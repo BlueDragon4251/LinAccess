@@ -40,7 +40,9 @@ jobs:
       - name: Build
         run: cmake --build build --parallel 2
       - name: Run tests
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          ./scripts/restore-fixtures.sh
+          ctest --test-dir build --output-on-failure
       - name: Package DEB
         run: cpack --config build/CPackConfig.cmake -G DEB
       - name: Upload native executable and DEB
@@ -80,7 +82,9 @@ jobs:
       - name: Build
         run: cmake --build build --parallel 2
       - name: Run portable tests
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          ./scripts/restore-fixtures.sh
+          ctest --test-dir build --output-on-failure
       - name: Build native Debian package
         run: cpack --config build/CPackConfig.cmake -G DEB
       - name: Upload Debian binary and package

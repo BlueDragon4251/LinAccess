@@ -26,6 +26,10 @@ Vertraulichkeit und Pfadstruktur stehen unter [fixtures](fixtures/README.md).
 Die vorhandene App ist **noch nicht Access-kompatibel genug, um das komplexe
 Kassensystem vollständig auszuführen**. Der konkrete Entwicklungsauftrag an
 Codex steht in [CODEX_HANDOFF.md](CODEX_HANDOFF.md).
+Beim erneuten MDBTools-1.0.0-Test der großen Kassen-MDB schwankte der Import
+zwischen 0 und 20/29 Tabellen; der ältere im Folgenden beschriebene
+29/29-Stand ist damit **nicht zuverlässig reproduziert** und bleibt ein
+offener Fehler im `complex_real_mdb_table_copy`-Regressionstest.
 
 Abhängigkeiten (je nach Distribution können die Paketnamen abweichen):
 

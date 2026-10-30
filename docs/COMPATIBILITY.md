@@ -2,6 +2,13 @@
 
 Stand: LinAccess Native 0.7.0. **Nur ein Entwicklungsstand, keine 1:1-Migration.**
 
+**Aktueller Regressionhinweis:** Der erneute Test der hier mitgelieferten
+Kassen-MDB auf einer Linux-Umgebung mit MDBTools 1.0.0 schwankte zwischen
+0 und 20 von 29 importierten Tabellen; unter anderem treten
+MDBTools-Page-Offset- und Schema-/CSV-Spaltenfehler auf. Die in der
+Tabelle unten genannte Zahl 29/29 bezeichnet den früheren Teststand und ist
+kein garantiert reproduzierbarer Erfolg. Siehe auch `CODEX_HANDOFF.md`.
+
 | Bereich | Jetzt | Geplante Strategie | Grenze / Risiko |
 |---|---|---|---|
 | `.mdb`-Tabellen | MDBTools: typisierte INTEGER/REAL/TEXT-Kopie inklusive NULL, BLOB-Spalten ohne Nutzdaten; **29/29** Tabellen der echten Kassen-MDB in SQLite-Kopie importiert | Vollständiger Jet-Schemaimport | Primärschlüssel, Indizes, Standardwerte, echte OLE-Daten, Beziehungen, Encoding |

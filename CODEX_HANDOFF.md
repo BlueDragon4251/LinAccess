@@ -37,6 +37,19 @@ VBA-Code möglichst ohne manuelle Änderungen laufen.
   vollständige Access-Objektgraph fehlen.** Die Kassenanwendung läuft nicht.
 - `docs/COMPATIBILITY.md` ist der ehrliche Kompatibilitätsstatus.
 
+**Neue reproduzierte Auffälligkeit beim Upload (30.10.2026):** Ein frischer
+Linux-Build mit MDBTools 1.0.0 importierte beim Kassen-MDB-Regressionslauf
+schwankend nur 0 bis 20 von 29 Tabellen; Fehler umfassen `MDBTools: offset
+... is beyond EOF` und Schema-/CSV-Spaltenfehler. Eine zeitweise gekürzte
+Arbeitskopie wurde durch SHA-256-geprüfte Archivwiederherstellung repariert,
+aber auch mit intakter Originaldatei blieb der MDBTools-Import instabil.
+Der aktuelle `ctest`-Lauf ist für `complex_real_mdb_table_copy` **rot**.
+Das ist **kein Erfolg für vollständigen Tabellenimport**.
+Vor Architektur- oder Vollständigkeitsversprechen die Ursache anhand originaler
+SHA-256-Dateien und MDBTools-Versionen exakt analysieren, im Issue festhalten
+und reparieren. Die vormals dokumentierten 29/29 waren ein früherer Teststand,
+nicht der aktuelle reproduzierte Befund.
+
 ## Reproduzierbare Testdaten — zuerst auspacken
 
 **Das Git-Repository ist privat und MUSS privat bleiben.** Es enthält

@@ -152,12 +152,11 @@ if(BUILD_TESTING)
                 tests/complex_mdb_table_tests.cpp
                 src/access_catalog.cpp src/access_catalog.hpp
                 src/access_table_import.cpp src/access_table_import.hpp
-                src/vba_source_codec.cpp src/vba_source_codec.hpp
                 src/csv.cpp src/csv.hpp)
             target_include_directories(linaccess_complex_mdb_table_tests PRIVATE src)
             target_link_libraries(linaccess_complex_mdb_table_tests PRIVATE Qt6::Sql Qt6::Core)
             add_test(NAME complex_real_mdb_table_copy
-                COMMAND linaccess_complex_mdb_table_tests "${LINACCESS_COMPLEX_MDB_FILE}" "${LINACCESS_COMPLEX_BRIDGE_DIR}")
+                COMMAND linaccess_complex_mdb_table_tests "${LINACCESS_COMPLEX_MDB_FILE}")
         endif()
     endif()
 endif()

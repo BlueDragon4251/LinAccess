@@ -1,14 +1,8 @@
 #include "access_catalog.hpp"
 #include "access_table_import.hpp"
 #include "csv.hpp"
-#include "vba_source_codec.hpp"
 
 #include <QCoreApplication>
-#include <QDir>
-#include <QFile>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlError>
@@ -22,7 +16,7 @@
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
-    assert(argc == 2 || argc == 3);
+    assert(argc == 2);
     const QString source = QString::fromLocal8Bit(argv[1]);
     QTemporaryDir temp;
     assert(temp.isValid());
@@ -56,29 +50,5 @@ int main(int argc, char** argv) {
     // This test deliberately does not pretend 100% source data compatibility;
     // it makes regressions against an actual large Access 2003 file visible.
     assert(imported >= 20);
-    if (argc == 3) {
-        const QDir bridge(QString::fromLocal8Bit(argv[2]));
-        QFile file(bridge.filePath("manifest.json"));
-        assert(file.open(QIODevice::ReadOnly));
-        const auto objects = QJsonDocument::fromJson(file.readAll()).object().value("objects").toArray();
-        int selectQueries = 0, directlyRunnable = 0;
-        for (const auto& objectValue : objects) {
-            const auto item = objectValue.toObject();
-            if (item.value("kind") != "query") continue;
-            QFile sqlSource(bridge.filePath(item.value("file").toString()));
-            assert(sqlSource.open(QIODevice::ReadOnly));
-            auto sql = linaccess::decodeVbaSource(sqlSource.readAll()).trimmed();
-            if (!sql.startsWith("SELECT", Qt::CaseInsensitive)) continue;
-            ++selectQueries;
-            QSqlQuery q(db);
-            if (q.exec(sql)) ++directlyRunnable;
-            else if (selectQueries <= 25) {
-                std::cout << "  QUERY " << item.value("name").toString().toStdString()
-                          << ": " << q.lastError().text().toStdString() << '\n';
-            }
-        }
-        std::cout << "Kassa saved SELECTs directly runnable with SQLite: "
-                  << directlyRunnable << "/" << selectQueries << '\n';
-    }
     return 0;
 }
