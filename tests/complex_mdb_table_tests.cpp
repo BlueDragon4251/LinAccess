@@ -3,6 +3,8 @@
 #include "csv.hpp"
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QFile>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlError>
@@ -13,11 +15,18 @@
 #endif
 #include <cassert>
 #include <iostream>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <set>
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     assert(argc == 2);
     const QString source = QString::fromLocal8Bit(argv[1]);
+    QFile original(source);
+    assert(original.open(QIODevice::ReadOnly));
+    const auto before = QCryptographicHash::hash(original.readAll(), QCryptographicHash::Sha256);
+    original.close();
     QTemporaryDir temp;
     assert(temp.isValid());
     auto db = QSqlDatabase::addDatabase("QSQLITE", "complex-mdb-table-test");
@@ -38,17 +47,69 @@ int main(int argc, char** argv) {
             const auto csv = linaccess::AccessCatalog::tool(
                 "mdb-export", {"-0", QString(QChar(0x1e)), source, table});
             const auto rows = linaccess::parseCsvDetailed(std::string_view(csv.constData(), csv.size()));
-            linaccess::importAccessTable(db, source, table,
-                linaccess::parseMdbColumns(catalog.tableSchema(table)), rows);
+            const auto schema = linaccess::parseMdbSchema(catalog.tableSchema(table));
+            linaccess::importAccessTable(db, source, table, schema, rows);
+            auto quote = [](QString name) { name.replace('"', "\"\""); return '"' + name + '"'; };
+            QSqlQuery copied(db);
+            assert(copied.exec("SELECT * FROM " + quote(table)));
+            std::multiset<QByteArray> expectedRows, actualRows;
+            for (std::size_t row = 1; row < rows.size(); ++row) {
+                QJsonArray values;
+                for (int col = 0; col < schema.columns.size(); ++col) {
+                    const auto& cell = rows[row][col];
+                    const auto text = QString::fromUtf8(cell.value);
+                    if (!cell.quoted && cell.value == "\x1e") values.append(QJsonValue::Null);
+                    else if (schema.columns[col].sqliteType == "INTEGER") values.append(QString::number(text.toLongLong()));
+                    else if (schema.columns[col].sqliteType == "REAL") values.append(QString::number(text.toDouble(), 'g', 17));
+                    else values.append(text);
+                }
+                expectedRows.insert(QJsonDocument(values).toJson(QJsonDocument::Compact));
+            }
+            while (copied.next()) {
+                QJsonArray values;
+                for (int col = 0; col < schema.columns.size(); ++col) {
+                    const auto cell = copied.value(col);
+                    if (cell.isNull()) values.append(QJsonValue::Null);
+                    else if (schema.columns[col].sqliteType == "INTEGER") values.append(QString::number(cell.toLongLong()));
+                    else if (schema.columns[col].sqliteType == "REAL") values.append(QString::number(cell.toDouble(), 'g', 17));
+                    else values.append(cell.toString());
+                }
+                actualRows.insert(QJsonDocument(values).toJson(QJsonDocument::Compact));
+            }
+            assert(expectedRows == actualRows);
+            assert(copied.exec("PRAGMA table_info(" + quote(table) + ")"));
+            int col = 0;
+            while (copied.next()) {
+                assert(copied.value(5).toInt() == schema.columns[col].primaryKeyOrder);
+                ++col;
+            }
+            assert(col == schema.columns.size());
+            assert(copied.exec(QString("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND tbl_name=")
+                              + "'" + QString(table).replace("'", "''") + "' AND sql IS NOT NULL"));
+            assert(copied.next() && copied.value(0).toInt() == schema.indexes.size());
             ++imported;
         } catch (const std::exception& e) {
-            failures << table + ": " + QString::fromUtf8(e.what());
+            failures << QString::number(imported + failures.size() + 1);
+            (void)e; // Keep source names, values and tool stderr out of CI logs.
         }
     }
     std::cout << "Kassa real table copy: " << imported << "/" << tables.size() << " tables\n";
     for (const auto& issue : failures) std::cout << "  ERROR " << issue.toStdString() << '\n';
     // This test deliberately does not pretend 100% source data compatibility;
     // it makes regressions against an actual large Access 2003 file visible.
-    assert(imported >= 20);
+    assert(tables.size() == 29);
+    assert(imported == 29 && failures.empty());
+    assert(original.open(QIODevice::ReadOnly));
+    assert(QCryptographicHash::hash(original.readAll(), QCryptographicHash::Sha256) == before);
+    auto full = QSqlDatabase::addDatabase("QSQLITE", "full-mdb-test");
+    full.setDatabaseName(temp.filePath("full.linaccess"));
+    assert(full.open());
+    QSqlQuery fullQuery(full);
+    assert(fullQuery.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
+    assert(linaccess::importAccessDatabase(full, source) == 29);
+    assert(fullQuery.exec("PRAGMA foreign_key_check"));
+    assert(!fullQuery.next());
+    assert(fullQuery.exec("SELECT COUNT(*) FROM _la_access_relations"));
+    assert(fullQuery.next() && fullQuery.value(0).toInt() == catalog.relationships().size());
     return 0;
 }

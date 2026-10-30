@@ -36,6 +36,13 @@ QByteArray AccessCatalog::tool(const QString& name, const QStringList& args,
     }
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
         throw std::runtime_error("MDBTools: " + process.readAllStandardError().toStdString());
+    const auto diagnostics = process.readAllStandardError();
+    // MDBTools can report damaged pages while returning exit code zero.
+    // Never accept a silently truncated schema or row set in that case.
+    const QRegularExpression fatalDiagnostic("beyond EOF|error|failed|unable|could not",
+        QRegularExpression::CaseInsensitiveOption);
+    if (fatalDiagnostic.match(QString::fromUtf8(diagnostics)).hasMatch())
+        throw std::runtime_error("MDBTools meldet einen Lesefehler; Import wurde abgebrochen");
     const auto result = process.readAllStandardOutput();
     if (result.size() > 20 * 1024 * 1024)
         throw std::runtime_error("MDBTools-Ausgabe überschreitet 20 MB");
@@ -89,7 +96,8 @@ QVector<AccessRelation> AccessCatalog::relationships() const {
         if (rows[i].size() < 8) continue;
         const auto toString = [](const std::string& s) { return QString::fromUtf8(s); };
         result.append({toString(rows[i][4]), toString(rows[i][5]),
-                       toString(rows[i][6]), toString(rows[i][7])});
+                       toString(rows[i][6]), toString(rows[i][7]), toString(rows[i][0]),
+                       toString(rows[i][1]).toUInt(), toString(rows[i][3]).toInt()});
     }
     return result;
 }
@@ -121,6 +129,23 @@ QStringList AccessCatalog::missingQuerySources(const QString& sql) const {
 }
 
 QString AccessCatalog::tableSchema(const QString& name) const {
-    return QString::fromUtf8(tool("mdb-schema", {"-T", name, file_, "sqlite"}));
+    auto schema = QString::fromUtf8(tool("mdb-schema", {"-T", name, file_, "sqlite"}));
+    // MDBTools 1.0.0's SQLite backend omits all keys and indexes. Its MySQL
+    // backend exposes them. Read only structural ALTER lines; never execute them.
+    if (!schema.contains("PRIMARY KEY", Qt::CaseInsensitive)
+        || !schema.contains("CREATE INDEX", Qt::CaseInsensitive)) {
+        const auto metadata = QString::fromUtf8(tool("mdb-schema", {"-T", name, file_, "mysql"}));
+        const bool needKeys = !schema.contains("PRIMARY KEY", Qt::CaseInsensitive);
+        const bool needIndexes = !schema.contains("CREATE INDEX", Qt::CaseInsensitive)
+            && !schema.contains("CREATE UNIQUE INDEX", Qt::CaseInsensitive);
+        for (const auto& line : metadata.split('\n')) {
+            if (!line.startsWith("ALTER TABLE ", Qt::CaseInsensitive)) continue;
+            if ((needKeys && line.contains(" ADD PRIMARY KEY ", Qt::CaseInsensitive))
+                || (needIndexes && (line.contains(" ADD INDEX ", Qt::CaseInsensitive)
+                                    || line.contains(" ADD UNIQUE INDEX ", Qt::CaseInsensitive))))
+                schema += '\n' + line;
+        }
+    }
+    return schema;
 }
 }

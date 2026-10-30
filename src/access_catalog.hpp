@@ -17,6 +17,9 @@ struct AccessRelation {
     QString childColumn;
     QString parentTable;
     QString parentColumn;
+    QString name;
+    quint32 flags{};
+    int ordinal{};
 };
 
 // Only reads the Access file. No VBA is loaded or executed, and no file is altered.

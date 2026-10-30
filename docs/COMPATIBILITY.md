@@ -2,16 +2,17 @@
 
 Stand: LinAccess Native 0.7.0. **Nur ein Entwicklungsstand, keine 1:1-Migration.**
 
-**Aktueller Regressionhinweis:** Der erneute Test der hier mitgelieferten
-Kassen-MDB auf einer Linux-Umgebung mit MDBTools 1.0.0 schwankte zwischen
-0 und 20 von 29 importierten Tabellen; unter anderem treten
-MDBTools-Page-Offset- und Schema-/CSV-Spaltenfehler auf. Die in der
-Tabelle unten genannte Zahl 29/29 bezeichnet den früheren Teststand und ist
-kein garantiert reproduzierbarer Erfolg. Siehe auch `CODEX_HANDOFF.md`.
+**Aktueller Regressionhinweis:** Der Gesamtimport übernimmt jetzt alle 29
+Kassen-Tabellen mit NULLs, exportierten Schlüsseln/Indizes und Beziehungen atomar.
+Der Schlüsselzeilen-Parserfehler mit MDBTools 1.0.1 ist behoben; MDBTools 1.0.0
+benötigt zusätzliche Schema-Metadaten aus dessen MySQL-Backend. Die früheren
+intermittierenden EOF-Fehler sind hier nicht reproduziert und nicht abschließend
+erklärt. Siehe [Untersuchung](MDB_IMPORT_REGRESSION.md) und
+[Entwicklungscheckliste](DEVELOPMENT_CHECKLIST.md).
 
 | Bereich | Jetzt | Geplante Strategie | Grenze / Risiko |
 |---|---|---|---|
-| `.mdb`-Tabellen | MDBTools: typisierte INTEGER/REAL/TEXT-Kopie inklusive NULL, BLOB-Spalten ohne Nutzdaten; **29/29** Tabellen der echten Kassen-MDB in SQLite-Kopie importiert | Vollständiger Jet-Schemaimport | Primärschlüssel, Indizes, Standardwerte, echte OLE-Daten, Beziehungen, Encoding |
+| `.mdb`-Tabellen | MDBTools: typisierte INTEGER/REAL/TEXT-Kopie inklusive NULL, BLOB-Spalten ohne Nutzdaten; **29/29** Tabellen der echten Kassen-MDB in SQLite-Kopie importiert | Vollständiger Jet-Schemaimport | Standardwerte, echte OLE-Daten, exakte Jet-Typen, Encoding |
 | `.accdb`-Tabellen | Nur soweit installierte MDBTools-Version liest | Zusätzlicher Importadapter | Versions- und Feature-Abhängigkeit |
 | Tabellen-/Datensatzeditor | Ja, für SQLite | Constraints, Indizes, Migrationen | Noch rudimentär |
 | Access-Abfragen | Exportierte Jet-SQL-Dateien können gegen SQLite ausgeführt werden, wenn die Syntax bereits kompatibel ist; 100 Originalabfragen aus der Kassen-Bridge sind als Quelltext verfügbar | Jet/ACE-SQL-Übersetzung | Jet/ACE-Funktionen, Parameter, Crosstab |

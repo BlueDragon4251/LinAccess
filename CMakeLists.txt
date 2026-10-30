@@ -54,6 +54,11 @@ if(BUILD_TESTING)
     target_include_directories(linaccess_core_tests PRIVATE src)
     add_test(NAME core_tests COMMAND linaccess_core_tests)
     if(LINACCESS_BUILD_GUI)
+        add_executable(linaccess_table_import_tests tests/access_table_import_tests.cpp
+            src/access_table_import.cpp src/access_catalog.cpp src/csv.cpp)
+        target_include_directories(linaccess_table_import_tests PRIVATE src)
+        target_link_libraries(linaccess_table_import_tests PRIVATE Qt6::Core Qt6::Sql)
+        add_test(NAME table_import_contracts COMMAND linaccess_table_import_tests)
         add_executable(linaccess_mdb_tests
             tests/mdb_tests.cpp
             src/access_catalog.cpp

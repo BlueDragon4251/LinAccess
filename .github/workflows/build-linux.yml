@@ -42,7 +42,7 @@ jobs:
       - name: Run tests
         run: |
           ./scripts/restore-fixtures.sh
-          ctest --test-dir build --output-on-failure
+          CTEST_OUTPUT_ON_FAILURE=0 ctest --test-dir build --timeout 120
       - name: Package DEB
         run: cpack --config build/CPackConfig.cmake -G DEB
       - name: Upload native executable and DEB
@@ -84,7 +84,7 @@ jobs:
       - name: Run portable tests
         run: |
           ./scripts/restore-fixtures.sh
-          ctest --test-dir build --output-on-failure
+          CTEST_OUTPUT_ON_FAILURE=0 ctest --test-dir build --timeout 120
       - name: Build native Debian package
         run: cpack --config build/CPackConfig.cmake -G DEB
       - name: Upload Debian binary and package

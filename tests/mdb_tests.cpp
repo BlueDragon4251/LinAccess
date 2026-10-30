@@ -66,8 +66,8 @@ int main(int argc, char** argv) {
                      "status TEXT,details TEXT)"));
 
     for (const auto& table : {"3_tbl_Rezepte", "33_tbl_ZutatenRezept"}) {
-        const auto schema = linaccess::parseMdbColumns(source.tableSchema(table));
-        assert(!schema.isEmpty());
+        const auto schema = linaccess::parseMdbSchema(source.tableSchema(table));
+        assert(!schema.columns.isEmpty());
         const auto csv = linaccess::AccessCatalog::tool(
             "mdb-export", {"-0", QString(QChar(0x1e)), path, table});
         const auto rows = linaccess::parseCsvDetailed(std::string_view(csv.constData(), csv.size()));
@@ -89,11 +89,29 @@ int main(int argc, char** argv) {
         const auto csv = linaccess::AccessCatalog::tool(
             "mdb-export", {"-0", QString(QChar(0x1e)), path, "3_tbl_Rezepte"});
         linaccess::importAccessTable(db, path, "3_tbl_Rezepte",
-            linaccess::parseMdbColumns(source.tableSchema("3_tbl_Rezepte")),
+            linaccess::parseMdbSchema(source.tableSchema("3_tbl_Rezepte")),
             linaccess::parseCsvDetailed(std::string_view(csv.constData(), csv.size())));
     } catch (...) { refusedDuplicate = true; }
     assert(refusedDuplicate);
     assert(scalar(db, "SELECT COUNT(*) FROM _la_import_log") == 2);
+    auto full = QSqlDatabase::addDatabase("QSQLITE", "full-recipe-copy");
+    full.setDatabaseName(tmp.filePath("full.linaccess"));
+    assert(full.open());
+    QSqlQuery fullQuery(full);
+    assert(fullQuery.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
+    assert(linaccess::importAccessDatabase(full, path) == 2);
+    assert(fullQuery.exec("PRAGMA foreign_key_check"));
+    assert(!fullQuery.next());
+    assert(fullQuery.exec("PRAGMA foreign_key_list(\"33_tbl_ZutatenRezept\")"));
+    assert(fullQuery.next());
+    assert(fullQuery.value(2).toString() == "3_tbl_Rezepte");
+    assert(fullQuery.value(5).toString() == "CASCADE" && fullQuery.value(6).toString() == "CASCADE");
+    assert(!fullQuery.exec("UPDATE \"33_tbl_ZutatenRezept\" SET RezeptNr=999999999"));
+    assert(fullQuery.exec("DELETE FROM \"3_tbl_Rezepte\""));
+    assert(scalar(full, "SELECT COUNT(*) FROM \"33_tbl_ZutatenRezept\"") == 0);
+    bool duplicateRefused = false;
+    try { linaccess::importAccessDatabase(full, path); } catch (...) { duplicateRefused = true; }
+    assert(duplicateRefused);
     assert(digest(path) == before); // Nothing touched the original MDB.
     std::cout << "Real MDB test passed: " << tables << " tables, " << forms
               << " forms, " << reports << " report, " << queries

@@ -83,7 +83,7 @@ AccessInspector::AccessInspector(QString sourceFile, QSqlDatabase projectDb, QWi
     status_->setMaximumHeight(150);
     status_->setHtml(
         "<b>Kompatibilität:</b> Datentypen und NULLs werden beim Tabellenimport nach Möglichkeit erhalten. "
-        "Schlüssel, Indizes, Beziehungen und Access-Standardwerte werden noch nicht erzwungen. "
+        "Primärschlüssel und exportierte Indizes werden übernommen; der Gesamtimport erhält auch Beziehungen. Access-Standardwerte und OLE-Nutzdaten fehlen. "
         "Der Katalog zeigt Objektnamen und SQL, <b>nicht</b> VBA-Code oder GUI-Layouts. "
         "Importierte Katalogeinträge sind <b>metadata_only</b> und nicht ausführbar. "
         "Die Access-Originaldatei bleibt unverändert.");
@@ -175,17 +175,17 @@ void AccessInspector::importTable() {
     if (!projectDb_.isOpen() || csvRows_.empty() || selectedTable_.isEmpty()) return;
     if (QMessageBox::warning(this, "Verlustbehafteter Import",
             "Die Tabelle wird als neue SQLite-Tabelle mit INTEGER/REAL/TEXT und echten NULL-Werten importiert. "
-            "Primärschlüssel, Indizes, Beziehungen, Access-Standardwerte, Formulare und VBA "
+            "Beziehungen, Access-Standardwerte, Formulare und VBA "
             "werden NICHT übernommen. "
             "Die Access-Quelldatei bleibt erhalten. Fortfahren?",
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes) return;
     try {
         linaccess::AccessCatalog catalog(sourceFile_);
-        const auto columns = linaccess::parseMdbColumns(catalog.tableSchema(selectedTable_));
+        const auto columns = linaccess::parseMdbSchema(catalog.tableSchema(selectedTable_));
         linaccess::importAccessTable(projectDb_, sourceFile_, selectedTable_, columns, csvRows_);
         importButton_->setEnabled(false);
         QMessageBox::information(this, "Importiert", "Tabelle mit Datentypen und NULLs kopiert. "
-            "Schlüssel/Beziehungen noch nicht übernommen. Original unverändert.");
+            "Primärschlüssel und Indizes erhalten. Beziehungen nur beim Gesamtimport. Original unverändert.");
     } catch (const std::exception& exc) {
         QMessageBox::critical(this, "Import abgebrochen", QString::fromUtf8(exc.what()));
     }
@@ -195,47 +195,19 @@ void AccessInspector::importAllTables() {
     if (!projectDb_.isOpen() || tables_->count() == 0) return;
     if (QMessageBox::question(this, "Tabellenkopie",
         "Alle Tabellen der MDB werden in das geöffnete LinAccess-Projekt importiert. "
-        "Gleichnamige bereits vorhandene Tabellen bleiben unverändert; die MDB-Quelldatei wird nie beschrieben. "
+        "Der gesamte Import ist atomar. Gleichnamige vorhandene Tabellen führen zum Abbruch ohne Änderungen. "
         "Fortfahren?", QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes) != QMessageBox::Yes) return;
-    linaccess::AccessCatalog catalog(sourceFile_);
-    QProgressDialog progress("Access-Tabellen werden gelesen…", "Abbrechen", 0, tables_->count(), this);
-    progress.setWindowModality(Qt::WindowModal);
-    progress.setMinimumDuration(0);
-    QStringList problems;
-    int imported = 0, skipped = 0;
-    for (int i = 0; i < tables_->count(); ++i) {
-        if (progress.wasCanceled()) break;
-        const auto name = tables_->item(i)->text();
-        progress.setLabelText("Importiere " + name + " (" + QString::number(i + 1)
-            + "/" + QString::number(tables_->count()) + ")");
-        progress.setValue(i);
-        QApplication::processEvents();
-        if (projectDb_.tables().contains(name, Qt::CaseInsensitive)) {
-            ++skipped;
-            continue;
-        }
-        try {
-            const auto typedOutput = runMdbTool("mdb-export",
-                {"-0", QString(QChar(0x1e)), sourceFile_, name});
-            const auto rows = linaccess::parseCsvDetailed(
-                std::string_view(typedOutput.constData(), static_cast<std::size_t>(typedOutput.size())));
-            const auto columns = linaccess::parseMdbColumns(catalog.tableSchema(name));
-            linaccess::importAccessTable(projectDb_, sourceFile_, name, columns, rows);
-            ++imported;
-        } catch (const std::exception& error) {
-            problems << name + ": " + QString::fromUtf8(error.what());
-        }
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    try {
+        const int imported = linaccess::importAccessDatabase(projectDb_, sourceFile_);
+        QApplication::restoreOverrideCursor();
+        status_->append(QString::number(imported) + " Tabellen mit Schlüsseln, Indizes und Beziehungen übernommen.");
+        QMessageBox::information(this, "Tabellenimport abgeschlossen",
+            QString::number(imported) + " Tabellen erfolgreich übernommen. Original unverändert.");
+    } catch (const std::exception& error) {
+        QApplication::restoreOverrideCursor();
+        QMessageBox::warning(this, "Import zurückgerollt", QString::fromUtf8(error.what()));
     }
-    const bool canceled = progress.wasCanceled();
-    progress.setValue(tables_->count());
-    status_->append("Tabellenimport: " + QString::number(imported) + " erfolgreich, "
-        + QString::number(skipped) + " bereits vorhanden, "
-        + QString::number(problems.size()) + " fehlgeschlagen."
-        + (canceled ? " (abgebrochen)" : ""));
-    if (!problems.empty()) QMessageBox::warning(this, "Import mit Fehlern",
-        "Einige Tabellen wurden nicht kopiert.\n" + problems.join("\n").left(10000));
-    else QMessageBox::information(this, "Tabellenimport abgeschlossen",
-        QString::number(imported) + " Tabellen erfolgreich übernommen.");
 }
 
 void AccessInspector::loadCatalog() {
