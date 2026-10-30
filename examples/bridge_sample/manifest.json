@@ -1,0 +1,28 @@
+{
+  "format": "linaccess-bridge-v1",
+  "exported_utc": "2026-10-30T00:00:00Z",
+  "source": {
+    "filename": "SYNTHETIC_NO_REAL_SOURCE.accdb",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "objects": [
+    {
+      "kind": "vba",
+      "name": "Form_Kunden",
+      "status": "source_only",
+      "format": "vbide-export",
+      "file": "objects/000001_vba.bas",
+      "sha256": "0a088d3eddb1d4cf3ab0156207ca0ab9983200ddf6f8f75cdd7865dc2436e0e1",
+      "detail": "SYNTHETIC TEST — kein echter Access-Export"
+    },
+    {
+      "kind": "query",
+      "name": "Kundenliste",
+      "status": "source_only",
+      "format": "access-query-sql",
+      "file": "objects/000002_query.sql",
+      "sha256": "c2b3c60a7934942e5b822e77ff8632582068a0f5f22b1436cf4ca527f79b1eae",
+      "detail": "SYNTHETIC TEST — kein echter Access-Export"
+    }
+  ]
+}

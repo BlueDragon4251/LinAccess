@@ -1,0 +1,10 @@
+/build/
+/build-core/
+/core_tests
+*.deb
+*.linaccess
+*.sqlite
+*.db
+/fixtures/raw/
+/fixtures/unpacked/
+/fixtures/fixtures.tar.xz

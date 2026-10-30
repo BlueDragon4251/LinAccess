@@ -12,6 +12,21 @@ Datenbankdesigner. **Kein Python-Runtimebedarf.**
 
 ## Build unter Ubuntu / Debian
 
+Dieses Repository enthält zwei Access-2003-Testdatenbanken samt originalen
+Bridge-Exporten in einem komprimierten, verlustfrei wiederherstellbaren
+Git-Testpaket. Vor den vollständigen Regressionstests ausführen:
+
+```bash
+sudo apt install xz-utils unzip
+./scripts/restore-fixtures.sh
+```
+
+Die Original-MDBs werden anhand von SHA-256 überprüft; nähere Hinweise zur
+Vertraulichkeit und Pfadstruktur stehen unter [fixtures](fixtures/README.md).
+Die vorhandene App ist **noch nicht Access-kompatibel genug, um das komplexe
+Kassensystem vollständig auszuführen**. Der konkrete Entwicklungsauftrag an
+Codex steht in [CODEX_HANDOFF.md](CODEX_HANDOFF.md).
+
 Abhängigkeiten (je nach Distribution können die Paketnamen abweichen):
 
 ```bash
@@ -258,3 +273,111 @@ Ausführung prüfen und ausschließlich aus vertrauenswürdiger Quelle starten.
   Access-Datei und testet deshalb keine Microsoft-Access-Kompatibilität.
 
 ## Experimentelle VBA-Ausführung
+
+Dieser Code wird vom neuen C++-Teilinterpreter in einem LinAccess-Formular
+unterstützt:
+
+```vb
+Private Sub Form_Load()
+    MsgBox "Formular geöffnet"
+End Sub
+
+Private Sub btnSpeichern_Click()
+    If IsNull(Me!Nachname) Then
+        MsgBox "Bitte Nachnamen eingeben"
+        Exit Sub
+    End If
+    DoCmd.RunCommand acCmdSaveRecord
+End Sub
+```
+
+Vor dem Ausführen der VBA-Ereignisse fragt LinAccess nach. Nicht unterstützte
+Anweisungen werden vor Ausführung der jeweiligen Prozedur erkannt. Die Engine
+hat nur explizite Host-Funktionen für Formularfelder, Meldungen, Speichern,
+Maximieren und Navigation zum letzten Datensatz; sie unterstützt
+**kein COM, ActiveX, Windows-API oder DAO**.
+Der Interpreter begrenzt die Ausführung auf 10.000 Anweisungsschritte und
+unterstützt außer dem speziellen `Form_Open(Cancel As Integer/Boolean)`
+noch keine Parameter, `On Error`, frei verschachtelte Prozeduraufrufe,
+Arrays, `With`, `Select Case`, `While/Wend`, `Do/Loop`, Objekte oder vollständige
+VBA-Typkonvertierung. VBA-spezifische Semantik ist noch nicht überall korrekt.
+
+Ein zusätzlich unterstütztes Beispiel:
+
+```vb
+Public Function Summe() As Long
+    Dim i As Long
+    Dim wert As Long
+    wert = 0
+    For i = 1 To 4
+        wert = wert + i
+    Next i
+    Summe = wert
+End Function
+```
+
+Diese Funktion liefert im eingeschränkten Interpreter `10` zurück.
+
+## Build-Status
+
+**Verifiziert:** Ubuntu 24.04 / GCC 13 / Qt 6.4 / CMake 3.28:
+
+- Native GUI und C++-Kern wurden erfolgreich kompiliert.
+- `ctest` besteht mit 8 Tests (bei Vorliegen beider privaten MDB-/Bridge-Testdateien): VBA-/CSV-Kern, echte JET4-MDB mit typisiertem
+  Import, echter MDB-Katalogimport über eine Qt-Offscreen-Oberfläche sowie
+  Bridge-Import und Manipulationsschutz und realer Bridge-Export mit
+  Ausführung von `Form_Open` und komplexer Bridge-Import mit 192 Quellen
+  **ohne** Ausführung von Original-Kassen-VBA (Qt-Offscreen),
+  47 reale Layouts/Qt-Eventausführung und **29/29** kopierte Kassen-Tabellen.
+- Die App startet mit `QT_QPA_PLATFORM=offscreen` ohne Absturz.
+- Ein installierbares Paket `linaccess-0.7.0-Linux.deb` wurde gebaut und sein
+  Inhalt mit `dpkg-deb` geprüft. Die benötigten Qt-Bibliotheken werden über
+  Paketabhängigkeiten installiert.
+
+**Noch nicht verifiziert:** interaktive Desktop-Bedienung auf einem echten
+Linux-Desktop, reale `.accdb`-Dateien, reproduzierbarer Windows-
+PowerShell-Bridge-Build an allen Access-Versionen, volle VBA-Kompatibilität.
+
+## Debian- und Ubuntu-Pakete
+
+Der Quellcode baut mit C++20, CMake und Qt 6.4+ auf beiden Systemfamilien.
+GitHub Actions enthält getrennte Jobs für **Ubuntu 24.04**, **Debian 12**
+und **Debian 13**: jeder Job erstellt ein auf seiner Distribution gebautes
+`.deb`-Paket. Diese externen CI-Jobs wurden hier **noch nicht ausgeführt**.
+
+Ein unter Ubuntu 24.04 erzeugtes `.deb` ist wegen der Qt-6-`t64`-Paketnamen
+ausdrücklich **nicht** als Debian-12-Paket freigegeben. Für Debian ist ein
+separat auf Debian gebautes Paket bzw. Selbstkompilierung notwendig.
+
+## Architektur
+
+```text
+Qt Widgets GUI
+  ├─ SQLite-Projekt / Tabellen / Abfragen
+  ├─ Native Formulare und Berichte (neue LinAccess-Objekte)
+  ├─ Access Inspector → MDBTools (Typkopie / Objektkatalog / Jet-SQL)
+  ├─ Access Bridge → Quellobjektkatalog und SHA-256-Prüfung
+  └─ VBA-Modulkatalog → Analyse + experimentelle Teilinterpretation
+                          └─ später vollständige VBA-Laufzeit + Access-Objektmodell
+```
+
+Neue `.linaccess`-Dateien sind SQLite-Datenbanken mit reservierten
+Metadatentabellen `_la_objects`, `_la_import_log` und `_la_access_artifacts`.
+
+## Nächste, in dieser Reihenfolge geplante Schritte
+
+1. Weitere echte Testdateien (insbesondere ACCDB) und interaktive UI-Tests
+2. Den typisierten Import um Schlüssel, Beziehungen, Indizes, Standardwerte
+   und Jet/ACE-Abfragekonversion erweitern
+3. Windows-Export-Brücke mit weiteren Access-Versionen testen und die bereits
+   begonnene `SaveAsText`-Teilkonvertierung auf mehr Formelemente erweitern
+4. Drag-and-drop-Formular-/Berichtdesigner mit Ereignisbindung
+5. VBA-Laufzeit systematisch erweitern (Parameter, Prozeduraufrufe, weitere
+   Schleifen/Fehlerbehandlung und vor allem DAO/Access-Objektmodell)
+6. Systematische Kompatibilitätstests anhand realer `.accdb`-/`.mdb`-Projekte
+7. Linux-Binaries und Distributionspakete (AppImage, `.deb`)
+
+Die Windows-Export-Brücke wäre ein optionales **Importwerkzeug**, nicht die
+Linux-Laufzeit. Vollständige VBA-/Access-Kompatibilität ist auch damit nicht
+automatisch erreicht; besonders COM, ActiveX und Windows-API-Aufrufe bleiben
+problematisch.

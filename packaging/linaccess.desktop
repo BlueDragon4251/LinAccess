@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=LinAccess Studio
+Comment=Native C++/Qt database designer (development preview)
+Exec=linaccess
+Terminal=false
+Categories=Development;Database;

@@ -1,0 +1,123 @@
+#include "access_form_import.hpp"
+#include "access_form_preview.hpp"
+#include "vba_source_codec.hpp"
+
+#include <QApplication>
+#include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+#include <cassert>
+#include <iostream>
+
+int main(int argc, char** argv) {
+    QApplication app(argc, argv);
+    assert(argc >= 2);
+    const QDir directory(QString::fromLocal8Bit(argv[1]));
+    QFile manifest(directory.filePath("manifest.json"));
+    assert(manifest.open(QIODevice::ReadOnly));
+    const auto objects = QJsonDocument::fromJson(manifest.readAll()).object().value("objects").toArray();
+    int scanned = 0;
+    int visible = 0;
+    int buttons = 0;
+    for (const auto& item : objects) {
+        const auto object = item.toObject();
+        if (object.value("kind") != "form") continue;
+        QFile file(directory.filePath(object.value("file").toString()));
+        assert(file.open(QIODevice::ReadOnly));
+        const auto bytes = file.readAll();
+        const auto form = linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(bytes));
+        assert(form.width > 0);
+        assert(form.height > 0);
+        for (const auto& control : form.controls) {
+            if (!control.visible) continue;
+            if (control.type == "CommandButton") ++buttons;
+        }
+        visible += static_cast<int>(form.controls.size());
+        ++scanned;
+        if (scanned == 1) {
+            std::cerr << "First form: " << object.value("name").toString().toStdString()
+                      << ", parsed controls=" << form.controls.size()
+                      << ", raw bytes=" << bytes.size()
+                      << ", Begin Section=" << linaccess::decodeVbaSource(bytes).indexOf("Begin Section")
+                      << ", Begin TextBox=" << linaccess::decodeVbaSource(bytes).indexOf("Begin TextBox")
+                      << '\n';
+            // The actual Qt widgets must instantiate and inherit geometry.
+            auto db = QSqlDatabase::addDatabase("QSQLITE", "layout-test");
+            db.setDatabaseName(":memory:");
+            assert(db.open());
+            AccessFormPreview dialog(object.value("name").toString(), bytes, {}, db);
+            assert(dialog.renderedControls() > 0);
+            assert(dialog.findChild<QWidget*>("access-form-canvas") != nullptr);
+            db.close();
+        }
+    }
+    assert(scanned == 47);
+    assert(visible > 150);
+    assert(buttons > 0);
+    {
+        // Exercise real Qt click -> imported VBA -> SQLite mutation, with no
+        // synthetic confirmation dialog and no access to the original MDB.
+        auto db = QSqlDatabase::addDatabase("QSQLITE", "layout-execution-test");
+        db.setDatabaseName(":memory:");
+        assert(db.open());
+        QSqlQuery query(db);
+        assert(query.exec("CREATE TABLE recipes (id INTEGER PRIMARY KEY, name TEXT)"));
+        const QByteArray form = R"FORM(Begin Form
+    Width =4200
+    RecordSource ="recipes"
+    Caption ="Keksverwaltung"
+    Begin Section
+        Height =2000
+        Begin
+            Begin TextBox
+                Name ="Name"
+                ControlSource ="name"
+                Left =100
+                Top =100
+                Width =2000
+                Height =300
+            End
+            Begin CommandButton
+                Name ="btnInsert"
+                Caption ="Speichern"
+                Left =100
+                Top =600
+                Width =1700
+                Height =400
+            End
+        End
+    End
+End
+)FORM";
+        const QByteArray vba = R"VBA(Private Sub Form_Open(Cancel As Integer)
+Me!Name = "Nico"
+End Sub
+Private Sub btnInsert_Click()
+CurrentDb.Execute "INSERT INTO recipes (name) VALUES ('Keks')"
+DoCmd.Requery
+End Sub
+)VBA";
+        AccessFormPreview dialog("frmRezepte", form, vba, db);
+        assert(dialog.renderedControls() == 2);
+        auto* name = dialog.findChild<QLineEdit*>("access-control-Name");
+        assert(name && name->text() == "Nico");
+        auto* action = dialog.findChild<QPushButton*>("access-control-btnInsert");
+        assert(action);
+        action->click();
+        assert(query.exec("SELECT name FROM recipes"));
+        assert(query.next() && query.value(0).toString() == "Keks");
+        db.close();
+    }
+    std::cout << "Access 2003 layout tests passed: " << scanned
+              << " forms, " << visible << " controls, " << buttons << " buttons\n";
+}
