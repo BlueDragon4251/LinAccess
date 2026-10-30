@@ -1,11 +1,19 @@
 #pragma once
 
 #include <optional>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 
 namespace linaccess {
+
+class VbaRuntimeError : public std::runtime_error {
+public:
+    VbaRuntimeError(int code, const std::string& message) : std::runtime_error(message), number(code) {}
+    int number;
+};
+class VbaObject;
 
 class VbaHost {
 public:
@@ -14,6 +22,7 @@ public:
     virtual void setField(std::string_view name, std::optional<std::string> value) = 0;
     virtual void message(std::string_view text) = 0;
     virtual void saveRecord() = 0;
+    virtual void quitApplication() { throw std::runtime_error("DoCmd.Quit: kein Anwendungskontext"); }
     virtual void maximizeForm() { throw std::runtime_error("DoCmd.Maximize: kein Formularkontext"); }
     virtual void gotoLastRecord() { throw std::runtime_error("DoCmd.GoToRecord: keine Datensatznavigation"); }
     virtual void gotoNextRecord() { throw std::runtime_error("DoCmd.GoToRecord acNext: keine Datensatznavigation"); }
@@ -29,6 +38,9 @@ public:
         throw std::runtime_error("Me.Control.Visible: kein Formularkontext");
     }
     virtual std::optional<std::string> moduleForProcedure(std::string_view) { return std::nullopt; }
+    virtual std::shared_ptr<VbaObject> currentDatabase() {
+        throw std::runtime_error("CurrentDb: keine verbundene Datenbank");
+    }
     virtual void executeSql(std::string_view) {
         throw std::runtime_error("DAO.Execute/DoCmd.RunSQL: keine verbundene Datenbank");
     }

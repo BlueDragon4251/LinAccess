@@ -1,5 +1,8 @@
 #include "access_table_import.hpp"
+#include "access_catalog.hpp"
 #include <QCoreApplication>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #ifdef NDEBUG
@@ -51,5 +54,15 @@ CREATE INDEX `label` ON `source` (`a``b`);
     assert(refused && !db.tables().contains("failed"));
     assert(query.exec("SELECT COUNT(*) FROM _la_import_log"));
     assert(query.next() && query.value(0).toInt() == 1);
+    QTemporaryDir tools;
+    assert(tools.isValid());
+    QFile fake(tools.filePath("mdb-failure"));
+    assert(fake.open(QIODevice::WriteOnly));
+    assert(fake.write("#!/bin/sh\necho 'offset is beyond EOF' >&2\necho partial\nexit 0\n") > 0);
+    fake.close();
+    assert(fake.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+    bool rejectedPartial = false;
+    try { (void)AccessCatalog::tool(fake.fileName(), {}); } catch (...) { rejectedPartial = true; }
+    assert(rejectedPartial);
     std::cout << "Schema, composite keys, indices, quoted identifiers and rollback verified\n";
 }

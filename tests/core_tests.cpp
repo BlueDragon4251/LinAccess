@@ -1,6 +1,7 @@
 #include "csv.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_runtime.hpp"
+#include "vba_expression.hpp"
 
 // Tests must stay active in Release builds (which normally define NDEBUG).
 #ifdef NDEBUG
@@ -244,5 +245,45 @@ End Sub
     assert(host.fields["Name"] == "Keksotcd");
     assert(host.fields["Nachname"] == "3");
     assert(host.messages.back().size() == 19);
+    const auto handled = executeVbaProcedure(R"VBA(
+Sub Errors()
+Dim untyped, typed As Long
+If Not IsEmpty(untyped) Or IsEmpty(typed) Then
+    Err.Raise(5)
+End If
+On Error Resume Next
+typed = 1 / 0
+Me!Name = CStr(Err.Number)
+Err.Clear
+Me!Nachname = CStr(Err.Number)
+End Sub
+)VBA", "Errors", host);
+    assert(handled.status == VbaExecutionStatus::Completed);
+    assert(host.fields["Name"] == "11" && host.fields["Nachname"] == "0");
+    const auto unhandled = executeVbaProcedure(
+        "Sub Errors()\nOn Error Resume Next\nErr.Raise(5)\nOn Error GoTo 0\nErr.Raise(6)\nEnd Sub", "Errors", host);
+    assert(unhandled.status == VbaExecutionStatus::Error);
+    const VbaVariables variables;
+    const auto evaluate = [&](std::string_view source) { return evaluateVbaExpression(source, host, variables); };
+    assert(evaluate("Empty + 2").asNumber() == 2);
+    assert(evaluate("IsEmpty(Empty)").truthy());
+    assert(!evaluate("IsNull(Empty)").truthy());
+    assert(evaluate("Null And False").kind == VbaValue::Kind::Boolean);
+    assert(!evaluate("Null And False").truthy());
+    assert(evaluate("Null Or False").kind == VbaValue::Kind::Null);
+    assert(evaluate("Null Or True").truthy());
+    assert(evaluate("Not Null").kind == VbaValue::Kind::Null);
+    assert(evaluate("Not 1 = 2").truthy());
+    assert(evaluate("6 And 3").asNumber() == 2);
+    assert(evaluate("4 Or 1").asNumber() == 5);
+    assert(evaluate("CLng(2.5)").asNumber() == 2);
+    assert(evaluate("CLng(3.5)").asNumber() == 4);
+    assert(evaluate("CLng(-2.5)").asNumber() == -2);
+    assert(evaluate("Null & Null").kind == VbaValue::Kind::Null);
+    assert(evaluate("Nothing Is Nothing").truthy());
+    assert(evaluate("Len(Null)").kind == VbaValue::Kind::Null);
+    bool invalidNull = false;
+    try { (void)evaluate("CStr(Null)"); } catch (...) { invalidNull = true; }
+    assert(invalidNull);
     std::cout << "Core tests passed\n";
 }

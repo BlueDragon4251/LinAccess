@@ -30,6 +30,18 @@ rows, credentials, or raw tool logs to issues, PRs, releases or build artifacts.
 
 ## P2: VBA execution and Access object model
 
+Verified incremental work ([details and limits](DAO_RUNTIME.md)):
+
+- [x] Native object references, CurrentDb and table-backed DAO dynasets/snapshots.
+- [x] Recordset iteration, named/indexed Field.Value access and edit/insert/delete buffers.
+- [x] Do While loops, multiple DAO Dim declarations and Nothing identity.
+- [x] Original Kassa Qt button/unchanged handler performs a real DAO insertion.
+- [x] Hidden controls remain accessible; space-containing control names bind to VBA handlers.
+- [x] Empty/Null distinction, tested Boolean/bitwise rules and CLng tie-to-even rounding.
+- [x] Procedure-local Resume Next/GoTo 0 and scoped Err object (partial error codes).
+
+Full targets remain open:
+
 - [ ] Replace statement regex dispatch with a complete lexer/parser, AST and bound runtime.
 - [ ] Implement typed Variants (Empty/Null/Error/Object/Date/Currency), coercions,
   banker rounding, Unicode, operator precedence and three-valued logic.

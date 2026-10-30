@@ -1,4 +1,6 @@
 #include "access_form_import.hpp"
+#include "access_catalog.hpp"
+#include "access_table_import.hpp"
 #include "access_form_preview.hpp"
 #include "vba_source_codec.hpp"
 
@@ -9,6 +11,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLineEdit>
+#include <QComboBox>
+#include <QRegularExpression>
+#include <QTemporaryDir>
 #include <QPushButton>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -117,6 +122,54 @@ End Sub
         assert(query.exec("SELECT name FROM recipes"));
         assert(query.next() && query.value(0).toString() == "Keks");
         db.close();
+    }
+    if (argc >= 3) {
+        QTemporaryDir temporary;
+        assert(temporary.isValid());
+        auto db = QSqlDatabase::addDatabase("QSQLITE", "original-kassa-dao-event");
+        db.setDatabaseName(temporary.filePath("copy.linaccess"));
+        assert(db.open());
+        QSqlQuery query(db);
+        assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
+        assert(linaccess::importAccessDatabase(db, QString::fromLocal8Bit(argv[2])) == 29);
+        QByteArray form, code;
+        for (const auto& value : objects) {
+            const auto object = value.toObject();
+            if ((object.value("kind") == "form" && object.value("name") == "Tagesende oder Ende")
+                || (object.value("kind") == "vba" && object.value("name") == "Form_Tagesende oder Ende")) {
+                QFile file(directory.filePath(object.value("file").toString()));
+                assert(file.open(QIODevice::ReadOnly));
+                if (object.value("kind") == "form") form = file.readAll(); else code = file.readAll();
+            }
+        }
+        assert(!form.isEmpty() && !code.isEmpty());
+        // Extract only the source table identifier; execute the original whole
+        // handler and original form definition, without changing their bytes.
+        const auto source = linaccess::decodeVbaSource(code);
+        const QRegularExpression tablePattern(R"re(SF_Ende_Kassa_Click\(\)[\s\S]*?OpenRecordset\("([^"]+)")re");
+        const auto match = tablePattern.match(source);
+        assert(match.hasMatch());
+        auto table = match.captured(1); table.replace('"', "\"\"");
+        const auto count = [&] {
+            assert(query.exec("SELECT COUNT(*) FROM \"" + table + "\""));
+            assert(query.next()); return query.value(0).toInt();
+        };
+        const int before = count();
+        AccessFormPreview dialog("Tagesende oder Ende", form, code, db);
+        for (const auto& name : {"BedienerTmp", "BedienerNameTmp"}) {
+            auto* editor = dialog.findChild<QLineEdit*>("access-control-" + QString(name));
+            assert(editor);
+            editor->setText(QString(name) == "BedienerTmp" ? "1" : "LinAccess regression");
+        }
+        auto* button = dialog.findChild<QPushButton*>("access-control-SF Ende Kassa");
+        assert(button);
+        button->click();
+        assert(count() == before + 1);
+        assert(query.exec("SELECT PersonalNr,Bediener,Zeitpunkt FROM \"" + table + "\" ORDER BY rowid DESC LIMIT 1"));
+        assert(query.next() && query.value(0).toInt() == 1);
+        assert(query.value(1).toString() == "LinAccess regression");
+        assert(!query.value(2).toString().isEmpty());
+        std::cout << "Original Kassa form click executed DAO AddNew/Update on isolated database copy\n";
     }
     std::cout << "Access 2003 layout tests passed: " << scanned
               << " forms, " << visible << " controls, " << buttons << " buttons\n";

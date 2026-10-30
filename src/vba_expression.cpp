@@ -6,6 +6,8 @@
 #include <cctype>
 #include <ctime>
 #include <iomanip>
+#include <cstdint>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -18,7 +20,7 @@ std::string lower(std::string s) {
     });
     return s;
 }
-std::runtime_error error(const std::string& reason) { return std::runtime_error(reason); }
+VbaRuntimeError error(const std::string& reason, int code = 5) { return VbaRuntimeError(code, reason); }
 
 struct Token {
     enum class Type { Word, Number, Text, Bracket, Symbol, End } type{Type::End};
@@ -30,10 +32,10 @@ std::vector<Token> tokenize(std::string_view input) {
     for (std::size_t pos = 0; pos < input.size();) {
         const char ch = input[pos];
         if (std::isspace(static_cast<unsigned char>(ch))) { ++pos; continue; }
-        if (std::isalpha(static_cast<unsigned char>(ch)) || ch == '_') {
+        if (std::isalpha(static_cast<unsigned char>(ch)) || static_cast<unsigned char>(ch) >= 0x80 || ch == '_') {
             const auto start = pos++;
             while (pos < input.size() &&
-                   (std::isalnum(static_cast<unsigned char>(input[pos])) || input[pos] == '_')) ++pos;
+                   (std::isalnum(static_cast<unsigned char>(input[pos])) || static_cast<unsigned char>(input[pos]) >= 0x80 || input[pos] == '_')) ++pos;
             tokens.push_back({Token::Type::Word, std::string(input.substr(start, pos - start))});
         } else if (std::isdigit(static_cast<unsigned char>(ch))) {
             const auto start = pos++;
@@ -82,18 +84,53 @@ int precedence(const Token& token) {
     if (text == "or") return 1;
     if (text == "and") return 2;
     if (text == "=" || text == "<>" || text == "<" || text == "<=" ||
-        text == ">" || text == ">=") return 3;
+        text == ">" || text == ">=" || text == "is") return 3;
     if (text == "&") return 4;
     if (text == "+" || text == "-") return 5;
     if (text == "*" || text == "/" || text == "mod") return 6;
     return 0;
 }
 
+double bankersRound(double value) {
+    const auto floor = std::floor(value);
+    const auto fraction = value - floor;
+    return fraction < 0.5 ? floor : fraction > 0.5 ? floor + 1
+        : std::fmod(std::abs(floor), 2.0) == 0 ? floor : floor + 1;
+}
+std::int32_t integer(const VbaValue& value) {
+    const auto rounded = bankersRound(value.asNumber());
+    if (!std::isfinite(rounded) || rounded < std::numeric_limits<std::int32_t>::min()
+        || rounded > std::numeric_limits<std::int32_t>::max()) throw error("VBA: Long-Überlauf", 6);
+    return static_cast<std::int32_t>(rounded);
+}
 VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& right) {
-    if (op == "&") return VbaValue::string((left.kind == VbaValue::Kind::Null ? "" : left.asText())
-                                             + (right.kind == VbaValue::Kind::Null ? "" : right.asText()));
-    if (op == "and") return VbaValue::logical(left.truthy() && right.truthy());
-    if (op == "or") return VbaValue::logical(left.truthy() || right.truthy());
+    if (op == "is") {
+        if (left.kind != VbaValue::Kind::Object || right.kind != VbaValue::Kind::Object)
+            throw error("VBA: Is benötigt Objekte");
+        return VbaValue::logical(left.object == right.object);
+    }
+    if (op == "&") {
+        if (left.kind == VbaValue::Kind::Null && right.kind == VbaValue::Kind::Null) return {};
+        return VbaValue::string(left.asText() + right.asText());
+    }
+    if (op == "and" || op == "or") {
+        const bool leftNull = left.kind == VbaValue::Kind::Null;
+        const bool rightNull = right.kind == VbaValue::Kind::Null;
+        if (leftNull || rightNull) {
+            if (op == "and" && ((!leftNull && !left.truthy()) || (!rightNull && !right.truthy())))
+                return VbaValue::logical(false);
+            if (op == "or" && ((!leftNull && left.truthy()) || (!rightNull && right.truthy())))
+                return VbaValue::logical(true);
+            return {};
+        }
+        if (left.kind == VbaValue::Kind::Boolean && right.kind == VbaValue::Kind::Boolean)
+            return VbaValue::logical(op == "and" ? left.boolean && right.boolean : left.boolean || right.boolean);
+        return VbaValue::numeric(op == "and" ? integer(left) & integer(right) : integer(left) | integer(right));
+    }
+    if (left.kind == VbaValue::Kind::Empty && right.kind == VbaValue::Kind::Text)
+        return binary(op, VbaValue::string(""), right);
+    if (right.kind == VbaValue::Kind::Empty && left.kind == VbaValue::Kind::Text)
+        return binary(op, left, VbaValue::string(""));
     if (left.kind == VbaValue::Kind::Null || right.kind == VbaValue::Kind::Null)
         return {}; // Simplified three-valued logic: NULL comparisons yield NULL.
 
@@ -116,10 +153,10 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
     else if (op == "-") answer = a - b;
     else if (op == "*") answer = a * b;
     else if (op == "/") {
-        if (b == 0) throw error("VBA: Division durch Null");
+        if (b == 0) throw error("VBA: Division durch Null", 11);
         answer = a / b;
     } else if (op == "mod") {
-        if (b == 0) throw error("VBA: Modulo durch Null");
+        if (b == 0) throw error("VBA: Modulo durch Null", 11);
         answer = std::fmod(a, b);
     } else throw error("Nicht unterstützter Operator " + op);
     if (!std::isfinite(answer)) throw error("VBA: Ungültiges numerisches Ergebnis");
@@ -160,6 +197,28 @@ private:
         return lhs;
     }
     VbaValue primary() {
+        auto value = atom();
+        while (peek().value == "." || peek().value == "!") {
+            consume();
+            const auto member = consume();
+            if (member.type != Token::Type::Word && member.type != Token::Type::Bracket)
+                throw error("Objektmitglied erwartet");
+            std::vector<VbaValue> args;
+            if (take("(")) {
+                if (!take(")")) {
+                    do { args.push_back(expression(1)); } while (take(","));
+                    require(")");
+                }
+            }
+            if (host_) {
+                if (value.kind != VbaValue::Kind::Object || !value.object)
+                    throw error("Objektvariable nicht gesetzt", 91);
+                value = value.object->member(member.value, args);
+            }
+        }
+        return value;
+    }
+    VbaValue atom() {
         if (take("-")) {
             const auto arg = expression(7);
             return host_ ? VbaValue::numeric(-arg.asNumber()) : VbaValue{};
@@ -169,8 +228,10 @@ private:
             return host_ ? VbaValue::numeric(arg.asNumber()) : VbaValue{};
         }
         if (take("not")) {
-            const auto arg = expression(7);
-            return host_ ? VbaValue::logical(!arg.truthy()) : VbaValue{};
+            const auto arg = expression(3); // comparisons bind before Not in VBA
+            if (!host_ || arg.kind == VbaValue::Kind::Null) return {};
+            if (arg.kind == VbaValue::Kind::Boolean) return VbaValue::logical(!arg.boolean);
+            return VbaValue::numeric(~integer(arg));
         }
         if (take("(")) {
             const auto value = expression(1);
@@ -188,7 +249,16 @@ private:
         if (tok.type != Token::Type::Word)
             throw error("Ungültiger VBA-Ausdruck: " + tok.value);
         const auto word = lower(tok.value);
-        if (word == "null" || word == "empty") return {};
+        if (word == "null") return {};
+        if (word == "empty") return VbaValue::empty();
+        if (word == "nothing") return VbaValue::reference(nullptr);
+        if (word == "currentdb") {
+            if (take("(")) require(")");
+            return host_ ? VbaValue::reference(host_->currentDatabase()) : VbaValue{};
+        }
+        if (word == "dbopendynaset") return VbaValue::numeric(2);
+        if (word == "dbopensnapshot") return VbaValue::numeric(4);
+        if (word == "dbfailonerror") return VbaValue::numeric(128);
         if (word == "true") return VbaValue::logical(true);
         if (word == "false") return VbaValue::logical(false);
         if (word == "vbcrlf") return VbaValue::string("\r\n");
@@ -219,16 +289,20 @@ private:
                     : word == "date" ? "%Y-%m-%d" : "%H:%M:%S");
                 return VbaValue::string(formatted.str());
             }
-            if ((word == "isnull" || word == "len" || word == "cstr"
+            if ((word == "isnull" || word == "isempty" || word == "len" || word == "cstr"
                 || word == "clng" || word == "cdbl" || word == "ucase"
                 || word == "lcase" || word == "abs" || word == "int"
                 || word == "trim" || word == "isnumeric" || word == "val") && one) {
                 if (!host_) return {};
                 const auto& value = args[0];
                 if (word == "isnull") return VbaValue::logical(value.kind == VbaValue::Kind::Null);
-                if (word == "len") return VbaValue::numeric(value.asText().size());
-                if (word == "cstr") return VbaValue::string(value.asText());
-                if (word == "clng") return VbaValue::numeric(std::round(value.asNumber()));
+                if (word == "isempty") return VbaValue::logical(value.kind == VbaValue::Kind::Empty);
+                if (word == "len") return value.kind == VbaValue::Kind::Null ? VbaValue{} : VbaValue::numeric(value.asText().size());
+                if (word == "cstr") {
+                    if (value.kind == VbaValue::Kind::Null) throw error("VBA: Ungültige Verwendung von Null", 94);
+                    return VbaValue::string(value.asText());
+                }
+                if (word == "clng") return VbaValue::numeric(integer(value));
                 if (word == "cdbl") return VbaValue::numeric(value.asNumber());
                 if (word == "abs") return VbaValue::numeric(std::abs(value.asNumber()));
                 if (word == "int") return VbaValue::numeric(std::floor(value.asNumber()));
@@ -300,18 +374,23 @@ private:
 };
 } // namespace
 
+VbaValue VbaValue::empty() { VbaValue v; v.kind = Kind::Empty; return v; }
+VbaValue VbaValue::reference(std::shared_ptr<VbaObject> value) { VbaValue v; v.kind = Kind::Object; v.object = std::move(value); return v; }
 VbaValue VbaValue::numeric(double value) { VbaValue v; v.kind = Kind::Number; v.number = value; return v; }
 VbaValue VbaValue::string(std::string value) { VbaValue v; v.kind = Kind::Text; v.text = std::move(value); return v; }
 VbaValue VbaValue::logical(bool value) { VbaValue v; v.kind = Kind::Boolean; v.boolean = value; return v; }
 std::string VbaValue::asText() const {
+    if (kind == Kind::Object) throw error("VBA: Objekt kann nicht in Text umgewandelt werden");
     if (kind == Kind::Text) return text;
     if (kind == Kind::Boolean) return boolean ? "True" : "False";
-    if (kind == Kind::Null) return {};
+    if (kind == Kind::Null || kind == Kind::Empty) return {};
     std::ostringstream stream;
     stream << std::setprecision(15) << number;
     return stream.str();
 }
 double VbaValue::asNumber() const {
+    if (kind == Kind::Object) throw error("VBA: Objekt kann nicht in Zahl umgewandelt werden");
+    if (kind == Kind::Empty) return 0;
     if (kind == Kind::Number) return number;
     if (kind == Kind::Boolean) return boolean ? -1.0 : 0.0; // VBA True = -1.
     if (kind == Kind::Null) throw error("VBA: Null kann nicht in Zahl umgewandelt werden");

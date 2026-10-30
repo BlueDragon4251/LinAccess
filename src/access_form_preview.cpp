@@ -1,9 +1,11 @@
 #include "access_form_preview.hpp"
 
 #include "vba_runtime.hpp"
+#include "dao_database.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_source_codec.hpp"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
@@ -12,6 +14,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QScrollArea>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -65,6 +68,7 @@ public:
     void saveRecord() override {
         if (!preview_.saveRecord()) throw std::runtime_error("Datensatz konnte nicht gespeichert werden");
     }
+    void quitApplication() override { QApplication::quit(); }
     void maximizeForm() override { preview_.showMaximized(); }
     void gotoLastRecord() override {
         if (preview_.recordSelector_->count() > 0)
@@ -120,6 +124,7 @@ public:
         }
         return std::nullopt;
     }
+    std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(preview_.db_); }
     void executeSql(std::string_view statement) override {
         if (!preview_.db_.isOpen()) throw std::runtime_error("Kein offenes Datenbankprojekt");
         QSqlQuery query(preview_.db_);
@@ -190,7 +195,7 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
 
 void AccessFormPreview::buildControls(QWidget* canvas) {
     for (const auto& control : layout_.controls) {
-        if (!control.visible) continue;
+
         QWidget* widget = nullptr;
         if (control.type == "Label") {
             auto* label = new QLabel(control.caption, canvas);
@@ -209,7 +214,9 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         } else if (control.type == "CommandButton" || control.type == "ToggleButton") {
             auto* button = new QPushButton(control.caption.isEmpty() ? control.name : control.caption, canvas);
             widget = button;
-            const auto event = control.name + "_Click";
+            auto eventName = control.name;
+            eventName.replace(QRegularExpression("[^\\p{L}\\p{N}_]"), "_");
+            const auto event = eventName + "_Click";
             connect(button, &QPushButton::clicked, this, [this, event] { runHandler(event); });
         } else if (control.type == "Subform") {
             auto* button = new QPushButton(control.name + " (Unterformular)", canvas);
@@ -229,7 +236,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         widget->setObjectName("access-control-" + control.name);
         widget->setGeometry(pixels(control.left), pixels(control.top),
                             qMax(12, pixels(control.width)), qMax(14, pixels(control.height)));
-        widget->show();
+        widget->setVisible(control.visible);
         if (!control.name.isEmpty()) controls_.insert(control.name.toCaseFolded(), widget);
         ++renderedControls_;
     }

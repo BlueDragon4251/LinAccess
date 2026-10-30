@@ -93,7 +93,7 @@ ctest --test-dir build-core --output-on-failure
   `DoCmd.Maximize` und `DoCmd.GoToRecord , , acLast`.
   Das Ereignis `Form_Open(Cancel As Integer)` wird unterstützt und kann
   durch Setzen von `Cancel` die Formularöffnung abbrechen.
-  **Keine vollständige Microsoft-VBA-Runtime, keine DAO/COM-API.**
+  **Keine vollständige Microsoft-VBA-Runtime; DAO nur als Teilmenge, COM nicht implementiert.**
 - SQL-basierte Tabellenberichte als HTML-Vorschau und PDF
 - Microsoft Access-Dateien über MDBTools **lesend** untersuchen: Tabellen,
   gespeicherte SQL-Abfragen, sichtbare Formular-/Bericht-/Modulnamen und Beziehungen
@@ -155,7 +155,7 @@ ctest --test-dir build-core --output-on-failure
 
 **Nicht implementiert:** vollständige Original-VBA-Ausführung, wirklich
 pixelidentische Form-/Report-Rekonstruktion, eingebettete Access-Makros,
-DAO-Recordsets/ADO, ActiveX, Windows-COM, Jet/ACE-SQL und 1:1-Konvertierung.
+vollständige DAO-/ADO-Unterstützung, ActiveX, Windows-COM, Jet/ACE-SQL und 1:1-Konvertierung.
 
 ## Reale Access-2003-Regression
 
@@ -186,7 +186,7 @@ Der statische Analyzer erkennt **187 VBA-Prozeduren**, führt beim Import
 jedoch **keinen** fremden Code aus. 23 Formulare nutzen direktes SQL als
 Datenquelle, lediglich 10 sind unmittelbar tabellengebunden.
 Die Bestandsanwendung ist **noch nicht lauffähig**, insbesondere wegen
-DAO/Recordsets, `CurrentDb`, Formularobjekten und diversen `DoCmd`-Befehlen.
+der weiterhin unvollständigen DAO-Unterstützung, Formularobjekten und diversen `DoCmd`-Befehlen. Ein Originalhandler ist inzwischen separat gegen eine SQLite-Kopie ausgeführt; siehe DAO-Laufzeit.
 In Version 0.7 wurden alle **47 realen Access-2003-Formdefinitionen** mit
 dem Layout-Parser geprüft: 685 Platzierungsdaten und 43 Schaltflächen wurden
 erkannt. Ein echter Qt-Klick mit VBA-`CurrentDb.Execute` wird gegen eine
@@ -278,6 +278,14 @@ Ausführung prüfen und ausschließlich aus vertrauenswürdiger Quelle starten.
   **synthetisches**, SHA-256-konsistentes Testpaket. Es enthält **keine echte**
   Access-Datei und testet deshalb keine Microsoft-Access-Kompatibilität.
 
+## Native DAO-Teilmenge
+
+Tabellenrecordsets können jetzt per VBA geöffnet, durchlaufen und mit
+`Edit`/`AddNew`/`Update`/`Delete` verändert werden. Ein echter Qt-Klick führt den
+unveränderten Kassenhandler `SF_Ende_Kassa_Click` gegen eine SQLite-Testkopie aus.
+Das belegt einen Originalhandler, keine vollständige Kassen-/VBA-Kompatibilität.
+Unterstützung, Tests und offene Grenzen stehen unter [DAO-Laufzeit](docs/DAO_RUNTIME.md).
+
 ## Experimentelle VBA-Ausführung
 
 Dieser Code wird vom neuen C++-Teilinterpreter in einem LinAccess-Formular
@@ -301,12 +309,13 @@ Vor dem Ausführen der VBA-Ereignisse fragt LinAccess nach. Nicht unterstützte
 Anweisungen werden vor Ausführung der jeweiligen Prozedur erkannt. Die Engine
 hat nur explizite Host-Funktionen für Formularfelder, Meldungen, Speichern,
 Maximieren und Navigation zum letzten Datensatz; sie unterstützt
-**kein COM, ActiveX, Windows-API oder DAO**.
+**kein COM, ActiveX oder Windows-API; DAO nur in der dokumentierten Teilmenge**.
 Der Interpreter begrenzt die Ausführung auf 10.000 Anweisungsschritte und
 unterstützt außer dem speziellen `Form_Open(Cancel As Integer/Boolean)`
-noch keine Parameter, `On Error`, frei verschachtelte Prozeduraufrufe,
-Arrays, `With`, `Select Case`, `While/Wend`, `Do/Loop`, Objekte oder vollständige
-VBA-Typkonvertierung. VBA-spezifische Semantik ist noch nicht überall korrekt.
+noch keine allgemeinen Parameter, Label-Fehlerhandler, Arrays, `With`,
+`Select Case`, `While/Wend`, allgemeine Klassen oder vollständige VBA-Typkonvertierung.
+`Do While/Loop`, DAO-Objektreferenzen und lokales `On Error Resume Next` sind
+inzwischen als dokumentierte Teilmenge implementiert. VBA-spezifische Semantik ist noch nicht überall korrekt.
 
 Ein zusätzlich unterstütztes Beispiel:
 
@@ -325,6 +334,13 @@ End Function
 Diese Funktion liefert im eingeschränkten Interpreter `10` zurück.
 
 ## Build-Status
+
+Aktuelle lokale Regression (Debian 13 / GCC 14 / Qt 6.8): **11/11 Tests**,
+einschließlich vollständigem 29-Tabellen-Zellvergleich und einem echten Kassen-
+DAO-Buttonereignis. Die MDB-Regressionen wurden zusätzlich mit MDBTools 1.0.0
+mehrfach ausgeführt. Externe Debian-/Ubuntu-CI-Ergebnisse bleiben unbestätigt.
+
+Früherer Referenzstand:
 
 **Verifiziert:** Ubuntu 24.04 / GCC 13 / Qt 6.4 / CMake 3.28:
 

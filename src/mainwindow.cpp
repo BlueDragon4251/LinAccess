@@ -6,9 +6,11 @@
 #include "bridge_importer.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_runtime.hpp"
+#include "dao_database.hpp"
 #include "vba_source_codec.hpp"
 
 #include <QAction>
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
@@ -100,8 +102,10 @@ public:
     void saveRecord() override {
         if (!persist_()) throw std::runtime_error("DoCmd: Datensatz konnte nicht gespeichert werden");
     }
+    void quitApplication() override { QApplication::quit(); }
     void maximizeForm() override { parent_->showMaximized(); }
     void gotoLastRecord() override { gotoLast_(); }
+    std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(database_); }
     void executeSql(std::string_view statement) override {
         QSqlQuery query(database_);
         if (!query.exec(QString::fromUtf8(statement.data(), statement.size())))
@@ -526,9 +530,11 @@ void MainWindow::showAccessArtifact(int id) {
                     QMessageBox::information(dialog_, "VBA MsgBox",
                         QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size())));
                 }
+                void quitApplication() override { QApplication::quit(); }
                 void saveRecord() override {
                     throw std::runtime_error("DoCmd benötigt einen geöffneten Formularkontext");
                 }
+                std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(database_); }
                 void executeSql(std::string_view sql) override {
                     QSqlQuery query(database_);
                     if (!query.exec(QString::fromUtf8(sql.data(), sql.size())))
@@ -842,7 +848,7 @@ void MainWindow::runForm(const QString& name) {
     dialog.resize(620, 510);
     auto* outer = new QVBoxLayout(&dialog);
     outer->addWidget(new QLabel("<b>VBA: experimenteller Teilinterpreter. "
-                                "Windows-API, DAO, COM und weitere Anweisungen werden nicht unterstützt.</b>"));
+                                "DAO unterstützt nur einfache Tabellenrecordsets; Windows-API und COM sind nicht implementiert.</b>"));
     auto* records = new QComboBox(&dialog);
     outer->addWidget(records);
     auto* form = new QFormLayout();
