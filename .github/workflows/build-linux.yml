@@ -44,7 +44,9 @@ jobs:
           ./scripts/restore-fixtures.sh
           CTEST_OUTPUT_ON_FAILURE=0 ctest --test-dir build --timeout 120
       - name: Package DEB
-        run: cpack --config build/CPackConfig.cmake -G DEB
+        run: |
+          cpack --config build/CPackConfig.cmake -G DEB
+          for package in ./linaccess-*.deb; do ./scripts/check-deb.sh "$package"; done
       - name: Upload native executable and DEB
         uses: actions/upload-artifact@v4
         with:
@@ -86,7 +88,9 @@ jobs:
           ./scripts/restore-fixtures.sh
           CTEST_OUTPUT_ON_FAILURE=0 ctest --test-dir build --timeout 120
       - name: Build native Debian package
-        run: cpack --config build/CPackConfig.cmake -G DEB
+        run: |
+          cpack --config build/CPackConfig.cmake -G DEB
+          for package in ./linaccess-*.deb; do ./scripts/check-deb.sh "$package"; done
       - name: Upload Debian binary and package
         uses: actions/upload-artifact@v4
         with:

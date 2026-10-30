@@ -84,7 +84,9 @@ Existing small subset execution tests remain mandatory. Static recognition of
 - [ ] COM/ActiveX/WinAPI reference inventory and feasible native/optional Windows adapters.
 - [ ] Real Windows Access 2003/365 Bridge export validation, 32/64-bit registration,
   references, encoding and failed-export diagnostics.
-- [ ] Repeated Debian 12/13 and Ubuntu 24.04 CI builds/tests and verified .deb packages.
+- [x] Local Debian 13 .deb build, exact payload check (application/desktop only),
+  public install directory permissions even under umask 0077; package check wired into CI.
+- [ ] Repeated Debian 12/13 and Ubuntu 24.04 remote CI builds/tests and package validation.
 - [ ] Interactive Linux desktop validation and accessibility/translations.
 - [ ] GitHub issue checklist and reviewed PRs; API access currently returns Forbidden.
 - [ ] Full end-to-end operation of the original Kassa application, without compatibility claims

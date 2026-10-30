@@ -36,6 +36,15 @@ if(LINACCESS_BUILD_GUI)
         src/csv.hpp
     )
     target_link_libraries(linaccess PRIVATE Qt6::Widgets Qt6::Sql Qt6::PrintSupport)
+    # Cloud workspaces can use umask 0077. Installed system directories must
+    # remain traversable by ordinary desktop users in the generated package.
+    set(CMAKE_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
+        OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+    set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS ${CMAKE_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS})
+    foreach(directory IN ITEMS "." "bin" "share" "share/applications")
+        install(DIRECTORY DESTINATION "${directory}" DIRECTORY_PERMISSIONS
+            OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+    endforeach()
     install(TARGETS linaccess RUNTIME DESTINATION bin)
     install(FILES packaging/linaccess.desktop DESTINATION share/applications)
 
