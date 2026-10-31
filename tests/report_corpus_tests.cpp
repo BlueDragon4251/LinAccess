@@ -78,8 +78,50 @@ QString failureCategory(const QString& error,const QJsonArray& definitions,const
     if (text.contains("syntax")) return "unsupported_grammar";
     return "other_sql_failure";
 }
+int verifyOriginalTags(AccessFormPreview& preview,const QString& code,QSqlDatabase db) {
+    const auto options=QRegularExpression::CaseInsensitiveOption|QRegularExpression::DotMatchesEverythingOption;
+    const auto body=QRegularExpression("Sub\\s+Form_Load\\s*\\(\\s*\\)(.*?)End Sub",options).match(code).captured(1);
+    const auto loop=QRegularExpression(R"tag(Me\s*\(\s*"((?:[^"]|"")*)"\s*&\s*(\w+)\s*\)\s*\.Tag\s*=\s*(\w+)\s*!\s*(\w+))tag",QRegularExpression::CaseInsensitiveOption).match(body);
+    assert(loop.hasMatch());
+    const auto key=QRegularExpression("\\b"+QRegularExpression::escape(loop.captured(2))+"\\s*=\\s*"+QRegularExpression::escape(loop.captured(3))+"!\\s*(\\w+)",QRegularExpression::CaseInsensitiveOption).match(body);
+    const auto source=QRegularExpression("Set\\s+"+QRegularExpression::escape(loop.captured(3))+R"sql(\s*=\s*CurrentDb\.OpenRecordset\s*\(\s*"((?:[^"]|"")*)")sql",QRegularExpression::CaseInsensitiveOption).match(body);
+    assert(key.hasMatch() && source.hasMatch());
+    auto name=source.captured(1); name.replace("\"\"","\"");
+    auto prefix=loop.captured(1); prefix.replace("\"\"","\"");
+    linaccess::AccessQueryPlan plan;
+    QMap<QString,QString> types;
+    if (db.tables().contains(name,Qt::CaseInsensitive)) {
+        plan.sql="SELECT * FROM "+db.driver()->escapeIdentifier(name,QSqlDriver::TableName);
+        types=linaccess::sqliteColumnTypes(db,name);
+    } else plan=linaccess::compileAccessQuery(name.startsWith("SELECT",Qt::CaseInsensitive) ? name : linaccess::accessQuerySource(db,name));
+    const auto bindings=linaccess::bindAccessQueryParameters(plan,{});
+    linaccess::SqliteExecutionBudget budget(db);
+    QSqlQuery reference(db); assert(reference.prepare(plan.sql));
+    for (auto it=bindings.cbegin();it!=bindings.cend();++it) reference.bindValue(it.key(),it.value());
+    assert(reference.exec());
+    const auto idColumn=reference.record().indexOf(key.captured(1));
+    const auto tagColumn=reference.record().indexOf(loop.captured(4));
+    assert(idColumn>=0 && tagColumn>=0);
+    auto controls=makePreviewFormObject(preview)->member("Controls",{}).object;
+    int count=0;
+    while (reference.next()) {
+        if (plan.hiddenRank && reference.value(reference.record().count()-1).toLongLong()>plan.topLimit) break;
+        const auto id=linaccess::qtFieldValue(reference.value(idColumn),types.value(key.captured(1).toCaseFolded())).asText();
+        const auto expected=linaccess::qtFieldValue(reference.value(tagColumn),types.value(loop.captured(4).toCaseFolded())).asText();
+        auto control=controls->member("Item",{linaccess::VbaValue::string(prefix.toUtf8().toStdString()+id)}).object;
+        assert(control->member("Tag",{}).asText()==expected); ++count;
+    }
+    assert(!reference.lastError().isValid() && count>0);
+    return count;
+}
 }
 void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QString& mdb) {
+    QTimer acknowledge;
+    QObject::connect(&acknowledge,&QTimer::timeout,[] {
+        for (auto* widget : QApplication::topLevelWidgets())
+            if (auto* message=qobject_cast<QMessageBox*>(widget)) message->accept();
+    });
+    acknowledge.start(10);
     QTemporaryDir temporary; assert(temporary.isValid());
     auto db=QSqlDatabase::addDatabase("QSQLITE","report-corpus");
     db.setDatabaseName(temporary.filePath("copy.linaccess")); assert(db.open());
@@ -89,14 +131,15 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
     assert(query.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
     for (const auto& value : objects) {
         const auto object=value.toObject();
-        if (object["kind"]!="query") continue;
+        if (object["kind"]!="query" && object["kind"]!="form" && object["kind"]!="vba") continue;
         QFile file(directory.filePath(object["file"].toString())); assert(file.open(QIODevice::ReadOnly));
         const auto bytes=file.readAll();
         assert(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()==object["sha256"].toString().toLatin1().toLower());
-        query.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('query',?,?)");
-        query.addBindValue(object["name"].toString()); query.addBindValue(bytes); assert(query.exec()); query.finish();
+        query.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES(?,?,?)");
+        query.addBindValue(object["kind"].toString()); query.addBindValue(object["name"].toString()); query.addBindValue(bytes); assert(query.exec()); query.finish();
     }
     assert(linaccess::installAccessQueryViews(db)>0);
+    assert(db.transaction());
     // Resolve references taken from the original SQL against original control
     // definitions. Synthetic inputs exercise lookup, not Access result parity.
     const QRegularExpression refs(R"((?:\[Formulare\]|Formulare|\[Forms\]|Forms)\s*!\s*(?:\[([^\]]+)\]|([\p{L}\p{N}_]+))\s*!\s*(?:\[([^\]]+)\]|([\p{L}\p{N}_]+)))",QRegularExpression::CaseInsensitiveOption);
@@ -160,8 +203,9 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
     // Keep the report inventory independent of these synthetic filter inputs.
     for (auto& form : referencedForms) assert(form->close());
     referencedForms.clear();
+    assert(db.rollback());
     std::cout<<"Original SQL object references: "<<referenceCount<<", query definitions: "<<referencingQueries<<", mutable input checks: "<<mutableReferences<<'\n';
-    int blockedInitializers=0;
+    int completedInitializers=0;
     for (const auto& value : objects) {
         const auto module=value.toObject();
         if (module["kind"]!="vba" || module["sha256"].toString().toLatin1().toLower()!="6e8e0a0e41e1a1768cff4a0b79a07205c7b0f799eb8b465af5397843ce048ed8") continue;
@@ -177,26 +221,50 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
         }
         assert(!definition.isEmpty() && db.transaction());
         {
-            QTimer acknowledge;
-            QObject::connect(&acknowledge,&QTimer::timeout,[] {
-                for (auto* widget : QApplication::topLevelWidgets())
-                    if (auto* message=qobject_cast<QMessageBox*>(widget)) message->accept();
-            });
-            acknowledge.start(10);
             QMainWindow window;
             auto* toolbar=window.addToolBar("Project"); toolbar->addAction("Test command"); toolbar->setEnabled(false);
             AccessFormPreview initialized(formName,definition,code,db,&window);
             const auto result=initialized.eventResult("OnLoad");
-            // Current explicit boundary: its first operation requeries an
-            // embedded subform. Do not count this handler as executed startup.
-            assert(result && result->status==linaccess::VbaExecutionStatus::Error && result->errorNumber==438 && result->line==1454);
-            assert(!toolbar->isEnabled());
-            std::cout<<"Complex original Form_Load remains blocked by native subform Requery (438); not counted as completed\n";
-            ++blockedInitializers;
+            if (!result || result->status!=linaccess::VbaExecutionStatus::Completed)
+                std::cerr<<"Complex original initializer: bound="<<static_cast<bool>(result)<<", status="<<(result ? static_cast<int>(result->status) : -1)<<", error="<<(result ? result->errorNumber : 0)<<", line="<<(result ? result->line : 0)<<'\n';
+            assert(result && result->status==linaccess::VbaExecutionStatus::Completed);
+            assert(toolbar->isEnabled());
+            const auto tags=verifyOriginalTags(initialized,linaccess::decodeVbaSource(code),db);
+            int subforms=0,calculated=0,calculationErrors=0;
+            QJsonArray calculations;
+            const auto layout=linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(definition));
+            for (qsizetype index=0;index<layout.controls.size();++index) {
+                const auto& control=layout.controls[index];
+                if (control.type=="Subform") {
+                    auto* child=dynamic_cast<AccessFormPreview*>(initialized.findChild<QWidget*>("access-control-"+control.name));
+                    if (child && child->hasDataSource()) ++subforms;
+                }
+                if (control.controlSource.trimmed().startsWith('=')) {
+                    const auto value=makePreviewFormObject(initialized)->item(control.name.toUtf8().toStdString());
+                    ++calculated; calculationErrors+=value.kind==linaccess::VbaValue::Kind::Error;
+                    calculations.append(QJsonObject{{"module_sha256",module["sha256"]},{"control_index",index},
+                        {"value_kind",static_cast<int>(value.kind)},{"error_number",value.errorNumber}});
+                }
+            }
+            assert(subforms>=2 && calculated>0);
+            assert(initialized.close());
+            QJsonArray events;
+            for (auto event=layout.events.cbegin();event!=layout.events.cend();++event) {
+                if (event.value().compare("[Event Procedure]",Qt::CaseInsensitive)!=0) continue;
+                const auto outcome=initialized.eventResult(event.key());
+                events.append(QJsonObject{{"module_sha256",module["sha256"]},{"event",event.key()},
+                    {"dispatched",outcome.has_value()},{"status",outcome ? static_cast<int>(outcome->status) : -1},{"error_number",outcome ? outcome->errorNumber : 0},{"line",outcome ? outcome->line : 0}});
+            }
+            QFile eventInventory(QCoreApplication::applicationDirPath()+"/private-form-event-inventory.json"); assert(eventInventory.open(QIODevice::WriteOnly));
+            assert(eventInventory.write(QJsonDocument(events).toJson())>0);
+            QFile calculationInventory(QCoreApplication::applicationDirPath()+"/private-form-calculation-inventory.json"); assert(calculationInventory.open(QIODevice::WriteOnly));
+            assert(calculationInventory.write(QJsonDocument(calculations).toJson())>0);
+            std::cout<<"Complex original Form_Load completed; independently verified control Tags: "<<tags<<", available subforms: "<<subforms<<", calculated controls: "<<calculated<<", calculation error values: "<<calculationErrors<<'\n';
+            ++completedInitializers;
         }
         assert(db.rollback());
     }
-    assert(blockedInitializers==1);
+    assert(completedInitializers==1);
     int scanned=0,available=0,cells=0;
     QJsonArray inventory;
     QMap<QString,int> failures;

@@ -62,8 +62,8 @@ private:
 };
 class Recordset final : public VbaObject, public std::enable_shared_from_this<Recordset> {
 public:
-    Recordset(QSqlDatabase db, QString source, bool snapshot, QMap<QString,QVariant> bindings = {}, int topLimit = 0, bool hiddenRank = false)
-        : db_(std::move(db)), source_(std::move(source)), readOnly_(snapshot), bindings_(std::move(bindings)), topLimit_(topLimit), hiddenRank_(hiddenRank) {
+    Recordset(QSqlDatabase db, QString source, bool snapshot, QMap<QString,QVariant> bindings = {},AccessQueryPlan plan={})
+        : db_(std::move(db)), source_(std::move(source)), readOnly_(snapshot), bindings_(std::move(bindings)),queryPlan_(std::move(plan)) {
         table_ = db_.tables().contains(source_, Qt::CaseInsensitive);
         readOnly_ |= !table_;
         reload();
@@ -149,8 +149,8 @@ private:
     void reload() {
         types_ = table_ ? sqliteColumnTypes(db_,source_) : QMap<QString,QString>{};
         if (!table_) {
-            AccessQueryPlan plan;
-            plan.sql = source_; plan.topLimit = topLimit_; plan.hiddenRank = hiddenRank_;
+            auto plan=queryPlan_;
+            if (plan.sql.isEmpty()) plan.sql=source_;
             const auto result = executeAccessQueryPlan(db_,plan,bindings_);
             columns_ = result.columns; rows_ = result.rows; ids_.clear(); position_ = 0;
             return;
@@ -160,10 +160,9 @@ private:
         exec(query,"SELECT rowid,* FROM " + quote(source_));
         const int offset = table_ ? 1 : 0;
         columns_.clear(); rows_.clear(); ids_.clear(); position_ = 0;
-        const int end = query.record().count() - (hiddenRank_ ? 1 : 0);
+        const int end = query.record().count();
         for (int i = offset; i < end; ++i) columns_ << query.record().fieldName(i);
         while (query.next()) {
-            if (hiddenRank_ && query.value(query.record().count()-1).toLongLong() > topLimit_) break;
             require(rows_.size() < 100000, "DAO: Recordset row limit exceeded");
             QVariantList row;
             if (table_) ids_.append(query.value(0));
@@ -209,8 +208,7 @@ private:
     QSet<int> changed_;
     qsizetype position_{};
     Mode mode_{Mode::Browse};
-    int topLimit_{};
-    bool hiddenRank_{};
+    AccessQueryPlan queryPlan_;
 };
 class Fields final : public VbaObject {
 public:
@@ -275,7 +273,7 @@ public:
         if (key == "openrecordset") {
             require(args.empty() || (args.size() == 1 && (args[0].asNumber() == 2 || args[0].asNumber() == 4)),"DAO: Recordset type unsupported");
             require(plan_.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT QueryDef required");
-            return VbaValue::reference(std::make_shared<Recordset>(db_,plan_.sql,true,bindAccessQueryParameters(plan_,values_),plan_.topLimit,plan_.hiddenRank));
+            return VbaValue::reference(std::make_shared<Recordset>(db_,plan_.sql,true,bindAccessQueryParameters(plan_,values_),plan_));
         }
         if (key == "execute") {
             require(args.empty() || (args.size() == 1 && args[0].asNumber() == 128),"DAO: Execute options unsupported");
@@ -354,7 +352,7 @@ public:
             const auto sql = source.trimmed().startsWith("SELECT ",Qt::CaseInsensitive) ? source : accessQuerySource(db_,source);
             const auto plan = compileAccessQuery(sql);
             require(plan.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT required");
-            return VbaValue::reference(std::make_shared<Recordset>(db_,plan.sql,true,bindAccessQueryParameters(plan,{}),plan.topLimit,plan.hiddenRank));
+            return VbaValue::reference(std::make_shared<Recordset>(db_,plan.sql,true,bindAccessQueryParameters(plan,{}),plan));
         }
         if (key == "execute") {
             require(args.size() == 1 || (args.size() == 2 && args[1].asNumber() == 128), "DAO: Execute arguments unsupported");

@@ -58,6 +58,8 @@ Full targets remain open:
 - [ ] With, Select Case, remaining Do/While/Exit variants and full conditional semantics.
 - [x] Imported-form Forms/Controls collections, guarded references, typed cross-form data writes and basic Access control constants.
 - [x] Value/reference contexts for Set and property assignment, dynamic Me(control), DAO Field bang references; six property writes in one original Form_Load verified.
+- [x] Unlinked native embedded child forms, Form references, Requery, typed edits and parent-close cancellation; original complex Form_Load and 15 actual data-driven Tags verified.
+- [x] Bounded Error Variants, CVErr/IsError, ByRef/function return and calculated-control error handling.
 - [ ] Complete Forms/Reports object model, properties, lifetime and subform semantics.
 - [ ] On Error/Err/Resume, nested handlers and source-mapped diagnostics/debugger.
 - [ ] Application/Forms/Reports/Me/DoCmd and Access/DAO constants.
@@ -82,7 +84,7 @@ Verified incremental work ([query adapter and limits](QUERY_ADAPTER.md)):
 - [x] Canonical MDB/date-literal/Date()/Now() timestamps at second precision.
 - [x] Parameterless compatible query views, dependency refresh and form source exposure.
 - [x] All 100 query artifacts hash-checked and classified on an isolated copy;
-  49 execute without an Access result oracle, the rest remain explicitly unresolved.
+  58 execute without an Access result oracle, the rest remain explicitly unresolved.
 - [x] SQL operation/time budgets and rejection of interrupted partial results.
 
 Full targets remain open:
@@ -92,6 +94,8 @@ Full targets remain open:
 - [x] Bounded date Format/Format$ masks in SQL/VBA; actual values from ten original date columns, NULL/error/locale/DST tests.
 - [x] Native SQL concatenation with arithmetic/Boolean boundaries, NULL and dynamic LIKE regression; original query execution 49/100.
 - [ ] Complete date/format masks, wildcard semantics, Null/coercion, DDL/DML and action queries.
+- [x] Saved ranked TOP dependency views, NULL/tie-safe bounded TOP 1 plans and qualified column labels; 58/100 original queries execute.
+- [x] Nested SQL budget enforcement and guarded simple RIGHT JOIN adaptation with independent NULL/duplicate results.
 - [ ] Execute and classify all 100 Kassa queries against the imported database copy.
 - [x] Bounded read-only saved-query form sources and translated navigator results with explicit typed parameter prompts.
 - [x] Live SQL Forms/Formulare and Reports/Berichte control values, project isolation and saved views; nine original references / five queries verified.
@@ -99,7 +103,8 @@ Full targets remain open:
 - [ ] Complete form/report query binding, implicit parameters and editable joins where valid.
 - [ ] Navigator, datasheet/form/design views, properties, toolbox, undo/redo and SQL designer.
 - [ ] Fonts/colors/geometry/default control properties and Access 2003 layout parity.
-- [ ] Embedded linked subforms, tab/option groups, combos/lists and expression controls.
+- [x] SaveAsText quoted string continuation/escaping, typed Column/BoundColumn values, basic form aggregates and explicit subform references.
+- [ ] Embedded linked subforms, tab/option groups, complete combos/lists and expression controls.
 - [x] Bound Report_Open/Close/NoData, cancellation and read-only sources; all 9 original report sources classified, six bind 54 actual non-NULL controls.
 - [ ] Report sections/grouping/aggregates/headers/footers/pagination and complete report event order.
 - [x] Native current-layout single-page print/PDF preview and CommandBars adapter; three original Report_Open procedures executed explicitly.

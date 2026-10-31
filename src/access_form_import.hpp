@@ -24,9 +24,15 @@ struct AccessVisualControl {
     QString type;
     QString name;
     QString caption;
+    QString tag;
     QString controlSource;
     QString rowSource;
+    QString rowSourceType;
+    int boundColumn{1};
+    int columnCount{1};
     QString sourceObject;
+    QString linkMasterFields;
+    QString linkChildFields;
     QString section;
     QString onClick;
     QString afterUpdate;
@@ -42,6 +48,7 @@ enum class AccessDocumentKind { Form, Report };
 struct AccessFormLayout {
     AccessDocumentKind kind{AccessDocumentKind::Form};
     QString caption;
+    QString tag;
     QString recordSource;
     int width{9000};
     int height{5000};

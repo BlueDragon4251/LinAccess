@@ -232,6 +232,7 @@ Forms![reference context]!Summary.Value = "live"
 Set ctl = Forms![reference context]!Summary
 ctl.Value = ctl.Value & ":reference"
 Me!Summary.Visible = True
+Me.Scan.Requery
 End Sub
 Sub Write_Click()
 On Error Resume Next

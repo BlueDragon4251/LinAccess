@@ -1,0 +1,271 @@
+#include "access_form_preview.hpp"
+#include "access_form_objects.hpp"
+#include "access_query.hpp"
+#include <QSqlQuery>
+#include <QLineEdit>
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+#include <cassert>
+void testSubforms() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","embedded-form-test"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery query(db);
+    assert(query.exec("CREATE TABLE items(id INTEGER PRIMARY KEY,name TEXT,amount REAL)"));
+    assert(query.exec("INSERT INTO items VALUES(1,'before',10.5),(2,'second',3.5),(3,'nullable',NULL)"));
+    assert(query.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    const QByteArray childSource=R"FORM(Begin Form
+RecordSource ="items"
+OnLoad ="[Event Procedure]"
+OnUnload ="[Event Procedure]"
+OnClose ="[Event Procedure]"
+Begin Section
+Height =1500
+Begin TextBox
+Name ="child_name"
+Tag ="field metadata"
+ControlSource ="name"
+End
+Begin TextBox
+Name ="allow_close"
+Top =400
+End
+Begin TextBox
+Name ="total"
+ControlSource ="=Sum([amount])"
+Top =800
+End
+Begin TextBox
+Name ="nonnull"
+ControlSource ="=Count([amount])"
+End
+Begin TextBox
+Name ="rowcount"
+ControlSource ="=Count(*)"
+End
+Begin TextBox
+Name ="localized"
+ControlSource ="=Wenn(IstNull([total]);0;[total])"
+End
+Begin TextBox
+Name ="eager_error"
+ControlSource ="=IIf(True,1,1/0)"
+End
+End
+End
+)FORM";
+    const QByteArray childCode=R"VBA(
+Sub Form_Load()
+Me!allow_close = 1
+End Sub
+Sub Form_Unload(Cancel As Integer)
+If Me!allow_close = 0 Then
+Cancel = 1
+End If
+End Sub
+Sub Form_Close()
+Me!allow_close = 2
+End Sub
+)VBA";
+    const auto artifact=[&](const char* kind,const char* name,const QByteArray& bytes) {
+        query.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES(?,?,?)");
+        query.addBindValue(kind); query.addBindValue(name); query.addBindValue(bytes); assert(query.exec()); query.finish();
+    };
+    artifact("form","child",childSource); artifact("vba","Form_child",childCode);
+    const QByteArray parentSource=R"FORM(Begin Form
+Tag ="parent metadata"
+Begin Section
+Height =4000
+Begin Subform
+Name ="embedded records"
+SourceObject ="Form.child"
+Width =7000
+Height =3500
+End
+Begin TextBox
+Name ="offset"
+Top =3500
+End
+Begin TextBox
+Name ="combined"
+ControlSource ="=[embedded records].[Form]![total]+[offset]"
+Top =3800
+End
+Begin ComboBox
+Name ="lookup"
+RowSource ="SELECT id,name,amount FROM items ORDER BY id"
+RowSourceType ="Table/Query"
+BoundColumn =2
+ColumnCount =3
+End
+Begin TextBox
+Name ="lookup_id"
+ControlSource ="=[lookup].Column(0)"
+End
+Begin TextBox
+Name ="lookup_first"
+ControlSource ="=[lookup].Column(1;0)"
+End
+Begin TextBox
+Name ="global_offset"
+ControlSource ="=[Formulare]![parent]![offset]+1"
+End
+Begin ComboBox
+Name ="ordinal"
+RowSource ="SELECT id,name,amount FROM items ORDER BY id"
+BoundColumn =0
+ColumnCount =3
+End
+Begin TextBox
+Name ="manual_error"
+End
+Begin TextBox
+Name ="cycle_one"
+ControlSource ="=[cycle_two]"
+End
+Begin TextBox
+Name ="cycle_two"
+ControlSource ="=[cycle_one]"
+End
+End
+End
+)FORM";
+    const QByteArray parentCode=R"VBA(
+Sub Refresh()
+Me![embedded records].Requery
+End Sub
+Sub Change()
+Dim frm As Form
+Set frm = Me![embedded records].Form
+frm!child_name = "edited"
+Me("embedded " & "records").Tag = "child metadata"
+Me.Tag = Me.Tag & ":changed"
+Me!offset = 2
+End Sub
+Sub CheckErrors()
+Me!offset = CVErr(2015)
+Me!manual_error = CStr(IsError(Me!combined))
+End Sub
+)VBA";
+    AccessFormPreview parent("parent",parentSource,parentCode,db);
+    auto* child=dynamic_cast<AccessFormPreview*>(parent.findChild<QWidget*>("access-control-embedded records"));
+    assert(child && !child->isWindow() && child->hasDataSource());
+    assert(child->eventResult("OnLoad") && child->eventResult("OnLoad")->status==linaccess::VbaExecutionStatus::Completed);
+    auto form=makePreviewFormObject(parent)->member("Controls",{linaccess::VbaValue::string("embedded records")}).object->member("Form",{}).object;
+    auto controls=form->member("Controls",{}).object;
+    auto name=controls->member("Item",{linaccess::VbaValue::string("child_name")}).object;
+    assert(name->member("Tag",{}).asText()=="field metadata");
+    bool nullTag=false;
+    try { name->assign("Tag",{}); } catch(const linaccess::VbaRuntimeError& error) { nullTag=error.number==94; }
+    assert(nullTag && name->member("Tag",{}).asText()=="field metadata");
+    assert(makePreviewFormObject(parent)->member("Tag",{}).asText()=="parent metadata");
+    auto allow=controls->member("Item",{linaccess::VbaValue::string("allow_close")}).object;
+    assert(form->item("total").asNumber()==14);
+    assert(form->item("nonnull").asNumber()==2);
+    assert(form->item("rowcount").asNumber()==3);
+    assert(form->item("localized").asNumber()==14);
+    const auto eager=form->item("eager_error");
+    assert(eager.kind==linaccess::VbaValue::Kind::Error && eager.errorNumber==11);
+    const auto parentControls=makePreviewFormObject(parent)->member("Controls",{}).object;
+    const auto lookup=parentControls->member("Item",{linaccess::VbaValue::string("lookup")}).object;
+    assert(lookup->member("Column",{linaccess::VbaValue::numeric(0)}).kind==linaccess::VbaValue::Kind::Null);
+    lookup->assign("Value",linaccess::VbaValue::string("second"));
+    assert(lookup->member("Value",{}).asText()=="second");
+    assert(lookup->member("Column",{linaccess::VbaValue::numeric(0)}).asNumber()==2);
+    assert(lookup->member("Column",{linaccess::VbaValue::numeric(2)}).asNumber()==3.5);
+    assert(lookup->member("Column",{linaccess::VbaValue::numeric(1),linaccess::VbaValue::numeric(0)}).asText()=="before");
+    assert(makePreviewFormObject(parent)->item("lookup_id").asNumber()==2);
+    lookup->assign("Value",linaccess::VbaValue::string("nullable"));
+    assert(lookup->member("Column",{linaccess::VbaValue::numeric(2)}).kind==linaccess::VbaValue::Kind::Null);
+    const auto ordinal=parentControls->member("Item",{linaccess::VbaValue::string("ordinal")}).object;
+    ordinal->assign("Value",linaccess::VbaValue::numeric(1));
+    assert(ordinal->member("Column",{linaccess::VbaValue::numeric(0)}).asNumber()==2);
+    assert(ordinal->member("Value",{}).asNumber()==1);
+    assert(name->member("Value",{}).asText()=="before");
+    assert(makePreviewFormsObject(parent)->member("Count",{}).asNumber()==1);
+    assert(query.exec("UPDATE items SET name='external' WHERE id=1")); query.finish();
+    std::vector<linaccess::VbaValue> arguments;
+    assert(parent.executeProcedure("Refresh",arguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(name->member("Value",{}).asText()=="external");
+    assert(parent.executeProcedure("Change",arguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(makePreviewFormObject(parent)->member("Tag",{}).asText()=="parent metadata:changed");
+    assert(makePreviewFormObject(parent)->item("combined").asNumber()==16);
+    assert(makePreviewFormObject(parent)->item("global_offset").asNumber()==3);
+    assert(makePreviewFormObject(parent)->item("lookup_first").asText()=="before");
+    assert(parent.findChild<QLineEdit*>("access-control-combined")->text()=="16");
+    assert(parent.executeProcedure("CheckErrors",arguments).status==linaccess::VbaExecutionStatus::Completed);
+    const auto propagated=makePreviewFormObject(parent)->item("combined");
+    assert(propagated.kind==linaccess::VbaValue::Kind::Error && propagated.errorNumber==2015);
+    assert(makePreviewFormObject(parent)->item("manual_error").asText()=="True");
+    const auto cyclic=makePreviewFormObject(parent)->item("cycle_one");
+    assert(cyclic.kind==linaccess::VbaValue::Kind::Error && cyclic.errorNumber==2455);
+    linaccess::AccessQueryModel sql;
+    bool rejectedError=false;
+    try { sql.execute(db,"SELECT Forms!parent!combined"); }
+    catch(const linaccess::VbaRuntimeError& error) { rejectedError=error.number==13; }
+    assert(rejectedError);
+    parentControls->member("Item",{linaccess::VbaValue::string("offset")}).object->assign("Value",linaccess::VbaValue::numeric(2));
+    assert(makePreviewFormObject(parent)->member("Controls",{linaccess::VbaValue::string("embedded records")}).object->member("Tag",{}).asText()=="child metadata");
+    allow->assign("Value",linaccess::VbaValue::numeric(0));
+    assert(!parent.close());
+    assert(form->member("Name",{}).asText()=="child");
+    assert(!child->eventResult("OnClose"));
+    assert(query.exec("SELECT name FROM items WHERE id=1") && query.next() && query.value(0).toString()=="edited"); query.finish();
+    allow->assign("Value",linaccess::VbaValue::numeric(1));
+    assert(parent.close());
+    assert(child->eventResult("OnClose") && child->eventResult("OnClose")->status==linaccess::VbaExecutionStatus::Completed);
+    bool closed=false;
+    try { (void)form->member("Name",{}); } catch(const linaccess::VbaRuntimeError& error) { closed=error.number==2450; }
+    assert(closed);
+
+    auto linked=parentSource;
+    linked.replace("SourceObject =\"Form.child\"","SourceObject =\"Form.child\"\nLinkMasterFields =\"id\"\nLinkChildFields =\"id\"");
+    AccessFormPreview unsupported("linked",linked,parentCode,db);
+    const auto rejected=unsupported.executeProcedure("Refresh",arguments);
+    assert(rejected.status==linaccess::VbaExecutionStatus::Error && rejected.errorNumber==3251);
+    assert(unsupported.close());
+
+    auto cycle=parentSource; cycle.replace("Form.child","Form.cycle"); artifact("form","cycle",cycle);
+    AccessFormPreview recursive("cycle",cycle,parentCode,db);
+    const auto recursion=recursive.executeProcedure("Refresh",arguments);
+    assert(recursion.status==linaccess::VbaExecutionStatus::Error && recursion.errorNumber==2455);
+    assert(recursive.close());
+
+    const QByteArray wrappedSource=R"FORM(Begin Form
+Caption ="A ""quoted"" "
+    "caption"
+RecordSource ="SELECT id,na"
+    "me,amount FROM items ORDER BY id"
+Begin Section
+Height =1500
+Begin TextBox
+Name ="bound name"
+ControlSource ="na"
+    "me"
+End
+Begin ComboBox
+Name ="wrapped rows"
+ColumnCount =2
+RowSource ="SELECT id,na"
+    "me FROM items ORDER BY id"
+End
+End
+End
+)FORM";
+    const auto decoded=linaccess::parseAccessFormLayout(QString::fromUtf8(wrappedSource));
+    assert(decoded.caption=="A \"quoted\" caption" && decoded.recordSource=="SELECT id,name,amount FROM items ORDER BY id");
+    assert(linaccess::parseAccessFormText(QString::fromUtf8(wrappedSource)).recordSource==decoded.recordSource);
+    AccessFormPreview wrapped("wrapped source",wrappedSource,{},db);
+    assert(wrapped.hasDataSource());
+    assert(makePreviewFormObject(wrapped)->item("bound name").asText()=="edited");
+    const auto wrappedRows=makePreviewFormObject(wrapped)->member("Controls",{linaccess::VbaValue::string("wrapped rows")}).object;
+    assert(wrappedRows->member("Column",{linaccess::VbaValue::numeric(1),linaccess::VbaValue::numeric(0)}).asText()=="edited");
+    assert(wrapped.close());
+
+    AccessFormPreview failedSource("failed source",parentSource,parentCode,db);
+    assert(query.exec("DROP TABLE items")); query.finish();
+    const auto failedRequery=failedSource.executeProcedure("Refresh",arguments);
+    assert(failedRequery.status==linaccess::VbaExecutionStatus::Error && failedRequery.errorNumber==3078);
+    auto* unavailable=dynamic_cast<AccessFormPreview*>(failedSource.findChild<QWidget*>("access-control-embedded records"));
+    assert(unavailable && !unavailable->hasDataSource());
+    assert(failedSource.close());
+}

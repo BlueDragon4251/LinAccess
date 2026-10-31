@@ -5,30 +5,35 @@
 #include <QHash>
 
 namespace linaccess {
+namespace {
+QString propertyValue(const QString& raw);
+QStringList saveAsTextLines(const QString& source);
+}
 AccessFormDraft parseAccessFormText(const QString& source) {
     AccessFormDraft draft;
+    const auto logicalSource=saveAsTextLines(source).join('\n');
     // The export consists of many nested Begin/End blocks. For the simple
     // bound-form import we need only top-level RecordSource and field bindings.
-    // Text after the first embedded quote is deliberately not evaluated.
-    const QRegularExpression record(R"re(^\s*RecordSource\s*=\s*"([^"]*)")re",
+    // SaveAsText splits long strings into adjacent quoted fragments.
+    const QRegularExpression record(R"re(^\s*RecordSource\s*=\s*(.+)$)re",
         QRegularExpression::MultilineOption | QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpression control(R"re(^\s*ControlSource\s*=\s*"([^"]*)")re",
+    const QRegularExpression control(R"re(^\s*ControlSource\s*=\s*(.+)$)re",
         QRegularExpression::MultilineOption | QRegularExpression::CaseInsensitiveOption);
     const QRegularExpression event(R"re(^\s*(OnOpen|OnLoad|AfterUpdate|OnClick|OnCurrent)\s*=\s*"\[Event Procedure\]")re",
         QRegularExpression::MultilineOption | QRegularExpression::CaseInsensitiveOption);
-    const auto table = record.match(source);
-    if (table.hasMatch()) draft.recordSource = table.captured(1).trimmed();
+    const auto table = record.match(logicalSource);
+    if (table.hasMatch()) draft.recordSource = propertyValue(table.captured(1)).trimmed();
 
     QSet<QString> seen;
-    auto fields = control.globalMatch(source);
+    auto fields = control.globalMatch(logicalSource);
     while (fields.hasNext()) {
-        const auto name = fields.next().captured(1).trimmed();
+        const auto name = propertyValue(fields.next().captured(1)).trimmed();
         if (!name.isEmpty() && !seen.contains(name.toCaseFolded())) {
             seen.insert(name.toCaseFolded());
             draft.controlSources << name;
         }
     }
-    auto events = event.globalMatch(source);
+    auto events = event.globalMatch(logicalSource);
     while (events.hasNext()) {
         const auto name = events.next().captured(1);
         if (!draft.eventNames.contains(name, Qt::CaseInsensitive)) draft.eventNames << name;
@@ -52,6 +57,23 @@ QString propertyValue(const QString& raw) {
     return result;
 }
 
+QStringList saveAsTextLines(const QString& source) {
+    const auto physical=source.split('\n');
+    QStringList logical;
+    static const QRegularExpression property(R"(^\s*[A-Za-z][A-Za-z0-9_]*\s*=\s*(".*)$)");
+    for (qsizetype i=0;i<physical.size();++i) {
+        auto line=physical[i];
+        const auto match=property.match(line);
+        if (match.hasMatch() && i+1<physical.size() && physical[i+1].trimmed().startsWith('"')) {
+            auto value=propertyValue(match.captured(1));
+            while (i+1<physical.size() && physical[i+1].trimmed().startsWith('"')) value+=propertyValue(physical[++i]);
+            value.replace('"',"\"\"");
+            line=line.left(match.capturedStart(1))+'"'+value+'"';
+        }
+        logical.append(line);
+    }
+    return logical;
+}
 bool isControl(const QString& type) {
     static const QSet<QString> types = {
         "TextBox", "Label", "CommandButton", "ComboBox", "ListBox",
@@ -71,7 +93,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
     static const QRegularExpression begin(R"(^\s*Begin(?:\s+(\w+))?\s*$)",
         QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression property(R"(^\s*([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$)");
-    const auto lines = source.split('\n');
+    const auto lines = saveAsTextLines(source);
     for (const auto& rawLine : lines) {
         const auto line = rawLine.trimmed();
         const auto start = begin.match(line);
@@ -118,9 +140,15 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             auto& control = form.controls[current.control];
             if (key == "Name") control.name = value;
             else if (key == "Caption") control.caption = value;
+            else if (key == "Tag") control.tag = value;
             else if (key == "ControlSource") control.controlSource = value;
             else if (key == "RowSource") control.rowSource = value;
+            else if (key == "RowSourceType") control.rowSourceType = value;
+            else if (key == "BoundColumn") control.boundColumn = integer();
+            else if (key == "ColumnCount") control.columnCount = integer();
             else if (key == "SourceObject") control.sourceObject = value;
+            else if (key == "LinkMasterFields") control.linkMasterFields = value;
+            else if (key == "LinkChildFields") control.linkChildFields = value;
             else if (key == "OnClick") control.onClick = value;
             else if (key == "AfterUpdate") control.afterUpdate = value;
             else if (key == "BeforeUpdate") control.beforeUpdate = value;
@@ -133,6 +161,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             static const QSet<QString> events{"onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate","onnodata","onerror","onpage"};
             if (events.contains(key.toCaseFolded())) form.events.insert(key.toCaseFolded(),value);
             if (key == "Caption") form.caption = value;
+            else if (key == "Tag") form.tag = value;
             else if (key == "RecordSource") form.recordSource = value;
             else if (key == "Width") form.width = integer();
         } else if (current.type == "Section" || current.type == "FormHeader"

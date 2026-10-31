@@ -11,13 +11,16 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original register keypad button/parameter-helper executions | 11 |
 | Original DAO insertion button execution | 1 |
 | Original bound Report_Open / Report_Close procedures executed | 3 / 3 |
-| Original Form_Load control initializer / verified property assignments | 1 / 6 |
+| Original simple Form_Load / verified property assignments | 1 / 6 |
+| Original complex Form_Load / independently verified dynamic Tags | 1 / 15 |
+| Available embedded sources in that original form | 6 |
+| Calculated controls / remaining error values in that form | 34 / 7 |
 | Original report sources classified / currently bound | 9 / 6 |
 | Original report non-NULL textbox values compared with prepared reader | 54 |
 | Original form layouts scanned | 47 |
 | Parsed controls / visible command buttons | 878 / 86 |
-| Original query artifacts classified / executed without Access result oracle | 100 / 49 |
-| Current local regression tests | 17 passed |
+| Original query artifacts classified / executed without Access result oracle | 100 / 58 |
+| Current local regression tests | 18 passed |
 
 Current completed work package: positional Sub/Function calls, ByVal/ByRef aliases,
 function expressions, top-level label error handling and original keypad regression.
@@ -89,5 +92,19 @@ errors are tested. Full default-member/Variant semantics remain open.
 
 Completed project command-bar package: bare CommandBars and actual enclosing
 Qt toolbar/button collections, guarded lifetimes and one-based identity tests.
-The complex original Form_Load is classified as blocked at embedded-subform
-Requery (438), not counted as successful execution.
+Subsequent embedded-form work completes its Form_Load; the entire startup still
+fails at ActiveMenuBar/OnCurrent and has unresolved calculated controls.
+
+Completed embedded-form execution package: real child forms, persistence and
+close cancellation, typed combo columns, simple calculated aggregates, Error
+Variants and complete SaveAsText string fragments (NATIVE_FORM_RUNTIME.md).
+Qualified projection labels, ranked TOP dependency views, guarded TOP 1 boundary
+queries and bounded two-table RIGHT-to-LEFT JOIN adaptation execute 58/100
+original queries. Nested SQL budgets remain effective. Overall compatibility,
+classes/AST, remaining startup events and exact monetary types remain open.
+
+Latest local validation: 18/18 regressions pass, the Qt-free runtime build/test
+passes, and the Debian package payload/permissions check passes. The original
+29-table comparison also passes five consecutive times with MDBTools 1.0.0.
+All four original fixture SHA-256 checks remain unchanged. This does not explain
+the historical intermittent EOF failures or verify remote distro CI execution.

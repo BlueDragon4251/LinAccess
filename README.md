@@ -146,7 +146,7 @@ ctest --test-dir build-core --output-on-failure
 - Importierte Access-Abfragen laufen im Navigator über einen begrenzten Jet-SQL-
   Adapter mit Parameterdialogen, DAO-QueryDefs, TOP-Sortiergleichständen, eager
   IIf und begrenzter nativer Datumsformatierung für SQL/VBA-Format$. Gespeicherte Abfragen können schreibgeschützte Formular-Datenquellen sein.
-  49/100 Kassenabfragen werden ausgeführt, bisher ohne Access-Referenzergebnis;
+  58/100 Kassenabfragen werden ausgeführt, bisher ohne Access-Referenzergebnis;
   SQL-Verweise auf geöffnete Forms/Formulare und Reports/Berichte lesen echte
   Controlwerte, auch in gespeicherten Abfragen; [Umfang und Tests](docs/SQL_OBJECT_VALUES.md).
   siehe [Abfrageadapter](docs/QUERY_ADAPTER.md). Importierte Berichte haben eine
@@ -425,3 +425,9 @@ Die Windows-Export-Brücke wäre ein optionales **Importwerkzeug**, nicht die
 Linux-Laufzeit. Vollständige VBA-/Access-Kompatibilität ist auch damit nicht
 automatisch erreicht; besonders COM, ActiveX und Windows-API-Aufrufe bleiben
 problematisch.
+
+Ein komplexer originaler `Form_Load` läuft jetzt mit echten eingebetteten
+Unterformularen; 15 dynamische Tags sind gegen die tatsächlichen Datensätze
+geprüft. Berechnete Grundausdrücke, Error-Variants und ComboBox-Spalten sind
+teilweise unterstützt. Sieben Berechnungen und weitere Startup-Ereignisse bleiben
+offen: [Details und Regressionen](docs/NATIVE_FORM_RUNTIME.md).

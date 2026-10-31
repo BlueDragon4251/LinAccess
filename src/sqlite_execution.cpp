@@ -5,6 +5,7 @@
 #include <QLibrary>
 #include <QSqlDriver>
 #include <algorithm>
+#include <unordered_map>
 struct sqlite3;
 namespace linaccess {
 struct SqliteExecutionBudget::Impl {
@@ -15,10 +16,15 @@ struct SqliteExecutionBudget::Impl {
     int interval{};
     int milliseconds{};
     QElapsedTimer clock;
+    Impl* previous{};
+    inline static thread_local std::unordered_map<sqlite3*,Impl*> active;
     static int check(void* pointer) {
         auto& self = *static_cast<Impl*>(pointer);
-        self.remaining -= self.interval;
-        return self.remaining <= 0 || self.clock.hasExpired(self.milliseconds);
+        for (auto* budget=&self;budget;budget=budget->previous) {
+            budget->remaining-=self.interval;
+            if (budget->remaining<=0 || budget->clock.hasExpired(budget->milliseconds)) return 1;
+        }
+        return 0;
     }
 };
 SqliteExecutionBudget::SqliteExecutionBudget(QSqlDatabase db, qint64 operations, int milliseconds)
@@ -38,9 +44,28 @@ SqliteExecutionBudget::SqliteExecutionBudget(QSqlDatabase db, qint64 operations,
     impl_->interval = static_cast<int>(std::min<qint64>(1000,operations));
     impl_->milliseconds = milliseconds;
     impl_->clock.start();
+    auto& current=Impl::active[impl_->database];
+    impl_->previous=current;
+    if (current) impl_->interval=std::min(impl_->interval,current->interval);
+    current=impl_.get();
     function(impl_->database,impl_->interval,&Impl::check,impl_.get());
 }
 SqliteExecutionBudget::~SqliteExecutionBudget() {
-    if (impl_ && impl_->progress) impl_->progress(impl_->database,0,nullptr,nullptr);
+    if (!impl_ || !impl_->progress) return;
+    auto found=Impl::active.find(impl_->database);
+    if (found==Impl::active.end()) return;
+    if (found->second==impl_.get()) {
+        auto* previous=impl_->previous;
+        if (previous) {
+            found->second=previous;
+            impl_->progress(impl_->database,previous->interval,&Impl::check,previous);
+        } else {
+            Impl::active.erase(found);
+            impl_->progress(impl_->database,0,nullptr,nullptr);
+        }
+    } else {
+        for (auto* budget=found->second;budget;budget=budget->previous)
+            if (budget->previous==impl_.get()) { budget->previous=impl_->previous; break; }
+    }
 }
 }

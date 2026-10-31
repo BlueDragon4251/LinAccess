@@ -313,6 +313,34 @@ Me!Nachname = CStr(Err.Number)
 End Sub
 )VBA","ClockError",host);
     assert(badClock.status==VbaExecutionStatus::Completed && host.fields["Nachname"]=="450");
+    const auto errorVariants=executeVbaProcedure(R"VBA(
+Sub VariantErrors()
+Dim problem As Variant
+problem = CVErr(2015)
+Me!Name = CStr(IsError(problem)) & ":" & CStr(problem) & ":" & CStr(Err.Number)
+Call ReplaceError(problem)
+Me!Nachname = CStr(problem)
+Me!Returned = CStr(MakeError())
+On Error Resume Next
+problem = problem + 1
+Me!Arithmetic = CStr(Err.Number)
+Err.Clear
+problem = CVErr(-1)
+Me!InvalidError = CStr(Err.Number)
+problem = CVErr()
+Me!ArgumentError = CStr(Err.Number)
+End Sub
+Sub ReplaceError(ByRef value As Variant)
+value = CVErr(2020)
+End Sub
+Function MakeError() As Variant
+MakeError = CVErr(2042)
+End Function
+)VBA","VariantErrors",host);
+    assert(errorVariants.status==VbaExecutionStatus::Completed);
+    assert(host.fields["Name"]=="True:Error 2015:0" && host.fields["Nachname"]=="Error 2020");
+    assert(host.fields["Returned"]=="Error 2042" && host.fields["Arithmetic"]=="13" && host.fields["InvalidError"]=="5");
+    assert(host.fields["ArgumentError"]=="450");
     const auto labelHandler = executeVbaProcedure(R"VBA(
 Sub Labels()
 Dim divisor As Long

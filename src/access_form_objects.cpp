@@ -52,9 +52,18 @@ public:
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked();
         auto* widget = control();
-        if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected control arguments");
         const auto key = text(name).toCaseFolded();
+        if (key=="column" || key=="spalte") return preview.controlColumnValue(name_,args);
+        if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected control arguments");
+        if (key=="form" || key=="formular") {
+            if (auto* child=preview.subforms_.value(name_.toCaseFolded()).data())
+                return linaccess::VbaValue::reference(makePreviewFormObject(*child));
+            if (preview.subformErrors_.contains(name_.toCaseFolded()))
+                throw linaccess::VbaRuntimeError(preview.subformErrors_.value(name_.toCaseFolded()),"Subform unavailable");
+            throw linaccess::VbaRuntimeError(438,"Control has no Form property");
+        }
         if (key == "name") return linaccess::VbaValue::string(bytes(name_));
+        if (key == "tag") return linaccess::VbaValue::string(bytes(widget->property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(caption()));
         if (key == "value") { requireValue(); return preview.getFieldValue(bytes(name_)); }
         if (key == "visible") return linaccess::VbaValue::logical(!widget->isHidden());
@@ -78,6 +87,10 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (key=="tag") {
+            if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Tag");
+            control()->setProperty("la_access_tag",text(value.asText())); return;
+        }
         if (key == "value") { requireValue(); preview.setFieldValue(bytes(name_),value); return; }
         if (key == "caption") {
             (void)caption();
@@ -162,6 +175,7 @@ public:
         }
         if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected form arguments");
         if (key == "name") return linaccess::VbaValue::string(bytes(preview.formName_));
+        if (key == "tag") return linaccess::VbaValue::string(bytes(preview.property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(preview.layout_.caption));
         if (key == "recordsource") return linaccess::VbaValue::string(bytes(preview.layout_.recordSource));
         if (preview.layout_.kind==linaccess::AccessDocumentKind::Report && (key=="dirty" || key=="newrecord"))
@@ -170,20 +184,23 @@ public:
         if (key == "newrecord") return linaccess::VbaValue::logical(preview.currentRecordIndex_==0);
         if (key == "requery") {
             if (!preview.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Requery cancelled");
-            preview.loadRecords(); return {};
+            preview.loadRecords();
+            if (!preview.layout_.recordSource.trimmed().isEmpty() && !preview.dataSourceAvailable_)
+                throw linaccess::VbaRuntimeError(preview.dataSourceErrorNumber_ ? preview.dataSourceErrorNumber_ : 3146,"Form record source unavailable after Requery");
+            return {};
         }
         if (key == "setfocus") { preview.activateWindow(); preview.setFocus(); return {}; }
-        return PreviewControlObject(preview,text(name)).member("Value",{});
+        return preview.getFieldValue(name);
     }
     linaccess::VbaValue item(std::string_view name) override {
-        return PreviewControlObject(checked(),text(name)).member("Value",{});
+        return checked().getFieldValue(name);
     }
     linaccess::VbaValue objectItem(std::string_view name) override {
         return makePreviewControlsObject(checked())->item(name);
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="setfocus")
+        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="setfocus")
             return member(name,args);
         return objectItem(name);
     }
@@ -192,6 +209,10 @@ public:
     }
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if (key=="tag") {
+            if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Tag");
+            preview.setProperty("la_access_tag",text(value.asText())); return;
+        }
         if (key == "caption") {
             if (value.kind == linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null caption");
             preview.layout_.caption = text(value.asText());

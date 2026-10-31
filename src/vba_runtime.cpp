@@ -502,7 +502,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 aliases.push_back({lower(parameters[i].name), (*references)[i], *(*references)[i]});
     const auto equalValue = [](const VbaValue& a, const VbaValue& b) {
         return a.kind == b.kind && a.number == b.number && a.text == b.text
-            && a.boolean == b.boolean && a.object == b.object;
+            && a.boolean == b.boolean && a.object == b.object && a.errorNumber==b.errorNumber;
     };
     const auto refreshAliases = [&] {
         for (auto& alias : aliases) { locals[alias.name] = *alias.source; alias.before = *alias.source; }
@@ -522,7 +522,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         if (isFunction) {
             const auto value = locals[lower(std::string(procedure))];
             outcome.typedReturnValue = std::make_shared<VbaValue>(value);
-            if (value.kind != VbaValue::Kind::Object) outcome.returnValue = value.asField();
+            if (value.kind != VbaValue::Kind::Object && value.kind!=VbaValue::Kind::Error) outcome.returnValue = value.asField();
         }
         storeAliases();
         copyArguments();

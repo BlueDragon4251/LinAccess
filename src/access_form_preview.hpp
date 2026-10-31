@@ -27,7 +27,7 @@ class AccessFormPreview final : public QDialog {
 public:
     AccessFormPreview(QString formName, const QByteArray& source,
                       const QByteArray& vbaSource, QSqlDatabase database,
-                      QWidget* parent = nullptr);
+                      QWidget* parent = nullptr,bool embedded=false);
 
     linaccess::VbaExecutionResult executeProcedure(const QString& name,std::vector<linaccess::VbaValue>& arguments);
     bool exportLayoutPdf(const QString& path);
@@ -37,6 +37,7 @@ public:
     }
     int renderedControls() const { return renderedControls_; }
     bool hasDataSource() const { return dataSourceAvailable_; }
+    int dataSourceErrorNumber() const { return dataSourceErrorNumber_; }
     bool cancelledByOpen() const { return openCancelled_; }
     bool hasUnsavedChanges() const { return dirty_; }
     void accept() override;
@@ -60,6 +61,9 @@ private:
     void ensureWritableControl(std::string_view name) const;
     void setField(std::string_view name, std::optional<std::string> value);
     linaccess::VbaValue getFieldValue(std::string_view name) const;
+    linaccess::VbaValue calculatedControlValue(const QString& name) const;
+    void refreshCalculatedControls();
+    linaccess::VbaValue controlColumnValue(const QString& name,const std::vector<linaccess::VbaValue>& arguments);
     void setFieldValue(std::string_view name,const linaccess::VbaValue& value);
     friend class PreviewVbaHost;
     friend void connectPreviewSqlObjects(QSqlDatabase db);
@@ -99,6 +103,10 @@ private:
     QComboBox* recordSelector_{};
     QLabel* status_{};
     QMap<QString,QPointer<QWidget>> controls_;
+    QMap<QString,QPointer<AccessFormPreview>> subforms_;
+    QMap<QString,int> subformErrors_;
+    mutable QSet<QString> calculatingControls_;
+    int dataSourceErrorNumber_{};
     QStringList dataColumns_;
     QMap<QString,QString> dataTypes_;
     QVector<QVariantList> recordRows_;

@@ -1,7 +1,9 @@
 #include "access_query.hpp"
 #include "vba_runtime.hpp"
+#include "sqlite_execution.hpp"
 #include <QCoreApplication>
 #include <QSqlQuery>
+#include <QSqlError>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -13,6 +15,17 @@ int main(int argc, char** argv) {
     QSqlQuery query(db);
     assert(query.exec("CREATE TABLE samples(id INTEGER, score INTEGER, label TEXT)"));
     assert(query.exec("INSERT INTO samples VALUES(1,10,'one'),(2,20,'two'),(3,20,NULL),(4,30,'four')"));
+    const auto expensive=QString("WITH RECURSIVE numbers(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM numbers WHERE x<100000) SELECT sum(x) FROM numbers");
+    {
+        linaccess::SqliteExecutionBudget outer(db,1000,5000);
+        { linaccess::SqliteExecutionBudget inner(db,10000000,5000); assert(query.exec("SELECT 1")); query.finish(); }
+        assert(!query.exec(expensive) && query.lastError().databaseText().contains("interrupted",Qt::CaseInsensitive)); query.finish();
+    }
+    {
+        linaccess::SqliteExecutionBudget outer(db,1000,5000);
+        linaccess::SqliteExecutionBudget inner(db,10000000,5000);
+        assert(!query.exec(expensive) && query.lastError().databaseText().contains("interrupted",Qt::CaseInsensitive)); query.finish();
+    }
     linaccess::AccessQueryModel model;
     model.execute(db,"SELECT TOP 2 id,score FROM samples ORDER BY score");
     assert(model.rowCount()==3 && model.columnCount()==2);

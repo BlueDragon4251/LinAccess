@@ -28,6 +28,7 @@
 #include <iostream>
 
 void testFormEvents();
+void testSubforms();
 void testFormObjects();
 void testReportEvents();
 void testReportCorpus(const QDir&,const QJsonArray&,const QString&);
@@ -202,6 +203,7 @@ End Sub
     }
     testFormEvents();
     testFormObjects();
+    testSubforms();
     testReportEvents();
     testOriginalControls(directory,objects);
     if (argc >= 3) {

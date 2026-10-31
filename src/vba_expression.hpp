@@ -12,10 +12,11 @@
 namespace linaccess {
 
 struct VbaValue {
-    enum class Kind { Null, Empty, Number, Text, Boolean, Object } kind{Kind::Null};
+    enum class Kind { Null, Empty, Number, Text, Boolean, Object, Error } kind{Kind::Null};
     double number{};
     std::string text;
     bool boolean{};
+    int errorNumber{};
     std::shared_ptr<VbaObject> object;
 
     static VbaValue empty();
@@ -23,6 +24,7 @@ struct VbaValue {
     static VbaValue string(std::string value);
     static VbaValue logical(bool value);
     static VbaValue reference(std::shared_ptr<VbaObject> value);
+    static VbaValue errorValue(int number);
     std::string asText() const;
     double asNumber() const;
     bool truthy() const;
@@ -55,4 +57,5 @@ VbaValue evaluateVbaExpression(std::string_view expression, VbaHost& host,
                                const VbaVariables& variables, const VbaFunctionResolver& resolver = {});
 VbaValue evaluateVbaObjectExpression(std::string_view expression,VbaHost& host,
                                     const VbaVariables& variables,const VbaFunctionResolver& resolver = {});
+VbaValue evaluateAccessExpression(std::string_view expression,VbaHost& host);
 }

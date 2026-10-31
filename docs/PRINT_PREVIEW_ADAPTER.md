@@ -49,8 +49,8 @@ state and access after action deletion.
 
 Project-toolbar regression additionally exercises bare CommandBars enumeration,
 real QAction caption writes, identity across global/Application lookups, toolbar
-visibility and deletion guards. The large original Form_Load remains blocked
-at its first embedded-subform Requery (438); it is explicitly not counted as
-completed initialization. Its diagnostic test rolls back changes on an isolated
+visibility and deletion guards. The large original Form_Load now completes with native embedded forms.
+CommandBars.ActiveMenuBar still blocks its OnOpen; complete startup is not
+claimed (NATIVE_FORM_RUNTIME.md). Its diagnostic test rolls back changes on an isolated
 MDB import before the report inventory runs. No original toolbar names or
 complete Office menu hierarchy are fabricated.

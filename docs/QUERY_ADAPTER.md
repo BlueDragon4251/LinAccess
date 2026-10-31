@@ -22,7 +22,8 @@ Implemented with execution tests:
   so ties at the boundary are retained; that column is excluded from recordset
   fields. Explicit ORDER BY aliases are bound to their expressions. Ordered
   TOP DISTINCT, ordinal ordering, PERCENT and UNION combinations remain rejected.
-  Ranked TOP queries are not yet installed as dependency views.
+  Ranked TOP dependencies now use owned temporary helper/public views; hidden
+  rank fields stay internal, ties remain included and dependency chains retry.
 - Compatible parameterless SELECT artifacts become temporary SQLite views for
   dependency resolution and form record sources. Refresh updates owned views,
   preserves user tables/views and rolls back DDL if active readers block it.
@@ -38,16 +39,16 @@ Implemented with execution tests:
 ## Original corpus measurement
 
 All 100 original Kassa query artifacts are hash-checked and classified against a
-separate imported SQLite database. Current local run: 49 executed, 16 missing a
+separate imported SQLite database. Current local run: 58 executed, 9 missing a
 query dependency, 6 unsupported function/compilation cases, 25 other unsupported
-Jet/binding cases, 2 execution-budget failures and 2 action queries unexecuted by
+Jet/binding cases and 2 action queries unexecuted by
 this corpus runner. Action query mutation is verified separately with typed
 QueryDefs tests. No row values or raw SQL are emitted in corpus reports.
 
 Execution without a Microsoft Access reference result is not proof of original
 query semantics. The report says executed_no_access_reference_oracle explicitly.
 Remaining dialect work includes '&' coercion, functions, nested parameter queries,
-arbitrary form/report property chains, saved ranked TOP dependencies, multitable DISTINCTROW,
+arbitrary form/report property chains, multitable DISTINCTROW,
 crosstabs, implicit form parameter resolution, collations, precise types and editable query joins.
 
 ## Application execution path
@@ -105,3 +106,26 @@ can choose different scans. No cross-engine equality claim is made. Current corp
 Date Format/Format$ is described in DATE_FORMAT.md. Native concatenation and
 current original query/report measurements are described in SQL_CONCATENATION.md.
 Localized form references remain a separate unresolved SQL feature.
+
+## Schema labels and bounded query plans
+
+Direct qualified projections receive explicit field labels. This prevents SQLite
+nested RIGHT JOIN column suffixes such as id:1 from breaking original query
+dependencies. Source aliases remain intact. Duplicate/wildcard projection naming
+is not complete Jet provenance support.
+
+TOP 1 can use a NULL-safe boundary query for a single column sort and a direct
+projection over a proven stable table/view dependency graph. Parameters, OR
+conditions, NULL ties, descending order and aliases have tests. Volatile/unknown
+functions and complex cases keep the rank plan. A 20,000-row fixture verifies the
+indexed path inside a 10,000-operation outer budget. Simple two-table RIGHT JOIN
+queries can swap to LEFT JOIN when both sources are normal tables, projections
+are explicit and the ON clause is a qualified equality. Independent native
+RIGHT JOIN results verify duplicates and NULL extension. Wildcards, grouped and
+complex joins are excluded from this optimization.
+
+Ranked view schema discovery does not execute value expressions (tested with a
+counting resolver). Helper names are owned separately, collisions are preserved,
+missing dependencies retry and user columns named like the rank field remain
+visible. DAO recordsets retain the complete shared query plan. Nested execution
+budgets charge all enclosing budgets and restore the parent progress handler.

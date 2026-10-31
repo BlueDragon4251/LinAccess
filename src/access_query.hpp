@@ -20,6 +20,11 @@ struct AccessQueryPlan {
     QVector<AccessQueryParameter> parameters;
     int topLimit{};
     bool hiddenRank{};
+    QString topOneSql;
+    QString topOneTable;
+    QString topOneColumn;
+    QString rightJoinSql;
+    QStringList rightJoinSources;
 };
 struct AccessQueryResult {
     QStringList columns;

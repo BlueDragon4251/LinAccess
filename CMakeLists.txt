@@ -92,6 +92,9 @@ if(BUILD_TESTING)
         add_executable(linaccess_sql_object_tests tests/sql_object_tests.cpp)
         target_link_libraries(linaccess_sql_object_tests PRIVATE linaccess_data)
         add_test(NAME sql_object_values COMMAND linaccess_sql_object_tests)
+        add_executable(linaccess_projection_tests tests/projection_tests.cpp)
+        target_link_libraries(linaccess_projection_tests PRIVATE linaccess_data)
+        add_test(NAME jet_projection_names COMMAND linaccess_projection_tests)
         set_tests_properties(access_date_formats PROPERTIES ENVIRONMENT "TZ=Europe/Berlin")
         add_executable(linaccess_table_import_tests tests/access_table_import_tests.cpp
               )
@@ -183,7 +186,7 @@ if(BUILD_TESTING)
                 COMMAND linaccess_real_bridge_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}" 192 47 9 100 32 4)
             set_tests_properties(complex_access_bridge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
             add_executable(linaccess_access_layout_tests
-                tests/access_form_layout_tests.cpp tests/form_event_tests.cpp tests/form_object_tests.cpp tests/original_control_tests.cpp tests/report_event_tests.cpp tests/report_corpus_tests.cpp
+                tests/access_form_layout_tests.cpp tests/form_event_tests.cpp tests/subform_tests.cpp tests/form_object_tests.cpp tests/original_control_tests.cpp tests/report_event_tests.cpp tests/report_corpus_tests.cpp
                  src/access_form_import.hpp
 
                 src/access_form_preview.cpp src/access_form_objects.cpp src/access_layout_print.cpp src/access_form_preview.hpp
