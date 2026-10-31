@@ -1,4 +1,5 @@
 #include "jet_sql_functions.hpp"
+#include "access_format.hpp"
 #include "vba_runtime.hpp"
 #include <QLibrary>
 #include <QSqlDriver>
@@ -23,6 +24,7 @@ struct Api {
     sqlite3_value* (*duplicate)(const sqlite3_value*){};
     void (*freeValue)(sqlite3_value*){};
     void (*nullResult)(sqlite3_context*){};
+    void (*textResult)(sqlite3_context*,const char*,int,void (*)(void*)){};
     Api() {
         library.setLoadHints(QLibrary::PreventUnloadHint);
         create = reinterpret_cast<Create>(library.resolve("sqlite3_create_function_v2"));
@@ -36,8 +38,9 @@ struct Api {
         duplicate = reinterpret_cast<decltype(duplicate)>(library.resolve("sqlite3_value_dup"));
         freeValue = reinterpret_cast<decltype(freeValue)>(library.resolve("sqlite3_value_free"));
         nullResult = reinterpret_cast<decltype(nullResult)>(library.resolve("sqlite3_result_null"));
+        textResult = reinterpret_cast<decltype(textResult)>(library.resolve("sqlite3_result_text"));
     }
-    bool valid() const { return create && type && number && text && bytes && result && error && aggregate && duplicate && freeValue && nullResult; }
+    bool valid() const { return create && type && number && text && bytes && result && error && aggregate && duplicate && freeValue && nullResult && textResult; }
 };
 Api& api() { static Api value; return value; }
 void iif(sqlite3_context* context,int,sqlite3_value** args) noexcept {
@@ -58,6 +61,31 @@ void iif(sqlite3_context* context,int,sqlite3_value** args) noexcept {
         native.result(context,args[condition ? 1 : 2]);
     } catch (...) { native.error(context,"Jet IIf evaluation failed",-1); }
 }
+void formatDate(sqlite3_context* context,sqlite3_value** args,bool stringResult) noexcept {
+    auto& native=api();
+    try {
+        if (native.type(args[1])==5) throw VbaRuntimeError(94,"Format mask is Null");
+        if (native.type(args[1])!=3) throw VbaRuntimeError(13,"Format mask requires text");
+        const auto readText=[&](sqlite3_value* value) {
+            const auto* data=native.text(value);
+            if (!data) throw VbaRuntimeError(7,"Format string unavailable");
+            return std::string(reinterpret_cast<const char*>(data),native.bytes(value));
+        };
+        VbaValue input;
+        const auto type=native.type(args[0]);
+        if (type==1 || type==2) input=VbaValue::numeric(native.number(args[0]));
+        else if (type==3) input=VbaValue::string(readText(args[0]));
+        else if (type!=5) throw VbaRuntimeError(13,"Format input type unsupported");
+        const auto result=formatAccessValue(input,readText(args[1]),stringResult);
+        if (result.kind==VbaValue::Kind::Null) native.nullResult(context);
+        else native.textResult(context,result.text.data(),static_cast<int>(result.text.size()),reinterpret_cast<void (*)(void*)>(-1));
+    } catch (const VbaRuntimeError& error) {
+        const auto message="LinAccess Format error "+std::to_string(error.number);
+        native.error(context,message.c_str(),message.size());
+    } catch (...) { native.error(context,"Jet date format failed",-1); }
+}
+void formatString(sqlite3_context* context,int,sqlite3_value** args) noexcept { formatDate(context,args,true); }
+void formatVariant(sqlite3_context* context,int,sqlite3_value** args) noexcept { formatDate(context,args,false); }
 // aggregate_context supplies zeroed storage. Each group retains one copied value;
 // no pointers into the temporary SQLite argument storage outlive a step callback.
 struct AggregateState { sqlite3_value* value; bool failed; };
@@ -106,5 +134,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
+    ensure("linaccess_jet_format_string",2,&formatString,nullptr,nullptr);
+    ensure("linaccess_jet_format",2,&formatVariant,nullptr,nullptr);
 }
 }

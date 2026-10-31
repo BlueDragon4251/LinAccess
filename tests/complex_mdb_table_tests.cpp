@@ -1,4 +1,5 @@
 #include "access_catalog.hpp"
+#include "access_query.hpp"
 #include "dao_database.hpp"
 #include "access_table_import.hpp"
 #include "csv.hpp"
@@ -56,6 +57,7 @@ int main(int argc, char** argv) {
     int booleanColumns = 0;
     int trueBooleans = 0;
     int typedBooleans = 0;
+    int formattedDates = 0;
     QStringList failures;
     for (const auto& table : tables) {
         if (table.startsWith("MSys", Qt::CaseInsensitive)) continue;
@@ -95,6 +97,21 @@ End Function
                     assert(value.kind == linaccess::VbaValue::Kind::Boolean); ++typedBooleans;
                 }
                 recordset.object->member("Close",{});
+            }
+
+            for (const auto& column : schema.columns) {
+                if (column.sourceType!="DATETIME" && column.sourceType!="DATE") continue;
+                const auto bracket=[](QString name) { return '['+name.replace(']',"]]")+']'; };
+                linaccess::AccessQueryModel formatted;
+                const auto field=bracket(column.name);
+                formatted.execute(db,"SELECT TOP 1 "+field+",Format$("+field+",\"yyyy\"),Format$("+field+",\"mm\"),Format$("+field+",\"dd\") FROM "+bracket(table)+" WHERE "+field+" IS NOT NULL");
+                if (formatted.rowCount()==0) continue;
+                const auto originalDate=formatted.data(formatted.index(0,0)).toString();
+                assert(originalDate.size()>=10);
+                assert(formatted.data(formatted.index(0,1)).toString()==originalDate.left(4));
+                assert(formatted.data(formatted.index(0,2)).toString()==originalDate.mid(5,2));
+                assert(formatted.data(formatted.index(0,3)).toString()==originalDate.mid(8,2));
+                ++formattedDates;
             }
             auto quote = [](QString name) { name.replace('"', "\"\""); return '"' + name + '"'; };
             QSqlQuery copied(db);
@@ -149,6 +166,8 @@ End Function
     // This test deliberately does not pretend 100% source data compatibility;
     // it makes regressions against an actual large Access 2003 file visible.
     assert(booleanColumns == 16 && trueBooleans > 0 && typedBooleans > 0);
+    assert(formattedDates>0);
+    std::cout << "Original date columns formatted through native SQL: " << formattedDates << '\n';
     assert(tables.size() == 29);
     assert(imported == 29 && failures.empty());
     assert(original.open(QIODevice::ReadOnly));

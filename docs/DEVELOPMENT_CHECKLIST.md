@@ -88,7 +88,8 @@ Full targets remain open:
 
 - [ ] Jet/ACE SQL parser/translator, parameters and saved query dependency resolution.
 - [ ] JOIN/DISTINCT/UNION/TOP, TRANSFORM/PIVOT and Access expressions/functions.
-- [ ] Date literals, wildcard semantics, Null/coercion, DDL/DML and action queries.
+- [x] Bounded date Format/Format$ masks in SQL/VBA; actual values from ten original date columns, NULL/error/locale/DST tests.
+- [ ] Complete date/format masks, wildcard semantics, Null/coercion, DDL/DML and action queries.
 - [ ] Execute and classify all 100 Kassa queries against the imported database copy.
 - [x] Bounded read-only saved-query form sources and translated navigator results with explicit typed parameter prompts.
 - [ ] Complete form/report query binding, implicit parameters and editable joins where valid.

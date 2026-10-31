@@ -22,6 +22,7 @@ public:
     virtual ~VbaHost() = default;
     virtual std::optional<std::string> field(std::string_view name) = 0;
     virtual void setField(std::string_view name, std::optional<std::string> value) = 0;
+    virtual VbaValue formatValue(const VbaValue& value,std::string_view mask,bool stringResult);
     virtual VbaValue fieldValue(std::string_view name);
     virtual VbaValue controlValue(std::string_view name);
     virtual void setControlValue(std::string_view name,const VbaValue& value);

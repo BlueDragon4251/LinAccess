@@ -1,4 +1,5 @@
 #include "access_query.hpp"
+#include "access_format.hpp"
 #include "sqlite_execution.hpp"
 #include <QSqlError>
 #include <QSqlRecord>
@@ -63,6 +64,7 @@ QVector<Token> tokenize(const QString& sql) {
         } else if (ch.isLetter() || ch == '_') {
             const auto start = i++;
             while (i < sql.size() && (sql[i].isLetterOrNumber() || sql[i] == '_')) ++i;
+            if (i<sql.size() && sql[i]=='$') ++i;
             result.append({Token::Word,sql.mid(start,i-start)});
         } else if (ch.isDigit()) {
             const auto start = i++;
@@ -226,6 +228,9 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
             output << literal(like ? pattern(token.value) : token.value);
             if (like) output << "ESCAPE '\\'";
         } else if (token.kind == Token::Identifier) output << identifier(token.value);
+        else if (token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="("
+                 && (token.value.compare("Format$",Qt::CaseInsensitive)==0 || token.value.compare("Format",Qt::CaseInsensitive)==0))
+            output << (token.value.endsWith('$') ? "linaccess_jet_format_string" : "linaccess_jet_format");
         else if (token.kind == Token::Word && i + 1 < tokens.size() && tokens[i+1].value == "("
                  && (token.value.compare("IIf",Qt::CaseInsensitive)==0 || token.value.compare("First",Qt::CaseInsensitive)==0
                      || token.value.compare("Last",Qt::CaseInsensitive)==0)) output << "linaccess_jet_" + token.value.toCaseFolded();
@@ -334,6 +339,8 @@ AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan&
     QSqlQuery query(db);
     const auto fail = [&]() {
         const auto error = query.lastError().text().toCaseFolded();
+        if (const auto code=accessFormatErrorNumber(error.toUtf8().toStdString()))
+            throw VbaRuntimeError(*code,"Jet date format argument invalid");
         if (error.contains("no such function")) throw VbaRuntimeError(3085,"SQL function unsupported");
         if (error.contains("no such table")) throw VbaRuntimeError(3078,"SQL dependency unavailable");
         if (error.contains("interrupted")) throw VbaRuntimeError(3035,"Query execution budget exceeded");

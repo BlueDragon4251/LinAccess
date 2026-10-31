@@ -9,6 +9,7 @@
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
+#include "access_format.hpp"
 #include "vba_source_codec.hpp"
 
 #include <QAction>
@@ -117,6 +118,9 @@ public:
     void quitApplication() override { QApplication::quit(); }
     void maximizeForm() override { parent_->showMaximized(); }
     void gotoLastRecord() override { gotoLast_(); }
+    linaccess::VbaValue formatValue(const linaccess::VbaValue& value,std::string_view mask,bool stringResult) override {
+        return linaccess::formatAccessValue(value,mask,stringResult);
+    }
     std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(database_); }
     void executeSql(std::string_view statement) override {
         auto database = linaccess::makeDaoDatabase(database_);
@@ -559,6 +563,9 @@ void MainWindow::showAccessArtifact(int id) {
                 void quitApplication() override { QApplication::quit(); }
                 void saveRecord() override {
                     throw std::runtime_error("DoCmd benötigt einen geöffneten Formularkontext");
+                }
+                linaccess::VbaValue formatValue(const linaccess::VbaValue& value,std::string_view mask,bool stringResult) override {
+                    return linaccess::formatAccessValue(value,mask,stringResult);
                 }
                 std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(database_); }
                 void executeSql(std::string_view sql) override {

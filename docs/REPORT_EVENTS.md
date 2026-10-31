@@ -42,8 +42,8 @@ procedure execution. Current result: one report source executes and binds 22
 non-NULL textbox values. Values and NULL flags are compared directly with a
 prepared SQLite reference reader. All reports stay read-only.
 
-The remaining five sources fail in the adapter, and three contain Format$ date
-expressions whose dollar token is not yet supported. They are explicitly failed
+Five remaining sources require concatenation, and three Format$ date sources
+reach a saved-query dependency that also requires concatenation (DATE_FORMAT.md). They are explicitly failed
 sources, not empty reports. The ignored private-report-inventory.json contains
 artifact hashes, status and counts only; vba_executed=false is explicit for this
 separate data inventory. Neither query execution nor binding proves agreement

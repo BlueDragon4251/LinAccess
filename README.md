@@ -144,8 +144,8 @@ ctest --test-dir build-core --output-on-failure
   bei `DELETE`, `UPDATE`, `DROP TABLE` und `INSERT`. Es erscheint keine
   LinAccess-spezifische Sicherheitsabfrage vor jeder VBA-Anweisung.
 - Importierte Access-Abfragen laufen im Navigator über einen begrenzten Jet-SQL-
-  Adapter mit Parameterdialogen, DAO-QueryDefs, TOP-Sortiergleichständen und eager
-  IIf. Gespeicherte Abfragen können schreibgeschützte Formular-Datenquellen sein.
+  Adapter mit Parameterdialogen, DAO-QueryDefs, TOP-Sortiergleichständen, eager
+  IIf und begrenzter nativer Datumsformatierung für SQL/VBA-Format$. Gespeicherte Abfragen können schreibgeschützte Formular-Datenquellen sein.
   38/100 Kassenabfragen werden ausgeführt, bisher ohne Access-Referenzergebnis;
   siehe [Abfrageadapter](docs/QUERY_ADAPTER.md). Importierte Berichte haben eine
   grobe Layoutvorschau mit einseitigem Druck/PDF des aktuellen Layouts, noch keine

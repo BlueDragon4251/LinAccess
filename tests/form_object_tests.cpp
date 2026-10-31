@@ -197,6 +197,23 @@ End Sub
     catch(const linaccess::VbaRuntimeError& error) { deletedRejected = error.number==91; }
     assert(deletedRejected); assert(report.close());
 
+
+    const QByteArray formatCode=R"VBA(
+Sub Scan_Click()
+Me!Summary = Format$("2003-12-31 18:05:06", "yyyy") & ":" & Format("2003-12-31", "mm")
+End Sub
+Sub Write_Click()
+On Error Resume Next
+Me!Summary = Format$(Null, "yyyy")
+Me!Summary = CStr(Err.Number)
+End Sub
+)VBA";
+    AccessFormPreview formatted("formatted",form,formatCode,db);
+    formatted.findChild<QPushButton*>("access-control-Scan")->click();
+    assert(formatted.findChild<QLineEdit*>("access-control-Summary")->text()=="2003:12");
+    formatted.findChild<QPushButton*>("access-control-Write")->click();
+    assert(formatted.findChild<QLineEdit*>("access-control-Summary")->text()=="94");
+    assert(formatted.close());
     auto retainedField = firstObject->member("Controls",{linaccess::VbaValue::string("Name.Field")}).object;
     delete first.findChild<QLineEdit*>("access-control-Name.Field");
     bool deletedFieldRejected = false;

@@ -97,6 +97,13 @@ End Sub
         result = executeVbaProcedureWithArguments(module,"Iterate",form,args);
         assert(result.status == VbaExecutionStatus::Error && result.errorNumber == 424);
     }
+
+    assert(validVbaExpression("Format$(\"2003-12-31\", \"yyyy\")"));
+    {
+        FakeForm unavailable;
+        const auto result=executeVbaProcedure("Sub FormatDate()\nMe!Result=Format$(\"2003-12-31\", \"yyyy\")\nEnd Sub","FormatDate",unavailable);
+        assert(result.status==VbaExecutionStatus::Error && result.errorNumber==438);
+    }
     const auto csv = parseCsv("id,name\r\n1,\"Egger, Nico\"\r\n2,\"A\"\"B\"\r\n");
     assert(csv.size() == 3);
     assert(csv[1][1] == "Egger, Nico");

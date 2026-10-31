@@ -16,7 +16,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original form layouts scanned | 47 |
 | Parsed controls / visible command buttons | 878 / 86 |
 | Original query artifacts classified / executed without Access result oracle | 100 / 38 |
-| Current local regression tests | 14 passed |
+| Current local regression tests | 15 passed |
 
 Current completed work package: positional Sub/Function calls, ByVal/ByRef aliases,
 function expressions, top-level label error handling and original keypad regression.
@@ -62,7 +62,12 @@ report pagination and Access print parity remain open
 Completed report-event package: navigator module binding, automatic Open/Close,
 NoData versus failed-source separation, cancellation and distinct Reports collection.
 Original data inventory measures one of nine report sources bound to 22 non-NULL
-controls; Format$ and other SQL gaps remain (REPORT_EVENTS.md).
+controls; concatenation and other SQL gaps remain (REPORT_EVENTS.md).
+
+Completed bounded date-format package: shared native SQL/VBA Format/Format$,
+Gregorian masks, explicit locale/NULL/error behavior, DST-neutral timestamps and
+real values from ten original date columns. Report/query success counts remain
+unchanged because concatenation blocks their dependencies (DATE_FORMAT.md).
 
 See DEVELOPMENT_CHECKLIST.md for all requirements and DAO_RUNTIME.md and
 MDB_IMPORT_REGRESSION.md for evidence and limitations. Private syntax inventory

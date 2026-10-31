@@ -26,10 +26,33 @@
 #include <cassert>
 #include <iostream>
 namespace {
-QString failureCategory(const QString& error) {
+QString adapterCategory(const linaccess::VbaRuntimeError& error) {
+    const auto reason=QString::fromUtf8(error.what()).toCaseFolded();
+    if (reason.contains("concatenation")) return "unsupported_concat";
+    if (reason.contains("distinctrow")) return "unsupported_distinctrow";
+    if (reason.contains("like character")) return "unsupported_like_class";
+    return "adapter_error_"+QString::number(error.number);
+}
+QString failureCategory(const QString& error,const QJsonArray& definitions,const QDir& directory) {
     const auto text=error.toCaseFolded();
     if (text.contains("no such column")) return "unresolved_column";
-    if (text.contains("no such table")) return "missing_dependency";
+    if (text.contains("no such table")) {
+        auto name=error.mid(error.toCaseFolded().indexOf("no such table:")+14).trimmed();
+        if (name.startsWith("temp.") || name.startsWith("main.")) name=name.mid(5);
+        for (const auto& value : definitions) {
+            const auto object=value.toObject();
+            if (object["kind"]=="query" && object["name"].toString().compare(name,Qt::CaseInsensitive)==0) {
+                QFile source(directory.filePath(object["file"].toString())); assert(source.open(QIODevice::ReadOnly));
+                try {
+                    const auto plan=linaccess::compileAccessQuery(linaccess::decodeVbaSource(source.readAll()));
+                    if (!plan.parameters.empty()) return "parameterized_query_dependency";
+                    if (plan.hiddenRank) return "ranked_top_query_dependency";
+                } catch (const linaccess::VbaRuntimeError& dependency) { return "query_dependency_"+adapterCategory(dependency); }
+                return "unsupported_saved_query_dependency";
+            }
+        }
+        return "absent_dependency";
+    }
     if (text.contains("no such function")) return "unsupported_function";
     if (text.contains("ambiguous")) return "ambiguous_name";
     if (text.contains("aggregate")) return "aggregate_usage";
@@ -124,12 +147,12 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                     for (auto it=bindings.cbegin();it!=bindings.cend();++it) diagnostic.bindValue(it.key(),it.value());
                     ok=diagnostic.exec();
                 }
-                if (!ok) status=failureCategory(diagnostic.lastError().text());
+                if (!ok) status=failureCategory(diagnostic.lastError().databaseText(),objects,directory);
                 else {
                     while (diagnostic.next()) {}
-                    if (diagnostic.lastError().isValid()) status=failureCategory(diagnostic.lastError().text());
+                    if (diagnostic.lastError().isValid()) status=failureCategory(diagnostic.lastError().databaseText(),objects,directory);
                 }
-            } catch (const linaccess::VbaRuntimeError& error) { status="adapter_error_"+QString::number(error.number); }
+            } catch (const linaccess::VbaRuntimeError& error) { status=adapterCategory(error); }
             ++failures[status];
         }
         auto* save=report.findChild<QPushButton*>("access-save-record"); assert(save && !save->isEnabled());

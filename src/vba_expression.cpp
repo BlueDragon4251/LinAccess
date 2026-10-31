@@ -36,6 +36,7 @@ std::vector<Token> tokenize(std::string_view input) {
             const auto start = pos++;
             while (pos < input.size() &&
                    (std::isalnum(static_cast<unsigned char>(input[pos])) || static_cast<unsigned char>(input[pos]) >= 0x80 || input[pos] == '_')) ++pos;
+            if (pos<input.size() && input[pos]=='$') ++pos;
             tokens.push_back({Token::Type::Word, std::string(input.substr(start, pos - start))});
         } else if (std::isdigit(static_cast<unsigned char>(ch))) {
             const auto start = pos++;
@@ -322,6 +323,12 @@ private:
                     : word == "date" ? "%Y-%m-%d" : "%H:%M:%S");
                 return VbaValue::string(formatted.str());
             }
+            if (word=="format" || word=="format$") {
+                if (args.size()!=2) throw error("Format arguments unsupported",450);
+                if (!host_) return {};
+                if (args[1].kind==VbaValue::Kind::Null) throw error("Format mask is Null",94);
+                return host_->formatValue(args[0],args[1].asText(),word=="format$");
+            }
             if ((word == "isnull" || word == "isempty" || word == "len" || word == "cstr"
                 || word == "clng" || word == "cdbl" || word == "ucase"
                 || word == "lcase" || word == "abs" || word == "int"
@@ -410,6 +417,9 @@ private:
 };
 } // namespace
 
+VbaValue VbaHost::formatValue(const VbaValue&,std::string_view,bool) {
+    throw VbaRuntimeError(438,"Format host adapter unavailable");
+}
 VbaValue VbaHost::controlValue(std::string_view name) { return fieldValue(name); }
 void VbaHost::setControlValue(std::string_view name,const VbaValue& value) { setFieldValue(name,value); }
 VbaValue VbaHost::fieldValue(std::string_view name) {

@@ -11,7 +11,7 @@ if(LINACCESS_BUILD_GUI)
     set(CMAKE_AUTOMOC ON)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Sql PrintSupport)
     add_library(linaccess_data STATIC
-        src/access_catalog.cpp src/access_table_import.cpp src/access_query.cpp
+        src/access_catalog.cpp src/access_table_import.cpp src/access_query.cpp src/access_format.cpp
         src/dao_database.cpp src/sqlite_execution.cpp src/jet_sql_functions.cpp src/vba_source_codec.cpp
         src/vba_qt_value.cpp src/access_form_import.cpp)
     target_link_libraries(linaccess_data PUBLIC linaccess_runtime Qt6::Core Qt6::Sql)
@@ -83,6 +83,10 @@ if(BUILD_TESTING)
         add_executable(linaccess_query_model_tests tests/query_model_tests.cpp)
         target_link_libraries(linaccess_query_model_tests PRIVATE linaccess_data)
         add_test(NAME access_query_model COMMAND linaccess_query_model_tests)
+        add_executable(linaccess_format_tests tests/access_format_tests.cpp)
+        target_link_libraries(linaccess_format_tests PRIVATE linaccess_data)
+        add_test(NAME access_date_formats COMMAND linaccess_format_tests)
+        set_tests_properties(access_date_formats PROPERTIES ENVIRONMENT "TZ=Europe/Berlin")
         add_executable(linaccess_table_import_tests tests/access_table_import_tests.cpp
               )
         target_include_directories(linaccess_table_import_tests PRIVATE src)
