@@ -5,6 +5,7 @@
 #include <QComboBox>
 #include <QToolBar>
 #include <QAction>
+#include <QMainWindow>
 #include <QPushButton>
 #include <QSqlQuery>
 #ifdef NDEBUG
@@ -248,6 +249,45 @@ End Sub
     assert(referenceContext.executeProcedure("Write_Click",referenceArgs).status==linaccess::VbaExecutionStatus::Completed);
     assert(referenceInput->text()=="13");
     assert(referenceContext.close());
+
+    QMainWindow projectWindow;
+    auto* projectToolbar=projectWindow.addToolBar("Project");
+    auto* projectAction=projectToolbar->addAction("Open"); projectToolbar->setEnabled(false);
+    projectToolbar->addSeparator();
+    const QByteArray commandCode=R"VBA(
+Sub Scan_Click()
+Dim bar As Variant
+Dim command As Variant
+Dim count As Long
+For Each bar In CommandBars
+bar.Enabled = True
+For Each command In bar.Controls
+command.Caption = command.Caption & "!"
+count = count + 1
+Next command
+Next bar
+If Not (CommandBars(1) Is Application.CommandBars("Project")) Then
+Err.Raise 5
+End If
+Me!Summary = CStr(count)
+End Sub
+Sub Write_Click()
+CommandBars("Project").Visible = False
+End Sub
+)VBA";
+    AccessFormPreview projectForm("toolbar context",form,commandCode,db,&projectWindow);
+    assert(projectForm.executeProcedure("Scan_Click",referenceArgs).status==linaccess::VbaExecutionStatus::Completed);
+    assert(projectToolbar->isEnabled() && projectAction->text()=="Open!");
+    assert(projectForm.findChild<QLineEdit*>("access-control-Summary")->text()=="1");
+    assert(projectForm.executeProcedure("Write_Click",referenceArgs).status==linaccess::VbaExecutionStatus::Completed);
+    assert(projectToolbar->isHidden());
+    auto projectBar=makePreviewApplicationObject(projectForm)->member("CommandBars",{linaccess::VbaValue::string("Project")}).object;
+    auto projectCommands=projectBar->member("Controls",{}).object;
+    delete projectToolbar;
+    bool removedBar=false,removedControls=false;
+    try { (void)projectBar->member("Enabled",{}); } catch(const linaccess::VbaRuntimeError& error) { removedBar=error.number==91; }
+    try { (void)projectCommands->enumerate(); } catch(const linaccess::VbaRuntimeError& error) { removedControls=error.number==91; }
+    assert(removedBar && removedControls); assert(projectForm.close());
 
     AccessFormPreview parameters("sql parameters",form,{},db);
     auto input=makePreviewFormObject(parameters);

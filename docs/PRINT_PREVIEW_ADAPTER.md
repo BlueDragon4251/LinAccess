@@ -7,12 +7,15 @@ surface to native Qt; it neither starts COM nor implements the Office object mod
 
 Supported:
 
-- Application.CommandBars(name/index), Count and enumeration. Only the actual
-  Print Preview bar of this preview context is exposed. Office indices start at 1.
+- Application.CommandBars(name/index), the bare global CommandBars, Count and
+  enumeration. The current Print Preview toolbar and actual toolbars of the
+  enclosing Qt project window are exposed. Office indices start at 1.
 - CommandBar.Name/Enabled/Visible and Controls(name/index), Count/enumeration.
 - Command control Caption/Enabled/Visible and Type=msoControlButton (1), backed
   by actual QAction state. Unsupported Office bars, members and IDs fail.
-- Weakly cached wrappers and QPointer guards for deleted actions/dialogs.
+- Weakly cached wrappers and QPointer guards for deleted toolbars/actions/dialogs.
+- Qt separators and widget actions are excluded from this button-only adapter;
+  they are not misreported as Office command buttons.
 - Caption reads/writes for native label/button/check controls and form captions.
   Textboxes and shapes do not acquire a fabricated Caption property.
 
@@ -43,3 +46,11 @@ unchanged on rejected export. No source data, VBA literals, PDF output or raw
 SQL are emitted in test summaries or packaged artifacts. Additional synthetic
 checks cover one-based indices, action caption lookup/identity, actual toolbar
 state and access after action deletion.
+
+Project-toolbar regression additionally exercises bare CommandBars enumeration,
+real QAction caption writes, identity across global/Application lookups, toolbar
+visibility and deletion guards. The large original Form_Load remains blocked
+at its first embedded-subform Requery (438); it is explicitly not counted as
+completed initialization. Its diagnostic test rolls back changes on an isolated
+MDB import before the report inventory runs. No original toolbar names or
+complete Office menu hierarchy are fabricated.

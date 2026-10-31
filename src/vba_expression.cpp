@@ -285,6 +285,11 @@ private:
         if (word == "vbnewline") return VbaValue::string("\n");
         if (word == "vbtab") return VbaValue::string("\t");
         if (word == "application") return host_ ? VbaValue::reference(host_->applicationObject()) : VbaValue{};
+        if (word=="commandbars") {
+            std::vector<VbaValue> arguments;
+            if (take("(")) { arguments.push_back(expression(1)); require(")"); }
+            return host_ ? host_->applicationObject()->member("CommandBars",arguments) : VbaValue{};
+        }
         if (word == "forms" || word == "reports") {
             std::vector<VbaValue> args;
             const bool item = take("(");

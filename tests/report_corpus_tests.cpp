@@ -17,6 +17,11 @@
 #include <QLineEdit>
 #include <QComboBox>
 #include <QPushButton>
+#include <QMainWindow>
+#include <QToolBar>
+#include <QTimer>
+#include <QApplication>
+#include <QMessageBox>
 #include <QRegularExpression>
 #include <QSqlQuery>
 #include <QSqlDriver>
@@ -156,6 +161,42 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
     for (auto& form : referencedForms) assert(form->close());
     referencedForms.clear();
     std::cout<<"Original SQL object references: "<<referenceCount<<", query definitions: "<<referencingQueries<<", mutable input checks: "<<mutableReferences<<'\n';
+    int blockedInitializers=0;
+    for (const auto& value : objects) {
+        const auto module=value.toObject();
+        if (module["kind"]!="vba" || module["sha256"].toString().toLatin1().toLower()!="6e8e0a0e41e1a1768cff4a0b79a07205c7b0f799eb8b465af5397843ce048ed8") continue;
+        QFile source(directory.filePath(module["file"].toString())); assert(source.open(QIODevice::ReadOnly));
+        const auto code=source.readAll();
+        assert(QCryptographicHash::hash(code,QCryptographicHash::Sha256).toHex()==module["sha256"].toString().toLatin1().toLower());
+        const auto formName=module["name"].toString().mid(5);
+        QByteArray definition;
+        for (const auto& candidate : objects) {
+            const auto form=candidate.toObject(); if (form["kind"]!="form" || form["name"]!=formName) continue;
+            QFile file(directory.filePath(form["file"].toString())); assert(file.open(QIODevice::ReadOnly)); definition=file.readAll();
+            assert(QCryptographicHash::hash(definition,QCryptographicHash::Sha256).toHex()==form["sha256"].toString().toLatin1().toLower());
+        }
+        assert(!definition.isEmpty() && db.transaction());
+        {
+            QTimer acknowledge;
+            QObject::connect(&acknowledge,&QTimer::timeout,[] {
+                for (auto* widget : QApplication::topLevelWidgets())
+                    if (auto* message=qobject_cast<QMessageBox*>(widget)) message->accept();
+            });
+            acknowledge.start(10);
+            QMainWindow window;
+            auto* toolbar=window.addToolBar("Project"); toolbar->addAction("Test command"); toolbar->setEnabled(false);
+            AccessFormPreview initialized(formName,definition,code,db,&window);
+            const auto result=initialized.eventResult("OnLoad");
+            // Current explicit boundary: its first operation requeries an
+            // embedded subform. Do not count this handler as executed startup.
+            assert(result && result->status==linaccess::VbaExecutionStatus::Error && result->errorNumber==438 && result->line==1454);
+            assert(!toolbar->isEnabled());
+            std::cout<<"Complex original Form_Load remains blocked by native subform Requery (438); not counted as completed\n";
+            ++blockedInitializers;
+        }
+        assert(db.rollback());
+    }
+    assert(blockedInitializers==1);
     int scanned=0,available=0,cells=0;
     QJsonArray inventory;
     QMap<QString,int> failures;

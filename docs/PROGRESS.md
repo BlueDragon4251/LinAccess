@@ -86,3 +86,8 @@ Completed object-reference context package: Set and assignment owners retain
 actual control/DAO Field references; one unchanged original Form_Load executes
 six Qt property assignments. Bare Date/Now/Time calls and catchable argument
 errors are tested. Full default-member/Variant semantics remain open.
+
+Completed project command-bar package: bare CommandBars and actual enclosing
+Qt toolbar/button collections, guarded lifetimes and one-based identity tests.
+The complex original Form_Load is classified as blocked at embedded-subform
+Requery (438), not counted as successful execution.

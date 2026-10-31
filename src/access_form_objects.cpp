@@ -8,6 +8,8 @@
 #include <QAction>
 #include <QLabel>
 #include <QToolBar>
+#include <QMainWindow>
+#include <QWidgetAction>
 #include <QPointer>
 #include <QWidget>
 #include <algorithm>
@@ -15,11 +17,17 @@
 std::shared_ptr<linaccess::VbaObject> makePreviewControlsObject(AccessFormPreview&);
 std::shared_ptr<linaccess::VbaObject> makePreviewControlObject(AccessFormPreview&,const QString&);
 
-std::shared_ptr<linaccess::VbaObject> makePreviewCommandBarObject(AccessFormPreview&);
+std::shared_ptr<linaccess::VbaObject> makePreviewCommandBarObject(AccessFormPreview&,QToolBar*);
 
 std::shared_ptr<linaccess::VbaObject> makePreviewCommandControlObject(AccessFormPreview&,QAction*);
 
 namespace {
+QList<QAction*> commandActions(QToolBar* bar) {
+    QList<QAction*> actions;
+    for (auto* action : bar->actions())
+        if (!action->isSeparator() && !qobject_cast<QWidgetAction*>(action)) actions.append(action);
+    return actions;
+}
 QString text(std::string_view value) { return QString::fromUtf8(value.data(),value.size()); }
 std::string bytes(const QString& value) { return value.toUtf8().toStdString(); }
 qsizetype ordinal(const linaccess::VbaValue& value,qsizetype count) {
@@ -277,10 +285,11 @@ private:
 };
 class PreviewCommandControlsObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
-    explicit PreviewCommandControlsObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    PreviewCommandControlsObject(AccessFormPreview& preview,QToolBar* bar) : PreviewObjectBase(preview),bar_(bar) {}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked();
-        const auto actions = preview.printToolbar_ ? preview.printToolbar_->actions() : QList<QAction*>{};
+        if (!bar_) throw linaccess::VbaRuntimeError(91,"Command bar unavailable");
+        const auto actions = commandActions(bar_);
         const auto key = text(name).toCaseFolded();
         if (key=="count" && args.empty()) return linaccess::VbaValue::numeric(actions.size());
         if (key=="item" && args.size()==1) {
@@ -299,10 +308,13 @@ public:
     linaccess::VbaValue item(std::string_view name) override { return member("Item",{linaccess::VbaValue::string(std::string(name))}); }
     std::vector<linaccess::VbaValue> enumerate() override {
         auto& preview = checked(); std::vector<linaccess::VbaValue> values;
-        if (preview.printToolbar_) for (auto* action : preview.printToolbar_->actions())
+        if (!bar_) throw linaccess::VbaRuntimeError(91,"Command bar unavailable");
+        for (auto* action : commandActions(bar_))
             values.push_back(linaccess::VbaValue::reference(makePreviewCommandControlObject(preview,action)));
         return values;
     }
+private:
+    QPointer<QToolBar> bar_;
 };
 std::shared_ptr<linaccess::VbaObject> makePreviewCommandControlObject(AccessFormPreview& preview,QAction* action) {
     auto& cached = preview.commandControlObjects_[action];
@@ -312,16 +324,17 @@ std::shared_ptr<linaccess::VbaObject> makePreviewCommandControlObject(AccessForm
 }
 class PreviewCommandBarObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
-    explicit PreviewCommandBarObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    PreviewCommandBarObject(AccessFormPreview& preview,QToolBar* bar,QString name) : PreviewObjectBase(preview),bar_(bar),name_(std::move(name)) {}
+    bool alive() const { return !bar_.isNull(); }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto* bar = toolbar();
         if (text(name).compare("Controls",Qt::CaseInsensitive)==0) {
-            auto controls = std::make_shared<PreviewCommandControlsObject>(checked());
+            auto controls = std::make_shared<PreviewCommandControlsObject>(checked(),bar);
             return args.empty() ? linaccess::VbaValue::reference(controls) : controls->member("Item",args);
         }
         if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected command bar arguments");
         const auto key = text(name).toCaseFolded();
-        if (key=="name") return linaccess::VbaValue::string("Print Preview");
+        if (key=="name") return linaccess::VbaValue::string(bytes(name_));
         if (key=="enabled") return linaccess::VbaValue::logical(bar->isEnabled());
         if (key=="visible") return linaccess::VbaValue::logical(!bar->isHidden());
         throw linaccess::VbaRuntimeError(438,"Command bar member unsupported");
@@ -335,35 +348,54 @@ public:
     }
 private:
     QToolBar* toolbar() const {
-        auto* bar = checked().printToolbar_;
-        if (!bar) throw linaccess::VbaRuntimeError(5,"Print Preview command bar unavailable in this context");
-        return bar;
+        (void)checked();
+        if (!bar_) throw linaccess::VbaRuntimeError(91,"Command bar unavailable");
+        return bar_;
     }
+    QPointer<QToolBar> bar_;
+    QString name_;
 };
 class PreviewCommandBarsObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewCommandBarsObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
-        auto& preview = checked(); const auto key = text(name).toCaseFolded();
-        if (key=="count" && args.empty()) return linaccess::VbaValue::numeric(preview.printToolbar_ ? 1 : 0);
+        auto& preview=checked(); const auto bars=toolbars(); const auto key=text(name).toCaseFolded();
+        if (key=="count" && args.empty()) return linaccess::VbaValue::numeric(bars.size());
         QString target;
         if (key=="item" && args.size()==1) {
             if (args[0].kind==linaccess::VbaValue::Kind::Number) {
-                const auto index = linaccess::sqlFieldValue(args[0],"INTEGER").toLongLong();
-                if (!preview.printToolbar_ || index!=1) throw linaccess::VbaRuntimeError(5,"Command bar index out of range");
-                target = "Print Preview";
-            } else target = text(args[0].asText());
-        } else if (args.empty()) target = text(name);
+                const auto index=linaccess::sqlFieldValue(args[0],"INTEGER").toLongLong();
+                if (index<1 || index>bars.size()) throw linaccess::VbaRuntimeError(5,"Command bar index out of range");
+                return linaccess::VbaValue::reference(makePreviewCommandBarObject(preview,bars[index-1]));
+            }
+            target=text(args[0].asText());
+        } else if (args.empty()) target=text(name);
         else throw linaccess::VbaRuntimeError(450,"Unexpected command bars arguments");
-        if (preview.printToolbar_ && target.compare("Print Preview",Qt::CaseInsensitive)==0)
-            return linaccess::VbaValue::reference(makePreviewCommandBarObject(preview));
+        for (auto* bar : bars) {
+            const auto barName=bar==preview.printToolbar_ ? QString("Print Preview") : bar->windowTitle();
+            if (barName.compare(target,Qt::CaseInsensitive)==0)
+                return linaccess::VbaValue::reference(makePreviewCommandBarObject(preview,bar));
+        }
         throw linaccess::VbaRuntimeError(5,"Command bar unavailable");
     }
     linaccess::VbaValue item(std::string_view name) override { return member("Item",{linaccess::VbaValue::string(std::string(name))}); }
     std::vector<linaccess::VbaValue> enumerate() override {
-        auto& preview = checked();
-        if (!preview.printToolbar_) return {};
-        return {linaccess::VbaValue::reference(makePreviewCommandBarObject(preview))};
+        auto& preview=checked(); std::vector<linaccess::VbaValue> values;
+        for (auto* bar : toolbars()) values.push_back(linaccess::VbaValue::reference(makePreviewCommandBarObject(preview,bar)));
+        return values;
+    }
+private:
+    QList<QToolBar*> toolbars() const {
+        const auto& preview=checked(); QList<QToolBar*> bars;
+        if (preview.printToolbar_) bars.append(preview.printToolbar_);
+        for (auto* parent=preview.parentWidget();parent;parent=parent->parentWidget()) {
+            if (auto* window=qobject_cast<QMainWindow*>(parent)) {
+                for (auto* bar : window->findChildren<QToolBar*>(QString(),Qt::FindDirectChildrenOnly))
+                    if (!bars.contains(bar)) bars.append(bar);
+                break;
+            }
+        }
+        return bars;
     }
 };
 class PreviewApplicationObject final : public linaccess::VbaObject, private PreviewObjectBase {
@@ -385,10 +417,11 @@ std::shared_ptr<linaccess::VbaObject> makePreviewApplicationObject(AccessFormPre
     auto object = std::make_shared<PreviewApplicationObject>(preview);
     preview.applicationObject_ = object; return object;
 }
-std::shared_ptr<linaccess::VbaObject> makePreviewCommandBarObject(AccessFormPreview& preview) {
-    if (auto object = preview.commandBarObject_.lock()) return object;
-    auto object = std::make_shared<PreviewCommandBarObject>(preview);
-    preview.commandBarObject_ = object; return object;
+std::shared_ptr<linaccess::VbaObject> makePreviewCommandBarObject(AccessFormPreview& preview,QToolBar* bar) {
+    auto& cached=preview.commandBarObjects_[bar];
+    if (auto object=cached.lock();object && std::static_pointer_cast<PreviewCommandBarObject>(object)->alive()) return object;
+    auto object=std::make_shared<PreviewCommandBarObject>(preview,bar,bar==preview.printToolbar_ ? QString("Print Preview") : bar->windowTitle());
+    cached=object; return object;
 }
 
 std::shared_ptr<linaccess::VbaObject> makePreviewFormObject(AccessFormPreview& preview) {
