@@ -139,14 +139,16 @@ private:
     void current() const { require(position_ >= 0 && position_ < rows_.size(), "DAO: No current record"); }
     void reload() {
         types_ = table_ ? sqliteColumnTypes(db_,source_) : QMap<QString,QString>{};
+        if (!table_) {
+            AccessQueryPlan plan;
+            plan.sql = source_; plan.topLimit = topLimit_; plan.hiddenRank = hiddenRank_;
+            const auto result = executeAccessQueryPlan(db_,plan,bindings_);
+            columns_ = result.columns; rows_ = result.rows; ids_.clear(); position_ = 0;
+            return;
+        }
         SqliteExecutionBudget budget(db_);
         QSqlQuery query(db_);
-        if (table_) exec(query,"SELECT rowid,* FROM " + quote(source_));
-        else {
-            if (!query.prepare(source_)) queryFailure(query);
-            for (auto it = bindings_.cbegin(); it != bindings_.cend(); ++it) query.bindValue(it.key(),it.value());
-            if (!query.exec()) queryFailure(query);
-        }
+        exec(query,"SELECT rowid,* FROM " + quote(source_));
         const int offset = table_ ? 1 : 0;
         columns_.clear(); rows_.clear(); ids_.clear(); position_ = 0;
         const int end = query.record().count() - (hiddenRank_ ? 1 : 0);

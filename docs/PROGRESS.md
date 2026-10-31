@@ -13,7 +13,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original form layouts scanned | 47 |
 | Parsed controls / visible command buttons | 878 / 86 |
 | Original query artifacts classified / executed without Access result oracle | 100 / 37 |
-| Current local regression tests | 13 passed |
+| Current local regression tests | 14 passed |
 
 Current completed work package: positional Sub/Function calls, ByVal/ByRef aliases,
 function expressions, top-level label error handling and original keypad regression.
@@ -28,8 +28,10 @@ save, close handling and synchronized bindings (FORM_EVENTS.md).
 Completed typed-field package: Qt/native form/DAO values, all 16 Kassa Boolean
 columns, True=-1 normalization and explicit numeric/date validation (TYPED_FIELDS.md).
 
-Next work package: expose translated imported queries in the application UI and
-use the same bounded result path for saved form queries.
+Completed query UI package: translated imported SELECT/action queries with typed
+parameter prompts, a read-only result model, and bounded saved-query form sources.
+DAO read-only results share the same executor. TOP, NULL, parameters, error clearing,
+DML rejection in result models and named TOP form sources have regression coverage.
 
 See DEVELOPMENT_CHECKLIST.md for all requirements and DAO_RUNTIME.md and
 MDB_IMPORT_REGRESSION.md for evidence and limitations. Private syntax inventory

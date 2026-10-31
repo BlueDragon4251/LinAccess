@@ -267,4 +267,28 @@ End Sub
     quantity->setFocus(); quantity->selectAll(); QTest::keyClicks(quantity,"3"); quantity->clearFocus(); typedSave->click();
     assert(!typed.hasUnsavedChanges()); assert(typed.close());
 
+    assert(query.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    query.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('query','ranked',?)");
+    query.addBindValue(QByteArray("SELECT TOP 1 id,name FROM records ORDER BY id")); assert(query.exec()); query.finish();
+    const QByteArray queryForm = R"FORM(Begin Form
+RecordSource ="ranked"
+Begin Section
+Height =1000
+Begin TextBox
+Name ="QueryName"
+ControlSource ="name"
+End
+End
+End
+)FORM";
+    AccessFormPreview queryPreview("query",queryForm,{},db);
+    auto* queryName = queryPreview.findChild<QLineEdit*>("access-control-QueryName");
+    auto* querySave = queryPreview.findChild<QPushButton*>("access-save-record");
+    assert(queryName && queryName->isReadOnly() && !queryName->text().isEmpty());
+    assert(querySave && !querySave->isEnabled());
+    const auto selectors = queryPreview.findChildren<QComboBox*>();
+    bool foundRows = false;
+    for (auto* selector : selectors) if (selector->count() == 2) foundRows = true;
+    assert(foundRows);
+
 }

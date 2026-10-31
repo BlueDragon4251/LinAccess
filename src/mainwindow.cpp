@@ -385,38 +385,48 @@ void MainWindow::showAccessArtifact(int id) {
         + (bytes.size() > 512 * 1024 ? "\n\n[Vorschau gekürzt; Originalbytes bleiben gespeichert]" : ""));
     outer->addWidget(source);
     if (kind == "query" && status == "source_only" && !bytes.isEmpty()) {
-        auto* execute = new QPushButton("Access-Abfrage mit SQLite versuchen", &dialog);
+        auto* execute = new QPushButton("Abfrage ausführen", &dialog);
         outer->addWidget(execute);
         const auto text = linaccess::decodeVbaSource(bytes).trimmed();
         connect(execute, &QPushButton::clicked, &dialog, [this, text, &dialog] {
-            if (isSelect(text)) {
-                QDialog result(&dialog);
-                result.setWindowTitle("Abfrageergebnis (SQLite)");
-                result.resize(900, 620);
-                auto* layout = new QVBoxLayout(&result);
-                auto* model = new QSqlQueryModel(&result);
-                model->setQuery(text, db_);
-                if (model->lastError().isValid()) {
-                    messageError(&dialog, "Access SQL ist hier nicht kompatibel: "
-                                 + model->lastError().text());
-                    return;
+            try {
+                const auto plan = linaccess::compileAccessQuery(text);
+                QMap<QString,QVariant> parameters;
+                for (const auto& parameter : plan.parameters) {
+                    bool accepted = false;
+                    const auto value = QInputDialog::getText(&dialog,"Abfrageparameter",
+                        parameter.name + " (" + parameter.type + ")",QLineEdit::Normal,{},&accepted);
+                    if (!accepted) return;
+                    parameters.insert(parameter.name.toCaseFolded(),value);
                 }
-                auto* table = new QTableView(&result);
-                table->setModel(model);
-                layout->addWidget(table);
-                result.exec();
-            } else {
-                QSqlQuery action(db_);
-                if (!action.exec(text)) {
-                    messageError(&dialog, "Abfrage konnte nicht ausgeführt werden: "
-                                 + action.lastError().text());
-                    return;
+                if (isSelect(plan.sql)) {
+                    QDialog result(&dialog);
+                    result.setWindowTitle("Abfrageergebnis");
+                    result.resize(900,620);
+                    auto* layout = new QVBoxLayout(&result);
+                    auto* model = new linaccess::AccessQueryModel(&result);
+                    model->execute(db_,text,parameters);
+                    auto* table = new QTableView(&result);
+                    table->setModel(model);
+                    layout->addWidget(table);
+                    result.exec();
+                } else {
+                    auto database = linaccess::makeDaoDatabase(db_);
+                    const auto definition = database->member("CreateQueryDef",{
+                        linaccess::VbaValue::string(""),linaccess::VbaValue::string(text.toUtf8().toStdString())});
+                    for (auto it = parameters.cbegin(); it != parameters.cend(); ++it) {
+                        const auto parameter = definition.object->member("Parameters",{linaccess::VbaValue::string(it.key().toUtf8().toStdString())});
+                        parameter.object->assign("Value",linaccess::qtFieldValue(it.value()));
+                    }
+                    definition.object->member("Execute",{});
+                    QMessageBox::information(&dialog,"Abfrage ausgeführt","Die Projektkopie wurde aktualisiert.");
                 }
-                QMessageBox::information(&dialog, "Abfrage ausgeführt",
-                    QString::number(action.numRowsAffected()) + " betroffene Datensätze (SQLite-Projektkopie).");
+            } catch (const std::exception& error) {
+                messageError(&dialog,QString::fromUtf8(error.what()));
             }
         });
     }
+
     if (kind == "report" && status == "source_only" && !bytes.isEmpty()) {
         auto* open = new QPushButton("Access-Berichtsaufbau ansehen (Layoutvorschau)", &dialog);
         outer->addWidget(open);

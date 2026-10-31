@@ -48,4 +48,24 @@ Execution without a Microsoft Access reference result is not proof of original
 query semantics. The report says executed_no_access_reference_oracle explicitly.
 Remaining dialect work includes '&' coercion, functions, nested parameter queries,
 form/report references, saved ranked TOP dependencies, multitable DISTINCTROW,
-crosstabs, parameter prompts, collations, precise types and editable query joins.
+crosstabs, implicit form parameter resolution, collations, precise types and editable query joins.
+
+## Application execution path
+
+Imported query objects now run through this adapter from the navigator. Explicit
+PARAMETERS declarations prompt for values and pass through the same type checks
+as DAO. SELECT results use AccessQueryModel; actions use QueryDef.Execute against
+the project copy without additional per-statement consent. The native SQLite SQL
+editor retains its separate SQL behavior.
+
+DAO SELECTs, the result model and saved-query form sources share bounded result
+materialization, hidden TOP-rank removal, tie handling and interrupted-fetch
+rejection. Result views and query-bound forms remain read-only; editable query
+joins and automatic form/control parameter resolution are not implemented.
+Existing native SQLite views remain usable as read-only form sources.
+
+The access_query_model test checks TOP ties, headers, typed parameters, NULL,
+read-only flags, rejection of DML without mutation, clearing stale results after
+errors and recovery. The GUI event suite exercises a named saved TOP query as a
+real form record source. The original 100-query corpus continues to run through
+DAO and the shared executor; no Access reference oracle is available.

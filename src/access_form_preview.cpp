@@ -321,30 +321,36 @@ void AccessFormPreview::loadRecords() {
     const auto source = layout_.recordSource.trimmed();
     if (!source.isEmpty() && db_.isOpen()) {
         try {
-            QString sql;
-            linaccess::AccessQueryPlan plan;
-            if (source.startsWith("SELECT ",Qt::CaseInsensitive)) {
-                plan = linaccess::compileAccessQuery(source);
-                (void)linaccess::bindAccessQueryParameters(plan,{});
-                sql = plan.sql;
+            directTable_ = db_.tables().contains(source,Qt::CaseInsensitive);
+            if (!directTable_) {
+                linaccess::AccessQueryPlan plan;
+                if (db_.tables(QSql::Views).contains(source,Qt::CaseInsensitive))
+                    plan.sql = "SELECT * FROM " + sqlIdentifier(source);
+                else {
+                    const auto sql = source.startsWith("SELECT",Qt::CaseInsensitive)
+                        || source.startsWith("PARAMETERS",Qt::CaseInsensitive)
+                        ? source : linaccess::accessQuerySource(db_,source);
+                    plan = linaccess::compileAccessQuery(sql);
+                }
+                auto result = linaccess::executeAccessQueryPlan(db_,plan,linaccess::bindAccessQueryParameters(plan,{}));
+                dataColumns_ = result.columns;
+                dataTruncated_ = result.rows.size() > 10000;
+                recordRows_ = result.rows.mid(0,10000);
+                for (int i = 0; i < recordRows_.size(); ++i)
+                    recordSelector_->addItem("Datensatz " + QString::number(i+1));
+                dataSourceAvailable_ = true;
             } else {
-                directTable_ = db_.tables().contains(source,Qt::CaseInsensitive);
-                if (directTable_) dataTypes_ = linaccess::sqliteColumnTypes(db_,source);
-                sql = directTable_ ? "SELECT rowid AS __la_rowid,* FROM " + sqlIdentifier(source)
-                                   : "SELECT * FROM " + sqlIdentifier(source);
-            }
-            linaccess::SqliteExecutionBudget budget(db_);
-            QSqlQuery query(db_);
-            if (query.exec(sql)) {
-                const int offset = directTable_ ? 1 : 0;
-                const int end = query.record().count() - (plan.hiddenRank ? 1 : 0);
-                for (int i = offset; i < end; ++i) dataColumns_ << query.record().fieldName(i);
+                dataTypes_ = linaccess::sqliteColumnTypes(db_,source);
+                linaccess::SqliteExecutionBudget budget(db_);
+                QSqlQuery query(db_);
+                if (!query.exec("SELECT rowid AS __la_rowid,* FROM " + sqlIdentifier(source)))
+                    throw std::runtime_error("Record source unavailable");
+                for (int i = 1; i < query.record().count(); ++i) dataColumns_ << query.record().fieldName(i);
                 while (query.next()) {
-                    if (plan.hiddenRank && query.value(end).toLongLong() > plan.topLimit) break;
                     if (recordRows_.size() >= 10000) { dataTruncated_ = true; break; }
                     QVariantList row;
-                    if (directTable_) rowIds_.push_back(query.value(0));
-                    for (int i = offset; i < end; ++i) row << query.value(i);
+                    rowIds_.push_back(query.value(0));
+                    for (int i = 1; i < query.record().count(); ++i) row << query.value(i);
                     recordRows_.push_back(row);
                     recordSelector_->addItem("Datensatz " + QString::number(recordRows_.size()));
                 }

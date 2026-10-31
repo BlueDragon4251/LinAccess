@@ -1,4 +1,7 @@
 #include "access_query.hpp"
+#include "sqlite_execution.hpp"
+#include <QSqlError>
+#include <QSqlRecord>
 #include "vba_runtime.hpp"
 #include "vba_source_codec.hpp"
 #include <QSqlQuery>
@@ -320,4 +323,53 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
     }
     return result;
 }
+AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan& plan,
+                                       const QMap<QString,QVariant>& bindings) {
+    if (!plan.sql.trimmed().startsWith("SELECT", Qt::CaseInsensitive))
+        throw VbaRuntimeError(3065,"Query result requires SELECT");
+    SqliteExecutionBudget budget(db);
+    QSqlQuery query(db);
+    const auto fail = [&]() {
+        const auto error = query.lastError().text().toCaseFolded();
+        if (error.contains("no such function")) throw VbaRuntimeError(3085,"SQL function unsupported");
+        if (error.contains("no such table")) throw VbaRuntimeError(3078,"SQL dependency unavailable");
+        if (error.contains("interrupted")) throw VbaRuntimeError(3035,"Query execution budget exceeded");
+        if (error.contains("syntax error") || error.contains("circularly defined"))
+            throw VbaRuntimeError(3075,"SQL grammar unsupported");
+        throw VbaRuntimeError(3146,"SQL operation failed");
+    };
+    if (!query.prepare(plan.sql)) fail();
+    for (auto it = bindings.cbegin(); it != bindings.cend(); ++it) query.bindValue(it.key(),it.value());
+    if (!query.exec()) fail();
+    AccessQueryResult result;
+    const int count = query.record().count() - (plan.hiddenRank ? 1 : 0);
+    for (int i = 0; i < count; ++i) result.columns.append(query.record().fieldName(i));
+    while (query.next()) {
+        if (plan.hiddenRank && query.value(count).toLongLong() > plan.topLimit) break;
+        if (result.rows.size() >= 100000) throw VbaRuntimeError(3035,"Query row limit exceeded");
+        QVariantList row;
+        for (int i = 0; i < count; ++i) row.append(query.value(i));
+        result.rows.append(row);
+    }
+    if (query.lastError().isValid()) fail();
+    return result;
+}
+void AccessQueryModel::execute(QSqlDatabase db, const QString& source, const QMap<QString,QVariant>& parameters) {
+    beginResetModel(); result_ = {}; endResetModel();
+    const auto plan = compileAccessQuery(source);
+    auto result = executeAccessQueryPlan(db,plan,bindAccessQueryParameters(plan,parameters));
+    beginResetModel(); result_ = std::move(result); endResetModel();
+}
+QVariant AccessQueryModel::data(const QModelIndex& index, int role) const {
+    if (!index.isValid() || index.row() < 0 || index.row() >= rowCount() ||
+        index.column() < 0 || index.column() >= columnCount() ||
+        (role != Qt::DisplayRole && role != Qt::EditRole)) return {};
+    return result_.rows[index.row()][index.column()];
+}
+QVariant AccessQueryModel::headerData(int section, Qt::Orientation orientation, int role) const {
+    if (role != Qt::DisplayRole || section < 0) return {};
+    if (orientation == Qt::Vertical) return section < rowCount() ? QVariant(section+1) : QVariant{};
+    return section < columnCount() ? QVariant(result_.columns[section]) : QVariant{};
+}
+
 }
