@@ -48,6 +48,7 @@ Eine `.deb`-Datei lässt sich nach dem Build erzeugen mit:
 
 ```bash
 cpack --config build/CPackConfig.cmake -G DEB
+./scripts/check-deb.sh ./linaccess-0.7.0-Linux.deb build/linaccess
 ```
 
 Die Datei `.github/workflows/build-linux.yml` enthält zusätzlich einen

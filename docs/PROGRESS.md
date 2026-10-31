@@ -146,3 +146,8 @@ Completed DAO parameter-collection package: real Count/Item/For Each, shared
 Parameter identity and explicit stale/closed handle errors (3420). SQL replacement
 keeps the collection current while invalidating previous parameter generations.
 Original six-query declarations and five positive parameter results are tested.
+
+Package validation optionally compares the packaged executable's GNU build ID
+with the current linked binary. Both Debian/Ubuntu CI package checks require it.
+An actually stale local package was rejected and the fresh package passed, in
+addition to existing permissions/content/fixture-exclusion checks.
