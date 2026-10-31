@@ -69,6 +69,7 @@ public:
         reload();
     }
     VbaValue item(std::string_view name) override { return value(text(name)); }
+    VbaValue objectItem(std::string_view name) override { return member("Fields",{VbaValue::string(std::string(name))}); }
     void assignItem(std::string_view name,const VbaValue& value) override { set(text(name),value); }
     QStringList fieldNames() const { require(!closed_,"DAO: Recordset is closed"); return columns_; }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {

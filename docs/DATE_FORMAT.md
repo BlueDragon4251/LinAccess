@@ -34,9 +34,18 @@ Original fixture hashes remain unchanged.
 All 100 original Kassa queries are still classified. Subsequent concatenation
 support now executes 49 of them and binds six of nine original report sources to
 54 non-NULL controls (SQL_CONCATENATION.md). Three report sources still require
-localized SQL form references; fixing syntax alone does not establish complete
-original report execution.
+open referenced filter forms with valid inputs; localized reference lookup is
+implemented, but this alone does not establish complete original report execution.
 
 Qt locale output is not proof of the original Windows/Access locale. Database
 locale metadata and Microsoft Access reference results are still needed for
 cross-engine formatting equivalence.
+
+## VBA system clock calls
+
+Date, Now and Time accept bare expression syntax and empty parentheses. Their
+current bridge representation remains ISO text, not a complete Date Variant.
+Local wall-clock conversion uses POSIX localtime_r and fixed numeric formatting;
+invalid arguments raise catchable VBA error 450. Core execution tests cover both
+syntaxes, shape of returned values and On Error Resume Next recovery. System
+clock setters, Timer, time formatting masks and full Date arithmetic remain open.

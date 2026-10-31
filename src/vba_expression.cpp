@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <cstdint>
 #include <limits>
+#include <locale>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -21,6 +22,15 @@ std::string lower(std::string s) {
     return s;
 }
 VbaRuntimeError error(const std::string& reason, int code = 5) { return VbaRuntimeError(code, reason); }
+VbaValue clockValue(const std::string& word) {
+    const auto now=std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::tm local{};
+    if (!::localtime_r(&now,&local)) throw error("Systemdatum nicht verfügbar");
+    std::ostringstream formatted;
+    formatted.imbue(std::locale::classic());
+    formatted<<std::put_time(&local,word=="now" ? "%Y-%m-%d %H:%M:%S" : word=="date" ? "%Y-%m-%d" : "%H:%M:%S");
+    return VbaValue::string(formatted.str());
+}
 
 struct Token {
     enum class Type { Word, Number, Text, Bracket, Symbol, End } type{Type::End};
@@ -167,11 +177,11 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
 class ExpressionParser {
 public:
     ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals,
-                     const VbaFunctionResolver& resolver = {})
-        : tokens_(tokenize(source)), host_(host), locals_(locals), resolver_(resolver) {}
+                     const VbaFunctionResolver& resolver = {},bool objectContext=false)
+        : tokens_(tokenize(source)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext) {}
 
     VbaValue parse() {
-        auto value = expression(1);
+        auto value = expression(1,objectContext_);
         if (peek().type != Token::Type::End)
             throw error("Zusätzliche Zeichen im VBA-Ausdruck: " + peek().value);
         return value;
@@ -187,8 +197,8 @@ private:
     void require(const std::string& wanted) {
         if (!take(wanted)) throw error("Erwartet: " + wanted);
     }
-    VbaValue expression(int minPrecedence) {
-        auto lhs = primary();
+    VbaValue expression(int minPrecedence,bool objectContext=false) {
+        auto lhs = primary(objectContext);
         while (true) {
             const int prec = precedence(peek());
             if (prec < minPrecedence) break;
@@ -198,8 +208,8 @@ private:
         }
         return lhs;
     }
-    VbaValue primary() {
-        auto value = atom();
+    VbaValue primary(bool objectContext) {
+        auto value = atom(objectContext);
         while (peek().value == "." || peek().value == "!") {
             const bool item = consume().value == "!";
             const auto member = consume();
@@ -216,12 +226,14 @@ private:
                 if (value.kind != VbaValue::Kind::Object || !value.object)
                     throw error("Objektvariable nicht gesetzt", 91);
                 if (item && !args.empty()) throw error("Bang lookup arguments unsupported",450);
-                value = item ? value.object->item(member.value) : value.object->member(member.value,args);
+                const bool reference=objectContext || peek().value=="." || peek().value=="!";
+                value = item ? (reference ? value.object->objectItem(member.value) : value.object->item(member.value))
+                    : (reference ? value.object->objectMember(member.value,args) : value.object->member(member.value,args));
             }
         }
         return value;
     }
-    VbaValue atom() {
+    VbaValue atom(bool objectContext) {
         if (take("-")) {
             const auto arg = expression(7);
             return host_ ? VbaValue::numeric(-arg.asNumber()) : VbaValue{};
@@ -237,7 +249,7 @@ private:
             return VbaValue::numeric(~integer(arg));
         }
         if (take("(")) {
-            const auto value = expression(1);
+            const auto value = expression(1,objectContext);
             require(")");
             return value;
         }
@@ -281,8 +293,13 @@ private:
             const auto forms = word == "forms" ? host_->formsCollection() : host_->reportsCollection();
             return item ? forms->member("Item",args) : VbaValue::reference(forms);
         }
-        if (word == "me" && peek().value != "!" && peek().value != ".")
+        if (word == "me" && peek().value != "!" && peek().value != ".") {
+            if (take("(")) {
+                const auto index=expression(1); require(")");
+                return host_ ? host_->currentForm()->member("Controls",{index}) : VbaValue{};
+            }
             return host_ ? VbaValue::reference(host_->currentForm()) : VbaValue{};
+        }
         if (word == "me" && (peek().value == "!" || peek().value == ".")) {
             const bool item = consume().value == "!";
             const auto field = consume();
@@ -296,10 +313,14 @@ private:
             if (!host_) return {};
             const auto key = lower(field.value);
             const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource" || key == "caption");
+            if (!formProperty && objectContext)
+                return item ? host_->currentForm()->objectItem(field.value) : host_->currentForm()->objectMember(field.value,{});
             if (!formProperty && (peek().value == "." || peek().value == "!"))
                 return host_->currentForm()->member("Controls",{VbaValue::string(field.value)});
             return item ? host_->controlValue(field.value) : host_->fieldValue(field.value);
         }
+        if ((word=="now" || word=="date" || word=="time") && peek().value!="(")
+            return host_ ? clockValue(word) : VbaValue{};
         if (take("(")) {
             std::vector<VbaValue> args;
             std::vector<std::string> references;
@@ -313,15 +334,10 @@ private:
                 require(")");
             }
             const auto one = args.size() == 1;
-            if ((word == "now" || word == "date" || word == "time") && args.empty()) {
+            if (word == "now" || word == "date" || word == "time") {
                 if (!host_) return {};
-                const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-                const auto* local = std::localtime(&now);
-                if (!local) throw error("Systemdatum nicht verfügbar");
-                std::ostringstream formatted;
-                formatted << std::put_time(local, word == "now" ? "%Y-%m-%d %H:%M:%S"
-                    : word == "date" ? "%Y-%m-%d" : "%H:%M:%S");
-                return VbaValue::string(formatted.str());
+                if (!args.empty()) throw error("Clock function takes no arguments",450);
+                return clockValue(word);
             }
             if (word=="format" || word=="format$") {
                 if (args.size()!=2) throw error("Format arguments unsupported",450);
@@ -414,6 +430,7 @@ private:
     VbaHost* host_{};
     const VbaVariables& locals_;
     VbaFunctionResolver resolver_;
+    bool objectContext_{};
 };
 } // namespace
 
@@ -470,5 +487,9 @@ bool validVbaExpression(std::string_view text) {
 VbaValue evaluateVbaExpression(std::string_view text, VbaHost& host,
                                const VbaVariables& vars, const VbaFunctionResolver& resolver) {
     return ExpressionParser(text, &host, vars, resolver).parse();
+}
+VbaValue evaluateVbaObjectExpression(std::string_view text,VbaHost& host,
+                                    const VbaVariables& vars,const VbaFunctionResolver& resolver) {
+    return ExpressionParser(text,&host,vars,resolver,true).parse();
 }
 }

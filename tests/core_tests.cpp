@@ -294,6 +294,25 @@ End Sub
     assert(host.fields["Name"] == "Keksotcd");
     assert(host.fields["Nachname"] == "3");
     assert(host.messages.back().size() == 19);
+    const auto bareClocks=executeVbaProcedure(R"VBA(
+Sub Clocks()
+Me!Name = Date
+Me!Nachname = Time
+MsgBox Now
+End Sub
+)VBA","Clocks",host);
+    assert(bareClocks.status==VbaExecutionStatus::Completed);
+    assert(host.fields["Name"]->size()==10 && host.fields["Name"]->at(4)=='-' && host.fields["Name"]->at(7)=='-');
+    assert(host.fields["Nachname"]->size()==8 && host.fields["Nachname"]->at(2)==':' && host.fields["Nachname"]->at(5)==':');
+    assert(host.messages.back().size()==19 && host.messages.back()[10]==' ');
+    const auto badClock=executeVbaProcedure(R"VBA(
+Sub ClockError()
+On Error Resume Next
+Me!Name = Date(1)
+Me!Nachname = CStr(Err.Number)
+End Sub
+)VBA","ClockError",host);
+    assert(badClock.status==VbaExecutionStatus::Completed && host.fields["Nachname"]=="450");
     const auto labelHandler = executeVbaProcedure(R"VBA(
 Sub Labels()
 Dim divisor As Long

@@ -560,6 +560,9 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     const auto evaluate = [&](std::string_view expression) {
         return evaluateVbaExpression(expression, host, locals, resolver);
     };
+    const auto evaluateObject = [&](std::string_view expression) {
+        return evaluateVbaObjectExpression(expression,host,locals,resolver);
+    };
     bool active = true;
     int currentLine = 0;
     int steps = 0;
@@ -698,8 +701,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 break;
             case Statement::Type::ObjectSet:
                 if (active) {
-                    auto value = evaluate(instruction.expression);
-                    if (value.kind != VbaValue::Kind::Object) throw std::runtime_error("Set benötigt ein Objekt");
+                    auto value = evaluateObject(instruction.expression);
+                    if (value.kind != VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set benötigt ein Objekt");
                     locals[lower(instruction.argument)] = std::move(value);
                 }
                 break;
@@ -708,8 +711,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     const auto pos = memberSeparator(instruction.argument);
                     auto name = instruction.argument.substr(pos + 1);
                     if (name.starts_with('[') && name.ends_with(']')) name = name.substr(1, name.size() - 2);
-                    const auto object = evaluate(instruction.argument.substr(0, pos));
-                    if (!object.object) throw std::runtime_error("Objektvariable nicht gesetzt");
+                    const auto object = evaluateObject(instruction.argument.substr(0, pos));
+                    if (!object.object) throw VbaRuntimeError(91,"Objektvariable nicht gesetzt");
                     const auto value = evaluate(instruction.expression);
                     if (instruction.argument[pos] == '!') object.object->assignItem(name,value);
                     else object.object->assign(name,value);

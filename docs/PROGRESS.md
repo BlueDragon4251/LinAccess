@@ -11,6 +11,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original register keypad button/parameter-helper executions | 11 |
 | Original DAO insertion button execution | 1 |
 | Original bound Report_Open / Report_Close procedures executed | 3 / 3 |
+| Original Form_Load control initializer / verified property assignments | 1 / 6 |
 | Original report sources classified / currently bound | 9 / 6 |
 | Original report non-NULL textbox values compared with prepared reader | 54 |
 | Original form layouts scanned | 47 |
@@ -80,3 +81,8 @@ Completed SQL object-value package: project-scoped live Forms/Formulare and
 Reports/Berichte control references in queries and saved views, typed Value
 parameters, nine original references across five queries and six original Value
 parameter declarations (SQL_OBJECT_VALUES.md). Complete report workflows remain open.
+
+Completed object-reference context package: Set and assignment owners retain
+actual control/DAO Field references; one unchanged original Form_Load executes
+six Qt property assignments. Bare Date/Now/Time calls and catchable argument
+errors are tested. Full default-member/Variant semantics remain open.

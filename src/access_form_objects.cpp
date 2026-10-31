@@ -170,6 +170,15 @@ public:
     linaccess::VbaValue item(std::string_view name) override {
         return PreviewControlObject(checked(),text(name)).member("Value",{});
     }
+    linaccess::VbaValue objectItem(std::string_view name) override {
+        return makePreviewControlsObject(checked())->item(name);
+    }
+    linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        const auto key=text(name).toCaseFolded();
+        if (!args.empty() || key=="name" || key=="caption" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="setfocus")
+            return member(name,args);
+        return objectItem(name);
+    }
     void assignItem(std::string_view name,const linaccess::VbaValue& value) override {
         PreviewControlObject(checked(),text(name)).assign("Value",value);
     }

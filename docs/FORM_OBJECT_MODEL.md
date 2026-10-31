@@ -64,3 +64,25 @@ raises an explicit error. No COM/ActiveX implementation is implied.
 
 Print/PDF and the scoped Application.CommandBars adapter are documented in
 PRINT_PREVIEW_ADAPTER.md. They remain distinct from a complete Reports engine.
+
+## Value versus object reference contexts
+
+The evaluator distinguishes scalar reads from object-reference reads for Set and
+property-assignment owners. `Me.control.Enabled = ...` must retain the control
+object rather than try to assign through its current scalar Value. Both dot and
+bang paths, parenthesized references and Forms collection paths are covered.
+Reserved form properties such as Name/Caption keep their property meaning;
+Set on a scalar raises error 13 and an unset assignment owner raises error 91.
+
+`Me("control" & suffix)` resolves the actual Controls collection item; explicit
+properties such as Caption/Visible/Value work on that reference. Implicit scalar
+coercion of arbitrary objects and all default-member signatures remain open.
+DAO bang references similarly retain a Field object for Set or a following
+.Value, while ordinary `rs!field` reads keep their scalar behavior. Collisions
+with Recordset EOF/Fields properties are exercised separately.
+
+A hash-verified original Form_Load initializer now runs automatically and after
+resetting actual Qt state: six Enabled/Visible assignments are checked. The
+original module and form bytes are unchanged. This is control/event execution;
+it does not claim that this form's complete record-source or business workflow
+is compatible. The other two original Form_Load handlers remain separate work.

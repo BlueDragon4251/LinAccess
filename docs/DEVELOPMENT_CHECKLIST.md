@@ -57,6 +57,7 @@ Full targets remain open:
 - [x] Native For Each/Next, Exit For, nested loops and DAO Fields enumeration; real 29-table structure regression.
 - [ ] With, Select Case, remaining Do/While/Exit variants and full conditional semantics.
 - [x] Imported-form Forms/Controls collections, guarded references, typed cross-form data writes and basic Access control constants.
+- [x] Value/reference contexts for Set and property assignment, dynamic Me(control), DAO Field bang references; six property writes in one original Form_Load verified.
 - [ ] Complete Forms/Reports object model, properties, lifetime and subform semantics.
 - [ ] On Error/Err/Resume, nested handlers and source-mapped diagnostics/debugger.
 - [ ] Application/Forms/Reports/Me/DoCmd and Access/DAO constants.

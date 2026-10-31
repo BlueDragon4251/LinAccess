@@ -216,6 +216,39 @@ End Sub
     assert(formatted.findChild<QLineEdit*>("access-control-Summary")->text()=="94");
     assert(formatted.close());
 
+    const QByteArray referenceCode=R"VBA(
+Sub Scan_Click()
+Dim ctl As Control
+Dim same As Control
+Set ctl = Me.Summary
+Set same = (Me!Summary)
+If Not (ctl Is same) Then
+Err.Raise 5
+End If
+Me.Summary.Enabled = False
+Me("Sum" & "mary").Visible = False
+Forms![reference context]!Summary.Value = "live"
+Set ctl = Forms![reference context]!Summary
+ctl.Value = ctl.Value & ":reference"
+Me!Summary.Visible = True
+End Sub
+Sub Write_Click()
+On Error Resume Next
+Dim ctl As Control
+Set ctl = Me.Caption
+Me!Summary = CStr(Err.Number)
+End Sub
+)VBA";
+    AccessFormPreview referenceContext("reference context",form,referenceCode,db);
+    std::vector<linaccess::VbaValue> referenceArgs;
+    const auto references=referenceContext.executeProcedure("Scan_Click",referenceArgs);
+    assert(references.status==linaccess::VbaExecutionStatus::Completed);
+    auto* referenceInput=referenceContext.findChild<QLineEdit*>("access-control-Summary");
+    assert(referenceInput && referenceInput->text()=="live:reference" && !referenceInput->isEnabled() && !referenceInput->isHidden());
+    assert(referenceContext.executeProcedure("Write_Click",referenceArgs).status==linaccess::VbaExecutionStatus::Completed);
+    assert(referenceInput->text()=="13");
+    assert(referenceContext.close());
+
     AccessFormPreview parameters("sql parameters",form,{},db);
     auto input=makePreviewFormObject(parameters);
     input->assignItem("Summary",linaccess::VbaValue::numeric(2003));

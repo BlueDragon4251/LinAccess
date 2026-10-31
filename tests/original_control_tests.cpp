@@ -106,4 +106,54 @@ void testOriginalControls(const QDir& directory,const QJsonArray& objects) {
     }
     assert(executed==3);
     std::cout << "Original report control handlers executed after resetting visibility: " << executed << '\n';
+    int initialized=0,assignments=0;
+    for (const auto& item : objects) {
+        const auto module=item.toObject(); if (module["kind"]!="vba") continue;
+        if (module["sha256"].toString().toLatin1().toLower()!="dbd3623b9404e490a814b70de6318d2c0877969b7feef081696d3e235ae3b427") continue;
+        QFile codeFile(directory.filePath(module["file"].toString())); assert(codeFile.open(QIODevice::ReadOnly));
+        const auto raw=codeFile.readAll();
+        assert(QCryptographicHash::hash(raw,QCryptographicHash::Sha256).toHex()==module["sha256"].toString().toLatin1().toLower());
+        const auto code=linaccess::decodeVbaSource(raw);
+        const auto handler=QRegularExpression("Sub\\s+Form_Load\\s*\\(\\s*\\)(.*?)End Sub",QRegularExpression::CaseInsensitiveOption|QRegularExpression::DotMatchesEverythingOption).match(code);
+        assert(handler.hasMatch());
+        const auto name=module["name"].toString().mid(5);
+        QByteArray definition;
+        for (const auto& candidate : objects) {
+            const auto form=candidate.toObject();
+            if (form["kind"]!="form" || form["name"]!=name) continue;
+            QFile input(directory.filePath(form["file"].toString())); assert(input.open(QIODevice::ReadOnly)); definition=input.readAll();
+            assert(QCryptographicHash::hash(definition,QCryptographicHash::Sha256).toHex()==form["sha256"].toString().toLatin1().toLower());
+        }
+        assert(!definition.isEmpty());
+        auto db=QSqlDatabase::addDatabase("QSQLITE","original-load-controls"); db.setDatabaseName(":memory:"); assert(db.open());
+        AccessFormPreview preview(name,definition,raw,db);
+        const auto loaded=preview.eventResult("OnLoad");
+        if (!loaded || loaded->status!=linaccess::VbaExecutionStatus::Completed)
+            std::cerr<<"Original initializer: bound="<<static_cast<bool>(loaded)<<", status="<<(loaded ? static_cast<int>(loaded->status) : -1)<<", error="<<(loaded ? loaded->errorNumber : 0)<<", line="<<(loaded ? loaded->line : 0)<<'\n';
+        assert(loaded && loaded->status==linaccess::VbaExecutionStatus::Completed);
+        const auto controls=makePreviewFormObject(preview)->member("Controls",{}).object;
+        const QRegularExpression assignment("Me[.!](?:\\[([^\\]]+)\\]|([\\p{L}\\p{N}_]+))\\.(Enabled|Visible)\\s*=\\s*(True|False)",QRegularExpression::CaseInsensitiveOption);
+        const auto verify=[&](bool reset) {
+            int count=0;
+            auto matches=assignment.globalMatch(handler.captured(1));
+            while (matches.hasNext()) {
+                const auto match=matches.next();
+                const auto controlName=match.captured(1).isEmpty() ? match.captured(2) : match.captured(1);
+                const auto control=controls->member("Item",{linaccess::VbaValue::string(controlName.toUtf8().toStdString())}).object;
+                const auto property=match.captured(3).toUtf8().toStdString();
+                const bool expected=match.captured(4).compare("True",Qt::CaseInsensitive)==0;
+                if (reset) control->assign(property,linaccess::VbaValue::logical(!expected));
+                else assert(control->member(property,{}).boolean==expected);
+                ++count;
+            }
+            return count;
+        };
+        assert(verify(false)==6); assert(verify(true)==6);
+        std::vector<linaccess::VbaValue> arguments;
+        assert(preview.executeProcedure("Form_Load",arguments).status==linaccess::VbaExecutionStatus::Completed);
+        assignments+=verify(false); ++initialized;
+        assert(preview.close());
+    }
+    assert(initialized==1 && assignments==6);
+    std::cout<<"Original Form_Load control initializer executed: "<<initialized<<", verified property assignments: "<<assignments<<'\n';
 }
