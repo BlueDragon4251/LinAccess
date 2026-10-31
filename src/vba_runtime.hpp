@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace linaccess {
 
@@ -14,6 +15,7 @@ public:
     int number;
 };
 class VbaObject;
+struct VbaValue;
 
 class VbaHost {
 public:
@@ -58,7 +60,15 @@ struct VbaExecutionResult {
     bool exitSub{};
     std::optional<std::string> returnValue;
     bool cancelled{};
+    std::shared_ptr<VbaValue> typedReturnValue;
+    int errorNumber{};
 };
+
+// Syntax inspection only; Completed here does not mean a procedure was executed.
+VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_view procedure);
+
+VbaExecutionResult executeVbaProcedureWithArguments(std::string_view module,
+    std::string_view procedure, VbaHost& host, std::vector<VbaValue>& arguments);
 
 // Strict, explicitly limited interpreter. NOT the Microsoft VBA runtime.
 // The whole procedure is syntax-validated before any host-side effect.

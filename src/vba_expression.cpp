@@ -165,8 +165,9 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
 
 class ExpressionParser {
 public:
-    ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals)
-        : tokens_(tokenize(source)), host_(host), locals_(locals) {}
+    ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals,
+                     const VbaFunctionResolver& resolver = {})
+        : tokens_(tokenize(source)), host_(host), locals_(locals), resolver_(resolver) {}
 
     VbaValue parse() {
         auto value = expression(1);
@@ -274,8 +275,14 @@ private:
         }
         if (take("(")) {
             std::vector<VbaValue> args;
+            std::vector<std::string> references;
             if (!take(")")) {
-                do { args.push_back(expression(1)); } while (take(","));
+                do {
+                    const auto start = index_;
+                    args.push_back(expression(1));
+                    references.push_back(index_ == start + 1 && tokens_[start].type == Token::Type::Word
+                        ? tokens_[start].value : "");
+                } while (take(","));
                 require(")");
             }
             const auto one = args.size() == 1;
@@ -360,6 +367,8 @@ private:
                     std::min<std::size_t>(input.size(), static_cast<std::size_t>(start - 1)),
                     static_cast<std::size_t>(length)));
             }
+            if (!host_) return {}; // syntactic function call; bind at execution
+            if (resolver_) return resolver_(tok.value, args, references);
             throw error("Nicht unterstützte VBA-Funktion/Parameter: " + tok.value);
         }
         if (!host_) return {}; // Validate identifiers syntactically, resolve on execution.
@@ -371,6 +380,7 @@ private:
     std::size_t index_{};
     VbaHost* host_{};
     const VbaVariables& locals_;
+    VbaFunctionResolver resolver_;
 };
 } // namespace
 
@@ -415,7 +425,7 @@ bool validVbaExpression(std::string_view text) {
     catch (...) { return false; }
 }
 VbaValue evaluateVbaExpression(std::string_view text, VbaHost& host,
-                               const VbaVariables& vars) {
-    return ExpressionParser(text, &host, vars).parse();
+                               const VbaVariables& vars, const VbaFunctionResolver& resolver) {
+    return ExpressionParser(text, &host, vars, resolver).parse();
 }
 }

@@ -3,6 +3,7 @@
 #include "vba_runtime.hpp"
 
 #include <optional>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -40,7 +41,9 @@ public:
 
 using VbaVariables = std::unordered_map<std::string, VbaValue>;
 
+using VbaFunctionResolver = std::function<VbaValue(std::string_view, std::vector<VbaValue>&,
+                                                 const std::vector<std::string>&)>;
 bool validVbaExpression(std::string_view expression);
 VbaValue evaluateVbaExpression(std::string_view expression, VbaHost& host,
-                               const VbaVariables& variables);
+                               const VbaVariables& variables, const VbaFunctionResolver& resolver = {});
 }

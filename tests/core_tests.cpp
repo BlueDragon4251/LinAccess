@@ -245,6 +245,95 @@ End Sub
     assert(host.fields["Name"] == "Keksotcd");
     assert(host.fields["Nachname"] == "3");
     assert(host.messages.back().size() == 19);
+    const auto labelHandler = executeVbaProcedure(R"VBA(
+Sub Labels()
+Dim divisor As Long
+Dim answer As Long
+On Error GoTo Recover
+divisor = 0
+answer = 12 / divisor
+Me!Name = CStr(answer)
+GoTo Finished
+Recover:
+Me!Nachname = CStr(Err.Number)
+divisor = 3
+Resume
+Finished:
+Exit Sub
+End Sub
+)VBA", "Labels", host);
+    assert(labelHandler.status == VbaExecutionStatus::Completed);
+    assert(host.fields["Name"] == "4" && host.fields["Nachname"] == "11");
+    const auto nestedError = executeVbaProcedure(R"VBA(
+Sub Outer()
+On Error GoTo Handler
+Inner
+Exit Sub
+Handler:
+Me!Name = CStr(Err.Number)
+Resume Done
+Done:
+Exit Sub
+End Sub
+Sub Inner()
+Err.Raise(6)
+End Sub
+)VBA", "Outer", host);
+    assert(nestedError.status == VbaExecutionStatus::Completed && host.fields["Name"] == "6");
+    assert(executeVbaProcedure("Sub Test()\nResume Next\nEnd Sub", "Test", host).errorNumber == 20);
+    const auto functions = executeVbaProcedure(R"VBA(
+Sub Functions()
+Dim n As Long
+n = 2
+Me!Name = CStr(Twice(n) + PlusOne(n))
+Me!Nachname = CStr(n)
+End Sub
+Function Twice(ByVal value As Long) As Long
+Twice = value * 2
+End Function
+Function PlusOne(ByRef value As Long) As Long
+value = value + 1
+PlusOne = value
+End Function
+)VBA", "Functions", host);
+    assert(functions.status == VbaExecutionStatus::Completed);
+    assert(host.fields["Name"] == "7" && host.fields["Nachname"] == "3");
+    const auto aliased = executeVbaProcedure(R"VBA(
+Sub Aliases()
+Dim n As Long
+n = 1
+Touch n, n
+Me!Name = CStr(n)
+End Sub
+Sub Touch(ByRef a As Long, ByRef b As Long)
+a = a + 1
+b = b + a
+End Sub
+)VBA", "Aliases", host);
+    assert(aliased.status == VbaExecutionStatus::Completed && host.fields["Name"] == "4");
+    const auto parameterCalls = executeVbaProcedure(R"VBA(
+Sub Parameters()
+Dim n As Long
+n = 2
+Increment n
+Call Increment(n)
+IgnoreChange n
+Me!Name = CStr(n)
+KeyCapt "7,8"
+End Sub
+Sub Increment(ByRef value As Long)
+value = value + 1
+End Sub
+Sub IgnoreChange(ByVal value As Long)
+value = 99
+End Sub
+Sub KeyCapt(C)
+Me!Nachname = C
+End Sub
+)VBA", "Parameters", host);
+    assert(parameterCalls.status == VbaExecutionStatus::Completed);
+    assert(host.fields["Name"] == "4");
+    assert(host.fields["Nachname"] == "7,8");
     const auto handled = executeVbaProcedure(R"VBA(
 Sub Errors()
 Dim untyped, typed As Long

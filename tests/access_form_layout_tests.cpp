@@ -14,6 +14,8 @@
 #include <QComboBox>
 #include <QRegularExpression>
 #include <QTemporaryDir>
+#include <QMessageBox>
+#include <QTimer>
 #include <QPushButton>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -31,6 +33,21 @@ int main(int argc, char** argv) {
     QFile manifest(directory.filePath("manifest.json"));
     assert(manifest.open(QIODevice::ReadOnly));
     const auto objects = QJsonDocument::fromJson(manifest.readAll()).object().value("objects").toArray();
+    const auto unknownBinary = linaccess::parseAccessFormLayout(R"FORM(Begin Form
+UnknownProp = {305 ,452 ,1 ,1 ,1 } Begin
+    0x12345678
+End
+Caption ="Begin"
+Begin Section
+Height =1000
+Begin TextBox
+Name ="Preserved"
+End
+End
+End
+)FORM");
+    assert(unknownBinary.caption == "Begin");
+    assert(unknownBinary.controls.size() == 1 && unknownBinary.controls[0].name == "Preserved");
     int scanned = 0;
     int visible = 0;
     int buttons = 0;
@@ -122,6 +139,54 @@ End Sub
         assert(query.exec("SELECT name FROM recipes"));
         assert(query.next() && query.value(0).toString() == "Keks");
         db.close();
+    }
+    {
+        auto db = QSqlDatabase::addDatabase("QSQLITE", "original-keypad-events");
+        db.setDatabaseName(":memory:"); assert(db.open());
+        QTimer acknowledge;
+        QObject::connect(&acknowledge, &QTimer::timeout, [] {
+            for (auto* widget : QApplication::topLevelWidgets())
+                if (auto* message = qobject_cast<QMessageBox*>(widget)) message->accept();
+        });
+        acknowledge.start(10);
+        int executedKeys = 0;
+        for (const auto& value : objects) {
+            const auto module = value.toObject();
+            if (module["kind"] != "vba") continue;
+            QFile file(directory.filePath(module["file"].toString())); assert(file.open(QIODevice::ReadOnly));
+            const auto bytes = file.readAll();
+            const auto code = linaccess::decodeVbaSource(bytes);
+            if (!code.contains("Me!gegeben = Me!gegeben & C")) continue;
+            const auto formName = module["name"].toString().mid(5);
+            QByteArray form;
+            for (const auto& objectValue : objects) {
+                const auto object = objectValue.toObject();
+                if (object["kind"] != "form" || object["name"] != formName) continue;
+                QFile formFile(directory.filePath(object["file"].toString()));
+                assert(formFile.open(QIODevice::ReadOnly)); form = formFile.readAll();
+            }
+            assert(!form.isEmpty());
+            AccessFormPreview preview(formName, form, bytes, db);
+            QLineEdit* given = nullptr;
+            for (auto* editor : preview.findChildren<QLineEdit*>())
+                if (editor->objectName().compare("access-control-gegeben", Qt::CaseInsensitive) == 0) given = editor;
+            assert(given);
+            const auto layout = linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(form));
+            for (const auto& control : layout.controls) {
+                auto event = control.name;
+                event.replace(QRegularExpression("[^\\p{L}\\p{N}_]"), "_");
+                const QRegularExpression handler("(?im)^\\s*(?:Private\\s+|Public\\s+)?Sub\\s+"
+                    + QRegularExpression::escape(event + "_Click")
+                    + R"re(\(\)\s*\r?\n\s*KeyCapt\s+"([^"]*)"\s*\r?\n\s*End Sub)re");
+                const auto match = handler.match(code);
+                if (!match.hasMatch()) continue;
+                auto* button = preview.findChild<QPushButton*>("access-control-" + control.name); assert(button);
+                given->clear(); button->click();
+                assert(given->text() == match.captured(1)); ++executedKeys;
+            }
+        }
+        assert(executedKeys >= 10);
+        std::cout << "Original keypad button/parameterized-handler executions: " << executedKeys << '\n';
     }
     if (argc >= 3) {
         QTemporaryDir temporary;

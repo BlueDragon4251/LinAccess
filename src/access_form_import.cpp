@@ -106,7 +106,9 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
         const auto current = stack.back();
         // GUID/NameMap/embedded-image values use `Property = Begin` followed
         // by hex bytes and `End`. That End is *not* the enclosing control End.
-        if (value.compare("Begin", Qt::CaseInsensitive) == 0) {
+        static const QRegularExpression binaryBegin(R"(^(?:\{[0-9, \t-]+\}\s*)?Begin$)",
+            QRegularExpression::CaseInsensitiveOption);
+        if (binaryBegin.match(assignment.captured(2).trimmed()).hasMatch()) {
             stack.push_back({"BinaryProperty", -1, current.section});
             continue;
         }

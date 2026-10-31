@@ -32,6 +32,10 @@ rows, credentials, or raw tool logs to issues, PRs, releases or build artifacts.
 
 Verified incremental work ([details and limits](DAO_RUNTIME.md)):
 
+- [x] Positional Sub/Function arguments, value-returning expression calls, ByVal/ByRef aliases.
+- [x] Top-level label handlers, Resume retry/next/label and nested error-number propagation.
+- [x] Eleven original keypad button/helper executions and typed binary form-property parsing.
+- [x] Full 187-procedure, hash-verified syntax inventory, explicitly separate from execution coverage.
 - [x] Native object references, CurrentDb and table-backed DAO dynasets/snapshots.
 - [x] Recordset iteration, named/indexed Field.Value access and edit/insert/delete buffers.
 - [x] Do While loops, multiple DAO Dim declarations and Nothing identity.
