@@ -99,6 +99,71 @@ End Sub
     assert(parameterized.status == linaccess::VbaExecutionStatus::Completed);
     assert(host.fields["Result"] == "1" && host.fields["Affected"] == "1");
     assert(q.exec("SELECT label FROM items WHERE id=2")); assert(q.next() && q.value(0).toString() == "changed");
+    const auto parameterCollection=linaccess::executeVbaProcedure(R"VBA(
+Sub CollectionExecution()
+Dim definition As DAO.QueryDef
+Dim parameters As Object
+Dim parameter As DAO.Parameter
+Dim first As DAO.Parameter
+Dim rows As DAO.Recordset
+Dim names As String
+Set definition=CurrentDb.CreateQueryDef("", "PARAMETERS [first] Long, [second] Long; SELECT [first]+[second] AS result")
+Set parameters=definition.Parameters
+Set first=parameters.Item(0)
+Me!ParameterIdentity=CStr(first Is definition.Parameters("FIRST"))
+Me!ParameterCount=CStr(parameters.Count)
+names=""
+For Each parameter In parameters
+parameter.Value=3
+names=names & parameter.Name & ":"
+Next
+Me!ParameterNames=names
+Set rows=definition.OpenRecordset(dbOpenSnapshot)
+Me!CollectionValue=CStr(rows.Fields(0).Value)
+rows.Close
+definition.SQL="PARAMETERS [replacement] Long; SELECT [replacement] AS result"
+Me!ReplacementCount=CStr(parameters.Count)
+On Error Resume Next
+Me!InvalidName=first.Name
+Me!StaleParameter=CStr(Err.Number)
+On Error GoTo 0
+definition.Close
+Err.Clear
+On Error Resume Next
+Me!InvalidCount=parameters.Count
+Me!ClosedParameters=CStr(Err.Number)
+End Sub
+)VBA","CollectionExecution",host);
+    assert(parameterCollection.status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["ParameterIdentity"]=="True" && host.fields["ParameterCount"]=="2");
+    assert(host.fields["ParameterNames"]=="first:second:" && host.fields["CollectionValue"]=="6");
+    assert(host.fields["ReplacementCount"]=="1" && host.fields["StaleParameter"]=="3420" && host.fields["ClosedParameters"]=="3420");
+    auto emptyDefinition=host.currentDatabase()->member("CreateQueryDef",{linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT 1")}).object;
+    auto emptyParameters=emptyDefinition->member("Parameters",{}).object;
+    assert(emptyParameters->member("Count",{}).asNumber()==0 && emptyParameters->enumerate().empty());
+    bool absentIndex=false;
+    try { (void)emptyParameters->member("Item",{linaccess::VbaValue::numeric(0)}); }
+    catch(const linaccess::VbaRuntimeError& error) { absentIndex=error.number==3265; }
+    assert(absentIndex);
+    auto replaced=host.currentDatabase()->member("CreateQueryDef",{linaccess::VbaValue::string(""),linaccess::VbaValue::string("PARAMETERS [same] Long; SELECT [same]")}).object;
+    auto collection=replaced->member("Parameters",{}).object;
+    auto oldParameter=collection->member("Item",{linaccess::VbaValue::numeric(0)}).object;
+    replaced->assign("SQL",linaccess::VbaValue::string("PARAMETERS [same] Text; SELECT [same]"));
+    auto newParameter=collection->item("SAME").object;
+    assert(newParameter!=oldParameter && collection->member("Count",{}).asNumber()==1);
+    bool staleReference=false;
+    try { (void)oldParameter->member("Value",{}); }
+    catch(const linaccess::VbaRuntimeError& error) { staleReference=error.number==3420; }
+    assert(staleReference);
+    newParameter->assign("Value",linaccess::VbaValue::string("new value"));
+    auto replacementRows=replaced->member("OpenRecordset",{}).object;
+    assert(replacementRows->member("Fields",{linaccess::VbaValue::numeric(0)}).object->member("Value",{}).asText()=="new value");
+    replacementRows->member("Close",{});
+    replaced->member("Close",{});
+    bool closedName=false;
+    try { (void)newParameter->member("Name",{}); }
+    catch(const linaccess::VbaRuntimeError& error) { closedName=error.number==3420; }
+    assert(closedName);
     const auto missingParameter = linaccess::executeVbaProcedure(
         "Sub Test()\nDim definition As DAO.QueryDef\nDim rows As DAO.Recordset\nSet definition=CurrentDb.QueryDefs(\"minimum\")\nSet rows=definition.OpenRecordset()\nEnd Sub", "Test", host);
     assert(missingParameter.status == linaccess::VbaExecutionStatus::Error && missingParameter.errorNumber == 3061);

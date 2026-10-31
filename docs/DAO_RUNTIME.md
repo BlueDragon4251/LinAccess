@@ -90,3 +90,22 @@ application procedure. Original For Each procedures still require their specific
 Access collections and other unsupported syntax. Native enumeration materializes
 an object-reference snapshot; COM enumerator mutation/lifetime behavior is not
 claimed. Default members and a VBA Collection class remain open.
+
+## QueryDef parameter collections
+
+`QueryDef.Parameters` returns an actual native collection. Count, zero-based
+Item (name or ordinal), bang lookup and For Each use the declared parameter
+order. Legacy `Parameters(name)` and collection lookups share cached Parameter
+objects; Name/Value access and binding execute against the actual QueryDef.
+Missing entries report 3265 and Null indices report 94.
+
+The collection reflects replacement SQL. Parameter handles from an earlier SQL
+generation become invalid (3420), including when the new declaration reuses the
+same name. Closing the QueryDef invalidates parameter Name/Value operations and
+collection access. Tests verify identity, native VBA iteration, real SELECT
+results, SQL replacement, stale references, empty collections and close errors.
+The six original parameter declarations exercise collection count/order/identity;
+five also execute positive filtered recordsets (QUERY_ORIGINS.md).
+
+Parameter Type/Attributes metadata, implicit parameter inference, Refresh,
+ADO collections and every default-member/coercion combination remain incomplete.

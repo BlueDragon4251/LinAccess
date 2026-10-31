@@ -246,29 +246,24 @@ void Field::assign(std::string_view name, const VbaValue& value) {
 class QueryDefinition;
 class QueryParameter final : public VbaObject {
 public:
-    QueryParameter(std::shared_ptr<QueryDefinition> query, QString name) : query_(std::move(query)), name_(std::move(name)) {}
+    QueryParameter(std::shared_ptr<QueryDefinition> query, QString name,quint64 generation) : query_(std::move(query)), name_(std::move(name)),generation_(generation) {}
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override;
     void assign(std::string_view name, const VbaValue& value) override;
 private:
     std::shared_ptr<QueryDefinition> query_;
     QString name_;
+    quint64 generation_{};
 };
+class QueryParameters;
 class QueryDefinition final : public VbaObject, public std::enable_shared_from_this<QueryDefinition> {
 public:
     QueryDefinition(QSqlDatabase db, QString source) : db_(std::move(db)), source_(std::move(source)), plan_(compileAccessQuery(source_)) {}
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
-        require(!closed_,"DAO: QueryDef is closed");
+        if (closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
         const auto key = lower(name);
         if (key == "parameters") {
-            require(args.size() == 1,"DAO: Parameter name/index required");
-            QString parameter;
-            if (args[0].kind == VbaValue::Kind::Number) {
-                const auto index = static_cast<int>(args[0].asNumber());
-                require(index >= 0 && index < plan_.parameters.size(),"DAO: Parameter index out of range");
-                parameter = plan_.parameters[index].name;
-            } else parameter = text(args[0].asText());
-            checkParameter(parameter);
-            return VbaValue::reference(std::make_shared<QueryParameter>(shared_from_this(),parameter));
+            auto collection=parameters();
+            return args.empty() ? VbaValue::reference(collection) : collection->member("Item",args);
         }
         if (key == "openrecordset") {
             require(args.empty() || (args.size() == 1 && (args[0].asNumber() == 2 || args[0].asNumber() == 4)),"DAO: Recordset type unsupported");
@@ -293,10 +288,11 @@ public:
         throw VbaRuntimeError(438,"DAO: QueryDef member unsupported");
     }
     void assign(std::string_view name, const VbaValue& value) override {
-        require(!closed_ && lower(name) == "sql","DAO: QueryDef property is not writable");
+        if (closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
+        require(lower(name) == "sql","DAO: QueryDef property is not writable");
         const auto source = text(value.asText());
         const auto compiled = compileAccessQuery(source);
-        source_ = source; plan_ = compiled; values_.clear();
+        source_ = source; plan_ = compiled; values_.clear(); parameterObjects_.clear(); ++generation_;
     }
     VbaValue parameter(const QString& name) const {
         checkParameter(name); return fromSql(values_.value(name.toCaseFolded()));
@@ -305,8 +301,14 @@ public:
         checkParameter(name); values_.insert(name.toCaseFolded(),toSql(value));
     }
 private:
+    friend class QueryParameter;
+    friend class QueryParameters;
+    std::shared_ptr<VbaObject> parameters();
+    void parameterGeneration(quint64 generation) const {
+        if (closed_ || generation!=generation_) throw VbaRuntimeError(3420,"DAO: Parameter is no longer valid");
+    }
     void checkParameter(const QString& name) const {
-        require(!closed_,"DAO: QueryDef is closed");
+        if (closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
         for (const auto& parameter : plan_.parameters)
             if (parameter.name.compare(name,Qt::CaseInsensitive) == 0) return;
         throw VbaRuntimeError(3265,"DAO: Parameter not found");
@@ -315,16 +317,66 @@ private:
     QString source_;
     AccessQueryPlan plan_;
     QMap<QString,QVariant> values_;
+    std::weak_ptr<VbaObject> parameters_;
+    QMap<QString,std::weak_ptr<VbaObject>> parameterObjects_;
+    quint64 generation_{};
     qlonglong affected_{};
     bool closed_{};
 };
+class QueryParameters final : public VbaObject {
+public:
+    explicit QueryParameters(std::shared_ptr<QueryDefinition> query) : query_(std::move(query)) {}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        if (query_->closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
+        const auto key=lower(name);
+        if (key=="count") {
+            if (!args.empty()) throw VbaRuntimeError(450,"DAO: Count takes no arguments");
+            return VbaValue::numeric(query_->plan_.parameters.size());
+        }
+        if (key!="item") throw VbaRuntimeError(438,"DAO: Parameters collection member unsupported");
+        if (args.size()!=1) throw VbaRuntimeError(450,"DAO: Parameter name/index required");
+        const auto& value=args.front();
+        if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null Parameter index");
+        QString target;
+        if (value.kind==VbaValue::Kind::Number || value.kind==VbaValue::Kind::Currency || value.kind==VbaValue::Kind::Boolean || value.kind==VbaValue::Kind::Empty) {
+            const auto index=sqlFieldValue(value,"INTEGER").toLongLong();
+            if (index<0 || index>=query_->plan_.parameters.size()) throw VbaRuntimeError(3265,"DAO: Parameter index not found");
+            target=query_->plan_.parameters[index].name;
+        } else {
+            const auto requested=text(value.asText());
+            for (const auto& parameter : query_->plan_.parameters)
+                if (parameter.name.compare(requested,Qt::CaseInsensitive)==0) { target=parameter.name; break; }
+            if (target.isEmpty()) throw VbaRuntimeError(3265,"DAO: Parameter not found");
+        }
+        auto& cached=query_->parameterObjects_[target.toCaseFolded()];
+        auto parameter=cached.lock();
+        if (!parameter) { parameter=std::make_shared<QueryParameter>(query_,target,query_->generation_); cached=parameter; }
+        return VbaValue::reference(parameter);
+    }
+    VbaValue item(std::string_view name) override { return member("Item",{VbaValue::string(std::string(name))}); }
+    std::vector<VbaValue> enumerate() override {
+        if (query_->closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
+        std::vector<VbaValue> result;
+        for (int i=0;i<query_->plan_.parameters.size();++i) result.push_back(member("Item",{VbaValue::numeric(i)}));
+        return result;
+    }
+private:
+    std::shared_ptr<QueryDefinition> query_;
+};
+std::shared_ptr<VbaObject> QueryDefinition::parameters() {
+    auto collection=parameters_.lock();
+    if (!collection) { collection=std::make_shared<QueryParameters>(shared_from_this()); parameters_=collection; }
+    return collection;
+}
 VbaValue QueryParameter::member(std::string_view name, const std::vector<VbaValue>& args) {
-    require(args.empty(),"DAO: Unexpected Parameter arguments");
+    query_->parameterGeneration(generation_);
+    if (!args.empty()) throw VbaRuntimeError(450,"DAO: Unexpected Parameter arguments");
     if (lower(name) == "value") return query_->parameter(name_);
     if (lower(name) == "name") return VbaValue::string(name_.toUtf8().toStdString());
     throw VbaRuntimeError(438,"DAO: Parameter member unsupported");
 }
 void QueryParameter::assign(std::string_view name, const VbaValue& value) {
+    query_->parameterGeneration(generation_);
     require(lower(name) == "value","DAO: Parameter property is not writable");
     query_->setParameter(name_,value);
 }

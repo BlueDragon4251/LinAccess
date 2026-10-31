@@ -76,7 +76,16 @@ int main(int argc,char** argv) {
             const auto plan = linaccess::compileAccessQuery(source);
             if (!plan.parameters.empty()) {
                 auto definition=database->member("QueryDefs",{linaccess::VbaValue::string(object["name"].toString().toStdString())}).object;
-                for (const auto& parameter : plan.parameters) definition->member("Parameters",{linaccess::VbaValue::string(parameter.name.toStdString())}).object->assign("Value",linaccess::VbaValue::numeric(2004));
+                auto parameters=definition->member("Parameters",{}).object;
+                assert(parameters->member("Count",{}).asNumber()==plan.parameters.size());
+                const auto members=parameters->enumerate(); assert(members.size()==static_cast<std::size_t>(plan.parameters.size()));
+                for (int i=0;i<plan.parameters.size();++i) {
+                    auto byName=definition->member("Parameters",{linaccess::VbaValue::string(plan.parameters[i].name.toStdString())}).object;
+                    assert(members[i].object==byName);
+                    assert(parameters->member("Item",{linaccess::VbaValue::numeric(i)}).object==byName);
+                    assert(byName->member("Name",{}).asText()==plan.parameters[i].name.toStdString());
+                    byName->assign("Value",linaccess::VbaValue::numeric(2004));
+                }
                 int expectedCount=-1;
                 if (derivedQueryHashes.contains(object["sha256"].toString()) && object["sha256"].toString()!="4a8db1b0b4f74446d4d95098591dbb4f36c871de05533f3c182b23bfa6127e6e") {
                     const auto where=plan.sql.lastIndexOf("WHERE",-1,Qt::CaseInsensitive); assert(where>=0);

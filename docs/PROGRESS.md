@@ -141,3 +141,8 @@ DISTINCTROW semantics, proven unique base-column lineage and pure previous-alias
 expansion. Corpus execution rises from 58 to 74 (69 ordinary and five positive
 parameter cases). One original reference requests a field absent from its
 six-column source view; it remains explicitly unresolved (QUERY_ORIGINS.md).
+
+Completed DAO parameter-collection package: real Count/Item/For Each, shared
+Parameter identity and explicit stale/closed handle errors (3420). SQL replacement
+keeps the collection current while invalidating previous parameter generations.
+Original six-query declarations and five positive parameter results are tested.
