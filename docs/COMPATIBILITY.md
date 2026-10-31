@@ -123,7 +123,7 @@ roter Test belegte die dort fehlende OptionGroup-Laufzeitunterstützung. Numeris
 Gruppenwerte, Standardwerte und native exklusive Auswahl sind jetzt implementiert.
 Weitere Ansichten, benannte Filter, DataMode/WindowMode/OpenArgs und allgemeine
 Access-Fenstersemantik sind nicht implementiert. Der Aufruf verwendet weiterhin
-eine modale Vorschau. 181/187 statisch angenommene Prozeduren bedeuten ausdrücklich
+eine modale Vorschau. 182/187 statisch angenommene Prozeduren bedeuten ausdrücklich
 keine entsprechende Ausführungsabdeckung.
 
 
@@ -132,3 +132,11 @@ einen begrenzten nativen Laufzeitpfad mit echten Formular-/DAO-Tests. Ein
 originaler berechneter Formularwert bleibt schreibgeschützt. Vollständiges Access
 Eval, allgemeine Unicode-Namensnormalisierung und das vollständige Ausführen der
 umgebenden originalen Kassenprozeduren werden dadurch nicht behauptet.
+
+
+Die begrenzte [TableDefs-Sammlung](TABLEDEFS_RUNTIME.md) liefert echte
+Projekttabellen und Recordsets. Die unveränderte originale Existenzfunktion führt
+29 positive Prüfungen und einen negativen Fall aus; alle Recordset-Zeilenzahlen
+werden mit unabhängigem SQL verglichen. Vollständige DAO-Katalogeigenschaften,
+Fields/Indexes/Relations und allgemeine deklarierte Rückgabetyp-Coercion bleiben
+offen. Die 182/187 angenommenen Prozeduren sind weiterhin eine Syntaxmetrik.

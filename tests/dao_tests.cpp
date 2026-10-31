@@ -45,6 +45,50 @@ sätze.Close
 End Sub)VBA","Übertragen",host);
     assert(unicode.status==linaccess::VbaExecutionStatus::Completed);
     assert(q.exec("SELECT [Änderung] FROM unicode_values WHERE id=1") && q.next() && q.value(0).toInt()==7); q.finish();
+    {
+        auto database=linaccess::makeDaoDatabase(db);
+        const auto definitions=database->member("TableDefs",{}).object;
+        assert(definitions==database->member("TableDefs",{}).object);
+        assert(definitions->member("Count",{}).asNumber()==2);
+        assert(q.exec("CREATE TABLE _la_private_metadata(secret TEXT)"));
+        assert(q.exec("CREATE VIEW visible_query AS SELECT * FROM items"));
+        assert(definitions->member("Count",{}).asNumber()==2);
+        const auto table=database->member("TableDefs",{linaccess::VbaValue::string("ITEMS")}).object;
+        assert(table==definitions->member("Item",{linaccess::VbaValue::numeric(0)}).object);
+        assert(table==definitions->item("items").object);
+        assert(table->member("Name",{}).asText()=="items");
+        assert(definitions->enumerate().size()==2);
+        for (const auto& [arguments,number]:std::vector<std::pair<std::vector<linaccess::VbaValue>,int>>{
+            {{},450},{{linaccess::VbaValue{}},94},{{linaccess::VbaValue::numeric(-1)},3265},{{linaccess::VbaValue::string("missing")},3265}}) {
+            try { (void)definitions->member("Item",arguments); assert(false); }
+            catch(const linaccess::VbaRuntimeError& error) { assert(error.number==number); }
+        }
+        auto rows=table->member("OpenRecordset",{}).object;
+        rows->member("Edit",{}); rows->assignItem("qty",linaccess::VbaValue::numeric(2.5)); rows->member("Update",{}); rows->member("Close",{});
+        assert(q.exec("SELECT qty FROM items WHERE id=1") && q.next() && q.value(0).toDouble()==2.5); q.finish();
+        assert(q.exec("UPDATE items SET qty=2 WHERE id=1"));
+        assert(q.exec("CREATE TABLE transient_table(value INTEGER)"));
+        assert(definitions->member("Count",{}).asNumber()==3);
+        auto transient=definitions->item("transient_table").object;
+        assert(q.exec("DROP TABLE transient_table"));
+        assert(definitions->member("Count",{}).asNumber()==2);
+        try { (void)transient->member("Name",{}); assert(false); }
+        catch(const linaccess::VbaRuntimeError& error) { assert(error.number==3420); }
+        assert(q.exec("CREATE TABLE transient_table(value INTEGER)"));
+        assert(definitions->item("transient_table").object!=transient);
+        assert(q.exec("DROP TABLE transient_table"));
+    }
+    {
+        auto closedDb=QSqlDatabase::addDatabase("QSQLITE","closed-tabledefs"); closedDb.setDatabaseName(":memory:"); assert(closedDb.open());
+        QSqlQuery schema(closedDb); assert(schema.exec("CREATE TABLE one_table(value INTEGER)")); schema.finish();
+        auto database=linaccess::makeDaoDatabase(closedDb);
+        auto definitions=database->member("TableDefs",{}).object;
+        auto definition=definitions->item("one_table").object; closedDb.close();
+        for (const auto& object:{definitions,definition}) {
+            try { (void)object->member(object==definitions ? "Count" : "Name",{}); assert(false); }
+            catch(const linaccess::VbaRuntimeError& error) { assert(error.number==3420); }
+        }
+    }
     const auto result = linaccess::executeVbaProcedure(R"VBA(
 Sub Run()
 Dim db As DAO.Database

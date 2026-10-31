@@ -180,3 +180,13 @@ Full targets remain open:
   reproduced pre-fix DAO failure (BRACKET_IDENTIFIER_RUNTIME.md).
 - [ ] Full Access Eval grammar/scope, Unicode identifier validation and locale
   case folding; full surrounding original record-copy handlers and Access oracle.
+
+
+- [x] Bounded native TableDefs Count/Item/For Each, TableDef.Name and real
+  OpenRecordset; original standard-module function checks all 29 tables and an
+  absent name with typed Boolean results and independent record counts.
+- [x] Single-line If/colon Exit For binds to the enclosing loop; nested numeric
+  loop and unchanged original For Each regressions; basic function result defaults.
+- [ ] Complete DAO catalog Fields/Indexes/Relations, Refresh/Append/Delete,
+  linked-table metadata and immutable generation identity across drop/recreate.
+- [ ] Full declared result/local/argument type enforcement and Access DAO oracle.

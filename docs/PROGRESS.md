@@ -192,7 +192,7 @@ MDB records with an independent positive count. This uses a limited MSCAL-to-Qt
 adapter, not general COM/ActiveX execution. The original helper exposed and regressed
 a string-literal-versus-syntax lexer defect. Full generic VBA/default-property
 semantics and OCX parity remain open (CALENDAR_RUNTIME.md). Latest syntax inventory:
-181 accepted / 187 inventoried, explicitly not runtime execution coverage.
+182 accepted / 187 inventoried, explicitly not runtime execution coverage.
 
 
 Completed bounded OpenForm package: four positional arguments, omitted defaults,
@@ -215,5 +215,15 @@ probe; its full surrounding handler is not executed by that probe. A reproduced
 DAO regression fixes inconsistent ASCII-only statement rules. An unchanged
 original Unicode-field assignment copies actual imported values and Null through
 native DAO into disposable tables, with independent SQL assertions. Current
-syntax inventory: 181/187 accepted, not execution coverage
+syntax inventory: 182/187 accepted, not execution coverage
 (BRACKET_IDENTIFIER_RUNTIME.md).
+
+
+Completed bounded TableDefs package: actual user-table Count/Item/For Each,
+case-insensitive named lookup, cached native object identity, TableDef.Name and
+real dynaset/snapshot OpenRecordset. The unchanged original standard-module
+existence function executes successfully for all 29 original tables and returns
+a typed False for an absent name; all 29 record counts match independent SQL.
+This exposed and fixed single-line If/colon Exit For losing its enclosing loop
+context, plus incorrect Null function-result defaults. Fields/Indexes/Relations
+metadata and complete DAO catalog semantics remain open (TABLEDEFS_RUNTIME.md).

@@ -479,6 +479,30 @@ End Sub
     host.bracketFields["flag"]=VbaValue::numeric(0);
     assert(executeVbaProcedure(bracketCode,"Bracket",host).status==VbaExecutionStatus::Completed && host.fields["Tag"]=="clear");
     host.bracketHost=false;
+    for (const auto& [declaration,kind]:std::vector<std::pair<std::string,VbaValue::Kind>>{{"As Boolean",VbaValue::Kind::Boolean},{"As String",VbaValue::Kind::Text},{"As Long",VbaValue::Kind::Number},{"",VbaValue::Kind::Empty},{"As Object",VbaValue::Kind::Object}}) {
+        const auto outcome=executeVbaProcedure("Function DefaultResult() "+declaration+"\nEnd Function","DefaultResult",host);
+        assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue && outcome.typedReturnValue->kind==kind);
+        if (kind==VbaValue::Kind::Boolean) assert(!outcome.typedReturnValue->boolean);
+        if (kind==VbaValue::Kind::Number) assert(outcome.typedReturnValue->number==0);
+        if (kind==VbaValue::Kind::Object) assert(!outcome.typedReturnValue->object);
+    }
+    assert(executeVbaProcedure("Function UnsupportedResult() As CustomType\nMe.Tag=\"effect\"\nEnd Function","UnsupportedResult",host).status==VbaExecutionStatus::Unsupported);
+    const auto inlineExit=executeVbaProcedure(R"VBA(Sub InlineExit()
+Dim total As Long
+Dim outer As Long
+Dim inner As Long
+For outer=1 To 3
+For inner=1 To 5
+If inner=2 Then total=total+10: Exit For
+total=total+1
+Next
+total=total+100
+Next
+Me!LoopResult=total
+End Sub)VBA","InlineExit",host);
+    assert(inlineExit.status==VbaExecutionStatus::Completed && host.fields["LoopResult"]=="333");
+    assert(executeVbaProcedure("Sub InvalidExit()\nMe!LoopResult=0\nIf True Then Exit For\nEnd Sub","InvalidExit",host).status!=VbaExecutionStatus::Completed);
+    assert(host.fields["LoopResult"]=="333");
     const auto nestedCall = executeVbaProcedure(R"VBA(
 Private Sub btn_Click()
 Call InternerHandler

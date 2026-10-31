@@ -225,6 +225,42 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
         query.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES(?,?,?)");
         query.addBindValue(object["kind"].toString()); query.addBindValue(object["name"].toString()); query.addBindValue(bytes); assert(query.exec()); query.finish();
     }
+    // Invoke the unchanged public standard-module function through the native
+    // project resolver, over every original table and one absent name.
+    bool originalTableExists=false;
+    for (const auto& entry:objects) {
+        const auto artifact=entry.toObject();
+        if (artifact["sha256"]!="4be67ece759c7816795451ec075ca3fe4fd87cd5aab632fcaca6ecb534fea5ba") continue;
+        QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly));
+        const auto bytes=input.readAll(); assert(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1());
+        const auto analysis=linaccess::analyzeVba(linaccess::decodeVbaSource(bytes).toStdString()); assert(analysis.procedures.size()==1);
+        const auto wrapper=QByteArray("Function CheckOriginal(target As String) As Boolean\nCheckOriginal=")+QByteArray::fromStdString(analysis.procedures.front().name)+"(target)\nEnd Function\n";
+        AccessFormPreview caller("original TableDefs function","Begin Form\nEnd\n",wrapper,db);
+        auto database=linaccess::makeDaoDatabase(db); auto definitions=database->member("TableDefs",{}).object;
+        assert(definitions->member("Count",{}).asNumber()==29 && definitions->enumerate().size()==29);
+        int checked=0;
+        for (const auto& table:db.tables()) {
+            if (table.startsWith("_la_") || table.startsWith("sqlite_")) continue;
+            std::vector<linaccess::VbaValue> arguments{linaccess::VbaValue::string(table.toStdString())};
+            const auto result=caller.executeProcedure("CheckOriginal",arguments);
+            assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue);
+            assert(result.typedReturnValue->kind==linaccess::VbaValue::Kind::Boolean && result.typedReturnValue->boolean);
+            auto definition=database->member("TableDefs",{arguments.front()}).object;
+            assert(definition->member("Name",{}).asText()==table.toStdString());
+            auto records=definition->member("OpenRecordset",{linaccess::VbaValue::numeric(4)}).object;
+            QSqlQuery count(db); assert(count.exec("SELECT COUNT(*) FROM "+db.driver()->escapeIdentifier(table,QSqlDriver::TableName)) && count.next());
+            assert(records->member("RecordCount",{}).asNumber()==count.value(0).toLongLong());
+            records->member("Close",{}); ++checked;
+        }
+        assert(checked==29);
+        const QString absent="linaccess_missing_table_for_original_function"; assert(!db.tables().contains(absent));
+        std::vector<linaccess::VbaValue> missing{linaccess::VbaValue::string(absent.toStdString())};
+        const auto result=caller.executeProcedure("CheckOriginal",missing);
+        assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue && result.typedReturnValue->kind==linaccess::VbaValue::Kind::Boolean && !result.typedReturnValue->boolean);
+        assert(caller.close()); originalTableExists=true;
+    }
+    assert(originalTableExists);
+    std::cout<<"Original TableDefs function: 29 present and one absent name; record counts independently verified\n";
     // Preserve one originally rejected Unicode-field assignment verbatim,
     // with actual imported values and native DAO records on disposable clones.
     bool originalUnicodeAssignment=false;

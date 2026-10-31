@@ -165,9 +165,9 @@ std::string inlineStatementLines(const std::string& source) {
 
 VbaExecutionResult parseProcedure(std::string_view module, std::string_view name,
                                   std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
-                                  std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true) {
+                                  std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr) {
     const std::regex begin(
-        R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*?)\s*\)\s*(?:As\s+[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)?\s*$)",
+        R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*?)\s*\)\s*(?:As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?\s*$)",
         std::regex::icase);
     const std::regex anyBegin(
         R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\(.*\))?.*$)",
@@ -192,7 +192,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex call(R"(^Call\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\((.*)\))?$)", std::regex::icase);
     const std::regex implicitCall(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+(.+)|\((.*)\))?$)", std::regex::icase);
     const std::regex memberCall(R"(^((?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)(?:[.!][A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)+)\s+(.+)$)",std::regex::icase);
-    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(?:Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database))?$)", std::regex::icase);
+    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(?:Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database|DAO\.TableDef|DAO\.TableDefs))?$)", std::regex::icase);
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
     const std::regex objectSet(R"(^Set\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
     const std::regex objectAssign(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))*(?:[.!](?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])(?:\([^)]*\))*)*[.!](?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\]))\s*=\s*(.+)$)", std::regex::icase);
@@ -248,6 +248,10 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 }
                 within = true;
                 isFunction = lower(match[1].str()) == "function";
+                const auto declaredResult=lower(match[4].str());
+                if (isFunction && !declaredResult.empty() && declaredResult!="variant" && declaredResult!="boolean" && declaredResult!="string" && declaredResult!="integer" && declaredResult!="long" && declaredResult!="single" && declaredResult!="double" && declaredResult!="byte" && declaredResult!="object")
+                    return {VbaExecutionStatus::Unsupported,"Function result type unsupported",line};
+                if (resultType) *resultType=declaredResult;
             } else if (std::regex_match(source, match, anyBegin)
                        && lower(match[1].str()) == lower(std::string(name))) {
                 return {VbaExecutionStatus::Unsupported,
@@ -259,6 +263,17 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             if ((lower(match[1].str()) == "function") != isFunction)
                 return {VbaExecutionStatus::Error, "End Sub/Function passt nicht", line};
             if (!blocks.empty()) return {VbaExecutionStatus::Error, "End If oder Next fehlt", line};
+            // Single-line branches are parsed in a temporary wrapper. An
+            // Exit For there binds to the enclosing real procedure's loop.
+            if (resolveLabels) {
+                int forDepth=0;
+                for (const auto& instruction:statements) {
+                    if (instruction.type==Statement::Type::For || instruction.type==Statement::Type::ForEach) ++forDepth;
+                    else if (instruction.type==Statement::Type::Next) --forDepth;
+                    else if (instruction.type==Statement::Type::ExitFor && forDepth==0)
+                        return {VbaExecutionStatus::Error,"Exit For without For",instruction.line};
+                }
+            }
             if (resolveLabels) for (auto& instruction : statements) {
                 if (instruction.type != Statement::Type::Jump && instruction.type != Statement::Type::ErrorHandler
                     && instruction.type != Statement::Type::ResumeLabel) continue;
@@ -332,7 +347,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             blocks.push_back(Statement::Type::For);
             statements.push_back({Statement::Type::ForEach,match[1].str(),expression,line});
         } else if (lower(source) == "exit for") {
-            if (forStarts.empty()) return {VbaExecutionStatus::Error,"Exit For without For",line};
+            if (forStarts.empty() && resolveLabels) return {VbaExecutionStatus::Error,"Exit For without For",line};
             statements.push_back({Statement::Type::ExitFor,{},{},line});
         } else if (std::regex_match(source, match, forStart)) {
             const auto start = trim(match[2].str());
@@ -456,7 +471,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 const auto type = lower(declared[2].str());
                 if (!type.empty() && type != "variant" && type != "object" && type != "dao.database"
                     && type != "control" && type != "form" && type != "access.control" && type != "access.form"
-                    && type != "dao.recordset" && type != "dao.field" && type != "dao.fields" && type != "dao.querydef" && type != "dao.parameter" && type != "string" && type != "boolean"
+                    && type != "dao.tabledef" && type != "dao.tabledefs" && type != "dao.recordset" && type != "dao.field" && type != "dao.fields" && type != "dao.querydef" && type != "dao.parameter" && type != "string" && type != "boolean"
                     && type != "integer" && type != "long" && type != "single" && type != "double"
                     && type != "byte") return {VbaExecutionStatus::Unsupported, "Variablentyp: " + type, line};
                 statements.push_back({Statement::Type::Dim, declared[1].str(), type, line});
@@ -605,7 +620,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     bool isFunction = false;
     bool hasCancel = false;
     std::vector<Parameter> parameters;
-    auto result = parseProcedure(module, procedure, instructions, isFunction, hasCancel, &parameters);
+    std::string resultType;
+    auto result = parseProcedure(module, procedure, instructions, isFunction, hasCancel, &parameters,true,&resultType);
     if (result.status != VbaExecutionStatus::Completed) return result;
     host.enterModule(module);
     struct ModuleScope { VbaHost& host; ~ModuleScope() { host.leaveModule(); } } moduleScope{host};
@@ -650,7 +666,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     std::vector<Frame> faultFrames;
     std::vector<LoopFrame> faultLoops;
     bool faultActive = true;
-    if (isFunction) locals[lower(std::string(procedure))] = VbaValue{};
+    if (isFunction) locals[lower(std::string(procedure))] = initialLocalValue(resultType);
     const bool implicitCancel = hasCancel && arguments.empty();
     if (!implicitCancel && parameters.size() != arguments.size())
         return {VbaExecutionStatus::Error, "Falsche Argumentanzahl", 0};

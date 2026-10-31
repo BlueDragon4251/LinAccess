@@ -386,12 +386,94 @@ void QueryParameter::assign(std::string_view name, const VbaValue& value) {
     require(lower(name) == "value","DAO: Parameter property is not writable");
     query_->setParameter(name_,value);
 }
+QStringList nativeTableNames(QSqlDatabase db) {
+    if (!db.isOpen()) throw VbaRuntimeError(3420,"DAO: Database is closed");
+    QStringList result;
+    QSqlQuery query(db);
+    if (!query.exec("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY rowid")) queryFailure(query);
+    while (query.next()) {
+        const auto name=query.value(0).toString();
+        if (!name.startsWith("sqlite_",Qt::CaseInsensitive) && !name.startsWith("_la_",Qt::CaseInsensitive)) result.append(name);
+    }
+    if (query.lastError().isValid()) queryFailure(query);
+    return result;
+}
+class TableDefinition final : public VbaObject {
+public:
+    TableDefinition(QSqlDatabase db,QString name) : db_(std::move(db)),name_(std::move(name)) {}
+    bool valid() {
+        if (invalidated_ || !db_.isOpen() || !nativeTableNames(db_).contains(name_,Qt::CaseInsensitive)) invalidated_=true;
+        return !invalidated_;
+    }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        if (!valid()) throw VbaRuntimeError(3420,"DAO: TableDef is unavailable");
+        const auto key=lower(name);
+        if (key=="name") {
+            if (!args.empty()) throw VbaRuntimeError(450,"DAO: Name takes no arguments");
+            return VbaValue::string(name_.toStdString());
+        }
+        if (key=="openrecordset") {
+            if (args.size()>1) throw VbaRuntimeError(450,"DAO: TableDef OpenRecordset arguments unsupported");
+            if (!args.empty() && args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null recordset mode");
+            const auto mode=args.empty() ? 2 : sqlFieldValue(args[0],"INTEGER").toLongLong();
+            if (mode!=2 && mode!=4) throw VbaRuntimeError(3251,"DAO: TableDef recordset mode unsupported");
+            return VbaValue::reference(std::make_shared<Recordset>(db_,name_,mode==4));
+        }
+        throw VbaRuntimeError(438,"DAO: TableDef member unsupported");
+    }
+private:
+    QSqlDatabase db_;
+    QString name_;
+    bool invalidated_{};
+};
+class TableDefinitions final : public VbaObject {
+public:
+    explicit TableDefinitions(QSqlDatabase db) : db_(std::move(db)) {}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        const auto names=nativeTableNames(db_); const auto key=lower(name);
+        if (key=="count") {
+            if (!args.empty()) throw VbaRuntimeError(450,"DAO: Count takes no arguments");
+            return VbaValue::numeric(names.size());
+        }
+        if (key!="item") throw VbaRuntimeError(438,"DAO: TableDefs member unsupported");
+        if (args.size()!=1) throw VbaRuntimeError(450,"DAO: TableDef name/index required");
+        const auto& value=args[0]; QString target;
+        if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null TableDef index");
+        if (value.kind==VbaValue::Kind::Number || value.kind==VbaValue::Kind::Currency || value.kind==VbaValue::Kind::Boolean || value.kind==VbaValue::Kind::Empty) {
+            const auto index=sqlFieldValue(value,"INTEGER").toLongLong();
+            if (index<0 || index>=names.size()) throw VbaRuntimeError(3265,"DAO: TableDef index not found");
+            target=names[index];
+        } else {
+            const auto requested=text(value.asText());
+            for (const auto& candidate:names) if (candidate.compare(requested,Qt::CaseInsensitive)==0) { target=candidate; break; }
+            if (target.isEmpty()) throw VbaRuntimeError(3265,"DAO: TableDef not found");
+        }
+        auto& cached=definitions_[target.toCaseFolded()]; auto definition=cached.lock();
+        if (!definition || !definition->valid()) { definition=std::make_shared<TableDefinition>(db_,target); cached=definition; }
+        return VbaValue::reference(definition);
+    }
+    VbaValue item(std::string_view name) override { return member("Item",{VbaValue::string(std::string(name))}); }
+    std::vector<VbaValue> enumerate() override {
+        const auto names=nativeTableNames(db_); std::vector<VbaValue> result;
+        for (const auto& name:names) result.push_back(member("Item",{VbaValue::string(name.toStdString())}));
+        return result;
+    }
+private:
+    QSqlDatabase db_;
+    QMap<QString,std::weak_ptr<TableDefinition>> definitions_;
+};
 class Database final : public VbaObject {
 public:
     explicit Database(QSqlDatabase db) : db_(std::move(db)) {}
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         require(db_.isOpen(), "DAO: Database is closed");
         const auto key = lower(name);
+        if (key=="tabledefs") {
+            auto definitions=tableDefinitions_.lock();
+            if (!definitions) { definitions=std::make_shared<TableDefinitions>(db_); tableDefinitions_=definitions; }
+            if (args.empty()) return VbaValue::reference(definitions);
+            return definitions->member("Item",args);
+        }
         if (key == "querydefs") {
             require(args.size() == 1,"DAO: QueryDef name required");
             return VbaValue::reference(std::make_shared<QueryDefinition>(db_,accessQuerySource(db_,text(args[0].asText()))));
@@ -428,6 +510,7 @@ public:
     }
 private:
     QSqlDatabase db_;
+    std::weak_ptr<TableDefinitions> tableDefinitions_;
 };
 }
 std::shared_ptr<VbaObject> makeDaoDatabase(QSqlDatabase database) {
