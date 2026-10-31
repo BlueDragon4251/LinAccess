@@ -154,6 +154,8 @@ public:
         if (key == "name") return linaccess::VbaValue::string(bytes(preview.formName_));
         if (key == "caption") return linaccess::VbaValue::string(bytes(preview.layout_.caption));
         if (key == "recordsource") return linaccess::VbaValue::string(bytes(preview.layout_.recordSource));
+        if (preview.layout_.kind==linaccess::AccessDocumentKind::Report && (key=="dirty" || key=="newrecord"))
+            throw linaccess::VbaRuntimeError(438,"Report member unsupported");
         if (key == "dirty") return linaccess::VbaValue::logical(preview.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview.currentRecordIndex_==0);
         if (key == "requery") {
@@ -177,6 +179,8 @@ public:
             preview.setWindowTitle((preview.layout_.caption.isEmpty() ? preview.formName_ : preview.layout_.caption) + " — LinAccess");
             return;
         }
+        if (preview.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
+            throw linaccess::VbaRuntimeError(438,"Report member unsupported");
         if (key == "dirty") {
             if (!value.truthy()) {
                 if (!preview.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record save cancelled");
@@ -193,7 +197,7 @@ public:
 };
 class PreviewFormsObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
-    explicit PreviewFormsObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    explicit PreviewFormsObject(AccessFormPreview& preview,bool reports=false) : PreviewObjectBase(preview),reports_(reports) {}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto forms = openForms(); const auto key = text(name).toCaseFolded();
         if (key == "count" && args.empty()) return linaccess::VbaValue::numeric(forms.size());
@@ -206,7 +210,7 @@ public:
         else throw linaccess::VbaRuntimeError(450,"Unexpected Forms arguments");
         for (auto* form : forms) if (form->formName_.compare(target,Qt::CaseInsensitive)==0)
             return linaccess::VbaValue::reference(makePreviewFormObject(*form));
-        throw linaccess::VbaRuntimeError(2450,"Form is not open");
+        throw linaccess::VbaRuntimeError(reports_ ? 2451 : 2450,"Requested document is not open");
     }
     linaccess::VbaValue item(std::string_view name) override { return member("Item",{linaccess::VbaValue::string(std::string(name))}); }
     std::vector<linaccess::VbaValue> enumerate() override {
@@ -215,11 +219,13 @@ public:
         return values;
     }
 private:
+    bool reports_{};
     QVector<AccessFormPreview*> openForms() const {
         const auto& owner = checked(); QVector<AccessFormPreview*> forms;
         for (auto* widget : QApplication::topLevelWidgets())
             if (auto* form = dynamic_cast<AccessFormPreview*>(widget); form && !form->closed_ && !form->openCancelled_
-                && form->db_.connectionName()==owner.db_.connectionName()) forms.append(form);
+                && form->db_.connectionName()==owner.db_.connectionName()
+                && (form->layout_.kind==linaccess::AccessDocumentKind::Report)==reports_) forms.append(form);
         std::sort(forms.begin(),forms.end(),[](auto* left,auto* right) {
             return left->property("la_form_open_order").toLongLong() < right->property("la_form_open_order").toLongLong();
         });
@@ -359,6 +365,7 @@ public:
             return args.empty() ? linaccess::VbaValue::reference(bars) : bars->member("Item",args);
         }
         if (key=="forms" && args.empty()) return linaccess::VbaValue::reference(makePreviewFormsObject(preview));
+        if (key=="reports" && args.empty()) return linaccess::VbaValue::reference(makePreviewReportsObject(preview));
         throw linaccess::VbaRuntimeError(438,"Application member unsupported");
     }
 };
@@ -377,6 +384,11 @@ std::shared_ptr<linaccess::VbaObject> makePreviewFormObject(AccessFormPreview& p
     if (auto object = preview.formObject_.lock()) return object;
     auto object = std::make_shared<PreviewFormObject>(preview);
     preview.formObject_ = object; return object;
+}
+std::shared_ptr<linaccess::VbaObject> makePreviewReportsObject(AccessFormPreview& preview) {
+    if (auto object = preview.reportsObject_.lock()) return object;
+    auto object = std::make_shared<PreviewFormsObject>(preview,true);
+    preview.reportsObject_ = object; return object;
 }
 std::shared_ptr<linaccess::VbaObject> makePreviewFormsObject(AccessFormPreview& preview) {
     if (auto object = preview.formsObject_.lock()) return object;

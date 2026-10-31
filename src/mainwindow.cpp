@@ -428,12 +428,16 @@ void MainWindow::showAccessArtifact(int id) {
     }
 
     if (kind == "report" && status == "source_only" && !bytes.isEmpty()) {
-        auto* open = new QPushButton("Access-Berichtsaufbau ansehen (Layoutvorschau)", &dialog);
+        auto* open = new QPushButton("Access-Bericht öffnen (Layoutansicht)", &dialog);
         outer->addWidget(open);
         const auto name = query.value(1).toString();
         connect(open, &QPushButton::clicked, &dialog, [this, name, bytes] {
-            AccessFormPreview preview(name, bytes, {}, db_, this);
-            preview.exec();
+            QSqlQuery vba(db_);
+            vba.prepare("SELECT source_bytes FROM _la_access_artifacts WHERE kind='vba' AND name=? ORDER BY id DESC LIMIT 1");
+            vba.addBindValue("Report_" + name);
+            const auto module = vba.exec() && vba.next() ? vba.value(0).toByteArray() : QByteArray{};
+            AccessFormPreview preview(name,bytes,module,db_,this);
+            if (!preview.cancelledByOpen()) preview.exec();
         });
     }
     if (kind == "form" && status == "source_only" && !bytes.isEmpty()) {

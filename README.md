@@ -149,8 +149,9 @@ ctest --test-dir build-core --output-on-failure
   38/100 Kassenabfragen werden ausgeführt, bisher ohne Access-Referenzergebnis;
   siehe [Abfrageadapter](docs/QUERY_ADAPTER.md). Importierte Berichte haben eine
   grobe Layoutvorschau mit einseitigem Druck/PDF des aktuellen Layouts, noch keine
-  Access-Berichts-/Druckkompatibilität. Drei originale Report_Open-Prozeduren
-  werden explizit über den Runtime-Einstieg ausgeführt; der native CommandBars-
+  Access-Berichts-/Druckkompatibilität. Drei originale Open-/Close-Paare laufen
+  automatisch. Eine von neun Originalquellen bindet 22 nicht-NULL-Textfelder;
+  siehe [Berichtsereignisse](docs/REPORT_EVENTS.md). Der native CommandBars-
   Adapter ist in [Druckvorschau](docs/PRINT_PREVIEW_ADAPTER.md) beschrieben.
 - Importierte Formulare bieten native `Forms`-/`Controls`-Sammlungen einschließlich
   `Me.Controls`, tatsächlicher formulierübergreifender Datenänderungen und

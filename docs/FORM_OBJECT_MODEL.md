@@ -50,11 +50,14 @@ DAO insertion button; this does not demonstrate the complete application.
 
 ## Remaining limits
 
+Reports is now a separate project-scoped collection, with bounded read-only
+record binding and Open/Close/NoData event support (REPORT_EVENTS.md).
+
 Only named controls with a supported widget implementation appear in Controls;
 unsupported Access controls are not fabricated. Default control-object coercion
 and `Set ctl = Me!control` are incomplete; use Controls(name) for explicit object
 references. Full property/event namespaces, dynamic control creation, module/class
-lifetimes, custom form methods, native-designed forms, Reports, embedded subforms,
+lifetimes, custom form methods, native-designed forms, complete report processing, embedded subforms,
 combo bound columns/multicolumn rendering, control arrays, timers and Access
 window-activation semantics remain open. Requery on unsupported control kinds
 raises an explicit error. No COM/ActiveX implementation is implied.

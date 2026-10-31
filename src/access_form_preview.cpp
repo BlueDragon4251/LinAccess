@@ -85,6 +85,8 @@ public:
     void setControlValue(std::string_view name,const linaccess::VbaValue& value) override { preview_.setFieldValue(name,value); }
     linaccess::VbaValue fieldValue(std::string_view name) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && (key=="dirty" || key=="newrecord"))
+            throw linaccess::VbaRuntimeError(438,"Report member unsupported");
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
@@ -94,6 +96,8 @@ public:
     }
     void setFieldValue(std::string_view name,const linaccess::VbaValue& value) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
+            throw linaccess::VbaRuntimeError(438,"Report member unsupported");
         if (key == "caption") { makePreviewFormObject(preview_)->assign("Caption",value); return; }
         if (key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
@@ -130,7 +134,10 @@ public:
             preview_.recordSelector_->currentIndex() + 1,
             preview_.recordSelector_->count() - 1));
     }
-    void gotoNewRecord() override { preview_.recordSelector_->setCurrentIndex(0); }
+    void gotoNewRecord() override {
+        if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report) throw linaccess::VbaRuntimeError(438,"Report does not support new records");
+        preview_.recordSelector_->setCurrentIndex(0);
+    }
     void requery() override {
         if (!preview_.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Requery cancelled by validation");
         preview_.loadRecords();
@@ -163,6 +170,7 @@ public:
     }
     std::shared_ptr<linaccess::VbaObject> applicationObject() override { return makePreviewApplicationObject(preview_); }
     std::shared_ptr<linaccess::VbaObject> currentForm() override { return makePreviewFormObject(preview_); }
+    std::shared_ptr<linaccess::VbaObject> reportsCollection() override { return makePreviewReportsObject(preview_); }
     std::shared_ptr<linaccess::VbaObject> formsCollection() override { return makePreviewFormsObject(preview_); }
     std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(preview_.db_); }
     void executeSql(std::string_view statement) override {
@@ -190,8 +198,7 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     setWindowTitle((layout_.caption.isEmpty() ? formName_ : layout_.caption) + " — LinAccess");
     resize(950, 720);
     auto* outer = new QVBoxLayout(this);
-    if (linaccess::decodeVbaSource(source).contains(QRegularExpression("^\\s*Begin\\s+Report\\b",QRegularExpression::CaseInsensitiveOption|QRegularExpression::MultilineOption)))
-        buildPrintToolbar(outer);
+    if (layout_.kind==linaccess::AccessDocumentKind::Report) buildPrintToolbar(outer);
     auto* controls = new QHBoxLayout();
     controls->addWidget(new QLabel("Datensatz", this));
     recordSelector_ = new QComboBox(this);
@@ -224,10 +231,17 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
         status_->setText("Abfrageansichten werden noch verwendet; andere Ansichten schließen und Formular erneut öffnen.");
         canvas->setEnabled(false); save->setEnabled(false); return;
     }
-    loadRecords();
-
+    const bool report = layout_.kind==linaccess::AccessDocumentKind::Report;
+    if (!report) loadRecords();
     const auto outcome = formEvent("OnOpen","Form_Open");
     if (outcome.cancelled) { openCancelled_ = true; return; }
+    if (report) {
+        loadRecords();
+        if (dataSourceAvailable_ && recordRows_.isEmpty()) {
+            const auto noData = formEvent("OnNoData","Report_NoData");
+            if (noData.cancelled) { openCancelled_ = true; return; }
+        }
+    }
     (void)formEvent("OnLoad","Form_Load");
     opened_ = true;
     (void)formEvent("OnCurrent","Form_Current");
@@ -317,14 +331,14 @@ void AccessFormPreview::loadRecords() {
     recordSelector_->blockSignals(true);
     recordSelector_->clear(); recordRows_.clear(); rowIds_.clear(); dataColumns_.clear(); dataTypes_.clear();
     dataSourceAvailable_ = false; directTable_ = false; dataTruncated_ = false;
-    recordSelector_->addItem("(Neuer Datensatz)");
+    recordSelector_->addItem(layout_.kind==linaccess::AccessDocumentKind::Report ? "(Kein Datensatz)" : "(Neuer Datensatz)");
     const auto source = layout_.recordSource.trimmed();
     if (!source.isEmpty() && db_.isOpen()) {
         try {
-            directTable_ = db_.tables().contains(source,Qt::CaseInsensitive);
+            directTable_ = layout_.kind==linaccess::AccessDocumentKind::Form && db_.tables().contains(source,Qt::CaseInsensitive);
             if (!directTable_) {
                 linaccess::AccessQueryPlan plan;
-                if (db_.tables(QSql::Views).contains(source,Qt::CaseInsensitive))
+                if (db_.tables().contains(source,Qt::CaseInsensitive) || db_.tables(QSql::Views).contains(source,Qt::CaseInsensitive))
                     plan.sql = "SELECT * FROM " + sqlIdentifier(source);
                 else {
                     const auto sql = source.startsWith("SELECT",Qt::CaseInsensitive)
@@ -396,8 +410,8 @@ void AccessFormPreview::loadRecord() {
         }
         widget->setProperty("la_sql_type",type);
         if (auto* line = qobject_cast<QLineEdit*>(widget))
-            line->setReadOnly(control.controlSource.startsWith('=') || (index >= 0 && !directTable_));
-        else if (qobject_cast<QCheckBox*>(widget) || qobject_cast<QComboBox*>(widget)) widget->setEnabled(index < 0 || directTable_);
+            line->setReadOnly(layout_.kind==linaccess::AccessDocumentKind::Report || control.controlSource.startsWith('=') || (!control.controlSource.isEmpty() && !directTable_));
+        else if (qobject_cast<QCheckBox*>(widget) || qobject_cast<QComboBox*>(widget)) widget->setEnabled(layout_.kind!=linaccess::AccessDocumentKind::Report && (control.controlSource.isEmpty() || directTable_));
         setText(widget,value.toString()); widget->setProperty("la_null",value.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
     }
@@ -539,7 +553,15 @@ std::optional<std::string> AccessFormPreview::getField(std::string_view name) co
     return value.toUtf8().toStdString();
 }
 
+void AccessFormPreview::ensureWritableControl(std::string_view name) const {
+    const auto key = QString::fromUtf8(name.data(),name.size());
+    for (const auto& control : layout_.controls)
+        if (control.name.compare(key,Qt::CaseInsensitive)==0 &&
+            (control.controlSource.startsWith('=') || (!control.controlSource.isEmpty() && !directTable_)))
+            throw linaccess::VbaRuntimeError(2448,"Bound control is read-only");
+}
 void AccessFormPreview::setField(std::string_view name, std::optional<std::string> value) {
+    ensureWritableControl(name);
     auto* widget = controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded()).data();
     if (!widget) throw std::runtime_error("Unbekanntes Access-Control: " + std::string(name));
     const bool wasNull = widget->property("la_null").toBool();
@@ -567,6 +589,7 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
     return linaccess::qtFieldValue(textOf(widget),type);
 }
 void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::VbaValue& value) {
+    ensureWritableControl(name);
     auto* widget = controls_.value(QString::fromUtf8(name.data(),name.size()).toCaseFolded()).data();
     if (!widget) throw linaccess::VbaRuntimeError(2465,"Unknown form control");
     const auto type = widget->property("la_sql_type").toString();
@@ -646,5 +669,9 @@ linaccess::VbaExecutionResult AccessFormPreview::runHandler(const QString& handl
 }
 linaccess::VbaExecutionResult AccessFormPreview::formEvent(const QString& property,const QString& handler) {
     if (!eventProcedure(layout_.events.value(property.toCaseFolded()))) return {};
-    return runHandler(handler);
+    auto name = handler;
+    if (layout_.kind==linaccess::AccessDocumentKind::Report && name.startsWith("Form_")) name.replace(0,5,"Report_");
+    const auto result = runHandler(name);
+    eventResults_.insert(property.toCaseFolded(),result);
+    return result;
 }

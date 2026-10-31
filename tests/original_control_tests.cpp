@@ -55,6 +55,7 @@ void testOriginalControls(const QDir& directory,const QJsonArray& objects) {
         auto db = QSqlDatabase::addDatabase("QSQLITE","original-controls-" + QString::number(executed));
         db.setDatabaseName(":memory:"); assert(db.open());
         AccessFormPreview preview(formName,formBytes,raw,db);
+        assert(preview.eventResult("OnOpen") && preview.eventResult("OnOpen")->status==linaccess::VbaExecutionStatus::Completed);
         auto controls = makePreviewApplicationObject(preview)->member("CommandBars",{linaccess::VbaValue::string("Print Preview")}).object->member("Controls",{}).object->enumerate();
         assert(!controls.empty());
         for (std::size_t i=0;i<analysis.procedures.size();++i) {
@@ -98,6 +99,8 @@ void testOriginalControls(const QDir& directory,const QJsonArray& objects) {
             assert(!preview.exportLayoutPdf(protectedFile));
             assert(sentinel.open(QIODevice::ReadOnly) && sentinel.readAll()=="unchanged");
 
+            assert(preview.close());
+            assert(preview.eventResult("OnClose") && preview.eventResult("OnClose")->status==linaccess::VbaExecutionStatus::Completed);
             ++executed;
         }
     }

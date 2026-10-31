@@ -38,7 +38,9 @@ struct AccessVisualControl {
     bool visible{true};
 };
 
+enum class AccessDocumentKind { Form, Report };
 struct AccessFormLayout {
+    AccessDocumentKind kind{AccessDocumentKind::Form};
     QString caption;
     QString recordSource;
     int width{9000};

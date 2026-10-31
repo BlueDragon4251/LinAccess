@@ -5,3 +5,5 @@ std::shared_ptr<linaccess::VbaObject> makePreviewFormObject(AccessFormPreview& p
 std::shared_ptr<linaccess::VbaObject> makePreviewFormsObject(AccessFormPreview& preview);
 
 std::shared_ptr<linaccess::VbaObject> makePreviewApplicationObject(AccessFormPreview& preview);
+
+std::shared_ptr<linaccess::VbaObject> makePreviewReportsObject(AccessFormPreview& preview);

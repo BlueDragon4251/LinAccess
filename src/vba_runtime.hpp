@@ -48,6 +48,7 @@ public:
     virtual std::shared_ptr<VbaObject> currentForm() {
         throw VbaRuntimeError(438,"Me: form object unavailable");
     }
+    virtual std::shared_ptr<VbaObject> reportsCollection() { throw VbaRuntimeError(438,"Reports collection unavailable"); }
     virtual std::shared_ptr<VbaObject> formsCollection() {
         throw VbaRuntimeError(438,"Forms collection unavailable");
     }

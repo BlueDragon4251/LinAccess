@@ -29,6 +29,8 @@
 
 void testFormEvents();
 void testFormObjects();
+void testReportEvents();
+void testReportCorpus(const QDir&,const QJsonArray&,const QString&);
 void testOriginalControls(const QDir&,const QJsonArray&);
 
 int main(int argc, char** argv) {
@@ -200,8 +202,10 @@ End Sub
     }
     testFormEvents();
     testFormObjects();
+    testReportEvents();
     testOriginalControls(directory,objects);
     if (argc >= 3) {
+        testReportCorpus(directory,objects,QString::fromLocal8Bit(argv[2]));
         QTemporaryDir temporary;
         assert(temporary.isValid());
         auto db = QSqlDatabase::addDatabase("QSQLITE", "original-kassa-dao-event");

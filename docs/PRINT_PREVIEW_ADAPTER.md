@@ -31,10 +31,11 @@ Print Preview bar, enumerate its actual native actions and hide actions accordin
 to Caption. The regression asserts that only Close remains visible, resets the
 actions and reruns each complete handler. Their unused Cancel parameter is zero.
 
-The test invokes the runtime entry point explicitly; this package does not yet
-bind Report_Open/Close automatically from the object navigator. That wiring and
-report data/event semantics remain a separate open step. This is not proof of
-complete original report execution or print equivalence with Microsoft Access.
+The test also asserts automatic bound Report_Open and Report_Close execution
+through the navigator's shared preview path; explicit runtime entry calls rerun
+the original opening body for action-state checks. Report data/event coverage is
+detailed in REPORT_EVENTS.md. This does not prove complete original report
+execution or print equivalence with Microsoft Access.
 
 Each original layout also produces a temporary one-page PDF, checked for PDF
 format and page count, then deleted. Tests verify that a non-PDF sentinel file is

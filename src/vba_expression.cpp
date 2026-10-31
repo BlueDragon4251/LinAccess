@@ -272,12 +272,12 @@ private:
         if (word == "vbnewline") return VbaValue::string("\n");
         if (word == "vbtab") return VbaValue::string("\t");
         if (word == "application") return host_ ? VbaValue::reference(host_->applicationObject()) : VbaValue{};
-        if (word == "forms") {
+        if (word == "forms" || word == "reports") {
             std::vector<VbaValue> args;
             const bool item = take("(");
             if (item) { args.push_back(expression(1)); require(")"); }
             if (!host_) return {};
-            const auto forms = host_->formsCollection();
+            const auto forms = word == "forms" ? host_->formsCollection() : host_->reportsCollection();
             return item ? forms->member("Item",args) : VbaValue::reference(forms);
         }
         if (word == "me" && peek().value != "!" && peek().value != ".")

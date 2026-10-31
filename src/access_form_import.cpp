@@ -77,6 +77,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
         const auto start = begin.match(line);
         if (start.hasMatch()) {
             const auto type = start.captured(1);
+            if (stack.isEmpty() && type.compare("Report",Qt::CaseInsensitive)==0) form.kind = AccessDocumentKind::Report;
             QString section;
             for (auto it = stack.crbegin(); it != stack.crend(); ++it)
                 if (!it->section.isEmpty()) { section = it->section; break; }
@@ -128,8 +129,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "Width") control.width = integer();
             else if (key == "Height") control.height = integer();
             else if (key == "Visible") control.visible = value != "0" && value != "False";
-        } else if (current.type == "Form") {
-            static const QSet<QString> events{"onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate"};
+        } else if (current.type == "Form" || current.type == "Report") {
+            static const QSet<QString> events{"onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate","onnodata","onerror","onpage"};
             if (events.contains(key.toCaseFolded())) form.events.insert(key.toCaseFolded(),value);
             if (key == "Caption") form.caption = value;
             else if (key == "RecordSource") form.recordSource = value;

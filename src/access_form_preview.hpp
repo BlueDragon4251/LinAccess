@@ -31,6 +31,10 @@ public:
 
     linaccess::VbaExecutionResult executeProcedure(const QString& name,std::vector<linaccess::VbaValue>& arguments);
     bool exportLayoutPdf(const QString& path);
+    std::optional<linaccess::VbaExecutionResult> eventResult(const QString& property) const {
+        const auto found = eventResults_.constFind(property.toCaseFolded());
+        return found==eventResults_.cend() ? std::nullopt : std::optional<linaccess::VbaExecutionResult>(*found);
+    }
     int renderedControls() const { return renderedControls_; }
     bool hasDataSource() const { return dataSourceAvailable_; }
     bool cancelledByOpen() const { return openCancelled_; }
@@ -53,11 +57,13 @@ private:
     void closeEvent(QCloseEvent* event) override;
     void openOtherForm(const QString& name);
     std::optional<std::string> getField(std::string_view name) const;
+    void ensureWritableControl(std::string_view name) const;
     void setField(std::string_view name, std::optional<std::string> value);
     linaccess::VbaValue getFieldValue(std::string_view name) const;
     void setFieldValue(std::string_view name,const linaccess::VbaValue& value);
     friend class PreviewVbaHost;
     friend std::shared_ptr<linaccess::VbaObject> makePreviewFormObject(AccessFormPreview&);
+    friend std::shared_ptr<linaccess::VbaObject> makePreviewReportsObject(AccessFormPreview&);
     friend std::shared_ptr<linaccess::VbaObject> makePreviewFormsObject(AccessFormPreview&);
     friend std::shared_ptr<linaccess::VbaObject> makePreviewControlsObject(AccessFormPreview&);
     friend std::shared_ptr<linaccess::VbaObject> makePreviewControlObject(AccessFormPreview&,const QString&);
@@ -76,13 +82,14 @@ private:
     friend class PreviewControlObject;
     void requeryControl(std::string_view name);
 
-    std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, controlsObject_;
+    std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, reportsObject_, controlsObject_;
     QMap<QString,std::weak_ptr<linaccess::VbaObject>> controlObjects_;
     std::weak_ptr<linaccess::VbaObject> applicationObject_,commandBarObject_;
     QMap<QAction*,std::weak_ptr<linaccess::VbaObject>> commandControlObjects_;
     QToolBar* printToolbar_{};
     void buildPrintToolbar(QVBoxLayout* layout);
     bool renderLayout(QPrinter& printer);
+    QMap<QString,linaccess::VbaExecutionResult> eventResults_;
     QString formName_;
     QString vba_;
     linaccess::AccessFormLayout layout_;

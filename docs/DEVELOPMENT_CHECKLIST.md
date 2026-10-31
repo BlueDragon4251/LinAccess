@@ -95,7 +95,8 @@ Full targets remain open:
 - [ ] Navigator, datasheet/form/design views, properties, toolbox, undo/redo and SQL designer.
 - [ ] Fonts/colors/geometry/default control properties and Access 2003 layout parity.
 - [ ] Embedded linked subforms, tab/option groups, combos/lists and expression controls.
-- [ ] Report sections/grouping/aggregates/headers/footers/pagination, report events.
+- [x] Bound Report_Open/Close/NoData, cancellation and read-only sources; all 9 original report sources classified, one binds 22 actual non-NULL controls.
+- [ ] Report sections/grouping/aggregates/headers/footers/pagination and complete report event order.
 - [x] Native current-layout single-page print/PDF preview and CommandBars adapter; three original Report_Open procedures executed explicitly.
 - [ ] Full report print/PDF pagination and output compared against original reference reports.
 - [ ] Macros/action representation and native execution with error diagnostics.
