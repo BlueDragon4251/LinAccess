@@ -2,6 +2,7 @@
 #include "access_format.hpp"
 #include "access_query.hpp"
 #include <QLocale>
+#include <QObject>
 #include <charconv>
 #include <cmath>
 #include <cstring>
@@ -22,6 +23,9 @@ struct Api {
     int (*type)(sqlite3_value*){};
     double (*number)(sqlite3_value*){};
     qlonglong (*integer)(sqlite3_value*){};
+    void* (*userData)(sqlite3_context*){};
+    void (*integerResult)(sqlite3_context*,qlonglong){};
+    void (*numberResult)(sqlite3_context*,double){};
     const unsigned char* (*text)(sqlite3_value*){};
     int (*bytes)(sqlite3_value*){};
     void (*result)(sqlite3_context*,sqlite3_value*){};
@@ -37,6 +41,9 @@ struct Api {
         type = reinterpret_cast<decltype(type)>(library.resolve("sqlite3_value_type"));
         number = reinterpret_cast<decltype(number)>(library.resolve("sqlite3_value_double"));
         integer = reinterpret_cast<decltype(integer)>(library.resolve("sqlite3_value_int64"));
+        userData = reinterpret_cast<decltype(userData)>(library.resolve("sqlite3_user_data"));
+        integerResult = reinterpret_cast<decltype(integerResult)>(library.resolve("sqlite3_result_int64"));
+        numberResult = reinterpret_cast<decltype(numberResult)>(library.resolve("sqlite3_result_double"));
         text = reinterpret_cast<decltype(text)>(library.resolve("sqlite3_value_text"));
         bytes = reinterpret_cast<decltype(bytes)>(library.resolve("sqlite3_value_bytes"));
         result = reinterpret_cast<decltype(result)>(library.resolve("sqlite3_result_value"));
@@ -47,9 +54,19 @@ struct Api {
         nullResult = reinterpret_cast<decltype(nullResult)>(library.resolve("sqlite3_result_null"));
         textResult = reinterpret_cast<decltype(textResult)>(library.resolve("sqlite3_result_text"));
     }
-    bool valid() const { return create && type && number && integer && text && bytes && result && error && aggregate && duplicate && freeValue && nullResult && textResult; }
+    bool valid() const { return create && type && number && integer && userData && integerResult && numberResult && text && bytes && result && error && aggregate && duplicate && freeValue && nullResult && textResult; }
 };
 Api& api() { static Api value; return value; }
+class ObjectContext final : public QObject {
+public:
+    explicit ObjectContext(QObject* owner) : QObject(owner) { setObjectName("linaccess-sql-objects"); }
+    JetSqlObjectResolver resolver;
+};
+ObjectContext* objectContext(QSqlDatabase db) {
+    auto* driver=db.driver();
+    for (auto* child : driver->children()) if (auto* context=dynamic_cast<ObjectContext*>(child)) return context;
+    return new ObjectContext(driver);
+}
 void functionError(sqlite3_context* context,const VbaRuntimeError& error) noexcept {
     constexpr char prefix[]="LinAccess SQL function error ";
     char buffer[80];
@@ -95,6 +112,30 @@ void likePattern(sqlite3_context* context,int,sqlite3_value** args) noexcept {
         returnText(context,accessLikePattern(scalarText(args[0])));
     } catch (const VbaRuntimeError& error) { functionError(context,error); }
       catch (...) { native.error(context,"Jet LIKE pattern failed",-1); }
+}
+void objectValue(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+    auto& native=api();
+    try {
+        auto* objects=static_cast<ObjectContext*>(native.userData(context));
+        if (!objects || !objects->resolver) throw VbaRuntimeError(3061,"SQL object context unavailable");
+        const auto collection=scalarText(args[0]).toUtf8();
+        const auto object=scalarText(args[1]).toUtf8();
+        const auto field=scalarText(args[2]).toUtf8();
+        const auto result=objects->resolver(
+            std::string_view(collection.constData(),collection.size()),std::string_view(object.constData(),object.size()),std::string_view(field.constData(),field.size()));
+        switch (result.kind) {
+        case VbaValue::Kind::Null: native.nullResult(context); break;
+        case VbaValue::Kind::Empty: native.integerResult(context,0); break;
+        case VbaValue::Kind::Boolean: native.integerResult(context,result.boolean ? -1 : 0); break;
+        case VbaValue::Kind::Number:
+            if (!std::isfinite(result.number)) throw VbaRuntimeError(6,"SQL object number overflow");
+            native.numberResult(context,result.number); break;
+        case VbaValue::Kind::Text:
+            native.textResult(context,result.text.data(),static_cast<int>(result.text.size()),reinterpret_cast<void (*)(void*)>(-1)); break;
+        default: throw VbaRuntimeError(13,"SQL object value must be scalar");
+        }
+    } catch (const VbaRuntimeError& error) { functionError(context,error); }
+      catch (...) { native.error(context,"SQL object resolution failed",-1); }
 }
 void iif(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native = api();
@@ -172,7 +213,7 @@ std::optional<int> jetSqlFunctionErrorNumber(std::string_view foldedMessage) {
     int number=0;
     const auto parsed=std::from_chars(code.data(),code.data()+code.size(),number);
     if (parsed.ec!=std::errc{}) return {};
-    if (number==5 || number==6 || number==7 || number==13 || number==94 || number==3085) return number;
+    if (number==5 || number==6 || number==7 || number==13 || number==94 || number==3061 || number==2450 || number==2451 || number==2465 || number==3251 || number==3085) return number;
     return {};
 }
 void installJetSqlFunctions(QSqlDatabase db) {
@@ -184,13 +225,14 @@ void installJetSqlFunctions(QSqlDatabase db) {
     if (!connection) throw VbaRuntimeError(3251,"Jet SQL connection unavailable");
     // Probe the live connection, rather than caching a native pointer that could
     // be reused after close/open. Preparing this call does not execute arguments.
+    auto* objects=objectContext(db);
     const auto ensure = [&](const char* name,int count,Api::Callback scalar,Api::Callback step,void (*final)(sqlite3_context*)) {
         QSqlQuery probe(db);
         QStringList args;
         for (int i = 0; i < count; ++i) args.append("NULL");
         if (probe.prepare("SELECT " + QString::fromLatin1(name) + "(" + args.join(',') + ")")) return;
         probe.clear();
-        if (native.create(connection,name,count,1,nullptr,scalar,step,final,nullptr) != 0)
+        if (native.create(connection,name,count,1,objects,scalar,step,final,nullptr) != 0)
             throw VbaRuntimeError(3251,"Jet SQL function registration failed");
     };
     ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
@@ -200,5 +242,11 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_format",2,&formatVariant,nullptr,nullptr);
     ensure("linaccess_jet_concat",2,&concatenate,nullptr,nullptr);
     ensure("linaccess_jet_like_pattern",1,&likePattern,nullptr,nullptr);
+    ensure("linaccess_jet_object_value",3,&objectValue,nullptr,nullptr);
 }
+void setJetSqlObjectResolver(QSqlDatabase db,JetSqlObjectResolver resolver) {
+    installJetSqlFunctions(db);
+    objectContext(db)->resolver=std::move(resolver);
+}
+
 }

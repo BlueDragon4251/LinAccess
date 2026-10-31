@@ -12,6 +12,7 @@
 #include <QSet>
 #include <QDateTime>
 #include <cmath>
+#include <limits>
 
 namespace linaccess {
 namespace {
@@ -159,6 +160,25 @@ void adaptDynamicLike(QVector<Token>& tokens,qsizetype start,const QMap<QString,
         replaceTokens(tokens,i+1,last,replacement);
     }
 }
+void adaptObjectReferences(QVector<Token>& tokens,qsizetype start) {
+    const auto name=[](const Token& token) { return token.kind==Token::Word || token.kind==Token::Identifier; };
+    for (qsizetype i=start;i+4<tokens.size();++i) {
+        if (!name(tokens[i])) continue;
+        const auto root=tokens[i].value.toCaseFolded();
+        const bool forms=root=="forms" || root=="formulare";
+        const bool reports=root=="reports" || root=="berichte";
+        if ((!forms && !reports) || !symbol(tokens[i+1],"!") || !name(tokens[i+2]) || !symbol(tokens[i+3],"!") || !name(tokens[i+4])) continue;
+        require(i==start || (!symbol(tokens[i-1],".") && !symbol(tokens[i-1],"!")),"Jet SQL: qualified object context unsupported");
+        auto last=i+5;
+        if (last+1<tokens.size() && symbol(tokens[last],".") && name(tokens[last+1]) && tokens[last+1].value.compare("Value",Qt::CaseInsensitive)==0) last+=2;
+        require(last==tokens.size() || (!symbol(tokens[last],".") && !symbol(tokens[last],"!") && !symbol(tokens[last],"(")),"Jet SQL: nested object reference unsupported");
+        const QVector<Token> replacement{{Token::Word,"linaccess_jet_object_value"},{Token::Other,"("},
+            {Token::String,forms ? "forms" : "reports"},{Token::Other,","},{Token::String,tokens[i+2].value},
+            {Token::Other,","},{Token::String,tokens[i+4].value},{Token::Other,")"}};
+        replaceTokens(tokens,i,last,replacement);
+        i+=replacement.size()-1;
+    }
+}
 QString pattern(const QString& input) {
     require(!input.contains('[') && !input.contains(']') && !input.contains('#'), "Jet SQL: LIKE character classes unsupported");
     QString result;
@@ -184,7 +204,7 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
             const auto name = tokens[pos++].value;
             require(pos < tokens.size() && tokens[pos].kind == Token::Word, "Jet SQL: parameter type required");
             const auto type = tokens[pos++].value.toCaseFolded();
-            const QSet<QString> types{"long","integer","short","byte","single","double","text","varchar","char","boolean","yesno","datetime","date"};
+            const QSet<QString> types{"long","integer","short","byte","single","double","text","varchar","char","boolean","yesno","datetime","date","value"};
             require(types.contains(type), "Jet SQL: parameter type unsupported");
             if (pos < tokens.size() && tokens[pos].value == "(") {
                 ++pos; require(pos < tokens.size() && tokens[pos].kind == Token::Other, "Jet SQL: type width required");
@@ -202,6 +222,7 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
         }
     }
     require(pos < tokens.size(), "Jet SQL: query body required");
+    adaptObjectReferences(tokens,pos);
     adaptConcatenation(tokens,pos);
     adaptDynamicLike(tokens,pos,parameters);
     const auto word = [&](qsizetype index, const char* value) {
@@ -391,7 +412,26 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
         }
         QVariant converted = value;
         const auto& type = parameter.type;
-        if (type == "long" || type == "integer" || type == "short" || type == "byte") {
+        if (type=="value") {
+            const auto kind=value.metaType().id();
+            if (kind==QMetaType::Bool) converted=value.toBool() ? -1 : 0;
+            else if (kind==QMetaType::QDateTime) {
+                const auto date=value.toDateTime();
+                if (!date.isValid()) throw VbaRuntimeError(13,"DAO: parameter date invalid");
+                converted=date.toString("yyyy-MM-dd HH:mm:ss");
+            } else if (kind==QMetaType::QDate) {
+                const auto date=value.toDate();
+                if (!date.isValid()) throw VbaRuntimeError(13,"DAO: parameter date invalid");
+                converted=date.toString("yyyy-MM-dd");
+            } else if (kind==QMetaType::QString || kind==QMetaType::QByteArray || kind==QMetaType::Int || kind==QMetaType::UInt || kind==QMetaType::LongLong) converted=value;
+            else if (kind==QMetaType::ULongLong) {
+                if (value.toULongLong()>static_cast<qulonglong>(std::numeric_limits<qlonglong>::max())) throw VbaRuntimeError(6,"DAO: parameter integer overflow");
+                converted=static_cast<qlonglong>(value.toULongLong());
+            } else if (kind==QMetaType::Float || kind==QMetaType::Double) {
+                if (!std::isfinite(value.toDouble())) throw VbaRuntimeError(6,"DAO: parameter number overflow");
+                converted=value;
+            } else throw VbaRuntimeError(13,"DAO: parameter scalar type required");
+        } else if (type == "long" || type == "integer" || type == "short" || type == "byte") {
             bool valid = false; const auto real = value.toDouble(&valid);
             const auto floor = std::floor(real); const auto fraction = real - floor;
             const auto rounded = fraction < 0.5 ? floor : fraction > 0.5 ? floor+1

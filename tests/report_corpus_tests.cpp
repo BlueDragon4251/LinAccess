@@ -1,9 +1,12 @@
 #include "access_form_preview.hpp"
+#include "access_form_objects.hpp"
 #include "access_form_import.hpp"
 #include "access_table_import.hpp"
 #include "access_query.hpp"
 #include "sqlite_execution.hpp"
+#include "jet_sql_functions.hpp"
 #include "vba_source_codec.hpp"
+#include "vba_qt_value.hpp"
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -25,6 +28,7 @@
 #endif
 #include <cassert>
 #include <iostream>
+#include <memory>
 namespace {
 QString adapterCategory(const linaccess::VbaRuntimeError& error) {
     const auto reason=QString::fromUtf8(error.what()).toCaseFolded();
@@ -35,6 +39,8 @@ QString adapterCategory(const linaccess::VbaRuntimeError& error) {
 }
 QString failureCategory(const QString& error,const QJsonArray& definitions,const QDir& directory) {
     const auto text=error.toCaseFolded();
+    if (const auto number=linaccess::jetSqlFunctionErrorNumber(text.toUtf8().toStdString()))
+        return "adapter_error_"+QString::number(*number);
     if (text.contains("no such column")) return "unresolved_column";
     if (text.contains("no such table")) {
         auto name=error.mid(error.toCaseFolded().indexOf("no such table:")+14).trimmed();
@@ -86,6 +92,70 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
         query.addBindValue(object["name"].toString()); query.addBindValue(bytes); assert(query.exec()); query.finish();
     }
     assert(linaccess::installAccessQueryViews(db)>0);
+    // Resolve references taken from the original SQL against original control
+    // definitions. Synthetic inputs exercise lookup, not Access result parity.
+    const QRegularExpression refs(R"((?:\[Formulare\]|Formulare|\[Forms\]|Forms)\s*!\s*(?:\[([^\]]+)\]|([\p{L}\p{N}_]+))\s*!\s*(?:\[([^\]]+)\]|([\p{L}\p{N}_]+)))",QRegularExpression::CaseInsensitiveOption);
+    int referenceCount=0,referencingQueries=0,mutableReferences=0;
+    std::vector<std::unique_ptr<AccessFormPreview>> referencedForms;
+    QMap<QString,AccessFormPreview*> openForms;
+    QMap<QString,linaccess::AccessFormLayout> referencedLayouts;
+    for (const auto& value : objects) {
+        const auto object=value.toObject(); if (object["kind"]!="query") continue;
+        QFile file(directory.filePath(object["file"].toString())); assert(file.open(QIODevice::ReadOnly));
+        const auto source=linaccess::decodeVbaSource(file.readAll());
+        auto matches=refs.globalMatch(source);
+        bool referenced=false;
+        while (matches.hasNext()) {
+            const auto match=matches.next();
+            const auto formName=match.captured(1).isEmpty() ? match.captured(2) : match.captured(1);
+            const auto field=match.captured(3).isEmpty() ? match.captured(4) : match.captured(3);
+            const auto key=formName.toCaseFolded();
+            if (!openForms.contains(key)) {
+                QByteArray definition;
+                for (const auto& candidate : objects) {
+                    const auto form=candidate.toObject();
+                    if (form["kind"]!="form" || form["name"].toString().compare(formName,Qt::CaseInsensitive)!=0) continue;
+                    QFile input(directory.filePath(form["file"].toString())); assert(input.open(QIODevice::ReadOnly));
+                    definition=input.readAll();
+                    assert(QCryptographicHash::hash(definition,QCryptographicHash::Sha256).toHex()==form["sha256"].toString().toLatin1().toLower());
+                }
+                assert(!definition.isEmpty());
+                referencedLayouts.insert(key,linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(definition)));
+                referencedForms.push_back(std::make_unique<AccessFormPreview>(formName,definition,QByteArray{},db));
+                openForms.insert(key,referencedForms.back().get());
+            }
+            auto control=makePreviewFormObject(*openForms.value(key))->member("Controls",{}).object
+                ->member("Item",{linaccess::VbaValue::string(field.toUtf8().toStdString())}).object;
+            linaccess::AccessQueryModel lookup;
+            const auto initial=control->member("Value",{});
+            lookup.execute(db,"SELECT "+match.captured());
+            assert(lookup.rowCount()==1);
+            const auto expected=linaccess::sqlFieldValue(initial,"");
+            const auto actual=lookup.data(lookup.index(0,0));
+            assert(actual.isNull()==expected.isNull());
+            if (!expected.isNull()) assert(actual.toString()==expected.toString());
+            // Query-bound/computed controls correctly reject assignment. Only
+            // unbound original controls receive synthetic test inputs.
+            const auto& originalLayout=referencedLayouts.value(key);
+            for (const auto& item : originalLayout.controls) if (item.name.compare(field,Qt::CaseInsensitive)==0 && item.controlSource.isEmpty()) {
+                control->assign("Value",linaccess::VbaValue::numeric(2004));
+                lookup.execute(db,"SELECT "+match.captured());
+                assert(lookup.data(lookup.index(0,0)).toInt()==2004);
+                ++mutableReferences;
+            }
+            ++referenceCount; referenced=true;
+        }
+        if (referenced) {
+            const auto plan=linaccess::compileAccessQuery(source);
+            assert(plan.sql.contains("linaccess_jet_object_value"));
+            ++referencingQueries;
+        }
+    }
+    assert(referenceCount==9 && referencingQueries==5);
+    // Keep the report inventory independent of these synthetic filter inputs.
+    for (auto& form : referencedForms) assert(form->close());
+    referencedForms.clear();
+    std::cout<<"Original SQL object references: "<<referenceCount<<", query definitions: "<<referencingQueries<<", mutable input checks: "<<mutableReferences<<'\n';
     int scanned=0,available=0,cells=0;
     QJsonArray inventory;
     QMap<QString,int> failures;

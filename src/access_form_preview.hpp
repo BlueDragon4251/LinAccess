@@ -62,6 +62,7 @@ private:
     linaccess::VbaValue getFieldValue(std::string_view name) const;
     void setFieldValue(std::string_view name,const linaccess::VbaValue& value);
     friend class PreviewVbaHost;
+    friend void connectPreviewSqlObjects(QSqlDatabase db);
     friend std::shared_ptr<linaccess::VbaObject> makePreviewFormObject(AccessFormPreview&);
     friend std::shared_ptr<linaccess::VbaObject> makePreviewReportsObject(AccessFormPreview&);
     friend std::shared_ptr<linaccess::VbaObject> makePreviewFormsObject(AccessFormPreview&);

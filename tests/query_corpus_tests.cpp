@@ -46,12 +46,21 @@ int main(int argc,char** argv) {
     auto database = linaccess::makeDaoDatabase(db);
     QMap<QString,int> counts;
     QJsonArray report;
+    int valueDeclarations=0;
     for (const auto& object : definitions) {
         QString status;
         bool executed = false;
         assert(db.transaction());
         try {
             const auto source = linaccess::accessQuerySource(db,object["name"].toString());
+            if (source.trimmed().startsWith("PARAMETERS",Qt::CaseInsensitive)) {
+                const auto headerEnd=source.indexOf(';'); assert(headerEnd>=0);
+                const auto declarations=linaccess::compileAccessQuery(source.left(headerEnd+1)+" SELECT 1");
+                bool hasValue=false;
+                for (const auto& parameter : declarations.parameters)
+                    if (parameter.type.compare("value",Qt::CaseInsensitive)==0) hasValue=true;
+                if (hasValue) ++valueDeclarations;
+            }
             const auto plan = linaccess::compileAccessQuery(source);
             if (!plan.parameters.empty()) status = "parameters_required_unexecuted";
             else if (!plan.sql.startsWith("SELECT ",Qt::CaseInsensitive)) status = "action_query_unexecuted";
@@ -73,6 +82,7 @@ int main(int argc,char** argv) {
         report.append(QJsonObject{{"artifact_sha256",object["sha256"]},{"status",status},{"executed",executed}});
     }
     assert(report.size() == 100);
+    assert(valueDeclarations==6);
     assert(counts["executed_no_access_reference_oracle"] > 0);
     QFile output(QString::fromLocal8Bit(argv[3])); assert(output.open(QIODevice::WriteOnly));
     assert(output.write(QJsonDocument(report).toJson()) > 0);

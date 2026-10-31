@@ -196,6 +196,7 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
       vba_(linaccess::decodeVbaSource(vbaSource)),
       layout_(linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(source))),
       db_(std::move(database)) {
+    if (db_.isOpen()) connectPreviewSqlObjects(db_);
     static qlonglong openingSequence = 0;
     setProperty("la_form_open_order",++openingSequence);
     const bool queryViewsReady = linaccess::installAccessQueryViews(db_) >= 0;

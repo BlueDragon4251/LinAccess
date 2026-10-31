@@ -42,7 +42,9 @@ procedure execution. Current result: six report sources execute and bind 54
 non-NULL textbox values. Values and NULL flags are compared directly with a
 prepared SQLite reference reader. All reports stay read-only.
 
-Three remaining sources require localized SQL Formulare!form!control references.
+Three remaining sources reference controls on other forms. Localized SQL
+Formulare!form!control lookup is now implemented, but these forms must be open
+with valid inputs; the isolated report inventory does not invent those inputs.
 They are explicitly failed
 sources, not empty reports. The ignored private-report-inventory.json contains
 artifact hashes, status and counts only; vba_executed=false is explicit for this

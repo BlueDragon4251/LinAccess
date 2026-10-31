@@ -38,8 +38,8 @@ Implemented with execution tests:
 ## Original corpus measurement
 
 All 100 original Kassa query artifacts are hash-checked and classified against a
-separate imported SQLite database. Current local run: 49 executed, 19 missing a
-query dependency, 6 unsupported function/compilation cases, 22 other unsupported
+separate imported SQLite database. Current local run: 49 executed, 16 missing a
+query dependency, 6 unsupported function/compilation cases, 25 other unsupported
 Jet/binding cases, 2 execution-budget failures and 2 action queries unexecuted by
 this corpus runner. Action query mutation is verified separately with typed
 QueryDefs tests. No row values or raw SQL are emitted in corpus reports.
@@ -47,7 +47,7 @@ QueryDefs tests. No row values or raw SQL are emitted in corpus reports.
 Execution without a Microsoft Access reference result is not proof of original
 query semantics. The report says executed_no_access_reference_oracle explicitly.
 Remaining dialect work includes '&' coercion, functions, nested parameter queries,
-form/report references, saved ranked TOP dependencies, multitable DISTINCTROW,
+arbitrary form/report property chains, saved ranked TOP dependencies, multitable DISTINCTROW,
 crosstabs, implicit form parameter resolution, collations, precise types and editable query joins.
 
 ## Application execution path
@@ -61,7 +61,9 @@ editor retains its separate SQL behavior.
 DAO SELECTs, the result model and saved-query form sources share bounded result
 materialization, hidden TOP-rank removal, tie handling and interrupted-fetch
 rejection. Result views and query-bound forms remain read-only; editable query
-joins and automatic form/control parameter resolution are not implemented.
+joins and undeclared parameter inference are not implemented. Live explicit
+Forms/Formulare and Reports/Berichte references and typed Value parameters are
+implemented with native control lookup; see [SQL object values](SQL_OBJECT_VALUES.md).
 Existing native SQLite views remain usable as read-only form sources.
 
 The access_query_model test checks TOP ties, headers, typed parameters, NULL,

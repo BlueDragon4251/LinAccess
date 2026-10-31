@@ -7,3 +7,6 @@ std::shared_ptr<linaccess::VbaObject> makePreviewFormsObject(AccessFormPreview& 
 std::shared_ptr<linaccess::VbaObject> makePreviewApplicationObject(AccessFormPreview& preview);
 
 std::shared_ptr<linaccess::VbaObject> makePreviewReportsObject(AccessFormPreview& preview);
+
+class QSqlDatabase;
+void connectPreviewSqlObjects(QSqlDatabase db);

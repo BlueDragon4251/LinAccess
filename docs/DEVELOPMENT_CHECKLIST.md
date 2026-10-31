@@ -81,7 +81,7 @@ Verified incremental work ([query adapter and limits](QUERY_ADAPTER.md)):
 - [x] Canonical MDB/date-literal/Date()/Now() timestamps at second precision.
 - [x] Parameterless compatible query views, dependency refresh and form source exposure.
 - [x] All 100 query artifacts hash-checked and classified on an isolated copy;
-  37 execute without an Access result oracle, the rest remain explicitly unresolved.
+  49 execute without an Access result oracle, the rest remain explicitly unresolved.
 - [x] SQL operation/time budgets and rejection of interrupted partial results.
 
 Full targets remain open:
@@ -93,6 +93,8 @@ Full targets remain open:
 - [ ] Complete date/format masks, wildcard semantics, Null/coercion, DDL/DML and action queries.
 - [ ] Execute and classify all 100 Kassa queries against the imported database copy.
 - [x] Bounded read-only saved-query form sources and translated navigator results with explicit typed parameter prompts.
+- [x] Live SQL Forms/Formulare and Reports/Berichte control values, project isolation and saved views; nine original references / five queries verified.
+- [x] Typed Value parameter declarations in all six original parameterized queries.
 - [ ] Complete form/report query binding, implicit parameters and editable joins where valid.
 - [ ] Navigator, datasheet/form/design views, properties, toolbox, undo/redo and SQL designer.
 - [ ] Fonts/colors/geometry/default control properties and Access 2003 layout parity.

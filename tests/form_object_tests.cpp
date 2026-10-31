@@ -1,5 +1,6 @@
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
+#include "access_query.hpp"
 #include <QLineEdit>
 #include <QComboBox>
 #include <QToolBar>
@@ -214,6 +215,27 @@ End Sub
     formatted.findChild<QPushButton*>("access-control-Write")->click();
     assert(formatted.findChild<QLineEdit*>("access-control-Summary")->text()=="94");
     assert(formatted.close());
+
+    AccessFormPreview parameters("sql parameters",form,{},db);
+    auto input=makePreviewFormObject(parameters);
+    input->assignItem("Summary",linaccess::VbaValue::numeric(2003));
+    linaccess::AccessQueryModel sqlValues;
+    sqlValues.execute(db,"SELECT Formulare![sql parameters]!Summary");
+    assert(sqlValues.data(sqlValues.index(0,0)).toInt()==2003);
+    input->assignItem("Summary",linaccess::VbaValue::string("002004"));
+    sqlValues.execute(db,"SELECT Forms![sql parameters]!Summary.Value");
+    assert(sqlValues.data(sqlValues.index(0,0)).toString()=="002004");
+    AccessFormPreview otherParameters("sql parameters",form,{},separate);
+    makePreviewFormObject(otherParameters)->assignItem("Summary",linaccess::VbaValue::numeric(9999));
+    sqlValues.execute(db,"SELECT Forms![sql parameters]!Summary");
+    assert(sqlValues.data(sqlValues.index(0,0)).toString()=="002004");
+    sqlValues.execute(separate,"SELECT Forms![sql parameters]!Summary");
+    assert(sqlValues.data(sqlValues.index(0,0)).toInt()==9999);
+    assert(parameters.close());
+    bool closedSqlRejected=false;
+    try { sqlValues.execute(db,"SELECT Formulare![sql parameters]!Summary"); }
+    catch(const linaccess::VbaRuntimeError& error) { closedSqlRejected=error.number==2450; }
+    assert(closedSqlRejected); assert(otherParameters.close());
     auto retainedField = firstObject->member("Controls",{linaccess::VbaValue::string("Name.Field")}).object;
     delete first.findChild<QLineEdit*>("access-control-Name.Field");
     bool deletedFieldRejected = false;

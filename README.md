@@ -147,6 +147,8 @@ ctest --test-dir build-core --output-on-failure
   Adapter mit Parameterdialogen, DAO-QueryDefs, TOP-Sortiergleichständen, eager
   IIf und begrenzter nativer Datumsformatierung für SQL/VBA-Format$. Gespeicherte Abfragen können schreibgeschützte Formular-Datenquellen sein.
   49/100 Kassenabfragen werden ausgeführt, bisher ohne Access-Referenzergebnis;
+  SQL-Verweise auf geöffnete Forms/Formulare und Reports/Berichte lesen echte
+  Controlwerte, auch in gespeicherten Abfragen; [Umfang und Tests](docs/SQL_OBJECT_VALUES.md).
   siehe [Abfrageadapter](docs/QUERY_ADAPTER.md). Importierte Berichte haben eine
   grobe Layoutvorschau mit einseitigem Druck/PDF des aktuellen Layouts, noch keine
   Access-Berichts-/Druckkompatibilität. Drei originale Open-/Close-Paare laufen

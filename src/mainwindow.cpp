@@ -3,6 +3,7 @@
 #include "access_inspector.hpp"
 #include "access_form_import.hpp"
 #include "access_form_preview.hpp"
+#include "access_form_objects.hpp"
 #include "bridge_importer.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_runtime.hpp"
@@ -225,6 +226,7 @@ void MainWindow::openDatabase(const QString& path) {
         messageError(this, "SQLite: " + db_.lastError().text());
         return;
     }
+    connectPreviewSqlObjects(db_);
     QSqlQuery query(db_);
     if (!query.exec("PRAGMA foreign_keys=ON") ||
         !query.exec("CREATE TABLE IF NOT EXISTS _la_objects ("

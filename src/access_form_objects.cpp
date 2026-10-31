@@ -1,4 +1,6 @@
 #include "access_form_objects.hpp"
+#include "jet_sql_functions.hpp"
+#include <QThread>
 #include "access_form_preview.hpp"
 #include "vba_qt_value.hpp"
 #include <QApplication>
@@ -405,4 +407,24 @@ std::shared_ptr<linaccess::VbaObject> makePreviewControlObject(AccessFormPreview
     if (auto object = cached.lock()) return object;
     auto object = std::make_shared<PreviewControlObject>(preview,name);
     cached = object; return object;
+}
+
+void connectPreviewSqlObjects(QSqlDatabase db) {
+    const auto connection=db.connectionName();
+    const auto database=db.databaseName();
+    linaccess::setJetSqlObjectResolver(db,[connection,database](std::string_view collection,std::string_view object,std::string_view field) {
+        if (!QApplication::instance() || QThread::currentThread()!=QApplication::instance()->thread())
+            throw linaccess::VbaRuntimeError(3251,"SQL GUI object lookup requires its GUI thread");
+        const bool report=collection=="reports";
+        const auto name=text(object);
+        for (auto* widget : QApplication::topLevelWidgets()) {
+            auto* preview=dynamic_cast<AccessFormPreview*>(widget);
+            if (!preview || preview->closed_ || preview->openCancelled_ ||
+                preview->db_.connectionName()!=connection || preview->db_.databaseName()!=database ||
+                (preview->layout_.kind==linaccess::AccessDocumentKind::Report)!=report ||
+                preview->formName_.compare(name,Qt::CaseInsensitive)!=0) continue;
+            return preview->getFieldValue(field);
+        }
+        throw linaccess::VbaRuntimeError(report ? 2451 : 2450,"Referenced SQL document is not open");
+    });
 }
