@@ -1,4 +1,5 @@
 #include "sqlite_execution.hpp"
+#include "jet_sql_functions.hpp"
 #include "vba_runtime.hpp"
 #include <QElapsedTimer>
 #include <QLibrary>
@@ -28,6 +29,7 @@ SqliteExecutionBudget::SqliteExecutionBudget(QSqlDatabase db, qint64 operations,
     auto handle = db.driver()->handle();
     if (!function || !handle.isValid() || QByteArray(handle.typeName()) != "sqlite3*")
         throw VbaRuntimeError(3251,"SQLite query execution budget unavailable");
+    installJetSqlFunctions(db);
     impl_->database = *static_cast<sqlite3**>(handle.data());
     if (!impl_->database || operations <= 0 || milliseconds <= 0)
         throw VbaRuntimeError(5,"Invalid SQLite execution budget");

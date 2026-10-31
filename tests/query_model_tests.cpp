@@ -31,4 +31,27 @@ int main(int argc, char** argv) {
     assert(rejected && model.rowCount()==0);
     model.execute(db,"SELECT id FROM samples WHERE id=4");
     assert(model.rowCount()==1 && model.data(model.index(0,0)).toInt()==4);
+    model.execute(db,"SELECT IIf(True, 7, 9) AS chosen, IIf(Null,1,2) AS null_condition, IIf(False,1,Null) AS null_result");
+    assert(model.data(model.index(0,0)).toInt()==7 && model.data(model.index(0,1)).toInt()==2);
+    assert(model.data(model.index(0,2)).isNull());
+    model.execute(db,"SELECT IIf(True, 'kept', 9), IIf(False, 'discarded', 12)");
+    assert(model.data(model.index(0,0)).metaType().id()==QMetaType::QString);
+    assert(model.data(model.index(0,1)).toInt()==12);
+    // Access evaluates both IIf arguments. SQLite's built-in IIf short-circuits.
+    assert(query.exec("SELECT IIf(1,7,abs(-9223372036854775808))"));
+    assert(query.next() && query.value(0).toInt()==7); query.finish();
+    rejected = false;
+    try { model.execute(db,"SELECT IIf(True,7,abs(-9223372036854775808))"); }
+    catch(const linaccess::VbaRuntimeError&) { rejected = true; }
+    assert(rejected && model.rowCount()==0);
+    model.execute(db,"SELECT IIf('True',1,2), IIf('False',1,2)");
+    assert(model.data(model.index(0,0)).toInt()==1 && model.data(model.index(0,1)).toInt()==2);
+    rejected = false;
+    try { model.execute(db,"SELECT IIf('invalid',1,2)"); }
+    catch(const linaccess::VbaRuntimeError&) { rejected = true; }
+    assert(rejected);
+    query.clear(); db.close(); assert(db.open());
+    model.execute(db,"SELECT IIf(True,5,6)");
+    assert(model.data(model.index(0,0)).toInt()==5);
+
 }

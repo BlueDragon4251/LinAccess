@@ -37,6 +37,10 @@ Completed iteration package: native For Each/Next, Exit For, DAO Fields collecti
 nested loops and error-handler loop restoration; schema counts verified on all
 29 original Kassa tables. Original collection-dependent procedures remain open.
 
+Completed conditional SQL package: native eager IIf argument evaluation with
+selected-value type/NULL preservation and connection-reopen regression. Other
+SQLite/Jet expression semantics remain explicitly incomplete.
+
 See DEVELOPMENT_CHECKLIST.md for all requirements and DAO_RUNTIME.md and
 MDB_IMPORT_REGRESSION.md for evidence and limitations. Private syntax inventory
 outputs remain under build and contain no raw VBA literals or fixture rows.

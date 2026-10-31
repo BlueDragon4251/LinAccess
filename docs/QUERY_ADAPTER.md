@@ -69,3 +69,20 @@ read-only flags, rejection of DML without mutation, clearing stale results after
 errors and recovery. The GUI event suite exercises a named saved TOP query as a
 real form record source. The original 100-query corpus continues to run through
 DAO and the shared executor; no Access reference oracle is available.
+
+## IIf argument evaluation
+
+Jet IIf calls are rewritten to an internal native SQLite scalar function. SQLite
+therefore evaluates both argument expressions before the callback chooses the
+result, instead of using SQLite's built-in short-circuit IIf. The callback retains
+the selected SQLite value type and NULL, treats NULL conditions as false, and
+rejects invalid condition coercions. Registration probes the live connection so
+close/reopen does not retain stale native-handle state.
+
+The model regression contrasts the SQLite built-in with the Jet adapter using
+an integer-overflow error in an unselected argument; the Jet path must fail.
+Numeric/text/NULL results, condition coercion and connection reopen are covered.
+The original query corpus still has 37 successful executions without an Access
+reference oracle. Remaining expression differences include SQLite division by
+zero producing NULL and exact Jet numeric/locale behavior; eager IIf alone does
+not resolve those differences.

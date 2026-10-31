@@ -226,6 +226,8 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
             output << literal(like ? pattern(token.value) : token.value);
             if (like) output << "ESCAPE '\\'";
         } else if (token.kind == Token::Identifier) output << identifier(token.value);
+        else if (token.kind == Token::Word && token.value.compare("IIf",Qt::CaseInsensitive) == 0
+                 && i + 1 < tokens.size() && tokens[i+1].value == "(") output << "linaccess_jet_iif";
         else if (token.kind == Token::Word && token.value.compare("TRUE",Qt::CaseInsensitive) == 0) output << "-1";
         else if (token.kind == Token::Word && token.value.compare("FALSE",Qt::CaseInsensitive) == 0) output << "0";
         else output << token.value;

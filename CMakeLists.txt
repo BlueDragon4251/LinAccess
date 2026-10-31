@@ -12,7 +12,7 @@ if(LINACCESS_BUILD_GUI)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Sql PrintSupport)
     add_library(linaccess_data STATIC
         src/access_catalog.cpp src/access_table_import.cpp src/access_query.cpp
-        src/dao_database.cpp src/sqlite_execution.cpp src/vba_source_codec.cpp
+        src/dao_database.cpp src/sqlite_execution.cpp src/jet_sql_functions.cpp src/vba_source_codec.cpp
         src/vba_qt_value.cpp src/access_form_import.cpp)
     target_link_libraries(linaccess_data PUBLIC linaccess_runtime Qt6::Core Qt6::Sql)
     target_include_directories(linaccess_data PUBLIC src)
