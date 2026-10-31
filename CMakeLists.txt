@@ -186,7 +186,7 @@ if(BUILD_TESTING)
                 COMMAND linaccess_real_bridge_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}" 192 47 9 100 32 4)
             set_tests_properties(complex_access_bridge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
             add_executable(linaccess_access_layout_tests
-                tests/access_form_layout_tests.cpp tests/form_event_tests.cpp tests/subform_tests.cpp tests/form_object_tests.cpp tests/original_control_tests.cpp tests/report_event_tests.cpp tests/report_corpus_tests.cpp
+                tests/access_form_layout_tests.cpp tests/filter_tests.cpp tests/form_event_tests.cpp tests/subform_tests.cpp tests/form_object_tests.cpp tests/original_control_tests.cpp tests/report_event_tests.cpp tests/report_corpus_tests.cpp
                  src/access_form_import.hpp
 
                 src/access_form_preview.cpp src/access_form_objects.cpp src/access_layout_print.cpp src/access_form_preview.hpp

@@ -8,6 +8,7 @@
 #include "access_query.hpp"
 #include "access_format.hpp"
 #include "sqlite_execution.hpp"
+#include "jet_sql_functions.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_source_codec.hpp"
 
@@ -160,6 +161,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
+        if (key=="filter" || key=="filteron") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -169,7 +171,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
-        if (key == "caption" || key=="tag") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
+        if (key == "caption" || key=="tag" || key=="filter" || key=="filteron") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
         if (key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
@@ -272,6 +274,7 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     QScopedValueRollback<QStringList> constructionGuard(constructionStack);
     constructionStack.append(identity);
     if (embedded) setWindowFlags(Qt::Widget);
+    filter_=layout_.filter; filterOn_=layout_.filterOnLoad && !filter_.trimmed().isEmpty();
     initialCurrentDeferred_=!embedded && eventProcedure(layout_.events.value("onactivate"));
     if (db_.isOpen()) connectPreviewSqlObjects(db_);
     static qlonglong openingSequence = 0;
@@ -287,6 +290,11 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     recordSelector_ = new QComboBox(this);
     recordSelector_->setObjectName("access-record-selector");
     controls->addWidget(recordSelector_, 1);
+    filterEditor_=new QLineEdit(this); filterEditor_->setObjectName("access-filter");
+    filterEditor_->setPlaceholderText("Bedingung eingeben"); filterEditor_->setText(filter_);
+    controls->addWidget(filterEditor_,1);
+    filterToggle_=new QCheckBox("Filter aktiv",this); filterToggle_->setObjectName("access-filter-on"); filterToggle_->setChecked(filterOn_);
+    controls->addWidget(filterToggle_);
     auto* save = new QPushButton("Datensatz speichern", this);
     save->setObjectName("access-save-record");
     controls->addWidget(save);
@@ -306,6 +314,15 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
 
     status_ = new QLabel(this);
     status_->setWordWrap(true);
+    const auto applyFilter=[this] {
+        try { setFilterState(filterEditor_->text(),filterToggle_->isChecked()); }
+        catch(const linaccess::VbaRuntimeError& error) {
+            const QSignalBlocker blocked(filterToggle_); filterToggle_->setChecked(filterOn_);
+            status_->setText("Filter nicht angewendet ("+QString::number(error.number)+")");
+        }
+    };
+    connect(filterToggle_,&QCheckBox::toggled,this,[applyFilter](bool) { applyFilter(); });
+    connect(filterEditor_,&QLineEdit::editingFinished,this,applyFilter);
     outer->addWidget(status_);
     connect(recordSelector_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int index) { selectRecord(index); });
@@ -484,6 +501,7 @@ void AccessFormPreview::loadRecords() {
                         ? source : linaccess::accessQuerySource(db_,source);
                     plan = linaccess::compileAccessQuery(sql);
                 }
+                if (filterOn_) plan=linaccess::filterAccessQueryPlan(db_,plan,filter_);
                 auto result = linaccess::executeAccessQueryPlan(db_,plan,linaccess::bindAccessQueryParameters(plan,{}));
                 dataColumns_ = result.columns;
                 dataTruncated_ = result.rows.size() > 10000;
@@ -495,8 +513,14 @@ void AccessFormPreview::loadRecords() {
                 dataTypes_ = linaccess::sqliteColumnTypes(db_,source);
                 linaccess::SqliteExecutionBudget budget(db_);
                 QSqlQuery query(db_);
-                if (!query.exec("SELECT rowid AS __la_rowid,* FROM " + sqlIdentifier(source)))
-                    throw std::runtime_error("Record source unavailable");
+                auto name=source; name.replace(']',"]]");
+                const auto plan=linaccess::compileAccessQuery("SELECT rowid AS [__la_rowid],* FROM ["+name+"]"+(filterOn_ && !filter_.trimmed().isEmpty() ? " WHERE "+filter_ : QString{}));
+                if (!query.prepare(plan.sql) || !query.exec()) {
+                    const auto message=query.lastError().text().toCaseFolded();
+                    const auto typed=linaccess::jetSqlFunctionErrorNumber(message.toStdString());
+                    const auto code=typed ? *typed : (message.contains("syntax error") || message.contains("incomplete input")) ? 3075 : message.contains("no such table") ? 3078 : message.contains("no such function") ? 3085 : message.contains("interrupted") ? 3035 : 3146;
+                    throw linaccess::VbaRuntimeError(code,"Record source query failed");
+                }
                 for (int i = 1; i < query.record().count(); ++i) dataColumns_ << query.record().fieldName(i);
                 while (query.next()) {
                     if (recordRows_.size() >= 10000) { dataTruncated_ = true; break; }
@@ -528,6 +552,35 @@ void AccessFormPreview::loadRecords() {
         ? "Access-Layout: " + QString::number(renderedControls_) + " Elemente, "
             + QString::number(recordRows_.size()) + " Datensätze." + (!directTable_ ? " Datenquelle schreibgeschützt." : "") + (dataTruncated_ ? " Anzeige auf die ersten 10000 begrenzt." : "")
         : "Die Datenquelle ist nicht verfügbar oder ihre Ausführung wurde abgebrochen: " + source);
+}
+
+void AccessFormPreview::setFilterState(const QString& filter,bool enabled) {
+    const bool reload=filterOn_!=enabled || (enabled && filter_!=filter);
+    if (reload && changingFilter_) throw linaccess::VbaRuntimeError(3251,"Reentrant filter change unsupported");
+    if (reload && !enabled && layout_.recordSource.trimmed().isEmpty()) {
+        filter_=filter; filterOn_=false;
+    } else if (reload && !layout_.recordSource.trimmed().isEmpty() && !opened_ && layout_.kind==linaccess::AccessDocumentKind::Report) {
+        filter_=filter; filterOn_=enabled;
+    } else if (reload) {
+        if (enabled && layout_.recordSource.trimmed().isEmpty()) throw linaccess::VbaRuntimeError(3078,"Filter record source unavailable");
+        QScopedValueRollback<bool> changing(changingFilter_,true);
+        if (!saveRecord()) throw linaccess::VbaRuntimeError(2501,"Filter change cancelled");
+        const auto oldFilter=filter_; const bool oldEnabled=filterOn_; const auto oldIndex=currentRecordIndex_;
+        const auto oldId=oldIndex>0 && oldIndex<=rowIds_.size() ? rowIds_[oldIndex-1] : QVariant{};
+        filter_=filter; filterOn_=enabled; loadRecords();
+        if (!dataSourceAvailable_) {
+            const auto number=dataSourceErrorNumber_ ? dataSourceErrorNumber_ : 3146;
+            filter_=oldFilter; filterOn_=oldEnabled; loadRecords();
+            if (dataSourceAvailable_) {
+                const auto index=oldIndex==0 ? 0 : !oldId.isNull() ? rowIds_.indexOf(oldId)+1 : qMin(oldIndex,recordSelector_->count()-1);
+                const QSignalBlocker blocked(recordSelector_); recordSelector_->setCurrentIndex(qMax(0,index)); currentRecordIndex_=qMax(0,index); loadRecord();
+            }
+            throw linaccess::VbaRuntimeError(number,"Filter execution failed");
+        }
+        if (opened_ && initialCurrentDispatched_) (void)formEvent("OnCurrent","Form_Current");
+    } else filter_=filter;
+    const QSignalBlocker textBlocked(filterEditor_),toggleBlocked(filterToggle_);
+    filterEditor_->setText(filter_); filterToggle_->setChecked(filterOn_);
 }
 
 void AccessFormPreview::loadRecord() {
@@ -942,6 +995,7 @@ linaccess::VbaExecutionResult AccessFormPreview::runHandler(const QString& handl
 }
 linaccess::VbaExecutionResult AccessFormPreview::formEvent(const QString& property,const QString& handler) {
     if (!eventProcedure(layout_.events.value(property.toCaseFolded()))) return {};
+
     auto name = handler;
     if (layout_.kind==linaccess::AccessDocumentKind::Report && name.startsWith("Form_")) name.replace(0,5,"Report_");
     const auto result = runHandler(name);

@@ -20,6 +20,8 @@ class QToolBar;
 class QVBoxLayout;
 class QPrinter;
 class QAction;
+class QLineEdit;
+class QCheckBox;
 
 // Renders controls from Access 2003 SaveAsText instead of placing them in an
 // unrelated auto-generated QFormLayout. Only supported VBA handlers can run.
@@ -46,6 +48,7 @@ public:
 private:
     void buildControls(QWidget* canvas);
     void loadRecords();
+    void setFilterState(const QString& filter,bool enabled);
     void loadRecord();
     bool saveRecord();
     linaccess::VbaExecutionResult runHandler(const QString& handler);
@@ -104,6 +107,11 @@ private:
     linaccess::AccessFormLayout layout_;
     QSqlDatabase db_;
     QComboBox* recordSelector_{};
+    QLineEdit* filterEditor_{};
+    QCheckBox* filterToggle_{};
+    QString filter_;
+    bool filterOn_{};
+    bool changingFilter_{};
     QLabel* status_{};
     QMap<QString,QPointer<QWidget>> controls_;
     QMap<QString,QPointer<AccessFormPreview>> subforms_;

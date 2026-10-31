@@ -25,7 +25,7 @@ void exec(QSqlQuery& query, const QString& sql) {
         throw VbaRuntimeError(*code,"Jet SQL function argument invalid");
     if (message.contains("no such function")) throw VbaRuntimeError(3085,"DAO: SQL function unsupported");
     if (message.contains("no such table")) throw VbaRuntimeError(3078,"DAO: SQL dependency unavailable");
-    if (message.contains("syntax error") || message.contains("circularly defined")) throw VbaRuntimeError(3075,"DAO: SQL grammar unsupported");
+    if ((message.contains("syntax error") || message.contains("incomplete input")) || message.contains("circularly defined")) throw VbaRuntimeError(3075,"DAO: SQL grammar unsupported");
     if (message.contains("interrupted")) throw VbaRuntimeError(3035,"DAO: query execution budget exceeded");
     throw VbaRuntimeError(3146,"DAO: SQL operation failed");
 }

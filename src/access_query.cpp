@@ -698,6 +698,20 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
     }
     return plan;
 }
+AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& criteria) {
+    if (criteria.trimmed().isEmpty()) return source;
+    if (!source.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) throw VbaRuntimeError(3065,"Filter source requires SELECT");
+    installJetSqlFunctions(db);
+    const bool topOne=useTopOneBoundary(db,source);
+    if (source.hiddenRank && !topOne) throw VbaRuntimeError(3251,"Filtering an inline ranked TOP source is unsupported");
+    auto sql=resolveQueryOrigins(db,topOne ? source.topOneSql : useLeftJoin(db,source) ? source.rightJoinSql : source.sql).trimmed();
+    while (sql.endsWith(';')) sql.chop(1);
+    auto filtered=compileAccessQuery("SELECT * FROM [__la_filter_source] WHERE "+criteria);
+    const auto marker="FROM "+identifier("__la_filter_source");
+    filtered.sql.replace(filtered.sql.indexOf(marker),marker.size(),"FROM ("+sql+") AS "+identifier("__la_filter_source"));
+    filtered.parameters=source.parameters;
+    return filtered;
+}
 int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
     auto* driver = db.driver();
     if (freshConnection) {
@@ -878,7 +892,7 @@ AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan&
         if (error.contains("no such function")) throw VbaRuntimeError(3085,"SQL function unsupported");
         if (error.contains("no such table")) throw VbaRuntimeError(3078,"SQL dependency unavailable");
         if (error.contains("interrupted")) throw VbaRuntimeError(3035,"Query execution budget exceeded");
-        if (error.contains("syntax error") || error.contains("circularly defined"))
+        if ((error.contains("syntax error") || error.contains("incomplete input")) || error.contains("circularly defined"))
             throw VbaRuntimeError(3075,"SQL grammar unsupported");
         throw VbaRuntimeError(3146,"SQL operation failed");
     };

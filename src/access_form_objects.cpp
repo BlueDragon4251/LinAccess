@@ -181,6 +181,8 @@ public:
         if (key == "tag") return linaccess::VbaValue::string(bytes(preview.property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(preview.layout_.caption));
         if (key == "recordsource") return linaccess::VbaValue::string(bytes(preview.layout_.recordSource));
+        if (key=="filter") return linaccess::VbaValue::string(bytes(preview.filter_));
+        if (key=="filteron") return linaccess::VbaValue::logical(preview.filterOn_);
         if (preview.layout_.kind==linaccess::AccessDocumentKind::Report && (key=="dirty" || key=="newrecord"))
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
         if (key == "dirty") return linaccess::VbaValue::logical(preview.dirty_);
@@ -190,6 +192,7 @@ public:
             preview.loadRecords();
             if (!preview.layout_.recordSource.trimmed().isEmpty() && !preview.dataSourceAvailable_)
                 throw linaccess::VbaRuntimeError(preview.dataSourceErrorNumber_ ? preview.dataSourceErrorNumber_ : 3146,"Form record source unavailable after Requery");
+            if (preview.opened_ && preview.initialCurrentDispatched_ && !preview.layout_.recordSource.trimmed().isEmpty()) (void)preview.formEvent("OnCurrent","Form_Current");
             return {};
         }
         if (key == "setfocus") { preview.activateWindow(); preview.setFocus(); return {}; }
@@ -203,7 +206,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="setfocus")
+        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="setfocus" || key=="filter" || key=="filteron")
             return member(name,args);
         return objectItem(name);
     }
@@ -212,6 +215,10 @@ public:
     }
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if (key=="filter" || key=="filteron") {
+            if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null filter property");
+            preview.setFilterState(key=="filter" ? text(value.asText()) : preview.filter_,key=="filteron" ? value.truthy() : preview.filterOn_); return;
+        }
         if (key=="tag") {
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Tag");
             preview.setProperty("la_access_tag",text(value.asText())); return;

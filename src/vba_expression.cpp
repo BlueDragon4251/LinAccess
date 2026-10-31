@@ -346,9 +346,13 @@ private:
                 if (take("(")) { args.push_back(expression(1)); require(")"); }
                 return host_ ? host_->currentForm()->member("Controls",args) : VbaValue{};
             }
-            if (!host_) return {};
             const auto key = lower(field.value);
-            const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource" || key == "caption" || key=="tag");
+            if (!item && (key=="requery" || key=="setfocus")) {
+                if (take("(")) require(")");
+                return host_ ? host_->currentForm()->member(field.value,{}) : VbaValue{};
+            }
+            if (!host_) return {};
+            const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource" || key == "caption" || key=="tag" || key=="filter" || key=="filteron");
             if (!formProperty && objectContext)
                 return item ? host_->currentForm()->objectItem(field.value) : host_->currentForm()->objectMember(field.value,{});
             if (!formProperty && (peek().value == "." || peek().value == "!"))

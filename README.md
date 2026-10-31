@@ -137,6 +137,7 @@ ctest --test-dir build-core --output-on-failure
   bisherigen Befehlen kennt der Interpreter nun `DoCmd.RunSQL`,
   `CurrentDb.Execute`, `DoCmd.OpenForm`, `GoToRecord acNext/acNewRec`,
   `DoCmd.Requery`, `Me.Control.Visible`, `.SetFocus`, `.Requery`,
+  native `Filter`/`FilterOn`-Eigenschaften mit Filterleiste ([Nachweise](docs/NATIVE_FILTERS.md)),
   parameterisierte Sub-/Function-Aufrufe, ByVal/ByRef, lokale Fehlerhandler
   mit Labels/Resume und VBA-Zeilenfortsetzung `_`. Gebundene Update-/Dirty-/
   Navigations-/Schließereignisse samt Cancel werden getestet; siehe

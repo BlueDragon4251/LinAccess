@@ -81,6 +81,57 @@ QString failureCategory(const QString& error,const QJsonArray& definitions,const
     if (text.contains("syntax")) return "unsupported_grammar";
     return "other_sql_failure";
 }
+int verifyOriginalFilter(const QDir& directory,const QJsonArray& objects,QSqlDatabase db) {
+    // This regression measures original layout/data binding. CodeBehind is
+    // deliberately absent; native VBA property dispatch is tested separately.
+    for (const auto& value : objects) {
+        const auto object=value.toObject(); if (object["kind"]!="form") continue;
+        QFile file(directory.filePath(object["file"].toString())); assert(file.open(QIODevice::ReadOnly));
+        const auto bytes=file.readAll();
+        assert(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()==object["sha256"].toString().toLatin1().toLower());
+        const auto layout=linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(bytes));
+        if (layout.filterOnLoad || !db.tables().contains(layout.recordSource,Qt::CaseInsensitive)) continue;
+        QSqlQuery source(db); assert(source.exec("SELECT * FROM "+db.driver()->escapeIdentifier(layout.recordSource,QSqlDriver::TableName)));
+        const auto record=source.record(); if (record.isEmpty()) continue;
+        QVector<QVariantList> rows;
+        while (source.next()) {
+            QVariantList row;
+            for (int i=0;i<record.count();++i) row.append(source.value(i));
+            rows.append(row);
+        }
+        source.finish();
+        if (rows.size()<2 || rows.size()>10000 || rows.front().front().isNull()) continue;
+        const auto type=rows.front().front().metaType().id();
+        if (type!=QMetaType::Int && type!=QMetaType::LongLong) continue;
+        const auto input=rows.front().front().toLongLong();
+        int expected=0;
+        for (const auto& row : rows) if (row.front().toLongLong()==input) ++expected;
+        if (expected==rows.size()) continue;
+        AccessFormPreview form(object["name"].toString(),bytes,{},db);
+        assert(form.hasDataSource());
+        auto* selector=form.findChild<QComboBox*>("access-record-selector"); assert(selector && selector->count()==rows.size()+1);
+        auto field=record.fieldName(0); field.replace(']',"]]");
+        auto native=makePreviewFormObject(form);
+        native->assign("Filter",linaccess::VbaValue::string(("["+field+"]="+QString::number(input)).toStdString()));
+        native->assign("FilterOn",linaccess::VbaValue::logical(true));
+        assert(selector->count()==expected+1 && selector->currentIndex()>0);
+        int checked=0;
+        for (const auto& control : layout.controls) {
+            auto name=control.controlSource.trimmed();
+            if (name.startsWith('[') && name.endsWith(']')) name=name.mid(1,name.size()-2);
+            const int column=record.indexOf(name);
+            if (column<0 || control.type!="TextBox") continue;
+            auto* widget=form.findChild<QLineEdit*>("access-control-"+control.name); if (!widget) continue;
+            assert(widget->property("la_null").toBool()==rows.front()[column].isNull());
+            assert(widget->text()==rows.front()[column].toString()); ++checked;
+        }
+        if (!checked) { assert(form.close()); continue; }
+        native->assign("FilterOn",linaccess::VbaValue::logical(false));
+        assert(selector->count()==rows.size()+1 && !makePreviewFormObject(form)->member("FilterOn",{}).truthy());
+        assert(form.close()); return checked;
+    }
+    return 0;
+}
 int verifyOriginalTags(AccessFormPreview& preview,const QString& code,QSqlDatabase db) {
     const auto options=QRegularExpression::CaseInsensitiveOption|QRegularExpression::DotMatchesEverythingOption;
     const auto body=QRegularExpression("Sub\\s+Form_Load\\s*\\(\\s*\\)(.*?)End Sub",options).match(code).captured(1);
@@ -142,6 +193,10 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
         query.addBindValue(object["kind"].toString()); query.addBindValue(object["name"].toString()); query.addBindValue(bytes); assert(query.exec()); query.finish();
     }
     assert(linaccess::installAccessQueryViews(db)>0);
+    assert(db.transaction());
+    const auto originalFilterCells=verifyOriginalFilter(directory,objects,db);
+    assert(originalFilterCells>0 && db.rollback());
+    std::cout<<"Original native filter layout/data cells verified: "<<originalFilterCells<<'\n';
     assert(db.transaction());
     // Resolve references taken from the original SQL against original control
     // definitions. Synthetic inputs exercise lookup, not Access result parity.

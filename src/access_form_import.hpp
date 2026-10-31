@@ -51,6 +51,8 @@ struct AccessFormLayout {
     QString tag;
     QString recordSource;
     int width{9000};
+    QString filter;
+    bool filterOnLoad{};
     int height{5000};
     QVector<AccessVisualControl> controls;
     QMap<QString,QString> events;

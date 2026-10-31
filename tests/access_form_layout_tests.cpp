@@ -28,6 +28,7 @@
 #include <iostream>
 
 void testFormEvents();
+void testFilters();
 void testSubforms();
 void testFormObjects();
 void testReportEvents();
@@ -202,6 +203,7 @@ End Sub
         std::cout << "Original keypad button/parameterized-handler executions: " << executedKeys << '\n';
     }
     testFormEvents();
+    testFilters();
     testFormObjects();
     testSubforms();
     testReportEvents();

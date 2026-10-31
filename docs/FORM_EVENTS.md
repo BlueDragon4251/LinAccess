@@ -23,7 +23,9 @@ Implemented and checked with actual Qt keyboard edits and SQLite state assertion
 - Unload(Cancel) and Close are honored by window close, accept and reject paths.
   Pending changes save before Unload. Cancelling Unload leaves the window open.
 - CurrentDb.Execute no longer implicitly requeries a form and discards its edits.
-  Explicit Requery validates/saves pending changes first.
+  Explicit Requery validates/saves pending changes first, reloads filtered data
+  and dispatches Current for a bound record source. Unbound layout refresh does
+  not recursively manufacture Current. See [native filters](NATIVE_FILTERS.md).
 
 Regression coverage lives in tests/form_event_tests.cpp and is included in the
 real-layout runner. It exercises Qt text entry/focus commits, persisted values,
@@ -33,7 +35,7 @@ Existing original keypad and DAO button regressions continue to run separately.
 This is not an instrumented Microsoft Access reference trace.
 
 Still open: complete BeforeInsert/AfterInsert/Delete sequences, key/mouse/timer
-semantics, activation, nested form/report events, editable joins, general property
+semantics, full activation/focus variants, nested form/report events, editable joins, general property
 objects, module lifetimes, record locking/conflict resolution and virtualized
 navigation beyond the explicit 10,000-row display limit. Query sources are not
 yet generally editable and complete Access rendering/event compatibility is not

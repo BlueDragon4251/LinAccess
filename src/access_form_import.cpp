@@ -166,6 +166,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             if (key == "Caption") form.caption = value;
             else if (key == "Tag") form.tag = value;
             else if (key == "RecordSource") form.recordSource = value;
+            else if (key == "Filter") form.filter = value;
+            else if (key == "FilterOnLoad") form.filterOnLoad = value.toInt()!=0;
             else if (key == "Width") form.width = integer();
         } else if (current.type == "Section" || current.type == "FormHeader"
                    || current.type == "FormFooter") {

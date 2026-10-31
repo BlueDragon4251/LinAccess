@@ -102,3 +102,8 @@ including empty and numeric-looking strings; Empty and Null retain their
 separate comparison rules. This fixes the original Form_Open condition after
 menu access. Declared scalar type retention and all coercion combinations
 remain outside this bounded comparison regression.
+
+Runtime Filter/FilterOn and saved FilterOnLoad use actual filtered records and
+native UI controls. Direct table editing, readonly query filtering, validation
+cancellation, recovery and bound/unbound Requery behavior are tested, including
+twelve original bound cells; see [NATIVE_FILTERS.md](NATIVE_FILTERS.md).

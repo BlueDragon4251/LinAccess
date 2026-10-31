@@ -151,3 +151,10 @@ Package validation optionally compares the packaged executable's GNU build ID
 with the current linked binary. Both Debian/Ubuntu CI package checks require it.
 An actually stale local package was rejected and the fresh package passed, in
 addition to existing permissions/content/fixture-exclusion checks.
+
+Completed native filter package: real Filter/FilterOn properties and UI, saved
+FilterOnLoad, typed edits, readonly query filters and recovery/cancellation.
+Twelve bound original textbox values are checked after filtering actual records.
+Me.Requery reloads external DB changes and Current is dispatched for bound
+sources. The unbound original Current/Requery cycle is prevented by respecting
+its absent record source (NATIVE_FILTERS.md). Full advanced semantics remain open.
