@@ -237,7 +237,7 @@ End Sub
     assert(modalChild); assert(modalChild->isModal());
     assert(makePreviewFormObject(owner)->member("Tag",{}).asText()=="target");
     auto retained=makePreviewFormObject(*modalChild);
-    retained->assign("Tag",VbaValue::string("block")); assert(!owner.close() && modalChild->isVisible());
+    retained->assign("Tag",VbaValue::string("block")); assert(!AccessFormPreview::closeProjectDocuments(db) && modalChild->isVisible());
     retained->assign("Tag",VbaValue::string("allowed"));
     bool observedMessage=false; QTimer answer; answer.setInterval(1);
     QObject::connect(&answer,&QTimer::timeout,[&] {
@@ -256,6 +256,8 @@ End Sub
     assert(owner.executeProcedure("OpenFiltered",args).status==linaccess::VbaExecutionStatus::Completed);
     auto remaining=makePreviewFormsObject(owner)->item("target").object;
     assert(owner.close());
+    assert(remaining->member("Name",{}).asText()=="target");
+    assert(AccessFormPreview::closeProjectDocuments(db));
     invalidated=false;
     try { (void)remaining->member("Name",{}); } catch(const linaccess::VbaRuntimeError& error) { invalidated=error.number==2450; }
     assert(invalidated);

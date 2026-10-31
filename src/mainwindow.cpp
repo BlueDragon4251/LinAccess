@@ -1,4 +1,5 @@
 #include "mainwindow.hpp"
+#include <QCloseEvent>
 
 #include "access_inspector.hpp"
 #include "access_form_import.hpp"
@@ -119,7 +120,7 @@ public:
     void saveRecord() override {
         if (!persist_()) throw std::runtime_error("DoCmd: Datensatz konnte nicht gespeichert werden");
     }
-    void quitApplication() override { QApplication::quit(); }
+    void quitApplication() override { AccessFormPreview::quitApplication(); }
     void maximizeForm() override { parent_->showMaximized(); }
     void gotoLastRecord() override { gotoLast_(); }
     linaccess::VbaValue formatValue(const linaccess::VbaValue& value,std::string_view mask,bool stringResult) override {
@@ -229,6 +230,7 @@ void MainWindow::openDatabase(const QString& path) {
                            "Sie dürfen nicht als SQLite-Projekt geöffnet werden.");
         return;
     }
+    if (!AccessFormPreview::closeProjectDocuments(db_)) return;
     while (tabs_->count()) {
         auto* widget = tabs_->widget(0);
         tabs_->removeTab(0);
@@ -577,7 +579,7 @@ void MainWindow::showAccessArtifact(int id) {
                     QMessageBox::information(dialog_, "VBA MsgBox",
                         QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size())));
                 }
-                void quitApplication() override { QApplication::quit(); }
+                void quitApplication() override { AccessFormPreview::quitApplication(); }
                 void saveRecord() override {
                     throw std::runtime_error("DoCmd benötigt einen geöffneten Formularkontext");
                 }
@@ -1110,4 +1112,9 @@ void MainWindow::editReport(const QString& existingName) {
             dialog.accept();
     });
     dialog.exec();
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+    if (!AccessFormPreview::closeProjectDocuments(db_)) event->ignore();
+    else QMainWindow::closeEvent(event);
 }

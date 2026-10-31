@@ -271,3 +271,35 @@ semantics, Access warnings/transaction flags and independent document lifetime
 remain open.
 Validation: 18/18 Release CTests (71.98 s), GUI-disabled core 1/1 (2.85 s), fresh
 .deb payload/Build ID and all four original hashes passed.
+
+
+Independent-document / Quit / dynamic-combo increment (31 October 2026): the
+old uncommitted workspace changes and Quit logs were absent. Development resumed
+from the remotely verified private branch at 753ffc8; no missing feature was
+assumed present. OpenForm targets now belong to their project window rather than
+the invoking form, retaining actual command bars. The unchanged original opener
+and its target events complete; closing/destroying the caller leaves the target
+open. The first new original test reproduced error 5 when a parentless target
+lost ActiveMenuBar; project ownership fixes that specific failure.
+
+Project switch/window close and application Quit now validate native Access
+forms/reports, save pending records and honor Unload cancellation before logical
+closure. Tests cover retained references, retry after cancellation, cross-project
+isolation, reentrant shutdown rejection, exactly one finished notification and
+deferred deletion. Successful Quit is exercised inside a real QApplication event
+loop, which must terminate; code following statement Quit must not execute.
+See DOCUMENT_LIFETIME_RUNTIME.md for limits, including other native editors.
+
+Dynamic RowSource, RowSourceType, BoundColumn, ColumnCount and ColumnWidths now
+operate on typed multicolumn Qt models with independent bound/display values,
+hidden popup columns and actual row selection/persistence. Invalid property/query
+changes preserve prior metadata/rows/selection. See DYNAMIC_COMBO_RUNTIME.md.
+
+Validation: final Release build; 18/18 CTests passed (48.26 s), GUI-disabled
+Release core build and 1/1 test passed (0.39 s), fresh Debian package matched the
+current executable Build ID and passed content/permissions/fixture-exclusion
+checks. All four original fixture SHA-256 checks passed before and after testing.
+No source/fixture literals, rows or credentials were added to public artifacts.
+Remote distro CI remains separately tracked, not inferred from these local tests.
+The full initialized sale/snapshot/report workflow, exact Access event/window
+parity and previously documented two empty-sale AfterUpdate errors remain open.

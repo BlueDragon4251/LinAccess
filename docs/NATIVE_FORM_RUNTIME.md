@@ -29,8 +29,9 @@ Column(column[,row]) uses zero-based indices. BoundColumn uses Access's one-base
 field index, or zero for ListIndex. The selected bound value is separate from
 the displayed first column. Metadata ColumnCount/BoundColumn is preserved.
 
-Value/field lists, user row-source functions, column widths, full multicolumn
-popup/list rendering and automatic popup loading remain open. ListBox currently
+Dynamic metadata, hidden columns and multicolumn popup presentation now have a
+bounded native model (DYNAMIC_COMBO_RUNTIME.md). Value/field lists, user row-source
+functions and complete Access sizing/list rendering remain open. ListBox currently
 shares the Qt combo adapter; it does not reproduce Access listbox presentation.
 
 Calculated textboxes execute bracket field/control references, explicit subform

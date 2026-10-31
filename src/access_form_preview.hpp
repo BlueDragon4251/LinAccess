@@ -42,6 +42,9 @@ public:
     int dataSourceErrorNumber() const { return dataSourceErrorNumber_; }
     bool cancelledByOpen() const { return openCancelled_; }
     bool hasUnsavedChanges() const { return dirty_; }
+    static bool closeProjectDocuments(const QSqlDatabase& database);
+    static bool closeApplicationDocuments();
+    static void quitApplication();
     void accept() override;
     void reject() override;
 
@@ -61,6 +64,7 @@ private:
     bool commitControls();
     void selectRecord(int target);
     bool prepareClose();
+    static bool closeDocuments(const QVector<AccessFormPreview*>& roots,AccessFormPreview* closingRoot=nullptr);
     bool event(QEvent* event) override;
     void activateDocument();
     void initialCurrent();
@@ -100,7 +104,6 @@ private:
     friend class PreviewControlsObject;
     friend class PreviewControlObject;
     void requeryControl(std::string_view name);
-    QVector<QPointer<AccessFormPreview>> openedForms_;
 
     std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, reportsObject_, controlsObject_;
     QMap<QString,std::weak_ptr<linaccess::VbaObject>> controlObjects_;

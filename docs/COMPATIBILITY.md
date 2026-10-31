@@ -125,7 +125,7 @@ Weitere Ansichten, benannte Filter, DataMode/WindowMode/OpenArgs und allgemeine
 Access-Fenstersemantik sind nicht vollständig implementiert. OpenForm lässt das
 native Ziel nun geöffnet und setzt VBA fort; eine eindeutige bestehende Instanz
 wird wiederverwendet. Modal sperrt die anderen Fenster, ohne VBA anzuhalten.
-Die Fensterlebensdauer ist bisher an den aufrufenden Formularbaum gebunden. 185/187 statisch angenommene Prozeduren bedeuten ausdrücklich
+Die Fensterlebensdauer ist vom Aufrufer unabhängig; projektweites Schließen und Quit prüfen native Unload-Abbrüche ([Nachweise](DOCUMENT_LIFETIME_RUNTIME.md)). 185/187 statisch angenommene Prozeduren bedeuten ausdrücklich
 keine entsprechende Ausführungsabdeckung.
 
 
@@ -171,3 +171,10 @@ Last/Requery unabhängig verglichen; sein CodeBehind ist in diesem Bindungstest
 bewusst ausgeblendet. Das ist keine vollständig bestandene Verkaufskette.
 SetWarnings, vollständige Befehls-/Unterformularsemantik und Access-Dialogparität
 bleiben offen.
+
+
+Unabhängige Dokumentlebensdauer und der unveränderte originale Kassenöffner sind
+in [Dokumentlebensdauer](DOCUMENT_LIFETIME_RUNTIME.md) beschrieben. Dynamische
+ComboBox-Eigenschaften verwenden echte mehrspaltige Qt-Modelle, getrennte
+gebundene Werte und ausgeblendete Spalten; [Umfang und Grenzen](DYNAMIC_COMBO_RUNTIME.md).
+Die vollständige ursprüngliche Verkaufskette bleibt unbestätigt.

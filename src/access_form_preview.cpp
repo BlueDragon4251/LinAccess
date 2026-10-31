@@ -22,12 +22,16 @@
 #include <QKeyEvent>
 #include <QTimer>
 #include <QScopedValueRollback>
+#include <QScopeGuard>
 #include <QSignalBlocker>
 #include <QCheckBox>
 #include <QGroupBox>
 #include <QButtonGroup>
 #include <QRadioButton>
 #include <QComboBox>
+#include <QStandardItemModel>
+#include <QTreeView>
+#include <QMainWindow>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -53,6 +57,8 @@ QPointer<AccessFormPreview>& activeDocument() {
     static QPointer<AccessFormPreview> document;
     return document;
 }
+QSet<QString>& closingProjects() { static QSet<QString> projects; return projects; }
+QString projectKey(const QSqlDatabase& db) { return db.connectionName()+QChar(0)+db.databaseName(); }
 int& nativeExecutionDepth() { static thread_local int depth=0; return depth; }
 QVector<QPointer<AccessFormPreview>>& pendingFormDisposals() {
     static thread_local QVector<QPointer<AccessFormPreview>> pending; return pending;
@@ -352,7 +358,7 @@ public:
     void saveRecord() override {
         if (!commandDocument().saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record save cancelled");
     }
-    void quitApplication() override { QApplication::quit(); }
+    void quitApplication() override { AccessFormPreview::quitApplication(); }
     void maximizeForm() override { commandDocument().window()->showMaximized(); }
     void gotoLastRecord() override {
         auto& document=commandDocument();
@@ -1028,33 +1034,65 @@ void AccessFormPreview::selectRecord(int target) {
         if (auto* parent=dynamic_cast<AccessFormPreview*>(ancestor);parent && parent->initialized_ && !parent->loading_) parent->refreshCalculatedControls();
 }
 
-bool AccessFormPreview::prepareClose() {
-    if (closed_ || openCancelled_) return true;
-    if (closing_) return false;
-    QScopedValueRollback<bool> closing(closing_,true);
-    QVector<AccessFormPreview*> documents;
+bool AccessFormPreview::closeDocuments(const QVector<AccessFormPreview*>& roots,AccessFormPreview* closingRoot) {
+    QVector<QPointer<AccessFormPreview>> documents;
     const std::function<void(AccessFormPreview*)> collect=[&](AccessFormPreview* document) {
-        if (document->closed_ || document->openCancelled_) return;
+        if (!document || document->closed_ || document->openCancelled_ || documents.contains(document)) return;
         documents.append(document);
         for (const auto& child : document->subforms_) if (child) collect(child);
-        for (const auto& child : document->openedForms_) if (child) collect(child);
     };
-    collect(this);
-    for (auto* document : documents) if (!document->saveRecord()) return false;
-    for (auto* document : documents) {
+    for (auto* root : roots) collect(root);
+    for (const auto& document : documents) if (document->closing_) return false;
+    for (const auto& document : documents) document->closing_=true;
+    const auto reset=qScopeGuard([&] { for (const auto& document : documents) if (document) document->closing_=false; });
+    for (const auto& document : documents) if (!document || !document->saveRecord()) return false;
+    for (const auto& document : documents) {
+        if (!document) return false;
         const auto unload=document->formEvent("OnUnload","Form_Unload");
         if (unload.cancelled || failed(unload)) return false;
     }
-    if (activeDocument() && documents.contains(activeDocument().data())) {
-        const auto active=activeDocument();
-        activeDocument().clear();
+    if (activeDocument() && documents.contains(activeDocument())) {
+        const auto active=activeDocument(); activeDocument().clear();
         (void)active->formEvent("OnDeactivate","Form_Deactivate");
     }
-    for (auto it=documents.crbegin();it!=documents.crend();++it) {
-        (void)(*it)->formEvent("OnClose","Form_Close"); (*it)->closed_=true;
-        if (*it!=this && (*it)->isWindow()) (void)(*it)->close();
+    for (auto it=documents.crbegin();it!=documents.crend();++it) if (*it) {
+        (void)(*it)->formEvent("OnClose","Form_Close");
+        if (!*it) continue;
+        (*it)->closed_=true;
+        if (*it!=closingRoot && (*it)->isWindow()) (*it)->QDialog::reject();
     }
     return true;
+}
+bool AccessFormPreview::prepareClose() {
+    if (closed_ || openCancelled_) return true;
+    return closeDocuments({this},this);
+}
+bool AccessFormPreview::closeProjectDocuments(const QSqlDatabase& db) {
+    const auto key=projectKey(db);
+    if (closingProjects().contains(key)) return false;
+    closingProjects().insert(key);
+    const auto reset=qScopeGuard([&] { closingProjects().remove(key); });
+    QVector<AccessFormPreview*> roots;
+    for (auto* widget : QApplication::topLevelWidgets())
+        if (auto* document=dynamic_cast<AccessFormPreview*>(widget); document && projectKey(document->db_)==key)
+            roots.append(document);
+    return closeDocuments(roots);
+}
+bool AccessFormPreview::closeApplicationDocuments() {
+    QVector<AccessFormPreview*> roots;
+    QSet<QString> keys;
+    for (auto* widget : QApplication::topLevelWidgets())
+        if (auto* document=dynamic_cast<AccessFormPreview*>(widget); document && !document->closed_ && !document->openCancelled_) {
+            roots.append(document); keys.insert(projectKey(document->db_));
+        }
+    for (const auto& key : keys) if (closingProjects().contains(key)) return false;
+    closingProjects().unite(keys);
+    const auto reset=qScopeGuard([&] { closingProjects().subtract(keys); });
+    return closeDocuments(roots);
+}
+void AccessFormPreview::quitApplication() {
+    if (!closeApplicationDocuments()) throw linaccess::VbaRuntimeError(2501,"Quit action cancelled");
+    QApplication::quit();
 }
 void AccessFormPreview::closeEvent(QCloseEvent* event) {
     if (!prepareClose()) event->ignore(); else QDialog::closeEvent(event);
@@ -1281,17 +1319,53 @@ void AccessFormPreview::requeryControl(std::string_view name) {
             result = linaccess::executeAccessQueryPlan(db_,plan,linaccess::bindAccessQueryParameters(plan,{}));
             if (result.rows.size()>10000) throw linaccess::VbaRuntimeError(3035,"Control row limit exceeded");
         }
-        if (control.boundColumn<0 || control.columnCount<1 || (!result.columns.empty() && control.boundColumn>result.columns.size()))
+        if (control.boundColumn<0 || control.columnCount<1 || control.columnCount>255 || (!result.columns.empty() && control.boundColumn>result.columns.size()))
             throw linaccess::VbaRuntimeError(5,"Invalid row source column configuration");
+        QVector<int> widths;
+        const auto specifications=control.columnWidths.split(';');
+        if (specifications.size()>255) throw linaccess::VbaRuntimeError(5,"Too many column widths");
+        for (auto specification : specifications) {
+            specification=specification.trimmed();
+            if (specification.isEmpty()) { widths.append(-1); continue; }
+            static const QRegularExpression widthPattern(R"(^([0-9]+(?:[.,][0-9]+)?)\s*(cm|mm|in|pt)?$)",QRegularExpression::CaseInsensitiveOption);
+            const auto match=widthPattern.match(specification);
+            if (!match.hasMatch()) throw linaccess::VbaRuntimeError(5,"Invalid column width");
+            auto decimal=match.captured(1); decimal.replace(',','.');
+            const auto amount=decimal.toDouble(); const auto unit=match.captured(2).toLower();
+            const auto scale=unit=="cm" ? 96.0/2.54 : unit=="mm" ? 96.0/25.4 : unit=="in" ? 96.0 : unit=="pt" ? 96.0/72.0 : 1.0/15.0;
+            if (!std::isfinite(amount) || amount*scale>32767) throw linaccess::VbaRuntimeError(5,"Column width out of range");
+            widths.append(qRound(amount*scale));
+        }
         const auto oldValue=getFieldValue(target.toUtf8().toStdString());
         const auto old=linaccess::sqlFieldValue(oldValue,"");
         const QSignalBlocker blocked(combo);
-        combo->clear();
-        for (const auto& row : result.rows) if (!row.isEmpty()) {
-            const auto bound=control.boundColumn==0 ? QVariant(combo->count()) : row[control.boundColumn-1];
-            combo->addItem(row.front().toString(),bound);
-            combo->setItemData(combo->count()-1,row,Qt::UserRole+1);
+        auto* model=new QStandardItemModel(combo);
+        model->setColumnCount(control.columnCount);
+        for (int index=0;index<result.rows.size();++index) {
+            const auto& row=result.rows[index];
+            const auto bound=control.boundColumn==0 ? QVariant(index) : row.value(control.boundColumn-1);
+            for (int column=0;column<control.columnCount;++column) {
+                auto* item=new QStandardItem(row.value(column).toString());
+                item->setData(bound,Qt::UserRole); item->setData(row,Qt::UserRole+1);
+                model->setItem(index,column,item);
+            }
         }
+        auto* previousModel=combo->model();
+        combo->setModel(model);
+        if (previousModel && previousModel->parent()==combo) previousModel->deleteLater();
+        auto* view=qobject_cast<QTreeView*>(combo->view());
+        if (!view) {
+            view=new QTreeView(combo); view->setRootIsDecorated(false); view->setHeaderHidden(true);
+            view->setSelectionBehavior(QAbstractItemView::SelectRows); combo->setView(view);
+        }
+        int displayColumn=-1;
+        for (int column=0;column<control.columnCount;++column) {
+            const auto width=widths.value(column,-1);
+            view->setColumnHidden(column,width==0);
+            if (width>0) view->setColumnWidth(column,width);
+            if (width!=0 && displayColumn<0) displayColumn=column;
+        }
+        combo->setModelColumn(displayColumn<0 ? 0 : displayColumn);
         combo->setProperty("la_rows_loaded",true);
         setText(combo,old.toString()); combo->setProperty("la_null",old.isNull());
         return;
@@ -1344,6 +1418,7 @@ void AccessFormPreview::closeOtherDocument(int type,const std::optional<QString>
 }
 
 void AccessFormPreview::openOtherForm(const QString& name,const QString& where) {
+    if (closing_ || closingProjects().contains(projectKey(db_))) throw linaccess::VbaRuntimeError(2501,"Project is closing");
     AccessFormPreview* existing=nullptr;
     for (auto* widget:QApplication::topLevelWidgets()) {
         auto* document=dynamic_cast<AccessFormPreview*>(widget);
@@ -1377,7 +1452,12 @@ void AccessFormPreview::openOtherForm(const QString& name,const QString& where) 
     const auto code = vba.exec() && vba.next() ? vba.value(0).toByteArray() : QByteArray{}; vba.finish();
     if (linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(form)).kind!=linaccess::AccessDocumentKind::Form)
         throw linaccess::VbaRuntimeError(2102,"OpenForm target is not a form");
-    auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,db_,this,false,where);
+    // Preserve the actual project UI without owning the new document through
+    // its invoking form. Project close validates every independent document.
+    QWidget* projectOwner=nullptr;
+    for (auto* ancestor=parentWidget();ancestor;ancestor=ancestor->parentWidget())
+        if (qobject_cast<QMainWindow*>(ancestor)) { projectOwner=ancestor; break; }
+    auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,db_,projectOwner,false,where);
     const auto validate=[&] {
         for (const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent"})
             if (const auto outcome=nested->eventResult(event);outcome && failed(*outcome))
@@ -1397,8 +1477,6 @@ void AccessFormPreview::openOtherForm(const QString& name,const QString& where) 
     // loop (e.g. MsgBox). Retain all closing native windows until the outermost
     // VBA call unwinds, including callers with executing child handlers.
     QObject::connect(nested.get(),&QDialog::finished,nested.get(),[form=nested.get()] { deferFormDisposal(form); });
-    openedForms_.removeIf([](const auto& document) { return !document || document->closed_; });
-    openedForms_.append(nested.get());
     (void)nested.release();
 }
 

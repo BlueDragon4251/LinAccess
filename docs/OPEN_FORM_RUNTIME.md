@@ -66,7 +66,7 @@ group read. This proves a specific execution path, not the whole application.
 - Immediate Screen.ActiveForm/ActiveControl after OpenForm/SetFocus are tested
   before processing delayed window-manager activation. Screen uses the logical
   active native document and its focused widget, not only OS activation timing.
-- Caller-tree closing saves/validates opened children and respects Unload Cancel.
+- Project closing saves/validates independent opened documents and respects Unload Cancel.
   Closed object references invalidate. A self-closing child can show a real
   MsgBox before its procedure ends: physical QObject deletion waits until the
   outermost native VBA call unwinds, protecting nested Qt event loops.
@@ -77,12 +77,12 @@ group read. This proves a specific execution path, not the whole application.
 
 ## Remaining boundaries
 
-Native opened forms are owned by their calling form tree. Closing that tree
-closes its children; this is not Access's independent application document
-lifetime. Bounded same-project active-document commands and keyboard routing are
-now tested (ACTIVE_DOCUMENT_COMMANDS.md). Full MDI/document management,
-close-time reentrant opening, remaining DoCmd/activation semantics, designer or
-datasheet views, named filter queries, data/window modes (including acDialog)
+Native opened forms now belong to the project window (or an independent top-level
+window), and survive closing/destruction of their invoking form. Project shutdown
+and Quit validate native documents; see [lifecycle evidence](DOCUMENT_LIFETIME_RUNTIME.md).
+Bounded same-project active-document commands and keyboard routing are tested
+(ACTIVE_DOCUMENT_COMMANDS.md). Full MDI, remaining activation/DoCmd semantics,
+designer/datasheet views, named filters, data/window modes (including acDialog)
 and OpenArgs remain open.
 Only currently implemented SQL criteria and record-source binding are available.
 Full reentrant Activate/error semantics require further work and an Access oracle.

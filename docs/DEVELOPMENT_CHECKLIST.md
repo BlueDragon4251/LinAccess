@@ -240,3 +240,15 @@ Full targets remain open:
 - [ ] Full active-subform/navigation/end-of-record and unavailable-command parity,
   remaining command arguments, RunSQL UseTransaction, SetWarnings/Access dialogs,
   complete window event scheduling and the initialized original sale workflow.
+
+
+- [x] Independent OpenForm lifetime through the project window, preserved actual
+  command bars and original opener/target execution after caller Close/destruction.
+- [x] Project switch/main-window close and application Quit validate native Access
+  documents, save records, respect Unload cancellation, reject reentrant shutdown
+  opens and clear guards on both success/cancellation (DOCUMENT_LIFETIME_RUNTIME.md).
+- [x] Dynamic RowSource/RowSourceType/BoundColumn/ColumnCount/ColumnWidths with a
+  typed multicolumn Qt model, hidden columns, actual mouse selection/persistence
+  and failed-assignment recovery (DYNAMIC_COMBO_RUNTIME.md).
+- [ ] Complete native-editor/designer shutdown, Access event/window oracle,
+  full initialized sale workflow and actual report/print comparison.

@@ -865,5 +865,60 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
     for (auto it=failures.cbegin();it!=failures.cend();++it) std::cout<<"Report source category "<<it.key().toStdString()<<": "<<it.value()<<'\n';
     assert(available>0 && cells>0);
     acknowledge.stop();
+    {
+        assert(query.exec("SAVEPOINT original_document_opener"));
+        QByteArray openerCode,openerLayout; QString openerName;
+        for (const auto& entry:objects) {
+            const auto artifact=entry.toObject();
+            if (artifact["sha256"]!="8cde46e4573af8191abdbf9eb66d3993b640bbb249fee202872492d3457ad77b") continue;
+            QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly)); openerCode=input.readAll();
+            assert(QCryptographicHash::hash(openerCode,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1());
+            openerName=artifact["name"].toString().mid(5);
+        }
+        for (const auto& entry:objects) {
+            const auto artifact=entry.toObject();
+            if (artifact["kind"]!="form" || artifact["name"].toString()!=openerName) continue;
+            QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly)); openerLayout=input.readAll();
+            assert(QCryptographicHash::hash(openerLayout,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1());
+        }
+        assert(!openerCode.isEmpty() && !openerLayout.isEmpty());
+        const auto source=linaccess::decodeVbaSource(openerCode);
+        const auto procedures=linaccess::analyzeVba(source.toStdString()).procedures;
+        QString procedure; for (const auto& candidate:procedures) if (candidate.line<=16) procedure=QString::fromStdString(candidate.name);
+        const QRegularExpression openCall(R"re(DoCmd\.OpenForm\s+"([^"]+)")re",QRegularExpression::CaseInsensitiveOption);
+        const auto call=openCall.match(source); assert(call.hasMatch() && !procedure.isEmpty());
+        int unexpectedDialogs=0;
+        QTimer dismissUnexpected; dismissUnexpected.setInterval(1);
+        QObject::connect(&dismissUnexpected,&QTimer::timeout,[&] {
+            if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) { ++unexpectedDialogs; box->accept(); }
+        }); dismissUnexpected.start();
+        QTimer openerDeadline; openerDeadline.setSingleShot(true);
+        QObject::connect(&openerDeadline,&QTimer::timeout,[] { assert(false && "Original document opener timed out"); }); openerDeadline.start(5000);
+        QMainWindow projectWindow;
+        auto* projectToolbar=projectWindow.addToolBar("Project"); projectToolbar->addAction("Test command");
+        projectWindow.menuBar()->addMenu("Project")->addAction(projectToolbar->actions().first());
+        QPointer<AccessFormPreview> target;
+        {
+            AccessFormPreview opener(openerName,openerLayout,openerCode,db,&projectWindow); opener.show();
+            QApplication::setActiveWindow(&opener); QApplication::processEvents();
+            std::vector<linaccess::VbaValue> none;
+            const auto outcome=opener.executeProcedure(procedure,none);
+            if (outcome.status!=linaccess::VbaExecutionStatus::Completed)
+                std::cerr<<"Original document opener: status="<<static_cast<int>(outcome.status)<<", error="<<outcome.errorNumber<<", line="<<outcome.line<<'\n';
+            assert(outcome.status==linaccess::VbaExecutionStatus::Completed && !opener.isVisible());
+            for (auto* widget:QApplication::topLevelWidgets())
+                if (auto* candidate=dynamic_cast<AccessFormPreview*>(widget);candidate && candidate!=&opener && candidate->isVisible()
+                    && makePreviewFormObject(*candidate)->member("Name",{}).asText()==call.captured(1).toStdString()) { assert(!target); target=candidate; }
+            assert(target && target->parentWidget()==&projectWindow);
+            for (const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent"})
+                if (const auto result=target->eventResult(event)) assert(result->status==linaccess::VbaExecutionStatus::Completed);
+        }
+        QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);
+        assert(target && target->isVisible()); assert(target->close());
+        QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!target);
+        openerDeadline.stop(); dismissUnexpected.stop(); assert(unexpectedDialogs==0);
+        assert(query.exec("ROLLBACK TO original_document_opener")); assert(query.exec("RELEASE original_document_opener"));
+        std::cout<<"Original document opener: unchanged handler closes caller, target survives caller destruction\n";
+    }
     testOriginalCalendar(directory,objects,db);
 }

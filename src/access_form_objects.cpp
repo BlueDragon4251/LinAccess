@@ -61,6 +61,16 @@ public:
         auto& preview = checked();
         auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (qobject_cast<QComboBox*>(widget) && (key=="rowsource" || key=="rowsourcetype" || key=="boundcolumn" || key=="columncount" || key=="columnwidths")) {
+            if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected combo property arguments");
+            for (const auto& definition : preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
+                if (key=="rowsource") return linaccess::VbaValue::string(bytes(definition.rowSource));
+                if (key=="rowsourcetype") return linaccess::VbaValue::string(bytes(definition.rowSourceType));
+                if (key=="boundcolumn") return linaccess::VbaValue::numeric(definition.boundColumn);
+                if (key=="columncount") return linaccess::VbaValue::numeric(definition.columnCount);
+                if (key=="columnwidths") return linaccess::VbaValue::string(bytes(definition.columnWidths));
+            }
+        }
         if (key=="column" || key=="spalte") return preview.controlColumnValue(name_,args);
         if (!args.empty() && key!="form" && key!="formular") throw linaccess::VbaRuntimeError(450,"Unexpected control arguments");
         if (key=="form" || key=="formular") {
@@ -119,6 +129,23 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (qobject_cast<QComboBox*>(widget) && (key=="rowsource" || key=="rowsourcetype" || key=="boundcolumn" || key=="columncount" || key=="columnwidths")) {
+            if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null combo property");
+            for (auto& definition : preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
+                const auto previous=definition;
+                if (key=="rowsource") definition.rowSource=text(value.asText());
+                if (key=="rowsourcetype") definition.rowSourceType=text(value.asText());
+                if (key=="columnwidths") definition.columnWidths=text(value.asText());
+                if (key=="boundcolumn" || key=="columncount") {
+                    const auto number=linaccess::sqlFieldValue(value,"INTEGER").toLongLong();
+                    if (number<(key=="columncount" ? 1 : 0) || number>255) throw linaccess::VbaRuntimeError(5,"Invalid combo column configuration");
+                    if (key=="columncount") definition.columnCount=static_cast<int>(number); else definition.boundColumn=static_cast<int>(number);
+                }
+                try { preview.requeryControl(bytes(name_)); }
+                catch (...) { definition=previous; throw; }
+                return;
+            }
+        }
         if (key=="tag") {
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Tag");
             control()->setProperty("la_access_tag",text(value.asText())); return;
@@ -533,6 +560,10 @@ public:
             if (auto* editor=qobject_cast<QLineEdit*>(widget)) editor->selectAll();
             else if (auto* combo=qobject_cast<QComboBox*>(widget);combo && combo->isEditable()) combo->lineEdit()->selectAll();
             return {};
+        }
+        if (key=="quit") {
+            if (!args.empty()) throw linaccess::VbaRuntimeError(3251,"Quit options unsupported");
+            AccessFormPreview::quitApplication(); return {};
         }
         if (key=="openform") {
             const auto request=linaccess::parseVbaOpenFormArguments(args);

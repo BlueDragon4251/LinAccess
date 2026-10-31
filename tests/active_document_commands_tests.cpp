@@ -148,5 +148,6 @@ End Sub
     makePreviewFormObject(foreign)->assignItem("value",VbaValue::string("unsaved foreign"));
     assert(owner.executeProcedure("SaveActive",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(foreignQuery.exec("SELECT value FROM records WHERE id=1") && foreignQuery.next() && foreignQuery.value(0).toString()=="foreign"); foreignQuery.finish();
-    assert(owner.close() && sibling.isVisible()); assert(sibling.close()); assert(foreign.close());
+    assert(owner.close() && sibling.isVisible()); assert(sibling.close());
+    assert(AccessFormPreview::closeProjectDocuments(db)); assert(foreign.isVisible()); assert(foreign.close());
 }

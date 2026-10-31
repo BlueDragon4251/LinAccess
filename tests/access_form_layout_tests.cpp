@@ -33,6 +33,8 @@ void testMessageBoxes();
 void testCalendarValues();
 void testModuleStates(const QDir&,const QJsonArray&);
 void testCloseCommands();
+void testDocumentLifetimes();
+void testDynamicCombos();
 void testOpenFormCommands();
 void testActiveDocumentCommands();
 void testOptionGroups();
@@ -218,6 +220,8 @@ End Sub
     testCalendarValues();
     testModuleStates(directory,objects);
     testCloseCommands();
+    testDocumentLifetimes();
+    testDynamicCombos();
     testOpenFormCommands();
     testActiveDocumentCommands();
     testOptionGroups();

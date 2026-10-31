@@ -360,7 +360,7 @@ Diese Funktion liefert im eingeschränkten Interpreter `10` zurück.
 
 ## Build-Status
 
-Aktuelle lokale Regression (Debian 13 / GCC 14 / Qt 6.8): **11/11 Tests**,
+Aktuelle lokale Regression (Debian 13 / GCC 14 / Qt 6.8): **18/18 Tests**,
 einschließlich vollständigem 29-Tabellen-Zellvergleich und einem echten Kassen-
 DAO-Buttonereignis. Die MDB-Regressionen wurden zusätzlich mit MDBTools 1.0.0
 mehrfach ausgeführt. Externe Debian-/Ubuntu-CI-Ergebnisse bleiben unbestätigt.
@@ -432,8 +432,8 @@ problematisch.
 Ein komplexer originaler `Form_Load` läuft jetzt mit echten eingebetteten
 Unterformularen; 15 dynamische Tags sind gegen die tatsächlichen Datensätze
 geprüft. Berechnete Grundausdrücke, Error-Variants und ComboBox-Spalten sind
-teilweise unterstützt. Sieben Berechnungen und weitere Startup-Ereignisse bleiben
-offen: [Details und Regressionen](docs/NATIVE_FORM_RUNTIME.md).
+teilweise unterstützt. Ein anfänglicher Null-Konvertierungsfehler und vollständige
+Kassenabläufe bleiben offen: [Details und Regressionen](docs/NATIVE_FORM_RUNTIME.md).
 
 
 [OpenForm mit WhereCondition](docs/OPEN_FORM_RUNTIME.md) lädt im begrenzten
@@ -441,3 +441,11 @@ nativen Laufzeitpfad echte gefilterte Datensätze. Ein unveränderter Kassen-Han
 öffnet sein originales Zielformular. Dessen zuvor roter OptionGroup-Test wird
 mit nativen Auswahlknöpfen und numerischem Gruppenwert erfüllt. Weitere
 Access-Fenstermodi und vollständige Ereignissemantik bleiben offen.
+
+
+[Unabhängige Dokumente und Quit](docs/DOCUMENT_LIFETIME_RUNTIME.md) erhalten
+OpenForm-Ziele nach dem Schließen und Zerstören des Aufrufers. Der unveränderte
+originale Kassenöffner und seine Zielereignisse werden ausgeführt; Projektwechsel
+und Quit prüfen native Unload-Abbrüche. [Dynamische ComboBox-Eigenschaften](docs/DYNAMIC_COMBO_RUNTIME.md)
+verwenden echte mehrspaltige Qt-Modelle mit getrennten Anzeige-/Bindewerten und
+Spaltenbreiten. Das ist keine vollständig geprüfte ursprüngliche Verkaufskette.

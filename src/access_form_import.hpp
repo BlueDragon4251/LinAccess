@@ -33,6 +33,7 @@ struct AccessVisualControl {
     QString rowSourceType;
     int boundColumn{1};
     int columnCount{1};
+    QString columnWidths;
     QString sourceObject;
     QString linkMasterFields;
     QString linkChildFields;

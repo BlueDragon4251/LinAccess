@@ -24,7 +24,8 @@ Supported and tested:
 - DAO `Fields`, `Fields.Count`, `Fields.Item(name/index)` and enumeration of actual
   Field objects. Field.Value remains bound to the recordset edit buffer.
 - Object method arguments without parentheses, including `Err.Raise 11`.
-- `DoCmd.Quit` requests Qt application termination.
+- `DoCmd.Quit` validates native Access documents and honors Unload cancellation
+  before Qt application termination (DOCUMENT_LIFETIME_RUNTIME.md).
 - Variant Empty versus Null, Null-aware Boolean logic, numeric bitwise And/Or/Not,
   comparison-before-Not precedence, CLng tie-to-even rounding and Long overflow,
   Null propagation for Len and explicit invalid-Null errors for CStr.

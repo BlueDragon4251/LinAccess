@@ -16,6 +16,7 @@ public:
     ~MainWindow() override;
 
 private:
+    void closeEvent(QCloseEvent* event) override;
     QSqlDatabase db_;
     QString databasePath_;
     QTreeWidget* explorer_{};

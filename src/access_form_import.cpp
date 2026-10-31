@@ -153,6 +153,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "RowSourceType") control.rowSourceType = value;
             else if (key == "BoundColumn") control.boundColumn = integer();
             else if (key == "ColumnCount") control.columnCount = integer();
+            else if (key == "ColumnWidths") control.columnWidths = value;
             else if (key == "SourceObject") control.sourceObject = value;
             else if (key == "LinkMasterFields") control.linkMasterFields = value;
             else if (key == "LinkChildFields") control.linkChildFields = value;
