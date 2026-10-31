@@ -24,23 +24,18 @@ fails explicitly instead of claiming it executed Format$.
 
 ## Evidence and remaining original-query blockers
 
-The 15-test suite covers year/month/day output, leap days, negative OA fractions,
+The date-format regression suite covers year/month/day output, leap days, negative OA fractions,
 invalid clocks/dates, NULL, overflow, German/US Long Date locale output, stored
 query dependencies, SQL and real Qt VBA button execution. The original 29-table
 MDB regression additionally executes Format$ on actual non-NULL values in ten
 original date columns and verifies year/month/day against the stored ISO values.
 Original fixture hashes remain unchanged.
 
-All 100 original Kassa queries are still classified. Current results: 38 execute
-without an Access reference oracle, 31 have unresolved dependencies, 22 fail in
-function/compilation handling, 5 have other unsupported binding cases, 2 exceed
-execution budgets and 2 action queries remain unexecuted by the read-only runner.
-
-Three original report queries now pass their former Format$ syntax failure but
-reach a stored-query dependency that requires the still-unsupported concatenation
-operator. Five further report sources directly require that operator. Therefore
-report binding remains one of nine sources / 22 non-NULL controls at this stage;
-no new original report success is inferred from fixing the lexer.
+All 100 original Kassa queries are still classified. Subsequent concatenation
+support now executes 49 of them and binds six of nine original report sources to
+54 non-NULL controls (SQL_CONCATENATION.md). Three report sources still require
+localized SQL form references; fixing syntax alone does not establish complete
+original report execution.
 
 Qt locale output is not proof of the original Windows/Access locale. Database
 locale metadata and Microsoft Access reference results are still needed for

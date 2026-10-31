@@ -89,6 +89,7 @@ Full targets remain open:
 - [ ] Jet/ACE SQL parser/translator, parameters and saved query dependency resolution.
 - [ ] JOIN/DISTINCT/UNION/TOP, TRANSFORM/PIVOT and Access expressions/functions.
 - [x] Bounded date Format/Format$ masks in SQL/VBA; actual values from ten original date columns, NULL/error/locale/DST tests.
+- [x] Native SQL concatenation with arithmetic/Boolean boundaries, NULL and dynamic LIKE regression; original query execution 49/100.
 - [ ] Complete date/format masks, wildcard semantics, Null/coercion, DDL/DML and action queries.
 - [ ] Execute and classify all 100 Kassa queries against the imported database copy.
 - [x] Bounded read-only saved-query form sources and translated navigator results with explicit typed parameter prompts.
@@ -96,7 +97,7 @@ Full targets remain open:
 - [ ] Navigator, datasheet/form/design views, properties, toolbox, undo/redo and SQL designer.
 - [ ] Fonts/colors/geometry/default control properties and Access 2003 layout parity.
 - [ ] Embedded linked subforms, tab/option groups, combos/lists and expression controls.
-- [x] Bound Report_Open/Close/NoData, cancellation and read-only sources; all 9 original report sources classified, one binds 22 actual non-NULL controls.
+- [x] Bound Report_Open/Close/NoData, cancellation and read-only sources; all 9 original report sources classified, six bind 54 actual non-NULL controls.
 - [ ] Report sections/grouping/aggregates/headers/footers/pagination and complete report event order.
 - [x] Native current-layout single-page print/PDF preview and CommandBars adapter; three original Report_Open procedures executed explicitly.
 - [ ] Full report print/PDF pagination and output compared against original reference reports.

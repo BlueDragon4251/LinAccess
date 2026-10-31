@@ -1,7 +1,7 @@
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
-#include "access_format.hpp"
+#include "jet_sql_functions.hpp"
 #include "sqlite_execution.hpp"
 #include <QSqlError>
 #include <QSqlQuery>
@@ -21,8 +21,8 @@ void exec(QSqlQuery& query, const QString& sql) {
 }
 [[noreturn]] void queryFailure(const QSqlQuery& query) {
     const auto message = query.lastError().text().toCaseFolded();
-    if (const auto code=accessFormatErrorNumber(message.toUtf8().toStdString()))
-        throw VbaRuntimeError(*code,"Jet date format argument invalid");
+    if (const auto code=jetSqlFunctionErrorNumber(message.toUtf8().toStdString()))
+        throw VbaRuntimeError(*code,"Jet SQL function argument invalid");
     if (message.contains("no such function")) throw VbaRuntimeError(3085,"DAO: SQL function unsupported");
     if (message.contains("no such table")) throw VbaRuntimeError(3078,"DAO: SQL dependency unavailable");
     if (message.contains("syntax error") || message.contains("circularly defined")) throw VbaRuntimeError(3075,"DAO: SQL grammar unsupported");

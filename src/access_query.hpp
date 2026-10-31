@@ -40,6 +40,7 @@ private:
 };
 // Jet ANSI-89 strings, named PARAMETERS and basic LIKE patterns. Unsupported
 // grammar remains an explicit error; this is not a complete Jet SQL translator.
+QString accessLikePattern(const QString& value);
 AccessQueryPlan compileAccessQuery(const QString& source);
 int installAccessQueryViews(QSqlDatabase db, bool freshConnection = false);
 QString accessQuerySource(QSqlDatabase db, const QString& name);

@@ -38,8 +38,8 @@ Implemented with execution tests:
 ## Original corpus measurement
 
 All 100 original Kassa query artifacts are hash-checked and classified against a
-separate imported SQLite database. Current local run: 38 executed, 31 missing a
-query dependency, 22 unsupported function/compilation cases, 5 other unsupported
+separate imported SQLite database. Current local run: 49 executed, 19 missing a
+query dependency, 6 unsupported function/compilation cases, 22 other unsupported
 Jet/binding cases, 2 execution-budget failures and 2 action queries unexecuted by
 this corpus runner. Action query mutation is verified separately with typed
 QueryDefs tests. No row values or raw SQL are emitted in corpus reports.
@@ -82,8 +82,7 @@ close/reopen does not retain stale native-handle state.
 The model regression contrasts the SQLite built-in with the Jet adapter using
 an integer-overflow error in an unselected argument; the Jet path must fail.
 Numeric/text/NULL results, condition coercion and connection reopen are covered.
-The original query corpus still has 38 successful executions without an Access
-reference oracle. Remaining expression differences include SQLite division by
+Current original-query coverage is measured above. Remaining expression differences include SQLite division by
 zero producing NULL and exact Jet numeric/locale behavior; eager IIf alone does
 not resolve those differences.
 
@@ -99,13 +98,8 @@ implement MDB OLE import or a VBA BLOB Variant.
 
 Selection follows the SQLite input scan order. Access also does not promise a
 particular First/Last result without an established record order; SQLite and Jet
-can choose different scans. No cross-engine equality claim is made. The original
-100-query run now executes 38 queries (one more than before this package), with
-22 function/compilation failures, 31 missing dependencies, 5 other unsupported
-cases, 2 execution-budget failures and 2 action queries left unexecuted by the
-read-only corpus runner. All statuses remain explicit and lack an Access oracle.
+can choose different scans. No cross-engine equality claim is made. Current corpus status is measured above; it remains without an Access oracle.
 
-Date Format/Format$ and the current query/report measurements are described in
-DATE_FORMAT.md. Three former grammar failures now expose a concatenation-dependent
-saved query; the successful execution count remains 38 rather than implying that
-format support alone executes those reports.
+Date Format/Format$ is described in DATE_FORMAT.md. Native concatenation and
+current original query/report measurements are described in SQL_CONCATENATION.md.
+Localized form references remain a separate unresolved SQL feature.

@@ -38,12 +38,12 @@ actions are inspected, and temporary one-page PDFs remain covered separately.
 A separate nine-report corpus test imports all 29 original Kassa tables and all
 100 query artifacts into a temporary SQLite copy. It loads the original report
 layouts without their VBA modules to measure record binding independently of
-procedure execution. Current result: one report source executes and binds 22
+procedure execution. Current result: six report sources execute and bind 54
 non-NULL textbox values. Values and NULL flags are compared directly with a
 prepared SQLite reference reader. All reports stay read-only.
 
-Five remaining sources require concatenation, and three Format$ date sources
-reach a saved-query dependency that also requires concatenation (DATE_FORMAT.md). They are explicitly failed
+Three remaining sources require localized SQL Formulare!form!control references.
+They are explicitly failed
 sources, not empty reports. The ignored private-report-inventory.json contains
 artifact hashes, status and counts only; vba_executed=false is explicit for this
 separate data inventory. Neither query execution nor binding proves agreement

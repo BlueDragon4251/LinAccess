@@ -1,5 +1,5 @@
 #include "access_query.hpp"
-#include "access_format.hpp"
+#include "jet_sql_functions.hpp"
 #include "sqlite_execution.hpp"
 #include <QSqlError>
 #include <QSqlRecord>
@@ -75,13 +75,89 @@ QVector<Token> tokenize(const QString& sql) {
             }
             result.append({Token::Other,sql.mid(start,i-start)});
         } else {
-            require(ch != '&', "Jet SQL: concatenation requires a dedicated adapter");
             QString op(ch); ++i;
             if (i < sql.size() && ((ch == '<' && (sql[i] == '>' || sql[i] == '=')) || (ch == '>' && sql[i] == '='))) op += sql[i++];
             result.append({Token::Other,op});
         }
     }
     return result;
+}
+// Wrap concatenation operands before SQL emission. Arithmetic stays inside each
+// operand; comparison, Boolean and clause boundaries remain outside. Parentheses
+// are scanned structurally, including nested function arguments and subqueries.
+bool symbol(const Token& token,const char* value) { return token.kind==Token::Other && token.value==value; }
+bool expressionBoundary(const QVector<Token>& tokens,qsizetype index) {
+    const auto& token=tokens[index];
+    if (token.kind==Token::Other) {
+        static const QSet<QString> symbols{",",";","&","=","<",">","<=",">=","<>"};
+        return symbols.contains(token.value);
+    }
+    if (token.kind!=Token::Word) return false;
+    // Reserved words used as function names are atomic with their arguments.
+    if ((token.value.compare("Left",Qt::CaseInsensitive)==0 || token.value.compare("Right",Qt::CaseInsensitive)==0)
+        && index+1<tokens.size() && symbol(tokens[index+1],"(")) return false;
+    static const QSet<QString> words{"select","from","where","group","order","having","by","as","on",
+        "join","left","right","inner","outer","full","cross","union","except","intersect","limit","offset",
+        "when","then","else","end","case","set","values","into","update","delete","insert","top","distinct",
+        "distinctrow","parameters","pivot","transform","asc","desc","and","or","xor","eqv","imp","not","is","like","in","between"};
+    return words.contains(token.value.toCaseFolded());
+}
+qsizetype operandEnd(const QVector<Token>& tokens,qsizetype start) {
+    int depth=0;
+    auto end=start;
+    while (end<tokens.size()) {
+        if (symbol(tokens[end],"(")) ++depth;
+        else if (symbol(tokens[end],")")) { if (depth==0) break; --depth; }
+        else if (depth==0 && expressionBoundary(tokens,end)) break;
+        ++end;
+    }
+    return end;
+}
+void replaceTokens(QVector<Token>& tokens,qsizetype first,qsizetype last,const QVector<Token>& replacement) {
+    tokens.erase(tokens.begin()+first,tokens.begin()+last);
+    for (qsizetype i=replacement.size();i>0;--i) tokens.insert(first,replacement[i-1]);
+}
+void adaptConcatenation(QVector<Token>& tokens,qsizetype start) {
+    int count=0;
+    while (true) {
+        qsizetype amp=start;
+        while (amp<tokens.size() && !symbol(tokens[amp],"&")) ++amp;
+        if (amp==tokens.size()) break;
+        require(++count<=128,"Jet SQL: concatenation expression limit exceeded");
+        qsizetype first=amp;
+        int depth=0;
+        for (qsizetype i=amp-1;i>=start;--i) {
+            if (symbol(tokens[i],")")) ++depth;
+            else if (symbol(tokens[i],"(")) { if (depth==0) break; --depth; }
+            else if (depth==0 && expressionBoundary(tokens,i)) break;
+            first=i;
+        }
+        const auto last=operandEnd(tokens,amp+1);
+        require(first<amp && last>amp+1,"Jet SQL: concatenation operand missing");
+        QVector<Token> replacement{{Token::Word,"linaccess_jet_concat"},{Token::Other,"("}};
+        replacement+=tokens.mid(first,amp-first);
+        replacement.append({Token::Other,","});
+        replacement+=tokens.mid(amp+1,last-amp-1);
+        replacement.append({Token::Other,")"});
+        replaceTokens(tokens,first,last,replacement);
+    }
+}
+void adaptDynamicLike(QVector<Token>& tokens,qsizetype start,const QMap<QString,int>& parameters) {
+    for (qsizetype i=tokens.size()-1;i>=start;--i) {
+        if (tokens[i].kind!=Token::Word || tokens[i].value.compare("LIKE",Qt::CaseInsensitive)!=0) continue;
+        const auto last=operandEnd(tokens,i+1);
+        require(last>i+1,"Jet SQL: LIKE operand missing");
+        const auto& first=tokens[i+1];
+        const bool simple=last==i+2 && (first.kind==Token::String ||
+            ((first.kind==Token::Identifier || first.kind==Token::Word) && parameters.contains(first.value.toCaseFolded())));
+        if (simple) continue;
+        QVector<Token> replacement{{Token::Word,"linaccess_jet_like_pattern"},{Token::Other,"("}};
+        replacement+=tokens.mid(i+1,last-i-1);
+        replacement.append({Token::Other,")"});
+        replacement.append({Token::Word,"ESCAPE"});
+        replacement.append({Token::String,"\\"});
+        replaceTokens(tokens,i+1,last,replacement);
+    }
 }
 QString pattern(const QString& input) {
     require(!input.contains('[') && !input.contains(']') && !input.contains('#'), "Jet SQL: LIKE character classes unsupported");
@@ -94,6 +170,7 @@ QString pattern(const QString& input) {
     return result;
 }
 }
+QString accessLikePattern(const QString& value) { return pattern(value); }
 AccessQueryPlan compileAccessQuery(const QString& source) {
     auto tokens = tokenize(source);
     require(!tokens.empty(), "Jet SQL: empty query");
@@ -125,6 +202,8 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
         }
     }
     require(pos < tokens.size(), "Jet SQL: query body required");
+    adaptConcatenation(tokens,pos);
+    adaptDynamicLike(tokens,pos,parameters);
     const auto word = [&](qsizetype index, const char* value) {
         return index >= 0 && index < tokens.size() && tokens[index].kind == Token::Word
             && tokens[index].value.compare(value,Qt::CaseInsensitive) == 0;
@@ -219,7 +298,8 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
         const bool like = i > pos && tokens[i-1].kind == Token::Word && tokens[i-1].value.compare("LIKE",Qt::CaseInsensitive) == 0;
         const bool qualified = (i > pos && tokens[i-1].value == ".") || (i + 1 < tokens.size() && tokens[i+1].value == ".");
         const auto param = parameters.constFind(token.value.toCaseFolded());
-        if ((token.kind == Token::Word || token.kind == Token::Identifier) && !qualified && param != parameters.cend()) {
+        if ((token.kind == Token::Word || token.kind == Token::Identifier) && !qualified && param != parameters.cend()
+            && !(i+1<tokens.size() && symbol(tokens[i+1],"("))) {
             plan.parameters[*param].likePattern |= like;
             plan.parameters[*param].direct |= !like;
             output << plan.parameters[*param].binding + (like ? "_like" : "");
@@ -339,8 +419,8 @@ AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan&
     QSqlQuery query(db);
     const auto fail = [&]() {
         const auto error = query.lastError().text().toCaseFolded();
-        if (const auto code=accessFormatErrorNumber(error.toUtf8().toStdString()))
-            throw VbaRuntimeError(*code,"Jet date format argument invalid");
+        if (const auto code=jetSqlFunctionErrorNumber(error.toUtf8().toStdString()))
+            throw VbaRuntimeError(*code,"Jet SQL function argument invalid");
         if (error.contains("no such function")) throw VbaRuntimeError(3085,"SQL function unsupported");
         if (error.contains("no such table")) throw VbaRuntimeError(3078,"SQL dependency unavailable");
         if (error.contains("interrupted")) throw VbaRuntimeError(3035,"Query execution budget exceeded");

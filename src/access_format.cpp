@@ -4,19 +4,7 @@
 #include <QLocale>
 #include <QRegularExpression>
 #include <cmath>
-#include <charconv>
 namespace linaccess {
-std::optional<int> accessFormatErrorNumber(std::string_view foldedMessage) {
-    constexpr std::string_view prefix="linaccess format error ";
-    const auto position=foldedMessage.find(prefix);
-    if (position==std::string_view::npos) return {};
-    const auto code=foldedMessage.substr(position+prefix.size());
-    int number=0;
-    const auto parsed=std::from_chars(code.data(),code.data()+code.size(),number);
-    if (parsed.ec!=std::errc{}) return {};
-    if (number==5 || number==6 || number==7 || number==13 || number==94) return number;
-    return {};
-}
 VbaValue formatAccessValue(const VbaValue& value,std::string_view mask,bool stringResult) {
     if (value.kind==VbaValue::Kind::Null && stringResult)
         throw VbaRuntimeError(94,"Format$: invalid use of Null");

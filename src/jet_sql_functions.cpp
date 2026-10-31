@@ -1,5 +1,10 @@
 #include "jet_sql_functions.hpp"
 #include "access_format.hpp"
+#include "access_query.hpp"
+#include <QLocale>
+#include <charconv>
+#include <cmath>
+#include <cstring>
 #include "vba_runtime.hpp"
 #include <QLibrary>
 #include <QSqlDriver>
@@ -16,6 +21,7 @@ struct Api {
     Create create{};
     int (*type)(sqlite3_value*){};
     double (*number)(sqlite3_value*){};
+    qlonglong (*integer)(sqlite3_value*){};
     const unsigned char* (*text)(sqlite3_value*){};
     int (*bytes)(sqlite3_value*){};
     void (*result)(sqlite3_context*,sqlite3_value*){};
@@ -30,6 +36,7 @@ struct Api {
         create = reinterpret_cast<Create>(library.resolve("sqlite3_create_function_v2"));
         type = reinterpret_cast<decltype(type)>(library.resolve("sqlite3_value_type"));
         number = reinterpret_cast<decltype(number)>(library.resolve("sqlite3_value_double"));
+        integer = reinterpret_cast<decltype(integer)>(library.resolve("sqlite3_value_int64"));
         text = reinterpret_cast<decltype(text)>(library.resolve("sqlite3_value_text"));
         bytes = reinterpret_cast<decltype(bytes)>(library.resolve("sqlite3_value_bytes"));
         result = reinterpret_cast<decltype(result)>(library.resolve("sqlite3_result_value"));
@@ -40,9 +47,55 @@ struct Api {
         nullResult = reinterpret_cast<decltype(nullResult)>(library.resolve("sqlite3_result_null"));
         textResult = reinterpret_cast<decltype(textResult)>(library.resolve("sqlite3_result_text"));
     }
-    bool valid() const { return create && type && number && text && bytes && result && error && aggregate && duplicate && freeValue && nullResult && textResult; }
+    bool valid() const { return create && type && number && integer && text && bytes && result && error && aggregate && duplicate && freeValue && nullResult && textResult; }
 };
 Api& api() { static Api value; return value; }
+void functionError(sqlite3_context* context,const VbaRuntimeError& error) noexcept {
+    constexpr char prefix[]="LinAccess SQL function error ";
+    char buffer[80];
+    std::memcpy(buffer,prefix,sizeof(prefix)-1);
+    const auto result=std::to_chars(buffer+sizeof(prefix)-1,buffer+sizeof(buffer),error.number);
+    api().error(context,buffer,static_cast<int>(result.ptr-buffer));
+}
+QString scalarText(sqlite3_value* value) {
+    auto& native=api();
+    const auto type=native.type(value);
+    if (type==5) return {};
+    if (type==3) {
+        const auto* text=native.text(value);
+        if (!text) throw VbaRuntimeError(7,"SQL string unavailable");
+        return QString::fromUtf8(reinterpret_cast<const char*>(text),native.bytes(value));
+    }
+    QLocale locale;
+    locale.setNumberOptions(locale.numberOptions()|QLocale::OmitGroupSeparator);
+    if (type==1) return locale.toString(native.integer(value));
+    if (type==2) {
+        const auto number=native.number(value);
+        if (!std::isfinite(number)) throw VbaRuntimeError(6,"SQL numeric string overflow");
+        return locale.toString(number,'g',15);
+    }
+    throw VbaRuntimeError(13,"SQL value cannot be concatenated");
+}
+void returnText(sqlite3_context* context,const QString& value) {
+    const auto bytes=value.toUtf8();
+    api().textResult(context,bytes.constData(),bytes.size(),reinterpret_cast<void (*)(void*)>(-1));
+}
+void concatenate(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+    auto& native=api();
+    try {
+        if (native.type(args[0])==5 && native.type(args[1])==5) { native.nullResult(context); return; }
+        returnText(context,scalarText(args[0])+scalarText(args[1]));
+    } catch (const VbaRuntimeError& error) { functionError(context,error); }
+      catch (...) { native.error(context,"Jet concatenation failed",-1); }
+}
+void likePattern(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+    auto& native=api();
+    try {
+        if (native.type(args[0])==5) { native.nullResult(context); return; }
+        returnText(context,accessLikePattern(scalarText(args[0])));
+    } catch (const VbaRuntimeError& error) { functionError(context,error); }
+      catch (...) { native.error(context,"Jet LIKE pattern failed",-1); }
+}
 void iif(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native = api();
     try {
@@ -79,10 +132,8 @@ void formatDate(sqlite3_context* context,sqlite3_value** args,bool stringResult)
         const auto result=formatAccessValue(input,readText(args[1]),stringResult);
         if (result.kind==VbaValue::Kind::Null) native.nullResult(context);
         else native.textResult(context,result.text.data(),static_cast<int>(result.text.size()),reinterpret_cast<void (*)(void*)>(-1));
-    } catch (const VbaRuntimeError& error) {
-        const auto message="LinAccess Format error "+std::to_string(error.number);
-        native.error(context,message.c_str(),message.size());
-    } catch (...) { native.error(context,"Jet date format failed",-1); }
+    } catch (const VbaRuntimeError& error) { functionError(context,error); }
+      catch (...) { native.error(context,"Jet date format failed",-1); }
 }
 void formatString(sqlite3_context* context,int,sqlite3_value** args) noexcept { formatDate(context,args,true); }
 void formatVariant(sqlite3_context* context,int,sqlite3_value** args) noexcept { formatDate(context,args,false); }
@@ -113,6 +164,17 @@ void aggregateFinal(sqlite3_context* context) noexcept {
 }
 
 }
+std::optional<int> jetSqlFunctionErrorNumber(std::string_view foldedMessage) {
+    constexpr std::string_view prefix="linaccess sql function error ";
+    const auto position=foldedMessage.find(prefix);
+    if (position==std::string_view::npos) return {};
+    const auto code=foldedMessage.substr(position+prefix.size());
+    int number=0;
+    const auto parsed=std::from_chars(code.data(),code.data()+code.size(),number);
+    if (parsed.ec!=std::errc{}) return {};
+    if (number==5 || number==6 || number==7 || number==13 || number==94 || number==3085) return number;
+    return {};
+}
 void installJetSqlFunctions(QSqlDatabase db) {
     auto& native = api();
     auto handle = db.driver()->handle();
@@ -136,5 +198,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
     ensure("linaccess_jet_format_string",2,&formatString,nullptr,nullptr);
     ensure("linaccess_jet_format",2,&formatVariant,nullptr,nullptr);
+    ensure("linaccess_jet_concat",2,&concatenate,nullptr,nullptr);
+    ensure("linaccess_jet_like_pattern",1,&likePattern,nullptr,nullptr);
 }
 }
