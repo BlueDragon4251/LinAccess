@@ -14,6 +14,9 @@
 #include "vba_source_codec.hpp"
 
 #include <QApplication>
+#include <QCalendarWidget>
+#include <QDate>
+#include <QDateTime>
 #include <QCloseEvent>
 #include <QKeyEvent>
 #include <QTimer>
@@ -123,6 +126,7 @@ bool failed(const linaccess::VbaExecutionResult& result) {
     return result.status == linaccess::VbaExecutionStatus::Error || result.status == linaccess::VbaExecutionStatus::Unsupported;
 }
 QString textOf(QWidget* editor) {
+    if (auto* calendar=qobject_cast<QCalendarWidget*>(editor)) return calendar->selectedDate().toString(Qt::ISODate)+" 00:00:00";
     if (auto* line = qobject_cast<QLineEdit*>(editor)) return line->text();
     if (auto* checkbox = qobject_cast<QCheckBox*>(editor)) return checkbox->isChecked() ? "-1" : "0";
     if (auto* combo = qobject_cast<QComboBox*>(editor)) {
@@ -133,7 +137,10 @@ QString textOf(QWidget* editor) {
     return {};
 }
 void setText(QWidget* editor, const QString& text) {
-    if (auto* line = qobject_cast<QLineEdit*>(editor)) line->setText(text);
+    if (auto* calendar=qobject_cast<QCalendarWidget*>(editor)) {
+        const auto date=QDate::fromString(text.left(10),Qt::ISODate); if (date.isValid()) calendar->setSelectedDate(date);
+    }
+    else if (auto* line = qobject_cast<QLineEdit*>(editor)) line->setText(text);
     else if (auto* checkbox = qobject_cast<QCheckBox*>(editor))
         checkbox->setChecked(text == "-1" || text == "1" || text.compare("true", Qt::CaseInsensitive) == 0);
     else if (auto* combo = qobject_cast<QComboBox*>(editor)) {
@@ -495,6 +502,21 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             auto* label = new QLabel(control.caption, canvas);
             label->setWordWrap(true);
             widget = label;
+        } else if (control.type=="CustomControl" && (control.className.compare("MSCAL.Calendar.7",Qt::CaseInsensitive)==0 || control.className.compare("MSCAL.Kalender-Steuerelement.7",Qt::CaseInsensitive)==0)) {
+            auto* calendar=new QCalendarWidget(canvas);
+            calendar->setDateRange(QDate(100,1,1),QDate(9999,12,31));
+            calendar->setMinimumSize(0,0); widget=calendar;
+            calendar->setProperty("la_calendar_bound",!control.controlSource.isEmpty());
+            if (!control.controlSource.isEmpty()) { calendar->setEnabled(false); calendar->setToolTip("Kalender-Datenbindung wird noch nicht unterstützt."); }
+            auto clickBinding=control.onClick;
+            // MSCAL's source-interface Click event is stored in CodeBehind,
+            // without a SaveAsText OnClick property in the original export.
+            if (clickBinding.isEmpty() && linaccess::validateVbaProcedure(vba_.toUtf8().toStdString(),(eventName(control.name)+"_Click").toStdString()).status!=linaccess::VbaExecutionStatus::ProcedureMissing)
+                clickBinding="[Event Procedure]";
+            if (!clickBinding.isEmpty()) connect(calendar,&QCalendarWidget::clicked,this,[this,name=control.name,binding=clickBinding,calendar](const QDate&) {
+                calendar->setProperty("la_null",false); markDirty(name);
+                (void)runControlBinding(name,"Click",binding);
+            });
         } else if (control.type == "TextBox") {
             auto* edit = new QLineEdit(canvas);
             edit->setReadOnly(control.controlSource.startsWith('='));
@@ -508,10 +530,9 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         } else if (control.type == "CommandButton" || control.type == "ToggleButton") {
             auto* button = new QPushButton(control.caption.isEmpty() ? control.name : control.caption, canvas);
             widget = button;
-            if (eventProcedure(control.onClick)) {
-                const auto event = eventName(control.name) + "_Click";
-                connect(button, &QPushButton::clicked, this, [this,event] { (void)runHandler(event); });
-            }
+            if (!control.onClick.isEmpty()) connect(button,&QPushButton::clicked,this,[this,name=control.name,binding=control.onClick] {
+                (void)runControlBinding(name,"Click",binding);
+            });
         } else if (control.type == "Subform") {
             try {
                 if (!control.linkMasterFields.isEmpty() || !control.linkChildFields.isEmpty())
@@ -552,7 +573,11 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         widget->setVisible(control.visible);
         if (!control.name.isEmpty()) controls_.insert(control.name.toCaseFolded(), widget);
         const auto name = control.name;
-        widget->setProperty("la_null",true);
+        widget->setProperty("la_null",!qobject_cast<QCalendarWidget*>(widget));
+        if (!control.onDblClick.isEmpty()) {
+            widget->setProperty("la_access_dblclick",control.onDblClick);
+            widget->setProperty("la_access_control_name",control.name); widget->installEventFilter(this);
+        }
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Null));
         if (auto* line = qobject_cast<QLineEdit*>(widget)) {
             connect(line,&QLineEdit::textChanged,this,[this,name,widget] {
@@ -907,6 +932,10 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
         const auto row=currentRecordIndex_-1;
         return row>=0 && row<recordRows_.size() ? linaccess::qtFieldValue(recordRows_[row][index],dataTypes_.value(key.toCaseFolded())) : linaccess::VbaValue{};
     }
+    if (auto* calendar=qobject_cast<QCalendarWidget*>(widget)) {
+        if (calendar->property("la_calendar_bound").toBool()) throw linaccess::VbaRuntimeError(3251,"Bound calendar adapter is unsupported");
+        return widget->property("la_null").toBool() ? linaccess::VbaValue{} : linaccess::VbaValue::string((calendar->selectedDate().toString(Qt::ISODate)+" 00:00:00").toStdString());
+    }
     if (!qobject_cast<QLineEdit*>(widget) && !qobject_cast<QComboBox*>(widget) && !qobject_cast<QCheckBox*>(widget))
         throw linaccess::VbaRuntimeError(438,"Control has no Value property");
     if (static_cast<linaccess::VbaValue::Kind>(widget->property("la_vba_kind").toInt())==linaccess::VbaValue::Kind::Error)
@@ -990,6 +1019,17 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
     ensureWritableControl(name);
     auto* widget = controls_.value(QString::fromUtf8(name.data(),name.size()).toCaseFolded()).data();
     if (!widget) throw linaccess::VbaRuntimeError(2465,"Unknown form control");
+    if (auto* calendar=qobject_cast<QCalendarWidget*>(widget)) {
+        if (calendar->property("la_calendar_bound").toBool()) throw linaccess::VbaRuntimeError(3251,"Bound calendar adapter is unsupported");
+        if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Calendar requires a date");
+        if (value.kind!=linaccess::VbaValue::Kind::Text) throw linaccess::VbaRuntimeError(13,"Calendar requires an ISO date value");
+        const auto text=QString::fromStdString(value.text); const auto date=QDate::fromString(text.left(10),Qt::ISODate);
+        if (!date.isValid() || (text.size()!=10 && (text.size()!=19 || !QDateTime::fromString(text,"yyyy-MM-dd HH:mm:ss").isValid()))
+            || date<calendar->minimumDate() || date>calendar->maximumDate()) throw linaccess::VbaRuntimeError(13,"Invalid calendar date");
+        if (text.size()==19 && QDateTime::fromString(text,"yyyy-MM-dd HH:mm:ss").time()!=QTime(0,0))
+            throw linaccess::VbaRuntimeError(3251,"Calendar time components are unsupported");
+        calendar->setSelectedDate(date); calendar->setProperty("la_null",false); markDirty(QString::fromUtf8(name.data(),name.size())); return;
+    }
     if (value.kind==linaccess::VbaValue::Kind::Error) {
         bool unbound=false;
         for (const auto& control : layout_.controls)
@@ -1128,6 +1168,27 @@ void AccessFormPreview::openOtherForm(const QString& name) {
     const auto code = vba.exec() && vba.next() ? vba.value(0).toByteArray() : QByteArray{};
     AccessFormPreview nested(name, form, code, db_, this);
     if (!nested.cancelledByOpen()) nested.exec();
+}
+
+bool AccessFormPreview::eventFilter(QObject* watched,QEvent* event) {
+    if (event->type()==QEvent::MouseButtonDblClick) {
+        const auto binding=watched->property("la_access_dblclick").toString();
+        if (!binding.isEmpty()) {
+            const auto result=runControlBinding(watched->property("la_access_control_name").toString(),"DblClick",binding);
+            if (result.cancelled || failed(result)) return true;
+        }
+    }
+    return QDialog::eventFilter(watched,event);
+}
+linaccess::VbaExecutionResult AccessFormPreview::runControlBinding(const QString& control,const QString& event,const QString& binding) {
+    linaccess::VbaExecutionResult result;
+    if (eventProcedure(binding)) result=runHandler(eventName(control)+"_"+event);
+    else {
+        PreviewVbaHost host(*this);
+        result=linaccess::executeVbaEventExpression(vba_.toUtf8().toStdString(),binding.toUtf8().toStdString(),host);
+        if (failed(result) && status_) status_->setText("Ereignisfehler "+QString::number(result.errorNumber)+" (Zeile "+QString::number(result.line)+")");
+    }
+    eventResults_.insert(("control:"+control+":"+event).toCaseFolded(),result); return result;
 }
 
 linaccess::VbaExecutionResult AccessFormPreview::executeProcedure(const QString& name,std::vector<linaccess::VbaValue>& arguments) {

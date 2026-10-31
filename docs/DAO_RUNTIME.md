@@ -75,7 +75,7 @@ this adapter. Unsupported members throw rather than report success.
 Eleven original register-form buttons now invoke the unchanged KeyCapt(C) helper
 with their original arguments and update the actual Gegeben Qt control. The form
 parser recognizes typed binary-property headers (`UnknownProp = {…} Begin`), which
-previously closed the Form stack early. All 47 forms now yield 878 controls and
+previously closed the Form stack early. All 47 forms now yield 879 controls and
 86 visible command buttons, rather than the earlier 685 controls/43 buttons.
 
 The syntax inventory checks every artifact hash and classifies all 187 procedures

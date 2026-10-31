@@ -99,6 +99,8 @@ VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_vie
 VbaExecutionResult executeVbaProcedureWithArguments(std::string_view module,
     std::string_view procedure, VbaHost& host, std::vector<VbaValue>& arguments);
 
+VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string_view expression,VbaHost& host);
+
 // Strict, explicitly limited interpreter. NOT the Microsoft VBA runtime.
 // The whole procedure is syntax-validated before any host-side effect.
 VbaExecutionResult executeVbaProcedure(std::string_view module,

@@ -54,6 +54,7 @@ VbaValue fieldCollection(std::shared_ptr<Recordset> owner);
 class Field final : public VbaObject {
 public:
     Field(std::shared_ptr<Recordset> owner, QString name) : owner_(std::move(owner)), name_(std::move(name)) {}
+    VbaValue scalarValue() override { return member("Value",{}); }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override;
     void assign(std::string_view name, const VbaValue& value) override;
 private:
@@ -67,6 +68,10 @@ public:
         table_ = db_.tables().contains(source_, Qt::CaseInsensitive);
         readOnly_ |= !table_;
         reload();
+    }
+    VbaValue defaultMember(const std::vector<VbaValue>& args,bool reference) override {
+        if (args.size()!=1) throw VbaRuntimeError(450,"DAO: Recordset default field requires one index");
+        const auto field=member("Fields",args); return reference ? field : field.object->member("Value",{});
     }
     VbaValue item(std::string_view name) override { return value(text(name)); }
     VbaValue objectItem(std::string_view name) override { return member("Fields",{VbaValue::string(std::string(name))}); }
@@ -247,6 +252,7 @@ class QueryDefinition;
 class QueryParameter final : public VbaObject {
 public:
     QueryParameter(std::shared_ptr<QueryDefinition> query, QString name,quint64 generation) : query_(std::move(query)), name_(std::move(name)),generation_(generation) {}
+    VbaValue scalarValue() override { return member("Value",{}); }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override;
     void assign(std::string_view name, const VbaValue& value) override;
 private:

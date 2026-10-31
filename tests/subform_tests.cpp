@@ -176,6 +176,31 @@ Me!offset = CVErr(2015)
 Me!manual_error = CStr(IsError(Me!combined))
 End Sub
 )VBA";
+    const QByteArray defaultCode=R"VBA(Sub WriteDefault()
+Dim child As Object
+Set child=Forms("default parent")("embedded records").Form
+child("child_name").Value="default call"
+child.Dirty=False
+End Sub
+Function ReadDefault() As String
+ReadDefault=Forms("default parent")("embedded records").Form("child_name")
+End Function
+Sub RestoreDefault()
+Forms("default parent")("embedded records").Form("child_name").Value="before"
+Forms("default parent")("embedded records").Form.Dirty=False
+End Sub
+)VBA";
+    {
+        AccessFormPreview defaultParent("default parent",parentSource,defaultCode,db);
+        std::vector<linaccess::VbaValue> args;
+        const auto read=defaultParent.executeProcedure("ReadDefault",args);
+        assert(read.status==linaccess::VbaExecutionStatus::Completed && read.typedReturnValue->asText()=="before");
+        assert(defaultParent.executeProcedure("WriteDefault",args).status==linaccess::VbaExecutionStatus::Completed);
+        assert(query.exec("SELECT name FROM items WHERE id=1") && query.next() && query.value(0).toString()=="default call"); query.finish();
+        assert(defaultParent.executeProcedure("RestoreDefault",args).status==linaccess::VbaExecutionStatus::Completed);
+        assert(query.exec("SELECT name FROM items WHERE id=1") && query.next() && query.value(0).toString()=="before"); query.finish();
+        assert(defaultParent.close());
+    }
     AccessFormPreview parent("parent",parentSource,parentCode,db);
     auto* child=dynamic_cast<AccessFormPreview*>(parent.findChild<QWidget*>("access-control-embedded records"));
     assert(child && !child->isWindow() && child->hasDataSource());

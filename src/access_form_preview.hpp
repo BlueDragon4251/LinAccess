@@ -52,6 +52,8 @@ private:
     void loadRecord();
     bool saveRecord();
     linaccess::VbaExecutionResult runHandler(const QString& handler);
+    linaccess::VbaExecutionResult runControlBinding(const QString& control,const QString& event,const QString& binding);
+    bool eventFilter(QObject* watched,QEvent* event) override;
     linaccess::VbaExecutionResult formEvent(const QString& property,const QString& handler);
     void markDirty(const QString& control);
     bool commitControl(const QString& control);
@@ -83,6 +85,7 @@ private:
     friend std::shared_ptr<linaccess::VbaObject> makePreviewControlObject(AccessFormPreview&,const QString&);
     friend class PreviewApplicationObject;
     friend class PreviewDoCmdObject;
+    friend class PreviewScreenObject;
     friend class PreviewCommandBarsObject;
     friend class PreviewCommandBarObject;
     friend class PreviewCommandControlsObject;
@@ -100,7 +103,7 @@ private:
     std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, reportsObject_, controlsObject_;
     QMap<QString,std::weak_ptr<linaccess::VbaObject>> controlObjects_;
     std::unordered_map<std::string,std::shared_ptr<linaccess::VbaModuleState>> moduleStates_;
-    std::weak_ptr<linaccess::VbaObject> applicationObject_,doCmdObject_;
+    std::weak_ptr<linaccess::VbaObject> applicationObject_,doCmdObject_,screenObject_;
     QMap<QWidget*,std::weak_ptr<linaccess::VbaObject>> commandBarObjects_;
     QMap<QAction*,std::weak_ptr<linaccess::VbaObject>> commandControlObjects_;
     QToolBar* printToolbar_{};

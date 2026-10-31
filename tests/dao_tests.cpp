@@ -64,6 +64,11 @@ End Sub
     auto run = [&](const char* body) {
         return linaccess::executeVbaProcedure(std::string("Sub Test()\nDim rs As DAO.Recordset\nSet rs = CurrentDb.OpenRecordset(\"items\")\n") + body + "\nEnd Sub", "Test", host);
     };
+    assert(run("Me!DefaultQty=rs(\"qty\")\nMe!DefaultIndex=rs(0)\nMe!DefaultNull=IsNull(rs(\"label\"))\nMe!ImplicitQty=rs.Fields(\"qty\")+1\nrs.Edit\nrs(\"qty\").Value=4.25\nrs.Update\nrs.MoveNext\nMe!DefaultString=(rs.Fields(\"label\")=\"two\")\nrs.Close").status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["DefaultQty"]=="4" && host.fields["DefaultIndex"]=="1" && host.fields["DefaultNull"]=="True"
+        && host.fields["ImplicitQty"]=="5" && host.fields["DefaultString"]=="True");
+    assert(q.exec("SELECT qty FROM items WHERE id=1") && q.next() && q.value(0).toDouble()==4.25); q.finish();
+    assert(q.exec("UPDATE items SET qty=4 WHERE id=1")); q.finish();
     assert(run("rs.Edit\nrs!qty = 99\nrs.CancelUpdate\nrs.Requery").status == linaccess::VbaExecutionStatus::Completed);
     assert(run("rs!qty = 99").status == linaccess::VbaExecutionStatus::Error);
     assert(run("rs.Close\nrs.MoveNext").status == linaccess::VbaExecutionStatus::Error);

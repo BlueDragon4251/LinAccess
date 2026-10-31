@@ -82,6 +82,7 @@ class ErrorObject final : public VbaObject {
 public:
     int number{};
     std::string description;
+    VbaValue scalarValue() override { return VbaValue::numeric(number); }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         const auto key = lower(std::string(name));
         if (key == "raise") {
@@ -121,9 +122,50 @@ std::vector<std::string> splitArguments(const std::string& input) {
     return args;
 }
 
+std::size_t outsideKeyword(const std::string& source,std::string_view keyword,std::size_t start=0) {
+    bool quoted=false,bracket=false; int depth=0;
+    for (std::size_t i=0;i<source.size();++i) {
+        const char ch=source[i];
+        if (quoted) { if (ch=='"') { if (i+1<source.size() && source[i+1]=='"') ++i; else quoted=false; } continue; }
+        if (bracket) { if (ch==']') { if (i+1<source.size() && source[i+1]==']') ++i; else bracket=false; } continue; }
+        if (ch=='"') { quoted=true; continue; }
+        if (ch=='[') { bracket=true; continue; }
+        if (ch=='(') ++depth;
+        else if (ch==')') --depth;
+        if (i<start || depth!=0 || i+keyword.size()>source.size()) continue;
+        const auto part=lower(source.substr(i,keyword.size()));
+        const auto identifier=[](char value) { return std::isalnum(static_cast<unsigned char>(value)) || value=='_'; };
+        if (part==keyword && (i==0 || !identifier(source[i-1])) && (i+keyword.size()==source.size() || !identifier(source[i+keyword.size()]))) return i;
+    }
+    return std::string::npos;
+}
+std::size_t inlineElse(const std::string& source,std::size_t start) {
+    int nested=0;
+    while (start<source.size()) {
+        const auto condition=outsideKeyword(source,"if",start),otherwise=outsideKeyword(source,"else",start);
+        if (otherwise==std::string::npos) return otherwise;
+        if (condition!=std::string::npos && condition<otherwise) { ++nested; start=condition+2; }
+        else if (nested==0) return otherwise;
+        else { --nested; start=otherwise+4; }
+    }
+    return std::string::npos;
+}
+std::string inlineStatementLines(const std::string& source) {
+    std::string result=source; bool quoted=false,bracket=false; int depth=0;
+    for (std::size_t i=0;i<result.size();++i) {
+        const char ch=result[i];
+        if (quoted) { if (ch=='"') { if (i+1<result.size() && result[i+1]=='"') ++i; else quoted=false; } continue; }
+        if (bracket) { if (ch==']') { if (i+1<result.size() && result[i+1]==']') ++i; else bracket=false; } continue; }
+        if (ch=='"') quoted=true; else if (ch=='[') bracket=true;
+        else if (ch=='(') ++depth; else if (ch==')') --depth;
+        else if (ch==':' && depth==0) result[i]='\n';
+    }
+    return result;
+}
+
 VbaExecutionResult parseProcedure(std::string_view module, std::string_view name,
                                   std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
-                                  std::vector<Parameter>* parameters = nullptr) {
+                                  std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true) {
     const std::regex begin(
         R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*?)\s*\)\s*(?:As\s+[A-Za-z_][A-Za-z0-9_]*)?\s*$)",
         std::regex::icase);
@@ -153,7 +195,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:\s+As\s+(?:Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database))?$)", std::regex::icase);
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
     const std::regex objectSet(R"(^Set\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$)", std::regex::icase);
-    const std::regex objectAssign(R"(^([A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?(?:[.!](?:[A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\])(?:\([^)]*\))?)*[.!](?:[A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\]))\s*=\s*(.+)$)", std::regex::icase);
+    const std::regex objectAssign(R"(^([A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))*(?:[.!](?:[A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\])(?:\([^)]*\))*)*[.!](?:[A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\]))\s*=\s*(.+)$)", std::regex::icase);
     const std::regex label(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*):$)");
     const std::regex jump(R"(^GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
     const std::regex errorHandler(R"(^On\s+Error\s+GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
@@ -217,7 +259,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             if ((lower(match[1].str()) == "function") != isFunction)
                 return {VbaExecutionStatus::Error, "End Sub/Function passt nicht", line};
             if (!blocks.empty()) return {VbaExecutionStatus::Error, "End If oder Next fehlt", line};
-            for (auto& instruction : statements) {
+            if (resolveLabels) for (auto& instruction : statements) {
                 if (instruction.type != Statement::Type::Jump && instruction.type != Statement::Type::ErrorHandler
                     && instruction.type != Statement::Type::ResumeLabel) continue;
                 const auto target = labels.find(lower(instruction.argument));
@@ -225,6 +267,27 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 instruction.partner = target->second;
             }
             return {VbaExecutionStatus::Completed, {}, line};
+        }
+        if (lower(source).starts_with("if ") || lower(source).starts_with("if\t")) {
+            const auto then=outsideKeyword(source,"then",2);
+            if (then!=std::string::npos && !trim(source.substr(then+4)).empty()) {
+                static thread_local int inlineDepth=0;
+                if (inlineDepth>=16) return {VbaExecutionStatus::Unsupported,"Single-line If nesting limit",line};
+                struct Guard { int& depth; Guard(int& value):depth(value) { ++depth; } ~Guard() { --depth; } } guard(inlineDepth);
+                const auto otherwise=inlineElse(source,then+4);
+                const auto condition=trim(source.substr(2,then-2));
+                const auto yes=trim(source.substr(then+4,otherwise==std::string::npos ? std::string::npos : otherwise-then-4));
+                const auto no=otherwise==std::string::npos ? std::string{} : trim(source.substr(otherwise+4));
+                if (yes.empty() || (otherwise!=std::string::npos && no.empty())) return {VbaExecutionStatus::Unsupported,"Single-line If branch missing",line};
+                const auto wrapper="Sub __la_inline()\nIf "+condition+" Then\n"+inlineStatementLines(yes)
+                    +(otherwise==std::string::npos ? "" : "\nElse\n"+inlineStatementLines(no))+"\nEnd If\nEnd Sub\n";
+                std::vector<Statement> body; bool function=false,cancel=false;
+                auto parsed=parseProcedure(wrapper,"__la_inline",body,function,cancel,nullptr,false);
+                if (parsed.status!=VbaExecutionStatus::Completed) { parsed.line=line; return parsed; }
+                const auto offset=static_cast<int>(statements.size());
+                for (auto& statement:body) { if (statement.partner>=0) statement.partner+=offset; statement.line=line; statements.push_back(std::move(statement)); }
+                continue;
+            }
         }
         if (std::regex_match(source, match, label)) {
             if (!blocks.empty()) return {VbaExecutionStatus::Unsupported, "Sprungmarke innerhalb eines Blocks", line};
@@ -941,5 +1004,35 @@ VbaExecutionResult executeVbaProcedureWithArguments(std::string_view module, std
 VbaExecutionResult executeVbaProcedure(std::string_view module, std::string_view procedure, VbaHost& host) {
     std::vector<VbaValue> arguments;
     return executeVbaProcedureWithArguments(module, procedure, host, arguments);
+}
+VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string_view expression,VbaHost& host) {
+    auto source=trim(std::string(expression));
+    if (source.empty() || source.front()!='=') {
+        VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Event binding requires a function expression",0}; result.errorNumber=3251; return result;
+    }
+    source=trim(source.substr(1));
+    if (!validVbaExpression(source)) return {VbaExecutionStatus::Unsupported,"Event expression syntax unsupported",0};
+    int line=0;
+    try {
+        const VbaFunctionResolver resolver=[&](std::string_view name,std::vector<VbaValue>& args,const std::vector<std::string>&) {
+            auto outcome=executeVbaProcedureWithArguments(module,name,host,args);
+            if (outcome.status==VbaExecutionStatus::ProcedureMissing) {
+                if (const auto external=host.moduleForProcedure(name)) outcome=executeVbaProcedureWithArguments(*external,name,host,args);
+            }
+            line=outcome.line;
+            if (outcome.status!=VbaExecutionStatus::Completed || !outcome.typedReturnValue)
+                throw VbaRuntimeError(outcome.errorNumber ? outcome.errorNumber : 5,outcome.explanation.empty() ? "Event function execution failed" : outcome.explanation);
+            return *outcome.typedReturnValue;
+        };
+        const auto value=evaluateVbaExpression(source,host,{},resolver);
+        VbaExecutionResult result{VbaExecutionStatus::Completed,{},line};
+        result.typedReturnValue=std::make_shared<VbaValue>(value);
+        if (value.kind!=VbaValue::Kind::Object && value.kind!=VbaValue::Kind::Error) result.returnValue=value.asField();
+        return result;
+    } catch (const VbaRuntimeError& error) {
+        VbaExecutionResult result{VbaExecutionStatus::Error,error.what(),line}; result.errorNumber=error.number; return result;
+    } catch (const std::exception&) {
+        VbaExecutionResult result{VbaExecutionStatus::Error,"Event expression execution failed",line}; result.errorNumber=5; return result;
+    }
 }
 }  // namespace linaccess

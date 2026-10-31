@@ -210,7 +210,7 @@ Tastatur-Schaltflächen samt Parameterhelfer sowie ein DAO-Einfügehandler
 werden inzwischen separat gegen Testkopien ausgeführt; siehe
 [DAO-Laufzeit](docs/DAO_RUNTIME.md).
 In Version 0.7 wurden alle **47 realen Access-2003-Formdefinitionen** mit
-dem Layout-Parser geprüft: Nach Korrektur der Blockzuordnung werden 878 Controls
+dem Layout-Parser geprüft: Nach Korrektur der Blockzuordnung werden 879 Controls
 und 86 sichtbare CommandButtons erkannt. Unterstützte Widgets aller 47 Formulare
 werden in der Strukturregression instanziiert. Ein echter Qt-Klick mit VBA-`CurrentDb.Execute` wird gegen eine
 separate SQLite-Testtabelle ausgeführt. Das belegt **nicht**, dass die
@@ -334,7 +334,9 @@ Vor dem Ausführen der VBA-Ereignisse fragt LinAccess nach. Nicht unterstützte
 Anweisungen werden vor Ausführung der jeweiligen Prozedur erkannt. Die Engine
 hat nur explizite Host-Funktionen für Formularfelder, Meldungen, Speichern,
 Maximieren und Navigation zum letzten Datensatz; sie unterstützt
-**kein COM, ActiveX oder Windows-API; DAO nur in der dokumentierten Teilmenge**.
+**keine generische COM-/ActiveX-/Windows-API-Ausführung; DAO nur in der dokumentierten Teilmenge**.
+Ein begrenzter [nativer Kalenderadapter](docs/CALENDAR_RUNTIME.md) führt den
+unveränderten originalen Datumsdialog mit echter Qt-Auswahl und VBA-Rückübertragung aus.
 Der Interpreter begrenzt die Ausführung auf 10.000 Anweisungsschritte und
 unterstützt außer dem speziellen `Form_Open(Cancel As Integer/Boolean)`
 noch keine allgemeinen Parameter, Label-Fehlerhandler, Arrays, `With`,

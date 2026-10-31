@@ -58,3 +58,7 @@ Stage validation: all 18 CTests passed (59.27 seconds), the GUI-disabled core
 build/test passed, a fresh Debian package passed executable Build ID/content/
 permission checks, and all four original fixture SHA-256 checks remained unchanged.
 This is local validation, not a remote distro CI or Microsoft Access reference run.
+
+The subsequent [calendar stage](CALENDAR_RUNTIME.md) now executes the unchanged
+standard helper against these globals through native Screen and date selection;
+its evidence and remaining ActiveX/default-member boundaries are documented there.

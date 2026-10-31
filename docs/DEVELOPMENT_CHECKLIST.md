@@ -59,6 +59,9 @@ Verified incremental work ([details and limits](DAO_RUNTIME.md)):
 - [x] Bounded persistent CodeBehind instance fields and connection-owned standard-module fields; real original public declarations bind across native forms, with recursion, typed alias recovery, visibility and reset tests. See MODULE_STATE_RUNTIME.md.
 - [x] Procedure-wide Dim binding, local/control/global lookup precedence and standard-module Me restrictions; complete compiler/class scope remains open.
 
+- [x] Single-line If/Else/colon branches, reference-aware default invocation and scalar defaults for supported native objects; original calendar Error/Resume path and real DAO/subform SQL writes verified.
+- [x] Original function-expression date-field events, native Screen/Parent getters and bounded MSCAL adapter; both unchanged original date bindings navigate/select/close and feed actual MDB records. See CALENDAR_RUNTIME.md.
+
 Full targets remain open:
 
 - [ ] Replace statement regex dispatch with a complete lexer/parser, AST and bound runtime.

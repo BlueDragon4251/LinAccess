@@ -92,6 +92,7 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
 }
 
 int precedence(const Token& token) {
+    if (token.type!=Token::Type::Symbol && token.type!=Token::Type::Word) return 0;
     const auto text = lower(token.value);
     if (text == "or") return 1;
     if (text == "and") return 2;
@@ -115,6 +116,7 @@ std::int32_t integer(const VbaValue& value) {
         || rounded > std::numeric_limits<std::int32_t>::max()) throw error("VBA: Long-Überlauf", 6);
     return static_cast<std::int32_t>(rounded);
 }
+VbaValue scalarObjectValue(VbaValue value);
 VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& right) {
     if (left.kind==VbaValue::Kind::Error || right.kind==VbaValue::Kind::Error)
         throw error("Error Variant cannot be used as an operand",13);
@@ -123,6 +125,8 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
             throw error("VBA: Is benötigt Objekte");
         return VbaValue::logical(left.object == right.object);
     }
+    if (left.kind==VbaValue::Kind::Object) return binary(op,scalarObjectValue(left),right);
+    if (right.kind==VbaValue::Kind::Object) return binary(op,left,scalarObjectValue(right));
     if (op == "&") {
         if (left.kind == VbaValue::Kind::Null && right.kind == VbaValue::Kind::Null) return {};
         return VbaValue::string(left.asText() + right.asText());
@@ -201,8 +205,9 @@ public:
 private:
     const Token& peek() const { return tokens_[index_]; }
     Token consume() { return tokens_[index_++]; }
+    bool nextSymbol(std::string_view symbol) const { return peek().type==Token::Type::Symbol && peek().value==symbol; }
     bool take(const std::string& wanted) {
-        if (lower(peek().value) != wanted) return false;
+        if ((peek().type!=Token::Type::Symbol && peek().type!=Token::Type::Word) || lower(peek().value) != wanted) return false;
         consume();
         return true;
     }
@@ -225,7 +230,21 @@ private:
     }
     VbaValue primary(bool objectContext) {
         auto value = atom(objectContext);
-        while (peek().value == "." || peek().value == "!") {
+        while (nextSymbol("(") || nextSymbol(".") || nextSymbol("!")) {
+            if (take("(")) {
+                std::vector<VbaValue> arguments;
+                if (!take(")")) {
+                    do { arguments.push_back(expression(1)); } while (take(",") || (accessExpression_ && take(";")));
+                    require(")");
+                }
+                if (host_) {
+                    try {
+                        if (value.kind!=VbaValue::Kind::Object || !value.object) throw error("Default member requires an object",91);
+                        value=value.object->defaultMember(arguments,objectContext || nextSymbol(".") || nextSymbol("!") || nextSymbol("("));
+                    } catch(const VbaRuntimeError& failure) { if (!accessExpression_) throw; value=VbaValue::errorValue(failure.number); }
+                }
+                continue;
+            }
             const bool item = consume().value == "!";
             const auto member = consume();
             if (member.type != Token::Type::Word && member.type != Token::Type::Bracket)
@@ -243,7 +262,7 @@ private:
                 if (value.kind != VbaValue::Kind::Object || !value.object)
                     throw error("Objektvariable nicht gesetzt", 91);
                 if (item && !args.empty()) throw error("Bang lookup arguments unsupported",450);
-                const bool reference=objectContext || peek().value=="." || peek().value=="!";
+                const bool reference=objectContext || nextSymbol(".") || nextSymbol("!");
                 value = item ? (reference ? value.object->objectItem(member.value) : value.object->item(member.value))
                     : (reference ? value.object->objectMember(member.value,args) : value.object->member(member.value,args));
                 } catch(const VbaRuntimeError& failure) { if (!accessExpression_) throw; value=VbaValue::errorValue(failure.number); }
@@ -275,11 +294,11 @@ private:
         if (tok.type==Token::Type::Bracket && accessExpression_) {
             if (!host_) return {};
             const auto root=lower(tok.value);
-            if (peek().value=="." || peek().value=="!") {
+            if (nextSymbol(".") || nextSymbol("!")) {
                 if (root=="forms" || root=="formulare") return VbaValue::reference(host_->formsCollection());
                 if (root=="reports" || root=="berichte") return VbaValue::reference(host_->reportsCollection());
             }
-            return host_->expressionValue(tok.value,objectContext || peek().value=="." || peek().value=="!");
+            return host_->expressionValue(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"));
         }
         if (tok.type == Token::Type::Text) return VbaValue::string(tok.value);
         if (tok.type == Token::Type::Number) {
@@ -325,6 +344,7 @@ private:
         if (word == "vbtab") return VbaValue::string("\t");
         static const std::unordered_map<std::string,int> documentConstants{{"acdefault",-1},{"acform",2},{"acreport",3},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
         if (const auto constant=documentConstants.find(word);constant!=documentConstants.end()) return VbaValue::numeric(constant->second);
+        if (word=="screen") return host_ ? host_->applicationObject()->member("Screen",{}) : VbaValue{};
         if (word=="docmd") return host_ ? host_->applicationObject()->member("DoCmd",{}) : VbaValue{};
         if (word == "application") return host_ ? VbaValue::reference(host_->applicationObject()) : VbaValue{};
         if (word=="commandbars") {
@@ -340,14 +360,14 @@ private:
             const auto forms = word == "forms" ? host_->formsCollection() : host_->reportsCollection();
             return item ? forms->member("Item",args) : VbaValue::reference(forms);
         }
-        if (word == "me" && peek().value != "!" && peek().value != ".") {
+        if (word == "me" && !nextSymbol("!") && !nextSymbol(".")) {
             if (take("(")) {
                 const auto index=expression(1); require(")");
                 return host_ ? host_->currentForm()->member("Controls",{index}) : VbaValue{};
             }
             return host_ ? VbaValue::reference(host_->currentForm()) : VbaValue{};
         }
-        if (word == "me" && (peek().value == "!" || peek().value == ".")) {
+        if (word == "me" && (nextSymbol("!") || nextSymbol("."))) {
             const bool item = consume().value == "!";
             const auto field = consume();
             if (field.type != Token::Type::Word && field.type != Token::Type::Bracket)
@@ -365,14 +385,14 @@ private:
             if (!host_) return {};
             const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource" || key == "caption" || key=="tag" || key=="filter" || key=="filteron");
             if (!item && !formProperty)
-                if (auto value=host_->resolveIdentifier(field.value,objectContext || peek().value=="." || peek().value=="!")) return *value;
+                if (auto value=host_->resolveIdentifier(field.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return *value;
             if (!formProperty && objectContext)
                 return item ? host_->currentForm()->objectItem(field.value) : host_->currentForm()->objectMember(field.value,{});
-            if (!formProperty && (peek().value == "." || peek().value == "!"))
+            if (!formProperty && (nextSymbol(".") || nextSymbol("!")))
                 return host_->currentForm()->member("Controls",{VbaValue::string(field.value)});
             return item ? host_->controlValue(field.value) : host_->fieldValue(field.value);
         }
-        if ((word=="now" || word=="date" || word=="time") && peek().value!="(")
+        if ((word=="now" || word=="date" || word=="time") && !nextSymbol("("))
             return host_ ? clockValue(word) : VbaValue{};
         if (accessExpression_ && (word=="sum" || word=="count") && take("(")) {
             const auto field=consume();
@@ -381,6 +401,10 @@ private:
             require(")");
             return host_ ? host_->expressionAggregate(word,field.value,field.value=="*") : VbaValue{};
         }
+        if (nextSymbol("(")) {
+            const auto variable=locals_.find(word);
+            if (variable!=locals_.end() && variable->second.kind==VbaValue::Kind::Object) return variable->second;
+        }
         if (take("(")) {
             std::vector<VbaValue> args;
             std::vector<std::string> references;
@@ -388,7 +412,7 @@ private:
             if (!take(")")) {
                 do {
                     const auto start = index_;
-                    const bool missing=word=="msgbox" && (peek().value=="," || peek().value==")" || (accessExpression_ && peek().value==";"));
+                    const bool missing=word=="msgbox" && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
                     args.push_back(missing ? VbaValue::empty() : expression(1));
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
@@ -532,9 +556,9 @@ private:
         if (!host_) return {}; // Validate identifiers syntactically, resolve on execution.
         const auto variable = locals_.find(word);
         if (variable==locals_.end() && accessExpression_)
-            return host_->expressionValue(tok.value,objectContext || peek().value=="." || peek().value=="!");
+            return host_->expressionValue(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"));
         if (variable==locals_.end()) {
-            if (auto value=host_->resolveIdentifier(tok.value,objectContext || peek().value=="." || peek().value=="!")) return *value;
+            if (auto value=host_->resolveIdentifier(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return *value;
             throw error("VBA-Variable nicht deklariert: " + tok.value);
         }
         return variable->second;
@@ -575,9 +599,19 @@ VbaValue VbaValue::numeric(double value) { VbaValue v; v.kind = Kind::Number; v.
 VbaValue VbaValue::string(std::string value) { VbaValue v; v.kind = Kind::Text; v.text = std::move(value); return v; }
 VbaValue VbaValue::currency(std::int64_t units) { VbaValue v; v.kind=Kind::Currency; v.currencyUnits=units; return v; }
 VbaValue VbaValue::logical(bool value) { VbaValue v; v.kind = Kind::Boolean; v.boolean = value; return v; }
+namespace {
+VbaValue scalarObjectValue(VbaValue value) {
+    for (int depth=0;depth<16;++depth) {
+        if (value.kind!=VbaValue::Kind::Object) return value;
+        if (!value.object) throw VbaRuntimeError(91,"Object variable is Nothing");
+        value=value.object->scalarValue();
+    }
+    throw VbaRuntimeError(28,"Recursive object default value");
+}
+}
 std::string VbaValue::asText() const {
     if (kind==Kind::Error) throw error("Error Variant cannot be implicitly converted to text",13);
-    if (kind == Kind::Object) throw error("VBA: Objekt kann nicht in Text umgewandelt werden");
+    if (kind==Kind::Object) return scalarObjectValue(*this).asText();
     if (kind == Kind::Text) return text;
     if (kind==Kind::Currency) {
         const auto magnitude=currencyUnits<0 ? static_cast<std::uint64_t>(-(currencyUnits+1))+1 : static_cast<std::uint64_t>(currencyUnits);
@@ -597,7 +631,7 @@ std::string VbaValue::asText() const {
 }
 double VbaValue::asNumber() const {
     if (kind==Kind::Error) throw error("Error Variant cannot be implicitly converted to number",13);
-    if (kind == Kind::Object) throw error("VBA: Objekt kann nicht in Zahl umgewandelt werden");
+    if (kind==Kind::Object) return scalarObjectValue(*this).asNumber();
     if (kind == Kind::Empty) return 0;
     if (kind == Kind::Number) return number;
     if (kind == Kind::Currency) return static_cast<double>(currencyUnits)/10000;

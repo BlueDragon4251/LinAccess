@@ -82,7 +82,7 @@ bool isControl(const QString& type) {
         "TextBox", "Label", "CommandButton", "ComboBox", "ListBox",
         "CheckBox", "OptionButton", "ToggleButton", "Subform",
         "Rectangle", "Line", "Image", "Tab", "OptionGroup",
-        "BoundObjectFrame", "UnboundObjectFrame"
+        "BoundObjectFrame", "UnboundObjectFrame", "CustomControl"
     };
     return types.contains(type);
 }
@@ -153,6 +153,9 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "LinkMasterFields") control.linkMasterFields = value;
             else if (key == "LinkChildFields") control.linkChildFields = value;
             else if (key == "OnClick") control.onClick = value;
+            else if (key == "OnDblClick") control.onDblClick = value;
+            else if (key == "Class") control.className = value;
+            else if (key == "OLEClass") control.oleClass = value;
             else if (key == "AfterUpdate") control.afterUpdate = value;
             else if (key == "BeforeUpdate") control.beforeUpdate = value;
             else if (key == "Left") control.left = integer();

@@ -37,6 +37,9 @@ struct AccessVisualControl {
     QString onClick;
     QString afterUpdate;
     QString beforeUpdate;
+    QString onDblClick;
+    QString className;
+    QString oleClass;
     int left{};
     int top{};
     int width{1701};

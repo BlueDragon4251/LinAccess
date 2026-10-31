@@ -10,6 +10,7 @@
 #include <cassert>
 #include <iostream>
 #include <map>
+#include <tuple>
 #include <optional>
 
 namespace {
@@ -72,6 +73,53 @@ int main() {
     using namespace linaccess;
 
     {
+        FakeForm host;
+        for (const auto& literal:std::vector<std::string>{"(",")","-","+","not","and","or",".","!",",",";"}) {
+            const auto source="\""+literal+"\"";
+            assert(validVbaExpression(source));
+            const auto value=evaluateVbaExpression(source,host,{});
+            assert(value.kind==VbaValue::Kind::Text && value.asText()==literal);
+        }
+        assert(evaluateVbaExpression("\"(\" & 2465 & \")\"",host,{}).asText()=="(2465)");
+        assert(!validVbaExpression("1 \"and\" 2"));
+        assert(validVbaExpression("MsgBox(\")\")"));
+    }
+
+    {
+        FakeForm host;
+        const std::string module=R"VBA(Function Inline(x As Long,y As Long) As Long
+Dim value As Long
+If x Then value=1: value=value+1 Else value=7
+If x Then If y Then value=3 Else value=4
+If value=7 Then GoTo done Else value=value+10
+done:
+Inline=value
+End Function
+Function Quoted() As String
+If "Then Else"="Then Else" Then Quoted="Then:Else" Else Quoted="bad"
+End Function
+Function Recover() As Long
+On Error GoTo failed
+Err.Raise 2465
+Recover=23
+Exit Function
+failed:
+If Err=2465 Then Resume Next
+Recover=99
+End Function
+)VBA";
+        for (const auto& [x,y,expected]:std::vector<std::tuple<int,int,int>>{{0,0,7},{0,1,7},{1,0,14},{1,1,13}}) {
+            std::vector<VbaValue> args{VbaValue::numeric(x),VbaValue::numeric(y)};
+            const auto result=executeVbaProcedureWithArguments(module,"Inline",host,args);
+            assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==expected);
+        }
+        const auto quoted=executeVbaProcedure(module,"Quoted",host);
+        assert(quoted.status==VbaExecutionStatus::Completed && quoted.typedReturnValue->asText()=="Then:Else");
+        const auto recovered=executeVbaProcedure(module,"Recover",host);
+        assert(recovered.status==VbaExecutionStatus::Completed && recovered.typedReturnValue->asNumber()==23);
+    }
+
+    {
         const std::string module=R"VBA(Private counter As Variant
 Private flag As Boolean
 Public text As String
@@ -126,11 +174,15 @@ End Function
             return *result.typedReturnValue;
         };
         assert(call(first,"NextValue").asNumber()==2 && call(first,"NextValue").asNumber()==4);
+        const auto event=executeVbaEventExpression(module,"=NextValue()",first);
+        assert(event.status==VbaExecutionStatus::Completed && event.typedReturnValue->asNumber()==6);
+        assert(executeVbaEventExpression(module,"=NextValue()+)",first).status==VbaExecutionStatus::Unsupported);
+        assert(call(first,"CurrentValue").asNumber()==6);
         assert(call(second,"CurrentValue").kind==VbaValue::Kind::Empty);
         std::vector<VbaValue> args{VbaValue::numeric(2)};
         const auto recursive=executeVbaProcedureWithArguments(module,"Recursive",second,args);
         assert(recursive.status==VbaExecutionStatus::Completed && recursive.typedReturnValue->asNumber()==6);
-        assert(call(first,"Shadow").asNumber()==9 && call(first,"CurrentValue").asNumber()==4);
+        assert(call(first,"Shadow").asNumber()==9 && call(first,"CurrentValue").asNumber()==6);
         assert(call(first,"ForwardLocal").kind==VbaValue::Kind::Empty);
         assert(call(first,"TypedFailure").asText()=="94:11");
         assert(call(first,"TextValue").kind==VbaValue::Kind::Text && call(first,"TextValue").asText()=="True");

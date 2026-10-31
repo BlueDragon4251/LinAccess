@@ -169,6 +169,8 @@ int verifyOriginalTags(AccessFormPreview& preview,const QString& code,QSqlDataba
     return count;
 }
 }
+void testOriginalCalendar(const QDir&,const QJsonArray&,QSqlDatabase);
+
 void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QString& mdb) {
     QTimer acknowledge;
     QObject::connect(&acknowledge,&QTimer::timeout,[] {
@@ -459,4 +461,6 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
     std::cout<<"Original reports: "<<scanned<<", executed sources: "<<available<<", non-NULL bound controls: "<<cells<<'\n';
     for (auto it=failures.cbegin();it!=failures.cend();++it) std::cout<<"Report source category "<<it.key().toStdString()<<": "<<it.value()<<'\n';
     assert(available>0 && cells>0);
+    acknowledge.stop();
+    testOriginalCalendar(directory,objects,db);
 }

@@ -13,13 +13,14 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original bound Report_Open / Report_Close procedures executed | 3 / 3 |
 | Original simple Form_Load / verified property assignments | 1 / 6 |
 | Original complex Form_Load / independently verified dynamic Tags | 1 / 15 |
-| Available embedded sources in that original form | 6 |
+| Available embedded sources in that original form | 7 |
 | Calculated controls / remaining error values in that form | 34 / 1 |
 | Original report sources classified / currently bound | 9 / 6 |
 | Original report non-NULL textbox values compared with prepared reader | 54 |
 | Original form layouts scanned | 47 |
-| Parsed controls / visible command buttons | 878 / 86 |
-| Original query artifacts classified / executed without Access result oracle | 100 / 74 (69 ordinary + 5 parameterized) |
+| Parsed controls / visible command buttons | 879 / 86 |
+| Original query artifacts classified / executed without Access result oracle | 100 / 77 (72 ordinary + 5 parameterized) |
+| Original date-filter fields exercised through actual calendar selection | 2 |
 | Current local regression tests | 18 passed |
 
 Current completed work package: positional Sub/Function calls, ByVal/ByRef aliases,
@@ -164,3 +165,31 @@ Completed import version/library diagnosis: byte-identical pre-fix sources copy
 29/29 with library 1.0.0. Twenty standalone PK clauses explain the parser failures.
 The current full 29-table schema/data test passes all four combinations. EOF was
 not reproduced and stays explicitly unresolved (MDB_IMPORT_REGRESSION.md).
+
+
+Completed native MsgBox package: actual selected buttons return VBA results,
+optional positional arguments and styles are validated, and an unchanged original
+missing-input handler displays/focuses real native controls (MESSAGE_BOX_RUNTIME.md).
+Completed native Close/Dropdown package: original Close button execution,
+Unload cancellation, real SQL-backed popup rows and typed mouse selection
+(CLOSE_COMMAND_RUNTIME.md).
+
+Completed conditional alias package: pure IIf projection chains and leading-dot
+numeric literals; three further unchanged queries return positive non-NULL results.
+Current query coverage is 77/100, without an Access result oracle (QUERY_ORIGINS.md).
+A reproduced nested Currency ByRef mutation loss is fixed, including original
+expression value interoperability and error/alias regressions (CURRENCY_RUNTIME.md).
+
+Completed bounded module-state package: procedure locals, CodeBehind instances
+and connection-owned standard modules have separate lifetimes and lookup scopes.
+Original public declarations provide actual shared state; full classes/types remain
+open (MODULE_STATE_RUNTIME.md).
+
+Completed original calendar package: both unchanged function-expression date-field
+bindings execute the original Screen/global helper, native calendar page handlers,
+Click/Error/Resume path and DoCmd.Close. Both selected values feed a query of actual
+MDB records with an independent positive count. This uses a limited MSCAL-to-Qt
+adapter, not general COM/ActiveX execution. The original helper exposed and regressed
+a string-literal-versus-syntax lexer defect. Full generic VBA/default-property
+semantics and OCX parity remain open (CALENDAR_RUNTIME.md). Latest syntax inventory:
+169 accepted / 187 inventoried, explicitly not runtime execution coverage.
