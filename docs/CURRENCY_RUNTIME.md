@@ -37,3 +37,25 @@ The implementation does not change the original expression to hide this error.
 
 The runtime is C++20; wide integer intermediates are supported by the target
 Debian/Ubuntu GCC toolchains. No Python or COM service performs these operations.
+
+## Nested ByRef regression
+
+A reproduced defect in reference synchronization compared Variant kind and Double
+payload but omitted the Currency scaled-integer payload. A nested ByRef procedure
+could therefore lose an exact 0.0001 mutation while appearing to complete. The
+new regression failed on the unchanged runtime before the comparison was fixed.
+
+The comparison now includes scaled units. Core tests verify an exact unit increment,
+ByVal isolation, two parameters referencing the same caller variable, and mutations
+retained before an error handled by the caller. The native corpus test also passes
+the actual Currency result of the unchanged original calculated expression through
+a separate generic, nested native VBA helper (12500 to 12501 scaled units). Original
+code bytes remain unchanged; this tests original-expression value interoperability,
+not an original procedure calling that synthetic helper. Exact imported/SQL Money
+storage, declared Currency variable/parameter coercion and general typed VBA remain
+outside this fix.
+
+ByRef-fix validation: all 18 CTests passed (59.57 seconds), the GUI-disabled core
+build/test passed, a fresh Debian package matched the current executable Build ID
+and passed content/permission checks, and all four fixture SHA-256 checks remained
+unchanged.

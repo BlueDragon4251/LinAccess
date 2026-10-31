@@ -72,6 +72,56 @@ int main() {
     using namespace linaccess;
 
     {
+        FakeForm form;
+        const std::string module=R"VBA(Function Calculate() As Variant
+Dim amount As Variant
+amount=CCur("1")
+Call Increment(amount)
+Calculate=amount
+End Function
+Sub Increment(ByRef amount As Variant)
+amount=amount+CCur("0.0001")
+End Sub
+Function ValueCopy() As Variant
+Dim amount As Variant
+amount=CCur("1")
+Call IncrementCopy(amount)
+ValueCopy=amount
+End Function
+Sub IncrementCopy(ByVal amount As Variant)
+amount=amount+CCur("0.0001")
+End Sub
+Function SharedSlot() As Variant
+Dim amount As Variant
+amount=CCur("1")
+Call Transfer(amount,amount)
+SharedSlot=amount
+End Function
+Sub Transfer(ByRef debit As Variant,ByRef credit As Variant)
+debit=debit-CCur("0.0001")
+credit=credit+CCur("0.0001")
+End Sub
+Function BeforeError() As Variant
+Dim amount As Variant
+amount=CCur("1")
+On Error Resume Next
+Call ChangeThenFail(amount)
+BeforeError=amount
+End Function
+Sub ChangeThenFail(ByRef amount As Variant)
+amount=amount+CCur("0.0001")
+Err.Raise 5
+End Sub
+)VBA";
+        const auto verify=[&](const char* procedure,std::int64_t units) {
+            const auto result=executeVbaProcedure(module,procedure,form);
+            assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue);
+            assert(result.typedReturnValue->kind==VbaValue::Kind::Currency && result.typedReturnValue->currencyUnits==units);
+        };
+        verify("Calculate",10001); verify("ValueCopy",10000); verify("SharedSlot",10000); verify("BeforeError",10001);
+    }
+
+    {
         FakeForm host;
         assert(evaluateVbaExpression("MsgBox(\"plain\")",host,{}).asNumber()==1);
         try { (void)evaluateVbaExpression("MsgBox(\"styled\",vbYesNo)",host,{}); assert(false); }

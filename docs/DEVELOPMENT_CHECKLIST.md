@@ -54,6 +54,8 @@ Verified incremental work ([details and limits](DAO_RUNTIME.md)):
 - [x] Native late-bound DoCmd.Close for active/named forms and reports, validated record saving, Unload cancellation and recursion protection; original Kassa Close button executes unchanged. See CLOSE_COMMAND_RUNTIME.md.
 - [x] ComboBox.Dropdown opens actual SQL-backed rows and preserves a native mouse selection as a typed bound value; original missing-selection handler runs unchanged.
 
+- [x] Currency scaled-unit changes survive nested ByRef synchronization, shared aliases and handled errors; original calculated Currency value passes through a separate native nested helper exactly.
+
 Full targets remain open:
 
 - [ ] Replace statement regex dispatch with a complete lexer/parser, AST and bound runtime.

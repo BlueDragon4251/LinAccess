@@ -506,7 +506,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             if (parameters[i].byReference && (*references)[i])
                 aliases.push_back({lower(parameters[i].name), (*references)[i], *(*references)[i]});
     const auto equalValue = [](const VbaValue& a, const VbaValue& b) {
-        return a.kind == b.kind && a.number == b.number && a.text == b.text
+        return a.kind == b.kind && a.number == b.number && a.currencyUnits==b.currencyUnits && a.text == b.text
             && a.boolean == b.boolean && a.object == b.object && a.errorNumber==b.errorNumber;
     };
     const auto refreshAliases = [&] {

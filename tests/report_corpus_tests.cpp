@@ -348,6 +348,14 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                 inputControl->assign("Value",linaccess::VbaValue::numeric(1.25));
                 const auto actual=originalForm->item(control.name.toStdString());
                 assert(actual.kind==linaccess::VbaValue::Kind::Currency && actual.currencyUnits==12500);
+                // Pass the original expression's actual typed result through
+                // a separate native VBA helper; original code bytes stay intact.
+                const QByteArray helperCode="Sub Adjust(ByRef amount As Variant)\nCall Increment(amount)\nEnd Sub\nSub Increment(ByRef amount As Variant)\namount=amount+CCur(\"0.0001\")\nEnd Sub\n";
+                AccessFormPreview helper("currency value interop","Begin Form\nEnd\n",helperCode,db);
+                std::vector<linaccess::VbaValue> currencyArgs{actual};
+                assert(helper.executeProcedure("Adjust",currencyArgs).status==linaccess::VbaExecutionStatus::Completed);
+                assert(currencyArgs.front().kind==linaccess::VbaValue::Kind::Currency && currencyArgs.front().currencyUnits==12501);
+                assert(helper.close());
                 inputControl->assign("Value",before);
                 ++originalCurrencyChecks;
             }
