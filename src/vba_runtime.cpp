@@ -33,6 +33,26 @@ std::string trim(std::string text) {
     const auto last = text.find_last_not_of(" \t\r\n");
     return text.substr(first, last - first + 1);
 }
+std::size_t memberSeparator(const std::string& expression) {
+    std::size_t result = std::string::npos;
+    bool quoted = false, bracket = false;
+    int depth = 0;
+    for (std::size_t i = 0; i < expression.size(); ++i) {
+        const char ch = expression[i];
+        if (bracket) { if (ch == ']') bracket = false; continue; }
+        if (ch == '"') {
+            if (quoted && i + 1 < expression.size() && expression[i+1] == '"') { ++i; continue; }
+            quoted = !quoted; continue;
+        }
+        if (quoted) continue;
+        if (ch == '[') bracket = true;
+        else if (ch == '(') ++depth;
+        else if (ch == ')') --depth;
+        else if (depth == 0 && (ch == '.' || ch == '!')) result = i;
+    }
+    return result;
+}
+
 std::string lower(std::string text) {
     std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
@@ -112,7 +132,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
         std::regex::icase);
     const std::regex end(R"(^\s*End\s+(Sub|Function)\s*$)", std::regex::icase);
     const std::regex ifThen(R"(^If\s+(.+)\s+Then\s*$)", std::regex::icase);
-    const std::regex assignment(R"(^Me\s*[!.]\s*([A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
+    const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
     const std::regex variableAssignment(R"(^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$)", std::regex::icase);
     const std::regex message(R"(^MsgBox\s+(.+)$)", std::regex::icase);
     const std::regex save(R"(^DoCmd\s*\.\s*RunCommand\s+acCmdSaveRecord$)", std::regex::icase);
@@ -133,7 +153,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:\s+As\s+(?:Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database))?$)", std::regex::icase);
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
     const std::regex objectSet(R"(^Set\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$)", std::regex::icase);
-    const std::regex objectAssign(R"(^([A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?(?:[.!][A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?)*[.!](?:[A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\]))\s*=\s*(.+)$)", std::regex::icase);
+    const std::regex objectAssign(R"(^([A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?(?:[.!](?:[A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\])(?:\([^)]*\))?)*[.!](?:[A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\]))\s*=\s*(.+)$)", std::regex::icase);
     const std::regex label(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*):$)");
     const std::regex jump(R"(^GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
     const std::regex errorHandler(R"(^On\s+Error\s+GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
@@ -346,11 +366,11 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 if (!validVbaExpression(arg)) return {VbaExecutionStatus::Unsupported, "Aufrufargument", line};
             statements.push_back({Statement::Type::Call, match[1].str(), args, line});
         } else if (std::regex_match(source, match, assignment)) {
-            const auto expr = trim(match[2].str());
+            const auto expr = trim(match[3].str());
             if (!validVbaExpression(expr)) return {VbaExecutionStatus::Unsupported, "Zuweisung: " + expr, line};
-            auto field = match[1].str();
+            auto field = match[2].str();
             if (field.starts_with('[') && field.ends_with(']')) field = field.substr(1, field.size() - 2);
-            statements.push_back({Statement::Type::SetField, field, expr, line});
+            statements.push_back({Statement::Type::SetField,field,expr,line,match[1].str()});
         } else if (std::regex_match(source, match, objectAssign)) {
             const auto target = match[1].str();
             const auto expr = trim(match[2].str());
@@ -367,6 +387,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                     return {VbaExecutionStatus::Unsupported, "Variablendeklaration", line};
                 const auto type = lower(declared[2].str());
                 if (!type.empty() && type != "variant" && type != "object" && type != "dao.database"
+                    && type != "control" && type != "form" && type != "access.control" && type != "access.form"
                     && type != "dao.recordset" && type != "dao.field" && type != "dao.fields" && type != "dao.querydef" && type != "dao.parameter" && type != "string" && type != "boolean"
                     && type != "integer" && type != "long" && type != "single" && type != "double"
                     && type != "byte") return {VbaExecutionStatus::Unsupported, "Variablentyp: " + type, line};
@@ -670,7 +691,9 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::SetField:
                 if (active) {
                     if (++effects > 1000) throw std::runtime_error("VBA-Effektbudget erreicht");
-                    host.setFieldValue(instruction.argument,evaluate(instruction.expression));
+                    const auto value = evaluate(instruction.expression);
+                    if (instruction.endExpression == "!") host.setControlValue(instruction.argument,value);
+                    else host.setFieldValue(instruction.argument,value);
                 }
                 break;
             case Statement::Type::ObjectSet:
@@ -682,12 +705,14 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 break;
             case Statement::Type::ObjectAssign:
                 if (active) {
-                    const auto pos = instruction.argument.find_last_of(".!");
+                    const auto pos = memberSeparator(instruction.argument);
                     auto name = instruction.argument.substr(pos + 1);
                     if (name.starts_with('[') && name.ends_with(']')) name = name.substr(1, name.size() - 2);
                     const auto object = evaluate(instruction.argument.substr(0, pos));
                     if (!object.object) throw std::runtime_error("Objektvariable nicht gesetzt");
-                    object.object->assign(name, evaluate(instruction.expression));
+                    const auto value = evaluate(instruction.expression);
+                    if (instruction.argument[pos] == '!') object.object->assignItem(name,value);
+                    else object.object->assign(name,value);
                 }
                 break;
             case Statement::Type::ObjectCall:
@@ -779,7 +804,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (active) {
                     const auto& type = instruction.expression;
                     auto initial = VbaValue::empty();
-                    if (type == "object" || type.starts_with("dao.")) initial = VbaValue::reference(nullptr);
+                    if (type == "object" || type == "control" || type == "form" || type.starts_with("access.") || type.starts_with("dao.")) initial = VbaValue::reference(nullptr);
                     else if (type == "string") initial = VbaValue::string("");
                     else if (type == "boolean") initial = VbaValue::logical(false);
                     else if (!type.empty() && type != "variant") initial = VbaValue::numeric(0);

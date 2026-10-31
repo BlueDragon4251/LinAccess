@@ -41,6 +41,11 @@ Completed conditional SQL package: native eager IIf argument evaluation with
 selected-value type/NULL preservation and connection-reopen regression. Other
 SQLite/Jet expression semantics remain explicitly incomplete.
 
+Completed imported-form object package: project-scoped Forms and Controls
+collections, real cross-form data writes/saves, guarded Qt object lifetimes and
+bang/property namespace separation (FORM_OBJECT_MODEL.md). All 47 original form
+layouts instantiate in the structure regression; full execution remains open.
+
 See DEVELOPMENT_CHECKLIST.md for all requirements and DAO_RUNTIME.md and
 MDB_IMPORT_REGRESSION.md for evidence and limitations. Private syntax inventory
 outputs remain under build and contain no raw VBA literals or fixture rows.

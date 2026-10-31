@@ -65,6 +65,8 @@ public:
         readOnly_ |= !table_;
         reload();
     }
+    VbaValue item(std::string_view name) override { return value(text(name)); }
+    void assignItem(std::string_view name,const VbaValue& value) override { set(text(name),value); }
     QStringList fieldNames() const { require(!closed_,"DAO: Recordset is closed"); return columns_; }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         require(!closed_, "DAO: Recordset is closed");
@@ -215,6 +217,7 @@ public:
         if (key == "item" && args.size() == 1) return owner_->member("Fields",args);
         throw VbaRuntimeError(438,"DAO: Fields member unsupported");
     }
+    VbaValue item(std::string_view name) override { return owner_->member("Fields",{VbaValue::string(std::string(name))}); }
     std::vector<VbaValue> enumerate() override {
         std::vector<VbaValue> values;
         for (const auto& name : owner_->fieldNames())

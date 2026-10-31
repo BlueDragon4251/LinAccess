@@ -34,6 +34,8 @@ class VbaObject {
 public:
     virtual ~VbaObject() = default;
     virtual VbaValue member(std::string_view name, const std::vector<VbaValue>& arguments) = 0;
+    virtual VbaValue item(std::string_view name) { return member(name,{}); }
+    virtual void assignItem(std::string_view name,const VbaValue& value) { assign(name,value); }
     virtual std::vector<VbaValue> enumerate() {
         throw VbaRuntimeError(438,"Object does not support enumeration");
     }

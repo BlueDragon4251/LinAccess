@@ -56,6 +56,8 @@ Full targets remain open:
 - [ ] Calls/returns, ByRef/ByVal, Optional/ParamArray, arrays, properties and collections.
 - [x] Native For Each/Next, Exit For, nested loops and DAO Fields enumeration; real 29-table structure regression.
 - [ ] With, Select Case, remaining Do/While/Exit variants and full conditional semantics.
+- [x] Imported-form Forms/Controls collections, guarded references, typed cross-form data writes and basic Access control constants.
+- [ ] Complete Forms/Reports object model, properties, lifetime and subform semantics.
 - [ ] On Error/Err/Resume, nested handlers and source-mapped diagnostics/debugger.
 - [ ] Application/Forms/Reports/Me/DoCmd and Access/DAO constants.
 - [ ] CurrentDb/DBEngine/Workspace/Database, DAO transactions and ADO adapter.

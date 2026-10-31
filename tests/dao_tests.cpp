@@ -248,5 +248,26 @@ End Sub
         "Sub Bad()\nDim x\nFor Each x In CurrentDb\nNext\nEnd Sub","Bad",host);
     assert(wrongCollection.status == linaccess::VbaExecutionStatus::Error && wrongCollection.errorNumber == 438);
     assert(linaccess::validateVbaProcedure("Sub Bad()\nExit For\nEnd Sub","Bad").status == linaccess::VbaExecutionStatus::Error);
+
+    assert(q.exec("CREATE TABLE property_collision(EOF INTEGER,Fields TEXT)"));
+    assert(q.exec("INSERT INTO property_collision VALUES(9,'field')"));
+    const auto collision = linaccess::executeVbaProcedure(R"VBA(
+Sub Collision()
+Dim rs As DAO.Recordset
+Set rs = CurrentDb.OpenRecordset("property_collision")
+Me!EofField = rs!EOF
+Me!EofProperty = rs.EOF
+Me!FieldsField = rs!Fields
+Me!FieldsCount = rs.Fields.Count
+rs.Edit
+rs!EOF = 10
+rs.Update
+rs.Close
+End Sub
+)VBA","Collision",host);
+    assert(collision.status == linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["EofField"]=="9" && host.fields["EofProperty"]=="False");
+    assert(host.fields["FieldsField"]=="field" && host.fields["FieldsCount"]=="2");
+    assert(q.exec("SELECT EOF FROM property_collision") && q.next() && q.value(0).toInt()==10); q.finish();
     std::cout << "DAO recordset iteration, edit, insert, fields, cancel, delete and read-only checks passed\n";
 }

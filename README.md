@@ -87,7 +87,7 @@ ctest --test-dir build-core --output-on-failure
 - **VBA-Teilinterpretation** für native Formulare und importierte VBIDE-Module:
   `Form_Load`, `btnSpeichern_Click`, `btnAktion_Click`, `MsgBox`,
   `If/Else/End If`, `Dim`, Variablen, Rechenausdrücke und Vergleiche,
-  `For/Next`, `Exit Sub/Function`, `Me!Feld = ...`, `&`-Verkettung,
+  `For/Next`, `For Each`, `Exit For`, `Exit Sub/Function`, `Me!Feld = ...`, `&`-Verkettung,
   einige Standardfunktionen (`IsNull`, `Nz`, `Len`, `CStr`, `CLng`,
   `CDbl`, `UCase`, `LCase`, `Abs`), `DoCmd.RunCommand acCmdSaveRecord`,
   `DoCmd.Maximize` und `DoCmd.GoToRecord , , acLast`.
@@ -136,13 +136,23 @@ ctest --test-dir build-core --output-on-failure
   bisherigen Befehlen kennt der Interpreter nun `DoCmd.RunSQL`,
   `CurrentDb.Execute`, `DoCmd.OpenForm`, `GoToRecord acNext/acNewRec`,
   `DoCmd.Requery`, `Me.Control.Visible`, `.SetFocus`, `.Requery`,
-  parameterloses `Call` und VBA-Zeilenfortsetzung `_`.
+  parameterisierte Sub-/Function-Aufrufe, ByVal/ByRef, lokale Fehlerhandler
+  mit Labels/Resume und VBA-Zeilenfortsetzung `_`. Gebundene Update-/Dirty-/
+  Navigations-/Schließereignisse samt Cancel werden getestet; siehe
+  [Ereignisse](docs/FORM_EVENTS.md).
   **SQL-Aktionen wirken direkt auf die geöffnete SQLite-Projektkopie**, auch
   bei `DELETE`, `UPDATE`, `DROP TABLE` und `INSERT`. Es erscheint keine
   LinAccess-spezifische Sicherheitsabfrage vor jeder VBA-Anweisung.
-- Importierte Access-Abfragen lassen sich in einer SQLite-Abfrageansicht
-  ausführen, soweit ihre Jet-SQL-Syntax kompatibel ist. Importierte Berichte
-  haben eine grobe Layoutvorschau (noch keine Layout-/Druckkompatibilität).
+- Importierte Access-Abfragen laufen im Navigator über einen begrenzten Jet-SQL-
+  Adapter mit Parameterdialogen, DAO-QueryDefs, TOP-Sortiergleichständen und eager
+  IIf. Gespeicherte Abfragen können schreibgeschützte Formular-Datenquellen sein.
+  37/100 Kassenabfragen werden ausgeführt, bisher ohne Access-Referenzergebnis;
+  siehe [Abfrageadapter](docs/QUERY_ADAPTER.md). Importierte Berichte haben eine
+  grobe Layoutvorschau, noch keine Layout-/Druckkompatibilität.
+- Importierte Formulare bieten native `Forms`-/`Controls`-Sammlungen einschließlich
+  `Me.Controls`, tatsächlicher formulierübergreifender Datenänderungen und
+  geprüfter Qt-Objektlebensdauer. Die Implementierung bleibt eine Teilmenge;
+  siehe [Formular-Objektmodell](docs/FORM_OBJECT_MODEL.md).
 - Für ein per Windows-Bridge importiertes Formular gibt es die Aktion
   **Als natives Formular übernehmen (Teilkonvertierung)**. Sie liest
   `RecordSource` und gebundene `ControlSource`-Felder aus `SaveAsText`, gleicht
@@ -186,16 +196,22 @@ Der statische Analyzer erkennt **187 VBA-Prozeduren**, führt beim Import
 jedoch **keinen** fremden Code aus. 23 Formulare nutzen direktes SQL als
 Datenquelle, lediglich 10 sind unmittelbar tabellengebunden.
 Die Bestandsanwendung ist **noch nicht lauffähig**, insbesondere wegen
-der weiterhin unvollständigen DAO-Unterstützung, Formularobjekten und diversen `DoCmd`-Befehlen. Ein Originalhandler ist inzwischen separat gegen eine SQLite-Kopie ausgeführt; siehe DAO-Laufzeit.
+der weiterhin unvollständigen VBA-/Objekt-/SQL-Semantik. Elf originale
+Tastatur-Schaltflächen samt Parameterhelfer sowie ein DAO-Einfügehandler
+werden inzwischen separat gegen Testkopien ausgeführt; siehe
+[DAO-Laufzeit](docs/DAO_RUNTIME.md).
 In Version 0.7 wurden alle **47 realen Access-2003-Formdefinitionen** mit
-dem Layout-Parser geprüft: 685 Platzierungsdaten und 43 Schaltflächen wurden
-erkannt. Ein echter Qt-Klick mit VBA-`CurrentDb.Execute` wird gegen eine
+dem Layout-Parser geprüft: Nach Korrektur der Blockzuordnung werden 878 Controls
+und 86 sichtbare CommandButtons erkannt. Unterstützte Widgets aller 47 Formulare
+werden in der Strukturregression instanziiert. Ein echter Qt-Klick mit VBA-`CurrentDb.Execute` wird gegen eine
 separate SQLite-Testtabelle ausgeführt. Das belegt **nicht**, dass die
 Original-Kassenaktionen bereits laufen.
 Auch der tabellarische MDB-Import wurde direkt an der originalen Kassen-MDB
 getestet: **29 von 29 Tabellen** konnten als typisierte SQLite-Kopien angelegt
 werden. Die vorhandene `Foto`-BLOB-Spalte enthielt im Test keine nicht-NULL-
-Werte. Das ist kein Nachweis für PK-/FK-/Index- oder DAO-Kompatibilität.
+Werte. Die Regression prüft exportierte Schlüssel/Indizes, Beziehungen und
+sämtliche Zellen einschließlich NULL. Exakte Jet-Typen, Standardwerte und
+OLE-Nutzdaten sind weiterhin nicht allgemein erhalten.
 Details: [Kassen-Regression](docs/KASSA_ACCESS2003_BRIDGE_TEST.md).
 
 Die vom Anwender bereitgestellte MDB-Datei wird **nicht** mit dem Code

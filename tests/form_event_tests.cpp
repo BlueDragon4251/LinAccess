@@ -62,7 +62,7 @@ CurrentDb.Execute "INSERT INTO events(name) VALUES ('dirty')"
 End Sub
 Sub Name_BeforeUpdate(Cancel As Integer)
 CurrentDb.Execute "INSERT INTO events(name) VALUES ('control_before')"
-If Me.Name = "blocked" Then
+If Me!Name = "blocked" Then
 Cancel = 1
 End If
 End Sub
@@ -71,7 +71,7 @@ CurrentDb.Execute "INSERT INTO events(name) VALUES ('control_after')"
 End Sub
 Sub Form_BeforeUpdate(Cancel As Integer)
 CurrentDb.Execute "INSERT INTO events(name) VALUES ('form_before')"
-If Me.Name = "cancel" Then
+If Me!Name = "cancel" Then
 Cancel = 1
 End If
 End Sub
@@ -80,7 +80,7 @@ CurrentDb.Execute "INSERT INTO events(name) VALUES ('form_after')"
 End Sub
 Sub Form_Unload(Cancel As Integer)
 CurrentDb.Execute "INSERT INTO events(name) VALUES ('unload')"
-If Me.Name = "stay" Then
+If Me!Name = "stay" Then
 Cancel = 1
 End If
 End Sub

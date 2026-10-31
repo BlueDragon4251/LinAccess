@@ -200,7 +200,7 @@ private:
     VbaValue primary() {
         auto value = atom();
         while (peek().value == "." || peek().value == "!") {
-            consume();
+            const bool item = consume().value == "!";
             const auto member = consume();
             if (member.type != Token::Type::Word && member.type != Token::Type::Bracket)
                 throw error("Objektmitglied erwartet");
@@ -214,7 +214,8 @@ private:
             if (host_) {
                 if (value.kind != VbaValue::Kind::Object || !value.object)
                     throw error("Objektvariable nicht gesetzt", 91);
-                value = value.object->member(member.value, args);
+                if (item && !args.empty()) throw error("Bang lookup arguments unsupported",450);
+                value = item ? value.object->item(member.value) : value.object->member(member.value,args);
             }
         }
         return value;
@@ -257,6 +258,11 @@ private:
             if (take("(")) require(")");
             return host_ ? VbaValue::reference(host_->currentDatabase()) : VbaValue{};
         }
+        static const std::unordered_map<std::string,int> controlTypes{
+            {"aclabel",100},{"acrectangle",101},{"acline",102},{"accommandbutton",104},
+            {"acoptionbutton",105},{"accheckbox",106},{"actextbox",109},{"aclistbox",110},
+            {"accombobox",111},{"acsubform",112},{"actogglebutton",122}};
+        if (const auto type = controlTypes.find(word); type != controlTypes.end()) return VbaValue::numeric(type->second);
         if (word == "dbopendynaset") return VbaValue::numeric(2);
         if (word == "dbopensnapshot") return VbaValue::numeric(4);
         if (word == "dbfailonerror") return VbaValue::numeric(128);
@@ -265,12 +271,32 @@ private:
         if (word == "vbcrlf") return VbaValue::string("\r\n");
         if (word == "vbnewline") return VbaValue::string("\n");
         if (word == "vbtab") return VbaValue::string("\t");
-        if (word == "me" && (take("!") || take("."))) {
+        if (word == "forms") {
+            std::vector<VbaValue> args;
+            const bool item = take("(");
+            if (item) { args.push_back(expression(1)); require(")"); }
+            if (!host_) return {};
+            const auto forms = host_->formsCollection();
+            return item ? forms->member("Item",args) : VbaValue::reference(forms);
+        }
+        if (word == "me" && peek().value != "!" && peek().value != ".")
+            return host_ ? VbaValue::reference(host_->currentForm()) : VbaValue{};
+        if (word == "me" && (peek().value == "!" || peek().value == ".")) {
+            const bool item = consume().value == "!";
             const auto field = consume();
             if (field.type != Token::Type::Word && field.type != Token::Type::Bracket)
                 throw error("Me! benötigt einen Feldnamen");
+            if (!item && lower(field.value) == "controls") {
+                std::vector<VbaValue> args;
+                if (take("(")) { args.push_back(expression(1)); require(")"); }
+                return host_ ? host_->currentForm()->member("Controls",args) : VbaValue{};
+            }
             if (!host_) return {};
-            return host_->fieldValue(field.value);
+            const auto key = lower(field.value);
+            const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource");
+            if (!formProperty && (peek().value == "." || peek().value == "!"))
+                return host_->currentForm()->member("Controls",{VbaValue::string(field.value)});
+            return item ? host_->controlValue(field.value) : host_->fieldValue(field.value);
         }
         if (take("(")) {
             std::vector<VbaValue> args;
@@ -383,6 +409,8 @@ private:
 };
 } // namespace
 
+VbaValue VbaHost::controlValue(std::string_view name) { return fieldValue(name); }
+void VbaHost::setControlValue(std::string_view name,const VbaValue& value) { setFieldValue(name,value); }
 VbaValue VbaHost::fieldValue(std::string_view name) {
     const auto value = field(name);
     return value ? VbaValue::string(*value) : VbaValue{};

@@ -23,6 +23,8 @@ public:
     virtual std::optional<std::string> field(std::string_view name) = 0;
     virtual void setField(std::string_view name, std::optional<std::string> value) = 0;
     virtual VbaValue fieldValue(std::string_view name);
+    virtual VbaValue controlValue(std::string_view name);
+    virtual void setControlValue(std::string_view name,const VbaValue& value);
     virtual void setFieldValue(std::string_view name,const VbaValue& value);
     virtual void message(std::string_view text) = 0;
     virtual void saveRecord() = 0;
@@ -42,6 +44,12 @@ public:
         throw std::runtime_error("Me.Control.Visible: kein Formularkontext");
     }
     virtual std::optional<std::string> moduleForProcedure(std::string_view) { return std::nullopt; }
+    virtual std::shared_ptr<VbaObject> currentForm() {
+        throw VbaRuntimeError(438,"Me: form object unavailable");
+    }
+    virtual std::shared_ptr<VbaObject> formsCollection() {
+        throw VbaRuntimeError(438,"Forms collection unavailable");
+    }
     virtual std::shared_ptr<VbaObject> currentDatabase() {
         throw std::runtime_error("CurrentDb: keine verbundene Datenbank");
     }

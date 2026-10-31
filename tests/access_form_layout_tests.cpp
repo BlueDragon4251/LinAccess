@@ -2,6 +2,7 @@
 #include "access_catalog.hpp"
 #include "access_table_import.hpp"
 #include "access_form_preview.hpp"
+#include "access_form_objects.hpp"
 #include "vba_source_codec.hpp"
 
 #include <QApplication>
@@ -27,6 +28,7 @@
 #include <iostream>
 
 void testFormEvents();
+void testFormObjects();
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
@@ -68,19 +70,22 @@ End
         }
         visible += static_cast<int>(form.controls.size());
         ++scanned;
-        if (scanned == 1) {
-            std::cerr << "First form: " << object.value("name").toString().toStdString()
-                      << ", parsed controls=" << form.controls.size()
-                      << ", raw bytes=" << bytes.size()
-                      << ", Begin Section=" << linaccess::decodeVbaSource(bytes).indexOf("Begin Section")
-                      << ", Begin TextBox=" << linaccess::decodeVbaSource(bytes).indexOf("Begin TextBox")
-                      << '\n';
+        {
             // The actual Qt widgets must instantiate and inherit geometry.
-            auto db = QSqlDatabase::addDatabase("QSQLITE", "layout-test");
+            auto db = QSqlDatabase::addDatabase("QSQLITE", "layout-test-" + QString::number(scanned));
             db.setDatabaseName(":memory:");
             assert(db.open());
             AccessFormPreview dialog(object.value("name").toString(), bytes, {}, db);
             assert(dialog.renderedControls() > 0);
+            auto objectModel = makePreviewFormObject(dialog);
+            auto controlsModel = objectModel->member("Controls",{}).object;
+            const auto items = controlsModel->enumerate();
+            assert(items.size() == controlsModel->member("Count",{}).asNumber());
+            assert(items.size() <= static_cast<std::size_t>(dialog.renderedControls()));
+            for (const auto& item : items) {
+                assert(!item.object->member("Name",{}).asText().empty());
+                assert(item.object->member("ControlType",{}).asNumber() >= 100);
+            }
             assert(dialog.findChild<QWidget*>("access-form-canvas") != nullptr);
             db.close();
         }
@@ -193,6 +198,7 @@ End Sub
         std::cout << "Original keypad button/parameterized-handler executions: " << executedKeys << '\n';
     }
     testFormEvents();
+    testFormObjects();
     if (argc >= 3) {
         QTemporaryDir temporary;
         assert(temporary.isValid());

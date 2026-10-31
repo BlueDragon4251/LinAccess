@@ -1,4 +1,5 @@
 #include "access_form_preview.hpp"
+#include "access_form_objects.hpp"
 
 #include "vba_runtime.hpp"
 #include "dao_database.hpp"
@@ -11,6 +12,7 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QScopedValueRollback>
+#include <QSignalBlocker>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
@@ -79,14 +81,20 @@ public:
         if (key == "newrecord") return preview_.currentRecordIndex_ == 0 ? "-1" : "0";
         return preview_.getField(name);
     }
+    linaccess::VbaValue controlValue(std::string_view name) override { return preview_.getFieldValue(name); }
+    void setControlValue(std::string_view name,const linaccess::VbaValue& value) override { preview_.setFieldValue(name,value); }
     linaccess::VbaValue fieldValue(std::string_view name) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
+        if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
         return preview_.getFieldValue(name);
     }
     void setFieldValue(std::string_view name,const linaccess::VbaValue& value) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if (key == "name" || key == "recordsource" || key == "newrecord")
+            throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
         preview_.setFieldValue(name,value);
     }
@@ -125,25 +133,8 @@ public:
         if (!preview_.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Requery cancelled by validation");
         preview_.loadRecords();
     }
-    void requeryControl(std::string_view name) override {
-        const auto target = QString::fromUtf8(name.data(), name.size());
-        auto* widget = preview_.controls_.value(target.toCaseFolded());
-        if (!widget) throw std::runtime_error("Steuerelement nicht gefunden: " + std::string(name));
-        auto* combo = qobject_cast<QComboBox*>(widget);
-        if (!combo) { widget->update(); return; }
-        for (const auto& control : preview_.layout_.controls) {
-            if (control.name.compare(target, Qt::CaseInsensitive) != 0) continue;
-            if (!control.rowSource.startsWith("SELECT ", Qt::CaseInsensitive)) return;
-            const auto old = combo->currentText();
-            QSqlQuery query(preview_.db_);
-            if (!query.exec(control.rowSource))
-                throw std::runtime_error(query.lastError().text().toStdString());
-            combo->clear();
-            while (combo->count() < 10000 && query.next()) combo->addItem(query.value(0).toString());
-            combo->setCurrentText(old);
-            return;
-        }
-    }
+    void requeryControl(std::string_view name) override { preview_.requeryControl(name); }
+
     void focusControl(std::string_view name) override {
         auto* widget = preview_.controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded());
         if (!widget) throw std::runtime_error("Steuerelement nicht gefunden: " + std::string(name));
@@ -168,6 +159,8 @@ public:
         }
         return std::nullopt;
     }
+    std::shared_ptr<linaccess::VbaObject> currentForm() override { return makePreviewFormObject(preview_); }
+    std::shared_ptr<linaccess::VbaObject> formsCollection() override { return makePreviewFormsObject(preview_); }
     std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(preview_.db_); }
     void executeSql(std::string_view statement) override {
         if (!preview_.db_.isOpen()) throw std::runtime_error("Kein offenes Datenbankprojekt");
@@ -188,6 +181,8 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
       vba_(linaccess::decodeVbaSource(vbaSource)),
       layout_(linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(source))),
       db_(std::move(database)) {
+    static qlonglong openingSequence = 0;
+    setProperty("la_form_open_order",++openingSequence);
     const bool queryViewsReady = linaccess::installAccessQueryViews(db_) >= 0;
     setWindowTitle((layout_.caption.isEmpty() ? formName_ : layout_.caption) + " — LinAccess");
     resize(950, 720);
@@ -578,6 +573,34 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
         widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
     }
     if (before != textOf(widget) || wasNull != converted.isNull()) markDirty(QString::fromUtf8(name.data(),name.size()));
+}
+
+void AccessFormPreview::requeryControl(std::string_view name) {
+    const auto target = QString::fromUtf8(name.data(),name.size());
+    auto* widget = controls_.value(target.toCaseFolded());
+    if (!widget) throw linaccess::VbaRuntimeError(2465,"Control unavailable");
+    auto* combo = qobject_cast<QComboBox*>(widget);
+    if (!combo) throw linaccess::VbaRuntimeError(438,"Requery for this control type is unsupported");
+    for (const auto& control : layout_.controls) {
+        if (control.name.compare(target,Qt::CaseInsensitive)!=0) continue;
+        const auto source = control.rowSource.trimmed();
+        linaccess::AccessQueryResult result;
+        if (!source.isEmpty()) {
+            linaccess::AccessQueryPlan plan;
+            if (db_.tables().contains(source,Qt::CaseInsensitive)) plan.sql = "SELECT * FROM " + sqlIdentifier(source);
+            else plan = linaccess::compileAccessQuery(
+                source.startsWith("SELECT",Qt::CaseInsensitive) || source.startsWith("PARAMETERS",Qt::CaseInsensitive)
+                    ? source : linaccess::accessQuerySource(db_,source));
+            result = linaccess::executeAccessQueryPlan(db_,plan,linaccess::bindAccessQueryParameters(plan,{}));
+            if (result.rows.size()>10000) throw linaccess::VbaRuntimeError(3035,"Control row limit exceeded");
+        }
+        const auto old = combo->currentText();
+        const QSignalBlocker blocked(combo);
+        combo->clear();
+        for (const auto& row : result.rows) if (!row.isEmpty()) combo->addItem(row.front().toString());
+        combo->setCurrentText(old);
+        return;
+    }
 }
 
 void AccessFormPreview::openOtherForm(const QString& name) {

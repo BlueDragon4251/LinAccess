@@ -50,7 +50,19 @@ private:
     linaccess::VbaValue getFieldValue(std::string_view name) const;
     void setFieldValue(std::string_view name,const linaccess::VbaValue& value);
     friend class PreviewVbaHost;
+    friend std::shared_ptr<linaccess::VbaObject> makePreviewFormObject(AccessFormPreview&);
+    friend std::shared_ptr<linaccess::VbaObject> makePreviewFormsObject(AccessFormPreview&);
+    friend std::shared_ptr<linaccess::VbaObject> makePreviewControlsObject(AccessFormPreview&);
+    friend std::shared_ptr<linaccess::VbaObject> makePreviewControlObject(AccessFormPreview&,const QString&);
+    friend class PreviewObjectBase;
+    friend class PreviewFormObject;
+    friend class PreviewFormsObject;
+    friend class PreviewControlsObject;
+    friend class PreviewControlObject;
+    void requeryControl(std::string_view name);
 
+    std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, controlsObject_;
+    QMap<QString,std::weak_ptr<linaccess::VbaObject>> controlObjects_;
     QString formName_;
     QString vba_;
     linaccess::AccessFormLayout layout_;
