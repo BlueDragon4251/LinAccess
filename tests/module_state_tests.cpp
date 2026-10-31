@@ -48,11 +48,11 @@ void testModuleStates(const QDir& directory,const QJsonArray& objects) {
             query.addBindValue(name); query.addBindValue(code); assert(query.exec());
         };
         add("shared helper","Public Function SharedNext() As Variant\nSharedNext=999\nEnd Function\n");
-        const auto helper=QByteArray("Private hits As Variant\nPublic Function SharedNext() As Variant\nSharedNext=Advance()\nEnd Function\nPrivate Function Advance() As Variant\nhits=hits+1\nAdvance=hits\nEnd Function\nPublic Function ReadStandard() As Variant\nReadStandard=")+QByteArray::fromStdString(selected)+"\nEnd Function\nPublic Function IllegalMe() As Variant\nIllegalMe=Me.Tag\nEnd Function\n";
+        const auto helper=QByteArray("Private hits As Variant\nPublic Function SharedNext() As Variant\nSharedNext=Advance()\nEnd Function\nPrivate Function Advance() As Variant\nhits=hits+1\nAdvance=hits\nEnd Function\nPublic Function ReadStandard() As Variant\nReadStandard=")+QByteArray::fromStdString(selected)+"\nEnd Function\nPublic Function IllegalMe() As Variant\nIllegalMe=Me.Tag\nEnd Function\nPublic Function IllegalMeRequery() As Variant\nMe.exposed.Requery\nEnd Function\nPublic Function IllegalMeFocus() As Variant\nMe.exposed.SetFocus\nEnd Function\n";
         add("SHARED HELPER",helper); return db;
     };
     auto db=open("original-module-state"); auto otherDb=open("separate-module-state");
-    const auto source=QByteArray("Private counter As Variant\nPublic exposed As String\nFunction External() As Variant\nExternal=SharedNext()\nEnd Function\nFunction StandardValue() As Variant\nStandardValue=ReadStandard()\nEnd Function\nFunction PrivateCall() As Variant\nPrivateCall=Advance()\nEnd Function\nFunction BadMe() As Variant\nBadMe=IllegalMe()\nEnd Function\nSub Explicit()\nMe.counter=9\nMe.exposed=\"public value\"\nMe.Tag=CStr(Me.counter)\nEnd Sub\nSub Bang()\nMe!exposed=1\nEnd Sub\nSub WriteGlobal()\n")+QByteArray::fromStdString(selected)+"=\"session\"\nEnd Sub\nFunction ReadGlobal() As Variant\nReadGlobal="+QByteArray::fromStdString(selected)+"\nEnd Function\nFunction Increment() As Variant\ncounter=counter+1\nIncrement=counter\nEnd Function\n";
+    const auto source=QByteArray("Private counter As Variant\nPublic exposed As String\nFunction External() As Variant\nExternal=SharedNext()\nEnd Function\nFunction StandardValue() As Variant\nStandardValue=ReadStandard()\nEnd Function\nFunction PrivateCall() As Variant\nPrivateCall=Advance()\nEnd Function\nFunction BadMe() As Variant\nBadMe=IllegalMe()\nEnd Function\nFunction BadMeRequery() As Variant\nBadMeRequery=IllegalMeRequery()\nEnd Function\nFunction BadMeFocus() As Variant\nBadMeFocus=IllegalMeFocus()\nEnd Function\nSub Explicit()\nMe.counter=9\nMe.exposed=\"public value\"\nMe.Tag=CStr(Me.counter)\nEnd Sub\nSub Bang()\nMe!exposed=1\nEnd Sub\nSub WriteGlobal()\n")+QByteArray::fromStdString(selected)+"=\"session\"\nEnd Sub\nFunction ReadGlobal() As Variant\nReadGlobal="+QByteArray::fromStdString(selected)+"\nEnd Function\nFunction Increment() As Variant\ncounter=counter+1\nIncrement=counter\nEnd Function\n";
     const auto call=[](AccessFormPreview& form,const QString& procedure) {
         std::vector<linaccess::VbaValue> args; const auto result=form.executeProcedure(procedure,args);
         assert(result.status==linaccess::VbaExecutionStatus::Completed); return result;
@@ -69,6 +69,8 @@ void testModuleStates(const QDir& directory,const QJsonArray& objects) {
     std::vector<linaccess::VbaValue> unavailable;
     assert(first.executeProcedure("PrivateCall",unavailable).errorNumber==5);
     assert(first.executeProcedure("BadMe",unavailable).errorNumber==438);
+    assert(first.executeProcedure("BadMeRequery",unavailable).errorNumber==438);
+    assert(first.executeProcedure("BadMeFocus",unavailable).errorNumber==438);
     const auto controlDefinition=QByteArray("Begin Form\nBegin Section\nBegin TextBox\nName =\"")+QByteArray::fromStdString(selected)+"\"\nEnd\nEnd\nEnd\n";
     AccessFormPreview controlOwner("control scope",controlDefinition,source,db);
     makePreviewFormObject(controlOwner)->assignItem(selected,linaccess::VbaValue::string("control value"));

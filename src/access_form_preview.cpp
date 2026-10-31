@@ -1,5 +1,6 @@
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
+#include "native_send_keys.hpp"
 
 #include "vba_runtime.hpp"
 #include "vba_module_context.hpp"
@@ -173,9 +174,25 @@ int columnIndex(QString source, const QStringList& columns) {
 }
 }
 
+QString AccessFormPreview::controlMemberName(const QString& name) const {
+    if (controls_.contains(name.toCaseFolded())) return name;
+    QString resolved;
+    for (const auto& control:layout_.controls) {
+        if (!controls_.contains(control.name.toCaseFolded()) || eventName(control.name).compare(name,Qt::CaseInsensitive)!=0) continue;
+        if (!resolved.isEmpty() && resolved.compare(control.name,Qt::CaseInsensitive)!=0)
+            throw linaccess::VbaRuntimeError(2465,"Ambiguous generated control member");
+        resolved=control.name;
+    }
+    return resolved.isEmpty() ? name : resolved;
+}
+
 class PreviewVbaHost final : public linaccess::VbaHost {
 public:
     explicit PreviewVbaHost(AccessFormPreview& preview) : preview_(preview) {}
+    int compareStrings(std::string_view left,std::string_view right,linaccess::VbaCompareMode mode) override {
+        if (mode==linaccess::VbaCompareMode::Binary) return left.compare(right);
+        return QString::compare(QString::fromUtf8(left.data(),left.size()),QString::fromUtf8(right.data(),right.size()),Qt::CaseInsensitive);
+    }
     std::optional<std::string> field(std::string_view name) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (key == "dirty") return preview_.dirty_ ? "-1" : "0";
@@ -186,7 +203,7 @@ public:
     void enterModule(std::string_view source) override { moduleScopes_.push_back(source==preview_.vba_.toUtf8().toStdString()); }
     void leaveModule() noexcept override { moduleScopes_.pop_back(); }
     bool hasInstanceIdentifier(std::string_view name) override {
-        return instanceScope() && preview_.controls_.contains(QString::fromUtf8(name.data(),name.size()).toCaseFolded());
+        return instanceScope() && preview_.controls_.contains(preview_.controlMemberName(QString::fromUtf8(name.data(),name.size())).toCaseFolded());
     }
     std::shared_ptr<linaccess::VbaModuleState> moduleState(std::string_view source) override {
         if (source!=preview_.vba_.toUtf8().toStdString() && !linaccess::isVbaClassModule(source))
@@ -201,15 +218,15 @@ public:
     std::optional<linaccess::VbaValue> resolveIdentifier(std::string_view name,bool reference) override {
         if (!instanceScope()) return std::nullopt;
         if (auto value=preview_.getModuleMember(name,false)) return value;
-        const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
-        if (!preview_.controls_.contains(key)) return std::nullopt;
-        return reference ? makePreviewFormObject(preview_)->objectItem(name) : preview_.getFieldValue(name);
+        const auto canonical=memberControlName(name);
+        if (!preview_.controls_.contains(QString::fromStdString(canonical).toCaseFolded())) return std::nullopt;
+        return reference ? makePreviewFormObject(preview_)->objectItem(canonical) : preview_.getFieldValue(canonical);
     }
     bool assignIdentifier(std::string_view name,const linaccess::VbaValue& value) override {
         if (!instanceScope()) return false;
-        const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
-        if (!preview_.controls_.contains(key)) return false;
-        preview_.setFieldValue(name,value); return true;
+        const auto canonical=memberControlName(name);
+        if (!preview_.controls_.contains(QString::fromStdString(canonical).toCaseFolded())) return false;
+        preview_.setFieldValue(canonical,value); return true;
     }
     linaccess::VbaValue bracketValue(std::string_view name,bool reference) override {
         if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Unqualified bracket reference requires a native instance context");
@@ -282,7 +299,7 @@ public:
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
         if (auto value=preview_.getModuleMember(name,false)) return *value;
-        return preview_.getFieldValue(name);
+        return preview_.getFieldValue(memberControlName(name));
     }
     void setControlValue(std::string_view name,const linaccess::VbaValue& value) override { requireInstance(); preview_.setFieldValue(name,value); }
     void setFieldValue(std::string_view name,const linaccess::VbaValue& value) override {
@@ -295,7 +312,7 @@ public:
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
         if (preview_.setModuleMember(name,value,false)) return;
-        preview_.setFieldValue(name,value);
+        preview_.setFieldValue(memberControlName(name),value);
     }
     void setField(std::string_view name, std::optional<std::string> value) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
@@ -337,16 +354,22 @@ public:
     void requery() override {
         (void)makePreviewFormObject(preview_)->member("Requery",{});
     }
-    void requeryControl(std::string_view name) override { preview_.requeryControl(name); }
+    std::string memberControlName(std::string_view name) override {
+        requireInstance();
+        return preview_.controlMemberName(QString::fromUtf8(name.data(),name.size())).toUtf8().toStdString();
+    }
+    void requeryControl(std::string_view name) override { requireInstance(); preview_.requeryControl(name); }
 
     void focusControl(std::string_view name) override {
+        requireInstance();
         auto* widget = preview_.controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded()).data();
-        if (!widget) throw std::runtime_error("Steuerelement nicht gefunden: " + std::string(name));
+        if (!widget) throw linaccess::VbaRuntimeError(2465,"Control unavailable");
         widget->setFocus();
     }
     void setControlVisible(std::string_view name, bool value) override {
+        requireInstance();
         auto* widget = preview_.controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded()).data();
-        if (!widget) throw std::runtime_error("Steuerelement nicht gefunden: " + std::string(name));
+        if (!widget) throw linaccess::VbaRuntimeError(2465,"Control unavailable");
         widget->setVisible(value);
     }
     std::optional<std::string> moduleForProcedure(std::string_view procedure) override {
@@ -381,6 +404,12 @@ public:
         if (!preview_.db_.isOpen()) throw std::runtime_error("Kein offenes Datenbankprojekt");
         auto database = linaccess::makeDaoDatabase(preview_.db_);
         (void)database->member("Execute",{linaccess::VbaValue::string(std::string(statement))});
+    }
+    void sendKeys(std::string_view keys,bool wait) override {
+        linaccess::sendNativeKeys(&preview_,QString::fromUtf8(keys.data(),keys.size()),wait,
+            [preview=QPointer<AccessFormPreview>(&preview_)](int number) {
+                if (preview && preview->status_) preview->status_->setText("SendKeys: Fehler "+QString::number(number));
+            });
     }
     void openFormArguments(const std::vector<linaccess::VbaValue>& args) override {
         const auto request=linaccess::parseVbaOpenFormArguments(args);
@@ -612,7 +641,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
                         if (loading_) return;
                         group->setProperty("la_option_value",button->property("la_option_value"));
                         group->setProperty("la_null",false); group->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Number));
-                        markDirty(parent.name); pendingControls_.insert(parent.name);
+                        markDirty(parent.name); refreshCalculatedControls(); pendingControls_.insert(parent.name);
                         if (commitControl(parent.name)) {
                             (void)runControlBinding(parent.name,"Click",parent.onClick);
                             (void)runControlBinding(control.name,"Click",control.onClick);
@@ -633,7 +662,8 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         if (auto* line = qobject_cast<QLineEdit*>(widget)) {
             connect(line,&QLineEdit::textChanged,this,[this,name,widget] {
                 if (loading_) return;
-                widget->setProperty("la_null",false); markDirty(name);
+                widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
+                markDirty(name); refreshCalculatedControls();
             });
             connect(line,&QLineEdit::textEdited,this,[this,name,widget] {
                 if (!loading_) { pendingControls_.insert(name); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text)); }
@@ -642,17 +672,18 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         } else if (auto* combo = qobject_cast<QComboBox*>(widget)) {
             connect(combo,&QComboBox::currentTextChanged,this,[this,name,widget] {
                 if (loading_) return;
-                widget->setProperty("la_null",false); markDirty(name);
+                widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
+                markDirty(name); refreshCalculatedControls();
             });
             connect(combo,QOverload<int>::of(&QComboBox::activated),this,[this,name](int) {
                 if (loading_) return;
                 if (auto* widget=controls_.value(name.toCaseFolded()).data()) widget->setProperty("la_null",false);
-                markDirty(name); pendingControls_.insert(name); (void)commitControl(name);
+                markDirty(name); refreshCalculatedControls(); pendingControls_.insert(name); (void)commitControl(name);
             });
         } else if (auto* box = qobject_cast<QCheckBox*>(widget);box && control.optionGroupIndex<0) {
             connect(box,&QCheckBox::toggled,this,[this,name,widget] {
                 if (loading_) return;
-                widget->setProperty("la_null",false); markDirty(name);
+                widget->setProperty("la_null",false); markDirty(name); refreshCalculatedControls();
             });
             connect(box,&QCheckBox::clicked,this,[this,name] { pendingControls_.insert(name); (void)commitControl(name); });
         }
@@ -832,6 +863,7 @@ bool AccessFormPreview::commitControl(const QString& name) {
         if (control.name.compare(name,Qt::CaseInsensitive) != 0) continue;
         if (eventProcedure(control.beforeUpdate)) {
             const auto result = runHandler(eventName(control.name)+"_BeforeUpdate");
+            eventResults_.insert(("control:"+control.name+":BeforeUpdate").toCaseFolded(),result);
             if (result.cancelled || failed(result)) {
                 if (auto* widget = controls_.value(control.name.toCaseFolded()).data()) widget->setFocus();
                 return false;
@@ -840,6 +872,7 @@ bool AccessFormPreview::commitControl(const QString& name) {
         pendingControls_.remove(name);
         if (eventProcedure(control.afterUpdate)) {
             const auto result = runHandler(eventName(control.name)+"_AfterUpdate");
+            eventResults_.insert(("control:"+control.name+":AfterUpdate").toCaseFolded(),result);
             if (failed(result)) return false;
         }
     }
@@ -914,6 +947,10 @@ void AccessFormPreview::selectRecord(int target) {
         currentRecordIndex_ = destination; loadRecord();
     }
     if (opened_ && initialCurrentDispatched_) (void)formEvent("OnCurrent","Form_Current");
+    // Record navigation is an observable change in an embedded form. Requery
+    // itself preserves the parent's displayed snapshot until an explicit recalc.
+    for (auto* ancestor=parentWidget();ancestor;ancestor=ancestor->parentWidget())
+        if (auto* parent=dynamic_cast<AccessFormPreview*>(ancestor);parent && parent->initialized_ && !parent->loading_) parent->refreshCalculatedControls();
 }
 
 bool AccessFormPreview::prepareClose() {
@@ -981,8 +1018,11 @@ void AccessFormPreview::setField(std::string_view name, std::optional<std::strin
 linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) const {
     const auto key=QString::fromUtf8(name.data(),name.size());
     for (const auto& control : layout_.controls)
-        if (control.name.compare(key,Qt::CaseInsensitive)==0 && control.controlSource.trimmed().startsWith('='))
+        if (control.name.compare(key,Qt::CaseInsensitive)==0 && control.controlSource.trimmed().startsWith('=')) {
+            const auto cached=calculatedValues_.value(control.name.toCaseFolded());
+            if (cached && calculatingControls_.isEmpty()) return *cached;
             return calculatedControlValue(control.name);
+        }
     auto* widget = controls_.value(key.toCaseFolded()).data();
     if (!widget) {
         const auto index=columnIndex(key,dataColumns_);
@@ -1021,6 +1061,9 @@ linaccess::VbaValue AccessFormPreview::calculatedControlValue(const QString& nam
     auto* widget=controls_.value(key).data();
     if (!widget) throw linaccess::VbaRuntimeError(2465,"Calculated control unavailable");
     const QSignalBlocker blocked(widget);
+    const auto remember=[&](linaccess::VbaValue value) {
+        calculatedValues_.insert(key,std::make_shared<linaccess::VbaValue>(value)); return value;
+    };
     try {
         if (calculatingControls_.contains(key) || calculatingControls_.size()>=64)
             throw linaccess::VbaRuntimeError(2455,"Circular calculated control reference");
@@ -1035,20 +1078,20 @@ linaccess::VbaValue AccessFormPreview::calculatedControlValue(const QString& nam
             setText(widget,"#Fehler ("+QString::number(value.errorNumber)+")");
             widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
             widget->setProperty("la_error_number",value.errorNumber); widget->setProperty("la_calculation_error",value.errorNumber);
-            return value;
+            return remember(value);
         }
         const auto converted=linaccess::sqlFieldValue(value,"");
         setText(widget,converted.toString()); widget->setProperty("la_null",converted.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
         widget->setProperty("la_calculation_error",0);
-        return value;
+        return remember(value);
     } catch (const std::exception& error) {
         const auto* typed=dynamic_cast<const linaccess::VbaRuntimeError*>(&error);
         const int number=typed ? typed->number : 5;
         setText(widget,"#Fehler ("+QString::number(number)+")"); widget->setProperty("la_calculation_error",number);
         widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Error));
         widget->setProperty("la_error_number",number);
-        return linaccess::VbaValue::errorValue(number);
+        return remember(linaccess::VbaValue::errorValue(number));
     }
 }
 void AccessFormPreview::refreshCalculatedControls() {
@@ -1139,9 +1182,9 @@ void AccessFormPreview::requeryControl(std::string_view name) {
             (void)calculatedControlValue(control.name); return;
         }
     for (const auto& control : layout_.controls)
-        if (control.name.compare(target,Qt::CaseInsensitive)==0 && control.type=="CommandButton") {
-            // A command button has no record/row source to execute. Requery
-            // invalidates its presentation after Caption/Visible/Tag changes.
+        if (control.name.compare(target,Qt::CaseInsensitive)==0 && (control.type=="CommandButton" || (control.type=="TextBox" && control.controlSource.isEmpty()))) {
+            // These controls have no record/row source. Invalidate their native
+            // presentation while preserving the value and form event state.
             widget->update(); return;
         }
     auto* combo = qobject_cast<QComboBox*>(widget);

@@ -46,6 +46,7 @@ public:
     void reject() override;
 
 private:
+    QString controlMemberName(const QString& name) const;
     void buildControls(QWidget* canvas);
     void loadRecords();
     void setFilterState(const QString& filter,bool enabled);
@@ -125,6 +126,7 @@ private:
     QMap<QString,QPointer<AccessFormPreview>> subforms_;
     QMap<QString,int> subformErrors_;
     mutable QSet<QString> calculatingControls_;
+    mutable QMap<QString,std::shared_ptr<linaccess::VbaValue>> calculatedValues_;
     int dataSourceErrorNumber_{};
     QStringList dataColumns_;
     QMap<QString,QString> dataTypes_;

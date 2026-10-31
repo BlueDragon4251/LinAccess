@@ -99,7 +99,7 @@ Verified incremental work ([query adapter and limits](QUERY_ADAPTER.md)):
 - [x] Canonical MDB/date-literal/Date()/Now() timestamps at second precision.
 - [x] Parameterless compatible query views, dependency refresh and form source exposure.
 - [x] All 100 query artifacts hash-checked and classified on an isolated copy;
-  74 execute (69 ordinary + five parameterized) without an Access result oracle, the rest remain explicitly unresolved.
+  77 execute (72 ordinary + five parameterized) without an Access result oracle, the rest remain explicitly unresolved.
 - [x] SQL operation/time budgets and rejection of interrupted partial results.
 
 Full targets remain open:
@@ -190,3 +190,23 @@ Full targets remain open:
 - [ ] Complete DAO catalog Fields/Indexes/Relations, Refresh/Append/Delete,
   linked-table metadata and immutable generation identity across drop/recreate.
 - [ ] Full declared result/local/argument type enforcement and Access DAO oracle.
+
+
+- [x] Bounded nested With, once-only object evaluation, relative DAO writes,
+  Resume recovery and Exit For scope restoration; native CodeContextObject.
+- [x] Actual native SendKeys/GoToControl with queued focus, Unicode, preflight
+  rejection and bound persistence; three unchanged original keyboard handlers
+  and three independent receiver/text checks (WITH_KEYBOARD_RUNTIME.md).
+- [x] Typed displayed calculated-control cache, input/navigation invalidation
+  and explicit Requery; unbound TextBox.Requery retains its value.
+- [x] Unique generated dotted control aliases, exact-name precedence, literal
+  bang/Controls.Item and ambiguity/standard-module scope regressions.
+- [x] Per-module Option Compare for relational strings; native Qt folding and
+  explicit generic-host non-ASCII limits; original table-existence case failure fixed.
+- [x] Local SELECT INTO with parameters, actual creation/row counts, error 3010
+  and nested rollback; original 14-column statement on an empty sale snapshot.
+- [ ] Full initialized original sale workflow: subsequent first/second keyboard
+  AfterUpdate still fails 3075/1023 without a sale ID; modeless continuation,
+  positive original sale snapshot and real report/printing regression remain open.
+- [ ] Full Jet/locale collation, comparison-aware Like/StrComp/InStr and complete
+  SELECT INTO metadata/AutoNumber/index/default/validation propagation.

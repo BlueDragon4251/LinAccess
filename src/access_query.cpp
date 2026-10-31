@@ -560,6 +560,24 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
         }
     }
     require(pos < tokens.size(), "Jet SQL: query body required");
+    // Jet make-table queries place INTO between the projection and FROM.
+    // Inspect tokens at the outer query depth, never text inside a literal.
+    if (tokens[pos].kind==Token::Word && tokens[pos].value.compare("SELECT",Qt::CaseInsensitive)==0) {
+        int depth=0;
+        for (qsizetype i=pos+1;i<tokens.size();++i) {
+            if (symbol(tokens[i],"(")) { ++depth; continue; }
+            if (symbol(tokens[i],")")) { --depth; continue; }
+            if (depth!=0 || tokens[i].kind!=Token::Word) continue;
+            if (tokens[i].value.compare("FROM",Qt::CaseInsensitive)==0) break;
+            if (tokens[i].value.compare("INTO",Qt::CaseInsensitive)!=0) continue;
+            if (i+2>=tokens.size() || (tokens[i+1].kind!=Token::Word && tokens[i+1].kind!=Token::Identifier)
+                || tokens[i+1].value.isEmpty() || tokens[i+2].kind!=Token::Word
+                || tokens[i+2].value.compare("FROM",Qt::CaseInsensitive)!=0)
+                throw VbaRuntimeError(3251,"Make-table destination must be a local table followed by FROM");
+            plan.makeTable=tokens[i+1].value;
+            tokens.remove(i,2); break;
+        }
+    }
     adaptObjectReferences(tokens,pos);
     adaptConcatenation(tokens,pos);
     adaptDynamicLike(tokens,pos,parameters);
@@ -695,6 +713,10 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
             plan.rightJoinSql=compileAccessQuery(candidate.source).sql;
             plan.rightJoinSources=candidate.tables;
         }
+    }
+    if (!plan.makeTable.isEmpty()) {
+        if (plan.topLimit || !plan.rightJoinSql.isEmpty()) throw VbaRuntimeError(3251,"Make-table TOP/RIGHT JOIN materialization unsupported");
+        plan.sql="CREATE TABLE "+identifier(plan.makeTable)+" AS "+plan.sql;
     }
     return plan;
 }

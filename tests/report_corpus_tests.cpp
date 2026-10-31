@@ -17,6 +17,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLineEdit>
+#include <QKeyEvent>
 #include <QComboBox>
 #include <QPushButton>
 #include <QMainWindow>
@@ -38,8 +39,90 @@
 #include <cassert>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <cmath>
 namespace {
+class OriginalKeyDelivery final : public QObject {
+public:
+    explicit OriginalKeyDelivery(QWidget& scope):scope_(scope) { QApplication::instance()->installEventFilter(this); }
+    ~OriginalKeyDelivery() override { QApplication::instance()->removeEventFilter(this); }
+    int presses{},dialogs{};
+    QString deliveredText,beforeReturn;
+    bool sawReturn{};
+    QPointer<QWidget> firstReceiver;
+    bool initialWholeSelection{};
+protected:
+    bool eventFilter(QObject* object,QEvent* event) override {
+        if (event->type()==QEvent::Show && qobject_cast<QMessageBox*>(object)) ++dialogs;
+        if (event->type()==QEvent::KeyPress)
+            if (auto* widget=qobject_cast<QWidget*>(object);widget && (widget==&scope_ || scope_.isAncestorOf(widget))) {
+                ++presses;
+                if (!firstReceiver) {
+                    firstReceiver=widget;
+                    if (auto* editor=qobject_cast<QLineEdit*>(widget)) initialWholeSelection=editor->selectedText()==editor->text();
+                }
+                const auto* key=static_cast<QKeyEvent*>(event);
+                if (!sawReturn && (key->key()==Qt::Key_Return || key->key()==Qt::Key_Enter))
+                    if (auto* editor=qobject_cast<QLineEdit*>(widget)) { beforeReturn=editor->text(); sawReturn=true; }
+                deliveredText+=key->text();
+            }
+        return false;
+    }
+private:
+    QWidget& scope_;
+};
+QWidget* controlInDocument(AccessFormPreview& document,const QString& canonical) {
+    QWidget* found=nullptr;
+    for (auto* widget:document.findChildren<QWidget*>("access-control-"+canonical)) {
+        auto* owner=widget->parentWidget();
+        while (owner && !dynamic_cast<AccessFormPreview*>(owner)) owner=owner->parentWidget();
+        if (owner==&document) { assert(!found); found=widget; }
+    }
+    assert(found); return found;
+}
+int primeOriginalSearchInputs(const QString& source,QSqlDatabase db,AccessFormPreview& form,const linaccess::AccessFormLayout& layout) {
+    const auto name=QString::fromStdString(makePreviewFormObject(form)->member("Name",{}).asText());
+    const QRegularExpression references(R"((?:\[Formulare\]|Formulare|\[Forms\]|Forms)\s*!\s*(?:\[([^\]]+)\]|([\p{L}\p{N}_]+))\s*!\s*(?:\[([^\]]+)\]|([\p{L}\p{N}_]+)))",QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpression likeOperand(R"rx(\bLIKE\s*\(*\s*(?:(?:'(?:[^']|'')*'|"(?:[^"]|"")*")\s*&\s*)?$)rx",QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpression equalsOperand(R"((?:\[([^\]]+)\]|([\p{L}\p{N}_]+))\s*\.\s*(?:\[([^\]]+)\]|([\p{L}\p{N}_]+))\s*\)*\s*=\s*\(*\s*$)",QRegularExpression::CaseInsensitiveOption);
+    QStringList queryNames;
+    QSqlQuery catalog(db); assert(catalog.exec("SELECT DISTINCT name FROM _la_access_artifacts WHERE kind='query'"));
+    while (catalog.next()) queryNames.append(catalog.value(0).toString()); catalog.finish();
+    QSet<QString> visited; int inputs=0;
+    std::function<void(const QString&,int)> visit=[&](const QString& sql,int depth) {
+        assert(depth<24);
+        auto matches=references.globalMatch(sql);
+        while (matches.hasNext()) {
+            const auto reference=matches.next();
+            const auto owner=reference.captured(1).isEmpty() ? reference.captured(2) : reference.captured(1);
+            const auto field=reference.captured(3).isEmpty() ? reference.captured(4) : reference.captured(3);
+            if (owner.compare(name,Qt::CaseInsensitive)!=0) continue;
+            const auto prefix=sql.left(reference.capturedStart());
+            const bool like=likeOperand.match(prefix).hasMatch(); const auto equals=equalsOperand.match(prefix);
+            if (!like && !equals.hasMatch()) continue;
+            for (const auto& control:layout.controls) if (control.name.compare(field,Qt::CaseInsensitive)==0 && control.controlSource.isEmpty() && (control.type=="TextBox" || control.type=="ComboBox")) {
+                auto value=linaccess::VbaValue::string("*");
+                if (!like) {
+                    const auto source=equals.captured(1).isEmpty() ? equals.captured(2) : equals.captured(1);
+                    const auto column=equals.captured(3).isEmpty() ? equals.captured(4) : equals.captured(3);
+                    QSqlQuery actual(db);
+                    const auto identifier=db.driver()->escapeIdentifier(column,QSqlDriver::FieldName);
+                    assert(actual.exec("SELECT "+identifier+" FROM "+db.driver()->escapeIdentifier(source,QSqlDriver::TableName)+" WHERE "+identifier+" IS NOT NULL LIMIT 1") && actual.next());
+                    value=linaccess::qtFieldValue(actual.value(0)); actual.finish();
+                }
+                makePreviewFormObject(form)->assignItem(control.name.toStdString(),value); ++inputs; break;
+            }
+        }
+        for (const auto& view:queryNames) {
+            if (visited.contains(view.toCaseFolded())) continue;
+            if (!sql.contains("["+view+"]",Qt::CaseInsensitive) && !sql.contains(QRegularExpression("\\b"+QRegularExpression::escape(view)+"\\b",QRegularExpression::CaseInsensitiveOption))) continue;
+            visited.insert(view.toCaseFolded());
+            QSqlQuery artifact(db); artifact.prepare("SELECT 1 FROM _la_access_artifacts WHERE kind='query' AND name=? COLLATE NOCASE LIMIT 1"); artifact.addBindValue(view);
+            if (artifact.exec() && artifact.next()) visit(linaccess::accessQuerySource(db,view),depth+1);
+        }
+    };
+    visit(source,0); return inputs;
+}
 QString adapterCategory(const linaccess::VbaRuntimeError& error) {
     const auto reason=QString::fromUtf8(error.what()).toCaseFolded();
     if (reason.contains("concatenation")) return "unsupported_concat";
@@ -506,6 +589,135 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
             assert(probe->member("Tag",{}).asText()==(selected ? "selected" : "clear"));
             assert(bracketProbe.close());
             std::cout<<"Original bracket condition: native calculated value executed; full handler not executed by this probe\n";
+            // Original With/GoToControl/SendKeys paths: real native focus and
+            // queued events, with actual calculated source values kept private.
+            const auto originalLines=linaccess::decodeVbaSource(code).split('\n');
+            const auto originalAnalysis=linaccess::analyzeVba(linaccess::decodeVbaSource(code).toStdString());
+            {
+                const auto statement=QRegularExpression(R"sql(\.\s*Execute\s+"((?:[^"]|"")*)"\s*$)sql",QRegularExpression::CaseInsensitiveOption).match(originalLines[2142]);
+                assert(statement.hasMatch()); auto sql=statement.captured(1); sql.replace("\"\"","\"");
+                const auto plan=linaccess::compileAccessQuery(sql); assert(!plan.makeTable.isEmpty());
+                auto projected=sql;
+                const QRegularExpression into(R"(\bINTO\s+\[[^\]]+\]\s+(?=FROM\b))",QRegularExpression::CaseInsensitiveOption);
+                assert(into.match(projected).hasMatch()); projected.remove(into);
+                QStringList projectedColumns;
+                const auto rows=[&](const QString& source) {
+                    QSqlQuery actual(db); assert(actual.exec(source));
+                    assert(actual.record().count()==14);
+                    QStringList names; for (int i=0;i<14;++i) names.append(actual.record().fieldName(i));
+                    if (projectedColumns.isEmpty()) projectedColumns=names; else assert(names==projectedColumns);
+                    std::multiset<QByteArray> result;
+                    while (actual.next()) {
+                        QJsonArray row;
+                        for (int column=0;column<actual.record().count();++column) row.append(QJsonValue::fromVariant(actual.value(column)));
+                        result.insert(QJsonDocument(row).toJson(QJsonDocument::Compact));
+                    }
+                    assert(!actual.lastError().isValid()); return result;
+                };
+                const auto expected=rows(projected);
+                assert(expected.empty()); // No active sale in this unchanged fixture workflow.
+                QSqlQuery guard(db); assert(guard.exec("SAVEPOINT original_make_table_probe"));
+                const auto target=db.driver()->escapeIdentifier(plan.makeTable,QSqlDriver::TableName);
+                assert(guard.exec("DROP TABLE "+target));
+                auto database=linaccess::makeDaoDatabase(db);
+                database->member("Execute",{linaccess::VbaValue::string(sql.toStdString())});
+                assert(database->member("RecordsAffected",{}).asNumber()==expected.size());
+                assert(rows("SELECT * FROM "+target)==expected);
+                assert(guard.exec("ROLLBACK TO original_make_table_probe") && guard.exec("RELEASE original_make_table_probe"));
+                std::cout<<"Original make-table statement: 14 columns, empty-workflow snapshot; "<<expected.size()<<" rows independently compared\n";
+            }
+            int keyboardHandlers=0,plainTextChecks=0,emptyWorkflowFailures=0;
+            for (const int line:{229,244,1943}) {
+                QString procedure;
+                for (const auto& candidate:originalAnalysis.procedures) if (candidate.line<=line) procedure=QString::fromStdString(candidate.name);
+                assert(!procedure.isEmpty());
+                const auto input=QRegularExpression(R"(^\s*SendKeys\s+\.([\p{L}\p{N}_]+),\s*False\s*$)",QRegularExpression::CaseInsensitiveOption).match(originalLines[line-1].trimmed());
+                const auto target=QRegularExpression(R"rx(DoCmd\.GoToControl\s+"([^"]+)")rx",QRegularExpression::CaseInsensitiveOption).match(originalLines[line-2]);
+                assert(input.hasMatch() && target.hasMatch());
+                auto keyValue=makePreviewFormObject(initialized)->item(input.captured(1).toStdString());
+                if (keyValue.kind==linaccess::VbaValue::Kind::Null) {
+                    QString expression;
+                    for (const auto& control:layout.controls) if (control.name.compare(input.captured(1),Qt::CaseInsensitive)==0) expression=control.controlSource;
+                    const QRegularExpression reference(R"(=\s*\[([^\]]+)\]\s*\.\s*\[(?:Form|Formular)\]\s*!\s*\[([^\]]+)\])",QRegularExpression::CaseInsensitiveOption);
+                    const auto source=reference.match(expression);
+                    if (source.hasMatch()) {
+                        const auto canonical=makePreviewFormObject(initialized)->member("Controls",{linaccess::VbaValue::string(source.captured(1).toStdString())}).object->member("Name",{}).asText();
+                        auto* child=dynamic_cast<AccessFormPreview*>(controlInDocument(initialized,QString::fromStdString(canonical)));
+                        assert(child && child->hasDataSource());
+                        auto* records=child->findChild<QComboBox*>("access-record-selector",Qt::FindDirectChildrenOnly); assert(records);
+                        if (records->count()==1) {
+                            const auto sourceName=QString::fromStdString(makePreviewFormObject(*child)->member("RecordSource",{}).asText());
+                            const auto sql=sourceName.trimmed().startsWith("SELECT",Qt::CaseInsensitive) || sourceName.trimmed().startsWith("PARAMETERS",Qt::CaseInsensitive) ? sourceName : linaccess::accessQuerySource(db,sourceName);
+                            // Normal search input over unchanged query definitions;
+                            // inspect transitive saved queries for LIKE inputs.
+                            const auto prepared=primeOriginalSearchInputs(sql,db,initialized,layout);
+                            if (prepared) (void)makePreviewFormObject(*child)->member("Requery",{});
+                            std::cerr<<"Original keyboard search preconditions: inputs="<<prepared<<", records="<<records->count()-1<<'\n';
+                        }
+                        for (int index=1;index<records->count() && keyValue.kind==linaccess::VbaValue::Kind::Null;++index) {
+                            records->setCurrentIndex(index); assert(records->currentIndex()==index);
+                            keyValue=makePreviewFormObject(initialized)->item(input.captured(1).toStdString());
+                        }
+
+                    }
+                }
+                assert(keyValue.kind!=linaccess::VbaValue::Kind::Null && keyValue.kind!=linaccess::VbaValue::Kind::Error);
+                const auto keyText=QString::fromStdString(keyValue.asText()); assert(!keyText.isEmpty());
+                auto requested=target.captured(1);
+                if (requested.startsWith('[') && requested.endsWith(']')) { requested=requested.mid(1,requested.size()-2); requested.replace("]]","]"); }
+                const auto canonical=makePreviewFormObject(initialized)->member("Controls",{linaccess::VbaValue::string(requested.toStdString())}).object->member("Name",{}).asText();
+                auto* targetWidget=controlInDocument(initialized,QString::fromStdString(canonical));
+                auto* targetLine=qobject_cast<QLineEdit*>(targetWidget);
+                if (auto* combo=qobject_cast<QComboBox*>(targetWidget);combo && combo->isEditable()) targetLine=combo->lineEdit();
+                const bool plain=targetLine && !targetLine->isReadOnly() && !keyText.contains(QRegularExpression(R"([+^%~{}()\x00-\x1f])"));
+                QApplication::setActiveWindow(&initialized); targetWidget->setFocus(); QApplication::processEvents();
+                if (plain) targetLine->selectAll();
+                QVector<QPair<QPointer<QLineEdit>,QString>> before;
+                for (auto* editor:initialized.findChildren<QLineEdit*>()) if (editor->objectName().startsWith("access-control-")) before.append({editor,editor->text()});
+                const QPointer<QWidget> previousFocus=QApplication::focusWidget();
+                OriginalKeyDelivery delivery(initialized); std::vector<linaccess::VbaValue> args;
+                const auto result=initialized.executeProcedure(procedure,args);
+                if (result.status!=linaccess::VbaExecutionStatus::Completed)
+                    std::cerr<<"Original keyboard handler: status="<<static_cast<int>(result.status)<<", error="<<result.errorNumber<<", line="<<result.line<<'\n';
+                assert(result.status==linaccess::VbaExecutionStatus::Completed);
+                assert(delivery.presses==0); // Wait=False has not delivered yet.
+                const QPointer<QWidget> queuedFocus=QApplication::focusWidget();
+                auto* queuedEditor=qobject_cast<QLineEdit*>(queuedFocus.data());
+                if (auto* combo=qobject_cast<QComboBox*>(queuedFocus.data());combo && combo->isEditable()) queuedEditor=combo->lineEdit();
+                QString expectedEntry;
+                if (plain) {
+                    assert(queuedEditor);
+                    expectedEntry=queuedEditor->text();
+                    const auto start=queuedEditor->hasSelectedText() ? queuedEditor->selectionStart() : queuedEditor->cursorPosition();
+                    expectedEntry.replace(start,queuedEditor->selectedText().size(),keyText);
+                }
+                QApplication::processEvents();
+                int changed=0; for (const auto& entry:before) if (entry.first && entry.first->text()!=entry.second) ++changed;
+                assert(delivery.presses>0 && delivery.dialogs==0);
+                assert(changed>0 || QApplication::focusWidget()!=previousFocus || QApplication::activePopupWidget());
+                if (plain) {
+                    const auto entered=delivery.sawReturn ? delivery.beforeReturn : queuedEditor->text();
+                    if (entered!=expectedEntry) std::cerr<<"Original keyboard entry boundary: receiver matches="<<(delivery.firstReceiver==targetLine)<<", whole selection="<<delivery.initialWholeSelection<<", Return observed="<<delivery.sawReturn<<'\n';
+                    assert(delivery.firstReceiver==queuedEditor && entered==expectedEntry); ++plainTextChecks;
+                    for (const auto& control:layout.controls) if (control.name.compare(QString::fromStdString(canonical),Qt::CaseInsensitive)==0 && !control.afterUpdate.isEmpty()) {
+                        const auto updated=initialized.eventResult("control:"+control.name+":AfterUpdate");
+                        if (!updated || updated->status!=linaccess::VbaExecutionStatus::Completed)
+                            std::cerr<<"Original keyboard AfterUpdate: status="<<(updated ? static_cast<int>(updated->status) : -1)<<", error="<<(updated ? updated->errorNumber : 0)<<", line="<<(updated ? updated->line : 0)<<'\n';
+                        assert(updated);
+                        if (updated->status!=linaccess::VbaExecutionStatus::Completed) {
+                            // These keyboard probes deliberately have no active
+                            // sale. The unchanged subsequent event builds an
+                            // empty-ID filter; record its real error explicitly.
+                            assert(updated->status==linaccess::VbaExecutionStatus::Error && updated->errorNumber==3075 && updated->line==1023);
+                            ++emptyWorkflowFailures;
+                        }
+                    }
+                }
+                if (auto* popup=QApplication::activePopupWidget()) popup->close();
+                ++keyboardHandlers;
+            }
+            assert(keyboardHandlers==3 && plainTextChecks==3 && emptyWorkflowFailures==2);
+            std::cout<<"Original With/GoToControl/SendKeys handlers: "<<keyboardHandlers<<", independent plain-text checks: "<<plainTextChecks<<", subsequent empty-workflow errors: "<<emptyWorkflowFailures<<'\n';
             // Execute the unchanged four-position wizard handler, rather than
             // deriving execution success from syntax recognition.
             QString originalOpenProcedure,targetName;

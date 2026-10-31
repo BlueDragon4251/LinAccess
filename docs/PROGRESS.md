@@ -227,3 +227,17 @@ a typed False for an absent name; all 29 record counts match independent SQL.
 This exposed and fixed single-line If/colon Exit For losing its enclosing loop
 context, plus incorrect Null function-result defaults. Fields/Indexes/Relations
 metadata and complete DAO catalog semantics remain open (TABLEDEFS_RUNTIME.md).
+
+
+Native With/SendKeys increment (WITH_KEYBOARD_RUNTIME.md): three unchanged
+keyboard handlers now complete; actual queued receivers/text are checked.
+Generated dotted aliases, displayed calculated values, local SELECT INTO and
+per-module Option Compare fixed reproduced runtime failures along that path.
+The independent original make-table probe has 14 columns and zero sale rows;
+positive/NULL copies are separately tested. Two subsequent asynchronous
+AfterUpdate events remain expected 3075/1023 failures with no active-sale ID.
+This is not a completed sale regression. Syntax inventory is now 185/187,
+explicitly separate from execution coverage. Optional REA CLI is installed outside
+the app; Ghidra/Windows Access reference execution is unavailable.
+Validation: Release build and 18/18 CTests (71.91 s); GUI-disabled core 1/1
+(3.00 s); fresh .deb payload/Build ID check; four original SHA-256 checks.

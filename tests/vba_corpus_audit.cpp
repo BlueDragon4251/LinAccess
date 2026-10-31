@@ -42,6 +42,12 @@ int main(int argc, char** argv) {
                 else if (reason.contains("If-Bedingung")) category = "conditional_expression";
                 else if (reason.contains("Zuweisung")) category = "assignment_expression";
                 else if (reason.contains("VBA-Anweisung")) category = "statement";
+                else if (reason=="Object method arguments") category="object_method_arguments";
+                else if (reason=="MsgBox argument syntax unsupported") category="message_box_arguments";
+                else if (reason=="Set-Ausdruck") category="object_set_expression";
+                else if (reason=="Variablendeklaration") category="variable_declaration";
+                else if (reason=="Objektzuweisung") category="object_assignment_expression";
+                else if (reason=="Aufrufargument") category="call_argument_expression";
                 else category = "other_syntax";
             }
             ++categories[category];

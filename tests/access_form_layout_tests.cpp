@@ -35,6 +35,8 @@ void testModuleStates(const QDir&,const QJsonArray&);
 void testCloseCommands();
 void testOpenFormCommands();
 void testOptionGroups();
+void testSendKeys();
+void testCalculatedCaching();
 void testComboDropdown();
 void testOriginalMessageBox(const QDir&,const QJsonArray&);
 void testSubforms();
@@ -217,6 +219,8 @@ End Sub
     testCloseCommands();
     testOpenFormCommands();
     testOptionGroups();
+    testSendKeys();
+    testCalculatedCaching();
     testComboDropdown();
     testOriginalMessageBox(directory,objects);
     testFilters();

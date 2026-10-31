@@ -330,19 +330,17 @@ Private Sub btnSpeichern_Click()
 End Sub
 ```
 
-Vor dem Ausführen der VBA-Ereignisse fragt LinAccess nach. Nicht unterstützte
-Anweisungen werden vor Ausführung der jeweiligen Prozedur erkannt. Die Engine
-hat nur explizite Host-Funktionen für Formularfelder, Meldungen, Speichern,
-Maximieren und Navigation zum letzten Datensatz; sie unterstützt
-**keine generische COM-/ActiveX-/Windows-API-Ausführung; DAO nur in der dokumentierten Teilmenge**.
-Ein begrenzter [nativer Kalenderadapter](docs/CALENDAR_RUNTIME.md) führt den
-unveränderten originalen Datumsdialog mit echter Qt-Auswahl und VBA-Rückübertragung aus.
-Der Interpreter begrenzt die Ausführung auf 10.000 Anweisungsschritte und
-unterstützt außer dem speziellen `Form_Open(Cancel As Integer/Boolean)`
-noch keine allgemeinen Parameter, Label-Fehlerhandler, Arrays, `With`,
-`Select Case`, `While/Wend`, allgemeine Klassen oder vollständige VBA-Typkonvertierung.
-`Do While/Loop`, DAO-Objektreferenzen und lokales `On Error Resume Next` sind
-inzwischen als dokumentierte Teilmenge implementiert. VBA-spezifische Semantik ist noch nicht überall korrekt.
+Die native Laufzeit führt die dokumentierte Teilmenge mit echten Formular- und
+DAO-Effekten aus. Normale SQL-Aktionen benötigen keine zusätzliche Zustimmung
+pro Aktion. Nicht unterstützte Syntax wird vor dem Prozedurstart gemeldet;
+Laufzeitfehler können nach bereits ausgeführten Anweisungen auftreten.
+**Generische COM-/ActiveX-/Windows-API-Ausführung fehlt; DAO ist eine Teilmenge.**
+Der [Kalenderadapter](docs/CALENDAR_RUNTIME.md) und
+[With, Tastatureingaben und SELECT INTO](docs/WITH_KEYBOARD_RUNTIME.md) sind mit
+Originalartefakten getestet. Positionsparameter, begrenztes ByRef/ByVal und
+Label-Fehlerhandler sind implementiert. Arrays, Select Case, While/Wend,
+allgemeine Klassen, vollständige Typkonvertierung und ein vollständiger
+VBA-Parser fehlen weiterhin. Die gesamte Kassen-Verkaufskette läuft noch nicht.
 
 Ein zusätzlich unterstütztes Beispiel:
 

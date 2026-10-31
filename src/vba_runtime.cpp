@@ -15,7 +15,7 @@ namespace {
 // This interpreter deliberately reports unsupported VBA instead of silently
 // treating Access/DAO/COM calls as successful no-ops.
 struct Statement {
-    enum class Type { If, Else, EndIf, For, ForEach, ExitFor, Next, Message, Save, Maximize, GoLast,
+    enum class Type { With, EndWith, SendKeys, If, Else, EndIf, For, ForEach, ExitFor, Next, Message, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
                       Call, SetField, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, Quit, ErrorResumeNext, ErrorDisable, Label, Jump, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
@@ -165,7 +165,7 @@ std::string inlineStatementLines(const std::string& source) {
 
 VbaExecutionResult parseProcedure(std::string_view module, std::string_view name,
                                   std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
-                                  std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr) {
+                                  std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr,bool inheritedWith=false) {
     const std::regex begin(
         R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*?)\s*\)\s*(?:As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?\s*$)",
         std::regex::icase);
@@ -186,9 +186,9 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex runSql(R"(^DoCmd\s*\.\s*RunSQL\s+(.+)$)", std::regex::icase);
     const std::regex daoExecute(R"(^CurrentDb(?:\s*\(\s*\))?\s*\.\s*Execute\s+(.+)$)", std::regex::icase);
     const std::regex openForm(R"(^DoCmd\s*\.\s*OpenForm\s+(.+)$)", std::regex::icase);
-    const std::regex controlRequery(R"(^Me\s*[!.]\s*(\[[^\]]+\]|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\.\s*Requery$)", std::regex::icase);
-    const std::regex controlFocus(R"(^Me\s*[!.]\s*(\[[^\]]+\]|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\.\s*SetFocus$)", std::regex::icase);
-    const std::regex controlVisible(R"(^Me\s*[!.]\s*(\[[^\]]+\]|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\.\s*Visible\s*=\s*(.+)$)", std::regex::icase);
+    const std::regex controlRequery(R"(^Me\s*([!.])\s*(\[[^\]]+\]|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\.\s*Requery$)", std::regex::icase);
+    const std::regex controlFocus(R"(^Me\s*([!.])\s*(\[[^\]]+\]|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\.\s*SetFocus$)", std::regex::icase);
+    const std::regex controlVisible(R"(^Me\s*([!.])\s*(\[[^\]]+\]|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\.\s*Visible\s*=\s*(.+)$)", std::regex::icase);
     const std::regex call(R"(^Call\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\((.*)\))?$)", std::regex::icase);
     const std::regex implicitCall(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+(.+)|\((.*)\))?$)", std::regex::icase);
     const std::regex memberCall(R"(^((?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)(?:[.!][A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)+)\s+(.+)$)",std::regex::icase);
@@ -213,6 +213,8 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     int nesting = 0;
     std::vector<bool> elseSeen;
     std::vector<Statement::Type> blocks;
+    const auto withActive=[&] { return inheritedWith || std::find(blocks.begin(),blocks.end(),Statement::Type::With)!=blocks.end(); };
+    const auto validExpression=[&](std::string_view expression) { return validVbaExpression(expression,withActive()); };
     std::vector<int> forStarts;
     std::vector<int> whileStarts;
     bool within = false;
@@ -297,14 +299,27 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 const auto wrapper="Sub __la_inline()\nIf "+condition+" Then\n"+inlineStatementLines(yes)
                     +(otherwise==std::string::npos ? "" : "\nElse\n"+inlineStatementLines(no))+"\nEnd If\nEnd Sub\n";
                 std::vector<Statement> body; bool function=false,cancel=false;
-                auto parsed=parseProcedure(wrapper,"__la_inline",body,function,cancel,nullptr,false);
+                auto parsed=parseProcedure(wrapper,"__la_inline",body,function,cancel,nullptr,false,nullptr,withActive());
                 if (parsed.status!=VbaExecutionStatus::Completed) { parsed.line=line; return parsed; }
                 const auto offset=static_cast<int>(statements.size());
                 for (auto& statement:body) { if (statement.partner>=0) statement.partner+=offset; statement.line=line; statements.push_back(std::move(statement)); }
                 continue;
             }
         }
-        if (std::regex_match(source, match, label)) {
+        const auto relativeSource=(source.starts_with('.') || source.starts_with('!')) ? "__la_with"+source : std::string{};
+        if (lower(source).starts_with("with ") || lower(source).starts_with("with\t")) {
+            const auto expression=trim(source.substr(4));
+            if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"With expression unsupported",line};
+            statements.push_back({Statement::Type::With,{},expression,line}); blocks.push_back(Statement::Type::With);
+        } else if (lower(source)=="end with") {
+            if (blocks.empty() || blocks.back()!=Statement::Type::With) return {VbaExecutionStatus::Error,"End With without With",line};
+            blocks.pop_back(); statements.push_back({Statement::Type::EndWith,{},{},line});
+        } else if (lower(source).starts_with("sendkeys ") || lower(source).starts_with("sendkeys\t")) {
+            const auto args=splitArguments(trim(source.substr(8)));
+            if (args.empty() || args.size()>2 || args[0].empty()) return {VbaExecutionStatus::Unsupported,"SendKeys arguments unsupported",line};
+            for (const auto& arg:args) if (!arg.empty() && !validExpression(arg)) return {VbaExecutionStatus::Unsupported,"SendKeys expression unsupported",line};
+            statements.push_back({Statement::Type::SendKeys,{},trim(source.substr(8)),line});
+        } else if (std::regex_match(source, match, label)) {
             if (!blocks.empty()) return {VbaExecutionStatus::Unsupported, "Sprungmarke innerhalb eines Blocks", line};
             if (!labels.emplace(lower(match[1].str()), static_cast<int>(statements.size())).second)
                 return {VbaExecutionStatus::Error, "Doppelte Sprungmarke", line};
@@ -321,7 +336,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             statements.push_back({Statement::Type::ResumeLabel, match[1].str(), {}, line});
         } else if (std::regex_match(source, match, ifThen)) {
             const auto expr = trim(match[1].str());
-            if (!validVbaExpression(expr)) return {VbaExecutionStatus::Unsupported, "If-Bedingung: " + expr, line};
+            if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported, "If-Bedingung: " + expr, line};
             statements.push_back({Statement::Type::If, expr, {}, line});
             ++nesting;
             elseSeen.push_back(false);
@@ -341,7 +356,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             statements.push_back({Statement::Type::EndIf, {}, {}, line});
         } else if (std::regex_match(source, match, forEach)) {
             const auto expression = trim(match[2].str());
-            if (!validVbaExpression(expression))
+            if (!validExpression(expression))
                 return {VbaExecutionStatus::Unsupported,"For Each collection expression",line};
             forStarts.push_back(static_cast<int>(statements.size()));
             blocks.push_back(Statement::Type::For);
@@ -353,8 +368,8 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             const auto start = trim(match[2].str());
             const auto endValue = trim(match[3].str());
             const auto step = match[4].matched ? trim(match[4].str()) : "1";
-            if (!validVbaExpression(start) || !validVbaExpression(endValue)
-                || !validVbaExpression(step))
+            if (!validExpression(start) || !validExpression(endValue)
+                || !validExpression(step))
                 return {VbaExecutionStatus::Unsupported, "For-Ausdruck: " + source, line};
             forStarts.push_back(static_cast<int>(statements.size()));
             blocks.push_back(Statement::Type::For);
@@ -374,7 +389,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             statements.back().partner = startIndex;
         } else if (std::regex_match(source, match, whileStart)) {
             const auto expr = trim(match[1].str());
-            if (!validVbaExpression(expr)) return {VbaExecutionStatus::Unsupported, "Do While-Ausdruck", line};
+            if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported, "Do While-Ausdruck", line};
             whileStarts.push_back(static_cast<int>(statements.size()));
             blocks.push_back(Statement::Type::While);
             statements.push_back({Statement::Type::While, {}, expr, line});
@@ -392,11 +407,11 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             statements.push_back({Statement::Type::ErrorDisable, {}, {}, line});
         } else if (std::regex_match(source, match, objectSet)) {
             const auto expr = trim(match[2].str());
-            if (!validVbaExpression(expr)) return {VbaExecutionStatus::Unsupported, "Set-Ausdruck", line};
+            if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported, "Set-Ausdruck", line};
             statements.push_back({Statement::Type::ObjectSet, match[1].str(), expr, line});
         } else if (std::regex_match(source, match, message)) {
             const auto expr = "MsgBox("+trim(match[1].matched ? match[1].str() : match[2].str())+")";
-            if (!validVbaExpression(expr)) return {VbaExecutionStatus::Unsupported, "MsgBox argument syntax unsupported", line};
+            if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported, "MsgBox argument syntax unsupported", line};
             statements.push_back({Statement::Type::Message, {}, expr, line});
         } else if (lower(source) == "docmd.quit") {
             statements.push_back({Statement::Type::Quit, {}, {}, line});
@@ -415,49 +430,53 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
         } else if (std::regex_match(source, match, runSql)
                    || std::regex_match(source, match, daoExecute)) {
             const auto expr = trim(match[1].str());
-            if (!validVbaExpression(expr))
+            if (!validExpression(expr))
                 return {VbaExecutionStatus::Unsupported, "SQL-Ausdruck: " + expr, line};
             statements.push_back({Statement::Type::ExecuteSql, {}, expr, line});
         } else if (std::regex_match(source, match, openForm)) {
             const auto args=splitArguments(match[1].str());
             if (args.empty() || args.front().empty() || args.size()>7) return {VbaExecutionStatus::Unsupported,"OpenForm arguments unsupported",line};
-            for (const auto& arg:args) if (!arg.empty() && !validVbaExpression(arg)) return {VbaExecutionStatus::Unsupported,"OpenForm argument expression unsupported",line};
+            for (const auto& arg:args) if (!arg.empty() && !validExpression(arg)) return {VbaExecutionStatus::Unsupported,"OpenForm argument expression unsupported",line};
             statements.push_back({Statement::Type::OpenForm,{},match[1].str(),line});
         } else if (std::regex_match(source, match, controlRequery)) {
-            auto name = match[1].str();
+            auto name = match[2].str();
             if (name.starts_with('[') && name.ends_with(']')) name = name.substr(1, name.size() - 2);
-            statements.push_back({Statement::Type::ControlRequery, name, {}, line});
+            statements.push_back({Statement::Type::ControlRequery, name, {}, line,match[1].str()});
         } else if (std::regex_match(source, match, controlFocus)) {
-            auto name = match[1].str();
+            auto name = match[2].str();
             if (name.starts_with('[') && name.ends_with(']')) name = name.substr(1, name.size() - 2);
-            statements.push_back({Statement::Type::ControlFocus, name, {}, line});
+            statements.push_back({Statement::Type::ControlFocus, name, {}, line,match[1].str()});
         } else if (std::regex_match(source, match, controlVisible)) {
-            auto name = match[1].str();
+            auto name = match[2].str();
             if (name.starts_with('[') && name.ends_with(']')) name = name.substr(1, name.size() - 2);
-            const auto expr = trim(match[2].str());
-            if (!validVbaExpression(expr))
+            const auto expr = trim(match[3].str());
+            if (!validExpression(expr))
                 return {VbaExecutionStatus::Unsupported, "Visible-Ausdruck: " + expr, line};
-            statements.push_back({Statement::Type::ControlVisible, name, expr, line});
+            statements.push_back({Statement::Type::ControlVisible, name, expr, line,match[1].str()});
         } else if (std::regex_match(source, match, call)) {
             const auto args = match[2].str();
             if (lower(match[1].str())=="msgbox") {
                 const auto expression="MsgBox("+args+")";
-                if (!validVbaExpression(expression)) return {VbaExecutionStatus::Unsupported,"MsgBox argument syntax unsupported",line};
+                if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"MsgBox argument syntax unsupported",line};
                 statements.push_back({Statement::Type::Message,{},expression,line}); continue;
             }
             for (const auto& arg : splitArguments(args))
-                if (!validVbaExpression(arg)) return {VbaExecutionStatus::Unsupported, "Aufrufargument", line};
+                if (!validExpression(arg)) return {VbaExecutionStatus::Unsupported, "Aufrufargument", line};
             statements.push_back({Statement::Type::Call, match[1].str(), args, line});
         } else if (std::regex_match(source, match, assignment)) {
             const auto expr = trim(match[3].str());
-            if (!validVbaExpression(expr)) return {VbaExecutionStatus::Unsupported, "Zuweisung: " + expr, line};
+            if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported, "Zuweisung: " + expr, line};
             auto field = match[2].str();
             if (field.starts_with('[') && field.ends_with(']')) field = field.substr(1, field.size() - 2);
             statements.push_back({Statement::Type::SetField,field,expr,line,match[1].str()});
+        } else if (!relativeSource.empty() && std::regex_match(relativeSource,match,objectAssign)) {
+            const auto target=match[1].str().substr(9),expr=trim(match[2].str());
+            if (!validExpression(target) || !validExpression(expr)) return {VbaExecutionStatus::Unsupported,"With assignment unsupported",line};
+            statements.push_back({Statement::Type::ObjectAssign,target,expr,line});
         } else if (std::regex_match(source, match, objectAssign)) {
             const auto target = match[1].str();
             const auto expr = trim(match[2].str());
-            if (!validVbaExpression(target) || !validVbaExpression(expr))
+            if (!validExpression(target) || !validExpression(expr))
                 return {VbaExecutionStatus::Unsupported, "Objektzuweisung", line};
             statements.push_back({Statement::Type::ObjectAssign, target, expr, line});
         } else if (std::regex_match(source, match, dim)) {
@@ -478,20 +497,24 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             }
         } else if (std::regex_match(source, match, variableAssignment)) {
             const auto expr = trim(match[2].str());
-            if (!validVbaExpression(expr)) return {VbaExecutionStatus::Unsupported, "Zuweisung: " + expr, line};
+            if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported, "Zuweisung: " + expr, line};
             statements.push_back({Statement::Type::SetVar, match[1].str(), expr, line});
         } else if (lower(source) == "exit sub" || lower(source) == "exit function") {
             statements.push_back({Statement::Type::Exit, {}, {}, line});
+        } else if (!relativeSource.empty() && std::regex_match(relativeSource,match,memberCall)) {
+            const auto expression=match[1].str().substr(9)+"("+match[2].str()+")";
+            if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"With method arguments unsupported",line};
+            statements.push_back({Statement::Type::ObjectCall,{},expression,line});
         } else if (std::regex_match(source,match,memberCall)) {
             const auto expression = match[1].str() + "(" + match[2].str() + ")";
-            if (!validVbaExpression(expression)) return {VbaExecutionStatus::Unsupported,"Object method arguments",line};
+            if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Object method arguments",line};
             statements.push_back({Statement::Type::ObjectCall,{},expression,line});
-        } else if (source.find('.') != std::string::npos && validVbaExpression(source)) {
+        } else if (source.find('.') != std::string::npos && validExpression(source)) {
             statements.push_back({Statement::Type::ObjectCall, {}, source, line});
         } else if (std::regex_match(source, match, implicitCall)) {
             const auto args = match[2].matched ? match[2].str() : match[3].str();
             for (const auto& arg : splitArguments(args))
-                if (!validVbaExpression(arg)) return {VbaExecutionStatus::Unsupported, "Aufrufargument", line};
+                if (!validExpression(arg)) return {VbaExecutionStatus::Unsupported, "Aufrufargument", line};
             statements.push_back({Statement::Type::Call, match[1].str(), args, line});
         } else {
             return {VbaExecutionStatus::Unsupported, "VBA-Anweisung noch nicht unterstützt: " + source, line};
@@ -653,9 +676,12 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         std::vector<VbaValue> items;
         std::size_t itemIndex{};
         std::size_t frameDepth{};
+        std::size_t withDepth{};
     };
     std::vector<Frame> frames;
     std::vector<LoopFrame> loops;
+    struct WithFrame { std::size_t instruction; VbaValue value; bool pending{}; };
+    std::vector<WithFrame> withFrames,faultWithFrames;
     VbaVariables locals;
     auto errorState = std::make_shared<ErrorObject>();
     locals["err"] = VbaValue::reference(errorState);
@@ -764,11 +790,23 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                                             const std::vector<std::string>& refs) {
         return invoke(name, args, refs, true);
     };
+    auto compareMode=VbaCompareMode::Binary;
+    {
+        std::istringstream source{std::string(module)}; std::string line;
+        const std::regex option(R"(^\s*Option\s+Compare\s+(Binary|Text|Database)\s*(?:'.*)?$)",std::regex::icase);
+        while (std::getline(source,line)) {
+            std::smatch match;
+            if (std::regex_match(line,match,option)) {
+                const auto mode=lower(match[1].str());
+                compareMode=mode=="database" ? VbaCompareMode::Database : mode=="text" ? VbaCompareMode::Text : VbaCompareMode::Binary;
+            }
+        }
+    }
     const auto evaluate = [&](std::string_view expression) {
-        return evaluateVbaExpression(expression, host, locals, resolver);
+        return evaluateVbaExpression(expression, host, locals, resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode);
     };
     const auto evaluateObject = [&](std::string_view expression) {
-        return evaluateVbaObjectExpression(expression,host,locals,resolver);
+        return evaluateVbaObjectExpression(expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode);
     };
     bool active = true;
     int currentLine = 0;
@@ -783,6 +821,27 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             refreshAliases();
             try {
             switch (instruction.type) {
+            case Statement::Type::With:
+                if (!withFrames.empty() && withFrames.back().instruction==ip && withFrames.back().pending) withFrames.pop_back();
+                if (!active) { withFrames.push_back({ip,VbaValue::reference(nullptr),false}); break; }
+                try {
+                    const auto value=evaluateObject(instruction.expression);
+                    if (value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(424,"With requires an object");
+                    withFrames.push_back({ip,value,false});
+                } catch (...) { withFrames.push_back({ip,VbaValue::reference(nullptr),true}); throw; }
+                break;
+            case Statement::Type::EndWith:
+                if (withFrames.empty()) throw VbaRuntimeError(5,"With stack invalid");
+                withFrames.pop_back(); break;
+            case Statement::Type::SendKeys:
+                if (active) {
+                    const auto expressions=splitArguments(instruction.expression);
+                    const auto keys=scalarVbaValue(evaluate(expressions[0]));
+                    if (keys.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null SendKeys input");
+                    const bool wait=expressions.size()>1 && !expressions[1].empty() ? coerceVbaModuleValue(scalarVbaValue(evaluate(expressions[1])),"boolean").boolean : false;
+                    host.sendKeys(keys.asText(),wait);
+                }
+                break;
             case Statement::Type::ErrorResumeNext:
                 if (active) { resumeNext = true; handler = -1; }
                 break;
@@ -792,7 +851,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::Label:
                 break;
             case Statement::Type::Jump:
-                if (active) { frames.clear(); loops.clear(); active = true; ip = static_cast<std::size_t>(instruction.partner); }
+                if (active) { frames.clear(); loops.clear(); withFrames.clear(); active = true; ip = static_cast<std::size_t>(instruction.partner); }
                 break;
             case Statement::Type::ErrorHandler:
                 if (active) { handler = instruction.partner; resumeNext = false; }
@@ -805,10 +864,10 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     handlingError = false;
                     errorState->number = 0; errorState->description.clear();
                     if (instruction.type == Statement::Type::ResumeLabel) {
-                        frames.clear(); loops.clear(); active = true;
+                        frames.clear(); loops.clear(); withFrames.clear(); active = true;
                         ip = static_cast<std::size_t>(instruction.partner);
                     } else {
-                        frames = faultFrames; loops = faultLoops; active = faultActive;
+                        frames = faultFrames; loops = faultLoops; withFrames=faultWithFrames; active = faultActive;
                         ip = instruction.type == Statement::Type::Resume ? faultInstruction - 1 : faultInstruction;
                     }
                 }
@@ -883,13 +942,13 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 }
                 break;
             case Statement::Type::ControlRequery:
-                if (active) host.requeryControl(instruction.argument);
+                if (active) host.requeryControl(instruction.endExpression=="." ? host.memberControlName(instruction.argument) : instruction.argument);
                 break;
             case Statement::Type::ControlFocus:
-                if (active) host.focusControl(instruction.argument);
+                if (active) host.focusControl(instruction.endExpression=="." ? host.memberControlName(instruction.argument) : instruction.argument);
                 break;
             case Statement::Type::ControlVisible:
-                if (active) host.setControlVisible(instruction.argument,
+                if (active) host.setControlVisible(instruction.endExpression=="." ? host.memberControlName(instruction.argument) : instruction.argument,
                     evaluate(instruction.expression).truthy());
                 break;
             case Statement::Type::Call:
@@ -920,7 +979,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     const auto pos = memberSeparator(instruction.argument);
                     auto name = instruction.argument.substr(pos + 1);
                     if (name.starts_with('[') && name.ends_with(']')) name = name.substr(1, name.size() - 2);
-                    const auto object = evaluateObject(instruction.argument.substr(0, pos));
+                    const auto object = pos==0 && !withFrames.empty() ? withFrames.back().value : evaluateObject(instruction.argument.substr(0, pos));
                     if (!object.object) throw VbaRuntimeError(91,"Objektvariable nicht gesetzt");
                     const auto value = evaluate(instruction.expression);
                     if (instruction.argument[pos] == '!') object.object->assignItem(name,value);
@@ -952,7 +1011,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (!collection.object) throw VbaRuntimeError(91,"For Each object is not set");
                 LoopFrame loop{static_cast<int>(ip)};
                 loop.items = collection.object->enumerate();
-                loop.frameDepth = frames.size();
+                loop.frameDepth = frames.size(); loop.withDepth=withFrames.size();
                 if (loop.items.empty()) ip = static_cast<std::size_t>(instruction.partner);
                 else {
                     locals[lower(instruction.argument)] = loop.items.front();
@@ -964,7 +1023,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (active) {
                     if (loops.empty()) throw VbaRuntimeError(5,"Exit For stack invalid");
                     const auto loop = std::move(loops.back()); loops.pop_back();
-                    frames.resize(loop.frameDepth); active = true;
+                    frames.resize(loop.frameDepth); withFrames.resize(loop.withDepth); active = true;
                     ip = static_cast<std::size_t>(instructions[loop.forIndex].partner);
                 }
                 break;
@@ -984,7 +1043,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     ip = static_cast<std::size_t>(instruction.partner);
                 } else {
                     LoopFrame loop{static_cast<int>(ip),end,step};
-                    loop.frameDepth = frames.size();
+                    loop.frameDepth = frames.size(); loop.withDepth=withFrames.size();
                     loops.push_back(std::move(loop));
                 }
                 break;
@@ -1027,8 +1086,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 errorState->description = exception.what();
                 if (!resumeNext) {
                     handlingError = true; faultInstruction = ip;
-                    faultFrames = frames; faultLoops = loops; faultActive = active;
-                    frames.clear(); loops.clear(); active = true;
+                    faultFrames = frames; faultLoops = loops; faultWithFrames=withFrames; faultActive = active;
+                    frames.clear(); loops.clear(); withFrames.clear(); active = true;
                     ip = static_cast<std::size_t>(handler);
                 }
             }

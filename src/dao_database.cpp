@@ -23,11 +23,39 @@ void exec(QSqlQuery& query, const QString& sql) {
     const auto message = query.lastError().text().toCaseFolded();
     if (const auto code=jetSqlFunctionErrorNumber(message.toUtf8().toStdString()))
         throw VbaRuntimeError(*code,"Jet SQL function argument invalid");
+    if (message.contains("already exists")) throw VbaRuntimeError(3010,"DAO: destination table already exists");
     if (message.contains("no such function")) throw VbaRuntimeError(3085,"DAO: SQL function unsupported");
     if (message.contains("no such table")) throw VbaRuntimeError(3078,"DAO: SQL dependency unavailable");
     if ((message.contains("syntax error") || message.contains("incomplete input")) || message.contains("circularly defined")) throw VbaRuntimeError(3075,"DAO: SQL grammar unsupported");
     if (message.contains("interrupted")) throw VbaRuntimeError(3035,"DAO: query execution budget exceeded");
     throw VbaRuntimeError(3146,"DAO: SQL operation failed");
+}
+qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<QString,QVariant>& bindings) {
+    if (plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");
+    const bool makeTable=!plan.makeTable.isEmpty();
+    QSqlQuery guard(db);
+    if (makeTable && !guard.exec("SAVEPOINT la_make_table")) queryFailure(guard);
+    try {
+        qlonglong affected{};
+        {
+            SqliteExecutionBudget budget(db);
+            QSqlQuery query(db);
+            if (!query.prepare(plan.sql)) queryFailure(query);
+            for (auto it=bindings.cbegin();it!=bindings.cend();++it) query.bindValue(it.key(),it.value());
+            if (!query.exec()) queryFailure(query);
+            if (query.isSelect()) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");
+            affected=std::max<qlonglong>(0,query.numRowsAffected()); query.finish();
+            if (makeTable) {
+                if (!query.exec("SELECT COUNT(*) FROM "+quote(plan.makeTable)) || !query.next()) queryFailure(query);
+                affected=query.value(0).toLongLong(); query.finish();
+            }
+        }
+        if (makeTable && !guard.exec("RELEASE la_make_table")) queryFailure(guard);
+        return affected;
+    } catch (...) {
+        if (makeTable) { guard.exec("ROLLBACK TO la_make_table"); guard.exec("RELEASE la_make_table"); }
+        throw;
+    }
 }
 VbaValue fromSql(const QVariant& value) {
     if (value.isNull()) return {};
@@ -278,14 +306,7 @@ public:
         }
         if (key == "execute") {
             require(args.empty() || (args.size() == 1 && args[0].asNumber() == 128),"DAO: Execute options unsupported");
-            SqliteExecutionBudget budget(db_);
-            QSqlQuery query(db_);
-            if (!query.prepare(plan_.sql)) queryFailure(query);
-            const auto bindings = bindAccessQueryParameters(plan_,values_);
-            for (auto it = bindings.cbegin(); it != bindings.cend(); ++it) query.bindValue(it.key(),it.value());
-            if (!query.exec()) queryFailure(query);
-            if (query.isSelect()) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");
-            affected_ = query.numRowsAffected(); return {};
+            affected_=executeAction(db_,plan_,bindAccessQueryParameters(plan_,values_)); return {};
         }
         require(args.empty(),"DAO: Unexpected QueryDef arguments");
         if (key == "sql") return VbaValue::string(source_.toUtf8().toStdString());
@@ -496,21 +517,17 @@ public:
         }
         if (key == "execute") {
             require(args.size() == 1 || (args.size() == 2 && args[1].asNumber() == 128), "DAO: Execute arguments unsupported");
-            SqliteExecutionBudget budget(db_);
             const auto plan = compileAccessQuery(text(args[0].asText()));
-            const auto bindings = bindAccessQueryParameters(plan,{});
-            QSqlQuery query(db_);
-            if (!query.prepare(plan.sql)) queryFailure(query);
-            for (auto it = bindings.cbegin(); it != bindings.cend(); ++it) query.bindValue(it.key(),it.value());
-            if (!query.exec()) queryFailure(query);
-            if (query.isSelect()) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");
+            affected_=executeAction(db_,plan,bindAccessQueryParameters(plan,{}));
             return {};
         }
+        if (key=="recordsaffected" && args.empty()) return VbaValue::numeric(affected_);
         throw std::runtime_error("DAO: Database member unsupported");
     }
 private:
     QSqlDatabase db_;
     std::weak_ptr<TableDefinitions> tableDefinitions_;
+    qlonglong affected_{};
 };
 }
 std::shared_ptr<VbaObject> makeDaoDatabase(QSqlDatabase database) {

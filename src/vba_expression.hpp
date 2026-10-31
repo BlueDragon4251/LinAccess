@@ -54,6 +54,9 @@ public:
     }
 };
 
+// Resolve scalar defaults without erasing Null/Empty/Error subtype information.
+VbaValue scalarVbaValue(VbaValue value);
+
 using VbaVariables = std::unordered_map<std::string, VbaValue>;
 struct VbaModuleState {
     VbaVariables values;
@@ -64,10 +67,10 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type);
 
 using VbaFunctionResolver = std::function<VbaValue(std::string_view, std::vector<VbaValue>&,
                                                  const std::vector<std::string>&)>;
-bool validVbaExpression(std::string_view expression);
+bool validVbaExpression(std::string_view expression,bool withContext=false);
 VbaValue evaluateVbaExpression(std::string_view expression, VbaHost& host,
-                               const VbaVariables& variables, const VbaFunctionResolver& resolver = {});
+                               const VbaVariables& variables, const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary);
 VbaValue evaluateVbaObjectExpression(std::string_view expression,VbaHost& host,
-                                    const VbaVariables& variables,const VbaFunctionResolver& resolver = {});
+                                    const VbaVariables& variables,const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary);
 VbaValue evaluateAccessExpression(std::string_view expression,VbaHost& host);
 }

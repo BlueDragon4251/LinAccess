@@ -89,6 +89,91 @@ End Sub)VBA","Übertragen",host);
             catch(const linaccess::VbaRuntimeError& error) { assert(error.number==3420); }
         }
     }
+    {
+        const auto database=linaccess::makeDaoDatabase(db);
+        auto definition=database->member("CreateQueryDef",{linaccess::VbaValue::string(""),linaccess::VbaValue::string("PARAMETERS [minimum] Long; SELECT id,qty,label INTO [made table] FROM items WHERE id>=[minimum]")}).object;
+        definition->member("Parameters",{linaccess::VbaValue::string("minimum")}).object->assign("Value",linaccess::VbaValue::numeric(1));
+        assert(db.transaction());
+        definition->member("Execute",{});
+        assert(definition->member("RecordsAffected",{}).asNumber()==2);
+        assert(q.exec("SELECT id,qty,label FROM [made table] ORDER BY id") && q.next());
+        assert(q.value(0).toInt()==1 && q.value(1).toDouble()==2 && q.value(2).isNull());
+        assert(q.next() && q.value(0).toInt()==2 && q.value(1).toDouble()==3 && q.value(2).toString()=="two"); assert(!q.next()); q.finish();
+        bool exists=false;
+        try { definition->member("Execute",{}); } catch(const linaccess::VbaRuntimeError& error) { exists=error.number==3010; }
+        assert(exists && db.rollback() && !db.tables().contains("made table"));
+        database->member("Execute",{linaccess::VbaValue::string("SELECT id,label INTO [empty table] FROM items WHERE id<0")});
+        assert(database->member("RecordsAffected",{}).asNumber()==0);
+        assert(q.exec("SELECT COUNT(*) FROM [empty table]") && q.next() && q.value(0).toInt()==0); q.finish();
+        database->member("Execute",{linaccess::VbaValue::string("DROP TABLE [empty table]")});
+        bool external=false;
+        try { (void)linaccess::compileAccessQuery("SELECT id INTO [copy] IN 'external.mdb' FROM items"); }
+        catch(const linaccess::VbaRuntimeError& error) { external=error.number==3251; }
+        assert(external && !db.tables().contains("copy"));
+        assert(db.transaction());
+        bool failedCreation=false;
+        try { database->member("Execute",{linaccess::VbaValue::string("SELECT absent_function(id) AS value INTO [failed table] FROM items")}); }
+        catch(const linaccess::VbaRuntimeError& error) { failedCreation=error.number==3085; }
+        assert(failedCreation && !db.tables().contains("failed table"));
+        assert(q.exec("INSERT INTO items VALUES(3,9,'outer transaction survives')")); q.finish();
+        assert(db.rollback());
+        assert(q.exec("SELECT COUNT(*) FROM items") && q.next() && q.value(0).toInt()==2); q.finish();
+        bool selected=false;
+        try { database->member("Execute",{linaccess::VbaValue::string("WITH values_source AS (SELECT 1) SELECT * FROM values_source")}); }
+        catch(const linaccess::VbaRuntimeError& error) { selected=error.number==3065; }
+        assert(selected);
+    }
+    for (const auto& mode:std::vector<std::pair<std::string,bool>>{{"Binary",false},{"Text",true},{"Database",true},{"Binary",false}}) {
+        const auto result=linaccess::executeVbaProcedure("Option Compare "+mode.first+"\nFunction CompareMode() As Boolean\nWith CurrentDb.TableDefs(\"items\")\nCompareMode=(.Name=\"ITEMS\")\nEnd With\nEnd Function\n","CompareMode",host);
+        assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue && result.typedReturnValue->boolean==mode.second);
+    }
+    const auto withResult=linaccess::executeVbaProcedure(R"VBA(Sub WithRecords()
+With OpenOnce()
+.Edit
+.Fields("qty").Value=2.75
+.Update
+With .Fields("qty")
+Me!NestedValue=.Value
+End With
+.Close
+End With
+End Sub
+Function OpenOnce() As Object
+Me!Opened=CLng(Nz(Me!Opened,0))+1
+Set OpenOnce=CurrentDb.OpenRecordset("items")
+End Function)VBA","WithRecords",host);
+    assert(withResult.status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["Opened"]=="1" && host.fields["NestedValue"]=="2.75");
+    assert(q.exec("SELECT qty FROM items WHERE id=1") && q.next() && q.value(0).toDouble()==2.75); q.finish();
+    const auto withResume=linaccess::executeVbaProcedure(R"VBA(Sub WithResume()
+On Error GoTo Repair
+With CurrentDb.OpenRecordset("items")
+.Edit
+.Fields("qty").Value=1/0
+.Fields("qty").Value=2.5
+.Update
+.Close
+End With
+Exit Sub
+Repair:
+Resume Next
+End Sub)VBA","WithResume",host);
+    assert(withResume.status==linaccess::VbaExecutionStatus::Completed);
+    assert(q.exec("SELECT qty FROM items WHERE id=1") && q.next() && q.value(0).toDouble()==2.5); q.finish();
+    const auto withExit=linaccess::executeVbaProcedure(R"VBA(Sub WithExit()
+Dim i As Long
+With CurrentDb.OpenRecordset("items")
+For i=1 To 3
+With .Fields("qty")
+If i=1 Then Exit For
+End With
+Next
+.Close
+End With
+End Sub)VBA","WithExit",host);
+    assert(withExit.status==linaccess::VbaExecutionStatus::Completed);
+    assert(linaccess::validateVbaProcedure("Sub IllegalWith()\n.Value=1\nEnd Sub","IllegalWith").status!=linaccess::VbaExecutionStatus::Completed);
+    assert(q.exec("UPDATE items SET qty=2 WHERE id=1")); q.finish();
     const auto result = linaccess::executeVbaProcedure(R"VBA(
 Sub Run()
 Dim db As DAO.Database

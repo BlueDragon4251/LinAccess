@@ -15,6 +15,7 @@ public:
     VbaRuntimeError(int code, const std::string& message) : std::runtime_error(message), number(code) {}
     int number;
 };
+enum class VbaCompareMode { Binary, Text, Database };
 class VbaObject;
 struct VbaValue;
 struct VbaModuleState;
@@ -27,6 +28,7 @@ public:
     virtual ~VbaHost() = default;
     virtual std::optional<std::string> field(std::string_view name) = 0;
     virtual void setField(std::string_view name, std::optional<std::string> value) = 0;
+    virtual int compareStrings(std::string_view left,std::string_view right,VbaCompareMode mode);
     virtual VbaValue formatValue(const VbaValue& value,std::string_view mask,bool stringResult);
     virtual void enterModule(std::string_view) {}
     virtual void leaveModule() noexcept {}
@@ -52,6 +54,7 @@ public:
     virtual void gotoNextRecord() { throw std::runtime_error("DoCmd.GoToRecord acNext: keine Datensatznavigation"); }
     virtual void gotoNewRecord() { throw std::runtime_error("DoCmd.GoToRecord acNewRec: keine Datensatznavigation"); }
     virtual void requery() { throw std::runtime_error("DoCmd.Requery: kein Formularkontext"); }
+    virtual std::string memberControlName(std::string_view name) { return std::string(name); }
     virtual void requeryControl(std::string_view) {
         throw std::runtime_error("Me.Control.Requery: kein Formularkontext");
     }
@@ -76,6 +79,7 @@ public:
     virtual void executeSql(std::string_view) {
         throw std::runtime_error("DAO.Execute/DoCmd.RunSQL: keine verbundene Datenbank");
     }
+    virtual void sendKeys(std::string_view,bool) { throw VbaRuntimeError(3251,"SendKeys requires a native keyboard host"); }
     virtual void openFormArguments(const std::vector<VbaValue>& arguments);
     virtual void openForm(std::string_view) {
         throw std::runtime_error("DoCmd.OpenForm: kein Access-Formularkatalog");

@@ -123,7 +123,7 @@ roter Test belegte die dort fehlende OptionGroup-Laufzeitunterstützung. Numeris
 Gruppenwerte, Standardwerte und native exklusive Auswahl sind jetzt implementiert.
 Weitere Ansichten, benannte Filter, DataMode/WindowMode/OpenArgs und allgemeine
 Access-Fenstersemantik sind nicht implementiert. Der Aufruf verwendet weiterhin
-eine modale Vorschau. 182/187 statisch angenommene Prozeduren bedeuten ausdrücklich
+eine modale Vorschau. 185/187 statisch angenommene Prozeduren bedeuten ausdrücklich
 keine entsprechende Ausführungsabdeckung.
 
 
@@ -139,4 +139,14 @@ Projekttabellen und Recordsets. Die unveränderte originale Existenzfunktion fü
 29 positive Prüfungen und einen negativen Fall aus; alle Recordset-Zeilenzahlen
 werden mit unabhängigem SQL verglichen. Vollständige DAO-Katalogeigenschaften,
 Fields/Indexes/Relations und allgemeine deklarierte Rückgabetyp-Coercion bleiben
-offen. Die 182/187 angenommenen Prozeduren sind weiterhin eine Syntaxmetrik.
+offen. Die 185/187 angenommenen Prozeduren sind weiterhin eine Syntaxmetrik.
+
+
+[With, native Tastatureingaben und Tabellenerstellungsabfragen](WITH_KEYBOARD_RUNTIME.md)
+haben echte, begrenzte Laufzeitpfade. Drei unveränderte Kassen-Tastaturhandler
+enden erfolgreich; ihre tatsächlichen Empfänger werden geprüft. Zwei spätere
+AfterUpdate-Ereignisse scheitern im Test ohne aktiven Verkauf weiterhin mit
+3075/Zeile 1023. Dies ist keine erfolgreich getestete Verkaufskette.
+Option Compare ist pro Modul berücksichtigt, die vollständige Jet-Kollation
+bleibt offen. SELECT INTO kopiert echte Tabellen; vollständige Jet-Metadaten
+werden dabei noch nicht übernommen.

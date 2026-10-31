@@ -117,7 +117,7 @@ std::int32_t integer(const VbaValue& value) {
     return static_cast<std::int32_t>(rounded);
 }
 VbaValue scalarObjectValue(VbaValue value);
-VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& right) {
+VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& right,VbaHost* host,VbaCompareMode mode) {
     if (left.kind==VbaValue::Kind::Error || right.kind==VbaValue::Kind::Error)
         throw error("Error Variant cannot be used as an operand",13);
     if (op == "is") {
@@ -125,8 +125,8 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
             throw error("VBA: Is benötigt Objekte");
         return VbaValue::logical(left.object == right.object);
     }
-    if (left.kind==VbaValue::Kind::Object) return binary(op,scalarObjectValue(left),right);
-    if (right.kind==VbaValue::Kind::Object) return binary(op,left,scalarObjectValue(right));
+    if (left.kind==VbaValue::Kind::Object) return binary(op,scalarObjectValue(left),right,host,mode);
+    if (right.kind==VbaValue::Kind::Object) return binary(op,left,scalarObjectValue(right),host,mode);
     if (op == "&") {
         if (left.kind == VbaValue::Kind::Null && right.kind == VbaValue::Kind::Null) return {};
         return VbaValue::string(left.asText() + right.asText());
@@ -146,16 +146,16 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         return VbaValue::numeric(op == "and" ? integer(left) & integer(right) : integer(left) | integer(right));
     }
     if (left.kind == VbaValue::Kind::Empty && right.kind == VbaValue::Kind::Text)
-        return binary(op, VbaValue::string(""), right);
+        return binary(op, VbaValue::string(""), right,host,mode);
     if (right.kind == VbaValue::Kind::Empty && left.kind == VbaValue::Kind::Text)
-        return binary(op, left, VbaValue::string(""));
+        return binary(op, left, VbaValue::string(""),host,mode);
     if (left.kind == VbaValue::Kind::Null || right.kind == VbaValue::Kind::Null)
         return {}; // Simplified three-valued logic: NULL comparisons yield NULL.
 
     if (op == "=" || op == "<>" || op == "<" || op == "<=" || op == ">" || op == ">=") {
         int cmp = 0;
         if (left.kind == VbaValue::Kind::Text && right.kind == VbaValue::Kind::Text) {
-            cmp = left.text.compare(right.text);
+            cmp = host ? host->compareStrings(left.text,right.text,mode) : left.text.compare(right.text);
         } else if (left.kind==VbaValue::Kind::Currency && right.kind==VbaValue::Kind::Currency) {
             cmp=(left.currencyUnits>right.currencyUnits)-(left.currencyUnits<right.currencyUnits);
         } else if (left.kind == VbaValue::Kind::Text || right.kind == VbaValue::Kind::Text) {
@@ -193,8 +193,8 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
 class ExpressionParser {
 public:
     ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals,
-                     const VbaFunctionResolver& resolver = {},bool objectContext=false,bool accessExpression=false)
-        : tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression) {}
+                     const VbaFunctionResolver& resolver = {},bool objectContext=false,bool accessExpression=false,const VbaValue* withContext=nullptr,bool allowWith=false,VbaCompareMode compareMode=VbaCompareMode::Binary)
+        : tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode) {}
 
     VbaValue parse() {
         auto value = expression(1,objectContext_);
@@ -224,12 +224,17 @@ private:
             if (!host_) lhs={};
             else if (accessExpression_ && (lhs.kind==VbaValue::Kind::Error || rhs.kind==VbaValue::Kind::Error))
                 lhs=lhs.kind==VbaValue::Kind::Error ? lhs : rhs;
-            else lhs=binary(op,lhs,rhs);
+            else lhs=binary(op,lhs,rhs,host_,compareMode_);
         }
         return lhs;
     }
     VbaValue primary(bool objectContext) {
-        auto value = atom(objectContext);
+        auto value = [&] {
+            if (!nextSymbol(".") && !nextSymbol("!")) return atom(objectContext);
+            if (!host_ && allowWith_) return VbaValue{};
+            if (!withContext_) throw error("With object context unavailable",91);
+            return *withContext_;
+        }();
         while (nextSymbol("(") || nextSymbol(".") || nextSymbol("!")) {
             if (take("(")) {
                 std::vector<VbaValue> arguments;
@@ -350,6 +355,7 @@ private:
         if (const auto constant=documentConstants.find(word);constant!=documentConstants.end()) return VbaValue::numeric(constant->second);
         if (word=="screen") return host_ ? host_->applicationObject()->member("Screen",{}) : VbaValue{};
         if (word=="docmd") return host_ ? host_->applicationObject()->member("DoCmd",{}) : VbaValue{};
+        if (word=="codecontextobject") return host_ ? VbaValue::reference(host_->currentForm()) : VbaValue{};
         if (word == "application") return host_ ? VbaValue::reference(host_->applicationObject()) : VbaValue{};
         if (word=="commandbars") {
             std::vector<VbaValue> arguments;
@@ -574,6 +580,9 @@ private:
     VbaFunctionResolver resolver_;
     bool objectContext_{};
     bool accessExpression_{};
+    const VbaValue* withContext_{};
+    bool allowWith_{};
+    VbaCompareMode compareMode_;
 };
 } // namespace
 
@@ -614,6 +623,20 @@ VbaValue scalarObjectValue(VbaValue value) {
     throw VbaRuntimeError(28,"Recursive object default value");
 }
 }
+int VbaHost::compareStrings(std::string_view left,std::string_view right,VbaCompareMode mode) {
+    if (mode==VbaCompareMode::Binary) return left.compare(right);
+    const auto fold=[](std::string_view text) {
+        auto result=std::string(text);
+        for (auto& ch:result) if (ch>='A' && ch<='Z') ch=static_cast<char>(ch-'A'+'a');
+        return result;
+    };
+    const auto a=fold(left),b=fold(right);
+    if (a==b) return 0;
+    const auto nonAscii=[](std::string_view text) { return std::any_of(text.begin(),text.end(),[](unsigned char ch) { return ch>=128; }); };
+    if (nonAscii(a) || nonAscii(b)) throw VbaRuntimeError(3251,"Non-ASCII text comparison requires a locale-aware host");
+    return a.compare(b);
+}
+VbaValue scalarVbaValue(VbaValue value) { return scalarObjectValue(std::move(value)); }
 std::string VbaValue::asText() const {
     if (kind==Kind::Error) throw error("Error Variant cannot be implicitly converted to text",13);
     if (kind==Kind::Object) return scalarObjectValue(*this).asText();
@@ -657,18 +680,18 @@ bool VbaValue::truthy() const {
 std::optional<std::string> VbaValue::asField() const {
     return kind == Kind::Null ? std::nullopt : std::optional<std::string>{asText()};
 }
-bool validVbaExpression(std::string_view text) {
+bool validVbaExpression(std::string_view text,bool withContext) {
     const VbaVariables vars;
-    try { (void)ExpressionParser(text, nullptr, vars).parse(); return true; }
+    try { (void)ExpressionParser(text, nullptr, vars,{},false,false,nullptr,withContext).parse(); return true; }
     catch (...) { return false; }
 }
 VbaValue evaluateVbaExpression(std::string_view text, VbaHost& host,
-                               const VbaVariables& vars, const VbaFunctionResolver& resolver) {
-    return ExpressionParser(text, &host, vars, resolver).parse();
+                               const VbaVariables& vars, const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode) {
+    return ExpressionParser(text, &host, vars, resolver,false,false,withContext,false,compareMode).parse();
 }
 VbaValue evaluateVbaObjectExpression(std::string_view text,VbaHost& host,
-                                    const VbaVariables& vars,const VbaFunctionResolver& resolver) {
-    return ExpressionParser(text,&host,vars,resolver,true).parse();
+                                    const VbaVariables& vars,const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode) {
+    return ExpressionParser(text,&host,vars,resolver,true,false,withContext,false,compareMode).parse();
 }
 VbaValue evaluateAccessExpression(std::string_view text,VbaHost& host) {
     const VbaVariables variables;

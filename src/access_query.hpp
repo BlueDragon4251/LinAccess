@@ -17,6 +17,7 @@ struct AccessQueryParameter {
 };
 struct AccessQueryPlan {
     QString sql;
+    QString makeTable;
     QVector<AccessQueryParameter> parameters;
     int topLimit{};
     bool hiddenRank{};

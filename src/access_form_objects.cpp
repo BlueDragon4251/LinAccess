@@ -7,6 +7,7 @@
 #include <QAbstractButton>
 #include <QAction>
 #include <QLabel>
+#include <QLineEdit>
 #include <QComboBox>
 #include <QCalendarWidget>
 #include <QToolBar>
@@ -231,7 +232,7 @@ public:
         }
         if (key == "setfocus") { preview.activateWindow(); preview.setFocus(); return {}; }
         if (auto value=preview.getModuleMember(name,true)) return *value;
-        return preview.getFieldValue(name);
+        return preview.getFieldValue(bytes(preview.controlMemberName(text(name))));
     }
     linaccess::VbaValue item(std::string_view name) override {
         return checked().getFieldValue(name);
@@ -244,7 +245,7 @@ public:
         if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="setfocus" || key=="filter" || key=="filteron")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
-        return objectItem(name);
+        return objectItem(bytes(checked().controlMemberName(text(name))));
     }
     void assignItem(std::string_view name,const linaccess::VbaValue& value) override {
         PreviewControlObject(checked(),text(name)).assign("Value",value);
@@ -279,7 +280,7 @@ public:
         if (key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (preview.setModuleMember(name,value,true)) return;
-        PreviewControlObject(preview,text(name)).assign("Value",value);
+        PreviewControlObject(preview,preview.controlMemberName(text(name))).assign("Value",value);
     }
 };
 class PreviewFormsObject final : public linaccess::VbaObject, private PreviewObjectBase {
@@ -513,6 +514,17 @@ public:
     explicit PreviewDoCmdObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
+        if (key=="gotocontrol") {
+            if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"GoToControl requires a control name");
+            if (args[0].kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null control name");
+            auto requested=text(args[0].asText());
+            if (requested.startsWith('[') && requested.endsWith(']')) { requested=requested.mid(1,requested.size()-2); requested.replace("]]","]"); }
+            makePreviewFormObject(preview)->member("Controls",{linaccess::VbaValue::string(bytes(requested))}).object->member("SetFocus",{});
+            auto* widget=preview.controls_.value(requested.toCaseFolded()).data();
+            if (auto* editor=qobject_cast<QLineEdit*>(widget)) editor->selectAll();
+            else if (auto* combo=qobject_cast<QComboBox*>(widget);combo && combo->isEditable()) combo->lineEdit()->selectAll();
+            return {};
+        }
         if (key=="openform") {
             const auto request=linaccess::parseVbaOpenFormArguments(args);
             preview.openOtherForm(text(request.name),text(request.where)); return {};
