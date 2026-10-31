@@ -303,3 +303,15 @@ No source/fixture literals, rows or credentials were added to public artifacts.
 Remote distro CI remains separately tracked, not inferred from these local tests.
 The full initialized sale/snapshot/report workflow, exact Access event/window
 parity and previously documented two empty-sale AfterUpdate errors remain open.
+
+Remote follow-up: code commit 121afa58c46c55b2cb623ebbbbeec2c7b81b4dc2 was pushed
+to development/access-compatibility and verified with ls-remote. Repository
+visibility was rechecked as private. GitHub Actions run
+https://github.com/BlueDragon4251/LinAccess/actions/runs/41250623462
+failed before running job steps. The Ubuntu and Debian 12 check annotations
+explicitly report account payment/spending-limit restrictions preventing job
+startup. This is an external runner/billing blocker, not a compiler/test failure;
+Debian 12/13, Ubuntu 24.04 and Windows PowerShell CI validation remain unperformed.
+Account/billing settings were not changed. Re-run the private workflow after the
+account restriction is resolved, then continue the positive initialized-sale /
+snapshot / report workflow. No fixture upload or external analysis is required.

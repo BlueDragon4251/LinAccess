@@ -139,7 +139,9 @@ Full targets remain open:
   public install directory permissions even under umask 0077; package check wired into CI.
 - [ ] Repeated Debian 12/13 and Ubuntu 24.04 remote CI builds/tests and package validation.
 - [ ] Interactive Linux desktop validation and accessibility/translations.
-- [ ] GitHub issue checklist and reviewed PRs; API access currently returns Forbidden.
+- [ ] GitHub issue checklist and reviewed PRs; current GitHub API reads work.
+- [ ] Remote CI execution blocked before job startup by account payment/spending
+  limit restrictions; see the verified run linked in PROGRESS.md.
 - [ ] Full end-to-end operation of the original Kassa application, without compatibility claims
   based solely on import counts, synthetic UI actions, or static source recognition.
 
