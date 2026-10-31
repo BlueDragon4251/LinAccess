@@ -6,6 +6,7 @@
 #include <QSqlQuery>
 #include <QTest>
 #include <QTimer>
+#include <QMessageBox>
 #include <QGroupBox>
 #include <QButtonGroup>
 #include <QPushButton>
@@ -147,9 +148,19 @@ void testOpenFormCommands() {
     store("vba","Form_target","Sub Form_Open(Cancel As Integer)\nMe.Tag=Me.Filter\nEnd Sub\n");
     const QByteArray code=R"VBA(Sub OpenFiltered(criteria As String)
 DoCmd.OpenForm "TARGET",acNormal,,criteria
+Me.Tag=Forms("target").Name
+If Not (Screen.ActiveForm Is Forms("target")) Then Err.Raise 5
+Forms("target").Controls("value").SetFocus
+If Not (Screen.ActiveControl Is Forms("target").Controls("value")) Then Err.Raise 5
 End Sub
 Sub OpenObject(criteria As String)
 Application.DoCmd.OpenForm "target",,,criteria
+End Sub
+Sub OpenAndWrite(criteria As String)
+DoCmd.OpenForm "target",,,criteria
+Forms("target")!value="continued"
+Forms("target").Dirty=False
+Me.Tag=Forms("target")!value
 End Sub
 Sub OpenMissing()
 DoCmd.OpenForm "missing"
@@ -166,26 +177,32 @@ End Sub
 )VBA";
     AccessFormPreview owner("controller","Begin Form\nEnd\n",code,db);
     for (const auto* procedure:{"OpenFiltered","OpenObject"}) {
-        bool observed=false; QTimer timer; timer.setInterval(1);
-        QObject::connect(&timer,&QTimer::timeout,[&] {
-            auto* child=dynamic_cast<AccessFormPreview*>(QApplication::activeModalWidget());
-            if (!child) return;
-            auto object=makePreviewFormObject(*child);
-            assert(object->member("Filter",{}).asText()=="[id]=2");
-            assert(object->member("Tag",{}).asText()=="[id]=2");
-            assert(object->member("FilterOn",{}).truthy());
-            assert(object->item("value").asText()=="second");
-            auto* selector=child->findChild<QComboBox*>("access-record-selector");
-            assert(selector && selector->count()==2);
-            observed=true; timer.stop(); assert(child->close());
-        });
-        QTimer deadline; deadline.setSingleShot(true);
-        QObject::connect(&deadline,&QTimer::timeout,[]{ assert(false && "OpenForm modal callback timed out"); });
-        timer.start(); deadline.start(3000);
         std::vector<VbaValue> args{VbaValue::string("[id]=2")};
         assert(owner.executeProcedure(procedure,args).status==linaccess::VbaExecutionStatus::Completed);
-        assert(observed);
+        AccessFormPreview* child=nullptr;
+        for (auto* widget:QApplication::topLevelWidgets()) if (auto* form=dynamic_cast<AccessFormPreview*>(widget);form && form!=&owner && form->isVisible()) { assert(!child); child=form; }
+        assert(child && !child->isModal());
+        auto object=makePreviewFormObject(*child);
+        assert(object->member("Filter",{}).asText()=="[id]=2");
+        assert(object->member("Tag",{}).asText()=="[id]=2");
+        assert(object->member("FilterOn",{}).truthy());
+        assert(object->item("value").asText()=="second");
+        auto* selector=child->findChild<QComboBox*>("access-record-selector"); assert(selector && selector->count()==2);
+        assert(makePreviewFormsObject(owner)->member("Count",{}).asNumber()==2);
+        object->assign("Tag",VbaValue::string("reused instance"));
+        assert(owner.executeProcedure("OpenObject",args).status==linaccess::VbaExecutionStatus::Completed);
+        assert(makePreviewFormsObject(owner)->item("target").object==object && object->member("Tag",{}).asText()=="reused instance");
+        assert(child->close());
+        bool invalidated=false;
+        try { (void)object->member("Name",{}); } catch(const linaccess::VbaRuntimeError& error) { invalidated=error.number==2450; }
+        assert(invalidated);
     }
+    std::vector<VbaValue> write{VbaValue::string("[id]=2")};
+    assert(owner.executeProcedure("OpenAndWrite",write).status==linaccess::VbaExecutionStatus::Completed);
+    assert(makePreviewFormObject(owner)->member("Tag",{}).asText()=="continued");
+    assert(query.exec("SELECT value FROM records WHERE id=2") && query.next() && query.value(0).toString()=="continued"); query.finish();
+    makePreviewApplicationObject(owner)->member("DoCmd",{}).object->member("Close",{VbaValue::numeric(2),VbaValue::string("target")});
+
     std::vector<VbaValue> none;
     for (const auto& [procedure,number]:std::vector<std::pair<QString,int>>{{"OpenMissing",2102},{"OpenDesign",3251},{"OpenNamed",3251},{"OpenOptions",3251}}) {
         const auto result=owner.executeProcedure(procedure,none);
@@ -199,7 +216,49 @@ End Sub
     store("vba","Form_target","Sub Form_Open(Cancel As Integer)\nCancel=1\nEnd Sub\n");
     std::vector<VbaValue> args{VbaValue::string("[id]=2")};
     assert(owner.executeProcedure("OpenFiltered",args).errorNumber==2501);
+
+    // Modal controls user interaction, without blocking the VBA continuation.
+    auto modal=definition; modal.replace("Begin Form\n","Begin Form\nModal =-1\nOnUnload =\"[Event Procedure]\"\n");
+    store("form","target",modal);
+    store("vba","Form_target",R"VBA(Sub Form_Open(Cancel As Integer)
+Me.Tag=Me.Filter
+End Sub
+Sub Form_Unload(Cancel As Integer)
+If Me.Tag="block" Then Cancel=1
+End Sub
+Sub CloseThenMessage()
+DoCmd.Close acForm,"target"
+MsgBox "closed window remains alive during execution"
+End Sub
+)VBA");
+    assert(owner.executeProcedure("OpenFiltered",args).status==linaccess::VbaExecutionStatus::Completed);
+    QPointer<AccessFormPreview> modalChild;
+    for (auto* widget:QApplication::topLevelWidgets()) if (auto* form=dynamic_cast<AccessFormPreview*>(widget);form && form!=&owner && form->isVisible()) { assert(!modalChild); modalChild=form; }
+    assert(modalChild); assert(modalChild->isModal());
+    assert(makePreviewFormObject(owner)->member("Tag",{}).asText()=="target");
+    auto retained=makePreviewFormObject(*modalChild);
+    retained->assign("Tag",VbaValue::string("block")); assert(!owner.close() && modalChild->isVisible());
+    retained->assign("Tag",VbaValue::string("allowed"));
+    bool observedMessage=false; QTimer answer; answer.setInterval(1);
+    QObject::connect(&answer,&QTimer::timeout,[&] {
+        if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            assert(modalChild); observedMessage=true; answer.stop(); box->accept();
+        }
+    }); answer.start();
+    QTimer messageDeadline; messageDeadline.setSingleShot(true);
+    QObject::connect(&messageDeadline,&QTimer::timeout,[] { assert(false && "Modeless self-close MsgBox timed out"); }); messageDeadline.start(3000);
+    assert(modalChild->executeProcedure("CloseThenMessage",none).status==linaccess::VbaExecutionStatus::Completed);
+    messageDeadline.stop();
+    assert(observedMessage && modalChild); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(modalChild.isNull());
+    bool invalidated=false;
+    try { (void)retained->member("Name",{}); } catch(const linaccess::VbaRuntimeError& error) { invalidated=error.number==2450; }
+    assert(invalidated);
+    assert(owner.executeProcedure("OpenFiltered",args).status==linaccess::VbaExecutionStatus::Completed);
+    auto remaining=makePreviewFormsObject(owner)->item("target").object;
     assert(owner.close());
+    invalidated=false;
+    try { (void)remaining->member("Name",{}); } catch(const linaccess::VbaRuntimeError& error) { invalidated=error.number==2450; }
+    assert(invalidated);
 }
 
 void testOptionGroups() {

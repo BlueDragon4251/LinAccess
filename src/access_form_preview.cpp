@@ -53,6 +53,20 @@ QPointer<AccessFormPreview>& activeDocument() {
     static QPointer<AccessFormPreview> document;
     return document;
 }
+int& nativeExecutionDepth() { static thread_local int depth=0; return depth; }
+QVector<QPointer<AccessFormPreview>>& pendingFormDisposals() {
+    static thread_local QVector<QPointer<AccessFormPreview>> pending; return pending;
+}
+void disposeClosedForms() {
+    if (nativeExecutionDepth()!=0) return;
+    auto pending=std::move(pendingFormDisposals()); pendingFormDisposals().clear();
+    for (const auto& form:pending) if (form) form->deleteLater();
+}
+void deferFormDisposal(AccessFormPreview* form) {
+    auto& pending=pendingFormDisposals();
+    if (!pending.contains(form)) pending.append(form);
+    disposeClosedForms();
+}
 class AccessMessageBox final : public QMessageBox {
 public:
     AccessMessageBox(QWidget* owner,bool dismissible) : QMessageBox(owner),dismissible_(dismissible) {}
@@ -186,6 +200,8 @@ QString AccessFormPreview::controlMemberName(const QString& name) const {
     return resolved.isEmpty() ? name : resolved;
 }
 
+AccessFormPreview* activePreviewDocument() { return activeDocument().data(); }
+
 class PreviewVbaHost final : public linaccess::VbaHost {
 public:
     explicit PreviewVbaHost(AccessFormPreview& preview) : preview_(preview) {}
@@ -200,8 +216,8 @@ public:
         return preview_.getField(name);
     }
     linaccess::VbaValue controlValue(std::string_view name) override { requireInstance(); return preview_.getFieldValue(name); }
-    void enterModule(std::string_view source) override { moduleScopes_.push_back(source==preview_.vba_.toUtf8().toStdString()); }
-    void leaveModule() noexcept override { moduleScopes_.pop_back(); }
+    void enterModule(std::string_view source) override { moduleScopes_.push_back(source==preview_.vba_.toUtf8().toStdString()); ++nativeExecutionDepth(); }
+    void leaveModule() noexcept override { moduleScopes_.pop_back(); --nativeExecutionDepth(); disposeClosedForms(); }
     bool hasInstanceIdentifier(std::string_view name) override {
         return instanceScope() && preview_.controls_.contains(preview_.controlMemberName(QString::fromUtf8(name.data(),name.size())).toCaseFolded());
     }
@@ -439,6 +455,7 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     QScopedValueRollback<QStringList> constructionGuard(constructionStack);
     constructionStack.append(identity);
     if (embedded) setWindowFlags(Qt::Widget);
+    else if (layout_.modal) setWindowModality(Qt::ApplicationModal);
     filter_=whereCondition.trimmed().isEmpty() ? layout_.filter : whereCondition;
     filterOn_=whereCondition.trimmed().isEmpty() ? layout_.filterOnLoad && !filter_.trimmed().isEmpty() : true;
     initialCurrentDeferred_=!embedded && eventProcedure(layout_.events.value("onactivate"));
@@ -531,7 +548,7 @@ bool AccessFormPreview::event(QEvent* event) {
 }
 
 void AccessFormPreview::activateDocument() {
-    if (!opened_ || closed_ || openCancelled_ || !isWindow()) return;
+    if (!opened_ || closed_ || closing_ || openCancelled_ || !isWindow()) return;
     auto& active=activeDocument();
     if (active==this) return;
     const auto previous=active;
@@ -962,6 +979,7 @@ bool AccessFormPreview::prepareClose() {
         if (document->closed_ || document->openCancelled_) return;
         documents.append(document);
         for (const auto& child : document->subforms_) if (child) collect(child);
+        for (const auto& child : document->openedForms_) if (child) collect(child);
     };
     collect(this);
     for (auto* document : documents) if (!document->saveRecord()) return false;
@@ -976,6 +994,7 @@ bool AccessFormPreview::prepareClose() {
     }
     for (auto it=documents.crbegin();it!=documents.crend();++it) {
         (void)(*it)->formEvent("OnClose","Form_Close"); (*it)->closed_=true;
+        if (*it!=this && (*it)->isWindow()) (void)(*it)->close();
     }
     return true;
 }
@@ -1267,30 +1286,62 @@ void AccessFormPreview::closeOtherDocument(int type,const std::optional<QString>
 }
 
 void AccessFormPreview::openOtherForm(const QString& name,const QString& where) {
+    AccessFormPreview* existing=nullptr;
+    for (auto* widget:QApplication::topLevelWidgets()) {
+        auto* document=dynamic_cast<AccessFormPreview*>(widget);
+        if (!document || !document->opened_ || document->closed_ || document->openCancelled_
+            || document->layout_.kind!=linaccess::AccessDocumentKind::Form
+            || document->db_.connectionName()!=db_.connectionName() || document->db_.databaseName()!=db_.databaseName()
+            || document->formName_.compare(name,Qt::CaseInsensitive)!=0) continue;
+        if (existing) throw linaccess::VbaRuntimeError(5,"OpenForm target instance is ambiguous");
+        existing=document;
+    }
+    if (existing) {
+        if (!where.trimmed().isEmpty()) {
+            if (existing->layout_.recordSource.trimmed().isEmpty()) throw linaccess::VbaRuntimeError(3251,"WhereCondition requires a bound form");
+            existing->setFilterState(where,true);
+        }
+        existing->show(); existing->raise(); existing->activateWindow(); existing->activateDocument(); return;
+    }
     QSqlQuery query(db_);
-    query.prepare("SELECT source_bytes FROM _la_access_artifacts "
+    query.prepare("SELECT name,source_bytes FROM _la_access_artifacts "
                   "WHERE kind='form' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
     query.addBindValue(name);
     if (!query.exec() || !query.next()) {
         throw linaccess::VbaRuntimeError(2102,"OpenForm target is not imported");
     }
-    const auto form = query.value(0).toByteArray();
+    const auto canonical=query.value(0).toString();
+    const auto form = query.value(1).toByteArray(); query.finish();
     QSqlQuery vba(db_);
     vba.prepare("SELECT source_bytes FROM _la_access_artifacts "
                 "WHERE kind='vba' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
-    vba.addBindValue("Form_" + name);
-    const auto code = vba.exec() && vba.next() ? vba.value(0).toByteArray() : QByteArray{};
+    vba.addBindValue("Form_" + canonical);
+    const auto code = vba.exec() && vba.next() ? vba.value(0).toByteArray() : QByteArray{}; vba.finish();
     if (linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(form)).kind!=linaccess::AccessDocumentKind::Form)
         throw linaccess::VbaRuntimeError(2102,"OpenForm target is not a form");
-    AccessFormPreview nested(name,form,code,db_,this,false,where);
-    for (const auto* event:{"OnOpen","OnLoad","OnCurrent"}) if (const auto outcome=nested.eventResult(event);outcome && failed(*outcome))
-        throw linaccess::VbaRuntimeError(outcome->errorNumber ? outcome->errorNumber : 3251,"OpenForm initialization failed");
-    if (nested.cancelledByOpen()) throw linaccess::VbaRuntimeError(2501,"OpenForm action cancelled");
-    if (!nested.layout_.recordSource.trimmed().isEmpty() && !nested.hasDataSource())
-        throw linaccess::VbaRuntimeError(nested.dataSourceErrorNumber_ ? nested.dataSourceErrorNumber_ : 3078,"OpenForm record source unavailable");
-    if (!where.trimmed().isEmpty() && nested.layout_.recordSource.trimmed().isEmpty())
-        throw linaccess::VbaRuntimeError(3251,"WhereCondition requires a bound form");
-    nested.exec();
+    auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,db_,this,false,where);
+    const auto validate=[&] {
+        for (const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent"})
+            if (const auto outcome=nested->eventResult(event);outcome && failed(*outcome))
+                throw linaccess::VbaRuntimeError(outcome->errorNumber ? outcome->errorNumber : 3251,"OpenForm initialization failed");
+        if (nested->cancelledByOpen() || nested->closed_) throw linaccess::VbaRuntimeError(2501,"OpenForm action cancelled");
+        if (!nested->layout_.recordSource.trimmed().isEmpty() && !nested->hasDataSource())
+            throw linaccess::VbaRuntimeError(nested->dataSourceErrorNumber_ ? nested->dataSourceErrorNumber_ : 3078,"OpenForm record source unavailable");
+        if (!where.trimmed().isEmpty() && nested->layout_.recordSource.trimmed().isEmpty())
+            throw linaccess::VbaRuntimeError(3251,"WhereCondition requires a bound form");
+    };
+    validate();
+    // Modal blocks user interaction with other windows. Unlike acDialog it
+    // does not suspend the VBA caller, so neither path enters QDialog::exec.
+    nested->show(); nested->activateWindow(); nested->activateDocument();
+    validate();
+    // A handler may close its own window and then enter another Qt event
+    // loop (e.g. MsgBox). Retain all closing native windows until the outermost
+    // VBA call unwinds, including callers with executing child handlers.
+    QObject::connect(nested.get(),&QDialog::finished,nested.get(),[form=nested.get()] { deferFormDisposal(form); });
+    openedForms_.removeIf([](const auto& document) { return !document || document->closed_; });
+    openedForms_.append(nested.get());
+    (void)nested.release();
 }
 
 bool AccessFormPreview::eventFilter(QObject* watched,QEvent* event) {

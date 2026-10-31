@@ -241,3 +241,18 @@ explicitly separate from execution coverage. Optional REA CLI is installed outsi
 the app; Ghidra/Windows Access reference execution is unavailable.
 Validation: Release build and 18/18 CTests (71.91 s); GUI-disabled core 1/1
 (3.00 s); fresh .deb payload/Build ID check; four original SHA-256 checks.
+
+
+Native modeless OpenForm continuation: reproduced failing immediate Forms access,
+replaced synchronous preview exec with a persistent native window, reused unique
+same-project instances and preserved canonical catalog Name. Imported Modal
+blocks UI without suspending VBA. Immediate Screen access now follows logical
+native activation; its pre-fix regression failed. Real SQL persistence, caller
+close cancellation, guarded references and self-close then MsgBox are tested.
+Native deletion waits for the outermost VBA call to unwind. Original bound form,
+wizard and both calendar selections remain tested over unchanged artifacts.
+Caller-tree ownership, independent application lifetime/MDI, reentrant opening,
+complete active-document DoCmd/keyboard routing and full window options remain
+open. This does not complete the original sale workflow.
+Validation: all 18 Release CTests (75.58 s), fresh .deb payload/Build ID and all
+four original hashes passed. The GUI-disabled runtime code is unchanged.

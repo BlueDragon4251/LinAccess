@@ -206,7 +206,22 @@ Full targets remain open:
 - [x] Local SELECT INTO with parameters, actual creation/row counts, error 3010
   and nested rollback; original 14-column statement on an empty sale snapshot.
 - [ ] Full initialized original sale workflow: subsequent first/second keyboard
-  AfterUpdate still fails 3075/1023 without a sale ID; modeless continuation,
-  positive original sale snapshot and real report/printing regression remain open.
+  AfterUpdate still fails 3075/1023 without a sale ID; independent document
+  lifetimes, positive original sale snapshot and real report/printing remain open.
 - [ ] Full Jet/locale collation, comparison-aware Like/StrComp/InStr and complete
   SELECT INTO metadata/AutoNumber/index/default/validation propagation.
+
+
+- [x] Native OpenForm continuation with persistent target, same-project unique
+  instance reuse, canonical catalog Name, actual continuing Forms writes/save;
+  imported Modal blocks UI without blocking VBA (OPEN_FORM_RUNTIME.md).
+- [x] Immediate logical Screen.ActiveForm/ActiveControl after OpenForm/SetFocus,
+  caller-tree child close/save/cancellation and guarded object invalidation.
+- [x] Deferred physical window deletion until native VBA unwinds, including a
+  self-close followed by a real MsgBox and nested Qt event-loop regression.
+- [x] Original bound-layout WhereCondition and unchanged wizard/target opening;
+  both original calendar bindings still perform real asynchronous selection and
+  data-query write-back with untouched fixture bytes.
+- [ ] Independent application document lifetimes/MDI, close-time reentrant opens,
+  complete active-document DoCmd/keyboard scheduling across windows, acDialog /
+  other window/data modes, OpenArgs and an Access event/window oracle.

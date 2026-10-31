@@ -100,6 +100,7 @@ private:
     friend class PreviewControlsObject;
     friend class PreviewControlObject;
     void requeryControl(std::string_view name);
+    QVector<QPointer<AccessFormPreview>> openedForms_;
 
     std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, reportsObject_, controlsObject_;
     QMap<QString,std::weak_ptr<linaccess::VbaObject>> controlObjects_;

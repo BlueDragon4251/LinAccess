@@ -61,8 +61,9 @@ The later asynchronous AfterUpdate from the first two keyboard handlers still
 fails with error 3075 at original line 1023 because this probe has no active-sale
 identifier. The regression explicitly asserts both failures, separately from the
 three completed keyboard handlers. This is **not** a successful checkout/sale
-regression. A valid full sale setup, modeless OpenForm continuation, actual report
-printing and Access event/result comparison remain open.
+regression. A subsequent increment implements bounded modeless OpenForm
+continuation (OPEN_FORM_RUNTIME.md). A valid full sale setup, independent document
+lifetimes, actual report printing and Access event/result comparison remain open.
 
 The syntax inventory accepts 185/187 procedures. This is a syntax metric, never
 185 executed procedures. The interpreter still has statement regex dispatch;

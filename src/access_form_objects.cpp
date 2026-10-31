@@ -488,16 +488,20 @@ public:
         auto& owner=checked(); const auto key=text(name).toCaseFolded();
         if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected Screen arguments");
         if (key=="activeform") {
-            for (auto* widget=QApplication::activeWindow();widget;widget=widget->parentWidget()) {
-                auto* form=dynamic_cast<AccessFormPreview*>(widget);
-                if (form && !form->closed_ && !form->openCancelled_ && form->db_.connectionName()==owner.db_.connectionName()
-                    && form->layout_.kind==linaccess::AccessDocumentKind::Form)
-                    return linaccess::VbaValue::reference(makePreviewFormObject(*form));
-            }
+            auto* form=activePreviewDocument();
+            if (!form) for (auto* widget=QApplication::activeWindow();widget;widget=widget->parentWidget())
+                if (auto* candidate=dynamic_cast<AccessFormPreview*>(widget)) { form=candidate; break; }
+            if (form && !form->closed_ && !form->openCancelled_ && form->db_.connectionName()==owner.db_.connectionName()
+                && form->db_.databaseName()==owner.db_.databaseName() && form->layout_.kind==linaccess::AccessDocumentKind::Form)
+                return linaccess::VbaValue::reference(makePreviewFormObject(*form));
             throw linaccess::VbaRuntimeError(2450,"Active form unavailable");
         }
         if (key=="activecontrol") {
-            for (auto* focused=QApplication::focusWidget();focused;focused=focused->parentWidget())
+            QWidget* focus=QApplication::focusWidget();
+            if (auto* document=activePreviewDocument();document && !document->closed_ && !document->openCancelled_
+                && document->db_.connectionName()==owner.db_.connectionName() && document->db_.databaseName()==owner.db_.databaseName())
+                focus=document->focusWidget();
+            for (auto* focused=focus;focused;focused=focused->parentWidget())
                 for (auto* widget:QApplication::allWidgets()) {
                     auto* form=dynamic_cast<AccessFormPreview*>(widget);
                     if (!form || form->closed_ || form->openCancelled_ || form->db_.connectionName()!=owner.db_.connectionName()) continue;

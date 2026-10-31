@@ -222,27 +222,23 @@ int verifyOriginalFilter(const QDir& directory,const QJsonArray& objects,QSqlDat
         latest.addBindValue("Form_"+formName); latest.addBindValue(QByteArray{}); assert(latest.exec()); latest.finish();
         const QByteArray callerCode="Sub OpenOriginal(target As String,criteria As String)\nDoCmd.OpenForm target,acNormal,,criteria\nEnd Sub\n";
         AccessFormPreview caller("original binding caller","Begin Form\nEnd\n",callerCode,db);
-        bool observed=false; QTimer inspect; inspect.setInterval(1);
-        QObject::connect(&inspect,&QTimer::timeout,[&] {
-            auto* opened=dynamic_cast<AccessFormPreview*>(QApplication::activeModalWidget()); if (!opened) return;
-            auto* records=opened->findChild<QComboBox*>("access-record-selector"); assert(records && records->count()==expected+1);
-            int cells=0;
-            for (const auto& control:layout.controls) {
-                auto name=control.controlSource.trimmed();
-                if (name.startsWith('[') && name.endsWith(']')) name=name.mid(1,name.size()-2);
-                const auto column=record.indexOf(name); if (column<0 || control.type!="TextBox") continue;
-                auto* widget=opened->findChild<QLineEdit*>("access-control-"+control.name); if (!widget) continue;
-                assert(widget->property("la_null").toBool()==rows.front()[column].isNull());
-                assert(widget->text()==rows.front()[column].toString()); ++cells;
-            }
-            assert(cells==checked); observed=true; inspect.stop(); assert(opened->close());
-        });
-        QTimer deadline; deadline.setSingleShot(true);
-        QObject::connect(&deadline,&QTimer::timeout,[]{ assert(false && "Original bound OpenForm timed out"); });
-        inspect.start(); deadline.start(3000);
         std::vector<linaccess::VbaValue> arguments{linaccess::VbaValue::string(formName.toStdString()),linaccess::VbaValue::string(("["+field+"]="+QString::number(input)).toStdString())};
-        assert(caller.executeProcedure("OpenOriginal",arguments).status==linaccess::VbaExecutionStatus::Completed && observed);
-        inspect.stop(); deadline.stop(); assert(caller.close()); return checked;
+        assert(caller.executeProcedure("OpenOriginal",arguments).status==linaccess::VbaExecutionStatus::Completed);
+        AccessFormPreview* opened=nullptr;
+        for (auto* widget:QApplication::topLevelWidgets()) if (auto* candidate=dynamic_cast<AccessFormPreview*>(widget);candidate && candidate!=&caller && candidate->isVisible() && makePreviewFormObject(*candidate)->member("Name",{}).asText()==formName.toStdString()) { assert(!opened); opened=candidate; }
+        assert(opened);
+        auto* records=opened->findChild<QComboBox*>("access-record-selector"); assert(records && records->count()==expected+1);
+        int cells=0;
+        for (const auto& control:layout.controls) {
+            auto name=control.controlSource.trimmed();
+            if (name.startsWith('[') && name.endsWith(']')) name=name.mid(1,name.size()-2);
+            const auto column=record.indexOf(name); if (column<0 || control.type!="TextBox") continue;
+            auto* widget=opened->findChild<QLineEdit*>("access-control-"+control.name); if (!widget) continue;
+            assert(widget->property("la_null").toBool()==rows.front()[column].isNull());
+            assert(widget->text()==rows.front()[column].toString()); ++cells;
+        }
+        assert(cells==checked); assert(opened->close());
+        assert(caller.close()); return checked;
     }
     return 0;
 }
@@ -720,32 +716,25 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
             std::cout<<"Original With/GoToControl/SendKeys handlers: "<<keyboardHandlers<<", independent plain-text checks: "<<plainTextChecks<<", subsequent empty-workflow errors: "<<emptyWorkflowFailures<<'\n';
             // Execute the unchanged four-position wizard handler, rather than
             // deriving execution success from syntax recognition.
-            QString originalOpenProcedure,targetName;
+            QString originalOpenProcedure,targetName; bool targetModal=false;
             const auto analysis=linaccess::analyzeVba(linaccess::decodeVbaSource(code).toStdString());
             for (const auto& procedure:analysis.procedures) if (procedure.line<=2409) originalOpenProcedure=QString::fromStdString(procedure.name);
             for (const auto& candidate:objects) {
                 const auto artifact=candidate.toObject();
-                if (artifact["sha256"]=="4480943bd1372986a103cc2400deca5b3a0305df6dd7fd8b77f701199363b167") targetName=artifact["name"].toString();
+                if (artifact["sha256"]=="4480943bd1372986a103cc2400deca5b3a0305df6dd7fd8b77f701199363b167") {
+                    targetName=artifact["name"].toString(); QFile file(directory.filePath(artifact["file"].toString())); assert(file.open(QIODevice::ReadOnly));
+                    targetModal=linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(file.readAll())).modal;
+                }
             }
             assert(!originalOpenProcedure.isEmpty() && !targetName.isEmpty());
-            bool originalOpened=false; int unexpectedDialogs=0;
-            QTimer inspect; inspect.setInterval(1);
-            QObject::connect(&inspect,&QTimer::timeout,[&] {
-                if (qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) ++unexpectedDialogs;
-                auto* target=dynamic_cast<AccessFormPreview*>(QApplication::activeModalWidget());
-                if (!target || target==&initialized) return;
-                assert(makePreviewFormObject(*target)->member("Name",{}).asText()==targetName.toStdString());
-                originalOpened=true; inspect.stop(); assert(target->close());
-            });
-            QTimer deadline; deadline.setSingleShot(true);
-            QObject::connect(&deadline,&QTimer::timeout,[]{ assert(false && "Original OpenForm callback timed out"); });
-            inspect.start(); deadline.start(3000); std::vector<linaccess::VbaValue> noArguments;
+            std::vector<linaccess::VbaValue> noArguments;
             const auto originalOpenResult=initialized.executeProcedure(originalOpenProcedure,noArguments);
-            inspect.stop(); deadline.stop();
-            if (originalOpenResult.status!=linaccess::VbaExecutionStatus::Completed || !originalOpened || unexpectedDialogs) {
-                std::cerr<<"Original OpenForm outcome: status="<<static_cast<int>(originalOpenResult.status)<<", error="<<originalOpenResult.errorNumber<<", line="<<originalOpenResult.line<<", opened="<<originalOpened<<", unexpected dialogs="<<unexpectedDialogs<<'\n';
-            }
-            assert(originalOpenResult.status==linaccess::VbaExecutionStatus::Completed && originalOpened && unexpectedDialogs==0);
+            assert(originalOpenResult.status==linaccess::VbaExecutionStatus::Completed);
+            AccessFormPreview* originalTarget=nullptr;
+            for (auto* widget:QApplication::topLevelWidgets()) if (auto* target=dynamic_cast<AccessFormPreview*>(widget);target && target!=&initialized && target->isVisible() && makePreviewFormObject(*target)->member("Name",{}).asText()==targetName.toStdString()) { assert(!originalTarget); originalTarget=target; }
+            assert(originalTarget);
+            assert(originalTarget->isModal()==targetModal);
+            assert(originalTarget->close());
             std::cout<<"Original four-position OpenForm handler: native target opened and execution completed\n";
             assert(initialized.close());
             QJsonArray events;

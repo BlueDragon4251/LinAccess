@@ -122,8 +122,10 @@ unveränderter Kassen-Handler öffnet sein originales Zielformular; ein zunächs
 roter Test belegte die dort fehlende OptionGroup-Laufzeitunterstützung. Numerische
 Gruppenwerte, Standardwerte und native exklusive Auswahl sind jetzt implementiert.
 Weitere Ansichten, benannte Filter, DataMode/WindowMode/OpenArgs und allgemeine
-Access-Fenstersemantik sind nicht implementiert. Der Aufruf verwendet weiterhin
-eine modale Vorschau. 185/187 statisch angenommene Prozeduren bedeuten ausdrücklich
+Access-Fenstersemantik sind nicht vollständig implementiert. OpenForm lässt das
+native Ziel nun geöffnet und setzt VBA fort; eine eindeutige bestehende Instanz
+wird wiederverwendet. Modal sperrt die anderen Fenster, ohne VBA anzuhalten.
+Die Fensterlebensdauer ist bisher an den aufrufenden Formularbaum gebunden. 185/187 statisch angenommene Prozeduren bedeuten ausdrücklich
 keine entsprechende Ausführungsabdeckung.
 
 
@@ -150,3 +152,11 @@ AfterUpdate-Ereignisse scheitern im Test ohne aktiven Verkauf weiterhin mit
 Option Compare ist pro Modul berücksichtigt, die vollständige Jet-Kollation
 bleibt offen. SELECT INTO kopiert echte Tabellen; vollständige Jet-Metadaten
 werden dabei noch nicht übernommen.
+
+
+Der native OpenForm-Fortsetzungstest belegt unmittelbare Forms-Zugriffe, echte
+SQL-Schreibvorgänge, Instanzwiederverwendung und sofortiges Screen.ActiveForm /
+ActiveControl. Abbrechbares Schließen und Selbstschließen mit anschließender
+MsgBox sind getestet; die physische Löschung wartet auf das Ende der laufenden
+VBA-Aufrufe. Eine unabhängige Access-Dokumentverwaltung und vollständige
+Aktivierungs-/DoCmd-/WindowMode-Semantik bleiben offen.

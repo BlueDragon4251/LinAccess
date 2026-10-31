@@ -5,7 +5,12 @@ FilterName and WhereCondition as positional arguments. Empty positions use the
 supported defaults. acNormal (0) opens an imported form, case-insensitively.
 A nonempty WhereCondition is applied through the real record-source SQL before
 Open and the initial record events. It is visible through Filter/FilterOn.
-The existing native preview remains modal; this is not Access window-mode parity.
+The native target remains open after OpenForm returns, so the following VBA can
+read/write Forms(target) and save its actual records. A uniquely open instance
+in the same project is reused, including a supported new WhereCondition. Name
+retains the stored catalog spelling rather than the caller's capitalization.
+Imported Modal controls Qt application modality; it does not suspend VBA like
+acDialog. Full Access window-mode/document lifetime parity is not established.
 
 The parser preserves argument positions; syntax acceptance is separate from
 runtime support. Unsupported views, nonempty FilterName and additional
@@ -54,13 +59,30 @@ group read. This proves a specific execution path, not the whole application.
   test intentionally overlays empty CodeBehind within a rolled-back test-copy
   transaction. Separately, the unchanged original root handler and target
   CodeBehind execute together without that overlay.
-- Native modal callbacks have three-second deadlines; an unopened target or an
-  unexpected original error dialog cannot count as successful execution.
+- The post-OpenForm Forms access regression failed before the modeless change.
+  Tests now inspect the real persistent native window after VBA returns, check
+  instance identity and retained CodeBehind state on reuse, and independently
+  verify SQL writes made by the continuing caller.
+- Immediate Screen.ActiveForm/ActiveControl after OpenForm/SetFocus are tested
+  before processing delayed window-manager activation. Screen uses the logical
+  active native document and its focused widget, not only OS activation timing.
+- Caller-tree closing saves/validates opened children and respects Unload Cancel.
+  Closed object references invalidate. A self-closing child can show a real
+  MsgBox before its procedure ends: physical QObject deletion waits until the
+  outermost native VBA call unwinds, protecting nested Qt event loops.
+- Both original calendar double-click bindings remain unchanged. Their tests
+  now wait for the actual user click after the opener returns and verify the
+  original date write-back and real MDB date-query count. The original calendar
+  has no Modal property; the harness no longer assumes every target is modal.
 
 ## Remaining boundaries
 
-No existing-open-instance reuse, modeless/MDI lifetime equivalence, designer or
-datasheet view, named filter query, data/window modes or OpenArgs is claimed.
+Native opened forms are owned by their calling form tree. Closing that tree
+closes its children; this is not Access's independent application document
+lifetime. Full MDI/document management, close-time reentrant opening, sibling
+window keyboard scheduling/complete active-document DoCmd dispatch, designer or
+datasheet views, named filter queries, data/window modes (including acDialog)
+and OpenArgs remain open.
 Only currently implemented SQL criteria and record-source binding are available.
 Full reentrant Activate/error semantics require further work and an Access oracle.
 
@@ -70,3 +92,8 @@ assignment, fractional coercion and cancelled-update selection rollback remain
 unsupported/incomplete. No exact Access rendering or event-order equivalence is
 claimed. Unsupported individual assignments/fractional values raise 3251.
 All mutations in regression tests affect disposable copies only.
+
+Modeless increment validation: Release build, all 18 CTests passed (75.58 s),
+fresh .deb payload and executable Build ID checked, four original SHA-256 checks
+passed. GUI-disabled runtime code is unchanged from the preceding verified core
+build. Debian 12/Ubuntu remote CI results remain unverified here.

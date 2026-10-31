@@ -94,8 +94,11 @@ void testOriginalCalendar(const QDir& directory,const QJsonArray& objects,QSqlDa
     });
     QTimer choose;
     QObject::connect(&choose,&QTimer::timeout,[&] {
-        auto* popup=dynamic_cast<AccessFormPreview*>(QApplication::activeModalWidget());
-        if (!popup || popup==&filter) return;
+        AccessFormPreview* popup=nullptr;
+        for (auto* widget:QApplication::topLevelWidgets())
+            if (auto* candidate=dynamic_cast<AccessFormPreview*>(widget);candidate && candidate!=&filter && candidate->isVisible()
+                && candidate->findChild<QCalendarWidget*>("access-control-"+calendarControl)) { assert(!popup); popup=candidate; }
+        if (!popup) return;
         choose.stop(); popupGuard=popup; deadline.start(3000);
         auto* calendar=popup->findChild<QCalendarWidget*>("access-control-"+calendarControl); assert(calendar);
         closedCalendar=makePreviewFormObject(*popup)->member("Controls",{linaccess::VbaValue::string(calendarControl.toStdString())}).object;
@@ -125,6 +128,7 @@ void testOriginalCalendar(const QDir& directory,const QJsonArray& objects,QSqlDa
     });
     choose.start(1);
     QTest::mouseDClick(input,Qt::LeftButton);
+    assert(QTest::qWaitFor([&] { return visited && popupGuard.isNull(); },4000));
     choose.stop(); guard.stop(); deadline.stop();
     const auto debugEvent=filter.eventResult("control:"+target+":dblclick");
     if (!visited || unexpectedDialogs || !popupGuard.isNull())
@@ -149,7 +153,9 @@ void testOriginalCalendar(const QDir& directory,const QJsonArray& objects,QSqlDa
     QApplication::setActiveWindow(&filter); other->setFocus(); QApplication::processEvents();
     assert(QApplication::focusWidget()==other);
     visited=false; timedOut=false; guard.start(10); choose.start(1);
-    QTest::mouseDClick(other,Qt::LeftButton); choose.stop(); guard.stop(); deadline.stop();
+    QTest::mouseDClick(other,Qt::LeftButton);
+    assert(QTest::qWaitFor([&] { return visited && popupGuard.isNull(); },4000));
+    choose.stop(); guard.stop(); deadline.stop();
     assert(visited && !timedOut && unexpectedDialogs==0 && popupGuard.isNull());
     const auto secondEvent=filter.eventResult("control:"+targets.back()+":dblclick");
     assert(secondEvent && secondEvent->status==linaccess::VbaExecutionStatus::Completed);

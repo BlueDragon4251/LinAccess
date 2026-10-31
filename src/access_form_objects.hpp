@@ -1,6 +1,8 @@
 #pragma once
 #include "vba_expression.hpp"
 class AccessFormPreview;
+// Non-owning GUI-thread lookup of the active native document.
+AccessFormPreview* activePreviewDocument();
 std::shared_ptr<linaccess::VbaObject> makePreviewFormObject(AccessFormPreview& preview);
 std::shared_ptr<linaccess::VbaObject> makePreviewFormsObject(AccessFormPreview& preview);
 

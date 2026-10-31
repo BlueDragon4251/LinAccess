@@ -72,8 +72,11 @@ Value is currently an ISO date/midnight String Variant, not a complete VBA Date
 Variant or OLE serial. Time-bearing values and bound calendar data sources are
 explicitly unsupported; their data is not silently rewritten. The fixture's
 calendar is unbound. Full Screen semantics, other events, linked-subform calendar
-workflows and general OCX interfaces remain open. OpenForm still uses the existing
-modal native preview, not complete Access window-mode semantics. Report pagination,
+workflows and general OCX interfaces remain open. OpenForm now returns with its
+native target still open (OPEN_FORM_RUNTIME.md). The original calendar is not
+marked Modal; tests drive its real asynchronous selection instead of relying on
+the former synchronous-preview behavior. Complete Access window-mode semantics
+remain open. Report pagination,
 full form compatibility and all 187 procedure executions are not established here.
 
 
