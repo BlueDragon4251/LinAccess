@@ -26,6 +26,8 @@
 #include <cassert>
 #include <iostream>
 
+void testFormEvents();
+
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     assert(argc >= 2);
@@ -98,6 +100,7 @@ End
     Width =4200
     RecordSource ="recipes"
     Caption ="Keksverwaltung"
+    OnOpen ="[Event Procedure]"
     Begin Section
         Height =2000
         Begin
@@ -111,6 +114,7 @@ End
             End
             Begin CommandButton
                 Name ="btnInsert"
+                OnClick ="[Event Procedure]"
                 Caption ="Speichern"
                 Left =100
                 Top =600
@@ -188,6 +192,7 @@ End Sub
         assert(executedKeys >= 10);
         std::cout << "Original keypad button/parameterized-handler executions: " << executedKeys << '\n';
     }
+    testFormEvents();
     if (argc >= 3) {
         QTemporaryDir temporary;
         assert(temporary.isValid());

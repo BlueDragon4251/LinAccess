@@ -44,6 +44,8 @@ Verified incremental work ([details and limits](DAO_RUNTIME.md)):
 - [x] Empty/Null distinction, tested Boolean/bitwise rules and CLng tie-to-even rounding.
 - [x] Procedure-local Resume Next/GoTo 0 and scoped Err object (partial error codes).
 
+- [x] Bound-form Open/Load/Current, Dirty, control/form updates, navigation save and Unload/Close cancellation; see FORM_EVENTS.md.
+
 Full targets remain open:
 
 - [ ] Replace statement regex dispatch with a complete lexer/parser, AST and bound runtime.

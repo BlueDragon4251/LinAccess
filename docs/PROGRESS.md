@@ -22,7 +22,10 @@ Current completed query package: typed named parameters, imported/temporary DAO
 QueryDefs, basic Jet strings/LIKE/DISTINCTROW/TOP ties, canonical dates and bounded
 execution. Full Jet/ACE SQL and original Kassa operation remain open.
 
-Next work package: form record lifecycle, control update events and cancellation.
+Completed event package: bound-form lifecycle, validation/cancellation, navigation
+save, close handling and synchronized bindings (FORM_EVENTS.md).
+
+Next work package: typed control values and Boolean import semantics.
 
 See DEVELOPMENT_CHECKLIST.md for all requirements and DAO_RUNTIME.md and
 MDB_IMPORT_REGRESSION.md for evidence and limitations. Private syntax inventory

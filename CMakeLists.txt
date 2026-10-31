@@ -68,6 +68,7 @@ if(BUILD_TESTING)
     target_link_libraries(linaccess_core_tests PRIVATE linaccess_runtime)
     add_test(NAME core_tests COMMAND linaccess_core_tests)
     if(LINACCESS_BUILD_GUI)
+        find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
         add_executable(linaccess_dao_tests tests/dao_tests.cpp src/dao_database.cpp src/access_query.cpp src/sqlite_execution.cpp src/vba_source_codec.cpp
              )
         target_include_directories(linaccess_dao_tests PRIVATE src)
@@ -163,7 +164,7 @@ if(BUILD_TESTING)
                 COMMAND linaccess_real_bridge_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}" 192 47 9 100 32 4)
             set_tests_properties(complex_access_bridge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
             add_executable(linaccess_access_layout_tests
-                tests/access_form_layout_tests.cpp
+                tests/access_form_layout_tests.cpp tests/form_event_tests.cpp
                 src/access_form_import.cpp src/access_form_import.hpp
                 src/dao_database.cpp src/access_query.cpp src/sqlite_execution.cpp src/access_catalog.cpp src/access_table_import.cpp
                 src/access_form_preview.cpp src/access_form_preview.hpp
@@ -172,7 +173,7 @@ if(BUILD_TESTING)
                  src/vba_expression.hpp
                  src/vba_analyzer.hpp)
             target_include_directories(linaccess_access_layout_tests PRIVATE src)
-            target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_runtime Qt6::Widgets Qt6::Sql)
+            target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_runtime Qt6::Widgets Qt6::Sql Qt6::Test)
             add_test(NAME access_2003_layouts
                 COMMAND linaccess_access_layout_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}")
             set_tests_properties(access_2003_layouts PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

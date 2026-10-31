@@ -122,12 +122,15 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "SourceObject") control.sourceObject = value;
             else if (key == "OnClick") control.onClick = value;
             else if (key == "AfterUpdate") control.afterUpdate = value;
+            else if (key == "BeforeUpdate") control.beforeUpdate = value;
             else if (key == "Left") control.left = integer();
             else if (key == "Top") control.top = integer();
             else if (key == "Width") control.width = integer();
             else if (key == "Height") control.height = integer();
             else if (key == "Visible") control.visible = value != "0" && value != "False";
         } else if (current.type == "Form") {
+            static const QSet<QString> events{"onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate"};
+            if (events.contains(key.toCaseFolded())) form.events.insert(key.toCaseFolded(),value);
             if (key == "Caption") form.caption = value;
             else if (key == "RecordSource") form.recordSource = value;
             else if (key == "Width") form.width = integer();

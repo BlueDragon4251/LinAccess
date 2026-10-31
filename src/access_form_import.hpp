@@ -3,6 +3,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include <QMap>
 
 namespace linaccess {
 // A deliberately partial, source-only decoder for Access SaveAsText form
@@ -29,6 +30,7 @@ struct AccessVisualControl {
     QString section;
     QString onClick;
     QString afterUpdate;
+    QString beforeUpdate;
     int left{};
     int top{};
     int width{1701};
@@ -42,6 +44,7 @@ struct AccessFormLayout {
     int width{9000};
     int height{5000};
     QVector<AccessVisualControl> controls;
+    QMap<QString,QString> events;
 };
 
 AccessFormLayout parseAccessFormLayout(const QString& text);

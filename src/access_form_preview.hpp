@@ -1,9 +1,11 @@
 #pragma once
 
 #include "access_form_import.hpp"
+#include "vba_runtime.hpp"
 
 #include <QDialog>
 #include <QMap>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QVariant>
 
@@ -12,6 +14,7 @@
 class QComboBox;
 class QLabel;
 class QWidget;
+class QCloseEvent;
 
 // Renders controls from Access 2003 SaveAsText instead of placing them in an
 // unrelated auto-generated QFormLayout. Only supported VBA handlers can run.
@@ -24,13 +27,23 @@ public:
     int renderedControls() const { return renderedControls_; }
     bool hasDataSource() const { return dataSourceAvailable_; }
     bool cancelledByOpen() const { return openCancelled_; }
+    bool hasUnsavedChanges() const { return dirty_; }
+    void accept() override;
+    void reject() override;
 
 private:
     void buildControls(QWidget* canvas);
     void loadRecords();
     void loadRecord();
     bool saveRecord();
-    void runHandler(const QString& handler);
+    linaccess::VbaExecutionResult runHandler(const QString& handler);
+    linaccess::VbaExecutionResult formEvent(const QString& property,const QString& handler);
+    void markDirty(const QString& control);
+    bool commitControl(const QString& control);
+    bool commitControls();
+    void selectRecord(int target);
+    bool prepareClose();
+    void closeEvent(QCloseEvent* event) override;
     void openOtherForm(const QString& name);
     std::optional<std::string> getField(std::string_view name) const;
     void setField(std::string_view name, std::optional<std::string> value);
@@ -50,4 +63,14 @@ private:
     bool dataSourceAvailable_{};
     bool directTable_{};
     bool openCancelled_{};
+    bool opened_{};
+    bool closed_{};
+    bool dirty_{};
+    bool loading_{};
+    bool saving_{};
+    bool navigating_{};
+    bool initialized_{};
+    bool dataTruncated_{};
+    int currentRecordIndex_{};
+    QSet<QString> pendingControls_;
 };
