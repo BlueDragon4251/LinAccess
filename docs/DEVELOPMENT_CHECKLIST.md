@@ -130,4 +130,5 @@ Full targets remain open:
 - [x] Native ActiveMenuBar and popup Controls share real project actions; unchanged complex original Form_Open completes, with mixed numeric/String Variant comparison regressions.
 - [x] Original OnCurrent completes; two original DSum controls independently match actual record sums after SaveAsText escaped-quote correction.
 - [x] DSum/DCount execute native table/view aggregates with criteria, Null/count and catchable-error regressions.
-- [ ] Native activation event regression and the remaining CCur calculated Error Variant; exact Currency/Decimal semantics.
+- [x] Bounded Currency subtype, CCur, fixed-point operations and original calculated expression with a synthetic non-Null control input; initial eager CCur(Null) error 94 remains explicit.
+- [ ] Native activation event regression, Access oracle for the remaining initial calculated error, full Currency coercions/locales, exact Jet MONEY storage and Decimal semantics.

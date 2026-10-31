@@ -106,6 +106,7 @@ QVariant sqlFieldValue(const VbaValue& value,const QString& type) {
     switch (value.kind) {
     case VbaValue::Kind::Empty: return QString{};
     case VbaValue::Kind::Text: return QString::fromUtf8(value.text);
+    case VbaValue::Kind::Currency: return QString::fromStdString(value.asText());
     case VbaValue::Kind::Number: return value.number;
     case VbaValue::Kind::Boolean: return value.boolean ? -1 : 0;
     default: throw VbaRuntimeError(13,"Object cannot be stored in a field");

@@ -20,7 +20,7 @@ erklärt. Siehe [Untersuchung](MDB_IMPORT_REGRESSION.md) und
 | Access-Berichte | Original-Layoutvorschau mit einseitigem Qt-Druck/PDF; drei originale Open-/Close-Paare automatisch ausgeführt, tatsächliche CommandBars-Aktionen angepasst; 6/9 Quellen binden 54 nicht-NULL-Textfelder | Report-Modell vervollständigen | Keine vollständige Daten-/Gruppen-/Seitenverarbeitung oder Access-Druckgleichheit; [Druckadapter](PRINT_PREVIEW_ADAPTER.md) |
 | VBA-Module aus `.mdb`/`.accdb` | Anwenderexporte mit Access 365 und Access 2003 geprüft. Komplexe Kassen-MDB: 32 VBA-Dateien, 187 Prozeduren statisch erkannt, Umlautnamen unterstützt. Ein Original-Kassenhandler per Qt-Klick/DAO ausgeführt; keine vollständige Laufzeitabdeckung | Umfangreicher VBA-Parser/Interpreter | VBA-Quellcode aus geschützten Projekten, Referenzen, dokumentgebundene Steuerelemente |
 | `.bas`/`.cls`-Textdateien | Import in Editor, Originalbytes erhalten, Prozedurerkennung | Vollständiger Parser | Zeichencodierung; nur sehr kleine ausführbare Teilmenge |
-| VBA-Ausführung | **Experimentelle Teilmenge**: Variants, Ausdrücke, If, For/For Each/Do While, DAO, parameterisierte Sub/Function-Aufrufe, ByRef-Aliase, Label-Fehlerbehandlung/Resume und gebundene Ereignisse. SQL-Aktionen ändern die Projektkopie tatsächlich | Vollständige VBA-Syntax und Semantik | Klassen, AST/Grammatik, Modulzustand, Arrays, Optional/ParamArray, präzise Date/Currency/Decimal fehlen; [Laufzeit](DAO_RUNTIME.md) |
+| VBA-Ausführung | **Experimentelle Teilmenge**: Variants, Ausdrücke, If, For/For Each/Do While, DAO, parameterisierte Sub/Function-Aufrufe, ByRef-Aliase, Label-Fehlerbehandlung/Resume und gebundene Ereignisse. SQL-Aktionen ändern die Projektkopie tatsächlich | Vollständige VBA-Syntax und Semantik | Klassen, AST/Grammatik, Modulzustand, Arrays, Optional/ParamArray, Date/Decimal und vollständige Currency-Koercionen fehlen; [Laufzeit](DAO_RUNTIME.md) |
 | `Me`, `DoCmd`, `CurrentDb`, DAO | Native Teilmengen mit tatsächlichen Recordsets/Fields/QueryDefs, typisierten Werten, Navigation und Edit/AddNew/Update/Delete; importierte Forms/Controls-Sammlungen und formulierübergreifende Änderungen mit Lebensdauerprüfung | Access-Objektmodell vervollständigen | ADO, Reports, volle Collections/Default-Member, Filter/Sort, Klassen und Access-Fenstersemantik fehlen; [Objekte](FORM_OBJECT_MODEL.md), [Typen](TYPED_FIELDS.md) |
 | COM/ActiveX/WinAPI | **Nein** | Fehlerdiagnose, ggf. eingeschränkte Adapter | Echte Windows-COM-Objekte nicht nativ Linux |
 | Access-Makros | Nein | Eigene Aktionsrepräsentation | Kein pauschaler 1:1-Support |
@@ -82,5 +82,6 @@ und einfache berechnete Felder sind mit Originalartefakten geprüft. Ein komplex
 originaler Form_Load läuft mit 15 unabhängig geprüften dynamischen Tags und sechs
 Kind-Datenquellen. Auch Form_Open läuft mit nativer Menüleiste durch.
 Form_Current und zwei unabhängig geprüfte DSum-Berechnungen laufen ebenfalls.
-Eine CCur-Berechnung und Aktivierungsereignisse bleiben offen; dies ist kein vollständig lauffähiger Kassen-Workflow.
+CCur läuft mit einem nicht leeren Testwert; beim anfänglichen Null-Wert bleibt
+ein expliziter Fehler 94. Aktivierungsereignisse bleiben offen; dies ist kein vollständig lauffähiger Kassen-Workflow.
 Siehe [Nachweise und Grenzen](NATIVE_FORM_RUNTIME.md).

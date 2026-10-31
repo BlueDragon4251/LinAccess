@@ -249,6 +249,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                 if (control.controlSource.trimmed().startsWith('=')) {
                     const auto value=makePreviewFormObject(initialized)->item(control.name.toUtf8().toStdString());
                     ++calculated; calculationErrors+=value.kind==linaccess::VbaValue::Kind::Error;
+                    if (value.kind==linaccess::VbaValue::Kind::Error) std::cerr<<"Calculated control position="<<index<<", error="<<value.errorNumber<<'\n';
                     calculations.append(QJsonObject{{"module_sha256",module["sha256"]},{"control_index",index},
                         {"value_kind",static_cast<int>(value.kind)},{"error_number",value.errorNumber}});
                 }
@@ -275,6 +276,24 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
             const auto current=initialized.eventResult("OnCurrent");
             assert(current && current->status==linaccess::VbaExecutionStatus::Completed);
             assert(calculated==34 && calculationErrors==1);
+            int originalCurrencyChecks=0;
+            const QRegularExpression currencyInput(R"currency(CCur\(\s*\[([^\]]+)\]\s*\))currency",QRegularExpression::CaseInsensitiveOption);
+            for (const auto& control : layout.controls) {
+                const auto input=currencyInput.match(control.controlSource);
+                if (!input.hasMatch()) continue;
+                auto originalForm=makePreviewFormObject(initialized);
+                const auto initial=originalForm->item(control.name.toStdString());
+                assert(initial.kind==linaccess::VbaValue::Kind::Error && initial.errorNumber==94);
+                auto inputControl=originalForm->member("Controls",{linaccess::VbaValue::string(input.captured(1).toStdString())}).object;
+                const auto before=inputControl->member("Value",{});
+                assert(before.kind==linaccess::VbaValue::Kind::Null);
+                inputControl->assign("Value",linaccess::VbaValue::numeric(1.25));
+                const auto actual=originalForm->item(control.name.toStdString());
+                assert(actual.kind==linaccess::VbaValue::Kind::Currency && actual.currencyUnits==12500);
+                inputControl->assign("Value",before);
+                ++originalCurrencyChecks;
+            }
+            assert(originalCurrencyChecks==1);
             std::cout<<"Original domain sums independently verified: "<<originalDomainSums<<"; original Form_Current completed\n";
             assert(subforms>=2 && calculated>0);
             assert(initialized.close());

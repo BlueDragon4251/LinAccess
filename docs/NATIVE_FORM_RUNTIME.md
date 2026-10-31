@@ -37,8 +37,9 @@ Calculated textboxes execute bracket field/control references, explicit subform
 Form references, basic scalar expressions and simple Sum(field), Count(field)
 and Count(*) over the loaded record source. English and bounded German expression
 names/separators are supported. NULL aggregate behavior is tested. Incomplete
-recordsets produce an error instead of an incorrect partial total. Domain
-functions, general aggregate expressions, Currency/Decimal/Date subtype behavior,
+recordsets produce an error instead of an incorrect partial total. DSum/DCount
+and bounded Currency execution are implemented below. Other domain functions,
+general aggregate expressions, full Currency/Decimal/Date subtype behavior,
 formatting, arbitrary module functions and all recalculation timings remain open.
 
 Variant/Error is represented separately from NULL and exceptions. CVErr/IsError,
@@ -62,8 +63,10 @@ records. Six embedded child forms have available record sources. Its SQL changes
 are rolled back before the independent report inventory runs.
 
 A second, simpler original Form_Load verifies six Enabled/Visible assignments.
-The complex form now has one error value among 34 calculated controls: CCur
-is still unsupported. Its unchanged OnOpen, OnLoad and OnCurrent complete;
+The complex form has one error value among 34 calculated controls: eager
+IIf evaluates CCur(Null), producing 94. Its original CCur expression executes
+with a non-Null synthetic input and returns an actual Currency subtype
+([Currency evidence and limits](CURRENCY_RUNTIME.md)). Its unchanged OnOpen, OnLoad and OnCurrent complete;
 OnActivate is not dispatched. This is not complete application startup.
 Two original DSum controls are independently checked by summing their actual
 projected records in C++, including the original criterion on one control.

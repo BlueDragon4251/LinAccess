@@ -1,4 +1,5 @@
 #include "vba_expression.hpp"
+#include "vba_currency.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -151,6 +152,8 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         int cmp = 0;
         if (left.kind == VbaValue::Kind::Text && right.kind == VbaValue::Kind::Text) {
             cmp = left.text.compare(right.text);
+        } else if (left.kind==VbaValue::Kind::Currency && right.kind==VbaValue::Kind::Currency) {
+            cmp=(left.currencyUnits>right.currencyUnits)-(left.currencyUnits<right.currencyUnits);
         } else if (left.kind == VbaValue::Kind::Text || right.kind == VbaValue::Kind::Text) {
             // These values are Variants: a numeric Variant sorts before a
             // String Variant, including numeric-looking and empty strings.
@@ -165,6 +168,8 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
     }
     if (op == "+" && left.kind == VbaValue::Kind::Text && right.kind == VbaValue::Kind::Text)
         return VbaValue::string(left.text + right.text);
+    if (left.kind==VbaValue::Kind::Currency && right.kind==VbaValue::Kind::Currency && (op=="+" || op=="-" || op=="*"))
+        return currencyBinary(op,left,right);
     const auto a = left.asNumber(), b = right.asNumber();
     double answer = 0;
     if (op == "+") answer = a + b;
@@ -249,11 +254,11 @@ private:
     VbaValue atom(bool objectContext) {
         if (take("-")) {
             const auto arg = expression(7);
-            return host_ ? VbaValue::numeric(-arg.asNumber()) : VbaValue{};
+            return host_ ? arg.kind==VbaValue::Kind::Currency ? negateCurrency(arg) : VbaValue::numeric(-arg.asNumber()) : VbaValue{};
         }
         if (take("+")) {
             const auto arg = expression(7);
-            return host_ ? VbaValue::numeric(arg.asNumber()) : VbaValue{};
+            return host_ ? arg.kind==VbaValue::Kind::Currency ? arg : VbaValue::numeric(arg.asNumber()) : VbaValue{};
         }
         if (take("not")) {
             const auto arg = expression(3); // comparisons bind before Not in VBA
@@ -377,6 +382,23 @@ private:
                 if (!args.empty()) throw error("Clock function takes no arguments",450);
                 return clockValue(word);
             }
+            if (word=="ccur" || word=="vartype" || word=="typename") {
+                if (!host_) return {};
+                if (args.size()!=1) throw error("Conversion/type function requires one argument",450);
+                const auto& value=args.front();
+                if (word=="ccur") return convertCurrency(value);
+                const int type=value.kind==VbaValue::Kind::Empty ? 0 : value.kind==VbaValue::Kind::Null ? 1
+                    : value.kind==VbaValue::Kind::Number ? 5 : value.kind==VbaValue::Kind::Currency ? 6
+                    : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
+                    : value.kind==VbaValue::Kind::Error ? 10 : 11;
+                if (word=="vartype") return VbaValue::numeric(type);
+                if (type==9) {
+                    if (!value.object) return VbaValue::string("Nothing");
+                    throw error("Native object class name unavailable",3251);
+                }
+                return VbaValue::string(type==0 ? "Empty" : type==1 ? "Null" : type==5 ? "Double"
+                    : type==6 ? "Currency" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : "Boolean");
+            }
             if (word=="dsum" || word=="dcount") {
                 if (!host_) return {};
                 if (args.size()<2 || args.size()>3) throw error("Domain aggregate requires two or three arguments",450);
@@ -413,8 +435,9 @@ private:
                 }
                 if (word == "clng") return VbaValue::numeric(integer(value));
                 if (word == "cdbl") return VbaValue::numeric(value.asNumber());
-                if (word == "abs") return VbaValue::numeric(std::abs(value.asNumber()));
-                if (word == "int") return VbaValue::numeric(std::floor(value.asNumber()));
+                if (word == "abs") return value.kind==VbaValue::Kind::Currency
+                    ? value.currencyUnits<0 ? negateCurrency(value) : value : VbaValue::numeric(std::abs(value.asNumber()));
+                if (word == "int") return value.kind==VbaValue::Kind::Currency ? floorCurrency(value) : VbaValue::numeric(std::floor(value.asNumber()));
                 if (word == "trim") return VbaValue::string([&] {
                     const auto str = value.asText();
                     const auto first = str.find_first_not_of(" \t\n\r");
@@ -508,11 +531,22 @@ VbaValue VbaValue::errorValue(int number) { VbaValue v; v.kind=Kind::Error; v.er
 VbaValue VbaValue::reference(std::shared_ptr<VbaObject> value) { VbaValue v; v.kind = Kind::Object; v.object = std::move(value); return v; }
 VbaValue VbaValue::numeric(double value) { VbaValue v; v.kind = Kind::Number; v.number = value; return v; }
 VbaValue VbaValue::string(std::string value) { VbaValue v; v.kind = Kind::Text; v.text = std::move(value); return v; }
+VbaValue VbaValue::currency(std::int64_t units) { VbaValue v; v.kind=Kind::Currency; v.currencyUnits=units; return v; }
 VbaValue VbaValue::logical(bool value) { VbaValue v; v.kind = Kind::Boolean; v.boolean = value; return v; }
 std::string VbaValue::asText() const {
     if (kind==Kind::Error) throw error("Error Variant cannot be implicitly converted to text",13);
     if (kind == Kind::Object) throw error("VBA: Objekt kann nicht in Text umgewandelt werden");
     if (kind == Kind::Text) return text;
+    if (kind==Kind::Currency) {
+        const auto magnitude=currencyUnits<0 ? static_cast<std::uint64_t>(-(currencyUnits+1))+1 : static_cast<std::uint64_t>(currencyUnits);
+        auto whole=std::to_string(magnitude/10000);
+        if (magnitude%10000) {
+            auto fraction=std::to_string(10000+magnitude%10000).substr(1);
+            while (fraction.back()=='0') fraction.pop_back();
+            whole+='.'+fraction;
+        }
+        return (currencyUnits<0 ? "-" : "")+whole;
+    }
     if (kind == Kind::Boolean) return boolean ? "True" : "False";
     if (kind == Kind::Null || kind == Kind::Empty) return {};
     std::ostringstream stream;
@@ -524,6 +558,7 @@ double VbaValue::asNumber() const {
     if (kind == Kind::Object) throw error("VBA: Objekt kann nicht in Zahl umgewandelt werden");
     if (kind == Kind::Empty) return 0;
     if (kind == Kind::Number) return number;
+    if (kind == Kind::Currency) return static_cast<double>(currencyUnits)/10000;
     if (kind == Kind::Boolean) return boolean ? -1.0 : 0.0; // VBA True = -1.
     if (kind == Kind::Null) throw error("VBA: Null kann nicht in Zahl umgewandelt werden");
     std::size_t consumed = 0;

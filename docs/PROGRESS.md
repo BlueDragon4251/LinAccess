@@ -120,4 +120,12 @@ Completed domain-aggregate/SaveAsText package: DSum and DCount on actual tables
 and query views, optional criteria, Null/count handling and catchable errors.
 Backslash-escaped property quotes are decoded correctly. Two unchanged original
 DSum controls match independent record sums. Original Form_Current completes;
-one of 34 calculated controls still requires CCur. Exact Jet Currency remains open.
+one of 34 calculated controls still produces an initial Null conversion error
+after subsequent CCur implementation. Exact Jet Currency storage remains open.
+
+Completed bounded Currency execution package: exact four-place values and decimal
+string conversion, checked Currency arithmetic/comparison, subtype introspection
+and unbound control retention. The original CCur expression executes with a
+synthetic non-Null input; its initial Null branch remains error 94 under eager
+IIf. Full mixed coercion/locales and exact Jet MONEY storage remain open.
+See CURRENCY_RUNTIME.md.

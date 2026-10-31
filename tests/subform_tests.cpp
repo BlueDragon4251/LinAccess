@@ -71,6 +71,9 @@ End
 End
 )FORM";
     const QByteArray childCode=R"VBA(
+Sub CurrencyCheck()
+Me!allow_close = CCur("922337203685477.5807")
+End Sub
 Sub DomainCheck()
 Me!allow_close = DSum("amount", "items", "id=" & 2)
 End Sub
@@ -192,6 +195,10 @@ End Sub
     assert(form->item("domain_count").asNumber()==2);
     assert(form->item("domain_view").asNumber()==28);
     std::vector<linaccess::VbaValue> domainArgs;
+    assert(child->executeProcedure("CurrencyCheck",domainArgs).status==linaccess::VbaExecutionStatus::Completed);
+    const auto preservedCurrency=allow->member("Value",{});
+    assert(preservedCurrency.kind==linaccess::VbaValue::Kind::Currency && preservedCurrency.asText()=="922337203685477.5807");
+
     assert(child->executeProcedure("DomainCheck",domainArgs).status==linaccess::VbaExecutionStatus::Completed);
     assert(allow->member("Value",{}).asNumber()==3.5);
     assert(child->executeProcedure("DomainFailure",domainArgs).status==linaccess::VbaExecutionStatus::Completed);

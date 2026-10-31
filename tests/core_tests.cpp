@@ -451,6 +451,48 @@ End Sub
     const VbaVariables variables;
     const auto evaluate = [&](std::string_view source) { return evaluateVbaExpression(source, host, variables); };
     assert(evaluate("Empty + 2").asNumber() == 2);
+    const auto currencyCheck=[&](std::string_view text,std::string_view expected) {
+        const auto value=evaluate(text);
+        assert(value.kind==VbaValue::Kind::Currency && value.asText()==expected);
+    };
+    currencyCheck("CCur(\"922337203685477.5807\")","922337203685477.5807");
+    currencyCheck("CCur(\"-922337203685477.5808\")","-922337203685477.5808");
+    currencyCheck("CCur(\"1.23445\")","1.2344");
+    currencyCheck("CCur(\"1.23455\")","1.2346");
+    currencyCheck("CCur(\"-1.23445\")","-1.2344");
+    currencyCheck("CCur(\"0.00005001\")","0.0001");
+    currencyCheck("CCur(\"4.5e-5\")","0");
+    currencyCheck("CCur(True)","-1");
+    currencyCheck("CCur(Empty)","0");
+    currencyCheck("CCur(1.25)","1.25");
+    currencyCheck("Int(CCur(\"-1.25\"))","-2");
+    currencyCheck("Int(CCur(\"1.25\"))","1");
+    currencyCheck("CCur(\"922337203685477.5806\")+CCur(\"0.0001\")","922337203685477.5807");
+    currencyCheck("CCur(\"0.0001\")*CCur(\"0.5\")","0");
+    currencyCheck("CCur(\"0.0003\")*CCur(\"0.5\")","0.0002");
+    currencyCheck("CCur(\"-0.0003\")*CCur(\"0.5\")","-0.0002");
+    currencyCheck("-CCur(\"1.0001\")","-1.0001");
+    currencyCheck("Abs(CCur(\"-1.0001\"))","1.0001");
+    assert(evaluate("CCur(\"922337203685477.5806\") < CCur(\"922337203685477.5807\")").truthy());
+    assert(evaluate("VarType(CCur(1))").asNumber()==6);
+    assert(evaluate("TypeName(CCur(1))").asText()=="Currency");
+    assert(evaluate("CCur(1)/CCur(2)").asNumber()==0.5);
+    assert(evaluate("CCur(1)/CCur(2)").kind==VbaValue::Kind::Number);
+    const auto currencyError=[&](std::string_view source,int number) {
+        bool caught=false;
+        try { (void)evaluate(source); } catch(const VbaRuntimeError& error) { caught=error.number==number; }
+        assert(caught);
+    };
+    currencyError("CCur(\"922337203685477.58075\")",6);
+    currencyError("-CCur(\"-922337203685477.5808\")",6);
+    currencyError("CCur(\"922337203685477.5807\")+CCur(1)",6);
+    currencyError("CCur(Null)",94);
+    currencyError("CCur(\"invalid\")",13);
+    currencyError("CCur(CVErr(2015))",13);
+    currencyError("CCur()",450);
+    currencyError("Int(CCur(\"-922337203685477.5808\"))",6);
+    assert(evaluate("TypeName(Nothing)").asText()=="Nothing");
+
     assert(!evaluate("0 = \"\"").truthy());
     assert(!evaluate("2 = \"2\"").truthy());
     assert(evaluate("2 < \"1\"").truthy());

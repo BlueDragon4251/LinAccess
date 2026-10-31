@@ -3,6 +3,7 @@
 #include "vba_runtime.hpp"
 
 #include <optional>
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -12,8 +13,9 @@
 namespace linaccess {
 
 struct VbaValue {
-    enum class Kind { Null, Empty, Number, Text, Boolean, Object, Error } kind{Kind::Null};
+    enum class Kind { Null, Empty, Number, Text, Boolean, Object, Error, Currency } kind{Kind::Null};
     double number{};
+    std::int64_t currencyUnits{};
     std::string text;
     bool boolean{};
     int errorNumber{};
@@ -21,6 +23,7 @@ struct VbaValue {
 
     static VbaValue empty();
     static VbaValue numeric(double value);
+    static VbaValue currency(std::int64_t scaledUnits);
     static VbaValue string(std::string value);
     static VbaValue logical(bool value);
     static VbaValue reference(std::shared_ptr<VbaObject> value);

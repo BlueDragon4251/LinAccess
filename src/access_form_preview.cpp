@@ -2,6 +2,7 @@
 #include "access_form_objects.hpp"
 
 #include "vba_runtime.hpp"
+#include "vba_currency.hpp"
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
@@ -712,6 +713,7 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
     if (type.isEmpty()) {
         const auto kind = static_cast<linaccess::VbaValue::Kind>(widget->property("la_vba_kind").toInt());
         if (kind == linaccess::VbaValue::Kind::Empty) return linaccess::VbaValue::empty();
+        if (kind == linaccess::VbaValue::Kind::Currency) return linaccess::convertCurrency(linaccess::VbaValue::string(textOf(widget).toStdString()));
         if (kind == linaccess::VbaValue::Kind::Number) type = "REAL";
         if (kind == linaccess::VbaValue::Kind::Boolean || qobject_cast<QCheckBox*>(widget)) type = "BOOLEAN";
     }
