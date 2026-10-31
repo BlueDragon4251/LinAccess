@@ -305,7 +305,7 @@ int importAccessDatabase(QSqlDatabase db, const QString& sourceFile) {
             importAccessTablePhase(db, sourceFile, it.key(), it.value(), {header});
         }
         for (auto it = schemas.cbegin(); it != schemas.cend(); ++it) {
-            const auto csv = AccessCatalog::tool("mdb-export", {"-0", QString(QChar(0x1e)), readPath, it.key()});
+            const auto csv = AccessCatalog::exportTable(readPath,it.key());
             importAccessTablePhase(db, sourceFile, it.key(), it.value(),
                 parseCsvDetailed(std::string_view(csv.constData(), csv.size())), true);
         }

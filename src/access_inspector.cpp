@@ -142,7 +142,7 @@ void AccessInspector::previewTable() {
     try {
         // The control-character marker is different from an empty text field;
         // quoted text identical to the marker is also not considered NULL.
-        const QByteArray typedOutput = runMdbTool("mdb-export", {"-0", QString(QChar(0x1e)), sourceFile_, selectedTable_});
+        const QByteArray typedOutput = linaccess::AccessCatalog::exportTable(sourceFile_,selectedTable_);
         csvRows_ = linaccess::parseCsvDetailed(std::string_view(typedOutput.constData(),
                                                                static_cast<std::size_t>(typedOutput.size())));
         if (csvRows_.empty()) throw std::runtime_error("Leerer Export ohne Kopfzeile");

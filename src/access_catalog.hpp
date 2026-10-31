@@ -32,6 +32,7 @@ public:
     QString querySql(const QString& name) const;
     QStringList missingQuerySources(const QString& sql) const;
     QString tableSchema(const QString& name) const;
+    static QByteArray exportTable(const QString& source, const QString& table);
     static QByteArray tool(const QString& executable, const QStringList& args,
                            const QByteArray& input = {});
 private:

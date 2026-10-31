@@ -1,4 +1,5 @@
 #include "bridge_importer.hpp"
+#include "access_query.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_source_codec.hpp"
 
@@ -226,6 +227,7 @@ void BridgeImporter::importAll() {
         QMessageBox::critical(this, "Bridge-Import abgebrochen", problem);
         return;
     }
+    const bool queryViewsReady = linaccess::installAccessQueryViews(project_) >= 0;
     int detectedProcedures = 0;
     int vbaFiles = 0;
     QMap<QString, int> dependencies;
@@ -240,6 +242,7 @@ void BridgeImporter::importAll() {
     }
     QString summary = QString::number(ready.size()) + " geprüfte Quellobjekte gespeichert. "
         "Beim Import wurde KEIN VBA ausgeführt.";
+    if (!queryViewsReady) summary += "\nAbfrageansichten konnten wegen aktiver Leser noch nicht aktualisiert werden; Projekt erneut öffnen.";
     if (vbaFiles) {
         summary += "\n\nStatische VBA-Analyse: " + QString::number(vbaFiles)
             + " Module, " + QString::number(detectedProcedures) + " Prozeduren erkannt.";

@@ -11,7 +11,7 @@ if(LINACCESS_BUILD_GUI)
     set(CMAKE_AUTOMOC ON)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Sql PrintSupport)
     add_executable(linaccess
-        src/dao_database.cpp
+        src/dao_database.cpp src/access_query.cpp src/sqlite_execution.cpp
         src/main.cpp
         src/mainwindow.cpp
         src/mainwindow.hpp
@@ -68,7 +68,7 @@ if(BUILD_TESTING)
     target_link_libraries(linaccess_core_tests PRIVATE linaccess_runtime)
     add_test(NAME core_tests COMMAND linaccess_core_tests)
     if(LINACCESS_BUILD_GUI)
-        add_executable(linaccess_dao_tests tests/dao_tests.cpp src/dao_database.cpp
+        add_executable(linaccess_dao_tests tests/dao_tests.cpp src/dao_database.cpp src/access_query.cpp src/sqlite_execution.cpp src/vba_source_codec.cpp
              )
         target_include_directories(linaccess_dao_tests PRIVATE src)
         target_link_libraries(linaccess_dao_tests PRIVATE linaccess_runtime Qt6::Core Qt6::Sql)
@@ -105,7 +105,7 @@ if(BUILD_TESTING)
         endif()
         add_executable(linaccess_bridge_gui_tests
             tests/bridge_gui_tests.cpp
-            src/bridge_importer.cpp
+            src/bridge_importer.cpp src/access_query.cpp
             src/bridge_importer.hpp
             src/vba_source_codec.cpp
             src/vba_source_codec.hpp
@@ -126,7 +126,7 @@ if(BUILD_TESTING)
         if(LINACCESS_REAL_BRIDGE_DIR AND EXISTS "${LINACCESS_REAL_BRIDGE_DIR}/manifest.json")
             add_executable(linaccess_real_bridge_tests
                 tests/real_bridge_tests.cpp
-                src/bridge_importer.cpp src/bridge_importer.hpp
+                src/bridge_importer.cpp src/access_query.cpp src/bridge_importer.hpp
                 src/vba_source_codec.cpp src/vba_source_codec.hpp
                  src/vba_analyzer.hpp
                  src/vba_runtime.hpp
@@ -144,7 +144,7 @@ if(BUILD_TESTING)
             if(NOT TARGET linaccess_real_bridge_tests)
                 add_executable(linaccess_real_bridge_tests
                     tests/real_bridge_tests.cpp
-                    src/bridge_importer.cpp src/bridge_importer.hpp
+                    src/bridge_importer.cpp src/access_query.cpp src/bridge_importer.hpp
                     src/vba_source_codec.cpp src/vba_source_codec.hpp
                      src/vba_analyzer.hpp
                      src/vba_runtime.hpp
@@ -165,7 +165,7 @@ if(BUILD_TESTING)
             add_executable(linaccess_access_layout_tests
                 tests/access_form_layout_tests.cpp
                 src/access_form_import.cpp src/access_form_import.hpp
-                src/dao_database.cpp src/access_catalog.cpp src/access_table_import.cpp
+                src/dao_database.cpp src/access_query.cpp src/sqlite_execution.cpp src/access_catalog.cpp src/access_table_import.cpp
                 src/access_form_preview.cpp src/access_form_preview.hpp
                 src/vba_source_codec.cpp src/vba_source_codec.hpp
                  src/vba_runtime.hpp
@@ -179,6 +179,15 @@ if(BUILD_TESTING)
         endif()
         set(LINACCESS_COMPLEX_MDB_FILE "" CACHE FILEPATH "Optional complex real Access MDB table fixture")
         if(LINACCESS_COMPLEX_MDB_FILE AND EXISTS "${LINACCESS_COMPLEX_MDB_FILE}")
+            if(LINACCESS_COMPLEX_BRIDGE_DIR AND EXISTS "${LINACCESS_COMPLEX_BRIDGE_DIR}/manifest.json")
+                add_executable(linaccess_query_corpus_tests tests/query_corpus_tests.cpp
+                    src/access_query.cpp src/dao_database.cpp src/sqlite_execution.cpp src/vba_source_codec.cpp
+                    src/access_catalog.cpp src/access_table_import.cpp)
+                target_link_libraries(linaccess_query_corpus_tests PRIVATE linaccess_runtime Qt6::Core Qt6::Sql)
+                add_test(NAME kassa_query_inventory COMMAND linaccess_query_corpus_tests
+                    "${LINACCESS_COMPLEX_BRIDGE_DIR}" "${LINACCESS_COMPLEX_MDB_FILE}"
+                    "${CMAKE_CURRENT_BINARY_DIR}/private-query-inventory.json")
+            endif()
             if(TARGET linaccess_access_layout_tests)
                 add_test(NAME real_kassa_dao_event COMMAND linaccess_access_layout_tests
                     "${LINACCESS_COMPLEX_BRIDGE_DIR}" "${LINACCESS_COMPLEX_MDB_FILE}")

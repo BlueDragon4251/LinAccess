@@ -355,7 +355,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                     return {VbaExecutionStatus::Unsupported, "Variablendeklaration", line};
                 const auto type = lower(declared[2].str());
                 if (!type.empty() && type != "variant" && type != "object" && type != "dao.database"
-                    && type != "dao.recordset" && type != "string" && type != "boolean"
+                    && type != "dao.recordset" && type != "dao.querydef" && type != "dao.parameter" && type != "string" && type != "boolean"
                     && type != "integer" && type != "long" && type != "single" && type != "double"
                     && type != "byte") return {VbaExecutionStatus::Unsupported, "Variablentyp: " + type, line};
                 statements.push_back({Statement::Type::Dim, declared[1].str(), type, line});

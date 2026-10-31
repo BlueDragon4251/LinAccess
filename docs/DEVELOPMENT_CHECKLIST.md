@@ -68,6 +68,18 @@ Existing small subset execution tests remain mandatory. Static recognition of
 
 ## P3: queries, forms, reports and UI
 
+Verified incremental work ([query adapter and limits](QUERY_ADAPTER.md)):
+
+- [x] Imported QueryDefs, typed bound Parameters, temporary CreateQueryDef, SELECT/action execution.
+- [x] Basic ANSI-89 strings/LIKE, single-table DISTINCTROW and TOP boundary ties.
+- [x] Canonical MDB/date-literal/Date()/Now() timestamps at second precision.
+- [x] Parameterless compatible query views, dependency refresh and form source exposure.
+- [x] All 100 query artifacts hash-checked and classified on an isolated copy;
+  37 execute without an Access result oracle, the rest remain explicitly unresolved.
+- [x] SQL operation/time budgets and rejection of interrupted partial results.
+
+Full targets remain open:
+
 - [ ] Jet/ACE SQL parser/translator, parameters and saved query dependency resolution.
 - [ ] JOIN/DISTINCT/UNION/TOP, TRANSFORM/PIVOT and Access expressions/functions.
 - [ ] Date literals, wildcard semantics, Null/coercion, DDL/DML and action queries.

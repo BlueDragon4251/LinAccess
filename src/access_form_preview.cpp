@@ -2,6 +2,7 @@
 
 #include "vba_runtime.hpp"
 #include "dao_database.hpp"
+#include "access_query.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_source_codec.hpp"
 
@@ -127,9 +128,8 @@ public:
     std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(preview_.db_); }
     void executeSql(std::string_view statement) override {
         if (!preview_.db_.isOpen()) throw std::runtime_error("Kein offenes Datenbankprojekt");
-        QSqlQuery query(preview_.db_);
-        if (!query.exec(QString::fromUtf8(statement.data(), statement.size())))
-            throw std::runtime_error("SQL: " + query.lastError().text().toStdString());
+        auto database = linaccess::makeDaoDatabase(preview_.db_);
+        (void)database->member("Execute",{linaccess::VbaValue::string(std::string(statement))});
         preview_.loadRecords();
     }
     void openForm(std::string_view name) override {
@@ -146,6 +146,7 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
       vba_(linaccess::decodeVbaSource(vbaSource)),
       layout_(linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(source))),
       db_(std::move(database)) {
+    const bool queryViewsReady = linaccess::installAccessQueryViews(db_) >= 0;
     setWindowTitle((layout_.caption.isEmpty() ? formName_ : layout_.caption) + " — LinAccess");
     resize(950, 720);
     auto* outer = new QVBoxLayout(this);
@@ -176,6 +177,10 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     connect(recordSelector_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this] { loadRecord(); });
     connect(save, &QPushButton::clicked, this, [this] { (void)saveRecord(); });
+    if (!queryViewsReady) {
+        status_->setText("Abfrageansichten werden noch verwendet; andere Ansichten schließen und Formular erneut öffnen.");
+        canvas->setEnabled(false); save->setEnabled(false); return;
+    }
     loadRecords();
 
     // Access opens the form before its Form_Load event and honors Form_Open(Cancel).

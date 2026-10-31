@@ -55,7 +55,7 @@ representations. Numbers currently pass through doubles.
 Top-level error labels, Resume/retry and nested error-number propagation are tested.
 Jump targets inside structured blocks, complete error codes and debugger support
 remain unsupported. SQL is still SQLite SQL; no
-Jet/ACE compatibility is inferred from opening a recordset. QueryDefs, parameters,
+Jet/ACE compatibility is inferred from opening a recordset. Persistent QueryDef creation, general query parameters/dependencies (see QUERY_ADAPTER.md),
 Workspace transactions, SQL-join updates, bookmarks, recordset clones,
 Filter/Sort, pessimistic locking, concurrency, ADO and default Field-value coercion
 without `.Value` remain unsupported. Delete currently refreshes the recordset;

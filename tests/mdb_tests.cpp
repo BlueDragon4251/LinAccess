@@ -68,8 +68,7 @@ int main(int argc, char** argv) {
     for (const auto& table : {"3_tbl_Rezepte", "33_tbl_ZutatenRezept"}) {
         const auto schema = linaccess::parseMdbSchema(source.tableSchema(table));
         assert(!schema.columns.isEmpty());
-        const auto csv = linaccess::AccessCatalog::tool(
-            "mdb-export", {"-0", QString(QChar(0x1e)), path, table});
+        const auto csv = linaccess::AccessCatalog::exportTable(path,table);
         const auto rows = linaccess::parseCsvDetailed(std::string_view(csv.constData(), csv.size()));
         linaccess::importAccessTable(db, path, table, schema, rows);
     }
@@ -86,8 +85,7 @@ int main(int argc, char** argv) {
                       "WHERE status='partial_typed_nulls'") == 2);
     bool refusedDuplicate = false;
     try {
-        const auto csv = linaccess::AccessCatalog::tool(
-            "mdb-export", {"-0", QString(QChar(0x1e)), path, "3_tbl_Rezepte"});
+        const auto csv = linaccess::AccessCatalog::exportTable(path,"3_tbl_Rezepte");
         linaccess::importAccessTable(db, path, "3_tbl_Rezepte",
             linaccess::parseMdbSchema(source.tableSchema("3_tbl_Rezepte")),
             linaccess::parseCsvDetailed(std::string_view(csv.constData(), csv.size())));

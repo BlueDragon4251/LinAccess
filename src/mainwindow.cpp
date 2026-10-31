@@ -7,6 +7,7 @@
 #include "vba_analyzer.hpp"
 #include "vba_runtime.hpp"
 #include "dao_database.hpp"
+#include "access_query.hpp"
 #include "vba_source_codec.hpp"
 
 #include <QAction>
@@ -107,9 +108,8 @@ public:
     void gotoLastRecord() override { gotoLast_(); }
     std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(database_); }
     void executeSql(std::string_view statement) override {
-        QSqlQuery query(database_);
-        if (!query.exec(QString::fromUtf8(statement.data(), statement.size())))
-            throw std::runtime_error(query.lastError().text().toStdString());
+        auto database = linaccess::makeDaoDatabase(database_);
+        (void)database->member("Execute",{linaccess::VbaValue::string(std::string(statement))});
     }
     void openForm(std::string_view name) override {
         openForm_(QString::fromUtf8(name.data(), name.size()));
@@ -228,6 +228,7 @@ void MainWindow::openDatabase(const QString& path) {
         db_.close();
         return;
     }
+    linaccess::installAccessQueryViews(db_,true);
     databasePath_ = path;
     setWindowTitle("LinAccess — " + QFileInfo(path).fileName());
     statusBar()->showMessage(path);
@@ -536,9 +537,8 @@ void MainWindow::showAccessArtifact(int id) {
                 }
                 std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(database_); }
                 void executeSql(std::string_view sql) override {
-                    QSqlQuery query(database_);
-                    if (!query.exec(QString::fromUtf8(sql.data(), sql.size())))
-                        throw std::runtime_error(query.lastError().text().toStdString());
+                    auto database = linaccess::makeDaoDatabase(database_);
+                    (void)database->member("Execute",{linaccess::VbaValue::string(std::string(sql))});
                 }
             private:
                 QWidget* dialog_;

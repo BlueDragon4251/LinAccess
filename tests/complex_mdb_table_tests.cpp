@@ -44,8 +44,7 @@ int main(int argc, char** argv) {
     for (const auto& table : tables) {
         if (table.startsWith("MSys", Qt::CaseInsensitive)) continue;
         try {
-            const auto csv = linaccess::AccessCatalog::tool(
-                "mdb-export", {"-0", QString(QChar(0x1e)), source, table});
+            const auto csv = linaccess::AccessCatalog::exportTable(source,table);
             const auto rows = linaccess::parseCsvDetailed(std::string_view(csv.constData(), csv.size()));
             const auto schema = linaccess::parseMdbSchema(catalog.tableSchema(table));
             linaccess::importAccessTable(db, source, table, schema, rows);

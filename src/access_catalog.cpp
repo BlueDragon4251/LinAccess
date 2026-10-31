@@ -49,6 +49,11 @@ QByteArray AccessCatalog::tool(const QString& name, const QStringList& args,
     return result;
 }
 
+QByteArray AccessCatalog::exportTable(const QString& source, const QString& table) {
+    return tool("mdb-export",{"-D","%Y-%m-%d %H:%M:%S","-T","%Y-%m-%d %H:%M:%S",
+        "-0",QString(QChar(0x1e)),source,table});
+}
+
 QString AccessCatalog::formatVersion() const {
     return QString::fromUtf8(tool("mdb-ver", {file_})).trimmed();
 }
