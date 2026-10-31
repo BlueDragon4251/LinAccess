@@ -49,6 +49,8 @@
 #include <QTextBrowser>
 #include <QTextDocument>
 #include <QToolBar>
+#include <QMenuBar>
+#include <QMenu>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QVBoxLayout>
@@ -184,6 +186,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     action("+ Formular", [this] { editForm(); });
     action("+ Bericht", [this] { editReport(); });
     action("Aktualisieren", [this] { refreshExplorer(); });
+    auto* fileMenu=menuBar()->addMenu("&Datei");
+    const auto projectActions=toolbar->actions();
+    for (int i=0;i<4;++i) fileMenu->addAction(projectActions[i]);
+    fileMenu->addSeparator();
+    fileMenu->addAction("Beenden",this,[this] { close(); });
+    auto* objectMenu=menuBar()->addMenu("&Objekte");
+    for (int i=5;i<9;++i) objectMenu->addAction(projectActions[i]);
+    auto* viewMenu=menuBar()->addMenu("&Ansicht");
+    viewMenu->addAction(projectActions.last());
     statusBar()->showMessage("Neue SQLite-Datenbank erstellen oder Access-Datei untersuchen");
 }
 

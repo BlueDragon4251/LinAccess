@@ -451,6 +451,14 @@ End Sub
     const VbaVariables variables;
     const auto evaluate = [&](std::string_view source) { return evaluateVbaExpression(source, host, variables); };
     assert(evaluate("Empty + 2").asNumber() == 2);
+    assert(!evaluate("0 = \"\"").truthy());
+    assert(!evaluate("2 = \"2\"").truthy());
+    assert(evaluate("2 < \"1\"").truthy());
+    assert(evaluate("\"\" > -1").truthy());
+    assert(evaluate("Empty = \"\"").truthy());
+    assert(evaluate("Empty = 0").truthy());
+    assert(evaluate("Null = \"\"").kind == VbaValue::Kind::Null);
+
     assert(evaluate("IsEmpty(Empty)").truthy());
     assert(!evaluate("IsNull(Empty)").truthy());
     assert(evaluate("Null And False").kind == VbaValue::Kind::Boolean);

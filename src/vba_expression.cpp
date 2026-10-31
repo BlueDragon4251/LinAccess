@@ -151,6 +151,11 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         int cmp = 0;
         if (left.kind == VbaValue::Kind::Text && right.kind == VbaValue::Kind::Text) {
             cmp = left.text.compare(right.text);
+        } else if (left.kind == VbaValue::Kind::Text || right.kind == VbaValue::Kind::Text) {
+            // These values are Variants: a numeric Variant sorts before a
+            // String Variant, including numeric-looking and empty strings.
+            // Empty was coerced above according to the other operand.
+            cmp = left.kind == VbaValue::Kind::Text ? 1 : -1;
         } else {
             const auto a = left.asNumber(), b = right.asNumber();
             cmp = (a > b) - (a < b);

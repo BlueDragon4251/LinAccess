@@ -63,7 +63,8 @@ are rolled back before the independent report inventory runs.
 
 A second, simpler original Form_Load verifies six Enabled/Visible assignments.
 The complex form still has 7 error values among 34 calculated controls. Its
-OnOpen fails at unsupported CommandBars.ActiveMenuBar (5); OnCurrent fails with
+OnOpen now completes, including writes to the actual enclosing Qt menu bar.
+OnCurrent still fails with
 13; OnActivate is not dispatched. Thus successful Form_Load is not successful
 complete application startup. DSum/CCur and their dependent expressions are
 among the next unresolved calculations.
@@ -72,3 +73,15 @@ Ignored private event/calculation inventories contain module hashes, event or
 control positions, type/status/error numbers and source line numbers. They do
 not contain field values, raw SQL or VBA literals. No Microsoft Access result or
 rendering oracle is available.
+
+Native project menus share the existing toolbar actions (file operations,
+object creation/opening and refresh). CommandBars.ActiveMenuBar returns that
+actual QMenuBar; its popup Controls expose the actual QMenu actions. Enabled,
+Visible, Caption, one-based lookup, object identity and deleted-widget guards
+are tested. No full Microsoft Office menu hierarchy is synthesized.
+
+Mixed numeric/String Variant comparisons use numeric-before-string ordering,
+including empty and numeric-looking strings; Empty and Null retain their
+separate comparison rules. This fixes the original Form_Open condition after
+menu access. Declared scalar type retention and all coercion combinations
+remain outside this bounded comparison regression.

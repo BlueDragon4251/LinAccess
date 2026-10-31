@@ -79,7 +79,7 @@ private:
     friend class PreviewCommandControlObject;
     friend std::shared_ptr<linaccess::VbaObject> makePreviewCommandControlObject(AccessFormPreview&,QAction*);
     friend std::shared_ptr<linaccess::VbaObject> makePreviewApplicationObject(AccessFormPreview&);
-    friend std::shared_ptr<linaccess::VbaObject> makePreviewCommandBarObject(AccessFormPreview&,QToolBar*);
+    friend std::shared_ptr<linaccess::VbaObject> makePreviewCommandBarObject(AccessFormPreview&,QWidget*);
     friend class PreviewObjectBase;
     friend class PreviewFormObject;
     friend class PreviewFormsObject;
@@ -90,7 +90,7 @@ private:
     std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, reportsObject_, controlsObject_;
     QMap<QString,std::weak_ptr<linaccess::VbaObject>> controlObjects_;
     std::weak_ptr<linaccess::VbaObject> applicationObject_;
-    QMap<QToolBar*,std::weak_ptr<linaccess::VbaObject>> commandBarObjects_;
+    QMap<QWidget*,std::weak_ptr<linaccess::VbaObject>> commandBarObjects_;
     QMap<QAction*,std::weak_ptr<linaccess::VbaObject>> commandControlObjects_;
     QToolBar* printToolbar_{};
     void buildPrintToolbar(QVBoxLayout* layout);

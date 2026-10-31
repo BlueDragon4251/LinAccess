@@ -6,6 +6,8 @@
 #include <QToolBar>
 #include <QAction>
 #include <QMainWindow>
+#include <QMenuBar>
+#include <QMenu>
 #include <QPushButton>
 #include <QSqlQuery>
 #ifdef NDEBUG
@@ -289,6 +291,53 @@ End Sub
     try { (void)projectBar->member("Enabled",{}); } catch(const linaccess::VbaRuntimeError& error) { removedBar=error.number==91; }
     try { (void)projectCommands->enumerate(); } catch(const linaccess::VbaRuntimeError& error) { removedControls=error.number==91; }
     assert(removedBar && removedControls); assert(projectForm.close());
+
+    QMainWindow menuWindow;
+    auto* menuBar=menuWindow.menuBar();
+    auto* fileMenu=menuBar->addMenu("&Datei");
+    auto* openAction=fileMenu->addAction("Öffnen");
+    auto* sharedToolbar=menuWindow.addToolBar("Project"); sharedToolbar->addAction(openAction);
+    int menuCommands=0;
+    QObject::connect(openAction,&QAction::triggered,[&] { ++menuCommands; });
+    const QByteArray menuCode=R"VBA(
+Sub Scan_Click()
+Dim bar As Variant
+Dim popup As Variant
+Set bar = CommandBars.ActiveMenuBar
+If Not (bar Is CommandBars("Menu Bar")) Then
+Err.Raise 5
+End If
+bar.Enabled = False
+Set popup = bar.Controls(1)
+If popup.Type <> 10 Then
+Err.Raise 5
+End If
+popup.Controls(1).Caption = "Start"
+popup.Controls(1).Enabled = False
+Me!Summary = popup.Controls(1).Caption & ":" & CStr(CommandBars.Count)
+End Sub
+Sub Write_Click()
+CommandBars.ActiveMenuBar.Enabled = True
+CommandBars.ActiveMenuBar.Controls(1).Controls(1).Enabled = True
+End Sub
+)VBA";
+    AccessFormPreview menuForm("native menus",form,menuCode,db,&menuWindow);
+    assert(menuForm.executeProcedure("Scan_Click",referenceArgs).status==linaccess::VbaExecutionStatus::Completed);
+    assert(!menuBar->isEnabled() && !openAction->isEnabled() && openAction->text()=="Start");
+    assert(menuForm.findChild<QLineEdit*>("access-control-Summary")->text()=="Start:2");
+    assert(menuForm.executeProcedure("Write_Click",referenceArgs).status==linaccess::VbaExecutionStatus::Completed);
+    assert(menuBar->isEnabled() && openAction->isEnabled()); openAction->trigger(); assert(menuCommands==1);
+    auto nativeBar=makePreviewApplicationObject(menuForm)->member("CommandBars",{}).object->member("ActiveMenuBar",{}).object;
+    auto popup=nativeBar->member("Controls",{linaccess::VbaValue::numeric(1)}).object;
+    auto popupItems=popup->member("Controls",{}).object;
+    delete fileMenu;
+    bool removedPopup=false;
+    try { (void)popupItems->enumerate(); } catch(const linaccess::VbaRuntimeError& error) { removedPopup=error.number==91; }
+    assert(removedPopup);
+    delete menuBar;
+    bool removedMenu=false;
+    try { (void)nativeBar->member("Enabled",{}); } catch(const linaccess::VbaRuntimeError& error) { removedMenu=error.number==91; }
+    assert(removedMenu && menuForm.close());
 
     AccessFormPreview parameters("sql parameters",form,{},db);
     auto input=makePreviewFormObject(parameters);

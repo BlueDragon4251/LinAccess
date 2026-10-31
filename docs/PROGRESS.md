@@ -93,7 +93,8 @@ errors are tested. Full default-member/Variant semantics remain open.
 Completed project command-bar package: bare CommandBars and actual enclosing
 Qt toolbar/button collections, guarded lifetimes and one-based identity tests.
 Subsequent embedded-form work completes its Form_Load; the entire startup still
-fails at ActiveMenuBar/OnCurrent and has unresolved calculated controls.
+fails at OnCurrent and has unresolved calculated controls; subsequent native
+menu-bar and mixed-Variant comparisons complete its original Form_Open.
 
 Completed embedded-form execution package: real child forms, persistence and
 close cancellation, typed combo columns, simple calculated aggregates, Error
@@ -108,3 +109,8 @@ passes, and the Debian package payload/permissions check passes. The original
 29-table comparison also passes five consecutive times with MDBTools 1.0.0.
 All four original fixture SHA-256 checks remain unchanged. This does not explain
 the historical intermittent EOF failures or verify remote distro CI execution.
+
+Completed active-menu package: actual project QMenuBar/QMenu/QAction objects,
+popup controls and guarded lifetimes; the unchanged original complex Form_Open
+completes. Seven calculated Error Variants and OnCurrent (13) remain, while
+OnActivate is not yet dispatched. This is not a complete startup claim.

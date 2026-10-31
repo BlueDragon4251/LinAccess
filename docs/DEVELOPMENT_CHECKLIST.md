@@ -126,3 +126,6 @@ Full targets remain open:
 - [ ] GitHub issue checklist and reviewed PRs; API access currently returns Forbidden.
 - [ ] Full end-to-end operation of the original Kassa application, without compatibility claims
   based solely on import counts, synthetic UI actions, or static source recognition.
+
+- [x] Native ActiveMenuBar and popup Controls share real project actions; unchanged complex original Form_Open completes, with mixed numeric/String Variant comparison regressions.
+- [ ] Complete original OnCurrent and native activation event regression; seven calculated Error Variants remain unresolved.

@@ -18,6 +18,8 @@
 #include <QComboBox>
 #include <QPushButton>
 #include <QMainWindow>
+#include <QMenuBar>
+#include <QMenu>
 #include <QToolBar>
 #include <QTimer>
 #include <QApplication>
@@ -223,7 +225,11 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
         {
             QMainWindow window;
             auto* toolbar=window.addToolBar("Project"); toolbar->addAction("Test command"); toolbar->setEnabled(false);
+            auto* menuBar=window.menuBar(); menuBar->addMenu("Project")->addAction(toolbar->actions().first()); menuBar->setEnabled(false);
             AccessFormPreview initialized(formName,definition,code,db,&window);
+            const auto opened=initialized.eventResult("OnOpen");
+            std::cerr<<"Original OnOpen menu adapter: status="<<(opened ? static_cast<int>(opened->status) : -1)<<", error="<<(opened ? opened->errorNumber : 0)<<", line="<<(opened ? opened->line : 0)<<", menu enabled="<<menuBar->isEnabled()<<'\n';
+            assert(opened && opened->status==linaccess::VbaExecutionStatus::Completed && menuBar->isEnabled());
             const auto result=initialized.eventResult("OnLoad");
             if (!result || result->status!=linaccess::VbaExecutionStatus::Completed)
                 std::cerr<<"Complex original initializer: bound="<<static_cast<bool>(result)<<", status="<<(result ? static_cast<int>(result->status) : -1)<<", error="<<(result ? result->errorNumber : 0)<<", line="<<(result ? result->line : 0)<<'\n';

@@ -80,6 +80,7 @@ Versionenkompatibilität noch vollständige VBA-Semantik.
 Native Unterformulare ohne Master-/Child-Verknüpfung, typisierte ComboBox-Spalten
 und einfache berechnete Felder sind mit Originalartefakten geprüft. Ein komplexer
 originaler Form_Load läuft mit 15 unabhängig geprüften dynamischen Tags und sechs
-Kind-Datenquellen. Sieben Berechnungen sowie OnOpen/OnCurrent und Aktivierungsereignisse
+Kind-Datenquellen. Auch Form_Open läuft mit nativer Menüleiste durch.
+Sieben Berechnungen sowie OnCurrent und Aktivierungsereignisse
 bleiben offen; dies ist kein vollständig lauffähiger Kassen-Workflow.
 Siehe [Nachweise und Grenzen](NATIVE_FORM_RUNTIME.md).
