@@ -228,6 +228,9 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
             auto* toolbar=window.addToolBar("Project"); toolbar->addAction("Test command"); toolbar->setEnabled(false);
             auto* menuBar=window.menuBar(); menuBar->addMenu("Project")->addAction(toolbar->actions().first()); menuBar->setEnabled(false);
             AccessFormPreview initialized(formName,definition,code,db,&window);
+            initialized.show(); QApplication::setActiveWindow(&initialized); QApplication::processEvents();
+            const auto activated=initialized.eventResult("OnActivate");
+            assert(activated && activated->status==linaccess::VbaExecutionStatus::Completed);
             const auto opened=initialized.eventResult("OnOpen");
             std::cerr<<"Original OnOpen menu adapter: status="<<(opened ? static_cast<int>(opened->status) : -1)<<", error="<<(opened ? opened->errorNumber : 0)<<", line="<<(opened ? opened->line : 0)<<", menu enabled="<<menuBar->isEnabled()<<'\n';
             assert(opened && opened->status==linaccess::VbaExecutionStatus::Completed && menuBar->isEnabled());

@@ -55,6 +55,9 @@ private:
     bool commitControls();
     void selectRecord(int target);
     bool prepareClose();
+    bool event(QEvent* event) override;
+    void activateDocument();
+    void initialCurrent();
     void closeEvent(QCloseEvent* event) override;
     void openOtherForm(const QString& name);
     std::optional<std::string> getField(std::string_view name) const;
@@ -116,6 +119,9 @@ private:
     bool directTable_{};
     bool openCancelled_{};
     bool opened_{};
+    bool nativeActivationPending_{};
+    bool initialCurrentDeferred_{};
+    bool initialCurrentDispatched_{};
     bool closed_{};
     bool dirty_{};
     bool loading_{};

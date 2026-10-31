@@ -83,5 +83,7 @@ originaler Form_Load läuft mit 15 unabhängig geprüften dynamischen Tags und s
 Kind-Datenquellen. Auch Form_Open läuft mit nativer Menüleiste durch.
 Form_Current und zwei unabhängig geprüfte DSum-Berechnungen laufen ebenfalls.
 CCur läuft mit einem nicht leeren Testwert; beim anfänglichen Null-Wert bleibt
-ein expliziter Fehler 94. Aktivierungsereignisse bleiben offen; dies ist kein vollständig lauffähiger Kassen-Workflow.
+ein expliziter Fehler 94. Native Aktivierung führt auch Form_Activate aus;
+Open/Load/Activate/Current sind damit geprüft. Vollständige Ereignissemantik und
+Kassen-Workflows bleiben offen; siehe [Aktivierungsgrenzen](NATIVE_ACTIVATION.md).
 Siehe [Nachweise und Grenzen](NATIVE_FORM_RUNTIME.md).

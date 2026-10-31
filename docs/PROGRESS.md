@@ -113,8 +113,8 @@ the historical intermittent EOF failures or verify remote distro CI execution.
 Completed active-menu package: actual project QMenuBar/QMenu/QAction objects,
 popup controls and guarded lifetimes; the unchanged original complex Form_Open
 completes. Subsequent domain-aggregate work reduces seven calculated Error Variants to
-one and completes OnCurrent. OnActivate is not yet dispatched; this is not
-a complete startup claim.
+one and completes OnCurrent. Subsequent native activation work also completes
+the original OnActivate; this is not a complete workflow claim.
 
 Completed domain-aggregate/SaveAsText package: DSum and DCount on actual tables
 and query views, optional criteria, Null/count handling and catchable errors.
@@ -129,3 +129,9 @@ and unbound control retention. The original CCur expression executes with a
 synthetic non-Null input; its initial Null branch remains error 94 under eager
 IIf. Full mixed coercion/locales and exact Jet MONEY storage remain open.
 See CURRENCY_RUNTIME.md.
+
+Completed native activation package: actual Qt document events, deferred first
+Current, form-to-form Deactivate/Activate, accepted/cancelled close and embedded
+form exclusions. The unchanged original Open/Load/Activate/Current all complete.
+Remaining initial calculated error 94, full workflows and Access event-oracle
+comparison remain open (NATIVE_ACTIVATION.md).

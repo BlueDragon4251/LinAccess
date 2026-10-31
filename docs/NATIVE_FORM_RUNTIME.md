@@ -67,7 +67,9 @@ The complex form has one error value among 34 calculated controls: eager
 IIf evaluates CCur(Null), producing 94. Its original CCur expression executes
 with a non-Null synthetic input and returns an actual Currency subtype
 ([Currency evidence and limits](CURRENCY_RUNTIME.md)). Its unchanged OnOpen, OnLoad and OnCurrent complete;
-OnActivate is not dispatched. This is not complete application startup.
+Its bound OnActivate also completes after actual native window activation
+([event evidence and limits](NATIVE_ACTIVATION.md)). This is not a complete
+application workflow.
 Two original DSum controls are independently checked by summing their actual
 projected records in C++, including the original criterion on one control.
 

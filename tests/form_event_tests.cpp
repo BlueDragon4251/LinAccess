@@ -291,4 +291,83 @@ End
     for (auto* selector : selectors) if (selector->count() == 2) foundRows = true;
     assert(foundRows);
 
+    assert(queryPreview.close());
+    assert(query.exec("DELETE FROM events")); query.finish();
+    const QByteArray activationForm=R"FORM(Begin Form
+RecordSource ="records"
+OnOpen ="[Event Procedure]"
+OnLoad ="[Event Procedure]"
+OnActivate ="[Event Procedure]"
+OnDeactivate ="[Event Procedure]"
+OnCurrent ="[Event Procedure]"
+OnUnload ="[Event Procedure]"
+OnClose ="[Event Procedure]"
+Begin Section
+Height =300
+End
+End
+)FORM";
+    const QByteArray activationCode=R"VBA(
+Sub Form_Open(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO events(name) VALUES ('open')"
+End Sub
+Sub Form_Load()
+CurrentDb.Execute "INSERT INTO events(name) VALUES ('load')"
+End Sub
+Sub Form_Activate()
+CurrentDb.Execute "INSERT INTO events(name) VALUES ('activate')"
+End Sub
+Sub Form_Deactivate()
+CurrentDb.Execute "INSERT INTO events(name) VALUES ('deactivate')"
+End Sub
+Sub Form_Current()
+CurrentDb.Execute "INSERT INTO events(name) VALUES ('current')"
+End Sub
+Sub Form_Unload(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO events(name) VALUES ('unload')"
+If Me.Tag = "stay" Then
+Cancel = 1
+End If
+End Sub
+Sub Form_Close()
+CurrentDb.Execute "INSERT INTO events(name) VALUES ('close')"
+End Sub
+)VBA";
+    AccessFormPreview firstWindow("first activation",activationForm,activationCode,db);
+    assert(events()==QStringList({"open","load"}));
+    firstWindow.findChild<QComboBox*>("access-record-selector")->setCurrentIndex(2);
+    assert(events()==QStringList({"open","load"}));
+    firstWindow.show(); QApplication::setActiveWindow(&firstWindow); QApplication::processEvents();
+    assert(events()==QStringList({"open","load","activate","current"}));
+    QWidget nonDocument;
+    nonDocument.show(); QApplication::setActiveWindow(&nonDocument); QApplication::processEvents();
+    assert(events().size()==4);
+    QApplication::setActiveWindow(&firstWindow); QApplication::processEvents();
+    assert(events().size()==4);
+    AccessFormPreview secondWindow("second activation",activationForm,activationCode,db);
+    assert(events().mid(4)==QStringList({"open","load"}));
+    secondWindow.show(); QApplication::setActiveWindow(&secondWindow); QApplication::processEvents();
+    assert(events().mid(6)==QStringList({"deactivate","activate","current"}));
+    QApplication::setActiveWindow(&firstWindow); QApplication::processEvents();
+    assert(events().mid(9)==QStringList({"deactivate","activate"}));
+    firstWindow.setProperty("la_access_tag","stay");
+    assert(!firstWindow.close());
+    assert(events().mid(11)==QStringList({"unload"}));
+    firstWindow.setProperty("la_access_tag","");
+    assert(firstWindow.close());
+    assert(events().mid(12)==QStringList({"unload","deactivate","close"}));
+    QApplication::setActiveWindow(&secondWindow); QApplication::processEvents();
+    assert(events().mid(15)==QStringList({"activate"}));
+    assert(secondWindow.close());
+    assert(events().mid(16)==QStringList({"unload","deactivate","close"}));
+    assert(nonDocument.close());
+    assert(query.exec("DELETE FROM events")); query.finish();
+    QWidget container;
+    AccessFormPreview embedded("embedded activation",activationForm,activationCode,db,&container,true);
+    container.show(); embedded.show(); QApplication::setActiveWindow(&container); QApplication::processEvents();
+    assert(events()==QStringList({"open","load","current"}));
+    assert(!embedded.eventResult("OnActivate"));
+    assert(embedded.close()); assert(container.close());
+
+
 }

@@ -37,6 +37,10 @@
 #include <stdexcept>
 
 namespace {
+QPointer<AccessFormPreview>& activeDocument() {
+    static QPointer<AccessFormPreview> document;
+    return document;
+}
 QString sqlIdentifier(QString text) {
     text.replace('"', "\"\"");
     return '"' + text + '"';
@@ -268,6 +272,7 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     QScopedValueRollback<QStringList> constructionGuard(constructionStack);
     constructionStack.append(identity);
     if (embedded) setWindowFlags(Qt::Widget);
+    initialCurrentDeferred_=!embedded && eventProcedure(layout_.events.value("onactivate"));
     if (db_.isOpen()) connectPreviewSqlObjects(db_);
     static qlonglong openingSequence = 0;
     setProperty("la_form_open_order",++openingSequence);
@@ -322,7 +327,40 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     }
     (void)formEvent("OnLoad","Form_Load");
     opened_ = true;
+    if (nativeActivationPending_) activateDocument();
+    if (!initialCurrentDeferred_) initialCurrent();
+}
+
+void AccessFormPreview::initialCurrent() {
+    if (initialCurrentDispatched_ || closed_ || openCancelled_) return;
+    initialCurrentDispatched_=true;
     (void)formEvent("OnCurrent","Form_Current");
+}
+
+bool AccessFormPreview::event(QEvent* event) {
+    const auto type=event->type();
+    const auto result=QDialog::event(event);
+    if (type==QEvent::WindowActivate && isWindow()) {
+        nativeActivationPending_=true;
+        if (opened_) activateDocument();
+    }
+    return result;
+}
+
+void AccessFormPreview::activateDocument() {
+    if (!opened_ || closed_ || openCancelled_ || !isWindow()) return;
+    auto& active=activeDocument();
+    if (active==this) return;
+    const auto previous=active;
+    active=this;
+    // Only an actual transition between Access documents deactivates the
+    // preceding one. Qt WindowDeactivate also covers external applications
+    // and message boxes; those do not constitute this Access event.
+    if (previous && previous->opened_ && !previous->closed_ && !previous->openCancelled_)
+        (void)previous->formEvent("OnDeactivate","Form_Deactivate");
+    if (active!=this || closed_) return;
+    (void)formEvent("OnActivate","Form_Activate");
+    if (active==this && !closed_) initialCurrent();
 }
 
 void AccessFormPreview::buildControls(QWidget* canvas) {
@@ -632,7 +670,7 @@ void AccessFormPreview::selectRecord(int target) {
         recordSelector_->blockSignals(true); recordSelector_->setCurrentIndex(destination); recordSelector_->blockSignals(false);
         currentRecordIndex_ = destination; loadRecord();
     }
-    if (opened_) (void)formEvent("OnCurrent","Form_Current");
+    if (opened_ && initialCurrentDispatched_) (void)formEvent("OnCurrent","Form_Current");
 }
 
 bool AccessFormPreview::prepareClose() {
@@ -648,6 +686,11 @@ bool AccessFormPreview::prepareClose() {
     for (auto* document : documents) {
         const auto unload=document->formEvent("OnUnload","Form_Unload");
         if (unload.cancelled || failed(unload)) return false;
+    }
+    if (activeDocument() && documents.contains(activeDocument().data())) {
+        const auto active=activeDocument();
+        activeDocument().clear();
+        (void)active->formEvent("OnDeactivate","Form_Deactivate");
     }
     for (auto it=documents.crbegin();it!=documents.crend();++it) {
         (void)(*it)->formEvent("OnClose","Form_Close"); (*it)->closed_=true;
