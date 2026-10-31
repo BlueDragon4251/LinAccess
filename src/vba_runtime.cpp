@@ -134,7 +134,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex ifThen(R"(^If\s+(.+)\s+Then\s*$)", std::regex::icase);
     const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
     const std::regex variableAssignment(R"(^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$)", std::regex::icase);
-    const std::regex message(R"(^MsgBox\s+(.+)$)", std::regex::icase);
+    const std::regex message(R"(^MsgBox(?:\s+(.+)|\((.*)\))$)", std::regex::icase);
     const std::regex save(R"(^DoCmd\s*\.\s*RunCommand\s+acCmdSaveRecord$)", std::regex::icase);
     const std::regex maximize(R"(^DoCmd\s*\.\s*Maximize\s*$)", std::regex::icase);
     const std::regex goLast(R"(^DoCmd\s*\.\s*GoToRecord\s*,\s*,\s*acLast\s*$)", std::regex::icase);
@@ -317,8 +317,8 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             if (!validVbaExpression(expr)) return {VbaExecutionStatus::Unsupported, "Set-Ausdruck", line};
             statements.push_back({Statement::Type::ObjectSet, match[1].str(), expr, line});
         } else if (std::regex_match(source, match, message)) {
-            const auto expr = trim(match[1].str());
-            if (!validVbaExpression(expr)) return {VbaExecutionStatus::Unsupported, "MsgBox-Ausdruck: " + expr, line};
+            const auto expr = "MsgBox("+trim(match[1].matched ? match[1].str() : match[2].str())+")";
+            if (!validVbaExpression(expr)) return {VbaExecutionStatus::Unsupported, "MsgBox argument syntax unsupported", line};
             statements.push_back({Statement::Type::Message, {}, expr, line});
         } else if (lower(source) == "docmd.quit") {
             statements.push_back({Statement::Type::Quit, {}, {}, line});
@@ -362,6 +362,11 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             statements.push_back({Statement::Type::ControlVisible, name, expr, line});
         } else if (std::regex_match(source, match, call)) {
             const auto args = match[2].str();
+            if (lower(match[1].str())=="msgbox") {
+                const auto expression="MsgBox("+args+")";
+                if (!validVbaExpression(expression)) return {VbaExecutionStatus::Unsupported,"MsgBox argument syntax unsupported",line};
+                statements.push_back({Statement::Type::Message,{},expression,line}); continue;
+            }
             for (const auto& arg : splitArguments(args))
                 if (!validVbaExpression(arg)) return {VbaExecutionStatus::Unsupported, "Aufrufargument", line};
             statements.push_back({Statement::Type::Call, match[1].str(), args, line});
@@ -628,7 +633,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::Message:
                 if (active) {
                     if (++effects > 1000) throw std::runtime_error("VBA-Effektbudget erreicht");
-                    host.message(evaluate(instruction.expression).asText());
+                    (void)evaluate(instruction.expression);
                 }
                 break;
             case Statement::Type::Quit:
@@ -729,8 +734,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (active) ip = static_cast<std::size_t>(instruction.partner) - 1;
                 break;
             case Statement::Type::SetVar:
-                if (active) locals[lower(instruction.argument)] =
-                    evaluate(instruction.expression);
+                if (active) {
+                    const auto value=evaluate(instruction.expression);
+                    const auto name=lower(instruction.argument);
+                    if (locals.contains(name) || !host.assignIdentifier(instruction.argument,value)) locals[name]=value;
+                }
                 break;
             case Statement::Type::ForEach: {
                 if (!active) { ip = static_cast<std::size_t>(instruction.partner); break; }

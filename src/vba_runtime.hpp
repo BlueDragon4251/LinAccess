@@ -23,6 +23,8 @@ public:
     virtual std::optional<std::string> field(std::string_view name) = 0;
     virtual void setField(std::string_view name, std::optional<std::string> value) = 0;
     virtual VbaValue formatValue(const VbaValue& value,std::string_view mask,bool stringResult);
+    virtual std::optional<VbaValue> resolveIdentifier(std::string_view name,bool objectReference);
+    virtual bool assignIdentifier(std::string_view name,const VbaValue& value);
     virtual VbaValue expressionValue(std::string_view name,bool objectReference);
     virtual VbaValue domainAggregate(std::string_view function,const std::vector<VbaValue>& arguments);
     virtual VbaValue expressionAggregate(std::string_view function,std::string_view field,bool allRecords);
@@ -31,6 +33,7 @@ public:
     virtual void setControlValue(std::string_view name,const VbaValue& value);
     virtual void setFieldValue(std::string_view name,const VbaValue& value);
     virtual void message(std::string_view text) = 0;
+    virtual int messageBox(std::string_view prompt,int buttons,const std::optional<std::string>& title);
     virtual void saveRecord() = 0;
     virtual void quitApplication() { throw std::runtime_error("DoCmd.Quit: kein Anwendungskontext"); }
     virtual void maximizeForm() { throw std::runtime_error("DoCmd.Maximize: kein Formularkontext"); }

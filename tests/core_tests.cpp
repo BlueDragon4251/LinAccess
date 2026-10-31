@@ -25,6 +25,9 @@ class FakeForm final : public linaccess::VbaHost {
 public:
     std::map<std::string, std::optional<std::string>> fields;
     std::vector<std::string> messages;
+    bool dialogHost=false;
+    int dialogResult=1,dialogButtons=-1;
+    std::optional<std::string> dialogTitle;
     int saves = 0;
     int maximized = 0;
     int navigatedLast = 0;
@@ -45,6 +48,10 @@ public:
         fields[std::string(name)] = std::move(value);
     }
     void message(std::string_view text) override { messages.emplace_back(text); }
+    int messageBox(std::string_view text,int buttons,const std::optional<std::string>& title) override {
+        if (!dialogHost) return VbaHost::messageBox(text,buttons,title);
+        messages.emplace_back(text); dialogButtons=buttons; dialogTitle=title; return dialogResult;
+    }
     void saveRecord() override { ++saves; }
     void maximizeForm() override { ++maximized; }
     void gotoLastRecord() override { ++navigatedLast; }
@@ -63,6 +70,28 @@ public:
 
 int main() {
     using namespace linaccess;
+
+    {
+        FakeForm host;
+        assert(evaluateVbaExpression("MsgBox(\"plain\")",host,{}).asNumber()==1);
+        try { (void)evaluateVbaExpression("MsgBox(\"styled\",vbYesNo)",host,{}); assert(false); }
+        catch (const VbaRuntimeError& error) { assert(error.number==3251); }
+        host.dialogHost=true; host.dialogResult=7;
+        assert(evaluateVbaExpression("MsgBox(\"question\",vbYesNo+vbQuestion+vbDefaultButton2)",host,{}).asNumber()==7);
+        assert(host.dialogButtons==292 && !host.dialogTitle);
+        assert(evaluateVbaExpression("MsgBox(\"optional\",,\"\",,)",host,{}).asNumber()==7);
+        assert(host.dialogButtons==0 && host.dialogTitle && host.dialogTitle->empty());
+        for (const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
+            {"MsgBox()",450},{"MsgBox(,)",450},{"MsgBox(Null)",94},
+            {"MsgBox(\"x\",Null)",94},{"MsgBox(\"x\",,Null)",94},
+            {"MsgBox(\"x\",,,\"help\")",3251},{"MsgBox(\"x\",,,,,0)",450}}) {
+            try { (void)evaluateVbaExpression(expression,host,{}); assert(false); }
+            catch (const VbaRuntimeError& error) { assert(error.number==code); }
+        }
+        host.dialogResult=0;
+        try { (void)evaluateVbaExpression("MsgBox(\"x\")",host,{}); assert(false); }
+        catch (const VbaRuntimeError& error) { assert(error.number==5); }
+    }
 
     {
         FakeForm form;

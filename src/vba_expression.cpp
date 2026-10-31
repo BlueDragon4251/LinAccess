@@ -312,6 +312,14 @@ private:
         if (word == "dbfailonerror") return VbaValue::numeric(128);
         if (word == "true") return VbaValue::logical(true);
         if (word == "false") return VbaValue::logical(false);
+        static const std::unordered_map<std::string,int> messageConstants{
+            {"vbokonly",0},{"vbokcancel",1},{"vbabortretryignore",2},{"vbyesnocancel",3},{"vbyesno",4},{"vbretrycancel",5},
+            {"vbcritical",16},{"vbquestion",32},{"vbexclamation",48},{"vbinformation",64},
+            {"vbdefaultbutton1",0},{"vbdefaultbutton2",256},{"vbdefaultbutton3",512},{"vbdefaultbutton4",768},
+            {"vbapplicationmodal",0},{"vbsystemmodal",4096},{"vbmsgboxhelpbutton",16384},{"vbmsgboxsetforeground",65536},
+            {"vbmsgboxright",524288},{"vbmsgboxrtlreading",1048576},
+            {"vbok",1},{"vbcancel",2},{"vbabort",3},{"vbretry",4},{"vbignore",5},{"vbyes",6},{"vbno",7}};
+        if (const auto constant=messageConstants.find(word);constant!=messageConstants.end()) return VbaValue::numeric(constant->second);
         if (word == "vbcrlf") return VbaValue::string("\r\n");
         if (word == "vbnewline") return VbaValue::string("\n");
         if (word == "vbtab") return VbaValue::string("\t");
@@ -371,16 +379,32 @@ private:
         if (take("(")) {
             std::vector<VbaValue> args;
             std::vector<std::string> references;
+            std::vector<bool> omitted;
             if (!take(")")) {
                 do {
                     const auto start = index_;
-                    args.push_back(expression(1));
-                    references.push_back(index_ == start + 1 && tokens_[start].type == Token::Type::Word
+                    const bool missing=word=="msgbox" && (peek().value=="," || peek().value==")" || (accessExpression_ && peek().value==";"));
+                    args.push_back(missing ? VbaValue::empty() : expression(1));
+                    omitted.push_back(missing);
+                    references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
                         ? tokens_[start].value : "");
                 } while (take(",") || (accessExpression_ && take(";")));
                 require(")");
             }
             const auto one = args.size() == 1;
+            if (word=="msgbox") {
+                if (!host_) return {};
+                if (args.empty() || args.size()>5 || omitted.front()) throw error("MsgBox requires a prompt and at most five arguments",450);
+                if (args[0].kind==VbaValue::Kind::Null || (args.size()>1 && args[1].kind==VbaValue::Kind::Null) || (args.size()>2 && args[2].kind==VbaValue::Kind::Null))
+                    throw error("Invalid Null MsgBox argument",94);
+                for (std::size_t i=3;i<args.size();++i) if (!omitted[i]) throw error("Windows Help arguments are unsupported",3251);
+                const auto buttons=args.size()>1 && !omitted[1] ? integer(args[1]) : 0;
+                const auto title=args.size()>2 && !omitted[2] ? std::optional<std::string>(args[2].asText()) : std::nullopt;
+                const auto result=host_->messageBox(args[0].asText(),buttons,title);
+                if (result<1 || result>7) throw error("Invalid MsgBox result",5);
+                return VbaValue::numeric(result);
+            }
+
             if (word == "now" || word == "date" || word == "time") {
                 if (!host_) return {};
                 if (!args.empty()) throw error("Clock function takes no arguments",450);
@@ -504,7 +528,10 @@ private:
         const auto variable = locals_.find(word);
         if (variable==locals_.end() && accessExpression_)
             return host_->expressionValue(tok.value,objectContext || peek().value=="." || peek().value=="!");
-        if (variable == locals_.end()) throw error("VBA-Variable nicht deklariert: " + tok.value);
+        if (variable==locals_.end()) {
+            if (auto value=host_->resolveIdentifier(tok.value,objectContext || peek().value=="." || peek().value=="!")) return *value;
+            throw error("VBA-Variable nicht deklariert: " + tok.value);
+        }
         return variable->second;
     }
     std::vector<Token> tokens_;
@@ -520,6 +547,12 @@ private:
 VbaValue VbaHost::formatValue(const VbaValue&,std::string_view,bool) {
     throw VbaRuntimeError(438,"Format host adapter unavailable");
 }
+int VbaHost::messageBox(std::string_view prompt,int buttons,const std::optional<std::string>& title) {
+    if (buttons!=0 || title.has_value()) throw VbaRuntimeError(3251,"Styled MsgBox requires a dialog host");
+    message(prompt); return 1;
+}
+std::optional<VbaValue> VbaHost::resolveIdentifier(std::string_view,bool) { return std::nullopt; }
+bool VbaHost::assignIdentifier(std::string_view,const VbaValue&) { return false; }
 VbaValue VbaHost::expressionValue(std::string_view,bool) { throw VbaRuntimeError(438,"Access expression context unavailable"); }
 VbaValue VbaHost::domainAggregate(std::string_view,const std::vector<VbaValue>&) { throw VbaRuntimeError(438,"Access domain context unavailable"); }
 VbaValue VbaHost::expressionAggregate(std::string_view,std::string_view,bool) { throw VbaRuntimeError(438,"Access aggregate context unavailable"); }

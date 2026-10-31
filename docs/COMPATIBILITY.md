@@ -92,3 +92,8 @@ Native Filter/FilterOn-Eigenschaften und Filterleiste arbeiten mit echten
 Datensätzen. Zwölf gebundene Felder eines Originalformulars werden nach dem
 Filtern unabhängig geprüft. Speichern/Abbruch, Rückkehr nach ungültigem Filter
 und Requery sind getestet; [Umfang und Grenzen](NATIVE_FILTERS.md).
+
+Native MsgBox execution and the bounded unqualified form-member bridge are covered
+by real Qt choices, SQL effects and one unchanged Kassa missing-input handler; see
+[MESSAGE_BOX_RUNTIME.md](MESSAGE_BOX_RUNTIME.md). This does not establish complete
+login, VBA class scope or Access action-warning compatibility.

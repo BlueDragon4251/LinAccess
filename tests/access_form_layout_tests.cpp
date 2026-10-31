@@ -29,6 +29,8 @@
 
 void testFormEvents();
 void testFilters();
+void testMessageBoxes();
+void testOriginalMessageBox(const QDir&,const QJsonArray&);
 void testSubforms();
 void testFormObjects();
 void testReportEvents();
@@ -203,6 +205,8 @@ End Sub
         std::cout << "Original keypad button/parameterized-handler executions: " << executedKeys << '\n';
     }
     testFormEvents();
+    testMessageBoxes();
+    testOriginalMessageBox(directory,objects);
     testFilters();
     testFormObjects();
     testSubforms();

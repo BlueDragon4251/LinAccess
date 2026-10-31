@@ -48,6 +48,9 @@ Verified incremental work ([details and limits](DAO_RUNTIME.md)):
 - [x] Typed Qt/native form/DAO field bridge, original Boolean metadata/True=-1 normalization, numeric input checks; see TYPED_FIELDS.md.
 - [x] Bound-form Open/Load/Current, Dirty, control/form updates, navigation save and Unload/Close cancellation; see FORM_EVENTS.md.
 
+- [x] Native MsgBox button groups/results, optional positional arguments and real SQL branching; unchanged Kassa missing-input handler opens its dialog and focuses the actual control. See MESSAGE_BOX_RUNTIME.md.
+- [x] Bounded unqualified form-control value/object reads and writes, with existing locals/parameters taking priority; full class/scope semantics remain open.
+
 Full targets remain open:
 
 - [ ] Replace statement regex dispatch with a complete lexer/parser, AST and bound runtime.

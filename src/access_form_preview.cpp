@@ -14,6 +14,8 @@
 
 #include <QApplication>
 #include <QCloseEvent>
+#include <QKeyEvent>
+#include <QTimer>
 #include <QScopedValueRollback>
 #include <QSignalBlocker>
 #include <QCheckBox>
@@ -41,6 +43,66 @@ namespace {
 QPointer<AccessFormPreview>& activeDocument() {
     static QPointer<AccessFormPreview> document;
     return document;
+}
+class AccessMessageBox final : public QMessageBox {
+public:
+    AccessMessageBox(QWidget* owner,bool dismissible) : QMessageBox(owner),dismissible_(dismissible) {}
+protected:
+    void keyPressEvent(QKeyEvent* event) override {
+        if (event->key()==Qt::Key_Escape && !dismissible_) { event->accept(); return; }
+        QMessageBox::keyPressEvent(event);
+    }
+    void closeEvent(QCloseEvent* event) override {
+        if (!dismissible_) { event->ignore(); return; }
+        QMessageBox::closeEvent(event);
+    }
+private:
+    bool dismissible_{};
+};
+int nativeMessageBox(QWidget* owner,std::string_view prompt,int style,const std::optional<std::string>& title) {
+    constexpr int allowed=0x0f|0xf0|0x300|0x1000|0x4000|0x10000|0x80000|0x100000;
+    const int kind=style&15,icon=style&0xf0,defaultIndex=(style>>8)&3;
+    if (style<0 || (style&~allowed)!=0 || kind>5 || (icon!=0 && icon!=16 && icon!=32 && icon!=48 && icon!=64))
+        throw linaccess::VbaRuntimeError(5,"Invalid MsgBox style");
+    if ((style&0x1000)!=0 || (style&0x4000)!=0) throw linaccess::VbaRuntimeError(3251,"Windows system-modal/Help MsgBox is unsupported");
+    const QVector<QVector<QMessageBox::StandardButton>> groups{{QMessageBox::Ok},{QMessageBox::Ok,QMessageBox::Cancel},
+        {QMessageBox::Abort,QMessageBox::Retry,QMessageBox::Ignore},{QMessageBox::Yes,QMessageBox::No,QMessageBox::Cancel},
+        {QMessageBox::Yes,QMessageBox::No},{QMessageBox::Retry,QMessageBox::Cancel}};
+    const auto choices=groups[kind];
+    if (defaultIndex>=choices.size()) throw linaccess::VbaRuntimeError(5,"MsgBox default button unavailable");
+    const bool dismissible=kind==0 || choices.contains(QMessageBox::Cancel);
+    AccessMessageBox box(owner,dismissible);
+    box.setWindowModality(Qt::ApplicationModal);
+    box.setTextFormat(Qt::PlainText);
+    box.setText(QString::fromUtf8(prompt.data(),prompt.size()));
+    box.setWindowTitle(title ? QString::fromStdString(*title) : QStringLiteral("LinAccess"));
+    box.setIcon(icon==16 ? QMessageBox::Critical : icon==32 ? QMessageBox::Question : icon==48 ? QMessageBox::Warning : icon==64 ? QMessageBox::Information : QMessageBox::NoIcon);
+    for (const auto choice : choices) box.addButton(choice);
+    box.setDefaultButton(choices[defaultIndex]);
+    if (!dismissible) box.setWindowFlag(Qt::WindowCloseButtonHint,false);
+    else box.setEscapeButton(kind==0 ? QMessageBox::Ok : QMessageBox::Cancel);
+    if ((style&0x100000)!=0) box.setLayoutDirection(Qt::RightToLeft);
+    if ((style&0x80000)!=0)
+        if (auto* label=box.findChild<QLabel*>("qt_msgbox_label")) label->setAlignment(Qt::AlignRight|Qt::AlignVCenter);
+    if ((style&0x10000)!=0) QTimer::singleShot(0,&box,[&box] { box.raise(); box.activateWindow(); });
+    const auto result=box.exec();
+    auto selected=box.standardButton(box.clickedButton());
+    if (selected==QMessageBox::NoButton) {
+        for (const auto choice : choices) if (result==choice) selected=choice;
+        // Existing OK-only callers may close the dialog through QDialog::accept.
+        if (kind==0 && result==QDialog::Accepted) selected=QMessageBox::Ok;
+        else if (result==QDialog::Rejected && choices.contains(QMessageBox::Cancel)) selected=QMessageBox::Cancel;
+    }
+    switch (selected) {
+    case QMessageBox::Ok: return 1;
+    case QMessageBox::Cancel: return 2;
+    case QMessageBox::Abort: return 3;
+    case QMessageBox::Retry: return 4;
+    case QMessageBox::Ignore: return 5;
+    case QMessageBox::Yes: return 6;
+    case QMessageBox::No: return 7;
+    default: throw linaccess::VbaRuntimeError(5,"MsgBox closed without a supported button");
+    }
 }
 QString sqlIdentifier(QString text) {
     text.replace('"', "\"\"");
@@ -99,6 +161,16 @@ public:
         return preview_.getField(name);
     }
     linaccess::VbaValue controlValue(std::string_view name) override { return preview_.getFieldValue(name); }
+    std::optional<linaccess::VbaValue> resolveIdentifier(std::string_view name,bool reference) override {
+        const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if (!preview_.controls_.contains(key)) return std::nullopt;
+        return reference ? makePreviewFormObject(preview_)->objectItem(name) : preview_.getFieldValue(name);
+    }
+    bool assignIdentifier(std::string_view name,const linaccess::VbaValue& value) override {
+        const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if (!preview_.controls_.contains(key)) return false;
+        preview_.setFieldValue(name,value); return true;
+    }
     linaccess::VbaValue expressionValue(std::string_view name,bool reference) override {
         try { return reference ? makePreviewFormObject(preview_)->objectItem(name) : preview_.getFieldValue(name); }
         catch(const linaccess::VbaRuntimeError& failure) { return linaccess::VbaValue::errorValue(failure.number); }
@@ -191,7 +263,10 @@ public:
         preview_.setField(name, std::move(value));
     }
     void message(std::string_view value) override {
-        QMessageBox::information(&preview_, "Access VBA", QString::fromUtf8(value.data(), value.size()));
+        (void)nativeMessageBox(&preview_,value,0,std::nullopt);
+    }
+    int messageBox(std::string_view prompt,int buttons,const std::optional<std::string>& title) override {
+        return nativeMessageBox(&preview_,prompt,buttons,title);
     }
     void saveRecord() override {
         if (!preview_.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Datensatz konnte nicht gespeichert werden");
