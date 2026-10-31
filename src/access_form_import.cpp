@@ -115,6 +115,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 control = static_cast<int>(form.controls.size());
                 AccessVisualControl item;
                 item.type = type;
+                for (auto it=stack.crbegin();it!=stack.crend();++it)
+                    if (it->type=="OptionGroup" && it->control>=0) { item.optionGroupIndex=it->control; break; }
                 item.section = section;
                 form.controls.push_back(item);
             }
@@ -145,6 +147,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "Caption") control.caption = value;
             else if (key == "Tag") control.tag = value;
             else if (key == "ControlSource") control.controlSource = value;
+            else if (key == "DefaultValue") control.defaultValue = value;
+            else if (key == "OptionValue") control.optionValue = integer();
             else if (key == "RowSource") control.rowSource = value;
             else if (key == "RowSourceType") control.rowSourceType = value;
             else if (key == "BoundColumn") control.boundColumn = integer();

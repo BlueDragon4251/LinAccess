@@ -462,6 +462,9 @@ End Sub
     assert(host.sqlStatements[1] == "INSERT INTO recipes (id) VALUES (5)");
     assert(host.navigatedNext == 1 && host.navigatedNew == 1 && host.requeries == 1);
     assert(host.openedForms.size() == 1 && host.openedForms[0] == "frmRezepte");
+    assert(executeVbaProcedure("Sub OpenDefault()\nDoCmd.OpenForm \"form\",acNormal,,\"\"\nEnd Sub", "OpenDefault", host).status==VbaExecutionStatus::Completed);
+    assert(host.openedForms.back()=="form");
+    assert(executeVbaProcedure("Sub OpenFiltered()\nDoCmd.OpenForm \"form\",,,\"id=2\"\nEnd Sub", "OpenFiltered", host).errorNumber==3251);
     const auto nestedCall = executeVbaProcedure(R"VBA(
 Private Sub btn_Click()
 Call InternerHandler

@@ -192,4 +192,16 @@ MDB records with an independent positive count. This uses a limited MSCAL-to-Qt
 adapter, not general COM/ActiveX execution. The original helper exposed and regressed
 a string-literal-versus-syntax lexer defect. Full generic VBA/default-property
 semantics and OCX parity remain open (CALENDAR_RUNTIME.md). Latest syntax inventory:
-169 accepted / 187 inventoried, explicitly not runtime execution coverage.
+178 accepted / 187 inventoried, explicitly not runtime execution coverage.
+
+
+Completed bounded OpenForm package: four positional arguments, omitted defaults,
+acNormal and WhereCondition load actual restricted records before Open. Both direct
+DoCmd and Application.DoCmd dispatch are tested. Missing targets, initialization
+errors and cancellation propagate to VBA. An unchanged original wizard handler now
+opens its original target. Its initially failing target exposed a missing native
+OptionGroup value (2465); numeric defaults and exclusive native choices fix that
+regression. Separate original-layout/data and synthetic interaction tests verify
+filtering, cells, option selection, events and persisted SQL values. This remains
+modal preview infrastructure, not full Access window/view/filter-name semantics
+(OPEN_FORM_RUNTIME.md).

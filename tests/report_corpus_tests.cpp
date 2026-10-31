@@ -6,6 +6,7 @@
 #include "sqlite_execution.hpp"
 #include "jet_sql_functions.hpp"
 #include "vba_source_codec.hpp"
+#include "vba_analyzer.hpp"
 #include "vba_qt_value.hpp"
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -128,7 +129,36 @@ int verifyOriginalFilter(const QDir& directory,const QJsonArray& objects,QSqlDat
         if (!checked) { assert(form.close()); continue; }
         native->assign("FilterOn",linaccess::VbaValue::logical(false));
         assert(selector->count()==rows.size()+1 && !makePreviewFormObject(form)->member("FilterOn",{}).truthy());
-        assert(form.close()); return checked;
+        assert(form.close());
+        // The same original layout and records are opened through real VBA
+        // with WhereCondition; CodeBehind stays outside this binding test.
+        const auto formName=object["name"].toString();
+        QSqlQuery latest(db);
+        latest.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba',?,?)");
+        latest.addBindValue("Form_"+formName); latest.addBindValue(QByteArray{}); assert(latest.exec()); latest.finish();
+        const QByteArray callerCode="Sub OpenOriginal(target As String,criteria As String)\nDoCmd.OpenForm target,acNormal,,criteria\nEnd Sub\n";
+        AccessFormPreview caller("original binding caller","Begin Form\nEnd\n",callerCode,db);
+        bool observed=false; QTimer inspect; inspect.setInterval(1);
+        QObject::connect(&inspect,&QTimer::timeout,[&] {
+            auto* opened=dynamic_cast<AccessFormPreview*>(QApplication::activeModalWidget()); if (!opened) return;
+            auto* records=opened->findChild<QComboBox*>("access-record-selector"); assert(records && records->count()==expected+1);
+            int cells=0;
+            for (const auto& control:layout.controls) {
+                auto name=control.controlSource.trimmed();
+                if (name.startsWith('[') && name.endsWith(']')) name=name.mid(1,name.size()-2);
+                const auto column=record.indexOf(name); if (column<0 || control.type!="TextBox") continue;
+                auto* widget=opened->findChild<QLineEdit*>("access-control-"+control.name); if (!widget) continue;
+                assert(widget->property("la_null").toBool()==rows.front()[column].isNull());
+                assert(widget->text()==rows.front()[column].toString()); ++cells;
+            }
+            assert(cells==checked); observed=true; inspect.stop(); assert(opened->close());
+        });
+        QTimer deadline; deadline.setSingleShot(true);
+        QObject::connect(&deadline,&QTimer::timeout,[]{ assert(false && "Original bound OpenForm timed out"); });
+        inspect.start(); deadline.start(3000);
+        std::vector<linaccess::VbaValue> arguments{linaccess::VbaValue::string(formName.toStdString()),linaccess::VbaValue::string(("["+field+"]="+QString::number(input)).toStdString())};
+        assert(caller.executeProcedure("OpenOriginal",arguments).status==linaccess::VbaExecutionStatus::Completed && observed);
+        inspect.stop(); deadline.stop(); assert(caller.close()); return checked;
     }
     return 0;
 }
@@ -364,6 +394,35 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
             assert(originalCurrencyChecks==1);
             std::cout<<"Original domain sums independently verified: "<<originalDomainSums<<"; original Form_Current completed\n";
             assert(subforms>=2 && calculated>0);
+            // Execute the unchanged four-position wizard handler, rather than
+            // deriving execution success from syntax recognition.
+            QString originalOpenProcedure,targetName;
+            const auto analysis=linaccess::analyzeVba(linaccess::decodeVbaSource(code).toStdString());
+            for (const auto& procedure:analysis.procedures) if (procedure.line<=2409) originalOpenProcedure=QString::fromStdString(procedure.name);
+            for (const auto& candidate:objects) {
+                const auto artifact=candidate.toObject();
+                if (artifact["sha256"]=="4480943bd1372986a103cc2400deca5b3a0305df6dd7fd8b77f701199363b167") targetName=artifact["name"].toString();
+            }
+            assert(!originalOpenProcedure.isEmpty() && !targetName.isEmpty());
+            bool originalOpened=false; int unexpectedDialogs=0;
+            QTimer inspect; inspect.setInterval(1);
+            QObject::connect(&inspect,&QTimer::timeout,[&] {
+                if (qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) ++unexpectedDialogs;
+                auto* target=dynamic_cast<AccessFormPreview*>(QApplication::activeModalWidget());
+                if (!target || target==&initialized) return;
+                assert(makePreviewFormObject(*target)->member("Name",{}).asText()==targetName.toStdString());
+                originalOpened=true; inspect.stop(); assert(target->close());
+            });
+            QTimer deadline; deadline.setSingleShot(true);
+            QObject::connect(&deadline,&QTimer::timeout,[]{ assert(false && "Original OpenForm callback timed out"); });
+            inspect.start(); deadline.start(3000); std::vector<linaccess::VbaValue> noArguments;
+            const auto originalOpenResult=initialized.executeProcedure(originalOpenProcedure,noArguments);
+            inspect.stop(); deadline.stop();
+            if (originalOpenResult.status!=linaccess::VbaExecutionStatus::Completed || !originalOpened || unexpectedDialogs) {
+                std::cerr<<"Original OpenForm outcome: status="<<static_cast<int>(originalOpenResult.status)<<", error="<<originalOpenResult.errorNumber<<", line="<<originalOpenResult.line<<", opened="<<originalOpened<<", unexpected dialogs="<<unexpectedDialogs<<'\n';
+            }
+            assert(originalOpenResult.status==linaccess::VbaExecutionStatus::Completed && originalOpened && unexpectedDialogs==0);
+            std::cout<<"Original four-position OpenForm handler: native target opened and execution completed\n";
             assert(initialized.close());
             QJsonArray events;
             for (auto event=layout.events.cbegin();event!=layout.events.cend();++event) {

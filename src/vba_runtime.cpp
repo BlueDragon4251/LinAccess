@@ -404,10 +404,10 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 return {VbaExecutionStatus::Unsupported, "SQL-Ausdruck: " + expr, line};
             statements.push_back({Statement::Type::ExecuteSql, {}, expr, line});
         } else if (std::regex_match(source, match, openForm)) {
-            const auto expr = trim(match[1].str());
-            if (!validVbaExpression(expr))
-                return {VbaExecutionStatus::Unsupported, "Formularname: " + expr, line};
-            statements.push_back({Statement::Type::OpenForm, {}, expr, line});
+            const auto args=splitArguments(match[1].str());
+            if (args.empty() || args.front().empty() || args.size()>7) return {VbaExecutionStatus::Unsupported,"OpenForm arguments unsupported",line};
+            for (const auto& arg:args) if (!arg.empty() && !validVbaExpression(arg)) return {VbaExecutionStatus::Unsupported,"OpenForm argument expression unsupported",line};
+            statements.push_back({Statement::Type::OpenForm,{},match[1].str(),line});
         } else if (std::regex_match(source, match, controlRequery)) {
             auto name = match[1].str();
             if (name.starts_with('[') && name.ends_with(']')) name = name.substr(1, name.size() - 2);
@@ -545,6 +545,34 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
         catch (...) { throw VbaRuntimeError(13,"Module Boolean field type mismatch"); }
     }
     throw VbaRuntimeError(3251,"Module field coercion unsupported");
+}
+VbaOpenFormArguments parseVbaOpenFormArguments(const std::vector<VbaValue>& args) {
+    if (args.empty()) throw VbaRuntimeError(450,"OpenForm requires a form name");
+    if (args.size()>4) throw VbaRuntimeError(3251,"OpenForm data/window modes and OpenArgs are unsupported");
+    if (args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null form name");
+    VbaOpenFormArguments result{args[0].asText(),{}};
+    if (result.name.empty()) throw VbaRuntimeError(2102,"Form name is unavailable");
+    if (args.size()>1 && args[1].kind!=VbaValue::Kind::Empty) {
+        if (args[1].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null form view");
+        const auto number=args[1].asNumber(); const auto low=std::floor(number); const auto fraction=number-low;
+        const auto view=fraction<0.5 ? low : fraction>0.5 ? low+1 : std::fmod(std::abs(low),2)==0 ? low : low+1;
+        if (!std::isfinite(view) || view < -2147483648.0 || view > 2147483647.0) throw VbaRuntimeError(6,"OpenForm view overflow");
+        if (view!=0) throw VbaRuntimeError(3251,"OpenForm view is unsupported");
+    }
+    if (args.size()>2) {
+        if (args[2].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null filter name");
+        if (!args[2].asText().empty()) throw VbaRuntimeError(3251,"OpenForm named filter is unsupported");
+    }
+    if (args.size()>3) {
+        if (args[3].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null WhereCondition");
+        result.where=args[3].asText();
+    }
+    return result;
+}
+void VbaHost::openFormArguments(const std::vector<VbaValue>& args) {
+    const auto request=parseVbaOpenFormArguments(args);
+    if (!request.where.empty()) throw VbaRuntimeError(3251,"Host does not support a form WhereCondition");
+    openForm(request.name);
 }
 namespace {
 VbaValue initialLocalValue(const std::string& type) {
@@ -833,7 +861,9 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::OpenForm:
                 if (active) {
                     if (++effects > 1000) throw std::runtime_error("VBA-Effektbudget erreicht");
-                    host.openForm(evaluate(instruction.expression).asText());
+                    std::vector<VbaValue> args;
+                    for (const auto& expression:splitArguments(instruction.expression)) args.push_back(expression.empty() ? VbaValue::empty() : evaluate(expression));
+                    host.openFormArguments(args);
                 }
                 break;
             case Statement::Type::ControlRequery:

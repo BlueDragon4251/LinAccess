@@ -436,3 +436,10 @@ Unterformularen; 15 dynamische Tags sind gegen die tatsächlichen Datensätze
 geprüft. Berechnete Grundausdrücke, Error-Variants und ComboBox-Spalten sind
 teilweise unterstützt. Sieben Berechnungen und weitere Startup-Ereignisse bleiben
 offen: [Details und Regressionen](docs/NATIVE_FORM_RUNTIME.md).
+
+
+[OpenForm mit WhereCondition](docs/OPEN_FORM_RUNTIME.md) lädt im begrenzten
+nativen Laufzeitpfad echte gefilterte Datensätze. Ein unveränderter Kassen-Handler
+öffnet sein originales Zielformular. Dessen zuvor roter OptionGroup-Test wird
+mit nativen Auswahlknöpfen und numerischem Gruppenwert erfüllt. Weitere
+Access-Fenstermodi und vollständige Ereignissemantik bleiben offen.

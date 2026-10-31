@@ -158,3 +158,15 @@ Full targets remain open:
 - [x] Native Filter/FilterOn, FilterOnLoad and UI, typed editable table/readonly query filtering, validation/recovery and twelve original bound-cell checks.
 - [x] Direct Me.Requery/Me.SetFocus and bound Requery Current dispatch; original unbound Requery cycle regression.
 - [ ] Complete focus-specific DoCmd.Requery targeting, sorting, advanced/nested criteria, report/reentrant event semantics and designer filter persistence.
+
+
+- [x] Bounded four-position OpenForm/acNormal/WhereCondition with omitted defaults,
+  actual filtered rows/cells and original wizard-handler execution; typed failure
+  and cancellation propagation (OPEN_FORM_RUNTIME.md).
+- [x] Native OptionGroup numeric literal defaults, nested choice metadata,
+  exclusive selection, Null clearing, typed getter and direct-table persistence;
+  original target Open/Current initialization regression.
+- [ ] Full OpenForm modeless/modal/MDI lifetimes, existing-instance reuse, named
+  filters, designer/datasheet views, DataMode/WindowMode/OpenArgs and Access oracle.
+- [ ] Full option-group default expressions, bound new-record defaults,
+  individual child Value assignments, cancelled-update rollback and event oracle.

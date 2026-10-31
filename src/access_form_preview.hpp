@@ -29,7 +29,7 @@ class AccessFormPreview final : public QDialog {
 public:
     AccessFormPreview(QString formName, const QByteArray& source,
                       const QByteArray& vbaSource, QSqlDatabase database,
-                      QWidget* parent = nullptr,bool embedded=false);
+                      QWidget* parent = nullptr,bool embedded=false,QString whereCondition={});
 
     linaccess::VbaExecutionResult executeProcedure(const QString& name,std::vector<linaccess::VbaValue>& arguments);
     bool exportLayoutPdf(const QString& path);
@@ -64,7 +64,7 @@ private:
     void activateDocument();
     void initialCurrent();
     void closeEvent(QCloseEvent* event) override;
-    void openOtherForm(const QString& name);
+    void openOtherForm(const QString& name,const QString& where={});
     void closeOtherDocument(int type,const std::optional<QString>& name,int save);
     std::optional<linaccess::VbaValue> getModuleMember(std::string_view name,bool publicOnly);
     bool setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly);

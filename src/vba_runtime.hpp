@@ -19,6 +19,8 @@ class VbaObject;
 struct VbaValue;
 struct VbaModuleState;
 std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module);
+struct VbaOpenFormArguments { std::string name,where; };
+VbaOpenFormArguments parseVbaOpenFormArguments(const std::vector<VbaValue>& arguments);
 
 class VbaHost {
 public:
@@ -73,6 +75,7 @@ public:
     virtual void executeSql(std::string_view) {
         throw std::runtime_error("DAO.Execute/DoCmd.RunSQL: keine verbundene Datenbank");
     }
+    virtual void openFormArguments(const std::vector<VbaValue>& arguments);
     virtual void openForm(std::string_view) {
         throw std::runtime_error("DoCmd.OpenForm: kein Access-Formularkatalog");
     }

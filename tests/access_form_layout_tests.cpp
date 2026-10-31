@@ -33,6 +33,8 @@ void testMessageBoxes();
 void testCalendarValues();
 void testModuleStates(const QDir&,const QJsonArray&);
 void testCloseCommands();
+void testOpenFormCommands();
+void testOptionGroups();
 void testComboDropdown();
 void testOriginalMessageBox(const QDir&,const QJsonArray&);
 void testSubforms();
@@ -213,6 +215,8 @@ End Sub
     testCalendarValues();
     testModuleStates(directory,objects);
     testCloseCommands();
+    testOpenFormCommands();
+    testOptionGroups();
     testComboDropdown();
     testOriginalMessageBox(directory,objects);
     testFilters();

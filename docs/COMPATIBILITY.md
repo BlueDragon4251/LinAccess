@@ -114,3 +114,14 @@ Der originale Kalender-/Datumsdialog führt beide Funktions-Ereignisbindungen,
 Screen-Zugriffe, Projektvariablen, Monats-Handler, Default-Member-Zugriffe und
 seinen Error-/Resume-Pfad tatsächlich aus. Die Auswahl beider Felder wirkt auf
 eine Abfrage echter MDB-Datensätze. [Testumfang und Grenzen](CALENDAR_RUNTIME.md).
+
+
+Der begrenzte [OpenForm-Laufzeitpfad](OPEN_FORM_RUNTIME.md) unterstützt vier
+Positionsargumente mit ausgelassenen Vorgaben, acNormal und WhereCondition. Ein
+unveränderter Kassen-Handler öffnet sein originales Zielformular; ein zunächst
+roter Test belegte die dort fehlende OptionGroup-Laufzeitunterstützung. Numerische
+Gruppenwerte, Standardwerte und native exklusive Auswahl sind jetzt implementiert.
+Weitere Ansichten, benannte Filter, DataMode/WindowMode/OpenArgs und allgemeine
+Access-Fenstersemantik sind nicht implementiert. Der Aufruf verwendet weiterhin
+eine modale Vorschau. 178/187 statisch angenommene Prozeduren bedeuten ausdrücklich
+keine entsprechende Ausführungsabdeckung.

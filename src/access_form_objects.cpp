@@ -84,7 +84,7 @@ public:
         if (key == "enabled") return linaccess::VbaValue::logical(widget->isEnabled());
         if (key == "controltype") {
             static const QMap<QString,int> types{{"Label",100},{"Rectangle",101},{"Line",102},
-                {"CommandButton",104},{"OptionButton",105},{"CheckBox",106},{"TextBox",109},
+                {"OptionGroup",103},{"CommandButton",104},{"OptionButton",105},{"CheckBox",106},{"TextBox",109},
                 {"ListBox",110},{"ComboBox",111},{"Subform",112},{"ToggleButton",122}};
             for (const auto& item : preview.layout_.controls)
                 if (item.name.compare(name_,Qt::CaseInsensitive)==0 && types.contains(item.type))
@@ -152,7 +152,7 @@ private:
         if (qobject_cast<QCalendarWidget*>(control())) return;
         for (const auto& control : checked().layout_.controls)
             if (control.name.compare(name_,Qt::CaseInsensitive)==0 &&
-                (control.type=="TextBox" || control.type=="ComboBox" || control.type=="ListBox" ||
+                (control.type=="OptionGroup" || control.type=="TextBox" || control.type=="ComboBox" || control.type=="ListBox" ||
                  control.type=="CheckBox" || control.type=="OptionButton" || control.type=="ToggleButton")) return;
         throw linaccess::VbaRuntimeError(438,"Control has no supported Value property");
     }
@@ -513,6 +513,10 @@ public:
     explicit PreviewDoCmdObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
+        if (key=="openform") {
+            const auto request=linaccess::parseVbaOpenFormArguments(args);
+            preview.openOtherForm(text(request.name),text(request.where)); return {};
+        }
         if (key!="close") throw linaccess::VbaRuntimeError(438,"DoCmd member unsupported");
         if (args.size()>3) throw linaccess::VbaRuntimeError(450,"Unexpected Close arguments");
         for (const auto& arg:args) if (arg.kind==linaccess::VbaValue::Kind::Null)

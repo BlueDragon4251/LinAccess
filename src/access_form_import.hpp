@@ -26,6 +26,9 @@ struct AccessVisualControl {
     QString caption;
     QString tag;
     QString controlSource;
+    QString defaultValue;
+    int optionValue{1};
+    int optionGroupIndex{-1};
     QString rowSource;
     QString rowSourceType;
     int boundColumn{1};
