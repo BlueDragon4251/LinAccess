@@ -135,6 +135,8 @@ End Sub
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QLineEdit>
+#include <QComboBox>
+#include <QAbstractItemView>
 
 void testOriginalMessageBox(const QDir& directory,const QJsonArray& objects) {
     int executed=0;
@@ -161,8 +163,10 @@ void testOriginalMessageBox(const QDir& directory,const QJsonArray& objects) {
         assert(!handler.isEmpty());
         // Original module, actual native controls, bounded missing-input branch.
         // No original credentials or authentication SQL are used or recorded.
-        const auto definition=QString("Begin Form\nBegin Section\nBegin TextBox\nName =\"%1\"\nEnd\nBegin TextBox\nName =\"%2\"\nEnd\nEnd\nEnd\n").arg(firstInput,secondInput).toUtf8();
+        const auto definition=QString("Begin Form\nBegin Section\nBegin ComboBox\nName =\"%1\"\nRowSourceType =\"Table/Query\"\nRowSource =\"SELECT id,label FROM choices ORDER BY id\"\nColumnCount =2\nEnd\nBegin TextBox\nName =\"%2\"\nEnd\nEnd\nEnd\n").arg(firstInput,secondInput).toUtf8();
         auto db=QSqlDatabase::addDatabase("QSQLITE","original-message-tests"); db.setDatabaseName(":memory:"); assert(db.open());
+        QSqlQuery choices(db); assert(choices.exec("CREATE TABLE choices(id INTEGER PRIMARY KEY,label TEXT)"));
+        assert(choices.exec("INSERT INTO choices VALUES(1,'first'),(2,'second')"));
         AccessFormPreview form("original message handler",definition,raw,db);
         auto model=makePreviewFormObject(form);
         model->member("Controls",{linaccess::VbaValue::string(firstInput.toStdString())}).object->assign("Value",linaccess::VbaValue::string("selected"));
@@ -180,6 +184,16 @@ void testOriginalMessageBox(const QDir& directory,const QJsonArray& objects) {
             std::cerr << "Original MsgBox path: visited=" << visited << ", status=" << static_cast<int>(result.status) << ", line=" << result.line << ", error=" << result.errorNumber << "\n";
         assert(visited && result.status==linaccess::VbaExecutionStatus::Completed);
         assert(form.focusWidget()==form.findChild<QLineEdit*>("access-control-"+secondInput));
+        model->member("Controls",{linaccess::VbaValue::string(firstInput.toStdString())}).object->assign("Value",linaccess::VbaValue{});
+        bool firstInputMessage=false;
+        QTimer::singleShot(0,&form,[&] {
+            auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget()); assert(box);
+            firstInputMessage=true; box->button(QMessageBox::Ok)->click();
+        });
+        const auto missingFirst=form.executeProcedure(handler,args);
+        assert(firstInputMessage && missingFirst.status==linaccess::VbaExecutionStatus::Completed);
+        auto* combo=form.findChild<QComboBox*>("access-control-"+firstInput);
+        assert(combo && combo->count()==2 && combo->view()->isVisible()); combo->hidePopup();
         assert(form.close()); ++executed;
     }
     assert(executed==1);

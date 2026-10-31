@@ -63,6 +63,7 @@ private:
     void initialCurrent();
     void closeEvent(QCloseEvent* event) override;
     void openOtherForm(const QString& name);
+    void closeOtherDocument(int type,const std::optional<QString>& name,int save);
     std::optional<std::string> getField(std::string_view name) const;
     void ensureWritableControl(std::string_view name) const;
     void setField(std::string_view name, std::optional<std::string> value);
@@ -79,6 +80,7 @@ private:
     friend std::shared_ptr<linaccess::VbaObject> makePreviewControlsObject(AccessFormPreview&);
     friend std::shared_ptr<linaccess::VbaObject> makePreviewControlObject(AccessFormPreview&,const QString&);
     friend class PreviewApplicationObject;
+    friend class PreviewDoCmdObject;
     friend class PreviewCommandBarsObject;
     friend class PreviewCommandBarObject;
     friend class PreviewCommandControlsObject;
@@ -95,7 +97,7 @@ private:
 
     std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, reportsObject_, controlsObject_;
     QMap<QString,std::weak_ptr<linaccess::VbaObject>> controlObjects_;
-    std::weak_ptr<linaccess::VbaObject> applicationObject_;
+    std::weak_ptr<linaccess::VbaObject> applicationObject_,doCmdObject_;
     QMap<QWidget*,std::weak_ptr<linaccess::VbaObject>> commandBarObjects_;
     QMap<QAction*,std::weak_ptr<linaccess::VbaObject>> commandControlObjects_;
     QToolBar* printToolbar_{};
@@ -131,6 +133,7 @@ private:
     bool initialCurrentDeferred_{};
     bool initialCurrentDispatched_{};
     bool closed_{};
+    bool closing_{};
     bool dirty_{};
     bool loading_{};
     bool saving_{};

@@ -803,6 +803,8 @@ void AccessFormPreview::selectRecord(int target) {
 
 bool AccessFormPreview::prepareClose() {
     if (closed_ || openCancelled_) return true;
+    if (closing_) return false;
+    QScopedValueRollback<bool> closing(closing_,true);
     QVector<AccessFormPreview*> documents;
     const std::function<void(AccessFormPreview*)> collect=[&](AccessFormPreview* document) {
         if (document->closed_ || document->openCancelled_) return;
@@ -1030,6 +1032,33 @@ void AccessFormPreview::requeryControl(std::string_view name) {
         setText(combo,old.toString()); combo->setProperty("la_null",old.isNull());
         return;
     }
+}
+
+void AccessFormPreview::closeOtherDocument(int type,const std::optional<QString>& name,int save) {
+    if (type!=-1 && type!=2 && type!=3) throw linaccess::VbaRuntimeError(3251,"Closing this object type is unsupported");
+    if (save<0 || save>2) throw linaccess::VbaRuntimeError(5,"Invalid Close save option");
+    const auto matches=[&](AccessFormPreview* document) {
+        return document && document->isWindow() && !document->closed_ && !document->openCancelled_
+            && document->db_.connectionName()==db_.connectionName()
+            && (type==-1 || (document->layout_.kind==linaccess::AccessDocumentKind::Report ? 3 : 2)==type);
+    };
+    AccessFormPreview* target=nullptr;
+    if (name && !name->isEmpty()) {
+        for (auto* widget:QApplication::topLevelWidgets()) {
+            auto* document=dynamic_cast<AccessFormPreview*>(widget);
+            if (matches(document) && document->formName_.compare(*name,Qt::CaseInsensitive)==0) {
+                if (target) throw linaccess::VbaRuntimeError(5,"Close target is ambiguous");
+                target=document;
+            }
+        }
+    } else {
+        if (matches(activeDocument())) target=activeDocument();
+        else if (matches(this)) target=this;
+    }
+    if (!target) throw linaccess::VbaRuntimeError(type==3 ? 2451 : 2450,"Close target is unavailable");
+    // The native preview has no pending design-edit session. Save options apply
+    // to object design, not record changes; normal record validation still runs.
+    if (target->closing_ || !target->close()) throw linaccess::VbaRuntimeError(2501,"Close action cancelled");
 }
 
 void AccessFormPreview::openOtherForm(const QString& name) {

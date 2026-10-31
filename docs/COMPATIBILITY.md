@@ -97,3 +97,8 @@ Native MsgBox execution and the bounded unqualified form-member bridge are cover
 by real Qt choices, SQL effects and one unchanged Kassa missing-input handler; see
 [MESSAGE_BOX_RUNTIME.md](MESSAGE_BOX_RUNTIME.md). This does not establish complete
 login, VBA class scope or Access action-warning compatibility.
+
+Bounded native DoCmd.Close and SQL-backed ComboBox.Dropdown now execute real Qt
+actions, including an unchanged original Close button and a second original
+missing-input branch. See [CLOSE_COMMAND_RUNTIME.md](CLOSE_COMMAND_RUNTIME.md)
+for cancellation/save semantics and remaining command/combo boundaries.

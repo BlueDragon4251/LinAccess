@@ -11,6 +11,10 @@
 #include <QSet>
 #include <QToolBar>
 #include <QAction>
+#include <QApplication>
+#include <QPushButton>
+#include <QTimer>
+#include <QMessageBox>
 #include <QTemporaryDir>
 #ifdef NDEBUG
 #undef NDEBUG
@@ -152,7 +156,35 @@ void testOriginalControls(const QDir& directory,const QJsonArray& objects) {
         std::vector<linaccess::VbaValue> arguments;
         assert(preview.executeProcedure("Form_Load",arguments).status==linaccess::VbaExecutionStatus::Completed);
         assignments+=verify(false); ++initialized;
-        assert(preview.close());
+        const auto procedures=linaccess::analyzeVba(code.toStdString()).procedures;
+        const auto sourceLines=code.split('\n'); QString closeHandler;
+        for (std::size_t i=0;i<procedures.size();++i) {
+            const auto& procedure=procedures[i];
+            const int end=i+1<procedures.size() ? procedures[i+1].line-1 : sourceLines.size();
+            const auto body=sourceLines.mid(procedure.line-1,end-procedure.line+1).join('\n');
+            if (body.contains(QRegularExpression("^\\s*DoCmd\\.Close\\s*$",QRegularExpression::MultilineOption|QRegularExpression::CaseInsensitiveOption)))
+                closeHandler=QString::fromStdString(procedure.name);
+        }
+        assert(!closeHandler.isEmpty());
+        QPushButton* closeButton=nullptr;
+        const auto layout=linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(definition));
+        for (const auto& control:layout.controls)
+            if (control.name+"_Click"==closeHandler && control.onClick=="[Event Procedure]")
+                closeButton=preview.findChild<QPushButton*>("access-control-"+control.name);
+        assert(closeButton);
+        preview.show(); QApplication::processEvents();
+        int unexpectedDialogs=0; QTimer guard;
+        QObject::connect(&guard,&QTimer::timeout,[&] {
+            if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+                ++unexpectedDialogs; box->accept();
+            }
+        });
+        guard.start(10); closeButton->click(); guard.stop();
+        assert(unexpectedDialogs==0 && !preview.isVisible());
+        bool closedReference=false;
+        try { (void)controls->member("Count",{}); }
+        catch(const linaccess::VbaRuntimeError& error) { closedReference=error.number==2450; }
+        assert(closedReference);
     }
     assert(initialized==1 && assignments==6);
     std::cout<<"Original Form_Load control initializer executed: "<<initialized<<", verified property assignments: "<<assignments<<'\n';

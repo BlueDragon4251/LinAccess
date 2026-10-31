@@ -323,6 +323,9 @@ private:
         if (word == "vbcrlf") return VbaValue::string("\r\n");
         if (word == "vbnewline") return VbaValue::string("\n");
         if (word == "vbtab") return VbaValue::string("\t");
+        static const std::unordered_map<std::string,int> documentConstants{{"acdefault",-1},{"acform",2},{"acreport",3},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
+        if (const auto constant=documentConstants.find(word);constant!=documentConstants.end()) return VbaValue::numeric(constant->second);
+        if (word=="docmd") return host_ ? host_->applicationObject()->member("DoCmd",{}) : VbaValue{};
         if (word == "application") return host_ ? VbaValue::reference(host_->applicationObject()) : VbaValue{};
         if (word=="commandbars") {
             std::vector<VbaValue> arguments;

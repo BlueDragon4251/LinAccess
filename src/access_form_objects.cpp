@@ -7,6 +7,7 @@
 #include <QAbstractButton>
 #include <QAction>
 #include <QLabel>
+#include <QComboBox>
 #include <QToolBar>
 #include <QMainWindow>
 #include <QMenuBar>
@@ -15,6 +16,7 @@
 #include <QPointer>
 #include <QWidget>
 #include <algorithm>
+#include <limits>
 
 std::shared_ptr<linaccess::VbaObject> makePreviewControlsObject(AccessFormPreview&);
 std::shared_ptr<linaccess::VbaObject> makePreviewControlObject(AccessFormPreview&,const QString&);
@@ -79,6 +81,16 @@ public:
                 if (item.name.compare(name_,Qt::CaseInsensitive)==0 && types.contains(item.type))
                     return linaccess::VbaValue::numeric(types.value(item.type));
             throw linaccess::VbaRuntimeError(438,"Control type unsupported");
+        }
+        if (key=="dropdown") {
+            auto* combo=qobject_cast<QComboBox*>(widget);
+            const auto definition=std::find_if(preview.layout_.controls.cbegin(),preview.layout_.controls.cend(),[&](const auto& control) {
+                return control.name.compare(name_,Qt::CaseInsensitive)==0 && control.type=="ComboBox";
+            });
+            if (!combo || definition==preview.layout_.controls.cend()) throw linaccess::VbaRuntimeError(438,"Dropdown requires a combo box");
+            if (!combo->isVisible() || !combo->isEnabled()) throw linaccess::VbaRuntimeError(2110,"Combo box cannot open");
+            if (!combo->property("la_rows_loaded").toBool()) preview.requeryControl(bytes(name_));
+            combo->setFocus(); combo->showPopup(); return {};
         }
         if (key == "setfocus") {
             if (widget->isHidden() || !widget->isEnabled()) throw linaccess::VbaRuntimeError(2110,"Control cannot receive focus");
@@ -443,11 +455,37 @@ private:
         return bars;
     }
 };
+class PreviewDoCmdObject final : public linaccess::VbaObject, private PreviewObjectBase {
+public:
+    explicit PreviewDoCmdObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        auto& preview=checked(); const auto key=text(name).toCaseFolded();
+        if (key!="close") throw linaccess::VbaRuntimeError(438,"DoCmd member unsupported");
+        if (args.size()>3) throw linaccess::VbaRuntimeError(450,"Unexpected Close arguments");
+        for (const auto& arg:args) if (arg.kind==linaccess::VbaValue::Kind::Null)
+            throw linaccess::VbaRuntimeError(94,"Invalid Null Close argument");
+        const auto number=[](const linaccess::VbaValue& value) {
+            const auto integer=linaccess::sqlFieldValue(value,"INTEGER").toLongLong();
+            if (integer<std::numeric_limits<std::int32_t>::min() || integer>std::numeric_limits<std::int32_t>::max())
+                throw linaccess::VbaRuntimeError(6,"Close argument overflow");
+            return static_cast<int>(integer);
+        };
+        const int type=args.empty() ? -1 : number(args[0]);
+        const auto objectName=args.size()>1 ? std::optional<QString>(text(args[1].asText())) : std::nullopt;
+        const int save=args.size()>2 ? number(args[2]) : 0;
+        preview.closeOtherDocument(type,objectName,save); return {};
+    }
+};
 class PreviewApplicationObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewApplicationObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if (key=="docmd" && args.empty()) {
+            if (auto object=preview.doCmdObject_.lock()) return linaccess::VbaValue::reference(object);
+            auto object=std::make_shared<PreviewDoCmdObject>(preview); preview.doCmdObject_=object;
+            return linaccess::VbaValue::reference(object);
+        }
         if (key=="commandbars") {
             auto bars = std::make_shared<PreviewCommandBarsObject>(preview);
             return args.empty() ? linaccess::VbaValue::reference(bars) : bars->member("Item",args);
