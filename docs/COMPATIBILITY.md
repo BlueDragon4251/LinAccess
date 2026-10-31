@@ -81,6 +81,6 @@ Native Unterformulare ohne Master-/Child-Verknüpfung, typisierte ComboBox-Spalt
 und einfache berechnete Felder sind mit Originalartefakten geprüft. Ein komplexer
 originaler Form_Load läuft mit 15 unabhängig geprüften dynamischen Tags und sechs
 Kind-Datenquellen. Auch Form_Open läuft mit nativer Menüleiste durch.
-Sieben Berechnungen sowie OnCurrent und Aktivierungsereignisse
-bleiben offen; dies ist kein vollständig lauffähiger Kassen-Workflow.
+Form_Current und zwei unabhängig geprüfte DSum-Berechnungen laufen ebenfalls.
+Eine CCur-Berechnung und Aktivierungsereignisse bleiben offen; dies ist kein vollständig lauffähiger Kassen-Workflow.
 Siehe [Nachweise und Grenzen](NATIVE_FORM_RUNTIME.md).

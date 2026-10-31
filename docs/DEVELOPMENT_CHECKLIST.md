@@ -128,4 +128,6 @@ Full targets remain open:
   based solely on import counts, synthetic UI actions, or static source recognition.
 
 - [x] Native ActiveMenuBar and popup Controls share real project actions; unchanged complex original Form_Open completes, with mixed numeric/String Variant comparison regressions.
-- [ ] Complete original OnCurrent and native activation event regression; seven calculated Error Variants remain unresolved.
+- [x] Original OnCurrent completes; two original DSum controls independently match actual record sums after SaveAsText escaped-quote correction.
+- [x] DSum/DCount execute native table/view aggregates with criteria, Null/count and catchable-error regressions.
+- [ ] Native activation event regression and the remaining CCur calculated Error Variant; exact Currency/Decimal semantics.

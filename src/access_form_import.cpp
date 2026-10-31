@@ -47,7 +47,10 @@ QString propertyValue(const QString& raw) {
     if (!value.startsWith('"')) return value;
     QString result;
     for (qsizetype index = 1; index < value.size(); ++index) {
-        if (value[index] == '"') {
+        if (value[index] == '\\' && index+1<value.size() && value[index+1]=='"') {
+            result += '"';
+            ++index;
+        } else if (value[index] == '"') {
             if (index + 1 < value.size() && value[index + 1] == '"') {
                 result += '"';
                 ++index;

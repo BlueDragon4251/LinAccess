@@ -36,6 +36,7 @@
 #include <cassert>
 #include <iostream>
 #include <memory>
+#include <cmath>
 namespace {
 QString adapterCategory(const linaccess::VbaRuntimeError& error) {
     const auto reason=QString::fromUtf8(error.what()).toCaseFolded();
@@ -252,6 +253,29 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                         {"value_kind",static_cast<int>(value.kind)},{"error_number",value.errorNumber}});
                 }
             }
+            int originalDomainSums=0;
+            const QRegularExpression domainSum(R"domain(^=DSum\(\s*"([^"]+)"\s*[,;]\s*"([^"]+)"(?:\s*[,;]\s*"([^"]*)")?\s*\)$)domain",QRegularExpression::CaseInsensitiveOption);
+            for (const auto& control : layout.controls) {
+                const auto match=domainSum.match(control.controlSource.trimmed());
+                if (!match.hasMatch()) continue;
+                // Independently sum the actual projected records in C++; do
+                // not reuse the domain adapter's SQLite aggregate result.
+                const auto domain=db.driver()->escapeIdentifier(match.captured(2),QSqlDriver::TableName);
+                const auto source="SELECT "+match.captured(1)+" FROM "+domain+(match.captured(3).isEmpty() ? QString{} : " WHERE "+match.captured(3));
+                const auto plan=linaccess::compileAccessQuery(source);
+                const auto rows=linaccess::executeAccessQueryPlan(db,plan,linaccess::bindAccessQueryParameters(plan,{}));
+                double expected=0; int nonnull=0;
+                for (const auto& row : rows.rows) if (!row.front().isNull()) { expected+=row.front().toDouble(); ++nonnull; }
+                const auto actual=makePreviewFormObject(initialized)->item(control.name.toUtf8().toStdString());
+                if (nonnull) assert(std::abs(actual.asNumber()-expected)<=1e-8*std::max(1.0,std::abs(expected)));
+                else assert(actual.kind==linaccess::VbaValue::Kind::Null);
+                ++originalDomainSums;
+            }
+            assert(originalDomainSums==2);
+            const auto current=initialized.eventResult("OnCurrent");
+            assert(current && current->status==linaccess::VbaExecutionStatus::Completed);
+            assert(calculated==34 && calculationErrors==1);
+            std::cout<<"Original domain sums independently verified: "<<originalDomainSums<<"; original Form_Current completed\n";
             assert(subforms>=2 && calculated>0);
             assert(initialized.close());
             QJsonArray events;

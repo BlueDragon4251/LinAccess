@@ -12,6 +12,7 @@ void testSubforms() {
     QSqlQuery query(db);
     assert(query.exec("CREATE TABLE items(id INTEGER PRIMARY KEY,name TEXT,amount REAL)"));
     assert(query.exec("INSERT INTO items VALUES(1,'before',10.5),(2,'second',3.5),(3,'nullable',NULL)"));
+    assert(query.exec("CREATE VIEW amount_domain AS SELECT id,amount FROM items WHERE id<3"));
     assert(query.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
     const QByteArray childSource=R"FORM(Begin Form
 RecordSource ="items"
@@ -47,6 +48,22 @@ Name ="localized"
 ControlSource ="=Wenn(IstNull([total]);0;[total])"
 End
 Begin TextBox
+Name ="domain_sum"
+ControlSource ="=DSum(""amount"",""items"",""id<3"")"
+End
+Begin TextBox
+Name ="domain_none"
+ControlSource ="=DSum(""amount"",""items"",""id<0"")"
+End
+Begin TextBox
+Name ="domain_count"
+ControlSource ="=DCount(""amount"",""items"")"
+End
+Begin TextBox
+Name ="domain_view"
+ControlSource ="=DSum(""amount*2"",""amount_domain"")"
+End
+Begin TextBox
 Name ="eager_error"
 ControlSource ="=IIf(True,1,1/0)"
 End
@@ -54,6 +71,16 @@ End
 End
 )FORM";
     const QByteArray childCode=R"VBA(
+Sub DomainCheck()
+Me!allow_close = DSum("amount", "items", "id=" & 2)
+End Sub
+Sub DomainFailure()
+On Error GoTo Failed
+Me!allow_close = DSum("amount", "missing_domain")
+Exit Sub
+Failed:
+Me!allow_close = Err.Number
+End Sub
 Sub Form_Load()
 Me!allow_close = 1
 End Sub
@@ -160,6 +187,17 @@ End Sub
     assert(makePreviewFormObject(parent)->member("Tag",{}).asText()=="parent metadata");
     auto allow=controls->member("Item",{linaccess::VbaValue::string("allow_close")}).object;
     assert(form->item("total").asNumber()==14);
+    assert(form->item("domain_sum").asNumber()==14);
+    assert(form->item("domain_none").kind==linaccess::VbaValue::Kind::Null);
+    assert(form->item("domain_count").asNumber()==2);
+    assert(form->item("domain_view").asNumber()==28);
+    std::vector<linaccess::VbaValue> domainArgs;
+    assert(child->executeProcedure("DomainCheck",domainArgs).status==linaccess::VbaExecutionStatus::Completed);
+    assert(allow->member("Value",{}).asNumber()==3.5);
+    assert(child->executeProcedure("DomainFailure",domainArgs).status==linaccess::VbaExecutionStatus::Completed);
+    assert(allow->member("Value",{}).asNumber()==3078);
+    allow->assign("Value",linaccess::VbaValue::numeric(1));
+
     assert(form->item("nonnull").asNumber()==2);
     assert(form->item("rowcount").asNumber()==3);
     assert(form->item("localized").asNumber()==14);
@@ -251,6 +289,22 @@ End
 End
 End
 )FORM";
+    const auto escaped=linaccess::parseAccessFormLayout(QString::fromUtf8(R"FORM(Begin Form
+Caption ="A \"quoted\" "
+    "caption"
+Tag ="C:\data\folder"
+Begin Section
+Begin TextBox
+Name ="escaped expression"
+ControlSource ="=DSum(\"amount\",\"items\",\"id<3\")"
+End
+End
+End
+)FORM"));
+    assert(escaped.caption=="A \"quoted\" caption");
+    assert(escaped.tag==R"(C:\data\folder)");
+    assert(escaped.controls.size()==1);
+    assert(escaped.controls.front().controlSource==R"(=DSum("amount","items","id<3"))");
     const auto decoded=linaccess::parseAccessFormLayout(QString::fromUtf8(wrappedSource));
     assert(decoded.caption=="A \"quoted\" caption" && decoded.recordSource=="SELECT id,name,amount FROM items ORDER BY id");
     assert(linaccess::parseAccessFormText(QString::fromUtf8(wrappedSource)).recordSource==decoded.recordSource);

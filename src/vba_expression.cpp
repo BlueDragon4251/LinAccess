@@ -377,6 +377,11 @@ private:
                 if (!args.empty()) throw error("Clock function takes no arguments",450);
                 return clockValue(word);
             }
+            if (word=="dsum" || word=="dcount") {
+                if (!host_) return {};
+                if (args.size()<2 || args.size()>3) throw error("Domain aggregate requires two or three arguments",450);
+                return host_->domainAggregate(word,args);
+            }
             if (word=="iserror" || word=="cverr") {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Error function requires one argument",450);
@@ -489,6 +494,7 @@ VbaValue VbaHost::formatValue(const VbaValue&,std::string_view,bool) {
     throw VbaRuntimeError(438,"Format host adapter unavailable");
 }
 VbaValue VbaHost::expressionValue(std::string_view,bool) { throw VbaRuntimeError(438,"Access expression context unavailable"); }
+VbaValue VbaHost::domainAggregate(std::string_view,const std::vector<VbaValue>&) { throw VbaRuntimeError(438,"Access domain context unavailable"); }
 VbaValue VbaHost::expressionAggregate(std::string_view,std::string_view,bool) { throw VbaRuntimeError(438,"Access aggregate context unavailable"); }
 VbaValue VbaHost::controlValue(std::string_view name) { return fieldValue(name); }
 void VbaHost::setControlValue(std::string_view name,const VbaValue& value) { setFieldValue(name,value); }

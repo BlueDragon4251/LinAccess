@@ -62,12 +62,24 @@ records. Six embedded child forms have available record sources. Its SQL changes
 are rolled back before the independent report inventory runs.
 
 A second, simpler original Form_Load verifies six Enabled/Visible assignments.
-The complex form still has 7 error values among 34 calculated controls. Its
-OnOpen now completes, including writes to the actual enclosing Qt menu bar.
-OnCurrent still fails with
-13; OnActivate is not dispatched. Thus successful Form_Load is not successful
-complete application startup. DSum/CCur and their dependent expressions are
-among the next unresolved calculations.
+The complex form now has one error value among 34 calculated controls: CCur
+is still unsupported. Its unchanged OnOpen, OnLoad and OnCurrent complete;
+OnActivate is not dispatched. This is not complete application startup.
+Two original DSum controls are independently checked by summing their actual
+projected records in C++, including the original criterion on one control.
+
+DSum and DCount execute real aggregate SELECTs on the current database, with
+an escaped table/view domain name, expression and optional criterion translated
+by the shared Jet compiler. Numeric totals, Null for no matching sum, non-Null
+counts, query views, dynamic VBA criteria and catchable missing-domain errors
+are tested. Parameterized query domains, exact Jet Currency accumulation and
+all Access domain error/coercion details are not yet covered. Ordinary SQL
+budgets and errors apply; no additional confirmation dialog is introduced.
+
+SaveAsText property decoding handles both doubled quotes and backslash-escaped
+quotes, including continued fragments, while preserving ordinary Windows path
+backslashes. The escaped-quote correction restores the original DSum and
+conditional control expressions that were previously truncated during parsing.
 
 Ignored private event/calculation inventories contain module hashes, event or
 control positions, type/status/error numbers and source line numbers. They do

@@ -14,7 +14,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original simple Form_Load / verified property assignments | 1 / 6 |
 | Original complex Form_Load / independently verified dynamic Tags | 1 / 15 |
 | Available embedded sources in that original form | 6 |
-| Calculated controls / remaining error values in that form | 34 / 7 |
+| Calculated controls / remaining error values in that form | 34 / 1 |
 | Original report sources classified / currently bound | 9 / 6 |
 | Original report non-NULL textbox values compared with prepared reader | 54 |
 | Original form layouts scanned | 47 |
@@ -93,8 +93,8 @@ errors are tested. Full default-member/Variant semantics remain open.
 Completed project command-bar package: bare CommandBars and actual enclosing
 Qt toolbar/button collections, guarded lifetimes and one-based identity tests.
 Subsequent embedded-form work completes its Form_Load; the entire startup still
-fails at OnCurrent and has unresolved calculated controls; subsequent native
-menu-bar and mixed-Variant comparisons complete its original Form_Open.
+has unresolved calculations/activation; subsequent menu-bar, mixed-Variant,
+SaveAsText and domain-aggregate work completes Form_Open and Form_Current.
 
 Completed embedded-form execution package: real child forms, persistence and
 close cancellation, typed combo columns, simple calculated aggregates, Error
@@ -112,5 +112,12 @@ the historical intermittent EOF failures or verify remote distro CI execution.
 
 Completed active-menu package: actual project QMenuBar/QMenu/QAction objects,
 popup controls and guarded lifetimes; the unchanged original complex Form_Open
-completes. Seven calculated Error Variants and OnCurrent (13) remain, while
-OnActivate is not yet dispatched. This is not a complete startup claim.
+completes. Subsequent domain-aggregate work reduces seven calculated Error Variants to
+one and completes OnCurrent. OnActivate is not yet dispatched; this is not
+a complete startup claim.
+
+Completed domain-aggregate/SaveAsText package: DSum and DCount on actual tables
+and query views, optional criteria, Null/count handling and catchable errors.
+Backslash-escaped property quotes are decoded correctly. Two unchanged original
+DSum controls match independent record sums. Original Form_Current completes;
+one of 34 calculated controls still requires CCur. Exact Jet Currency remains open.

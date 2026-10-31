@@ -97,6 +97,32 @@ public:
         try { return reference ? makePreviewFormObject(preview_)->objectItem(name) : preview_.getFieldValue(name); }
         catch(const linaccess::VbaRuntimeError& failure) { return linaccess::VbaValue::errorValue(failure.number); }
     }
+    linaccess::VbaValue domainAggregate(std::string_view function,const std::vector<linaccess::VbaValue>& args) override {
+        if (args.size()<2 || args.size()>3) throw linaccess::VbaRuntimeError(450,"Invalid domain aggregate arguments");
+        if (args[0].kind==linaccess::VbaValue::Kind::Null || args[1].kind==linaccess::VbaValue::Kind::Null)
+            throw linaccess::VbaRuntimeError(94,"Invalid Null domain aggregate argument");
+        const auto expression=QString::fromStdString(args[0].asText()).trimmed();
+        const auto domain=QString::fromStdString(args[1].asText());
+        if (expression.isEmpty() || domain.isEmpty()) throw linaccess::VbaRuntimeError(5,"Empty domain aggregate argument");
+        // Domain is an object name, never executable SQL. Saved non-parameter
+        // queries are installed as views on the same native connection.
+        linaccess::installAccessQueryViews(preview_.db_);
+        if (!preview_.db_.tables(QSql::AllTables).contains(domain,Qt::CaseInsensitive))
+            throw linaccess::VbaRuntimeError(3078,"Domain object unavailable");
+        QString source="SELECT "+QString(function=="dsum" ? "Sum" : "Count")+"("+expression+") FROM "+sqlIdentifier(domain);
+        if (args.size()==3 && args[2].kind!=linaccess::VbaValue::Kind::Null) {
+            const auto criteria=QString::fromStdString(args[2].asText()).trimmed();
+            if (!criteria.isEmpty()) source+=" WHERE "+criteria;
+        }
+        const auto plan=linaccess::compileAccessQuery(source);
+        try {
+            const auto result=linaccess::executeAccessQueryPlan(preview_.db_,plan,linaccess::bindAccessQueryParameters(plan,{}));
+            if (result.rows.size()!=1 || result.rows.front().size()!=1)
+                throw linaccess::VbaRuntimeError(3146,"Invalid domain aggregate result");
+            return linaccess::qtFieldValue(result.rows.front().front(),"");
+        } catch(const linaccess::VbaRuntimeError&) { throw; }
+        catch(...) { throw linaccess::VbaRuntimeError(3146,"Domain aggregate execution failed"); }
+    }
     linaccess::VbaValue expressionAggregate(std::string_view function,std::string_view field,bool allRecords) override {
         try {
         if (!preview_.dataSourceAvailable_) throw linaccess::VbaRuntimeError(3146,"Aggregate record source unavailable");
