@@ -158,3 +158,9 @@ Twelve bound original textbox values are checked after filtering actual records.
 Me.Requery reloads external DB changes and Current is dispatched for bound
 sources. The unbound original Current/Requery cycle is prevented by respecting
 its absent record source (NATIVE_FILTERS.md). Full advanced semantics remain open.
+
+Completed import version/library diagnosis: byte-identical pre-fix sources copy
+9/29 when the backend library is 1.0.1, including with CLI-reported 1.0.0, and
+29/29 with library 1.0.0. Twenty standalone PK clauses explain the parser failures.
+The current full 29-table schema/data test passes all four combinations. EOF was
+not reproduced and stays explicitly unresolved (MDB_IMPORT_REGRESSION.md).

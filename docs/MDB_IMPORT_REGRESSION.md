@@ -6,11 +6,36 @@ line made it return an empty schema. This deterministically rejected 20 Kassa
 tables and both recipe tables. The remaining nine Kassa tables could be copied;
 the old test threshold was only 20/29. This is a confirmed LinAccess parser defect.
 
-The unchanged original code was also compiled separately and run with Debian 12's
-signed MDBTools 1.0.0 packages: it copied 29/29 in this environment. That version's
-SQLite backend emits neither primary keys nor indices. The historical intermittent
-EOF/0–20 results are not reproduced here and their root cause remains unresolved.
-Do not infer that the parser fix explains every previous failure.
+The pre-fix sources (commit `70c83efd170c6b6f402f15b09aabfd31093c2c00`)
+were checked byte-for-byte before an isolated version/library matrix. All runs
+used the same SHA-256-verified, readonly MDB test copy. Debian package versions
+were MDBTools/libmdb 1.0.0+dfsg-1.1 and 1.0.1-0.1.
+
+| CLI reports | Loaded libmdb | Separate PK clauses | Old importer | Current full schema/data test |
+|---|---|---:|---:|---:|
+| 1.0.0 | 1.0.0 | 0 | 29/29 | 29/29 passed |
+| 1.0.0 | 1.0.1 | 20 | 9/29, failed | 29/29 passed |
+| 1.0.1 | 1.0.0 | 0 | 29/29 | 29/29 passed |
+| 1.0.1 | 1.0.1 | 20 | 9/29, failed | 29/29 passed |
+
+The same CLI executable hash produces different schema formats when only the
+library search path changes. Thus the version string alone does not identify
+the schema backend. This reproduces a partial import even with a 1.0.0 version
+string and ties it to the 20 rejected PRIMARY KEY clauses. The current parser
+and structural metadata fallback pass all four real 29-table schema/data tests.
+
+No beyond-EOF diagnostic occurred in this matrix. The earlier intermittent EOF
+reports still require independent failure evidence; their historical cause is
+not established. The verified parser/library-format cause does not establish an
+explanation for every older failure. Current consistent 1.0.0 also passes repeated
+full regressions; its SQLite backend omits keys/indices, recovered from MySQL
+structural output.
+
+`scripts/mdbtools-diagnostics.sh` records CLI versions, executable/loaded MDB
+library hashes and installed package metadata without opening a database. Linux
+CI records these diagnostics. Corpus rows, SQL/VBA literals and raw failure logs
+are excluded from committed evidence. See
+[the counts-only matrix](regressions/mdbtools-version-matrix.json).
 
 The adapter now parses standalone primary keys and exported indices. Where SQLite
 output omits them, structural MySQL-backend key/index metadata is read separately;

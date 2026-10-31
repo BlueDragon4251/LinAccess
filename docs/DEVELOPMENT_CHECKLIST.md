@@ -22,7 +22,8 @@ rows, credentials, or raw tool logs to issues, PRs, releases or build artifacts.
   key positions and index counts; verify the original MDB remains unchanged.
 - [x] Regression coverage for quoted identifiers, composite keys, uniqueness and rollback.
 - [x] Exercise recipe foreign-key rejection and cascading deletion on a SQLite copy.
-- [ ] Independently reproduce and explain the historical 0–20/29/EOF instability.
+- [x] Reproduce 9/29 even with CLI 1.0.0 by changing only its loaded MDB library; tie all 20 rejected schemas to standalone PK clauses; current full test passes all four version/library combinations.
+- [ ] Independently reproduce/explain the remaining historical intermittent EOF reports.
 - [ ] Preserve original Jet column types, precision/scale, Currency and Decimal exactly.
 - [ ] Preserve AutoNumber seeds, defaults, validation, lookups and collations exactly.
 - [ ] Implement non-NULL OLE/attachment binary extraction and round trips.

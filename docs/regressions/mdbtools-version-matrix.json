@@ -1,0 +1,94 @@
+{
+  "scope": "Readonly test copy; counts and dependency fingerprints only; no Access oracle",
+  "baseline_commit": "70c83efd170c6b6f402f15b09aabfd31093c2c00",
+  "current_commit": "e2c3fe8",
+  "platform": "Debian 13 x86_64 / Qt 6.8.2",
+  "cases": [
+    {
+      "case": "matching_101",
+      "reported_version": "mdbtools v1.0.1",
+      "return_code": -6,
+      "imported_tables": 9,
+      "catalog_tables": 29,
+      "eof_diagnostics": 0,
+      "libmdb_sha256": "972c68b557cfcbb1f2918a0a214b482f4d0b10a84d18d2b6be06e6f84223c32d",
+      "cli_sha256": "f7bca399d49d0c6126701cd22744e36bf900cc543a94da1f0911d870120ddc5e",
+      "standalone_primary_key_lines": 20,
+      "create_table_count": 29,
+      "loaded_library_package_version": "1.0.1-0.1",
+      "current_schema_data_test": {
+        "case": "matching_101",
+        "return_code": 0,
+        "full_29_table_schema_data_test_passed": true,
+        "eof_diagnostics": 0
+      }
+    },
+    {
+      "case": "matching_100",
+      "reported_version": "mdbtools v1.0.0",
+      "return_code": 0,
+      "imported_tables": 29,
+      "catalog_tables": 29,
+      "eof_diagnostics": 0,
+      "libmdb_sha256": "154d3e9e886db99ed5202a132908c17467af3e64ac86853fe97a05c063836716",
+      "cli_sha256": "e947f02f76bb76df1257c6989cd372d757d188bb70cbf3460e096a299171843a",
+      "standalone_primary_key_lines": 0,
+      "create_table_count": 29,
+      "loaded_library_package_version": "1.0.0+dfsg-1.1",
+      "current_schema_data_test": {
+        "case": "matching_100",
+        "return_code": 0,
+        "full_29_table_schema_data_test_passed": true,
+        "eof_diagnostics": 0
+      }
+    },
+    {
+      "case": "cli100_library101",
+      "reported_version": "mdbtools v1.0.0",
+      "return_code": -6,
+      "imported_tables": 9,
+      "catalog_tables": 29,
+      "eof_diagnostics": 0,
+      "libmdb_sha256": "972c68b557cfcbb1f2918a0a214b482f4d0b10a84d18d2b6be06e6f84223c32d",
+      "cli_sha256": "e947f02f76bb76df1257c6989cd372d757d188bb70cbf3460e096a299171843a",
+      "standalone_primary_key_lines": 20,
+      "create_table_count": 29,
+      "loaded_library_package_version": "1.0.1-0.1",
+      "current_schema_data_test": {
+        "case": "cli100_library101",
+        "return_code": 0,
+        "full_29_table_schema_data_test_passed": true,
+        "eof_diagnostics": 0
+      }
+    },
+    {
+      "case": "cli101_library100",
+      "reported_version": "mdbtools v1.0.1",
+      "return_code": 0,
+      "imported_tables": 29,
+      "catalog_tables": 29,
+      "eof_diagnostics": 0,
+      "libmdb_sha256": "154d3e9e886db99ed5202a132908c17467af3e64ac86853fe97a05c063836716",
+      "cli_sha256": "f7bca399d49d0c6126701cd22744e36bf900cc543a94da1f0911d870120ddc5e",
+      "standalone_primary_key_lines": 0,
+      "create_table_count": 29,
+      "loaded_library_package_version": "1.0.0+dfsg-1.1",
+      "current_schema_data_test": {
+        "case": "cli101_library100",
+        "return_code": 0,
+        "full_29_table_schema_data_test_passed": true,
+        "eof_diagnostics": 0
+      }
+    }
+  ],
+  "historical_eof_cause": "unresolved; no EOF observed in this matrix",
+  "baseline_source_files_verified": [
+    "src/access_catalog.cpp",
+    "src/access_catalog.hpp",
+    "src/access_table_import.cpp",
+    "src/access_table_import.hpp",
+    "src/csv.cpp",
+    "src/csv.hpp",
+    "tests/complex_mdb_table_tests.cpp"
+  ]
+}
