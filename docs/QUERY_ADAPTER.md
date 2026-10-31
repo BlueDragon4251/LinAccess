@@ -40,9 +40,9 @@ Implemented with execution tests:
 ## Original corpus measurement
 
 All 100 original Kassa query artifacts are hash-checked and classified against a
-separate imported SQLite database. Current local run: 69 executed without extra
-parameters and five with parameters selected from actual data (74 total), nine
-missing query dependencies, fourteen other Jet/binding failures, one source-column
+separate imported SQLite database. Current local run: 72 executed without extra
+parameters and five with parameters selected from actual data (77 total), nine
+missing query dependencies, eleven other Jet/binding failures, one source-column
 mismatch and two actions unexecuted by this runner. Parameterized results are
 compared against positive independent filter counts. Action mutation is verified
 separately with typed QueryDefs tests. Reports contain hashes/status/error codes,
@@ -136,3 +136,9 @@ budgets charge all enclosing budgets and restore the parent progress handler.
 
 Bracketed derived tables, proven column lineage across saved queries and bounded
 pure alias expansion are described in [QUERY_ORIGINS.md](QUERY_ORIGINS.md).
+
+Pure IIf expressions can feed later SELECT aliases, provided all nested functions
+are known pure and no actual source column shadows the alias. Three additional
+original queries must return positive, non-NULL results; synthetic regressions
+check independent tax totals, NULL cases and prevention of volatile callback
+duplication. Leading-dot decimal/exponent literals are also tokenized intact.

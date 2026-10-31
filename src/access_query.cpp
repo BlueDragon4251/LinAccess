@@ -113,7 +113,7 @@ QVector<Token> tokenize(const QString& sql,bool nativeIdentifiers=false) {
             while (i < sql.size() && (sql[i].isLetterOrNumber() || sql[i] == '_')) ++i;
             if (i<sql.size() && sql[i]=='$') ++i;
             result.append({Token::Word,sql.mid(start,i-start)});
-        } else if (ch.isDigit()) {
+        } else if (ch.isDigit() || (ch=='.' && i+1<sql.size() && sql[i+1].isDigit())) {
             const auto start = i++;
             while (i < sql.size() && (sql[i].isDigit() || sql[i] == '.')) ++i;
             if (i < sql.size() && (sql[i] == 'e' || sql[i] == 'E')) {
@@ -364,7 +364,7 @@ QString resolveQueryOrigins(QSqlDatabase db,const QString& sql) {
         }
         if (expanded.size()>4096 || output.size()+expanded.size()>16384) return sql;
         bool pure=true;
-        static const QSet<QString> functions{"linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","abs","round","length","lower","upper","coalesce"};
+        static const QSet<QString> functions{"linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","abs","round","length","lower","upper","coalesce"};
         for (qsizetype j=0;j+1<expanded.size();++j)
             if (name(expanded[j]) && symbol(expanded[j+1],"(") && !functions.contains(expanded[j].value.toCaseFolded())) pure=false;
         if (explicitAlias && pure) aliases.insert(projection.last().value.toCaseFolded(),expanded);

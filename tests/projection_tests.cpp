@@ -7,6 +7,7 @@
 #undef NDEBUG
 #endif
 #include <cassert>
+#include <cmath>
 int main(int argc,char** argv) {
     QCoreApplication app(argc,argv);
     auto db=QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());
@@ -152,5 +153,25 @@ int main(int argc,char** argv) {
     try { model.execute(db,"SELECT Forms!Filter!Year AS x,x+1 FROM a"); }
     catch(const linaccess::VbaRuntimeError& error) { volatileAlias=error.number==3146; }
     assert(volatileAlias && calls==0);
+
+    model.execute(db,"SELECT .5e+2 AS positive,-.25 AS negative,.5e-2 AS small,'literal .5e+2' AS text_value FROM a");
+    assert(model.rowCount()==1 && model.data(model.index(0,0)).toDouble()==50
+        && model.data(model.index(0,1)).toDouble()==-.25 && model.data(model.index(0,2)).toDouble()==.005
+        && model.data(model.index(0,3)).toString()=="literal .5e+2");
+    assert(query.exec("CREATE TABLE tax_totals(id INTEGER PRIMARY KEY,tax REAL,gross REAL)"));
+    assert(query.exec("INSERT INTO tax_totals VALUES(1,20,120),(2,0,50),(3,NULL,40),(4,20,NULL)")); query.finish();
+    model.execute(db,"SELECT IIf(tax=20,gross/1.2,0) AS net20,IIf(tax=0,gross,0) AS net0,IIf(tax=20,net20*.2,0) AS tax20,net20+net0+tax20 AS checked FROM tax_totals ORDER BY id");
+    assert(model.rowCount()==4 && model.columnCount()==4);
+    const double expected[][4]={{100,0,20,120},{0,50,0,50},{0,0,0,0}};
+    for (int row=0;row<3;++row) for (int column=0;column<4;++column)
+        assert(std::abs(model.data(model.index(row,column)).toDouble()-expected[row][column])<1e-10);
+    assert(model.data(model.index(3,0)).isNull() && model.data(model.index(3,1)).toInt()==0
+        && model.data(model.index(3,2)).isNull() && model.data(model.index(3,3)).isNull());
+    model.execute(db,"SELECT IIf(id=1,100,200) AS gross,gross+1 AS original_column FROM tax_totals ORDER BY id");
+    assert(model.data(model.index(0,0)).toInt()==100 && model.data(model.index(0,1)).toInt()==121);
+    calls=0; bool nestedVolatile=false;
+    try { model.execute(db,"SELECT IIf(True,Forms!Filter!Year,0) AS x,x+1 FROM tax_totals"); }
+    catch(const linaccess::VbaRuntimeError& error) { nestedVolatile=error.number==3146; }
+    assert(nestedVolatile && calls==0);
 
 }

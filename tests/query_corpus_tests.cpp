@@ -58,7 +58,11 @@ int main(int argc,char** argv) {
         "8c50591d9badb66b4842c5df4a84384fb7d9f7cb9fa724ab788ad61021100255",
         "223132c09574d3477409de4a557540e3f2b85dddf7d9f7fcf7c419b1fe39632f",
         "2c2c6d97a6bd3168396880060c905c2548364de2408dfa82aa23428585f631e5"};
-    int valueDeclarations=0,executedDerivedQueries=0,sourceColumnMismatches=0;
+    const QSet<QString> conditionalAliasHashes{
+        "aee3c2eb8334d24f8268bda68943e5c59c5a993da65d96ea824174da55ed16bf",
+        "c603f4a1eb63c4c0ad7a7427a87ae0978485d1bbea492b1caebedb387ad52c00",
+        "e074e74467212cd73520402ffb4239aef220557883d048a2be672de10c3d48de"};
+    int valueDeclarations=0,executedDerivedQueries=0,sourceColumnMismatches=0,positiveConditionalQueries=0;
     for (const auto& object : definitions) {
         QString status;
         bool executed = false; int errorNumber=0;
@@ -117,7 +121,14 @@ int main(int argc,char** argv) {
             else {
                 auto definition = database->member("QueryDefs",{linaccess::VbaValue::string(object["name"].toString().toUtf8().toStdString())});
                 auto rows = definition.object->member("OpenRecordset",{linaccess::VbaValue::numeric(4)});
-                assert(rows.object->member("RecordCount",{}).asNumber() >= 0);
+                const auto count=rows.object->member("RecordCount",{}).asNumber(); assert(count>=0);
+                if (conditionalAliasHashes.contains(object["sha256"].toString())) {
+                    assert(count>0);
+                    bool nonNull=false;
+                    for (const auto& field:rows.object->member("Fields",{}).object->enumerate())
+                        if (field.object->member("Value",{}).kind!=linaccess::VbaValue::Kind::Null) nonNull=true;
+                    assert(nonNull); ++positiveConditionalQueries;
+                }
                 rows.object->member("Close",{});
                 executed = true; status = "executed_no_access_reference_oracle";
             }
@@ -148,9 +159,10 @@ int main(int argc,char** argv) {
         report.append(QJsonObject{{"artifact_sha256",object["sha256"]},{"status",status},{"executed",executed},{"error_number",errorNumber}});
     }
     assert(report.size() == 100);
-    assert(valueDeclarations==6);
+    assert(valueDeclarations==6 && positiveConditionalQueries==3);
     assert(executedDerivedQueries==5 && sourceColumnMismatches==1);
-    assert(counts["executed_no_access_reference_oracle"] > 0);
+    assert(counts["executed_no_access_reference_oracle"]>=72
+        && counts["executed_with_test_parameters_no_access_reference_oracle"]>=5);
     QFile output(QString::fromLocal8Bit(argv[3])); assert(output.open(QIODevice::WriteOnly));
     assert(output.write(QJsonDocument(report).toJson()) > 0);
     for (auto it = counts.cbegin(); it != counts.cend(); ++it) std::cout << it.key().toStdString() << ": " << it.value() << '\n';

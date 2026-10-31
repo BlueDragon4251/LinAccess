@@ -47,7 +47,36 @@ substitute a similarly named column from another table. A Microsoft Access
 comparison is required to distinguish an original query/source mismatch from
 additional Access name-resolution behavior. This query is not counted executed.
 
-Remaining corpus classifications: nine missing query dependencies, fourteen
+Remaining corpus classifications: nine missing query dependencies, eleven
 other Jet/binding failures, that one source-column mismatch, and two actions not
 executed by the corpus runner. Action SQL mutation has separate real copy tests.
 No complete Jet/ACE semantics or result equivalence is claimed.
+
+
+## Conditional projection aliases
+
+The known-pure expansion whitelist now includes native Jet IIf. Every nested
+function is still inspected; a live Forms/Reports callback, volatile function,
+unknown function or aggregate prevents expansion. A real source column retains
+priority over a same-named projection alias. Synthetic SQL tests verify explicit
+independent tax totals across ordinary, zero-rate, Null-rate and Null-amount rows;
+no live callback runs while preparing a rejected alias chain. SQL numeric literals
+such as `.2`, `-.25` and `.5e+2` remain single tokens through rewriting.
+
+Three newly executing unchanged original queries are required to produce positive
+record counts and a non-NULL first-row value on the imported original MDB copy:
+
+- `aee3c2eb8334d24f8268bda68943e5c59c5a993da65d96ea824174da55ed16bf`
+- `c603f4a1eb63c4c0ad7a7427a87ae0978485d1bbea492b1caebedb387ad52c00`
+- `e074e74467212cd73520402ffb4239aef220557883d048a2be672de10c3d48de`
+
+These include a dependent lookup query; they are not three independent IIf
+implementations. The corpus now executes 77/100 (72 ordinary plus five with
+independently checked data parameters). Overall execution counts have lower-bound
+regression assertions. This demonstrates native execution on actual rows, not
+Microsoft Access result equivalence or exact Currency arithmetic in SQL.
+
+Validation for the conditional-alias stage: all 18 CTests passed (56.43 seconds),
+a fresh Debian package passed current executable Build ID/content/permission
+checks, and all four original fixture SHA-256 checks passed unchanged. The
+GUI-disabled runtime sources did not change in this SQL-only stage.
