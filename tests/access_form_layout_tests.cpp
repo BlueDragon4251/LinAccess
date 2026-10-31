@@ -34,6 +34,7 @@ void testCalendarValues();
 void testModuleStates(const QDir&,const QJsonArray&);
 void testCloseCommands();
 void testOpenFormCommands();
+void testActiveDocumentCommands();
 void testOptionGroups();
 void testSendKeys();
 void testCalculatedCaching();
@@ -218,6 +219,7 @@ End Sub
     testModuleStates(directory,objects);
     testCloseCommands();
     testOpenFormCommands();
+    testActiveDocumentCommands();
     testOptionGroups();
     testSendKeys();
     testCalculatedCaching();

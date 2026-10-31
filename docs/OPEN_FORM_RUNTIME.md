@@ -79,8 +79,9 @@ group read. This proves a specific execution path, not the whole application.
 
 Native opened forms are owned by their calling form tree. Closing that tree
 closes its children; this is not Access's independent application document
-lifetime. Full MDI/document management, close-time reentrant opening, sibling
-window keyboard scheduling/complete active-document DoCmd dispatch, designer or
+lifetime. Bounded same-project active-document commands and keyboard routing are
+now tested (ACTIVE_DOCUMENT_COMMANDS.md). Full MDI/document management,
+close-time reentrant opening, remaining DoCmd/activation semantics, designer or
 datasheet views, named filter queries, data/window modes (including acDialog)
 and OpenArgs remain open.
 Only currently implemented SQL criteria and record-source binding are available.

@@ -350,26 +350,24 @@ public:
         return nativeMessageBox(&preview_,prompt,buttons,title);
     }
     void saveRecord() override {
-        if (!preview_.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Datensatz konnte nicht gespeichert werden");
+        if (!commandDocument().saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record save cancelled");
     }
     void quitApplication() override { QApplication::quit(); }
-    void maximizeForm() override { preview_.window()->showMaximized(); }
+    void maximizeForm() override { commandDocument().window()->showMaximized(); }
     void gotoLastRecord() override {
-        if (preview_.recordSelector_->count() > 0)
-            preview_.recordSelector_->setCurrentIndex(preview_.recordSelector_->count() - 1);
+        auto& document=commandDocument();
+        if (document.recordSelector_->count()>0) document.recordSelector_->setCurrentIndex(document.recordSelector_->count()-1);
     }
     void gotoNextRecord() override {
-        preview_.recordSelector_->setCurrentIndex(qMin(
-            preview_.recordSelector_->currentIndex() + 1,
-            preview_.recordSelector_->count() - 1));
+        auto& document=commandDocument();
+        document.recordSelector_->setCurrentIndex(qMin(document.recordSelector_->currentIndex()+1,document.recordSelector_->count()-1));
     }
     void gotoNewRecord() override {
-        if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report) throw linaccess::VbaRuntimeError(438,"Report does not support new records");
-        preview_.recordSelector_->setCurrentIndex(0);
+        auto& document=commandDocument();
+        if (document.layout_.kind==linaccess::AccessDocumentKind::Report) throw linaccess::VbaRuntimeError(438,"Report does not support new records");
+        document.recordSelector_->setCurrentIndex(0);
     }
-    void requery() override {
-        (void)makePreviewFormObject(preview_)->member("Requery",{});
-    }
+    void requery() override { (void)makePreviewFormObject(commandDocument())->member("Requery",{}); }
     std::string memberControlName(std::string_view name) override {
         requireInstance();
         return preview_.controlMemberName(QString::fromUtf8(name.data(),name.size())).toUtf8().toStdString();
@@ -425,6 +423,12 @@ public:
         linaccess::sendNativeKeys(&preview_,QString::fromUtf8(keys.data(),keys.size()),wait,
             [preview=QPointer<AccessFormPreview>(&preview_)](int number) {
                 if (preview && preview->status_) preview->status_->setText("SendKeys: Fehler "+QString::number(number));
+            },[context=QPointer<AccessFormPreview>(&preview_)]() -> QWidget* {
+                if (!context || context->closed_ || context->openCancelled_) return nullptr;
+                auto* document=activePreviewDocument();
+                if (!context->opened_ || !document || document->closed_ || document->openCancelled_
+                    || document->db_.connectionName()!=context->db_.connectionName() || document->db_.databaseName()!=context->db_.databaseName()) document=context;
+                return document->focusWidget();
             });
     }
     void openFormArguments(const std::vector<linaccess::VbaValue>& args) override {
@@ -435,11 +439,65 @@ public:
         preview_.openOtherForm(QString::fromUtf8(name.data(), name.size()));
     }
 private:
+    AccessFormPreview& commandDocument() {
+        auto* document=activePreviewDocument();
+        if (preview_.opened_ && document && !document->closed_ && !document->openCancelled_
+            && document->db_.connectionName()==preview_.db_.connectionName() && document->db_.databaseName()==preview_.db_.databaseName()) return *document;
+        return preview_;
+    }
     std::vector<bool> moduleScopes_;
     bool instanceScope() const { return moduleScopes_.empty() || moduleScopes_.back(); }
     void requireInstance() const { if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Me is unavailable in a standard module"); }
     AccessFormPreview& preview_;
 };
+
+linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,std::string_view command,const std::vector<linaccess::VbaValue>& actuals) {
+    using linaccess::VbaRuntimeError; using linaccess::VbaValue;
+    std::vector<VbaValue> args;
+    for (const auto& actual:actuals) {
+        auto value=linaccess::scalarVbaValue(actual);
+        if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null document command argument");
+        args.push_back(std::move(value));
+    }
+    const auto number=[](const VbaValue& value) {
+        const auto result=linaccess::sqlFieldValue(value,"INTEGER").toLongLong();
+        if (result<std::numeric_limits<std::int32_t>::min() || result>std::numeric_limits<std::int32_t>::max()) throw VbaRuntimeError(6,"Document command argument overflow");
+        return static_cast<int>(result);
+    };
+    PreviewVbaHost host(preview);
+    if (command=="runsql") {
+        if (args.empty() || args.size()>2) throw VbaRuntimeError(450,"RunSQL argument count invalid");
+        if (args.size()>1) throw VbaRuntimeError(3251,"RunSQL transaction option unsupported");
+        host.executeSql(args[0].asText()); return {};
+    }
+    if (command=="runcommand") {
+        if (args.size()!=1) throw VbaRuntimeError(450,"RunCommand requires one command");
+        if (number(args[0])!=97) throw VbaRuntimeError(3251,"RunCommand option unsupported");
+        host.saveRecord(); return {};
+    }
+    if (command=="maximize") {
+        if (!args.empty()) throw VbaRuntimeError(450,"Maximize takes no arguments");
+        host.maximizeForm(); return {};
+    }
+    if (command=="requery") {
+        if (args.size()>1) throw VbaRuntimeError(450,"Requery argument count invalid");
+        if (!args.empty() && args[0].kind!=VbaValue::Kind::Empty && !args[0].asText().empty()) throw VbaRuntimeError(3251,"Named control Requery unsupported");
+        host.requery(); return {};
+    }
+    if (command=="gotorecord") {
+        if (args.size()>4) throw VbaRuntimeError(450,"GoToRecord argument count invalid");
+        if ((!args.empty() && args[0].kind!=VbaValue::Kind::Empty) || (args.size()>1 && args[1].kind!=VbaValue::Kind::Empty))
+            throw VbaRuntimeError(3251,"Named-object GoToRecord unsupported");
+        if (args.size()>3 && args[3].kind!=VbaValue::Kind::Empty && number(args[3])!=1) throw VbaRuntimeError(3251,"GoToRecord offset unsupported");
+        const auto action=args.size()>2 && args[2].kind!=VbaValue::Kind::Empty ? number(args[2]) : 1;
+        if (action==1) host.gotoNextRecord();
+        else if (action==3) host.gotoLastRecord();
+        else if (action==5) host.gotoNewRecord();
+        else throw VbaRuntimeError(3251,"GoToRecord action unsupported");
+        return {};
+    }
+    throw VbaRuntimeError(438,"Document command unsupported");
+}
 
 AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
                                      const QByteArray& vbaSource, QSqlDatabase database,

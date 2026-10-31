@@ -12,3 +12,5 @@ std::shared_ptr<linaccess::VbaObject> makePreviewReportsObject(AccessFormPreview
 
 class QSqlDatabase;
 void connectPreviewSqlObjects(QSqlDatabase db);
+
+linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,std::string_view command,const std::vector<linaccess::VbaValue>& arguments);

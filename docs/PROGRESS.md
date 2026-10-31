@@ -256,3 +256,18 @@ complete active-document DoCmd/keyboard routing and full window options remain
 open. This does not complete the original sale workflow.
 Validation: all 18 Release CTests (75.58 s), fresh .deb payload/Build ID and all
 four original hashes passed. The GUI-disabled runtime code is unchanged.
+
+
+Bounded active-document command increment (ACTIVE_DOCUMENT_COMMANDS.md): the
+pre-fix SQL persistence assertion failed after OpenForm. Global GoToControl,
+save/navigation/Maximize/Requery now use the invoking project's active document;
+explicit Me remains bound to its instance. Application.DoCmd paths and actual SQL
+actions are tested, including Null/default-Null/Error/overflow rejection. Queued
+keys follow a subsequent window switch and independently opened same-project
+windows, without saving another project's dirty record. Original-layout real-MDB
+focus/Last/Requery cells are independently compared in the existing explicitly
+CodeBehind-free binding probe. Full sale setup, remaining commands/subform
+semantics, Access warnings/transaction flags and independent document lifetime
+remain open.
+Validation: 18/18 Release CTests (71.98 s), GUI-disabled core 1/1 (2.85 s), fresh
+.deb payload/Build ID and all four original hashes passed.

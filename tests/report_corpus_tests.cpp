@@ -210,7 +210,12 @@ int verifyOriginalFilter(const QDir& directory,const QJsonArray& objects,QSqlDat
             assert(widget->property("la_null").toBool()==rows.front()[column].isNull());
             assert(widget->text()==rows.front()[column].toString()); ++checked;
         }
-        if (!checked) { assert(form.close()); continue; }
+        QString focusControl;
+        for (const auto& control:layout.controls) {
+            auto name=control.controlSource.trimmed(); if (name.startsWith('[') && name.endsWith(']')) name=name.mid(1,name.size()-2);
+            if (control.type=="TextBox" && control.visible && record.indexOf(name)>=0) { focusControl=control.name; break; }
+        }
+        if (!checked || focusControl.isEmpty()) { assert(form.close()); continue; }
         native->assign("FilterOn",linaccess::VbaValue::logical(false));
         assert(selector->count()==rows.size()+1 && !makePreviewFormObject(form)->member("FilterOn",{}).truthy());
         assert(form.close());
@@ -220,9 +225,20 @@ int verifyOriginalFilter(const QDir& directory,const QJsonArray& objects,QSqlDat
         QSqlQuery latest(db);
         latest.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba',?,?)");
         latest.addBindValue("Form_"+formName); latest.addBindValue(QByteArray{}); assert(latest.exec()); latest.finish();
-        const QByteArray callerCode="Sub OpenOriginal(target As String,criteria As String)\nDoCmd.OpenForm target,acNormal,,criteria\nEnd Sub\n";
+        const QByteArray callerCode=R"VBA(Sub OpenOriginal(target As String,criteria As String,controlName As String)
+DoCmd.OpenForm target,acNormal,,criteria
+If Forms(target).Filter<>criteria Then Err.Raise 5
+DoCmd.GoToControl controlName
+Me.Tag=Screen.ActiveControl.Name
+End Sub
+Sub LastOriginal(target As String)
+Forms(target).FilterOn=False
+DoCmd.GoToRecord , , acLast
+DoCmd.Requery
+End Sub
+)VBA";
         AccessFormPreview caller("original binding caller","Begin Form\nEnd\n",callerCode,db);
-        std::vector<linaccess::VbaValue> arguments{linaccess::VbaValue::string(formName.toStdString()),linaccess::VbaValue::string(("["+field+"]="+QString::number(input)).toStdString())};
+        std::vector<linaccess::VbaValue> arguments{linaccess::VbaValue::string(formName.toStdString()),linaccess::VbaValue::string(("["+field+"]="+QString::number(input)).toStdString()),linaccess::VbaValue::string(focusControl.toStdString())};
         assert(caller.executeProcedure("OpenOriginal",arguments).status==linaccess::VbaExecutionStatus::Completed);
         AccessFormPreview* opened=nullptr;
         for (auto* widget:QApplication::topLevelWidgets()) if (auto* candidate=dynamic_cast<AccessFormPreview*>(widget);candidate && candidate!=&caller && candidate->isVisible() && makePreviewFormObject(*candidate)->member("Name",{}).asText()==formName.toStdString()) { assert(!opened); opened=candidate; }
@@ -237,7 +253,22 @@ int verifyOriginalFilter(const QDir& directory,const QJsonArray& objects,QSqlDat
             assert(widget->property("la_null").toBool()==rows.front()[column].isNull());
             assert(widget->text()==rows.front()[column].toString()); ++cells;
         }
-        assert(cells==checked); assert(opened->close());
+        assert(cells==checked);
+        assert(makePreviewFormObject(caller)->member("Tag",{}).asText()==focusControl.toStdString());
+        std::vector<linaccess::VbaValue> last{linaccess::VbaValue::string(formName.toStdString())};
+        assert(caller.executeProcedure("LastOriginal",last).status==linaccess::VbaExecutionStatus::Completed);
+        assert(records->count()==rows.size()+1 && records->currentIndex()==rows.size());
+        int lastCells=0;
+        for (const auto& control:layout.controls) {
+            auto name=control.controlSource.trimmed(); if (name.startsWith('[') && name.endsWith(']')) name=name.mid(1,name.size()-2);
+            const auto column=record.indexOf(name); if (column<0 || control.type!="TextBox") continue;
+            auto* widget=opened->findChild<QLineEdit*>("access-control-"+control.name); if (!widget) continue;
+            assert(widget->property("la_null").toBool()==rows.back()[column].isNull());
+            assert(widget->text()==rows.back()[column].toString()); ++lastCells;
+        }
+        assert(lastCells==checked);
+        std::cout<<"Original active-document GoToControl/Last/Requery: independent bound-cell checks="<<lastCells<<'\n';
+        assert(opened->close());
         assert(caller.close()); return checked;
     }
     return 0;

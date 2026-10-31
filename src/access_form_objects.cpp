@@ -518,13 +518,18 @@ public:
     explicit PreviewDoCmdObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
+        if (key=="runcommand" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="runsql")
+            return dispatchPreviewDocumentCommand(preview,key.toStdString(),args);
         if (key=="gotocontrol") {
             if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"GoToControl requires a control name");
             if (args[0].kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null control name");
             auto requested=text(args[0].asText());
             if (requested.startsWith('[') && requested.endsWith(']')) { requested=requested.mid(1,requested.size()-2); requested.replace("]]","]"); }
-            makePreviewFormObject(preview)->member("Controls",{linaccess::VbaValue::string(bytes(requested))}).object->member("SetFocus",{});
-            auto* widget=preview.controls_.value(requested.toCaseFolded()).data();
+            auto* active=activePreviewDocument();
+            auto& target=preview.opened_ && active && !active->closed_ && !active->openCancelled_
+                && active->db_.connectionName()==preview.db_.connectionName() && active->db_.databaseName()==preview.db_.databaseName() ? *active : preview;
+            makePreviewFormObject(target)->member("Controls",{linaccess::VbaValue::string(bytes(requested))}).object->member("SetFocus",{});
+            auto* widget=target.controls_.value(requested.toCaseFolded()).data();
             if (auto* editor=qobject_cast<QLineEdit*>(widget)) editor->selectAll();
             else if (auto* combo=qobject_cast<QComboBox*>(widget);combo && combo->isEditable()) combo->lineEdit()->selectAll();
             return {};

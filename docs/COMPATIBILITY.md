@@ -160,3 +160,14 @@ ActiveControl. Abbrechbares Schließen und Selbstschließen mit anschließender
 MsgBox sind getestet; die physische Löschung wartet auf das Ende der laufenden
 VBA-Aufrufe. Eine unabhängige Access-Dokumentverwaltung und vollständige
 Aktivierungs-/DoCmd-/WindowMode-Semantik bleiben offen.
+
+
+[Globale Befehle und Tastatureingaben](ACTIVE_DOCUMENT_COMMANDS.md) treffen nun
+das aktive native Dokument desselben Projekts. Fokus, Speichern, Next/Last/New,
+Maximieren, Requery und unterstützte Application.DoCmd-Pfade haben echte
+Widget-/SQL-Regressionen; Me bleibt an seine CodeBehind-Instanz gebunden.
+Ein Originalformular mit tatsächlichen MDB-Datensätzen wird für Fokus und
+Last/Requery unabhängig verglichen; sein CodeBehind ist in diesem Bindungstest
+bewusst ausgeblendet. Das ist keine vollständig bestandene Verkaufskette.
+SetWarnings, vollständige Befehls-/Unterformularsemantik und Access-Dialogparität
+bleiben offen.

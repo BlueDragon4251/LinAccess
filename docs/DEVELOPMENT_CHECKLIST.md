@@ -225,3 +225,18 @@ Full targets remain open:
 - [ ] Independent application document lifetimes/MDI, close-time reentrant opens,
   complete active-document DoCmd/keyboard scheduling across windows, acDialog /
   other window/data modes, OpenArgs and an Access event/window oracle.
+
+
+- [x] Bounded same-project active-document GoToControl, SaveRecord, Next/Last/New,
+  Maximize/Requery with independent persistence; explicit Me remains instance-bound.
+- [x] Application.DoCmd command paths, GoToRecord omission/constants and scalar
+  argument validation; actual RunSQL CREATE/INSERT/UPDATE/DELETE/DROP, no extra
+  LinAccess consent dialogs (ACTIVE_DOCUMENT_COMMANDS.md).
+- [x] Per-delivery project focus for SendKeys, queued form switches, independent
+  same-project windows and foreign-project save isolation.
+- [x] Actual original-layout GoToControl/Last/Requery over imported MDB records,
+  independent bound-cell/Null checks in the documented CodeBehind-free probe;
+  unchanged original wizard/calendar/keyboard regressions remain mandatory.
+- [ ] Full active-subform/navigation/end-of-record and unavailable-command parity,
+  remaining command arguments, RunSQL UseTransaction, SetWarnings/Access dialogs,
+  complete window event scheduling and the initialized original sale workflow.

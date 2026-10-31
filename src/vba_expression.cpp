@@ -258,7 +258,7 @@ private:
             if (take("(")) {
                 if (!take(")")) {
                     do {
-                        const bool omitted=lower(member.value)=="openform" && (nextSymbol(",") || nextSymbol(")"));
+                        const bool omitted=(lower(member.value)=="openform" || lower(member.value)=="gotorecord") && (nextSymbol(",") || nextSymbol(")"));
                         args.push_back(omitted ? VbaValue::empty() : expression(1));
                     } while (take(",") || (accessExpression_ && take(";")));
                     require(")");
@@ -351,7 +351,7 @@ private:
         if (word == "vbcrlf") return VbaValue::string("\r\n");
         if (word == "vbnewline") return VbaValue::string("\n");
         if (word == "vbtab") return VbaValue::string("\t");
-        static const std::unordered_map<std::string,int> documentConstants{{"acnormal",0},{"acdesign",1},{"acpreview",2},{"acformds",3},{"accustomcontrol",119},{"acdefault",-1},{"acform",2},{"acreport",3},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
+        static const std::unordered_map<std::string,int> documentConstants{{"accmdsaverecord",97},{"acnext",1},{"aclast",3},{"acnewrec",5},{"acnormal",0},{"acdesign",1},{"acpreview",2},{"acformds",3},{"accustomcontrol",119},{"acdefault",-1},{"acform",2},{"acreport",3},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
         if (const auto constant=documentConstants.find(word);constant!=documentConstants.end()) return VbaValue::numeric(constant->second);
         if (word=="screen") return host_ ? host_->applicationObject()->member("Screen",{}) : VbaValue{};
         if (word=="docmd") return host_ ? host_->applicationObject()->member("DoCmd",{}) : VbaValue{};

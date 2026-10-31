@@ -94,31 +94,31 @@ private:
     qsizetype position_{};
     QVector<Key> result_;
 };
-QWidget* focused(QWidget* scope) {
-    auto* widget=QApplication::focusWidget();
-    if (!scope || !scope->isVisible() || !widget || !widget->isVisible() || !widget->isEnabled()
-        || (widget!=scope && !scope->isAncestorOf(widget))) throw VbaRuntimeError(2110,"Native keyboard focus unavailable");
+QWidget* focused(QWidget* scope,const std::function<QWidget*()>& resolver) {
+    auto* widget=resolver ? resolver() : QApplication::focusWidget();
+    if (!scope || (!resolver && !scope->isVisible()) || !widget || !widget->isVisible() || !widget->isEnabled()
+        || (!resolver && widget!=scope && !scope->isAncestorOf(widget))) throw VbaRuntimeError(2110,"Native keyboard focus unavailable");
     return widget;
 }
-void deliver(QWidget* scope,const QVector<Key>& keys) {
+void deliver(QWidget* scope,const QVector<Key>& keys,const std::function<QWidget*()>& resolver) {
     const QPointer<QWidget> guardedScope(scope);
     for (const auto& key:keys) {
-        QPointer<QWidget> target=focused(guardedScope);
+        QPointer<QWidget> target=focused(guardedScope,resolver);
         QKeyEvent press(QEvent::KeyPress,key.code,key.modifiers,key.text);
         QApplication::sendEvent(target,&press);
         if (target) { QKeyEvent release(QEvent::KeyRelease,key.code,key.modifiers,key.text); QApplication::sendEvent(target,&release); }
     }
 }
 }
-void sendNativeKeys(QWidget* scope,const QString& source,bool wait,std::function<void(int)> failure) {
+void sendNativeKeys(QWidget* scope,const QString& source,bool wait,std::function<void(int)> failure,std::function<QWidget*()> resolver) {
     const auto keys=KeyParser(source).parse(); // Validate the whole sequence before emitting anything.
     if (keys.isEmpty()) return;
-    (void)focused(scope);
-    if (wait) { deliver(scope,keys); return; }
+    (void)focused(scope,resolver);
+    if (wait) { deliver(scope,keys,resolver); return; }
     const QPointer<QWidget> guarded(scope);
-    QMetaObject::invokeMethod(scope,[guarded,keys,failure=std::move(failure)] {
+    QMetaObject::invokeMethod(scope,[guarded,keys,failure=std::move(failure),resolver=std::move(resolver)] {
         if (!guarded) return;
-        try { deliver(guarded,keys); }
+        try { deliver(guarded,keys,resolver); }
         catch(const VbaRuntimeError& error) { if (failure) failure(error.number); }
     },Qt::QueuedConnection);
 }

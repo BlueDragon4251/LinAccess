@@ -12,8 +12,8 @@ Original MDB/Bridge bytes remain unchanged; actions use disposable database copi
   context; full Access macro/class context remains open.
 - `SendKeys` delivers actual Qt key events, synchronously for Wait=True and queued
   for False. Literal Unicode, supported named keys, modifier groups, repetition
-  and escapes are preflighted before effects. Focus remains within the native
-  form. Unsupported key layouts/tokens fail explicitly; destroyed/hidden windows
+  and escapes are preflighted before effects. Input stays in native documents
+  of the invoking project (ACTIVE_DOCUMENT_COMMANDS.md). Unsupported key layouts/tokens fail explicitly; destroyed/hidden windows
   cannot receive queued events. This is not Windows desktop input injection.
 - Native GoToControl resolves literal control names and selects editable text.
   Unbound TextBox.Requery preserves its value. Input is checked in actual widgets,
