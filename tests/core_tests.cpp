@@ -26,6 +26,12 @@ class FakeForm final : public linaccess::VbaHost {
 public:
     std::map<std::string, std::optional<std::string>> fields;
     std::vector<std::string> messages;
+    std::map<std::string,linaccess::VbaValue> bracketFields;
+    bool bracketHost=false;
+    linaccess::VbaValue bracketValue(std::string_view name,bool reference) override {
+        if (!bracketHost || reference) return VbaHost::bracketValue(name,reference);
+        return bracketFields.at(std::string(name));
+    }
     bool dialogHost=false;
     int dialogResult=1,dialogButtons=-1;
     std::optional<std::string> dialogTitle;
@@ -465,6 +471,14 @@ End Sub
     assert(executeVbaProcedure("Sub OpenDefault()\nDoCmd.OpenForm \"form\",acNormal,,\"\"\nEnd Sub", "OpenDefault", host).status==VbaExecutionStatus::Completed);
     assert(host.openedForms.back()=="form");
     assert(executeVbaProcedure("Sub OpenFiltered()\nDoCmd.OpenForm \"form\",,,\"id=2\"\nEnd Sub", "OpenFiltered", host).errorNumber==3251);
+    const std::string bracketCode="Sub Bracket()\nDim flag As Boolean\nflag=False\nIf [flag]=-1 Then\nMe.Tag=\"selected\"\nElse\nMe.Tag=\"clear\"\nEnd If\nEnd Sub";
+    assert(validateVbaProcedure(bracketCode,"Bracket").status==VbaExecutionStatus::Completed);
+    assert(executeVbaProcedure(bracketCode,"Bracket",host).errorNumber==438);
+    host.bracketHost=true; host.bracketFields["flag"]=VbaValue::numeric(-1);
+    assert(executeVbaProcedure(bracketCode,"Bracket",host).status==VbaExecutionStatus::Completed && host.fields["Tag"]=="selected");
+    host.bracketFields["flag"]=VbaValue::numeric(0);
+    assert(executeVbaProcedure(bracketCode,"Bracket",host).status==VbaExecutionStatus::Completed && host.fields["Tag"]=="clear");
+    host.bracketHost=false;
     const auto nestedCall = executeVbaProcedure(R"VBA(
 Private Sub btn_Click()
 Call InternerHandler

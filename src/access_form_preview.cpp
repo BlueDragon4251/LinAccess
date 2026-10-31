@@ -211,6 +211,10 @@ public:
         if (!preview_.controls_.contains(key)) return false;
         preview_.setFieldValue(name,value); return true;
     }
+    linaccess::VbaValue bracketValue(std::string_view name,bool reference) override {
+        if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Unqualified bracket reference requires a native instance context");
+        return reference ? makePreviewFormObject(preview_)->objectItem(name) : preview_.getFieldValue(name);
+    }
     linaccess::VbaValue expressionValue(std::string_view name,bool reference) override {
         try { return reference ? makePreviewFormObject(preview_)->objectItem(name) : preview_.getFieldValue(name); }
         catch(const linaccess::VbaRuntimeError& failure) { return linaccess::VbaValue::errorValue(failure.number); }

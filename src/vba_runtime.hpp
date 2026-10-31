@@ -36,6 +36,7 @@ public:
     virtual std::optional<VbaValue> resolveIdentifier(std::string_view name,bool objectReference);
     virtual bool assignIdentifier(std::string_view name,const VbaValue& value);
     virtual VbaValue expressionValue(std::string_view name,bool objectReference);
+    virtual VbaValue bracketValue(std::string_view name,bool objectReference);
     virtual VbaValue domainAggregate(std::string_view function,const std::vector<VbaValue>& arguments);
     virtual VbaValue expressionAggregate(std::string_view function,std::string_view field,bool allRecords);
     virtual VbaValue fieldValue(std::string_view name);

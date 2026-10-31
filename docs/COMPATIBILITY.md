@@ -123,5 +123,12 @@ roter Test belegte die dort fehlende OptionGroup-Laufzeitunterstützung. Numeris
 Gruppenwerte, Standardwerte und native exklusive Auswahl sind jetzt implementiert.
 Weitere Ansichten, benannte Filter, DataMode/WindowMode/OpenArgs und allgemeine
 Access-Fenstersemantik sind nicht implementiert. Der Aufruf verwendet weiterhin
-eine modale Vorschau. 178/187 statisch angenommene Prozeduren bedeuten ausdrücklich
+eine modale Vorschau. 181/187 statisch angenommene Prozeduren bedeuten ausdrücklich
 keine entsprechende Ausführungsabdeckung.
+
+
+[Eckige Klammern und UTF-8-Bezeichner](BRACKET_IDENTIFIER_RUNTIME.md) haben
+einen begrenzten nativen Laufzeitpfad mit echten Formular-/DAO-Tests. Ein
+originaler berechneter Formularwert bleibt schreibgeschützt. Vollständiges Access
+Eval, allgemeine Unicode-Namensnormalisierung und das vollständige Ausführen der
+umgebenden originalen Kassenprozeduren werden dadurch nicht behauptet.

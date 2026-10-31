@@ -134,7 +134,7 @@ std::size_t outsideKeyword(const std::string& source,std::string_view keyword,st
         else if (ch==')') --depth;
         if (i<start || depth!=0 || i+keyword.size()>source.size()) continue;
         const auto part=lower(source.substr(i,keyword.size()));
-        const auto identifier=[](char value) { return std::isalnum(static_cast<unsigned char>(value)) || value=='_'; };
+        const auto identifier=[](char value) { return std::isalnum(static_cast<unsigned char>(value)) || static_cast<unsigned char>(value)>=0x80 || value=='_'; };
         if (part==keyword && (i==0 || !identifier(source[i-1])) && (i+keyword.size()==source.size() || !identifier(source[i+keyword.size()]))) return i;
     }
     return std::string::npos;
@@ -167,15 +167,15 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                                   std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
                                   std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true) {
     const std::regex begin(
-        R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*?)\s*\)\s*(?:As\s+[A-Za-z_][A-Za-z0-9_]*)?\s*$)",
+        R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*?)\s*\)\s*(?:As\s+[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)?\s*$)",
         std::regex::icase);
     const std::regex anyBegin(
         R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\(.*\))?.*$)",
         std::regex::icase);
     const std::regex end(R"(^\s*End\s+(Sub|Function)\s*$)", std::regex::icase);
     const std::regex ifThen(R"(^If\s+(.+)\s+Then\s*$)", std::regex::icase);
-    const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
-    const std::regex variableAssignment(R"(^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$)", std::regex::icase);
+    const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
+    const std::regex variableAssignment(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
     const std::regex message(R"(^MsgBox(?:\s+(.+)|\((.*)\))$)", std::regex::icase);
     const std::regex save(R"(^DoCmd\s*\.\s*RunCommand\s+acCmdSaveRecord$)", std::regex::icase);
     const std::regex maximize(R"(^DoCmd\s*\.\s*Maximize\s*$)", std::regex::icase);
@@ -191,21 +191,21 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex controlVisible(R"(^Me\s*[!.]\s*(\[[^\]]+\]|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\.\s*Visible\s*=\s*(.+)$)", std::regex::icase);
     const std::regex call(R"(^Call\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\((.*)\))?$)", std::regex::icase);
     const std::regex implicitCall(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+(.+)|\((.*)\))?$)", std::regex::icase);
-    const std::regex memberCall(R"(^((?:[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?)(?:[.!][A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?)+)\s+(.+)$)",std::regex::icase);
-    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:\s+As\s+(?:Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database))?$)", std::regex::icase);
+    const std::regex memberCall(R"(^((?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)(?:[.!][A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)+)\s+(.+)$)",std::regex::icase);
+    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(?:Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database))?$)", std::regex::icase);
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
-    const std::regex objectSet(R"(^Set\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$)", std::regex::icase);
-    const std::regex objectAssign(R"(^([A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))*(?:[.!](?:[A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\])(?:\([^)]*\))*)*[.!](?:[A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\]))\s*=\s*(.+)$)", std::regex::icase);
+    const std::regex objectSet(R"(^Set\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
+    const std::regex objectAssign(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))*(?:[.!](?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])(?:\([^)]*\))*)*[.!](?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\]))\s*=\s*(.+)$)", std::regex::icase);
     const std::regex label(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*):$)");
     const std::regex jump(R"(^GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
     const std::regex errorHandler(R"(^On\s+Error\s+GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
     const std::regex resumeLabel(R"(^Resume\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
     const std::regex whileStart(R"(^Do\s+While\s+(.+)$)", std::regex::icase);
     const std::regex dim(R"(^Dim\s+(.+)$)", std::regex::icase);
-    const std::regex declaration(R"(^([A-Za-z_][A-Za-z0-9_]*)(?:\s+As\s+([A-Za-z_][A-Za-z0-9_.]*))?$)", std::regex::icase);
-    const std::regex forStart(R"(^For\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s+To\s+(.+?)(?:\s+Step\s+(.+))?$)", std::regex::icase);
-    const std::regex forEach(R"(^For\s+Each\s+([A-Za-z_][A-Za-z0-9_]*)\s+In\s+(.+)$)", std::regex::icase);
-    const std::regex next(R"(^Next(?:\s+([A-Za-z_][A-Za-z0-9_]*))?$)", std::regex::icase);
+    const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*))?$)", std::regex::icase);
+    const std::regex forStart(R"(^For\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+?)\s+To\s+(.+?)(?:\s+Step\s+(.+))?$)", std::regex::icase);
+    const std::regex forEach(R"(^For\s+Each\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s+In\s+(.+)$)", std::regex::icase);
+    const std::regex next(R"(^Next(?:\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?$)", std::regex::icase);
 
     std::istringstream stream{std::string(module)};
     std::string raw;
@@ -499,7 +499,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
     auto state=std::make_shared<VbaModuleState>();
     const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
     const std::regex declaration(R"(^\s*(Dim|Private|Public|Global)\s+(.+)$)",std::regex::icase);
-    const std::regex variable(R"(^([A-Za-z_][A-Za-z0-9_]*)(?:\s+As\s+([A-Za-z_][A-Za-z0-9_]*))?$)",std::regex::icase);
+    const std::regex variable(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?$)",std::regex::icase);
     std::istringstream stream{std::string(module)}; std::string line;
     while (std::getline(stream,line)) {
         line=withoutComment(line); if (std::regex_search(line,procedure)) break;

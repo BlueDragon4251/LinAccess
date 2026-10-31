@@ -170,3 +170,13 @@ Full targets remain open:
   filters, designer/datasheet views, DataMode/WindowMode/OpenArgs and Access oracle.
 - [ ] Full option-group default expressions, bound new-record defaults,
   individual child Value assignments, cancelled-update rollback and event oracle.
+
+
+- [x] Bounded Access bracket control/field reads with typed values, explicit host
+  context, local-shadow isolation, native object property access and original
+  calculated-control condition/read-only regression.
+- [x] Consistent UTF-8 identifier spelling in statement declarations/assignments,
+  original Unicode DAO statement with actual imported values and Null writes;
+  reproduced pre-fix DAO failure (BRACKET_IDENTIFIER_RUNTIME.md).
+- [ ] Full Access Eval grammar/scope, Unicode identifier validation and locale
+  case folding; full surrounding original record-copy handlers and Access oracle.

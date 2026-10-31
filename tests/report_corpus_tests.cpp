@@ -3,6 +3,7 @@
 #include "access_form_import.hpp"
 #include "access_table_import.hpp"
 #include "access_query.hpp"
+#include "dao_database.hpp"
 #include "sqlite_execution.hpp"
 #include "jet_sql_functions.hpp"
 #include "vba_source_codec.hpp"
@@ -224,6 +225,61 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
         query.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES(?,?,?)");
         query.addBindValue(object["kind"].toString()); query.addBindValue(object["name"].toString()); query.addBindValue(bytes); assert(query.exec()); query.finish();
     }
+    // Preserve one originally rejected Unicode-field assignment verbatim,
+    // with actual imported values and native DAO records on disposable clones.
+    bool originalUnicodeAssignment=false;
+    for (const auto& entry:objects) {
+        const auto artifact=entry.toObject();
+        if (!artifact["sha256"].toString().startsWith("824977e9d7c7")) continue;
+        QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly));
+        const auto bytes=input.readAll();
+        assert(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1());
+        const auto lines=linaccess::decodeVbaSource(bytes).split('\n'); assert(lines.size()>136);
+        const auto statement=lines[136].trimmed();
+        const QRegularExpression shape(R"(^([\p{L}\p{N}_]+)!([\p{L}\p{N}_]+)\s*=\s*([\p{L}\p{N}_]+)!([\p{L}\p{N}_]+)$)");
+        const auto assignment=shape.match(statement); assert(assignment.hasMatch());
+        assert(assignment.captured(1)!=assignment.captured(3));
+        const auto destinationField=assignment.captured(2),sourceField=assignment.captured(4);
+        QVariant expected; QString fieldType;
+        for (const auto& table:db.tables()) {
+            if (table.startsWith("_la_") || table.startsWith("sqlite_")) continue;
+            const auto types=linaccess::sqliteColumnTypes(db,table);
+            if (!types.contains(sourceField.toCaseFolded())) continue;
+            QSqlQuery source(db);
+            const auto column=db.driver()->escapeIdentifier(sourceField,QSqlDriver::FieldName);
+            if (!source.exec("SELECT "+column+" FROM "+db.driver()->escapeIdentifier(table,QSqlDriver::TableName)+" WHERE "+column+" IS NOT NULL LIMIT 1") || !source.next()) continue;
+            expected=source.value(0); fieldType=types.value(sourceField.toCaseFolded()); break;
+        }
+        assert(expected.isValid() && !expected.isNull() && !fieldType.isEmpty());
+        assert(db.transaction());
+        const auto destinationColumn=db.driver()->escapeIdentifier(destinationField,QSqlDriver::FieldName);
+        const auto sourceColumn=db.driver()->escapeIdentifier(sourceField,QSqlDriver::FieldName);
+        assert(query.exec("CREATE TABLE _la_unicode_source("+sourceColumn+" "+fieldType+")"));
+        assert(query.exec("CREATE TABLE _la_unicode_destination("+destinationColumn+" "+fieldType+")"));
+        query.prepare("INSERT INTO _la_unicode_source VALUES(?)"); query.addBindValue(expected); assert(query.exec()); query.finish();
+        assert(query.exec("INSERT INTO _la_unicode_destination VALUES(NULL)")); query.finish();
+        const auto wrapper=("Sub OriginalAssignment("+assignment.captured(1)+" As DAO.Recordset,"+assignment.captured(3)+" As DAO.Recordset)\n"+statement+"\nEnd Sub\n").toUtf8();
+        {
+            AccessFormPreview caller("original Unicode assignment","Begin Form\nEnd\n",wrapper,db);
+            auto database=linaccess::makeDaoDatabase(db);
+            auto destination=database->member("OpenRecordset",{linaccess::VbaValue::string("_la_unicode_destination")});
+            for (const bool nullSource:{false,true}) {
+                if (nullSource) { assert(query.exec("UPDATE _la_unicode_source SET "+sourceColumn+"=NULL")); query.finish(); }
+                auto source=database->member("OpenRecordset",{linaccess::VbaValue::string("_la_unicode_source")});
+                destination.object->member("Edit",{});
+                std::vector<linaccess::VbaValue> arguments{destination,source};
+                assert(caller.executeProcedure("OriginalAssignment",arguments).status==linaccess::VbaExecutionStatus::Completed);
+                destination.object->member("Update",{});
+                assert(query.exec("SELECT "+destinationColumn+" FROM _la_unicode_destination") && query.next());
+                assert(nullSource ? query.value(0).isNull() : query.value(0)==expected); query.finish();
+                source.object->member("Close",{});
+            }
+            destination.object->member("Close",{}); assert(caller.close());
+        }
+        assert(db.rollback()); originalUnicodeAssignment=true;
+    }
+    assert(originalUnicodeAssignment);
+    std::cout<<"Original Unicode DAO assignment: non-Null and Null values independently verified; full handler not executed\n";
     assert(linaccess::installAccessQueryViews(db)>0);
     assert(db.transaction());
     const auto originalFilterCells=verifyOriginalFilter(directory,objects,db);
@@ -394,6 +450,26 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
             assert(originalCurrencyChecks==1);
             std::cout<<"Original domain sums independently verified: "<<originalDomainSums<<"; original Form_Current completed\n";
             assert(subforms>=2 && calculated>0);
+            // Run the unchanged bracket condition from the original source
+            // against controls from its unchanged layout. The surrounding
+            // synthetic probe is deliberately not counted as its full handler.
+            const QRegularExpression bracketCondition(R"(If\s+(\[([^\]]+)\]\s*=\s*-1)\s+Then)",QRegularExpression::CaseInsensitiveOption);
+            const auto condition=bracketCondition.match(linaccess::decodeVbaSource(code)); assert(condition.hasMatch());
+            const auto fieldName=condition.captured(2);
+            const auto probeCode=("Sub BracketProbe()\nIf "+condition.captured(1)+" Then\nMe.Tag=\"selected\"\nElse\nMe.Tag=\"clear\"\nEnd If\nEnd Sub\n").toUtf8();
+            AccessFormPreview bracketProbe("original bracket probe",definition,probeCode,db);
+            auto probe=makePreviewFormObject(bracketProbe); std::vector<linaccess::VbaValue> probeArguments;
+            const auto actualBracketValue=probe->item(fieldName.toStdString());
+            assert(actualBracketValue.kind!=linaccess::VbaValue::Kind::Error);
+            // This original control is calculated from a combo column. Preserve
+            // its read-only semantics rather than manufacturing an assignment.
+            try { probe->assignItem(fieldName.toStdString(),linaccess::VbaValue::logical(true)); assert(false); }
+            catch(const linaccess::VbaRuntimeError& error) { assert(error.number==2448); }
+            const bool selected=actualBracketValue.kind!=linaccess::VbaValue::Kind::Null && actualBracketValue.kind!=linaccess::VbaValue::Kind::Text && actualBracketValue.asNumber()==-1;
+            assert(bracketProbe.executeProcedure("BracketProbe",probeArguments).status==linaccess::VbaExecutionStatus::Completed);
+            assert(probe->member("Tag",{}).asText()==(selected ? "selected" : "clear"));
+            assert(bracketProbe.close());
+            std::cout<<"Original bracket condition: native calculated value executed; full handler not executed by this probe\n";
             // Execute the unchanged four-position wizard handler, rather than
             // deriving execution success from syntax recognition.
             QString originalOpenProcedure,targetName;

@@ -30,7 +30,21 @@ int main(int argc, char** argv) {
     QSqlQuery q(db);
     assert(q.exec("CREATE TABLE items (id INTEGER PRIMARY KEY, qty REAL, label TEXT DEFAULT 'default')"));
     assert(q.exec("INSERT INTO items VALUES (1,2,NULL),(2,3,'two')"));
+    assert(q.exec("CREATE TABLE unicode_values(id INTEGER PRIMARY KEY,[Änderung] INTEGER)"));
+    assert(q.exec("INSERT INTO unicode_values VALUES(1,3)"));
     Host host(db);
+    const auto unicode=linaccess::executeVbaProcedure(R"VBA(Sub Übertragen()
+Dim größe As Double
+Dim sätze As DAO.Recordset
+größe=4
+Set sätze=CurrentDb.OpenRecordset("unicode_values")
+sätze.Edit
+sätze!Änderung=sätze!Änderung+größe
+sätze.Update
+sätze.Close
+End Sub)VBA","Übertragen",host);
+    assert(unicode.status==linaccess::VbaExecutionStatus::Completed);
+    assert(q.exec("SELECT [Änderung] FROM unicode_values WHERE id=1") && q.next() && q.value(0).toInt()==7); q.finish();
     const auto result = linaccess::executeVbaProcedure(R"VBA(
 Sub Run()
 Dim db As DAO.Database

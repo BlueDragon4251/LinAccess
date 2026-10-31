@@ -294,14 +294,15 @@ private:
             return value;
         }
         const auto tok = consume();
-        if (tok.type==Token::Type::Bracket && accessExpression_) {
+        if (tok.type==Token::Type::Bracket) {
             if (!host_) return {};
             const auto root=lower(tok.value);
             if (nextSymbol(".") || nextSymbol("!")) {
                 if (root=="forms" || root=="formulare") return VbaValue::reference(host_->formsCollection());
                 if (root=="reports" || root=="berichte") return VbaValue::reference(host_->reportsCollection());
             }
-            return host_->expressionValue(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"));
+            const bool reference=objectContext || nextSymbol(".") || nextSymbol("!");
+            return accessExpression_ ? host_->expressionValue(tok.value,reference) : host_->bracketValue(tok.value,reference);
         }
         if (tok.type == Token::Type::Text) return VbaValue::string(tok.value);
         if (tok.type == Token::Type::Number) {
@@ -325,7 +326,7 @@ private:
             return host_ ? VbaValue::reference(host_->currentDatabase()) : VbaValue{};
         }
         static const std::unordered_map<std::string,int> controlTypes{
-            {"aclabel",100},{"acrectangle",101},{"acline",102},{"accommandbutton",104},
+            {"aclabel",100},{"acrectangle",101},{"acline",102},{"acoptiongroup",103},{"accommandbutton",104},
             {"acoptionbutton",105},{"accheckbox",106},{"actextbox",109},{"aclistbox",110},
             {"accombobox",111},{"acsubform",112},{"actogglebutton",122}};
         if (const auto type = controlTypes.find(word); type != controlTypes.end()) return VbaValue::numeric(type->second);
@@ -585,6 +586,7 @@ int VbaHost::messageBox(std::string_view prompt,int buttons,const std::optional<
 }
 std::optional<VbaValue> VbaHost::resolveIdentifier(std::string_view,bool) { return std::nullopt; }
 bool VbaHost::assignIdentifier(std::string_view,const VbaValue&) { return false; }
+VbaValue VbaHost::bracketValue(std::string_view,bool) { throw VbaRuntimeError(438,"Access bracket evaluation context unavailable"); }
 VbaValue VbaHost::expressionValue(std::string_view,bool) { throw VbaRuntimeError(438,"Access expression context unavailable"); }
 VbaValue VbaHost::domainAggregate(std::string_view,const std::vector<VbaValue>&) { throw VbaRuntimeError(438,"Access domain context unavailable"); }
 VbaValue VbaHost::expressionAggregate(std::string_view,std::string_view,bool) { throw VbaRuntimeError(438,"Access aggregate context unavailable"); }

@@ -192,7 +192,7 @@ MDB records with an independent positive count. This uses a limited MSCAL-to-Qt
 adapter, not general COM/ActiveX execution. The original helper exposed and regressed
 a string-literal-versus-syntax lexer defect. Full generic VBA/default-property
 semantics and OCX parity remain open (CALENDAR_RUNTIME.md). Latest syntax inventory:
-178 accepted / 187 inventoried, explicitly not runtime execution coverage.
+181 accepted / 187 inventoried, explicitly not runtime execution coverage.
 
 
 Completed bounded OpenForm package: four positional arguments, omitted defaults,
@@ -205,3 +205,15 @@ regression. Separate original-layout/data and synthetic interaction tests verify
 filtering, cells, option selection, events and persisted SQL values. This remains
 modal preview infrastructure, not full Access window/view/filter-name semantics
 (OPEN_FORM_RUNTIME.md).
+
+
+Completed bounded Access bracket/UTF-8 identifier package: native bracket names
+read typed current-form values through a separate context, preserve calculated
+control read-only behavior and do not resolve same-named local variables. The
+unchanged original bracket condition executes in an isolated original-layout
+probe; its full surrounding handler is not executed by that probe. A reproduced
+DAO regression fixes inconsistent ASCII-only statement rules. An unchanged
+original Unicode-field assignment copies actual imported values and Null through
+native DAO into disposable tables, with independent SQL assertions. Current
+syntax inventory: 181/187 accepted, not execution coverage
+(BRACKET_IDENTIFIER_RUNTIME.md).

@@ -236,7 +236,19 @@ End
 End
 End
 )FORM";
-    const QByteArray code=R"VBA(Sub selection_AfterUpdate()
+    const QByteArray code=R"VBA(Sub BracketValue()
+Dim selection As Boolean
+selection=False
+If [selection]=2 Then
+Me.Tag="selected"
+Else
+Me.Tag="clear"
+End If
+If [selection].ControlType<>acOptionGroup Then
+Err.Raise 5
+End If
+End Sub
+Sub selection_AfterUpdate()
 CurrentDb.Execute "INSERT INTO events VALUES(" & Me.selection & ")"
 End Sub
 Sub second_Click()
@@ -252,9 +264,12 @@ End Sub
     auto* first=bound.findChild<QPushButton*>("access-control-first");
     auto* second=bound.findChild<QPushButton*>("access-control-second"); assert(first && second);
     assert(first->isChecked() && !second->isChecked() && object->item("selection").asNumber()==1);
+    std::vector<VbaValue> noArguments;
+    assert(bound.executeProcedure("BracketValue",noArguments).status==linaccess::VbaExecutionStatus::Completed && object->member("Tag",{}).asText()=="clear");
     bound.show(); QApplication::processEvents();
     QTest::mouseClick(second,Qt::LeftButton);
     assert(!first->isChecked() && second->isChecked() && object->item("selection").asNumber()==2);
+    assert(bound.executeProcedure("BracketValue",noArguments).status==linaccess::VbaExecutionStatus::Completed && object->member("Tag",{}).asText()=="selected");
     const auto clicked=bound.eventResult("control:second:Click");
     assert(clicked && clicked->status==linaccess::VbaExecutionStatus::Completed);
     assert(query.exec("SELECT value FROM events") && query.next() && query.value(0).toInt()==2 && !query.next()); query.finish();
