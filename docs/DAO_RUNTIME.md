@@ -18,7 +18,12 @@ Supported and tested:
 - `Edit`, `AddNew`, `Update`, `CancelUpdate` and `Delete`, using bound SQL values.
   Table updates identify the actual SQLite rowid; insert buffers contain only
   explicitly assigned fields, so available SQLite defaults remain effective.
-- `Do While ... Loop` with the existing execution budget.
+- `Do While ... Loop` and `For Each ... Next` over native enumerable objects,
+  including nested numeric/enumeration loops and `Exit For`. Empty enumerations
+  retain the prior control-variable value. Error-handler Resume restores loop state.
+- DAO `Fields`, `Fields.Count`, `Fields.Item(name/index)` and enumeration of actual
+  Field objects. Field.Value remains bound to the recordset edit buffer.
+- Object method arguments without parentheses, including `Err.Raise 11`.
 - `DoCmd.Quit` requests Qt application termination.
 - Variant Empty versus Null, Null-aware Boolean logic, numeric bitwise And/Or/Not,
   comparison-before-Not precedence, CLng tie-to-even rounding and Long overflow,
@@ -46,7 +51,7 @@ procedures or for complete operation of the Kassa application.
 
 ## Remaining limits
 
-No complete VBA grammar, class system, scope/type enforcement, arrays, ByRef,
+No complete VBA grammar, class system, scope/type enforcement, arrays,
 module lifetimes, Optional/ParamArray arguments or full Variant coercion is provided.
 Typed Dim defaults are initialized, but assignment does not yet enforce the
 declared type. Date/Currency/Decimal and 64-bit integer fidelity need dedicated
@@ -77,3 +82,11 @@ The syntax inventory checks every artifact hash and classifies all 187 procedure
 from 32 VBA modules. Its JSON explicitly marks each entry executed=false and omits
 raw diagnostics/literals. Syntax acceptance is never an execution or compatibility
 claim. The inventory stays in the ignored build directory and is not packaged.
+
+The For Each regression also executes a counting function against every one of
+the 29 original Kassa tables and compares the result with imported schema columns.
+This test uses synthetic VBA against real fixture structures, not an original
+application procedure. Original For Each procedures still require their specific
+Access collections and other unsupported syntax. Native enumeration materializes
+an object-reference snapshot; COM enumerator mutation/lifetime behavior is not
+claimed. Default members and a VBA Collection class remain open.

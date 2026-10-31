@@ -15,7 +15,7 @@ namespace {
 // This interpreter deliberately reports unsupported VBA instead of silently
 // treating Access/DAO/COM calls as successful no-ops.
 struct Statement {
-    enum class Type { If, Else, EndIf, For, Next, Message, Save, Maximize, GoLast,
+    enum class Type { If, Else, EndIf, For, ForEach, ExitFor, Next, Message, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
                       Call, SetField, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, Quit, ErrorResumeNext, ErrorDisable, Label, Jump, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
@@ -129,6 +129,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex controlVisible(R"(^Me\s*[!.]\s*(\[[^\]]+\]|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\.\s*Visible\s*=\s*(.+)$)", std::regex::icase);
     const std::regex call(R"(^Call\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\((.*)\))?$)", std::regex::icase);
     const std::regex implicitCall(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+(.+)|\((.*)\))?$)", std::regex::icase);
+    const std::regex memberCall(R"(^((?:[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?)(?:[.!][A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?)+)\s+(.+)$)",std::regex::icase);
     const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:\s+As\s+(?:Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database))?$)", std::regex::icase);
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
     const std::regex objectSet(R"(^Set\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$)", std::regex::icase);
@@ -141,6 +142,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex dim(R"(^Dim\s+(.+)$)", std::regex::icase);
     const std::regex declaration(R"(^([A-Za-z_][A-Za-z0-9_]*)(?:\s+As\s+([A-Za-z_][A-Za-z0-9_.]*))?$)", std::regex::icase);
     const std::regex forStart(R"(^For\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s+To\s+(.+?)(?:\s+Step\s+(.+))?$)", std::regex::icase);
+    const std::regex forEach(R"(^For\s+Each\s+([A-Za-z_][A-Za-z0-9_]*)\s+In\s+(.+)$)", std::regex::icase);
     const std::regex next(R"(^Next(?:\s+([A-Za-z_][A-Za-z0-9_]*))?$)", std::regex::icase);
 
     std::istringstream stream{std::string(module)};
@@ -239,6 +241,16 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             elseSeen.pop_back();
             blocks.pop_back();
             statements.push_back({Statement::Type::EndIf, {}, {}, line});
+        } else if (std::regex_match(source, match, forEach)) {
+            const auto expression = trim(match[2].str());
+            if (!validVbaExpression(expression))
+                return {VbaExecutionStatus::Unsupported,"For Each collection expression",line};
+            forStarts.push_back(static_cast<int>(statements.size()));
+            blocks.push_back(Statement::Type::For);
+            statements.push_back({Statement::Type::ForEach,match[1].str(),expression,line});
+        } else if (lower(source) == "exit for") {
+            if (forStarts.empty()) return {VbaExecutionStatus::Error,"Exit For without For",line};
+            statements.push_back({Statement::Type::ExitFor,{},{},line});
         } else if (std::regex_match(source, match, forStart)) {
             const auto start = trim(match[2].str());
             const auto endValue = trim(match[3].str());
@@ -355,7 +367,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                     return {VbaExecutionStatus::Unsupported, "Variablendeklaration", line};
                 const auto type = lower(declared[2].str());
                 if (!type.empty() && type != "variant" && type != "object" && type != "dao.database"
-                    && type != "dao.recordset" && type != "dao.querydef" && type != "dao.parameter" && type != "string" && type != "boolean"
+                    && type != "dao.recordset" && type != "dao.field" && type != "dao.fields" && type != "dao.querydef" && type != "dao.parameter" && type != "string" && type != "boolean"
                     && type != "integer" && type != "long" && type != "single" && type != "double"
                     && type != "byte") return {VbaExecutionStatus::Unsupported, "Variablentyp: " + type, line};
                 statements.push_back({Statement::Type::Dim, declared[1].str(), type, line});
@@ -366,6 +378,10 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             statements.push_back({Statement::Type::SetVar, match[1].str(), expr, line});
         } else if (lower(source) == "exit sub" || lower(source) == "exit function") {
             statements.push_back({Statement::Type::Exit, {}, {}, line});
+        } else if (std::regex_match(source,match,memberCall)) {
+            const auto expression = match[1].str() + "(" + match[2].str() + ")";
+            if (!validVbaExpression(expression)) return {VbaExecutionStatus::Unsupported,"Object method arguments",line};
+            statements.push_back({Statement::Type::ObjectCall,{},expression,line});
         } else if (source.find('.') != std::string::npos && validVbaExpression(source)) {
             statements.push_back({Statement::Type::ObjectCall, {}, source, line});
         } else if (std::regex_match(source, match, implicitCall)) {
@@ -431,7 +447,14 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     if (instructions.size() > 20000)
         return {VbaExecutionStatus::Unsupported, "Prozedur überschreitet 20.000 Anweisungen", 0};
     struct Frame { bool parent; bool condition; bool inElse; };
-    struct LoopFrame { int forIndex; double end; double step; };
+    struct LoopFrame {
+        int forIndex;
+        double end{};
+        double step{};
+        std::vector<VbaValue> items;
+        std::size_t itemIndex{};
+        std::size_t frameDepth{};
+    };
     std::vector<Frame> frames;
     std::vector<LoopFrame> loops;
     VbaVariables locals;
@@ -681,6 +704,30 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (active) locals[lower(instruction.argument)] =
                     evaluate(instruction.expression);
                 break;
+            case Statement::Type::ForEach: {
+                if (!active) { ip = static_cast<std::size_t>(instruction.partner); break; }
+                const auto collection = evaluate(instruction.expression);
+                if (collection.kind != VbaValue::Kind::Object)
+                    throw VbaRuntimeError(424,"For Each requires an object collection");
+                if (!collection.object) throw VbaRuntimeError(91,"For Each object is not set");
+                LoopFrame loop{static_cast<int>(ip)};
+                loop.items = collection.object->enumerate();
+                loop.frameDepth = frames.size();
+                if (loop.items.empty()) ip = static_cast<std::size_t>(instruction.partner);
+                else {
+                    locals[lower(instruction.argument)] = loop.items.front();
+                    loops.push_back(std::move(loop));
+                }
+                break;
+            }
+            case Statement::Type::ExitFor:
+                if (active) {
+                    if (loops.empty()) throw VbaRuntimeError(5,"Exit For stack invalid");
+                    const auto loop = std::move(loops.back()); loops.pop_back();
+                    frames.resize(loop.frameDepth); active = true;
+                    ip = static_cast<std::size_t>(instructions[loop.forIndex].partner);
+                }
+                break;
             case Statement::Type::For: {
                 if (!active) {
                     ip = static_cast<std::size_t>(instruction.partner);
@@ -695,7 +742,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 locals[lower(instruction.argument)] = VbaValue::numeric(initial);
                 if ((step > 0 && initial > end) || (step < 0 && initial < end)) {
                     ip = static_cast<std::size_t>(instruction.partner);
-                } else loops.push_back({static_cast<int>(ip), end, step});
+                } else {
+                    LoopFrame loop{static_cast<int>(ip),end,step};
+                    loop.frameDepth = frames.size();
+                    loops.push_back(std::move(loop));
+                }
                 break;
             }
             case Statement::Type::Next: {
@@ -704,6 +755,14 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     throw std::runtime_error("VBA-For/Next-Laufzeitstapel ungültig");
                 const auto& start = instructions[loops.back().forIndex];
                 const auto name = lower(start.argument);
+                if (start.type == Statement::Type::ForEach) {
+                    auto& loop = loops.back();
+                    if (++loop.itemIndex < loop.items.size()) {
+                        locals[name] = loop.items[loop.itemIndex];
+                        ip = static_cast<std::size_t>(loop.forIndex);
+                    } else loops.pop_back();
+                    break;
+                }
                 const auto nextValue = locals[name].asNumber() + loops.back().step;
                 if (!std::isfinite(nextValue)) throw std::runtime_error("For-Zählerüberlauf");
                 locals[name] = VbaValue::numeric(nextValue);

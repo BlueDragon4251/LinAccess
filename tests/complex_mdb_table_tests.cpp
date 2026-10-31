@@ -20,6 +20,18 @@
 #include <QJsonDocument>
 #include <set>
 
+class EnumerationHost final : public linaccess::VbaHost {
+public:
+    explicit EnumerationHost(QSqlDatabase db) : db_(db) {}
+    std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(db_); }
+    std::optional<std::string> field(std::string_view) override { throw std::runtime_error("Unexpected control read"); }
+    void setField(std::string_view,std::optional<std::string>) override { assert(false); }
+    void message(std::string_view) override { assert(false); }
+    void saveRecord() override { assert(false); }
+private:
+    QSqlDatabase db_;
+};
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     assert(argc == 2);
@@ -54,6 +66,24 @@ int main(int argc, char** argv) {
             for (const auto& column : schema.columns)
                 if (column.sourceType == "BOOLEAN" || column.sourceType == "BIT") ++booleanColumns;
             linaccess::importAccessTable(db, source, table, schema, rows);
+            EnumerationHost enumerationHost(db);
+            std::vector<linaccess::VbaValue> arguments{linaccess::VbaValue::string(table.toUtf8().toStdString())};
+            const auto enumeration = linaccess::executeVbaProcedureWithArguments(R"VBA(
+Function CountFields(ByVal source As String) As Long
+Dim rs As DAO.Recordset
+Dim fld As DAO.Field
+Dim count As Long
+Set rs = CurrentDb.OpenRecordset(source, dbOpenSnapshot)
+For Each fld In rs.Fields
+count = count + 1
+Next fld
+rs.Close
+CountFields = count
+End Function
+)VBA","CountFields",enumerationHost,arguments);
+            assert(enumeration.status == linaccess::VbaExecutionStatus::Completed);
+            assert(enumeration.typedReturnValue && enumeration.typedReturnValue->asNumber() == schema.columns.size());
+
             bool hasBoolean = false;
             for (const auto& column : schema.columns) hasBoolean |= column.sourceType == "BOOLEAN" || column.sourceType == "BIT";
             if (hasBoolean && rows.size() > 1) {

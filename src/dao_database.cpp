@@ -47,6 +47,7 @@ QVariant toSql(const VbaValue& value) {
     }
 }
 class Recordset;
+VbaValue fieldCollection(std::shared_ptr<Recordset> owner);
 class Field final : public VbaObject {
 public:
     Field(std::shared_ptr<Recordset> owner, QString name) : owner_(std::move(owner)), name_(std::move(name)) {}
@@ -64,16 +65,18 @@ public:
         readOnly_ |= !table_;
         reload();
     }
+    QStringList fieldNames() const { require(!closed_,"DAO: Recordset is closed"); return columns_; }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         require(!closed_, "DAO: Recordset is closed");
         const auto key = lower(name);
         if (key == "fields") {
+            if (args.empty()) return fieldCollection(shared_from_this());
             require(args.size() == 1, "DAO: Fields requires one field name/index");
             QString field;
             if (args[0].kind == VbaValue::Kind::Number) {
-                const auto index = static_cast<int>(args[0].asNumber());
-                require(index >= 0 && index < columns_.size(), "DAO: Field index out of range");
-                field = columns_[index];
+                const auto index = sqlFieldValue(args[0],"INTEGER").toLongLong();
+                if (index < 0 || index >= columns_.size()) throw VbaRuntimeError(3265,"DAO: Field index out of range");
+                field = columns_[static_cast<int>(index)];
             } else field = text(args[0].asText());
             (void)column(field);
             return VbaValue::reference(std::make_shared<Field>(shared_from_this(), field));
@@ -203,6 +206,28 @@ private:
     int topLimit_{};
     bool hiddenRank_{};
 };
+class Fields final : public VbaObject {
+public:
+    explicit Fields(std::shared_ptr<Recordset> owner) : owner_(std::move(owner)) {}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        const auto key = lower(name);
+        if (key == "count" && args.empty()) return VbaValue::numeric(owner_->fieldNames().size());
+        if (key == "item" && args.size() == 1) return owner_->member("Fields",args);
+        throw VbaRuntimeError(438,"DAO: Fields member unsupported");
+    }
+    std::vector<VbaValue> enumerate() override {
+        std::vector<VbaValue> values;
+        for (const auto& name : owner_->fieldNames())
+            values.push_back(VbaValue::reference(std::make_shared<Field>(owner_,name)));
+        return values;
+    }
+private:
+    std::shared_ptr<Recordset> owner_;
+};
+VbaValue fieldCollection(std::shared_ptr<Recordset> owner) {
+    return VbaValue::reference(std::make_shared<Fields>(std::move(owner)));
+}
+
 VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args) {
     require(args.empty(), "DAO: Unexpected field arguments");
     if (lower(name) == "value") return owner_->value(name_);

@@ -54,7 +54,8 @@ Full targets remain open:
   banker rounding, Unicode, operator precedence and three-valued logic.
 - [ ] Modules/classes/CodeBehind, scope/lifetime, static/module variables and references.
 - [ ] Calls/returns, ByRef/ByVal, Optional/ParamArray, arrays, properties and collections.
-- [ ] With, Select Case, Do/While, For Each, Exit and full conditional semantics.
+- [x] Native For Each/Next, Exit For, nested loops and DAO Fields enumeration; real 29-table structure regression.
+- [ ] With, Select Case, remaining Do/While/Exit variants and full conditional semantics.
 - [ ] On Error/Err/Resume, nested handlers and source-mapped diagnostics/debugger.
 - [ ] Application/Forms/Reports/Me/DoCmd and Access/DAO constants.
 - [ ] CurrentDb/DBEngine/Workspace/Database, DAO transactions and ADO adapter.

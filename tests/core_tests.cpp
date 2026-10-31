@@ -13,6 +13,14 @@
 #include <optional>
 
 namespace {
+class TestSequence final : public linaccess::VbaObject {
+public:
+    std::vector<linaccess::VbaValue> values;
+    linaccess::VbaValue member(std::string_view,const std::vector<linaccess::VbaValue>&) override {
+        throw linaccess::VbaRuntimeError(438,"No members");
+    }
+    std::vector<linaccess::VbaValue> enumerate() override { return values; }
+};
 class FakeForm final : public linaccess::VbaHost {
 public:
     std::map<std::string, std::optional<std::string>> fields;
@@ -55,6 +63,40 @@ public:
 
 int main() {
     using namespace linaccess;
+
+    {
+        FakeForm form;
+        const std::string module = R"VBA(
+Sub Iterate(ByVal items As Object)
+Dim item As Variant
+Dim total As Long
+Dim count As Long
+item = 7
+For Each item In items
+count = count + 1
+total = total + item
+Next item
+Me!Total = total
+Me!Count = count
+Me!Last = item
+End Sub
+)VBA";
+        auto sequence = std::make_shared<TestSequence>();
+        std::vector<VbaValue> args{VbaValue::reference(sequence)};
+        auto result = executeVbaProcedureWithArguments(module,"Iterate",form,args);
+        assert(result.status == VbaExecutionStatus::Completed);
+        assert(form.fields["Count"] == "0" && form.fields["Last"] == "7");
+        sequence->values = {VbaValue::numeric(2),VbaValue::numeric(5)};
+        result = executeVbaProcedureWithArguments(module,"Iterate",form,args);
+        assert(result.status == VbaExecutionStatus::Completed);
+        assert(form.fields["Total"] == "7" && form.fields["Last"] == "5");
+        args[0] = VbaValue::reference(nullptr);
+        result = executeVbaProcedureWithArguments(module,"Iterate",form,args);
+        assert(result.status == VbaExecutionStatus::Error && result.errorNumber == 91);
+        args[0] = VbaValue::numeric(2);
+        result = executeVbaProcedureWithArguments(module,"Iterate",form,args);
+        assert(result.status == VbaExecutionStatus::Error && result.errorNumber == 424);
+    }
     const auto csv = parseCsv("id,name\r\n1,\"Egger, Nico\"\r\n2,\"A\"\"B\"\r\n");
     assert(csv.size() == 3);
     assert(csv[1][1] == "Egger, Nico");

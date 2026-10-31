@@ -34,6 +34,9 @@ class VbaObject {
 public:
     virtual ~VbaObject() = default;
     virtual VbaValue member(std::string_view name, const std::vector<VbaValue>& arguments) = 0;
+    virtual std::vector<VbaValue> enumerate() {
+        throw VbaRuntimeError(438,"Object does not support enumeration");
+    }
     virtual void assign(std::string_view, const VbaValue&) {
         throw std::runtime_error("Objekteigenschaft ist nicht schreibbar");
     }

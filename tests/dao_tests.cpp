@@ -184,5 +184,69 @@ End Sub
     try { (void)linaccess::qtFieldValue(QVariant(qlonglong(9007199254740993LL)),"INTEGER"); }
     catch (const linaccess::VbaRuntimeError& error) { refusedLoss = error.number == 6; }
     assert(refusedLoss);
+
+    assert(q.exec("CREATE TABLE enumeration_values(a INTEGER,b INTEGER)"));
+    assert(q.exec("INSERT INTO enumeration_values VALUES(2,3)"));
+    const auto enumerated = linaccess::executeVbaProcedure(R"VBA(
+Sub Enumerate()
+Dim rs As DAO.Recordset
+Dim fld As DAO.Field
+Dim i As Long
+Dim visits As Long
+Set rs = CurrentDb.OpenRecordset("enumeration_values")
+Me!Count = rs.Fields.Count
+Me!First = rs.Fields.Item(0).Name
+For i = 1 To 2
+For Each fld In rs.Fields
+visits = visits + 1
+Next fld
+Next i
+Me!Visits = visits
+rs.Edit
+For Each fld In rs.Fields
+fld.Value = fld.Value * 2
+Next
+rs.Update
+visits = 0
+For Each fld In rs.Fields
+If fld.Name = "a" Then
+visits = visits + 1
+Exit For
+End If
+visits = 100
+Next
+Me!Exited = visits
+rs.Close
+End Sub
+)VBA","Enumerate",host);
+    if (enumerated.status != linaccess::VbaExecutionStatus::Completed) std::cerr << enumerated.explanation << " at " << enumerated.line << "\n";
+    assert(enumerated.status == linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["Count"] == "2" && host.fields["First"] == "a");
+    assert(host.fields["Visits"] == "4" && host.fields["Exited"] == "1");
+    assert(q.exec("SELECT a,b FROM enumeration_values") && q.next());
+    assert(q.value(0).toInt()==4 && q.value(1).toInt()==6); q.finish();
+    const auto enumerationError = linaccess::executeVbaProcedure(R"VBA(
+Sub Recover()
+Dim rs As DAO.Recordset
+Dim fld As DAO.Field
+Dim count As Long
+On Error GoTo Failed
+Set rs = CurrentDb.OpenRecordset("enumeration_values")
+For Each fld In rs.Fields
+Err.Raise 11
+count = count + 1
+Next fld
+Me!Recovered = count
+Exit Sub
+Failed:
+Resume Next
+End Sub
+)VBA","Recover",host);
+    assert(enumerationError.status == linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["Recovered"] == "2");
+    const auto wrongCollection = linaccess::executeVbaProcedure(
+        "Sub Bad()\nDim x\nFor Each x In CurrentDb\nNext\nEnd Sub","Bad",host);
+    assert(wrongCollection.status == linaccess::VbaExecutionStatus::Error && wrongCollection.errorNumber == 438);
+    assert(linaccess::validateVbaProcedure("Sub Bad()\nExit For\nEnd Sub","Bad").status == linaccess::VbaExecutionStatus::Error);
     std::cout << "DAO recordset iteration, edit, insert, fields, cancel, delete and read-only checks passed\n";
 }

@@ -33,6 +33,10 @@ parameter prompts, a read-only result model, and bounded saved-query form source
 DAO read-only results share the same executor. TOP, NULL, parameters, error clearing,
 DML rejection in result models and named TOP form sources have regression coverage.
 
+Completed iteration package: native For Each/Next, Exit For, DAO Fields collection,
+nested loops and error-handler loop restoration; schema counts verified on all
+29 original Kassa tables. Original collection-dependent procedures remain open.
+
 See DEVELOPMENT_CHECKLIST.md for all requirements and DAO_RUNTIME.md and
 MDB_IMPORT_REGRESSION.md for evidence and limitations. Private syntax inventory
 outputs remain under build and contain no raw VBA literals or fixture rows.
