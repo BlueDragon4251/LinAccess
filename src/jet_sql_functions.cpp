@@ -19,6 +19,10 @@ struct Api {
     int (*bytes)(sqlite3_value*){};
     void (*result)(sqlite3_context*,sqlite3_value*){};
     void (*error)(sqlite3_context*,const char*,int){};
+    void* (*aggregate)(sqlite3_context*,int){};
+    sqlite3_value* (*duplicate)(const sqlite3_value*){};
+    void (*freeValue)(sqlite3_value*){};
+    void (*nullResult)(sqlite3_context*){};
     Api() {
         library.setLoadHints(QLibrary::PreventUnloadHint);
         create = reinterpret_cast<Create>(library.resolve("sqlite3_create_function_v2"));
@@ -28,8 +32,12 @@ struct Api {
         bytes = reinterpret_cast<decltype(bytes)>(library.resolve("sqlite3_value_bytes"));
         result = reinterpret_cast<decltype(result)>(library.resolve("sqlite3_result_value"));
         error = reinterpret_cast<decltype(error)>(library.resolve("sqlite3_result_error"));
+        aggregate = reinterpret_cast<decltype(aggregate)>(library.resolve("sqlite3_aggregate_context"));
+        duplicate = reinterpret_cast<decltype(duplicate)>(library.resolve("sqlite3_value_dup"));
+        freeValue = reinterpret_cast<decltype(freeValue)>(library.resolve("sqlite3_value_free"));
+        nullResult = reinterpret_cast<decltype(nullResult)>(library.resolve("sqlite3_result_null"));
     }
-    bool valid() const { return create && type && number && text && bytes && result && error; }
+    bool valid() const { return create && type && number && text && bytes && result && error && aggregate && duplicate && freeValue && nullResult; }
 };
 Api& api() { static Api value; return value; }
 void iif(sqlite3_context* context,int,sqlite3_value** args) noexcept {
@@ -50,20 +58,53 @@ void iif(sqlite3_context* context,int,sqlite3_value** args) noexcept {
         native.result(context,args[condition ? 1 : 2]);
     } catch (...) { native.error(context,"Jet IIf evaluation failed",-1); }
 }
+// aggregate_context supplies zeroed storage. Each group retains one copied value;
+// no pointers into the temporary SQLite argument storage outlive a step callback.
+struct AggregateState { sqlite3_value* value; bool failed; };
+void aggregateStep(sqlite3_context* context,sqlite3_value* value,bool first) noexcept {
+    auto& native = api();
+    auto* state = static_cast<AggregateState*>(native.aggregate(context,sizeof(AggregateState)));
+    if (!state) { native.error(context,"Jet aggregate allocation failed",-1); return; }
+    if (state->failed || (first && state->value)) return;
+    auto* copied = native.duplicate(value);
+    if (!copied) { state->failed = true; native.error(context,"Jet aggregate allocation failed",-1); return; }
+    if (state->value) native.freeValue(state->value);
+    state->value = copied;
+}
+void firstStep(sqlite3_context* context,int,sqlite3_value** args) noexcept { aggregateStep(context,args[0],true); }
+void lastStep(sqlite3_context* context,int,sqlite3_value** args) noexcept { aggregateStep(context,args[0],false); }
+void aggregateFinal(sqlite3_context* context) noexcept {
+    auto& native = api();
+    auto* state = static_cast<AggregateState*>(native.aggregate(context,0));
+    if (!state) { native.nullResult(context); return; }
+    if (state->failed) native.error(context,"Jet aggregate allocation failed",-1);
+    else if (state->value) native.result(context,state->value);
+    else native.nullResult(context);
+    if (state->value) native.freeValue(state->value);
+    state->value = nullptr;
+}
+
 }
 void installJetSqlFunctions(QSqlDatabase db) {
     auto& native = api();
     auto handle = db.driver()->handle();
     if (!native.valid() || !handle.isValid() || QByteArray(handle.typeName()) != "sqlite3*")
-        throw VbaRuntimeError(3251,"Jet scalar adapters unavailable");
+        throw VbaRuntimeError(3251,"Jet SQL adapters unavailable");
     auto* connection = *static_cast<sqlite3**>(handle.data());
-    if (!connection) throw VbaRuntimeError(3251,"Jet scalar connection unavailable");
+    if (!connection) throw VbaRuntimeError(3251,"Jet SQL connection unavailable");
     // Probe the live connection, rather than caching a native pointer that could
     // be reused after close/open. Preparing this call does not execute arguments.
-    QSqlQuery probe(db);
-    if (probe.prepare("SELECT linaccess_jet_iif(0,NULL,NULL)")) return;
-    probe.clear();
-    if (native.create(connection,"linaccess_jet_iif",3,1,nullptr,&iif,nullptr,nullptr,nullptr) != 0)
-        throw VbaRuntimeError(3251,"Jet scalar adapter registration failed");
+    const auto ensure = [&](const char* name,int count,Api::Callback scalar,Api::Callback step,void (*final)(sqlite3_context*)) {
+        QSqlQuery probe(db);
+        QStringList args;
+        for (int i = 0; i < count; ++i) args.append("NULL");
+        if (probe.prepare("SELECT " + QString::fromLatin1(name) + "(" + args.join(',') + ")")) return;
+        probe.clear();
+        if (native.create(connection,name,count,1,nullptr,scalar,step,final,nullptr) != 0)
+            throw VbaRuntimeError(3251,"Jet SQL function registration failed");
+    };
+    ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
+    ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
+    ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
 }
 }

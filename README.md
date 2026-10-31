@@ -146,7 +146,7 @@ ctest --test-dir build-core --output-on-failure
 - Importierte Access-Abfragen laufen im Navigator über einen begrenzten Jet-SQL-
   Adapter mit Parameterdialogen, DAO-QueryDefs, TOP-Sortiergleichständen und eager
   IIf. Gespeicherte Abfragen können schreibgeschützte Formular-Datenquellen sein.
-  37/100 Kassenabfragen werden ausgeführt, bisher ohne Access-Referenzergebnis;
+  38/100 Kassenabfragen werden ausgeführt, bisher ohne Access-Referenzergebnis;
   siehe [Abfrageadapter](docs/QUERY_ADAPTER.md). Importierte Berichte haben eine
   grobe Layoutvorschau, noch keine Layout-/Druckkompatibilität.
 - Importierte Formulare bieten native `Forms`-/`Controls`-Sammlungen einschließlich

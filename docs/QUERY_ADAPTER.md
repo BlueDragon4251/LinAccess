@@ -38,8 +38,8 @@ Implemented with execution tests:
 ## Original corpus measurement
 
 All 100 original Kassa query artifacts are hash-checked and classified against a
-separate imported SQLite database. Current local run: 37 executed, 28 missing a
-query dependency, 23 unsupported function/compilation cases, 8 other unsupported
+separate imported SQLite database. Current local run: 38 executed, 28 missing a
+query dependency, 22 unsupported function/compilation cases, 8 other unsupported
 Jet/binding cases, 2 execution-budget failures and 2 action queries unexecuted by
 this corpus runner. Action query mutation is verified separately with typed
 QueryDefs tests. No row values or raw SQL are emitted in corpus reports.
@@ -82,7 +82,25 @@ close/reopen does not retain stale native-handle state.
 The model regression contrasts the SQLite built-in with the Jet adapter using
 an integer-overflow error in an unselected argument; the Jet path must fail.
 Numeric/text/NULL results, condition coercion and connection reopen are covered.
-The original query corpus still has 37 successful executions without an Access
+The original query corpus still has 38 successful executions without an Access
 reference oracle. Remaining expression differences include SQLite division by
 zero producing NULL and exact Jet numeric/locale behavior; eager IIf alone does
 not resolve those differences.
+
+## First and Last aggregates
+
+First(expr) and Last(expr) use native SQLite aggregate callbacks with one copied
+value per group. They retain NULL at the selected end, unlike Min/Max, and preserve
+the selected SQLite storage type. Empty inputs return NULL. Finalization releases
+copied SQLite values. The regression covers separate groups, NULL endpoints,
+empty input, exact SQLite 64-bit integers, real values, embedded-NUL BLOB values
+and connection reopening. This BLOB test concerns query results; it does not
+implement MDB OLE import or a VBA BLOB Variant.
+
+Selection follows the SQLite input scan order. Access also does not promise a
+particular First/Last result without an established record order; SQLite and Jet
+can choose different scans. No cross-engine equality claim is made. The original
+100-query run now executes 38 queries (one more than before this package), with
+22 function/compilation failures, 28 missing dependencies, 8 other unsupported
+cases, 2 execution-budget failures and 2 action queries left unexecuted by the
+read-only corpus runner. All statuses remain explicit and lack an Access oracle.

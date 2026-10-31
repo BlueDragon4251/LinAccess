@@ -12,7 +12,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original DAO insertion button execution | 1 |
 | Original form layouts scanned | 47 |
 | Parsed controls / visible command buttons | 878 / 86 |
-| Original query artifacts classified / executed without Access result oracle | 100 / 37 |
+| Original query artifacts classified / executed without Access result oracle | 100 / 38 |
 | Current local regression tests | 14 passed |
 
 Current completed work package: positional Sub/Function calls, ByVal/ByRef aliases,
@@ -45,6 +45,10 @@ Completed imported-form object package: project-scoped Forms and Controls
 collections, real cross-form data writes/saves, guarded Qt object lifetimes and
 bang/property namespace separation (FORM_OBJECT_MODEL.md). All 47 original form
 layouts instantiate in the structure regression; full execution remains open.
+
+Completed aggregate package: First/Last with NULL endpoints and copied per-group
+values; original query executions increased to 38/100 without an Access oracle.
+Cross-engine ordering and remaining dialect dependencies remain open.
 
 See DEVELOPMENT_CHECKLIST.md for all requirements and DAO_RUNTIME.md and
 MDB_IMPORT_REGRESSION.md for evidence and limitations. Private syntax inventory

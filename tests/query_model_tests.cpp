@@ -50,8 +50,28 @@ int main(int argc, char** argv) {
     try { model.execute(db,"SELECT IIf('invalid',1,2)"); }
     catch(const linaccess::VbaRuntimeError&) { rejected = true; }
     assert(rejected);
+
+    assert(query.exec("CREATE TABLE aggregate_values(group_name TEXT,sequence INTEGER,value TEXT)"));
+    assert(query.exec("INSERT INTO aggregate_values VALUES('a',1,NULL),('a',2,'last'),('b',1,'first'),('b',2,NULL)"));
+    query.finish();
+    model.execute(db,"SELECT group_name,First(value),Last(value) FROM (SELECT * FROM aggregate_values ORDER BY sequence) GROUP BY group_name ORDER BY group_name");
+    assert(model.rowCount()==2 && model.columnCount()==3);
+    assert(model.data(model.index(0,1)).isNull() && model.data(model.index(0,2)).toString()=="last");
+    assert(model.data(model.index(1,1)).toString()=="first" && model.data(model.index(1,2)).isNull());
+    model.execute(db,"SELECT First(value),Last(value) FROM aggregate_values WHERE 1=0");
+    assert(model.rowCount()==1 && model.data(model.index(0,0)).isNull() && model.data(model.index(0,1)).isNull());
+    model.execute(db,"SELECT First(9007199254740993),Last(7.5)");
+    assert(model.data(model.index(0,0)).toLongLong()==9007199254740993LL);
+    assert(model.data(model.index(0,1)).toDouble()==7.5);
+    assert(query.exec("CREATE TABLE aggregate_blobs(value BLOB)"));
+    query.prepare("INSERT INTO aggregate_blobs VALUES(?)");
+    const auto binary = QByteArray::fromHex("0001ff00"); query.addBindValue(binary); assert(query.exec()); query.finish();
+    model.execute(db,"SELECT First(value),Last(value) FROM aggregate_blobs");
+    assert(model.data(model.index(0,0)).toByteArray()==binary && model.data(model.index(0,1)).toByteArray()==binary);
     query.clear(); db.close(); assert(db.open());
     model.execute(db,"SELECT IIf(True,5,6)");
     assert(model.data(model.index(0,0)).toInt()==5);
+    model.execute(db,"SELECT First(12),Last('restored')");
+    assert(model.data(model.index(0,0)).toInt()==12 && model.data(model.index(0,1)).toString()=="restored");
 
 }
