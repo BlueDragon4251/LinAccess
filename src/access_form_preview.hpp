@@ -47,6 +47,8 @@ private:
     void openOtherForm(const QString& name);
     std::optional<std::string> getField(std::string_view name) const;
     void setField(std::string_view name, std::optional<std::string> value);
+    linaccess::VbaValue getFieldValue(std::string_view name) const;
+    void setFieldValue(std::string_view name,const linaccess::VbaValue& value);
     friend class PreviewVbaHost;
 
     QString formName_;
@@ -57,6 +59,7 @@ private:
     QLabel* status_{};
     QMap<QString, QWidget*> controls_;
     QStringList dataColumns_;
+    QMap<QString,QString> dataTypes_;
     QVector<QVariantList> recordRows_;
     QVector<QVariant> rowIds_;
     int renderedControls_{};

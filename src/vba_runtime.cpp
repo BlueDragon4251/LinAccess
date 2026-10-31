@@ -647,8 +647,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::SetField:
                 if (active) {
                     if (++effects > 1000) throw std::runtime_error("VBA-Effektbudget erreicht");
-                    host.setField(instruction.argument,
-                        evaluate(instruction.expression).asField());
+                    host.setFieldValue(instruction.argument,evaluate(instruction.expression));
                 }
                 break;
             case Statement::Type::ObjectSet:

@@ -1,4 +1,5 @@
 #include "dao_database.hpp"
+#include "vba_qt_value.hpp"
 #include "access_query.hpp"
 #include "sqlite_execution.hpp"
 #include "vba_runtime.hpp"
@@ -174,5 +175,14 @@ End Sub
         assert(!q.exec("WITH RECURSIVE forever(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM forever) SELECT sum(x) FROM forever"));
     }
     assert(q.exec("SELECT 1")); assert(q.next() && q.value(0).toInt() == 1);
+    const auto boolValue = linaccess::qtFieldValue(QVariant(-1),"BOOLEAN");
+    assert(boolValue.kind == linaccess::VbaValue::Kind::Boolean && boolValue.boolean);
+    const auto textValue = linaccess::sqlFieldValue(linaccess::VbaValue::numeric(3),"TEXT");
+    assert(textValue.metaType().id() == QMetaType::QString && textValue.toString() == "3");
+    assert(linaccess::sqlFieldValue(linaccess::VbaValue::string("2003-12-31"),"DATETIME").toString() == "2003-12-31 00:00:00");
+    bool refusedLoss = false;
+    try { (void)linaccess::qtFieldValue(QVariant(qlonglong(9007199254740993LL)),"INTEGER"); }
+    catch (const linaccess::VbaRuntimeError& error) { refusedLoss = error.number == 6; }
+    assert(refusedLoss);
     std::cout << "DAO recordset iteration, edit, insert, fields, cancel, delete and read-only checks passed\n";
 }

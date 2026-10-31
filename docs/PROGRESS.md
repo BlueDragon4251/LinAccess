@@ -25,7 +25,11 @@ execution. Full Jet/ACE SQL and original Kassa operation remain open.
 Completed event package: bound-form lifecycle, validation/cancellation, navigation
 save, close handling and synchronized bindings (FORM_EVENTS.md).
 
-Next work package: typed control values and Boolean import semantics.
+Completed typed-field package: Qt/native form/DAO values, all 16 Kassa Boolean
+columns, True=-1 normalization and explicit numeric/date validation (TYPED_FIELDS.md).
+
+Next work package: expose translated imported queries in the application UI and
+use the same bounded result path for saved form queries.
 
 See DEVELOPMENT_CHECKLIST.md for all requirements and DAO_RUNTIME.md and
 MDB_IMPORT_REGRESSION.md for evidence and limitations. Private syntax inventory

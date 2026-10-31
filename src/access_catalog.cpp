@@ -137,13 +137,18 @@ QString AccessCatalog::tableSchema(const QString& name) const {
     auto schema = QString::fromUtf8(tool("mdb-schema", {"-T", name, file_, "sqlite"}));
     // MDBTools 1.0.0's SQLite backend omits all keys and indexes. Its MySQL
     // backend exposes them. Read only structural ALTER lines; never execute them.
-    if (!schema.contains("PRIMARY KEY", Qt::CaseInsensitive)
-        || !schema.contains("CREATE INDEX", Qt::CaseInsensitive)) {
+    {
         const auto metadata = QString::fromUtf8(tool("mdb-schema", {"-T", name, file_, "mysql"}));
         const bool needKeys = !schema.contains("PRIMARY KEY", Qt::CaseInsensitive);
         const bool needIndexes = !schema.contains("CREATE INDEX", Qt::CaseInsensitive)
             && !schema.contains("CREATE UNIQUE INDEX", Qt::CaseInsensitive);
+        const QRegularExpression column(R"(^\s*`((?:``|[^`])+)`\s+([A-Za-z][A-Za-z0-9_]*))");
         for (const auto& line : metadata.split('\n')) {
+            const auto field = column.match(line);
+            if (field.hasMatch()) {
+                const auto nameBytes = field.captured(1).replace("``","`").toUtf8().toHex();
+                schema += "\n-- LINACCESS_SOURCE_TYPE " + QString::fromLatin1(nameBytes) + ' ' + field.captured(2).toUpper();
+            }
             if (!line.startsWith("ALTER TABLE ", Qt::CaseInsensitive)) continue;
             if ((needKeys && line.contains(" ADD PRIMARY KEY ", Qt::CaseInsensitive))
                 || (needIndexes && (line.contains(" ADD INDEX ", Qt::CaseInsensitive)

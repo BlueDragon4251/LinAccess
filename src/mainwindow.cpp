@@ -7,6 +7,7 @@
 #include "vba_analyzer.hpp"
 #include "vba_runtime.hpp"
 #include "dao_database.hpp"
+#include "vba_qt_value.hpp"
 #include "access_query.hpp"
 #include "vba_source_codec.hpp"
 
@@ -95,6 +96,16 @@ public:
     void setField(std::string_view name, std::optional<std::string> value) override {
         lookup(name)->setText(value ? QString::fromUtf8(value->data(),
                                                        static_cast<qsizetype>(value->size())) : QString{});
+    }
+    linaccess::VbaValue fieldValue(std::string_view name) override {
+        auto* editor = lookup(name);
+        return linaccess::qtFieldValue(editor->property("la_null").toBool() ? QVariant{} : QVariant(editor->text()),
+                                      editor->property("la_sql_type").toString());
+    }
+    void setFieldValue(std::string_view name,const linaccess::VbaValue& value) override {
+        auto* editor = lookup(name);
+        const auto converted = linaccess::sqlFieldValue(value,editor->property("la_sql_type").toString());
+        editor->setText(converted.toString()); editor->setProperty("la_null",converted.isNull());
     }
     void message(std::string_view text) override {
         QMessageBox::information(parent_, "VBA MsgBox",
@@ -853,9 +864,13 @@ void MainWindow::runForm(const QString& name) {
     outer->addWidget(records);
     auto* form = new QFormLayout();
     std::vector<std::pair<QString, QLineEdit*>> entries;
+    const auto fieldTypes = linaccess::sqliteColumnTypes(db_,tableName);
     for (const auto& field : fieldsJson) {
         const auto column = field.toString();
         auto* edit = new QLineEdit(&dialog);
+        edit->setProperty("la_sql_type",fieldTypes.value(column.toCaseFolded()));
+        edit->setProperty("la_null",true);
+        connect(edit,&QLineEdit::textEdited,edit,[edit] { edit->setProperty("la_null",false); });
         entries.emplace_back(column, edit);
         form->addRow(column, edit);
     }
@@ -873,24 +888,30 @@ void MainWindow::runForm(const QString& name) {
             if (idx >= 0) records->setCurrentIndex(idx);
         }
         records->blockSignals(false);
-        for (const auto& entry : entries) entry.second->clear();
+        for (const auto& entry : entries) { entry.second->clear(); entry.second->setProperty("la_null",true); }
         if (records->currentData().isNull()) return;
         QSqlQuery row(db_);
         row.prepare("SELECT * FROM " + quoteSql(tableName) + " WHERE " + keyExpr + "=?");
         row.addBindValue(records->currentData());
         if (row.exec() && row.next())
             for (const auto& entry : entries)
-                entry.second->setText(asText(row.value(row.record().indexOf(entry.first))));
+                {
+                    const auto value = row.value(row.record().indexOf(entry.first));
+                    entry.second->setText(asText(value)); entry.second->setProperty("la_null",value.isNull());
+                }
     };
     connect(records, &QComboBox::currentIndexChanged, &dialog, [this, tableName, keyExpr, records, entries] {
-        for (const auto& entry : entries) entry.second->clear();
+        for (const auto& entry : entries) { entry.second->clear(); entry.second->setProperty("la_null",true); }
         if (records->currentData().isNull()) return;
         QSqlQuery row(db_);
         row.prepare("SELECT * FROM " + quoteSql(tableName) + " WHERE " + keyExpr + "=?");
         row.addBindValue(records->currentData());
         if (row.exec() && row.next())
             for (const auto& entry : entries)
-                entry.second->setText(asText(row.value(row.record().indexOf(entry.first))));
+                {
+                    const auto value = row.value(row.record().indexOf(entry.first));
+                    entry.second->setText(asText(value)); entry.second->setProperty("la_null",value.isNull());
+                }
     });
     auto* buttons = new QHBoxLayout();
     auto* create = addButton(buttons, "Neu");
@@ -914,8 +935,13 @@ void MainWindow::runForm(const QString& name) {
         else
             query.prepare("UPDATE " + quoteSql(tableName) + " SET " + assignments.join(",")
                           + " WHERE " + keyExpr + "=?");
-        for (const auto& entry : entries)
-            query.addBindValue(entry.second->text().isEmpty() ? QVariant{} : QVariant(entry.second->text()));
+        try {
+            for (const auto& entry : entries) {
+                auto* editor = entry.second; const auto type = editor->property("la_sql_type").toString();
+                const auto value = linaccess::qtFieldValue(editor->property("la_null").toBool() ? QVariant{} : QVariant(editor->text()),type);
+                query.addBindValue(linaccess::sqlFieldValue(value,type));
+            }
+        } catch (const std::exception& error) { messageError(this,QString::fromUtf8(error.what())); return false; }
         if (!id.isNull()) query.addBindValue(id);
         if (!query.exec()) { messageError(this, query.lastError().text()); return false; }
         reload(id.isNull() ? query.lastInsertId() : id);

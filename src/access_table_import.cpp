@@ -42,9 +42,16 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
     };
     AccessTableSchema result;
     QStringList keys;
+    QMap<QString,QString> sourceTypes;
     bool inTable = false;
     for (const auto& raw : schema.split('\n')) {
         const auto text = raw.trimmed();
+        static const QRegularExpression sourceType(R"(^-- LINACCESS_SOURCE_TYPE ([0-9a-fA-F]+) ([A-Z][A-Z0-9_]*)$)");
+        const auto source = sourceType.match(text);
+        if (source.hasMatch()) {
+            sourceTypes.insert(QString::fromUtf8(QByteArray::fromHex(source.captured(1).toLatin1())),source.captured(2));
+            continue;
+        }
         if (text.startsWith("CREATE TABLE ", Qt::CaseInsensitive)) {
             if (!result.columns.empty()) return {}; // exactly one table
             inTable = true;
@@ -88,6 +95,8 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
         }
         if (!found) return {};
     }
+    for (auto& column : result.columns)
+        if (sourceTypes.contains(column.name)) column.sourceType = sourceTypes.value(column.name);
     return result;
 }
 
@@ -156,6 +165,10 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                 // single-character markers mean NULL, not quoted literal text.
                 if (!cell.quoted && cell.value == "\x1e") {
                     converted = QVariant();
+                } else if (columns[c].sourceType == "BOOLEAN" || columns[c].sourceType == "BIT") {
+                    if (value == "1" || value == "-1" || value.compare("TRUE",Qt::CaseInsensitive) == 0) converted = qlonglong(-1);
+                    else if (value == "0" || value.compare("FALSE",Qt::CaseInsensitive) == 0) converted = qlonglong(0);
+                    else throw fail("Ungültiger Boolean-Exportwert");
                 } else if (columns[c].sqliteType == "BLOB") {
                     // MDBTools CSV exports are not an unambiguous OLE binary
                     // serialization. Preserve NULLs, but do not reinterpret

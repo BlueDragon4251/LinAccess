@@ -178,4 +178,93 @@ End Sub
     assert(!dirtyCancel.hasUnsavedChanges() && cancelledEdit->text() == "leave" && value(1) == "leave");
     assert(dirtyCancel.close());
 
+    assert(query.exec("CREATE TABLE typed_records(id INTEGER PRIMARY KEY,quantity INTEGER,price REAL,label TEXT,flag BOOLEAN)"));
+    assert(query.exec("INSERT INTO typed_records VALUES (1,12,3.5,'',-1)"));
+    const QByteArray typedForm = R"FORM(Begin Form
+RecordSource ="typed_records"
+Begin Section
+Height =3000
+Begin TextBox
+Name ="Quantity"
+ControlSource ="quantity"
+End
+Begin TextBox
+Name ="Price"
+ControlSource ="price"
+Top =400
+End
+Begin TextBox
+Name ="LabelValue"
+ControlSource ="label"
+Top =800
+End
+Begin CheckBox
+Name ="Flag"
+ControlSource ="flag"
+Top =1200
+End
+Begin TextBox
+Name ="Result"
+Top =1600
+End
+Begin TextBox
+Name ="Temporary"
+End
+Begin TextBox
+Name ="BoolText"
+End
+Begin TextBox
+Name ="NullText"
+End
+Begin CommandButton
+Name ="Compute"
+OnClick ="[Event Procedure]"
+End
+Begin CommandButton
+Name ="Assign"
+OnClick ="[Event Procedure]"
+End
+End
+End
+)FORM";
+    const QByteArray typedCode = R"VBA(Sub Compute_Click()
+Me!Result = Me!Quantity + Me!Price
+Me!BoolText = CStr(Me!Flag)
+If IsNull(Me!LabelValue) Then
+Me!NullText = "null"
+Else
+Me!NullText = "text"
+End If
+End Sub
+Sub Assign_Click()
+Me!Quantity = 2.5
+Me!Flag = False
+Me!LabelValue = ""
+Me!Temporary = 7
+Me!Result = Me!Temporary + Me!Quantity
+End Sub
+)VBA";
+    AccessFormPreview typed("typed",typedForm,typedCode,db);
+    auto* compute = typed.findChild<QPushButton*>("access-control-Compute");
+    auto* assign = typed.findChild<QPushButton*>("access-control-Assign");
+    auto* result = typed.findChild<QLineEdit*>("access-control-Result");
+    auto* boolean = typed.findChild<QLineEdit*>("access-control-BoolText");
+    auto* null = typed.findChild<QLineEdit*>("access-control-NullText");
+    auto* typedSave = typed.findChild<QPushButton*>("access-save-record");
+    assert(compute && assign && result && boolean && null && typedSave);
+    compute->click(); assert(result->text() == "15.5" && boolean->text() == "True" && null->text() == "text");
+    assign->click(); assert(result->text() == "9"); typedSave->click();
+    assert(query.exec("SELECT quantity,typeof(quantity),flag,label,label IS NULL FROM typed_records WHERE id=1"));
+    assert(query.next() && query.value(0).toInt() == 2 && query.value(1).toString() == "integer");
+    assert(query.value(2).toInt() == 0 && query.value(3).toString().isEmpty() && query.value(4).toInt() == 0);
+    query.finish();
+    compute->click(); assert(result->text() == "5.5" && boolean->text() == "False");
+    typed.show(); typed.activateWindow(); QCoreApplication::processEvents();
+    auto* quantity = typed.findChild<QLineEdit*>("access-control-Quantity"); assert(quantity);
+    quantity->setFocus(); quantity->selectAll(); QTest::keyClicks(quantity,"bad"); quantity->clearFocus();
+    typedSave->click(); assert(typed.hasUnsavedChanges());
+    assert(query.exec("SELECT quantity FROM typed_records WHERE id=1")); assert(query.next() && query.value(0).toInt() == 2); query.finish();
+    quantity->setFocus(); quantity->selectAll(); QTest::keyClicks(quantity,"3"); quantity->clearFocus(); typedSave->click();
+    assert(!typed.hasUnsavedChanges()); assert(typed.close());
+
 }

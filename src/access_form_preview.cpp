@@ -2,6 +2,7 @@
 
 #include "vba_runtime.hpp"
 #include "dao_database.hpp"
+#include "vba_qt_value.hpp"
 #include "access_query.hpp"
 #include "sqlite_execution.hpp"
 #include "vba_analyzer.hpp"
@@ -23,6 +24,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QSqlRecord>
+#include <QSqlField>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -77,12 +79,26 @@ public:
         if (key == "newrecord") return preview_.currentRecordIndex_ == 0 ? "-1" : "0";
         return preview_.getField(name);
     }
+    linaccess::VbaValue fieldValue(std::string_view name) override {
+        const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
+        if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
+        return preview_.getFieldValue(name);
+    }
+    void setFieldValue(std::string_view name,const linaccess::VbaValue& value) override {
+        const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if (key == "dirty") { setField(name,value.asField()); return; }
+        preview_.setFieldValue(name,value);
+    }
     void setField(std::string_view name, std::optional<std::string> value) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (key == "dirty") {
             if (value && (*value == "0" || *value == "False")) {
                 if (!preview_.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record save cancelled");
-            } else preview_.markDirty({});
+            } else {
+                if (!preview_.directTable_) throw linaccess::VbaRuntimeError(2448,"Record source is read-only");
+                preview_.markDirty({});
+            }
             return;
         }
         preview_.setField(name, std::move(value));
@@ -264,12 +280,15 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         if (!control.name.isEmpty()) controls_.insert(control.name.toCaseFolded(), widget);
         const auto name = control.name;
         widget->setProperty("la_null",true);
+        widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Null));
         if (auto* line = qobject_cast<QLineEdit*>(widget)) {
             connect(line,&QLineEdit::textChanged,this,[this,name,widget] {
                 if (loading_) return;
                 widget->setProperty("la_null",false); markDirty(name);
             });
-            connect(line,&QLineEdit::textEdited,this,[this,name] { if (!loading_) pendingControls_.insert(name); });
+            connect(line,&QLineEdit::textEdited,this,[this,name,widget] {
+                if (!loading_) { pendingControls_.insert(name); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text)); }
+            });
             connect(line,&QLineEdit::editingFinished,this,[this,name] { if (!loading_) (void)commitControl(name); });
         } else if (auto* combo = qobject_cast<QComboBox*>(widget)) {
             connect(combo,&QComboBox::currentTextChanged,this,[this,name,widget] {
@@ -296,7 +315,7 @@ void AccessFormPreview::loadRecords() {
         ? rowIds_[currentRecordIndex_-1] : QVariant{};
     const int oldIndex = currentRecordIndex_;
     recordSelector_->blockSignals(true);
-    recordSelector_->clear(); recordRows_.clear(); rowIds_.clear(); dataColumns_.clear();
+    recordSelector_->clear(); recordRows_.clear(); rowIds_.clear(); dataColumns_.clear(); dataTypes_.clear();
     dataSourceAvailable_ = false; directTable_ = false; dataTruncated_ = false;
     recordSelector_->addItem("(Neuer Datensatz)");
     const auto source = layout_.recordSource.trimmed();
@@ -310,6 +329,7 @@ void AccessFormPreview::loadRecords() {
                 sql = plan.sql;
             } else {
                 directTable_ = db_.tables().contains(source,Qt::CaseInsensitive);
+                if (directTable_) dataTypes_ = linaccess::sqliteColumnTypes(db_,source);
                 sql = directTable_ ? "SELECT rowid AS __la_rowid,* FROM " + sqlIdentifier(source)
                                    : "SELECT * FROM " + sqlIdentifier(source);
             }
@@ -343,9 +363,10 @@ void AccessFormPreview::loadRecords() {
     currentRecordIndex_ = selected; initialized_ = true;
     recordSelector_->blockSignals(false);
     loadRecord();
+    if (auto* save = findChild<QPushButton*>("access-save-record")) save->setEnabled(dataSourceAvailable_ && directTable_);
     if (status_) status_->setText(dataSourceAvailable_
         ? "Access-Layout: " + QString::number(renderedControls_) + " Elemente, "
-            + QString::number(recordRows_.size()) + " Datensätze." + (dataTruncated_ ? " Anzeige auf die ersten 10000 begrenzt." : "")
+            + QString::number(recordRows_.size()) + " Datensätze." + (!directTable_ ? " Datenquelle schreibgeschützt." : "") + (dataTruncated_ ? " Anzeige auf die ersten 10000 begrenzt." : "")
         : "Die Datenquelle ist nicht verfügbar oder ihre Ausführung wurde abgebrochen: " + source);
 }
 
@@ -359,7 +380,20 @@ void AccessFormPreview::loadRecord() {
         const int row = currentRecordIndex_-1;
         QVariant value;
         if (row >= 0 && row < recordRows_.size() && index >= 0) value = recordRows_[row][index];
+        auto type = index >= 0 ? dataTypes_.value(dataColumns_[index].toCaseFolded()) : QString{};
+        if (type.isEmpty() && value.isValid()) {
+            const auto id = value.metaType().id();
+            if (id == QMetaType::LongLong || id == QMetaType::Int) type = "INTEGER";
+            else if (id == QMetaType::Double) type = "REAL";
+            else if (id == QMetaType::Bool) type = "BOOLEAN";
+            else type = "TEXT";
+        }
+        widget->setProperty("la_sql_type",type);
+        if (auto* line = qobject_cast<QLineEdit*>(widget))
+            line->setReadOnly(control.controlSource.startsWith('=') || (index >= 0 && !directTable_));
+        else if (qobject_cast<QCheckBox*>(widget) || qobject_cast<QComboBox*>(widget)) widget->setEnabled(index < 0 || directTable_);
         setText(widget,value.toString()); widget->setProperty("la_null",value.isNull());
+        widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
     }
     dirty_ = false; pendingControls_.clear();
 }
@@ -432,7 +466,9 @@ bool AccessFormPreview::saveRecord() {
         const auto column = sqlIdentifier(dataColumns_[fieldIndex]);
         if (columns.contains(column)) continue;
         columns << column; placeholders << "?";
-        values << (widget->property("la_null").toBool() ? QVariant{} : QVariant(textOf(widget)));
+        try {
+            values << linaccess::sqlFieldValue(getFieldValue(control.name.toUtf8().toStdString()),widget->property("la_sql_type").toString());
+        } catch (const std::exception& error) { status_->setText(QString::fromUtf8(error.what())); return false; }
     }
     if (columns.empty()) return false;
     QSqlQuery query(db_);
@@ -509,6 +545,33 @@ void AccessFormPreview::setField(std::string_view name, std::optional<std::strin
     }
     if (wasNull != !value.has_value() || previous != textOf(widget))
         markDirty(QString::fromUtf8(name.data(),name.size()));
+}
+
+linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) const {
+    auto* widget = controls_.value(QString::fromUtf8(name.data(),name.size()).toCaseFolded());
+    if (!widget) throw linaccess::VbaRuntimeError(2465,"Unknown form control");
+    if (widget->property("la_null").toBool()) return {};
+    auto type = widget->property("la_sql_type").toString();
+    if (type.isEmpty()) {
+        const auto kind = static_cast<linaccess::VbaValue::Kind>(widget->property("la_vba_kind").toInt());
+        if (kind == linaccess::VbaValue::Kind::Empty) return linaccess::VbaValue::empty();
+        if (kind == linaccess::VbaValue::Kind::Number) type = "REAL";
+        if (kind == linaccess::VbaValue::Kind::Boolean || qobject_cast<QCheckBox*>(widget)) type = "BOOLEAN";
+    }
+    return linaccess::qtFieldValue(textOf(widget),type);
+}
+void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::VbaValue& value) {
+    auto* widget = controls_.value(QString::fromUtf8(name.data(),name.size()).toCaseFolded());
+    if (!widget) throw linaccess::VbaRuntimeError(2465,"Unknown form control");
+    const auto type = widget->property("la_sql_type").toString();
+    const auto converted = linaccess::sqlFieldValue(value,type);
+    const auto before = textOf(widget); const bool wasNull = widget->property("la_null").toBool();
+    {
+        QScopedValueRollback<bool> loading(loading_,true);
+        setText(widget,converted.toString()); widget->setProperty("la_null",converted.isNull());
+        widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
+    }
+    if (before != textOf(widget) || wasNull != converted.isNull()) markDirty(QString::fromUtf8(name.data(),name.size()));
 }
 
 void AccessFormPreview::openOtherForm(const QString& name) {

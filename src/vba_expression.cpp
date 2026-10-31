@@ -270,8 +270,7 @@ private:
             if (field.type != Token::Type::Word && field.type != Token::Type::Bracket)
                 throw error("Me! benötigt einen Feldnamen");
             if (!host_) return {};
-            const auto value = host_->field(field.value);
-            return value ? VbaValue::string(*value) : VbaValue{};
+            return host_->fieldValue(field.value);
         }
         if (take("(")) {
             std::vector<VbaValue> args;
@@ -384,6 +383,11 @@ private:
 };
 } // namespace
 
+VbaValue VbaHost::fieldValue(std::string_view name) {
+    const auto value = field(name);
+    return value ? VbaValue::string(*value) : VbaValue{};
+}
+void VbaHost::setFieldValue(std::string_view name,const VbaValue& value) { setField(name,value.asField()); }
 VbaValue VbaValue::empty() { VbaValue v; v.kind = Kind::Empty; return v; }
 VbaValue VbaValue::reference(std::shared_ptr<VbaObject> value) { VbaValue v; v.kind = Kind::Object; v.object = std::move(value); return v; }
 VbaValue VbaValue::numeric(double value) { VbaValue v; v.kind = Kind::Number; v.number = value; return v; }

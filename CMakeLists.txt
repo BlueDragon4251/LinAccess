@@ -10,18 +10,24 @@ option(LINACCESS_BUILD_GUI "Build the native Qt desktop application" ON)
 if(LINACCESS_BUILD_GUI)
     set(CMAKE_AUTOMOC ON)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Sql PrintSupport)
+    add_library(linaccess_data STATIC
+        src/access_catalog.cpp src/access_table_import.cpp src/access_query.cpp
+        src/dao_database.cpp src/sqlite_execution.cpp src/vba_source_codec.cpp
+        src/vba_qt_value.cpp src/access_form_import.cpp)
+    target_link_libraries(linaccess_data PUBLIC linaccess_runtime Qt6::Core Qt6::Sql)
+    target_include_directories(linaccess_data PUBLIC src)
     add_executable(linaccess
-        src/dao_database.cpp src/access_query.cpp src/sqlite_execution.cpp
+
         src/main.cpp
         src/mainwindow.cpp
         src/mainwindow.hpp
         src/access_inspector.cpp
         src/access_inspector.hpp
-        src/access_catalog.cpp
+
         src/access_catalog.hpp
-        src/access_table_import.cpp
+
         src/access_table_import.hpp
-        src/access_form_import.cpp
+
         src/access_form_import.hpp
         src/access_form_preview.cpp
         src/access_form_preview.hpp
@@ -33,12 +39,12 @@ if(LINACCESS_BUILD_GUI)
         src/vba_runtime.hpp
 
         src/vba_expression.hpp
-        src/vba_source_codec.cpp
+
         src/vba_source_codec.hpp
 
         src/csv.hpp
     )
-    target_link_libraries(linaccess PRIVATE linaccess_runtime Qt6::Widgets Qt6::Sql Qt6::PrintSupport)
+    target_link_libraries(linaccess PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport)
     # Cloud workspaces can use umask 0077. Installed system directories must
     # remain traversable by ordinary desktop users in the generated package.
     set(CMAKE_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
@@ -69,46 +75,46 @@ if(BUILD_TESTING)
     add_test(NAME core_tests COMMAND linaccess_core_tests)
     if(LINACCESS_BUILD_GUI)
         find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
-        add_executable(linaccess_dao_tests tests/dao_tests.cpp src/dao_database.cpp src/access_query.cpp src/sqlite_execution.cpp src/vba_source_codec.cpp
+        add_executable(linaccess_dao_tests tests/dao_tests.cpp
              )
         target_include_directories(linaccess_dao_tests PRIVATE src)
-        target_link_libraries(linaccess_dao_tests PRIVATE linaccess_runtime Qt6::Core Qt6::Sql)
+        target_link_libraries(linaccess_dao_tests PRIVATE linaccess_runtime linaccess_data Qt6::Core Qt6::Sql)
         add_test(NAME dao_execution COMMAND linaccess_dao_tests)
         add_executable(linaccess_table_import_tests tests/access_table_import_tests.cpp
-            src/access_table_import.cpp src/access_catalog.cpp )
+              )
         target_include_directories(linaccess_table_import_tests PRIVATE src)
-        target_link_libraries(linaccess_table_import_tests PRIVATE linaccess_runtime Qt6::Core Qt6::Sql)
+        target_link_libraries(linaccess_table_import_tests PRIVATE linaccess_runtime linaccess_data Qt6::Core Qt6::Sql)
         add_test(NAME table_import_contracts COMMAND linaccess_table_import_tests)
         add_executable(linaccess_mdb_tests
             tests/mdb_tests.cpp
-            src/access_catalog.cpp
+
             src/access_catalog.hpp
-            src/access_table_import.cpp
+
             src/access_table_import.hpp
 
             src/csv.hpp)
         target_include_directories(linaccess_mdb_tests PRIVATE src)
-        target_link_libraries(linaccess_mdb_tests PRIVATE linaccess_runtime Qt6::Core Qt6::Sql)
+        target_link_libraries(linaccess_mdb_tests PRIVATE linaccess_runtime linaccess_data Qt6::Core Qt6::Sql)
         set(LINACCESS_REAL_MDB_FILE "" CACHE FILEPATH "Optional real MDB regression test path (not distributed)")
         if(LINACCESS_REAL_MDB_FILE AND EXISTS "${LINACCESS_REAL_MDB_FILE}")
             add_test(NAME mdb_real_fixture COMMAND linaccess_mdb_tests "${LINACCESS_REAL_MDB_FILE}")
             add_executable(linaccess_mdb_inspector_gui_tests
                 tests/mdb_inspector_gui_tests.cpp
                 src/access_inspector.cpp src/access_inspector.hpp
-                src/access_catalog.cpp src/access_catalog.hpp
-                src/access_table_import.cpp src/access_table_import.hpp
+                 src/access_catalog.hpp
+                 src/access_table_import.hpp
                  src/csv.hpp)
             target_include_directories(linaccess_mdb_inspector_gui_tests PRIVATE src)
-            target_link_libraries(linaccess_mdb_inspector_gui_tests PRIVATE linaccess_runtime Qt6::Widgets Qt6::Sql)
+            target_link_libraries(linaccess_mdb_inspector_gui_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql)
             add_test(NAME mdb_inspector_gui_tests
                 COMMAND linaccess_mdb_inspector_gui_tests "${LINACCESS_REAL_MDB_FILE}")
             set_tests_properties(mdb_inspector_gui_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
         endif()
         add_executable(linaccess_bridge_gui_tests
             tests/bridge_gui_tests.cpp
-            src/bridge_importer.cpp src/access_query.cpp
+            src/bridge_importer.cpp
             src/bridge_importer.hpp
-            src/vba_source_codec.cpp
+
             src/vba_source_codec.hpp
 
             src/vba_runtime.hpp
@@ -118,7 +124,7 @@ if(BUILD_TESTING)
             src/vba_analyzer.hpp
         )
         target_include_directories(linaccess_bridge_gui_tests PRIVATE src)
-        target_link_libraries(linaccess_bridge_gui_tests PRIVATE linaccess_runtime Qt6::Widgets Qt6::Sql)
+        target_link_libraries(linaccess_bridge_gui_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql)
         target_compile_definitions(linaccess_bridge_gui_tests PRIVATE
             LINACCESS_FIXTURE_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/examples/bridge_sample")
         add_test(NAME bridge_gui_tests COMMAND linaccess_bridge_gui_tests)
@@ -127,15 +133,15 @@ if(BUILD_TESTING)
         if(LINACCESS_REAL_BRIDGE_DIR AND EXISTS "${LINACCESS_REAL_BRIDGE_DIR}/manifest.json")
             add_executable(linaccess_real_bridge_tests
                 tests/real_bridge_tests.cpp
-                src/bridge_importer.cpp src/access_query.cpp src/bridge_importer.hpp
-                src/vba_source_codec.cpp src/vba_source_codec.hpp
+                src/bridge_importer.cpp  src/bridge_importer.hpp
+                 src/vba_source_codec.hpp
                  src/vba_analyzer.hpp
                  src/vba_runtime.hpp
                  src/vba_expression.hpp)
             target_sources(linaccess_real_bridge_tests PRIVATE
-                src/access_form_import.cpp src/access_form_import.hpp)
+                 src/access_form_import.hpp)
             target_include_directories(linaccess_real_bridge_tests PRIVATE src)
-            target_link_libraries(linaccess_real_bridge_tests PRIVATE linaccess_runtime Qt6::Widgets Qt6::Sql)
+            target_link_libraries(linaccess_real_bridge_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql)
             add_test(NAME real_access_bridge
                 COMMAND linaccess_real_bridge_tests "${LINACCESS_REAL_BRIDGE_DIR}" 26 4 1 19 2 0)
             set_tests_properties(real_access_bridge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
@@ -145,19 +151,19 @@ if(BUILD_TESTING)
             if(NOT TARGET linaccess_real_bridge_tests)
                 add_executable(linaccess_real_bridge_tests
                     tests/real_bridge_tests.cpp
-                    src/bridge_importer.cpp src/access_query.cpp src/bridge_importer.hpp
-                    src/vba_source_codec.cpp src/vba_source_codec.hpp
+                    src/bridge_importer.cpp  src/bridge_importer.hpp
+                     src/vba_source_codec.hpp
                      src/vba_analyzer.hpp
                      src/vba_runtime.hpp
                      src/vba_expression.hpp
-                    src/access_form_import.cpp src/access_form_import.hpp)
+                     src/access_form_import.hpp)
                 target_include_directories(linaccess_real_bridge_tests PRIVATE src)
-                target_link_libraries(linaccess_real_bridge_tests PRIVATE linaccess_runtime Qt6::Widgets Qt6::Sql)
+                target_link_libraries(linaccess_real_bridge_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql)
             endif()
             add_executable(linaccess_vba_corpus_audit tests/vba_corpus_audit.cpp
-                   src/vba_source_codec.cpp)
+                   )
             target_include_directories(linaccess_vba_corpus_audit PRIVATE src)
-            target_link_libraries(linaccess_vba_corpus_audit PRIVATE linaccess_runtime Qt6::Core)
+            target_link_libraries(linaccess_vba_corpus_audit PRIVATE linaccess_runtime linaccess_data Qt6::Core)
             add_test(NAME kassa_vba_inventory COMMAND linaccess_vba_corpus_audit
                 "${LINACCESS_COMPLEX_BRIDGE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/private-vba-inventory.json")
             add_test(NAME complex_access_bridge
@@ -165,15 +171,15 @@ if(BUILD_TESTING)
             set_tests_properties(complex_access_bridge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
             add_executable(linaccess_access_layout_tests
                 tests/access_form_layout_tests.cpp tests/form_event_tests.cpp
-                src/access_form_import.cpp src/access_form_import.hpp
-                src/dao_database.cpp src/access_query.cpp src/sqlite_execution.cpp src/access_catalog.cpp src/access_table_import.cpp
+                 src/access_form_import.hpp
+
                 src/access_form_preview.cpp src/access_form_preview.hpp
-                src/vba_source_codec.cpp src/vba_source_codec.hpp
+                 src/vba_source_codec.hpp
                  src/vba_runtime.hpp
                  src/vba_expression.hpp
                  src/vba_analyzer.hpp)
             target_include_directories(linaccess_access_layout_tests PRIVATE src)
-            target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_runtime Qt6::Widgets Qt6::Sql Qt6::Test)
+            target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::Test)
             add_test(NAME access_2003_layouts
                 COMMAND linaccess_access_layout_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}")
             set_tests_properties(access_2003_layouts PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
@@ -182,9 +188,9 @@ if(BUILD_TESTING)
         if(LINACCESS_COMPLEX_MDB_FILE AND EXISTS "${LINACCESS_COMPLEX_MDB_FILE}")
             if(LINACCESS_COMPLEX_BRIDGE_DIR AND EXISTS "${LINACCESS_COMPLEX_BRIDGE_DIR}/manifest.json")
                 add_executable(linaccess_query_corpus_tests tests/query_corpus_tests.cpp
-                    src/access_query.cpp src/dao_database.cpp src/sqlite_execution.cpp src/vba_source_codec.cpp
-                    src/access_catalog.cpp src/access_table_import.cpp)
-                target_link_libraries(linaccess_query_corpus_tests PRIVATE linaccess_runtime Qt6::Core Qt6::Sql)
+
+                     )
+                target_link_libraries(linaccess_query_corpus_tests PRIVATE linaccess_runtime linaccess_data Qt6::Core Qt6::Sql)
                 add_test(NAME kassa_query_inventory COMMAND linaccess_query_corpus_tests
                     "${LINACCESS_COMPLEX_BRIDGE_DIR}" "${LINACCESS_COMPLEX_MDB_FILE}"
                     "${CMAKE_CURRENT_BINARY_DIR}/private-query-inventory.json")
@@ -196,11 +202,11 @@ if(BUILD_TESTING)
             endif()
             add_executable(linaccess_complex_mdb_table_tests
                 tests/complex_mdb_table_tests.cpp
-                src/access_catalog.cpp src/access_catalog.hpp
-                src/access_table_import.cpp src/access_table_import.hpp
+                 src/access_catalog.hpp
+                 src/access_table_import.hpp
                  src/csv.hpp)
             target_include_directories(linaccess_complex_mdb_table_tests PRIVATE src)
-            target_link_libraries(linaccess_complex_mdb_table_tests PRIVATE linaccess_runtime Qt6::Sql Qt6::Core)
+            target_link_libraries(linaccess_complex_mdb_table_tests PRIVATE linaccess_runtime linaccess_data Qt6::Sql Qt6::Core)
             add_test(NAME complex_real_mdb_table_copy
                 COMMAND linaccess_complex_mdb_table_tests "${LINACCESS_COMPLEX_MDB_FILE}")
         endif()

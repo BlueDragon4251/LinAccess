@@ -1,4 +1,5 @@
 #include "dao_database.hpp"
+#include "vba_qt_value.hpp"
 #include "access_query.hpp"
 #include "sqlite_execution.hpp"
 #include <QSqlError>
@@ -120,13 +121,13 @@ public:
     VbaValue value(const QString& name) const {
         require(!closed_, "DAO: Recordset is closed");
         const int index = column(name);
-        if (mode_ != Mode::Browse) return fromSql(pending_[index]);
-        current(); return fromSql(rows_[position_][index]);
+        if (mode_ != Mode::Browse) return qtFieldValue(pending_[index],types_.value(name.toCaseFolded()));
+        current(); return qtFieldValue(rows_[position_][index],types_.value(name.toCaseFolded()));
     }
     void set(const QString& name, const VbaValue& value) {
         require(!closed_ && mode_ != Mode::Browse, "DAO: Edit or AddNew required");
         const auto index = column(name);
-        pending_[index] = toSql(value); changed_.insert(index);
+        pending_[index] = sqlFieldValue(value,types_.value(name.toCaseFolded())); changed_.insert(index);
     }
 private:
     enum class Mode { Browse, Edit, Add };
@@ -137,6 +138,7 @@ private:
     }
     void current() const { require(position_ >= 0 && position_ < rows_.size(), "DAO: No current record"); }
     void reload() {
+        types_ = table_ ? sqliteColumnTypes(db_,source_) : QMap<QString,QString>{};
         SqliteExecutionBudget budget(db_);
         QSqlQuery query(db_);
         if (table_) exec(query,"SELECT rowid,* FROM " + quote(source_));
@@ -189,6 +191,7 @@ private:
     QMap<QString,QVariant> bindings_;
     bool table_{}, readOnly_{}, closed_{};
     QStringList columns_;
+    QMap<QString,QString> types_;
     QVector<QVariantList> rows_;
     QVector<QVariant> ids_;
     QVariantList pending_;

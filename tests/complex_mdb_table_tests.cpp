@@ -1,4 +1,5 @@
 #include "access_catalog.hpp"
+#include "dao_database.hpp"
 #include "access_table_import.hpp"
 #include "csv.hpp"
 
@@ -40,6 +41,9 @@ int main(int argc, char** argv) {
     const auto tables = QString::fromUtf8(linaccess::AccessCatalog::tool(
         "mdb-tables", {"-1", source})).split('\n', Qt::SkipEmptyParts);
     int imported = 0;
+    int booleanColumns = 0;
+    int trueBooleans = 0;
+    int typedBooleans = 0;
     QStringList failures;
     for (const auto& table : tables) {
         if (table.startsWith("MSys", Qt::CaseInsensitive)) continue;
@@ -47,7 +51,21 @@ int main(int argc, char** argv) {
             const auto csv = linaccess::AccessCatalog::exportTable(source,table);
             const auto rows = linaccess::parseCsvDetailed(std::string_view(csv.constData(), csv.size()));
             const auto schema = linaccess::parseMdbSchema(catalog.tableSchema(table));
+            for (const auto& column : schema.columns)
+                if (column.sourceType == "BOOLEAN" || column.sourceType == "BIT") ++booleanColumns;
             linaccess::importAccessTable(db, source, table, schema, rows);
+            bool hasBoolean = false;
+            for (const auto& column : schema.columns) hasBoolean |= column.sourceType == "BOOLEAN" || column.sourceType == "BIT";
+            if (hasBoolean && rows.size() > 1) {
+                auto database = linaccess::makeDaoDatabase(db);
+                auto recordset = database->member("OpenRecordset",{linaccess::VbaValue::string(table.toUtf8().toStdString()),linaccess::VbaValue::numeric(4)});
+                for (const auto& column : schema.columns) {
+                    if (column.sourceType != "BOOLEAN" && column.sourceType != "BIT") continue;
+                    const auto value = recordset.object->member("Fields",{linaccess::VbaValue::string(column.name.toUtf8().toStdString())}).object->member("Value",{});
+                    assert(value.kind == linaccess::VbaValue::Kind::Boolean); ++typedBooleans;
+                }
+                recordset.object->member("Close",{});
+            }
             auto quote = [](QString name) { name.replace('"', "\"\""); return '"' + name + '"'; };
             QSqlQuery copied(db);
             assert(copied.exec("SELECT * FROM " + quote(table)));
@@ -58,6 +76,10 @@ int main(int argc, char** argv) {
                     const auto& cell = rows[row][col];
                     const auto text = QString::fromUtf8(cell.value);
                     if (!cell.quoted && cell.value == "\x1e") values.append(QJsonValue::Null);
+                    else if (schema.columns[col].sourceType == "BOOLEAN" || schema.columns[col].sourceType == "BIT") {
+                        const bool truth = text == "1" || text == "-1" || text.compare("TRUE",Qt::CaseInsensitive) == 0;
+                        values.append(truth ? "-1" : "0"); if (truth) ++trueBooleans;
+                    }
                     else if (schema.columns[col].sqliteType == "INTEGER") values.append(QString::number(text.toLongLong()));
                     else if (schema.columns[col].sqliteType == "REAL") values.append(QString::number(text.toDouble(), 'g', 17));
                     else values.append(text);
@@ -96,6 +118,7 @@ int main(int argc, char** argv) {
     for (const auto& issue : failures) std::cout << "  ERROR " << issue.toStdString() << '\n';
     // This test deliberately does not pretend 100% source data compatibility;
     // it makes regressions against an actual large Access 2003 file visible.
+    assert(booleanColumns == 16 && trueBooleans > 0 && typedBooleans > 0);
     assert(tables.size() == 29);
     assert(imported == 29 && failures.empty());
     assert(original.open(QIODevice::ReadOnly));
