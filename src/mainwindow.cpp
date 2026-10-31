@@ -3,6 +3,7 @@
 #include "access_inspector.hpp"
 #include "access_form_import.hpp"
 #include "access_form_preview.hpp"
+#include "vba_module_context.hpp"
 #include "access_form_objects.hpp"
 #include "bridge_importer.hpp"
 #include "vba_analyzer.hpp"
@@ -148,6 +149,8 @@ private:
 };
 }
 
+MainWindow::~MainWindow() { linaccess::resetVbaProjectState(db_); }
+
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("LinAccess — C++ / Qt 6");
     resize(1260, 790);
@@ -231,6 +234,7 @@ void MainWindow::openDatabase(const QString& path) {
         tabs_->removeTab(0);
         delete widget;
     }
+    linaccess::resetVbaProjectState(db_);
     db_.close();
     db_.setDatabaseName(path);
     if (!db_.open()) {

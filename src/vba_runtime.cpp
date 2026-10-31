@@ -432,10 +432,72 @@ VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_vie
     return parseProcedure(module, procedure, instructions, function, cancel);
 }
 
+std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
+    auto state=std::make_shared<VbaModuleState>();
+    const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
+    const std::regex declaration(R"(^\s*(Dim|Private|Public|Global)\s+(.+)$)",std::regex::icase);
+    const std::regex variable(R"(^([A-Za-z_][A-Za-z0-9_]*)(?:\s+As\s+([A-Za-z_][A-Za-z0-9_]*))?$)",std::regex::icase);
+    std::istringstream stream{std::string(module)}; std::string line;
+    while (std::getline(stream,line)) {
+        line=withoutComment(line); if (std::regex_search(line,procedure)) break;
+        std::smatch match; if (!std::regex_match(line,match,declaration)) continue;
+        const auto visibility=lower(match[1].str());
+        const auto declarations=match[2].str();
+        const auto start=lower(trim(declarations));
+        if (start.starts_with("declare ") || start.starts_with("type ") || start.starts_with("enum ")) continue;
+        for (const auto& entry:splitArguments(declarations)) {
+            std::smatch field;
+            if (!std::regex_match(entry,field,variable)) throw VbaRuntimeError(3251,"Module declaration unsupported");
+            const auto name=lower(field[1].str()),type=lower(field[2].str());
+            if (!type.empty() && type!="variant" && type!="boolean" && type!="string")
+                throw VbaRuntimeError(3251,"Module field type unsupported");
+            if (state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
+            state->values.emplace(name,type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : VbaValue::empty());
+            state->types.emplace(name,type);
+            if (visibility=="public" || visibility=="global") state->publicVariables.insert(name);
+        }
+    }
+    return state;
+}
+std::shared_ptr<VbaModuleState> VbaHost::moduleState(std::string_view module) {
+    const auto key=std::string(module);
+    if (const auto found=moduleStates_.find(key);found!=moduleStates_.end()) return found->second;
+    auto state=createVbaModuleState(module); moduleStates_.emplace(key,state); return state;
+}
+VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
+    if (type.empty() || type=="variant") return value;
+    if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null module field assignment");
+    if (value.kind==VbaValue::Kind::Error || value.kind==VbaValue::Kind::Object) throw VbaRuntimeError(13,"Module field type mismatch");
+    if (type=="string") {
+        if (value.kind==VbaValue::Kind::Empty) return VbaValue::string("");
+        if (value.kind==VbaValue::Kind::Boolean) return VbaValue::string(value.boolean ? "True" : "False");
+        return VbaValue::string(value.asText());
+    }
+    if (type=="boolean") {
+        if (value.kind==VbaValue::Kind::Text) {
+            const auto text=lower(trim(value.text));
+            if (text=="true" || text=="false") return VbaValue::logical(text=="true");
+        }
+        try { return VbaValue::logical(value.asNumber()!=0); }
+        catch (...) { throw VbaRuntimeError(13,"Module Boolean field type mismatch"); }
+    }
+    throw VbaRuntimeError(3251,"Module field coercion unsupported");
+}
+namespace {
+VbaValue initialLocalValue(const std::string& type) {
+    if (type=="object" || type=="control" || type=="form" || type.starts_with("access.") || type.starts_with("dao.")) return VbaValue::reference(nullptr);
+    if (type=="string") return VbaValue::string("");
+    if (type=="boolean") return VbaValue::logical(false);
+    if (!type.empty() && type!="variant") return VbaValue::numeric(0);
+    return VbaValue::empty();
+}
+struct ReferenceBinding { VbaValue* source{}; std::string type; };
+}
+
 static VbaExecutionResult executeProcedure(std::string_view module,
                                        std::string_view procedure,
                                        VbaHost& host, std::vector<VbaValue>& arguments,
-                                       const std::vector<VbaValue*>* references = nullptr) {
+                                       const std::vector<ReferenceBinding>* references = nullptr) {
     // Independent of host type, recursive VBA calls must not overflow the
     // native C++ stack. Access' own runtime also terminates stack overflow.
     static thread_local int callDepth = 0;
@@ -454,6 +516,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     std::vector<Parameter> parameters;
     auto result = parseProcedure(module, procedure, instructions, isFunction, hasCancel, &parameters);
     if (result.status != VbaExecutionStatus::Completed) return result;
+    host.enterModule(module);
+    struct ModuleScope { VbaHost& host; ~ModuleScope() { host.leaveModule(); } } moduleScope{host};
     // Resolve direct Sub calls before any effects in the calling procedure.
     // Syntax acceptance alone must not turn unknown APIs into successful calls.
     try {
@@ -467,6 +531,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             if (declaration.status != VbaExecutionStatus::Completed)
                 return {VbaExecutionStatus::Unsupported, "Aufgerufene Prozedur nicht verfügbar oder nicht unterstützt", instruction.line};
         }
+    } catch (const VbaRuntimeError& exception) {
+        VbaExecutionResult failure{VbaExecutionStatus::Error,"Procedure resolution failed",0}; failure.errorNumber=exception.number; return failure;
     } catch (const std::exception& exception) {
         return {VbaExecutionStatus::Error, exception.what(), 0};
     }
@@ -499,12 +565,37 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         return {VbaExecutionStatus::Error, "Falsche Argumentanzahl", 0};
     for (std::size_t i = 0; i < parameters.size(); ++i)
         locals[lower(parameters[i].name)] = implicitCancel ? VbaValue::numeric(0) : arguments[i];
-    struct Alias { std::string name; VbaValue* source; VbaValue before; };
+    // Declarations bind for the whole procedure, including skipped branches.
+    for (const auto& instruction:instructions) if (instruction.type==Statement::Type::Dim)
+        locals.try_emplace(lower(instruction.argument),initialLocalValue(instruction.expression));
+    struct Alias { std::string name; VbaValue* source; VbaValue before; std::string type; };
     std::vector<Alias> aliases;
     if (references && !implicitCancel)
         for (std::size_t i = 0; i < parameters.size(); ++i)
-            if (parameters[i].byReference && (*references)[i])
-                aliases.push_back({lower(parameters[i].name), (*references)[i], *(*references)[i]});
+            if (parameters[i].byReference && (*references)[i].source)
+                aliases.push_back({lower(parameters[i].name), (*references)[i].source, *(*references)[i].source,(*references)[i].type});
+    std::vector<std::shared_ptr<VbaModuleState>> stateOwners;
+    try {
+        auto state=host.moduleState(module); stateOwners.push_back(state);
+        for (auto& [name,value]:state->values) if (!locals.contains(name)) {
+            locals.emplace(name,value); aliases.push_back({name,&value,value,state->types.at(name)});
+        }
+        const auto reserved=locals;
+        std::unordered_set<std::string> globals;
+        auto globalStates=host.globalModuleStates();
+        for (auto& global:globalStates) {
+            stateOwners.push_back(global);
+            if (global==state) continue;
+            for (const auto& name:global->publicVariables) {
+                if (reserved.contains(name) || host.hasInstanceIdentifier(name)) continue;
+                if (!globals.insert(name).second) throw VbaRuntimeError(5,"Ambiguous public module field");
+                auto& value=global->values.at(name);
+                locals.emplace(name,value); aliases.push_back({name,&value,value,global->types.at(name)});
+            }
+        }
+    } catch (const VbaRuntimeError& error) {
+        VbaExecutionResult failure{VbaExecutionStatus::Error,"Module state initialization failed",0}; failure.errorNumber=error.number; return failure;
+    }
     const auto equalValue = [](const VbaValue& a, const VbaValue& b) {
         return a.kind == b.kind && a.number == b.number && a.currencyUnits==b.currencyUnits && a.text == b.text
             && a.boolean == b.boolean && a.object == b.object && a.errorNumber==b.errorNumber;
@@ -514,7 +605,10 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     };
     const auto storeAliases = [&] {
         for (auto& alias : aliases)
-            if (!equalValue(locals[alias.name], alias.before)) *alias.source = locals[alias.name];
+            if (!equalValue(locals[alias.name], alias.before)) {
+                try { *alias.source=coerceVbaModuleValue(locals[alias.name],alias.type); }
+                catch (...) { locals[alias.name]=*alias.source; alias.before=*alias.source; throw; }
+            }
         refreshAliases();
     };
     const auto copyArguments = [&] {
@@ -536,11 +630,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     };
     const auto invoke = [&](std::string_view name, std::vector<VbaValue>& actuals,
                             const std::vector<std::string>& names, bool needsValue) -> VbaValue {
-        std::vector<VbaValue*> bindings;
+        std::vector<ReferenceBinding> bindings;
         for (const auto& expression : names) {
             auto found = locals.find(lower(expression));
-            VbaValue* binding = found == locals.end() ? nullptr : &found->second;
-            for (const auto& alias : aliases) if (alias.name == lower(expression)) binding = alias.source;
+            ReferenceBinding binding{found==locals.end() ? nullptr : &found->second,{}};
+            for (const auto& alias:aliases) if (alias.name==lower(expression)) binding={alias.source,alias.type};
             bindings.push_back(binding);
         }
         auto nested = executeProcedure(module, name, host, actuals, &bindings);
@@ -552,6 +646,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             auto found = locals.find(lower(names[i]));
             if (found != locals.end()) found->second = actuals[i];
         }
+        storeAliases();
         if (nested.status != VbaExecutionStatus::Completed)
             throw VbaRuntimeError(nested.errorNumber ? nested.errorNumber : 5,
                 nested.status == VbaExecutionStatus::ProcedureMissing ? "Prozedur nicht gefunden" : nested.explanation);
@@ -812,16 +907,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (active) return completed(instruction.line, true);
                 break;
             case Statement::Type::Dim:
-                if (active) {
-                    const auto& type = instruction.expression;
-                    auto initial = VbaValue::empty();
-                    if (type == "object" || type == "control" || type == "form" || type.starts_with("access.") || type.starts_with("dao.")) initial = VbaValue::reference(nullptr);
-                    else if (type == "string") initial = VbaValue::string("");
-                    else if (type == "boolean") initial = VbaValue::logical(false);
-                    else if (!type.empty() && type != "variant") initial = VbaValue::numeric(0);
-                    locals.try_emplace(lower(instruction.argument), std::move(initial));
-                }
-                break;
+                break; // Already initialized in the procedure declaration scope.
             }
             storeAliases();
             } catch (const std::exception& exception) {

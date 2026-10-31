@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace linaccess {
@@ -52,6 +53,12 @@ public:
 };
 
 using VbaVariables = std::unordered_map<std::string, VbaValue>;
+struct VbaModuleState {
+    VbaVariables values;
+    std::unordered_map<std::string,std::string> types;
+    std::unordered_set<std::string> publicVariables;
+};
+VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type);
 
 using VbaFunctionResolver = std::function<VbaValue(std::string_view, std::vector<VbaValue>&,
                                                  const std::vector<std::string>&)>;

@@ -13,7 +13,7 @@ if(LINACCESS_BUILD_GUI)
     add_library(linaccess_data STATIC
         src/access_catalog.cpp src/access_table_import.cpp src/access_query.cpp src/access_format.cpp
         src/dao_database.cpp src/sqlite_execution.cpp src/jet_sql_functions.cpp src/vba_source_codec.cpp
-        src/vba_qt_value.cpp src/access_form_import.cpp)
+        src/vba_qt_value.cpp src/vba_module_context.cpp src/access_form_import.cpp)
     target_link_libraries(linaccess_data PUBLIC linaccess_runtime Qt6::Core Qt6::Sql)
     target_include_directories(linaccess_data PUBLIC src)
     add_executable(linaccess
@@ -186,7 +186,7 @@ if(BUILD_TESTING)
                 COMMAND linaccess_real_bridge_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}" 192 47 9 100 32 4)
             set_tests_properties(complex_access_bridge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
             add_executable(linaccess_access_layout_tests
-                tests/access_form_layout_tests.cpp tests/message_box_tests.cpp tests/close_command_tests.cpp tests/filter_tests.cpp tests/form_event_tests.cpp tests/subform_tests.cpp tests/form_object_tests.cpp tests/original_control_tests.cpp tests/report_event_tests.cpp tests/report_corpus_tests.cpp
+                tests/access_form_layout_tests.cpp tests/message_box_tests.cpp tests/close_command_tests.cpp tests/module_state_tests.cpp tests/filter_tests.cpp tests/form_event_tests.cpp tests/subform_tests.cpp tests/form_object_tests.cpp tests/original_control_tests.cpp tests/report_event_tests.cpp tests/report_corpus_tests.cpp
                  src/access_form_import.hpp
 
                 src/access_form_preview.cpp src/access_form_objects.cpp src/access_layout_print.cpp src/access_form_preview.hpp

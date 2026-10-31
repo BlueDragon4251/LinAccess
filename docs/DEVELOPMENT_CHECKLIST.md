@@ -56,6 +56,9 @@ Verified incremental work ([details and limits](DAO_RUNTIME.md)):
 
 - [x] Currency scaled-unit changes survive nested ByRef synchronization, shared aliases and handled errors; original calculated Currency value passes through a separate native nested helper exactly.
 
+- [x] Bounded persistent CodeBehind instance fields and connection-owned standard-module fields; real original public declarations bind across native forms, with recursion, typed alias recovery, visibility and reset tests. See MODULE_STATE_RUNTIME.md.
+- [x] Procedure-wide Dim binding, local/control/global lookup precedence and standard-module Me restrictions; complete compiler/class scope remains open.
+
 Full targets remain open:
 
 - [ ] Replace statement regex dispatch with a complete lexer/parser, AST and bound runtime.

@@ -30,6 +30,7 @@
 void testFormEvents();
 void testFilters();
 void testMessageBoxes();
+void testModuleStates(const QDir&,const QJsonArray&);
 void testCloseCommands();
 void testComboDropdown();
 void testOriginalMessageBox(const QDir&,const QJsonArray&);
@@ -208,6 +209,7 @@ End Sub
     }
     testFormEvents();
     testMessageBoxes();
+    testModuleStates(directory,objects);
     testCloseCommands();
     testComboDropdown();
     testOriginalMessageBox(directory,objects);

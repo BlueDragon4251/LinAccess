@@ -102,3 +102,10 @@ Bounded native DoCmd.Close and SQL-backed ComboBox.Dropdown now execute real Qt
 actions, including an unchanged original Close button and a second original
 missing-input branch. See [CLOSE_COMMAND_RUNTIME.md](CLOSE_COMMAND_RUNTIME.md)
 for cancellation/save semantics and remaining command/combo boundaries.
+
+Persistent scalar module state now distinguishes CodeBehind instances, procedure
+locals and connection-owned standard modules; the original public declaration
+artifact supplies real globals across native form instances. Visibility, recursion,
+control/global precedence and reset tests are documented in
+[MODULE_STATE_RUNTIME.md](MODULE_STATE_RUNTIME.md). Supported field types are
+Boolean/String/Variant in the preamble; complete VBA classes/scopes remain open.

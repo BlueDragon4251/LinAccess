@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <unordered_map>
 
 namespace linaccess {
 
@@ -16,6 +17,8 @@ public:
 };
 class VbaObject;
 struct VbaValue;
+struct VbaModuleState;
+std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module);
 
 class VbaHost {
 public:
@@ -23,6 +26,11 @@ public:
     virtual std::optional<std::string> field(std::string_view name) = 0;
     virtual void setField(std::string_view name, std::optional<std::string> value) = 0;
     virtual VbaValue formatValue(const VbaValue& value,std::string_view mask,bool stringResult);
+    virtual void enterModule(std::string_view) {}
+    virtual void leaveModule() noexcept {}
+    virtual bool hasInstanceIdentifier(std::string_view) { return false; }
+    virtual std::shared_ptr<VbaModuleState> moduleState(std::string_view module);
+    virtual std::vector<std::shared_ptr<VbaModuleState>> globalModuleStates() { return {}; }
     virtual std::optional<VbaValue> resolveIdentifier(std::string_view name,bool objectReference);
     virtual bool assignIdentifier(std::string_view name,const VbaValue& value);
     virtual VbaValue expressionValue(std::string_view name,bool objectReference);
@@ -68,6 +76,8 @@ public:
     virtual void openForm(std::string_view) {
         throw std::runtime_error("DoCmd.OpenForm: kein Access-Formularkatalog");
     }
+private:
+    std::unordered_map<std::string,std::shared_ptr<VbaModuleState>> moduleStates_;
 };
 
 enum class VbaExecutionStatus { Completed, ProcedureMissing, Unsupported, Error };

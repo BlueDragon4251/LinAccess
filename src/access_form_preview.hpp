@@ -64,6 +64,8 @@ private:
     void closeEvent(QCloseEvent* event) override;
     void openOtherForm(const QString& name);
     void closeOtherDocument(int type,const std::optional<QString>& name,int save);
+    std::optional<linaccess::VbaValue> getModuleMember(std::string_view name,bool publicOnly);
+    bool setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly);
     std::optional<std::string> getField(std::string_view name) const;
     void ensureWritableControl(std::string_view name) const;
     void setField(std::string_view name, std::optional<std::string> value);
@@ -97,6 +99,7 @@ private:
 
     std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, reportsObject_, controlsObject_;
     QMap<QString,std::weak_ptr<linaccess::VbaObject>> controlObjects_;
+    std::unordered_map<std::string,std::shared_ptr<linaccess::VbaModuleState>> moduleStates_;
     std::weak_ptr<linaccess::VbaObject> applicationObject_,doCmdObject_;
     QMap<QWidget*,std::weak_ptr<linaccess::VbaObject>> commandBarObjects_;
     QMap<QAction*,std::weak_ptr<linaccess::VbaObject>> commandControlObjects_;

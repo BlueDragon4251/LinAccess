@@ -364,6 +364,8 @@ private:
             }
             if (!host_) return {};
             const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource" || key == "caption" || key=="tag" || key=="filter" || key=="filteron");
+            if (!item && !formProperty)
+                if (auto value=host_->resolveIdentifier(field.value,objectContext || peek().value=="." || peek().value=="!")) return *value;
             if (!formProperty && objectContext)
                 return item ? host_->currentForm()->objectItem(field.value) : host_->currentForm()->objectMember(field.value,{});
             if (!formProperty && (peek().value == "." || peek().value == "!"))

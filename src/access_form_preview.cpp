@@ -2,6 +2,7 @@
 #include "access_form_objects.hpp"
 
 #include "vba_runtime.hpp"
+#include "vba_module_context.hpp"
 #include "vba_currency.hpp"
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
@@ -160,13 +161,31 @@ public:
         if (key == "newrecord") return preview_.currentRecordIndex_ == 0 ? "-1" : "0";
         return preview_.getField(name);
     }
-    linaccess::VbaValue controlValue(std::string_view name) override { return preview_.getFieldValue(name); }
+    linaccess::VbaValue controlValue(std::string_view name) override { requireInstance(); return preview_.getFieldValue(name); }
+    void enterModule(std::string_view source) override { moduleScopes_.push_back(source==preview_.vba_.toUtf8().toStdString()); }
+    void leaveModule() noexcept override { moduleScopes_.pop_back(); }
+    bool hasInstanceIdentifier(std::string_view name) override {
+        return instanceScope() && preview_.controls_.contains(QString::fromUtf8(name.data(),name.size()).toCaseFolded());
+    }
+    std::shared_ptr<linaccess::VbaModuleState> moduleState(std::string_view source) override {
+        if (source!=preview_.vba_.toUtf8().toStdString() && !linaccess::isVbaClassModule(source))
+            return linaccess::standardVbaModuleState(preview_.db_,source);
+        const auto key=std::string(source);
+        if (const auto found=preview_.moduleStates_.find(key);found!=preview_.moduleStates_.end()) return found->second;
+        auto state=linaccess::createVbaModuleState(source); preview_.moduleStates_.emplace(key,state); return state;
+    }
+    std::vector<std::shared_ptr<linaccess::VbaModuleState>> globalModuleStates() override {
+        return linaccess::publicVbaModuleStates(preview_.db_);
+    }
     std::optional<linaccess::VbaValue> resolveIdentifier(std::string_view name,bool reference) override {
+        if (!instanceScope()) return std::nullopt;
+        if (auto value=preview_.getModuleMember(name,false)) return value;
         const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (!preview_.controls_.contains(key)) return std::nullopt;
         return reference ? makePreviewFormObject(preview_)->objectItem(name) : preview_.getFieldValue(name);
     }
     bool assignIdentifier(std::string_view name,const linaccess::VbaValue& value) override {
+        if (!instanceScope()) return false;
         const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (!preview_.controls_.contains(key)) return false;
         preview_.setFieldValue(name,value); return true;
@@ -225,8 +244,8 @@ public:
         return count ? linaccess::VbaValue::numeric(total) : linaccess::VbaValue{};
         } catch(const linaccess::VbaRuntimeError& failure) { return linaccess::VbaValue::errorValue(failure.number); }
     }
-    void setControlValue(std::string_view name,const linaccess::VbaValue& value) override { preview_.setFieldValue(name,value); }
     linaccess::VbaValue fieldValue(std::string_view name) override {
+        requireInstance();
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && (key=="dirty" || key=="newrecord"))
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
@@ -237,9 +256,12 @@ public:
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
+        if (auto value=preview_.getModuleMember(name,false)) return *value;
         return preview_.getFieldValue(name);
     }
+    void setControlValue(std::string_view name,const linaccess::VbaValue& value) override { requireInstance(); preview_.setFieldValue(name,value); }
     void setFieldValue(std::string_view name,const linaccess::VbaValue& value) override {
+        requireInstance();
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
@@ -247,6 +269,7 @@ public:
         if (key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
+        if (preview_.setModuleMember(name,value,false)) return;
         preview_.setFieldValue(name,value);
     }
     void setField(std::string_view name, std::optional<std::string> value) override {
@@ -303,20 +326,26 @@ public:
     }
     std::optional<std::string> moduleForProcedure(std::string_view procedure) override {
         QSqlQuery query(preview_.db_);
-        if (!query.exec("SELECT source_bytes FROM _la_access_artifacts "
-                        "WHERE kind='vba' ORDER BY id")) return std::nullopt;
-        const auto target = QString::fromUtf8(procedure.data(), procedure.size());
+        if (!query.exec("SELECT name,source_bytes FROM _la_access_artifacts WHERE kind='vba' ORDER BY id DESC")) return std::nullopt;
+        QSet<QString> names; std::optional<std::string> found;
+        const auto target=QString::fromUtf8(procedure.data(),procedure.size());
         while (query.next()) {
-            const auto code = linaccess::decodeVbaSource(query.value(0).toByteArray()).toUtf8().toStdString();
-            const auto analysis = linaccess::analyzeVba(code);
-            for (const auto& item : analysis.procedures)
-                if (QString::fromStdString(item.name).compare(target, Qt::CaseInsensitive) == 0)
-                    return code;
+            const auto name=query.value(0).toString().toCaseFolded(); if (names.contains(name)) continue; names.insert(name);
+            const auto source=linaccess::decodeVbaSource(query.value(1).toByteArray());
+            const auto code=source.toUtf8().toStdString();
+            if (linaccess::isVbaClassModule(code)) continue;
+            const auto analysis=linaccess::analyzeVba(code); const auto lines=source.split('\n');
+            for (const auto& item:analysis.procedures) {
+                if (QString::fromStdString(item.name).compare(target,Qt::CaseInsensitive)!=0) continue;
+                if (item.line>0 && item.line<=lines.size() && QRegularExpression("^Private\\b",QRegularExpression::CaseInsensitiveOption).match(lines[item.line-1].trimmed()).hasMatch()) continue;
+                if (found) throw linaccess::VbaRuntimeError(5,"Ambiguous public procedure");
+                found=code;
+            }
         }
-        return std::nullopt;
+        return found;
     }
     std::shared_ptr<linaccess::VbaObject> applicationObject() override { return makePreviewApplicationObject(preview_); }
-    std::shared_ptr<linaccess::VbaObject> currentForm() override { return makePreviewFormObject(preview_); }
+    std::shared_ptr<linaccess::VbaObject> currentForm() override { requireInstance(); return makePreviewFormObject(preview_); }
     std::shared_ptr<linaccess::VbaObject> reportsCollection() override { return makePreviewReportsObject(preview_); }
     std::shared_ptr<linaccess::VbaObject> formsCollection() override { return makePreviewFormsObject(preview_); }
     linaccess::VbaValue formatValue(const linaccess::VbaValue& value,std::string_view mask,bool stringResult) override {
@@ -332,6 +361,9 @@ public:
         preview_.openOtherForm(QString::fromUtf8(name.data(), name.size()));
     }
 private:
+    std::vector<bool> moduleScopes_;
+    bool instanceScope() const { return moduleScopes_.empty() || moduleScopes_.back(); }
+    void requireInstance() const { if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Me is unavailable in a standard module"); }
     AccessFormPreview& preview_;
 };
 
@@ -1032,6 +1064,24 @@ void AccessFormPreview::requeryControl(std::string_view name) {
         setText(combo,old.toString()); combo->setProperty("la_null",old.isNull());
         return;
     }
+}
+
+std::optional<linaccess::VbaValue> AccessFormPreview::getModuleMember(std::string_view name,bool publicOnly) {
+    if (closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"CodeBehind instance is unavailable");
+    const auto source=vba_.toUtf8().toStdString();
+    auto found=moduleStates_.find(source);
+    if (found==moduleStates_.end()) found=moduleStates_.emplace(source,linaccess::createVbaModuleState(source)).first;
+    const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded().toStdString();
+    const auto& frame=found->second;
+    if (publicOnly && !frame->publicVariables.contains(key)) return std::nullopt;
+    if (const auto field=frame->values.find(key);field!=frame->values.end()) return field->second;
+    return std::nullopt;
+}
+bool AccessFormPreview::setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly) {
+    if (!getModuleMember(name,publicOnly)) return false;
+    const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded().toStdString();
+    const auto& frame=moduleStates_.at(vba_.toUtf8().toStdString());
+    frame->values.at(key)=linaccess::coerceVbaModuleValue(value,frame->types.at(key)); return true;
 }
 
 void AccessFormPreview::closeOtherDocument(int type,const std::optional<QString>& name,int save) {

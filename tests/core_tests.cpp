@@ -72,6 +72,74 @@ int main() {
     using namespace linaccess;
 
     {
+        const std::string module=R"VBA(Private counter As Variant
+Private flag As Boolean
+Public text As String
+Function NextValue() As Variant
+counter=counter+1
+Call Touch()
+NextValue=counter
+End Function
+Sub Touch()
+counter=counter+1
+End Sub
+Function Recursive(level As Long) As Variant
+If level>0 Then
+counter=counter+1
+Recursive=Recursive(level-1)+counter
+Else
+Recursive=counter
+End If
+End Function
+Function CurrentValue() As Variant
+CurrentValue=counter
+End Function
+Function Shadow() As Variant
+If False Then
+Dim counter As Variant
+End If
+counter=9
+Shadow=counter
+End Function
+Function ForwardLocal() As Variant
+ForwardLocal=counter
+Dim counter As Variant
+End Function
+Function TypedFailure() As String
+flag=False
+On Error Resume Next
+Call BreakFlag(flag)
+TypedFailure=CStr(Err.Number) & ":" & CStr(VarType(flag))
+End Function
+Sub BreakFlag(ByRef argument As Variant)
+argument=Null
+End Sub
+Function TextValue() As Variant
+text=True
+TextValue=text
+End Function
+)VBA";
+        FakeForm first,second;
+        const auto call=[&](FakeForm& host,const char* procedure) {
+            const auto result=executeVbaProcedure(module,procedure,host);
+            assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue);
+            return *result.typedReturnValue;
+        };
+        assert(call(first,"NextValue").asNumber()==2 && call(first,"NextValue").asNumber()==4);
+        assert(call(second,"CurrentValue").kind==VbaValue::Kind::Empty);
+        std::vector<VbaValue> args{VbaValue::numeric(2)};
+        const auto recursive=executeVbaProcedureWithArguments(module,"Recursive",second,args);
+        assert(recursive.status==VbaExecutionStatus::Completed && recursive.typedReturnValue->asNumber()==6);
+        assert(call(first,"Shadow").asNumber()==9 && call(first,"CurrentValue").asNumber()==4);
+        assert(call(first,"ForwardLocal").kind==VbaValue::Kind::Empty);
+        assert(call(first,"TypedFailure").asText()=="94:11");
+        assert(call(first,"TextValue").kind==VbaValue::Kind::Text && call(first,"TextValue").asText()=="True");
+        const auto declarations=createVbaModuleState("Public first,second As String\nPrivate flag As Boolean\n");
+        assert(declarations->values.at("first").kind==VbaValue::Kind::Empty && declarations->values.at("second").asText().empty());
+        assert(declarations->publicVariables.size()==2 && !declarations->publicVariables.contains("flag"));
+    }
+
+    {
         FakeForm form;
         const std::string module=R"VBA(Function Calculate() As Variant
 Dim amount As Variant

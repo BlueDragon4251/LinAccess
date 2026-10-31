@@ -208,6 +208,7 @@ public:
             return {};
         }
         if (key == "setfocus") { preview.activateWindow(); preview.setFocus(); return {}; }
+        if (auto value=preview.getModuleMember(name,true)) return *value;
         return preview.getFieldValue(name);
     }
     linaccess::VbaValue item(std::string_view name) override {
@@ -220,6 +221,7 @@ public:
         const auto key=text(name).toCaseFolded();
         if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="setfocus" || key=="filter" || key=="filteron")
             return member(name,args);
+        if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(name);
     }
     void assignItem(std::string_view name,const linaccess::VbaValue& value) override {
@@ -254,6 +256,7 @@ public:
         }
         if (key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
+        if (preview.setModuleMember(name,value,true)) return;
         PreviewControlObject(preview,text(name)).assign("Value",value);
     }
 };
