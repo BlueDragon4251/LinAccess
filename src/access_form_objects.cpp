@@ -2,12 +2,20 @@
 #include "access_form_preview.hpp"
 #include "vba_qt_value.hpp"
 #include <QApplication>
+#include <QAbstractButton>
+#include <QAction>
+#include <QLabel>
+#include <QToolBar>
 #include <QPointer>
 #include <QWidget>
 #include <algorithm>
 
 std::shared_ptr<linaccess::VbaObject> makePreviewControlsObject(AccessFormPreview&);
 std::shared_ptr<linaccess::VbaObject> makePreviewControlObject(AccessFormPreview&,const QString&);
+
+std::shared_ptr<linaccess::VbaObject> makePreviewCommandBarObject(AccessFormPreview&);
+
+std::shared_ptr<linaccess::VbaObject> makePreviewCommandControlObject(AccessFormPreview&,QAction*);
 
 namespace {
 QString text(std::string_view value) { return QString::fromUtf8(value.data(),value.size()); }
@@ -37,6 +45,7 @@ public:
         if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected control arguments");
         const auto key = text(name).toCaseFolded();
         if (key == "name") return linaccess::VbaValue::string(bytes(name_));
+        if (key == "caption") return linaccess::VbaValue::string(bytes(caption()));
         if (key == "value") { requireValue(); return preview.getFieldValue(bytes(name_)); }
         if (key == "visible") return linaccess::VbaValue::logical(!widget->isHidden());
         if (key == "enabled") return linaccess::VbaValue::logical(widget->isEnabled());
@@ -60,6 +69,14 @@ public:
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
         if (key == "value") { requireValue(); preview.setFieldValue(bytes(name_),value); return; }
+        if (key == "caption") {
+            (void)caption();
+            if (value.kind == linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null caption");
+            const auto captionText = text(value.asText());
+            if (auto* label = qobject_cast<QLabel*>(widget)) label->setText(captionText);
+            else qobject_cast<QAbstractButton*>(widget)->setText(captionText);
+            return;
+        }
         if ((key == "visible" || key == "enabled") && value.kind == linaccess::VbaValue::Kind::Null)
             throw linaccess::VbaRuntimeError(94,"Invalid Null property assignment");
         if (key == "visible") { widget->setVisible(value.truthy()); return; }
@@ -67,6 +84,16 @@ public:
         throw linaccess::VbaRuntimeError(438,"Control property is unavailable or read-only");
     }
 private:
+    QString caption() const {
+        auto* widget = control();
+        for (const auto& control : checked().layout_.controls) {
+            if (control.name.compare(name_,Qt::CaseInsensitive)!=0) continue;
+            if (control.type=="Label") return qobject_cast<QLabel*>(widget)->text();
+            if (control.type=="CommandButton" || control.type=="CheckBox" || control.type=="OptionButton" || control.type=="ToggleButton")
+                return qobject_cast<QAbstractButton*>(widget)->text();
+        }
+        throw linaccess::VbaRuntimeError(438,"Control has no supported Caption property");
+    }
     void requireValue() const {
         for (const auto& control : checked().layout_.controls)
             if (control.name.compare(name_,Qt::CaseInsensitive)==0 &&
@@ -75,7 +102,7 @@ private:
         throw linaccess::VbaRuntimeError(438,"Control has no supported Value property");
     }
     QWidget* control() const {
-        auto* widget = checked().controls_.value(name_.toCaseFolded());
+        auto* widget = checked().controls_.value(name_.toCaseFolded()).data();
         if (!widget) throw linaccess::VbaRuntimeError(2465,"Control unavailable");
         return widget;
     }
@@ -108,7 +135,7 @@ private:
     QStringList controlNames() const {
         const auto& preview = checked(); QStringList names;
         for (const auto& control : preview.layout_.controls)
-            if (!control.name.isEmpty() && preview.controls_.contains(control.name.toCaseFolded()) && !names.contains(control.name,Qt::CaseInsensitive))
+            if (!control.name.isEmpty() && preview.controls_.value(control.name.toCaseFolded()) && !names.contains(control.name,Qt::CaseInsensitive))
                 names.append(control.name);
         return names;
     }
@@ -125,6 +152,7 @@ public:
         }
         if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected form arguments");
         if (key == "name") return linaccess::VbaValue::string(bytes(preview.formName_));
+        if (key == "caption") return linaccess::VbaValue::string(bytes(preview.layout_.caption));
         if (key == "recordsource") return linaccess::VbaValue::string(bytes(preview.layout_.recordSource));
         if (key == "dirty") return linaccess::VbaValue::logical(preview.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview.currentRecordIndex_==0);
@@ -143,6 +171,12 @@ public:
     }
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if (key == "caption") {
+            if (value.kind == linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null caption");
+            preview.layout_.caption = text(value.asText());
+            preview.setWindowTitle((preview.layout_.caption.isEmpty() ? preview.formName_ : preview.layout_.caption) + " — LinAccess");
+            return;
+        }
         if (key == "dirty") {
             if (!value.truthy()) {
                 if (!preview.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record save cancelled");
@@ -192,6 +226,152 @@ private:
         return forms;
     }
 };
+
+
+class PreviewCommandControlObject final : public linaccess::VbaObject, private PreviewObjectBase {
+public:
+    PreviewCommandControlObject(AccessFormPreview& preview,QAction* action) : PreviewObjectBase(preview),action_(action) {}
+    bool alive() const { return !action_.isNull(); }
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        auto* action = checkedAction();
+        if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected command control arguments");
+        const auto key = text(name).toCaseFolded();
+        if (key=="caption") return linaccess::VbaValue::string(bytes(action->text()));
+        if (key=="visible") return linaccess::VbaValue::logical(action->isVisible());
+        if (key=="enabled") return linaccess::VbaValue::logical(action->isEnabled());
+        if (key=="type") return linaccess::VbaValue::numeric(1); // msoControlButton
+        throw linaccess::VbaRuntimeError(438,"Command control member unsupported");
+    }
+    void assign(std::string_view name,const linaccess::VbaValue& value) override {
+        auto* action = checkedAction(); const auto key = text(name).toCaseFolded();
+        if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null command control property");
+        if (key=="caption") { action->setText(text(value.asText())); return; }
+        if (key=="visible") { action->setVisible(value.truthy()); return; }
+        if (key=="enabled") { action->setEnabled(value.truthy()); return; }
+        throw linaccess::VbaRuntimeError(438,"Command control property unsupported");
+    }
+private:
+    QAction* checkedAction() const {
+        (void)checked();
+        if (!action_) throw linaccess::VbaRuntimeError(91,"Command control unavailable");
+        return action_;
+    }
+    QPointer<QAction> action_;
+};
+class PreviewCommandControlsObject final : public linaccess::VbaObject, private PreviewObjectBase {
+public:
+    explicit PreviewCommandControlsObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        auto& preview = checked();
+        const auto actions = preview.printToolbar_ ? preview.printToolbar_->actions() : QList<QAction*>{};
+        const auto key = text(name).toCaseFolded();
+        if (key=="count" && args.empty()) return linaccess::VbaValue::numeric(actions.size());
+        if (key=="item" && args.size()==1) {
+            if (args[0].kind==linaccess::VbaValue::Kind::Number) {
+                const auto index = linaccess::sqlFieldValue(args[0],"INTEGER").toLongLong();
+                if (index<1 || index>actions.size()) throw linaccess::VbaRuntimeError(5,"Command control index out of range");
+                return linaccess::VbaValue::reference(makePreviewCommandControlObject(preview,actions[index-1]));
+            }
+            const auto caption = text(args[0].asText());
+            for (auto* action : actions) if (action->text().compare(caption,Qt::CaseInsensitive)==0)
+                return linaccess::VbaValue::reference(makePreviewCommandControlObject(preview,action));
+            throw linaccess::VbaRuntimeError(5,"Command control unavailable");
+        }
+        throw linaccess::VbaRuntimeError(438,"Command controls member unsupported");
+    }
+    linaccess::VbaValue item(std::string_view name) override { return member("Item",{linaccess::VbaValue::string(std::string(name))}); }
+    std::vector<linaccess::VbaValue> enumerate() override {
+        auto& preview = checked(); std::vector<linaccess::VbaValue> values;
+        if (preview.printToolbar_) for (auto* action : preview.printToolbar_->actions())
+            values.push_back(linaccess::VbaValue::reference(makePreviewCommandControlObject(preview,action)));
+        return values;
+    }
+};
+std::shared_ptr<linaccess::VbaObject> makePreviewCommandControlObject(AccessFormPreview& preview,QAction* action) {
+    auto& cached = preview.commandControlObjects_[action];
+    if (auto object = cached.lock(); object && std::static_pointer_cast<PreviewCommandControlObject>(object)->alive()) return object;
+    auto object = std::make_shared<PreviewCommandControlObject>(preview,action);
+    cached = object; return object;
+}
+class PreviewCommandBarObject final : public linaccess::VbaObject, private PreviewObjectBase {
+public:
+    explicit PreviewCommandBarObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        auto* bar = toolbar();
+        if (text(name).compare("Controls",Qt::CaseInsensitive)==0) {
+            auto controls = std::make_shared<PreviewCommandControlsObject>(checked());
+            return args.empty() ? linaccess::VbaValue::reference(controls) : controls->member("Item",args);
+        }
+        if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected command bar arguments");
+        const auto key = text(name).toCaseFolded();
+        if (key=="name") return linaccess::VbaValue::string("Print Preview");
+        if (key=="enabled") return linaccess::VbaValue::logical(bar->isEnabled());
+        if (key=="visible") return linaccess::VbaValue::logical(!bar->isHidden());
+        throw linaccess::VbaRuntimeError(438,"Command bar member unsupported");
+    }
+    void assign(std::string_view name,const linaccess::VbaValue& value) override {
+        auto* bar = toolbar(); const auto key = text(name).toCaseFolded();
+        if (key!="enabled" && key!="visible") throw linaccess::VbaRuntimeError(438,"Command bar property unsupported");
+        if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null command bar property");
+        if (key=="enabled") bar->setEnabled(value.truthy());
+        else bar->setVisible(value.truthy());
+    }
+private:
+    QToolBar* toolbar() const {
+        auto* bar = checked().printToolbar_;
+        if (!bar) throw linaccess::VbaRuntimeError(5,"Print Preview command bar unavailable in this context");
+        return bar;
+    }
+};
+class PreviewCommandBarsObject final : public linaccess::VbaObject, private PreviewObjectBase {
+public:
+    explicit PreviewCommandBarsObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if (key=="count" && args.empty()) return linaccess::VbaValue::numeric(preview.printToolbar_ ? 1 : 0);
+        QString target;
+        if (key=="item" && args.size()==1) {
+            if (args[0].kind==linaccess::VbaValue::Kind::Number) {
+                const auto index = linaccess::sqlFieldValue(args[0],"INTEGER").toLongLong();
+                if (!preview.printToolbar_ || index!=1) throw linaccess::VbaRuntimeError(5,"Command bar index out of range");
+                target = "Print Preview";
+            } else target = text(args[0].asText());
+        } else if (args.empty()) target = text(name);
+        else throw linaccess::VbaRuntimeError(450,"Unexpected command bars arguments");
+        if (preview.printToolbar_ && target.compare("Print Preview",Qt::CaseInsensitive)==0)
+            return linaccess::VbaValue::reference(makePreviewCommandBarObject(preview));
+        throw linaccess::VbaRuntimeError(5,"Command bar unavailable");
+    }
+    linaccess::VbaValue item(std::string_view name) override { return member("Item",{linaccess::VbaValue::string(std::string(name))}); }
+    std::vector<linaccess::VbaValue> enumerate() override {
+        auto& preview = checked();
+        if (!preview.printToolbar_) return {};
+        return {linaccess::VbaValue::reference(makePreviewCommandBarObject(preview))};
+    }
+};
+class PreviewApplicationObject final : public linaccess::VbaObject, private PreviewObjectBase {
+public:
+    explicit PreviewApplicationObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if (key=="commandbars") {
+            auto bars = std::make_shared<PreviewCommandBarsObject>(preview);
+            return args.empty() ? linaccess::VbaValue::reference(bars) : bars->member("Item",args);
+        }
+        if (key=="forms" && args.empty()) return linaccess::VbaValue::reference(makePreviewFormsObject(preview));
+        throw linaccess::VbaRuntimeError(438,"Application member unsupported");
+    }
+};
+std::shared_ptr<linaccess::VbaObject> makePreviewApplicationObject(AccessFormPreview& preview) {
+    if (auto object = preview.applicationObject_.lock()) return object;
+    auto object = std::make_shared<PreviewApplicationObject>(preview);
+    preview.applicationObject_ = object; return object;
+}
+std::shared_ptr<linaccess::VbaObject> makePreviewCommandBarObject(AccessFormPreview& preview) {
+    if (auto object = preview.commandBarObject_.lock()) return object;
+    auto object = std::make_shared<PreviewCommandBarObject>(preview);
+    preview.commandBarObject_ = object; return object;
+}
 
 std::shared_ptr<linaccess::VbaObject> makePreviewFormObject(AccessFormPreview& preview) {
     if (auto object = preview.formObject_.lock()) return object;

@@ -86,6 +86,7 @@ public:
     linaccess::VbaValue fieldValue(std::string_view name) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
+        if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -93,6 +94,7 @@ public:
     }
     void setFieldValue(std::string_view name,const linaccess::VbaValue& value) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if (key == "caption") { makePreviewFormObject(preview_)->assign("Caption",value); return; }
         if (key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
@@ -136,12 +138,12 @@ public:
     void requeryControl(std::string_view name) override { preview_.requeryControl(name); }
 
     void focusControl(std::string_view name) override {
-        auto* widget = preview_.controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded());
+        auto* widget = preview_.controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded()).data();
         if (!widget) throw std::runtime_error("Steuerelement nicht gefunden: " + std::string(name));
         widget->setFocus();
     }
     void setControlVisible(std::string_view name, bool value) override {
-        auto* widget = preview_.controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded());
+        auto* widget = preview_.controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded()).data();
         if (!widget) throw std::runtime_error("Steuerelement nicht gefunden: " + std::string(name));
         widget->setVisible(value);
     }
@@ -159,6 +161,7 @@ public:
         }
         return std::nullopt;
     }
+    std::shared_ptr<linaccess::VbaObject> applicationObject() override { return makePreviewApplicationObject(preview_); }
     std::shared_ptr<linaccess::VbaObject> currentForm() override { return makePreviewFormObject(preview_); }
     std::shared_ptr<linaccess::VbaObject> formsCollection() override { return makePreviewFormsObject(preview_); }
     std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(preview_.db_); }
@@ -187,6 +190,8 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     setWindowTitle((layout_.caption.isEmpty() ? formName_ : layout_.caption) + " — LinAccess");
     resize(950, 720);
     auto* outer = new QVBoxLayout(this);
+    if (linaccess::decodeVbaSource(source).contains(QRegularExpression("^\\s*Begin\\s+Report\\b",QRegularExpression::CaseInsensitiveOption|QRegularExpression::MultilineOption)))
+        buildPrintToolbar(outer);
     auto* controls = new QHBoxLayout();
     controls->addWidget(new QLabel("Datensatz", this));
     recordSelector_ = new QComboBox(this);
@@ -375,7 +380,7 @@ void AccessFormPreview::loadRecord() {
     QScopedValueRollback<bool> loading(loading_,true);
     for (const auto& control : layout_.controls) {
         if (control.controlSource.isEmpty()) continue;
-        auto* widget = controls_.value(control.name.toCaseFolded());
+        auto* widget = controls_.value(control.name.toCaseFolded()).data();
         if (!widget) continue;
         const int index = columnIndex(control.controlSource,dataColumns_);
         const int row = currentRecordIndex_-1;
@@ -403,7 +408,7 @@ void AccessFormPreview::markDirty(const QString& name) {
     if (loading_ || !directTable_ || !dataSourceAvailable_) return;
     if (!name.isEmpty()) {
         int boundColumn = -1;
-        auto* sourceWidget = controls_.value(name.toCaseFolded());
+        auto* sourceWidget = controls_.value(name.toCaseFolded()).data();
         for (const auto& control : layout_.controls)
             if (control.name.compare(name,Qt::CaseInsensitive) == 0)
                 boundColumn = columnIndex(control.controlSource,dataColumns_);
@@ -411,7 +416,7 @@ void AccessFormPreview::markDirty(const QString& name) {
         QScopedValueRollback<bool> loading(loading_,true);
         for (const auto& control : layout_.controls) {
             if (columnIndex(control.controlSource,dataColumns_) != boundColumn) continue;
-            auto* target = controls_.value(control.name.toCaseFolded());
+            auto* target = controls_.value(control.name.toCaseFolded()).data();
             if (!target || target == sourceWidget) continue;
             setText(target,textOf(sourceWidget)); target->setProperty("la_null",sourceWidget->property("la_null"));
         }
@@ -430,7 +435,7 @@ bool AccessFormPreview::commitControl(const QString& name) {
         if (eventProcedure(control.beforeUpdate)) {
             const auto result = runHandler(eventName(control.name)+"_BeforeUpdate");
             if (result.cancelled || failed(result)) {
-                if (auto* widget = controls_.value(control.name.toCaseFolded())) widget->setFocus();
+                if (auto* widget = controls_.value(control.name.toCaseFolded()).data()) widget->setFocus();
                 return false;
             }
         }
@@ -462,7 +467,7 @@ bool AccessFormPreview::saveRecord() {
     QVariantList values;
     for (const auto& control : layout_.controls) {
         const int fieldIndex = columnIndex(control.controlSource,dataColumns_);
-        auto* widget = controls_.value(control.name.toCaseFolded());
+        auto* widget = controls_.value(control.name.toCaseFolded()).data();
         if (!widget || fieldIndex < 0) continue;
         const auto column = sqlIdentifier(dataColumns_[fieldIndex]);
         if (columns.contains(column)) continue;
@@ -527,7 +532,7 @@ void AccessFormPreview::accept() { if (prepareClose()) QDialog::accept(); }
 void AccessFormPreview::reject() { if (prepareClose()) QDialog::reject(); }
 
 std::optional<std::string> AccessFormPreview::getField(std::string_view name) const {
-    auto* widget = controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded());
+    auto* widget = controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded()).data();
     if (!widget) throw std::runtime_error("Unbekanntes Access-Control: " + std::string(name));
     const auto value = textOf(widget);
     if (widget->property("la_null").toBool()) return std::nullopt;
@@ -535,7 +540,7 @@ std::optional<std::string> AccessFormPreview::getField(std::string_view name) co
 }
 
 void AccessFormPreview::setField(std::string_view name, std::optional<std::string> value) {
-    auto* widget = controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded());
+    auto* widget = controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded()).data();
     if (!widget) throw std::runtime_error("Unbekanntes Access-Control: " + std::string(name));
     const bool wasNull = widget->property("la_null").toBool();
     const auto previous = textOf(widget);
@@ -549,7 +554,7 @@ void AccessFormPreview::setField(std::string_view name, std::optional<std::strin
 }
 
 linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) const {
-    auto* widget = controls_.value(QString::fromUtf8(name.data(),name.size()).toCaseFolded());
+    auto* widget = controls_.value(QString::fromUtf8(name.data(),name.size()).toCaseFolded()).data();
     if (!widget) throw linaccess::VbaRuntimeError(2465,"Unknown form control");
     if (widget->property("la_null").toBool()) return {};
     auto type = widget->property("la_sql_type").toString();
@@ -562,7 +567,7 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
     return linaccess::qtFieldValue(textOf(widget),type);
 }
 void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::VbaValue& value) {
-    auto* widget = controls_.value(QString::fromUtf8(name.data(),name.size()).toCaseFolded());
+    auto* widget = controls_.value(QString::fromUtf8(name.data(),name.size()).toCaseFolded()).data();
     if (!widget) throw linaccess::VbaRuntimeError(2465,"Unknown form control");
     const auto type = widget->property("la_sql_type").toString();
     const auto converted = linaccess::sqlFieldValue(value,type);
@@ -577,7 +582,7 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
 
 void AccessFormPreview::requeryControl(std::string_view name) {
     const auto target = QString::fromUtf8(name.data(),name.size());
-    auto* widget = controls_.value(target.toCaseFolded());
+    auto* widget = controls_.value(target.toCaseFolded()).data();
     if (!widget) throw linaccess::VbaRuntimeError(2465,"Control unavailable");
     auto* combo = qobject_cast<QComboBox*>(widget);
     if (!combo) throw linaccess::VbaRuntimeError(438,"Requery for this control type is unsupported");
@@ -622,11 +627,14 @@ void AccessFormPreview::openOtherForm(const QString& name) {
     if (!nested.cancelledByOpen()) nested.exec();
 }
 
+linaccess::VbaExecutionResult AccessFormPreview::executeProcedure(const QString& name,std::vector<linaccess::VbaValue>& arguments) {
+    PreviewVbaHost host(*this);
+    return linaccess::executeVbaProcedureWithArguments(vba_.toUtf8().toStdString(),name.toUtf8().toStdString(),host,arguments);
+}
 linaccess::VbaExecutionResult AccessFormPreview::runHandler(const QString& handler) {
     if (vba_.isEmpty()) return {};
-    PreviewVbaHost host(*this);
-    const auto result = linaccess::executeVbaProcedure(
-        vba_.toUtf8().toStdString(), handler.toUtf8().toStdString(), host);
+    std::vector<linaccess::VbaValue> arguments;
+    const auto result = executeProcedure(handler,arguments);
     if (result.status == linaccess::VbaExecutionStatus::Unsupported
         || result.status == linaccess::VbaExecutionStatus::Error) {
         const auto message = handler + " (Zeile " + QString::number(result.line)

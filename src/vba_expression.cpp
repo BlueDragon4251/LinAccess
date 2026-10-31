@@ -271,6 +271,7 @@ private:
         if (word == "vbcrlf") return VbaValue::string("\r\n");
         if (word == "vbnewline") return VbaValue::string("\n");
         if (word == "vbtab") return VbaValue::string("\t");
+        if (word == "application") return host_ ? VbaValue::reference(host_->applicationObject()) : VbaValue{};
         if (word == "forms") {
             std::vector<VbaValue> args;
             const bool item = take("(");
@@ -293,7 +294,7 @@ private:
             }
             if (!host_) return {};
             const auto key = lower(field.value);
-            const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource");
+            const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource" || key == "caption");
             if (!formProperty && (peek().value == "." || peek().value == "!"))
                 return host_->currentForm()->member("Controls",{VbaValue::string(field.value)});
             return item ? host_->controlValue(field.value) : host_->fieldValue(field.value);

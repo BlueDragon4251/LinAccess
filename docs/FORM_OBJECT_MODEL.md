@@ -15,7 +15,7 @@ Supported paths:
   fail explicitly; dynamic record-source changes remain open.
 - `Me.Controls`, `Me.Controls(name/index)`, Controls.Item/Count and enumeration
   of instantiated named controls, including explicitly hidden controls.
-- Control Name, ControlType, typed Value for supported data controls,
+- Control Name, ControlType, Caption for supported label/button controls, typed Value for supported data controls,
   Visible/Enabled, SetFocus and bounded ComboBox/ListBox Requery. The latter
   executes table/SQL/saved-query row sources through the shared query adapter,
   uses the first result column, and blocks synthetic dirty signals during reload.
@@ -58,3 +58,6 @@ lifetimes, custom form methods, native-designed forms, Reports, embedded subform
 combo bound columns/multicolumn rendering, control arrays, timers and Access
 window-activation semantics remain open. Requery on unsupported control kinds
 raises an explicit error. No COM/ActiveX implementation is implied.
+
+Print/PDF and the scoped Application.CommandBars adapter are documented in
+PRINT_PREVIEW_ADAPTER.md. They remain distinct from a complete Reports engine.

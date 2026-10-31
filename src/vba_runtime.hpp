@@ -44,6 +44,7 @@ public:
         throw std::runtime_error("Me.Control.Visible: kein Formularkontext");
     }
     virtual std::optional<std::string> moduleForProcedure(std::string_view) { return std::nullopt; }
+    virtual std::shared_ptr<VbaObject> applicationObject() { throw VbaRuntimeError(438,"Application object unavailable"); }
     virtual std::shared_ptr<VbaObject> currentForm() {
         throw VbaRuntimeError(438,"Me: form object unavailable");
     }

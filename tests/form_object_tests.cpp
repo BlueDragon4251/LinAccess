@@ -2,6 +2,8 @@
 #include "access_form_objects.hpp"
 #include <QLineEdit>
 #include <QComboBox>
+#include <QToolBar>
+#include <QAction>
 #include <QPushButton>
 #include <QSqlQuery>
 #ifdef NDEBUG
@@ -156,5 +158,51 @@ End Sub
     assert(forms->item("Count").object->member("Name",{}).asText()=="Count");
     assert(forms->member("Count",{}).asNumber()==2);
     assert(countNamed.close());
+
+    auto firstObject = makePreviewFormObject(first);
+    firstObject->assign("Caption",linaccess::VbaValue::string("Changed caption"));
+    assert(first.windowTitle().startsWith("Changed caption"));
+    assert(firstObject->member("Caption",{}).asText()=="Changed caption");
+    auto scanObject = firstObject->member("Controls",{linaccess::VbaValue::string("Scan")}).object;
+    scanObject->assign("Caption",linaccess::VbaValue::string("New button caption"));
+    assert(scan->text()=="New button caption" && scanObject->member("Caption",{}).asText()=="New button caption");
+    bool invalidCaption = false;
+    try { (void)firstObject->member("Controls",{linaccess::VbaValue::string("Name.Field")}).object->member("Caption",{}); }
+    catch(const linaccess::VbaRuntimeError& error) { invalidCaption = error.number==438; }
+    assert(invalidCaption);
+
+    auto reportSource = form;
+    reportSource.replace("Begin Form","Begin Report");
+    AccessFormPreview report("toolbar report",reportSource,{},db);
+    auto application = makePreviewApplicationObject(report);
+    auto bars = application->member("CommandBars",{}).object;
+    assert(bars->member("Count",{}).asNumber()==1);
+    auto bar = bars->member("Item",{linaccess::VbaValue::numeric(1)}).object;
+    auto commandControls = bar->member("Controls",{}).object;
+    auto command = commandControls->member("Item",{linaccess::VbaValue::numeric(1)}).object;
+    auto* toolbar = report.findChild<QToolBar*>("access-print-preview-toolbar"); assert(toolbar);
+    assert(command->member("Caption",{}).asText()==toolbar->actions()[0]->text().toUtf8().toStdString());
+    bool zeroRejected = false;
+    try { (void)commandControls->member("Item",{linaccess::VbaValue::numeric(0)}); }
+    catch(const linaccess::VbaRuntimeError& error) { zeroRejected = error.number==5; }
+    assert(zeroRejected);
+    command->assign("Caption",linaccess::VbaValue::string("Renamed command"));
+    assert(toolbar->actions()[0]->text()=="Renamed command");
+    assert(commandControls->member("Item",{linaccess::VbaValue::string("Renamed command")}).object==command);
+    bar->assign("Enabled",linaccess::VbaValue::logical(false)); assert(!toolbar->isEnabled());
+    bar->assign("Enabled",linaccess::VbaValue::logical(true)); assert(toolbar->isEnabled());
+    delete toolbar->actions()[0];
+    bool deletedRejected = false;
+    try { (void)command->member("Caption",{}); }
+    catch(const linaccess::VbaRuntimeError& error) { deletedRejected = error.number==91; }
+    assert(deletedRejected); assert(report.close());
+
+    auto retainedField = firstObject->member("Controls",{linaccess::VbaValue::string("Name.Field")}).object;
+    delete first.findChild<QLineEdit*>("access-control-Name.Field");
+    bool deletedFieldRejected = false;
+    try { (void)retainedField->member("Value",{}); }
+    catch(const linaccess::VbaRuntimeError& error) { deletedFieldRejected = error.number==2465; }
+    assert(deletedFieldRejected);
+    assert(firstObject->member("Controls",{}).object->member("Count",{}).asNumber()==3);
     assert(first.close());
 }

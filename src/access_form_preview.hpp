@@ -5,6 +5,7 @@
 
 #include <QDialog>
 #include <QMap>
+#include <QPointer>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QVariant>
@@ -15,6 +16,10 @@ class QComboBox;
 class QLabel;
 class QWidget;
 class QCloseEvent;
+class QToolBar;
+class QVBoxLayout;
+class QPrinter;
+class QAction;
 
 // Renders controls from Access 2003 SaveAsText instead of placing them in an
 // unrelated auto-generated QFormLayout. Only supported VBA handlers can run.
@@ -24,6 +29,8 @@ public:
                       const QByteArray& vbaSource, QSqlDatabase database,
                       QWidget* parent = nullptr);
 
+    linaccess::VbaExecutionResult executeProcedure(const QString& name,std::vector<linaccess::VbaValue>& arguments);
+    bool exportLayoutPdf(const QString& path);
     int renderedControls() const { return renderedControls_; }
     bool hasDataSource() const { return dataSourceAvailable_; }
     bool cancelledByOpen() const { return openCancelled_; }
@@ -54,6 +61,14 @@ private:
     friend std::shared_ptr<linaccess::VbaObject> makePreviewFormsObject(AccessFormPreview&);
     friend std::shared_ptr<linaccess::VbaObject> makePreviewControlsObject(AccessFormPreview&);
     friend std::shared_ptr<linaccess::VbaObject> makePreviewControlObject(AccessFormPreview&,const QString&);
+    friend class PreviewApplicationObject;
+    friend class PreviewCommandBarsObject;
+    friend class PreviewCommandBarObject;
+    friend class PreviewCommandControlsObject;
+    friend class PreviewCommandControlObject;
+    friend std::shared_ptr<linaccess::VbaObject> makePreviewCommandControlObject(AccessFormPreview&,QAction*);
+    friend std::shared_ptr<linaccess::VbaObject> makePreviewApplicationObject(AccessFormPreview&);
+    friend std::shared_ptr<linaccess::VbaObject> makePreviewCommandBarObject(AccessFormPreview&);
     friend class PreviewObjectBase;
     friend class PreviewFormObject;
     friend class PreviewFormsObject;
@@ -63,13 +78,18 @@ private:
 
     std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, controlsObject_;
     QMap<QString,std::weak_ptr<linaccess::VbaObject>> controlObjects_;
+    std::weak_ptr<linaccess::VbaObject> applicationObject_,commandBarObject_;
+    QMap<QAction*,std::weak_ptr<linaccess::VbaObject>> commandControlObjects_;
+    QToolBar* printToolbar_{};
+    void buildPrintToolbar(QVBoxLayout* layout);
+    bool renderLayout(QPrinter& printer);
     QString formName_;
     QString vba_;
     linaccess::AccessFormLayout layout_;
     QSqlDatabase db_;
     QComboBox* recordSelector_{};
     QLabel* status_{};
-    QMap<QString, QWidget*> controls_;
+    QMap<QString,QPointer<QWidget>> controls_;
     QStringList dataColumns_;
     QMap<QString,QString> dataTypes_;
     QVector<QVariantList> recordRows_;

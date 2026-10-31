@@ -29,6 +29,7 @@
 
 void testFormEvents();
 void testFormObjects();
+void testOriginalControls(const QDir&,const QJsonArray&);
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
@@ -199,6 +200,7 @@ End Sub
     }
     testFormEvents();
     testFormObjects();
+    testOriginalControls(directory,objects);
     if (argc >= 3) {
         QTemporaryDir temporary;
         assert(temporary.isValid());

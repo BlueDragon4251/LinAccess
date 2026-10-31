@@ -10,6 +10,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | VBA files/procedures included in syntax inventory | 32/187 |
 | Original register keypad button/parameter-helper executions | 11 |
 | Original DAO insertion button execution | 1 |
+| Original Report_Open command-bar procedures executed explicitly | 3 |
 | Original form layouts scanned | 47 |
 | Parsed controls / visible command buttons | 878 / 86 |
 | Original query artifacts classified / executed without Access result oracle | 100 / 38 |
@@ -49,6 +50,12 @@ layouts instantiate in the structure regression; full execution remains open.
 Completed aggregate package: First/Last with NULL endpoints and copied per-group
 values; original query executions increased to 38/100 without an Access oracle.
 Cross-engine ordering and remaining dialect dependencies remain open.
+
+Completed print-preview adapter package: real Qt print/PDF actions and Office
+CommandBars/Controls Caption/Visible/Enabled mapping. Three original Report_Open
+procedures execute explicitly; one-page temporary PDFs are verified. Automatic
+report event binding, report pagination and Access print parity remain open
+(PRINT_PREVIEW_ADAPTER.md).
 
 See DEVELOPMENT_CHECKLIST.md for all requirements and DAO_RUNTIME.md and
 MDB_IMPORT_REGRESSION.md for evidence and limitations. Private syntax inventory

@@ -29,7 +29,7 @@ if(LINACCESS_BUILD_GUI)
         src/access_table_import.hpp
 
         src/access_form_import.hpp
-        src/access_form_preview.cpp src/access_form_objects.cpp
+        src/access_form_preview.cpp src/access_form_objects.cpp src/access_layout_print.cpp
         src/access_form_preview.hpp
         src/bridge_importer.cpp
         src/bridge_importer.hpp
@@ -173,16 +173,16 @@ if(BUILD_TESTING)
                 COMMAND linaccess_real_bridge_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}" 192 47 9 100 32 4)
             set_tests_properties(complex_access_bridge PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
             add_executable(linaccess_access_layout_tests
-                tests/access_form_layout_tests.cpp tests/form_event_tests.cpp tests/form_object_tests.cpp
+                tests/access_form_layout_tests.cpp tests/form_event_tests.cpp tests/form_object_tests.cpp tests/original_control_tests.cpp
                  src/access_form_import.hpp
 
-                src/access_form_preview.cpp src/access_form_objects.cpp src/access_form_preview.hpp
+                src/access_form_preview.cpp src/access_form_objects.cpp src/access_layout_print.cpp src/access_form_preview.hpp
                  src/vba_source_codec.hpp
                  src/vba_runtime.hpp
                  src/vba_expression.hpp
                  src/vba_analyzer.hpp)
             target_include_directories(linaccess_access_layout_tests PRIVATE src)
-            target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::Test)
+            target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::Test Qt6::PrintSupport)
             add_test(NAME access_2003_layouts
                 COMMAND linaccess_access_layout_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}")
             set_tests_properties(access_2003_layouts PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

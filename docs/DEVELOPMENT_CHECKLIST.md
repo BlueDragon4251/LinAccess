@@ -96,7 +96,8 @@ Full targets remain open:
 - [ ] Fonts/colors/geometry/default control properties and Access 2003 layout parity.
 - [ ] Embedded linked subforms, tab/option groups, combos/lists and expression controls.
 - [ ] Report sections/grouping/aggregates/headers/footers/pagination, report events.
-- [ ] Print/PDF preview and output compared against original reference reports.
+- [x] Native current-layout single-page print/PDF preview and CommandBars adapter; three original Report_Open procedures executed explicitly.
+- [ ] Full report print/PDF pagination and output compared against original reference reports.
 - [ ] Macros/action representation and native execution with error diagnostics.
 
 ## Corpus, platforms and delivery

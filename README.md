@@ -148,7 +148,10 @@ ctest --test-dir build-core --output-on-failure
   IIf. Gespeicherte Abfragen können schreibgeschützte Formular-Datenquellen sein.
   38/100 Kassenabfragen werden ausgeführt, bisher ohne Access-Referenzergebnis;
   siehe [Abfrageadapter](docs/QUERY_ADAPTER.md). Importierte Berichte haben eine
-  grobe Layoutvorschau, noch keine Layout-/Druckkompatibilität.
+  grobe Layoutvorschau mit einseitigem Druck/PDF des aktuellen Layouts, noch keine
+  Access-Berichts-/Druckkompatibilität. Drei originale Report_Open-Prozeduren
+  werden explizit über den Runtime-Einstieg ausgeführt; der native CommandBars-
+  Adapter ist in [Druckvorschau](docs/PRINT_PREVIEW_ADAPTER.md) beschrieben.
 - Importierte Formulare bieten native `Forms`-/`Controls`-Sammlungen einschließlich
   `Me.Controls`, tatsächlicher formulierübergreifender Datenänderungen und
   geprüfter Qt-Objektlebensdauer. Die Implementierung bleibt eine Teilmenge;
