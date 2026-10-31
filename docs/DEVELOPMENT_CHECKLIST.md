@@ -84,7 +84,7 @@ Verified incremental work ([query adapter and limits](QUERY_ADAPTER.md)):
 - [x] Canonical MDB/date-literal/Date()/Now() timestamps at second precision.
 - [x] Parameterless compatible query views, dependency refresh and form source exposure.
 - [x] All 100 query artifacts hash-checked and classified on an isolated copy;
-  58 execute without an Access result oracle, the rest remain explicitly unresolved.
+  74 execute (69 ordinary + five parameterized) without an Access result oracle, the rest remain explicitly unresolved.
 - [x] SQL operation/time budgets and rejection of interrupted partial results.
 
 Full targets remain open:
@@ -94,7 +94,7 @@ Full targets remain open:
 - [x] Bounded date Format/Format$ masks in SQL/VBA; actual values from ten original date columns, NULL/error/locale/DST tests.
 - [x] Native SQL concatenation with arithmetic/Boolean boundaries, NULL and dynamic LIKE regression; original query execution 49/100.
 - [ ] Complete date/format masks, wildcard semantics, Null/coercion, DDL/DML and action queries.
-- [x] Saved ranked TOP dependency views, NULL/tie-safe bounded TOP 1 plans and qualified column labels; 58/100 original queries execute.
+- [x] Saved ranked TOP dependency views, NULL/tie-safe bounded TOP 1 plans and qualified column labels; 74/100 original queries execute after subsequent query-origin work.
 - [x] Nested SQL budget enforcement and guarded simple RIGHT JOIN adaptation with independent NULL/duplicate results.
 - [ ] Execute and classify all 100 Kassa queries against the imported database copy.
 - [x] Bounded read-only saved-query form sources and translated navigator results with explicit typed parameter prompts.
@@ -134,3 +134,6 @@ Full targets remain open:
 - [x] Actual native activation, deferred first Current, form-switch and close-cancellation tests; original Open/Load/Activate/Current complete.
 - [ ] Full focus/resize/PopUp/Modal/MDI/reentrant event semantics and Microsoft Access event oracle.
 - [ ] Access oracle for the remaining initial calculated error, full Currency coercions/locales, exact Jet MONEY storage and Decimal semantics.
+
+- [x] Jet bracketed derived tables, full-field DISTINCTROW, unique column-origin rebinding, bounded pure aliases and positive original parameter results.
+- [ ] Resolve/compare the original six-column source mismatch against Access; full nested/intermediate lineage, ambiguous records and aggregate/volatile alias semantics remain open.

@@ -16,8 +16,9 @@ Implemented with execution tests:
   remain explicitly unsupported.
 - ANSI-89 quoted strings, bracket identifiers and True=-1/False=0.
 - Single-table DISTINCTROW is ignored, as in Jet. It must not become DISTINCT,
-  which can incorrectly remove projected duplicates. Multitable DISTINCTROW
-  remains unsupported without complete source-record identity mapping.
+  which can incorrectly remove projected duplicates. DISTINCTROW is also ignored
+  for a bare all-source wildcard. Other multitable projections still require
+  source-record identity mapping; see [derived tables and origins](QUERY_ORIGINS.md).
 - TOP integers without ORDER BY use LIMIT. Ordered TOP uses a hidden RANK column
   so ties at the boundary are retained; that column is excluded from recordset
   fields. Explicit ORDER BY aliases are bound to their expressions. Ordered
@@ -39,15 +40,17 @@ Implemented with execution tests:
 ## Original corpus measurement
 
 All 100 original Kassa query artifacts are hash-checked and classified against a
-separate imported SQLite database. Current local run: 58 executed, 9 missing a
-query dependency, 6 unsupported function/compilation cases, 25 other unsupported
-Jet/binding cases and 2 action queries unexecuted by
-this corpus runner. Action query mutation is verified separately with typed
-QueryDefs tests. No row values or raw SQL are emitted in corpus reports.
+separate imported SQLite database. Current local run: 69 executed without extra
+parameters and five with parameters selected from actual data (74 total), nine
+missing query dependencies, fourteen other Jet/binding failures, one source-column
+mismatch and two actions unexecuted by this runner. Parameterized results are
+compared against positive independent filter counts. Action mutation is verified
+separately with typed QueryDefs tests. Reports contain hashes/status/error codes,
+not values or raw SQL. See QUERY_ORIGINS.md for the remaining six-column mismatch.
 
 Execution without a Microsoft Access reference result is not proof of original
 query semantics. The report says executed_no_access_reference_oracle explicitly.
-Remaining dialect work includes '&' coercion, functions, nested parameter queries,
+Remaining dialect work includes full '&' coercion details, functions, nested parameter queries,
 arbitrary form/report property chains, multitable DISTINCTROW,
 crosstabs, implicit form parameter resolution, collations, precise types and editable query joins.
 
@@ -105,7 +108,8 @@ can choose different scans. No cross-engine equality claim is made. Current corp
 
 Date Format/Format$ is described in DATE_FORMAT.md. Native concatenation and
 current original query/report measurements are described in SQL_CONCATENATION.md.
-Localized form references remain a separate unresolved SQL feature.
+Explicit localized form references use native control lookup (SQL_OBJECT_VALUES.md);
+implicit parameter inference and full property chains remain incomplete.
 
 ## Schema labels and bounded query plans
 
@@ -129,3 +133,6 @@ counting resolver). Helper names are owned separately, collisions are preserved,
 missing dependencies retry and user columns named like the rank field remain
 visible. DAO recordsets retain the complete shared query plan. Nested execution
 budgets charge all enclosing budgets and restore the parent progress handler.
+
+Bracketed derived tables, proven column lineage across saved queries and bounded
+pure alias expansion are described in [QUERY_ORIGINS.md](QUERY_ORIGINS.md).

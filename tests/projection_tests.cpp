@@ -17,6 +17,32 @@ int main(int argc,char** argv) {
     assert(query.exec("INSERT INTO a VALUES(1,10)"));
     assert(query.exec("INSERT INTO b VALUES(1,20)"));
     assert(query.exec("INSERT INTO c VALUES(1)"));
+    assert(query.exec("CREATE TABLE distinct_parent(k INTEGER)"));
+    assert(query.exec("CREATE TABLE distinct_child(k INTEGER)"));
+    assert(query.exec("INSERT INTO distinct_parent VALUES(1),(1),(2),(2)"));
+    assert(query.exec("INSERT INTO distinct_child VALUES(1),(1)")); query.finish();
+    const auto distinctAll=linaccess::compileAccessQuery("SELECT DISTINCTROW * FROM distinct_parent INNER JOIN distinct_child ON distinct_parent.k=distinct_child.k");
+    const auto duplicates=linaccess::executeAccessQueryPlan(db,distinctAll,{});
+    assert(duplicates.rows.size()==4 && duplicates.columns.size()==2);
+    for (const auto& row : duplicates.rows) assert(row[0].toInt()==1 && row[1].toInt()==1);
+    const auto outer=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT DISTINCTROW * FROM distinct_parent LEFT JOIN distinct_child ON distinct_parent.k=distinct_child.k WHERE distinct_parent.k=2"),{});
+    assert(outer.rows.size()==2);
+    for (const auto& row : outer.rows) assert(row[0].toInt()==2 && row[1].isNull());
+    const auto derived=linaccess::compileAccessQuery("PARAMETERS [wanted] Value; SELECT DISTINCTROW * FROM [SELECT distinct_parent.k AS k FROM distinct_parent INNER JOIN distinct_child ON distinct_parent.k=distinct_child.k]. AS picked WHERE picked.k=[wanted]");
+    assert(derived.parameters.size()==1);
+    const auto picked=linaccess::executeAccessQueryPlan(db,derived,linaccess::bindAccessQueryParameters(derived,{{"wanted",1}}));
+    assert(picked.rows.size()==4 && picked.columns.size()==1);
+    const auto none=linaccess::executeAccessQueryPlan(db,derived,linaccess::bindAccessQueryParameters(derived,{{"wanted",2}}));
+    assert(none.rows.empty());
+    const auto nested=linaccess::compileAccessQuery("SELECT * FROM [SELECT * FROM [SELECT 'bracket ] and [ text' AS label]. AS inside_query]. AS outside_query");
+    const auto nestedRows=linaccess::executeAccessQueryPlan(db,nested,{});
+    assert(nestedRows.rows.size()==1 && nestedRows.rows.front().front().toString()=="bracket ] and [ text");
+    const auto ordinary=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT 1 AS [SELECT ordinary identifier]"),{});
+    assert(ordinary.columns.front()=="SELECT ordinary identifier");
+    bool identityMappingRequired=false;
+    try { (void)linaccess::compileAccessQuery("SELECT DISTINCTROW distinct_parent.k FROM distinct_parent INNER JOIN distinct_child ON distinct_parent.k=distinct_child.k"); }
+    catch(const linaccess::VbaRuntimeError& error) { identityMappingRequired=error.number==3085; }
+    assert(identityMappingRequired);
     assert(query.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
     const auto artifact=[&](const char* name,const char* sql) {
         query.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('query',?,?)");
@@ -106,4 +132,25 @@ int main(int argc,char** argv) {
     }
     assert(row==4); query.finish();
     assert(linaccess::compileAccessQuery("SELECT * FROM left_side RIGHT JOIN right_side ON left_side.k=right_side.k").rightJoinSql.isEmpty());
+    artifact("lineage_source","SELECT a.id AS original_key,a.flag AS amount FROM a");
+    artifact("lineage_consumer","SELECT a.id,a.flag FROM lineage_source");
+    artifact("pure_aliases","SELECT a.flag AS first_value,first_value+1 AS second_value,second_value & '!' AS text_value FROM lineage_source");
+    artifact("repeated_origins","SELECT a.id AS one,a.id AS two FROM a");
+    assert(linaccess::installAccessQueryViews(db)>0);
+    model.execute(db,"SELECT * FROM lineage_consumer");
+    assert(model.rowCount()==1 && model.data(model.index(0,0)).toInt()==1 && model.data(model.index(0,1)).toInt()==10);
+    model.execute(db,"SELECT * FROM pure_aliases");
+    assert(model.rowCount()==1 && model.data(model.index(0,1)).toInt()==11 && model.data(model.index(0,2)).toString()=="11!");
+    model.execute(db,"SELECT a.flag FROM lineage_source AS saved INNER JOIN c ON a.id=c.id");
+    assert(model.rowCount()==1 && model.data(model.index(0,0)).toInt()==10);
+    bool ambiguousOrigin=false;
+    try { model.execute(db,"SELECT a.id FROM repeated_origins"); }
+    catch(const linaccess::VbaRuntimeError& error) { ambiguousOrigin=error.number==3146; }
+    assert(ambiguousOrigin);
+    calls=0;
+    bool volatileAlias=false;
+    try { model.execute(db,"SELECT Forms!Filter!Year AS x,x+1 FROM a"); }
+    catch(const linaccess::VbaRuntimeError& error) { volatileAlias=error.number==3146; }
+    assert(volatileAlias && calls==0);
+
 }

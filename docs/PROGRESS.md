@@ -19,7 +19,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original report non-NULL textbox values compared with prepared reader | 54 |
 | Original form layouts scanned | 47 |
 | Parsed controls / visible command buttons | 878 / 86 |
-| Original query artifacts classified / executed without Access result oracle | 100 / 58 |
+| Original query artifacts classified / executed without Access result oracle | 100 / 74 (69 ordinary + 5 parameterized) |
 | Current local regression tests | 18 passed |
 
 Current completed work package: positional Sub/Function calls, ByVal/ByRef aliases,
@@ -100,7 +100,7 @@ Completed embedded-form execution package: real child forms, persistence and
 close cancellation, typed combo columns, simple calculated aggregates, Error
 Variants and complete SaveAsText string fragments (NATIVE_FORM_RUNTIME.md).
 Qualified projection labels, ranked TOP dependency views, guarded TOP 1 boundary
-queries and bounded two-table RIGHT-to-LEFT JOIN adaptation execute 58/100
+queries and bounded two-table RIGHT-to-LEFT JOIN adaptation and subsequent origin/derived-table work execute 74/100
 original queries. Nested SQL budgets remain effective. Overall compatibility,
 classes/AST, remaining startup events and exact monetary types remain open.
 
@@ -135,3 +135,9 @@ Current, form-to-form Deactivate/Activate, accepted/cancelled close and embedded
 form exclusions. The unchanged original Open/Load/Activate/Current all complete.
 Remaining initial calculated error 94, full workflows and Access event-oracle
 comparison remain open (NATIVE_ACTIVATION.md).
+
+Completed bounded query-origin package: Jet bracketed derived tables, all-field
+DISTINCTROW semantics, proven unique base-column lineage and pure previous-alias
+expansion. Corpus execution rises from 58 to 74 (69 ordinary and five positive
+parameter cases). One original reference requests a field absent from its
+six-column source view; it remains explicitly unresolved (QUERY_ORIGINS.md).

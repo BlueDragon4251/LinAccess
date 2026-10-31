@@ -146,7 +146,8 @@ ctest --test-dir build-core --output-on-failure
 - Importierte Access-Abfragen laufen im Navigator über einen begrenzten Jet-SQL-
   Adapter mit Parameterdialogen, DAO-QueryDefs, TOP-Sortiergleichständen, eager
   IIf und begrenzter nativer Datumsformatierung für SQL/VBA-Format$. Gespeicherte Abfragen können schreibgeschützte Formular-Datenquellen sein.
-  58/100 Kassenabfragen werden ausgeführt, bisher ohne Access-Referenzergebnis;
+  74/100 Kassenabfragen werden ausgeführt (69 ohne zusätzliche Parameter, fünf mit
+  Datenparametern und geprüften positiven Ergebnissen), bisher ohne Access-Referenzergebnis;
   SQL-Verweise auf geöffnete Forms/Formulare und Reports/Berichte lesen echte
   Controlwerte, auch in gespeicherten Abfragen; [Umfang und Tests](docs/SQL_OBJECT_VALUES.md).
   siehe [Abfrageadapter](docs/QUERY_ADAPTER.md). Importierte Berichte haben eine

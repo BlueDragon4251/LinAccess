@@ -7,6 +7,9 @@
 #include "vba_source_codec.hpp"
 #include <QSqlQuery>
 #include <QSqlDriver>
+#include <QLibrary>
+struct sqlite3;
+struct sqlite3_stmt;
 #include <QJsonDocument>
 #include <QCryptographicHash>
 #include <QSet>
@@ -31,7 +34,7 @@ QString canonicalDate(const QString& input, bool literalDate = false) {
 }
 QString literal(QString value) { return '\'' + value.replace('\'', "''") + '\''; }
 QString identifier(QString value) { return '"' + value.replace('"', "\"\"") + '"'; }
-QVector<Token> tokenize(const QString& sql) {
+QVector<Token> tokenize(const QString& sql,bool nativeIdentifiers=false) {
     QVector<Token> result;
     for (qsizetype i = 0; i < sql.size();) {
         const auto ch = sql[i];
@@ -50,7 +53,50 @@ QVector<Token> tokenize(const QString& sql) {
             result.append({Token::String,canonicalDate(sql.mid(i+1,end-i-1),true)});
             i = end + 1; continue;
         }
+        if (nativeIdentifiers && ch==':') {
+            const auto start=i++;
+            while (i<sql.size() && (sql[i].isLetterOrNumber() || sql[i]=='_')) ++i;
+            result.append({Token::Other,sql.mid(start,i-start)}); continue;
+        }
         if (ch == '\'' || ch == '"' || ch == '[') {
+            if (ch=='[') {
+                auto begin=i+1;
+                while (begin<sql.size() && sql[begin].isSpace()) ++begin;
+                if (sql.mid(begin,6).compare("SELECT",Qt::CaseInsensitive)==0
+                    && begin+6<sql.size() && sql[begin+6].isSpace()) {
+                    // Jet exports derived tables as [SELECT ...]. AS alias.
+                    // Nested identifier brackets belong to the inner query.
+                    int depth=1; auto end=i+1; QChar quote;
+                    for (;end<sql.size();++end) {
+                        const auto current=sql[end];
+                        if (!quote.isNull()) {
+                            if (current==quote) {
+                                if (end+1<sql.size() && sql[end+1]==quote) ++end;
+                                else quote={};
+                            }
+                        } else if (current=='\'' || current=='"') quote=current;
+                        else if (current=='[') ++depth;
+                        else if (current==']' && --depth==0) break;
+                    }
+                    auto dot=end+1;
+                    while (dot<sql.size() && sql[dot].isSpace()) ++dot;
+                    auto as=dot+1;
+                    while (as<sql.size() && sql[as].isSpace()) ++as;
+                    if (depth==0 && dot<sql.size() && sql[dot]=='.'
+                        && sql.mid(as,2).compare("AS",Qt::CaseInsensitive)==0
+                        && as+2<sql.size() && sql[as+2].isSpace()) {
+                        static thread_local int nesting=0;
+                        require(nesting<16,"Jet SQL: bracketed subquery nesting limit");
+                        struct Guard { int& depth; explicit Guard(int& value):depth(value) { ++depth; } ~Guard() { --depth; } } guard(nesting);
+                        const auto inner=compileAccessQuery(sql.mid(i+1,end-i-1));
+                        require(inner.parameters.empty() && inner.topLimit==0,"Jet SQL: bracketed subquery parameter/TOP materialization unsupported");
+                        require(inner.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive),"Jet SQL: bracketed subquery requires SELECT");
+                        result.append({Token::Other,"("+inner.sql+")"});
+                        i=dot+1;
+                        continue;
+                    }
+                }
+            }
             const auto close = ch == '[' ? QChar(']') : ch;
             QString value; bool closed = false; ++i;
             while (i < sql.size()) {
@@ -61,7 +107,7 @@ QVector<Token> tokenize(const QString& sql) {
                 } else value += sql[i++];
             }
             require(closed, "Jet SQL: unterminated string or identifier");
-            result.append({ch == '[' ? Token::Identifier : Token::String, value});
+            result.append({ch == '[' || (nativeIdentifiers && ch=='"') ? Token::Identifier : Token::String, value});
         } else if (ch.isLetter() || ch == '_') {
             const auto start = i++;
             while (i < sql.size() && (sql[i].isLetterOrNumber() || sql[i] == '_')) ++i;
@@ -222,6 +268,114 @@ QString renderJetTokens(const QVector<Token>& tokens) {
         else text.append(token.value);
     }
     return text.join(' ');
+}
+struct ColumnOrigin { QString label,table,column; };
+QVector<ColumnOrigin> columnOrigins(QSqlDatabase db,const QString& source) {
+    static QLibrary library("sqlite3",0);
+    library.setLoadHints(QLibrary::PreventUnloadHint);
+    const auto prepare=reinterpret_cast<int (*)(sqlite3*,const char*,int,sqlite3_stmt**,const char**)>(library.resolve("sqlite3_prepare_v2"));
+    const auto finish=reinterpret_cast<int (*)(sqlite3_stmt*)>(library.resolve("sqlite3_finalize"));
+    const auto count=reinterpret_cast<int (*)(sqlite3_stmt*)>(library.resolve("sqlite3_column_count"));
+    const auto label=reinterpret_cast<const char* (*)(sqlite3_stmt*,int)>(library.resolve("sqlite3_column_name"));
+    const auto table=reinterpret_cast<const char* (*)(sqlite3_stmt*,int)>(library.resolve("sqlite3_column_table_name"));
+    const auto column=reinterpret_cast<const char* (*)(sqlite3_stmt*,int)>(library.resolve("sqlite3_column_origin_name"));
+    const auto handle=db.driver()->handle();
+    if (!prepare || !finish || !count || !label || !table || !column || !handle.isValid() || QByteArray(handle.typeName())!="sqlite3*") return {};
+    const auto connection=*static_cast<sqlite3* const*>(handle.constData());
+    if (!connection) return {};
+    const auto sql=("SELECT * FROM "+identifier(source)+" LIMIT 0").toUtf8();
+    sqlite3_stmt* statement=nullptr;
+    const auto result=prepare(connection,sql.constData(),sql.size(),&statement,nullptr);
+    struct Guard { sqlite3_stmt* statement; int (*finish)(sqlite3_stmt*); ~Guard() { if (statement) finish(statement); } } guard{statement,finish};
+    if (result!=0 || !statement) return {};
+    QVector<ColumnOrigin> origins;
+    for (int i=0;i<count(statement);++i) origins.append({QString::fromUtf8(label(statement,i)),QString::fromUtf8(table(statement,i)),QString::fromUtf8(column(statement,i))});
+    // No sqlite3_step: obtaining lineage must never evaluate user expressions.
+    return origins;
+}
+QString resolveQueryOrigins(QSqlDatabase db,const QString& sql) {
+    auto tokens=tokenize(sql,true);
+    const auto word=[&](qsizetype i,const char* text) { return i>=0 && i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(text,Qt::CaseInsensitive)==0; };
+    const auto name=[](const Token& token) { return token.kind==Token::Word || token.kind==Token::Identifier; };
+    if (!word(0,"SELECT")) return sql;
+    int depth=0; qsizetype from=-1,end=tokens.size();
+    for (qsizetype i=1;i<tokens.size();++i) {
+        if (word(i,"SELECT")) return sql; // Nested scopes require independent lineage.
+        if (symbol(tokens[i],"(")) ++depth;
+        else if (symbol(tokens[i],")")) --depth;
+        else if (depth==0 && word(i,"FROM")) { from=i; break; }
+    }
+    if (from<0 || from+1>=tokens.size()) return sql;
+    for (auto i=from+2;i<tokens.size();++i) {
+        if (word(i,"WHERE") || word(i,"GROUP") || word(i,"HAVING") || word(i,"ORDER") || word(i,"LIMIT") || symbol(tokens[i],";")) { end=i; break; }
+    }
+    for (auto i=from+1;i<end;++i) if (symbol(tokens[i],",")) return sql;
+    struct Source { QString name,alias; QVector<ColumnOrigin> origins; };
+    QVector<Source> sources;
+    const QSet<QString> reserved{"inner","left","right","outer","full","cross","join","on","using"};
+    for (auto i=from+1;i<end;++i) {
+        if (i!=from+1 && !word(i-1,"JOIN")) continue;
+        while (i<end && symbol(tokens[i],"(")) ++i;
+        if (i>=end || !name(tokens[i]) || (i+1<end && symbol(tokens[i+1],"."))) return sql;
+        Source source{tokens[i].value,tokens[i].value,{}};
+        if (i+2<end && word(i+1,"AS") && name(tokens[i+2])) source.alias=tokens[i+2].value;
+        else if (i+1<end && name(tokens[i+1]) && !reserved.contains(tokens[i+1].value.toCaseFolded())) source.alias=tokens[i+1].value;
+        source.origins=columnOrigins(db,source.name);
+        if (source.origins.empty()) return sql;
+        sources.append(source);
+    }
+    if (sources.empty()) return sql;
+    QSet<QString> fields,visibleOwners;
+    for (const auto& source : sources) {
+        visibleOwners.insert(source.alias.toCaseFolded());
+        for (const auto& origin : source.origins) fields.insert(origin.label.toCaseFolded());
+    }
+    bool changed=false;
+    for (qsizetype i=1;i+2<tokens.size();++i) {
+        if (!name(tokens[i]) || !symbol(tokens[i+1],".") || !name(tokens[i+2])) continue;
+        const auto owner=tokens[i].value;
+        if (visibleOwners.contains(owner.toCaseFolded())) continue;
+        QVector<QPair<QString,QString>> matches;
+        for (const auto& source : sources) for (const auto& origin : source.origins)
+            if (!origin.table.isEmpty() && origin.table.compare(owner,Qt::CaseInsensitive)==0 && origin.column.compare(tokens[i+2].value,Qt::CaseInsensitive)==0) matches.append({source.alias,origin.label});
+        if (matches.size()!=1) continue; // Never guess across ambiguous origins.
+        tokens[i]={Token::Identifier,matches.front().first}; tokens[i+2]={Token::Identifier,matches.front().second}; changed=true;
+    }
+    // Jet permits referring to earlier computed projection aliases. Expand only
+    // known pure expressions and only when no source column shadows the alias.
+    QMap<QString,QVector<Token>> aliases;
+    qsizetype first=(word(1,"DISTINCT") || word(1,"ALL")) ? 2 : 1;
+    QVector<Token> output=tokens.mid(0,first);
+    depth=0;
+    for (qsizetype i=first;i<=from;++i) {
+        if (i!=from && symbol(tokens[i],"(")) ++depth;
+        else if (i!=from && symbol(tokens[i],")")) --depth;
+        if (i!=from && !(depth==0 && symbol(tokens[i],","))) continue;
+        auto projection=tokens.mid(first,i-first);
+        const bool explicitAlias=projection.size()>=3 && projection[projection.size()-2].kind==Token::Word && projection[projection.size()-2].value.compare("AS",Qt::CaseInsensitive)==0 && name(projection.last());
+        const auto expressionEnd=projection.size()-(explicitAlias ? 2 : 0);
+        QVector<Token> expanded;
+        for (qsizetype j=0;j<expressionEnd;++j) {
+            const auto key=projection[j].value.toCaseFolded();
+            const bool qualified=(j>0 && symbol(projection[j-1],".")) || (j+1<expressionEnd && symbol(projection[j+1],"."));
+            if (name(projection[j]) && !qualified && !fields.contains(key) && aliases.contains(key) && !(j+1<expressionEnd && symbol(projection[j+1],"("))) {
+                expanded.append({Token::Other,"("}); expanded+=aliases[key]; expanded.append({Token::Other,")"}); changed=true;
+            } else expanded.append(projection[j]);
+        }
+        if (expanded.size()>4096 || output.size()+expanded.size()>16384) return sql;
+        bool pure=true;
+        static const QSet<QString> functions{"linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","abs","round","length","lower","upper","coalesce"};
+        for (qsizetype j=0;j+1<expanded.size();++j)
+            if (name(expanded[j]) && symbol(expanded[j+1],"(") && !functions.contains(expanded[j].value.toCaseFolded())) pure=false;
+        if (explicitAlias && pure) aliases.insert(projection.last().value.toCaseFolded(),expanded);
+        output+=expanded;
+        if (explicitAlias) output+=projection.mid(expressionEnd);
+        if (i!=from) output.append(tokens[i]);
+        first=i+1;
+    }
+    if (!changed) return sql;
+    output+=tokens.mid(from);
+    return renderJetTokens(output);
 }
 struct RightJoinCandidate { QString source; QStringList tables; };
 RightJoinCandidate simpleRightJoin(const QVector<Token>& tokens,qsizetype start) {
@@ -427,8 +581,11 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
                 if (from && (word(i,"WHERE") || word(i,"GROUP") || word(i,"HAVING") || word(i,"ORDER"))) break;
                 if (from && (word(i,"JOIN") || tokens[i].value == ",")) single = false;
             }
-            require(from && single,"Jet SQL: multitable DISTINCTROW requires record identity mapping");
-            tokens.removeAt(modifier); // Single-table DISTINCTROW is ignored by Jet; DISTINCT would be wrong.
+            const bool allColumns=modifier+2<tokens.size() && symbol(tokens[modifier+1],"*") && word(modifier+2,"FROM");
+            require((from && single) || allColumns,"Jet SQL: multitable DISTINCTROW requires record identity mapping");
+            // Jet ignores DISTINCTROW for one source or when all source-table
+            // fields are output. SELECT DISTINCT would erase valid duplicates.
+            tokens.removeAt(modifier);
         } else if (word(modifier,"DISTINCT")) ++modifier;
         if (word(modifier,"TOP")) {
             require(modifier + 1 < tokens.size(),"Jet SQL: TOP count required");
@@ -580,6 +737,7 @@ int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
     owned.clear(); internal.clear();
     struct RankedView { QString name; QString raw; int limit; AccessQueryPlan plan; };
     QVector<RankedView> pending;
+    QMap<QString,QString> ordinarySql;
     const auto tables = db.tables(QSql::Tables);
     const auto views = db.tables(QSql::Views);
     for (auto it = definitions.cbegin(); it != definitions.cend(); ++it) {
@@ -595,15 +753,32 @@ int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
                 if (query.exec("CREATE TEMP VIEW "+identifier(raw)+" AS "+plan.sql)) {
                     internal.append(raw); pending.append({name,raw,plan.topLimit,plan});
                 }
-            } else if (query.exec("CREATE TEMP VIEW " + identifier(name) + " AS " + plan.sql)) owned << name;
+            } else if (query.exec("CREATE TEMP VIEW " + identifier(name) + " AS " + plan.sql)) {
+                owned << name; ordinarySql.insert(name,plan.sql);
+            }
         } catch (const VbaRuntimeError&) { /* Source remains stored and explicitly unsupported. */ }
     }
     // Ordinary views can forward-reference a ranked query. Resolve ranked
     // dependency chains after all raw/ordinary definitions exist. LIMIT 0 reads
     // schema only, without running expressions or leaking a hidden rank column.
+    const auto repairOrdinary=[&]() {
+        for (int pass=0;pass<ordinarySql.size();++pass) {
+            bool changed=false;
+            for (auto it=ordinarySql.begin();it!=ordinarySql.end();++it) {
+                const auto resolved=resolveQueryOrigins(db,it.value());
+                if (resolved==it.value()) continue;
+                if (!query.exec("DROP VIEW temp."+identifier(it.key())) || !query.exec("CREATE TEMP VIEW "+identifier(it.key())+" AS "+resolved)) return false;
+                it.value()=resolved; changed=true;
+            }
+            if (!changed) break;
+        }
+        return true;
+    };
+    if (!repairOrdinary()) return abort();
     bool progressed=true;
     while (progressed && !pending.empty()) {
         progressed=false;
+        if (!repairOrdinary()) return abort();
         for (qsizetype i=0;i<pending.size();) {
             const auto item=pending[i];
             if (useTopOneBoundary(db,item.plan)) {
@@ -708,7 +883,8 @@ AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan&
         throw VbaRuntimeError(3146,"SQL operation failed");
     };
     const bool topOne=useTopOneBoundary(db,plan);
-    if (!query.prepare(topOne ? plan.topOneSql : useLeftJoin(db,plan) ? plan.rightJoinSql : plan.sql)) fail();
+    const auto source=topOne ? plan.topOneSql : useLeftJoin(db,plan) ? plan.rightJoinSql : plan.sql;
+    if (!query.prepare(resolveQueryOrigins(db,source))) fail();
     for (auto it = bindings.cbegin(); it != bindings.cend(); ++it) query.bindValue(it.key(),it.value());
     if (!query.exec()) fail();
     AccessQueryResult result;
