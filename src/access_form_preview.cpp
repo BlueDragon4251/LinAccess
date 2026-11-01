@@ -342,7 +342,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
-        if (key=="allowadditions" || key=="allowdeletions" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
+        if (key=="allowadditions" || key=="allowdeletions" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -355,7 +355,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
-        if (key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="filter" || key=="filteron" || key=="keypreview" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
+        if (key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
         if (key == "selheight" || key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
@@ -661,6 +661,24 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     connect(recordSelector_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int index) { selectRecord(index); });
     connect(save, &QPushButton::clicked, this, [this] { (void)saveRecord(); });
+    if (layout_.kind==linaccess::AccessDocumentKind::Form) {
+        formTimer_=new QTimer(this); formTimer_->setTimerType(Qt::PreciseTimer);
+        connect(formTimer_,&QTimer::timeout,this,[this] {
+            if (!opened_ || closed_ || closing_ || openCancelled_ || timerDispatching_ || loading_
+                || saving_ || navigating_ || recordCommandRunning_ || insertionEventRunning_) return;
+            ++nativeExecutionDepth();
+            const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+            QScopedValueRollback<bool> dispatching(timerDispatching_,true);
+            const auto binding=layout_.events.value("ontimer");
+            if (eventProcedure(binding)) (void)formEvent("OnTimer","Form_Timer");
+            else if (!binding.trimmed().isEmpty()) {
+                PreviewVbaHost host(*this);
+                const auto result=linaccess::executeVbaEventExpression(vba_.toUtf8().toStdString(),binding.toUtf8().toStdString(),host);
+                eventResults_.insert("ontimer",result);
+                if (failed(result) && status_) status_->setText("Timer-Ereignisfehler "+QString::number(result.errorNumber));
+            }
+        });
+    }
     if (!queryViewsReady) {
         status_->setText("Abfrageansichten werden noch verwendet; andere Ansichten schließen und Formular erneut öffnen.");
         canvas->setEnabled(false); save->setEnabled(false); return;
@@ -680,6 +698,16 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     opened_ = true;
     if (nativeActivationPending_) activateDocument();
     if (!initialCurrentDeferred_) initialCurrent();
+    if (!report) setTimerInterval(layout_.timerInterval);
+}
+
+void AccessFormPreview::setTimerInterval(int interval) {
+    if (layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Timer requires a form");
+    if (interval<0) throw linaccess::VbaRuntimeError(5,"Invalid TimerInterval");
+    layout_.timerInterval=interval;
+    if (!formTimer_) return;
+    if (interval && opened_ && !closed_ && !openCancelled_) formTimer_->start(interval);
+    else formTimer_->stop();
 }
 
 void AccessFormPreview::initialCurrent() {
@@ -1207,6 +1235,7 @@ bool AccessFormPreview::closeDocuments(const QVector<AccessFormPreview*>& roots,
         (void)(*it)->formEvent("OnClose","Form_Close");
         if (!*it) continue;
         (*it)->closed_=true;
+        if ((*it)->formTimer_) (*it)->formTimer_->stop();
         if (*it!=closingRoot && (*it)->isWindow()) (*it)->QDialog::reject();
     }
     return true;

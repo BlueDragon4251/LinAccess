@@ -1,6 +1,15 @@
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
 #include <QApplication>
+#include "vba_source_codec.hpp"
+#include <QDir>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QFile>
+#include <QCryptographicHash>
+#include <QDateTime>
+#include <QRegularExpression>
+
 #include <QComboBox>
 #include <QCheckBox>
 #include <QLineEdit>
@@ -14,10 +23,12 @@
 
 void testInsertionEvents();
 void testChangeEvents();
+void testTimerEvents();
 
 void testFormEvents() {
     testInsertionEvents();
     testChangeEvents();
+    testTimerEvents();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -566,4 +577,136 @@ End Sub
     assert(form.hasUnsavedChanges() && root->item("input").asText()=="e");
     assert(sql.exec("SELECT name FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="d"); sql.finish();
     root->member("Undo",{}); assert(form.close());
+}
+
+void testTimerEvents() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","form-timer-events"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE ticks(value INTEGER)"));
+    const QByteArray layout=R"FORM(Begin Form
+Tag ="0"
+TimerInterval =15
+OnTimer ="[Event Procedure]"
+OnLoad ="[Event Procedure]"
+OnUnload ="[Event Procedure]"
+Begin Section
+Begin TextBox
+Name ="closeGuard"
+End
+End
+End
+)FORM";
+    assert(linaccess::parseAccessFormLayout(QString::fromUtf8(layout)).timerInterval==15);
+    const QByteArray code=R"VBA(Sub Form_Load()
+Me.TimerInterval=5
+End Sub
+Sub Form_Timer()
+CurrentDb.Execute "INSERT INTO ticks VALUES(1)"
+Me.Tag=CLng(Me.Tag)+1
+If CLng(Me.Tag)=3 Then Me.TimerInterval=0
+End Sub
+Sub Form_Unload(Cancel As Integer)
+If Me!closeGuard="stay" Then Cancel=1
+End Sub
+)VBA";
+    AccessFormPreview form("timer",layout,code,db); form.show();
+    auto root=makePreviewFormObject(form);
+    assert(root->member("TimerInterval",{}).asNumber()==5);
+    assert(QTest::qWaitFor([&] { return root->member("Tag",{}).asText()=="3"; },1500));
+    assert(root->member("TimerInterval",{}).asNumber()==0);
+    const auto count=[&] { assert(sql.exec("SELECT COUNT(*) FROM ticks") && sql.next()); const int n=sql.value(0).toInt(); sql.finish(); return n; };
+    assert(count()==3); QTest::qWait(30); assert(count()==3);
+    for (const auto& [value,expected]:std::vector<std::pair<VbaValue,int>>{{VbaValue::numeric(-1),5},{VbaValue::numeric(2147483648.0),6},{VbaValue{},94}}) {
+        int error=0; try { root->assign("TimerInterval",value); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==expected);
+        assert(root->member("TimerInterval",{}).asNumber()==0);
+    }
+    root->assign("Tag",VbaValue::string("0")); form.hide(); root->assign("TimerInterval",VbaValue::numeric(5));
+    assert(QTest::qWaitFor([&] { return root->member("Tag",{}).asText()=="3"; },1500)); assert(count()==6 && !form.isVisible());
+    root->assign("Tag",VbaValue::string("0")); root->assignItem("closeGuard",VbaValue::string("stay"));
+    form.show(); root->assign("TimerInterval",VbaValue::numeric(5)); assert(!form.close());
+    assert(QTest::qWaitFor([&] { return root->member("Tag",{}).asText()=="3"; },1500)); assert(count()==9);
+    root->assignItem("closeGuard",VbaValue::string("allow")); root->assign("TimerInterval",VbaValue::numeric(5));
+    assert(form.close()); QTest::qWait(30); assert(count()==9);
+    const QByteArray selfCode=R"VBA(Sub Form_Timer()
+CurrentDb.Execute "INSERT INTO ticks VALUES(2)"
+DoCmd.Close acForm,Me.Name
+End Sub
+)VBA";
+    auto selfLayout=layout; selfLayout.replace("OnLoad =\"[Event Procedure]\"",""); selfLayout.replace("OnUnload =\"[Event Procedure]\"","");
+    AccessFormPreview self("self closing timer",selfLayout,selfCode,db); self.show();
+    assert(QTest::qWaitFor([&] { return !self.isVisible(); },1500)); assert(count()==10); QTest::qWait(30); assert(count()==10);
+    const QByteArray errorCode="Sub Form_Timer()\nErr.Raise 17\nEnd Sub\n";
+    AccessFormPreview failure("failed timer",selfLayout,errorCode,db); auto failureRoot=makePreviewFormObject(failure);
+    assert(QTest::qWaitFor([&] { return failure.eventResult("OnTimer").has_value(); },1500));
+    assert(failure.eventResult("OnTimer")->errorNumber==17); failureRoot->assign("TimerInterval",VbaValue::numeric(0)); assert(failure.close());
+    auto expressionLayout=selfLayout; expressionLayout.replace("OnTimer =\"[Event Procedure]\"","OnTimer =\"=Pulse()\"");
+    const QByteArray expressionCode="Public Function Pulse()\nCurrentDb.Execute \"INSERT INTO ticks VALUES(3)\"\nMe.TimerInterval=0\nPulse=1\nEnd Function\n";
+    AccessFormPreview expression("expression timer",expressionLayout,expressionCode,db);
+    assert(QTest::qWaitFor([&] { return expression.eventResult("OnTimer").has_value(); },1500));
+    assert(expression.eventResult("OnTimer")->status==linaccess::VbaExecutionStatus::Completed && count()==11); assert(expression.close());
+    AccessFormPreview report("timer report","Begin Report\nEnd\n",{},db); auto reportRoot=makePreviewFormObject(report);
+    int reportError=0; try { reportRoot->member("TimerInterval",{}); } catch(const linaccess::VbaRuntimeError& error) { reportError=error.number; } assert(reportError==438);
+    reportError=0; try { reportRoot->assign("TimerInterval",VbaValue::numeric(5)); } catch(const linaccess::VbaRuntimeError& error) { reportError=error.number; } assert(reportError==438); assert(report.close());
+    for (const auto* invalid:{"-1","2147483648","invalid"}) {
+        bool rejected=false;
+        try { (void)linaccess::parseAccessFormLayout("Begin Form\nTimerInterval ="+QString::fromLatin1(invalid)+"\nEnd\n"); }
+        catch(const std::runtime_error&) { rejected=true; }
+        assert(rejected);
+    }
+
+}
+
+void testOriginalTimer(const QDir& directory,const QJsonArray& objects,QSqlDatabase db) {
+    const QString expected="265db230b1d253b070d2a58047e7db80ccc1d4b9f4e7ff38739e195371bc7deb";
+    int executions=0;
+    for (const auto& entry:objects) {
+        const auto module=entry.toObject(); if (module["kind"]!="vba" || module["sha256"].toString()!=expected) continue;
+        QFile source(directory.filePath(module["file"].toString())); assert(source.open(QIODevice::ReadOnly));
+        const auto code=source.readAll(); assert(QCryptographicHash::hash(code,QCryptographicHash::Sha256).toHex()==expected.toLatin1());
+        const auto name=module["name"].toString().mid(5); QByteArray original;
+        for (const auto& candidate:objects) {
+            const auto metadata=candidate.toObject(); if (metadata["kind"]!="form" || metadata["name"].toString()!=name) continue;
+            QFile layout(directory.filePath(metadata["file"].toString())); assert(layout.open(QIODevice::ReadOnly)); original=layout.readAll();
+            assert(QCryptographicHash::hash(original,QCryptographicHash::Sha256).toHex()==metadata["sha256"].toString().toLatin1());
+        }
+        assert(!original.isEmpty());
+        auto layout=linaccess::decodeVbaSource(original);
+        const auto imported=linaccess::parseAccessFormLayout(layout);
+        assert(imported.events.value("ontimer").compare("[Event Procedure]",Qt::CaseInsensitive)==0 && imported.timerInterval>0);
+        // Isolate the original timer from unrelated startup/shutdown workflows.
+        layout.remove(QRegularExpression("^\\s*(?:OnOpen|OnLoad|OnCurrent|OnActivate|OnDeactivate|OnUnload|OnClose|OnDirty|BeforeUpdate|AfterUpdate|BeforeInsert|AfterInsert)\\s*=.*(?:\\r?\\n|$)",QRegularExpression::MultilineOption));
+        const auto decoded=linaccess::decodeVbaSource(code);
+        const QRegularExpression procedure("^\\s*(?:(?:Private|Public)\\s+)?Sub\\s+Form_Timer\\s*\\([^\\n]*\\)([\\s\\S]*?)^\\s*End\\s+Sub",QRegularExpression::MultilineOption|QRegularExpression::CaseInsensitiveOption);
+        const auto body=procedure.match(decoded); assert(body.hasMatch());
+        const QRegularExpression assignment("^\\s*Me[.!](?:\\[([^\\]]+)\\]|([\\p{L}_][\\p{L}\\p{N}_]*))(?:\\.(Caption))?\\s*=\\s*Now\\s*(?:\\(\\))?\\s*$",QRegularExpression::MultilineOption|QRegularExpression::CaseInsensitiveOption);
+        QVector<QPair<QString,bool>> targets; auto matches=assignment.globalMatch(body.captured(1));
+        while(matches.hasNext()) { const auto match=matches.next(); targets.append({match.captured(1).isEmpty() ? match.captured(2) : match.captured(1),!match.captured(3).isEmpty()}); }
+        assert(targets.size()==2);
+        QSqlQuery guard(db); assert(guard.exec("SAVEPOINT original_timer"));
+        {
+            const auto before=QDateTime::currentDateTime().addSecs(-1);
+            AccessFormPreview document(name,layout.toUtf8(),code,db); auto root=makePreviewFormObject(document);
+            root->assign("TimerInterval",linaccess::VbaValue::numeric(0));
+            const auto sentinel=linaccess::VbaValue::string("2000-01-01 00:00:00");
+            for (const auto& target:targets) {
+                if (target.second) root->objectMember(target.first.toStdString(),{}).object->assign("Caption",sentinel);
+                else if (target.first.compare("Caption",Qt::CaseInsensitive)==0) root->assign("Caption",sentinel);
+                else root->assignItem(target.first.toStdString(),sentinel);
+            }
+            root->assign("TimerInterval",linaccess::VbaValue::numeric(5));
+            assert(QTest::qWaitFor([&] { return document.eventResult("OnTimer").has_value(); },1500));
+            root->assign("TimerInterval",linaccess::VbaValue::numeric(0));
+            assert(document.eventResult("OnTimer")->status==linaccess::VbaExecutionStatus::Completed);
+            const auto after=QDateTime::currentDateTime().addSecs(1);
+            for (const auto& target:targets) {
+                const auto value=target.second ? root->objectMember(target.first.toStdString(),{}).object->member("Caption",{})
+                    : target.first.compare("Caption",Qt::CaseInsensitive)==0 ? root->member("Caption",{}) : root->item(target.first.toStdString());
+                const auto date=QDateTime::fromString(QString::fromStdString(value.asText()),"yyyy-MM-dd HH:mm:ss");
+                assert(date.isValid() && date>=before && date<=after);
+            }
+            assert(document.close()); ++executions;
+        }
+        assert(guard.exec("ROLLBACK TO original_timer") && guard.exec("RELEASE original_timer"));
+    }
+    assert(executions==1);
 }

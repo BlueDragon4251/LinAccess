@@ -1,4 +1,6 @@
 #include "access_form_import.hpp"
+#include <stdexcept>
+#include <limits>
 
 #include <QRegularExpression>
 #include <QSet>
@@ -174,7 +176,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "Height") control.height = integer();
             else if (key == "Visible") control.visible = value != "0" && value != "False";
         } else if (current.type == "Form" || current.type == "Report") {
-            static const QSet<QString> events{"beforeinsert","afterinsert","ondelete","beforedelconfirm","afterdelconfirm","onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate","onnodata","onerror","onpage","onkeydown","onkeypress","onkeyup"};
+            static const QSet<QString> events{"beforeinsert","afterinsert","ondelete","beforedelconfirm","afterdelconfirm","onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate","onnodata","onerror","onpage","onkeydown","onkeypress","onkeyup","ontimer"};
             if (events.contains(key.toCaseFolded())) form.events.insert(key.toCaseFolded(),value);
             if (key == "AllowAdditions") form.allowAdditions = value != "0" && value.compare("False",Qt::CaseInsensitive)!=0;
             if (key == "AllowDeletions") form.allowDeletions = value != "0" && value.compare("False",Qt::CaseInsensitive)!=0;
@@ -182,6 +184,11 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "Tag") form.tag = value;
             else if (key == "RecordSource") form.recordSource = value;
             else if (key == "Filter") form.filter = value;
+            else if (key == "TimerInterval") {
+                bool valid=false; const auto interval=value.toLongLong(&valid);
+                if (!valid || interval<0 || interval>std::numeric_limits<int>::max()) throw std::runtime_error("Invalid imported TimerInterval");
+                form.timerInterval=static_cast<int>(interval);
+            }
             else if (key == "KeyPreview") form.keyPreview = value != "0" && value.compare("False",Qt::CaseInsensitive)!=0;
             else if (key == "Modal") form.modal = value != "0" && value.compare("False",Qt::CaseInsensitive)!=0;
             else if (key == "FilterOnLoad") form.filterOnLoad = value.toInt()!=0;

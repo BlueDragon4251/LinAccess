@@ -295,3 +295,13 @@ editors, including replacement, Null on no selection, focus/range validation
 and UTF-16 selection. Actual Change callbacks and SQL persistence are tested.
 FORM_OBJECT_MODEL.md records clamping and remaining text-buffer/format limits;
 original selection handlers are not claimed (none occur in the VBA fixtures).
+
+### Form timers
+
+Native form TimerInterval/OnTimer now run actual VBA or supported expression
+handlers on a form-owned Qt timer. Load configuration, hidden forms, dynamic
+stop/restart, Unload cancellation, errors and self-close have asynchronous SQL
+regressions. One unchanged original clock handler updates a native form caption and field
+with independently checked timestamps on a lifecycle-isolated test copy.
+TIMER_RUNTIME.md records scheduling guards, Report rejection and the absence of
+an Access clock-locale/event oracle. This is not full timer/message parity.

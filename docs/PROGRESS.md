@@ -26,6 +26,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original deletion procedure / direct invocation / bound native click on synthetic rows | 1 / 1 / 1 |
 | Original duplicate handler / handled manual-key conflicts via invocation and native click / inserted rows | 1 / 2 / 0 |
 | Original counter flags / single-PK generators / managed non-PK generators on new imports | 21 / 16 / 5 |
+| Original clock Timer handler / independently checked timestamp targets on prepared layout | 1 / 2 |
 | Current local regression tests | 21 passed |
 
 Recent completed work includes native combo/platform/backend fixes, control event
@@ -758,3 +759,30 @@ Ubuntu 24.04 21/21 (62.92 s). Fresh host/distro DEBs pass payload/backend,
 permissions and fixture-exclusion checks; all four original fixture hashes
 pass. GUI-disabled core has no changes in this increment.
 Isolated installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+
+Form timer increment: imported/runtime TimerInterval and OnTimer now use a
+form-owned precise QTimer and real VBA/expression dispatch. Tests assert SQL
+effects, Load configuration, three-tick self-stop, hidden restart, cancelled
+Unload, successful close/no further ticks, self-close, failures and expression
+bindings. Strict boolean deadline waits are asserted in the standalone runner.
+The targeted layout suite passes (7.66 s).
+
+One unchanged original Kassa clock module executes its original Timer binding
+on a prepared layout with unrelated lifecycle bindings removed and a shortened
+interval. Both Now assignments replace staged old values in the form caption and native
+field and match independent timestamp bounds. Hashes protect the original module/layout; all mutations are
+inside an isolated project/savepoint. This is one procedure (the SaveAsText
+occurrence duplicates the VBA export), not full startup or Access display-locale
+parity. TIMER_RUNTIME.md records the guards and remaining scheduling/oracle gaps.
+
+The first full timer run exposed a bug in the new original probe: Me.Caption
+was read as a control rather than a form property. The probe is corrected and
+now stages old timestamps before checking both actual changes. Targeted layouts
+and real Kassa integration pass together (32.03 s). No runtime timer defect was
+masked or bypassed; the original handler remains unchanged.
+
+Final timer validation: host Release 21/21 (60.25 s), Debian 12 21/21
+(63.89 s), Ubuntu 24.04 21/21 (58.98 s). Fresh host/distro DEBs pass exact
+payload/backend/permission/fixture-exclusion checks and all four original hashes
+pass. GUI-disabled core sources are unchanged in this increment.
+Isolated installed Debian/Ubuntu packages pass native backend/counter execution and GUI startup.

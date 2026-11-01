@@ -13,6 +13,7 @@
 #include <optional>
 
 class QComboBox;
+class QTimer;
 class QLabel;
 class QWidget;
 class QCloseEvent;
@@ -59,6 +60,7 @@ private:
     void setFilterState(const QString& filter,bool enabled);
     void loadRecord();
     bool saveRecord();
+    void setTimerInterval(int interval);
     void selectCurrentRecordForCommand();
     void deleteCurrentRecord();
     void copyCurrentRecord();
@@ -138,6 +140,8 @@ private:
     linaccess::AccessFormLayout layout_;
     QSqlDatabase db_;
     QComboBox* recordSelector_{};
+    QTimer* formTimer_{};
+    bool timerDispatching_{};
     QLineEdit* filterEditor_{};
     QCheckBox* filterToggle_{};
     QString filter_;

@@ -67,6 +67,7 @@ struct AccessFormLayout {
     bool filterOnLoad{};
     bool modal{};
     bool keyPreview{};
+    int timerInterval{};
     bool allowDeletions{true};
     bool allowAdditions{true};
     int height{5000};

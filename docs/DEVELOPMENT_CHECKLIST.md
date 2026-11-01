@@ -347,3 +347,9 @@ Full targets remain open:
 
 - [x] Focused native editor SelStart/SelLength/SelText with replacement,
   Change/SQL effects, Null/no-selection, validation and UTF-16 regression.
+
+- [x] Native form TimerInterval/OnTimer, Load initialization, hidden execution,
+  stop/restart, close/cancel/lifetime guards and asynchronous SQL regressions.
+- [x] Original clock Timer handler through its original binding on a prepared
+  project copy; two timestamps independently checked (not full startup).
+- [ ] Access modal/timer scheduling and original clock display-locale oracle.

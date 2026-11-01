@@ -313,6 +313,7 @@ int verifyOriginalTags(AccessFormPreview& preview,const QString& code,QSqlDataba
 void testOriginalCalendar(const QDir&,const QJsonArray&,QSqlDatabase);
 
 void testOriginalKeyboardEvents(const QDir&,const QJsonArray&,QSqlDatabase);
+void testOriginalTimer(const QDir&,const QJsonArray&,QSqlDatabase);
 
 void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QString& mdb) {
     QTimer acknowledge;
@@ -970,5 +971,6 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
         assert(query.exec("ROLLBACK TO original_login_boundary")); assert(query.exec("RELEASE original_login_boundary"));
     }
     testOriginalKeyboardEvents(directory,objects,db);
+    testOriginalTimer(directory,objects,db);
     testOriginalCalendar(directory,objects,db);
 }
