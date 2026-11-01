@@ -18,6 +18,7 @@
 #include "vba_source_codec.hpp"
 
 #include <QApplication>
+#include <QFont>
 #include <QCalendarWidget>
 #include <QDate>
 #include <QDateTime>
@@ -859,6 +860,25 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             widget = shape;
         }
         if (!widget) continue;
+        // Apply only text-bearing native adapters; do not change embedded
+        // documents, calendar internals or unsupported-control diagnostics.
+        if (!(control.locked && control.type!="TextBox") &&
+            (control.type=="TextBox" || control.type=="Label" || control.type=="CommandButton"
+             || control.type=="ComboBox" || control.type=="ListBox" || control.type=="CheckBox"
+             || control.type=="OptionButton" || control.type=="ToggleButton")) {
+            auto font=widget->font();
+            if (control.font.name) font.setFamily(*control.font.name);
+            if (control.font.size) font.setPointSize(*control.font.size);
+            if (control.font.weight) font.setWeight(static_cast<QFont::Weight>(*control.font.weight ? *control.font.weight : QFont::Normal));
+            if (control.font.italic) font.setItalic(*control.font.italic);
+            if (control.font.underline) font.setUnderline(*control.font.underline);
+            widget->setFont(font);
+            // Qt's editable combo editor keeps its own explicit default font.
+            if (auto* combo=qobject_cast<QComboBox*>(widget)) {
+                if (combo->lineEdit()) combo->lineEdit()->setFont(font);
+                combo->view()->setFont(font);
+            }
+        }
         widget->setObjectName("access-control-" + control.name);
         widget->setProperty("la_access_tag",control.tag);
         if (!dynamic_cast<AccessFormPreview*>(widget)) widget->installEventFilter(this);
@@ -1737,6 +1757,7 @@ void AccessFormPreview::requeryControl(std::string_view name) {
             view=new QTreeView(combo); view->setRootIsDecorated(false); view->setHeaderHidden(true);
             view->setSelectionBehavior(QAbstractItemView::SelectRows); combo->setView(view);
         }
+        view->setFont(combo->font());
         int displayColumn=-1;
         for (int column=0;column<control.columnCount;++column) {
             const auto width=widths.value(column,-1);

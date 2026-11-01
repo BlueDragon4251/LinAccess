@@ -4,11 +4,12 @@
 #include <QStringList>
 #include <QVector>
 #include <QMap>
+#include <optional>
 
 namespace linaccess {
 // A deliberately partial, source-only decoder for Access SaveAsText form
-// definitions. It does not reconstruct exact geometry, nested subforms,
-// expression controls, combo row sources or any Access-native layout binary.
+// definitions. Opaque Access layout binaries and complete rendering semantics
+// remain outside this decoder; native runtime adapters implement bounded features.
 struct AccessFormDraft {
     QString recordSource;
     QStringList controlSources;
@@ -20,6 +21,14 @@ AccessFormDraft parseAccessFormText(const QString& text);
 // Access 2000/2003 SaveAsText uses TWIPs (1/1440 inch) for geometry.
 // This preserves the layout and event metadata for controls we can draw; it
 // does not claim to reproduce the proprietary Access rendering engine.
+struct AccessControlFont {
+    std::optional<QString> name;
+    std::optional<int> size;
+    std::optional<int> weight;
+    std::optional<bool> italic;
+    std::optional<bool> underline;
+};
+
 struct AccessVisualControl {
     QString type;
     QString name;
@@ -29,6 +38,7 @@ struct AccessVisualControl {
     QString controlSource;
     QString defaultValue;
     QString inputMask;
+    AccessControlFont font;
     int optionValue{1};
     int optionGroupIndex{-1};
     QString rowSource;

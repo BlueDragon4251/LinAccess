@@ -400,3 +400,7 @@ Full targets remain open:
 - [x] Bounded Do Until, postcondition Loop While/Until, unconditional Do/Loop,
   While/Wend and Exit Do with nested frame unwinding, error retry, budget limits
   and native transaction-button SQL evidence.
+
+- [x] Bounded static control-font import/templates and native Qt text rendering,
+  including editable combo editor/popup, real SQL/navigation persistence and
+  original form/report layout probes; dynamic/exact visual parity remains open.

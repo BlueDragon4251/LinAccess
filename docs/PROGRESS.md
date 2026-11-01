@@ -1024,3 +1024,20 @@ Validation: host 21/21 (63.64 s), Debian 12 21/21 (66.30 s), Ubuntu 24.04
 DEBs pass exact payload/backend/permissions/fixture-exclusion checks; isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass.
+
+Control font increment: imported family, point size, weight, italic and underline
+now seed real native text widgets from declared control-type templates with
+per-property instance overrides. Template blocks do not become extra controls.
+A regression exposed Qt retaining a 9-point combo editor beside a 12-point combo;
+explicit editor and requeried popup font application fixes it. Native font metrics,
+sibling styles, SQL save/mirroring and record navigation are tested. One original
+form and one report layout are hash-verified and instantiated with an empty DB
+and no original VBA; no additional original handler/dataset execution is claimed.
+Targeted layout/original-heavy tests pass (35.10 s). Dynamic font APIs, missing
+families and exact Windows rendering remain open (CONTROL_FONT_RENDERING.md).
+
+Validation: host 21/21 (80.67 s), Debian 12 21/21 (68.45 s), Ubuntu 24.04
+21/21 (60.40 s), GUI-disabled core 1/1 (0.92 s). Fresh host/distro DEBs
+pass exact payload/backend/permissions/fixture-exclusion checks; isolated
+installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+All four original fixture hashes pass.

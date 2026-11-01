@@ -13,6 +13,9 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QLineEdit>
+#include <QLabel>
+#include <QFontMetricsF>
+#include <QAbstractItemView>
 #include <QPushButton>
 #include <QSqlQuery>
 #include <QTest>
@@ -36,6 +39,7 @@ void testImportedControlStates();
 void testPasswordMask();
 void testFormCycle();
 void testCycleClose();
+void testControlFonts();
 
 void testFormEvents() {
     testInsertionEvents();
@@ -48,6 +52,7 @@ void testFormEvents() {
     testPasswordMask();
     testFormCycle();
     testCycleClose();
+    testControlFonts();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -1471,4 +1476,140 @@ End
     assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="closing"); sql.finish();
     assert(sql.exec("SELECT COUNT(*) FROM records") && sql.next() && sql.value(0).toInt()==1); sql.finish();
     assert(caller.close());
+}
+
+void testControlFonts() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","control-fonts"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)"));
+    assert(sql.exec("INSERT INTO records VALUES(1,'one'),(2,'two')"));
+    const QByteArray source=R"FORM(Begin Form
+RecordSource ="records"
+Begin
+Begin TextBox
+FontName ="DejaVu Sans"
+FontSize =11
+FontWeight =400
+FontItalic =0
+End
+Begin Label
+FontName ="DejaVu Sans"
+FontSize =10
+FontWeight =700
+FontItalic =NotDefault
+End
+Begin CommandButton
+FontSize =13
+FontWeight =600
+End
+Begin ComboBox
+FontSize =12
+FontUnderline =NotDefault
+End
+End
+Begin Section
+Begin TextBox
+Name ="editor"
+ControlSource ="value"
+FontSize =18
+FontItalic =NotDefault
+Height =600
+End
+Begin TextBox
+Name ="sibling"
+ControlSource ="value"
+Top =700
+End
+Begin Label
+Name ="small"
+Caption ="Sample"
+FontWeight =400
+FontItalic =0
+FontUnderline =NotDefault
+Top =1100
+Height =300
+Width =4000
+End
+Begin Label
+Name ="large"
+Caption ="Sample"
+FontSize =24
+FontItalic =0
+Top =1600
+Height =900
+Width =4000
+End
+Begin CommandButton
+Name ="button"
+Top =2600
+Height =600
+End
+Begin ComboBox
+Name ="combo"
+Top =3300
+Height =600
+RowSourceType ="Value List"
+RowSource ="one;two"
+End
+End
+End
+)FORM";
+    auto layout=linaccess::parseAccessFormLayout(QString::fromUtf8(source)); assert(layout.controls.size()==6);
+    assert(layout.controls[0].font.size==18 && layout.controls[1].font.size==11);
+    assert(layout.controls[0].font.italic==true && layout.controls[1].font.italic==false);
+    assert(layout.controls[2].font.weight==400 && layout.controls[3].font.weight==700);
+    AccessFormPreview form("font regression",source,{},db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form);
+    auto* editor=form.findChild<QLineEdit*>("access-control-editor"); auto* sibling=form.findChild<QLineEdit*>("access-control-sibling");
+    auto* small=form.findChild<QLabel*>("access-control-small"); auto* large=form.findChild<QLabel*>("access-control-large");
+    auto* button=form.findChild<QPushButton*>("access-control-button"); auto* combo=form.findChild<QComboBox*>("access-control-combo");
+    auto* selector=form.findChild<QComboBox*>("access-record-selector"); assert(editor && sibling && small && large && button && combo && selector);
+    assert(editor->font().family()=="DejaVu Sans" && editor->font().pointSize()==18 && editor->font().italic());
+    assert(sibling->font().pointSize()==11 && !sibling->font().italic());
+    assert(small->font().pointSize()==10 && small->font().weight()==400 && small->font().underline() && !small->font().italic());
+    assert(large->font().pointSize()==24 && large->font().weight()==700 && !large->font().italic());
+    assert(button->font().pointSize()==13 && button->font().weight()==600);
+    if (!(combo->font().pointSize()==12 && combo->font().underline() && combo->lineEdit()->font().pointSize()==12))
+        std::cerr<<"Synthetic combo font: control size="<<combo->font().pointSize()<<", underline="<<combo->font().underline()<<", editor size="<<combo->lineEdit()->font().pointSize()<<"\n";
+    assert(combo->font().pointSize()==12 && combo->font().underline() && combo->lineEdit()->font().pointSize()==12);
+    root->objectMember("combo",{}).object->member("Requery",{});
+    assert(combo->count()==2 && combo->view()->font().pointSize()==12 && combo->view()->font().underline());
+    assert(combo->lineEdit()->font().pointSize()==12 && combo->lineEdit()->font().underline());
+    assert(QFontMetricsF(large->font()).horizontalAdvance("Sample")>QFontMetricsF(small->font()).horizontalAdvance("Sample")*2);
+    assert(!form.hasUnsavedChanges()); editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"fresh");
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="fresh"); sql.finish();
+    assert(sibling->text()=="fresh" && editor->font().pointSize()==18 && sibling->font().pointSize()==11);
+    selector->setCurrentIndex(2); assert(root->item("editor").asText()=="two" && !form.hasUnsavedChanges());
+    assert(editor->font().pointSize()==18 && editor->font().italic() && combo->lineEdit()->font().underline());
+    assert(form.close());
+    for (const auto& property:QStringList{"FontSize =0","FontSize =128","FontWeight =-1","FontWeight =1001","FontItalic =invalid","FontName =\"\""}) {
+        bool rejected=false;
+        try { (void)linaccess::parseAccessFormLayout("Begin Form\nBegin Section\nBegin TextBox\nName =\"bad\"\n"+property+"\nEnd\nEnd\nEnd"); }
+        catch(const std::runtime_error&) { rejected=true; }
+        assert(rejected);
+    }
+}
+
+void testOriginalControlFonts(const QDir& directory,const QJsonArray& objects) {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","original-control-fonts-empty"); db.setDatabaseName(":memory:"); assert(db.open());
+    int forms=0,reports=0;
+    for (const auto& entry:objects) {
+        const auto artifact=entry.toObject(); const auto kind=artifact["kind"].toString();
+        if ((kind!="form" && kind!="report") || (kind=="form" ? forms : reports)) continue;
+        QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly)); const auto bytes=input.readAll();
+        assert(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1().toLower());
+        const auto layout=linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(bytes));
+        for (const auto& control:layout.controls) if (control.type=="Label" && control.font.size) {
+            // Original layout only: no original VBA, table data or credentials.
+            AccessFormPreview form(artifact["name"].toString(),bytes,{},db);
+            auto* label=form.findChild<QLabel*>("access-control-"+control.name); assert(label && label->font().pointSize()==*control.font.size);
+            if (control.font.weight) assert(label->font().weight()==(*control.font.weight ? *control.font.weight : 400));
+            if (control.font.italic) assert(label->font().italic()==*control.font.italic);
+            if (control.font.underline) assert(label->font().underline()==*control.font.underline);
+            assert(form.close()); if (kind=="form") ++forms; else ++reports; break;
+        }
+        if (forms && reports) break;
+    }
+    assert(forms==1 && reports==1);
 }

@@ -87,6 +87,21 @@ bool accessBoolean(const QString& value,bool defaultValue) {
     if (!valid) throw std::runtime_error("Invalid imported Boolean property");
     return number!=0;
 }
+bool fontProperty(AccessControlFont& font,const QString& key,const QString& value) {
+    if (key=="FontName") {
+        if (value.isEmpty()) throw std::runtime_error("Invalid imported font name");
+        font.name=value;
+    } else if (key=="FontSize" || key=="FontWeight") {
+        bool valid=false; const auto number=value.toInt(&valid);
+        const bool size=key=="FontSize";
+        if (!valid || (size ? number<1 || number>127 : number<0 || number>1000))
+            throw std::runtime_error("Invalid imported font size/weight");
+        if (size) font.size=number; else font.weight=number;
+    } else if (key=="FontItalic") font.italic=accessBoolean(value,false);
+    else if (key=="FontUnderline") font.underline=accessBoolean(value,false);
+    else return false;
+    return true;
+}
 bool isControl(const QString& type) {
     static const QSet<QString> types = {
         "TextBox", "Label", "CommandButton", "ComboBox", "ListBox",
@@ -100,9 +115,10 @@ bool isControl(const QString& type) {
 
 AccessFormLayout parseAccessFormLayout(const QString& source) {
     AccessFormLayout form;
-    struct Block { QString type; int control{-1}; QString section; };
+    struct Block { QString type; int control{-1}; QString section; bool controlTemplate{}; };
     QVector<Block> stack;
     QHash<QString, int> sections;
+    QHash<QString,AccessControlFont> templateFonts;
     static const QRegularExpression begin(R"(^\s*Begin(?:\s+(\w+))?\s*$)",
         QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression property(R"(^\s*([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$)");
@@ -125,12 +141,13 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 control = static_cast<int>(form.controls.size());
                 AccessVisualControl item;
                 item.type = type;
+                item.font = templateFonts.value(type);
                 for (auto it=stack.crbegin();it!=stack.crend();++it)
                     if (it->type=="OptionGroup" && it->control>=0) { item.optionGroupIndex=it->control; break; }
                 item.section = section;
                 form.controls.push_back(item);
             }
-            stack.push_back({type, control, section});
+            stack.push_back({type, control, section, isControl(type) && section.isEmpty()});
             continue;
         }
         if (line.compare("End", Qt::CaseInsensitive) == 0) {
@@ -151,8 +168,10 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             continue;
         }
         const auto integer = [&] { bool ok = false; const int result = value.toInt(&ok); return ok ? result : 0; };
+        if (current.controlTemplate && fontProperty(templateFonts[current.type],key,value)) continue;
         if (current.control >= 0) {
             auto& control = form.controls[current.control];
+            if (fontProperty(control.font,key,value)) continue;
             if (key == "Name") control.name = value;
             else if (key == "EventProcPrefix") control.eventProcPrefix = value;
             else if (key == "Caption") control.caption = value;

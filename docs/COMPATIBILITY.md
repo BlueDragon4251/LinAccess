@@ -391,3 +391,10 @@ Exit Do now use native condition evaluation and explicit nested-frame unwinding.
 Core tests exercise control flow/error retry/budget limits; a real Qt transaction
 button performs its SQL updates through Do Until. No new original handler count
 is claimed; full grammar/error/type parity remains open (DO_LOOP_RUNTIME.md).
+
+Imported text-control font families, sizes, weights, italic and underline now
+reach real Qt widgets, including declared control-type templates and per-instance
+overrides. Editable combo editors and requeried popup views receive the same font.
+SQL/mirroring/navigation and one original form/report layout are tested without
+original VBA/data. Missing-font resolution, dynamic font APIs and exact Windows
+appearance remain open (CONTROL_FONT_RENDERING.md).
