@@ -425,6 +425,10 @@ public:
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Timer requires a form");
             return linaccess::VbaValue::numeric(preview.layout_.timerInterval);
         }
+        if (key=="cycle") {
+            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Cycle requires a form");
+            return linaccess::VbaValue::numeric(preview.layout_.cycle);
+        }
         if (key=="keypreview") return linaccess::VbaValue::logical(preview.layout_.keyPreview);
         if (preview.layout_.kind==linaccess::AccessDocumentKind::Report && (key=="dirty" || key=="newrecord"))
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
@@ -458,7 +462,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="selheight" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="setfocus" || key=="filter" || key=="filteron")
+        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="selheight" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
@@ -491,6 +495,15 @@ public:
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null AllowDeletions");
             if (preview.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Changing deletion policy during record command unsupported");
             preview.layout_.allowDeletions=value.truthy(); return;
+        }
+        if (key=="cycle") {
+            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Cycle requires a form");
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Cycle");
+            const auto mode=linaccess::sqlFieldValue(scalar,"INTEGER").toLongLong();
+            if (mode<0 || mode>2) throw linaccess::VbaRuntimeError(5,"Invalid Cycle setting");
+            if (mode==2 || !preview.flatTabScope()) throw linaccess::VbaRuntimeError(3251,"Cycle adapter requires a flat form and record mode");
+            preview.layout_.cycle=static_cast<int>(mode); return;
         }
         if (key=="timerinterval") {
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Timer requires a form");

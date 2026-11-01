@@ -372,3 +372,10 @@ Text and real SQL retain the entered value. Dynamic changes, Null/Unicode,
 record navigation and one original layout with synthetic input are tested.
 Other imported patterns are explicitly unsupported/read-only; the original
 login failure and general input-mask semantics remain open (PASSWORD_INPUT_MASK.md).
+
+Flat standalone forms now implement Cycle 0/1 through actual native Tab and
+Shift-Tab: validated control transfer, same-row wrap or real record save/move,
+cancellation with retained focus, new-row handling and handler focus override.
+A close-plus-MsgBox lifetime regression protects this new entry path. Page and
+nested/subform cycles plus general focus/event parity remain open
+(FORM_CYCLE_RUNTIME.md).

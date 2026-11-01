@@ -971,3 +971,22 @@ Validation: host 21/21 (81.92 s), Debian 12 21/21 (64.84 s), Ubuntu 24.04
 pass exact payload/backend/permission/fixture-exclusion checks; isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass.
+
+Form Cycle increment: standalone flat forms now honor Cycle All Records (0) and
+Current Record (1). Native Tab validates before moving focus, persists/navigates
+records when required, and retains input/focus on control or record cancellation.
+New rows save through real SQL without empty extra inserts; Shift-Tab returns
+to an existing row. Unbound forms wrap without SQL. VBA handler focus changes
+are respected. A control AfterUpdate closes its actual dynamically opened form
+and enters a real MsgBox; the form survives the nested loop and is deleted
+after unwinding, with one saved row. Actual Tab-key routing is separate from Qt's
+implicit focus traversal: hiding/disabling a dirty focused control does not save
+or navigate its record. Targeted GUI/original-heavy tests pass (34.91 s).
+Original exports contain no explicit Cycle settings; original
+execution counts are unchanged. Page, nested/subform and general focus/event
+semantics remain open (FORM_CYCLE_RUNTIME.md).
+Validation: host 21/21 (82.58 s), Debian 12 21/21 (65.55 s), Ubuntu 24.04
+21/21 (60.42 s), GUI-disabled build/core 1/1 (0.67 s). Fresh host/distro DEBs
+pass exact payload/backend/permission/fixture-exclusion checks; isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass.

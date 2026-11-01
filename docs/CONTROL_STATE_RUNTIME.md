@@ -53,8 +53,8 @@ Windows OCX activation/persistence has not been compared with an Access oracle.
 
 ## Remaining scope
 
-This is not full Access keyboard or visual parity. Tab-cycle behavior at record/
-section boundaries, focus validation cancellation, Enter/Shift-Enter behavior,
+This is not full Access keyboard or visual parity. General nested/page cycle behavior (bounded flat Cycle is now implemented in
+FORM_CYCLE_RUNTIME.md), mouse focus validation, Enter/Shift-Enter behavior,
 label access keys, container/subform tab scopes, disabling a focused control,
 all Locked kinds, default-property inheritance and exact Windows focus/rendering
 traces remain open. Qt rendering is not an Access 2003 pixel reference.

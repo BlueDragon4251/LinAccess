@@ -370,7 +370,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
-        if (key=="allowadditions" || key=="allowdeletions" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
+        if (key=="allowadditions" || key=="allowdeletions" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -383,7 +383,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
-        if (key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
+        if (key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
         if (key == "selheight" || key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
@@ -1002,6 +1002,72 @@ void AccessFormPreview::applyControlStates() {
     });
     for (int index=1;index<tabOrder.size();++index)
         QWidget::setTabOrder(controls_.value(layout_.controls[tabOrder[index-1]].name.toCaseFolded()).data(),controls_.value(layout_.controls[tabOrder[index]].name.toCaseFolded()).data());
+}
+
+bool AccessFormPreview::flatTabScope() const {
+    for (const auto& control:layout_.controls)
+        if (control.optionGroupIndex>=0 || control.type=="OptionGroup" || control.type=="Subform" || control.type=="Tab" || control.type=="CustomControl") return false;
+    return true;
+}
+
+bool AccessFormPreview::advanceTabFocus(bool next) {
+    if (cyclingFocus_) return true;
+    if (!isWindow() || !opened_ || closed_ || openCancelled_ || layout_.kind!=linaccess::AccessDocumentKind::Form || !flatTabScope())
+        return false;
+    auto* origin=QApplication::focusWidget(); if (!origin) return false;
+    struct Entry { QPointer<QWidget> widget; QString name,section; int index; };
+    const auto collect=[&] {
+        QVector<Entry> entries;
+        for (const auto& control:layout_.controls) {
+            auto* widget=controls_.value(control.name.toCaseFolded()).data();
+            if (!widget || qobject_cast<QLabel*>(widget) || widget->focusPolicy()==Qt::NoFocus) continue;
+            entries.append({widget,control.name,control.section,control.tabIndex});
+        }
+        const auto section=[](const QString& name) { return name=="FormHeader" ? 0 : name=="FormFooter" ? 2 : 1; };
+        std::stable_sort(entries.begin(),entries.end(),[&](const Entry& a,const Entry& b) {
+            return section(a.section)!=section(b.section) ? section(a.section)<section(b.section) : a.index<b.index;
+        });
+        return entries;
+    };
+    const auto locate=[&](const QVector<Entry>& entries) {
+        for (int index=0;index<entries.size();++index)
+            if (entries[index].widget && (entries[index].widget==origin || entries[index].widget->isAncestorOf(origin))) return index;
+        return -1;
+    };
+    auto entries=collect(); auto current=locate(entries);
+    if (current<0) return false; // Toolbar/navigation focus stays native.
+    QScopedValueRollback<bool> cycling(cyclingFocus_,true);
+    ++nativeExecutionDepth();
+    const auto unwind=qScopeGuard([&] { --nativeExecutionDepth(); disposeClosedForms(); });
+    const QPointer<AccessFormPreview> guard(this);
+    try {
+        if (!commitControl(entries[current].name)) { status_->setText("Tab-Wechsel abgebrochen (2501)"); return true; }
+        if (!guard || closed_ || QApplication::focusWidget()!=origin) return true;
+        entries=collect(); current=locate(entries); if (current<0) return true;
+        const auto eligible=[](const Entry& entry) { return entry.widget && entry.widget->isVisible() && entry.widget->isEnabled() && (entry.widget->focusPolicy()&Qt::TabFocus); };
+        const int step=next ? 1 : -1;
+        int target=current+step;
+        for (;target>=0 && target<entries.size();target+=step) if (eligible(entries[target])) break;
+        if (target<0 || target>=entries.size()) {
+            if (layout_.cycle==2) throw linaccess::VbaRuntimeError(3251,"Page cycle unsupported");
+            if (layout_.cycle==0 && !layout_.recordSource.trimmed().isEmpty() && !(next && currentRecordIndex_==0 && !dirty_)) {
+                if (!dataSourceAvailable_) throw linaccess::VbaRuntimeError(dataSourceErrorNumber_ ? dataSourceErrorNumber_ : 3078,"Record source unavailable");
+                if (dataTruncated_) throw linaccess::VbaRuntimeError(3035,"Incomplete record navigation");
+                if (next && !directTable_ && currentRecordIndex_==recordRows_.size()) throw linaccess::VbaRuntimeError(2046,"Read-only source has no new record");
+                PreviewVbaHost host(*this); host.gotoRecord(next ? 1 : 0);
+                if (!guard || closed_ || QApplication::focusWidget()!=origin) return true;
+                entries=collect();
+            }
+            target=next ? 0 : entries.size()-1;
+            for (;target>=0 && target<entries.size();target+=step) if (eligible(entries[target])) break;
+        }
+        if (target>=0 && target<entries.size() && eligible(entries[target])) entries[target].widget->setFocus(next ? Qt::TabFocusReason : Qt::BacktabFocusReason);
+    } catch (const linaccess::VbaRuntimeError& error) {
+        if (guard && !closed_) status_->setText("Tab-Wechsel abgebrochen ("+QString::number(error.number)+")");
+    } catch (const std::exception&) {
+        if (guard && !closed_) status_->setText("Tab-Wechsel abgebrochen (5)");
+    }
+    return true;
 }
 
 void AccessFormPreview::loadRecords() {
@@ -2012,6 +2078,11 @@ bool AccessFormPreview::eventFilter(QObject* watched,QEvent* event) {
     if ((event->type()==QEvent::KeyPress || event->type()==QEvent::KeyRelease)
         && dispatchKeyboardEvent(watched,static_cast<QKeyEvent*>(event))) { event->accept(); return true; }
     if (event->type()==QEvent::KeyPress && handleDocumentKey(static_cast<QKeyEvent*>(event))) { event->accept(); return true; }
+    if (event->type()==QEvent::KeyPress) {
+        const auto* key=static_cast<QKeyEvent*>(event); const auto modifiers=key->modifiers() & ~Qt::KeypadModifier;
+        if ((key->key()==Qt::Key_Tab || key->key()==Qt::Key_Backtab) && (modifiers==Qt::NoModifier || modifiers==Qt::ShiftModifier)
+            && advanceTabFocus(key->key()==Qt::Key_Tab && modifiers==Qt::NoModifier)) { event->accept(); return true; }
+    }
 
     if (event->type()==QEvent::MouseButtonDblClick) {
         const auto binding=watched->property("la_access_dblclick").toString();

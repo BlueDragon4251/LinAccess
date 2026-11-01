@@ -72,6 +72,8 @@ private:
     linaccess::VbaExecutionResult formEvent(const QString& property,const QString& handler);
     void markDirty(const QString& control,bool userEdit=false);
     void applyControlStates();
+    bool flatTabScope() const;
+    bool advanceTabFocus(bool next);
     bool commitControl(const QString& control);
     bool commitControls();
     void selectRecord(int target);
@@ -180,6 +182,7 @@ private:
     bool recordCommandRunning_{};
     bool recordSelected_{};
     bool navigating_{};
+    bool cyclingFocus_{};
     bool initialized_{};
     bool deliveringKeyReplacement_{};
     bool dataTruncated_{};

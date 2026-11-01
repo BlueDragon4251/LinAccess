@@ -17,6 +17,8 @@
 #include <QSqlQuery>
 #include <QTest>
 #include <QTemporaryDir>
+#include <QMessageBox>
+#include <QTimer>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -32,6 +34,8 @@ void testControlUndo();
 void testWorkspaceEvents();
 void testImportedControlStates();
 void testPasswordMask();
+void testFormCycle();
+void testCycleClose();
 
 void testFormEvents() {
     testInsertionEvents();
@@ -42,6 +46,8 @@ void testFormEvents() {
     testWorkspaceEvents();
     testImportedControlStates();
     testPasswordMask();
+    testFormCycle();
+    testCycleClose();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -1297,4 +1303,157 @@ void testOriginalPasswordMask(const QDir& directory,const QJsonArray& objects) {
         }
     }
     assert(checked==1);
+}
+
+void testFormCycle() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","form-tab-cycle"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,a TEXT,b TEXT)"));
+    assert(sql.exec("INSERT INTO records VALUES(1,'a1','b1'),(2,'a2','b2')")); assert(sql.exec("CREATE TABLE trace(id INTEGER PRIMARY KEY,event TEXT)"));
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="records"
+Cycle =1
+BeforeUpdate ="[Event Procedure]"
+AfterUpdate ="[Event Procedure]"
+OnCurrent ="[Event Procedure]"
+Begin Section
+Begin TextBox
+Name ="a"
+ControlSource ="a"
+TabIndex =0
+BeforeUpdate ="[Event Procedure]"
+AfterUpdate ="[Event Procedure]"
+End
+Begin TextBox
+Name ="b"
+ControlSource ="b"
+TabIndex =1
+BeforeUpdate ="[Event Procedure]"
+AfterUpdate ="[Event Procedure]"
+Top =400
+End
+End
+End
+)FORM";
+    const QByteArray code=R"VBA(Sub a_BeforeUpdate(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('a_before')"
+If Me.Tag="control_cancel" Then Cancel=1
+End Sub
+Sub a_AfterUpdate()
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('a_after')"
+End Sub
+Sub b_BeforeUpdate(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('b_before')"
+If Me.Tag="control_cancel" Then Cancel=1
+End Sub
+Sub b_AfterUpdate()
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('b_after')"
+If Me.Tag="handler_focus" Then Me.a.SetFocus
+End Sub
+Sub Form_BeforeUpdate(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('form_before')"
+If Me.Tag="record_cancel" Then Cancel=1
+End Sub
+Sub Form_AfterUpdate()
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('form_after')"
+End Sub
+Sub Form_Current()
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('current')"
+End Sub
+Sub AllRecords()
+Me.Cycle=0
+End Sub
+)VBA";
+    AccessFormPreview form("tab cycle",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form); auto* a=form.findChild<QLineEdit*>("access-control-a"); auto* b=form.findChild<QLineEdit*>("access-control-b");
+    auto* selector=form.findChild<QComboBox*>("access-record-selector"); assert(a && b && selector && selector->currentIndex()==1);
+    const auto value=[&](int id) { sql.prepare("SELECT b FROM records WHERE id=?"); sql.addBindValue(id); assert(sql.exec() && sql.next()); const auto result=sql.value(0).toString(); sql.finish(); return result; };
+    const auto count=[&] { assert(sql.exec("SELECT COUNT(*) FROM records") && sql.next()); const auto result=sql.value(0).toInt(); sql.finish(); return result; };
+    const auto events=[&] { QStringList result; assert(sql.exec("SELECT event FROM trace ORDER BY id")); while(sql.next()) result<<sql.value(0).toString(); sql.finish(); return result; };
+    const auto clear=[&] { assert(sql.exec("DELETE FROM trace")); };
+    assert(root->member("Cycle",{}).asNumber()==1); b->setFocus(); b->selectAll(); QTest::keyClicks(b,"changed"); clear();
+    QTest::keyClick(b,Qt::Key_Tab);
+    assert(a->hasFocus() && selector->currentIndex()==1 && value(1)=="b1" && form.hasUnsavedChanges());
+    assert(events()==QStringList({"b_before","b_after"})); root->assign("Dirty",VbaValue::logical(false)); assert(value(1)=="changed");
+    std::vector<VbaValue> none; assert(form.executeProcedure("AllRecords",none).status==linaccess::VbaExecutionStatus::Completed && root->member("Cycle",{}).asNumber()==0);
+    b->setFocus(); b->selectAll(); QTest::keyClicks(b,"row1"); clear(); QTest::keyClick(b,Qt::Key_Tab);
+    assert(a->hasFocus() && selector->currentIndex()==2 && value(1)=="row1");
+    assert(events()==QStringList({"b_before","b_after","form_before","form_after","current"}));
+    clear(); QTest::keyClick(a,Qt::Key_Backtab,Qt::ShiftModifier); assert(b->hasFocus() && selector->currentIndex()==1 && events()==QStringList{"current"});
+    a->setFocus(); QTest::keyClick(a,Qt::Key_Backtab,Qt::ShiftModifier); assert(a->hasFocus() && selector->currentIndex()==1);
+    b->setFocus(); b->selectAll(); QTest::keyClicks(b,"blocked"); root->assign("Tag",VbaValue::string("control_cancel")); clear();
+    QTest::keyClick(b,Qt::Key_Tab); assert(b->hasFocus() && b->text()=="blocked" && selector->currentIndex()==1 && value(1)=="row1");
+    assert(events()==QStringList{"b_before"});
+    root->assign("Tag",VbaValue::string("allow")); QTest::keyClick(b,Qt::Key_Tab); assert(a->hasFocus() && selector->currentIndex()==2 && value(1)=="blocked");
+    b->setFocus(); b->selectAll(); QTest::keyClicks(b,"pending"); root->assign("Tag",VbaValue::string("record_cancel")); clear();
+    QTest::keyClick(b,Qt::Key_Tab); assert(b->hasFocus() && selector->currentIndex()==2 && value(2)=="b2" && form.hasUnsavedChanges());
+    assert(events()==QStringList({"b_before","b_after","form_before"}));
+    root->assign("Tag",VbaValue::string("allow")); clear(); QTest::keyClick(b,Qt::Key_Tab);
+    assert(a->hasFocus() && selector->currentIndex()==0 && value(2)=="pending" && root->member("NewRecord",{}).truthy());
+    assert(events()==QStringList({"form_before","form_after","current"}));
+    QTest::keyClicks(a,"new_a"); QTest::keyClick(a,Qt::Key_Tab); assert(b->hasFocus()); QTest::keyClicks(b,"new_b"); QTest::keyClick(b,Qt::Key_Tab);
+    assert(a->hasFocus() && selector->currentIndex()==0 && count()==3 && value(3)=="new_b");
+    b->setFocus(); clear(); QTest::keyClick(b,Qt::Key_Tab); assert(a->hasFocus() && selector->currentIndex()==0 && count()==3 && events().isEmpty());
+    QTest::keyClick(a,Qt::Key_Backtab,Qt::ShiftModifier); assert(b->hasFocus() && selector->currentIndex()==3 && count()==3);
+    root->assign("AllowAdditions",VbaValue::logical(false)); QTest::keyClick(b,Qt::Key_Tab); assert(b->hasFocus() && selector->currentIndex()==3 && count()==3);
+    root->assign("Tag",VbaValue::string("handler_focus")); b->selectAll(); QTest::keyClicks(b,"focus_b"); QTest::keyClick(b,Qt::Key_Tab);
+    assert(a->hasFocus() && selector->currentIndex()==3 && value(3)=="new_b" && form.hasUnsavedChanges()); root->member("Undo",{});
+    root->assign("Tag",VbaValue::string("allow"));
+    b->setFocus(); b->selectAll(); QTest::keyClicks(b,"hide_probe");
+    auto bObject=root->objectMember("b",{}).object; bObject->assign("Visible",VbaValue::logical(false));
+    assert(selector->currentIndex()==3 && value(3)=="new_b");
+    bObject->assign("Visible",VbaValue::logical(true)); root->member("Undo",{});
+    b->setFocus(); b->selectAll(); QTest::keyClicks(b,"disable_probe"); bObject->assign("Enabled",VbaValue::logical(false));
+    assert(selector->currentIndex()==3 && value(3)=="new_b");
+    bObject->assign("Enabled",VbaValue::logical(true)); root->member("Undo",{});
+    for(const auto& [mode,expected]:std::vector<std::pair<VbaValue,int>>{{VbaValue{},94},{VbaValue::numeric(-1),5},{VbaValue::numeric(3),5},{VbaValue::numeric(2),3251}}) {
+        int error=0; try { root->assign("Cycle",mode); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==expected && root->member("Cycle",{}).asNumber()==0);
+    }
+    assert(form.close());
+    auto unboundLayout=layout; unboundLayout.replace("RecordSource =\"records\"",""); unboundLayout.replace("ControlSource =\"a\"",""); unboundLayout.replace("ControlSource =\"b\"",""); unboundLayout.replace("Cycle =1","Cycle =0");
+    AccessFormPreview unbound("unbound tab",unboundLayout,{},db); unbound.show(); QApplication::setActiveWindow(&unbound); QApplication::processEvents();
+    auto* first=unbound.findChild<QLineEdit*>("access-control-a"); auto* last=unbound.findChild<QLineEdit*>("access-control-b"); assert(first && last);
+    last->setFocus(); QTest::keyClicks(last,"unbound"); QTest::keyClick(last,Qt::Key_Tab); assert(first->hasFocus() && !unbound.hasUnsavedChanges() && count()==3);
+    assert(makePreviewFormObject(unbound)->item("b").asText()=="unbound"); assert(unbound.close());
+}
+
+void testCycleClose() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","tab-cycle-close"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)")); assert(sql.exec("INSERT INTO records VALUES(1,'old')"));
+    assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    const QByteArray child=R"FORM(Begin Form
+RecordSource ="records"
+Begin Section
+Begin TextBox
+Name ="entry"
+ControlSource ="value"
+AfterUpdate ="[Event Procedure]"
+End
+End
+End
+)FORM";
+    const QByteArray childCode="Sub entry_AfterUpdate()\nDoCmd.Close acForm,Me.Name\nMsgBox \"close probe\"\nEnd Sub\n";
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','cycle child',?)"); sql.addBindValue(child); assert(sql.exec());
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba','Form_cycle child',?)"); sql.addBindValue(childCode); assert(sql.exec()); sql.finish();
+    AccessFormPreview caller("cycle caller","Begin Form\nBegin Section\nEnd\nEnd","Sub OpenChild()\nDoCmd.OpenForm \"cycle child\"\nEnd Sub\n",db);
+    caller.show(); QApplication::setActiveWindow(&caller); QApplication::processEvents(); std::vector<VbaValue> none;
+    assert(caller.executeProcedure("OpenChild",none).status==linaccess::VbaExecutionStatus::Completed);
+    QPointer<AccessFormPreview> target;
+    for (auto* widget:QApplication::topLevelWidgets()) if(auto* form=dynamic_cast<AccessFormPreview*>(widget);form && form!=&caller && form->objectName()=="access-form-preview-cycle child") target=form;
+    if(!target) for (auto* widget:QApplication::topLevelWidgets()) if(auto* form=dynamic_cast<AccessFormPreview*>(widget);form && form!=&caller && form->findChild<QLineEdit*>("access-control-entry")) target=form;
+    assert(target); QApplication::setActiveWindow(target); QApplication::processEvents();
+    auto* entry=target->findChild<QLineEdit*>("access-control-entry"); assert(entry); entry->setFocus(); entry->selectAll(); QTest::keyClicks(entry,"closing");
+    bool dialogSeen=false;
+    QTimer::singleShot(0,&caller,[&] {
+        for(auto* widget:QApplication::topLevelWidgets()) if(auto* box=qobject_cast<QMessageBox*>(widget)) {
+            assert(target && !target->isVisible()); dialogSeen=true; box->accept(); return;
+        }
+        assert(false);
+    });
+    QTest::keyPress(entry,Qt::Key_Tab);
+    assert(dialogSeen && QTest::qWaitFor([&] { return target.isNull(); },1500));
+    assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="closing"); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM records") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    assert(caller.close());
 }

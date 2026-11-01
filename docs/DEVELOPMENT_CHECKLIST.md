@@ -389,3 +389,7 @@ Full targets remain open:
 - [x] Native TextBox Password mask with real masked echo, unchanged VBA/SQL
   value, dynamic updates, Null/Unicode/navigation and original-layout probe;
   generic masks remain unsupported.
+
+- [x] Bounded flat form Cycle 0/1 with native Tab/Shift-Tab, validated focus,
+  actual record SQL/navigation, cancellation/retry, empty-new-row handling,
+  handler focus override and close/MsgBox lifetime regression.

@@ -201,6 +201,11 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "Tag") form.tag = value;
             else if (key == "RecordSource") form.recordSource = value;
             else if (key == "Filter") form.filter = value;
+            else if (key == "Cycle") {
+                bool valid=false; const auto mode=value.toInt(&valid);
+                if (!valid || mode<0 || mode>2) throw std::runtime_error("Invalid imported Cycle");
+                form.cycle=mode;
+            }
             else if (key == "TimerInterval") {
                 bool valid=false; const auto interval=value.toLongLong(&valid);
                 if (!valid || interval<0 || interval>std::numeric_limits<int>::max()) throw std::runtime_error("Invalid imported TimerInterval");

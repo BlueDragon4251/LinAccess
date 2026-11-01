@@ -73,6 +73,7 @@ struct AccessFormLayout {
     bool modal{};
     bool keyPreview{};
     int timerInterval{};
+    int cycle{};
     bool allowDeletions{true};
     bool allowAdditions{true};
     int height{5000};
