@@ -728,3 +728,18 @@ Ubuntu 24.04 21/21 (54.69 s). Fresh host/distro DEBs pass executable/backend,
 permissions, exact payload and fixture-exclusion checks. All four original hashes
 pass. The GUI-disabled core has no source changes in this increment.
 Isolated installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+
+Change event increment: imported text/combo OnChange bindings now dispatch
+through EventProcPrefix on native edits. A new native Qt/SQL regression checks
+KeyDown/KeyPress/BeforeInsert/Change/KeyUp, existing-record edits, combo editing,
+KeyPress cancellation, handler effects/error propagation and actual saved values.
+VBA Value assignment, bound-mirror synchronization and loading/requery do not
+fire Change. The targeted layout suite passes (6.84 s). Text/Value buffering,
+Text-property setters, cascading Change and LimitToList/NotInList remain open.
+
+Validation: host Release 21/21 (73.78 s), Debian 12 21/21 (59.76 s),
+Ubuntu 24.04 21/21 (56.00 s). Fresh host/distro packages pass exact payload,
+backend, permissions and fixture-exclusion checks. All four original fixture
+hashes pass. GUI-disabled core sources are unchanged from their preceding
+validated 1/1 build.
+Isolated installed Debian/Ubuntu packages pass native backend/counter execution and GUI startup.

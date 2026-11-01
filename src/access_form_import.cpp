@@ -162,6 +162,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "OnDblClick") control.onDblClick = value;
             else if (key == "OnKeyDown") control.onKeyDown = value;
             else if (key == "OnKeyPress") control.onKeyPress = value;
+            else if (key == "OnChange") control.onChange = value;
             else if (key == "OnKeyUp") control.onKeyUp = value;
             else if (key == "Class") control.className = value;
             else if (key == "OLEClass") control.oleClass = value;

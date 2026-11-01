@@ -842,20 +842,22 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         }
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Null));
         if (auto* line = qobject_cast<QLineEdit*>(widget)) {
-            connect(line,&QLineEdit::textChanged,this,[this,name,widget] {
+            connect(line,&QLineEdit::textChanged,this,[this,name,widget,binding=control.onChange] {
                 if (loading_) return;
                 widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
                 markDirty(name,true); refreshCalculatedControls();
+                if (!widget->property("la_insert_rejected").toBool() && !binding.isEmpty()) (void)runControlBinding(name,"Change",binding);
             });
             connect(line,&QLineEdit::textEdited,this,[this,name,widget] {
                 if (!loading_) { pendingControls_.insert(name); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text)); }
             });
             connect(line,&QLineEdit::editingFinished,this,[this,name] { if (!loading_) (void)commitControl(name); });
         } else if (auto* combo = qobject_cast<QComboBox*>(widget)) {
-            connect(combo,&QComboBox::currentTextChanged,this,[this,name,widget] {
+            connect(combo,&QComboBox::currentTextChanged,this,[this,name,widget,binding=control.onChange] {
                 if (loading_) return;
                 widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
                 markDirty(name,true); refreshCalculatedControls();
+                if (!widget->property("la_insert_rejected").toBool() && !binding.isEmpty()) (void)runControlBinding(name,"Change",binding);
             });
             connect(combo,QOverload<int>::of(&QComboBox::activated),this,[this,name](int) {
                 if (loading_) return;

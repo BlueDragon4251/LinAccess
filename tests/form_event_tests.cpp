@@ -13,9 +13,11 @@
 #include <cassert>
 
 void testInsertionEvents();
+void testChangeEvents();
 
 void testFormEvents() {
     testInsertionEvents();
+    testChangeEvents();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -479,4 +481,89 @@ End Sub
     clear(); root->assign("Tag",VbaValue::string("undo_insert")); QTest::keyClicks(edit,"u");
     assert(!form.hasUnsavedChanges() && edit->text().isEmpty() && events()==QStringList{"before_insert"});
     assert(form.close());
+}
+
+void testChangeEvents() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","control-change-events"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,name TEXT)"));
+    assert(sql.exec("CREATE TABLE trace(id INTEGER PRIMARY KEY,event TEXT)"));
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="records"
+BeforeInsert ="[Event Procedure]"
+Begin Section
+Begin TextBox
+Name ="input"
+EventProcPrefix ="Editor"
+ControlSource ="name"
+OnChange ="[Event Procedure]"
+OnKeyDown ="[Event Procedure]"
+OnKeyPress ="[Event Procedure]"
+OnKeyUp ="[Event Procedure]"
+End
+Begin TextBox
+Name ="mirror"
+OnChange ="[Event Procedure]"
+Top =400
+End
+Begin ComboBox
+Name ="combo"
+ControlSource ="name"
+OnChange ="[Event Procedure]"
+Top =800
+End
+End
+End
+)FORM";
+    const QByteArray code=R"VBA(Sub Form_BeforeInsert(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('insert')"
+End Sub
+Sub Editor_KeyDown(KeyCode As Integer,Shift As Integer)
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('down')"
+End Sub
+Sub Editor_KeyPress(KeyAscii As Integer)
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('press')"
+If Me.Tag="block" Then KeyAscii=0
+End Sub
+Sub Editor_KeyUp(KeyCode As Integer,Shift As Integer)
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('up')"
+End Sub
+Sub Editor_Change()
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('change')"
+Me!mirror=Me!input
+If Me.Tag="fail_change" Then Err.Raise 5
+End Sub
+Sub mirror_Change()
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('unexpected_programmatic_change')"
+End Sub
+Sub combo_Change()
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('combo_change')"
+End Sub
+)VBA";
+    AccessFormPreview form("change",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form);
+    auto* edit=form.findChild<QLineEdit*>("access-control-input");
+    auto* selector=form.findChild<QComboBox*>("access-record-selector");
+    auto* combo=form.findChild<QComboBox*>("access-control-combo");
+    auto* save=form.findChild<QPushButton*>("access-save-record"); assert(edit && selector && combo && combo->lineEdit() && save);
+    const auto events=[&] { QStringList out; assert(sql.exec("SELECT event FROM trace ORDER BY id")); while(sql.next()) out<<sql.value(0).toString(); sql.finish(); return out; };
+    const auto clear=[&] { assert(sql.exec("DELETE FROM trace")); };
+    edit->setFocus(); QTest::keyClicks(edit,"a");
+    assert(events()==QStringList({"down","press","insert","change","up"}));
+    assert(root->item("mirror").asText()=="a"); save->click();
+    assert(sql.exec("SELECT name FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="a"); sql.finish();
+    selector->setCurrentIndex(0); clear(); root->assignItem("input",VbaValue::string("programmatic"));
+    assert(events().isEmpty() && root->item("mirror").asText()=="a"); save->click();
+    selector->setCurrentIndex(0); root->assign("Tag",VbaValue::string("block")); clear(); edit->setFocus(); QTest::keyClicks(edit,"z");
+    assert(events()==QStringList({"down","press","up"}) && !form.hasUnsavedChanges() && edit->text().isEmpty());
+    root->assign("Tag",VbaValue::string("allow")); selector->setCurrentIndex(1); clear(); edit->setFocus(); edit->selectAll(); QTest::keyClicks(edit,"b");
+    assert(events()==QStringList({"down","press","change","up"}) && root->item("mirror").asText()=="b"); save->click();
+    clear(); combo->lineEdit()->setFocus(); combo->lineEdit()->selectAll(); QTest::keyClicks(combo->lineEdit(),"d");
+    assert(events()==QStringList{"combo_change"} && root->item("input").asText()=="d"); save->click();
+    assert(sql.exec("SELECT name FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="d"); sql.finish();
+    root->assign("Tag",VbaValue::string("fail_change")); clear(); edit->setFocus(); edit->selectAll(); QTest::keyClicks(edit,"e");
+    const auto failed=form.eventResult("control:input:Change"); assert(failed && failed->errorNumber==5);
+    assert(form.hasUnsavedChanges() && root->item("input").asText()=="e");
+    assert(sql.exec("SELECT name FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="d"); sql.finish();
+    root->member("Undo",{}); assert(form.close());
 }

@@ -69,3 +69,15 @@ missing bindings; this change does not guess their older procedure names.
 
 Property contract reference (current Microsoft documentation; no Access 2003
 execution oracle): https://learn.microsoft.com/en-us/office/vba/api/access.textbox.eventprocprefix
+
+## Native control Change increment
+
+TextBox/ComboBox OnChange bindings now dispatch with the imported EventProcPrefix
+from native edits. A native Qt/SQL trace verifies KeyDown → KeyPress → BeforeInsert
+→ Change → KeyUp, an existing-record edit without BeforeInsert, a combo edit,
+KeyPress cancellation and visible handler errors. A handler's VBA Value assignment
+to another control does not fire its Change; loading/requery and synchronized
+bound mirrors also suppress Change. Actual record persistence is checked.
+Text-property access/buffering, cascading Text changes, LimitToList/NotInList
+and complete Access input/locale behavior remain open. See INSERT_EVENT_RUNTIME.md
+for editor-value visibility boundaries.

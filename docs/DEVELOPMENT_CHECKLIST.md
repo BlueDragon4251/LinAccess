@@ -340,3 +340,7 @@ Full targets remain open:
 - [x] Bounded native-control BeforeInsert/AfterInsert with Cancel/error/Undo,
   programmatic-assignment distinction and validation/constraint retry tests.
 - [ ] Access BeforeInsert/Change/Text/Value timing oracle and PasteAppend events.
+
+- [x] Imported native text/combo OnChange, EventProcPrefix dispatch, programmatic
+  Value suppression and KeyDown/KeyPress/BeforeInsert/Change/KeyUp regression.
+- [ ] Text/Value buffering, focused Text setters and cascading Change parity.

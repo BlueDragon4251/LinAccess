@@ -23,8 +23,10 @@ UNIQUE failure followed by successful retry. No private source text is copied.
 
 BeforeInsert currently runs from native value-change handling: the editor has
 already changed, before the adapter marks the record dirty. This does not prove
-Access's precise BeforeInsert/Change/Text/Value visibility and input ordering; a
-Change event adapter and Access reference traces remain necessary. Complete
+Access's precise BeforeInsert/Change/Text/Value visibility and input ordering; complete
+Text/Value buffering and Access reference traces remain necessary. Native
+OnChange now follows BeforeInsert and precedes KeyUp in the tested key path;
+VBA Value assignment and bound-mirror updates do not fire Change. Complete
 combo/popup/IME/context-menu timing, macros and keyboard cancellation interactions
 are not established. The separate PasteAppend path still rejects insertion-event
 bindings with 3251 before inserting; it does not reuse this UI event sequence.

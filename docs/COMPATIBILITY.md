@@ -278,3 +278,14 @@ and validation/constraint retries have native Qt/SQL regressions. Precise
 BeforeInsert/Change/Text/Value visibility is still open: the current adapter
 runs after the native editor value changes. INSERT_EVENT_RUNTIME.md records
 this boundary and the still-unsupported PasteAppend event pipeline.
+
+### Native control Change events
+
+Imported OnChange bindings on text fields and combo boxes now dispatch through
+the configured EventProcPrefix after native edits, including real SQL effects
+from handlers. Bound mirror updates, load/requery and VBA Value assignment do
+not dispatch Change. A native key test verifies KeyDown/KeyPress/BeforeInsert/
+Change/KeyUp order, suppressed KeyPress, existing-record changes and a combo edit.
+Handler errors remain visible without saving rejected dirty data automatically.
+This does not implement Text-property access, exact Text/Value buffering,
+cascading Text setters, LimitToList/NotInList or complete input/locale parity.

@@ -40,6 +40,7 @@ struct AccessVisualControl {
     QString linkChildFields;
     QString section;
     QString onClick;
+    QString onChange;
     QString afterUpdate;
     QString beforeUpdate;
     QString onDblClick;
