@@ -2,8 +2,8 @@
 
 Native ComboBox/ListBox adapters expose RowSource, RowSourceType, BoundColumn,
 ColumnCount and ColumnWidths through actual VBA getters/setters. SaveAsText
-ColumnWidths is retained. Assignment reloads the supported Table/Query source via
-the native query executor. Invalid metadata or a failed source query preserves the
+ColumnWidths is retained. Assignment reloads supported Table/Query, Value List
+or Field List sources. Invalid metadata or a failed source query preserves the
 previous metadata, rows and selected value. Null assignments fail explicitly.
 
 A QStandardItemModel holds actual typed rows and every configured display column;
@@ -27,8 +27,8 @@ state. Source replacement, BoundColumn zero and dynamic hidden-column changes
 have separate checks. Existing original initialization, Dropdown and typed-column
 regressions remain mandatory.
 
-Only supported SQL/table/saved-query row sources execute. Value/field lists,
-user-defined row-source functions, automatic dependency refresh, full combo event
+Supported SQL/table/saved-query sources execute through the native query adapter.
+User-defined row-source functions, automatic dependency refresh, full combo event
 ordering, Access multicolumn sizing/rendering parity and true ListBox presentation
 remain open. This adapter is not general Access control compatibility. Tests mutate
 only disposable SQLite data; original fixture bytes remain unchanged.
@@ -48,3 +48,39 @@ before any interaction and automatic dependent-source refresh remain open.
 Native tests include the actual mouse move/click sequence, typed label input,
 independent SQL persistence and failure/retry. No synthetic selection signal
 substitutes for user input.
+
+## Built-in value and field sources
+
+Value List/Wertliste parses semicolon-separated items into ColumnCount-sized
+rows. Quoted semicolons and doubled quotes are decoded; Unicode is preserved.
+The current parser distinguishes unquoted blank cells/padded absent cells as
+NULL from quoted empty text. This distinction and whitespace/localized-list
+edge behavior still require comparison with Access 2003. Cells otherwise remain
+text; the native bound field performs its usual numeric/Boolean/date conversion.
+Empty sources produce zero rows. Malformed quotes and sources exceeding the
+existing 10000-row control limit fail explicitly and preserve the previous model,
+configuration and selected value.
+
+Field List/Feldliste describes a table, saved SELECT or SELECT statement and
+lists its projected column names in order. It prepares through the native SQL
+adapter without fetching user records or evaluating result expressions; declared
+parameters need no values for this metadata operation. Internal TOP rank columns
+are excluded. Strict preparation rejects unknown quoted identifiers rather than
+turning them into string literals, and restores the prior connection quote policy.
+The same query-preparation/error path remains used by ordinary result execution.
+
+`row_source_types_tests.cpp` exercises actual value-list popup mouse selection
+and independently checks the persisted integer foreign-key value. It also covers
+quoted delimiters/quotes/Unicode, empty/padded cells, failure rollback, row limits,
+ordered field names, parameterized metadata and hidden-rank suppression. A SELECT
+with an eager overflow expression can be described but still fails when executed,
+proving the field list does not fetch/evaluate its data. These are native engine
+and GUI regressions, not an Access 2003 rendering or edge-semantics oracle.
+
+The original fixtures declare 17 explicit Table/Query source types and no explicit
+Value/Field List type. No additional original project success is inferred from
+these general built-in source tests. ColumnHeads, value-list AddItem/RemoveItem,
+full ListBox rendering and custom row-source callback protocol remain open.
+
+Contract reference (current documentation, not Access 2003 runtime verification):
+https://learn.microsoft.com/en-us/office/vba/api/access.combobox.rowsourcetype

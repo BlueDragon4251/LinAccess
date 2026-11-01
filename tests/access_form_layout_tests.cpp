@@ -33,6 +33,7 @@ void testFilters();
 void testMessageBoxes();
 void testInputBoxes();
 void testRecordsetNavigation();
+void testRowSourceTypes();
 void testOriginalRecordsetSearch(const QDir&,const QJsonArray&);
 void testCalendarValues();
 void testModuleStates(const QDir&,const QJsonArray&);
@@ -232,6 +233,7 @@ End Sub
     testMessageBoxes();
     testInputBoxes();
     testRecordsetNavigation();
+    testRowSourceTypes();
     testOriginalRecordsetSearch(directory,objects);
     testCalendarValues();
     testModuleStates(directory,objects);

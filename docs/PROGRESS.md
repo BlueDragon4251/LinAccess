@@ -108,7 +108,7 @@ queries and bounded two-table RIGHT-to-LEFT JOIN adaptation and subsequent origi
 original queries. Nested SQL budgets remain effective. Overall compatibility,
 classes/AST, remaining startup events and exact monetary types remain open.
 
-Latest local validation: 18/18 regressions pass, the Qt-free runtime build/test
+Earlier local validation at that stage: 18/18 regressions pass, the Qt-free runtime build/test
 passes, and the Debian package payload/permissions check passes. The original
 29-table comparison also passes five consecutive times with MDBTools 1.0.0.
 All four original fixture SHA-256 checks remain unchanged. This does not explain
@@ -473,3 +473,34 @@ Validation: Release host 20/20 CTests (68.29 s), Qt-free core 1/1 (0.46 s), Debi
 identity, exact payload/permission allowlists and extracted backend regressions.
 Both distro packages passed installed-backend resolution and bounded offscreen
 GUI startup in fresh containers. Four original fixture hashes passed after tests.
+
+Remote cursor/search verification: private GitHub run
+https://github.com/BlueDragon4251/LinAccess/actions/runs/41303749658 for commit
+f523639a73b18de4d3625700599c244f86520cd7 passed Ubuntu 24.04, Debian 12, Debian 13
+and Windows PowerShell syntax. The source's missing third search control remains
+an explicit expected error, not a counted successful original workflow.
+
+Built-in row-source increment: Value List/Wertliste now populates actual
+multicolumn Qt rows from semicolon-separated text with quoted delimiters, doubled
+quotes and Unicode. Actual native popup selection persists its bound integer
+value in SQLite. Failed parses/row-limit violations preserve the prior source,
+model and value. Empty/blank/padding semantics are explicitly documented as the
+current implementation, pending an Access 2003 edge-case oracle. Field List/
+Feldliste lists table or SELECT projection names without evaluating/fetching its
+records; declared parameters do not require values for description. Shared query
+preparation/error handling preserves ordinary result execution and suppresses
+internal TOP rank columns in metadata. Tests describe a SELECT with an eager
+runtime overflow expression and independently confirm actual execution still
+fails, proving metadata extraction does not execute its data expressions.
+
+The original fixtures contain 17 explicit Table/Query declarations and no explicit
+Value/Field List declaration; these general native GUI/schema regressions imply
+no additional original-project success. Custom row-source callback functions,
+ColumnHeads, AddItem/RemoveItem and full ListBox behavior remain open.
+
+Validation: host Release 20/20 CTests (72.75 s); GUI-disabled core 1/1 (0.37 s);
+Debian 12 20/20 (55.40 s); Ubuntu 24.04 20/20 (52.40 s). Fresh packages passed exact
+executable/backend/payload/permissions and extracted backend checks. Both distro
+packages passed installation, private-backend resolution and bounded offscreen
+GUI startup in fresh containers. All four original fixture hashes passed after
+testing. DYNAMIC_COMBO_RUNTIME.md records precise scope and reference limits.

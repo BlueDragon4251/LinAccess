@@ -33,6 +33,8 @@ struct AccessQueryResult {
 };
 AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan& plan,
                                        const QMap<QString,QVariant>& bindings);
+// Schema only: prepare without stepping records or evaluating user expressions.
+QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan);
 class AccessQueryModel final : public QAbstractTableModel {
 public:
     explicit AccessQueryModel(QObject* parent = nullptr) : QAbstractTableModel(parent) {}

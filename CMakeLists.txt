@@ -13,7 +13,7 @@ if(LINACCESS_BUILD_GUI)
     enable_language(C)
     add_subdirectory(third_party/sqlite)
     add_library(linaccess_data STATIC
-        src/access_catalog.cpp src/access_table_import.cpp src/access_query.cpp src/access_format.cpp
+        src/access_catalog.cpp src/access_table_import.cpp src/access_query.cpp src/access_value_list.cpp src/access_format.cpp
         src/dao_database.cpp src/sqlite_execution.cpp src/jet_sql_functions.cpp src/vba_source_codec.cpp
         src/vba_qt_value.cpp src/vba_module_context.cpp src/access_form_import.cpp)
     target_link_libraries(linaccess_data PUBLIC linaccess_runtime Qt6::Core Qt6::Sql linaccess_sqlite)
@@ -204,6 +204,7 @@ if(BUILD_TESTING)
             target_sources(linaccess_access_layout_tests PRIVATE tests/event_prefix_tests.cpp)
             target_sources(linaccess_access_layout_tests PRIVATE src/native_input_box.cpp tests/input_box_tests.cpp)
             target_sources(linaccess_access_layout_tests PRIVATE tests/recordset_navigation_tests.cpp)
+            target_sources(linaccess_access_layout_tests PRIVATE tests/row_source_types_tests.cpp)
             target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::Test Qt6::PrintSupport)
             add_test(NAME access_2003_layouts
                 COMMAND linaccess_access_layout_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}")

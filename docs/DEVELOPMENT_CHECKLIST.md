@@ -291,3 +291,8 @@ Full targets remain open:
   native selections; third original missing-control reference remains error 2465.
 - [ ] Full editable Form.Recordset, arrays/BLOBs, concurrent dynasets/locks/Seek,
   complete criteria/formatting and Access 2003 reference behavior.
+- [x] Native Value List/Wertliste text rows and Field List/Feldliste metadata-only
+  query columns; real popup/SQL persistence, quoting/Unicode, failure rollback,
+  parameterized description and no-expression-evaluation regressions.
+- [ ] Exact Access 2003 empty/whitespace list semantics, ColumnHeads,
+  AddItem/RemoveItem, full ListBox and custom row-source callbacks.

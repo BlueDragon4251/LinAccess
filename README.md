@@ -61,6 +61,10 @@ vorbereiteten Testdaten. Ein weiterer Originalhandler enthält einen fehlenden
 Controlverweis. Umfang und verbleibende Grenzen:
 [DAO-Cursor und Formularsuche](docs/DAO_CURSOR_RUNTIME.md).
 
+Kombofelder unterstützen zusätzlich native Wertlisten und Feldlisten aus
+Abfragemetadaten, einschließlich mehrspaltiger Auswahl und gebundener Speicherung:
+[dynamische Quelltypen](docs/DYNAMIC_COMBO_RUNTIME.md).
+
 Eine `.deb`-Datei lässt sich nach dem Build erzeugen mit:
 
 ```bash

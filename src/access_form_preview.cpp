@@ -9,6 +9,7 @@
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
+#include "access_value_list.hpp"
 #include "access_format.hpp"
 #include "sqlite_execution.hpp"
 #include "jet_sql_functions.hpp"
@@ -1356,15 +1357,22 @@ void AccessFormPreview::requeryControl(std::string_view name) {
         if (control.name.compare(target,Qt::CaseInsensitive)!=0) continue;
         const auto source = control.rowSource.trimmed();
         linaccess::AccessQueryResult result;
-        if (!control.rowSourceType.isEmpty() && control.rowSourceType.compare("Table/Query",Qt::CaseInsensitive)!=0 && control.rowSourceType.compare("Tabelle/Abfrage",Qt::CaseInsensitive)!=0)
+        const auto sourceType=control.rowSourceType.toCaseFolded();
+        const bool values=sourceType=="value list" || sourceType=="wertliste";
+        const bool fields=sourceType=="field list" || sourceType=="feldliste";
+        if (!values && !fields && !sourceType.isEmpty() && sourceType!="table/query" && sourceType!="tabelle/abfrage")
             throw linaccess::VbaRuntimeError(3251,"Row source type unsupported");
-        if (!source.isEmpty()) {
+        if (values) result=linaccess::parseAccessValueList(source,control.columnCount);
+        else if (!source.isEmpty()) {
             linaccess::AccessQueryPlan plan;
             if (db_.tables().contains(source,Qt::CaseInsensitive)) plan.sql = "SELECT * FROM " + sqlIdentifier(source);
             else plan = linaccess::compileAccessQuery(
                 source.startsWith("SELECT",Qt::CaseInsensitive) || source.startsWith("PARAMETERS",Qt::CaseInsensitive)
                     ? source : linaccess::accessQuerySource(db_,source));
-            result = linaccess::executeAccessQueryPlan(db_,plan,linaccess::bindAccessQueryParameters(plan,{}));
+            if (fields) {
+                result.columns=QStringList{"Field"};
+                for (const auto& name:linaccess::accessQueryColumns(db_,plan)) result.rows.append(QVariantList{name});
+            } else result = linaccess::executeAccessQueryPlan(db_,plan,linaccess::bindAccessQueryParameters(plan,{}));
             if (result.rows.size()>10000) throw linaccess::VbaRuntimeError(3035,"Control row limit exceeded");
         }
         if (control.boundColumn<0 || control.columnCount<1 || control.columnCount>255 || (!result.columns.empty() && control.boundColumn>result.columns.size()))

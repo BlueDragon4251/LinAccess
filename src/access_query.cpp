@@ -7,6 +7,9 @@
 #include "vba_source_codec.hpp"
 #include <QSqlQuery>
 #include <QSqlDriver>
+#include <QSqlResult>
+#include <QScopeGuard>
+#include <sqlite3.h>
 #include <QLibrary>
 struct sqlite3;
 struct sqlite3_stmt;
@@ -939,13 +942,7 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
     }
     return result;
 }
-AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan& plan,
-                                       const QMap<QString,QVariant>& bindings) {
-    if (!plan.sql.trimmed().startsWith("SELECT", Qt::CaseInsensitive))
-        throw VbaRuntimeError(3065,"Query result requires SELECT");
-    SqliteExecutionBudget budget(db);
-    QSqlQuery query(db);
-    const auto fail = [&]() {
+[[noreturn]] static void failAccessQuery(const QSqlQuery& query) {
         const auto error = query.lastError().text().toCaseFolded();
         if (const auto code=jetSqlFunctionErrorNumber(error.toUtf8().toStdString()))
             throw VbaRuntimeError(*code,"Jet SQL function argument invalid");
@@ -955,24 +952,62 @@ AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan&
         if ((error.contains("syntax error") || error.contains("incomplete input")) || error.contains("circularly defined"))
             throw VbaRuntimeError(3075,"SQL grammar unsupported");
         throw VbaRuntimeError(3146,"SQL operation failed");
-    };
+}
+namespace {
+struct PreparedAccessQuery { QSqlQuery query; bool hiddenRank; };
+PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& plan) {
+    if (!plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
+        throw VbaRuntimeError(3065,"Query result requires SELECT");
     const bool topOne=useTopOneBoundary(db,plan);
     const auto source=topOne ? plan.topOneSql : useLeftJoin(db,plan) ? plan.rightJoinSql : plan.sql;
     if (missingSqlDependency(db,source)) throw VbaRuntimeError(3078,"SQL dependency unavailable");
-    if (!query.prepare(resolveQueryOrigins(db,source))) fail();
+    QSqlQuery query(db);
+    if (!query.prepare(resolveQueryOrigins(db,source))) failAccessQuery(query);
+    return {std::move(query),plan.hiddenRank && !topOne};
+}
+}
+QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan) {
+    SqliteExecutionBudget budget(db);
+    const auto databaseHandle=db.driver()->handle();
+    if (!databaseHandle.isValid() || QByteArray(databaseHandle.typeName())!="sqlite3*")
+        throw VbaRuntimeError(3251,"SQLite metadata connection unavailable");
+    auto* connection=*static_cast<sqlite3* const*>(databaseHandle.constData());
+    int previousDqs=0;
+    if (!connection || sqlite3_db_config(connection,SQLITE_DBCONFIG_DQS_DML,-1,&previousDqs)!=SQLITE_OK
+        || sqlite3_db_config(connection,SQLITE_DBCONFIG_DQS_DML,0,nullptr)!=SQLITE_OK)
+        throw VbaRuntimeError(3251,"Strict query metadata unavailable");
+    const auto restore=qScopeGuard([&] { sqlite3_db_config(connection,SQLITE_DBCONFIG_DQS_DML,previousDqs,nullptr); });
+    auto prepared=prepareAccessQuery(db,plan);
+    const auto handle=prepared.query.result()->handle();
+    if (!handle.isValid() || QByteArray(handle.typeName())!="sqlite3_stmt*")
+        throw VbaRuntimeError(3251,"SQLite statement metadata unavailable");
+    auto* statement=*static_cast<sqlite3_stmt* const*>(handle.constData());
+    if (!statement) throw VbaRuntimeError(3251,"SQLite statement unavailable");
+    QStringList columns;
+    const int count=sqlite3_column_count(statement)-(prepared.hiddenRank ? 1 : 0);
+    for (int i=0;i<count;++i) columns.append(QString::fromUtf8(sqlite3_column_name(statement,i)));
+    return columns;
+}
+AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan& plan,
+                                       const QMap<QString,QVariant>& bindings) {
+    if (!plan.sql.trimmed().startsWith("SELECT", Qt::CaseInsensitive))
+        throw VbaRuntimeError(3065,"Query result requires SELECT");
+    SqliteExecutionBudget budget(db);
+    auto prepared=prepareAccessQuery(db,plan);
+    auto& query=prepared.query;
     for (auto it = bindings.cbegin(); it != bindings.cend(); ++it) query.bindValue(it.key(),it.value());
-    if (!query.exec()) fail();
+    if (!query.exec()) failAccessQuery(query);
     AccessQueryResult result;
-    const int count = query.record().count() - (plan.hiddenRank && !topOne ? 1 : 0);
+    const int count = query.record().count() - (prepared.hiddenRank ? 1 : 0);
     for (int i = 0; i < count; ++i) result.columns.append(query.record().fieldName(i));
     while (query.next()) {
-        if (plan.hiddenRank && !topOne && query.value(count).toLongLong() > plan.topLimit) break;
+        if (prepared.hiddenRank && query.value(count).toLongLong() > plan.topLimit) break;
         if (result.rows.size() >= 100000) throw VbaRuntimeError(3035,"Query row limit exceeded");
         QVariantList row;
         for (int i = 0; i < count; ++i) row.append(query.value(i));
         result.rows.append(row);
     }
-    if (query.lastError().isValid()) fail();
+    if (query.lastError().isValid()) failAccessQuery(query);
     return result;
 }
 void AccessQueryModel::execute(QSqlDatabase db, const QString& source, const QMap<QString,QVariant>& parameters) {
