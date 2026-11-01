@@ -25,7 +25,12 @@ references are invalidated.
 ## Regression evidence
 
 `tests/calendar_tests.cpp` automates real double clicks, original buttons and a
-real mouse click in the native calendar table. Both original date fields receive
+real mouse click in the native calendar table. After correct NotDefault decoding,
+the original exported calendar starts disabled. The test verifies that imported
+state, then explicitly enables it through the actual Enabled adapter before
+selecting a date. These are prepared UI-context event tests, not proof that the
+unprepared original calendar workflow is usable. The opaque Windows OCX's host/
+persistence behavior still needs an Access reference trace. Both original date fields receive
 an actual midnight date selected from the imported original MDB copy. A compiled
 SQL query reads both live Forms values and returns a positive record count equal
 to an independent C++ count of the actual source records. No chosen date, row,

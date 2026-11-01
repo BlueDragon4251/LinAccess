@@ -82,7 +82,7 @@ End
     assert(unknownBinary.caption == "Begin");
     assert(unknownBinary.controls.size() == 1 && unknownBinary.controls[0].name == "Preserved");
     int scanned = 0;
-    int visible = 0;
+    int controlCount = 0;
     int buttons = 0;
     int prefixes = 0;
     for (const auto& item : objects) {
@@ -99,7 +99,7 @@ End
             if (!control.visible) continue;
             if (control.type == "CommandButton") ++buttons;
         }
-        visible += static_cast<int>(form.controls.size());
+        controlCount += static_cast<int>(form.controls.size());
         ++scanned;
         {
             // The actual Qt widgets must instantiate and inherit geometry.
@@ -126,7 +126,7 @@ End
         }
     }
     assert(scanned == 47);
-    assert(visible > 150);
+    assert(controlCount > 150);
     assert(buttons > 0);
     assert(prefixes > 0);
     {
@@ -313,5 +313,5 @@ End Sub
         std::cout << "Original Kassa form click executed DAO AddNew/Update on isolated database copy\n";
     }
     std::cout << "Access 2003 layout tests passed: " << scanned
-              << " forms, " << visible << " controls, " << buttons << " buttons, " << prefixes << " stored event prefixes\n";
+              << " forms, " << controlCount << " controls, " << buttons << " declared-visible buttons, " << prefixes << " stored event prefixes\n";
 }

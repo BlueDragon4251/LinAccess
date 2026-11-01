@@ -147,7 +147,11 @@ void testOriginalControls(const QDir& directory,const QJsonArray& objects) {
                 const auto property=match.captured(3).toUtf8().toStdString();
                 const bool expected=match.captured(4).compare("True",Qt::CaseInsensitive)==0;
                 if (reset) control->assign(property,linaccess::VbaValue::logical(!expected));
-                else assert(control->member(property,{}).boolean==expected);
+                else {
+                    const auto actual=control->member(property,{}).boolean;
+                    if (actual!=expected) std::cerr<<"Original initializer state mismatch: property="<<property<<", type="<<control->member("ControlType",{}).asNumber()<<", expected="<<expected<<", actual="<<actual<<'\n';
+                    assert(actual==expected);
+                }
                 ++count;
             }
             return count;

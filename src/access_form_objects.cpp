@@ -142,6 +142,16 @@ public:
                 throw linaccess::VbaRuntimeError(3251,"Control Undo adapter requires a form text/combo editor");
             (void)preview.undoControlEdit(name_); return {};
         }
+        if (key=="locked" || key=="tabstop" || key=="tabindex") {
+            for (const auto& definition:preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
+                if (key=="locked") {
+                    if (definition.type!="TextBox") throw linaccess::VbaRuntimeError(3251,"Locked adapter requires a TextBox");
+                    return linaccess::VbaValue::logical(definition.locked);
+                }
+                if (qobject_cast<QLabel*>(widget)) throw linaccess::VbaRuntimeError(438,"Control has no tab properties");
+                return key=="tabstop" ? linaccess::VbaValue::logical(definition.tabStop) : linaccess::VbaValue::numeric(definition.tabIndex);
+            }
+        }
         if (key == "visible") return linaccess::VbaValue::logical(!widget->isHidden());
         if (key == "enabled") return linaccess::VbaValue::logical(widget->isEnabled());
         if (key == "controltype") {
@@ -161,6 +171,7 @@ public:
             });
             if (!combo || definition==preview.layout_.controls.cend()) throw linaccess::VbaRuntimeError(438,"Dropdown requires a combo box");
             if (!combo->isVisible() || !combo->isEnabled()) throw linaccess::VbaRuntimeError(2110,"Combo box cannot open");
+            if (combo->property("la_access_input_readonly").toBool()) throw linaccess::VbaRuntimeError(2448,"Combo source is read-only");
             if (!combo->property("la_rows_loaded").toBool()) preview.requeryControl(bytes(name_));
             combo->setFocus(); combo->showPopup(); return {};
         }
@@ -251,8 +262,44 @@ public:
         }
         if ((key == "visible" || key == "enabled") && value.kind == linaccess::VbaValue::Kind::Null)
             throw linaccess::VbaRuntimeError(94,"Invalid Null property assignment");
-        if (key == "visible") { widget->setVisible(value.truthy()); return; }
-        if (key == "enabled") { widget->setEnabled(value.truthy()); return; }
+        if (key=="visible" || key=="enabled" || key=="locked" || key=="tabstop") {
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null control state");
+            for (auto& definition:preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
+                if (key=="tabstop" && qobject_cast<QLabel*>(widget)) throw linaccess::VbaRuntimeError(438,"Control has no tab properties");
+                if (key=="locked" && definition.type!="TextBox") throw linaccess::VbaRuntimeError(3251,"Locked adapter requires a TextBox");
+                if (key=="visible") definition.visible=scalar.truthy();
+                if (key=="enabled") definition.enabled=scalar.truthy();
+                if (key=="locked") definition.locked=scalar.truthy();
+                if (key=="tabstop") definition.tabStop=scalar.truthy();
+                preview.applyControlStates(); return;
+            }
+        }
+        if (key=="tabindex") {
+            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form || qobject_cast<QLabel*>(widget)) throw linaccess::VbaRuntimeError(438,"Control has no writable TabIndex");
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null TabIndex");
+            const auto position=linaccess::sqlFieldValue(scalar,"INTEGER").toLongLong();
+            if (position<0) throw linaccess::VbaRuntimeError(5,"Invalid TabIndex");
+            if (position>32767) throw linaccess::VbaRuntimeError(6,"TabIndex Integer overflow");
+            int target=-1;
+            for(int index=0;index<preview.layout_.controls.size();++index) if(preview.layout_.controls[index].name.compare(name_,Qt::CaseInsensitive)==0) target=index;
+            if(target<0) throw linaccess::VbaRuntimeError(2465,"Control unavailable");
+            const auto section=preview.layout_.controls[target].section; QVector<int> order;
+            for(int index=0;index<preview.layout_.controls.size();++index) {
+                const auto& definition=preview.layout_.controls[index]; if(definition.section!=section) continue;
+                if(definition.optionGroupIndex>=0 || definition.type=="OptionGroup" || definition.type=="Subform" || definition.type=="CustomControl" || definition.type=="Tab")
+                    throw linaccess::VbaRuntimeError(3251,"TabIndex adapter requires a flat section");
+                auto* control=preview.controls_.value(definition.name.toCaseFolded()).data();
+                if(control && !qobject_cast<QLabel*>(control) && control->focusPolicy()!=Qt::NoFocus) order.append(index);
+            }
+            if(position>=order.size()) throw linaccess::VbaRuntimeError(5,"TabIndex exceeds section controls");
+            std::stable_sort(order.begin(),order.end(),[&](int a,int b) { return preview.layout_.controls[a].tabIndex<preview.layout_.controls[b].tabIndex; });
+            const auto previous=order.indexOf(target); if(previous<0) throw linaccess::VbaRuntimeError(438,"Control has no tab position");
+            order.removeAt(previous); order.insert(static_cast<int>(position),target);
+            for(int index=0;index<order.size();++index) preview.layout_.controls[order[index]].tabIndex=index;
+            preview.applyControlStates(); return;
+        }
         throw linaccess::VbaRuntimeError(438,"Control property is unavailable or read-only");
     }
 private:

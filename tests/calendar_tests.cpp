@@ -103,6 +103,11 @@ void testOriginalCalendar(const QDir& directory,const QJsonArray& objects,QSqlDa
         auto* calendar=popup->findChild<QCalendarWidget*>("access-control-"+calendarControl); assert(calendar);
         closedCalendar=makePreviewFormObject(*popup)->member("Controls",{linaccess::VbaValue::string(calendarControl.toStdString())}).object;
         assert(closedCalendar->member("ControlType",{}).asNumber()==119);
+        // SaveAsText exports this original control disabled. Prepare an enabled
+        // UI context explicitly; do not discard its imported NotDefault state.
+        assert(!closedCalendar->member("Enabled",{}).truthy() && !calendar->isEnabled());
+        closedCalendar->assign("Enabled",linaccess::VbaValue::logical(true));
+        assert(calendar->isEnabled());
         const auto module=linaccess::decodeVbaSource(calendarCode);
         const auto procedures=linaccess::analyzeVba(module.toStdString()).procedures; const auto lines=module.split('\n');
         QString next,previous;

@@ -71,6 +71,7 @@ private:
     bool eventFilter(QObject* watched,QEvent* event) override;
     linaccess::VbaExecutionResult formEvent(const QString& property,const QString& handler);
     void markDirty(const QString& control,bool userEdit=false);
+    void applyControlStates();
     bool commitControl(const QString& control);
     bool commitControls();
     void selectRecord(int target);

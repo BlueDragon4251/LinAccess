@@ -31,6 +31,7 @@
 #include <QGroupBox>
 #include <QButtonGroup>
 #include <QRadioButton>
+#include <QWheelEvent>
 #include <QComboBox>
 #include <QStandardItemModel>
 #include <QTreeView>
@@ -81,10 +82,37 @@ public:
     using QComboBox::QComboBox;
     std::function<bool()> preparePopup;
     void showPopup() override {
-        if (!isVisible() || !isEnabled()) return;
+        if (!isVisible() || !isEnabled() || property("la_access_input_readonly").toBool()) return;
         if (preparePopup && !preparePopup()) return;
         QComboBox::showPopup();
     }
+protected:
+    void wheelEvent(QWheelEvent* event) override {
+        if (property("la_access_input_readonly").toBool()) { event->accept(); return; }
+        QComboBox::wheelEvent(event);
+    }
+    void keyPressEvent(QKeyEvent* event) override {
+        if (property("la_access_input_readonly").toBool() && (event->key()==Qt::Key_Up || event->key()==Qt::Key_Down || event->key()==Qt::Key_PageUp || event->key()==Qt::Key_PageDown)) { event->accept(); return; }
+        QComboBox::keyPressEvent(event);
+    }
+};
+class AccessPushButton final:public QPushButton {
+public:
+    using QPushButton::QPushButton;
+protected:
+    void nextCheckState() override { if (!property("la_access_input_readonly").toBool()) QPushButton::nextCheckState(); }
+};
+class AccessCheckBox final:public QCheckBox {
+public:
+    using QCheckBox::QCheckBox;
+protected:
+    void nextCheckState() override { if (!property("la_access_input_readonly").toBool()) QCheckBox::nextCheckState(); }
+};
+class AccessRadioButton final:public QRadioButton {
+public:
+    using QRadioButton::QRadioButton;
+protected:
+    void nextCheckState() override { if (!property("la_access_input_readonly").toBool()) QRadioButton::nextCheckState(); }
 };
 class AccessMessageBox final : public QMessageBox {
 public:
@@ -449,15 +477,11 @@ public:
 
     void focusControl(std::string_view name) override {
         requireInstance();
-        auto* widget = preview_.controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded()).data();
-        if (!widget) throw linaccess::VbaRuntimeError(2465,"Control unavailable");
-        widget->setFocus();
+        (void)makePreviewControlObject(preview_,QString::fromUtf8(name.data(),name.size()))->member("SetFocus",{});
     }
-    void setControlVisible(std::string_view name, bool value) override {
+    void setControlVisible(std::string_view name,bool value) override {
         requireInstance();
-        auto* widget = preview_.controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded()).data();
-        if (!widget) throw linaccess::VbaRuntimeError(2465,"Control unavailable");
-        widget->setVisible(value);
+        makePreviewControlObject(preview_,QString::fromUtf8(name.data(),name.size()))->assign("Visible",linaccess::VbaValue::logical(value));
     }
     std::optional<std::string> moduleForProcedure(std::string_view procedure) override {
         QSqlQuery query(preview_.db_);
@@ -747,7 +771,10 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
     for (const auto& control : layout_.controls) {
 
         QWidget* widget = nullptr;
-        if (control.type=="OptionGroup") {
+        if (control.locked && control.type!="TextBox") {
+            auto* unavailable=new QLabel("Steuerelement-Sperre nicht unterstützt (3251)",canvas); unavailable->setWordWrap(true); widget=unavailable;
+            if (control.type=="Subform") subformErrors_.insert(control.name.toCaseFolded(),3251);
+        } else if (control.type=="OptionGroup") {
             auto* group=new QGroupBox(canvas); group->setFocusPolicy(Qt::StrongFocus);
             auto* buttons=new QButtonGroup(group); buttons->setObjectName("access-options");
             widget=group;
@@ -790,11 +817,11 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             };
             widget = combo;
         } else if (control.type=="OptionButton" && control.optionGroupIndex>=0) {
-            widget=new QRadioButton(control.caption,canvas);
+            widget=new AccessRadioButton(control.caption,canvas);
         } else if (control.type == "CheckBox" || control.type == "OptionButton") {
-            widget = new QCheckBox(control.caption, canvas);
+            widget = new AccessCheckBox(control.caption, canvas);
         } else if (control.type == "CommandButton" || control.type == "ToggleButton") {
-            auto* button = new QPushButton(control.caption.isEmpty() ? control.name : control.caption, canvas);
+            auto* button = new AccessPushButton(control.caption.isEmpty() ? control.name : control.caption, canvas);
             widget = button;
             if (control.optionGroupIndex<0 && !control.onClick.isEmpty()) connect(button,&QPushButton::clicked,this,[this,name=control.name,binding=control.onClick] {
                 (void)runControlBinding(name,"Click",binding);
@@ -849,7 +876,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
                     button->setProperty("la_option_group_name",parent.name);
                     group->findChild<QButtonGroup*>("access-options")->addButton(button);
                     connect(button,&QAbstractButton::clicked,this,[this,group,button,parent,control] {
-                        if (loading_) return;
+                        if (loading_ || group->property("la_access_input_readonly").toBool()) return;
                         group->setProperty("la_option_value",button->property("la_option_value"));
                         group->setProperty("la_null",false); group->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Number));
                         markDirty(parent.name,true); if (group->property("la_insert_rejected").toBool()) return; refreshCalculatedControls(); pendingControls_.insert(parent.name);
@@ -896,6 +923,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             });
             connect(combo,QOverload<int>::of(&QComboBox::activated),this,[this,name](int) {
                 if (loading_) return;
+                if (auto* widget=controls_.value(name.toCaseFolded()).data(); widget && widget->property("la_access_input_readonly").toBool()) return;
                 if (auto* widget=controls_.value(name.toCaseFolded()).data(); widget && widget->property("la_insert_rejected").toBool()) { widget->setProperty("la_insert_rejected",false); return; }
                 if (auto* widget=controls_.value(name.toCaseFolded()).data()) widget->setProperty("la_null",false);
                 markDirty(name,true);
@@ -908,6 +936,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
                 widget->setProperty("la_null",false); markDirty(name,true); refreshCalculatedControls();
             });
             connect(box,&QCheckBox::clicked,this,[this,name,widget] {
+                if (widget->property("la_access_input_readonly").toBool()) return;
                 if (widget->property("la_insert_rejected").toBool()) { widget->setProperty("la_insert_rejected",false); return; }
                 pendingControls_.insert(name); (void)commitControl(name);
             });
@@ -921,6 +950,39 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         setText(group,QString::number(value)); group->setProperty("la_null",false);
         group->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Number));
     }
+    applyControlStates();
+}
+
+void AccessFormPreview::applyControlStates() {
+    QVector<int> tabOrder;
+    for (int index=0;index<layout_.controls.size();++index) {
+        const auto& control=layout_.controls[index]; auto* widget=controls_.value(control.name.toCaseFolded()).data();
+        if (!widget) continue;
+        widget->setVisible(control.visible); widget->setEnabled(control.enabled);
+        const bool bound=!control.controlSource.isEmpty();
+        const bool parentReadOnly=control.optionGroupIndex>=0 && controls_.value(layout_.controls[control.optionGroupIndex].name.toCaseFolded()) && controls_.value(layout_.controls[control.optionGroupIndex].name.toCaseFolded())->property("la_access_input_readonly").toBool();
+        const bool readOnly=parentReadOnly || layout_.kind==linaccess::AccessDocumentKind::Report || control.locked || control.controlSource.startsWith('=') || (bound && (!directTable_ || (currentRecordIndex_==0 && !layout_.allowAdditions)));
+        widget->setProperty("la_access_input_readonly",readOnly);
+        if (auto* line=qobject_cast<QLineEdit*>(widget)) line->setReadOnly(readOnly);
+        else if (auto* combo=qobject_cast<QComboBox*>(widget);combo && combo->lineEdit()) combo->lineEdit()->setReadOnly(readOnly);
+        else if (auto* group=qobject_cast<QGroupBox*>(widget))
+            for (auto* button:group->findChildren<QAbstractButton*>()) button->setProperty("la_access_input_readonly",readOnly);
+        else if (auto* calendar=qobject_cast<QCalendarWidget*>(widget)) calendar->setEnabled(control.enabled && !calendar->property("la_calendar_bound").toBool());
+        const bool focusable=!qobject_cast<QLabel*>(widget) && control.type!="Image" && control.type!="Rectangle" && control.type!="Line";
+        if (focusable) {
+            widget->setFocusPolicy(control.tabStop ? Qt::StrongFocus : Qt::ClickFocus);
+            if (auto* combo=qobject_cast<QComboBox*>(widget);combo && combo->lineEdit()) combo->lineEdit()->setFocusPolicy(control.tabStop ? Qt::StrongFocus : Qt::ClickFocus);
+            tabOrder.append(index);
+        }
+    }
+    const auto section=[](const QString& name) { return name=="FormHeader" ? 0 : name=="FormFooter" ? 2 : 1; };
+    std::stable_sort(tabOrder.begin(),tabOrder.end(),[&](int a,int b) {
+        const auto& left=layout_.controls[a]; const auto& right=layout_.controls[b];
+        const auto first=section(left.section),second=section(right.section);
+        return first!=second ? first<second : left.tabIndex<right.tabIndex;
+    });
+    for (int index=1;index<tabOrder.size();++index)
+        QWidget::setTabOrder(controls_.value(layout_.controls[tabOrder[index-1]].name.toCaseFolded()).data(),controls_.value(layout_.controls[tabOrder[index]].name.toCaseFolded()).data());
 }
 
 void AccessFormPreview::loadRecords() {
@@ -1052,13 +1114,10 @@ void AccessFormPreview::loadRecord() {
             else type = "TEXT";
         }
         widget->setProperty("la_sql_type",type);
-        if (auto* line = qobject_cast<QLineEdit*>(widget))
-            line->setReadOnly(layout_.kind==linaccess::AccessDocumentKind::Report || control.controlSource.startsWith('=') || (!control.controlSource.isEmpty() && (!directTable_ || (currentRecordIndex_==0 && !layout_.allowAdditions))));
-        else if (qobject_cast<QCheckBox*>(widget) || qobject_cast<QComboBox*>(widget) || qobject_cast<QGroupBox*>(widget)) widget->setEnabled(layout_.kind!=linaccess::AccessDocumentKind::Report && (control.controlSource.isEmpty() || (directTable_ && (currentRecordIndex_!=0 || layout_.allowAdditions))));
         setText(widget,value.toString()); widget->setProperty("la_null",value.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
     }
-    refreshCalculatedControls();
+    applyControlStates(); refreshCalculatedControls();
     dirty_ = false; insertionStarted_=false; pendingControls_.clear(); editOriginals_.clear();
     rememberControlEdit(QApplication::focusWidget());
 }

@@ -54,6 +54,10 @@ struct AccessVisualControl {
     int width{1701};
     int height{283};
     bool visible{true};
+    bool enabled{true};
+    bool locked{};
+    bool tabStop{true};
+    int tabIndex{};
 };
 
 enum class AccessDocumentKind { Form, Report };

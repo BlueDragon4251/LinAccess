@@ -148,7 +148,8 @@ control/global precedence and reset tests are documented in
 [MODULE_STATE_RUNTIME.md](MODULE_STATE_RUNTIME.md). Supported field types are
 Boolean/String/Variant in the preamble; complete VBA classes/scopes remain open.
 
-Der originale Kalender-/Datumsdialog führt beide Funktions-Ereignisbindungen,
+Nach expliziter Aktivierung des im Export deaktivierten Kalender-Steuerelements
+führt der originale Kalender-/Datumsdialog beide Funktions-Ereignisbindungen,
 Screen-Zugriffe, Projektvariablen, Monats-Handler, Default-Member-Zugriffe und
 seinen Error-/Resume-Pfad tatsächlich aus. Die Auswahl beider Felder wirkt auf
 eine Abfrage echter MDB-Datensätze. [Testumfang und Grenzen](CALENDAR_RUNTIME.md).
@@ -357,3 +358,11 @@ VBA helpers and a real Qt button with handled SQL-error rollback. CurrentDb.Exec
 accepts dbFailOnError through its Database object. DAO_TRANSACTIONS_RUNTIME.md
 records nested rollback, clone, forced-flush, multi-database, Close and Jet cursor
 limits; full DAO transaction parity is not claimed.
+
+SaveAsText Boolean NotDefault now respects each supported property's default.
+Enabled/Visible survive record reloads; source read-only protection is separate
+from Enabled. Native TextBox Locked, TabStop and bounded flat-section TabIndex
+reordering/traversal are tested, including a hash-verified original layout. The
+original metadata declares 81 visible command buttons rather than the previously
+reported 86; hidden controls remain available to VBA. CONTROL_STATE_RUNTIME.md
+records focus/cycle/nesting, other Locked kinds and visual-reference limits.

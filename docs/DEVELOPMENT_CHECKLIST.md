@@ -60,7 +60,7 @@ Verified incremental work ([details and limits](DAO_RUNTIME.md)):
 - [x] Procedure-wide Dim binding, local/control/global lookup precedence and standard-module Me restrictions; complete compiler/class scope remains open.
 
 - [x] Single-line If/Else/colon branches, reference-aware default invocation and scalar defaults for supported native objects; original calendar Error/Resume path and real DAO/subform SQL writes verified.
-- [x] Original function-expression date-field events, native Screen/Parent getters and bounded MSCAL adapter; both unchanged original date bindings navigate/select/close and feed actual MDB records. See CALENDAR_RUNTIME.md.
+- [x] Original function-expression date-field events, native Screen/Parent getters and bounded MSCAL adapter; both unchanged original date bindings navigate/select/close and feed actual MDB records in an explicitly enabled calendar context. See CALENDAR_RUNTIME.md.
 
 Full targets remain open:
 
@@ -222,8 +222,8 @@ Full targets remain open:
 - [x] Deferred physical window deletion until native VBA unwinds, including a
   self-close followed by a real MsgBox and nested Qt event-loop regression.
 - [x] Original bound-layout WhereCondition and unchanged wizard/target opening;
-  both original calendar bindings still perform real asynchronous selection and
-  data-query write-back with untouched fixture bytes.
+  both original calendar bindings perform real asynchronous selection and
+  data-query write-back in an explicitly enabled calendar context, with untouched fixture bytes.
 - [ ] Independent application document lifetimes/MDI, close-time reentrant opens,
   complete active-document DoCmd/keyboard scheduling across windows, acDialog /
   other window/data modes, OpenArgs and an Access event/window oracle.
@@ -381,3 +381,7 @@ Full targets remain open:
 - [x] Bounded project DBEngine/Workspace transactions with real savepoints,
   nested commit/outer rollback, isolated-reader SQL/VBA/native-button evidence
   and rollback/connection-generation guards; broader DAO scope remains open.
+
+- [x] SaveAsText NotDefault Boolean semantics, native Enabled/Visible persistence,
+  TextBox Locked, TabStop and bounded flat TabIndex traversal/reordering, including
+  original layout keyboard evidence and preserved read-only input protection.

@@ -958,8 +958,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (active) host.focusControl(instruction.endExpression=="." ? host.memberControlName(instruction.argument) : instruction.argument);
                 break;
             case Statement::Type::ControlVisible:
-                if (active) host.setControlVisible(instruction.endExpression=="." ? host.memberControlName(instruction.argument) : instruction.argument,
-                    evaluate(instruction.expression).truthy());
+                if (active) {
+                    const auto value=scalarVbaValue(evaluate(instruction.expression));
+                    if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null visibility");
+                    host.setControlVisible(instruction.endExpression=="." ? host.memberControlName(instruction.argument) : instruction.argument,value.truthy());
+                }
                 break;
             case Statement::Type::Call:
                 if (active) {

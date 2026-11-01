@@ -20,6 +20,8 @@
 #undef NDEBUG
 #endif
 #include <cassert>
+#include <algorithm>
+#include <iostream>
 
 void testInsertionEvents();
 void testChangeEvents();
@@ -27,6 +29,7 @@ void testTimerEvents();
 void testTextBuffering();
 void testControlUndo();
 void testWorkspaceEvents();
+void testImportedControlStates();
 
 void testFormEvents() {
     testInsertionEvents();
@@ -35,6 +38,7 @@ void testFormEvents() {
     testTextBuffering();
     testControlUndo();
     testWorkspaceEvents();
+    testImportedControlStates();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -1031,4 +1035,195 @@ End Sub)VBA";
     root->assign("Tag",VbaValue::string("fail")); button->click();
     assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90 && root->item("lastError").asNumber()==3022);
     assert(form.close());
+}
+
+void testImportedControlStates() {
+    using linaccess::VbaValue;
+    const auto defaults=linaccess::parseAccessFormLayout(R"FORM(Begin Form
+AllowAdditions =NotDefault
+AllowDeletions =NotDefault
+Modal =NotDefault
+KeyPreview =NotDefault
+FilterOnLoad =NotDefault
+Begin
+Begin TextBox
+Visible =NotDefault
+Locked =NotDefault
+End
+End
+Begin Section
+Begin TextBox
+Name ="actual"
+End
+End
+End
+)FORM");
+    assert(!defaults.allowAdditions && !defaults.allowDeletions && defaults.modal && defaults.keyPreview && defaults.filterOnLoad);
+    assert(defaults.controls.size()==1 && defaults.controls[0].visible && !defaults.controls[0].locked);
+    auto db=QSqlDatabase::addDatabase("QSQLITE","imported-control-states"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)")); assert(sql.exec("INSERT INTO records VALUES(1,'alpha'),(2,'beta')"));
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="records"
+Begin Section
+Begin TextBox
+Name ="last"
+TabIndex =6
+Top =2400
+End
+Begin TextBox
+Name ="second"
+TabIndex =2
+Top =800
+End
+Begin TextBox
+Name ="hidden"
+Visible =NotDefault
+TabIndex =4
+Top =1600
+End
+Begin TextBox
+Name ="first"
+ControlSource ="value"
+TabIndex =0
+End
+Begin TextBox
+Name ="disabled"
+Enabled =NotDefault
+TabIndex =5
+Top =2000
+End
+Begin TextBox
+Name ="skip"
+TabStop =NotDefault
+TabIndex =1
+Top =400
+End
+Begin TextBox
+Name ="locked"
+ControlSource ="value"
+Locked =NotDefault
+TabIndex =3
+Top =1200
+End
+End
+End
+)FORM";
+    const QByteArray code="Sub FocusHidden()\nMe.hidden.SetFocus\nEnd Sub\nSub FocusDisabled()\nMe.disabled.SetFocus\nEnd Sub\nSub InvalidVisible()\nMe.hidden.Visible=Null\nEnd Sub\nSub Reorder()\nMe.last.TabIndex=0\nEnd Sub\n";
+    AccessFormPreview form("control states",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form);
+    const auto object=[&](const char* name) { return root->objectMember(name,{}).object; };
+    const auto editor=[&](const char* name) { auto* line=form.findChild<QLineEdit*>(QString("access-control-")+name); assert(line); return line; };
+    auto* first=editor("first"); auto* second=editor("second"); auto* locked=editor("locked");
+    auto* selector=form.findChild<QComboBox*>("access-record-selector"); assert(selector);
+    assert(!editor("hidden")->isVisible() && !editor("disabled")->isEnabled() && locked->isEnabled() && locked->isReadOnly());
+    assert(!object("skip")->member("TabStop",{}).truthy() && object("last")->member("TabIndex",{}).asNumber()==6);
+    std::vector<VbaValue> noArguments;
+    assert(form.executeProcedure("FocusHidden",noArguments).errorNumber==2110);
+    assert(form.executeProcedure("FocusDisabled",noArguments).errorNumber==2110);
+    assert(form.executeProcedure("InvalidVisible",noArguments).errorNumber==94 && !editor("hidden")->isVisible());
+    first->setFocus(); QTest::keyClick(first,Qt::Key_Tab); assert(second->hasFocus());
+    QTest::keyClick(second,Qt::Key_Backtab,Qt::ShiftModifier); assert(first->hasFocus());
+    first->selectAll(); QTest::keyClicks(first,"changed"); QTest::keyClick(first,Qt::Key_Tab);
+    assert(second->hasFocus() && locked->text()=="changed"); root->assign("Dirty",VbaValue::logical(false));
+    locked->setFocus(); QTest::keyClicks(locked,"X"); assert(locked->text()=="changed" && !form.hasUnsavedChanges());
+    object("locked")->assign("Value",VbaValue::string("programmatic")); root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="programmatic"); sql.finish();
+    object("first")->assign("Enabled",VbaValue::logical(false)); selector->setCurrentIndex(2);
+    assert(!first->isEnabled() && first->text()=="beta");
+    object("first")->assign("Enabled",VbaValue::logical(true)); object("first")->assign("Locked",VbaValue::logical(true)); selector->setCurrentIndex(1);
+    assert(first->isEnabled() && first->isReadOnly() && object("first")->member("Locked",{}).truthy());
+    object("first")->assign("Locked",VbaValue::logical(false)); object("hidden")->assign("Visible",VbaValue::logical(true)); selector->setCurrentIndex(2);
+    assert(!first->isReadOnly() && editor("hidden")->isVisible());
+    object("skip")->assign("TabStop",VbaValue::logical(true)); first->setFocus(); QTest::keyClick(first,Qt::Key_Tab); assert(editor("skip")->hasFocus());
+    object("skip")->assign("TabStop",VbaValue::logical(false)); selector->setCurrentIndex(1);
+    assert(!object("skip")->member("TabStop",{}).truthy());
+    first->setFocus(); assert(form.executeProcedure("Reorder",noArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(object("last")->member("TabIndex",{}).asNumber()==0 && object("second")->member("TabIndex",{}).asNumber()==3 && first->hasFocus());
+    QTest::keyClick(first,Qt::Key_Backtab,Qt::ShiftModifier); assert(editor("last")->hasFocus());
+    QTest::keyClick(editor("last"),Qt::Key_Tab); assert(first->hasFocus());
+    object("last")->assign("TabIndex",VbaValue::numeric(6)); QTest::keyClick(first,Qt::Key_Tab); assert(second->hasFocus());
+    for(const auto& [value,expected]:std::vector<std::pair<VbaValue,int>>{{VbaValue::numeric(-1),5},{VbaValue::numeric(7),5},{VbaValue::numeric(32768),6},{VbaValue{},94}}) {
+        int error=0; try { object("last")->assign("TabIndex",value); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+        assert(error==expected && object("last")->member("TabIndex",{}).asNumber()==6);
+    }
+    assert(!form.hasUnsavedChanges());
+    assert(form.close());
+    assert(sql.exec("CREATE TABLE readonly_records(id INTEGER PRIMARY KEY,flag INTEGER,pick INTEGER)"));
+    assert(sql.exec("INSERT INTO readonly_records VALUES(1,0,1)"));
+    const QByteArray readonlyLayout=R"FORM(Begin Form
+RecordSource ="SELECT * FROM readonly_records"
+Begin Section
+Begin CheckBox
+Name ="flag"
+ControlSource ="flag"
+End
+Begin ComboBox
+Name ="pick"
+ControlSource ="pick"
+Top =400
+End
+Begin OptionGroup
+Name ="group"
+ControlSource ="pick"
+Top =800
+Begin
+Begin OptionButton
+Name ="one"
+OptionValue =1
+Top =850
+End
+Begin OptionButton
+Name ="two"
+OptionValue =2
+Top =1200
+End
+End
+End
+End
+End
+)FORM";
+    AccessFormPreview readonlyForm("readonly states",readonlyLayout,{},db); readonlyForm.show(); QApplication::setActiveWindow(&readonlyForm); QApplication::processEvents();
+    auto readonlyRoot=makePreviewFormObject(readonlyForm);
+    auto* box=readonlyForm.findChild<QCheckBox*>("access-control-flag");
+    auto* combo=readonlyForm.findChild<QComboBox*>("access-control-pick");
+    auto* one=readonlyForm.findChild<QAbstractButton*>("access-control-one"); auto* two=readonlyForm.findChild<QAbstractButton*>("access-control-two");
+    assert(box && combo && one && two && box->isEnabled() && combo->isEnabled() && combo->lineEdit()->isReadOnly());
+    box->click(); two->click(); assert(!box->isChecked() && one->isChecked() && !two->isChecked());
+    const auto previous=combo->currentText(); QTest::keyClick(combo,Qt::Key_Down); assert(combo->currentText()==previous);
+    int error=0; try { readonlyRoot->objectMember("pick",{}).object->member("Dropdown",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==2448);
+    error=0; try { readonlyRoot->assignItem("flag",VbaValue::logical(true)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==2448);
+    assert(!readonlyForm.hasUnsavedChanges()); assert(readonlyForm.close());
+}
+
+void testOriginalTabOrder(const QDir& directory,const QJsonArray& objects,QSqlDatabase db) {
+    int checked=0;
+    for (const auto& item:objects) {
+        const auto artifact=item.toObject(); if (artifact["kind"]!="form") continue;
+        QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly)); const auto bytes=input.readAll();
+        assert(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1().toLower());
+        const auto layout=linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(bytes));
+        AccessFormPreview form(artifact["name"].toString(),bytes,{},db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+        struct Entry { QWidget* widget; QString section; int index; };
+        QVector<Entry> entries; bool flat=true;
+        for (const auto& control:layout.controls) {
+            auto* widget=form.findChild<QWidget*>("access-control-"+control.name);
+            if (!widget || !widget->isVisible() || !widget->isEnabled() || !(widget->focusPolicy()&Qt::TabFocus)) continue;
+            if (!qobject_cast<QLineEdit*>(widget) && !qobject_cast<QComboBox*>(widget) && !qobject_cast<QPushButton*>(widget) && !qobject_cast<QCheckBox*>(widget)) { flat=false; break; }
+            entries.append({widget,control.section,control.tabIndex});
+        }
+        if (!flat || entries.size()<3) { assert(form.close()); continue; }
+        const auto section=[](const QString& name) { return name=="FormHeader" ? 0 : name=="FormFooter" ? 2 : 1; };
+        std::stable_sort(entries.begin(),entries.end(),[&](const auto& a,const auto& b) { return section(a.section)!=section(b.section) ? section(a.section)<section(b.section) : a.index<b.index; });
+        bool distinct=false; for(int i=1;i<entries.size();++i) if(entries[i].index!=entries[0].index) distinct=true;
+        if (!distinct) { assert(form.close()); continue; }
+        const auto focused=[](QWidget* widget) { if(auto* combo=qobject_cast<QComboBox*>(widget)) return combo->hasFocus() || (combo->lineEdit() && combo->lineEdit()->hasFocus()); return widget->hasFocus(); };
+        entries[0].widget->setFocus(); QApplication::processEvents(); assert(focused(entries[0].widget));
+        const int steps=std::min<int>(entries.size()-1,4);
+        for(int index=1;index<=steps;++index) { assert(QApplication::focusWidget()); QTest::keyClick(QApplication::focusWidget(),Qt::Key_Tab); assert(focused(entries[index].widget)); }
+        for(int index=steps-1;index>=0;--index) { QTest::keyClick(QApplication::focusWidget(),Qt::Key_Backtab,Qt::ShiftModifier); assert(focused(entries[index].widget)); }
+        assert(form.close()); ++checked;
+        std::cout<<"Original imported tab traversal: flat layouts="<<checked<<", forward/backward steps="<<steps*2<<"\n";
+        break;
+    }
+    assert(checked==1);
 }

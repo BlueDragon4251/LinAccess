@@ -79,6 +79,14 @@ QStringList saveAsTextLines(const QString& source) {
     }
     return logical;
 }
+bool accessBoolean(const QString& value,bool defaultValue) {
+    if (value.compare("NotDefault",Qt::CaseInsensitive)==0) return !defaultValue;
+    if (value.compare("True",Qt::CaseInsensitive)==0 || value.compare("Yes",Qt::CaseInsensitive)==0) return true;
+    if (value.compare("False",Qt::CaseInsensitive)==0 || value.compare("No",Qt::CaseInsensitive)==0) return false;
+    bool valid=false; const auto number=value.toLongLong(&valid);
+    if (!valid) throw std::runtime_error("Invalid imported Boolean property");
+    return number!=0;
+}
 bool isControl(const QString& type) {
     static const QSet<QString> types = {
         "TextBox", "Label", "CommandButton", "ComboBox", "ListBox",
@@ -174,12 +182,20 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "Top") control.top = integer();
             else if (key == "Width") control.width = integer();
             else if (key == "Height") control.height = integer();
-            else if (key == "Visible") control.visible = value != "0" && value != "False";
+            else if (key == "Visible") control.visible = accessBoolean(value,true);
+            else if (key == "Enabled") control.enabled = accessBoolean(value,true);
+            else if (key == "Locked") control.locked = accessBoolean(value,false);
+            else if (key == "TabStop") control.tabStop = accessBoolean(value,true);
+            else if (key == "TabIndex") {
+                bool valid=false; const auto index=value.toInt(&valid);
+                if (!valid || index<0 || index>32767) throw std::runtime_error("Invalid imported TabIndex");
+                control.tabIndex=index;
+            }
         } else if (current.type == "Form" || current.type == "Report") {
             static const QSet<QString> events{"beforeinsert","afterinsert","ondelete","beforedelconfirm","afterdelconfirm","onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate","onnodata","onerror","onpage","onkeydown","onkeypress","onkeyup","ontimer"};
             if (events.contains(key.toCaseFolded())) form.events.insert(key.toCaseFolded(),value);
-            if (key == "AllowAdditions") form.allowAdditions = value != "0" && value.compare("False",Qt::CaseInsensitive)!=0;
-            if (key == "AllowDeletions") form.allowDeletions = value != "0" && value.compare("False",Qt::CaseInsensitive)!=0;
+            if (key == "AllowAdditions") form.allowAdditions = accessBoolean(value,true);
+            if (key == "AllowDeletions") form.allowDeletions = accessBoolean(value,true);
             if (key == "Caption") form.caption = value;
             else if (key == "Tag") form.tag = value;
             else if (key == "RecordSource") form.recordSource = value;
@@ -189,9 +205,9 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 if (!valid || interval<0 || interval>std::numeric_limits<int>::max()) throw std::runtime_error("Invalid imported TimerInterval");
                 form.timerInterval=static_cast<int>(interval);
             }
-            else if (key == "KeyPreview") form.keyPreview = value != "0" && value.compare("False",Qt::CaseInsensitive)!=0;
-            else if (key == "Modal") form.modal = value != "0" && value.compare("False",Qt::CaseInsensitive)!=0;
-            else if (key == "FilterOnLoad") form.filterOnLoad = value.toInt()!=0;
+            else if (key == "KeyPreview") form.keyPreview = accessBoolean(value,false);
+            else if (key == "Modal") form.modal = accessBoolean(value,false);
+            else if (key == "FilterOnLoad") form.filterOnLoad = accessBoolean(value,false);
             else if (key == "Width") form.width = integer();
         } else if (current.type == "Section" || current.type == "FormHeader"
                    || current.type == "FormFooter") {

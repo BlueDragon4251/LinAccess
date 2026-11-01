@@ -929,3 +929,27 @@ Validation: host 21/21 (77.13 s), Debian 12 21/21 (65.79 s), Ubuntu 24.04
 distro DEBs pass exact payload/backend/permission/fixture-exclusion checks;
 isolated installed Debian/Ubuntu packages pass backend/counter execution and
 GUI startup. All four original fixture hashes pass.
+
+Imported control-state increment: NotDefault now uses the property's actual
+supported default rather than generic truthiness. Enabled/Visible persist through
+reloads and the legacy visibility path updates the same model. TextBox Locked
+blocks native typing while preserving VBA writes. Source read-only protection no
+longer misreports Enabled=false; native editor/checkbox/combo/group input is
+protected. TabStop and flat TabIndex drive real traversal and live reordering,
+with renumbering and validation. Native SQL/state/focus tests and both original
+layout/calendar-heavy regressions pass (34.62 s); freshly rebuilt GUI-disabled
+core passes 1/1 (0.50 s). One unchanged original flat layout also passes actual
+forward/backward Tab traversal without executing original VBA.
+
+The original declared-visible command-button count is corrected from 86 to 81
+(879 total parsed controls). The original calendar's exported disabled state is
+now honored: its event regression explicitly enables the real control first.
+This qualifies the earlier calendar workflow evidence; no unprepared OCX/Access
+compatibility is inferred. CONTROL_STATE_RUNTIME.md records remaining cycle/
+focus/nesting/default/Locked/visual boundaries.
+Validation: host 21/21 (83.29 s), Debian 12 21/21 (66.31 s), Ubuntu 24.04
+21/21 (60.89 s), freshly rebuilt GUI-disabled core 1/1 (0.50 s). Fresh host/
+distro DEBs pass exact payload/backend/permission/fixture-exclusion checks;
+isolated installed Debian/Ubuntu packages pass backend/counter execution and
+GUI startup. All four original fixture hashes pass. The original flat-layout
+keyboard probe records two forward and two backward native Tab transitions.
