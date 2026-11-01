@@ -144,6 +144,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
         if (current.control >= 0) {
             auto& control = form.controls[current.control];
             if (key == "Name") control.name = value;
+            else if (key == "EventProcPrefix") control.eventProcPrefix = value;
             else if (key == "Caption") control.caption = value;
             else if (key == "Tag") control.tag = value;
             else if (key == "ControlSource") control.controlSource = value;

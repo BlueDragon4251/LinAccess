@@ -387,3 +387,28 @@ billing/spending restriction; local container success is not a remote-CI claim.
 Measured query inventory remains 100 original query artifacts / 77 executions without
 an Access result oracle; original full sale/login/report operation, UI/designers,
 remaining VBA/DAO/Jet and exhaustive Access 2003 parity remain open.
+
+Remote verification follow-up: private GitHub run
+https://github.com/BlueDragon4251/LinAccess/actions/runs/41298553788 completed
+successfully for pushed backend commit a63d003b55bbf8be7c19d161e8bf9ccd25fa553e.
+Ubuntu 24.04, Debian 12, Debian 13 and Windows PowerShell syntax jobs all ran and
+passed. Linux jobs include full CTest, DEB content/build identity checks, installed
+backend self-test and final fixture hashes. The previous account startup block
+did not recur in this run. This verifies the Linux CI matrix and bridge syntax;
+it is not Windows Access runtime or rendering verification.
+
+Event-prefix increment: native control dispatch now honors the stored
+EventProcPrefix independently of Name, including supported click/double-click,
+keyboard and validation events. All 47 original form layouts are scanned with
+68 stored prefixes preserved; rendered control objects expose their values.
+Synthetic GUI/SQL regressions verify actual prefixed writes, key order/ASCII
+replacement, validation cancellation, VBA-driven reassignment, default naming,
+unbound events and explicit ProcedureMissing without name guessing. Existing
+original keyboard-binding/login limitations remain unchanged. FORM_EVENTS.md
+records scope and unverified Access 2003 naming/design-view edges.
+
+Validation: Release 20/20 CTests on host Qt 6.8.2 (63.84 s), Debian 12 Qt 6.4.2
+(56.60 s) and Ubuntu 24.04 Qt 6.4.2 (52.94 s). Fresh DEBs passed executable/backend
+identity, exact payload/permissions and extracted backend regressions. Both distro
+packages passed installation, private-backend resolution and bounded offscreen
+GUI startup in fresh containers. Four original hashes passed after testing.

@@ -28,6 +28,7 @@
 #include <iostream>
 
 void testFormEvents();
+void testEventPrefixes();
 void testFilters();
 void testMessageBoxes();
 void testCalendarValues();
@@ -74,6 +75,7 @@ End
     int scanned = 0;
     int visible = 0;
     int buttons = 0;
+    int prefixes = 0;
     for (const auto& item : objects) {
         const auto object = item.toObject();
         if (object.value("kind") != "form") continue;
@@ -84,6 +86,7 @@ End
         assert(form.width > 0);
         assert(form.height > 0);
         for (const auto& control : form.controls) {
+            if (!control.eventProcPrefix.isEmpty()) ++prefixes;
             if (!control.visible) continue;
             if (control.type == "CommandButton") ++buttons;
         }
@@ -104,6 +107,10 @@ End
             for (const auto& item : items) {
                 assert(!item.object->member("Name",{}).asText().empty());
                 assert(item.object->member("ControlType",{}).asNumber() >= 100);
+                const auto name=QString::fromStdString(item.object->member("Name",{}).asText());
+                for (const auto& definition:form.controls)
+                    if (definition.name==name && !definition.eventProcPrefix.isEmpty())
+                        assert(item.object->member("EventProcPrefix",{}).asText()==definition.eventProcPrefix.toStdString());
             }
             assert(dialog.findChild<QWidget*>("access-form-canvas") != nullptr);
             db.close();
@@ -112,6 +119,7 @@ End
     assert(scanned == 47);
     assert(visible > 150);
     assert(buttons > 0);
+    assert(prefixes > 0);
     {
         // Exercise real Qt click -> imported VBA -> SQLite mutation, with no
         // synthetic confirmation dialog and no access to the original MDB.
@@ -217,6 +225,7 @@ End Sub
         std::cout << "Original keypad button/parameterized-handler executions: " << executedKeys << '\n';
     }
     testFormEvents();
+    testEventPrefixes();
     testMessageBoxes();
     testCalendarValues();
     testModuleStates(directory,objects);
@@ -286,5 +295,5 @@ End Sub
         std::cout << "Original Kassa form click executed DAO AddNew/Update on isolated database copy\n";
     }
     std::cout << "Access 2003 layout tests passed: " << scanned
-              << " forms, " << visible << " controls, " << buttons << " buttons\n";
+              << " forms, " << visible << " controls, " << buttons << " buttons, " << prefixes << " stored event prefixes\n";
 }

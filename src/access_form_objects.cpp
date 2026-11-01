@@ -16,6 +16,7 @@
 #include <QMenu>
 #include <QWidgetAction>
 #include <QPointer>
+#include <QRegularExpression>
 #include <QWidget>
 #include <algorithm>
 #include <limits>
@@ -88,6 +89,7 @@ public:
             if (key=="nextmonth") calendar->showNextMonth(); else calendar->showPreviousMonth(); return {};
         }
         if (key == "name") return linaccess::VbaValue::string(bytes(name_));
+        if (key == "eventprocprefix") return linaccess::VbaValue::string(bytes(preview.controlEventPrefix(name_)));
         if (key == "tag") return linaccess::VbaValue::string(bytes(widget->property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(caption()));
         if (key == "value") { requireValue(); return preview.getFieldValue(bytes(name_)); }
@@ -129,6 +131,16 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (key=="eventprocprefix") {
+            if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null event prefix");
+            const auto prefix=text(value.asText());
+            static const QRegularExpression identifier("^[\\p{L}_][\\p{L}\\p{N}_]{0,63}$");
+            if (!identifier.match(prefix).hasMatch()) throw linaccess::VbaRuntimeError(5,"Invalid event procedure prefix");
+            for (auto& definition:preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
+                definition.eventProcPrefix=prefix; return;
+            }
+            throw linaccess::VbaRuntimeError(2465,"Control unavailable");
+        }
         if (qobject_cast<QComboBox*>(widget) && (key=="rowsource" || key=="rowsourcetype" || key=="boundcolumn" || key=="columncount" || key=="columnwidths")) {
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null combo property");
             for (auto& definition : preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {

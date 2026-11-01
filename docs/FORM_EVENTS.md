@@ -40,3 +40,32 @@ objects, module lifetimes, record locking/conflict resolution and virtualized
 navigation beyond the explicit 10,000-row display limit. Query sources are not
 yet generally editable and complete Access rendering/event compatibility is not
 claimed.
+
+## Stored event procedure prefixes
+
+Control EventProcPrefix is preserved from SaveAsText and exposed as a read/write
+VBA property. An explicit prefix selects `prefix_Event`, independently of the
+current control Name, for bound Click/DblClick, KeyDown/KeyPress/KeyUp and control
+BeforeUpdate/AfterUpdate. The native MSCAL source-interface Click lookup uses the
+same prefix. Existing event-result keys and value/control lookup retain current
+control names; a prefix does not create another control alias. Without an
+explicit prefix, the existing generated control-name prefix remains in use.
+
+The 47 original form layouts contain 68 stored prefixes. The layout regression
+checks their parsed metadata and property values on rendered controls. Synthetic
+native GUI/SQL regressions prove renamed-button dispatch, cancellation of
+DblClick, keyboard order and ASCII replacement, actual record writes, validation
+cancellation, VBA-driven prefix reassignment and default-prefix behavior. An
+unbound event stays unbound, and an absent explicitly prefixed procedure remains
+ProcedureMissing even if a procedure using the current Name exists.
+
+The in-memory setter accepts 1–64-character letter/underscore-led identifiers
+and rejects Null (94) or invalid identifiers (5) without changing the prior value.
+Design-view source refactoring/persistence and exact Access 2003 edge-case name
+validation are not established by these tests. Form/report lifecycle procedure
+names remain their existing Form_/Report_ bindings. The two previously diagnosed
+renamed original KeyPress controls have no EventProcPrefix override and remain
+missing bindings; this change does not guess their older procedure names.
+
+Property contract reference (current Microsoft documentation; no Access 2003
+execution oracle): https://learn.microsoft.com/en-us/office/vba/api/access.textbox.eventprocprefix

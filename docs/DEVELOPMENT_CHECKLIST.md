@@ -274,3 +274,7 @@ Full targets remain open:
   original table names under an unchanged C-locale parent.
 - [x] Finish pinned SQLite backend, full Debian/Ubuntu regression and installed
   package verification; retain explicit Jet/Access compatibility boundaries.
+- [x] Preserve control EventProcPrefix, expose bounded in-memory read/write and
+  route supported native events through the explicit prefix; actual GUI/SQL
+  validation, cancellation, keyboard and missing-binding regressions.
+- [ ] Exact Access 2003 prefix-name edge cases and design-view source refactoring.

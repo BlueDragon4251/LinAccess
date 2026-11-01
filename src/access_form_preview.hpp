@@ -51,6 +51,7 @@ public:
 
 private:
     QString controlMemberName(const QString& name) const;
+    QString controlEventPrefix(const QString& name) const;
     void buildControls(QWidget* canvas);
     void loadRecords();
     void setFilterState(const QString& filter,bool enabled);

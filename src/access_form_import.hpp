@@ -23,6 +23,7 @@ AccessFormDraft parseAccessFormText(const QString& text);
 struct AccessVisualControl {
     QString type;
     QString name;
+    QString eventProcPrefix;
     QString caption;
     QString tag;
     QString controlSource;

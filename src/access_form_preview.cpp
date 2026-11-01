@@ -204,6 +204,12 @@ int columnIndex(QString source, const QStringList& columns) {
 }
 }
 
+QString AccessFormPreview::controlEventPrefix(const QString& name) const {
+    for (const auto& control:layout_.controls)
+        if (control.name.compare(name,Qt::CaseInsensitive)==0)
+            return control.eventProcPrefix.isEmpty() ? eventName(control.name) : control.eventProcPrefix;
+    return eventName(name);
+}
 QString AccessFormPreview::controlMemberName(const QString& name) const {
     if (controls_.contains(name.toCaseFolded())) return name;
     QString resolved;
@@ -658,7 +664,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             auto clickBinding=control.onClick;
             // MSCAL's source-interface Click event is stored in CodeBehind,
             // without a SaveAsText OnClick property in the original export.
-            if (clickBinding.isEmpty() && linaccess::validateVbaProcedure(vba_.toUtf8().toStdString(),(eventName(control.name)+"_Click").toStdString()).status!=linaccess::VbaExecutionStatus::ProcedureMissing)
+            if (clickBinding.isEmpty() && linaccess::validateVbaProcedure(vba_.toUtf8().toStdString(),(controlEventPrefix(control.name)+"_Click").toStdString()).status!=linaccess::VbaExecutionStatus::ProcedureMissing)
                 clickBinding="[Event Procedure]";
             if (!clickBinding.isEmpty()) connect(calendar,&QCalendarWidget::clicked,this,[this,name=control.name,binding=clickBinding,calendar](const QDate&) {
                 calendar->setProperty("la_null",false); markDirty(name);
@@ -968,7 +974,7 @@ bool AccessFormPreview::commitControl(const QString& name) {
     for (const auto& control : layout_.controls) {
         if (control.name.compare(name,Qt::CaseInsensitive) != 0) continue;
         if (eventProcedure(control.beforeUpdate)) {
-            const auto result = runHandler(eventName(control.name)+"_BeforeUpdate");
+            const auto result = runHandler(controlEventPrefix(control.name)+"_BeforeUpdate");
             eventResults_.insert(("control:"+control.name+":BeforeUpdate").toCaseFolded(),result);
             if (result.cancelled || failed(result)) {
                 if (auto* widget = controls_.value(control.name.toCaseFolded()).data()) widget->setFocus();
@@ -977,7 +983,7 @@ bool AccessFormPreview::commitControl(const QString& name) {
         }
         pendingControls_.remove(name); editOriginals_.remove(name);
         if (eventProcedure(control.afterUpdate)) {
-            const auto result = runHandler(eventName(control.name)+"_AfterUpdate");
+            const auto result = runHandler(controlEventPrefix(control.name)+"_AfterUpdate");
             eventResults_.insert(("control:"+control.name+":AfterUpdate").toCaseFolded(),result);
             if (failed(result)) return false;
         }
@@ -1644,7 +1650,7 @@ bool AccessFormPreview::dispatchKeyboardEvent(QObject* watched,QKeyEvent* event)
                 : suffix=="KeyDown" ? control->onKeyDown : suffix=="KeyUp" ? control->onKeyUp : control->onKeyPress;
             if (binding.isEmpty()) return;
             if (!eventProcedure(binding)) throw linaccess::VbaRuntimeError(3251,"Keyboard macro/function bindings unsupported");
-            const auto handler=form ? "Form_"+suffix : eventName(control->name)+"_"+suffix;
+            const auto handler=form ? "Form_"+suffix : controlEventPrefix(control->name)+"_"+suffix;
             const auto result=executeProcedure(handler,arguments);
             eventResults_.insert(form ? ("On"+suffix).toCaseFolded() : ("control:"+control->name+":"+suffix).toCaseFolded(),result);
             if (failed(result)) throw linaccess::VbaRuntimeError(result.errorNumber ? result.errorNumber : 3251,"Keyboard handler failed");
@@ -1719,7 +1725,7 @@ bool AccessFormPreview::eventFilter(QObject* watched,QEvent* event) {
 }
 linaccess::VbaExecutionResult AccessFormPreview::runControlBinding(const QString& control,const QString& event,const QString& binding) {
     linaccess::VbaExecutionResult result;
-    if (eventProcedure(binding)) result=runHandler(eventName(control)+"_"+event);
+    if (eventProcedure(binding)) result=runHandler(controlEventPrefix(control)+"_"+event);
     else {
         PreviewVbaHost host(*this);
         result=linaccess::executeVbaEventExpression(vba_.toUtf8().toStdString(),binding.toUtf8().toStdString(),host);

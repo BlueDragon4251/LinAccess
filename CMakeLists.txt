@@ -199,6 +199,7 @@ if(BUILD_TESTING)
                  src/vba_expression.hpp
                  src/vba_analyzer.hpp)
             target_include_directories(linaccess_access_layout_tests PRIVATE src)
+            target_sources(linaccess_access_layout_tests PRIVATE tests/event_prefix_tests.cpp)
             target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::Test Qt6::PrintSupport)
             add_test(NAME access_2003_layouts
                 COMMAND linaccess_access_layout_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}")
