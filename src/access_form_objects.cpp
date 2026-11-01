@@ -310,7 +310,7 @@ public:
         }
         if (key=="undo") {
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Undo requires a form");
-            if (preview.dirty_) preview.loadRecord(); return {};
+            if (preview.dirty_ || preview.insertionStarted_) preview.loadRecord(); return {};
         }
         if (key == "setfocus") { preview.activateWindow(); preview.setFocus(); return {}; }
         if (auto value=preview.getModuleMember(name,true)) return *value;

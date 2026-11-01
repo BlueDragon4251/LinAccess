@@ -738,7 +738,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             if (clickBinding.isEmpty() && linaccess::validateVbaProcedure(vba_.toUtf8().toStdString(),(controlEventPrefix(control.name)+"_Click").toStdString()).status!=linaccess::VbaExecutionStatus::ProcedureMissing)
                 clickBinding="[Event Procedure]";
             if (!clickBinding.isEmpty()) connect(calendar,&QCalendarWidget::clicked,this,[this,name=control.name,binding=clickBinding,calendar](const QDate&) {
-                calendar->setProperty("la_null",false); markDirty(name);
+                calendar->setProperty("la_null",false); markDirty(name,true);
                 (void)runControlBinding(name,"Click",binding);
             });
         } else if (control.type == "TextBox") {
@@ -823,7 +823,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
                         if (loading_) return;
                         group->setProperty("la_option_value",button->property("la_option_value"));
                         group->setProperty("la_null",false); group->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Number));
-                        markDirty(parent.name); refreshCalculatedControls(); pendingControls_.insert(parent.name);
+                        markDirty(parent.name,true); if (group->property("la_insert_rejected").toBool()) return; refreshCalculatedControls(); pendingControls_.insert(parent.name);
                         if (commitControl(parent.name)) {
                             (void)runControlBinding(parent.name,"Click",parent.onClick);
                             (void)runControlBinding(control.name,"Click",control.onClick);
@@ -845,7 +845,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             connect(line,&QLineEdit::textChanged,this,[this,name,widget] {
                 if (loading_) return;
                 widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
-                markDirty(name); refreshCalculatedControls();
+                markDirty(name,true); refreshCalculatedControls();
             });
             connect(line,&QLineEdit::textEdited,this,[this,name,widget] {
                 if (!loading_) { pendingControls_.insert(name); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text)); }
@@ -855,19 +855,25 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             connect(combo,&QComboBox::currentTextChanged,this,[this,name,widget] {
                 if (loading_) return;
                 widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
-                markDirty(name); refreshCalculatedControls();
+                markDirty(name,true); refreshCalculatedControls();
             });
             connect(combo,QOverload<int>::of(&QComboBox::activated),this,[this,name](int) {
                 if (loading_) return;
+                if (auto* widget=controls_.value(name.toCaseFolded()).data(); widget && widget->property("la_insert_rejected").toBool()) { widget->setProperty("la_insert_rejected",false); return; }
                 if (auto* widget=controls_.value(name.toCaseFolded()).data()) widget->setProperty("la_null",false);
-                markDirty(name); refreshCalculatedControls(); pendingControls_.insert(name); (void)commitControl(name);
+                markDirty(name,true);
+                if (auto* widget=controls_.value(name.toCaseFolded()).data(); widget && widget->property("la_insert_rejected").toBool()) { widget->setProperty("la_insert_rejected",false); return; }
+                refreshCalculatedControls(); pendingControls_.insert(name); (void)commitControl(name);
             });
         } else if (auto* box = qobject_cast<QCheckBox*>(widget);box && control.optionGroupIndex<0) {
             connect(box,&QCheckBox::toggled,this,[this,name,widget] {
                 if (loading_) return;
-                widget->setProperty("la_null",false); markDirty(name); refreshCalculatedControls();
+                widget->setProperty("la_null",false); markDirty(name,true); refreshCalculatedControls();
             });
-            connect(box,&QCheckBox::clicked,this,[this,name] { pendingControls_.insert(name); (void)commitControl(name); });
+            connect(box,&QCheckBox::clicked,this,[this,name,widget] {
+                if (widget->property("la_insert_rejected").toBool()) { widget->setProperty("la_insert_rejected",false); return; }
+                pendingControls_.insert(name); (void)commitControl(name);
+            });
         }
         ++renderedControls_;
     }
@@ -1016,12 +1022,18 @@ void AccessFormPreview::loadRecord() {
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
     }
     refreshCalculatedControls();
-    dirty_ = false; pendingControls_.clear(); editOriginals_.clear();
+    dirty_ = false; insertionStarted_=false; pendingControls_.clear(); editOriginals_.clear();
     rememberControlEdit(QApplication::focusWidget());
 }
 
-void AccessFormPreview::markDirty(const QString& name) {
+void AccessFormPreview::markDirty(const QString& name,bool userEdit) {
     if (loading_ || !directTable_ || !dataSourceAvailable_) return;
+    auto* editedWidget=controls_.value(name.toCaseFolded()).data();
+    if (userEdit && editedWidget) editedWidget->setProperty("la_insert_rejected",false);
+    const auto reject=[&] {
+        loadRecord();
+        if (userEdit && editedWidget) editedWidget->setProperty("la_insert_rejected",true);
+    };
     if (!name.isEmpty()) {
         int boundColumn = -1;
         auto* sourceWidget = controls_.value(name.toCaseFolded()).data();
@@ -1037,10 +1049,21 @@ void AccessFormPreview::markDirty(const QString& name) {
             setText(target,textOf(sourceWidget)); target->setProperty("la_null",sourceWidget->property("la_null"));
         }
     }
+    if (insertionEventRunning_) return;
+    if (userEdit && currentRecordIndex_==0 && !insertionStarted_) {
+        insertionStarted_=true;
+        linaccess::VbaExecutionResult before;
+        {
+            QScopedValueRollback<bool> inserting(insertionEventRunning_,true);
+            before=formEvent("BeforeInsert","Form_BeforeInsert");
+        }
+        if (before.cancelled || failed(before)) { reject(); return; }
+        if (!insertionStarted_) { reject(); return; } // The handler undid the new row.
+    }
     if (!dirty_) {
         dirty_ = true;
         const auto event = formEvent("OnDirty","Form_Dirty");
-        if (event.cancelled || failed(event)) loadRecord();
+        if (event.cancelled || failed(event)) reject();
     }
 }
 
@@ -1073,7 +1096,7 @@ bool AccessFormPreview::commitControls() {
 }
 
 bool AccessFormPreview::saveRecord() {
-    if (saving_ || recordCommandRunning_) return false;
+    if (saving_ || recordCommandRunning_ || insertionEventRunning_) return false;
     if (currentRecordIndex_==0 && !layout_.allowAdditions) return !dirty_;
     QScopedValueRollback<bool> saving(saving_,true);
     if (!commitControls()) return false;
@@ -1082,6 +1105,7 @@ bool AccessFormPreview::saveRecord() {
     if (!dataSourceAvailable_ || !directTable_) return false;
     const auto before = formEvent("BeforeUpdate","Form_BeforeUpdate");
     if (before.cancelled || failed(before)) return false;
+    const bool userInsertion=currentRecordIndex_==0 && insertionStarted_;
     QSet<QString> generated;
     try { if (currentRecordIndex_==0) generated=linaccess::generatedAccessColumns(db_,table); }
     catch (const std::exception& error) { status_->setText(QString::fromUtf8(error.what())); return false; }
@@ -1128,6 +1152,7 @@ bool AccessFormPreview::saveRecord() {
     recordSelector_->blockSignals(true); recordSelector_->setCurrentIndex(index); recordSelector_->blockSignals(false);
     currentRecordIndex_ = index; loadRecord();
     (void)formEvent("AfterUpdate","Form_AfterUpdate");
+    if (userInsertion) (void)formEvent("AfterInsert","Form_AfterInsert");
     return true;
 }
 
@@ -1650,6 +1675,7 @@ void AccessFormPreview::updateDirtyFromRecord() {
             if (actual.isNull()!=expected.isNull() || (!actual.isNull() && actual!=expected)) dirty_=true;
         } catch (const std::exception&) { dirty_=true; }
     }
+    if (!dirty_) insertionStarted_=false;
 }
 void AccessFormPreview::undoKeyboardEdit() {
     const auto* focus=QApplication::focusWidget();

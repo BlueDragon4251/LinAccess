@@ -268,3 +268,13 @@ non-list data control reloads the form record source after save validation, with
 Native tests compare actual SQL changes and distinct caller/active combo models.
 Focus-dependent implicit subform behavior and complete Access event timing still
 need a reference oracle.
+
+### Native insertion events
+
+Direct-table form control changes now invoke bounded BeforeInsert/Dirty and,
+after a successful SQL INSERT, AfterUpdate/AfterInsert. Programmatic VBA field
+assignments do not invoke insertion events. Cancel, errors, Undo, initialization
+and validation/constraint retries have native Qt/SQL regressions. Precise
+BeforeInsert/Change/Text/Value visibility is still open: the current adapter
+runs after the native editor value changes. INSERT_EVENT_RUNTIME.md records
+this boundary and the still-unsupported PasteAppend event pipeline.

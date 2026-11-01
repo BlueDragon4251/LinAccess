@@ -1,6 +1,8 @@
 #include "access_form_preview.hpp"
+#include "access_form_objects.hpp"
 #include <QApplication>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSqlQuery>
@@ -10,7 +12,10 @@
 #endif
 #include <cassert>
 
+void testInsertionEvents();
+
 void testFormEvents() {
+    testInsertionEvents();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -370,4 +375,108 @@ End Sub
     assert(embedded.close()); assert(container.close());
 
 
+}
+
+void testInsertionEvents() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","insertion-events"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,name TEXT UNIQUE,flag INTEGER)"));
+    assert(sql.exec("CREATE TABLE trace(id INTEGER PRIMARY KEY,event TEXT)"));
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="records"
+BeforeInsert ="[Event Procedure]"
+AfterInsert ="[Event Procedure]"
+OnDirty ="[Event Procedure]"
+BeforeUpdate ="[Event Procedure]"
+AfterUpdate ="[Event Procedure]"
+Begin Section
+Begin TextBox
+Name ="name"
+ControlSource ="name"
+End
+Begin CheckBox
+Name ="flag"
+ControlSource ="flag"
+Top =500
+End
+End
+End
+)FORM";
+    const QByteArray code=R"VBA(Sub Form_BeforeInsert(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('before_insert')"
+If Me.Tag="cancel_insert" Then Cancel=1
+If Me.Tag="fail_insert" Then Err.Raise 5
+If Me.Tag="undo_insert" Then Me.Undo
+If Me.Tag="initialize" Then Me.flag=True
+End Sub
+Sub Form_Dirty(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('dirty')"
+End Sub
+Sub Form_BeforeUpdate(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('before_update')"
+If Me.Tag="cancel_save" Then Cancel=1
+End Sub
+Sub Form_AfterUpdate()
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('after_update')"
+End Sub
+Sub Form_AfterInsert()
+If DCount("*","records")<1 Then Err.Raise 5
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('after_insert')"
+End Sub
+)VBA";
+    AccessFormPreview form("insertion",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form);
+    auto* edit=form.findChild<QLineEdit*>("access-control-name");
+    auto* selector=form.findChild<QComboBox*>("access-record-selector");
+    auto* save=form.findChild<QPushButton*>("access-save-record"); assert(edit && selector && save);
+    const auto events=[&] { QStringList out; assert(sql.exec("SELECT event FROM trace ORDER BY id")); while(sql.next()) out<<sql.value(0).toString(); sql.finish(); return out; };
+    const auto clear=[&] { assert(sql.exec("DELETE FROM trace")); };
+    root->assign("Tag",VbaValue::string("cancel_insert"));
+    edit->setFocus(); QTest::keyClicks(edit,"a");
+    assert(edit->text().isEmpty() && !form.hasUnsavedChanges());
+    assert(events()==QStringList{"before_insert"}); clear();
+    root->assign("Tag",VbaValue::string("initialize")); QTest::keyClicks(edit,"typed");
+    assert(events()==QStringList({"before_insert","dirty"}) && form.hasUnsavedChanges());
+    assert(root->item("flag").truthy());
+    save->click();
+    assert(events()==QStringList({"before_insert","dirty","before_update","after_update","after_insert"}));
+    assert(!form.hasUnsavedChanges());
+    assert(sql.exec("SELECT name,flag FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="typed" && sql.value(1).toInt()==-1); sql.finish();
+    clear(); selector->setCurrentIndex(0);
+    root->assign("Tag",VbaValue::string("allow")); root->assignItem("name",VbaValue::string("programmatic")); save->click();
+    assert(events()==QStringList({"dirty","before_update","after_update"}));
+    assert(sql.exec("SELECT name FROM records WHERE id=2") && sql.next() && sql.value(0).toString()=="programmatic"); sql.finish();
+    clear(); selector->setCurrentIndex(0); edit->setFocus(); QTest::keyClicks(edit,"retry");
+    root->assign("Tag",VbaValue::string("cancel_save")); save->click();
+    assert(form.hasUnsavedChanges() && root->member("NewRecord",{}).truthy());
+    assert(events()==QStringList({"before_insert","dirty","before_update"}));
+    root->assign("Tag",VbaValue::string("allow")); save->click();
+    assert(!form.hasUnsavedChanges());
+    assert(events()==QStringList({"before_insert","dirty","before_update","before_update","after_update","after_insert"}));
+    assert(sql.exec("SELECT name FROM records WHERE id=3") && sql.next() && sql.value(0).toString()=="retry"); sql.finish();
+    clear(); selector->setCurrentIndex(0); edit->setFocus(); QTest::keyClicks(edit,"undo"); root->member("Undo",{});
+    assert(!form.hasUnsavedChanges()); clear();
+    QTest::keyClicks(edit,"again"); save->click();
+    assert(events()==QStringList({"before_insert","dirty","before_update","after_update","after_insert"}));
+    clear(); selector->setCurrentIndex(0);
+    auto* checkbox=form.findChild<QCheckBox*>("access-control-flag"); assert(checkbox);
+    root->assign("Tag",VbaValue::string("cancel_insert")); checkbox->click();
+    assert(!form.hasUnsavedChanges() && events()==QStringList{"before_insert"}); clear();
+    root->assign("Tag",VbaValue::string("allow")); checkbox->click();
+    assert(form.hasUnsavedChanges() && events()==QStringList({"before_insert","dirty"}));
+    save->click(); assert(events()==QStringList({"before_insert","dirty","before_update","after_update","after_insert"}));
+    clear(); selector->setCurrentIndex(0); root->assign("Tag",VbaValue::string("allow"));
+    edit->setFocus(); QTest::keyClicks(edit,"typed"); save->click();
+    assert(form.hasUnsavedChanges() && root->member("NewRecord",{}).truthy());
+    assert(events()==QStringList({"before_insert","dirty","before_update"}));
+    edit->setFocus(); edit->selectAll(); QTest::keyClicks(edit,"constraint retry"); save->click();
+    assert(!form.hasUnsavedChanges());
+    assert(events()==QStringList({"before_insert","dirty","before_update","before_update","after_update","after_insert"}));
+    clear(); selector->setCurrentIndex(0); root->assign("Tag",VbaValue::string("fail_insert"));
+    edit->setFocus(); QTest::keyClicks(edit,"f");
+    assert(!form.hasUnsavedChanges() && edit->text().isEmpty() && events()==QStringList{"before_insert"});
+    clear(); root->assign("Tag",VbaValue::string("undo_insert")); QTest::keyClicks(edit,"u");
+    assert(!form.hasUnsavedChanges() && edit->text().isEmpty() && events()==QStringList{"before_insert"});
+    assert(form.close());
 }

@@ -68,7 +68,7 @@ private:
     linaccess::VbaExecutionResult runControlBinding(const QString& control,const QString& event,const QString& binding);
     bool eventFilter(QObject* watched,QEvent* event) override;
     linaccess::VbaExecutionResult formEvent(const QString& property,const QString& handler);
-    void markDirty(const QString& control);
+    void markDirty(const QString& control,bool userEdit=false);
     bool commitControl(const QString& control);
     bool commitControls();
     void selectRecord(int target);
@@ -166,6 +166,8 @@ private:
     bool closed_{};
     bool closing_{};
     bool dirty_{};
+    bool insertionStarted_{};
+    bool insertionEventRunning_{};
     bool loading_{};
     bool saving_{};
     bool recordCommandRunning_{};

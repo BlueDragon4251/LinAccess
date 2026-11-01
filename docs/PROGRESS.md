@@ -26,7 +26,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original deletion procedure / direct invocation / bound native click on synthetic rows | 1 / 1 / 1 |
 | Original duplicate handler / handled manual-key conflicts via invocation and native click / inserted rows | 1 / 2 / 0 |
 | Original counter flags / single-PK generators / managed non-PK generators on new imports | 21 / 16 / 5 |
-| Current local regression tests | 20 passed |
+| Current local regression tests | 21 passed |
 
 Recent completed work includes native combo/platform/backend fixes, control event
 prefixes, InputBox and DAO clone/bookmark/find form navigation. Positional
@@ -708,3 +708,23 @@ pass. GUI-disabled core remains unchanged from the preceding 1/1 validated
 commit. QUERY_ORIGINS.md now states the current 77-query coverage and joined
 action boundaries directly instead of retaining the earlier 74-query summary.
 Installed Debian/Ubuntu packages also pass native backend/counter execution and GUI startup.
+
+Insertion events increment: native control changes on a new direct-table form
+record now dispatch BeforeInsert before Dirty, and a successful actual INSERT
+dispatches AfterUpdate then AfterInsert. VBA assignment does not fire insertion
+events. Native tests cover text/checkbox input, exact traces, actual SQL values,
+field initialization from the handler, Cancel/errors/Undo and validation/UNIQUE
+retry. An additional regression exposed and fixed Undo being ignored during
+BeforeInsert while Dirty was still false. Rejected activations do not recommit
+values after cancellation. Targeted layouts pass (7.24 s).
+
+This runs after the editor value mutation; it does not establish Access's
+BeforeInsert/Change/Text/Value visibility. INSERT_EVENT_RUNTIME.md states that
+remaining timing/oracle boundary and the separate unsupported PasteAppend
+insertion-event pipeline. Full event parity is not claimed.
+
+Validation: host Release 21/21 (74.06 s), Debian 12 21/21 (60.50 s),
+Ubuntu 24.04 21/21 (54.69 s). Fresh host/distro DEBs pass executable/backend,
+permissions, exact payload and fixture-exclusion checks. All four original hashes
+pass. The GUI-disabled core has no source changes in this increment.
+Isolated installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.

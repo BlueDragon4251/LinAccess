@@ -336,3 +336,7 @@ Full targets remain open:
 
 - [x] Named-control DoCmd.Requery on active form, distinct from Me.control.Requery;
   native SQL row-source reload and bound-control form reload with validation.
+
+- [x] Bounded native-control BeforeInsert/AfterInsert with Cancel/error/Undo,
+  programmatic-assignment distinction and validation/constraint retry tests.
+- [ ] Access BeforeInsert/Change/Text/Value timing oracle and PasteAppend events.
