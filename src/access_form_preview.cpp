@@ -1107,10 +1107,12 @@ void AccessFormPreview::markDirty(const QString& name,bool userEdit) {
 
 bool AccessFormPreview::commitControl(const QString& name) {
     if (!pendingControls_.contains(name)) return true;
+    if (!updatingControl_.isEmpty() && updatingControl_.compare(name,Qt::CaseInsensitive)==0) return false;
     for (const auto& control : layout_.controls) {
         if (control.name.compare(name,Qt::CaseInsensitive) != 0) continue;
         QScopedValueRollback<QString> updating(updatingControl_,control.name);
         if (eventProcedure(control.beforeUpdate)) {
+            QScopedValueRollback<QString> validating(validatingControl_,control.name);
             const auto result = runHandler(controlEventPrefix(control.name)+"_BeforeUpdate");
             eventResults_.insert(("control:"+control.name+":BeforeUpdate").toCaseFolded(),result);
             if (result.cancelled || failed(result)) {
@@ -1118,6 +1120,7 @@ bool AccessFormPreview::commitControl(const QString& name) {
                 return false;
             }
         }
+        if (!pendingControls_.contains(name)) return true; // Control.Undo inside validation.
         pendingControls_.remove(name); bufferedTextControls_.remove(name); editOriginals_.remove(name);
         markDirty(name); refreshCalculatedControls();
         rememberControlEdit(controls_.value(control.name.toCaseFolded()).data());
@@ -1133,7 +1136,7 @@ bool AccessFormPreview::commitControls() {
     const auto pending = pendingControls_;
     for (const auto& control : layout_.controls)
         if (pending.contains(control.name) && !commitControl(control.name)) return false;
-    return true;
+    return pendingControls_.isEmpty(); // Retain drafts created by a reentrant handler.
 }
 
 bool AccessFormPreview::saveRecord() {
@@ -1182,6 +1185,9 @@ bool AccessFormPreview::saveRecord() {
         status_->setText("Der Datensatz wurde nicht gespeichert; er wurde möglicherweise extern entfernt."); return false;
     }
     if (savedId.isNull()) savedId = query.lastInsertId();
+    QVariantMap oldRecord;
+    for (int column=0;column<dataColumns_.size();++column)
+        oldRecord.insert(dataColumns_[column].toCaseFolded(),row>=0 && row<recordRows_.size() ? recordRows_[row][column] : QVariant{});
     dirty_ = false;
     const auto snapshot=recordsetSnapshot_;
     loadRecords();
@@ -1192,7 +1198,12 @@ bool AccessFormPreview::saveRecord() {
     const int index = rowIds_.indexOf(savedId)+1;
     recordSelector_->blockSignals(true); recordSelector_->setCurrentIndex(index); recordSelector_->blockSignals(false);
     currentRecordIndex_ = index; loadRecord();
-    (void)formEvent("AfterUpdate","Form_AfterUpdate");
+    {
+        const auto previous=property("la_after_update_old_values");
+        setProperty("la_after_update_old_values",oldRecord);
+        const auto restore=qScopeGuard([&] { setProperty("la_after_update_old_values",previous); });
+        (void)formEvent("AfterUpdate","Form_AfterUpdate");
+    }
     if (userInsertion) (void)formEvent("AfterInsert","Form_AfterInsert");
     return true;
 }
@@ -1297,6 +1308,8 @@ std::optional<std::string> AccessFormPreview::getField(std::string_view name) co
 }
 
 void AccessFormPreview::ensureWritableControl(std::string_view name) const {
+    if (!loading_ && !validatingControl_.isEmpty() && validatingControl_.compare(QString::fromUtf8(name.data(),name.size()),Qt::CaseInsensitive)==0)
+        throw linaccess::VbaRuntimeError(2115,"Control cannot change its data during BeforeUpdate");
     if (recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Editing during record command unsupported");
     const auto key = QString::fromUtf8(name.data(),name.size());
     for (const auto& control : layout_.controls)
@@ -1324,7 +1337,7 @@ void AccessFormPreview::setField(std::string_view name, std::optional<std::strin
 linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) const {
     const auto key=QString::fromUtf8(name.data(),name.size());
     for (const auto& buffered:bufferedTextControls_)
-        if (buffered.compare(key,Qt::CaseInsensitive)==0 && updatingControl_.compare(buffered,Qt::CaseInsensitive)!=0)
+        if (buffered.compare(key,Qt::CaseInsensitive)==0 && validatingControl_.compare(buffered,Qt::CaseInsensitive)!=0)
             if (const auto original=editOriginals_.value(buffered)) return *original;
     for (const auto& control : layout_.controls)
         if (control.name.compare(key,Qt::CaseInsensitive)==0 && control.controlSource.trimmed().startsWith('=')) {
@@ -1730,6 +1743,7 @@ void AccessFormPreview::updateDirtyFromRecord() {
     for (const auto& definition : layout_.controls) {
         const int column=columnIndex(definition.controlSource,dataColumns_);
         if (column<0 || !controls_.value(definition.name.toCaseFolded())) continue;
+        if (bufferedTextControls_.contains(definition.name)) { dirty_=true; continue; }
         const auto expected=row>=0 && row<recordRows_.size() ? recordRows_[row][column] : QVariant{};
         try {
             const auto actual=linaccess::sqlFieldValue(getFieldValue(definition.name.toStdString()),dataTypes_.value(dataColumns_[column].toCaseFolded()));
@@ -1738,25 +1752,31 @@ void AccessFormPreview::updateDirtyFromRecord() {
     }
     if (!dirty_) insertionStarted_=false;
 }
+bool AccessFormPreview::undoControlEdit(const QString& name) {
+    for (const auto& definition:layout_.controls) {
+        if (definition.name.compare(name,Qt::CaseInsensitive)!=0) continue;
+        const auto original=editOriginals_.value(definition.name);
+        if (!pendingControls_.contains(definition.name) || !original) return false;
+        {
+            QScopedValueRollback<bool> guard(loading_,true);
+            const int column=columnIndex(definition.controlSource,dataColumns_);
+            for (const auto& target:layout_.controls)
+                if (target.name==definition.name || (column>=0 && columnIndex(target.controlSource,dataColumns_)==column)) {
+                    setFieldValue(target.name.toStdString(),*original);
+                    pendingControls_.remove(target.name);
+                }
+        }
+        updateDirtyFromRecord(); refreshCalculatedControls(); return true;
+    }
+    return false;
+}
 void AccessFormPreview::undoKeyboardEdit() {
     const auto* focus=QApplication::focusWidget();
-    for (const auto& definition : layout_.controls) {
+    for (const auto& definition:layout_.controls) {
         auto* widget=controls_.value(definition.name.toCaseFolded()).data();
         const auto* combo=qobject_cast<QComboBox*>(widget);
         if (!widget || (widget!=focus && (!combo || combo->lineEdit()!=focus))) continue;
-        if (pendingControls_.contains(definition.name) && editOriginals_.contains(definition.name)) {
-            const auto original=editOriginals_.value(definition.name);
-            {
-                QScopedValueRollback<bool> guard(loading_,true);
-                const int column=columnIndex(definition.controlSource,dataColumns_);
-                for (const auto& target : layout_.controls)
-                    if (target.name==definition.name || (column>=0 && columnIndex(target.controlSource,dataColumns_)==column)) {
-                        setFieldValue(target.name.toStdString(),*original);
-                        pendingControls_.remove(target.name);
-                    }
-            }
-            pendingControls_.remove(definition.name); updateDirtyFromRecord(); return;
-        }
+        if (undoControlEdit(definition.name)) return;
         break;
     }
     if (dirty_) loadRecord();

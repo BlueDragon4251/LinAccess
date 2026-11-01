@@ -893,3 +893,19 @@ Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. A dedicated Undo/calculation regression verifies
 that record reload clears draft visibility before recalculating fields.
 Remaining timing/reentrancy limits are documented.
+
+Control Undo/OldValue increment: bound OldValue reads the original field buffer
+and remains unchanged through control and form AfterUpdate. Text/combo Undo
+restores a pending edit without discarding other changed fields; Change and
+BeforeUpdate handlers can undo without an incorrect AfterUpdate callback.
+Self-modifying BeforeUpdate Value/Text/SelText raises 2115, while AfterUpdate
+Value assignment is allowed. Reentrant new drafts survive cancelled save for
+explicit retry. Native SQL/event/focus/new-record tests pass in
+access_2003_layouts (7.62 s). Original OldValue/control-Undo token counts are zero;
+no new original-handler execution count is claimed. Currency/Decimal/Date field
+representation, general update reentrancy and Undo events remain separate work.
+Validation: host 21/21 (76.53 s), Debian 12 21/21 (63.05 s), Ubuntu 24.04
+21/21 (57.47 s), GUI-disabled core 1/1 (0.51 s). Fresh host/distro DEBs pass
+exact payload/backend/permission/fixture-exclusion checks. Isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass.

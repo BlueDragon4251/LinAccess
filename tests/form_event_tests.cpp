@@ -25,12 +25,14 @@ void testInsertionEvents();
 void testChangeEvents();
 void testTimerEvents();
 void testTextBuffering();
+void testControlUndo();
 
 void testFormEvents() {
     testInsertionEvents();
     testChangeEvents();
     testTimerEvents();
     testTextBuffering();
+    testControlUndo();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -847,5 +849,124 @@ End Sub
     assert(editor->member("Text",{}).asText()=="done" && editor->member("Value",{}).asText()=="combo");
     root->assign("Dirty",VbaValue::logical(false));
     assert(sql.exec("SELECT value FROM records WHERE id=2") && sql.next() && sql.value(0).toString()=="done"); sql.finish();
+    assert(form.close());
+}
+
+void testControlUndo() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","control-undo-events"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT,other TEXT,price REAL)"));
+    assert(sql.exec("INSERT INTO records VALUES(1,'old','original',1.2345)"));
+    assert(sql.exec("CREATE TABLE trace(event TEXT,oldvalue TEXT,newvalue TEXT)"));
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="records"
+AfterUpdate ="[Event Procedure]"
+Begin Section
+Begin TextBox
+Name ="editor"
+ControlSource ="value"
+OnChange ="[Event Procedure]"
+BeforeUpdate ="[Event Procedure]"
+AfterUpdate ="[Event Procedure]"
+End
+Begin TextBox
+Name ="other"
+ControlSource ="other"
+Top =400
+End
+Begin TextBox
+Name ="price"
+ControlSource ="price"
+Top =800
+End
+Begin ComboBox
+Name ="combo"
+ControlSource ="value"
+Top =1200
+End
+Begin TextBox
+Name ="unbound"
+Top =1600
+End
+End
+End
+)FORM";
+    const QByteArray code=R"VBA(Sub editor_Change()
+If Me.Tag="undo_change" Then Me.editor.Undo
+End Sub
+Sub editor_BeforeUpdate(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO trace VALUES('before','" & Nz(Me.editor.OldValue,"NULL") & "','" & Nz(Me.editor.Value,"NULL") & "')"
+If Me.Tag="undo_before" Then Me.editor.Undo
+If Me.Tag="set_value" Then Me.editor.Value="invalid"
+If Me.Tag="set_text" Then Me.editor.Text="invalid"
+If Me.Tag="set_selection" Then Me.editor.SelText="invalid"
+End Sub
+Sub editor_AfterUpdate()
+CurrentDb.Execute "INSERT INTO trace VALUES('control_after','" & Nz(Me.editor.OldValue,"NULL") & "','" & Nz(Me.editor.Value,"NULL") & "')"
+If Me.Tag="after_assign" Then Me.editor.Value="after"
+If Me.Tag="after_text" Then
+Me.Tag="allow"
+Me.editor.Text="followup"
+End If
+End Sub
+Sub Form_AfterUpdate()
+CurrentDb.Execute "INSERT INTO trace VALUES('form_after','" & Nz(Me.editor.OldValue,"NULL") & "','" & Nz(Me.editor.Value,"NULL") & "')"
+End Sub
+)VBA";
+    AccessFormPreview form("control undo",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form),editor=root->objectMember("editor",{}).object;
+    auto price=root->objectMember("price",{}).object,combo=root->objectMember("combo",{}).object;
+    auto* line=form.findChild<QLineEdit*>("access-control-editor");
+    auto* comboWidget=form.findChild<QComboBox*>("access-control-combo");
+    auto* selector=form.findChild<QComboBox*>("access-record-selector"); assert(line && comboWidget && selector);
+    const auto stored=[&] { assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next()); const auto out=sql.value(0).toString(); sql.finish(); return out; };
+    const auto events=[&] { QStringList out; assert(sql.exec("SELECT event,oldvalue,newvalue FROM trace ORDER BY rowid")); while(sql.next()) out<<sql.value(0).toString()+":"+sql.value(1).toString()+":"+sql.value(2).toString(); sql.finish(); return out; };
+    const auto clear=[&] { assert(sql.exec("DELETE FROM trace")); };
+    assert(editor->member("OldValue",{}).asText()=="old");
+    assert(price->member("OldValue",{}).kind==VbaValue::Kind::Number && price->member("OldValue",{}).asNumber()==1.2345);
+    editor->assign("Value",VbaValue::string("programmatic")); root->assignItem("other",VbaValue::string("changed"));
+    assert(editor->member("OldValue",{}).asText()=="old");
+    line->setFocus(); editor->assign("Text",VbaValue::string("draft")); editor->member("Undo",{});
+    assert(line->text()=="programmatic" && root->item("other").asText()=="changed" && form.hasUnsavedChanges() && stored()=="old");
+    root->assign("Tag",VbaValue::string("undo_change")); editor->assign("Text",VbaValue::string("discard"));
+    assert(line->text()=="programmatic" && root->item("other").asText()=="changed");
+    root->assign("Tag",VbaValue::string("allow")); clear(); root->assign("Dirty",VbaValue::logical(false));
+    assert(stored()=="programmatic" && events()==QStringList{"form_after:old:programmatic"});
+    assert(editor->member("OldValue",{}).asText()=="programmatic");
+    clear(); root->assign("Tag",VbaValue::string("undo_before")); editor->assign("Text",VbaValue::string("discard"));
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(!form.hasUnsavedChanges() && line->text()=="programmatic" && events()==QStringList{"before:programmatic:discard"});
+    for (const auto* mode:{"set_value","set_text","set_selection"}) {
+        clear(); root->assign("Tag",VbaValue::string(mode)); editor->assign("Text",VbaValue::string("draft"));
+        if (QString::fromLatin1(mode)=="set_text") {
+            auto* other=form.findChild<QLineEdit*>("access-control-other"); assert(other); other->setFocus(); QApplication::processEvents();
+            const auto focusResult=form.eventResult("control:editor:BeforeUpdate"); assert(focusResult && focusResult->errorNumber==2115);
+        }
+        int error=0; try { root->assign("Dirty",VbaValue::logical(false)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+        const auto result=form.eventResult("control:editor:BeforeUpdate");
+        assert(error==2501 && result && result->errorNumber==2115 && line->text()=="draft" && stored()=="programmatic");
+        root->member("Undo",{});
+    }
+    clear(); root->assign("Tag",VbaValue::string("after_assign")); editor->assign("Text",VbaValue::string("updated"));
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(events()==QStringList({"before:programmatic:updated","control_after:programmatic:updated","form_after:programmatic:after"}));
+    assert(stored()=="after" && editor->member("OldValue",{}).asText()=="after");
+    comboWidget->lineEdit()->setFocus(); QApplication::processEvents(); combo->assign("Text",VbaValue::string("draft")); combo->member("Undo",{});
+    assert(combo->member("Value",{}).asText()=="after" && combo->member("OldValue",{}).asText()=="after" && !form.hasUnsavedChanges());
+    line->setFocus(); QApplication::processEvents(); root->assign("Tag",VbaValue::string("after_text"));
+    editor->assign("Text",VbaValue::string("trigger"));
+    int retryError=0; try { root->assign("Dirty",VbaValue::logical(false)); } catch(const linaccess::VbaRuntimeError& failure) { retryError=failure.number; }
+    assert(retryError==2501 && stored()=="after" && editor->member("Value",{}).asText()=="trigger");
+    assert(editor->member("Text",{}).asText()=="followup" && form.hasUnsavedChanges());
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(stored()=="followup" && editor->member("OldValue",{}).asText()=="followup");
+    int error=0; try { editor->assign("OldValue",VbaValue::string("bad")); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==383);
+    error=0; try { root->objectMember("unbound",{}).object->member("OldValue",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==3251);
+    selector->setCurrentIndex(0); line->setFocus(); QApplication::processEvents(); clear(); root->assign("Tag",VbaValue::string("allow"));
+    assert(editor->member("OldValue",{}).kind==VbaValue::Kind::Null && price->member("OldValue",{}).kind==VbaValue::Kind::Null);
+    editor->assign("Text",VbaValue::string("fresh")); root->assign("Dirty",VbaValue::logical(false));
+    assert(events()==QStringList({"before:NULL:fresh","control_after:NULL:fresh","form_after:NULL:fresh"}));
+    assert(editor->member("OldValue",{}).asText()=="fresh");
+    assert(sql.exec("SELECT value FROM records WHERE id=2") && sql.next() && sql.value(0).toString()=="fresh"); sql.finish();
     assert(form.close());
 }

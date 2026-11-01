@@ -115,3 +115,7 @@ execution or a Windows Access reference comparison.
 Focused Text and bounded Text/Value buffering are now implemented for native
 text/ editable combo editors; see TEXT_VALUE_RUNTIME.md for update phases,
 SQL/validation regressions and the remaining focus/input/reentrancy limits.
+
+Bound OldValue, native text/combo Undo and BeforeUpdate self-change guards are
+documented in TEXT_VALUE_RUNTIME.md. Original record values persist through the
+form AfterUpdate callback; supported field conversion limits are inherited.

@@ -40,9 +40,42 @@ has not established exact event timing.
 ## Remaining scope
 
 This is a bounded single-line editing adapter. Full BeforeInsert timing before
-the first input, failed focus-transition details, self-modification restrictions
-inside BeforeUpdate, arbitrary reentrant control updates, OldValue/control Undo,
+the first input, failed focus-transition details, arbitrary reentrant control updates, broader Undo events/control kinds,
 formatted/multiline/rich Text, IME, combo auto-expansion/LimitToList/NotInList and
 complete popup/validation ordering remain open. Imported field-only references,
 non-direct writable sources and every keyboard path are not complete Access
 parity. No original full application workflow or visual parity is claimed.
+
+## OldValue and control Undo
+
+Bound data controls expose read-only OldValue from the original record buffer.
+It retains the previous field value during control update and the form's
+AfterUpdate handler, then advances after successful record save. New unsaved
+records expose Null. It uses the existing field converter: supported numeric,
+Boolean, text and Null representation is inherited; this does not add exact
+Currency/Decimal/Date Variant storage. Unbound/calculated OldValue is explicitly
+unsupported (3251), reports are rejected (438), assignment raises 383.
+
+TextBox/editable ComboBox Undo restores the pending control-edit baseline,
+synchronizes its bound mirrors and recalculates fields without Change. Other
+record edits remain dirty. It works inside Change or BeforeUpdate; an undone
+control update does not dispatch AfterUpdate. The same operation backs the
+first Escape action. Already updated controls have no pending edit to undo.
+Other control-kind Undo adapters/events remain unsupported.
+
+Self-modification of Value/Text/SelText inside the same control's BeforeUpdate
+raises 2115, including a focus-loss update. Normal AfterUpdate Value assignment
+remains allowed. A reentrant same-control commit is stopped; drafts created by
+AfterUpdate are retained and record save cancels with 2501 for explicit retry,
+rather than saving the earlier value and silently discarding newer input. This
+is a bounded recovery path, not general Access reentrant-update parity.
+
+Native tests cover real SQL writes, control/form event traces, prior-value
+visibility through form AfterUpdate, text/numeric/Null fields, programmatic
+changes, preservation of other fields, Change/BeforeUpdate Undo, both Escape
+levels, focus-loss rejection, AfterUpdate assignment and draft retry. Original
+restored modules contain no OldValue or control-qualified Undo tokens; no
+additional original-handler execution is claimed. Reference contracts:
+[OldValue](https://learn.microsoft.com/en-us/office/vba/api/access.textbox.oldvalue),
+[Control.Undo](https://learn.microsoft.com/en-us/office/vba/api/access.control.undo),
+[AfterUpdate](https://learn.microsoft.com/en-us/office/vba/api/access.textbox.afterupdate-event).

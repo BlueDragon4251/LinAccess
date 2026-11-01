@@ -345,8 +345,8 @@ Full targets remain open:
   Value suppression and KeyDown/KeyPress/BeforeInsert/Change/KeyUp regression.
 - [x] Bounded native Text/Value buffers, focused Text setters, control-update
   visibility, cancellation/retry, SQL persistence and finite cascading Change.
-- [ ] Full input/focus/popup timing, BeforeUpdate reentrancy, OldValue/control
-  Undo, multiline/IME and complete combo validation parity.
+- [ ] Full input/focus/popup timing, arbitrary update reentrancy, Undo events/other
+  control kinds, multiline/IME and complete combo validation parity.
 
 - [x] Focused native editor SelStart/SelLength/SelText with replacement,
   Change/SQL effects, Null/no-selection, validation and UTF-16 regression.
@@ -374,3 +374,6 @@ Full targets remain open:
 
 - [x] Bounded InStr/StrComp: UTF-16 positions/binary order, Option Compare,
   scalar defaults, Null/errors and native VBA tests; locale matching remains open.
+
+- [x] Bound OldValue through form AfterUpdate, text/combo control Undo with
+  other-edit preservation, BeforeUpdate self-change rejection and draft retry.

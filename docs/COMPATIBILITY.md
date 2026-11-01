@@ -343,3 +343,10 @@ from their prior Value until control update. Validation, cancellation/retry,
 mirrors/calculations, programmatic assignment, cascading Change and actual SQL
 save are tested. TEXT_VALUE_RUNTIME.md records remaining input/focus/reentrancy,
 OldValue, rich-text and combo-validation limits; no full Access timing claim.
+
+Bound data controls now expose OldValue through form AfterUpdate, using the
+existing supported field representations. Native text/combo control Undo and
+BeforeUpdate self-change errors are tested with real SQL and other-edit
+preservation. Reentrant new drafts are retained for explicit retry, not silently
+discarded. General Undo events, reentrancy, unbound OldValue and exact
+Currency/Decimal/Date field representation remain open (TEXT_VALUE_RUNTIME.md).

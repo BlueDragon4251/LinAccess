@@ -87,6 +87,7 @@ private:
     bool handleDocumentKey(QKeyEvent* event);
     void rememberControlEdit(QObject* watched);
     void undoKeyboardEdit();
+    bool undoControlEdit(const QString& name);
     void updateDirtyFromRecord();
     void openOtherForm(const QString& name,const QString& where={});
     void openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where);
@@ -185,5 +186,6 @@ private:
     QSet<QString> pendingControls_;
     QSet<QString> bufferedTextControls_;
     QString updatingControl_;
+    QString validatingControl_;
     QMap<QString,std::shared_ptr<linaccess::VbaValue>> editOriginals_;
 };

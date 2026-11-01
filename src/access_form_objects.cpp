@@ -118,6 +118,30 @@ public:
         if (key == "tag") return linaccess::VbaValue::string(bytes(widget->property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(caption()));
         if (key == "value") { requireValue(); return preview.getFieldValue(bytes(name_)); }
+        if (key=="oldvalue") {
+            requireValue();
+            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"OldValue requires a form control");
+            for (const auto& definition:preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
+                auto source=definition.controlSource.trimmed();
+                if (source.isEmpty() || source.startsWith('=')) throw linaccess::VbaRuntimeError(3251,"OldValue requires a bound data field");
+                if (source.startsWith('[') && source.endsWith(']')) source=source.mid(1,source.size()-2);
+                for (int column=0;column<preview.dataColumns_.size();++column) if (preview.dataColumns_[column].compare(source,Qt::CaseInsensitive)==0) {
+                    const auto previous=preview.property("la_after_update_old_values").toMap();
+                    const auto field=preview.dataColumns_[column].toCaseFolded();
+                    if (previous.contains(field)) return linaccess::qtFieldValue(previous.value(field),preview.dataTypes_.value(field));
+                    const auto row=preview.currentRecordIndex_-1;
+                    return row>=0 && row<preview.recordRows_.size()
+                        ? linaccess::qtFieldValue(preview.recordRows_[row][column],preview.dataTypes_.value(preview.dataColumns_[column].toCaseFolded())) : linaccess::VbaValue{};
+                }
+                throw linaccess::VbaRuntimeError(2465,"OldValue field unavailable");
+            }
+        }
+        if (key=="undo") {
+            requireValue();
+            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form || (!qobject_cast<QLineEdit*>(widget) && !qobject_cast<QComboBox*>(widget)))
+                throw linaccess::VbaRuntimeError(3251,"Control Undo adapter requires a form text/combo editor");
+            (void)preview.undoControlEdit(name_); return {};
+        }
         if (key == "visible") return linaccess::VbaValue::logical(!widget->isHidden());
         if (key == "enabled") return linaccess::VbaValue::logical(widget->isEnabled());
         if (key == "controltype") {
@@ -156,9 +180,10 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (key=="oldvalue") throw linaccess::VbaRuntimeError(383,"OldValue is read-only");
         if (key=="text") {
-            auto* editor=selectionEditor(widget);
             preview.ensureWritableControl(bytes(name_));
+            auto* editor=selectionEditor(widget,preview.updatingControl_.compare(name_,Qt::CaseInsensitive)==0);
             if (editor->isReadOnly()) throw linaccess::VbaRuntimeError(2046,"Editor is read-only");
             const auto scalar=linaccess::scalarVbaValue(value);
             if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Text assignment");
@@ -166,7 +191,8 @@ public:
             editor->selectAll(); editor->insert(text(scalar.asText())); return;
         }
         if (key=="selstart" || key=="sellength" || key=="seltext") {
-            auto* editor=selectionEditor(widget);
+            if (key=="seltext") preview.ensureWritableControl(bytes(name_));
+            auto* editor=selectionEditor(widget,preview.updatingControl_.compare(name_,Qt::CaseInsensitive)==0);
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null selection property");
             if (key=="seltext") {
                 preview.ensureWritableControl(bytes(name_));
