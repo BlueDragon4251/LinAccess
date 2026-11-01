@@ -337,3 +337,9 @@ Option Compare and explicit comparison constants, with actual VBA regressions.
 Text/database comparisons retain host collation limits: Qt case folding in the
 GUI, ASCII folding in the standalone host, no complete Windows/Jet linguistic
 matching or LCID support. See UTF16_STRINGS.md.
+
+Native single-line text/editable combo controls now distinguish focused Text
+from their prior Value until control update. Validation, cancellation/retry,
+mirrors/calculations, programmatic assignment, cascading Change and actual SQL
+save are tested. TEXT_VALUE_RUNTIME.md records remaining input/focus/reentrancy,
+OldValue, rich-text and combo-validation limits; no full Access timing claim.

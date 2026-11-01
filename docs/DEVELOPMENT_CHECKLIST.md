@@ -343,7 +343,10 @@ Full targets remain open:
 
 - [x] Imported native text/combo OnChange, EventProcPrefix dispatch, programmatic
   Value suppression and KeyDown/KeyPress/BeforeInsert/Change/KeyUp regression.
-- [ ] Text/Value buffering, focused Text setters and cascading Change parity.
+- [x] Bounded native Text/Value buffers, focused Text setters, control-update
+  visibility, cancellation/retry, SQL persistence and finite cascading Change.
+- [ ] Full input/focus/popup timing, BeforeUpdate reentrancy, OldValue/control
+  Undo, multiline/IME and complete combo validation parity.
 
 - [x] Focused native editor SelStart/SelLength/SelText with replacement,
   Change/SQL effects, Null/no-selection, validation and UTF-16 regression.

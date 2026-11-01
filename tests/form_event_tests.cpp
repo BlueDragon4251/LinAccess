@@ -24,11 +24,13 @@
 void testInsertionEvents();
 void testChangeEvents();
 void testTimerEvents();
+void testTextBuffering();
 
 void testFormEvents() {
     testInsertionEvents();
     testChangeEvents();
     testTimerEvents();
+    testTextBuffering();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -128,8 +130,9 @@ End Sub
     assert(edit && mirror && selector && save && edit->text() == "first");
     dialog.show(); dialog.activateWindow(); QCoreApplication::processEvents();
     const auto type = [&](const char* text) {
+        const auto previous=mirror->text();
         edit->setFocus(); edit->selectAll(); QTest::keyClicks(edit,text);
-        assert(mirror->text() == QString::fromLatin1(text));
+        assert(mirror->text()==previous);
     };
     const auto commit = [&] {
         edit->clearFocus(); QCoreApplication::processEvents();
@@ -138,6 +141,7 @@ End Sub
     assert(dialog.hasUnsavedChanges());
     commit();
     assert(events().mid(3) == QStringList({"dirty","control_before","control_after"}));
+    assert(mirror->text()=="updated");
     save->click(); assert(!dialog.hasUnsavedChanges() && value(1) == "updated");
     assert(events().mid(6) == QStringList({"form_before","form_after"}));
     auto* unused = dialog.findChild<QPushButton*>("access-control-Unused"); assert(unused);
@@ -541,7 +545,7 @@ CurrentDb.Execute "INSERT INTO trace(event) VALUES('up')"
 End Sub
 Sub Editor_Change()
 CurrentDb.Execute "INSERT INTO trace(event) VALUES('change')"
-Me!mirror=Me!input
+Me!mirror=Me.input.Text
 If Me.Tag="fail_change" Then Err.Raise 5
 End Sub
 Sub mirror_Change()
@@ -570,11 +574,12 @@ End Sub
     root->assign("Tag",VbaValue::string("allow")); selector->setCurrentIndex(1); clear(); edit->setFocus(); edit->selectAll(); QTest::keyClicks(edit,"b");
     assert(events()==QStringList({"down","press","change","up"}) && root->item("mirror").asText()=="b"); save->click();
     clear(); combo->lineEdit()->setFocus(); combo->lineEdit()->selectAll(); QTest::keyClicks(combo->lineEdit(),"d");
-    assert(events()==QStringList{"combo_change"} && root->item("input").asText()=="d"); save->click();
+    assert(events()==QStringList{"combo_change"} && root->item("input").asText()=="b"); save->click();
     assert(sql.exec("SELECT name FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="d"); sql.finish();
     root->assign("Tag",VbaValue::string("fail_change")); clear(); edit->setFocus(); edit->selectAll(); QTest::keyClicks(edit,"e");
     const auto failed=form.eventResult("control:input:Change"); assert(failed && failed->errorNumber==5);
-    assert(form.hasUnsavedChanges() && root->item("input").asText()=="e");
+    assert(form.hasUnsavedChanges() && root->item("input").asText()=="d");
+    assert(root->objectMember("input",{}).object->member("Text",{}).asText()=="e");
     assert(sql.exec("SELECT name FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="d"); sql.finish();
     root->member("Undo",{}); assert(form.close());
 }
@@ -709,4 +714,138 @@ void testOriginalTimer(const QDir& directory,const QJsonArray& objects,QSqlDatab
         assert(guard.exec("ROLLBACK TO original_timer") && guard.exec("RELEASE original_timer"));
     }
     assert(executions==1);
+}
+
+void testTextBuffering() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","text-buffer-events"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)"));
+    assert(sql.exec("INSERT INTO records VALUES(1,'old')"));
+    assert(sql.exec("CREATE TABLE trace(event TEXT,edited TEXT,stored TEXT)"));
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="records"
+Begin Section
+Begin TextBox
+Name ="editor"
+ControlSource ="value"
+OnChange ="[Event Procedure]"
+BeforeUpdate ="[Event Procedure]"
+AfterUpdate ="[Event Procedure]"
+End
+Begin TextBox
+Name ="mirror"
+ControlSource ="value"
+Top =400
+End
+Begin ComboBox
+Name ="combo"
+ControlSource ="value"
+OnChange ="[Event Procedure]"
+BeforeUpdate ="[Event Procedure]"
+AfterUpdate ="[Event Procedure]"
+Top =800
+End
+Begin TextBox
+Name ="derived"
+ControlSource ="=[editor]"
+Top =1200
+End
+Begin CommandButton
+Name ="button"
+Top =1600
+End
+End
+End
+)FORM";
+    const QByteArray code=R"VBA(Sub editor_Change()
+CurrentDb.Execute "INSERT INTO trace VALUES('change','" & Me.editor.Text & "','" & Nz(Me.editor.Value,"NULL") & "')"
+If Me.Tag="cascade" And Me.editor.Text="trigger" Then Me.editor.Text="done"
+End Sub
+Sub editor_BeforeUpdate(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO trace VALUES('before','" & Me.editor.Text & "','" & Nz(Me.editor.Value,"NULL") & "')"
+If Me.Tag="block" Then Cancel=1
+End Sub
+Sub editor_AfterUpdate()
+CurrentDb.Execute "INSERT INTO trace VALUES('after','" & Me.editor.Text & "','" & Nz(Me.editor.Value,"NULL") & "')"
+End Sub
+Sub ReplaceText()
+Me.editor.Text="new"
+End Sub
+Sub combo_Change()
+CurrentDb.Execute "INSERT INTO trace VALUES('combo_change','" & Me.combo.Text & "','" & Nz(Me.combo.Value,"NULL") & "')"
+End Sub
+Sub combo_BeforeUpdate(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO trace VALUES('combo_before','" & Me.combo.Text & "','" & Nz(Me.combo.Value,"NULL") & "')"
+If Me.Tag="block" Then Cancel=1
+End Sub
+Sub combo_AfterUpdate()
+CurrentDb.Execute "INSERT INTO trace VALUES('combo_after','" & Me.combo.Text & "','" & Nz(Me.combo.Value,"NULL") & "')"
+End Sub
+)VBA";
+    AccessFormPreview form("text-buffer",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form),editor=root->objectMember("editor",{}).object;
+    auto* line=form.findChild<QLineEdit*>("access-control-editor");
+    auto* mirror=form.findChild<QLineEdit*>("access-control-mirror");
+    auto* selector=form.findChild<QComboBox*>("access-record-selector"); assert(line && mirror && selector);
+    const auto stored=[&] { assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next()); const auto out=sql.value(0).toString(); sql.finish(); return out; };
+    const auto events=[&] { QStringList out; assert(sql.exec("SELECT event,edited,stored FROM trace ORDER BY rowid")); while(sql.next()) out<<sql.value(0).toString()+":"+sql.value(1).toString()+":"+sql.value(2).toString(); sql.finish(); return out; };
+    const auto clear=[&] { assert(sql.exec("DELETE FROM trace")); };
+    line->setFocus(); QApplication::processEvents(); std::vector<VbaValue> none;
+    assert(form.executeProcedure("ReplaceText",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(editor->member("Text",{}).asText()=="new" && editor->member("Value",{}).asText()=="old");
+    assert(mirror->text()=="old" && root->item("derived").asText()=="old" && stored()=="old" && form.hasUnsavedChanges());
+    assert(events()==QStringList{"change:new:old"});
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(events()==QStringList({"change:new:old","before:new:new","after:new:new"}));
+    assert(stored()=="new" && mirror->text()=="new" && editor->member("Value",{}).asText()=="new");
+    clear(); root->assign("Tag",VbaValue::string("block")); editor->assign("Text",VbaValue::string("blocked"));
+    int error=0; try { root->assign("Dirty",VbaValue::logical(false)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+    assert(error==2501 && stored()=="new" && mirror->text()=="new");
+    assert(editor->member("Text",{}).asText()=="blocked" && editor->member("Value",{}).asText()=="new");
+    root->assign("Tag",VbaValue::string("allow")); root->assign("Dirty",VbaValue::logical(false));
+    assert(stored()=="blocked" && mirror->text()=="blocked");
+    clear(); editor->assign("Text",VbaValue::string("pending"));
+    editor->assign("Value",VbaValue::string("assigned"));
+    assert(events()==QStringList{"change:pending:blocked"});
+    assert(editor->member("Text",{}).asText()=="assigned" && editor->member("Value",{}).asText()=="assigned");
+    QTest::keyClicks(line,"x");
+    assert(editor->member("Text",{}).asText()=="assignedx" && editor->member("Value",{}).asText()=="assigned");
+    QTest::keyClick(line,Qt::Key_Escape);
+    assert(editor->member("Text",{}).asText()=="assigned" && editor->member("Value",{}).asText()=="assigned");
+    root->member("Undo",{}); assert(stored()=="blocked" && line->text()=="blocked");
+    editor->assign("Value",VbaValue::string("unsaved")); editor->assign("Text",VbaValue::string("draft"));
+    assert(root->item("derived").asText()=="unsaved");
+    root->member("Undo",{}); assert(root->item("derived").asText()=="blocked");
+    clear(); line->setFocus(); editor->assign("Text",VbaValue::string("focus")); mirror->setFocus(); QApplication::processEvents();
+    assert(editor->member("Value",{}).asText()=="focus" && stored()=="blocked");
+    error=0; try { editor->member("Text",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==2185);
+    line->setFocus(); QApplication::processEvents();
+    error=0; try { editor->assign("Text",VbaValue{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==94);
+    error=0; try { root->objectMember("button",{}).object->member("Text",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==438);
+    root->member("Undo",{}); selector->setCurrentIndex(0); line->setFocus(); clear();
+    editor->assign("Text",VbaValue::string("fresh"));
+    assert(editor->member("Value",{}).kind==VbaValue::Kind::Null && events()==QStringList{"change:fresh:NULL"});
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT value FROM records WHERE id=2") && sql.next() && sql.value(0).toString()=="fresh"); sql.finish();
+    auto combo=root->objectMember("combo",{}).object;
+    auto* comboWidget=form.findChild<QComboBox*>("access-control-combo"); assert(comboWidget && comboWidget->lineEdit());
+    comboWidget->lineEdit()->setFocus(); QApplication::processEvents(); clear();
+    combo->assign("Text",VbaValue::string("combo"));
+    assert(combo->member("Value",{}).asText()=="fresh" && line->text()=="fresh");
+    assert(events()==QStringList{"combo_change:combo:fresh"});
+    root->assign("Tag",VbaValue::string("block")); error=0;
+    try { root->assign("Dirty",VbaValue::logical(false)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+    assert(error==2501 && combo->member("Value",{}).asText()=="fresh");
+    root->assign("Tag",VbaValue::string("allow")); clear();
+    line->setFocus(); QApplication::processEvents();
+    assert(events()==QStringList({"combo_before:combo:combo","combo_after:combo:combo"}));
+    assert(combo->member("Value",{}).asText()=="combo" && line->text()=="combo");
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT value FROM records WHERE id=2") && sql.next() && sql.value(0).toString()=="combo"); sql.finish();
+    clear(); root->assign("Tag",VbaValue::string("cascade")); editor->assign("Text",VbaValue::string("trigger"));
+    assert(events()==QStringList({"change:trigger:combo","change:done:combo"}));
+    assert(editor->member("Text",{}).asText()=="done" && editor->member("Value",{}).asText()=="combo");
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT value FROM records WHERE id=2") && sql.next() && sql.value(0).toString()=="done"); sql.finish();
+    assert(form.close());
 }

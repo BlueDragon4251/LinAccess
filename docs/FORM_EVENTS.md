@@ -78,6 +78,6 @@ from native edits. A native Qt/SQL trace verifies KeyDown → KeyPress → Befor
 KeyPress cancellation and visible handler errors. A handler's VBA Value assignment
 to another control does not fire its Change; loading/requery and synchronized
 bound mirrors also suppress Change. Actual record persistence is checked.
-Text-property access/buffering, cascading Text changes, LimitToList/NotInList
-and complete Access input/locale behavior remain open. See INSERT_EVENT_RUNTIME.md
-for editor-value visibility boundaries.
+Bounded focused Text/Value buffering and finite cascading Change are now tested
+(TEXT_VALUE_RUNTIME.md). LimitToList/NotInList and complete Access input/locale
+behavior remain open. See INSERT_EVENT_RUNTIME.md for pre-input timing limits.

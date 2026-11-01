@@ -51,7 +51,13 @@ End
     assert(object->item("cash").kind==VbaValue::Kind::Currency && object->item("cash").currencyUnits==12345);
     form.show(); QApplication::setActiveWindow(&form); auto* amount=form.findChild<QLineEdit*>("access-control-amount"); assert(amount);
     amount->setFocus(); amount->selectAll(); QTest::keyClicks(amount,"2.5");
+    assert(object->item("cash").currencyUnits==12345);
+    amount->clearFocus(); QApplication::processEvents();
     assert(object->item("doubled").asNumber()==5 && object->item("cash").currencyUnits==25000);
+    amount->setFocus(); QTest::keyClicks(amount,"7");
+    object->assignItem("amount",VbaValue::errorValue(2001));
+    assert(object->item("amount").kind==VbaValue::Kind::Error && object->item("amount").errorNumber==2001);
+    object->assignItem("amount",VbaValue::numeric(2));
     assert(form.close());
 
     assert(query.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));

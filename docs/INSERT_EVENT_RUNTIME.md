@@ -32,3 +32,7 @@ are not established. The separate PasteAppend path still rejects insertion-event
 bindings with 3251 before inserting; it does not reuse this UI event sequence.
 Reports, non-direct record sources and general Jet form updateability remain
 outside this insertion adapter. This is not full Access event parity.
+
+Native text/combo drafts now retain prior Value during Change, with Text
+exposing the current focused editor; see TEXT_VALUE_RUNTIME.md. This improves
+value visibility but does not prove exact pre-input BeforeInsert timing.

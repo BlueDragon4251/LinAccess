@@ -876,3 +876,20 @@ Validation: host 21/21 (61.46 s), Debian 12 21/21 (63.75 s), Ubuntu 24.04
 21/21 (58.66 s). Fresh host/distro DEBs pass exact payload/backend/permission
 and fixture-exclusion checks; isolated installed packages pass backend/counter
 execution and native GUI startup. All four original fixture hashes pass.
+
+Native Text/Value increment: focused Text reads/writes now use actual editors;
+user typing and Text/SelText changes preserve prior Value until control update.
+BeforeUpdate receives the new value, failed validation retains drafts, and
+successful update refreshes bound mirrors/calculations before AfterUpdate.
+Programmatic Value replaces pending input without control Change/update events.
+Tests verify native VBA event values, SQL save boundaries, cancellation/retry,
+Escape/Undo, new Null records, combo draft/model loading and cascading Change.
+Targeted access_2003_layouts passes (7.83 s). No direct original Text-property
+member tokens were found; original execution counts remain unchanged.
+Validation: host 21/21 (61.56 s), Debian 12 21/21 (63.93 s), Ubuntu 24.04
+21/21 (59.69 s), GUI-disabled core 1/1 (0.77 s). Fresh host/distro DEBs pass
+exact payload/backend/permission/fixture-exclusion checks. Isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. A dedicated Undo/calculation regression verifies
+that record reload clears draft visibility before recalculating fields.
+Remaining timing/reentrancy limits are documented.

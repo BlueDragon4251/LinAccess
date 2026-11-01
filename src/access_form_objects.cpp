@@ -58,11 +58,11 @@ protected:
 };
 class PreviewControlObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
-    static QLineEdit* selectionEditor(QWidget* widget) {
+    static QLineEdit* selectionEditor(QWidget* widget,bool duringUpdate=false) {
         auto* editor=qobject_cast<QLineEdit*>(widget);
         if (auto* combo=qobject_cast<QComboBox*>(widget);combo && combo->isEditable()) editor=combo->lineEdit();
         if (!editor) throw linaccess::VbaRuntimeError(438,"Control has no text selection");
-        if (!editor->hasFocus()) throw linaccess::VbaRuntimeError(2185,"Text selection requires control focus");
+        if (!editor->hasFocus() && !duringUpdate) throw linaccess::VbaRuntimeError(2185,"Text selection requires control focus");
         return editor;
     }
     PreviewControlObject(AccessFormPreview& preview,QString name) : PreviewObjectBase(preview),name_(std::move(name)) {}
@@ -85,6 +85,10 @@ public:
                 if (key=="columncount") return linaccess::VbaValue::numeric(definition.columnCount);
                 if (key=="columnwidths") return linaccess::VbaValue::string(bytes(definition.columnWidths));
             }
+        }
+        if (key=="text") {
+            if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected Text arguments");
+            return linaccess::VbaValue::string(bytes(selectionEditor(widget,preview.updatingControl_.compare(name_,Qt::CaseInsensitive)==0)->text()));
         }
         if (key=="selstart" || key=="sellength" || key=="seltext") {
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected selection property arguments");
@@ -152,6 +156,15 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (key=="text") {
+            auto* editor=selectionEditor(widget);
+            preview.ensureWritableControl(bytes(name_));
+            if (editor->isReadOnly()) throw linaccess::VbaRuntimeError(2046,"Editor is read-only");
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Text assignment");
+            preview.rememberControlEdit(widget);
+            editor->selectAll(); editor->insert(text(scalar.asText())); return;
+        }
         if (key=="selstart" || key=="sellength" || key=="seltext") {
             auto* editor=selectionEditor(widget);
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null selection property");

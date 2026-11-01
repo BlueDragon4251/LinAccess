@@ -877,10 +877,16 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
                 if (!widget->property("la_insert_rejected").toBool() && !binding.isEmpty()) (void)runControlBinding(name,"Change",binding);
             });
             connect(line,&QLineEdit::textEdited,this,[this,name,widget] {
-                if (!loading_) { pendingControls_.insert(name); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text)); }
+                if (!loading_) { bufferedTextControls_.insert(name); pendingControls_.insert(name); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text)); }
             });
             connect(line,&QLineEdit::editingFinished,this,[this,name] { if (!loading_) (void)commitControl(name); });
         } else if (auto* combo = qobject_cast<QComboBox*>(widget)) {
+            if (auto* editor=combo->lineEdit()) {
+                connect(editor,&QLineEdit::textEdited,this,[this,name] {
+                    if (!loading_) { bufferedTextControls_.insert(name); pendingControls_.insert(name); }
+                });
+                connect(editor,&QLineEdit::editingFinished,this,[this,name] { if (!loading_) (void)commitControl(name); });
+            }
             connect(combo,&QComboBox::currentTextChanged,this,[this,name,widget,binding=control.onChange] {
                 if (loading_) return;
                 widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
@@ -1026,7 +1032,7 @@ void AccessFormPreview::setFilterState(const QString& filter,bool enabled) {
 }
 
 void AccessFormPreview::loadRecord() {
-    clearRecordSelection();
+    clearRecordSelection(); bufferedTextControls_.clear();
     QScopedValueRollback<bool> loading(loading_,true);
     for (const auto& control : layout_.controls) {
         if (control.controlSource.isEmpty()) continue;
@@ -1071,12 +1077,14 @@ void AccessFormPreview::markDirty(const QString& name,bool userEdit) {
             if (control.name.compare(name,Qt::CaseInsensitive) == 0)
                 boundColumn = columnIndex(control.controlSource,dataColumns_);
         if (boundColumn < 0 || !sourceWidget) return;
-        QScopedValueRollback<bool> loading(loading_,true);
-        for (const auto& control : layout_.controls) {
-            if (columnIndex(control.controlSource,dataColumns_) != boundColumn) continue;
-            auto* target = controls_.value(control.name.toCaseFolded()).data();
-            if (!target || target == sourceWidget) continue;
-            setText(target,textOf(sourceWidget)); target->setProperty("la_null",sourceWidget->property("la_null"));
+        if (!bufferedTextControls_.contains(name)) {
+            QScopedValueRollback<bool> loading(loading_,true);
+            for (const auto& control : layout_.controls) {
+                if (columnIndex(control.controlSource,dataColumns_) != boundColumn) continue;
+                auto* target = controls_.value(control.name.toCaseFolded()).data();
+                if (!target || target == sourceWidget) continue;
+                setText(target,textOf(sourceWidget)); target->setProperty("la_null",sourceWidget->property("la_null"));
+            }
         }
     }
     if (insertionEventRunning_) return;
@@ -1101,6 +1109,7 @@ bool AccessFormPreview::commitControl(const QString& name) {
     if (!pendingControls_.contains(name)) return true;
     for (const auto& control : layout_.controls) {
         if (control.name.compare(name,Qt::CaseInsensitive) != 0) continue;
+        QScopedValueRollback<QString> updating(updatingControl_,control.name);
         if (eventProcedure(control.beforeUpdate)) {
             const auto result = runHandler(controlEventPrefix(control.name)+"_BeforeUpdate");
             eventResults_.insert(("control:"+control.name+":BeforeUpdate").toCaseFolded(),result);
@@ -1109,7 +1118,9 @@ bool AccessFormPreview::commitControl(const QString& name) {
                 return false;
             }
         }
-        pendingControls_.remove(name); editOriginals_.remove(name);
+        pendingControls_.remove(name); bufferedTextControls_.remove(name); editOriginals_.remove(name);
+        markDirty(name); refreshCalculatedControls();
+        rememberControlEdit(controls_.value(control.name.toCaseFolded()).data());
         if (eventProcedure(control.afterUpdate)) {
             const auto result = runHandler(controlEventPrefix(control.name)+"_AfterUpdate");
             eventResults_.insert(("control:"+control.name+":AfterUpdate").toCaseFolded(),result);
@@ -1304,12 +1315,17 @@ void AccessFormPreview::setField(std::string_view name, std::optional<std::strin
         setText(widget,value ? QString::fromUtf8(value->data(),value->size()) : QString{});
         widget->setProperty("la_null",!value.has_value());
     }
-    if (wasNull != !value.has_value() || previous != textOf(widget))
-        markDirty(QString::fromUtf8(name.data(),name.size()));
+    const auto assignedName=QString::fromUtf8(name.data(),name.size());
+    bufferedTextControls_.remove(assignedName); pendingControls_.remove(assignedName); editOriginals_.remove(assignedName);
+    rememberControlEdit(widget);
+    if (wasNull != !value.has_value() || previous != textOf(widget)) markDirty(assignedName);
 }
 
 linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) const {
     const auto key=QString::fromUtf8(name.data(),name.size());
+    for (const auto& buffered:bufferedTextControls_)
+        if (buffered.compare(key,Qt::CaseInsensitive)==0 && updatingControl_.compare(buffered,Qt::CaseInsensitive)!=0)
+            if (const auto original=editOriginals_.value(buffered)) return *original;
     for (const auto& control : layout_.controls)
         if (control.name.compare(key,Qt::CaseInsensitive)==0 && control.controlSource.trimmed().startsWith('=')) {
             const auto cached=calculatedValues_.value(control.name.toCaseFolded());
@@ -1437,7 +1453,10 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
         const QSignalBlocker blocked(widget);
         setText(widget,"#Fehler ("+QString::number(value.errorNumber)+")");
         widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
-        widget->setProperty("la_error_number",value.errorNumber); refreshCalculatedControls(); return;
+        widget->setProperty("la_error_number",value.errorNumber);
+        const auto assignedName=QString::fromUtf8(name.data(),name.size());
+        bufferedTextControls_.remove(assignedName); pendingControls_.remove(assignedName); editOriginals_.remove(assignedName);
+        rememberControlEdit(widget); refreshCalculatedControls(); return;
     }
     auto assigned=value;
     if (qobject_cast<QGroupBox*>(widget) && value.kind!=linaccess::VbaValue::Kind::Null) {
@@ -1456,7 +1475,10 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
         setText(widget,converted.toString()); widget->setProperty("la_null",converted.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
     }
-    if (before != textOf(widget) || wasNull != converted.isNull()) markDirty(QString::fromUtf8(name.data(),name.size()));
+    const auto assignedName=QString::fromUtf8(name.data(),name.size());
+    bufferedTextControls_.remove(assignedName); pendingControls_.remove(assignedName); editOriginals_.remove(assignedName);
+    rememberControlEdit(widget);
+    if (before != textOf(widget) || wasNull != converted.isNull()) markDirty(assignedName);
     refreshCalculatedControls();
 }
 
@@ -1528,6 +1550,7 @@ void AccessFormPreview::requeryControl(std::string_view name) {
             widths.append(qRound(amount*scale));
         }
         const bool editing=combo->isEditable() && combo->lineEdit()->isModified();
+        const auto draft=combo->currentText();
         QVariant old;
         try { old=linaccess::sqlFieldValue(getFieldValue(target.toStdString()),""); }
         catch (const linaccess::VbaRuntimeError& error) {
@@ -1566,7 +1589,9 @@ void AccessFormPreview::requeryControl(std::string_view name) {
         combo->setModelColumn(displayColumn<0 ? 0 : displayColumn);
         combo->setProperty("la_rows_loaded",true);
         combo->setProperty("la_rows_error",0);
-        setText(combo,old.toString()); combo->setProperty("la_null",old.isNull());
+        if (editing) {
+            combo->setCurrentIndex(-1); combo->setEditText(draft); combo->setProperty("la_null",false);
+        } else { setText(combo,old.toString()); combo->setProperty("la_null",old.isNull()); }
         if (combo->isEditable()) combo->lineEdit()->setModified(editing);
         return;
     }

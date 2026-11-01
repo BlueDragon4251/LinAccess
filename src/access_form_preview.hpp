@@ -183,5 +183,7 @@ private:
     bool dataTruncated_{};
     int currentRecordIndex_{};
     QSet<QString> pendingControls_;
+    QSet<QString> bufferedTextControls_;
+    QString updatingControl_;
     QMap<QString,std::shared_ptr<linaccess::VbaValue>> editOriginals_;
 };

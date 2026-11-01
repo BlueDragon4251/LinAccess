@@ -105,8 +105,13 @@ Unfocused access raises 2185, unsupported control types 438, negative positions
 clamped to the native text bounds. UTF-16 selection is exercised with a surrogate
 pair, replacement and independently read SQL values.
 
-This is a native single-line selection adapter, not full Access Text/Value
-buffering, formatted/multiline text, IME or rich-text parity. The original VBA
+This native single-line selection adapter shares the bounded Text/Value buffer
+in TEXT_VALUE_RUNTIME.md; formatted/multiline text, IME and rich-text parity
+remain open. The original VBA
 fixtures contain no selection-property calls, so evidence is the documented
 Microsoft selection contract and native Qt/VBA/SQL tests, not original-handler
 execution or a Windows Access reference comparison.
+
+Focused Text and bounded Text/Value buffering are now implemented for native
+text/ editable combo editors; see TEXT_VALUE_RUNTIME.md for update phases,
+SQL/validation regressions and the remaining focus/input/reentrancy limits.

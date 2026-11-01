@@ -358,7 +358,7 @@ End Sub
     comboWidget->lineEdit()->setFocus(); QApplication::processEvents();
     int error=0; try { editor->member("SelStart",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==2185);
     combo->assign("SelStart",VbaValue::numeric(0)); combo->assign("SelLength",VbaValue::numeric(2)); combo->assign("SelText",VbaValue::string("12"));
-    assert(comboWidget->currentText()=="12XYef" && root->item("editor").asText()=="12XYef");
+    assert(comboWidget->currentText()=="12XYef" && root->item("editor").asText()=="abXYef");
     root->assign("Dirty",VbaValue::logical(false));
     assert(sql.exec("SELECT value FROM records") && sql.next() && sql.value(0).toString()=="12XYef"); sql.finish();
     error=0; try { root->objectMember("button",{}).object->member("SelText",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==438);
@@ -367,7 +367,7 @@ End Sub
     editor->assign("SelStart",VbaValue::numeric(1)); editor->assign("SelLength",VbaValue::numeric(2));
     assert(editor->member("SelText",{}).asText()=="😀");
     editor->assign("SelText",VbaValue::string("ö"));
-    assert(root->item("editor").asText()=="AöZ");
+    assert(editor->member("Text",{}).asText()=="AöZ" && root->item("editor").asText()=="A😀Z");
     root->assign("Dirty",VbaValue::logical(false));
     assert(sql.exec("SELECT value FROM records") && sql.next() && sql.value(0).toString()==QString::fromUtf8("AöZ")); sql.finish();
     assert(form.close());
