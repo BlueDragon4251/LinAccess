@@ -1511,6 +1511,7 @@ Begin Section
 Begin TextBox
 Name ="editor"
 ControlSource ="value"
+InputMask ="Password"
 FontSize =18
 FontItalic =NotDefault
 Height =600
@@ -1541,6 +1542,7 @@ Width =4000
 End
 Begin CommandButton
 Name ="button"
+OnClick ="[Event Procedure]"
 Top =2600
 Height =600
 End
@@ -1551,14 +1553,41 @@ Height =600
 RowSourceType ="Value List"
 RowSource ="one;two"
 End
+Begin Rectangle
+Name ="shape"
+FontSize =18
+Left =8000
+End
 End
 End
 )FORM";
-    auto layout=linaccess::parseAccessFormLayout(QString::fromUtf8(source)); assert(layout.controls.size()==6);
+    auto layout=linaccess::parseAccessFormLayout(QString::fromUtf8(source)); assert(layout.controls.size()==7);
     assert(layout.controls[0].font.size==18 && layout.controls[1].font.size==11);
     assert(layout.controls[0].font.italic==true && layout.controls[1].font.italic==false);
     assert(layout.controls[2].font.weight==400 && layout.controls[3].font.weight==700);
-    AccessFormPreview form("font regression",source,{},db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    const QByteArray code=R"VBA(Sub button_Click()
+Me!editor.FontSize=22
+Me!editor.FontName="DejaVu Sans Mono"
+Me!editor.FontWeight=600
+If Me!editor.FontBold Then Err.Raise 5
+Me!editor.FontBold=True
+Me!editor.FontItalic=False
+Me!editor.FontUnderline=True
+Me!combo.FontSize=16
+Me!combo.FontWeight=300
+Me!combo.FontItalic=True
+Me!combo.FontUnderline=False
+Me!large.FontSize=28
+Me!button.FontBold=True
+Me.Tag=Me!editor.FontName & ":" & CStr(Me!editor.FontSize) & ":" & CStr(Me!editor.FontBold) & ":" & CStr(Me!editor.FontItalic) & ":" & CStr(Me!editor.FontUnderline)
+End Sub
+Sub FontError()
+On Error Resume Next
+Me!editor.FontSize=128
+Me.Tag=CStr(Err.Number)
+End Sub
+)VBA";
+    AccessFormPreview form("font regression",source,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
     auto root=makePreviewFormObject(form);
     auto* editor=form.findChild<QLineEdit*>("access-control-editor"); auto* sibling=form.findChild<QLineEdit*>("access-control-sibling");
     auto* small=form.findChild<QLabel*>("access-control-small"); auto* large=form.findChild<QLabel*>("access-control-large");
@@ -1576,13 +1605,87 @@ End
     assert(combo->count()==2 && combo->view()->font().pointSize()==12 && combo->view()->font().underline());
     assert(combo->lineEdit()->font().pointSize()==12 && combo->lineEdit()->font().underline());
     assert(QFontMetricsF(large->font()).horizontalAdvance("Sample")>QFontMetricsF(small->font()).horizontalAdvance("Sample")*2);
+    auto editorObject=root->objectMember("editor",{}).object;
+    assert(editorObject->member("FontName",{}).asText()=="DejaVu Sans" && editorObject->member("FontSize",{}).asNumber()==18);
+    assert(editorObject->member("FontWeight",{}).asNumber()==400 && !editorObject->member("FontBold",{}).truthy());
+    assert(editorObject->member("FontItalic",{}).truthy() && !editorObject->member("FontUnderline",{}).truthy());
+    editorObject->assign("FontSize",VbaValue::numeric(19.5)); assert(editor->font().pointSize()==20);
+    editorObject->assign("FontSize",VbaValue::numeric(18));
     assert(!form.hasUnsavedChanges()); editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"fresh");
+    editor->setSelection(1,3); assert(editor->hasFocus());
+    button->click();
+    const auto click=form.eventResult("control:button:Click"); assert(click && click->status==linaccess::VbaExecutionStatus::Completed);
+    assert(root->member("Tag",{}).asText()=="DejaVu Sans Mono:22:True:False:True");
+    assert(editor->hasFocus() && editor->selectionStart()==1 && editor->selectedText()=="res" && editor->displayText()=="*****");
+    assert(editorObject->member("Text",{}).asText()=="fresh" && editorObject->member("Value",{}).asText()=="one" && form.hasUnsavedChanges());
+    assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="one"); sql.finish();
+    assert(editor->font().pointSize()==22 && editor->font().bold() && !editor->font().italic() && editor->font().underline());
+    assert(editor->font().family()=="DejaVu Sans Mono" && sibling->font().pointSize()==11 && !sibling->font().bold());
+    assert(combo->font().pointSize()==16 && combo->font().weight()==300 && combo->font().italic() && !combo->font().underline());
+    assert(combo->lineEdit()->font().pointSize()==16 && combo->view()->font().pointSize()==16 && !combo->view()->font().underline());
+    editorObject->assign("FontWeight",VbaValue::numeric(699)); assert(!editorObject->member("FontBold",{}).truthy());
+    editorObject->assign("FontWeight",VbaValue::numeric(700)); assert(editorObject->member("FontBold",{}).truthy());
+    root->objectMember("combo",{}).object->member("Requery",{});
+    assert(combo->view()->font().pointSize()==16 && combo->view()->font().italic() && editor->hasFocus());
+    const auto rejected=[&](const char* property,const VbaValue& value,int expected) {
+        const auto before=editor->font(); int number=0;
+        try { editorObject->assign(property,value); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; }
+        assert(number==expected && editor->font()==before && editor->hasFocus() && editor->selectionStart()==1 && editor->selectedText()=="res");
+    };
+    for(const auto* property:{"FontName","FontSize","FontWeight","FontBold","FontItalic","FontUnderline"}) rejected(property,VbaValue{},94);
+    rejected("FontName",VbaValue::string(""),5); rejected("FontSize",VbaValue::numeric(0),5);
+    rejected("FontSize",VbaValue::numeric(128),5); rejected("FontSize",VbaValue::numeric(32768),6);
+    rejected("FontWeight",VbaValue::numeric(1001),5); rejected("FontWeight",VbaValue::numeric(-1),5);
+    rejected("FontSize",VbaValue::string("invalid"),13); rejected("FontBold",VbaValue::errorValue(5),13);
+    int number=0; try { editorObject->member("FontSize",{VbaValue::numeric(1)}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==450);
+    auto shape=root->objectMember("shape",{}).object;
+    number=0; try { shape->member("FontSize",{}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==438);
+    number=0; try { shape->assign("FontSize",VbaValue::numeric(12)); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==438);
+    std::vector<VbaValue> noArgs; auto failure=form.executeProcedure("FontError",noArgs);
+    assert(failure.status==linaccess::VbaExecutionStatus::Completed && root->member("Tag",{}).asText()=="5" && editor->font().pointSize()==22);
+    class FontScalar final:public linaccess::VbaObject {
+    public:
+        int reads{};
+        VbaValue scalarValue() override { ++reads; return VbaValue::numeric(22.5); }
+        VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw linaccess::VbaRuntimeError(438,"No font scalar members"); }
+    };
+    auto scalar=std::make_shared<FontScalar>(); editorObject->assign("FontSize",VbaValue::reference(scalar));
+    assert(scalar->reads==1 && editor->font().pointSize()==22 && editor->selectedText()=="res" && editor->displayText()=="*****");
     root->assign("Dirty",VbaValue::logical(false));
     assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="fresh"); sql.finish();
-    assert(sibling->text()=="fresh" && editor->font().pointSize()==18 && sibling->font().pointSize()==11);
+    assert(sibling->text()=="fresh" && editor->font().pointSize()==22 && sibling->font().pointSize()==11);
     selector->setCurrentIndex(2); assert(root->item("editor").asText()=="two" && !form.hasUnsavedChanges());
-    assert(editor->font().pointSize()==18 && editor->font().italic() && combo->lineEdit()->font().underline());
+    assert(editor->font().pointSize()==22 && !editor->font().italic() && !combo->lineEdit()->font().underline());
     assert(form.close());
+    number=0; try { editorObject->member("FontSize",{}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==2450);
+    assert(sql.exec("CREATE VIEW readonly_records AS SELECT * FROM records")); sql.finish();
+    auto readonlySource=source; readonlySource.replace("RecordSource =\"records\"","RecordSource =\"readonly_records\"");
+    AccessFormPreview readonlyForm("readonly font regression",readonlySource,{},db);
+    auto readonlyRoot=makePreviewFormObject(readonlyForm); auto readonlyObject=readonlyRoot->objectMember("editor",{}).object;
+    auto* readonlyEditor=readonlyForm.findChild<QLineEdit*>("access-control-editor"); assert(readonlyEditor && readonlyEditor->isReadOnly() && readonlyEditor->font().pointSize()==18);
+    readonlyObject->assign("FontSize",VbaValue::numeric(24)); readonlyObject->assign("FontBold",VbaValue::logical(true));
+    assert(readonlyEditor->font().pointSize()==24 && readonlyEditor->font().bold() && readonlyEditor->isReadOnly() && !readonlyForm.hasUnsavedChanges());
+    assert(sql.exec("SELECT COUNT(*) FROM records") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+    assert(readonlyForm.close());
+    const QByteArray defaults=R"FORM(Begin Form
+Begin Section
+Begin TextBox
+Name ="defaultText"
+End
+Begin CommandButton
+Name ="defaultButton"
+Top =400
+End
+End
+End
+)FORM";
+    AccessFormPreview defaultForm("default font regression",defaults,{},db);
+    auto defaultRoot=makePreviewFormObject(defaultForm);
+    assert(defaultForm.findChild<QLineEdit*>("access-control-defaultText")->font().pointSize()==8);
+    assert(defaultForm.findChild<QPushButton*>("access-control-defaultButton")->font().pointSize()==10);
+    assert(defaultRoot->objectMember("defaultText",{}).object->member("FontSize",{}).asNumber()==8);
+    assert(defaultRoot->objectMember("defaultButton",{}).object->member("FontSize",{}).asNumber()==10);
+    assert(defaultForm.close());
     for (const auto& property:QStringList{"FontSize =0","FontSize =128","FontWeight =-1","FontWeight =1001","FontItalic =invalid","FontName =\"\""}) {
         bool rejected=false;
         try { (void)linaccess::parseAccessFormLayout("Begin Form\nBegin Section\nBegin TextBox\nName =\"bad\"\n"+property+"\nEnd\nEnd\nEnd"); }
@@ -1607,6 +1710,16 @@ void testOriginalControlFonts(const QDir& directory,const QJsonArray& objects) {
             if (control.font.weight) assert(label->font().weight()==(*control.font.weight ? *control.font.weight : 400));
             if (control.font.italic) assert(label->font().italic()==*control.font.italic);
             if (control.font.underline) assert(label->font().underline()==*control.font.underline);
+            auto root=makePreviewFormObject(form); auto object=root->objectMember(control.name.toUtf8().toStdString(),{}).object;
+            const auto changed=*control.font.size==127 ? 126 : *control.font.size+1;
+            if (kind=="form") {
+                object->assign("FontSize",linaccess::VbaValue::numeric(changed));
+                assert(label->font().pointSize()==changed && object->member("FontSize",{}).asNumber()==changed && !form.hasUnsavedChanges());
+            } else {
+                int number=0; const auto before=label->font();
+                try { object->assign("FontSize",linaccess::VbaValue::numeric(changed)); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; }
+                assert(number==3251 && label->font()==before && !form.hasUnsavedChanges());
+            }
             assert(form.close()); if (kind=="form") ++forms; else ++reports; break;
         }
         if (forms && reports) break;

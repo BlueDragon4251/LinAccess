@@ -71,6 +71,19 @@ public:
         auto& preview = checked();
         auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (fontProperty(key)) {
+            if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected font property arguments");
+            (void)fontDefinition();
+            const auto font=widget->font();
+            if (key=="fontname") return linaccess::VbaValue::string(bytes(font.family()));
+            if (key=="fontsize") {
+                if (font.pointSizeF()<=0) throw linaccess::VbaRuntimeError(3251,"Pixel-sized native font has no point size");
+                return linaccess::VbaValue::numeric(font.pointSizeF());
+            }
+            if (key=="fontweight") return linaccess::VbaValue::numeric(font.weight());
+            return linaccess::VbaValue::logical(key=="fontbold" ? font.weight()>=700 : key=="fontitalic" ? font.italic() : font.underline());
+        }
+
         if (auto* combo=qobject_cast<QComboBox*>(widget);combo && key=="listcount") {
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected ListCount arguments");
             if (!combo->property("la_rows_loaded").toBool()) preview.requeryControl(bytes(name_));
@@ -195,6 +208,32 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (fontProperty(key)) {
+            auto& definition=fontDefinition();
+            if (preview.layout_.kind==linaccess::AccessDocumentKind::Report)
+                throw linaccess::VbaRuntimeError(3251,"Report font assignment requires an implemented Print event context");
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null font property");
+            auto next=definition.font;
+            if (key=="fontname") {
+                const auto family=text(scalar.asText());
+                if (family.isEmpty()) throw linaccess::VbaRuntimeError(5,"Invalid empty font family");
+                next.name=family;
+            } else if (key=="fontsize" || key=="fontweight") {
+                const auto number=linaccess::sqlFieldValue(scalar,"INTEGER").toLongLong();
+                if (number< -32768 || number>32767) throw linaccess::VbaRuntimeError(6,"Font Integer overflow");
+                if (key=="fontsize" ? number<1 || number>127 : number<0 || number>1000)
+                    throw linaccess::VbaRuntimeError(5,"Font property outside supported range");
+                if (key=="fontsize") next.size=static_cast<int>(number); else next.weight=static_cast<int>(number);
+            } else {
+                const bool flag=linaccess::coerceVbaModuleValue(scalar,"boolean").boolean;
+                if (key=="fontbold") next.weight=flag ? 700 : 400;
+                else if (key=="fontitalic") next.italic=flag;
+                else next.underline=flag;
+            }
+            definition.font=std::move(next); preview.applyControlFont(widget,definition); return;
+        }
+
         if (key=="oldvalue") throw linaccess::VbaRuntimeError(383,"OldValue is read-only");
         if (key=="text") {
             preview.ensureWritableControl(bytes(name_));
@@ -315,6 +354,16 @@ public:
         throw linaccess::VbaRuntimeError(438,"Control property is unavailable or read-only");
     }
 private:
+    static bool fontProperty(const QString& key) {
+        return key=="fontname" || key=="fontsize" || key=="fontweight" || key=="fontbold" || key=="fontitalic" || key=="fontunderline";
+    }
+    linaccess::AccessVisualControl& fontDefinition() const {
+        for (auto& definition:checked().layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
+            if (!AccessFormPreview::supportsControlFont(definition)) throw linaccess::VbaRuntimeError(438,"Control has no native font adapter");
+            return definition;
+        }
+        throw linaccess::VbaRuntimeError(2465,"Control unavailable");
+    }
     QString caption() const {
         auto* widget = control();
         for (const auto& control : checked().layout_.controls) {

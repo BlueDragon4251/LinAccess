@@ -768,6 +768,29 @@ void AccessFormPreview::activateDocument() {
     if (active==this && !closed_) initialCurrent();
 }
 
+bool AccessFormPreview::supportsControlFont(const linaccess::AccessVisualControl& control) {
+    return !(control.locked && control.type!="TextBox") &&
+        (control.type=="TextBox" || control.type=="Label" || control.type=="CommandButton"
+         || control.type=="ComboBox" || control.type=="ListBox" || control.type=="CheckBox"
+         || control.type=="OptionButton" || control.type=="ToggleButton");
+}
+void AccessFormPreview::applyControlFont(QWidget* widget,const linaccess::AccessVisualControl& control) {
+    if (!supportsControlFont(control)) return;
+    auto font=widget->font();
+    if (control.font.name) font.setFamily(*control.font.name);
+    font.setPointSize(control.font.size.value_or(control.type=="CommandButton" ? 10 : 8));
+    const auto weight=control.font.weight.value_or(400);
+    font.setWeight(static_cast<QFont::Weight>(weight ? weight : QFont::Normal));
+    font.setItalic(control.font.italic.value_or(false));
+    font.setUnderline(control.font.underline.value_or(false));
+    widget->setFont(font);
+    // Qt's editable combo editor keeps its own explicit default font.
+    if (auto* combo=qobject_cast<QComboBox*>(widget)) {
+        if (combo->lineEdit()) combo->lineEdit()->setFont(font);
+        combo->view()->setFont(font);
+    }
+}
+
 void AccessFormPreview::buildControls(QWidget* canvas) {
     for (const auto& control : layout_.controls) {
 
@@ -860,25 +883,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             widget = shape;
         }
         if (!widget) continue;
-        // Apply only text-bearing native adapters; do not change embedded
-        // documents, calendar internals or unsupported-control diagnostics.
-        if (!(control.locked && control.type!="TextBox") &&
-            (control.type=="TextBox" || control.type=="Label" || control.type=="CommandButton"
-             || control.type=="ComboBox" || control.type=="ListBox" || control.type=="CheckBox"
-             || control.type=="OptionButton" || control.type=="ToggleButton")) {
-            auto font=widget->font();
-            if (control.font.name) font.setFamily(*control.font.name);
-            if (control.font.size) font.setPointSize(*control.font.size);
-            if (control.font.weight) font.setWeight(static_cast<QFont::Weight>(*control.font.weight ? *control.font.weight : QFont::Normal));
-            if (control.font.italic) font.setItalic(*control.font.italic);
-            if (control.font.underline) font.setUnderline(*control.font.underline);
-            widget->setFont(font);
-            // Qt's editable combo editor keeps its own explicit default font.
-            if (auto* combo=qobject_cast<QComboBox*>(widget)) {
-                if (combo->lineEdit()) combo->lineEdit()->setFont(font);
-                combo->view()->setFont(font);
-            }
-        }
+        applyControlFont(widget,control);
         widget->setObjectName("access-control-" + control.name);
         widget->setProperty("la_access_tag",control.tag);
         if (!dynamic_cast<AccessFormPreview*>(widget)) widget->installEventFilter(this);

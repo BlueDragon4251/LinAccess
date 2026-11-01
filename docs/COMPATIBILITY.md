@@ -396,5 +396,18 @@ Imported text-control font families, sizes, weights, italic and underline now
 reach real Qt widgets, including declared control-type templates and per-instance
 overrides. Editable combo editors and requeried popup views receive the same font.
 SQL/mirroring/navigation and one original form/report layout are tested without
-original VBA/data. Missing-font resolution, dynamic font APIs and exact Windows
+original VBA/data. Missing-font resolution, complete font semantics and exact Windows
 appearance remain open (CONTROL_FONT_RENDERING.md).
+
+Native form text-control FontName/Size/Weight/Bold/Italic/Underline now read/write real
+instance fonts through VBA. Pending masked Text, old Value, selection, focus,
+read-only SQL policy and data Dirty state remain intact; invalid input is checked
+before mutation. Combo editors/popups and record navigation retain the changes.
+Qt fallback/defaults, full property semantics and exact Windows metrics remain
+open (CONTROL_FONT_RENDERING.md).
+
+FontBold follows the documented >=700 threshold, independently of Qt's 600 bold
+classification. Unexported sizes use documented 8/10-point defaults. Report font
+setters stop with 3251 because the required OnPrint context is not implemented;
+static rendering and getters remain available. These contracts are independently
+checked against Microsoft documentation, not an Access 2003 runtime oracle.

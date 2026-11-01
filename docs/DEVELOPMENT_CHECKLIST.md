@@ -404,3 +404,8 @@ Full targets remain open:
 - [x] Bounded static control-font import/templates and native Qt text rendering,
   including editable combo editor/popup, real SQL/navigation persistence and
   original form/report layout probes; dynamic/exact visual parity remains open.
+
+- [x] Bounded native form VBA FontName/Size/Weight/Bold/Italic/Underline properties,
+  with preflight errors, scalar conversion, preserved masked text/selection/SQL,
+  read-only-view styling and runtime font persistence across requery/navigation;
+  documented >=700 Bold, 8/10-point defaults and unsupported Report OnPrint preflight.

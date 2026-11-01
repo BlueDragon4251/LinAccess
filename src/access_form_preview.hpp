@@ -55,6 +55,8 @@ private:
     QString controlEventPrefix(const QString& name) const;
     std::shared_ptr<linaccess::VbaObject> recordsetSnapshot();
     linaccess::VbaValue evalExpression(std::string_view expression);
+    static bool supportsControlFont(const linaccess::AccessVisualControl& control);
+    void applyControlFont(QWidget* widget,const linaccess::AccessVisualControl& control);
     void buildControls(QWidget* canvas);
     void loadRecords();
     void setFilterState(const QString& filter,bool enabled);

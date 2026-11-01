@@ -1041,3 +1041,29 @@ Validation: host 21/21 (80.67 s), Debian 12 21/21 (68.45 s), Ubuntu 24.04
 pass exact payload/backend/permissions/fixture-exclusion checks; isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass.
+
+Runtime font increment: native VBA text-control objects now read/write FontName,
+FontSize, FontWeight, FontBold, FontItalic and FontUnderline. One renderer handles
+imported and runtime styles, including combo editors/popups. A bound Qt/VBA button
+changes all six while preserving pending masked Text, old Value, selection, focus
+and SQL. Scalar defaults resolve once, numeric rounding/ranges and handled error
+preflight are tested. A fresh instance restores imported fonts; an actual SQL view
+remains read-only and clean while fonts change. Generic property probes style an
+original form label and reject report assignment with 3251 until OnPrint exists,
+without original VBA/table-row execution. Targeted tests pass (36.43 s). Qt defaults/fallback, full Windows/font semantics and design
+persistence remain open (CONTROL_FONT_RENDERING.md).
+
+Microsoft reference calibration found that Qt's bold() classification includes
+600 while Access FontBold is false below 700. The getter now checks >=700;
+600/699/700 are regressed. Documented unexported point-size defaults are 8/10,
+not the host's previous 9. Report setters require OnPrint, which is not yet
+implemented, and now reject before mutation instead of succeeding in preview.
+Static rendering/getters still work. Font contract links and limits are recorded
+in CONTROL_FONT_RENDERING.md; no Windows Access runtime oracle is claimed.
+
+Runtime increment validation: host 21/21 (70.55 s), Debian 12 21/21 (69.71 s),
+Ubuntu 24.04 21/21 (63.59 s), GUI-disabled core 1/1 (0.89 s). Fresh host/distro
+DEBs pass exact payload/backend/permissions/fixture-exclusion checks; isolated
+installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+All four original fixture hashes pass. These measurements follow the documented
+Bold/default-size/report-Print corrections above.
