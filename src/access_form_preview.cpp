@@ -383,6 +383,11 @@ public:
     std::string inputBox(const linaccess::VbaInputBoxArguments& arguments) override {
         return linaccess::nativeInputBox(&preview_,arguments);
     }
+    linaccess::VbaValue eval(std::string_view expression) override {
+        ++nativeExecutionDepth();
+        const auto leave=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+        return linaccess::VbaHost::eval(expression);
+    }
     void saveRecord() override {
         if (!commandDocument().saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record save cancelled");
     }
@@ -1762,6 +1767,9 @@ linaccess::VbaExecutionResult AccessFormPreview::runControlBinding(const QString
 linaccess::VbaExecutionResult AccessFormPreview::executeProcedure(const QString& name,std::vector<linaccess::VbaValue>& arguments) {
     PreviewVbaHost host(*this);
     return linaccess::executeVbaProcedureWithArguments(vba_.toUtf8().toStdString(),name.toUtf8().toStdString(),host,arguments);
+}
+linaccess::VbaValue AccessFormPreview::evalExpression(std::string_view expression) {
+    PreviewVbaHost host(*this); return host.eval(expression);
 }
 linaccess::VbaExecutionResult AccessFormPreview::runHandler(const QString& handler) {
     if (vba_.isEmpty()) return {};

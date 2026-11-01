@@ -15,7 +15,7 @@ namespace {
 // This interpreter deliberately reports unsupported VBA instead of silently
 // treating Access/DAO/COM calls as successful no-ops.
 struct Statement {
-    enum class Type { With, EndWith, SendKeys, If, Else, EndIf, For, ForEach, ExitFor, Next, Message, Save, Maximize, GoLast,
+    enum class Type { With, EndWith, SendKeys, If, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
                       Call, SetField, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, Quit, ErrorResumeNext, ErrorDisable, Label, Jump, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
@@ -177,6 +177,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
     const std::regex variableAssignment(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
     const std::regex message(R"(^MsgBox(?:\s+(.+)|\((.*)\))$)", std::regex::icase);
+    const std::regex evaluation(R"(^Eval(?:\s+(.+)|\((.*)\))$)",std::regex::icase);
     const std::regex save(R"(^DoCmd\s*\.\s*RunCommand\s+acCmdSaveRecord$)", std::regex::icase);
     const std::regex maximize(R"(^DoCmd\s*\.\s*Maximize\s*$)", std::regex::icase);
     const std::regex goLast(R"(^DoCmd\s*\.\s*GoToRecord\s*,\s*,\s*acLast\s*$)", std::regex::icase);
@@ -412,7 +413,11 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
         } else if (std::regex_match(source, match, message)) {
             const auto expr = "MsgBox("+trim(match[1].matched ? match[1].str() : match[2].str())+")";
             if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported, "MsgBox argument syntax unsupported", line};
-            statements.push_back({Statement::Type::Message, {}, expr, line});
+            statements.push_back({Statement::Type::Evaluate, {}, expr, line});
+        } else if (std::regex_match(source,match,evaluation)) {
+            const auto expr="Eval("+trim(match[1].matched ? match[1].str() : match[2].str())+")";
+            if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported,"Eval argument syntax unsupported",line};
+            statements.push_back({Statement::Type::Evaluate,{},expr,line});
         } else if (lower(source) == "docmd.quit") {
             statements.push_back({Statement::Type::Quit, {}, {}, line});
         } else if (std::regex_match(source, save)) {
@@ -455,10 +460,10 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             statements.push_back({Statement::Type::ControlVisible, name, expr, line,match[1].str()});
         } else if (std::regex_match(source, match, call)) {
             const auto args = match[2].str();
-            if (lower(match[1].str())=="msgbox") {
-                const auto expression="MsgBox("+args+")";
-                if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"MsgBox argument syntax unsupported",line};
-                statements.push_back({Statement::Type::Message,{},expression,line}); continue;
+            if (lower(match[1].str())=="msgbox" || lower(match[1].str())=="eval") {
+                const auto expression=match[1].str()+"("+args+")";
+                if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Builtin argument syntax unsupported",line};
+                statements.push_back({Statement::Type::Evaluate,{},expression,line}); continue;
             }
             for (const auto& arg : splitArguments(args))
                 if (!validExpression(arg)) return {VbaExecutionStatus::Unsupported, "Aufrufargument", line};
@@ -693,9 +698,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     std::vector<LoopFrame> faultLoops;
     bool faultActive = true;
     if (isFunction) locals[lower(std::string(procedure))] = initialLocalValue(resultType);
-    const bool implicitCancel = hasCancel && arguments.empty();
-    if (!implicitCancel && parameters.size() != arguments.size())
-        return {VbaExecutionStatus::Error, "Falsche Argumentanzahl", 0};
+    const bool implicitCancel = hasCancel && !isFunction && arguments.empty();
+    if (!implicitCancel && parameters.size() != arguments.size()) {
+        VbaExecutionResult failure{VbaExecutionStatus::Error,"Falsche Argumentanzahl",0};
+        failure.errorNumber=450; return failure;
+    }
     for (std::size_t i = 0; i < parameters.size(); ++i)
         locals[lower(parameters[i].name)] = implicitCancel ? VbaValue::numeric(0) : arguments[i];
     // Declarations bind for the whole procedure, including skipped branches.
@@ -891,7 +898,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 active = frames.back().parent;
                 frames.pop_back();
                 break;
-            case Statement::Type::Message:
+            case Statement::Type::Evaluate:
                 if (active) {
                     if (++effects > 1000) throw std::runtime_error("VBA-Effektbudget erreicht");
                     (void)evaluate(instruction.expression);

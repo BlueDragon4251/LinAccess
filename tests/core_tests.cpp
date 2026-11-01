@@ -38,6 +38,10 @@ public:
     bool inputHost=false;
     std::optional<linaccess::VbaInputBoxArguments> inputRequest;
     std::string inputResult;
+    std::optional<std::string> evalModule;
+    std::optional<std::string> moduleForProcedure(std::string_view name) override {
+        return evalModule ? evalModule : VbaHost::moduleForProcedure(name);
+    }
     int saves = 0;
     int maximized = 0;
     int navigatedLast = 0;
@@ -84,6 +88,55 @@ public:
 
 int main() {
     using namespace linaccess;
+
+    {
+        FakeForm host;
+        assert(evaluateVbaExpression("Eval(\"1+2*3\")",host,{}).asNumber()==7);
+        assert(evaluateVbaExpression("Eval(5)",host,{}).asNumber()==5);
+        assert(host.eval("'O''Brien'").asText()=="O'Brien");
+        assert(host.eval("'alpha'='ALPHA'").truthy());
+        assert(host.eval("Null").kind==VbaValue::Kind::Null);
+        assert(host.eval("Null Is Null").truthy() && !host.eval("0 Is Null").truthy());
+        assert(!host.eval("Null Is Not Null").truthy() && host.eval("'text' Is Not Null").truthy());
+        assert(host.eval("Null Is Null And 1=1").truthy());
+        assert(!validVbaExpression("'not a VBA literal'"));
+        for (const auto& [expression,number]:std::vector<std::pair<std::string,int>>{
+            {"Eval()",450},{"Eval(1,2)",450},{"Eval(Null)",94}}) {
+            try { (void)evaluateVbaExpression(expression,host,{}); assert(false); }
+            catch (const VbaRuntimeError& failure) { assert(failure.number==number); }
+        }
+        host.evalModule=R"VBA(Public Function PlusOne(value As Double) As Double
+PlusOne=value+1
+End Function
+Public Function NeedCancel(Cancel As Integer) As Long
+NeedCancel=Cancel
+End Function
+Public Function RecurseEval() As Variant
+RecurseEval=Eval("RecurseEval()")
+End Function
+Private Function Hidden() As Long
+DoCmd.RunSQL "INSERT INTO markers VALUES(98)"
+Hidden=1
+End Function
+Public Sub NotAFunction()
+DoCmd.RunSQL "INSERT INTO markers VALUES(99)"
+End Sub
+)VBA";
+        assert(host.eval("PlusOne(7)").asNumber()==8);
+        for (const auto& [expression,number]:std::vector<std::pair<std::string,int>>{
+            {"PlusOne()",450},{"NeedCancel()",450},{"Hidden()",2425},{"NotAFunction()",2425},{"Unknown()",2425},{"RecurseEval()",28}}) {
+            try { (void)host.eval(expression); assert(false); }
+            catch (const VbaRuntimeError& failure) { assert(failure.number==number); }
+        }
+        assert(host.sqlStatements.empty() && host.eval("1+1").asNumber()==2);
+        const auto statements=executeVbaProcedure(R"VBA(Sub Test()
+Eval("PlusOne(1)")
+Call Eval("PlusOne(2)")
+Eval "PlusOne(3)"
+End Sub
+)VBA","Test",host);
+        assert(statements.status==VbaExecutionStatus::Completed);
+    }
 
     {
         FakeForm host;

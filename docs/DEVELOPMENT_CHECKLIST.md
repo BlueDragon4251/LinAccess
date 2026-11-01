@@ -296,3 +296,7 @@ Full targets remain open:
   parameterized description and no-expression-evaluation regressions.
 - [ ] Exact Access 2003 empty/whitespace list semantics, ColumnHeads,
   AddItem/RemoveItem, full ListBox and custom row-source callbacks.
+- [x] Bounded native Eval/Application.Eval, public Function execution, Access Null
+  tests, actual Forms/SQL and modal self-close lifetime regression; unchanged
+  original module with 15 Eval references on synthetic native controls.
+- [ ] Full Eval grammar, function resolution/coercion and Access 2003 oracle.

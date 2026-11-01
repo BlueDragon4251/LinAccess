@@ -54,6 +54,7 @@ public:
     virtual void message(std::string_view text) = 0;
     virtual int messageBox(std::string_view prompt,int buttons,const std::optional<std::string>& title);
     virtual std::string inputBox(const VbaInputBoxArguments& arguments);
+    virtual VbaValue eval(std::string_view expression);
     virtual void saveRecord() = 0;
     virtual void quitApplication() { throw std::runtime_error("DoCmd.Quit: kein Anwendungskontext"); }
     virtual void maximizeForm() { throw std::runtime_error("DoCmd.Maximize: kein Formularkontext"); }

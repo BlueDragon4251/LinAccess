@@ -65,6 +65,10 @@ Kombofelder unterstützen zusätzlich native Wertlisten und Feldlisten aus
 Abfragemetadaten, einschließlich mehrspaltiger Auswahl und gebundener Speicherung:
 [dynamische Quelltypen](docs/DYNAMIC_COMBO_RUNTIME.md).
 
+`Eval` und `Application.Eval` führen begrenzte native Access-Ausdrücke und
+öffentliche VBA-Funktionen aus, einschließlich echter Formularverweise:
+[Eval-Laufzeit und Grenzen](docs/EVAL_RUNTIME.md).
+
 Eine `.deb`-Datei lässt sich nach dem Build erzeugen mit:
 
 ```bash

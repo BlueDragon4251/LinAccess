@@ -2,6 +2,12 @@
 
 Stand: LinAccess Native 0.7.0. **Nur ein Entwicklungsstand, keine 1:1-Migration.**
 
+`Eval`/`Application.Eval` haben einen begrenzten nativen Ausführungspfad mit
+öffentlichen VBA-Funktionen, Forms-Verweisen und Access-Nulltests. Ein unverändertes
+Originalmodul mit 15 Eval-Aufrufen läuft auf vorbereiteten synthetischen Controls.
+Das belegt keine vollständige Ausdrucks- oder Projektkompatibilität:
+[Eval-Umfang und Grenzen](EVAL_RUNTIME.md).
+
 **Aktueller Regressionhinweis:** Der Gesamtimport übernimmt jetzt alle 29
 Kassen-Tabellen mit NULLs, exportierten Schlüsseln/Indizes und Beziehungen atomar.
 Der Schlüsselzeilen-Parserfehler mit MDBTools 1.0.1 ist behoben; MDBTools 1.0.0

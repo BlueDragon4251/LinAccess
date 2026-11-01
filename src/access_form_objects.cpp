@@ -646,6 +646,11 @@ public:
     explicit PreviewApplicationObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if (key=="eval") {
+            if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"Eval requires one argument");
+            if (args[0].kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Eval argument");
+            return preview.evalExpression(args[0].asText());
+        }
         if (key=="screen" && args.empty()) {
             if (auto object=preview.screenObject_.lock()) return linaccess::VbaValue::reference(object);
             auto object=std::make_shared<PreviewScreenObject>(preview); preview.screenObject_=object; return linaccess::VbaValue::reference(object);

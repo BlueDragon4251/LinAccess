@@ -205,6 +205,7 @@ if(BUILD_TESTING)
             target_sources(linaccess_access_layout_tests PRIVATE src/native_input_box.cpp tests/input_box_tests.cpp)
             target_sources(linaccess_access_layout_tests PRIVATE tests/recordset_navigation_tests.cpp)
             target_sources(linaccess_access_layout_tests PRIVATE tests/row_source_types_tests.cpp)
+            target_sources(linaccess_access_layout_tests PRIVATE tests/eval_tests.cpp)
             target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::Test Qt6::PrintSupport)
             add_test(NAME access_2003_layouts
                 COMMAND linaccess_access_layout_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}")

@@ -22,12 +22,22 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original query artifacts classified / executed without Access result oracle | 100 / 77 (72 ordinary + 5 parameterized) |
 | Original date-filter fields exercised through actual calendar selection | 2 |
 | Original generated record-search procedures / native selections / missing control-reference failures | 2 / 2 / 1 |
+| Original public Eval function executions on prepared native numeric/Null states | 20 |
 | Current local regression tests | 20 passed |
 
 Recent completed work includes native combo/platform/backend fixes, control event
 prefixes, InputBox and DAO clone/bookmark/find form navigation. Positional
 Sub/Function calls, ByVal/ByRef aliases, function expressions, top-level label
 error handling and original keypad regression remain covered.
+
+Native Eval/Application.Eval now executes bounded Access expressions and public
+Functions, including real Forms references, SQL writes, statement invocation and
+guarded form self-close followed by a modal dialog. Private Functions and Subs
+are rejected before their effects execute. The unchanged original module with
+15 Eval references executes in 20 prepared numeric/Null/mixed control states.
+Counted real Forms lookups verify the additional lookup per Null branch; complete
+project context and an Access 2003 result oracle remain open. See EVAL_RUNTIME.md
+for the exact regression boundary.
 
 Current completed query package: typed named parameters, imported/temporary DAO
 QueryDefs, basic Jet strings/LIKE/DISTINCTROW/TOP ties, canonical dates and bounded
@@ -504,3 +514,19 @@ executable/backend/payload/permissions and extracted backend checks. Both distro
 packages passed installation, private-backend resolution and bounded offscreen
 GUI startup in fresh containers. All four original fixture hashes passed after
 testing. DYNAMIC_COMBO_RUNTIME.md records precise scope and reference limits.
+
+Eval increment: native text evaluation, Application.Eval, statement invocation,
+public Function calls, single-quoted strings and Access Is Null/Is Not Null.
+Synthetic native UI/SQL tests verify actual effects, forbidden private/Sub bodies,
+typed argument errors, recursion recovery and modal self-close lifetime. The
+unchanged original module identified in EVAL_RUNTIME.md completes in 20 prepared
+numeric/Null states; counted host accesses verify each original Null branch's
+additional Forms lookup. This is not a full-project or Access-oracle comparison.
+
+Validation: host Release 20/20 CTests (56.80 s); GUI-disabled core 1/1 (0.58 s);
+Debian 12 20/20 (58.45 s); Ubuntu 24.04 20/20 (54.20 s). Fresh DEBs pass payload,
+permissions, executable/backend identity and extracted SQL-backend checks. Both
+distro packages also passed isolated installation, private backend resolution and
+bounded GUI startup. All four original fixture SHA-256 checks pass. Full Eval
+grammar, Access name resolution/coercion and complete original workflows remain
+open; original source and data stay in private fixtures.

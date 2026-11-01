@@ -1,5 +1,6 @@
 #include "vba_expression.hpp"
 #include "vba_currency.hpp"
+#include "vba_analyzer.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -54,15 +55,16 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
             while (pos < input.size() &&
                    (std::isdigit(static_cast<unsigned char>(input[pos])) || input[pos] == '.')) ++pos;
             tokens.push_back({Token::Type::Number, std::string(input.substr(start, pos - start))});
-        } else if (ch == '"') {
+        } else if (ch == '"' || (accessExpression && ch=='\'')) {
+            const auto delimiter=ch;
             ++pos;
             std::string value;
             bool closed = false;
             while (pos < input.size()) {
-                if (input[pos] == '"') {
+                if (input[pos] == delimiter) {
                     ++pos;
-                    if (pos < input.size() && input[pos] == '"') {
-                        value.push_back('"'); ++pos;
+                    if (pos < input.size() && input[pos] == delimiter) {
+                        value.push_back(delimiter); ++pos;
                     } else { closed = true; break; }
                 } else value.push_back(input[pos++]);
             }
@@ -220,6 +222,11 @@ private:
             const int prec = precedence(peek());
             if (prec < minPrecedence) break;
             const auto op = lower(consume().value);
+            if (accessExpression_ && op=="is" && (lower(peek().value)=="null" || lower(peek().value)=="not")) {
+                const bool negate=take("not"); require("null");
+                if (host_ && lhs.kind!=VbaValue::Kind::Error) lhs=VbaValue::logical((lhs.kind==VbaValue::Kind::Null)!=negate);
+                continue;
+            }
             auto rhs = expression(prec + 1);
             if (!host_) lhs={};
             else if (accessExpression_ && (lhs.kind==VbaValue::Kind::Error || rhs.kind==VbaValue::Kind::Error))
@@ -448,6 +455,12 @@ private:
                 require(")");
             }
             const auto one = args.size() == 1;
+            if (word=="eval") {
+                if (!host_) return {};
+                if (args.size()!=1) throw error("Eval requires one argument",450);
+                if (args[0].kind==VbaValue::Kind::Null) throw error("Invalid Null Eval argument",94);
+                return host_->eval(args[0].asText());
+            }
             if (word=="inputbox" || word=="inputbox$") {
                 if (!host_) return {};
                 if (args.empty() || args.size()>7 || omitted.front()) throw error("InputBox requires a prompt and at most seven arguments",450);
@@ -655,6 +668,35 @@ int VbaHost::messageBox(std::string_view prompt,int buttons,const std::optional<
 }
 std::string VbaHost::inputBox(const VbaInputBoxArguments&) {
     throw VbaRuntimeError(3251,"InputBox requires a native dialog host");
+}
+VbaValue VbaHost::eval(std::string_view source) {
+    static thread_local int depth=0;
+    if (depth>=16) throw VbaRuntimeError(28,"Eval nesting limit exceeded");
+    struct Guard { int& depth; explicit Guard(int& value):depth(value) { ++depth; } ~Guard() { --depth; } } guard(depth);
+    const VbaFunctionResolver functions=[&](std::string_view name,std::vector<VbaValue>& arguments,const std::vector<std::string>&) {
+        const auto module=moduleForProcedure(name);
+        if (!module) throw VbaRuntimeError(2425,"Eval function unavailable");
+        const auto analysis=analyzeVba(*module);
+        bool publicFunction=false;
+        for (const auto& procedure:analysis.procedures) {
+            if (lower(procedure.name)!=lower(std::string(name)) || lower(procedure.kind)!="function") continue;
+            std::istringstream lines(*module); std::string declaration;
+            for (int line=0;line<procedure.line && std::getline(lines,declaration);++line) {}
+            const auto start=declaration.find_first_not_of(" \t\r");
+            const auto header=start==std::string::npos ? std::string{} : lower(declaration.substr(start));
+            publicFunction=!header.starts_with("private ") && !header.starts_with("private\t");
+        }
+        if (!publicFunction) throw VbaRuntimeError(2425,"Eval requires a public function");
+        const auto result=executeVbaProcedureWithArguments(*module,name,*this,arguments);
+        if (result.status!=VbaExecutionStatus::Completed || !result.typedReturnValue)
+            throw VbaRuntimeError(result.errorNumber ? result.errorNumber : 2425,"Eval function execution failed");
+        return *result.typedReturnValue;
+    };
+    const VbaVariables variables;
+    auto value=scalarVbaValue(ExpressionParser(source,this,variables,functions,false,true,nullptr,false,VbaCompareMode::Database).parse());
+    if (value.kind==VbaValue::Kind::Error) throw VbaRuntimeError(value.errorNumber ? value.errorNumber : 13,"Eval expression failed");
+    if (value.kind==VbaValue::Kind::ByteArray) throw VbaRuntimeError(13,"Eval cannot return a byte array");
+    return value;
 }
 std::optional<VbaValue> VbaHost::resolveIdentifier(std::string_view,bool) { return std::nullopt; }
 bool VbaHost::assignIdentifier(std::string_view,const VbaValue&) { return false; }
