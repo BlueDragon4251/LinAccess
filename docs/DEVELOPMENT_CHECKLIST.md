@@ -328,3 +328,7 @@ Full targets remain open:
   frozen source, typed deterministic duplicates, ambiguity rollback, parameters,
   physical identity checks and unchanged original query on synthetic schema copies.
 - [ ] General Jet joined-query updateability, outer-join targets and Access oracle.
+
+- [x] Active-form GoToRecord first/last/next/previous/absolute/new with offsets,
+  explicit acActiveDataObject, save cancellation and new-row boundaries.
+- [ ] Named GoToRecord targets and native table/query datasheet navigation.

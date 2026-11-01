@@ -27,6 +27,18 @@ SendKeys "^anative",True
 Application.DoCmd.RunCommand acCmdSaveRecord
 Me.Tag=Forms("target")!value
 End Sub
+Sub NavigateOffsets()
+DoCmd.GoToRecord , , acFirst
+If Forms("target")!value<>"native" Then Err.Raise 5
+Application.DoCmd.GoToRecord , , acNext,2
+If Forms("target")!value<>"third" Then Err.Raise 5
+DoCmd.GoToRecord , , acPrevious,2
+If Forms("target")!value<>"native" Then Err.Raise 5
+DoCmd.GoToRecord , , acGoTo,4
+If Forms("target")!value<>"refreshed" Then Err.Raise 5
+DoCmd.GoToRecord acActiveDataObject, , acPrevious,3
+If Forms("target")!value<>"native" Then Err.Raise 5
+End Sub
 Sub NextRecord()
 Application.DoCmd.GoToRecord , , acNext
 Me.Tag=Forms("target")!value
@@ -100,6 +112,16 @@ End Sub
     assert(query.exec("UPDATE records SET value='refreshed' WHERE id=4")); query.finish();
     assert(owner.executeProcedure("RefreshActive",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(root->member("Tag",{}).asText()=="refreshed");
+    assert(owner.executeProcedure("NavigateOffsets",none).status==linaccess::VbaExecutionStatus::Completed);
+    auto navigated=makePreviewFormsObject(owner)->item("target").object;
+    assert(navigated->item("value").asText()=="native");
+    // Restore the original test's position after exercising both statement and object dispatch.
+    auto navigation=makePreviewApplicationObject(owner)->member("DoCmd",{}).object;
+    navigation->member("GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(4),VbaValue::numeric(4)});
+    navigation->member("GoToRecord",{});
+    assert(navigated->member("NewRecord",{}).truthy());
+    navigation->member("GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(0)});
+    assert(navigated->item("value").asText()=="refreshed");
     assert(owner.executeProcedure("ExplicitMe",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(caller->text()=="explicit caller" && makePreviewFormsObject(owner)->item("target").object->item("value").asText()=="refreshed");
     assert(owner.executeProcedure("MaxActive",none).status==linaccess::VbaExecutionStatus::Completed);
@@ -113,7 +135,10 @@ End Sub
         {"RunCommand",{VbaValue::errorValue(2042)},13},{"RunCommand",{VbaValue::numeric(2147483648.0)},6},
         {"RunCommand",{VbaValue::numeric(42)},3251},{"Requery",{root->objectMember("unset",{})},94},
         {"RunSQL",{VbaValue{}},94},{"RunSQL",{},450},{"RunSQL",{VbaValue::string("SELECT 1"),VbaValue::logical(false)},3251},
-        {"GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(1),VbaValue::numeric(2)},3251},
+        {"GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(1),VbaValue::numeric(-1)},2105},
+        {"GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(4),VbaValue::numeric(99)},2105},
+        {"GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(0),VbaValue::numeric(99)},2105},
+        {"GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(9)},5},
         {"Maximize",{VbaValue::numeric(1)},450},{"Requery",{VbaValue::string("value")},3251}}) {
         bool rejected=false;
         try { (void)commands->member(name,args); } catch(const linaccess::VbaRuntimeError& failure) { rejected=failure.number==error; }
@@ -150,4 +175,28 @@ End Sub
     assert(foreignQuery.exec("SELECT value FROM records WHERE id=1") && foreignQuery.next() && foreignQuery.value(0).toString()=="foreign"); foreignQuery.finish();
     assert(owner.close() && sibling.isVisible()); assert(sibling.close());
     assert(AccessFormPreview::closeProjectDocuments(db)); assert(foreign.isVisible()); assert(foreign.close());
+    auto guardedDefinition=definition;
+    guardedDefinition.replace("Begin Form\n","Begin Form\nBeforeUpdate =\"[Event Procedure]\"\n");
+    const QByteArray guardedCode=R"VBA(Sub Form_BeforeUpdate(Cancel As Integer)
+If Me.Tag="block" Then Cancel=1
+End Sub
+Sub NextGuarded()
+DoCmd.GoToRecord , , acNext
+End Sub
+)VBA";
+    AccessFormPreview guarded("guarded navigation",guardedDefinition,guardedCode,db);
+    guarded.show(); QApplication::setActiveWindow(&guarded); QApplication::processEvents();
+    auto guardedObject=makePreviewFormObject(guarded);
+    guardedObject->assign("Tag",VbaValue::string("block"));
+    guardedObject->assignItem("value",VbaValue::string("pending navigation"));
+    const auto cancelled=guarded.executeProcedure("NextGuarded",none);
+    assert(cancelled.errorNumber==2501 && guarded.hasUnsavedChanges());
+    assert(guardedObject->item("value").asText()=="pending navigation");
+    assert(query.exec("SELECT value FROM records WHERE id=1") && query.next() && query.value(0).toString()=="later"); query.finish();
+    guardedObject->assign("Tag",VbaValue::string("allow"));
+    assert(guarded.executeProcedure("NextGuarded",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(guardedObject->item("value").asText()=="second" && !guarded.hasUnsavedChanges());
+    assert(query.exec("SELECT value FROM records WHERE id=1") && query.next() && query.value(0).toString()=="pending navigation"); query.finish();
+    assert(guarded.close());
+
 }

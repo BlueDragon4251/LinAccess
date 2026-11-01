@@ -398,23 +398,32 @@ public:
     void pasteAppendRecord() { commandDocument().pasteAppendRecord(); }
     void quitApplication() override { AccessFormPreview::quitApplication(); }
     void maximizeForm() override { commandDocument().window()->showMaximized(); }
-    void gotoLastRecord() override {
+    void gotoRecord(int action,int offset=1) {
         auto& document=commandDocument();
         if (document.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Navigation during record command unsupported");
-        if (document.recordSelector_->count()>0) document.recordSelector_->setCurrentIndex(document.recordSelector_->count()-1);
+        if (document.layout_.kind==linaccess::AccessDocumentKind::Report) throw linaccess::VbaRuntimeError(438,"Report does not support record navigation");
+        if (action<0 || action>5) throw linaccess::VbaRuntimeError(5,"Invalid record navigation action");
+        if ((action==0 || action==1 || action==4) && offset<1) throw linaccess::VbaRuntimeError(2105,"Invalid record navigation offset");
+        if (!document.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record navigation save cancelled");
+        const qint64 count=document.recordSelector_->count()-1;
+        const qint64 current=document.currentRecordIndex_ ? document.currentRecordIndex_ : count+1;
+        qint64 target=0;
+        if (action==0) target=current-offset;
+        else if (action==1) target=current+offset;
+        else if (action==2) target=1;
+        else if (action==3) target=count;
+        else if (action==4) target=offset;
+        else target=count+1;
+        const bool newRecord=target==count+1 && (action==1 || action==5);
+        if (newRecord && !document.layout_.allowAdditions) throw linaccess::VbaRuntimeError(2046,"New records are disabled");
+        if ((!newRecord && (target<1 || target>count)) || target>count+1) throw linaccess::VbaRuntimeError(2105,"Cannot go to specified record");
+        const auto index=newRecord ? 0 : static_cast<int>(target);
+        document.selectRecord(index);
+        if (document.currentRecordIndex_!=index) throw linaccess::VbaRuntimeError(2501,"Record navigation cancelled");
     }
-    void gotoNextRecord() override {
-        auto& document=commandDocument();
-        if (document.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Navigation during record command unsupported");
-        document.recordSelector_->setCurrentIndex(qMin(document.recordSelector_->currentIndex()+1,document.recordSelector_->count()-1));
-    }
-    void gotoNewRecord() override {
-        auto& document=commandDocument();
-        if (document.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Navigation during record command unsupported");
-        if (document.layout_.kind==linaccess::AccessDocumentKind::Report) throw linaccess::VbaRuntimeError(438,"Report does not support new records");
-        if (!document.layout_.allowAdditions) throw linaccess::VbaRuntimeError(2046,"New records are disabled");
-        document.recordSelector_->setCurrentIndex(0);
-    }
+    void gotoLastRecord() override { gotoRecord(3); }
+    void gotoNextRecord() override { gotoRecord(1); }
+    void gotoNewRecord() override { gotoRecord(5); }
     void requery() override { (void)makePreviewFormObject(commandDocument())->member("Requery",{}); }
     std::string memberControlName(std::string_view name) override {
         requireInstance();
@@ -554,14 +563,11 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
     }
     if (command=="gotorecord") {
         if (args.size()>4) throw VbaRuntimeError(450,"GoToRecord argument count invalid");
-        if ((!args.empty() && args[0].kind!=VbaValue::Kind::Empty) || (args.size()>1 && args[1].kind!=VbaValue::Kind::Empty))
+        if ((!args.empty() && args[0].kind!=VbaValue::Kind::Empty && number(args[0])!=-1) || (args.size()>1 && args[1].kind!=VbaValue::Kind::Empty))
             throw VbaRuntimeError(3251,"Named-object GoToRecord unsupported");
-        if (args.size()>3 && args[3].kind!=VbaValue::Kind::Empty && number(args[3])!=1) throw VbaRuntimeError(3251,"GoToRecord offset unsupported");
         const auto action=args.size()>2 && args[2].kind!=VbaValue::Kind::Empty ? number(args[2]) : 1;
-        if (action==1) host.gotoNextRecord();
-        else if (action==3) host.gotoLastRecord();
-        else if (action==5) host.gotoNewRecord();
-        else throw VbaRuntimeError(3251,"GoToRecord action unsupported");
+        const auto offset=args.size()>3 && args[3].kind!=VbaValue::Kind::Empty ? number(args[3]) : 1;
+        host.gotoRecord(action,offset);
         return {};
     }
     throw VbaRuntimeError(438,"Document command unsupported");

@@ -239,3 +239,15 @@ schemas with synthetic, unique matching input and changes one expected value.
 The full original-data copy has conflicting candidates and is rejected; the other
 original action requires an outer join and saved-query target. Corpus coverage
 therefore remains 77/100, without an Access reference oracle.
+
+### Active-document record navigation
+
+DoCmd.GoToRecord supports acFirst/acLast/acNext/acPrevious/acGoTo/acNewRec
+for the active native form, including positive relative offsets and absolute
+saved-record numbers. acActiveDataObject is accepted explicitly. Both direct VBA
+statements and Application.DoCmd dispatch address the active document while Me
+continues to identify the caller. Saving/validation precedes movement; cancellation
+returns 2501, invalid/out-of-range positions 2105, and disabled additions 2046.
+Next from the last saved row enters the new row; Previous from that row returns
+to the last saved record. Named table/query/form targets remain unsupported (3251);
+this is not full Access navigation or datasheet parity.

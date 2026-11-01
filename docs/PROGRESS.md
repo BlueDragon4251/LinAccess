@@ -660,3 +660,20 @@ Fresh host/distro DEBs pass payload/backend/permission/fixture-exclusion checks;
 all four original fixture hashes pass.
 Isolated installed Debian/Ubuntu packages also pass allocation/backend and GUI
 startup checks without source-tree or fixture mounts.
+
+Active navigation increment: DoCmd.GoToRecord now supports all six AcRecord
+constants for the active native form, positive next/previous offsets, absolute
+saved-record numbers and explicit acActiveDataObject. Selection follows actual
+save/validation, including a dirty newly saved row; cancellation raises 2501.
+Out-of-range positions raise 2105 rather than silently clamping. Next from last
+opens the new row, and Previous returns to the last saved row. Tests exercise
+statement/object dispatch, offsets in both directions, new-row boundaries and
+actual SQL persistence with BeforeUpdate cancellation. Named-object navigation
+remains explicitly unsupported; MicrosoftDocs' GoToRecord/AcRecord contracts
+were checked without using private fixture content in external requests.
+
+Validation: host Release 21/21 (63.16 s), GUI-disabled core 1/1 (0.76 s),
+Debian 12 21/21 (59.74 s), Ubuntu 24.04 21/21 (55.82 s). Fresh DEBs
+pass exact payload/backend/permission/fixture-exclusion checks and all four
+original fixture hashes pass.
+Isolated installed distro packages pass the native backend/counter and GUI startup checks.
