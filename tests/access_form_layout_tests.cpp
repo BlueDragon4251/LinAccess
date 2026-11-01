@@ -35,6 +35,7 @@ void testModuleStates(const QDir&,const QJsonArray&);
 void testCloseCommands();
 void testDocumentLifetimes();
 void testDynamicCombos();
+void testKeyboardCommands();
 void testOpenFormCommands();
 void testActiveDocumentCommands();
 void testOptionGroups();
@@ -222,6 +223,7 @@ End Sub
     testCloseCommands();
     testDocumentLifetimes();
     testDynamicCombos();
+    testKeyboardCommands();
     testOpenFormCommands();
     testActiveDocumentCommands();
     testOptionGroups();

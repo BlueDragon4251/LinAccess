@@ -312,6 +312,8 @@ int verifyOriginalTags(AccessFormPreview& preview,const QString& code,QSqlDataba
 }
 void testOriginalCalendar(const QDir&,const QJsonArray&,QSqlDatabase);
 
+void testOriginalKeyboardEvents(const QDir&,const QJsonArray&,QSqlDatabase);
+
 void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QString& mdb) {
     QTimer acknowledge;
     QObject::connect(&acknowledge,&QTimer::timeout,[] {
@@ -920,5 +922,53 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
         assert(query.exec("ROLLBACK TO original_document_opener")); assert(query.exec("RELEASE original_document_opener"));
         std::cout<<"Original document opener: unchanged handler closes caller, target survives caller destruction\n";
     }
+    {
+        assert(query.exec("SAVEPOINT original_login_boundary"));
+        QByteArray loginCode,loginLayout; QString loginName;
+        for (const auto& entry:objects) {
+            const auto artifact=entry.toObject();
+            if (artifact["sha256"]!="fa72dad21f4875398da7de601750d963c1d5d1292a36f3db6fbc240ed66959ba") continue;
+            QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly)); loginCode=input.readAll();
+            assert(QCryptographicHash::hash(loginCode,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1());
+            loginName=artifact["name"].toString().mid(5);
+        }
+        for (const auto& entry:objects) {
+            const auto artifact=entry.toObject();
+            if (artifact["kind"]!="form" || artifact["name"].toString()!=loginName) continue;
+            QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly)); loginLayout=input.readAll();
+            assert(QCryptographicHash::hash(loginLayout,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1());
+        }
+        assert(!loginCode.isEmpty() && !loginLayout.isEmpty());
+        QMainWindow projectWindow;
+        auto* toolbar=projectWindow.addToolBar("Project"); toolbar->addAction("Test command");
+        projectWindow.menuBar()->addMenu("Project")->addAction(toolbar->actions().first());
+        AccessFormPreview login(loginName,loginLayout,loginCode,db,&projectWindow); login.show();
+        QApplication::setActiveWindow(&login); QApplication::processEvents();
+        auto loginObject=makePreviewFormObject(login);
+        auto user=loginObject->member("Controls",{linaccess::VbaValue::string("user")}).object;
+        user->member("Requery",{});
+        auto* choices=login.findChild<QComboBox*>("access-control-user"); assert(choices && choices->count()>0);
+        // Exercise the unchanged original handler with a deliberately synthetic
+        // password. It fails on its invalid sixth-column read before comparison;
+        // this does not authenticate against or expose original credentials.
+        user->assign("Value",linaccess::qtFieldValue(choices->itemData(0)));
+        assert(user->member("ColumnCount",{}).asNumber()==5);
+        loginObject->assignItem("Psw",linaccess::VbaValue::string("synthetic non-credential input"));
+        QString handler;
+        for (const auto& procedure:linaccess::analyzeVba(linaccess::decodeVbaSource(loginCode).toStdString()).procedures)
+            if (procedure.line<=25) handler=QString::fromStdString(procedure.name);
+        assert(!handler.isEmpty());
+        int unexpected=0; QTimer dismiss; dismiss.setInterval(1);
+        QObject::connect(&dismiss,&QTimer::timeout,[&] { if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) { ++unexpected; box->accept(); } }); dismiss.start();
+        std::vector<linaccess::VbaValue> none;
+        const auto outcome=login.executeProcedure(handler,none);
+        std::cerr<<"Original login source-column boundary: status="<<static_cast<int>(outcome.status)<<", error="<<outcome.errorNumber<<", line="<<outcome.line<<", dialogs="<<unexpected<<'\n';
+        assert(outcome.status==linaccess::VbaExecutionStatus::Error && outcome.errorNumber==5 && outcome.line==34);
+        assert(login.isVisible() && unexpected==0);
+        dismiss.stop();
+        assert(AccessFormPreview::closeProjectDocuments(db));
+        assert(query.exec("ROLLBACK TO original_login_boundary")); assert(query.exec("RELEASE original_login_boundary"));
+    }
+    testOriginalKeyboardEvents(directory,objects,db);
     testOriginalCalendar(directory,objects,db);
 }

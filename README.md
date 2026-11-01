@@ -449,3 +449,9 @@ originale Kassenöffner und seine Zielereignisse werden ausgeführt; Projektwech
 und Quit prüfen native Unload-Abbrüche. [Dynamische ComboBox-Eigenschaften](docs/DYNAMIC_COMBO_RUNTIME.md)
 verwenden echte mehrspaltige Qt-Modelle mit getrennten Anzeige-/Bindewerten und
 Spaltenbreiten. Das ist keine vollständig geprüfte ursprüngliche Verkaufskette.
+
+[Native Tastaturbefehle und Tastaturereignisse](docs/KEYBOARD_RUNTIME.md) umfassen
+einen begrenzten, tatsächlich ausgeführten Pfad für Escape, Umschalt+Enter,
+F9/Umschalt+F9, F2, Enter sowie Strg+W/Strg+F4. KeyPreview und gebundene VBA-
+KeyDown/KeyPress/KeyUp-Ereignisse können Eingaben abbrechen oder ASCII-Zeichen
+ersetzen. Vollständige Access-2003-Oberflächen- und Tastaturparität ist weiterhin offen.

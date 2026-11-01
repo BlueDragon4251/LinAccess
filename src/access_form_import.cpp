@@ -159,6 +159,9 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "LinkChildFields") control.linkChildFields = value;
             else if (key == "OnClick") control.onClick = value;
             else if (key == "OnDblClick") control.onDblClick = value;
+            else if (key == "OnKeyDown") control.onKeyDown = value;
+            else if (key == "OnKeyPress") control.onKeyPress = value;
+            else if (key == "OnKeyUp") control.onKeyUp = value;
             else if (key == "Class") control.className = value;
             else if (key == "OLEClass") control.oleClass = value;
             else if (key == "AfterUpdate") control.afterUpdate = value;
@@ -169,12 +172,13 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "Height") control.height = integer();
             else if (key == "Visible") control.visible = value != "0" && value != "False";
         } else if (current.type == "Form" || current.type == "Report") {
-            static const QSet<QString> events{"onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate","onnodata","onerror","onpage"};
+            static const QSet<QString> events{"onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate","onnodata","onerror","onpage","onkeydown","onkeypress","onkeyup"};
             if (events.contains(key.toCaseFolded())) form.events.insert(key.toCaseFolded(),value);
             if (key == "Caption") form.caption = value;
             else if (key == "Tag") form.tag = value;
             else if (key == "RecordSource") form.recordSource = value;
             else if (key == "Filter") form.filter = value;
+            else if (key == "KeyPreview") form.keyPreview = value != "0" && value.compare("False",Qt::CaseInsensitive)!=0;
             else if (key == "Modal") form.modal = value != "0" && value.compare("False",Qt::CaseInsensitive)!=0;
             else if (key == "FilterOnLoad") form.filterOnLoad = value.toInt()!=0;
             else if (key == "Width") form.width = integer();

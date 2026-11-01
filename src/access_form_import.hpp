@@ -42,6 +42,9 @@ struct AccessVisualControl {
     QString afterUpdate;
     QString beforeUpdate;
     QString onDblClick;
+    QString onKeyDown;
+    QString onKeyPress;
+    QString onKeyUp;
     QString className;
     QString oleClass;
     int left{};
@@ -61,6 +64,7 @@ struct AccessFormLayout {
     QString filter;
     bool filterOnLoad{};
     bool modal{};
+    bool keyPreview{};
     int height{5000};
     QVector<AccessVisualControl> controls;
     QMap<QString,QString> events;

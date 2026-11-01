@@ -316,7 +316,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
-        if (key=="filter" || key=="filteron") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
+        if (key=="filter" || key=="filteron" || key=="keypreview") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -329,7 +329,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
-        if (key == "caption" || key=="tag" || key=="filter" || key=="filteron") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
+        if (key == "caption" || key=="tag" || key=="filter" || key=="filteron" || key=="keypreview") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
         if (key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
@@ -707,6 +707,9 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         if (!widget) continue;
         widget->setObjectName("access-control-" + control.name);
         widget->setProperty("la_access_tag",control.tag);
+        if (!dynamic_cast<AccessFormPreview*>(widget)) widget->installEventFilter(this);
+        if (auto* combo=qobject_cast<QComboBox*>(widget); combo && combo->isEditable()) combo->lineEdit()->installEventFilter(this);
+        if (auto* button=qobject_cast<QPushButton*>(widget)) button->setAutoDefault(false);
         widget->setGeometry(pixels(control.left), pixels(control.top),
                             qMax(12, pixels(control.width)), qMax(14, pixels(control.height)));
         if (control.optionGroupIndex>=0) {
@@ -911,7 +914,8 @@ void AccessFormPreview::loadRecord() {
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
     }
     refreshCalculatedControls();
-    dirty_ = false; pendingControls_.clear();
+    dirty_ = false; pendingControls_.clear(); editOriginals_.clear();
+    rememberControlEdit(QApplication::focusWidget());
 }
 
 void AccessFormPreview::markDirty(const QString& name) {
@@ -950,7 +954,7 @@ bool AccessFormPreview::commitControl(const QString& name) {
                 return false;
             }
         }
-        pendingControls_.remove(name);
+        pendingControls_.remove(name); editOriginals_.remove(name);
         if (eventProcedure(control.afterUpdate)) {
             const auto result = runHandler(eventName(control.name)+"_AfterUpdate");
             eventResults_.insert(("control:"+control.name+":AfterUpdate").toCaseFolded(),result);
@@ -1480,7 +1484,200 @@ void AccessFormPreview::openOtherForm(const QString& name,const QString& where) 
     (void)nested.release();
 }
 
+void AccessFormPreview::rememberControlEdit(QObject* watched) {
+    for (const auto& definition : layout_.controls) {
+        auto* widget=controls_.value(definition.name.toCaseFolded()).data();
+        const auto* combo=qobject_cast<QComboBox*>(widget);
+        if (!widget || (widget!=watched && (!combo || combo->lineEdit()!=watched))) continue;
+        if (pendingControls_.contains(definition.name) && editOriginals_.contains(definition.name)) return;
+        try {
+            ensureWritableControl(definition.name.toStdString());
+            editOriginals_.insert(definition.name,std::make_shared<linaccess::VbaValue>(getFieldValue(definition.name.toStdString())));
+        } catch (const std::exception&) { editOriginals_.remove(definition.name); }
+        break;
+    }
+}
+void AccessFormPreview::updateDirtyFromRecord() {
+    if (!directTable_ || !dataSourceAvailable_) return;
+    dirty_=false;
+    const int row=currentRecordIndex_-1;
+    for (const auto& definition : layout_.controls) {
+        const int column=columnIndex(definition.controlSource,dataColumns_);
+        if (column<0 || !controls_.value(definition.name.toCaseFolded())) continue;
+        const auto expected=row>=0 && row<recordRows_.size() ? recordRows_[row][column] : QVariant{};
+        try {
+            const auto actual=linaccess::sqlFieldValue(getFieldValue(definition.name.toStdString()),dataTypes_.value(dataColumns_[column].toCaseFolded()));
+            if (actual.isNull()!=expected.isNull() || (!actual.isNull() && actual!=expected)) dirty_=true;
+        } catch (const std::exception&) { dirty_=true; }
+    }
+}
+void AccessFormPreview::undoKeyboardEdit() {
+    const auto* focus=QApplication::focusWidget();
+    for (const auto& definition : layout_.controls) {
+        auto* widget=controls_.value(definition.name.toCaseFolded()).data();
+        const auto* combo=qobject_cast<QComboBox*>(widget);
+        if (!widget || (widget!=focus && (!combo || combo->lineEdit()!=focus))) continue;
+        if (pendingControls_.contains(definition.name) && editOriginals_.contains(definition.name)) {
+            const auto original=editOriginals_.value(definition.name);
+            {
+                QScopedValueRollback<bool> guard(loading_,true);
+                const int column=columnIndex(definition.controlSource,dataColumns_);
+                for (const auto& target : layout_.controls)
+                    if (target.name==definition.name || (column>=0 && columnIndex(target.controlSource,dataColumns_)==column)) {
+                        setFieldValue(target.name.toStdString(),*original);
+                        pendingControls_.remove(target.name);
+                    }
+            }
+            pendingControls_.remove(definition.name); updateDirtyFromRecord(); return;
+        }
+        break;
+    }
+    if (dirty_) loadRecord();
+}
+bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
+    if (closed_ || openCancelled_) return false;
+    const auto modifiers=event->modifiers() & ~Qt::KeypadModifier;
+    try {
+        if (event->key()==Qt::Key_Escape && modifiers==Qt::NoModifier) {
+            if (layout_.kind==linaccess::AccessDocumentKind::Report) (void)close(); else undoKeyboardEdit();
+            return true;
+        }
+        if ((event->key()==Qt::Key_Return || event->key()==Qt::Key_Enter) && modifiers==Qt::ShiftModifier) {
+            if (!saveRecord()) status_->setText("Speichern abgebrochen"); return true;
+        }
+        if (event->key()==Qt::Key_F9 && modifiers==Qt::ShiftModifier) {
+            (void)makePreviewFormObject(*this)->member("Requery",{}); return true;
+        }
+        if (event->key()==Qt::Key_F9 && modifiers==Qt::NoModifier) { refreshCalculatedControls(); return true; }
+        if ((event->key()==Qt::Key_W || event->key()==Qt::Key_F4) && modifiers==Qt::ControlModifier) {
+            (void)window()->close(); return true;
+        }
+        if (event->key()==Qt::Key_F2 && modifiers==Qt::NoModifier) {
+            auto* line=qobject_cast<QLineEdit*>(QApplication::focusWidget());
+            if (line && isAncestorOf(line)) {
+                if (line->hasSelectedText()) line->setCursorPosition(line->text().size()); else line->selectAll();
+                return true;
+            }
+        }
+        if ((event->key()==Qt::Key_Return || event->key()==Qt::Key_Enter) && modifiers==Qt::NoModifier) {
+            auto* focus=QApplication::focusWidget();
+            if (auto* button=qobject_cast<QPushButton*>(focus); button && isAncestorOf(button)) { button->click(); return true; }
+            if (!commitControls()) return true;
+            (void)focusNextPrevChild(true); return true;
+        }
+    } catch (const std::exception& error) { if (status_) status_->setText(QString::fromUtf8(error.what())); return true; }
+    return false;
+}
+bool AccessFormPreview::ownsKeyboardFocus() const {
+    const auto* focus=QApplication::focusWidget();
+    for (auto* ancestor=focus;ancestor;ancestor=ancestor->parentWidget())
+        if (auto* document=dynamic_cast<const AccessFormPreview*>(ancestor)) {
+            if (document!=this) return true; // Embedded documents dispatch their own events.
+            break;
+        }
+    for (const auto& widget : controls_) {
+        const auto* combo=qobject_cast<QComboBox*>(widget.data());
+        if (widget && (widget==focus || (combo && combo->lineEdit()==focus))) return true;
+    }
+    return false;
+}
+bool AccessFormPreview::dispatchKeyboardEvent(QObject* watched,QKeyEvent* event) {
+    if (deliveringKeyReplacement_ || !opened_ || closed_ || layout_.kind!=linaccess::AccessDocumentKind::Form) return false;
+    if (event->type()==QEvent::KeyRelease && event->isAutoRepeat()) return false;
+    const linaccess::AccessVisualControl* control=nullptr;
+    for (const auto& definition : layout_.controls) {
+        const auto widget=controls_.value(definition.name.toCaseFolded());
+        const auto* combo=qobject_cast<QComboBox*>(widget.data());
+        if (widget && (widget==watched || (combo && combo->lineEdit()==watched))) { control=&definition; break; }
+    }
+    const auto virtualKey=[&]() -> std::optional<int> {
+        const auto key=event->key();
+        if ((key>=Qt::Key_A && key<=Qt::Key_Z) || (key>=Qt::Key_0 && key<=Qt::Key_9) || key==Qt::Key_Space) return key;
+        if (key>=Qt::Key_F1 && key<=Qt::Key_F24) return 112+key-Qt::Key_F1;
+        static const QMap<int,int> codes{{Qt::Key_Backspace,8},{Qt::Key_Tab,9},{Qt::Key_Backtab,9},{Qt::Key_Return,13},{Qt::Key_Enter,13},
+            {Qt::Key_Shift,16},{Qt::Key_Control,17},{Qt::Key_Alt,18},{Qt::Key_Pause,19},{Qt::Key_CapsLock,20},{Qt::Key_Escape,27},
+            {Qt::Key_PageUp,33},{Qt::Key_PageDown,34},{Qt::Key_End,35},{Qt::Key_Home,36},{Qt::Key_Left,37},{Qt::Key_Up,38},
+            {Qt::Key_Right,39},{Qt::Key_Down,40},{Qt::Key_Insert,45},{Qt::Key_Delete,46},{Qt::Key_NumLock,144},{Qt::Key_ScrollLock,145},
+            {Qt::Key_Semicolon,186},{Qt::Key_Colon,186},{Qt::Key_Equal,187},{Qt::Key_Plus,187},{Qt::Key_Comma,188},
+            {Qt::Key_Minus,189},{Qt::Key_Period,190},{Qt::Key_Slash,191},{Qt::Key_Question,191},{Qt::Key_QuoteLeft,192},
+            {Qt::Key_BracketLeft,219},{Qt::Key_Backslash,220},{Qt::Key_BracketRight,221},{Qt::Key_Apostrophe,222}};
+        const auto found=codes.constFind(key);
+        return found==codes.cend() ? std::nullopt : std::optional<int>(*found);
+    };
+    const int shift=(event->modifiers().testFlag(Qt::ShiftModifier) ? 1 : 0)
+        | (event->modifiers().testFlag(Qt::ControlModifier) ? 2 : 0) | (event->modifiers().testFlag(Qt::AltModifier) ? 4 : 0);
+    const auto dispatch=[&](const QString& suffix,int code,bool character) {
+        std::vector<linaccess::VbaValue> arguments{linaccess::VbaValue::numeric(code)};
+        if (!character) arguments.push_back(linaccess::VbaValue::numeric(shift));
+        const auto invoke=[&](bool form) {
+            const auto binding=form ? layout_.events.value(("on"+suffix).toCaseFolded()) : !control ? QString{}
+                : suffix=="KeyDown" ? control->onKeyDown : suffix=="KeyUp" ? control->onKeyUp : control->onKeyPress;
+            if (binding.isEmpty()) return;
+            if (!eventProcedure(binding)) throw linaccess::VbaRuntimeError(3251,"Keyboard macro/function bindings unsupported");
+            const auto handler=form ? "Form_"+suffix : eventName(control->name)+"_"+suffix;
+            const auto result=executeProcedure(handler,arguments);
+            eventResults_.insert(form ? ("On"+suffix).toCaseFolded() : ("control:"+control->name+":"+suffix).toCaseFolded(),result);
+            if (failed(result)) throw linaccess::VbaRuntimeError(result.errorNumber ? result.errorNumber : 3251,"Keyboard handler failed");
+        };
+        if (layout_.keyPreview) { invoke(true); if (!closed_ && arguments.front().asNumber()!=0) invoke(false); }
+        else { invoke(false); if (!closed_ && arguments.front().asNumber()!=0) invoke(true); }
+        const auto value=arguments.front().asNumber();
+        if (!std::isfinite(value) || value!=std::floor(value) || value<0 || value>255)
+            throw linaccess::VbaRuntimeError(5,"Invalid keyboard event result");
+        return static_cast<int>(value);
+    };
+    try {
+        const auto key=virtualKey();
+        const bool release=event->type()==QEvent::KeyRelease;
+        const bool physicalBinding=!layout_.events.value(release ? "onkeyup" : "onkeydown").isEmpty()
+            || (control && !(release ? control->onKeyUp : control->onKeyDown).isEmpty());
+        if (key) {
+            const int result=dispatch(release ? "KeyUp" : "KeyDown",*key,false);
+            if (closed_ || result==0) return true;
+            if (result!=*key) throw linaccess::VbaRuntimeError(3251,"Virtual key remapping unsupported");
+        } else if (physicalBinding) throw linaccess::VbaRuntimeError(3251,"Native virtual-key mapping unsupported");
+        if (event->type()==QEvent::KeyRelease) return false;
+        if (event->text().isEmpty() || (shift&6)) return false;
+        const bool keyPressBound=!layout_.events.value("onkeypress").isEmpty() || (control && !control->onKeyPress.isEmpty());
+        if (!keyPressBound) return false;
+        if (event->text().size()!=1) throw linaccess::VbaRuntimeError(3251,"Multi-unit KeyPress locale mapping unsupported");
+        const auto unicode=event->text().front().unicode();
+        if (unicode>127) throw linaccess::VbaRuntimeError(3251,"Non-ASCII KeyPress locale mapping unsupported");
+        const auto character=dispatch("KeyPress",unicode,true);
+        if (closed_ || character==0) return true;
+        if (character!=unicode) {
+            if (character>127) throw linaccess::VbaRuntimeError(3251,"Non-ASCII KeyPress replacement unsupported");
+            auto* receiver=qobject_cast<QWidget*>(watched);
+            if (!receiver) return true;
+            const QString text{QChar(character)};
+            const auto qtKey=character==13 ? Qt::Key_Return : character==9 ? Qt::Key_Tab : character==8 ? Qt::Key_Backspace : text.toUpper().front().unicode();
+            QKeyEvent replacement(QEvent::KeyPress,qtKey,event->modifiers(),text,event->isAutoRepeat(),event->count());
+            QScopedValueRollback<bool> guard(deliveringKeyReplacement_,true); QApplication::sendEvent(receiver,&replacement); return true;
+        }
+    } catch (const std::exception& error) {
+        const auto* typed=dynamic_cast<const linaccess::VbaRuntimeError*>(&error);
+        linaccess::VbaExecutionResult result; result.errorNumber=typed ? typed->number : 5;
+        result.status=result.errorNumber==3251 ? linaccess::VbaExecutionStatus::Unsupported : linaccess::VbaExecutionStatus::Error;
+        result.explanation=error.what(); eventResults_.insert("keyboarderror",result);
+        if (status_) status_->setText(QString::fromUtf8(error.what())); return true;
+    }
+    return false;
+}
+void AccessFormPreview::keyPressEvent(QKeyEvent* event) {
+    if ((!ownsKeyboardFocus() && dispatchKeyboardEvent(this,event)) || handleDocumentKey(event)) event->accept();
+    else QDialog::keyPressEvent(event);
+}
+void AccessFormPreview::keyReleaseEvent(QKeyEvent* event) {
+    if (!ownsKeyboardFocus() && dispatchKeyboardEvent(this,event)) event->accept(); else QDialog::keyReleaseEvent(event);
+}
 bool AccessFormPreview::eventFilter(QObject* watched,QEvent* event) {
+    if (auto* document=dynamic_cast<AccessFormPreview*>(watched); document && document!=this
+        && (event->type()==QEvent::KeyPress || event->type()==QEvent::KeyRelease)) return QDialog::eventFilter(watched,event);
+    if (event->type()==QEvent::FocusIn) rememberControlEdit(watched);
+    if ((event->type()==QEvent::KeyPress || event->type()==QEvent::KeyRelease)
+        && dispatchKeyboardEvent(watched,static_cast<QKeyEvent*>(event))) { event->accept(); return true; }
+    if (event->type()==QEvent::KeyPress && handleDocumentKey(static_cast<QKeyEvent*>(event))) { event->accept(); return true; }
+
     if (event->type()==QEvent::MouseButtonDblClick) {
         const auto binding=watched->property("la_access_dblclick").toString();
         if (!binding.isEmpty()) {

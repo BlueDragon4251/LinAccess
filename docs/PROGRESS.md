@@ -315,3 +315,31 @@ Debian 12/13, Ubuntu 24.04 and Windows PowerShell CI validation remain unperform
 Account/billing settings were not changed. Re-run the private workflow after the
 account restriction is resolved, then continue the positive initialized-sale /
 snapshot / report workflow. No fixture upload or external analysis is required.
+
+
+Native keyboard/events increment: the pre-fix Qt regression reproduced Escape
+closing a form. Native Escape now restores the active field, then pending record
+changes, preserving NULL, duplicate bindings and invalid numeric edits. Shift+Enter
+saves with validation; F9 recalculates, Shift+F9 requeries, F2 toggles editor
+selection, Enter advances focus and Ctrl+W/Ctrl+F4 close through normal lifecycle.
+Form.Recalc and Form.Undo execute native operations. Report-preview Escape closes
+the preview. This is a bounded subset, not Access 2003 shortcut/UI equivalence.
+
+Bound KeyDown/KeyPress/KeyUp, KeyPreview, ByRef cancellation, ASCII replacement and
+native modifier masks have actual Qt/SQL event-order tests. A child form receives
+and saves its own input without routing through the parent's KeyPreview or saving
+its pending record. Unsupported physical/locale key mappings fail explicitly.
+Three original KeyPress procedures execute as explicit calls; only one has a
+matching original binding. The two renamed controls' missing procedures remain
+ProcedureMissing rather than being guessed. Full original-layout login separately
+fails at its five-column combo's sixth-column read (error 5, source line 34), using
+synthetic non-credential input. No password is read, serialized or reported.
+See KEYBOARD_RUNTIME.md for exact scope, original source hashes and limitations.
+
+Validation: final Release build; 18/18 CTests passed (49.12 s); GUI-disabled
+Release core build/test 1/1 (0.37 s); fresh .deb matched the current executable
+Build ID and passed payload/permission checks. All four original hashes passed.
+Remote CI remains subject to the separately recorded account startup restriction;
+these local results do not verify Debian 12/Ubuntu or Windows Access behavior.
+Full sale/login/report operation, remaining VBA/DAO/Jet behavior, Access 2003
+appearance/designers and exhaustive keyboard parity remain open.

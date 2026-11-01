@@ -22,6 +22,7 @@ class QPrinter;
 class QAction;
 class QLineEdit;
 class QCheckBox;
+class QKeyEvent;
 
 // Renders controls from Access 2003 SaveAsText instead of placing them in an
 // unrelated auto-generated QFormLayout. Only supported VBA handlers can run.
@@ -69,6 +70,14 @@ private:
     void activateDocument();
     void initialCurrent();
     void closeEvent(QCloseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
+    bool dispatchKeyboardEvent(QObject* watched,QKeyEvent* event);
+    bool ownsKeyboardFocus() const;
+    bool handleDocumentKey(QKeyEvent* event);
+    void rememberControlEdit(QObject* watched);
+    void undoKeyboardEdit();
+    void updateDirtyFromRecord();
     void openOtherForm(const QString& name,const QString& where={});
     void closeOtherDocument(int type,const std::optional<QString>& name,int save);
     std::optional<linaccess::VbaValue> getModuleMember(std::string_view name,bool publicOnly);
@@ -151,7 +160,9 @@ private:
     bool saving_{};
     bool navigating_{};
     bool initialized_{};
+    bool deliveringKeyReplacement_{};
     bool dataTruncated_{};
     int currentRecordIndex_{};
     QSet<QString> pendingControls_;
+    QMap<QString,std::shared_ptr<linaccess::VbaValue>> editOriginals_;
 };

@@ -351,7 +351,22 @@ private:
         if (word == "vbcrlf") return VbaValue::string("\r\n");
         if (word == "vbnewline") return VbaValue::string("\n");
         if (word == "vbtab") return VbaValue::string("\t");
-        static const std::unordered_map<std::string,int> documentConstants{{"accmdsaverecord",97},{"acnext",1},{"aclast",3},{"acnewrec",5},{"acnormal",0},{"acdesign",1},{"acpreview",2},{"acformds",3},{"accustomcontrol",119},{"acdefault",-1},{"acform",2},{"acreport",3},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
+        static const std::unordered_map<std::string,int> keyConstants{{"vbkeyback",8},{"vbkeytab",9},{"vbkeyclear",12},
+            {"vbkeyreturn",13},{"vbkeyshift",16},{"vbkeycontrol",17},{"vbkeymenu",18},{"vbkeypause",19},
+            {"vbkeycapital",20},{"vbkeyescape",27},{"vbkeyspace",32},{"vbkeypageup",33},{"vbkeypagedown",34},
+            {"vbkeyend",35},{"vbkeyhome",36},{"vbkeyleft",37},{"vbkeyup",38},{"vbkeyright",39},{"vbkeydown",40},
+            {"vbkeyinsert",45},{"vbkeydelete",46},{"vbkeynumlock",144},{"vbkeyscrolllock",145}};
+        if (const auto found=keyConstants.find(word);found!=keyConstants.end()) return VbaValue::numeric(found->second);
+        if (word.starts_with("vbkey") && word.size()==6 && std::isalnum(static_cast<unsigned char>(word.back())))
+            return VbaValue::numeric(std::toupper(static_cast<unsigned char>(word.back())));
+        if (word.starts_with("vbkeyf")) {
+            const auto digits=word.substr(6);
+            if (!digits.empty() && std::all_of(digits.begin(),digits.end(),[](unsigned char ch) { return std::isdigit(ch); })) {
+                const auto number=digits.size()<=2 ? std::stoi(digits) : 0;
+                if (number>=1 && number<=24) return VbaValue::numeric(111+number);
+            }
+        }
+        static const std::unordered_map<std::string,int> documentConstants{{"accmdsaverecord",97},{"acnext",1},{"aclast",3},{"acnewrec",5},{"acnormal",0},{"acdesign",1},{"acpreview",2},{"acformds",3},{"accustomcontrol",119},{"acshiftmask",1},{"acctrlmask",2},{"acaltmask",4},{"acdefault",-1},{"acform",2},{"acreport",3},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
         if (const auto constant=documentConstants.find(word);constant!=documentConstants.end()) return VbaValue::numeric(constant->second);
         if (word=="screen") return host_ ? host_->applicationObject()->member("Screen",{}) : VbaValue{};
         if (word=="docmd") return host_ ? host_->applicationObject()->member("DoCmd",{}) : VbaValue{};
@@ -388,12 +403,12 @@ private:
                 return host_ ? host_->currentForm()->member("Controls",args) : VbaValue{};
             }
             const auto key = lower(field.value);
-            if (!item && (key=="requery" || key=="setfocus")) {
+            if (!item && (key=="requery" || key=="recalc" || key=="undo" || key=="setfocus")) {
                 if (take("(")) require(")");
                 return host_ ? host_->currentForm()->member(field.value,{}) : VbaValue{};
             }
             if (!host_) return {};
-            const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource" || key == "caption" || key=="tag" || key=="filter" || key=="filteron");
+            const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource" || key == "caption" || key=="tag" || key=="filter" || key=="filteron" || key=="keypreview");
             if (!item && !formProperty)
                 if (auto value=host_->resolveIdentifier(field.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return *value;
             if (!formProperty && objectContext)

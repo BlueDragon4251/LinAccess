@@ -245,6 +245,7 @@ public:
         if (key == "recordsource") return linaccess::VbaValue::string(bytes(preview.layout_.recordSource));
         if (key=="filter") return linaccess::VbaValue::string(bytes(preview.filter_));
         if (key=="filteron") return linaccess::VbaValue::logical(preview.filterOn_);
+        if (key=="keypreview") return linaccess::VbaValue::logical(preview.layout_.keyPreview);
         if (preview.layout_.kind==linaccess::AccessDocumentKind::Report && (key=="dirty" || key=="newrecord"))
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
         if (key == "dirty") return linaccess::VbaValue::logical(preview.dirty_);
@@ -256,6 +257,14 @@ public:
                 throw linaccess::VbaRuntimeError(preview.dataSourceErrorNumber_ ? preview.dataSourceErrorNumber_ : 3146,"Form record source unavailable after Requery");
             if (preview.opened_ && preview.initialCurrentDispatched_ && !preview.layout_.recordSource.trimmed().isEmpty()) (void)preview.formEvent("OnCurrent","Form_Current");
             return {};
+        }
+        if (key=="recalc") {
+            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Recalc requires a form");
+            preview.refreshCalculatedControls(); return {};
+        }
+        if (key=="undo") {
+            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Undo requires a form");
+            if (preview.dirty_) preview.loadRecord(); return {};
         }
         if (key == "setfocus") { preview.activateWindow(); preview.setFocus(); return {}; }
         if (auto value=preview.getModuleMember(name,true)) return *value;
@@ -269,7 +278,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="setfocus" || key=="filter" || key=="filteron")
+        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="setfocus" || key=="filter" || key=="filteron")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
@@ -279,6 +288,11 @@ public:
     }
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if (key=="keypreview") {
+            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"KeyPreview requires a form");
+            if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null KeyPreview");
+            preview.layout_.keyPreview=value.truthy(); return;
+        }
         if (key=="filter" || key=="filteron") {
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null filter property");
             preview.setFilterState(key=="filter" ? text(value.asText()) : preview.filter_,key=="filteron" ? value.truthy() : preview.filterOn_); return;

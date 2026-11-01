@@ -178,3 +178,10 @@ in [Dokumentlebensdauer](DOCUMENT_LIFETIME_RUNTIME.md) beschrieben. Dynamische
 ComboBox-Eigenschaften verwenden echte mehrspaltige Qt-Modelle, getrennte
 gebundene Werte und ausgeblendete Spalten; [Umfang und Grenzen](DYNAMIC_COMBO_RUNTIME.md).
 Die vollständige ursprüngliche Verkaufskette bleibt unbestätigt.
+
+
+Native [keyboard commands and VBA key events](KEYBOARD_RUNTIME.md) have bounded
+Qt execution paths, record persistence/undo and cancellation tests. This is not
+full Access 2003 shortcut, layout, designer or event parity. An original login
+column-index mismatch and two missing exported key-handler bindings are tracked
+explicitly; no original credentials or source are copied into public evidence.

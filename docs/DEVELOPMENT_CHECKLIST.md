@@ -254,3 +254,15 @@ Full targets remain open:
   and failed-assignment recovery (DYNAMIC_COMBO_RUNTIME.md).
 - [ ] Complete native-editor/designer shutdown, Access event/window oracle,
   full initialized sale workflow and actual report/print comparison.
+
+
+- [x] Bounded native form Escape field/record undo, Shift+Enter save, F9 Recalc,
+  Shift+F9 Requery, F2 editor selection, Enter focus advance and Ctrl+W/Ctrl+F4 close.
+- [x] Native Form.Recalc and Form.Undo, typed NULL/numeric/duplicate-field undo,
+  validation and actual SQL/focus regressions (KEYBOARD_RUNTIME.md).
+- [x] Native bound KeyDown/KeyPress/KeyUp and dynamic KeyPreview with ByRef
+  cancellation, ASCII replacement, modifier masks and event-order SQL traces.
+- [ ] Full Access 2003 key/layout/menu/designer parity, IME/locales, complete
+  key/Undo event scheduling and a Windows Access event/rendering oracle.
+- [ ] Validate the original login ColumnCount/index mismatch and two renamed
+  controls' missing KeyPress handlers against Access 2003; do not invent bindings.

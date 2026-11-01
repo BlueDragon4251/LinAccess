@@ -89,6 +89,12 @@ int main() {
         assert(evaluateVbaExpression("\"(\" & 2465 & \")\"",host,{}).asText()=="(2465)");
         assert(!validVbaExpression("1 \"and\" 2"));
         assert(validVbaExpression("MsgBox(\")\")"));
+        assert(evaluateVbaExpression("vbKeyF",host,{}).asNumber()==70);
+        assert(evaluateVbaExpression("vbKeyF1",host,{}).asNumber()==112);
+        assert(evaluateVbaExpression("vbKeyF24",host,{}).asNumber()==135);
+        assert(evaluateVbaExpression("vbKey9",host,{}).asNumber()==57);
+        assert(evaluateVbaExpression("vbKeyReturn",host,{}).asNumber()==13);
+        assert(evaluateVbaExpression("acShiftMask Or acCtrlMask Or acAltMask",host,{}).asNumber()==7);
     }
 
     {
