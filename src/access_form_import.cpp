@@ -173,8 +173,9 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "Height") control.height = integer();
             else if (key == "Visible") control.visible = value != "0" && value != "False";
         } else if (current.type == "Form" || current.type == "Report") {
-            static const QSet<QString> events{"onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate","onnodata","onerror","onpage","onkeydown","onkeypress","onkeyup"};
+            static const QSet<QString> events{"ondelete","beforedelconfirm","afterdelconfirm","onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate","onnodata","onerror","onpage","onkeydown","onkeypress","onkeyup"};
             if (events.contains(key.toCaseFolded())) form.events.insert(key.toCaseFolded(),value);
+            if (key == "AllowDeletions") form.allowDeletions = value != "0" && value.compare("False",Qt::CaseInsensitive)!=0;
             if (key == "Caption") form.caption = value;
             else if (key == "Tag") form.tag = value;
             else if (key == "RecordSource") form.recordSource = value;

@@ -69,6 +69,11 @@ Abfragemetadaten, einschließlich mehrspaltiger Auswahl und gebundener Speicheru
 öffentliche VBA-Funktionen aus, einschließlich echter Formularverweise:
 [Eval-Laufzeit und Grenzen](docs/EVAL_RUNTIME.md).
 
+Native Datensatzauswahl und begrenztes Löschen verwenden echte Transaktionen,
+Bestätigungs-/Abbruchereignisse und `AllowDeletions`. Ein unveränderter
+Original-Löschhandler ist auf synthetischen Zeilen direkt und per Button geprüft:
+[Datensatz-Löschlaufzeit](docs/RECORD_DELETE_RUNTIME.md).
+
 Eine `.deb`-Datei lässt sich nach dem Build erzeugen mit:
 
 ```bash

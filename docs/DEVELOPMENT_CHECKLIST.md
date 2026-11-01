@@ -304,3 +304,9 @@ Full targets remain open:
   preserved selection/Dirty state and VBA-to-SQL/Requery regression.
 - [ ] Compare Access 2003 ListCount list-header, ListBox and record-limit behavior;
   original fixtures contain only commented ListCount references.
+- [x] Bounded native single-record selection/deletion, AllowDeletions, actual
+  confirmation and Delete/BeforeDelConfirm/AfterDelConfirm cancellation, rollback,
+  bookmark/FK/reentrancy and active-document regression; one original delete
+  procedure via explicit invocation and bound native click on synthetic rows.
+- [ ] Legacy Copy/PasteAppend, multi-record selection/deletion, complete writable
+  query sources, full deletion focus/event ordering and Access 2003 oracle.

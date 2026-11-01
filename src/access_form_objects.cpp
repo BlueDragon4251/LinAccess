@@ -277,6 +277,10 @@ public:
         if (key == "name") return linaccess::VbaValue::string(bytes(preview.formName_));
         if (key == "tag") return linaccess::VbaValue::string(bytes(preview.property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(preview.layout_.caption));
+        if (key=="allowdeletions" || key=="selheight") {
+            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Record selection/deletion properties require a form");
+            return key=="allowdeletions" ? linaccess::VbaValue::logical(preview.layout_.allowDeletions) : linaccess::VbaValue::numeric(preview.recordSelected_ ? 1 : 0);
+        }
         if (key == "recordsource") return linaccess::VbaValue::string(bytes(preview.layout_.recordSource));
         if (key=="recordset") {
             (void)preview.recordsetSnapshot();
@@ -318,7 +322,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="setfocus" || key=="filter" || key=="filteron")
+        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="allowdeletions" || key=="selheight" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="setfocus" || key=="filter" || key=="filteron")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
@@ -328,12 +332,19 @@ public:
     }
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if (key=="selheight") throw linaccess::VbaRuntimeError(438,"Changing record selection height unsupported");
         if (key=="recordset") throw linaccess::VbaRuntimeError(3251,"Replacing the form recordset is unsupported");
         if (key=="bookmark") {
             const auto target=linaccess::daoBookmarkPosition(preview.recordsetSnapshot(),value)+1;
             preview.selectRecord(static_cast<int>(target));
             if (preview.currentRecordIndex_!=target) throw linaccess::VbaRuntimeError(2501,"Bookmark navigation cancelled");
             return;
+        }
+        if (key=="allowdeletions") {
+            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"AllowDeletions requires a form");
+            if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null AllowDeletions");
+            if (preview.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Changing deletion policy during record command unsupported");
+            preview.layout_.allowDeletions=value.truthy(); return;
         }
         if (key=="keypreview") {
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"KeyPreview requires a form");
@@ -606,7 +617,7 @@ public:
     explicit PreviewDoCmdObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
-        if (key=="runcommand" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="runsql")
+        if (key=="domenuitem" || key=="runcommand" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="runsql")
             return dispatchPreviewDocumentCommand(preview,key.toStdString(),args);
         if (key=="gotocontrol") {
             if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"GoToControl requires a control name");

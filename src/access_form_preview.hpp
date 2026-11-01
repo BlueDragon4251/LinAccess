@@ -59,6 +59,9 @@ private:
     void setFilterState(const QString& filter,bool enabled);
     void loadRecord();
     bool saveRecord();
+    void selectCurrentRecordForCommand();
+    void deleteCurrentRecord();
+    void clearRecordSelection();
     linaccess::VbaExecutionResult runHandler(const QString& handler);
     linaccess::VbaExecutionResult runControlBinding(const QString& control,const QString& event,const QString& binding);
     bool eventFilter(QObject* watched,QEvent* event) override;
@@ -163,6 +166,8 @@ private:
     bool dirty_{};
     bool loading_{};
     bool saving_{};
+    bool recordCommandRunning_{};
+    bool recordSelected_{};
     bool navigating_{};
     bool initialized_{};
     bool deliveringKeyReplacement_{};

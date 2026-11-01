@@ -65,8 +65,9 @@ regression. A subsequent increment implements bounded modeless OpenForm
 continuation (OPEN_FORM_RUNTIME.md). A valid full sale setup, independent document
 lifetimes, actual report printing and Access event/result comparison remain open.
 
-The syntax inventory accepts 185/187 procedures. This is a syntax metric, never
-185 executed procedures. The interpreter still has statement regex dispatch;
+At this increment the syntax inventory accepted 185/187 procedures. Later
+DoMenuItem omitted-argument parsing raises acceptance to 187/187; this is still
+a syntax metric, never 187 executed procedures. The interpreter still has statement regex dispatch;
 a full lexer/parser, classes, arrays and general VBA compatibility remain open.
 
 REA 6.8.0 is an optional external analysis tool in the onboarding workspace. Its

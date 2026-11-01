@@ -8,6 +8,12 @@ Originalmodul mit 15 Eval-Aufrufen läuft auf vorbereiteten synthetischen Contro
 Das belegt keine vollständige Ausdrucks- oder Projektkompatibilität:
 [Eval-Umfang und Grenzen](EVAL_RUNTIME.md).
 
+Native Datensatzauswahl und Löschen unterstützen begrenzte RunCommand-/alte
+DoMenuItem-Pfade mit echten Transaktionen und abbrechbaren Löschereignissen.
+Ein Original-Löschhandler ist direkt und per gebundenem Klick auf synthetischen
+Zeilen geprüft. Copy/PasteAppend und vollständige Access-Ereignisgleichheit bleiben
+offen: [Umfang und Grenzen](RECORD_DELETE_RUNTIME.md).
+
 **Aktueller Regressionhinweis:** Der Gesamtimport übernimmt jetzt alle 29
 Kassen-Tabellen mit NULLs, exportierten Schlüsseln/Indizes und Beziehungen atomar.
 Der Schlüsselzeilen-Parserfehler mit MDBTools 1.0.1 ist behoben; MDBTools 1.0.0
@@ -146,7 +152,7 @@ Weitere Ansichten, benannte Filter, DataMode/WindowMode/OpenArgs und allgemeine
 Access-Fenstersemantik sind nicht vollständig implementiert. OpenForm lässt das
 native Ziel nun geöffnet und setzt VBA fort; eine eindeutige bestehende Instanz
 wird wiederverwendet. Modal sperrt die anderen Fenster, ohne VBA anzuhalten.
-Die Fensterlebensdauer ist vom Aufrufer unabhängig; projektweites Schließen und Quit prüfen native Unload-Abbrüche ([Nachweise](DOCUMENT_LIFETIME_RUNTIME.md)). 185/187 statisch angenommene Prozeduren bedeuten ausdrücklich
+Die Fensterlebensdauer ist vom Aufrufer unabhängig; projektweites Schließen und Quit prüfen native Unload-Abbrüche ([Nachweise](DOCUMENT_LIFETIME_RUNTIME.md)). 187/187 statisch angenommene Prozeduren bedeuten ausdrücklich
 keine entsprechende Ausführungsabdeckung.
 
 
@@ -162,7 +168,7 @@ Projekttabellen und Recordsets. Die unveränderte originale Existenzfunktion fü
 29 positive Prüfungen und einen negativen Fall aus; alle Recordset-Zeilenzahlen
 werden mit unabhängigem SQL verglichen. Vollständige DAO-Katalogeigenschaften,
 Fields/Indexes/Relations und allgemeine deklarierte Rückgabetyp-Coercion bleiben
-offen. Die 185/187 angenommenen Prozeduren sind weiterhin eine Syntaxmetrik.
+offen. Die 187/187 angenommenen Prozeduren sind weiterhin eine Syntaxmetrik.
 
 
 [With, native Tastatureingaben und Tabellenerstellungsabfragen](WITH_KEYBOARD_RUNTIME.md)

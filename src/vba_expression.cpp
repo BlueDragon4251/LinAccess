@@ -265,7 +265,7 @@ private:
             if (take("(")) {
                 if (!take(")")) {
                     do {
-                        const bool omitted=(lower(member.value)=="openform" || lower(member.value)=="gotorecord") && (nextSymbol(",") || nextSymbol(")"));
+                        const bool omitted=(lower(member.value)=="openform" || lower(member.value)=="gotorecord" || lower(member.value)=="domenuitem") && (nextSymbol(",") || nextSymbol(")"));
                         args.push_back(omitted ? VbaValue::empty() : expression(1));
                     } while (take(",") || (accessExpression_ && take(";")));
                     require(")");
@@ -375,7 +375,7 @@ private:
                 if (number>=1 && number<=24) return VbaValue::numeric(111+number);
             }
         }
-        static const std::unordered_map<std::string,int> documentConstants{{"accmdsaverecord",97},{"acnext",1},{"aclast",3},{"acnewrec",5},{"acnormal",0},{"acdesign",1},{"acpreview",2},{"acformds",3},{"accustomcontrol",119},{"acshiftmask",1},{"acctrlmask",2},{"acaltmask",4},{"acdefault",-1},{"acform",2},{"acreport",3},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
+        static const std::unordered_map<std::string,int> documentConstants{{"acformbar",0},{"aceditmenu",1},{"acmenuver70",70},{"acmenuver20",20},{"acmenuver1x",11},{"acselectrecord",8},{"acdelete",6},{"accmdselectrecord",50},{"accmddeleterecord",223},{"acdataerrcontinue",0},{"acdataerrdisplay",1},{"acdeleteok",0},{"acdeletecancel",1},{"acdeleteusercancel",2},{"accmdsaverecord",97},{"acnext",1},{"aclast",3},{"acnewrec",5},{"acnormal",0},{"acdesign",1},{"acpreview",2},{"acformds",3},{"accustomcontrol",119},{"acshiftmask",1},{"acctrlmask",2},{"acaltmask",4},{"acdefault",-1},{"acform",2},{"acreport",3},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
         if (const auto constant=documentConstants.find(word);constant!=documentConstants.end()) return VbaValue::numeric(constant->second);
         if (word=="screen") return host_ ? host_->applicationObject()->member("Screen",{}) : VbaValue{};
         if (word=="docmd") return host_ ? host_->applicationObject()->member("DoCmd",{}) : VbaValue{};

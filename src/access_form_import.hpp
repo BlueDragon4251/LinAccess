@@ -66,6 +66,7 @@ struct AccessFormLayout {
     bool filterOnLoad{};
     bool modal{};
     bool keyPreview{};
+    bool allowDeletions{true};
     int height{5000};
     QVector<AccessVisualControl> controls;
     QMap<QString,QString> events;

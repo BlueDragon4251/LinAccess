@@ -13,6 +13,10 @@
 #include <QComboBox>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QAbstractButton>
+#include <QMessageBox>
+#include <QTimer>
+#include <QScrollArea>
 #include <QSqlQuery>
 #include <QTest>
 #include <QTreeView>
@@ -230,7 +234,50 @@ void testOriginalRecordsetSearch(const QDir& directory,const QJsonArray& objects
         }
         if (!bindings) ++unbound;
     }
-    assert(executed==6 && native==2 && missing==1 && brokenNative==1 && unbound==0 && form.close());
+    assert(executed==6 && native==2 && missing==1 && brokenNative==1 && unbound==0);
+    QString deleteProcedure;
+    const QRegularExpression deleteCall("DoMenuItem\\s+acFormBar\\s*,\\s*acEditMenu\\s*,\\s*6\\s*,",QRegularExpression::CaseInsensitiveOption);
+    for (std::size_t i=0;i<analysis.procedures.size();++i) {
+        const auto& procedure=analysis.procedures[i];
+        const int end=i+1<analysis.procedures.size() ? analysis.procedures[i+1].line-1 : lines.size();
+        if (deleteCall.match(lines.mid(procedure.line-1,end-procedure.line+1).join('\n')).hasMatch()) {
+            assert(deleteProcedure.isEmpty()); deleteProcedure=QString::fromStdString(procedure.name);
+        }
+    }
+    assert(!deleteProcedure.isEmpty());
+    const auto remaining=[&] {
+        assert(query.exec("SELECT count(*) FROM "+quoted(layout.recordSource)) && query.next());
+        const int count=query.value(0).toInt(); query.finish(); return count;
+    };
+    int confirmations=0;
+    const auto acceptDelete=[&] {
+        const int expected=remaining()-1;
+        auto* timer=new QTimer(&form); timer->setInterval(1);
+        QObject::connect(timer,&QTimer::timeout,&form,[&,timer,expected] {
+            auto* dialog=qobject_cast<QMessageBox*>(QApplication::activeModalWidget()); if (!dialog) return;
+            assert(dialog->objectName()=="access-delete-confirm" && remaining()==expected);
+            timer->stop(); timer->deleteLater(); ++confirmations;
+            QTest::mouseClick(dialog->button(QMessageBox::Yes),Qt::LeftButton);
+        }); timer->start();
+    };
+    assert(remaining()==2); acceptDelete(); std::vector<VbaValue> deleteArguments;
+    const auto deleted=form.executeProcedure(deleteProcedure,deleteArguments);
+    if (deleted.status!=VbaExecutionStatus::Completed) std::cerr<<"Original delete error="<<deleted.errorNumber<<", line="<<deleted.line<<'\n';
+    assert(deleted.status==VbaExecutionStatus::Completed && remaining()==1 && confirmations==1);
+    int deleteBindings=0;
+    for (const auto& definition:layout.controls) {
+        const auto prefix=definition.eventProcPrefix.isEmpty() ? definition.name : definition.eventProcPrefix;
+        if (definition.type!="CommandButton" || definition.onClick.compare("[Event Procedure]",Qt::CaseInsensitive)!=0 || (prefix+"_Click").compare(deleteProcedure,Qt::CaseInsensitive)!=0) continue;
+        auto control=model->member("Controls",{VbaValue::string(definition.name.toStdString())}).object;
+        control->assign("Visible",VbaValue::logical(true)); control->assign("Enabled",VbaValue::logical(true));
+        auto* button=form.findChild<QPushButton*>("access-control-"+definition.name); assert(button);
+        for (auto* area:form.findChildren<QScrollArea*>()) if (area->widget() && area->widget()->isAncestorOf(button)) area->ensureWidgetVisible(button);
+        QApplication::processEvents(); acceptDelete(); QTest::mouseClick(button,Qt::LeftButton); QApplication::processEvents();
+        const auto result=form.eventResult("control:"+definition.name+":Click");
+        assert(result && result->status==VbaExecutionStatus::Completed && remaining()==0 && confirmations==2); ++deleteBindings;
+    }
+    assert(deleteBindings==1 && form.close());
+    std::cout<<"Original record deletion: one unchanged procedure, one explicit call and one native bound click, two confirmed synthetic-row deletions\n";
     std::cout<<"Original recordset search: "<<executed<<" explicit positive/missing/NULL calls, "<<native<<" native successful selections, "
         <<missing<<" missing control reference, "<<brokenNative<<" native reference errors, "<<unbound<<" absent bindings; synthetic records only\n";
 }

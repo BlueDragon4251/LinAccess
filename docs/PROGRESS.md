@@ -23,6 +23,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original date-filter fields exercised through actual calendar selection | 2 |
 | Original generated record-search procedures / native selections / missing control-reference failures | 2 / 2 / 1 |
 | Original public Eval function executions on prepared native numeric/Null states | 20 |
+| Original deletion procedure / direct invocation / bound native click on synthetic rows | 1 / 1 / 1 |
 | Current local regression tests | 20 passed |
 
 Recent completed work includes native combo/platform/backend fixes, control event
@@ -544,3 +545,28 @@ checks. Distro packages pass isolated installation and bounded offscreen startup
 All four original fixture hashes pass. Core-only source is unchanged from the
 preceding verified build. ColumnHeads/full ListBox and Access 2003 list-count
 edge semantics remain open; see DYNAMIC_COMBO_RUNTIME.md.
+
+Single-record command increment: native RunCommand SelectRecord/DeleteRecord and
+bounded Access-95 DoMenuItem Select/Delete compatibility execute against the
+active document. Real highlighted selection, read-only SelHeight, AllowDeletions,
+pending-edit validation, bound Delete/BeforeDelConfirm/AfterDelConfirm and actual
+confirmation run through savepoint-backed deletion/rollback. Tests verify pending
+SQL visibility, programmatic/user cancellation, invalid/Null response, surviving
+and stale bookmarks, FK protection, empty/new/read-only targets, guarded callback
+edits, nested navigation/deletion/close and separate caller/target contexts.
+
+The unchanged original deletion procedure identified in RECORD_DELETE_RUNTIME.md
+executes once explicitly and once through its actual bound button with prepared
+synthetic rows and native confirmation. No original source/data/credentials are
+printed or packaged. All 187 original procedures are now syntax-accepted after
+omitted DoMenuItem argument support; this remains syntax-only inventory. The
+original legacy Copy/PasteAppend procedure still fails unsupported operations;
+full sale workflows, complete writable sources and Access event/UI parity remain
+open.
+
+Validation: host Release 20/20 (59.78 s); GUI-disabled core 1/1 (0.59 s); Debian 12
+20/20 (61.66 s); Ubuntu 24.04 20/20 (56.76 s). Fresh host/distro DEBs pass exact
+payload, permissions, executable and backend checks. Both distro packages pass
+isolated installation, backend resolution and bounded GUI startup. All four
+original fixture hashes remain unchanged. New record command regressions are in
+record_delete_tests.cpp and the original search/deletion regression.

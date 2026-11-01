@@ -341,7 +341,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
-        if (key=="filter" || key=="filteron" || key=="keypreview" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
+        if (key=="allowdeletions" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -354,8 +354,8 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
-        if (key == "caption" || key=="tag" || key=="filter" || key=="filteron" || key=="keypreview" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
-        if (key == "name" || key == "recordsource" || key == "newrecord")
+        if (key == "caption" || key=="tag" || key=="allowdeletions" || key=="filter" || key=="filteron" || key=="keypreview" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
+        if (key == "selheight" || key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
         if (preview_.setModuleMember(name,value,false)) return;
@@ -391,18 +391,23 @@ public:
     void saveRecord() override {
         if (!commandDocument().saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record save cancelled");
     }
+    void selectCurrentRecord() { commandDocument().selectCurrentRecordForCommand(); }
+    void deleteCurrentRecord() { commandDocument().deleteCurrentRecord(); }
     void quitApplication() override { AccessFormPreview::quitApplication(); }
     void maximizeForm() override { commandDocument().window()->showMaximized(); }
     void gotoLastRecord() override {
         auto& document=commandDocument();
+        if (document.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Navigation during record command unsupported");
         if (document.recordSelector_->count()>0) document.recordSelector_->setCurrentIndex(document.recordSelector_->count()-1);
     }
     void gotoNextRecord() override {
         auto& document=commandDocument();
+        if (document.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Navigation during record command unsupported");
         document.recordSelector_->setCurrentIndex(qMin(document.recordSelector_->currentIndex()+1,document.recordSelector_->count()-1));
     }
     void gotoNewRecord() override {
         auto& document=commandDocument();
+        if (document.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Navigation during record command unsupported");
         if (document.layout_.kind==linaccess::AccessDocumentKind::Report) throw linaccess::VbaRuntimeError(438,"Report does not support new records");
         document.recordSelector_->setCurrentIndex(0);
     }
@@ -492,6 +497,8 @@ private:
 
 linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,std::string_view command,const std::vector<linaccess::VbaValue>& actuals) {
     using linaccess::VbaRuntimeError; using linaccess::VbaValue;
+    ++nativeExecutionDepth();
+    const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
     std::vector<VbaValue> args;
     for (const auto& actual:actuals) {
         auto value=linaccess::scalarVbaValue(actual);
@@ -504,6 +511,17 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         return static_cast<int>(result);
     };
     PreviewVbaHost host(preview);
+    if (command=="domenuitem") {
+        if (args.size()<3 || args.size()>5) throw VbaRuntimeError(450,"DoMenuItem argument count invalid");
+        for (std::size_t i=0;i<3;++i) if (args[i].kind==VbaValue::Kind::Empty) throw VbaRuntimeError(450,"DoMenuItem required argument omitted");
+        const int version=args.size()==5 && args[4].kind!=VbaValue::Kind::Empty ? number(args[4]) : 11;
+        if (version!=70 || number(args[0])!=0 || number(args[1])!=1 || (args.size()>3 && args[3].kind!=VbaValue::Kind::Empty))
+            throw VbaRuntimeError(3251,"Legacy menu context unsupported");
+        if (number(args[2])==8) host.selectCurrentRecord();
+        else if (number(args[2])==6) host.deleteCurrentRecord();
+        else throw VbaRuntimeError(3251,"Legacy menu action unsupported");
+        return {};
+    }
     if (command=="runsql") {
         if (args.empty() || args.size()>2) throw VbaRuntimeError(450,"RunSQL argument count invalid");
         if (args.size()>1) throw VbaRuntimeError(3251,"RunSQL transaction option unsupported");
@@ -511,8 +529,11 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
     }
     if (command=="runcommand") {
         if (args.size()!=1) throw VbaRuntimeError(450,"RunCommand requires one command");
-        if (number(args[0])!=97) throw VbaRuntimeError(3251,"RunCommand option unsupported");
-        host.saveRecord(); return {};
+        if (number(args[0])==97) host.saveRecord();
+        else if (number(args[0])==50) host.selectCurrentRecord();
+        else if (number(args[0])==223) host.deleteCurrentRecord();
+        else throw VbaRuntimeError(3251,"RunCommand option unsupported");
+        return {};
     }
     if (command=="maximize") {
         if (!args.empty()) throw VbaRuntimeError(450,"Maximize takes no arguments");
@@ -905,6 +926,7 @@ void AccessFormPreview::loadRecords() {
 }
 
 void AccessFormPreview::setFilterState(const QString& filter,bool enabled) {
+    if (recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Filter change during record command unsupported");
     const bool reload=filterOn_!=enabled || (enabled && filter_!=filter);
     if (reload && changingFilter_) throw linaccess::VbaRuntimeError(3251,"Reentrant filter change unsupported");
     if (reload && !enabled && layout_.recordSource.trimmed().isEmpty()) {
@@ -934,6 +956,7 @@ void AccessFormPreview::setFilterState(const QString& filter,bool enabled) {
 }
 
 void AccessFormPreview::loadRecord() {
+    clearRecordSelection();
     QScopedValueRollback<bool> loading(loading_,true);
     for (const auto& control : layout_.controls) {
         if (control.controlSource.isEmpty()) continue;
@@ -1016,7 +1039,7 @@ bool AccessFormPreview::commitControls() {
 }
 
 bool AccessFormPreview::saveRecord() {
-    if (saving_) return false;
+    if (saving_ || recordCommandRunning_) return false;
     QScopedValueRollback<bool> saving(saving_,true);
     if (!commitControls()) return false;
     if (!dirty_) return true;
@@ -1068,6 +1091,9 @@ bool AccessFormPreview::saveRecord() {
 }
 
 void AccessFormPreview::selectRecord(int target) {
+    if (recordCommandRunning_) {
+        const QSignalBlocker blocked(recordSelector_); recordSelector_->setCurrentIndex(currentRecordIndex_); return;
+    }
     if (navigating_ || loading_ || target == currentRecordIndex_) return;
     {
         QScopedValueRollback<bool> navigating(navigating_,true);
@@ -1163,6 +1189,7 @@ std::optional<std::string> AccessFormPreview::getField(std::string_view name) co
 }
 
 void AccessFormPreview::ensureWritableControl(std::string_view name) const {
+    if (recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Editing during record command unsupported");
     const auto key = QString::fromUtf8(name.data(),name.size());
     for (const auto& control : layout_.controls)
         if (control.name.compare(key,Qt::CaseInsensitive)==0 &&
@@ -1604,6 +1631,9 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
     if (closed_ || openCancelled_) return false;
     const auto modifiers=event->modifiers() & ~Qt::KeypadModifier;
     try {
+        if (event->key()==Qt::Key_Delete && modifiers==Qt::NoModifier && recordSelected_) {
+            (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(223)}); return true;
+        }
         if (event->key()==Qt::Key_Escape && modifiers==Qt::NoModifier) {
             if (layout_.kind==linaccess::AccessDocumentKind::Report) (void)close(); else undoKeyboardEdit();
             return true;
@@ -1739,7 +1769,10 @@ void AccessFormPreview::keyReleaseEvent(QKeyEvent* event) {
 bool AccessFormPreview::eventFilter(QObject* watched,QEvent* event) {
     if (auto* document=dynamic_cast<AccessFormPreview*>(watched); document && document!=this
         && (event->type()==QEvent::KeyPress || event->type()==QEvent::KeyRelease)) return QDialog::eventFilter(watched,event);
-    if (event->type()==QEvent::FocusIn) rememberControlEdit(watched);
+    if (event->type()==QEvent::FocusIn) {
+        if (watched!=recordSelector_) clearRecordSelection();
+        rememberControlEdit(watched);
+    }
     if ((event->type()==QEvent::KeyPress || event->type()==QEvent::KeyRelease)
         && dispatchKeyboardEvent(watched,static_cast<QKeyEvent*>(event))) { event->accept(); return true; }
     if (event->type()==QEvent::KeyPress && handleDocumentKey(static_cast<QKeyEvent*>(event))) { event->accept(); return true; }
