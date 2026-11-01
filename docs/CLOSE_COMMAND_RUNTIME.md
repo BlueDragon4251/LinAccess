@@ -53,3 +53,8 @@ build/test passed, a freshly built Debian package matched the current executable
 Build ID and passed content/permission checks, and all four original fixture
 SHA-256 checks remained unchanged. Remote distro CI and Windows reference behavior
 are not established by these local checks.
+
+
+The native mouse/Alt+Down popup now performs the same initial source load without
+requiring an earlier VBA call (DYNAMIC_COMBO_RUNTIME.md). Draft text and recovery
+from a failed source are covered separately from complete Access combo events.

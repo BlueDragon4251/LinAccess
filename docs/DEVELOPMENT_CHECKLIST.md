@@ -266,3 +266,11 @@ Full targets remain open:
   key/Undo event scheduling and a Windows Access event/rendering oracle.
 - [ ] Validate the original login ColumnCount/index mismatch and two renamed
   controls' missing KeyPress handlers against Access 2003; do not invent bindings.
+
+- [x] Automatically load real multicolumn combo choices on mouse/Alt+Down popup,
+  preserve typed numeric-ID search drafts, and recover from RowSource errors.
+- [x] Remove the model use-after-free after QComboBox::setModel on Qt 6.4/6.8.
+- [x] Force UTF-8 only for MDBTools child processes; test Unicode MDB paths and
+  original table names under an unchanged C-locale parent.
+- [x] Finish pinned SQLite backend, full Debian/Ubuntu regression and installed
+  package verification; retain explicit Jet/Access compatibility boundaries.

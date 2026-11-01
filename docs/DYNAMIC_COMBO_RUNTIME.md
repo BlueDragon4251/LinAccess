@@ -37,3 +37,14 @@ Validation (31 October 2026): final Release build and all 18 CTests passed
 (48.26 s), GUI-disabled Release core 1/1 passed (0.39 s), fresh .deb Build ID /
 payload / permissions checks passed, and four original fixture hashes passed.
 Remote Debian/Ubuntu CI and a Windows Access oracle are not implied.
+
+
+The first native mouse-arrow / Alt+Down opening now loads a supported row source
+without a preceding VBA Requery/Dropdown call. Source failures leave the draft
+value intact and can be retried after data-source recovery; they are not presented
+as a successfully empty list. Loading choices does not prematurely validate or
+commit typed search text against a numeric bound ID. Initial display-label loading
+before any interaction and automatic dependent-source refresh remain open.
+Native tests include the actual mouse move/click sequence, typed label input,
+independent SQL persistence and failure/retry. No synthetic selection signal
+substitutes for user input.

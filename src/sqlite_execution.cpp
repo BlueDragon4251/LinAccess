@@ -4,6 +4,8 @@
 #include <QElapsedTimer>
 #include <QLibrary>
 #include <QSqlDriver>
+#include <QVariant>
+#include <QByteArray>
 #include <algorithm>
 #include <unordered_map>
 struct sqlite3;

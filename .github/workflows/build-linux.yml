@@ -27,7 +27,7 @@ jobs:
       - name: Install Qt 6 and build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake qt6-base-dev libqt6sql6-sqlite mdbtools xz-utils unzip
+          sudo apt-get install -y build-essential cmake qt6-base-dev libqt6sql6-sqlite mdbtools dpkg-dev file xz-utils unzip
       - name: Record MDBTools CLI and library metadata
         run: ./scripts/mdbtools-diagnostics.sh
       - name: Restore private regression fixtures
@@ -49,13 +49,16 @@ jobs:
         run: |
           cpack --config build/CPackConfig.cmake -G DEB
           for package in ./linaccess-*.deb; do ./scripts/check-deb.sh "$package" build/linaccess; done
-      - name: Upload native executable and DEB
+      - name: Verify installed backend and original hashes
+        run: |
+          sudo dpkg -i ./linaccess-*.deb
+          /usr/bin/linaccess --check-sql-backend
+          (cd fixtures && sha256sum -c SHA256SUMS)
+      - name: Upload native DEB
         uses: actions/upload-artifact@v4
         with:
           name: linaccess-ubuntu-24-04
-          path: |
-            build/linaccess
-            linaccess-*.deb
+          path: linaccess-*.deb
           if-no-files-found: error
   debian:
     runs-on: ubuntu-24.04
@@ -72,7 +75,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y git ca-certificates \
-            build-essential cmake qt6-base-dev libqt6sql6-sqlite mdbtools dpkg-dev xz-utils unzip
+            build-essential cmake qt6-base-dev libqt6sql6-sqlite mdbtools dpkg-dev file xz-utils unzip
       - uses: actions/checkout@v4
       - name: Record MDBTools CLI and library metadata
         run: ./scripts/mdbtools-diagnostics.sh
@@ -95,11 +98,14 @@ jobs:
         run: |
           cpack --config build/CPackConfig.cmake -G DEB
           for package in ./linaccess-*.deb; do ./scripts/check-deb.sh "$package" build/linaccess; done
-      - name: Upload Debian binary and package
+      - name: Verify installed backend and original hashes
+        run: |
+          dpkg -i ./linaccess-*.deb
+          /usr/bin/linaccess --check-sql-backend
+          (cd fixtures && sha256sum -c SHA256SUMS)
+      - name: Upload Debian package
         uses: actions/upload-artifact@v4
         with:
           name: linaccess-${{ matrix.label }}
-          path: |
-            build/linaccess
-            linaccess-*.deb
+          path: linaccess-*.deb
           if-no-files-found: error

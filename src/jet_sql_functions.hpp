@@ -5,7 +5,7 @@
 #include <functional>
 #include <string_view>
 namespace linaccess {
-// Registers internal scalar and aggregate adapters on the distro SQLite connection.
+// Registers internal scalar and aggregate adapters on the verified SQLite connection.
 std::optional<int> jetSqlFunctionErrorNumber(std::string_view foldedMessage);
 using JetSqlObjectResolver=std::function<VbaValue(std::string_view collection,std::string_view object,std::string_view field)>;
 void setJetSqlObjectResolver(QSqlDatabase db,JetSqlObjectResolver resolver);

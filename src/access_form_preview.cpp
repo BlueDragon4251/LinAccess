@@ -73,6 +73,16 @@ void deferFormDisposal(AccessFormPreview* form) {
     if (!pending.contains(form)) pending.append(form);
     disposeClosedForms();
 }
+class AccessComboBox final : public QComboBox {
+public:
+    using QComboBox::QComboBox;
+    std::function<bool()> preparePopup;
+    void showPopup() override {
+        if (!isVisible() || !isEnabled()) return;
+        if (preparePopup && !preparePopup()) return;
+        QComboBox::showPopup();
+    }
+};
 class AccessMessageBox final : public QMessageBox {
 public:
     AccessMessageBox(QWidget* owner,bool dismissible) : QMessageBox(owner),dismissible_(dismissible) {}
@@ -659,8 +669,19 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             edit->setReadOnly(control.controlSource.startsWith('='));
             widget = edit;
         } else if (control.type == "ComboBox" || control.type == "ListBox") {
-            auto* combo = new QComboBox(canvas);
+            auto* combo = new AccessComboBox(canvas);
             combo->setEditable(true);
+            combo->preparePopup=[this,combo,name=control.name] {
+                try {
+                    if (!combo->property("la_rows_loaded").toBool()) requeryControl(name.toStdString());
+                    return true;
+                } catch (const std::exception& error) {
+                    const auto* typed=dynamic_cast<const linaccess::VbaRuntimeError*>(&error);
+                    combo->setProperty("la_rows_error",typed ? typed->number : 5);
+                    if (status_) status_->setText("Listendaten nicht verfügbar: "+QString::fromUtf8(error.what()));
+                    return false;
+                }
+            };
             widget = combo;
         } else if (control.type=="OptionButton" && control.optionGroupIndex>=0) {
             widget=new QRadioButton(control.caption,canvas);
@@ -1340,8 +1361,15 @@ void AccessFormPreview::requeryControl(std::string_view name) {
             if (!std::isfinite(amount) || amount*scale>32767) throw linaccess::VbaRuntimeError(5,"Column width out of range");
             widths.append(qRound(amount*scale));
         }
-        const auto oldValue=getFieldValue(target.toUtf8().toStdString());
-        const auto old=linaccess::sqlFieldValue(oldValue,"");
+        const bool editing=combo->isEditable() && combo->lineEdit()->isModified();
+        QVariant old;
+        try { old=linaccess::sqlFieldValue(getFieldValue(target.toStdString()),""); }
+        catch (const linaccess::VbaRuntimeError& error) {
+            // A user can type a label before the first popup has loaded its
+            // numeric IDs. Loading choices must not validate/commit that draft.
+            if (!editing || (error.number!=13 && error.number!=6)) throw;
+            old=combo->currentText();
+        }
         const QSignalBlocker blocked(combo);
         auto* model=new QStandardItemModel(combo);
         model->setColumnCount(control.columnCount);
@@ -1354,9 +1382,9 @@ void AccessFormPreview::requeryControl(std::string_view name) {
                 model->setItem(index,column,item);
             }
         }
-        auto* previousModel=combo->model();
+        // QComboBox deletes its previous owned model inside setModel.
+        // Do not dereference or schedule that freed model afterwards.
         combo->setModel(model);
-        if (previousModel && previousModel->parent()==combo) previousModel->deleteLater();
         auto* view=qobject_cast<QTreeView*>(combo->view());
         if (!view) {
             view=new QTreeView(combo); view->setRootIsDecorated(false); view->setHeaderHidden(true);
@@ -1371,7 +1399,9 @@ void AccessFormPreview::requeryControl(std::string_view name) {
         }
         combo->setModelColumn(displayColumn<0 ? 0 : displayColumn);
         combo->setProperty("la_rows_loaded",true);
+        combo->setProperty("la_rows_error",0);
         setText(combo,old.toString()); combo->setProperty("la_null",old.isNull());
+        if (combo->isEditable()) combo->lineEdit()->setModified(editing);
         return;
     }
 }

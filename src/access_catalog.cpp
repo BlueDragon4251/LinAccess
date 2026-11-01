@@ -2,6 +2,7 @@
 #include "csv.hpp"
 
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QSet>
@@ -17,6 +18,12 @@ QByteArray AccessCatalog::tool(const QString& name, const QStringList& args,
     if (path.isEmpty())
         throw std::runtime_error((name + " fehlt. Installiere mdbtools.").toStdString());
     QProcess process;
+    auto environment=QProcessEnvironment::systemEnvironment();
+    // GLib parses string options using the child process locale. Keep UTF-8
+    // database/table/query arguments valid even when the desktop starts in C.
+    environment.insert("LC_ALL","C.UTF-8");
+    environment.insert("LANG","C.UTF-8");
+    process.setProcessEnvironment(environment);
     process.setProgram(path);
     process.setArguments(args);
     process.start(); // argv only, no shell or command interpolation.

@@ -270,7 +270,45 @@ QString renderJetTokens(const QVector<Token>& tokens) {
     return text.join(' ');
 }
 struct ColumnOrigin { QString label,table,column; };
+// Inspect stored view text before asking SQLite to expand it. SQLite 3.45 can
+// crash while preparing nested outer joins with an unresolved dependency.
+// This check does not prepare a view or evaluate any user expression.
+bool missingSqlDependency(QSqlDatabase db,const QString& sql,QSet<QString> visiting={});
+bool missingSourceDependency(QSqlDatabase db,const QString& source,QSet<QString> visiting={}) {
+    const auto key=source.toCaseFolded();
+    if (visiting.contains(key) || visiting.size()>=64) return false;
+    visiting.insert(key);
+    if (key=="sqlite_master" || key=="sqlite_schema" || key=="sqlite_temp_master" || key=="sqlite_temp_schema") return false;
+    QSqlQuery schema(db);
+    schema.prepare("SELECT type,sql FROM temp.sqlite_master WHERE name=? COLLATE NOCASE UNION ALL SELECT type,sql FROM main.sqlite_master WHERE name=? COLLATE NOCASE LIMIT 1");
+    schema.addBindValue(source); schema.addBindValue(source);
+    if (!schema.exec()) return false;
+    if (!schema.next()) return true;
+    const auto type=schema.value(0).toString(), text=schema.value(1).toString();
+    schema.finish();
+    return type=="view" && missingSqlDependency(db,text,visiting);
+}
+bool missingSqlDependency(QSqlDatabase db,const QString& sql,QSet<QString> visiting) {
+    const auto tokens=tokenize(sql,true);
+    // CTE names have lexical scope. Leave those statements to SQLite rather
+    // than mistake a local relation for an absent persistent table.
+    for (const auto& token:tokens)
+        if (token.kind==Token::Word && token.value.compare("WITH",Qt::CaseInsensitive)==0) return false;
+    for (qsizetype i=0;i<tokens.size();++i) {
+        if (tokens[i].kind!=Token::Word || (tokens[i].value.compare("FROM",Qt::CaseInsensitive)!=0 && tokens[i].value.compare("JOIN",Qt::CaseInsensitive)!=0)) continue;
+        auto next=i+1;
+        while (next<tokens.size() && symbol(tokens[next],"(")) ++next;
+        if (next>=tokens.size() || (tokens[next].kind!=Token::Word && tokens[next].kind!=Token::Identifier)) continue;
+        if (tokens[next].kind==Token::Word && tokens[next].value.compare("SELECT",Qt::CaseInsensitive)==0) continue;
+        // Qualified sources and table-valued functions require different
+        // resolution rules; do not infer an absent relation for them.
+        if (next+1<tokens.size() && (symbol(tokens[next+1],".") || symbol(tokens[next+1],"("))) continue;
+        if (missingSourceDependency(db,tokens[next].value,visiting)) return true;
+    }
+    return false;
+}
 QVector<ColumnOrigin> columnOrigins(QSqlDatabase db,const QString& source) {
+    if (missingSourceDependency(db,source)) return {};
     static QLibrary library("sqlite3",0);
     library.setLoadHints(QLibrary::PreventUnloadHint);
     const auto prepare=reinterpret_cast<int (*)(sqlite3*,const char*,int,sqlite3_stmt**,const char**)>(library.resolve("sqlite3_prepare_v2"));
@@ -463,7 +501,7 @@ bool stableTopSource(QSqlDatabase db,const QString& source,QSet<QString> visitin
     return true;
 }
 bool useTopOneBoundary(QSqlDatabase db,const AccessQueryPlan& plan) {
-    return !plan.topOneSql.isEmpty() && db.record(plan.topOneTable).indexOf(plan.topOneColumn)>=0 && stableTopSource(db,plan.topOneTable);
+    return !plan.topOneSql.isEmpty() && stableTopSource(db,plan.topOneTable) && db.record(plan.topOneTable).indexOf(plan.topOneColumn)>=0;
 }
 bool useLeftJoin(QSqlDatabase db,const AccessQueryPlan& plan) {
     if (plan.rightJoinSql.isEmpty() || plan.rightJoinSources.size()!=2) return false;
@@ -823,7 +861,7 @@ int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
                 internal.removeAll(item.raw); owned.append(item.name); pending.removeAt(i); progressed=true; continue;
             }
             QSqlQuery metadata(db);
-            if (!metadata.exec("SELECT * FROM "+identifier(item.raw)+" LIMIT 0")) { ++i; continue; }
+            if (missingSourceDependency(db,item.raw) || !metadata.exec("SELECT * FROM "+identifier(item.raw)+" LIMIT 0")) { ++i; continue; }
             const auto record=metadata.record(); metadata.finish();
             if (record.count()<2) { ++i; continue; }
             QStringList columns;
@@ -920,6 +958,7 @@ AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan&
     };
     const bool topOne=useTopOneBoundary(db,plan);
     const auto source=topOne ? plan.topOneSql : useLeftJoin(db,plan) ? plan.rightJoinSql : plan.sql;
+    if (missingSqlDependency(db,source)) throw VbaRuntimeError(3078,"SQL dependency unavailable");
     if (!query.prepare(resolveQueryOrigins(db,source))) fail();
     for (auto it = bindings.cbegin(); it != bindings.cend(); ++it) query.bindValue(it.key(),it.value());
     if (!query.exec()) fail();

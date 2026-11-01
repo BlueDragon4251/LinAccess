@@ -21,7 +21,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Parsed controls / visible command buttons | 879 / 86 |
 | Original query artifacts classified / executed without Access result oracle | 100 / 77 (72 ordinary + 5 parameterized) |
 | Original date-filter fields exercised through actual calendar selection | 2 |
-| Current local regression tests | 18 passed |
+| Current local regression tests | 20 passed |
 
 Current completed work package: positional Sub/Function calls, ByVal/ByRef aliases,
 function expressions, top-level label error handling and original keypad regression.
@@ -343,3 +343,47 @@ Remote CI remains subject to the separately recorded account startup restriction
 these local results do not verify Debian 12/Ubuntu or Windows Access behavior.
 Full sale/login/report operation, remaining VBA/DAO/Jet behavior, Access 2003
 appearance/designers and exhaustive keyboard parity remain open.
+
+Native combo/platform increment (2026-11-01): initial choice loading now happens
+on the actual Qt popup gesture (mouse or Alt+Down), with typed numeric-ID search
+drafts retained. Synthetic GUI regressions assert real model rows, mouse
+selection, SQL persistence, event-loop responsiveness and failed-RowSource
+recovery. QComboBox::setModel already deletes its previously owned model;
+removing the subsequent dereference fixes the Qt 6.4 use-after-free, with a
+QPointer regression on both supported Qt versions. MDBTools receives a UTF-8
+child locale while the parent environment remains untouched; the new C-locale
+regression reads original Unicode table schemas from a Unicode-named test copy
+and rechecks the original hash. Explicit Qt value includes fix clean Qt 6.4 builds.
+
+Clean distribution validation exposed a separate SQLite 3.45.1 engine crash in
+Ubuntu 24.04 while preparing nested JOIN-view column metadata, before stepping
+records. Private schema-only native reduction reproduced the crash outside Qt.
+A missing-dependency preflight preserves error 3078 for bounded transitive view
+references but alone does not fix the engine defect. Both original failing
+regressions passed unchanged against current official SQLite 3.54.1. The GUI
+build now compiles that unmodified public-domain source archive offline, verifies
+its published SHA3-256, and packages libsqlite3.so.0 in a private app directory.
+No system library is replaced. Qt/native/compiled source IDs must agree before
+native connection access; an older library injected by a workspace search path
+was explicitly rejected with error 3251. The isolated host validation prepends
+the matching build backend to its existing Qt sysroot search path.
+
+Release results with the pinned backend: host Qt 6.8.2 20/20 CTests (49.70 s),
+Debian 12 Qt 6.4.2/GCC 12 container 20/20 (51.54 s), Ubuntu 24.04 Qt 6.4.2/GCC 13
+container 20/20 (47.70 s); GUI-disabled Release core 1/1 (0.44 s). All three fresh
+DEBs matched executable Build IDs and exact backend bytes, passed payload and
+permission allowlists and ran the extracted native JOIN/NULL/backend-identity
+self-test. Debian/Ubuntu packages were also installed into fresh containers;
+their installed binaries resolved the private backend, passed the same self-test,
+and stayed running for the bounded offscreen GUI startup check. The package
+contains only the executable, desktop entry, private public-domain backend and
+backend notice; no original fixtures, VBA sources or credentials. All four
+original fixture SHA-256 checks passed after testing on every build platform.
+
+The CI workflow now installs the package and verifies its backend, records final
+fixture hashes and uploads complete DEBs rather than an incomplete bare binary.
+Remote GitHub runner startup remains blocked by the previously recorded account
+billing/spending restriction; local container success is not a remote-CI claim.
+Measured query inventory remains 100 original query artifacts / 77 executions without
+an Access result oracle; original full sale/login/report operation, UI/designers,
+remaining VBA/DAO/Jet and exhaustive Access 2003 parity remain open.

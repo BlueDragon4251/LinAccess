@@ -10,11 +10,13 @@ option(LINACCESS_BUILD_GUI "Build the native Qt desktop application" ON)
 if(LINACCESS_BUILD_GUI)
     set(CMAKE_AUTOMOC ON)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Sql PrintSupport)
+    enable_language(C)
+    add_subdirectory(third_party/sqlite)
     add_library(linaccess_data STATIC
         src/access_catalog.cpp src/access_table_import.cpp src/access_query.cpp src/access_format.cpp
         src/dao_database.cpp src/sqlite_execution.cpp src/jet_sql_functions.cpp src/vba_source_codec.cpp
         src/vba_qt_value.cpp src/vba_module_context.cpp src/access_form_import.cpp)
-    target_link_libraries(linaccess_data PUBLIC linaccess_runtime Qt6::Core Qt6::Sql)
+    target_link_libraries(linaccess_data PUBLIC linaccess_runtime Qt6::Core Qt6::Sql linaccess_sqlite)
     target_include_directories(linaccess_data PUBLIC src)
     add_executable(linaccess
 
@@ -45,12 +47,13 @@ if(LINACCESS_BUILD_GUI)
         src/csv.hpp
     )
     target_link_libraries(linaccess PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport)
+    set_target_properties(linaccess PROPERTIES INSTALL_RPATH "$ORIGIN/../lib/linaccess")
     # Cloud workspaces can use umask 0077. Installed system directories must
     # remain traversable by ordinary desktop users in the generated package.
     set(CMAKE_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
         OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
     set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS ${CMAKE_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS})
-    foreach(directory IN ITEMS "." "bin" "share" "share/applications")
+    foreach(directory IN ITEMS "." "bin" "lib" "lib/linaccess" "share" "share/applications" "share/doc" "share/doc/linaccess")
         install(DIRECTORY DESTINATION "${directory}" DIRECTORY_PERMISSIONS
             OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
     endforeach()
@@ -75,6 +78,7 @@ if(BUILD_TESTING)
     add_test(NAME core_tests COMMAND linaccess_core_tests)
     if(LINACCESS_BUILD_GUI)
         find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
+        add_test(NAME sqlite_backend_identity COMMAND linaccess --check-sql-backend)
         add_executable(linaccess_dao_tests tests/dao_tests.cpp
              )
         target_include_directories(linaccess_dao_tests PRIVATE src)
@@ -202,6 +206,10 @@ if(BUILD_TESTING)
         endif()
         set(LINACCESS_COMPLEX_MDB_FILE "" CACHE FILEPATH "Optional complex real Access MDB table fixture")
         if(LINACCESS_COMPLEX_MDB_FILE AND EXISTS "${LINACCESS_COMPLEX_MDB_FILE}")
+            add_executable(linaccess_mdb_locale_tests tests/mdb_locale_tests.cpp)
+            target_link_libraries(linaccess_mdb_locale_tests PRIVATE linaccess_data Qt6::Core Qt6::Sql)
+            add_test(NAME mdb_utf8_process_locale COMMAND linaccess_mdb_locale_tests "${LINACCESS_COMPLEX_MDB_FILE}")
+            set_tests_properties(mdb_utf8_process_locale PROPERTIES ENVIRONMENT "LC_ALL=C;LANG=C")
             if(LINACCESS_COMPLEX_BRIDGE_DIR AND EXISTS "${LINACCESS_COMPLEX_BRIDGE_DIR}/manifest.json")
                 add_executable(linaccess_query_corpus_tests tests/query_corpus_tests.cpp
 

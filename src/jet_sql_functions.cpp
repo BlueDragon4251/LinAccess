@@ -10,6 +10,8 @@
 #include <QLibrary>
 #include <QSqlDriver>
 #include <QSqlQuery>
+#include <QVariant>
+#include <sqlite3.h>
 struct sqlite3;
 struct sqlite3_context;
 struct sqlite3_value;
@@ -217,6 +219,14 @@ std::optional<int> jetSqlFunctionErrorNumber(std::string_view foldedMessage) {
     return {};
 }
 void installJetSqlFunctions(QSqlDatabase db) {
+    // Keep QSQLITE and all native handle calls on the exact pinned backend.
+    // Probe through Qt before passing its opaque handle to a native API.
+    QSqlQuery backend(db);
+    if (!backend.exec("SELECT sqlite_source_id()") || !backend.next()
+        || backend.value(0).toString()!=QString::fromLatin1(SQLITE_SOURCE_ID)
+        || QByteArray(sqlite3_sourceid())!=QByteArray(SQLITE_SOURCE_ID))
+        throw VbaRuntimeError(3251,"SQLite backend identity mismatch");
+    backend.finish();
     auto& native = api();
     auto handle = db.driver()->handle();
     if (!native.valid() || !handle.isValid() || QByteArray(handle.typeName()) != "sqlite3*")

@@ -42,6 +42,18 @@ int main(int argc, char** argv) {
     rejected=false;
     try { model.execute(db,"SELECT * FROM missing_dependency"); } catch(const linaccess::VbaRuntimeError&) { rejected=true; }
     assert(rejected && model.rowCount()==0);
+    // Metadata expansion must reject missing transitive dependencies before
+    // SQLite prepares nested outer joins (a crash on Ubuntu's SQLite 3.45).
+    assert(query.exec("CREATE TEMP VIEW broken_outer AS SELECT a.id, sum(b.score) AS total FROM (samples AS a RIGHT JOIN samples AS b ON a.id=b.id) LEFT JOIN absent_outer AS c ON b.id=c.id GROUP BY a.id"));
+    assert(query.exec("CREATE TEMP VIEW broken_wrapper AS SELECT * FROM broken_outer"));
+    for (const auto& sql : {"SELECT * FROM broken_outer", "SELECT * FROM broken_wrapper", "SELECT x.id FROM samples AS x LEFT JOIN broken_wrapper AS y ON x.id=y.id"}) {
+        int number=0;
+        try { model.execute(db,sql); } catch(const linaccess::VbaRuntimeError& error) { number=error.number; }
+        assert(number==3078 && model.rowCount()==0);
+    }
+    assert(query.exec("CREATE TABLE absent_outer(id INTEGER)"));
+    model.execute(db,"SELECT * FROM broken_wrapper");
+    assert(model.rowCount()==4);
     model.execute(db,"SELECT id FROM samples WHERE id=4");
     assert(model.rowCount()==1 && model.data(model.index(0,0)).toInt()==4);
     model.execute(db,"SELECT IIf(True, 7, 9) AS chosen, IIf(Null,1,2) AS null_condition, IIf(False,1,Null) AS null_result");

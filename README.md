@@ -37,12 +37,19 @@ Abhängigkeiten (je nach Distribution können die Paketnamen abweichen):
 
 ```bash
 sudo apt update
-sudo apt install build-essential cmake qt6-base-dev libqt6sql6-sqlite mdbtools
+sudo apt install build-essential cmake qt6-base-dev libqt6sql6-sqlite mdbtools dpkg-dev file
 
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ./build/linaccess
 ```
+
+Der GUI-Build kompiliert SQLite 3.54.1 aus dem mitgelieferten, per SHA3-256
+geprüften offiziellen Quellarchiv. Dafür ist kein Download beim Build nötig.
+Die private Bibliothek ersetzt kein Systempaket. Qt-SQL-Treiber und native
+Adapter werden vor Verwendung auf dieselbe Backend-Identität geprüft;
+Hintergrund und Aktualisierung: [SQLite-Backend](third_party/sqlite/README.md).
+Auch ohne grafische Sitzung prüfbar: `./build/linaccess --check-sql-backend`.
 
 Eine `.deb`-Datei lässt sich nach dem Build erzeugen mit:
 
@@ -51,8 +58,10 @@ cpack --config build/CPackConfig.cmake -G DEB
 ./scripts/check-deb.sh ./linaccess-0.7.0-Linux.deb build/linaccess
 ```
 
-Die Datei `.github/workflows/build-linux.yml` enthält zusätzlich einen
-GitHub-Actions-Build für Ubuntu 24.04. Er wurde hier noch nicht ausgeführt.
+Die Datei `.github/workflows/build-linux.yml` enthält zusätzlich Builds für
+Ubuntu 24.04 und Debian 12. Der zuletzt angeforderte GitHub-Lauf konnte wegen
+einer Kontozahlungs-/Ausgabenlimit-Sperre keine Jobs starten; lokale Container-
+Prüfungen werden im [Fortschrittsprotokoll](docs/PROGRESS.md) separat dokumentiert.
 
 `mdbtools` ist optional, aber zum Lesen von `.mdb` und versuchsweise `.accdb`
 im Access-Inspektor erforderlich. Die Unterstützung ist je nach MDBTools-Version

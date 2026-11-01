@@ -10,6 +10,14 @@ intermittierenden EOF-Fehler sind hier nicht reproduziert und nicht abschließen
 erklärt. Siehe [Untersuchung](MDB_IMPORT_REGRESSION.md) und
 [Entwicklungscheckliste](DEVELOPMENT_CHECKLIST.md).
 
+Der GUI-Build verwendet jetzt das offizielle, mitgelieferte SQLite 3.54.1 als
+private Bibliothek. Damit bestehen die zuvor beim Vorbereiten verschachtelter
+JOIN-Views abstürzenden Ubuntu-24.04-Regressionen. Qt-SQL-Verbindung und native
+Adapter müssen dieselbe gepinnte Backend-Identität melden; andernfalls Fehler
+3251. Das System-SQLite bleibt unverändert. Dies verbessert die Reproduzierbarkeit,
+belegt jedoch keine zusätzliche pauschale Jet-/Access-Kompatibilität. Siehe
+[Backend und Aktualisierung](../third_party/sqlite/README.md).
+
 | Bereich | Jetzt | Geplante Strategie | Grenze / Risiko |
 |---|---|---|---|
 | `.mdb`-Tabellen | MDBTools: typisierte INTEGER/REAL/TEXT-Kopie inklusive NULL, BLOB-Spalten ohne Nutzdaten; **29/29** Tabellen der echten Kassen-MDB in SQLite-Kopie importiert | Vollständiger Jet-Schemaimport | Standardwerte, echte OLE-Daten, exakte Jet-Typen, Encoding |
