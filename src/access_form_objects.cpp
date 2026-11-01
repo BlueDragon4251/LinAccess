@@ -142,6 +142,10 @@ public:
                 throw linaccess::VbaRuntimeError(3251,"Control Undo adapter requires a form text/combo editor");
             (void)preview.undoControlEdit(name_); return {};
         }
+        if (key=="inputmask") {
+            if (!qobject_cast<QLineEdit*>(widget)) throw linaccess::VbaRuntimeError(3251,"InputMask adapter requires a TextBox");
+            for (const auto& definition:preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) return linaccess::VbaValue::string(bytes(definition.inputMask));
+        }
         if (key=="locked" || key=="tabstop" || key=="tabindex") {
             for (const auto& definition:preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
                 if (key=="locked") {
@@ -274,6 +278,14 @@ public:
                 if (key=="tabstop") definition.tabStop=scalar.truthy();
                 preview.applyControlStates(); return;
             }
+        }
+        if (key=="inputmask") {
+            if (!qobject_cast<QLineEdit*>(widget)) throw linaccess::VbaRuntimeError(3251,"InputMask adapter requires a TextBox");
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null InputMask");
+            const auto mask=text(scalar.asText());
+            if (!mask.isEmpty() && mask.compare("Password",Qt::CaseInsensitive)!=0) throw linaccess::VbaRuntimeError(3251,"InputMask pattern unsupported");
+            for (auto& definition:preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) { definition.inputMask=mask; preview.applyControlStates(); return; }
         }
         if (key=="tabindex") {
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form || qobject_cast<QLabel*>(widget)) throw linaccess::VbaRuntimeError(438,"Control has no writable TabIndex");

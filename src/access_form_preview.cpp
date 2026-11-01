@@ -963,7 +963,26 @@ void AccessFormPreview::applyControlStates() {
         const bool parentReadOnly=control.optionGroupIndex>=0 && controls_.value(layout_.controls[control.optionGroupIndex].name.toCaseFolded()) && controls_.value(layout_.controls[control.optionGroupIndex].name.toCaseFolded())->property("la_access_input_readonly").toBool();
         const bool readOnly=parentReadOnly || layout_.kind==linaccess::AccessDocumentKind::Report || control.locked || control.controlSource.startsWith('=') || (bound && (!directTable_ || (currentRecordIndex_==0 && !layout_.allowAdditions)));
         widget->setProperty("la_access_input_readonly",readOnly);
-        if (auto* line=qobject_cast<QLineEdit*>(widget)) line->setReadOnly(readOnly);
+        if (auto* line=qobject_cast<QLineEdit*>(widget)) {
+            const bool password=control.inputMask.compare("Password",Qt::CaseInsensitive)==0;
+            const bool unsupportedMask=!control.inputMask.isEmpty() && !password;
+            line->setReadOnly(readOnly || unsupportedMask);
+            // Password is an echo policy, not a transformation of the stored value.
+            const bool passwordDisplay=password || control.inputMask.section(';',0,0).compare("Password",Qt::CaseInsensitive)==0;
+            line->setEchoMode(passwordDisplay ? QLineEdit::Password : QLineEdit::Normal);
+            if (passwordDisplay) {
+                if (!line->property("la_password_original_style").isValid()) line->setProperty("la_password_original_style",line->styleSheet());
+                line->setStyleSheet(line->property("la_password_original_style").toString()+"\nQLineEdit { lineedit-password-character: 42; lineedit-password-mask-delay: 0; }");
+            } else if (line->property("la_password_original_style").isValid()) {
+                line->setStyleSheet(line->property("la_password_original_style").toString()); line->setProperty("la_password_original_style",QVariant{});
+            }
+            if (unsupportedMask) {
+                if (!line->property("la_mask_original_tooltip").isValid()) line->setProperty("la_mask_original_tooltip",line->toolTip());
+                line->setToolTip("Access-Eingabemaske nicht unterstützt (3251); Benutzereingabe gesperrt.");
+            } else if (line->property("la_mask_original_tooltip").isValid()) {
+                line->setToolTip(line->property("la_mask_original_tooltip").toString()); line->setProperty("la_mask_original_tooltip",QVariant{});
+            }
+        }
         else if (auto* combo=qobject_cast<QComboBox*>(widget);combo && combo->lineEdit()) combo->lineEdit()->setReadOnly(readOnly);
         else if (auto* group=qobject_cast<QGroupBox*>(widget))
             for (auto* button:group->findChildren<QAbstractButton*>()) button->setProperty("la_access_input_readonly",readOnly);

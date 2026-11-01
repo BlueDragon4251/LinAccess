@@ -953,3 +953,21 @@ distro DEBs pass exact payload/backend/permission/fixture-exclusion checks;
 isolated installed Debian/Ubuntu packages pass backend/counter execution and
 GUI startup. All four original fixture hashes pass. The original flat-layout
 keyboard probe records two forward and two backward native Tab transitions.
+
+Password-mask increment: imported TextBox InputMask is preserved; Password uses
+native immediate asterisk echo while actual Text/Value/SQL remain unchanged.
+VBA reveal/remask, unsupported/Null preflight, Unicode, Null and navigation are
+tested. Generic imported masks are marked unsupported and user input is blocked.
+One hash-verified original layout is probed only with synthetic input in an empty
+database, without original VBA/credentials/authentication; no new original
+handler execution is claimed. The separate original login failure remains open.
+
+A synthetic native layout PDF was visually checked after rasterization and shows
+asterisks. The printer emits a widget bitmap, so an empty text extraction was
+rejected as an unsuitable content test. GUI/original-heavy regressions pass
+(35.99 s). PASSWORD_INPUT_MASK.md documents the bounded scope.
+Validation: host 21/21 (81.92 s), Debian 12 21/21 (64.84 s), Ubuntu 24.04
+21/21 (60.05 s), GUI-disabled build/core 1/1 (0.50 s). Fresh host/distro DEBs
+pass exact payload/backend/permission/fixture-exclusion checks; isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass.

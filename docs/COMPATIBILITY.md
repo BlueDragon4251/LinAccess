@@ -366,3 +366,9 @@ reordering/traversal are tested, including a hash-verified original layout. The
 original metadata declares 81 visible command buttons rather than the previously
 reported 86; hidden controls remain available to VBA. CONTROL_STATE_RUNTIME.md
 records focus/cycle/nesting, other Locked kinds and visual-reference limits.
+
+Native TextBox InputMask=Password now displays immediate asterisks while Value/
+Text and real SQL retain the entered value. Dynamic changes, Null/Unicode,
+record navigation and one original layout with synthetic input are tested.
+Other imported patterns are explicitly unsupported/read-only; the original
+login failure and general input-mask semantics remain open (PASSWORD_INPUT_MASK.md).

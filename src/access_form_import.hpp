@@ -28,6 +28,7 @@ struct AccessVisualControl {
     QString tag;
     QString controlSource;
     QString defaultValue;
+    QString inputMask;
     int optionValue{1};
     int optionGroupIndex{-1};
     QString rowSource;

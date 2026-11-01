@@ -16,6 +16,7 @@
 #include <QPushButton>
 #include <QSqlQuery>
 #include <QTest>
+#include <QTemporaryDir>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -30,6 +31,7 @@ void testTextBuffering();
 void testControlUndo();
 void testWorkspaceEvents();
 void testImportedControlStates();
+void testPasswordMask();
 
 void testFormEvents() {
     testInsertionEvents();
@@ -39,6 +41,7 @@ void testFormEvents() {
     testControlUndo();
     testWorkspaceEvents();
     testImportedControlStates();
+    testPasswordMask();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -1224,6 +1227,74 @@ void testOriginalTabOrder(const QDir& directory,const QJsonArray& objects,QSqlDa
         assert(form.close()); ++checked;
         std::cout<<"Original imported tab traversal: flat layouts="<<checked<<", forward/backward steps="<<steps*2<<"\n";
         break;
+    }
+    assert(checked==1);
+}
+
+void testPasswordMask() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","password-mask"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)")); assert(sql.exec("INSERT INTO records VALUES(1,'probe'),(2,NULL)"));
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="records"
+Begin Section
+Begin TextBox
+Name ="masked"
+ControlSource ="value"
+InputMask ="Password"
+End
+Begin TextBox
+Name ="unsupported"
+InputMask ="00/00"
+Top =400
+End
+End
+End
+)FORM";
+    const QByteArray code="Sub Reveal()\nMe.masked.InputMask=\"\"\nEnd Sub\nSub Mask()\nMe.masked.InputMask=\"Password\"\nEnd Sub\n";
+    AccessFormPreview form("mask",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form),masked=root->objectMember("masked",{}).object;
+    auto* editor=form.findChild<QLineEdit*>("access-control-masked"); auto* unsupported=form.findChild<QLineEdit*>("access-control-unsupported");
+    auto* selector=form.findChild<QComboBox*>("access-record-selector"); assert(editor && unsupported && selector);
+    assert(editor->echoMode()==QLineEdit::Password && editor->text()=="probe" && editor->displayText()=="*****");
+    assert(masked->member("InputMask",{}).asText()=="Password" && root->item("masked").asText()=="probe");
+    assert(unsupported->isReadOnly() && !unsupported->toolTip().isEmpty());
+    editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"sample");
+    assert(editor->displayText()=="******" && masked->member("Text",{}).asText()=="sample" && masked->member("Value",{}).asText()=="probe");
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="sample"); sql.finish();
+    std::vector<VbaValue> none; assert(form.executeProcedure("Reveal",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(editor->echoMode()==QLineEdit::Normal && editor->displayText()=="sample" && !form.hasUnsavedChanges());
+    assert(form.executeProcedure("Mask",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(editor->echoMode()==QLineEdit::Password && editor->displayText()=="******");
+    QTemporaryDir output; assert(output.isValid()); const auto pdf=output.filePath("masked.pdf"); assert(form.exportLayoutPdf(pdf));
+    QFile exported(pdf); assert(exported.open(QIODevice::ReadOnly) && exported.read(5)=="%PDF-");
+    for (const auto& value:std::vector<VbaValue>{VbaValue{},VbaValue::string("00/00")}) {
+        int error=0; try { masked->assign("InputMask",value); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+        assert(error==(value.kind==VbaValue::Kind::Null ? 94 : 3251) && editor->echoMode()==QLineEdit::Password && editor->displayText()=="******");
+    }
+    masked->assign("Value",VbaValue::string("A😀Z")); root->assign("Dirty",VbaValue::logical(false));
+    assert(editor->text()==QString::fromUtf8("A😀Z") && !editor->displayText().contains(QString::fromUtf8("😀")));
+    selector->setCurrentIndex(2); assert(editor->echoMode()==QLineEdit::Password && editor->displayText().isEmpty() && masked->member("Value",{}).kind==VbaValue::Kind::Null);
+    selector->setCurrentIndex(1); assert(editor->echoMode()==QLineEdit::Password && root->item("masked").asText()=="A😀Z");
+    assert(form.close());
+}
+
+void testOriginalPasswordMask(const QDir& directory,const QJsonArray& objects) {
+    int checked=0;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","original-mask-rendering"); db.setDatabaseName(":memory:"); assert(db.open());
+    for (const auto& entry:objects) {
+        const auto artifact=entry.toObject(); if (artifact["kind"]!="form") continue;
+        QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly)); const auto bytes=input.readAll();
+        assert(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1().toLower());
+        const auto layout=linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(bytes));
+        for (const auto& control:layout.controls) if (control.type=="TextBox" && control.inputMask.compare("Password",Qt::CaseInsensitive)==0) {
+            // No original table data or credential is loaded; only synthetic echo input.
+            AccessFormPreview form(artifact["name"].toString(),bytes,{},db);
+            auto* editor=form.findChild<QLineEdit*>("access-control-"+control.name); assert(editor && editor->echoMode()==QLineEdit::Password);
+            editor->setText("probe"); assert(editor->displayText()=="*****");
+            assert(form.close()); ++checked;
+        }
     }
     assert(checked==1);
 }

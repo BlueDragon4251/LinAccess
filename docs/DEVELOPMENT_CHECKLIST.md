@@ -385,3 +385,7 @@ Full targets remain open:
 - [x] SaveAsText NotDefault Boolean semantics, native Enabled/Visible persistence,
   TextBox Locked, TabStop and bounded flat TabIndex traversal/reordering, including
   original layout keyboard evidence and preserved read-only input protection.
+
+- [x] Native TextBox Password mask with real masked echo, unchanged VBA/SQL
+  value, dynamic updates, Null/Unicode/navigation and original-layout probe;
+  generic masks remain unsupported.
