@@ -51,6 +51,10 @@ Adapter werden vor Verwendung auf dieselbe Backend-Identität geprüft;
 Hintergrund und Aktualisierung: [SQLite-Backend](third_party/sqlite/README.md).
 Auch ohne grafische Sitzung prüfbar: `./build/linaccess --check-sql-backend`.
 
+VBA-Eingabedialoge `InputBox(...)`/`InputBox$(...)` verwenden einen echten
+Qt-Dialog mit Text-/Abbruchrückgabe. Geprüfter Umfang und verbleibende Grenzen:
+[InputBox-Laufzeit](docs/INPUT_BOX_RUNTIME.md).
+
 Eine `.deb`-Datei lässt sich nach dem Build erzeugen mit:
 
 ```bash

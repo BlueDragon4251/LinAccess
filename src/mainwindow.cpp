@@ -1,4 +1,5 @@
 #include "mainwindow.hpp"
+#include "native_input_box.hpp"
 #include <QCloseEvent>
 
 #include "access_inspector.hpp"
@@ -116,6 +117,9 @@ public:
     void message(std::string_view text) override {
         QMessageBox::information(parent_, "VBA MsgBox",
             QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size())));
+    }
+    std::string inputBox(const linaccess::VbaInputBoxArguments& arguments) override {
+        return linaccess::nativeInputBox(parent_,arguments);
     }
     void saveRecord() override {
         if (!persist_()) throw std::runtime_error("DoCmd: Datensatz konnte nicht gespeichert werden");

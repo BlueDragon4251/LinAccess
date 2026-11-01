@@ -47,6 +47,7 @@ if(LINACCESS_BUILD_GUI)
         src/csv.hpp
     )
     target_link_libraries(linaccess PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport)
+    target_sources(linaccess PRIVATE src/native_input_box.cpp)
     set_target_properties(linaccess PROPERTIES INSTALL_RPATH "$ORIGIN/../lib/linaccess")
     # Cloud workspaces can use umask 0077. Installed system directories must
     # remain traversable by ordinary desktop users in the generated package.
@@ -200,6 +201,7 @@ if(BUILD_TESTING)
                  src/vba_analyzer.hpp)
             target_include_directories(linaccess_access_layout_tests PRIVATE src)
             target_sources(linaccess_access_layout_tests PRIVATE tests/event_prefix_tests.cpp)
+            target_sources(linaccess_access_layout_tests PRIVATE src/native_input_box.cpp tests/input_box_tests.cpp)
             target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::Test Qt6::PrintSupport)
             add_test(NAME access_2003_layouts
                 COMMAND linaccess_access_layout_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}")

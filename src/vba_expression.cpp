@@ -437,7 +437,7 @@ private:
             if (!take(")")) {
                 do {
                     const auto start = index_;
-                    const bool missing=word=="msgbox" && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
+                    const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
                     args.push_back(missing ? VbaValue::empty() : expression(1));
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
@@ -446,6 +446,28 @@ private:
                 require(")");
             }
             const auto one = args.size() == 1;
+            if (word=="inputbox" || word=="inputbox$") {
+                if (!host_) return {};
+                if (args.empty() || args.size()>7 || omitted.front()) throw error("InputBox requires a prompt and at most seven arguments",450);
+                for (std::size_t i=0;i<args.size();++i)
+                    if (!omitted[i] && args[i].kind==VbaValue::Kind::Null) throw error("Invalid Null InputBox argument",94);
+                for (std::size_t i=5;i<args.size();++i)
+                    if (!omitted[i]) throw error("Windows Help arguments are unsupported",3251);
+                VbaInputBoxArguments request;
+                request.prompt=args[0].asText();
+                if (args.size()>1 && !omitted[1]) request.title=args[1].asText();
+                if (args.size()>2 && !omitted[2]) request.defaultValue=args[2].asText();
+                const auto position=[&](std::size_t index) {
+                    try { return integer(args[index]); }
+                    catch (const VbaRuntimeError& failure) {
+                        if (failure.number==5) throw error("InputBox position type mismatch",13);
+                        throw;
+                    }
+                };
+                if (args.size()>3 && !omitted[3]) request.xTwips=position(3);
+                if (args.size()>4 && !omitted[4]) request.yTwips=position(4);
+                return VbaValue::string(host_->inputBox(request));
+            }
             if (word=="msgbox") {
                 if (!host_) return {};
                 if (args.empty() || args.size()>5 || omitted.front()) throw error("MsgBox requires a prompt and at most five arguments",450);
@@ -607,6 +629,9 @@ VbaValue VbaHost::formatValue(const VbaValue&,std::string_view,bool) {
 int VbaHost::messageBox(std::string_view prompt,int buttons,const std::optional<std::string>& title) {
     if (buttons!=0 || title.has_value()) throw VbaRuntimeError(3251,"Styled MsgBox requires a dialog host");
     message(prompt); return 1;
+}
+std::string VbaHost::inputBox(const VbaInputBoxArguments&) {
+    throw VbaRuntimeError(3251,"InputBox requires a native dialog host");
 }
 std::optional<VbaValue> VbaHost::resolveIdentifier(std::string_view,bool) { return std::nullopt; }
 bool VbaHost::assignIdentifier(std::string_view,const VbaValue&) { return false; }

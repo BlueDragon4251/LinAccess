@@ -278,3 +278,9 @@ Full targets remain open:
   route supported native events through the explicit prefix; actual GUI/SQL
   validation, cancellation, keyboard and missing-binding regressions.
 - [ ] Exact Access 2003 prefix-name edge cases and design-view source refactoring.
+- [x] Native InputBox/InputBox$ expression results, optional positional slots,
+  cancellation and text limits; shared dialog in both GUI hosts, actual bound
+  SQL/paste/IME regression in the imported-layout host, explicit unsupported
+  no-GUI/Windows Help contexts.
+- [ ] Original InputBox procedure end-to-end with synthetic credential records;
+  named/statement arguments, Windows Help and Access 2003 rendering oracle.

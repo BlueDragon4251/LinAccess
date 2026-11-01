@@ -412,3 +412,27 @@ Validation: Release 20/20 CTests on host Qt 6.8.2 (63.84 s), Debian 12 Qt 6.4.2
 identity, exact payload/permissions and extracted backend regressions. Both distro
 packages passed installation, private-backend resolution and bounded offscreen
 GUI startup in fresh containers. Four original hashes passed after testing.
+
+Remote event-prefix verification: private GitHub run
+https://github.com/BlueDragon4251/LinAccess/actions/runs/41299117595 for commit
+b10a8b645e99fae4a5e8068fd0e36a4499ad904e completed successfully across Ubuntu 24.04,
+Debian 12, Debian 13 and Windows PowerShell syntax. This includes the prefix
+GUI/SQL regressions in Linux jobs; no Microsoft Access runtime was involved.
+
+InputBox increment: both GUI hosts delegate InputBox/InputBox$ to a shared native
+Qt dialog; the app generates no answer without user input. Positional optional
+arguments, defaults, TWIP coordinates, text/empty cancellation return and explicit
+argument/host/Windows Help errors are implemented. Actual modal GUI tests enter
+and save quoted text, Escape/Cancel empty text, length-limited text, one-line
+clipboard paste and Unicode IME input through an imported bound form into real
+SQLite rows. Core tests check omissions, conversions and numeric error classes.
+Original source inventory identifies two calls in one DAO/form-dependent procedure;
+that complete original procedure is not yet verified. INPUT_BOX_RUNTIME.md records
+this boundary and unimplemented named/statement/help/rendering behavior.
+
+Validation: Release host 20/20 CTests (53.80 s), GUI-disabled core 1/1 (0.49 s),
+Debian 12 20/20 (51.77 s), Ubuntu 24.04 20/20 (48.76 s). Fresh packages passed
+executable/backend/payload/permissions checks and extracted backend self-tests;
+both distro DEBs passed installed backend and offscreen GUI startup checks in
+fresh containers. Four original fixture hashes passed after distro testing.
+No original credential was used in GUI input tests or copied to artifacts/logs.

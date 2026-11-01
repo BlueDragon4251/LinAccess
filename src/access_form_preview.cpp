@@ -1,6 +1,7 @@
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
 #include "native_send_keys.hpp"
+#include "native_input_box.hpp"
 
 #include "vba_runtime.hpp"
 #include "vba_module_context.hpp"
@@ -370,6 +371,9 @@ public:
     }
     int messageBox(std::string_view prompt,int buttons,const std::optional<std::string>& title) override {
         return nativeMessageBox(&preview_,prompt,buttons,title);
+    }
+    std::string inputBox(const linaccess::VbaInputBoxArguments& arguments) override {
+        return linaccess::nativeInputBox(&preview_,arguments);
     }
     void saveRecord() override {
         if (!commandDocument().saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record save cancelled");

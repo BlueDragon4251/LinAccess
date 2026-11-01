@@ -21,6 +21,12 @@ struct VbaValue;
 struct VbaModuleState;
 std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module);
 struct VbaOpenFormArguments { std::string name,where; };
+struct VbaInputBoxArguments {
+    std::string prompt;
+    std::optional<std::string> title;
+    std::string defaultValue;
+    std::optional<int> xTwips,yTwips;
+};
 VbaOpenFormArguments parseVbaOpenFormArguments(const std::vector<VbaValue>& arguments);
 
 class VbaHost {
@@ -47,6 +53,7 @@ public:
     virtual void setFieldValue(std::string_view name,const VbaValue& value);
     virtual void message(std::string_view text) = 0;
     virtual int messageBox(std::string_view prompt,int buttons,const std::optional<std::string>& title);
+    virtual std::string inputBox(const VbaInputBoxArguments& arguments);
     virtual void saveRecord() = 0;
     virtual void quitApplication() { throw std::runtime_error("DoCmd.Quit: kein Anwendungskontext"); }
     virtual void maximizeForm() { throw std::runtime_error("DoCmd.Maximize: kein Formularkontext"); }

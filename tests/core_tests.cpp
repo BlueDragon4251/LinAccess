@@ -35,6 +35,9 @@ public:
     bool dialogHost=false;
     int dialogResult=1,dialogButtons=-1;
     std::optional<std::string> dialogTitle;
+    bool inputHost=false;
+    std::optional<linaccess::VbaInputBoxArguments> inputRequest;
+    std::string inputResult;
     int saves = 0;
     int maximized = 0;
     int navigatedLast = 0;
@@ -60,6 +63,10 @@ public:
         messages.emplace_back(text); dialogButtons=buttons; dialogTitle=title; return dialogResult;
     }
     void saveRecord() override { ++saves; }
+    std::string inputBox(const linaccess::VbaInputBoxArguments& request) override {
+        if (!inputHost) return VbaHost::inputBox(request);
+        inputRequest=request; return inputResult;
+    }
     void maximizeForm() override { ++maximized; }
     void gotoLastRecord() override { ++navigatedLast; }
     void gotoNextRecord() override { ++navigatedNext; }
@@ -267,6 +274,28 @@ End Sub
             {"MsgBox()",450},{"MsgBox(,)",450},{"MsgBox(Null)",94},
             {"MsgBox(\"x\",Null)",94},{"MsgBox(\"x\",,Null)",94},
             {"MsgBox(\"x\",,,\"help\")",3251},{"MsgBox(\"x\",,,,,0)",450}}) {
+            try { (void)evaluateVbaExpression(expression,host,{}); assert(false); }
+            catch (const VbaRuntimeError& error) { assert(error.number==code); }
+        }
+        try { (void)evaluateVbaExpression("InputBox(\"prompt\")",host,{}); assert(false); }
+        catch (const VbaRuntimeError& error) { assert(error.number==3251); }
+        host.inputHost=true; host.inputResult="answer";
+        assert(evaluateVbaExpression("InputBox(\"prompt\")",host,{}).asText()=="answer");
+        assert(host.inputRequest && host.inputRequest->prompt=="prompt" && !host.inputRequest->title && host.inputRequest->defaultValue.empty());
+        assert(!host.inputRequest->xTwips && !host.inputRequest->yTwips);
+        assert(evaluateVbaExpression("InputBox$(\"prompt\",,\"seed\",1440,720,,)",host,{}).asText()=="answer");
+        assert(!host.inputRequest->title && host.inputRequest->defaultValue=="seed" && host.inputRequest->xTwips==1440 && host.inputRequest->yTwips==720);
+        (void)evaluateVbaExpression("InputBox(\"prompt\",,,2.5,3.5)",host,{});
+        assert(host.inputRequest->xTwips==2 && host.inputRequest->yTwips==4);
+        host.inputResult="";
+        const auto cancelled=evaluateVbaExpression("InputBox(\"prompt\",\"\")",host,{});
+        assert(cancelled.kind==VbaValue::Kind::Text && cancelled.asText().empty() && host.inputRequest->title && host.inputRequest->title->empty());
+        for (const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
+            {"InputBox()",450},{"InputBox(,)",450},{"InputBox(Null)",94},{"InputBox(\"x\",Null)",94},
+            {"InputBox(\"x\",,Null)",94},{"InputBox(\"x\",,,Null)",94},{"InputBox(\"x\",,,,Null)",94},
+            {"InputBox(\"x\",,,,,'help')",5},{"InputBox(\"x\",,,,,\"help\")",3251},
+            {"InputBox(\"x\",,,,,,1)",3251},{"InputBox(\"x\",,,,,,,)",450},
+            {"InputBox(\"x\",,,\"bad\")",13},{"InputBox(\"x\",,,2147483648)",6}}) {
             try { (void)evaluateVbaExpression(expression,host,{}); assert(false); }
             catch (const VbaRuntimeError& error) { assert(error.number==code); }
         }

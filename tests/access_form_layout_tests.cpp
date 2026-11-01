@@ -31,6 +31,7 @@ void testFormEvents();
 void testEventPrefixes();
 void testFilters();
 void testMessageBoxes();
+void testInputBoxes();
 void testCalendarValues();
 void testModuleStates(const QDir&,const QJsonArray&);
 void testCloseCommands();
@@ -227,6 +228,7 @@ End Sub
     testFormEvents();
     testEventPrefixes();
     testMessageBoxes();
+    testInputBoxes();
     testCalendarValues();
     testModuleStates(directory,objects);
     testCloseCommands();
