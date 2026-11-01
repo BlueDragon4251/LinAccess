@@ -916,5 +916,26 @@ Me!UnicodeError=CStr(Err.Number)
 End Sub
 )VBA","UnicodeStrings",host);
     assert(unicodeProcedure.status==VbaExecutionStatus::Completed && host.fields["Name"]=="😀ö" && host.fields["UnicodeError"]=="94");
+    assert(evaluate("Trim(\"  ö  \")").asText()=="ö");
+    assert(evaluate("LTrim$(\"  ö  \")").asText()=="ö  ");
+    assert(evaluate("RTrim(\"  ö  \")").asText()=="  ö");
+    assert(evaluate("Trim$(\"   \")").asText().empty());
+    assert(evaluate("Trim(Null)").kind==VbaValue::Kind::Null);
+    assert(evaluate("LTrim(Null)").kind==VbaValue::Kind::Null && evaluate("RTrim(Null)").kind==VbaValue::Kind::Null);
+    substringError("Trim$(Null)",94); substringError("LTrim$(Null)",94); substringError("RTrim$(Null)",94);
+    substringError("Trim()",450);
+    const VbaVariables whitespaceValues{{"text",VbaValue::string(" \t ö\r\n ")}};
+    assert(evaluateVbaExpression("Trim(text)",host,whitespaceValues).asText()=="\t ö\r\n");
+    scalarProbe->value=VbaValue{};
+    const int beforeTrim=scalarProbe->reads;
+    assert(evaluateVbaExpression("Trim(probe)",host,scalarValues).kind==VbaValue::Kind::Null && scalarProbe->reads==beforeTrim+1);
+    const auto trimProcedure=executeVbaProcedure(R"VBA(Sub TrimStrings()
+Me!Name=LTrim$("  ö  ") & ":" & RTrim$("  x  ")
+On Error Resume Next
+Me!Nachname=Trim$(Null)
+Me!TrimError=CStr(Err.Number)
+End Sub
+)VBA","TrimStrings",host);
+    assert(trimProcedure.status==VbaExecutionStatus::Completed && host.fields["Name"]=="ö  :  x" && host.fields["TrimError"]=="94");
     std::cout << "Core tests passed\n";
 }

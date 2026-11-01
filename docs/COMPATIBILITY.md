@@ -326,3 +326,8 @@ Null/error/Long bounds and UTF-16 fields. A slice producing an isolated surrogat
 is still unsupported (3251); full BSTR storage, declared-type Len sizes and
 locale/code-page/string-intrinsic parity remain open (UTF16_STRINGS.md).
 Leading-dot/E-exponent numeric literals and numeric Null error 94 are also tested.
+
+Trim/LTrim/RTrim and their String variants now implement end-space removal,
+Variant Null propagation and String-result error 94, while preserving other
+whitespace. Actual VBA procedure/error-handler regressions cover the family;
+this does not extend the remaining code-page/locale/string-type scope.

@@ -611,10 +611,23 @@ private:
                 if (args[1].kind==VbaValue::Kind::Null) throw error("Format mask is Null",94);
                 return host_->formatValue(args[0],args[1].asText(),word=="format$");
             }
+            if (word=="trim" || word=="ltrim" || word=="rtrim" || word=="trim$" || word=="ltrim$" || word=="rtrim$") {
+                if (!host_) return {};
+                if (args.size()!=1) throw error("Trim function requires one argument",450);
+                const auto value=scalarObjectValue(args[0]);
+                if (value.kind==VbaValue::Kind::Null) {
+                    if (word.ends_with('$')) throw error("Invalid Null String result",94);
+                    return {};
+                }
+                const auto text=value.asText(); std::size_t first=0,last=text.size();
+                if (word!="rtrim" && word!="rtrim$") while(first<last && text[first]==' ') ++first;
+                if (word!="ltrim" && word!="ltrim$") while(last>first && text[last-1]==' ') --last;
+                return VbaValue::string(text.substr(first,last-first));
+            }
             if ((word == "isnull" || word == "isempty" || word == "len" || word == "cstr"
                 || word == "clng" || word == "cdbl" || word == "ucase"
                 || word == "lcase" || word == "abs" || word == "int"
-                || word == "trim" || word == "isnumeric" || word == "val") && one) {
+                || word == "isnumeric" || word == "val") && one) {
                 if (!host_) return {};
                 const auto& value = args[0];
                 if (word == "isnull") return VbaValue::logical(value.kind == VbaValue::Kind::Null);
@@ -633,13 +646,6 @@ private:
                 if (word == "abs") return value.kind==VbaValue::Kind::Currency
                     ? value.currencyUnits<0 ? negateCurrency(value) : value : VbaValue::numeric(std::abs(value.asNumber()));
                 if (word == "int") return value.kind==VbaValue::Kind::Currency ? floorCurrency(value) : VbaValue::numeric(std::floor(value.asNumber()));
-                if (word == "trim") return VbaValue::string([&] {
-                    const auto str = value.asText();
-                    const auto first = str.find_first_not_of(" \t\n\r");
-                    if (first == std::string::npos) return std::string{};
-                    const auto last = str.find_last_not_of(" \t\n\r");
-                    return str.substr(first, last - first + 1);
-                }());
                 if (word == "isnumeric") {
                     try { (void)value.asNumber(); return VbaValue::logical(true); }
                     catch (...) { return VbaValue::logical(false); }

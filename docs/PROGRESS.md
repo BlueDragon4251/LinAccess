@@ -851,3 +851,17 @@ Ubuntu 24.04 21/21 (56.57 s), fresh GUI-disabled core 1/1 (0.56 s).
 Fresh host/distro DEBs pass exact payload/backend/permission/fixture-exclusion
 checks; all four original fixture hashes pass.
 Isolated installed Debian/Ubuntu packages pass native backend/counter execution and GUI startup.
+
+Trim-family increment: native Trim no longer removes tab/newline data or turns
+Null into an empty String. Trim/LTrim/RTrim preserve Variant Null, their dollar
+variants raise 94, and all remove only end spaces as requested. Tests assert
+actual VBA assignment/error handling, other-whitespace preservation, scalar
+default getter effects and arity. GUI-disabled core passes 1/1 (0.46 s). A
+read-only original token scan found no direct Trim-family calls; original
+execution counts remain unchanged.
+
+Validation: host Release 21/21 (62.94 s), Debian 12 21/21 (66.44 s),
+Ubuntu 24.04 21/21 (61.70 s), GUI-disabled core 1/1 (0.46 s). Fresh
+host/distro DEBs pass exact payload/backend, permissions and fixture-exclusion
+checks. All four original fixture hashes pass.
+Isolated installed Debian/Ubuntu packages pass native backend/counter execution and GUI startup.

@@ -365,3 +365,6 @@ Full targets remain open:
 - [x] Bounded UTF-16 Len/Left/Right/Mid and dollar substring variants, shared SQL
   Len, embedded NUL, malformed-text validation, Null/Long error semantics and
   scalar getter/procedure/alias regressions; split surrogate strings stay unsupported.
+
+- [x] Trim/LTrim/RTrim and dollar variants: end spaces only, preserved non-space
+  whitespace, scalar defaults, Variant Null versus String 94 and VBA error tests.

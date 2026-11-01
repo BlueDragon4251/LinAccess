@@ -34,3 +34,13 @@ sizes for Len, code-page conversions, locale-aware case/collation/Like behavior
 and broader string intrinsics remain open. SQL scalar coercion also retains
 SQLite's limited numeric/Boolean type representation; this is not complete Jet
 Variant or VBA string compatibility.
+
+## Trim family
+
+Trim/LTrim/RTrim and their dollar variants now remove only U+0020 spaces at
+the requested ends, preserving tabs, line breaks and other characters. Variant
+forms preserve Null; String forms raise 94. Scalar default properties are
+resolved once and invalid arity raises 450. Core tests check actual VBA
+procedures and On Error/Err.Number as well as expressions and getter effects.
+No direct trim calls occur in the restored original VBA token inventory, so
+this adds no original-handler execution claim.
