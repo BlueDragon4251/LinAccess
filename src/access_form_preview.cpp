@@ -1618,40 +1618,45 @@ void AccessFormPreview::closeOtherDocument(int type,const std::optional<QString>
 }
 
 void AccessFormPreview::openOtherForm(const QString& name,const QString& where) {
+    openOtherDocument(linaccess::AccessDocumentKind::Form,name,where);
+}
+
+void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where) {
+    const bool report=kind==linaccess::AccessDocumentKind::Report;
     if (closing_ || closingProjects().contains(projectKey(db_))) throw linaccess::VbaRuntimeError(2501,"Project is closing");
     AccessFormPreview* existing=nullptr;
     for (auto* widget:QApplication::topLevelWidgets()) {
         auto* document=dynamic_cast<AccessFormPreview*>(widget);
         if (!document || !document->opened_ || document->closed_ || document->openCancelled_
-            || document->layout_.kind!=linaccess::AccessDocumentKind::Form
+            || document->layout_.kind!=kind
             || document->db_.connectionName()!=db_.connectionName() || document->db_.databaseName()!=db_.databaseName()
             || document->formName_.compare(name,Qt::CaseInsensitive)!=0) continue;
-        if (existing) throw linaccess::VbaRuntimeError(5,"OpenForm target instance is ambiguous");
+        if (existing) throw linaccess::VbaRuntimeError(5,"Document target instance is ambiguous");
         existing=document;
     }
     if (existing) {
         if (!where.trimmed().isEmpty()) {
-            if (existing->layout_.recordSource.trimmed().isEmpty()) throw linaccess::VbaRuntimeError(3251,"WhereCondition requires a bound form");
+            if (existing->layout_.recordSource.trimmed().isEmpty()) throw linaccess::VbaRuntimeError(3251,"WhereCondition requires a bound document");
             existing->setFilterState(where,true);
         }
         existing->show(); existing->raise(); existing->activateWindow(); existing->activateDocument(); return;
     }
     QSqlQuery query(db_);
     query.prepare("SELECT name,source_bytes FROM _la_access_artifacts "
-                  "WHERE kind='form' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
-    query.addBindValue(name);
+                  "WHERE kind=? AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
+    query.addBindValue(report ? "report" : "form"); query.addBindValue(name);
     if (!query.exec() || !query.next()) {
-        throw linaccess::VbaRuntimeError(2102,"OpenForm target is not imported");
+        throw linaccess::VbaRuntimeError(report ? 2103 : 2102,"Document target is not imported");
     }
     const auto canonical=query.value(0).toString();
     const auto form = query.value(1).toByteArray(); query.finish();
     QSqlQuery vba(db_);
     vba.prepare("SELECT source_bytes FROM _la_access_artifacts "
                 "WHERE kind='vba' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
-    vba.addBindValue("Form_" + canonical);
+    vba.addBindValue((report ? "Report_" : "Form_") + canonical);
     const auto code = vba.exec() && vba.next() ? vba.value(0).toByteArray() : QByteArray{}; vba.finish();
-    if (linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(form)).kind!=linaccess::AccessDocumentKind::Form)
-        throw linaccess::VbaRuntimeError(2102,"OpenForm target is not a form");
+    if (linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(form)).kind!=kind)
+        throw linaccess::VbaRuntimeError(report ? 2103 : 2102,"Document target kind mismatch");
     // Preserve the actual project UI without owning the new document through
     // its invoking form. Project close validates every independent document.
     QWidget* projectOwner=nullptr;
@@ -1659,14 +1664,14 @@ void AccessFormPreview::openOtherForm(const QString& name,const QString& where) 
         if (qobject_cast<QMainWindow*>(ancestor)) { projectOwner=ancestor; break; }
     auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,db_,projectOwner,false,where);
     const auto validate=[&] {
-        for (const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent"})
+        for (const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent","OnNoData"})
             if (const auto outcome=nested->eventResult(event);outcome && failed(*outcome))
-                throw linaccess::VbaRuntimeError(outcome->errorNumber ? outcome->errorNumber : 3251,"OpenForm initialization failed");
-        if (nested->cancelledByOpen() || nested->closed_) throw linaccess::VbaRuntimeError(2501,"OpenForm action cancelled");
+                throw linaccess::VbaRuntimeError(outcome->errorNumber ? outcome->errorNumber : 3251,"Document initialization failed");
+        if (nested->cancelledByOpen() || nested->closed_) throw linaccess::VbaRuntimeError(2501,"Document open action cancelled");
         if (!nested->layout_.recordSource.trimmed().isEmpty() && !nested->hasDataSource())
-            throw linaccess::VbaRuntimeError(nested->dataSourceErrorNumber_ ? nested->dataSourceErrorNumber_ : 3078,"OpenForm record source unavailable");
+            throw linaccess::VbaRuntimeError(nested->dataSourceErrorNumber_ ? nested->dataSourceErrorNumber_ : 3078,"Document record source unavailable");
         if (!where.trimmed().isEmpty() && nested->layout_.recordSource.trimmed().isEmpty())
-            throw linaccess::VbaRuntimeError(3251,"WhereCondition requires a bound form");
+            throw linaccess::VbaRuntimeError(3251,"WhereCondition requires a bound document");
     };
     validate();
     // Modal blocks user interaction with other windows. Unlike acDialog it

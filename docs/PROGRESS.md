@@ -27,6 +27,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original duplicate handler / handled manual-key conflicts via invocation and native click / inserted rows | 1 / 2 / 0 |
 | Original counter flags / single-PK generators / managed non-PK generators on new imports | 21 / 16 / 5 |
 | Original clock Timer handler / independently checked timestamp targets on prepared layout | 1 / 2 |
+| Original report-preview handler / direct invocation / prepared bound click | 1 / 1 / 1 |
 | Current local regression tests | 21 passed |
 
 Recent completed work includes native combo/platform/backend fixes, control event
@@ -802,3 +803,30 @@ Ubuntu 24.04 21/21 (56.05 s). Fresh host/distro DEBs pass exact payload,
 backend, permissions and fixture-exclusion checks; installed distro packages
 pass backend/counter execution and GUI startup. All four original hashes pass.
 GUI-disabled core sources are unchanged.
+
+OpenReport increment: explicit native preview supports omitted arguments,
+WhereCondition, imported report CodeBehind, actual data binding and independent
+lifetime. Tests check SQL event effects, Open/NoData cancellation, missing-source
+3078, handler errors, wrong-kind/missing-report 2103, reuse and caller closure.
+Default/direct printing is explicitly rejected rather than opening preview.
+Other view/filter/window/OpenArgs and pagination gaps remain documented in
+OPEN_REPORT_RUNTIME.md.
+
+One unchanged original preview handler also opens its original report via direct
+call and a prepared bound-button click over actual imported MDB data. Native
+fields/Nulls match a separate prepared reader. The old corpus setup omitted
+reports from its artifact catalog; it now imports them like the app. The original
+full-layout login and other known workflow boundaries are not bypassed. Targeted
+layouts/Kassa integration pass together (34.55 s); GUI-free core passes 1/1
+(0.55 s). A token inventory found four preview and four direct-print call sites;
+the latter are not implemented/claimed by this preview increment.
+
+Requested theoretical status bars use the unweighted checked/total items in
+DEVELOPMENT_CHECKLIST.md as a catalog indicator. Tasks differ greatly in size;
+this is not a measured percentage of Access functions, behavior or visual parity.
+
+Final OpenReport validation: host Release 21/21 (81.65 s), Debian 12
+21/21 (62.07 s), Ubuntu 24.04 21/21 (56.52 s), GUI-disabled core 1/1
+(0.55 s). Fresh host/distro DEBs pass exact payload/backend, permissions and
+fixture-exclusion checks; isolated installed distro packages pass backend/
+counter execution and GUI startup. All four original hashes pass.

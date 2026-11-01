@@ -693,6 +693,30 @@ public:
             if (!args.empty()) throw linaccess::VbaRuntimeError(3251,"Quit options unsupported");
             AccessFormPreview::quitApplication(); return {};
         }
+        if (key=="openreport") {
+            if (args.empty() || args.size()>6) throw linaccess::VbaRuntimeError(450,"OpenReport argument count invalid");
+            std::vector<linaccess::VbaValue> values;
+            for (const auto& arg:args) {
+                auto value=linaccess::scalarVbaValue(arg);
+                if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null OpenReport argument");
+                values.push_back(std::move(value));
+            }
+            const auto number=[](const linaccess::VbaValue& value) {
+                const auto integer=linaccess::sqlFieldValue(value,"INTEGER").toLongLong();
+                if (integer<std::numeric_limits<int>::min() || integer>std::numeric_limits<int>::max()) throw linaccess::VbaRuntimeError(6,"OpenReport argument overflow");
+                return static_cast<int>(integer);
+            };
+            const auto reportName=text(values[0].asText());
+            if (reportName.isEmpty()) throw linaccess::VbaRuntimeError(2103,"Report name unavailable");
+            const int view=values.size()>1 && values[1].kind!=linaccess::VbaValue::Kind::Empty ? number(values[1]) : 0;
+            if (view!=2) throw linaccess::VbaRuntimeError(3251,"OpenReport supports native preview only");
+            if (values.size()>2 && !values[2].asText().empty()) throw linaccess::VbaRuntimeError(3251,"Named report filters unsupported");
+            const auto where=values.size()>3 ? text(values[3].asText()) : QString{};
+            if (where.size()>32768) throw linaccess::VbaRuntimeError(5,"Report WhereCondition too long");
+            if (values.size()>4 && values[4].kind!=linaccess::VbaValue::Kind::Empty && number(values[4])!=0) throw linaccess::VbaRuntimeError(3251,"Report window mode unsupported");
+            if (values.size()>5 && !values[5].asText().empty()) throw linaccess::VbaRuntimeError(3251,"Report OpenArgs unsupported");
+            preview.openOtherDocument(linaccess::AccessDocumentKind::Report,reportName,where); return {};
+        }
         if (key=="openform") {
             const auto request=linaccess::parseVbaOpenFormArguments(args);
             preview.openOtherForm(text(request.name),text(request.where)); return {};

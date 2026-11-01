@@ -314,6 +314,7 @@ void testOriginalCalendar(const QDir&,const QJsonArray&,QSqlDatabase);
 
 void testOriginalKeyboardEvents(const QDir&,const QJsonArray&,QSqlDatabase);
 void testOriginalTimer(const QDir&,const QJsonArray&,QSqlDatabase);
+void testOriginalOpenReport(const QDir&,const QJsonArray&,QSqlDatabase);
 
 void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QString& mdb) {
     QTimer acknowledge;
@@ -331,7 +332,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
     assert(query.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
     for (const auto& value : objects) {
         const auto object=value.toObject();
-        if (object["kind"]!="query" && object["kind"]!="form" && object["kind"]!="vba") continue;
+        if (object["kind"]!="query" && object["kind"]!="form" && object["kind"]!="report" && object["kind"]!="vba") continue;
         QFile file(directory.filePath(object["file"].toString())); assert(file.open(QIODevice::ReadOnly));
         const auto bytes=file.readAll();
         assert(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()==object["sha256"].toString().toLatin1().toLower());
@@ -972,5 +973,6 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
     }
     testOriginalKeyboardEvents(directory,objects,db);
     testOriginalTimer(directory,objects,db);
+    testOriginalOpenReport(directory,objects,db);
     testOriginalCalendar(directory,objects,db);
 }

@@ -89,6 +89,7 @@ private:
     void undoKeyboardEdit();
     void updateDirtyFromRecord();
     void openOtherForm(const QString& name,const QString& where={});
+    void openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where);
     void closeOtherDocument(int type,const std::optional<QString>& name,int save);
     std::optional<linaccess::VbaValue> getModuleMember(std::string_view name,bool publicOnly);
     bool setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly);

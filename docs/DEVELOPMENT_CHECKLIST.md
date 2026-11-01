@@ -357,3 +357,7 @@ Full targets remain open:
 - [x] Single LEFT/RIGHT joined UPDATE to the preserved direct table, including
   unmatched NULL sources, Is Null filtering, affected counts and atomic rollback.
 - [ ] Nullable-side/FULL joined updates and writable saved-query targets.
+
+- [x] Native DoCmd.OpenReport preview with WhereCondition, imported Report VBA,
+  failure/cancellation and independent lifetime; original preview handler and
+  bound button open the original report with independently checked fields.

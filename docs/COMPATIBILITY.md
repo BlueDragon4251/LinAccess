@@ -306,3 +306,13 @@ regressions. One unchanged original clock handler updates a native form caption 
 with independently checked timestamps on a lifecycle-isolated test copy.
 TIMER_RUNTIME.md records scheduling guards, Report rejection and the absence of
 an Access clock-locale/event oracle. This is not full timer/message parity.
+
+### VBA report preview opening
+
+DoCmd/Application.DoCmd.OpenReport supports explicit native preview (2),
+WhereCondition, imported report CodeBehind, cancellation/error propagation and
+independent document lifetime. An unchanged original preview handler opens its
+original report through invocation and a prepared bound-button click; actual
+fields are compared with a separate SQL reader. Default direct printing, other
+views, named filters, window modes and OpenArgs remain unsupported (3251).
+OPEN_REPORT_RUNTIME.md records renderer/pagination/oracle limitations.
