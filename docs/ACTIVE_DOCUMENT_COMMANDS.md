@@ -62,8 +62,11 @@ and absolute saved-record offsets. Named acDataForm targets resolve live,
 case-insensitive same-project forms, including hidden windows, without activation.
 Missing/closed/foreign targets raise 2450; ambiguous instances raise 5. Tests
 cover both command dispatch paths, new-row boundaries and save cancellation.
-Table/query/report navigation, named-control DoCmd.Requery and RunSQL's
-UseTransaction option remain explicitly unsupported. Active subform/record-command edge cases,
+Named-control DoCmd.Requery now targets the active form's supported control,
+including combo/list row sources, subform sources and calculated controls.
+Bound non-list data controls requery the form, preserving save validation.
+Me.control.Requery retains the instance context. Table/query/report navigation
+and RunSQL's UseTransaction option remain explicitly unsupported. Active subform/record-command edge cases,
 end-of-record behavior, unavailable-command error parity, control-specific
 Requery and complete OS/window activation scheduling are not established here.
 

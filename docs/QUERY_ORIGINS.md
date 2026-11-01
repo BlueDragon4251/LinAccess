@@ -30,8 +30,8 @@ views are repaired in dependency passes; user views and tables are not replaced.
 ## Original regression evidence
 
 All 100 unchanged Kassa queries remain hash-checked on an isolated MDB import.
-The current run executes 69 without extra parameters and five with parameters:
-74 total, without a Microsoft Access result oracle. For those five, a non-Null
+The current run executes 72 without extra parameters and five with parameters:
+77 total, without a Microsoft Access result oracle. For those five, a non-Null
 parameter is selected from actual unfiltered results; the DAO filtered row count
 must be positive and equal an independent C++ filter count. Values are not
 included in reports. Synthetic tests separately check exact returned values,
@@ -48,8 +48,13 @@ comparison is required to distinguish an original query/source mismatch from
 additional Access name-resolution behavior. This query is not counted executed.
 
 Remaining corpus classifications: nine missing query dependencies, eleven
-other Jet/binding failures, that one source-column mismatch, and two actions not
-executed by the corpus runner. Action SQL mutation has separate real copy tests.
+other Jet/binding failures, that one source-column mismatch, and two joined
+UPDATE boundaries. The runner now attempts the INNER JOIN action on an isolated
+full data copy; differing candidates are rejected with 3251. The other action
+requires an outer join and a saved-query target (3251). One unchanged original
+INNER JOIN action separately changes one independently verified value using its
+actual table schemas and synthetic unique matches; that separate prepared case
+does not increase full-data corpus coverage.
 No complete Jet/ACE semantics or result equivalence is claimed.
 
 

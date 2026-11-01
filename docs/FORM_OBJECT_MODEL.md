@@ -18,7 +18,8 @@ Supported paths:
 - Control Name, ControlType, Caption for supported label/button controls, typed Value for supported data controls,
   Visible/Enabled, SetFocus and bounded ComboBox/ListBox Requery. The latter
   executes table/SQL/saved-query row sources through the shared query adapter,
-  uses the first result column, and blocks synthetic dirty signals during reload.
+  uses the native multicolumn model and configured BoundColumn, and blocks
+  synthetic dirty signals during reload.
 - Access acLabel/acTextBox/acCommandButton/acComboBox/acListBox/acCheckBox/
   acOptionButton/acToggleButton/acSubform/acRectangle/acLine constants.
 
@@ -86,3 +87,9 @@ resetting actual Qt state: six Enabled/Visible assignments are checked. The
 original module and form bytes are unchanged. This is control/event execution;
 it does not claim that this form's complete record-source or business workflow
 is compatible. The other two original Form_Load handlers remain separate work.
+
+DoCmd.Requery ControlName resolves the supported control on the active native
+form; Me.control.Requery resolves the caller's instance. A bound non-list data
+control reloads the form record source after normal save/validation. Native
+regressions check external SQL changes, separate caller/target combo models and
+BeforeUpdate cancellation (2501). Unsupported control types still raise errors.

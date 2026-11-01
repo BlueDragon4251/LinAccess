@@ -16,6 +16,7 @@
 #include <iostream>
 
 void testComboAutoPopup();
+void testCommandRequery();
 
 void testDynamicCombos() {
     using linaccess::VbaValue;
@@ -72,6 +73,7 @@ End Sub
     assert(!previousModel);
     assert(combo->modelColumn()==0 && combo->currentText()=="20" && view->isColumnHidden(1));
     assert(form.close());
+    testCommandRequery();
     testComboAutoPopup();
 }
 
@@ -135,4 +137,76 @@ void testComboAutoPopup() {
     assert(pending->count()==1 && pending->view()->isVisible() && pending->currentText()=="recovered");
     assert(model->item("pick").asNumber()==42 && pending->property("la_rows_error").toInt()==0);
     pending->hidePopup(); assert(recovery.close());
+}
+
+void testCommandRequery() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","command-requery"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,name TEXT)"));
+    assert(sql.exec("INSERT INTO records VALUES(1,'old')"));
+    assert(sql.exec("CREATE TABLE choices(id INTEGER,label TEXT)"));
+    assert(sql.exec("INSERT INTO choices VALUES(1,'first')"));
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="records"
+BeforeUpdate ="[Event Procedure]"
+Begin Section
+Begin TextBox
+Name ="name"
+ControlSource ="name"
+End
+Begin ComboBox
+Name ="pick"
+RowSource ="SELECT id,label FROM choices ORDER BY id"
+ColumnCount =2
+ColumnWidths ="0;1440"
+End
+End
+End
+)FORM";
+    const QByteArray targetCode=R"VBA(Sub Form_BeforeUpdate(Cancel As Integer)
+If Me.Tag="block" Then Cancel=1
+End Sub
+)VBA";
+    auto callerLayout=layout; callerLayout.replace("RecordSource =\"records\"",""); callerLayout.replace("ControlSource =\"name\"","");
+    const QByteArray callerCode=R"VBA(Sub NamedControl()
+DoCmd.Requery "PiCk"
+Me.Tag=Screen.ActiveForm.Name
+End Sub
+Sub BoundControl()
+Application.DoCmd.Requery "name"
+End Sub
+Sub ExplicitControl()
+Me.pick.Requery
+End Sub
+)VBA";
+    AccessFormPreview target("requery target",layout,targetCode,db);
+    AccessFormPreview caller("requery caller",callerLayout,callerCode,db);
+    auto targetRoot=makePreviewFormObject(target),callerRoot=makePreviewFormObject(caller);
+    auto targetPick=targetRoot->objectMember("pick",{}).object,callerPick=callerRoot->objectMember("pick",{}).object;
+    const auto label=[](const auto& pick) { return pick->member("Column",{VbaValue::numeric(1),VbaValue::numeric(0)}).asText(); };
+    assert(label(targetPick)=="first" && label(callerPick)=="first");
+    auto* targetCombo=target.findChild<QComboBox*>("access-control-pick");
+    auto* callerCombo=caller.findChild<QComboBox*>("access-control-pick"); assert(targetCombo && callerCombo);
+    assert(sql.exec("INSERT INTO choices VALUES(2,'second')"));
+    assert(sql.exec("UPDATE choices SET label='updated' WHERE id=1"));
+    assert(sql.exec("UPDATE records SET name='external' WHERE id=1"));
+    assert(targetRoot->item("name").asText()=="old");
+    caller.show(); target.show(); QApplication::setActiveWindow(&target); QApplication::processEvents();
+    std::vector<VbaValue> none;
+    assert(caller.executeProcedure("NamedControl",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(targetCombo->count()==2 && label(targetPick)=="updated");
+    assert(callerCombo->count()==1 && label(callerPick)=="first");
+    assert(callerRoot->member("Tag",{}).asText()=="requery target");
+    assert(caller.executeProcedure("BoundControl",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(targetRoot->item("name").asText()=="external");
+    targetRoot->assign("Tag",VbaValue::string("block"));
+    targetRoot->assignItem("name",VbaValue::string("pending"));
+    const auto cancelled=caller.executeProcedure("BoundControl",none);
+    assert(cancelled.errorNumber==2501 && target.hasUnsavedChanges() && targetRoot->item("name").asText()=="pending");
+    assert(sql.exec("SELECT name FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="external"); sql.finish();
+    targetRoot->member("Undo",{});
+    assert(caller.executeProcedure("ExplicitControl",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(callerCombo->count()==2 && label(callerPick)=="updated");
+    assert(caller.close() && target.close());
 }

@@ -692,3 +692,19 @@ DEBs pass payload/backend/permission/fixture-exclusion checks; all four original
 fixture hashes pass. ACTIVE_DOCUMENT_COMMANDS.md now reflects the implemented
 record actions/offsets and independent document ownership.
 Isolated installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+
+Control Requery increment: DoCmd.Requery ControlName now resolves the active
+form's named supported control. It reuses actual row-source/subform/calculation
+adapters; bound non-list data controls reload the form after normal save
+validation. Tests verify externally changed SQL rows, separate caller/target
+combo models, instance-specific Me.pick.Requery and BeforeUpdate cancellation
+without losing dirty input or writing rejected values. Targeted layouts pass
+(6.60 s). Full Access focus/event/reload parity is not claimed.
+
+Validation: host Release 21/21 (57.89 s), Debian 12 21/21 (58.76 s),
+Ubuntu 24.04 21/21 (54.01 s). Fresh host/distro DEBs pass exact payload,
+backend, permissions and fixture-exclusion checks; all original fixture hashes
+pass. GUI-disabled core remains unchanged from the preceding 1/1 validated
+commit. QUERY_ORIGINS.md now states the current 77-query coverage and joined
+action boundaries directly instead of retaining the earlier 74-query summary.
+Installed Debian/Ubuntu packages also pass native backend/counter execution and GUI startup.

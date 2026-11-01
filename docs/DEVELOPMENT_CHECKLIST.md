@@ -333,3 +333,6 @@ Full targets remain open:
   explicit acActiveDataObject, save cancellation and new-row boundaries.
 - [x] Named GoToRecord acDataForm targets, including hidden forms and project/lifetime checks.
 - [ ] Native table/query/report GoToRecord targets and datasheet navigation.
+
+- [x] Named-control DoCmd.Requery on active form, distinct from Me.control.Requery;
+  native SQL row-source reload and bound-control form reload with validation.

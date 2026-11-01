@@ -146,7 +146,7 @@ End Sub
         {"GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(4),VbaValue::numeric(99)},2105},
         {"GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(0),VbaValue::numeric(99)},2105},
         {"GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(9)},5},
-        {"Maximize",{VbaValue::numeric(1)},450},{"Requery",{VbaValue::string("value")},3251}}) {
+        {"Maximize",{VbaValue::numeric(1)},450},{"Requery",{VbaValue::string("absent")},2465}}) {
         bool rejected=false;
         try { (void)commands->member(name,args); } catch(const linaccess::VbaRuntimeError& failure) { rejected=failure.number==error; }
         assert(rejected);

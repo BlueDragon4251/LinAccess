@@ -440,6 +440,7 @@ public:
     void gotoNextRecord() override { gotoRecord(1); }
     void gotoNewRecord() override { gotoRecord(5); }
     void requery() override { (void)makePreviewFormObject(commandDocument())->member("Requery",{}); }
+    void requeryNamedControl(std::string_view name) { commandDocument().requeryControl(name); }
     std::string memberControlName(std::string_view name) override {
         requireInstance();
         return preview_.controlMemberName(QString::fromUtf8(name.data(),name.size())).toUtf8().toStdString();
@@ -573,8 +574,9 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
     }
     if (command=="requery") {
         if (args.size()>1) throw VbaRuntimeError(450,"Requery argument count invalid");
-        if (!args.empty() && args[0].kind!=VbaValue::Kind::Empty && !args[0].asText().empty()) throw VbaRuntimeError(3251,"Named control Requery unsupported");
-        host.requery(); return {};
+        if (!args.empty() && args[0].kind!=VbaValue::Kind::Empty && !args[0].asText().empty()) host.requeryNamedControl(args[0].asText());
+        else host.requery();
+        return {};
     }
     if (command=="gotorecord") {
         if (args.size()>4) throw VbaRuntimeError(450,"GoToRecord argument count invalid");
@@ -1421,6 +1423,12 @@ void AccessFormPreview::requeryControl(std::string_view name) {
             // These controls have no record/row source. Invalidate their native
             // presentation while preserving the value and form event state.
             widget->update(); return;
+        }
+    for (const auto& control : layout_.controls)
+        if (control.name.compare(target,Qt::CaseInsensitive)==0 && !control.controlSource.isEmpty()
+            && !control.controlSource.startsWith('=') && columnIndex(control.controlSource,dataColumns_)>=0
+            && !qobject_cast<QComboBox*>(widget)) {
+            (void)makePreviewFormObject(*this)->member("Requery",{}); return;
         }
     auto* combo = qobject_cast<QComboBox*>(widget);
     if (!combo) throw linaccess::VbaRuntimeError(438,"Requery for this control type is unsupported");

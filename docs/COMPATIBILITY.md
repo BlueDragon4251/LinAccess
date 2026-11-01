@@ -257,3 +257,14 @@ form by case-insensitive name, including hidden windows. It does not activate or
 reopen the destination. Missing/closed/foreign forms raise 2450; ambiguous form
 instances raise 5. Explicitly named navigation preserves the caller Me and the
 active form. Table/query/report targets remain unsupported.
+
+### Named control requery
+
+DoCmd.Requery ControlName requeries the supported named control on the active
+native form. Combo/list models reload SQL/table/saved-query row sources; existing
+subform and calculated-control adapters retain their bounded behavior. A bound
+non-list data control reloads the form record source after save validation, with
+2501 on cancellation. Me.control.Requery continues to address the caller instance.
+Native tests compare actual SQL changes and distinct caller/active combo models.
+Focus-dependent implicit subform behavior and complete Access event timing still
+need a reference oracle.
