@@ -89,5 +89,5 @@ Stage validation: all 18 CTests passed (91.96 seconds), the separate GUI-disable
 core build/test passed, a fresh Debian package matched the current executable
 Build ID and passed permissions/content/fixture-exclusion checks, and all four
 original fixture SHA-256 checks remained unchanged. Parsed layout coverage is
-47 forms / 879 controls / 86 visible command buttons. The 169/187 syntax acceptance
+47 forms / 879 controls / 86 command buttons (81 declared visible after the NotDefault correction). The 169/187 syntax acceptance
 measurement remains separate from actual procedure execution.

@@ -59,6 +59,10 @@ public:
     }
 };
 
+// Shared relational semantics for expression operators and Select Case.
+VbaValue compareVbaValues(std::string_view relation,const VbaValue& left,const VbaValue& right,
+                         VbaHost& host,VbaCompareMode mode);
+
 // Resolve scalar defaults without erasing Null/Empty/Error subtype information.
 VbaValue scalarVbaValue(VbaValue value);
 

@@ -15,7 +15,7 @@ namespace {
 // This interpreter deliberately reports unsupported VBA instead of silently
 // treating Access/DAO/COM calls as successful no-ops.
 struct Statement {
-    enum class Type { With, EndWith, SendKeys, If, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
+    enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, If, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
                       Call, SetField, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, Quit, ErrorResumeNext, ErrorDisable, Label, Jump, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
@@ -104,11 +104,16 @@ struct Parameter { std::string name; bool byReference{true}; };
 std::vector<std::string> splitArguments(const std::string& input) {
     std::vector<std::string> args;
     if (trim(input).empty()) return args;
-    bool quoted = false;
+    bool quoted = false, bracket = false;
     int parentheses = 0;
     std::size_t start = 0;
     for (std::size_t i = 0; i < input.size(); ++i) {
         const char ch = input[i];
+        if (bracket) {
+            if (ch==']') { if (i+1<input.size() && input[i+1]==']') ++i; else bracket=false; }
+            continue;
+        }
+        if (!quoted && ch=='[') { bracket=true; continue; }
         if (ch == '"') {
             if (quoted && i + 1 < input.size() && input[i + 1] == '"') { ++i; continue; }
             quoted = !quoted;
@@ -173,6 +178,8 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
         R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\(.*\))?.*$)",
         std::regex::icase);
     const std::regex end(R"(^\s*End\s+(Sub|Function)\s*$)", std::regex::icase);
+    const std::regex selectStart(R"(^Select\s+Case\s+(.+)$)",std::regex::icase);
+    const std::regex selectEnd(R"(^End\s+Select$)",std::regex::icase);
     const std::regex ifThen(R"(^If\s+(.+)\s+Then\s*$)", std::regex::icase);
     const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
     const std::regex variableAssignment(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
@@ -213,6 +220,8 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     int line = 0;
     int nesting = 0;
     std::vector<bool> elseSeen;
+    struct SelectBlock { bool hasCase{}; bool hasElse{}; };
+    std::vector<SelectBlock> selects;
     std::vector<Statement::Type> blocks;
     const auto withActive=[&] { return inheritedWith || std::find(blocks.begin(),blocks.end(),Statement::Type::With)!=blocks.end(); };
     const auto validExpression=[&](std::string_view expression) { return validVbaExpression(expression,withActive()); };
@@ -286,6 +295,12 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             }
             return {VbaExecutionStatus::Completed, {}, line};
         }
+        const auto normalized=lower(source);
+        const bool caseLine=normalized.starts_with("case ") || normalized.starts_with("case\t");
+        const bool endSelectLine=std::regex_match(source,selectEnd);
+        if (!blocks.empty() && blocks.back()==Statement::Type::Select && !selects.back().hasCase
+            && !caseLine && !endSelectLine)
+            return {VbaExecutionStatus::Error,"Statement before first Case",line};
         if (lower(source).starts_with("if ") || lower(source).starts_with("if\t")) {
             const auto then=outsideKeyword(source,"then",2);
             if (then!=std::string::npos && !trim(source.substr(then+4)).empty()) {
@@ -308,7 +323,42 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             }
         }
         const auto relativeSource=(source.starts_with('.') || source.starts_with('!')) ? "__la_with"+source : std::string{};
-        if (lower(source).starts_with("with ") || lower(source).starts_with("with\t")) {
+        if (std::regex_match(source,match,selectStart)) {
+            const auto expression=trim(match[1].str());
+            if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Select expression unsupported",line};
+            statements.push_back({Statement::Type::Select,{},expression,line});
+            blocks.push_back(Statement::Type::Select); selects.push_back({});
+        } else if (caseLine) {
+            if (blocks.empty() || blocks.back()!=Statement::Type::Select)
+                return {VbaExecutionStatus::Error,"Case without Select",line};
+            auto& block=selects.back();
+            if (block.hasElse) return {VbaExecutionStatus::Error,"Case after Case Else",line};
+            const auto expression=trim(source.substr(4));
+            block.hasCase=true;
+            if (lower(expression)=="else") block.hasElse=true;
+            else {
+                for (const auto& clause:splitArguments(expression)) {
+                    const auto range=outsideKeyword(clause,"to");
+                    if (lower(clause).starts_with("is ") || lower(clause).starts_with("is\t") || (!clause.empty() && std::string("<>=").find(clause.front())!=std::string::npos)) {
+                        const auto comparison=trim(lower(clause).starts_with("is") ? clause.substr(2) : clause);
+                        const auto op=comparison.find_first_not_of("<>=");
+                        const auto relation=comparison.substr(0,op);
+                        if ((relation!="=" && relation!="<>" && relation!="<" && relation!="<=" && relation!=">" && relation!=">=")
+                            || op==std::string::npos || !validExpression(trim(comparison.substr(op))))
+                            return {VbaExecutionStatus::Unsupported,"Case relation unsupported",line};
+                    } else if (range!=std::string::npos) {
+                        if (!validExpression(trim(clause.substr(0,range))) || !validExpression(trim(clause.substr(range+2))))
+                            return {VbaExecutionStatus::Unsupported,"Case range unsupported",line};
+                    } else if (!validExpression(clause)) return {VbaExecutionStatus::Unsupported,"Case expression unsupported",line};
+                }
+            }
+            statements.push_back({Statement::Type::Case,{},expression,line});
+        } else if (endSelectLine) {
+            if (blocks.empty() || blocks.back()!=Statement::Type::Select)
+                return {VbaExecutionStatus::Error,"End Select without Select",line};
+            blocks.pop_back(); selects.pop_back();
+            statements.push_back({Statement::Type::EndSelect,{},{},line});
+        } else if (lower(source).starts_with("with ") || lower(source).starts_with("with\t")) {
             const auto expression=trim(source.substr(4));
             if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"With expression unsupported",line};
             statements.push_back({Statement::Type::With,{},expression,line}); blocks.push_back(Statement::Type::With);
@@ -676,7 +726,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     }
     if (instructions.size() > 20000)
         return {VbaExecutionStatus::Unsupported, "Prozedur überschreitet 20.000 Anweisungen", 0};
-    struct Frame { bool parent; bool condition; bool inElse; };
+    struct Frame { bool parent; bool condition; bool inElse; VbaValue selector; bool select{}; bool pending{}; std::size_t instruction{}; };
     struct LoopFrame {
         int forIndex;
         double end{};
@@ -882,6 +932,45 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     }
                 }
                 break;
+            case Statement::Type::Select: {
+                // Preserve a failed selector frame for Resume, and skip its
+                // cases under Resume Next rather than consuming an outer frame.
+                if (!frames.empty() && frames.back().select && frames.back().pending && frames.back().instruction==ip) {
+                    active=frames.back().parent; frames.pop_back();
+                }
+                frames.push_back({active,false,false,{},true,true,ip});
+                active=false;
+                if (frames.back().parent) frames.back().selector=scalarVbaValue(evaluate(instruction.expression));
+                frames.back().pending=false;
+                break;
+            }
+            case Statement::Type::Case: {
+                if (frames.empty() || !frames.back().select) throw VbaRuntimeError(5,"Select stack invalid");
+                auto& frame=frames.back(); active=false;
+                if (!frame.parent || frame.condition || frame.pending) break;
+                bool matched=lower(instruction.expression)=="else";
+                for (const auto& clause:matched ? std::vector<std::string>{} : splitArguments(instruction.expression)) {
+                    const auto relation=[&](std::string_view op,const std::string& expression) {
+                        return compareVbaValues(op,frame.selector,scalarVbaValue(evaluate(expression)),host,compareMode).truthy();
+                    };
+                    if (lower(clause).starts_with("is ") || lower(clause).starts_with("is\t") || (!clause.empty() && std::string("<>=").find(clause.front())!=std::string::npos)) {
+                        const auto comparison=trim(lower(clause).starts_with("is") ? clause.substr(2) : clause);
+                        const auto end=comparison.find_first_not_of("<>=");
+                        matched=relation(comparison.substr(0,end),trim(comparison.substr(end)));
+                    } else if (const auto range=outsideKeyword(clause,"to"); range!=std::string::npos) {
+                        // Case lists and range bounds stop once a match or a
+                        // failed lower bound determines the result.
+                        matched=relation(">=",trim(clause.substr(0,range)))
+                            && relation("<=",trim(clause.substr(range+2)));
+                    } else matched=relation("=",clause);
+                    if (matched) break;
+                }
+                frame.condition=matched; active=matched;
+                break;
+            }
+            case Statement::Type::EndSelect:
+                if (frames.empty() || !frames.back().select) throw VbaRuntimeError(5,"End Select stack invalid");
+                active=frames.back().parent; frames.pop_back(); break;
             case Statement::Type::If: {
                 const bool matched = active
                     ? evaluate(instruction.argument).truthy() : false;

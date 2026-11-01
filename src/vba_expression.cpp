@@ -890,6 +890,12 @@ bool VbaValue::truthy() const {
 std::optional<std::string> VbaValue::asField() const {
     return kind == Kind::Null ? std::nullopt : std::optional<std::string>{asText()};
 }
+VbaValue compareVbaValues(std::string_view relation,const VbaValue& left,const VbaValue& right,
+                         VbaHost& host,VbaCompareMode mode) {
+    if (relation!="=" && relation!="<>" && relation!="<" && relation!="<=" && relation!=">" && relation!=">=")
+        throw VbaRuntimeError(5,"Invalid relational operator");
+    return binary(std::string(relation),left,right,&host,mode);
+}
 bool validVbaExpression(std::string_view text,bool withContext) {
     const VbaVariables vars;
     try { (void)ExpressionParser(text, nullptr, vars,{},false,false,nullptr,withContext).parse(); return true; }

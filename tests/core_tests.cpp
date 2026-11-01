@@ -232,6 +232,164 @@ End Function
     }
 
     {
+        FakeForm host;
+        const std::string module=R"VBA(Option Compare Text
+Private reads As Variant
+Function Probe(x As Variant) As Variant
+reads=reads+1
+Probe=x
+End Function
+Function Choose(x As Variant) As Long
+reads=0
+Select Case Probe(x)
+Case 1, 3, 5
+Choose=10
+Case "A"
+Choose=30
+Case "A,B", "To"
+Choose=35
+Case 6 To 9, Is >= 20
+Choose=20
+Case Else
+Choose=40
+End Select
+Choose=Choose+reads*100
+End Function
+Function Nested() As Long
+Dim i As Long
+For i=1 To 4
+Select Case i
+Case 1, 2
+If i=1 Then
+Select Case 7
+Case Is < 8
+Nested=Nested+1
+Case Else
+Nested=999
+End Select
+Else
+Nested=Nested+2
+End If
+Case 3
+Exit For
+Case Else
+Nested=999
+End Select
+Next
+End Function
+Function Lazy() As Long
+reads=0
+Select Case Probe(3)
+Case Probe(3), Probe(1/0)
+Lazy=1
+Case Probe(1/0)
+Lazy=99
+End Select
+Select Case 1
+Case 3 To Probe(1/0)
+Lazy=99
+Case Else
+Lazy=Lazy+1
+End Select
+If False Then
+Select Case Probe(1/0)
+Case Probe(1/0)
+Lazy=99
+End Select
+End If
+Lazy=Lazy+reads*100
+End Function
+Function RecoverCase() As Long
+Dim divisor As Long
+divisor=0
+On Error GoTo failed
+Select Case 2
+Case 4/divisor
+RecoverCase=7
+Case Else
+RecoverCase=99
+End Select
+Exit Function
+failed:
+divisor=2
+Resume
+End Function
+Function RecoverSelector() As Long
+Dim divisor As Long
+On Error GoTo failed
+Select Case 2/divisor
+Case 2
+RecoverSelector=23
+Case Else
+RecoverSelector=99
+End Select
+Exit Function
+failed:
+divisor=1
+Resume
+End Function
+Function SkipErrors() As Long
+On Error Resume Next
+Select Case 1/0
+Case Else
+SkipErrors=999
+End Select
+Select Case 2
+Case 1/0
+SkipErrors=999
+Case 2
+SkipErrors=3
+End Select
+SkipErrors=SkipErrors+Err.Number
+End Function
+Function EmptyBlock() As Long
+Select Case 1
+End Select
+EmptyBlock=8
+End Function
+)VBA";
+        for (const auto& [input,expected]:std::vector<std::pair<VbaValue,int>>{
+                {VbaValue::numeric(1),110},{VbaValue::numeric(7),120},{VbaValue::numeric(20),120},
+                {VbaValue::numeric(10),140},{VbaValue::string("a"),130},{VbaValue{},140},
+                {VbaValue::empty(),140},{VbaValue::string("1"),120},{VbaValue::string("a,b"),135}}) {
+            std::vector<VbaValue> args{input};
+            auto result=executeVbaProcedureWithArguments(module,"Choose",host,args);
+            if (result.status!=VbaExecutionStatus::Completed || result.typedReturnValue->asNumber()!=expected)
+                std::cerr<<"Select input kind="<<static_cast<int>(input.kind)<<", status="<<static_cast<int>(result.status)<<", line="<<result.line<<", reason="<<result.explanation<<", expected="<<expected<<", actual="<<(result.typedReturnValue ? result.typedReturnValue->asNumber() : -1)<<"\n";
+            assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==expected);
+        }
+        for (const auto& [procedure,expected]:std::vector<std::pair<std::string,int>>{
+                {"Nested",3},{"Lazy",202},{"RecoverCase",7},{"RecoverSelector",23},{"SkipErrors",14},{"EmptyBlock",8}}) {
+            auto result=executeVbaProcedure(module,procedure,host);
+            if (result.status!=VbaExecutionStatus::Completed || result.typedReturnValue->asNumber()!=expected)
+                std::cerr<<"Select Case regression: "<<procedure<<", status="<<static_cast<int>(result.status)<<", error="<<result.errorNumber<<"\n";
+            assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==expected);
+        }
+        for (const auto& body:std::vector<std::string>{
+                "Case 1", "End Select", "Select Case 1\nMe!Name=1\nCase 1\nEnd Select", "Select Case 1\nIf True Then Me!Name=1\nCase 1\nEnd Select",
+                "Select Case 1\nCase Else\nCase 1\nEnd Select", "Select Case 1\nCase 1",
+                "Select Case 1\nCase 1,\nEnd Select", "Select Case 1\nCase Is Like 1\nEnd Select",
+                "Select Case 1\nCase 1 To\nEnd Select", "Select Case 1\nIf True Then\nCase 1\nEnd If\nEnd Select"}) {
+            host.fields.clear();
+            auto result=executeVbaProcedure("Sub Invalid()\nMe!Name=42\n"+body+"\nEnd Sub","Invalid",host);
+            assert(result.status!=VbaExecutionStatus::Completed && host.fields.empty());
+        }
+        auto probe=std::make_shared<ScalarProbe>(); probe->value=VbaValue::numeric(3);
+        std::vector<VbaValue> objectArgs{VbaValue::reference(probe)};
+        auto once=executeVbaProcedureWithArguments(module,"Choose",host,objectArgs);
+        assert(once.status==VbaExecutionStatus::Completed && once.typedReturnValue->asNumber()==110 && probe->reads==1);
+        host.bracketHost=true; host.bracketFields["a,b"]=VbaValue::numeric(2);
+        auto bracket=executeVbaProcedure("Function BracketCase() As Long\nSelect  Case  2\nCase 1, [a,b]\nBracketCase=1\nEnd  Select\nEnd Function","BracketCase",host);
+        assert(bracket.status==VbaExecutionStatus::Completed && bracket.typedReturnValue->asNumber()==1);
+        for (const auto& relation:std::vector<std::string>{"= 2","<> 3","< 3","<= 2","> 1",">= 2","Is = 2","Is <> 3","Is < 3","Is <= 2","Is > 1","Is >= 2","2 To 2"}) {
+            auto result=executeVbaProcedure("Function Relation() As Long\nSelect Case 2\nCase "+relation+"\nRelation=1\nEnd Select\nEnd Function","Relation",host);
+            assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==1);
+        }
+        auto binary=executeVbaProcedure("Function BinaryCase() As Long\nSelect Case \"A\"\nCase \"a\"\nBinaryCase=1\nCase Else\nBinaryCase=2\nEnd Select\nEnd Function","BinaryCase",host);
+        assert(binary.status==VbaExecutionStatus::Completed && binary.typedReturnValue->asNumber()==2);
+    }
+
+    {
         const std::string module=R"VBA(Private counter As Variant
 Private flag As Boolean
 Public text As String

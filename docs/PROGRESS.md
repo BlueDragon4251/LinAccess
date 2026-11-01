@@ -18,7 +18,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original report sources classified / currently bound | 9 / 6 |
 | Original report non-NULL textbox values compared with prepared reader | 54 |
 | Original form layouts scanned | 47 |
-| Parsed controls / visible command buttons | 879 / 86 |
+| Parsed controls / command buttons (81 declared visible before VBA) | 879 / 86 |
 | Original query artifacts classified / executed without Access result oracle | 100 / 77 (72 ordinary + 5 parameterized) |
 | Original date-filter fields exercised through actual calendar selection | 2 |
 | Original generated record-search procedures / native selections / missing control-reference failures | 2 / 2 / 1 |
@@ -990,3 +990,20 @@ Validation: host 21/21 (82.58 s), Debian 12 21/21 (65.55 s), Ubuntu 24.04
 pass exact payload/backend/permission/fixture-exclusion checks; isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass.
+
+Select Case increment: multiline list, inclusive range, relational (optional Is)
+and Else clauses execute through the native interpreter. The selector/default
+value is resolved once and subsequent/inactive branches skip expression effects.
+Nested If/For/Exit For, selector/case Resume and bounded Resume Next are tested.
+The existing Qt transaction-button regression now executes Case branches,
+including Option Compare Text: real SQL commit, rollback and handled duplicate-key
+rollback retain their independently asserted balances. Core/layout/original-heavy
+targeted tests pass (37.97 s). All 32 original modules have zero Select Case starts;
+no additional original procedure execution is claimed. Full grammar/type/locale
+and Access error-oracle boundaries remain open (SELECT_CASE_RUNTIME.md).
+
+Validation: host 21/21 (86.07 s), Debian 12 21/21 (65.05 s), Ubuntu 24.04
+21/21 (59.69 s), freshly rebuilt GUI-disabled core 1/1 (0.90 s). Fresh host/
+distro DEBs pass exact payload/backend/permissions/fixture-exclusion checks;
+isolated installed Debian/Ubuntu packages pass backend/counter execution and
+GUI startup. All four original fixture hashes pass.

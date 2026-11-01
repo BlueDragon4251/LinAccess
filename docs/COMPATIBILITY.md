@@ -379,3 +379,9 @@ cancellation with retained focus, new-row handling and handler focus override.
 A close-plus-MsgBox lifetime regression protects this new entry path. Page and
 nested/subform cycles plus general focus/event parity remain open
 (FORM_CYCLE_RUNTIME.md).
+
+Multiline Select Case now executes first-match list/range/relational branches,
+with one-time selector evaluation, nested If/For/Exit For and bounded Resume
+handling. Core and native transaction-button tests exercise actual branches and
+SQL commit/rollback. Original modules contain no such blocks; no new original
+execution count or complete VBA grammar claim follows (SELECT_CASE_RUNTIME.md).

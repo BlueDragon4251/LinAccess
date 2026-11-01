@@ -393,3 +393,6 @@ Full targets remain open:
 - [x] Bounded flat form Cycle 0/1 with native Tab/Shift-Tab, validated focus,
   actual record SQL/navigation, cancellation/retry, empty-new-row handling,
   handler focus override and close/MsgBox lifetime regression.
+
+- [x] Bounded multiline Select Case lists/ranges/relations/Else, one-time selector,
+  nested conditional/loop stacks, Resume regression and native Qt/SQL branches.

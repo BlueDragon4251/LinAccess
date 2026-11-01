@@ -1010,11 +1010,16 @@ End
 End
 End
 )FORM";
-    const QByteArray code=R"VBA(Sub Transfer_Click()
+    const QByteArray code=R"VBA(Option Compare Text
+Sub Transfer_Click()
 Dim session As DAO.Workspace
 Set session=DBEngine(0)
-If Me.Tag="rollback" Then Set session=Application.DBEngine.Workspaces(0)
-If Me.Tag="fail" Then Set session=DBEngine.Workspaces.Item(0)
+Select Case Me.Tag
+Case "rollback"
+Set session=Application.DBEngine.Workspaces(0)
+Case "fail"
+Set session=DBEngine.Workspaces.Item(0)
+End Select
 If Not (Application.DBEngine Is DBEngine) Then Err.Raise 5
 If Not (DBEngine(0)(0) Is DBEngine(0)(0)) Then Err.Raise 5
 Me!lastError=0
@@ -1023,11 +1028,12 @@ session.BeginTrans
 CurrentDb.Execute "UPDATE balances SET amount=amount-10 WHERE id=1",dbFailOnError
 CurrentDb.Execute "UPDATE balances SET amount=amount+10 WHERE id=2",dbFailOnError
 If Me.Tag="fail" Then CurrentDb.Execute "INSERT INTO balances VALUES(1,5)",dbFailOnError
-If Me.Tag="rollback" Then
+Select Case Me.Tag
+Case "rollback"
 session.Rollback
-Else
+Case Else
 session.CommitTrans
-End If
+End Select
 Me.Requery
 Exit Sub
 failed:
@@ -1039,7 +1045,7 @@ End Sub)VBA";
     auto root=makePreviewFormObject(form); auto* button=form.findChild<QPushButton*>("access-control-Transfer"); assert(button);
     const auto amount=[&](int id) { sql.prepare("SELECT amount FROM balances WHERE id=?"); sql.addBindValue(id); assert(sql.exec() && sql.next()); const auto value=sql.value(0).toInt(); sql.finish(); return value; };
     button->click(); assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90 && root->item("lastError").asNumber()==0);
-    root->assign("Tag",VbaValue::string("rollback")); button->click();
+    root->assign("Tag",VbaValue::string("ROLLBACK")); button->click();
     assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90);
     root->assign("Tag",VbaValue::string("fail")); button->click();
     assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90 && root->item("lastError").asNumber()==3022);
