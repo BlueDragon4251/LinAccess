@@ -27,6 +27,13 @@ SendKeys "^anative",True
 Application.DoCmd.RunCommand acCmdSaveRecord
 Me.Tag=Forms("target")!value
 End Sub
+Sub NavigateNamed()
+DoCmd.GoToRecord acDataForm,"TaRgEt",acFirst
+If Forms("target")!value<>"native" Then Err.Raise 5
+Application.DoCmd.GoToRecord acDataForm,"target",acGoTo,3
+If Forms("target")!value<>"third" Then Err.Raise 5
+Me.Tag=Screen.ActiveForm.Name
+End Sub
 Sub NavigateOffsets()
 DoCmd.GoToRecord , , acFirst
 If Forms("target")!value<>"native" Then Err.Raise 5
@@ -144,6 +151,11 @@ End Sub
         try { (void)commands->member(name,args); } catch(const linaccess::VbaRuntimeError& failure) { rejected=failure.number==error; }
         assert(rejected);
     }
+    maximized->hide(); owner.activateWindow(); QApplication::setActiveWindow(&owner); QApplication::processEvents();
+    assert(owner.executeProcedure("NavigateNamed",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(!maximized->isVisible() && navigated->item("value").asText()=="third");
+    assert(root->member("Tag",{}).asText()=="controller" && caller->text()=="explicit caller");
+    maximized->show(); QApplication::setActiveWindow(maximized); QApplication::processEvents();
     assert(owner.executeProcedure("ObjectSql",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(query.exec("SELECT value FROM command_actions WHERE id=1") && query.next() && query.value(0).toString()=="updated"); query.finish();
     assert(owner.executeProcedure("ObjectDelete",none).status==linaccess::VbaExecutionStatus::Completed);
@@ -151,6 +163,10 @@ End Sub
     assert(owner.executeProcedure("ObjectDrop",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(!db.tables().contains("command_actions"));
     application->member("DoCmd",{}).object->member("Close",{VbaValue::numeric(2),VbaValue::string("target")});
+    int closedNavigationError=0;
+    try { navigation->member("GoToRecord",{VbaValue::numeric(2),VbaValue::string("target"),VbaValue::numeric(2)}); }
+    catch (const linaccess::VbaRuntimeError& failure) { closedNavigationError=failure.number; }
+    assert(closedNavigationError==2450);
     QApplication::setActiveWindow(&owner); caller->setFocus(); QApplication::processEvents();
     assert(owner.executeProcedure("CallerOnly",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(caller->text()=="caller typed");
@@ -173,6 +189,10 @@ End Sub
     makePreviewFormObject(foreign)->assignItem("value",VbaValue::string("unsaved foreign"));
     assert(owner.executeProcedure("SaveActive",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(foreignQuery.exec("SELECT value FROM records WHERE id=1") && foreignQuery.next() && foreignQuery.value(0).toString()=="foreign"); foreignQuery.finish();
+    int foreignNavigationError=0;
+    try { navigation->member("GoToRecord",{VbaValue::numeric(2),VbaValue::string("foreign"),VbaValue::numeric(2)}); }
+    catch (const linaccess::VbaRuntimeError& failure) { foreignNavigationError=failure.number; }
+    assert(foreignNavigationError==2450 && foreign.hasUnsavedChanges());
     assert(owner.close() && sibling.isVisible()); assert(sibling.close());
     assert(AccessFormPreview::closeProjectDocuments(db)); assert(foreign.isVisible()); assert(foreign.close());
     auto guardedDefinition=definition;
@@ -198,5 +218,14 @@ End Sub
     assert(guardedObject->item("value").asText()=="second" && !guarded.hasUnsavedChanges());
     assert(query.exec("SELECT value FROM records WHERE id=1") && query.next() && query.value(0).toString()=="pending navigation"); query.finish();
     assert(guarded.close());
+    AccessFormPreview duplicateA("ambiguous navigation",definition,{},db);
+    AccessFormPreview duplicateB("ambiguous navigation",definition,{},db);
+    auto duplicateCommands=makePreviewApplicationObject(duplicateA)->member("DoCmd",{}).object;
+    int ambiguousNavigationError=0;
+    try { duplicateCommands->member("GoToRecord",{VbaValue::numeric(2),VbaValue::string("ambiguous navigation"),VbaValue::numeric(2)}); }
+    catch (const linaccess::VbaRuntimeError& failure) { ambiguousNavigationError=failure.number; }
+    assert(ambiguousNavigationError==5);
+    assert(duplicateA.close() && duplicateB.close());
+
 
 }

@@ -249,5 +249,11 @@ statements and Application.DoCmd dispatch address the active document while Me
 continues to identify the caller. Saving/validation precedes movement; cancellation
 returns 2501, invalid/out-of-range positions 2105, and disabled additions 2046.
 Next from the last saved row enters the new row; Previous from that row returns
-to the last saved record. Named table/query/form targets remain unsupported (3251);
+to the last saved record. Named table/query targets remain unsupported (3251);
 this is not full Access navigation or datasheet parity.
+
+Named GoToRecord with acDataForm now resolves an already opened same-project
+form by case-insensitive name, including hidden windows. It does not activate or
+reopen the destination. Missing/closed/foreign forms raise 2450; ambiguous form
+instances raise 5. Explicitly named navigation preserves the caller Me and the
+active form. Table/query/report targets remain unsupported.

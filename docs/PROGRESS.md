@@ -677,3 +677,18 @@ Debian 12 21/21 (59.74 s), Ubuntu 24.04 21/21 (55.82 s). Fresh DEBs
 pass exact payload/backend/permission/fixture-exclusion checks and all four
 original fixture hashes pass.
 Isolated installed distro packages pass the native backend/counter and GUI startup checks.
+
+Named-form navigation increment: GoToRecord acDataForm now resolves a live
+case-insensitive same-project form name, including hidden windows, without
+activating/reopening that form. Tests execute statement and Application.DoCmd
+calls while a separate controller remains active; actual displayed records
+change and Me stays with the controller. Closed/foreign forms raise 2450 and
+ambiguous instances raise 5. Native table/query/report targets remain unsupported.
+The targeted access_2003_layouts regression passes (6.64 s).
+
+Validation: host Release 21/21 (61.45 s), GUI-disabled core 1/1 (0.55 s),
+Debian 12 21/21 (60.21 s), Ubuntu 24.04 21/21 (55.68 s). Fresh host/distro
+DEBs pass payload/backend/permission/fixture-exclusion checks; all four original
+fixture hashes pass. ACTIVE_DOCUMENT_COMMANDS.md now reflects the implemented
+record actions/offsets and independent document ownership.
+Isolated installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.

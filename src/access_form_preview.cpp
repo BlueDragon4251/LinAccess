@@ -398,8 +398,23 @@ public:
     void pasteAppendRecord() { commandDocument().pasteAppendRecord(); }
     void quitApplication() override { AccessFormPreview::quitApplication(); }
     void maximizeForm() override { commandDocument().window()->showMaximized(); }
-    void gotoRecord(int action,int offset=1) {
-        auto& document=commandDocument();
+    void gotoRecord(int action,int offset=1,const QString& name={}) {
+        AccessFormPreview* selected=nullptr;
+        if (name.isEmpty()) selected=&commandDocument();
+        else {
+            for (auto* widget:QApplication::topLevelWidgets()) {
+                auto* candidate=dynamic_cast<AccessFormPreview*>(widget);
+                if (!candidate || !candidate->opened_ || candidate->closed_ || candidate->openCancelled_
+                    || candidate->layout_.kind!=linaccess::AccessDocumentKind::Form
+                    || candidate->db_.connectionName()!=preview_.db_.connectionName()
+                    || candidate->db_.databaseName()!=preview_.db_.databaseName()
+                    || candidate->formName_.compare(name,Qt::CaseInsensitive)!=0) continue;
+                if (selected) throw linaccess::VbaRuntimeError(5,"GoToRecord target is ambiguous");
+                selected=candidate;
+            }
+            if (!selected) throw linaccess::VbaRuntimeError(2450,"GoToRecord form is unavailable");
+        }
+        auto& document=*selected;
         if (document.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Navigation during record command unsupported");
         if (document.layout_.kind==linaccess::AccessDocumentKind::Report) throw linaccess::VbaRuntimeError(438,"Report does not support record navigation");
         if (action<0 || action>5) throw linaccess::VbaRuntimeError(5,"Invalid record navigation action");
@@ -563,11 +578,12 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
     }
     if (command=="gotorecord") {
         if (args.size()>4) throw VbaRuntimeError(450,"GoToRecord argument count invalid");
-        if ((!args.empty() && args[0].kind!=VbaValue::Kind::Empty && number(args[0])!=-1) || (args.size()>1 && args[1].kind!=VbaValue::Kind::Empty))
-            throw VbaRuntimeError(3251,"Named-object GoToRecord unsupported");
+        const auto type=!args.empty() && args[0].kind!=VbaValue::Kind::Empty ? number(args[0]) : -1;
+        const auto name=args.size()>1 && args[1].kind!=VbaValue::Kind::Empty ? QString::fromStdString(args[1].asText()) : QString{};
+        if ((type!=-1 && type!=2) || (!name.isEmpty() && type!=2)) throw VbaRuntimeError(3251,"GoToRecord object type unsupported");
         const auto action=args.size()>2 && args[2].kind!=VbaValue::Kind::Empty ? number(args[2]) : 1;
         const auto offset=args.size()>3 && args[3].kind!=VbaValue::Kind::Empty ? number(args[3]) : 1;
-        host.gotoRecord(action,offset);
+        host.gotoRecord(action,offset,name);
         return {};
     }
     throw VbaRuntimeError(438,"Document command unsupported");

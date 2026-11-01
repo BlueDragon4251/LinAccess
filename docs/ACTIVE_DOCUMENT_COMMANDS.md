@@ -57,16 +57,21 @@ wizard, calendar and keyboard-handler regressions remain mandatory.
 
 ## Limits
 
-Only the listed command subset is implemented. Named-object navigation, other
-record actions/offsets, named-control DoCmd.Requery and RunSQL's UseTransaction
-option are explicitly unsupported. Active subform/record-command edge cases,
+All six AcRecord actions now support active-form navigation, positive relative
+and absolute saved-record offsets. Named acDataForm targets resolve live,
+case-insensitive same-project forms, including hidden windows, without activation.
+Missing/closed/foreign targets raise 2450; ambiguous instances raise 5. Tests
+cover both command dispatch paths, new-row boundaries and save cancellation.
+Table/query/report navigation, named-control DoCmd.Requery and RunSQL's
+UseTransaction option remain explicitly unsupported. Active subform/record-command edge cases,
 end-of-record behavior, unavailable-command error parity, control-specific
 Requery and complete OS/window activation scheduling are not established here.
 
 Access SetWarnings, confirmation options and full action-dialog semantics remain
 open; this increment adds no LinAccess-specific SQL approval policy. Original
-sale initialization, independent application document ownership, MDI/window/data
-modes and the complete sale/report workflow also remain open. No Windows Access
+sale initialization, MDI/window/data modes and the complete sale/report workflow
+also remain open. Independent native form/report ownership is covered separately
+in DOCUMENT_LIFETIME_RUNTIME.md. No Windows Access
 result/event oracle is available. All mutations use isolated copies or in-memory
 records; original MDB/Bridge bytes remain unchanged.
 

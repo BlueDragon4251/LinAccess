@@ -331,4 +331,5 @@ Full targets remain open:
 
 - [x] Active-form GoToRecord first/last/next/previous/absolute/new with offsets,
   explicit acActiveDataObject, save cancellation and new-row boundaries.
-- [ ] Named GoToRecord targets and native table/query datasheet navigation.
+- [x] Named GoToRecord acDataForm targets, including hidden forms and project/lifetime checks.
+- [ ] Native table/query/report GoToRecord targets and datasheet navigation.
