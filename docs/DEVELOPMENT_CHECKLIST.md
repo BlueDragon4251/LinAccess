@@ -135,13 +135,13 @@ Full targets remain open:
 - [ ] COM/ActiveX/WinAPI reference inventory and feasible native/optional Windows adapters.
 - [ ] Real Windows Access 2003/365 Bridge export validation, 32/64-bit registration,
   references, encoding and failed-export diagnostics.
-- [x] Local Debian 13 .deb build, exact payload check (application/desktop only),
+- [x] Local Debian 13 .deb build, exact payload check (application/desktop/private SQLite/notice),
   public install directory permissions even under umask 0077; package check wired into CI.
-- [ ] Repeated Debian 12/13 and Ubuntu 24.04 remote CI builds/tests and package validation.
+- [x] Repeated Debian 12/13 and Ubuntu 24.04 remote CI builds/tests and package validation.
 - [ ] Interactive Linux desktop validation and accessibility/translations.
 - [ ] GitHub issue checklist and reviewed PRs; current GitHub API reads work.
-- [ ] Remote CI execution blocked before job startup by account payment/spending
-  limit restrictions; see the verified run linked in PROGRESS.md.
+- [x] Remote CI jobs start successfully again after the earlier account payment/
+  spending-limit block; subsequent successful runs are linked in PROGRESS.md.
 - [ ] Full end-to-end operation of the original Kassa application, without compatibility claims
   based solely on import counts, synthetic UI actions, or static source recognition.
 
@@ -284,3 +284,10 @@ Full targets remain open:
   no-GUI/Windows Help contexts.
 - [ ] Original InputBox procedure end-to-end with synthetic credential records;
   named/statement arguments, Windows Help and Access 2003 rendering oracle.
+- [x] DAO clone cursor isolation, typed byte-array bookmarks, bounded Find methods/
+  NoMatch, shared writes, deletion/rowid-reuse and stale/foreign token checks.
+- [x] Restricted form Recordset.Clone + Form.Bookmark navigation through validation,
+  shared saved values and original generated search regression: two successful
+  native selections; third original missing-control reference remains error 2465.
+- [ ] Full editable Form.Recordset, arrays/BLOBs, concurrent dynasets/locks/Seek,
+  complete criteria/formatting and Access 2003 reference behavior.

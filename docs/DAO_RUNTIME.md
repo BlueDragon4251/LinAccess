@@ -110,3 +110,8 @@ five also execute positive filtered recordsets (QUERY_ORIGINS.md).
 
 Parameter Type/Attributes metadata, implicit parameter inference, Refresh,
 ADO collections and every default-member/coercion combination remain incomplete.
+
+Cursor/clone/bookmark operations and the original generated form-search path
+are implemented in a bounded native subset. Exact scope, typed tokens, validation,
+original successes and the missing original control reference are recorded in
+[DAO_CURSOR_RUNTIME.md](DAO_CURSOR_RUNTIME.md).

@@ -52,6 +52,7 @@ public:
 private:
     QString controlMemberName(const QString& name) const;
     QString controlEventPrefix(const QString& name) const;
+    std::shared_ptr<linaccess::VbaObject> recordsetSnapshot();
     void buildControls(QWidget* canvas);
     void loadRecords();
     void setFilterState(const QString& filter,bool enabled);
@@ -110,6 +111,7 @@ private:
     friend std::shared_ptr<linaccess::VbaObject> makePreviewCommandBarObject(AccessFormPreview&,QWidget*);
     friend class PreviewObjectBase;
     friend class PreviewFormObject;
+    friend class PreviewRecordsetObject;
     friend class PreviewFormsObject;
     friend class PreviewControlsObject;
     friend class PreviewControlObject;
@@ -146,6 +148,7 @@ private:
     QMap<QString,QString> dataTypes_;
     QVector<QVariantList> recordRows_;
     QVector<QVariant> rowIds_;
+    std::shared_ptr<linaccess::VbaObject> recordsetSnapshot_;
     int renderedControls_{};
     bool dataSourceAvailable_{};
     bool directTable_{};

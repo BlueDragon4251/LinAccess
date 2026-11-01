@@ -338,6 +338,8 @@ private:
         if (word == "dbopendynaset") return VbaValue::numeric(2);
         if (word == "dbopensnapshot") return VbaValue::numeric(4);
         if (word == "dbfailonerror") return VbaValue::numeric(128);
+        if (word == "vbarray") return VbaValue::numeric(8192);
+        if (word == "vbbyte") return VbaValue::numeric(17);
         if (word == "true") return VbaValue::logical(true);
         if (word == "false") return VbaValue::logical(false);
         static const std::unordered_map<std::string,int> messageConstants{
@@ -408,7 +410,7 @@ private:
                 return host_ ? host_->currentForm()->member(field.value,{}) : VbaValue{};
             }
             if (!host_) return {};
-            const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource" || key == "caption" || key=="tag" || key=="filter" || key=="filteron" || key=="keypreview");
+            const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource" || key == "caption" || key=="tag" || key=="filter" || key=="filteron" || key=="keypreview" || key=="bookmark" || key=="recordset");
             if (!item && !formProperty)
                 if (auto value=host_->resolveIdentifier(field.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return *value;
             if (!formProperty && objectContext)
@@ -486,6 +488,27 @@ private:
                 if (!args.empty()) throw error("Clock function takes no arguments",450);
                 return clockValue(word);
             }
+            if (word=="str" || word=="str$") {
+                if (!host_) return {};
+                if (args.size()!=1) throw error("Str requires one argument",450);
+                const auto& value=args[0];
+                if (value.kind==VbaValue::Kind::Null) throw error("Invalid Null Str argument",94);
+                double number;
+                try { number=value.asNumber(); }
+                catch (const VbaRuntimeError& failure) { if (failure.number==5) throw error("Str type mismatch",13); throw; }
+                if (!std::isfinite(number)) throw error("Str numeric overflow",6);
+                auto result=value.kind==VbaValue::Kind::Currency ? value.asText() : VbaValue::numeric(number==0 ? 0 : number).asText();
+                if (result.starts_with("0.")) result.erase(0,1);
+                else if (result.starts_with("-0.")) result.erase(1,1);
+                std::replace(result.begin(),result.end(),'e','E');
+                if (number>=0) result.insert(result.begin(),' ');
+                return VbaValue::string(std::move(result));
+            }
+            if (word=="isarray") {
+                if (!host_) return {};
+                if (args.size()!=1) throw error("IsArray requires one argument",450);
+                return VbaValue::logical(args[0].kind==VbaValue::Kind::ByteArray);
+            }
             if (word=="ccur" || word=="vartype" || word=="typename") {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Conversion/type function requires one argument",450);
@@ -494,14 +517,14 @@ private:
                 const int type=value.kind==VbaValue::Kind::Empty ? 0 : value.kind==VbaValue::Kind::Null ? 1
                     : value.kind==VbaValue::Kind::Number ? 5 : value.kind==VbaValue::Kind::Currency ? 6
                     : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
-                    : value.kind==VbaValue::Kind::Error ? 10 : 11;
+                    : value.kind==VbaValue::Kind::Error ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : 11;
                 if (word=="vartype") return VbaValue::numeric(type);
                 if (type==9) {
                     if (!value.object) return VbaValue::string("Nothing");
                     throw error("Native object class name unavailable",3251);
                 }
                 return VbaValue::string(type==0 ? "Empty" : type==1 ? "Null" : type==5 ? "Double"
-                    : type==6 ? "Currency" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : "Boolean");
+                    : type==6 ? "Currency" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : type==8209 ? "Byte()" : "Boolean");
             }
             if (word=="dsum" || word=="dcount") {
                 if (!host_) return {};
@@ -651,6 +674,7 @@ VbaValue VbaValue::errorValue(int number) { VbaValue v; v.kind=Kind::Error; v.er
 VbaValue VbaValue::reference(std::shared_ptr<VbaObject> value) { VbaValue v; v.kind = Kind::Object; v.object = std::move(value); return v; }
 VbaValue VbaValue::numeric(double value) { VbaValue v; v.kind = Kind::Number; v.number = value; return v; }
 VbaValue VbaValue::string(std::string value) { VbaValue v; v.kind = Kind::Text; v.text = std::move(value); return v; }
+VbaValue VbaValue::byteArray(std::vector<unsigned char> value) { VbaValue v; v.kind=Kind::ByteArray; v.bytes=std::move(value); return v; }
 VbaValue VbaValue::currency(std::int64_t units) { VbaValue v; v.kind=Kind::Currency; v.currencyUnits=units; return v; }
 VbaValue VbaValue::logical(bool value) { VbaValue v; v.kind = Kind::Boolean; v.boolean = value; return v; }
 namespace {
@@ -678,6 +702,7 @@ int VbaHost::compareStrings(std::string_view left,std::string_view right,VbaComp
 }
 VbaValue scalarVbaValue(VbaValue value) { return scalarObjectValue(std::move(value)); }
 std::string VbaValue::asText() const {
+    if (kind==Kind::ByteArray) throw error("Byte array cannot be implicitly converted to text",13);
     if (kind==Kind::Error) throw error("Error Variant cannot be implicitly converted to text",13);
     if (kind==Kind::Object) return scalarObjectValue(*this).asText();
     if (kind == Kind::Text) return text;
@@ -698,6 +723,7 @@ std::string VbaValue::asText() const {
     return stream.str();
 }
 double VbaValue::asNumber() const {
+    if (kind==Kind::ByteArray) throw error("Byte array cannot be implicitly converted to number",13);
     if (kind==Kind::Error) throw error("Error Variant cannot be implicitly converted to number",13);
     if (kind==Kind::Object) return scalarObjectValue(*this).asNumber();
     if (kind == Kind::Empty) return 0;

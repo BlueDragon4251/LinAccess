@@ -6,8 +6,13 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QSqlRecord>
+#include <QSqlDriver>
+#include <sqlite3.h>
 #include <QSet>
 #include <QVariant>
+#include <QUuid>
+#include <QElapsedTimer>
+#include <QScopeGuard>
 #include <algorithm>
 
 namespace linaccess {
@@ -78,6 +83,17 @@ QVariant toSql(const VbaValue& value) {
     }
 }
 class Recordset;
+struct RecordsetData {
+    QStringList columns;
+    QMap<QString,QString> types;
+    QVector<QVariantList> rows;
+    QVector<QVariant> ids;
+    QVector<quint64> bookmarks;
+    quint64 nextBookmark{1};
+    quint64 revision{};
+    QByteArray family{QUuid::createUuid().toRfc4122()};
+    QSet<Recordset*> cursors;
+};
 VbaValue fieldCollection(std::shared_ptr<Recordset> owner);
 class Field final : public VbaObject {
 public:
@@ -96,6 +112,53 @@ public:
         table_ = db_.tables().contains(source_, Qt::CaseInsensitive);
         readOnly_ |= !table_;
         reload();
+        data_->cursors.insert(this);
+    }
+    Recordset(QSqlDatabase db,QStringList columns,QMap<QString,QString> types,QVector<QVariantList> rows,QVector<QVariant> ids)
+        : db_(std::move(db)),readOnly_(true),frozen_(true) {
+        data_->columns=std::move(columns); data_->types=std::move(types); data_->rows=std::move(rows); data_->ids=std::move(ids);
+        for (qsizetype i=0;i<data_->rows.size();++i) data_->bookmarks.append(data_->nextBookmark++);
+        data_->cursors.insert(this);
+    }
+    ~Recordset() override { data_->cursors.remove(this); }
+    void refreshSnapshot(const QStringList& columns,const QMap<QString,QString>& types,
+                         const QVector<QVariantList>& rows,const QVector<QVariant>& ids) {
+        if (!frozen_ || columns!=data_->columns || ids.size()!=rows.size() || data_->ids.size()!=data_->rows.size())
+            throw VbaRuntimeError(3251,"DAO: Incompatible form snapshot refresh");
+        QMap<qlonglong,quint64> tokens;
+        QMap<Recordset*,QVariant> positions;
+        for (qsizetype i=0;i<data_->ids.size();++i) tokens.insert(data_->ids[i].toLongLong(),data_->bookmarks[i]);
+        for (auto* cursor:data_->cursors)
+            if (cursor->position_>=0 && cursor->position_<data_->ids.size()) positions.insert(cursor,data_->ids[cursor->position_]);
+        QVector<quint64> bookmarks;
+        for (const auto& id:ids) {
+            const auto previous=tokens.value(id.toLongLong());
+            bookmarks.append(previous ? previous : data_->nextBookmark++);
+        }
+        data_->types=types; data_->rows=rows; data_->ids=ids; data_->bookmarks=std::move(bookmarks);
+        ++data_->revision;
+        for (auto* cursor:data_->cursors) {
+            if (positions.contains(cursor)) cursor->position_=data_->ids.indexOf(positions.value(cursor));
+            else if (cursor->position_>=0) cursor->position_=data_->rows.size();
+        }
+    }
+    VbaValue bookmarkAt(qsizetype position) const {
+        if (closed_ || position<0 || position>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: No current record");
+        std::vector<unsigned char> bytes(data_->family.begin(),data_->family.end());
+        const auto id=data_->bookmarks[position];
+        for (int shift=56;shift>=0;shift-=8) bytes.push_back(static_cast<unsigned char>(id>>shift));
+        return VbaValue::byteArray(std::move(bytes));
+    }
+    qsizetype bookmarkPosition(const VbaValue& value) const {
+        if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null bookmark");
+        if (value.kind!=VbaValue::Kind::ByteArray) throw VbaRuntimeError(13,"DAO: Bookmark requires a byte array");
+        if (value.bytes.size()!=24 || !std::equal(data_->family.begin(),data_->family.end(),value.bytes.begin(),
+                [](char a,unsigned char b) { return static_cast<unsigned char>(a)==b; }))
+            throw VbaRuntimeError(3159,"DAO: Invalid bookmark");
+        quint64 id=0; for (std::size_t i=16;i<24;++i) id=(id<<8)|value.bytes[i];
+        const auto position=data_->bookmarks.indexOf(id);
+        if (position<0) throw VbaRuntimeError(3159,"DAO: Invalid bookmark");
+        return position;
     }
     VbaValue defaultMember(const std::vector<VbaValue>& args,bool reference) override {
         if (args.size()!=1) throw VbaRuntimeError(450,"DAO: Recordset default field requires one index");
@@ -104,39 +167,53 @@ public:
     VbaValue item(std::string_view name) override { return value(text(name)); }
     VbaValue objectItem(std::string_view name) override { return member("Fields",{VbaValue::string(std::string(name))}); }
     void assignItem(std::string_view name,const VbaValue& value) override { set(text(name),value); }
-    QStringList fieldNames() const { require(!closed_,"DAO: Recordset is closed"); return columns_; }
+    QStringList fieldNames() const { require(!closed_,"DAO: Recordset is closed"); return data_->columns; }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         require(!closed_, "DAO: Recordset is closed");
         const auto key = lower(name);
+        if (key=="findfirst" || key=="findlast" || key=="findnext" || key=="findprevious") {
+            if (args.size()!=1) throw VbaRuntimeError(450,"DAO: Find requires one criterion");
+            if (args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null criterion");
+            find(key,text(args[0].asText())); return {};
+        }
+        if (key=="clone") {
+            if (!args.empty()) throw VbaRuntimeError(450,"DAO: Clone takes no arguments");
+            if (mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
+            return VbaValue::reference(std::shared_ptr<Recordset>(new Recordset(*this,CloneTag{})));
+        }
         if (key == "fields") {
             if (args.empty()) return fieldCollection(shared_from_this());
             require(args.size() == 1, "DAO: Fields requires one field name/index");
             QString field;
             if (args[0].kind == VbaValue::Kind::Number) {
                 const auto index = sqlFieldValue(args[0],"INTEGER").toLongLong();
-                if (index < 0 || index >= columns_.size()) throw VbaRuntimeError(3265,"DAO: Field index out of range");
-                field = columns_[static_cast<int>(index)];
+                if (index < 0 || index >= data_->columns.size()) throw VbaRuntimeError(3265,"DAO: Field index out of range");
+                field = data_->columns[static_cast<int>(index)];
             } else field = text(args[0].asText());
             (void)column(field);
             return VbaValue::reference(std::make_shared<Field>(shared_from_this(), field));
         }
         require(args.empty(), "DAO: Unexpected Recordset arguments");
-        if (key == "eof") return VbaValue::logical(rows_.empty() || position_ >= rows_.size());
-        if (key == "bof") return VbaValue::logical(rows_.empty() || position_ < 0);
-        if (key == "recordcount") return VbaValue::numeric(rows_.size());
+        if (key=="bookmark") return bookmarkAt(position_);
+        if (key=="bookmarkable") return VbaValue::logical(true);
+        if (key=="nomatch") return VbaValue::logical(noMatch_);
+        if (key == "eof") return VbaValue::logical(data_->rows.empty() || position_ >= data_->rows.size());
+        if (key == "bof") return VbaValue::logical(data_->rows.empty() || position_ < 0);
+        if (key == "recordcount") return VbaValue::numeric(data_->rows.size());
         if (key == "movefirst" || key == "movelast" || key == "movenext" || key == "moveprevious") {
             require(mode_ == Mode::Browse, "DAO: Update or CancelUpdate before navigation");
             if (key == "movefirst") position_ = 0;
-            if (key == "movelast") position_ = rows_.empty() ? 0 : rows_.size() - 1;
-            if (key == "movenext") { require(position_ < rows_.size(), "DAO: Already at EOF"); ++position_; }
-            if (key == "moveprevious") { require(position_ >= 0 && !rows_.empty(), "DAO: Already at BOF"); --position_; }
+            if (key == "movelast") position_ = data_->rows.empty() ? 0 : data_->rows.size() - 1;
+            if (key == "movenext") { require(position_ < data_->rows.size(), "DAO: Already at EOF"); ++position_; }
+            if (key == "moveprevious") { require(position_ >= 0 && !data_->rows.empty(), "DAO: Already at BOF"); --position_; }
+            noMatch_=false;
             return {};
         }
         if (key == "edit" || key == "addnew") {
             require(!readOnly_, "DAO: Recordset is read-only");
             require(mode_ == Mode::Browse, "DAO: Edit already in progress");
-            if (key == "edit") { current(); pending_ = rows_[position_]; mode_ = Mode::Edit; }
-            else { pending_ = QVariantList(columns_.size()); mode_ = Mode::Add; }
+            if (key == "edit") { current(); pending_ = data_->rows[position_]; mode_ = Mode::Edit; }
+            else { pending_ = QVariantList(data_->columns.size()); mode_ = Mode::Add; }
             changed_.clear();
             return {};
         }
@@ -147,72 +224,163 @@ public:
             current();
             QSqlQuery query(db_);
             require(query.prepare("DELETE FROM " + quote(source_) + " WHERE rowid=?"), "DAO: Delete prepare failed");
-            query.addBindValue(ids_[position_]);
+            query.addBindValue(data_->ids[position_]);
             require(query.exec() && query.numRowsAffected() == 1, "DAO: Delete failed or record changed");
-            reload();
+            reload(false);
             return {};
         }
         if (key == "requery") {
             require(mode_ == Mode::Browse, "DAO: Pending edit");
             reload(); return {};
         }
-        if (key == "close") { closed_ = true; rows_.clear(); ids_.clear(); return {}; }
+        if (key == "close") { closed_ = true; data_->cursors.remove(this); pending_.clear(); changed_.clear(); return {}; }
         return value(text(name)); // implicit default Fields(name).Value
     }
-    void assign(std::string_view name, const VbaValue& value) override { set(text(name), value); }
+    void assign(std::string_view name, const VbaValue& value) override {
+        if (lower(name)=="bookmark") {
+            if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
+            if (mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
+            position_=bookmarkPosition(value); noMatch_=false; return;
+        }
+        set(text(name), value);
+    }
     VbaValue value(const QString& name) const {
         require(!closed_, "DAO: Recordset is closed");
         const int index = column(name);
-        if (mode_ != Mode::Browse) return qtFieldValue(pending_[index],types_.value(name.toCaseFolded()));
-        current(); return qtFieldValue(rows_[position_][index],types_.value(name.toCaseFolded()));
+        if (mode_ != Mode::Browse) return qtFieldValue(pending_[index],data_->types.value(name.toCaseFolded()));
+        current(); return qtFieldValue(data_->rows[position_][index],data_->types.value(name.toCaseFolded()));
     }
     void set(const QString& name, const VbaValue& value) {
         require(!closed_ && mode_ != Mode::Browse, "DAO: Edit or AddNew required");
         const auto index = column(name);
-        pending_[index] = sqlFieldValue(value,types_.value(name.toCaseFolded())); changed_.insert(index);
+        pending_[index] = sqlFieldValue(value,data_->types.value(name.toCaseFolded())); changed_.insert(index);
     }
 private:
+    struct CloneTag {};
+    Recordset(const Recordset& source,CloneTag)
+        : data_(source.data_),db_(source.db_),source_(source.source_),bindings_(source.bindings_),
+          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),position_(-1),queryPlan_(source.queryPlan_) {
+        data_->cursors.insert(this);
+    }
     enum class Mode { Browse, Edit, Add };
     int column(const QString& name) const {
-        for (int i = 0; i < columns_.size(); ++i)
-            if (columns_[i].compare(name, Qt::CaseInsensitive) == 0) return i;
+        for (int i = 0; i < data_->columns.size(); ++i)
+            if (data_->columns[i].compare(name, Qt::CaseInsensitive) == 0) return i;
         throw std::runtime_error("DAO: Unknown field");
     }
-    void current() const { require(position_ >= 0 && position_ < rows_.size(), "DAO: No current record"); }
-    void reload() {
-        types_ = table_ ? sqliteColumnTypes(db_,source_) : QMap<QString,QString>{};
+    void current() const { if (position_<0 || position_>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: No current record"); }
+    void find(const std::string& kind,const QString& criteria) {
+        if (mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
+        if (criteria.trimmed().isEmpty()) throw VbaRuntimeError(3075,"DAO: Empty find criterion");
+        auto plan=compileAccessQuery("SELECT IIf(("+criteria+"),1,0) FROM [__la_find_scope]");
+        if (!plan.parameters.empty()) throw VbaRuntimeError(3061,"DAO: Unbound find parameter");
+        QStringList projections;
+        for (const auto& column:data_->columns) projections.append("? AS "+quote(column));
+        const auto from=plan.sql.lastIndexOf(" FROM ",Qt::CaseInsensitive);
+        if (from<0) throw VbaRuntimeError(3075,"DAO: Find criterion grammar unsupported");
+        SqliteExecutionBudget budget(db_); QElapsedTimer clock; clock.start();
+        const auto handle=db_.driver()->handle();
+        auto* connection=*static_cast<sqlite3* const*>(handle.constData());
+        int previousDqs=0;
+        if (sqlite3_db_config(connection,SQLITE_DBCONFIG_DQS_DML,-1,&previousDqs)!=SQLITE_OK
+            || sqlite3_db_config(connection,SQLITE_DBCONFIG_DQS_DML,0,nullptr)!=SQLITE_OK)
+            throw VbaRuntimeError(3251,"DAO: Strict find preparation unavailable");
+        const auto restoreDqs=qScopeGuard([&] { sqlite3_db_config(connection,SQLITE_DBCONFIG_DQS_DML,previousDqs,nullptr); });
+        QSqlQuery query(db_);
+        const auto fail=[&] {
+            if (query.lastError().text().contains("no such column",Qt::CaseInsensitive)) throw VbaRuntimeError(3070,"DAO: Find field unavailable");
+            queryFailure(query);
+        };
+        if (!query.prepare(plan.sql.left(from)+" FROM (SELECT "+projections.join(',')+")")) fail();
+        const bool backwards=kind=="findlast" || kind=="findprevious";
+        const auto revision=data_->revision;
+        const qsizetype step=backwards ? -1 : 1;
+        qsizetype candidate=kind=="findfirst" ? 0 : kind=="findlast" ? data_->rows.size()-1 : position_+step;
+        for (;candidate>=0 && candidate<data_->rows.size();candidate+=step) {
+            if (clock.hasExpired(5000)) throw VbaRuntimeError(3035,"DAO: Find execution budget exceeded");
+            const auto& row=data_->rows[candidate];
+            for (qsizetype column=0;column<row.size();++column) query.bindValue(static_cast<int>(column),row[column]);
+            const bool fetched=query.exec() && query.next();
+            if (data_->revision!=revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during find");
+            if (!fetched) fail();
+            const bool match=query.value(0).toInt()!=0; query.finish();
+            if (match) { position_=candidate; noMatch_=false; return; }
+        }
+        position_=backwards ? -1 : data_->rows.size(); noMatch_=true;
+    }
+    void reload(bool invalidate=true) {
+        if (frozen_) throw VbaRuntimeError(3251,"DAO: Form snapshot requires form Requery");
+        const auto original=*data_;
+        std::vector<std::shared_ptr<Recordset>> leases;
+        for (auto* cursor:data_->cursors)
+            if (auto lease=cursor->weak_from_this().lock()) leases.push_back(std::move(lease));
+        QMap<Recordset*,QPair<qsizetype,bool>> originalPositions;
+        for (auto* cursor:data_->cursors) originalPositions.insert(cursor,{cursor->position_,cursor->noMatch_});
+        bool completed=false;
+        const auto restore=qScopeGuard([&] {
+            if (completed) return;
+            const auto live=data_->cursors; *data_=original; data_->cursors=live;
+            for (auto it=originalPositions.cbegin();it!=originalPositions.cend();++it) {
+                if (live.contains(it.key())) { it.key()->position_=it.value().first; it.key()->noMatch_=it.value().second; }
+            }
+        });
+        QMap<qlonglong,quint64> previousTokens;
+        QMap<Recordset*,QVariant> previousRows;
+        if (!invalidate && table_) {
+            for (qsizetype i=0;i<data_->ids.size();++i) previousTokens.insert(data_->ids[i].toLongLong(),data_->bookmarks[i]);
+            for (auto* cursor:data_->cursors)
+                if (cursor->position_>=0 && cursor->position_<data_->ids.size()) previousRows.insert(cursor,data_->ids[cursor->position_]);
+        }
+        const auto finalize=[&] {
+            data_->bookmarks.clear();
+            for (qsizetype i=0;i<data_->rows.size();++i) {
+                const auto old=table_ ? previousTokens.value(data_->ids[i].toLongLong()) : 0;
+                data_->bookmarks.append(old ? old : data_->nextBookmark++);
+            }
+            for (auto* cursor:data_->cursors) {
+                if (invalidate) cursor->position_=-1;
+                else if (previousRows.contains(cursor)) cursor->position_=data_->ids.indexOf(previousRows.value(cursor));
+                else if (cursor->position_>=0) cursor->position_=data_->rows.size();
+                cursor->noMatch_=false;
+            }
+            position_=0; noMatch_=false;
+            ++data_->revision;
+            completed=true;
+        };
+        data_->types = table_ ? sqliteColumnTypes(db_,source_) : QMap<QString,QString>{};
         if (!table_) {
             auto plan=queryPlan_;
             if (plan.sql.isEmpty()) plan.sql=source_;
             const auto result = executeAccessQueryPlan(db_,plan,bindings_);
-            columns_ = result.columns; rows_ = result.rows; ids_.clear(); position_ = 0;
+            data_->columns = result.columns; data_->rows = result.rows; data_->ids.clear(); finalize();
             return;
         }
         SqliteExecutionBudget budget(db_);
         QSqlQuery query(db_);
         exec(query,"SELECT rowid,* FROM " + quote(source_));
         const int offset = table_ ? 1 : 0;
-        columns_.clear(); rows_.clear(); ids_.clear(); position_ = 0;
+        data_->columns.clear(); data_->rows.clear(); data_->ids.clear(); position_ = 0;
         const int end = query.record().count();
-        for (int i = offset; i < end; ++i) columns_ << query.record().fieldName(i);
+        for (int i = offset; i < end; ++i) data_->columns << query.record().fieldName(i);
         while (query.next()) {
-            require(rows_.size() < 100000, "DAO: Recordset row limit exceeded");
+            require(data_->rows.size() < 100000, "DAO: Recordset row limit exceeded");
             QVariantList row;
-            if (table_) ids_.append(query.value(0));
+            if (table_) data_->ids.append(query.value(0));
             for (int i = offset; i < end; ++i) row << query.value(i);
-            rows_.append(row);
+            data_->rows.append(row);
         }
         if (query.lastError().isValid()) queryFailure(query);
+        finalize();
     }
     void update() {
         require(!closed_ && !readOnly_ && mode_ != Mode::Browse, "DAO: No editable record buffer");
         const bool adding = mode_ == Mode::Add;
-        QVariant id = adding ? QVariant{} : ids_[position_];
+        QVariant id = adding ? QVariant{} : data_->ids[position_];
         QStringList columns, values, assignments;
         QList<int> indices = changed_.values();
         std::sort(indices.begin(), indices.end());
         for (const int i : indices) {
-            columns << quote(columns_[i]); values << "?"; assignments << quote(columns_[i]) + "=?";
+            columns << quote(data_->columns[i]); values << "?"; assignments << quote(data_->columns[i]) + "=?";
         }
         QSqlQuery query(db_);
         if (adding && columns.empty()) exec(query, "INSERT INTO " + quote(source_) + " DEFAULT VALUES");
@@ -227,16 +395,13 @@ private:
         }
         if (adding) id = query.lastInsertId();
         mode_ = Mode::Browse; pending_.clear(); changed_.clear();
-        reload(); position_ = ids_.indexOf(id);
+        reload(false); position_ = data_->ids.indexOf(id);
     }
+    std::shared_ptr<RecordsetData> data_{std::make_shared<RecordsetData>()};
     QSqlDatabase db_;
     QString source_;
     QMap<QString,QVariant> bindings_;
-    bool table_{}, readOnly_{}, closed_{};
-    QStringList columns_;
-    QMap<QString,QString> types_;
-    QVector<QVariantList> rows_;
-    QVector<QVariant> ids_;
+    bool table_{}, readOnly_{}, closed_{}, frozen_{},noMatch_{};
     QVariantList pending_;
     QSet<int> changed_;
     qsizetype position_{};
@@ -532,5 +697,25 @@ private:
 }
 std::shared_ptr<VbaObject> makeDaoDatabase(QSqlDatabase database) {
     return std::make_shared<Database>(std::move(database));
+}
+std::shared_ptr<VbaObject> makeDaoSnapshot(QSqlDatabase database,const QStringList& columns,
+                                        const QMap<QString,QString>& types,const QVector<QVariantList>& rows,const QVector<QVariant>& ids) {
+    return std::make_shared<Recordset>(std::move(database),columns,types,rows,ids);
+}
+void refreshDaoSnapshot(const std::shared_ptr<VbaObject>& recordset,const QStringList& columns,
+                        const QMap<QString,QString>& types,const QVector<QVariantList>& rows,const QVector<QVariant>& ids) {
+    const auto native=std::dynamic_pointer_cast<Recordset>(recordset);
+    if (!native) throw VbaRuntimeError(13,"DAO: Native recordset required");
+    native->refreshSnapshot(columns,types,rows,ids);
+}
+VbaValue daoBookmarkAt(const std::shared_ptr<VbaObject>& recordset,qsizetype position) {
+    const auto native=std::dynamic_pointer_cast<Recordset>(recordset);
+    if (!native) throw VbaRuntimeError(13,"DAO: Native recordset required");
+    return native->bookmarkAt(position);
+}
+qsizetype daoBookmarkPosition(const std::shared_ptr<VbaObject>& recordset,const VbaValue& bookmark) {
+    const auto native=std::dynamic_pointer_cast<Recordset>(recordset);
+    if (!native) throw VbaRuntimeError(13,"DAO: Native recordset required");
+    return native->bookmarkPosition(bookmark);
 }
 }

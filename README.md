@@ -55,6 +55,12 @@ VBA-Eingabedialoge `InputBox(...)`/`InputBox$(...)` verwenden einen echten
 Qt-Dialog mit Text-/Abbruchrückgabe. Geprüfter Umfang und verbleibende Grenzen:
 [InputBox-Laufzeit](docs/INPUT_BOX_RUNTIME.md).
 
+DAO-Clone-/Bookmark-/Find-Suche kann den nativen Formulardatensatz wechseln,
+einschließlich Validierung und zweier originaler generierter Suchhandler auf
+vorbereiteten Testdaten. Ein weiterer Originalhandler enthält einen fehlenden
+Controlverweis. Umfang und verbleibende Grenzen:
+[DAO-Cursor und Formularsuche](docs/DAO_CURSOR_RUNTIME.md).
+
 Eine `.deb`-Datei lässt sich nach dem Build erzeugen mit:
 
 ```bash
@@ -62,10 +68,10 @@ cpack --config build/CPackConfig.cmake -G DEB
 ./scripts/check-deb.sh ./linaccess-0.7.0-Linux.deb build/linaccess
 ```
 
-Die Datei `.github/workflows/build-linux.yml` enthält zusätzlich Builds für
-Ubuntu 24.04 und Debian 12. Der zuletzt angeforderte GitHub-Lauf konnte wegen
-einer Kontozahlungs-/Ausgabenlimit-Sperre keine Jobs starten; lokale Container-
-Prüfungen werden im [Fortschrittsprotokoll](docs/PROGRESS.md) separat dokumentiert.
+Die Datei `.github/workflows/build-linux.yml` prüft Ubuntu 24.04 sowie Debian
+12/13 und installiert die erzeugten Pakete. Die zuletzt bestätigten Läufe sind
+erfolgreich; die frühere Kontozahlungs-/Ausgabenlimit-Sperre trat dabei nicht
+mehr auf. Commitbezogene Nachweise stehen im [Fortschrittsprotokoll](docs/PROGRESS.md).
 
 `mdbtools` ist optional, aber zum Lesen von `.mdb` und versuchsweise `.accdb`
 im Access-Inspektor erforderlich. Die Unterstützung ist je nach MDBTools-Version
@@ -373,10 +379,13 @@ Diese Funktion liefert im eingeschränkten Interpreter `10` zurück.
 
 ## Build-Status
 
-Aktuelle lokale Regression (Debian 13 / GCC 14 / Qt 6.8): **18/18 Tests**,
+Aktuelle lokale Regression (Debian 13 / GCC 14 / Qt 6.8): **20/20 Tests**,
 einschließlich vollständigem 29-Tabellen-Zellvergleich und einem echten Kassen-
 DAO-Buttonereignis. Die MDB-Regressionen wurden zusätzlich mit MDBTools 1.0.0
-mehrfach ausgeführt. Externe Debian-/Ubuntu-CI-Ergebnisse bleiben unbestätigt.
+mehrfach ausgeführt. Private GitHub-Läufe bestätigen zusätzlich Debian 12/13,
+Ubuntu 24.04 und die Windows-PowerShell-Syntaxprüfung. Die Linux-Jobs prüfen
+Tests, Pakete, installierte Backends und Fixture-Hashes. Dies ist kein Nachweis
+für Windows-Access-Laufzeit oder vollständige Access-Kompatibilität.
 
 Früherer Referenzstand:
 
@@ -403,7 +412,7 @@ PowerShell-Bridge-Build an allen Access-Versionen, volle VBA-Kompatibilität.
 Der Quellcode baut mit C++20, CMake und Qt 6.4+ auf beiden Systemfamilien.
 GitHub Actions enthält getrennte Jobs für **Ubuntu 24.04**, **Debian 12**
 und **Debian 13**: jeder Job erstellt ein auf seiner Distribution gebautes
-`.deb`-Paket. Diese externen CI-Jobs wurden hier **noch nicht ausgeführt**.
+`.deb`-Paket. Die aktuellen bestätigten Läufe sind im Fortschrittsprotokoll verlinkt.
 
 Ein unter Ubuntu 24.04 erzeugtes `.deb` ist wegen der Qt-6-`t64`-Paketnamen
 ausdrücklich **nicht** als Debian-12-Paket freigegeben. Für Debian ist ein

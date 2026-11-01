@@ -21,10 +21,13 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Parsed controls / visible command buttons | 879 / 86 |
 | Original query artifacts classified / executed without Access result oracle | 100 / 77 (72 ordinary + 5 parameterized) |
 | Original date-filter fields exercised through actual calendar selection | 2 |
+| Original generated record-search procedures / native selections / missing control-reference failures | 2 / 2 / 1 |
 | Current local regression tests | 20 passed |
 
-Current completed work package: positional Sub/Function calls, ByVal/ByRef aliases,
-function expressions, top-level label error handling and original keypad regression.
+Recent completed work includes native combo/platform/backend fixes, control event
+prefixes, InputBox and DAO clone/bookmark/find form navigation. Positional
+Sub/Function calls, ByVal/ByRef aliases, function expressions, top-level label
+error handling and original keypad regression remain covered.
 
 Current completed query package: typed named parameters, imported/temporary DAO
 QueryDefs, basic Jet strings/LIKE/DISTINCTROW/TOP ties, canonical dates and bounded
@@ -436,3 +439,37 @@ executable/backend/payload/permissions checks and extracted backend self-tests;
 both distro DEBs passed installed backend and offscreen GUI startup checks in
 fresh containers. Four original fixture hashes passed after distro testing.
 No original credential was used in GUI input tests or copied to artifacts/logs.
+
+Remote InputBox verification: private GitHub run
+https://github.com/BlueDragon4251/LinAccess/actions/runs/41300019379 for commit
+f694c81397c4c8221035753f640ed8e7f4f811cf completed successfully on Ubuntu 24.04,
+Debian 12, Debian 13 and Windows PowerShell syntax. The run verifies the InputBox
+increment on Linux; it does not verify a Windows Access input-dialog oracle.
+
+DAO cursor/search increment: clone cursors now share actual dataset changes with
+independent positions/edit buffers, typed opaque byte-array bookmarks, bounded
+Find methods and NoMatch. Stale/foreign/deleted/reused-rowid bookmark rejection,
+strict unknown-field handling, ordered query snapshots and independent close
+have native SQL regressions. Form.Recordset exposes a restricted clone/search
+view; Form.Bookmark selects through native save/validation/Current processing.
+Saved table values refresh shared clone snapshots without losing surviving row
+bookmarks; explicit requery/filter reload invalidates the form family. Str/Str$
+implements the numeric SQL-fragment conversion used by the original generated
+handlers. General arrays, editable form Recordset, locking and complete criteria/
+formatting/provider semantics remain open; see DAO_CURSOR_RUNTIME.md.
+
+The unchanged original module and original layout (source hash in that document)
+run against a prepared synthetic table and prepared real Qt lookup models. Both
+original automatic Open/Load procedures complete. Two original generated search
+procedures pass positive/no-match/Null cases (six explicit calls) and select the
+expected record through actual combo mouse input (two bound event executions).
+A third original procedure references an absent exported control, including after
+case/space normalization. Its direct call and actual bound combo event fail with
+2465 without navigation. No renamed alias is invented. This is not a successful
+third search or verification of the complete original lookup/business dataset.
+
+Validation: Release host 20/20 CTests (68.29 s), Qt-free core 1/1 (0.46 s), Debian 12
+20/20 (54.37 s), Ubuntu 24.04 20/20 (50.86 s). Fresh DEBs passed executable/backend
+identity, exact payload/permission allowlists and extracted backend regressions.
+Both distro packages passed installed-backend resolution and bounded offscreen
+GUI startup in fresh containers. Four original fixture hashes passed after tests.

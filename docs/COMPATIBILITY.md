@@ -18,6 +18,13 @@ Adapter müssen dieselbe gepinnte Backend-Identität melden; andernfalls Fehler
 belegt jedoch keine zusätzliche pauschale Jet-/Access-Kompatibilität. Siehe
 [Backend und Aktualisierung](../third_party/sqlite/README.md).
 
+Der native DAO-Suchpfad unterstützt jetzt begrenztes Find/Clone/Bookmark und
+Form.Bookmark-Navigation mit Validierung. Zwei unveränderte originale Suchhandler
+funktionieren per Qt-Auswahl auf vorbereiteten Testdaten; ein dritter behält wegen
+eines fehlenden Controlverweises Fehler 2465. Vollständiges editierbares
+Form.Recordset und generelle Array-/Sperrsemantik bleiben offen:
+[Cursor-Grenzen und Nachweise](DAO_CURSOR_RUNTIME.md).
+
 | Bereich | Jetzt | Geplante Strategie | Grenze / Risiko |
 |---|---|---|---|
 | `.mdb`-Tabellen | MDBTools: typisierte INTEGER/REAL/TEXT-Kopie inklusive NULL, BLOB-Spalten ohne Nutzdaten; **29/29** Tabellen der echten Kassen-MDB in SQLite-Kopie importiert | Vollständiger Jet-Schemaimport | Standardwerte, echte OLE-Daten, exakte Jet-Typen, Encoding |

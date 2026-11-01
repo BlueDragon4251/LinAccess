@@ -1,5 +1,6 @@
 #include "access_form_objects.hpp"
 #include "jet_sql_functions.hpp"
+#include "dao_database.hpp"
 #include <QThread>
 #include "access_form_preview.hpp"
 #include "vba_qt_value.hpp"
@@ -235,6 +236,23 @@ private:
         return names;
     }
 };
+class PreviewRecordsetObject final : public linaccess::VbaObject, private PreviewObjectBase {
+public:
+    explicit PreviewRecordsetObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& arguments) override {
+        auto& preview=checked(); const auto key=text(name).toCaseFolded();
+        auto snapshot=preview.recordsetSnapshot();
+        if (key=="clone" || key=="recordcount" || key=="bookmarkable") return snapshot->member(name,arguments);
+        if (key=="bookmark") {
+            if (!arguments.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected bookmark arguments");
+            return linaccess::daoBookmarkAt(snapshot,preview.currentRecordIndex_-1);
+        }
+        throw linaccess::VbaRuntimeError(3251,"Direct form recordset member unsupported; use Clone for searching");
+    }
+    void assign(std::string_view,const linaccess::VbaValue&) override {
+        (void)checked(); throw linaccess::VbaRuntimeError(3251,"Direct form recordset mutation unsupported");
+    }
+};
 class PreviewFormObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewFormObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
@@ -255,6 +273,11 @@ public:
         if (key == "tag") return linaccess::VbaValue::string(bytes(preview.property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(preview.layout_.caption));
         if (key == "recordsource") return linaccess::VbaValue::string(bytes(preview.layout_.recordSource));
+        if (key=="recordset") {
+            (void)preview.recordsetSnapshot();
+            return linaccess::VbaValue::reference(std::make_shared<PreviewRecordsetObject>(preview));
+        }
+        if (key=="bookmark") return linaccess::daoBookmarkAt(preview.recordsetSnapshot(),preview.currentRecordIndex_-1);
         if (key=="filter") return linaccess::VbaValue::string(bytes(preview.filter_));
         if (key=="filteron") return linaccess::VbaValue::logical(preview.filterOn_);
         if (key=="keypreview") return linaccess::VbaValue::logical(preview.layout_.keyPreview);
@@ -300,6 +323,13 @@ public:
     }
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if (key=="recordset") throw linaccess::VbaRuntimeError(3251,"Replacing the form recordset is unsupported");
+        if (key=="bookmark") {
+            const auto target=linaccess::daoBookmarkPosition(preview.recordsetSnapshot(),value)+1;
+            preview.selectRecord(static_cast<int>(target));
+            if (preview.currentRecordIndex_!=target) throw linaccess::VbaRuntimeError(2501,"Bookmark navigation cancelled");
+            return;
+        }
         if (key=="keypreview") {
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"KeyPreview requires a form");
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null KeyPreview");

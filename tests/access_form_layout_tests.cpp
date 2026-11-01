@@ -32,6 +32,8 @@ void testEventPrefixes();
 void testFilters();
 void testMessageBoxes();
 void testInputBoxes();
+void testRecordsetNavigation();
+void testOriginalRecordsetSearch(const QDir&,const QJsonArray&);
 void testCalendarValues();
 void testModuleStates(const QDir&,const QJsonArray&);
 void testCloseCommands();
@@ -229,6 +231,8 @@ End Sub
     testEventPrefixes();
     testMessageBoxes();
     testInputBoxes();
+    testRecordsetNavigation();
+    testOriginalRecordsetSearch(directory,objects);
     testCalendarValues();
     testModuleStates(directory,objects);
     testCloseCommands();

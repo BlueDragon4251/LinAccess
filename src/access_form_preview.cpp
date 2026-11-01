@@ -211,6 +211,13 @@ QString AccessFormPreview::controlEventPrefix(const QString& name) const {
             return control.eventProcPrefix.isEmpty() ? eventName(control.name) : control.eventProcPrefix;
     return eventName(name);
 }
+std::shared_ptr<linaccess::VbaObject> AccessFormPreview::recordsetSnapshot() {
+    if (layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Report has no form recordset");
+    if (!dataSourceAvailable_) throw linaccess::VbaRuntimeError(3146,"Form record source unavailable");
+    if (dataTruncated_) throw linaccess::VbaRuntimeError(3035,"Form recordset is incomplete");
+    if (!recordsetSnapshot_) recordsetSnapshot_=linaccess::makeDaoSnapshot(db_,dataColumns_,dataTypes_,recordRows_,rowIds_);
+    return recordsetSnapshot_;
+}
 QString AccessFormPreview::controlMemberName(const QString& name) const {
     if (controls_.contains(name.toCaseFolded())) return name;
     QString resolved;
@@ -333,7 +340,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
-        if (key=="filter" || key=="filteron" || key=="keypreview") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
+        if (key=="filter" || key=="filteron" || key=="keypreview" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -346,7 +353,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
-        if (key == "caption" || key=="tag" || key=="filter" || key=="filteron" || key=="keypreview") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
+        if (key == "caption" || key=="tag" || key=="filter" || key=="filteron" || key=="keypreview" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
         if (key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
@@ -814,6 +821,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
 }
 
 void AccessFormPreview::loadRecords() {
+    recordsetSnapshot_.reset();
     const bool wasNew = initialized_ && currentRecordIndex_ == 0;
     const auto oldId = currentRecordIndex_ > 0 && currentRecordIndex_ <= rowIds_.size()
         ? rowIds_[currentRecordIndex_-1] : QVariant{};
@@ -1040,7 +1048,12 @@ bool AccessFormPreview::saveRecord() {
     }
     if (savedId.isNull()) savedId = query.lastInsertId();
     dirty_ = false;
+    const auto snapshot=recordsetSnapshot_;
     loadRecords();
+    if (snapshot && directTable_ && dataSourceAvailable_ && !dataTruncated_) {
+        linaccess::refreshDaoSnapshot(snapshot,dataColumns_,dataTypes_,recordRows_,rowIds_);
+        recordsetSnapshot_=snapshot;
+    }
     const int index = rowIds_.indexOf(savedId)+1;
     recordSelector_->blockSignals(true); recordSelector_->setCurrentIndex(index); recordSelector_->blockSignals(false);
     currentRecordIndex_ = index; loadRecord();

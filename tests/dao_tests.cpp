@@ -24,8 +24,10 @@ public:
 private:
     QSqlDatabase db_;
 };
+void testDaoCursors();
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testDaoCursors();
     auto db = QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery q(db);
     assert(q.exec("CREATE TABLE items (id INTEGER PRIMARY KEY, qty REAL, label TEXT DEFAULT 'default')"));

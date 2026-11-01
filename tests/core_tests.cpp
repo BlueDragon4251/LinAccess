@@ -87,6 +87,26 @@ int main() {
 
     {
         FakeForm host;
+        for (const auto& [expression,result]:std::vector<std::pair<std::string,std::string>>{
+            {"Str(12)"," 12"},{"Str$(-12)","-12"},{"Str(0)"," 0"},{"Str(-0)"," 0"},
+            {"Str(0.5)"," .5"},{"Str(-0.5)","-.5"},{"Str(Empty)"," 0"},{"Str(True)","-1"},
+            {"Str(CCur(1.2345))"," 1.2345"}})
+            assert(evaluateVbaExpression(expression,host,{}).asText()==result);
+        for (const auto& [expression,number]:std::vector<std::pair<std::string,int>>{
+            {"Str()",450},{"Str(1,2)",450},{"Str(Null)",94},{"Str(\"bad\")",13}}) {
+            try { (void)evaluateVbaExpression(expression,host,{}); assert(false); }
+            catch (const VbaRuntimeError& failure) { assert(failure.number==number); }
+        }
+        const auto bytes=VbaValue::byteArray({1,2,3});
+        assert(evaluateVbaExpression("IsArray(token)",host,{{"token",bytes}}).truthy());
+        assert(evaluateVbaExpression("VarType(token)=vbArray+vbByte",host,{{"token",bytes}}).truthy());
+        assert(evaluateVbaExpression("TypeName(token)",host,{{"token",bytes}}).asText()=="Byte()");
+        try { (void)bytes.asText(); assert(false); } catch (const VbaRuntimeError& failure) { assert(failure.number==13); }
+        try { (void)bytes.asNumber(); assert(false); } catch (const VbaRuntimeError& failure) { assert(failure.number==13); }
+    }
+
+    {
+        FakeForm host;
         for (const auto& literal:std::vector<std::string>{"(",")","-","+","not","and","or",".","!",",",";"}) {
             const auto source="\""+literal+"\"";
             assert(validVbaExpression(source));
