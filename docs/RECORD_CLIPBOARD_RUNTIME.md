@@ -8,7 +8,7 @@ finite reals and binary bytes. A quoted TSV representation is also provided.
 
 PasteAppend validates field shape/names/types/version and 8 MiB/255-column
 limits. External plain text is not guessed to be a record. Actual AUTOINCREMENT
-columns, verified through SQLite metadata, generate destination keys; manual keys
+columns and verified managed counter defaults generate destination keys; manual keys
 remain unchanged and conflicts report 3022. Imported counters without native
 generation fail with 3251. SQL uses a savepoint and execution budget. Failure or
 exclusion by the current form filter rolls back. Snapshot clones retain surviving
@@ -39,4 +39,4 @@ in output. This is no independent Windows Access result comparison.
 
 Full clipboard interoperability, multiple records, external TSV import, complete
 insertion events, all conversions/defaults/constraints, writable query sources,
-non-primary-key generators, Access clipboard formats and rendering remain open.
+complete counter semantics, Access clipboard formats and rendering remain open.

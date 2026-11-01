@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
     int trueBooleans = 0;
     int typedBooleans = 0;
     int formattedDates = 0;
-    int counters=0,nativeCounters=0,counterProbes=0;
+    int counters=0,nativeCounters=0,counterProbes=0,managedProbes=0;
     QStringList failures;
     for (const auto& table : tables) {
         if (table.startsWith("MSys", Qt::CaseInsensitive)) continue;
@@ -82,18 +82,23 @@ int main(int argc, char** argv) {
                 int matched=0;
                 for (const auto& value:stored) {
                     const auto field=value.toObject(); if (field["name"].toString()!=column.name) continue;
-                    assert(field["auto_number"].toBool() && field["auto_number_native"].toBool()==native); ++matched;
+                    assert(field["auto_number"].toBool() && field["auto_number_native"].toBool()); ++matched;
                 }
                 assert(matched==1);
-                if (!native || counterProbes) continue;
+                if (native ? counterProbes!=0 : managedProbes!=0) continue;
                 const auto quote=[](QString value) { return '"'+value.replace('"',"\"\"")+'"'; };
                 QSqlQuery probe(db); assert(probe.exec("SAVEPOINT counter_probe"));
                 assert(probe.exec("SELECT COALESCE(MAX("+quote(column.name)+"),0) FROM "+quote(table)) && probe.next());
                 const auto previous=probe.value(0).toLongLong(); probe.finish();
                 if (probe.exec("INSERT INTO "+quote(table)+" DEFAULT VALUES")) {
-                    const auto first=probe.lastInsertId().toLongLong(); assert(first>previous);
+                    const auto counterValue=[&](const QVariant& rowId) {
+                        QSqlQuery read(db); read.prepare("SELECT "+quote(column.name)+" FROM "+quote(table)+" WHERE rowid=?"); read.addBindValue(rowId);
+                        assert(read.exec() && read.next()); return read.value(0).toLongLong();
+                    };
+                    const auto first=counterValue(probe.lastInsertId()); assert(first>previous);
                     probe.prepare("DELETE FROM "+quote(table)+" WHERE "+quote(column.name)+"=?"); probe.addBindValue(first); assert(probe.exec());
-                    assert(probe.exec("INSERT INTO "+quote(table)+" DEFAULT VALUES") && probe.lastInsertId().toLongLong()==first+1); ++counterProbes;
+                    assert(probe.exec("INSERT INTO "+quote(table)+" DEFAULT VALUES"));
+                    assert(counterValue(probe.lastInsertId())==first+1); if (native) ++counterProbes; else ++managedProbes;
                 }
                 assert(probe.exec("ROLLBACK TO counter_probe") && probe.exec("RELEASE counter_probe"));
             }
@@ -199,7 +204,7 @@ End Function
     std::cout << "Original date columns formatted through native SQL: " << formattedDates << '\n';
     assert(tables.size() == 29);
     assert(imported == 29 && failures.empty());
-    assert(counters==21 && nativeCounters==16 && counterProbes==1);
+    assert(counters==21 && nativeCounters==16 && counterProbes==1 && managedProbes==1);
     std::cout<<"Original counter metadata: "<<counters<<", native single-PK counters: "<<nativeCounters<<", isolated insert/delete/no-reuse probes: "<<counterProbes<<'\n';
     assert(original.open(QIODevice::ReadOnly));
     assert(QCryptographicHash::hash(original.readAll(), QCryptographicHash::Sha256) == before);

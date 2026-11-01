@@ -76,7 +76,8 @@ Original-Löschhandler ist auf synthetischen Zeilen direkt und per Button geprü
 
 Der Import erhält AutoNumber-Markierungen und verwendet für einzelne
 INTEGER-Primärschlüssel native Generierung ohne Wiederverwendung gelöschter
-Höchstwerte. Umfang einschließlich fünf noch nicht generierter Originalspalten:
+Höchstwerte. Auch die fünf Zähler ohne Primärschlüssel haben eine native
+Generierung. Genaue Grenzen und verbleibende Jet-Abweichungen:
 [AutoNumber-Import](docs/AUTONUMBER_IMPORT.md).
 
 Begrenztes natives Datensatz-Kopieren/Anfügen verwendet die echte Zwischenablage

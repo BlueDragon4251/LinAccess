@@ -1,5 +1,6 @@
 #include "access_form_preview.hpp"
 #include "dao_database.hpp"
+#include "access_autonumber.hpp"
 #include "jet_sql_functions.hpp"
 #include "sqlite_execution.hpp"
 #include "vba_qt_value.hpp"
@@ -15,10 +16,8 @@
 #include <QScopeGuard>
 #include <QSet>
 #include <QSignalBlocker>
-#include <QSqlDriver>
 #include <QSqlError>
 #include <QSqlQuery>
-#include <sqlite3.h>
 #include <cmath>
 
 namespace {
@@ -117,26 +116,19 @@ void AccessFormPreview::pasteAppendRecord() {
     QString table;
     for (const auto& candidate:db_.tables()) if (candidate.compare(layout_.recordSource.trimmed(),Qt::CaseInsensitive)==0) { table=candidate; break; }
     if (table.isEmpty()) throw VbaRuntimeError(3078,"Append table unavailable");
-    linaccess::installJetSqlFunctions(db_);
-    auto handle=db_.driver()->handle();
-    if (!handle.isValid() || QByteArray(handle.typeName())!="sqlite3*") throw VbaRuntimeError(3251,"Append metadata adapter unavailable");
-    auto* connection=*static_cast<sqlite3**>(handle.data());
-    if (!connection) throw VbaRuntimeError(3251,"Append connection unavailable");
     QSet<QString> counters;
     QSqlQuery metadata(db_); metadata.prepare("SELECT definition FROM _la_table_schema WHERE table_name=?"); metadata.addBindValue(table);
     if (metadata.exec() && metadata.next())
         for (const auto& field:QJsonDocument::fromJson(metadata.value(0).toByteArray()).array())
             if (field.toObject()["auto_number"].toBool()) counters.insert(field.toObject()["name"].toString().toCaseFolded());
     metadata.finish();
+    const auto generated=linaccess::generatedAccessColumns(db_,table);
     QStringList columns,placeholders; QVariantList values;
     for (const auto& column:dataColumns_) {
         const auto name=column.toCaseFolded();
         if (!source.contains(name)) throw VbaRuntimeError(3265,"Clipboard column unavailable");
-        int autoIncrement=0;
-        if (sqlite3_table_column_metadata(connection,"main",table.toUtf8().constData(),column.toUtf8().constData(),nullptr,nullptr,nullptr,nullptr,&autoIncrement)!=SQLITE_OK)
-            throw VbaRuntimeError(3146,"Append column metadata unavailable");
-        if (counters.contains(name) && !autoIncrement) throw VbaRuntimeError(3251,"Counter generation for this column unsupported");
-        if (autoIncrement) continue;
+        if (counters.contains(name) && !generated.contains(name)) throw VbaRuntimeError(3251,"Counter generation for this column unsupported");
+        if (generated.contains(name)) continue;
         auto value=source.value(name); const auto type=dataTypes_.value(name);
         if (!value.isNull() && type!="BLOB" && type!="TEXT" && !(type.contains("INT",Qt::CaseInsensitive) && value.metaType().id()==QMetaType::LongLong))
             value=linaccess::sqlFieldValue(linaccess::qtFieldValue(value,type),type);
@@ -164,7 +156,8 @@ void AccessFormPreview::pasteAppendRecord() {
         for (const auto& value:values) sql.addBindValue(value);
         if (!sql.exec()) {
             const auto message=sql.lastError().text().toCaseFolded();
-            const int number=message.contains("unique constraint") || message.contains("primary key") ? 3022 : message.contains("not null") ? 3314 : message.contains("foreign key") ? 3201 : message.contains("interrupted") ? 3035 : 3146;
+            const auto typed=linaccess::jetSqlFunctionErrorNumber(message.toStdString());
+            const int number=typed ? *typed : message.contains("unique constraint") || message.contains("primary key") ? 3022 : message.contains("not null") ? 3314 : message.contains("foreign key") ? 3201 : message.contains("interrupted") ? 3035 : 3146;
             throw VbaRuntimeError(number,"Record append failed");
         }
     }

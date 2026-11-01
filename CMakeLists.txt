@@ -13,7 +13,7 @@ if(LINACCESS_BUILD_GUI)
     enable_language(C)
     add_subdirectory(third_party/sqlite)
     add_library(linaccess_data STATIC
-        src/access_catalog.cpp src/access_table_import.cpp src/access_query.cpp src/access_value_list.cpp src/access_format.cpp
+        src/access_catalog.cpp src/access_autonumber.cpp src/access_table_import.cpp src/access_query.cpp src/access_value_list.cpp src/access_format.cpp
         src/dao_database.cpp src/sqlite_execution.cpp src/jet_sql_functions.cpp src/vba_source_codec.cpp
         src/vba_qt_value.cpp src/vba_module_context.cpp src/access_form_import.cpp)
     target_link_libraries(linaccess_data PUBLIC linaccess_runtime Qt6::Core Qt6::Sql linaccess_sqlite)

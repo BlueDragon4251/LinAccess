@@ -10,6 +10,7 @@
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
 #include "access_value_list.hpp"
+#include "access_autonumber.hpp"
 #include "access_format.hpp"
 #include "sqlite_execution.hpp"
 #include "jet_sql_functions.hpp"
@@ -1057,6 +1058,9 @@ bool AccessFormPreview::saveRecord() {
     if (!dataSourceAvailable_ || !directTable_) return false;
     const auto before = formEvent("BeforeUpdate","Form_BeforeUpdate");
     if (before.cancelled || failed(before)) return false;
+    QSet<QString> generated;
+    try { if (currentRecordIndex_==0) generated=linaccess::generatedAccessColumns(db_,table); }
+    catch (const std::exception& error) { status_->setText(QString::fromUtf8(error.what())); return false; }
     QStringList columns,placeholders;
     QVariantList values;
     for (const auto& control : layout_.controls) {
@@ -1065,12 +1069,14 @@ bool AccessFormPreview::saveRecord() {
         if (!widget || fieldIndex < 0) continue;
         const auto column = sqlIdentifier(dataColumns_[fieldIndex]);
         if (columns.contains(column)) continue;
-        columns << column; placeholders << "?";
         try {
-            values << linaccess::sqlFieldValue(getFieldValue(control.name.toUtf8().toStdString()),widget->property("la_sql_type").toString());
+            const auto value=getFieldValue(control.name.toUtf8().toStdString());
+            if (generated.contains(dataColumns_[fieldIndex].toCaseFolded()) && value.kind==linaccess::VbaValue::Kind::Null) continue;
+            columns << column; placeholders << "?";
+            values << linaccess::sqlFieldValue(value,widget->property("la_sql_type").toString());
         } catch (const std::exception& error) { status_->setText(QString::fromUtf8(error.what())); return false; }
     }
-    if (columns.empty()) return false;
+    if (columns.empty() && currentRecordIndex_>0) return false;
     QSqlQuery query(db_);
     const int row = currentRecordIndex_-1;
     QVariant savedId;
@@ -1079,7 +1085,8 @@ bool AccessFormPreview::saveRecord() {
         for (const auto& column : columns) assignments << column + "=?";
         query.prepare("UPDATE " + sqlIdentifier(table) + " SET " + assignments.join(',') + " WHERE rowid=?");
         values << savedId;
-    } else query.prepare("INSERT INTO " + sqlIdentifier(table) + " (" + columns.join(',') + ") VALUES (" + placeholders.join(',') + ")");
+    } else if (columns.empty()) query.prepare("INSERT INTO "+sqlIdentifier(table)+" DEFAULT VALUES");
+    else query.prepare("INSERT INTO " + sqlIdentifier(table) + " (" + columns.join(',') + ") VALUES (" + placeholders.join(',') + ")");
     for (const auto& value : values) query.addBindValue(value);
     if (!query.exec()) { status_->setText("SQL: " + query.lastError().text()); return false; }
     if (query.numRowsAffected() != 1) {

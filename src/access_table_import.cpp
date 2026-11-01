@@ -1,5 +1,7 @@
 #include "access_table_import.hpp"
 #include "access_catalog.hpp"
+#include "access_autonumber.hpp"
+#include "jet_sql_functions.hpp"
 #include <QMap>
 #include <QFile>
 #include <QTemporaryDir>
@@ -112,6 +114,7 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
             if (column.sqliteType!="INTEGER") return {};
             column.autoNumber=true;
         }
+        if (column.autoNumber) column.required=true;
     }
     if (!counters.isEmpty()) return {};
     return result;
@@ -142,12 +145,13 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
         if (column.name.isEmpty() || seen.contains(column.name.toCaseFolded())
             || rows[0][i].value != column.name.toUtf8().toStdString()
             || (column.sqliteType != "TEXT" && column.sqliteType != "INTEGER"
-                && column.sqliteType != "REAL" && column.sqliteType != "BLOB"))
+                && column.sqliteType != "REAL" && column.sqliteType != "BLOB")
+            || (column.autoNumber && column.sqliteType!="INTEGER"))
             throw fail("Spaltenname/-typ stimmt nicht mit MDBTools überein");
         seen.insert(column.name.toCaseFolded());
         definitions << sqlQuote(column.name) + ' ' + column.sqliteType
-            + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : "")
-            + (column.required || column.primaryKeyOrder ? " NOT NULL" : "");
+            + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : column.autoNumber ? " DEFAULT ("+accessCounterDefault(tableName,column.name)+")" : QString{})
+            + (column.required || column.primaryKeyOrder || column.autoNumber ? " NOT NULL" : "");
     }
 
     QStringList primary;
@@ -165,12 +169,14 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             + " ON DELETE " + (key.cascadeDelete ? "CASCADE" : "NO ACTION")
             + " DEFERRABLE INITIALLY DEFERRED";
     }
+    installJetSqlFunctions(db);
     QSqlQuery scope(db);
     if (!scope.exec("SAVEPOINT la_table_import")) throw fail(scope.lastError().text());
     try {
         QSqlQuery query(db);
         if (!insertOnly && !query.exec("CREATE TABLE " + sqlQuote(tableName) + " (" + definitions.join(",") + ")"))
             throw fail("CREATE TABLE: " + query.lastError().text());
+        if (!insertOnly) for (const auto& column:columns) if (column.autoNumber && !nativeCounter(column)) createAccessCounter(db,tableName,column.name);
         QStringList placeholders;
         for (int i = 0; i < columns.size(); ++i) placeholders << "?";
         if (rows.size() > 1 && !query.prepare("INSERT INTO " + sqlQuote(tableName) + " VALUES ("
@@ -234,7 +240,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             for (const auto& col : columns) metadata.append(QJsonObject{
                 {"name", col.name}, {"source_type", col.sourceType}, {"sqlite_type", col.sqliteType},
                 {"required", col.required}, {"primary_key_order", col.primaryKeyOrder},
-                {"auto_number", col.autoNumber}, {"auto_number_native", nativeCounter(col)}});
+                {"auto_number", col.autoNumber}, {"auto_number_native", col.autoNumber}});
             query.prepare("INSERT INTO _la_table_schema VALUES (?,?)");
             query.addBindValue(tableName);
             query.addBindValue(QString::fromUtf8(QJsonDocument(metadata).toJson(QJsonDocument::Compact)));

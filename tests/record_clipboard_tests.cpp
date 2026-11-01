@@ -113,6 +113,23 @@ End Sub
     assert(makePreviewFormObject(caller)->member("Tag",{}).asText()=="caller");
     assert(sql.exec("SELECT count(*) FROM records") && sql.next() && sql.value(0).toInt()==2); sql.finish();
     assert(target.close() && caller.close());
+    const auto managedSchema=parseMdbSchema("CREATE TABLE `x`\n(\n`id` INTEGER NOT NULL,\n`label` TEXT\n);\n-- LINACCESS_AUTO_NUMBER 6964\n");
+    assert(sql.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
+    importAccessTable(db,"synthetic","managed_counter",managedSchema,parseCsvDetailed("id,label\n12,seed\n"));
+    const QByteArray managedLayout="Begin Form\nRecordSource =\"managed_counter\"\nBegin Section\nBegin TextBox\nName =\"id\"\nControlSource =\"id\"\nEnd\nBegin TextBox\nName =\"label\"\nControlSource =\"label\"\nTop =400\nEnd\nEnd\nEnd\n";
+    const auto managedCode=code+"Sub AddManaged()\nDoCmd.GoToRecord , , acNewRec\nMe.label=\"from form\"\nMe.Dirty=False\nEnd Sub\n";
+    AccessFormPreview managedForm("managed counter form",managedLayout,managedCode,db); managedForm.show(); managedForm.activateWindow(); QApplication::processEvents();
+    auto managedRoot=makePreviewFormObject(managedForm);
+    result=managedForm.executeProcedure("AddManaged",arguments); assert(result.status==VbaExecutionStatus::Completed && managedRoot->item("id").asNumber()==13);
+    result=managedForm.executeProcedure("Duplicate",arguments); assert(result.status==VbaExecutionStatus::Completed && managedRoot->item("id").asNumber()==14);
+    assert(sql.exec("SELECT rowid,id,label FROM managed_counter WHERE id=14") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==14 && sql.value(2).toString()=="from form"); sql.finish();
+    assert(managedForm.close());
+    const auto onlySchema=parseMdbSchema("CREATE TABLE `x`\n(\n`id` INTEGER NOT NULL\n);\n-- LINACCESS_AUTO_NUMBER 6964\n");
+    importAccessTable(db,"synthetic","only_counter",onlySchema,parseCsvDetailed("id\n"));
+    const QByteArray onlyLayout="Begin Form\nRecordSource =\"only_counter\"\nBegin Section\nBegin TextBox\nName =\"id\"\nControlSource =\"id\"\nEnd\nEnd\nEnd\n";
+    AccessFormPreview onlyForm("only counter form",onlyLayout,{},db); auto onlyRoot=makePreviewFormObject(onlyForm);
+    onlyRoot->assign("Dirty",VbaValue::logical(true)); onlyRoot->assign("Dirty",VbaValue::logical(false));
+    assert(onlyRoot->item("id").asNumber()==1 && onlyForm.close());
     QApplication::clipboard()->clear();
 }
 

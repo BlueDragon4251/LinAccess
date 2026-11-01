@@ -313,8 +313,10 @@ Full targets remain open:
 - [x] Preserve 21 original AutoNumber flags and native AUTOINCREMENT generation
   for the 16 single-primary-key counters, retaining actual imported values and
   verifying no-reuse on isolated copies (AUTONUMBER_IMPORT.md).
-- [ ] Generate the five non-primary-key counters, preserve stored source seeds,
-  random/replication modes and exact Jet allocation/overflow semantics.
+- [x] Generate the five non-primary-key counters with persistent atomic defaults,
+  native form/DAO/clipboard use, reopen and concurrent-connection regression.
+- [ ] Preserve stored source seeds, random/replication modes, full counter property
+  semantics and exact Jet allocation/overflow behavior.
 
 - [x] Native single-record Copy/PasteAppend and selected-record Ctrl+C, typed
   clipboard, real SQL/bookmark/active-target tests and original manual-key conflict

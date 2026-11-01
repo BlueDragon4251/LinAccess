@@ -25,6 +25,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original public Eval function executions on prepared native numeric/Null states | 20 |
 | Original deletion procedure / direct invocation / bound native click on synthetic rows | 1 / 1 / 1 |
 | Original duplicate handler / handled manual-key conflicts via invocation and native click / inserted rows | 1 / 2 / 0 |
+| Original counter flags / single-PK generators / managed non-PK generators on new imports | 21 / 16 / 5 |
 | Current local regression tests | 20 passed |
 
 Recent completed work includes native combo/platform/backend fixes, control event
@@ -612,3 +613,28 @@ Validation: host Release 20/20 (76.85 s), GUI-disabled core 1/1 (0.66 s), Debian
 permissions and backend checks; isolated installed distro packages pass backend
 resolution and bounded offscreen startup. All four original fixture hashes pass.
 Original fixtures remain read-only; all mutation probes use synthetic data/copies.
+
+Managed counter increment: the five non-primary-key counters now have persistent
+DEFAULT-function allocation with transactional sequence state and explicit-insert/
+update seed triggers. All 21 original counters have bounded native generation on
+new imports (16 AUTOINCREMENT, five managed); existing projects are not rebuilt.
+Form save and DAO AddNew omit unset generated fields, and PasteAppend verifies
+actual generated defaults. Counter values remain separate from rowid/bookmarks.
+Tests cover constraint/import rollback, higher explicit values, no-reuse, reopen,
+quoted identifiers, invalid/exhausted sequences and two simultaneous connections
+allocating 40 distinct values. Native form/DAO/clipboard and counter-only forms
+are exercised. The original 29-table copy still compares every exported cell;
+separate isolated generation probes cover original single-PK and non-PK tables.
+
+The backend CLI now performs a fixture-free managed-counter regression, so both
+extracted and installed DEBs execute the actual callback/allocation path. All
+20 host tests pass (63.70 s); the added CLI probe passes separately (0.04 s).
+GUI-disabled core: 1/1 (0.62 s). Final Debian 12 and Ubuntu 24.04 suites pass
+20/20 (63.20 s / 59.29 s), including the expanded backend CLI. Fresh DEBs pass
+payload, permissions, binary/backend identity, isolated installed allocation and
+GUI startup checks. All four original fixture hashes pass.
+
+Exact source seeds, random/replication modes, signed-Long overflow, allocation
+timing/gaps, full read-only/DAO Attributes, schema rename/drop cleanup and direct
+SQL explicit-NULL allocation remain open. AUTONUMBER_IMPORT.md records the scope;
+this is not complete Jet counter or full Access 2003 parity.

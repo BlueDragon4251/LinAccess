@@ -1,4 +1,5 @@
 #include "dao_database.hpp"
+#include "access_autonumber.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
 #include "jet_sql_functions.hpp"
@@ -28,6 +29,8 @@ void exec(QSqlQuery& query, const QString& sql) {
     const auto message = query.lastError().text().toCaseFolded();
     if (const auto code=jetSqlFunctionErrorNumber(message.toUtf8().toStdString()))
         throw VbaRuntimeError(*code,"Jet SQL function argument invalid");
+    if (message.contains("unique constraint") || message.contains("primary key")) throw VbaRuntimeError(3022,"DAO: Duplicate key");
+    if (message.contains("not null")) throw VbaRuntimeError(3314,"DAO: Required value missing");
     if (message.contains("already exists")) throw VbaRuntimeError(3010,"DAO: destination table already exists");
     if (message.contains("no such function")) throw VbaRuntimeError(3085,"DAO: SQL function unsupported");
     if (message.contains("no such table")) throw VbaRuntimeError(3078,"DAO: SQL dependency unavailable");
@@ -375,15 +378,18 @@ private:
     void update() {
         require(!closed_ && !readOnly_ && mode_ != Mode::Browse, "DAO: No editable record buffer");
         const bool adding = mode_ == Mode::Add;
+        SqliteExecutionBudget budget(db_);
+        const auto generated=adding ? generatedAccessColumns(db_,source_) : QSet<QString>{};
         QVariant id = adding ? QVariant{} : data_->ids[position_];
         QStringList columns, values, assignments;
         QList<int> indices = changed_.values();
+        if (adding) indices.removeIf([&](int index) { return pending_[index].isNull() && generated.contains(data_->columns[index].toCaseFolded()); });
         std::sort(indices.begin(), indices.end());
         for (const int i : indices) {
             columns << quote(data_->columns[i]); values << "?"; assignments << quote(data_->columns[i]) + "=?";
         }
         QSqlQuery query(db_);
-        if (adding && columns.empty()) exec(query, "INSERT INTO " + quote(source_) + " DEFAULT VALUES");
+        if (adding && columns.empty()) { if (!query.exec("INSERT INTO " + quote(source_) + " DEFAULT VALUES")) queryFailure(query); }
         else if (!columns.empty()) {
             require(query.prepare(adding ? "INSERT INTO " + quote(source_) + " (" + columns.join(',')
                         + ") VALUES (" + values.join(',') + ")"
@@ -391,7 +397,8 @@ private:
                     "DAO: Update prepare failed");
             for (const int i : indices) query.addBindValue(pending_[i]);
             if (!adding) query.addBindValue(id);
-            require(query.exec() && query.numRowsAffected() == 1, "DAO: Update failed or record changed");
+            if (!query.exec()) queryFailure(query);
+            require(query.numRowsAffected() == 1, "DAO: Update failed or record changed");
         }
         if (adding) id = query.lastInsertId();
         mode_ = Mode::Browse; pending_.clear(); changed_.clear();

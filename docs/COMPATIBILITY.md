@@ -14,10 +14,10 @@ Ein Original-Löschhandler ist direkt und per gebundenem Klick auf synthetischen
 Zeilen geprüft. Copy/PasteAppend und vollständige Access-Ereignisgleichheit bleiben
 offen: [Umfang und Grenzen](RECORD_DELETE_RUNTIME.md).
 
-21 originale AutoNumber-Markierungen bleiben als Metadaten erhalten; 16 einzelne
-INTEGER-Primärschlüssel verwenden native AUTOINCREMENT-Generierung. Fünf Spalten
-ohne Primärschlüssel sind noch nicht automatisch generiert. Dies ist keine
-vollständige Jet-Zählersemantik: [AutoNumber-Grenzen](AUTONUMBER_IMPORT.md).
+21 originale AutoNumber-Markierungen bleiben erhalten; 16 einzelne INTEGER-
+Primärschlüssel verwenden AUTOINCREMENT, fünf Zähler ohne Primärschlüssel
+persistente native Standardwert-Generatoren. Das ist weiterhin keine vollständige
+Jet-Zählersemantik: [AutoNumber-Grenzen](AUTONUMBER_IMPORT.md).
 
 Begrenztes Copy/PasteAppend verwendet die echte Zwischenablage und erhält
 native Feldwerte. Tatsächliche AutoNumber-Felder erzeugen neue Schlüssel; manuelle

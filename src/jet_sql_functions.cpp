@@ -1,4 +1,5 @@
 #include "jet_sql_functions.hpp"
+#include "access_autonumber.hpp"
 #include "access_format.hpp"
 #include "access_query.hpp"
 #include <QLocale>
@@ -245,6 +246,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
         if (native.create(connection,name,count,1,objects,scalar,step,final,nullptr) != 0)
             throw VbaRuntimeError(3251,"Jet SQL function registration failed");
     };
+    ensure("linaccess_next_counter",2,&nextAccessCounter,nullptr,nullptr);
     ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);

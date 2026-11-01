@@ -1,5 +1,8 @@
 #include "access_table_import.hpp"
 #include "access_catalog.hpp"
+#include "access_autonumber.hpp"
+#include "jet_sql_functions.hpp"
+#include "dao_database.hpp"
 #include <QCoreApplication>
 #include <QFile>
 #include <QTemporaryDir>
@@ -8,6 +11,9 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSqlError>
+#include <atomic>
+#include <thread>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -81,8 +87,72 @@ CREATE INDEX `label` ON `source` (`a``b`);
     importAccessTable(db,"synthetic","counter_without_pk",sourceCounter,parseCsvDetailed("id\n12\n"));
     assert(query.exec("SELECT definition FROM _la_table_schema WHERE table_name='counter_without_pk'") && query.next());
     const auto preserved=QJsonDocument::fromJson(query.value(0).toByteArray()).array(); query.finish();
-    assert(preserved[0].toObject()["auto_number"].toBool() && !preserved[0].toObject()["auto_number_native"].toBool());
-    assert(!query.exec("INSERT INTO counter_without_pk DEFAULT VALUES")); // Preserved metadata, not yet generated.
+    assert(preserved[0].toObject()["auto_number"].toBool() && preserved[0].toObject()["auto_number_native"].toBool());
+    assert(query.exec("INSERT INTO counter_without_pk DEFAULT VALUES"));
+    assert(query.exec("SELECT max(id) FROM counter_without_pk") && query.next() && query.value(0).toInt()==13); query.finish();
+    QTemporaryDir persistent; assert(persistent.isValid());
+    const auto path=persistent.filePath("counter.linaccess");
+    auto file=QSqlDatabase::addDatabase("QSQLITE","persistent-counter"); file.setDatabaseName(path); assert(file.open());
+    QSqlQuery write(file); assert(write.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
+    const auto managed=parseMdbSchema("CREATE TABLE `x`\n(\n`id` INTEGER NOT NULL,\n`label` TEXT\n);\n-- LINACCESS_AUTO_NUMBER 6964\nCREATE UNIQUE INDEX `label` ON `x` (`label`);\n");
+    importAccessTable(file,"synthetic","persistent",managed,parseCsvDetailed("id,label\n12,seed\n"));
+    const auto idFor=[&](const QString& label) {
+        QSqlQuery read(file); read.prepare("SELECT id FROM persistent WHERE label=?"); read.addBindValue(label); assert(read.exec() && read.next()); return read.value(0).toLongLong();
+    };
+    assert(!write.exec("INSERT INTO persistent(label)VALUES('seed')"));
+    assert(write.exec("INSERT INTO persistent(label)VALUES('next')") && idFor("next")==13);
+    assert(write.exec("INSERT INTO persistent VALUES(70,'explicit')"));
+    assert(write.exec("UPDATE persistent SET id=90 WHERE label='explicit'"));
+    assert(write.exec("INSERT INTO persistent(label)VALUES('highest')") && idFor("highest")==91);
+    assert(write.exec("DELETE FROM persistent WHERE id=91"));
+    assert(write.exec("INSERT INTO persistent(label)VALUES('no reuse')") && idFor("no reuse")==92);
+    write.clear(); file.close(); assert(file.open()); installJetSqlFunctions(file); write=QSqlQuery(file);
+    assert(write.exec("INSERT INTO persistent(label)VALUES('reopen')") && idFor("reopen")==93);
+    auto database=makeDaoDatabase(file); auto recordset=database->member("OpenRecordset",{VbaValue::string("persistent")}).object;
+    recordset->member("AddNew",{}); recordset->assignItem("label",VbaValue::string("dao")); recordset->member("Update",{}); assert(recordset->item("id").asNumber()==94);
+    recordset->member("AddNew",{}); recordset->assignItem("id",VbaValue{}); recordset->assignItem("label",VbaValue::string("dao null")); recordset->member("Update",{}); assert(recordset->item("id").asNumber()==95);
+    recordset->member("AddNew",{}); recordset->assignItem("label",VbaValue::string("seed"));
+    int duplicate=0; try { recordset->member("Update",{}); } catch (const VbaRuntimeError& error) { duplicate=error.number; }
+    assert(duplicate==3022); recordset->member("Close",{});
+    std::atomic_bool good{true};
+    const auto worker=[&](int number) {
+        const auto connection="counter-worker-"+QString::number(number);
+        {
+            auto other=QSqlDatabase::addDatabase("QSQLITE",connection); other.setDatabaseName(path);
+            if (!other.open()) good=false;
+            else {
+                try {
+                    installJetSqlFunctions(other); QSqlQuery insert(other);
+                    for (int i=0;i<20;++i) {
+                        insert.prepare("INSERT INTO persistent(label)VALUES(?)"); insert.addBindValue("worker-"+QString::number(number)+'-'+QString::number(i));
+                        if (!insert.exec()) { good=false; break; }
+                    }
+                } catch (...) { good=false; }
+            }
+        }
+        QSqlDatabase::removeDatabase(connection);
+    };
+    std::thread first(worker,1),second(worker,2); first.join(); second.join(); assert(good);
+    assert(write.exec("SELECT count(*),count(DISTINCT id),max(id) FROM persistent WHERE id>95") && write.next());
+    assert(write.value(0).toInt()==40 && write.value(1).toInt()==40 && write.value(2).toInt()==135); write.finish();
+    assert(!write.exec("SELECT linaccess_next_counter(NULL,'id')"));
+    assert(jetSqlFunctionErrorNumber(write.lastError().text().toCaseFolded().toStdString())==94);
+    assert(!write.exec("SELECT linaccess_next_counter('missing','id')"));
+    assert(jetSqlFunctionErrorNumber(write.lastError().text().toCaseFolded().toStdString())==3251);
+    assert(write.exec("UPDATE _la_counter_sequences SET value=9223372036854775807 WHERE table_name='persistent'"));
+    assert(!write.exec("INSERT INTO persistent(label)VALUES('overflow')"));
+    assert(jetSqlFunctionErrorNumber(write.lastError().text().toCaseFolded().toStdString())==6);
+    auto duplicateRows=parseCsvDetailed("id,label\n1,same\n2,same\n"); bool atomic=false;
+    try { importAccessTable(file,"synthetic","failed_counter",managed,duplicateRows); } catch (...) { atomic=true; }
+    assert(atomic && !file.tables().contains("failed_counter"));
+    assert(write.exec("SELECT count(*) FROM _la_counter_sequences WHERE table_name='failed_counter'") && write.next() && write.value(0).toInt()==0); write.finish();
+    auto quotedCounter=sourceCounter; quotedCounter.columns[0].name="i'd\" ]";
+    const QString quotedTable="counter'\" table";
+    const std::vector<std::vector<CsvField>> quotedRows{{{quotedCounter.columns[0].name.toStdString(),true}},{{"12",false}}};
+    importAccessTable(file,"synthetic",quotedTable,quotedCounter,quotedRows);
+    assert(generatedAccessColumns(file,quotedTable).contains(quotedCounter.columns[0].name.toCaseFolded()));
+    assert(write.exec("INSERT INTO \"counter'\"\" table\" DEFAULT VALUES"));
+    assert(write.exec("SELECT MAX(\"i'd\"\" ]\") FROM \"counter'\"\" table\"") && write.next() && write.value(0).toInt()==13); write.finish();
     QTemporaryDir tools;
     assert(tools.isValid());
     QFile fake(tools.filePath("mdb-failure"));
