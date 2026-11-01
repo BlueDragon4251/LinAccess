@@ -830,3 +830,24 @@ Final OpenReport validation: host Release 21/21 (81.65 s), Debian 12
 (0.55 s). Fresh host/distro DEBs pass exact payload/backend, permissions and
 fixture-exclusion checks; isolated installed distro packages pass backend/
 counter execution and GUI startup. All four original hashes pass.
+
+String-unit increment: valid Unicode Len/Left/Right/Mid now index UTF-16 rather
+than UTF-8 bytes. Dollar substring variants, Null distinctions, bounded rounded
+Long arguments and strict malformed-text errors have native tests. Numeric
+Null conversion now returns 94; leading-dot decimals and E/e literals are
+recognized with malformed/overflow diagnostics. A shared counter also implements
+SQL Len (including embedded NUL and pure alias expansion).
+
+Tests execute expressions and an actual VBA procedure with On Error/Err.Number,
+verify single scalar getter evaluation and compare SQL values for Unicode/Null/
+embedded NUL/invalid data. Targeted core/query tests pass (0.50 s); the original
+query inventory remains 77/100. No direct Len/Left/Right/Mid calls were found in
+the restored original VBA/query token scan, so no original-handler count is added.
+UTF16_STRINGS.md documents isolated-surrogate, typed Len, code-page and locale
+limits; this is not full BSTR/VBA string parity.
+
+Validation: host Release 21/21 (78.99 s), Debian 12 21/21 (61.43 s),
+Ubuntu 24.04 21/21 (56.57 s), fresh GUI-disabled core 1/1 (0.56 s).
+Fresh host/distro DEBs pass exact payload/backend/permission/fixture-exclusion
+checks; all four original fixture hashes pass.
+Isolated installed Debian/Ubuntu packages pass native backend/counter execution and GUI startup.

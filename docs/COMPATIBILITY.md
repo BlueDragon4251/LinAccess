@@ -316,3 +316,13 @@ original report through invocation and a prepared bound-button click; actual
 fields are compared with a separate SQL reader. Default direct printing, other
 views, named filters, window modes and OpenArgs remain unsupported (3251).
 OPEN_REPORT_RUNTIME.md records renderer/pagination/oracle limitations.
+
+### UTF-16 string positions
+
+Len/Left/Right/Mid and the dollar substring variants now use UTF-16 units for
+valid Unicode text. Native SQL Len shares the validated counter, including
+embedded NUL and pure alias expansion. Tests exercise actual VBA execution,
+Null/error/Long bounds and UTF-16 fields. A slice producing an isolated surrogate
+is still unsupported (3251); full BSTR storage, declared-type Len sizes and
+locale/code-page/string-intrinsic parity remain open (UTF16_STRINGS.md).
+Leading-dot/E-exponent numeric literals and numeric Null error 94 are also tested.

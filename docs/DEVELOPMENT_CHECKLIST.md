@@ -361,3 +361,7 @@ Full targets remain open:
 - [x] Native DoCmd.OpenReport preview with WhereCondition, imported Report VBA,
   failure/cancellation and independent lifetime; original preview handler and
   bound button open the original report with independently checked fields.
+
+- [x] Bounded UTF-16 Len/Left/Right/Mid and dollar substring variants, shared SQL
+  Len, embedded NUL, malformed-text validation, Null/Long error semantics and
+  scalar getter/procedure/alias regressions; split surrogate strings stay unsupported.

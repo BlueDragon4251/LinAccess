@@ -1,6 +1,7 @@
 #include "access_query.hpp"
 #include "vba_runtime.hpp"
 #include "sqlite_execution.hpp"
+#include "jet_sql_functions.hpp"
 #include <QCoreApplication>
 #include <QSqlQuery>
 #include <QSqlError>
@@ -15,6 +16,21 @@ int main(int argc, char** argv) {
     QSqlQuery query(db);
     assert(query.exec("CREATE TABLE samples(id INTEGER, score INTEGER, label TEXT)"));
     assert(query.exec("INSERT INTO samples VALUES(1,10,'one'),(2,20,'two'),(3,20,NULL),(4,30,'four')"));
+    {
+        linaccess::AccessQueryModel lengths; lengths.execute(db,"SELECT Len('Grüße😀') AS units, Len(Null) AS missing");
+        assert(lengths.rowCount()==1 && lengths.data(lengths.index(0,0)).toInt()==7 && lengths.data(lengths.index(0,1)).isNull());
+        lengths.execute(db,"SELECT Len('😀') AS units, units+1 AS next_units FROM samples WHERE id=1");
+        assert(lengths.data(lengths.index(0,0)).toInt()==2 && lengths.data(lengths.index(0,1)).toInt()==3);
+        assert(query.exec("CREATE TABLE unicode_lengths(value TEXT)"));
+        query.prepare("INSERT INTO unicode_lengths VALUES(?)"); query.addBindValue(QString::fromUtf8("A\0😀",6)); assert(query.exec()); query.finish();
+        lengths.execute(db,"SELECT Len(value) AS units FROM unicode_lengths");
+        assert(lengths.data(lengths.index(0,0)).toInt()==4);
+        assert(query.exec("SELECT linaccess_jet_len(char(65279)||'A')") && query.next() && query.value(0).toInt()==2); query.finish();
+        assert(!query.exec("SELECT linaccess_jet_len(CAST(x'ff' AS TEXT))"));
+        assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==13); query.finish();
+
+    }
+
     const auto expensive=QString("WITH RECURSIVE numbers(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM numbers WHERE x<100000) SELECT sum(x) FROM numbers");
     {
         linaccess::SqliteExecutionBudget outer(db,1000,5000);

@@ -34,6 +34,46 @@ VbaValue clockValue(const std::string& word) {
     return VbaValue::string(formatted.str());
 }
 
+// Runtime strings use UTF-8 at the API boundary; VBA substring positions use
+// UTF-16 code units. Do not silently split a UTF-8 byte sequence.
+std::u16string utf16String(std::string_view input) {
+    std::u16string output;
+    for (std::size_t i=0;i<input.size();) {
+        const auto first=static_cast<unsigned char>(input[i++]);
+        std::uint32_t point=first,minimum=0; unsigned continuation=0;
+        if (first<128) {}
+        else if (first>=0xc2 && first<=0xdf) { point=first&31; continuation=1; minimum=0x80; }
+        else if (first>=0xe0 && first<=0xef) { point=first&15; continuation=2; minimum=0x800; }
+        else if (first>=0xf0 && first<=0xf4) { point=first&7; continuation=3; minimum=0x10000; }
+        else throw error("Invalid UTF-8 runtime string",13);
+        if (continuation>input.size()-i) throw error("Truncated UTF-8 runtime string",13);
+        for (unsigned n=0;n<continuation;++n) {
+            const auto byte=static_cast<unsigned char>(input[i++]);
+            if ((byte&0xc0)!=0x80) throw error("Invalid UTF-8 continuation",13);
+            point=(point<<6)|(byte&63);
+        }
+        if (point<minimum || point>0x10ffff || (point>=0xd800 && point<=0xdfff)) throw error("Invalid Unicode scalar",13);
+        if (point<=0xffff) output.push_back(static_cast<char16_t>(point));
+        else { point-=0x10000; output.push_back(static_cast<char16_t>(0xd800+(point>>10))); output.push_back(static_cast<char16_t>(0xdc00+(point&1023))); }
+    }
+    return output;
+}
+std::string utf8String(std::u16string_view input) {
+    std::string output;
+    for (std::size_t i=0;i<input.size();++i) {
+        std::uint32_t point=input[i];
+        if (point>=0xd800 && point<=0xdbff) {
+            if (i+1>=input.size() || input[i+1]<0xdc00 || input[i+1]>0xdfff) throw error("Isolated UTF-16 surrogate unsupported",3251);
+            point=0x10000+((point-0xd800)<<10)+(input[++i]-0xdc00);
+        } else if (point>=0xdc00 && point<=0xdfff) throw error("Isolated UTF-16 surrogate unsupported",3251);
+        if (point<0x80) output.push_back(static_cast<char>(point));
+        else if (point<0x800) { output.push_back(static_cast<char>(0xc0|(point>>6))); output.push_back(static_cast<char>(0x80|(point&63))); }
+        else if (point<0x10000) { output.push_back(static_cast<char>(0xe0|(point>>12))); output.push_back(static_cast<char>(0x80|((point>>6)&63))); output.push_back(static_cast<char>(0x80|(point&63))); }
+        else { output.push_back(static_cast<char>(0xf0|(point>>18))); output.push_back(static_cast<char>(0x80|((point>>12)&63))); output.push_back(static_cast<char>(0x80|((point>>6)&63))); output.push_back(static_cast<char>(0x80|(point&63))); }
+    }
+    return output;
+}
+
 struct Token {
     enum class Type { Word, Number, Text, Bracket, Symbol, End } type{Type::End};
     std::string value;
@@ -50,11 +90,19 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
                    (std::isalnum(static_cast<unsigned char>(input[pos])) || static_cast<unsigned char>(input[pos]) >= 0x80 || input[pos] == '_')) ++pos;
             if (pos<input.size() && input[pos]=='$') ++pos;
             tokens.push_back({Token::Type::Word, std::string(input.substr(start, pos - start))});
-        } else if (std::isdigit(static_cast<unsigned char>(ch))) {
-            const auto start = pos++;
-            while (pos < input.size() &&
-                   (std::isdigit(static_cast<unsigned char>(input[pos])) || input[pos] == '.')) ++pos;
-            tokens.push_back({Token::Type::Number, std::string(input.substr(start, pos - start))});
+        } else if (std::isdigit(static_cast<unsigned char>(ch)) || (ch=='.' && pos+1<input.size() && std::isdigit(static_cast<unsigned char>(input[pos+1])))) {
+            const auto start=pos;
+            while (pos<input.size() && std::isdigit(static_cast<unsigned char>(input[pos]))) ++pos;
+            if (pos<input.size() && input[pos]=='.') {
+                ++pos; while (pos<input.size() && std::isdigit(static_cast<unsigned char>(input[pos]))) ++pos;
+            }
+            if (pos<input.size() && (input[pos]=='e' || input[pos]=='E')) {
+                ++pos; if(pos<input.size() && (input[pos]=='+' || input[pos]=='-')) ++pos;
+                const auto exponent=pos;
+                while(pos<input.size() && std::isdigit(static_cast<unsigned char>(input[pos]))) ++pos;
+                if(pos==exponent) throw error("Numeric exponent requires digits",5);
+            }
+            tokens.push_back({Token::Type::Number,std::string(input.substr(start,pos-start))});
         } else if (ch == '"' || (accessExpression && ch=='\'')) {
             const auto delimiter=ch;
             ++pos;
@@ -319,8 +367,12 @@ private:
         if (tok.type == Token::Type::Text) return VbaValue::string(tok.value);
         if (tok.type == Token::Type::Number) {
             std::size_t consumed = 0;
-            const auto number = std::stod(tok.value, &consumed);
-            if (consumed != tok.value.size()) throw error("Ungültige VBA-Zahl");
+            double number;
+            try { number=std::stod(tok.value,&consumed); }
+            catch(const std::out_of_range&) { throw error("Numeric literal overflow",6); }
+            catch(const std::invalid_argument&) { throw error("Invalid numeric literal",5); }
+            if (consumed!=tok.value.size()) throw error("Ungültige VBA-Zahl");
+            if (!std::isfinite(number)) throw error("Numeric literal overflow",6);
             return VbaValue::numeric(number);
         }
         if (tok.type != Token::Type::Word)
@@ -567,7 +619,10 @@ private:
                 const auto& value = args[0];
                 if (word == "isnull") return VbaValue::logical(value.kind == VbaValue::Kind::Null);
                 if (word == "isempty") return VbaValue::logical(value.kind == VbaValue::Kind::Empty);
-                if (word == "len") return value.kind == VbaValue::Kind::Null ? VbaValue{} : VbaValue::numeric(value.asText().size());
+                if (word == "len") {
+                    const auto scalar=scalarObjectValue(value);
+                    return scalar.kind==VbaValue::Kind::Null ? VbaValue{} : VbaValue::numeric(vbaStringCodeUnits(scalar.asText()));
+                }
                 if (word == "cstr") {
                     if (value.kind==VbaValue::Kind::Error) return VbaValue::string("Error "+std::to_string(value.errorNumber));
                     if (value.kind == VbaValue::Kind::Null) throw error("VBA: Ungültige Verwendung von Null", 94);
@@ -610,27 +665,23 @@ private:
                 if (!host_) return {};
                 return args[0].truthy() ? args[1] : args[2];
             }
-            if ((word == "left" || word == "right") && args.size() == 2) {
+            if (word=="left" || word=="right" || word=="left$" || word=="right$" || word=="mid" || word=="mid$") {
                 if (!host_) return {};
-                const auto input = args[0].asText();
-                const auto length = static_cast<long>(args[1].asNumber());
-                if (length < 0) throw error("VBA: Negative Teilstringlänge");
-                const auto count = std::min<std::size_t>(input.size(), static_cast<std::size_t>(length));
-                return VbaValue::string(word == "left" ? input.substr(0, count)
-                                                        : input.substr(input.size() - count));
-            }
-            if (word == "mid" && (args.size() == 2 || args.size() == 3)) {
-                if (!host_) return {};
-                const auto input = args[0].asText();
-                const auto start = static_cast<long>(args[1].asNumber());
-                if (start < 1) throw error("VBA: Mid-Position muss >= 1 sein");
-                if (args.size() == 2) return VbaValue::string(input.substr(
-                    std::min<std::size_t>(input.size(), static_cast<std::size_t>(start - 1))));
-                const auto length = static_cast<long>(args[2].asNumber());
-                if (length < 0) throw error("VBA: Negative Teilstringlänge");
-                return VbaValue::string(input.substr(
-                    std::min<std::size_t>(input.size(), static_cast<std::size_t>(start - 1)),
-                    static_cast<std::size_t>(length)));
+                const bool middle=word=="mid" || word=="mid$";
+                if (args.size()<2 || args.size()>(middle ? 3u : 2u)) throw error("Substring argument count invalid",450);
+                const auto value=scalarObjectValue(args[0]);
+                const auto position=integer(args[1]);
+                const auto length=middle && args.size()==3 ? integer(args[2]) : middle ? std::numeric_limits<std::int32_t>::max() : position;
+                if (length<0 || (middle && position<1)) throw error("Invalid substring position or length",5);
+                if (value.kind==VbaValue::Kind::Null) {
+                    if (word.ends_with('$')) throw error("Invalid Null String result",94);
+                    return {};
+                }
+                const auto input=utf16String(value.asText());
+                const auto count=std::min<std::size_t>(input.size(),static_cast<std::size_t>(length));
+                const auto start=middle ? std::min<std::size_t>(input.size(),static_cast<std::size_t>(position-1))
+                    : word=="right" || word=="right$" ? input.size()-count : 0;
+                return VbaValue::string(utf8String(std::u16string_view(input).substr(start,count)));
             }
             if (!host_) return {}; // syntactic function call; bind at execution
             if (resolver_) return resolver_(tok.value, args, references);
@@ -742,6 +793,7 @@ int VbaHost::compareStrings(std::string_view left,std::string_view right,VbaComp
     if (nonAscii(a) || nonAscii(b)) throw VbaRuntimeError(3251,"Non-ASCII text comparison requires a locale-aware host");
     return a.compare(b);
 }
+std::size_t vbaStringCodeUnits(std::string_view text) { return utf16String(text).size(); }
 VbaValue scalarVbaValue(VbaValue value) { return scalarObjectValue(std::move(value)); }
 std::string VbaValue::asText() const {
     if (kind==Kind::ByteArray) throw error("Byte array cannot be implicitly converted to text",13);
@@ -772,7 +824,7 @@ double VbaValue::asNumber() const {
     if (kind == Kind::Number) return number;
     if (kind == Kind::Currency) return static_cast<double>(currencyUnits)/10000;
     if (kind == Kind::Boolean) return boolean ? -1.0 : 0.0; // VBA True = -1.
-    if (kind == Kind::Null) throw error("VBA: Null kann nicht in Zahl umgewandelt werden");
+    if (kind == Kind::Null) throw error("VBA: Null kann nicht in Zahl umgewandelt werden",94);
     std::size_t consumed = 0;
     try {
         const auto result = std::stod(text, &consumed);

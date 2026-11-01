@@ -22,6 +22,13 @@ public:
     }
     std::vector<linaccess::VbaValue> enumerate() override { return values; }
 };
+class ScalarProbe final : public linaccess::VbaObject {
+public:
+    linaccess::VbaValue value;
+    int reads{};
+    linaccess::VbaValue scalarValue() override { ++reads; return value; }
+    linaccess::VbaValue member(std::string_view,const std::vector<linaccess::VbaValue>&) override { throw linaccess::VbaRuntimeError(438,"No explicit members"); }
+};
 class FakeForm final : public linaccess::VbaHost {
 public:
     std::map<std::string, std::optional<std::string>> fields;
@@ -868,5 +875,46 @@ End Sub
     bool invalidNull = false;
     try { (void)evaluate("CStr(Null)"); } catch (...) { invalidNull = true; }
     assert(invalidNull);
+    assert(evaluate(".5+2e1").asNumber()==20.5);
+    assert(evaluate("1E-2").asNumber()==0.01);
+    assert(evaluate("Len(\"Grüße😀\")").asNumber()==7);
+    auto scalarProbe=std::make_shared<ScalarProbe>(); scalarProbe->value=VbaValue::string("ö😀");
+    const VbaVariables scalarValues{{"probe",VbaValue::reference(scalarProbe)}};
+    assert(evaluateVbaExpression("Len(probe)",host,scalarValues).asNumber()==3 && scalarProbe->reads==1);
+    scalarProbe->value=VbaValue{};
+    assert(evaluateVbaExpression("Len(probe)",host,scalarValues).kind==VbaValue::Kind::Null && scalarProbe->reads==2);
+    const VbaVariables unicodeValues{{"embedded",VbaValue::string(std::string("A\0B",3))},{"invalid",VbaValue::string(std::string(1,static_cast<char>(0xff)))}};
+    assert(evaluateVbaExpression("Len(embedded)",host,unicodeValues).asNumber()==3);
+    assert(evaluateVbaExpression("Mid(embedded,2,1)",host,unicodeValues).asText()==std::string(1,'\0'));
+    int invalidUnicode=0; try { (void)evaluateVbaExpression("Len(invalid)",host,unicodeValues); } catch(const VbaRuntimeError& failure) { invalidUnicode=failure.number; } assert(invalidUnicode==13);
+
+    assert(evaluate("Left(\"Grüße\",3)").asText()=="Grü");
+    assert(evaluate("Right$(\"Grüße\",2)").asText()=="ße");
+    assert(evaluate("Mid(\"A😀Z\",2,2)").asText()=="😀");
+    assert(evaluate("Mid$(\"A😀Z\",4)").asText()=="Z");
+    assert(evaluate("Right(\"A😀Z\",3)").asText()=="😀Z");
+    assert(evaluate("Left$(\"abc\",1.5)").asText()=="ab");
+    assert(evaluate("Mid(\"abc\",99)").asText().empty());
+    assert(evaluate("Left(Null,2)").kind==VbaValue::Kind::Null);
+    assert(evaluate("Right(Null,2)").kind==VbaValue::Kind::Null);
+    assert(evaluate("Mid(Null,1)").kind==VbaValue::Kind::Null);
+    const auto substringError=[&](const char* expression,int expected) {
+        int number=0; try { (void)evaluate(expression); } catch(const VbaRuntimeError& failure) { number=failure.number; } if(number!=expected) std::cerr<<"Substring error: expected="<<expected<<", actual="<<number<<", expression="<<expression<<"\n"; assert(number==expected);
+    };
+    substringError("CLng(Null)",94); substringError("CDbl(Null)",94);
+    substringError("Left$(Null,2)",94); substringError("Mid$(Null,1)",94);
+    substringError("Left(\"abc\",Null)",94); substringError("Left(\"abc\",-1)",5);
+    substringError("Mid(\"abc\",0)",5); substringError("Left(\"abc\",1e100)",6);
+    substringError("Left(\"abc\")",450);
+    substringError("1e309",6); substringError("1e+",5);
+    substringError("Left(\"😀\",1)",3251); substringError("Mid(\"😀\",2,1)",3251);
+    const auto unicodeProcedure=executeVbaProcedure(R"VBA(Sub UnicodeStrings()
+Me!Name=Mid$("A😀Z",2,2) & Left$("ö1",1)
+On Error Resume Next
+Me!Nachname=Left$(Null,2)
+Me!UnicodeError=CStr(Err.Number)
+End Sub
+)VBA","UnicodeStrings",host);
+    assert(unicodeProcedure.status==VbaExecutionStatus::Completed && host.fields["Name"]=="😀ö" && host.fields["UnicodeError"]=="94");
     std::cout << "Core tests passed\n";
 }

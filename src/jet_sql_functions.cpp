@@ -140,6 +140,21 @@ void objectValue(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     } catch (const VbaRuntimeError& error) { functionError(context,error); }
       catch (...) { native.error(context,"SQL object resolution failed",-1); }
 }
+void textLength(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+    auto& native=api();
+    try {
+        if (native.type(args[0])==SQLITE_NULL) { native.nullResult(context); return; }
+        if (native.type(args[0])==SQLITE_TEXT) {
+            const auto* bytes=native.text(args[0]); const auto size=native.bytes(args[0]);
+            if (!bytes) throw VbaRuntimeError(7,"SQL string unavailable");
+            native.integerResult(context,vbaStringCodeUnits(std::string_view(reinterpret_cast<const char*>(bytes),size)));
+        } else {
+            const auto text=scalarText(args[0]).toUtf8();
+            native.integerResult(context,vbaStringCodeUnits(std::string_view(text.constData(),text.size())));
+        }
+    } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
+      catch(...) { native.error(context,"SQL Len evaluation failed",-1); }
+}
 void iif(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native = api();
     try {
@@ -286,6 +301,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_format_string",2,&formatString,nullptr,nullptr);
     ensure("linaccess_jet_format",2,&formatVariant,nullptr,nullptr);
     ensure("linaccess_jet_concat",2,&concatenate,nullptr,nullptr);
+    ensure("linaccess_jet_len",1,&textLength,nullptr,nullptr);
     ensure("linaccess_jet_like_pattern",1,&likePattern,nullptr,nullptr);
     ensure("linaccess_jet_object_value",3,&objectValue,nullptr,nullptr);
 }

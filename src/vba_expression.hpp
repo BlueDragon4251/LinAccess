@@ -13,6 +13,9 @@
 
 namespace linaccess {
 
+// UTF-16 code-unit count for valid UTF-8; rejects malformed text.
+std::size_t vbaStringCodeUnits(std::string_view text);
+
 struct VbaValue {
     enum class Kind { Null, Empty, Number, Text, Boolean, Object, Error, Currency, ByteArray } kind{Kind::Null};
     double number{};
