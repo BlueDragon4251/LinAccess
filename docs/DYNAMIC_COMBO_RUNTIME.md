@@ -82,5 +82,19 @@ Value/Field List type. No additional original project success is inferred from
 these general built-in source tests. ColumnHeads, value-list AddItem/RemoveItem,
 full ListBox rendering and custom row-source callback protocol remain open.
 
+## ComboBox ListCount
+
+Read-only `ListCount` returns the actual loaded Qt model's row count. First access
+loads the configured real row source without opening a popup or moving focus.
+Value List, Field List and Table/Query use the same row-source loader; a loaded
+model is reused until explicit Requery or source-property assignment. Empty lists
+return zero. Arguments fail with 450; unsupported property assignment remains
+438. ColumnHeads and full ListBox behavior remain unsupported.
+
+Native GUI/VBA/SQL regressions check initial lazy loading, preserved selection and
+Dirty state, actual SQL INSERT of the VBA result, source changes, explicit Requery,
+zero rows and invalid operations. The original source inventory contains two
+ListCount tokens, both in comments. No executed original caller is claimed.
+
 Contract reference (current documentation, not Access 2003 runtime verification):
 https://learn.microsoft.com/en-us/office/vba/api/access.combobox.rowsourcetype

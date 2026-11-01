@@ -300,3 +300,7 @@ Full targets remain open:
   tests, actual Forms/SQL and modal self-close lifetime regression; unchanged
   original module with 15 Eval references on synthetic native controls.
 - [ ] Full Eval grammar, function resolution/coercion and Access 2003 oracle.
+- [x] Read-only native ComboBox ListCount with actual lazy row-source loading,
+  preserved selection/Dirty state and VBA-to-SQL/Requery regression.
+- [ ] Compare Access 2003 ListCount list-header, ListBox and record-limit behavior;
+  original fixtures contain only commented ListCount references.

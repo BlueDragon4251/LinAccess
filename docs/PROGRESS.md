@@ -530,3 +530,17 @@ distro packages also passed isolated installation, private backend resolution an
 bounded GUI startup. All four original fixture SHA-256 checks pass. Full Eval
 grammar, Access name resolution/coercion and complete original workflows remain
 open; original source and data stay in private fixtures.
+
+ComboBox ListCount increment: a read-only property now loads an uninitialized
+real row source and returns the native model's row count. Tests cover Value List,
+SQL rows (including a NULL-valued row), empty lists, explicit Requery/cache
+behavior, unchanged selected value/Dirty state, invalid arguments/assignment and
+a real VBA procedure inserting its result into SQLite. Both original ListCount
+tokens occur in comments, so no additional original caller execution is claimed.
+
+Validation: host Release 20/20 (58.14 s), Debian 12 20/20 (59.86 s), Ubuntu 24.04
+20/20 (55.18 s); freshly generated host/distro packages pass exact payload/backend
+checks. Distro packages pass isolated installation and bounded offscreen startup.
+All four original fixture hashes pass. Core-only source is unchanged from the
+preceding verified build. ColumnHeads/full ListBox and Access 2003 list-count
+edge semantics remain open; see DYNAMIC_COMBO_RUNTIME.md.

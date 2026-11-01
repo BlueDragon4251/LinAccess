@@ -63,6 +63,11 @@ public:
         auto& preview = checked();
         auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (auto* combo=qobject_cast<QComboBox*>(widget);combo && key=="listcount") {
+            if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected ListCount arguments");
+            if (!combo->property("la_rows_loaded").toBool()) preview.requeryControl(bytes(name_));
+            return linaccess::VbaValue::numeric(combo->count());
+        }
         if (qobject_cast<QComboBox*>(widget) && (key=="rowsource" || key=="rowsourcetype" || key=="boundcolumn" || key=="columncount" || key=="columnwidths")) {
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected combo property arguments");
             for (const auto& definition : preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {

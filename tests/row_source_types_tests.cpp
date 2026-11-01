@@ -43,12 +43,17 @@ End
     AccessFormPreview form("value list",layout,{},db); form.show(); form.activateWindow(); QApplication::processEvents();
     auto root=makePreviewFormObject(form); auto control=root->member("Controls",{VbaValue::string("pick")}).object;
     auto* combo=form.findChild<QComboBox*>("access-control-pick"); assert(combo); combo->setFocus();
+    assert(!combo->property("la_rows_loaded").toBool());
+    assert(control->member("ListCount",{}).asNumber()==2);
+    assert(combo->property("la_rows_loaded").toBool() && !combo->view()->isVisible());
+    assert(control->member("Value",{}).asNumber()==1 && !root->member("Dirty",{}).truthy());
     QTest::keyClick(combo,Qt::Key_Down,Qt::AltModifier); QApplication::processEvents();
     auto* view=qobject_cast<QTreeView*>(combo->view()); assert(view && view->isVisible() && combo->count()==2 && combo->currentText()=="first");
     QTest::qWait(QApplication::doubleClickInterval()+20);
     const auto point=view->visualRect(combo->model()->index(1,1)).center();
     QTest::mouseMove(view->viewport(),point); QTest::mouseClick(view->viewport(),Qt::LeftButton,Qt::NoModifier,point); QApplication::processEvents();
     assert(control->member("Value",{}).asNumber()==2 && combo->currentText()=="second");
+    assert(control->member("ListCount",{}).asNumber()==2 && root->member("Dirty",{}).truthy());
     root->assign("Dirty",VbaValue::logical(false));
     assert(query.exec("SELECT choice FROM records WHERE id=1") && query.next() && query.value(0).toInt()==2); query.finish();
     control->assign("RowSourceType",VbaValue::string("Value List"));
@@ -89,4 +94,32 @@ End
     assert(picker->count()==2 && picker->model()->index(0,0).data().toString()=="danger" && picker->model()->index(1,0).data().toString()=="identifier");
     fieldControl->assign("RowSourceType",VbaValue::string("Feldliste"));
     assert(picker->count()==2 && fields.close());
+
+    assert(query.exec("CREATE TABLE choices(id INTEGER,name TEXT)"));
+    assert(query.exec("INSERT INTO choices VALUES(1,'first'),(2,'second'),(3,NULL)"));
+    assert(query.exec("CREATE TABLE counts(value INTEGER)"));
+    auto tableLayout=layout;
+    tableLayout.replace("RowSourceType =\"Wertliste\"","RowSourceType =\"Table/Query\"");
+    tableLayout.replace("RowSource =\"1;first;2;second\"","RowSource =\"choices\"");
+    const QByteArray countCode=R"VBA(Sub CountRows()
+CurrentDb.Execute "INSERT INTO counts VALUES(" & Me.pick.ListCount & ")"
+End Sub
+)VBA";
+    AccessFormPreview counted("counted combo",tableLayout,countCode,db);
+    auto countedRoot=makePreviewFormObject(counted);
+    auto countedControl=countedRoot->member("Controls",{VbaValue::string("pick")}).object;
+    std::vector<VbaValue> arguments;
+    assert(counted.executeProcedure("CountRows",arguments).status==VbaExecutionStatus::Completed);
+    assert(query.exec("SELECT value FROM counts") && query.next() && query.value(0).toInt()==3 && !query.next()); query.finish();
+    assert(!countedRoot->member("Dirty",{}).truthy() && countedControl->member("Value",{}).asNumber()==2);
+    assert(query.exec("INSERT INTO choices VALUES(4,'fourth')"));
+    assert(countedControl->member("ListCount",{}).asNumber()==3); // Loaded model until explicit Requery.
+    countedControl->member("Requery",{});
+    assert(countedControl->member("ListCount",{}).asNumber()==4);
+    number=0; try { countedControl->member("ListCount",{VbaValue::numeric(0)}); }
+    catch (const VbaRuntimeError& failure) { number=failure.number; } assert(number==450);
+    number=0; try { countedControl->assign("ListCount",VbaValue::numeric(99)); }
+    catch (const VbaRuntimeError& failure) { number=failure.number; } assert(number==438);
+    countedControl->assign("RowSource",VbaValue::string(""));
+    assert(countedControl->member("ListCount",{}).asNumber()==0 && counted.close());
 }
