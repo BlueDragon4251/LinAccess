@@ -74,6 +74,11 @@ Bestätigungs-/Abbruchereignisse und `AllowDeletions`. Ein unveränderter
 Original-Löschhandler ist auf synthetischen Zeilen direkt und per Button geprüft:
 [Datensatz-Löschlaufzeit](docs/RECORD_DELETE_RUNTIME.md).
 
+Der Import erhält AutoNumber-Markierungen und verwendet für einzelne
+INTEGER-Primärschlüssel native Generierung ohne Wiederverwendung gelöschter
+Höchstwerte. Umfang einschließlich fünf noch nicht generierter Originalspalten:
+[AutoNumber-Import](docs/AUTONUMBER_IMPORT.md).
+
 Eine `.deb`-Datei lässt sich nach dem Build erzeugen mit:
 
 ```bash

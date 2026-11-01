@@ -14,6 +14,7 @@ struct AccessColumn {
     QString sourceType;
     bool required{};
     int primaryKeyOrder{};
+    bool autoNumber{};
 };
 
 struct AccessIndex {

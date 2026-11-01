@@ -570,3 +570,20 @@ payload, permissions, executable and backend checks. Both distro packages pass
 isolated installation, backend resolution and bounded GUI startup. All four
 original fixture hashes remain unchanged. New record command regressions are in
 record_delete_tests.cpp and the original search/deletion regression.
+
+AutoNumber import increment: preserve MDBTools' explicit counter modifiers through
+structural metadata rather than discarding them. All 21 original flags survive;
+16 single INTEGER primary keys use native AUTOINCREMENT and five non-primary-key
+counters are explicitly metadata-only. Imported IDs remain unchanged. Tests
+cover explicit values, next-ID generation, deleted-highest-key no-reuse, higher
+explicit IDs, quoting/malformed metadata and the unsupported non-PK case. One
+eligible copied original table is probed with insert/delete/insert under a rolled
+back savepoint; all 29 copied tables still match their exported cells.
+
+Validation: host Release 20/20 (62.03 s), Debian 12 20/20 (60.45 s), Ubuntu 24.04
+20/20 (54.23 s). Fresh DEBs pass exact payload/backend checks, isolated distro
+installation and bounded GUI startup. All four fixture hashes pass; GUI-disabled
+core source is unchanged from the preceding verified build. The source's stored
+counter seed, five non-PK generators, random modes and exact Jet allocation/
+overflow semantics remain open; existing projects are not silently rebuilt.
+AUTONUMBER_IMPORT.md records the precise new-import scope.

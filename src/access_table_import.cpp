@@ -43,11 +43,18 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
     AccessTableSchema result;
     QStringList keys;
     QMap<QString,QString> sourceTypes;
+    QMap<QString,bool> counters;
     bool inTable = false;
     for (const auto& raw : schema.split('\n')) {
         const auto text = raw.trimmed();
         static const QRegularExpression sourceType(R"(^-- LINACCESS_SOURCE_TYPE ([0-9a-fA-F]+) ([A-Z][A-Z0-9_]*)$)");
         const auto source = sourceType.match(text);
+        static const QRegularExpression autoNumber(R"(^-- LINACCESS_AUTO_NUMBER ([0-9a-fA-F]+)$)");
+        const auto counter=autoNumber.match(text);
+        if (counter.hasMatch()) {
+            counters.insert(QString::fromUtf8(QByteArray::fromHex(counter.captured(1).toLatin1())),true);
+            continue;
+        }
         if (source.hasMatch()) {
             sourceTypes.insert(QString::fromUtf8(QByteArray::fromHex(source.captured(1).toLatin1())),source.captured(2));
             continue;
@@ -85,8 +92,12 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
                  || native == "MEMO") type = "TEXT";
         else if (native == "BLOB") type = "BLOB";
         else return {};
+        auto modifiers=match.captured(3);
+        modifiers.remove(QRegularExpression(R"sql('(?:''|[^'])*'|"(?:""|[^"])*")sql"));
+        const bool generated=QRegularExpression("\\bauto_increment\\b",QRegularExpression::CaseInsensitiveOption).match(modifiers).hasMatch();
+        if (generated && type!="INTEGER") return {};
         result.columns.append({match.captured(1).replace("``", "`"), type, native,
-            match.captured(3).contains("NOT NULL", Qt::CaseInsensitive), 0});
+            match.captured(3).contains("NOT NULL", Qt::CaseInsensitive), 0,generated});
     }
     for (int i = 0; i < keys.size(); ++i) {
         bool found = false;
@@ -95,8 +106,14 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
         }
         if (!found) return {};
     }
-    for (auto& column : result.columns)
+    for (auto& column : result.columns) {
         if (sourceTypes.contains(column.name)) column.sourceType = sourceTypes.value(column.name);
+        if (counters.remove(column.name)) {
+            if (column.sqliteType!="INTEGER") return {};
+            column.autoNumber=true;
+        }
+    }
+    if (!counters.isEmpty()) return {};
     return result;
 }
 
@@ -117,6 +134,9 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
         throw fail("Schema und CSV-Spaltenanzahl stimmen nicht überein");
     std::set<QString> seen;
     QStringList definitions;
+    int primaryCount=0;
+    for (const auto& column:columns) if (column.primaryKeyOrder) ++primaryCount;
+    const auto nativeCounter=[&](const AccessColumn& column) { return column.autoNumber && column.sqliteType=="INTEGER" && column.primaryKeyOrder==1 && primaryCount==1; };
     for (int i = 0; i < columns.size(); ++i) {
         const auto& column = columns[i];
         if (column.name.isEmpty() || seen.contains(column.name.toCaseFolded())
@@ -126,6 +146,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             throw fail("Spaltenname/-typ stimmt nicht mit MDBTools überein");
         seen.insert(column.name.toCaseFolded());
         definitions << sqlQuote(column.name) + ' ' + column.sqliteType
+            + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : "")
             + (column.required || column.primaryKeyOrder ? " NOT NULL" : "");
     }
 
@@ -133,7 +154,8 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
     for (int order = 1; order <= columns.size(); ++order)
         for (const auto& col : columns)
             if (col.primaryKeyOrder == order) primary << sqlQuote(col.name);
-    if (!primary.empty()) definitions << "PRIMARY KEY (" + primary.join(',') + ")";
+    const bool inlineKey=std::any_of(columns.cbegin(),columns.cend(),nativeCounter);
+    if (!primary.empty() && !inlineKey) definitions << "PRIMARY KEY (" + primary.join(',') + ")";
     for (const auto& key : schema.foreignKeys) {
         QStringList child, parent;
         for (const auto& name : key.columns) child << sqlQuote(name);
@@ -211,7 +233,8 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             QJsonArray metadata;
             for (const auto& col : columns) metadata.append(QJsonObject{
                 {"name", col.name}, {"source_type", col.sourceType}, {"sqlite_type", col.sqliteType},
-                {"required", col.required}, {"primary_key_order", col.primaryKeyOrder}});
+                {"required", col.required}, {"primary_key_order", col.primaryKeyOrder},
+                {"auto_number", col.autoNumber}, {"auto_number_native", nativeCounter(col)}});
             query.prepare("INSERT INTO _la_table_schema VALUES (?,?)");
             query.addBindValue(tableName);
             query.addBindValue(QString::fromUtf8(QJsonDocument(metadata).toJson(QJsonDocument::Compact)));

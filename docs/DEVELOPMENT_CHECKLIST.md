@@ -310,3 +310,8 @@ Full targets remain open:
   procedure via explicit invocation and bound native click on synthetic rows.
 - [ ] Legacy Copy/PasteAppend, multi-record selection/deletion, complete writable
   query sources, full deletion focus/event ordering and Access 2003 oracle.
+- [x] Preserve 21 original AutoNumber flags and native AUTOINCREMENT generation
+  for the 16 single-primary-key counters, retaining actual imported values and
+  verifying no-reuse on isolated copies (AUTONUMBER_IMPORT.md).
+- [ ] Generate the five non-primary-key counters, preserve stored source seeds,
+  random/replication modes and exact Jet allocation/overflow semantics.

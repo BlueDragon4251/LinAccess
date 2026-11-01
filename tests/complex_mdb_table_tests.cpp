@@ -19,6 +19,7 @@
 #include <iostream>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <set>
 
 class EnumerationHost final : public linaccess::VbaHost {
@@ -58,6 +59,7 @@ int main(int argc, char** argv) {
     int trueBooleans = 0;
     int typedBooleans = 0;
     int formattedDates = 0;
+    int counters=0,nativeCounters=0,counterProbes=0;
     QStringList failures;
     for (const auto& table : tables) {
         if (table.startsWith("MSys", Qt::CaseInsensitive)) continue;
@@ -68,6 +70,33 @@ int main(int argc, char** argv) {
             for (const auto& column : schema.columns)
                 if (column.sourceType == "BOOLEAN" || column.sourceType == "BIT") ++booleanColumns;
             linaccess::importAccessTable(db, source, table, schema, rows);
+            int primaryCount=0;
+            for (const auto& column:schema.columns) if (column.primaryKeyOrder) ++primaryCount;
+            for (const auto& column:schema.columns) if (column.autoNumber) {
+                ++counters;
+                const bool native=primaryCount==1 && column.primaryKeyOrder==1;
+                if (native) ++nativeCounters;
+                QSqlQuery metadata(db); metadata.prepare("SELECT definition FROM _la_table_schema WHERE table_name=?"); metadata.addBindValue(table);
+                assert(metadata.exec() && metadata.next());
+                const auto stored=QJsonDocument::fromJson(metadata.value(0).toByteArray()).array(); metadata.finish();
+                int matched=0;
+                for (const auto& value:stored) {
+                    const auto field=value.toObject(); if (field["name"].toString()!=column.name) continue;
+                    assert(field["auto_number"].toBool() && field["auto_number_native"].toBool()==native); ++matched;
+                }
+                assert(matched==1);
+                if (!native || counterProbes) continue;
+                const auto quote=[](QString value) { return '"'+value.replace('"',"\"\"")+'"'; };
+                QSqlQuery probe(db); assert(probe.exec("SAVEPOINT counter_probe"));
+                assert(probe.exec("SELECT COALESCE(MAX("+quote(column.name)+"),0) FROM "+quote(table)) && probe.next());
+                const auto previous=probe.value(0).toLongLong(); probe.finish();
+                if (probe.exec("INSERT INTO "+quote(table)+" DEFAULT VALUES")) {
+                    const auto first=probe.lastInsertId().toLongLong(); assert(first>previous);
+                    probe.prepare("DELETE FROM "+quote(table)+" WHERE "+quote(column.name)+"=?"); probe.addBindValue(first); assert(probe.exec());
+                    assert(probe.exec("INSERT INTO "+quote(table)+" DEFAULT VALUES") && probe.lastInsertId().toLongLong()==first+1); ++counterProbes;
+                }
+                assert(probe.exec("ROLLBACK TO counter_probe") && probe.exec("RELEASE counter_probe"));
+            }
             EnumerationHost enumerationHost(db);
             std::vector<linaccess::VbaValue> arguments{linaccess::VbaValue::string(table.toUtf8().toStdString())};
             const auto enumeration = linaccess::executeVbaProcedureWithArguments(R"VBA(
@@ -170,6 +199,8 @@ End Function
     std::cout << "Original date columns formatted through native SQL: " << formattedDates << '\n';
     assert(tables.size() == 29);
     assert(imported == 29 && failures.empty());
+    assert(counters==21 && nativeCounters==16 && counterProbes==1);
+    std::cout<<"Original counter metadata: "<<counters<<", native single-PK counters: "<<nativeCounters<<", isolated insert/delete/no-reuse probes: "<<counterProbes<<'\n';
     assert(original.open(QIODevice::ReadOnly));
     assert(QCryptographicHash::hash(original.readAll(), QCryptographicHash::Sha256) == before);
     auto full = QSqlDatabase::addDatabase("QSQLITE", "full-mdb-test");
