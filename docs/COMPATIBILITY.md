@@ -416,3 +416,10 @@ Multiline ElseIf chains now execute in first-match order with skipped later/
 inactive conditions and Null-as-false. Native Qt/SQL tests assert displayed branch
 selection and independent commit/rollback balances. Full conditional grammar,
 TypeOf and Access error-oracle parity remain open (ELSEIF_RUNTIME.md).
+
+Native Form.AllowEdits now gates bound existing-record user input, preserves
+unbound/new-row input and honors the documented programmatic dirty-record
+exception until save/Undo. Deletion/policy-change preflight, checkbox Click and
+group-only Click plus close/MsgBox lifetime are tested with real Qt/VBA/SQL.
+Five original flags are retained; their native query sources are already
+read-only, so no original writable-query transition is claimed (ALLOW_EDITS_RUNTIME.md).

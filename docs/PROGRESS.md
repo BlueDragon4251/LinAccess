@@ -1083,3 +1083,25 @@ Validation: host 21/21 (65.43 s), Debian 12 21/21 (67.65 s), Ubuntu 24.04
 DEBs pass exact payload/backend/permissions/fixture-exclusion checks; isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass.
+
+AllowEdits increment: imported false/NotDefault and native Boolean properties now
+protect bound clean existing records while preserving unbound/new-row input.
+Programmatic Value changes temporarily enable current-record edits until save/
+Undo, with validation cancellation and pending drafts retained. Locked/backend/
+addition policies remain independent; record loading clears dirty state before
+applying input policy. Deletion and in-command policy changes preflight safely.
+Native checkbox Click is connected; grouped members dispatch only group Click,
+correcting an older child-event regression against Microsoft documentation.
+Callback scopes retain closing documents across nested dialogs and suppress a
+following Click after AfterUpdate closes the form. Actual Qt/VBA/SQL tests cover
+these paths (targeted 37.28 s). All five original disabled flags bind correctly;
+zero original writable-source policy transitions occur because their native query
+sources are already read-only. No original business-handler coverage is added.
+ALLOW_EDITS_RUNTIME.md records the remaining lifecycle/query/oracle boundaries.
+
+Validation: host 21/21 (83.77 s), Debian 12 21/21 (68.34 s), Ubuntu 24.04
+21/21 (62.50 s), GUI-disabled core 1/1 (0.88 s). Fresh host/distro DEBs pass
+exact payload/backend/permissions/fixture-exclusion checks; isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. Five original flag-retention probes and zero
+original writable-source policy transitions are recorded separately.

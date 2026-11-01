@@ -35,7 +35,9 @@ The parser now retains numeric DefaultValue, OptionValue and enclosing group
 indices. Native QGroupBox/QButtonGroup choices use exclusive checkable buttons,
 including the original nested ToggleButtons. Groups expose a numeric Value,
 ControlType 103 and Null clearing. Programmatic selection updates real buttons;
-user selection updates the group before supported update/click bindings. Bound
+user selection updates the group before supported update/click bindings. Click
+is dispatched to the group only, not its individual choices (see
+ALLOW_EDITS_RUNTIME.md for the Microsoft contract correction). Bound
 existing table records load and save their actual numeric values.
 
 The original handler now opens that unchanged target and completes without an

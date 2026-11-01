@@ -215,6 +215,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             static const QSet<QString> events{"beforeinsert","afterinsert","ondelete","beforedelconfirm","afterdelconfirm","onopen","onload","oncurrent","ondirty","beforeupdate","afterupdate","onunload","onclose","onactivate","ondeactivate","onnodata","onerror","onpage","onkeydown","onkeypress","onkeyup","ontimer"};
             if (events.contains(key.toCaseFolded())) form.events.insert(key.toCaseFolded(),value);
             if (key == "AllowAdditions") form.allowAdditions = accessBoolean(value,true);
+            if (key == "AllowEdits") form.allowEdits = accessBoolean(value,true);
             if (key == "AllowDeletions") form.allowDeletions = accessBoolean(value,true);
             if (key == "Caption") form.caption = value;
             else if (key == "Tag") form.tag = value;

@@ -16,6 +16,7 @@
 #include <QLabel>
 #include <QFontMetricsF>
 #include <QAbstractItemView>
+#include <QRadioButton>
 #include <QPushButton>
 #include <QSqlQuery>
 #include <QTest>
@@ -40,6 +41,8 @@ void testPasswordMask();
 void testFormCycle();
 void testCycleClose();
 void testControlFonts();
+void testAllowEdits();
+void testCheckboxClose();
 
 void testFormEvents() {
     testInsertionEvents();
@@ -53,6 +56,8 @@ void testFormEvents() {
     testFormCycle();
     testCycleClose();
     testControlFonts();
+    testAllowEdits();
+    testCheckboxClose();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -1732,4 +1737,260 @@ void testOriginalControlFonts(const QDir& directory,const QJsonArray& objects) {
         if (forms && reports) break;
     }
     assert(forms==1 && reports==1);
+}
+
+void testAllowEdits() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","form-allow-edits"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT,opt TEXT,flag INTEGER,choice INTEGER,locked TEXT)"));
+    assert(sql.exec("INSERT INTO records VALUES(1,'one','a',0,1,'fixed1'),(2,'two','b',1,2,'fixed2')"));
+    assert(sql.exec("CREATE TABLE trace(event TEXT)"));
+    const QByteArray source=R"FORM(Begin Form
+RecordSource ="records"
+AllowEdits =NotDefault
+BeforeUpdate ="[Event Procedure]"
+Begin Section
+Begin TextBox
+Name ="editor"
+ControlSource ="value"
+Height =400
+End
+Begin ComboBox
+Name ="combo"
+ControlSource ="opt"
+RowSourceType ="Value List"
+RowSource ="a;b"
+Top =500
+Height =400
+End
+Begin TextBox
+Name ="locked"
+ControlSource ="locked"
+Locked =NotDefault
+Top =1000
+Height =400
+End
+Begin CheckBox
+Name ="flag"
+Caption ="Flag"
+ControlSource ="flag"
+OnClick ="[Event Procedure]"
+Top =1500
+Width =1000
+Height =400
+End
+Begin OptionGroup
+Name ="choice"
+ControlSource ="choice"
+OnClick ="[Event Procedure]"
+Top =2000
+Width =3000
+Height =1200
+Begin OptionButton
+Name ="first"
+Caption ="First"
+OptionValue =1
+Top =2100
+Width =1200
+Height =400
+End
+Begin OptionButton
+Name ="second"
+Caption ="Second"
+OptionValue =2
+OnClick ="[Event Procedure]"
+Top =2500
+Width =1200
+Height =400
+End
+End
+Begin TextBox
+Name ="search"
+Top =3400
+Height =400
+End
+Begin CheckBox
+Name ="toggle"
+Caption ="Edit"
+OnClick ="[Event Procedure]"
+Top =3900
+Width =1000
+Height =400
+End
+Begin CommandButton
+Name ="code"
+Caption ="Code"
+OnClick ="[Event Procedure]"
+Top =4400
+Width =1200
+Height =400
+End
+End
+End
+)FORM";
+    const QByteArray module=R"VBA(Sub flag_Click()
+CurrentDb.Execute "INSERT INTO trace VALUES('flag')"
+If Me.Tag="override_flag" Then Me!flag=True
+End Sub
+Sub choice_Click()
+CurrentDb.Execute "INSERT INTO trace VALUES('group')"
+If Me.Tag="override_group" Then Me!choice=2
+End Sub
+Sub second_Click()
+CurrentDb.Execute "INSERT INTO trace VALUES('forbidden_child')"
+End Sub
+Sub toggle_Click()
+Me.AllowEdits=Me!toggle
+End Sub
+Sub code_Click()
+Me!editor="programmatic"
+End Sub
+Sub Form_BeforeUpdate(Cancel As Integer)
+If Me.Tag="cancel" Then Cancel=True
+End Sub
+)VBA";
+    assert(!linaccess::parseAccessFormLayout(QString::fromUtf8(source)).allowEdits);
+    assert(linaccess::parseAccessFormLayout("Begin Form\nEnd").allowEdits);
+    AccessFormPreview form("allow edits",source,module,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form);
+    auto* editor=form.findChild<QLineEdit*>("access-control-editor"); auto* locked=form.findChild<QLineEdit*>("access-control-locked");
+    auto* search=form.findChild<QLineEdit*>("access-control-search"); auto* combo=form.findChild<QComboBox*>("access-control-combo");
+    auto* flag=form.findChild<QCheckBox*>("access-control-flag"); auto* toggle=form.findChild<QCheckBox*>("access-control-toggle");
+    auto* first=form.findChild<QRadioButton*>("access-control-first"); auto* second=form.findChild<QRadioButton*>("access-control-second");
+    auto* code=form.findChild<QPushButton*>("access-control-code"); auto* selector=form.findChild<QComboBox*>("access-record-selector");
+    assert(editor && locked && search && combo && flag && toggle && first && second && code && selector);
+    const auto stored=[&](const char* column) { assert(sql.exec("SELECT "+QString::fromLatin1(column)+" FROM records WHERE id=1") && sql.next()); const auto value=sql.value(0); sql.finish(); return value; };
+    const auto count=[&] { assert(sql.exec("SELECT COUNT(*) FROM records") && sql.next()); const auto value=sql.value(0).toInt(); sql.finish(); return value; };
+    const auto traceCount=[&](const char* event) { sql.prepare("SELECT COUNT(*) FROM trace WHERE event=?"); sql.addBindValue(event); assert(sql.exec() && sql.next()); const auto value=sql.value(0).toInt(); sql.finish(); return value; };
+    assert(!root->member("AllowEdits",{}).truthy() && !root->member("NewRecord",{}).truthy());
+    assert(editor->isReadOnly() && editor->isEnabled() && combo->lineEdit()->isReadOnly() && locked->isReadOnly() && !search->isReadOnly());
+    editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"blocked");
+    assert(editor->text()=="one" && stored("value")=="one" && !form.hasUnsavedChanges());
+    int number=0; try { root->objectMember("combo",{}).object->member("Dropdown",{}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==2448);
+    QTest::mouseClick(flag,Qt::LeftButton); assert(!flag->isChecked() && !stored("flag").toBool() && !form.hasUnsavedChanges() && traceCount("flag")==1);
+    QTest::mouseClick(second,Qt::LeftButton); assert(first->isChecked() && !second->isChecked() && root->item("choice").asNumber()==1);
+    assert(!form.hasUnsavedChanges() && traceCount("group")==1 && traceCount("forbidden_child")==0);
+    search->setFocus(); QTest::keyClicks(search,"query"); assert(search->text()=="query" && !form.hasUnsavedChanges());
+    root->objectMember("editor",{}).object->assign("FontSize",VbaValue::numeric(12)); assert(editor->isReadOnly() && !form.hasUnsavedChanges());
+    root->assign("Tag",VbaValue::string("override_flag")); QTest::mouseClick(flag,Qt::LeftButton);
+    assert(flag->isChecked() && form.hasUnsavedChanges() && !editor->isReadOnly() && !stored("flag").toBool() && !root->member("AllowEdits",{}).truthy());
+    root->assign("Dirty",VbaValue::logical(false)); assert(stored("flag").toBool() && editor->isReadOnly() && !form.hasUnsavedChanges());
+    root->assign("Tag",VbaValue::string("override_group")); QTest::mouseClick(second,Qt::LeftButton);
+    assert(root->item("choice").asNumber()==2 && form.hasUnsavedChanges() && !editor->isReadOnly() && stored("choice").toInt()==1);
+    assert(traceCount("forbidden_child")==0); root->assign("Dirty",VbaValue::logical(false)); assert(stored("choice").toInt()==2 && editor->isReadOnly());
+    root->assign("Tag",VbaValue::string("")); QTest::mouseClick(toggle,Qt::LeftButton);
+    assert(root->member("AllowEdits",{}).truthy() && !editor->isReadOnly() && !combo->lineEdit()->isReadOnly() && !form.hasUnsavedChanges());
+    editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"draft"); QTest::mouseClick(toggle,Qt::LeftButton);
+    assert(!root->member("AllowEdits",{}).truthy() && form.hasUnsavedChanges() && !editor->isReadOnly() && editor->text()=="draft" && stored("value")=="one");
+    root->assign("Dirty",VbaValue::logical(false)); assert(stored("value")=="draft" && editor->isReadOnly() && locked->isReadOnly());
+    QTest::mouseClick(code,Qt::LeftButton);
+    assert(form.hasUnsavedChanges() && !editor->isReadOnly() && locked->isReadOnly() && root->item("editor").asText()=="programmatic" && stored("value")=="draft");
+    root->assign("Tag",VbaValue::string("cancel")); number=0;
+    try { root->assign("Dirty",VbaValue::logical(false)); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; }
+    assert(number==2501 && form.hasUnsavedChanges() && !editor->isReadOnly() && stored("value")=="draft");
+    root->assign("Tag",VbaValue::string("")); root->member("Undo",{});
+    assert(!form.hasUnsavedChanges() && editor->isReadOnly() && editor->text()=="draft");
+    selector->setCurrentIndex(2); assert(editor->isReadOnly() && editor->text()=="two"); selector->setCurrentIndex(1);
+    dispatchPreviewDocumentCommand(form,"runcommand",{VbaValue::numeric(50)}); number=0;
+    try { dispatchPreviewDocumentCommand(form,"runcommand",{VbaValue::numeric(223)}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; }
+    assert(number==2046 && count()==2);
+    selector->setCurrentIndex(0); assert(root->member("NewRecord",{}).truthy() && !editor->isReadOnly() && locked->isReadOnly());
+    editor->setFocus(); QTest::keyClicks(editor,"new"); root->assign("Dirty",VbaValue::logical(false));
+    assert(count()==3 && !root->member("NewRecord",{}).truthy() && editor->isReadOnly() && !form.hasUnsavedChanges());
+    selector->setCurrentIndex(0); root->assign("AllowAdditions",VbaValue::logical(false));
+    assert(editor->isReadOnly()); editor->setFocus(); QTest::keyClicks(editor,"blocked"); assert(editor->text().isEmpty() && count()==3);
+    number=0; try { root->assign("AllowEdits",VbaValue{}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; }
+    assert(number==94 && !root->member("AllowEdits",{}).truthy() && editor->isReadOnly());
+    number=0; try { root->assign("AllowEdits",VbaValue::string("invalid")); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; }
+    assert(number==13 && !root->member("AllowEdits",{}).truthy());
+    class EditScalar final:public linaccess::VbaObject {
+    public:
+        int reads{};
+        VbaValue scalarValue() override { ++reads; return VbaValue::logical(false); }
+        VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw linaccess::VbaRuntimeError(438,"No edit scalar members"); }
+    };
+    auto scalar=std::make_shared<EditScalar>(); root->assign("AllowEdits",VbaValue::reference(scalar));
+    assert(scalar->reads==1 && !root->member("AllowEdits",{}).truthy() && !form.hasUnsavedChanges());
+    assert(form.close());
+    const QByteArray deleting="Begin Form\nRecordSource =\"records\"\nOnDelete =\"[Event Procedure]\"\nBegin Section\nEnd\nEnd";
+    AccessFormPreview deletion("delete policy preflight",deleting,"Sub Form_Delete(Cancel As Integer)\nMe.AllowEdits=False\nEnd Sub",db);
+    QTimer::singleShot(0,[] { if(auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->reject(); });
+    number=0; try { dispatchPreviewDocumentCommand(deletion,"runcommand",{VbaValue::numeric(223)}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; }
+    QApplication::processEvents();
+    assert(number==3251 && makePreviewFormObject(deletion)->member("AllowEdits",{}).truthy() && count()==3);
+    assert(deletion.close());
+    const QByteArray report="Begin Report\nBegin Section\nBegin TextBox\nName =\"field\"\nEnd\nEnd\nEnd";
+    AccessFormPreview preview("report edit policy",report,{},db); auto reportObject=makePreviewFormObject(preview);
+    number=0; try { reportObject->member("AllowEdits",{}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==438);
+    number=0; try { reportObject->assign("AllowEdits",VbaValue::logical(true)); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==438);
+    assert(preview.close());
+}
+
+void testOriginalAllowEdits(const QDir& directory,const QJsonArray& objects,QSqlDatabase db) {
+    int disabled=0,transitions=0;
+    for (const auto& entry:objects) {
+        const auto artifact=entry.toObject(); if (artifact["kind"]!="form") continue;
+        QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly)); const auto bytes=input.readAll();
+        assert(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1().toLower());
+        const auto layout=linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(bytes)); if(layout.allowEdits) continue;
+        ++disabled; AccessFormPreview form(artifact["name"].toString(),bytes,{},db); auto root=makePreviewFormObject(form);
+        assert(!root->member("AllowEdits",{}).truthy() && !form.hasUnsavedChanges());
+        if(form.hasDataSource() && !root->member("NewRecord",{}).truthy()) {
+            root->assign("AllowEdits",linaccess::VbaValue::logical(true));
+            for(const auto& control:layout.controls) if(control.type=="TextBox" && !control.locked && !control.controlSource.isEmpty() && !control.controlSource.startsWith('=')) {
+                auto* editor=form.findChild<QLineEdit*>("access-control-"+control.name);
+                if(editor && !editor->isReadOnly()) {
+                    root->assign("AllowEdits",linaccess::VbaValue::logical(false)); assert(editor->isReadOnly() && !form.hasUnsavedChanges()); ++transitions; break;
+                }
+            }
+        }
+        assert(form.close());
+    }
+    assert(disabled==5);
+    std::cout<<"Original AllowEdits-disabled form layouts: "<<disabled<<"; writable-source policy transitions: "<<transitions<<"\n";
+}
+
+void testCheckboxClose() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","checkbox-close-lifetime"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,flag INTEGER)")); assert(sql.exec("INSERT INTO records VALUES(1,0)"));
+    assert(sql.exec("CREATE TABLE events(event TEXT)"));
+    assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    const QByteArray child=R"FORM(Begin Form
+RecordSource ="records"
+Begin Section
+Begin CheckBox
+Name ="flag"
+Caption ="Flag"
+Width =1000
+Height =400
+ControlSource ="flag"
+AfterUpdate ="[Event Procedure]"
+OnClick ="[Event Procedure]"
+End
+End
+End
+)FORM";
+    const QByteArray childCode="Sub flag_AfterUpdate()\nDoCmd.Close acForm,Me.Name\nMsgBox \"close probe\"\nEnd Sub\nSub flag_Click()\nCurrentDb.Execute \"INSERT INTO events VALUES('unexpected')\"\nEnd Sub\n";
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','checkbox child',?)"); sql.addBindValue(child); assert(sql.exec());
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba','Form_checkbox child',?)"); sql.addBindValue(childCode); assert(sql.exec()); sql.finish();
+    AccessFormPreview caller("checkbox caller","Begin Form\nBegin Section\nEnd\nEnd","Sub OpenChild()\nDoCmd.OpenForm \"checkbox child\"\nEnd Sub",db);
+    caller.show(); QApplication::setActiveWindow(&caller); QApplication::processEvents(); std::vector<VbaValue> none;
+    assert(caller.executeProcedure("OpenChild",none).status==linaccess::VbaExecutionStatus::Completed);
+    QPointer<AccessFormPreview> target;
+    for(auto* widget:QApplication::topLevelWidgets()) if(auto* candidate=dynamic_cast<AccessFormPreview*>(widget);candidate && candidate!=&caller && candidate->findChild<QCheckBox*>("access-control-flag")) target=candidate;
+    assert(target); QApplication::setActiveWindow(target); QApplication::processEvents(); auto* flag=target->findChild<QCheckBox*>("access-control-flag"); assert(flag);
+    bool dialogSeen=false;
+    QTimer::singleShot(0,&caller,[&] {
+        for(auto* widget:QApplication::topLevelWidgets()) if(auto* box=qobject_cast<QMessageBox*>(widget)) {
+            assert(target && !target->isVisible()); dialogSeen=true; box->accept(); return;
+        }
+        assert(false);
+    });
+    QTest::mouseClick(flag,Qt::LeftButton);
+    assert(dialogSeen && QTest::qWaitFor([&] { return target.isNull(); },1500));
+    assert(sql.exec("SELECT flag FROM records WHERE id=1") && sql.next() && sql.value(0).toBool()); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM records") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
+    assert(caller.close());
 }

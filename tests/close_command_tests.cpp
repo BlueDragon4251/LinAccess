@@ -280,6 +280,7 @@ DefaultValue ="1"
 Width =3000
 Height =2000
 AfterUpdate ="[Event Procedure]"
+OnClick ="[Event Procedure]"
 Begin
 Begin ToggleButton
 Name ="first"
@@ -312,7 +313,7 @@ End Sub
 Sub selection_AfterUpdate()
 CurrentDb.Execute "INSERT INTO events VALUES(" & Me.selection & ")"
 End Sub
-Sub second_Click()
+Sub selection_Click()
 If Me.selection<>2 Then
 Err.Raise 5
 End If
@@ -331,7 +332,8 @@ End Sub
     QTest::mouseClick(second,Qt::LeftButton);
     assert(!first->isChecked() && second->isChecked() && object->item("selection").asNumber()==2);
     assert(bound.executeProcedure("BracketValue",noArguments).status==linaccess::VbaExecutionStatus::Completed && object->member("Tag",{}).asText()=="selected");
-    const auto clicked=bound.eventResult("control:second:Click");
+    const auto clicked=bound.eventResult("control:selection:Click");
+    assert(!bound.eventResult("control:second:Click"));
     assert(clicked && clicked->status==linaccess::VbaExecutionStatus::Completed);
     assert(query.exec("SELECT value FROM events") && query.next() && query.value(0).toInt()==2 && !query.next()); query.finish();
     assert(bound.close());

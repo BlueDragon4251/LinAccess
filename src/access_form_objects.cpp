@@ -457,8 +457,9 @@ public:
         if (key == "name") return linaccess::VbaValue::string(bytes(preview.formName_));
         if (key == "tag") return linaccess::VbaValue::string(bytes(preview.property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(preview.layout_.caption));
-        if (key=="allowdeletions" || key=="allowadditions" || key=="selheight") {
+        if (key=="allowdeletions" || key=="allowadditions" || key=="allowedits" || key=="selheight") {
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Record selection/deletion properties require a form");
+            if (key=="allowedits") return linaccess::VbaValue::logical(preview.layout_.allowEdits);
             if (key=="allowadditions") return linaccess::VbaValue::logical(preview.layout_.allowAdditions);
             return key=="allowdeletions" ? linaccess::VbaValue::logical(preview.layout_.allowDeletions) : linaccess::VbaValue::numeric(preview.recordSelected_ ? 1 : 0);
         }
@@ -511,7 +512,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="selheight" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron")
+        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
@@ -528,6 +529,14 @@ public:
             preview.selectRecord(static_cast<int>(target));
             if (preview.currentRecordIndex_!=target) throw linaccess::VbaRuntimeError(2501,"Bookmark navigation cancelled");
             return;
+        }
+        if (key=="allowedits") {
+            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"AllowEdits requires a form");
+            if (preview.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Changing edit policy during record command unsupported");
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null AllowEdits");
+            const auto enabled=linaccess::coerceVbaModuleValue(scalar,"boolean").boolean;
+            preview.layout_.allowEdits=enabled; preview.applyControlStates(); return;
         }
         if (key=="allowadditions") {
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"AllowAdditions requires a form");

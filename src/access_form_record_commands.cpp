@@ -27,7 +27,7 @@ void AccessFormPreview::selectCurrentRecordForCommand() {
 }
 void AccessFormPreview::deleteCurrentRecord() {
     using linaccess::VbaRuntimeError; using linaccess::VbaValue;
-    if (recordCommandRunning_ || layout_.kind!=linaccess::AccessDocumentKind::Form || !layout_.allowDeletions || !directTable_ || !dataSourceAvailable_ || currentRecordIndex_<1 || currentRecordIndex_>rowIds_.size())
+    if (recordCommandRunning_ || layout_.kind!=linaccess::AccessDocumentKind::Form || !layout_.allowDeletions || !layout_.allowEdits || !directTable_ || !dataSourceAvailable_ || currentRecordIndex_<1 || currentRecordIndex_>rowIds_.size())
         throw VbaRuntimeError(2046,"Record deletion unavailable");
     if (!saveRecord()) throw VbaRuntimeError(2501,"Record deletion save cancelled");
     QScopedValueRollback<bool> running(recordCommandRunning_,true);

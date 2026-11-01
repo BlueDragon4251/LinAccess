@@ -412,3 +412,7 @@ Full targets remain open:
 
 - [x] Bounded multiline ElseIf first-match chains with Null/inactive/side-effect
   handling, nested loop exits, error retry and displayed native SQL mode selection.
+
+- [x] Bounded Form.AllowEdits import/VBA/user-input policy, programmatic dirty
+  exception/save/Undo, unbound/new-row handling, deletion preflight, checkbox and
+  group-only Click, callback lifetime and five original flag-retention probes.

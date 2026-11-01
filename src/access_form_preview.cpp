@@ -371,7 +371,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
-        if (key=="allowadditions" || key=="allowdeletions" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
+        if (key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -384,7 +384,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
-        if (key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
+        if (key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
         if (key == "selheight" || key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
@@ -900,15 +900,18 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
                     button->setCheckable(true); button->setProperty("la_option_value",control.optionValue);
                     button->setProperty("la_option_group_name",parent.name);
                     group->findChild<QButtonGroup*>("access-options")->addButton(button);
-                    connect(button,&QAbstractButton::clicked,this,[this,group,button,parent,control] {
-                        if (loading_ || group->property("la_access_input_readonly").toBool()) return;
-                        group->setProperty("la_option_value",button->property("la_option_value"));
-                        group->setProperty("la_null",false); group->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Number));
-                        markDirty(parent.name,true); if (group->property("la_insert_rejected").toBool()) return; refreshCalculatedControls(); pendingControls_.insert(parent.name);
-                        if (commitControl(parent.name)) {
-                            (void)runControlBinding(parent.name,"Click",parent.onClick);
-                            (void)runControlBinding(control.name,"Click",control.onClick);
+                    connect(button,&QAbstractButton::clicked,this,[this,group,button,parent] {
+                        if (closed_ || openCancelled_ || loading_ || layout_.kind!=linaccess::AccessDocumentKind::Form) return;
+                        ++nativeExecutionDepth(); const auto executing=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+                        if (!group->property("la_access_input_readonly").toBool()) {
+                            group->setProperty("la_option_value",button->property("la_option_value"));
+                            group->setProperty("la_null",false); group->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Number));
+                            markDirty(parent.name,true); if (closed_ || openCancelled_ || group->property("la_insert_rejected").toBool()) return;
+                            refreshCalculatedControls(); pendingControls_.insert(parent.name);
+                            if (!commitControl(parent.name)) return;
                         }
+                        // Access dispatches Click to the option group, not its members.
+                        if (!closed_ && !openCancelled_) (void)runControlBinding(parent.name,"Click",parent.onClick);
                     });
                 }
             }
@@ -957,13 +960,19 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             });
         } else if (auto* box = qobject_cast<QCheckBox*>(widget);box && control.optionGroupIndex<0) {
             connect(box,&QCheckBox::toggled,this,[this,name,widget] {
-                if (loading_) return;
-                widget->setProperty("la_null",false); markDirty(name,true); refreshCalculatedControls();
+                if (closed_ || openCancelled_ || loading_) return;
+                ++nativeExecutionDepth(); const auto executing=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+                widget->setProperty("la_null",false); markDirty(name,true);
+                if (!closed_ && !openCancelled_) refreshCalculatedControls();
             });
-            connect(box,&QCheckBox::clicked,this,[this,name,widget] {
-                if (widget->property("la_access_input_readonly").toBool()) return;
-                if (widget->property("la_insert_rejected").toBool()) { widget->setProperty("la_insert_rejected",false); return; }
-                pendingControls_.insert(name); (void)commitControl(name);
+            connect(box,&QCheckBox::clicked,this,[this,name,widget,binding=control.onClick] {
+                if (closed_ || openCancelled_ || loading_ || layout_.kind!=linaccess::AccessDocumentKind::Form) return;
+                ++nativeExecutionDepth(); const auto executing=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+                if (!widget->property("la_access_input_readonly").toBool()) {
+                    if (widget->property("la_insert_rejected").toBool()) { widget->setProperty("la_insert_rejected",false); return; }
+                    pendingControls_.insert(name); if (!commitControl(name)) return;
+                }
+                if (!closed_ && !openCancelled_) (void)runControlBinding(name,"Click",binding);
             });
         }
         ++renderedControls_;
@@ -986,7 +995,7 @@ void AccessFormPreview::applyControlStates() {
         widget->setVisible(control.visible); widget->setEnabled(control.enabled);
         const bool bound=!control.controlSource.isEmpty();
         const bool parentReadOnly=control.optionGroupIndex>=0 && controls_.value(layout_.controls[control.optionGroupIndex].name.toCaseFolded()) && controls_.value(layout_.controls[control.optionGroupIndex].name.toCaseFolded())->property("la_access_input_readonly").toBool();
-        const bool readOnly=parentReadOnly || layout_.kind==linaccess::AccessDocumentKind::Report || control.locked || control.controlSource.startsWith('=') || (bound && (!directTable_ || (currentRecordIndex_==0 && !layout_.allowAdditions)));
+        const bool readOnly=parentReadOnly || layout_.kind==linaccess::AccessDocumentKind::Report || control.locked || control.controlSource.startsWith('=') || (bound && (!directTable_ || (currentRecordIndex_==0 && !layout_.allowAdditions) || (currentRecordIndex_>0 && !layout_.allowEdits && !dirty_)));
         widget->setProperty("la_access_input_readonly",readOnly);
         if (auto* line=qobject_cast<QLineEdit*>(widget)) {
             const bool password=control.inputMask.compare("Password",Qt::CaseInsensitive)==0;
@@ -1227,8 +1236,8 @@ void AccessFormPreview::loadRecord() {
         setText(widget,value.toString()); widget->setProperty("la_null",value.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
     }
-    applyControlStates(); refreshCalculatedControls();
     dirty_ = false; insertionStarted_=false; pendingControls_.clear(); editOriginals_.clear();
+    applyControlStates(); refreshCalculatedControls();
     rememberControlEdit(QApplication::focusWidget());
 }
 
@@ -1272,6 +1281,7 @@ void AccessFormPreview::markDirty(const QString& name,bool userEdit) {
         dirty_ = true;
         const auto event = formEvent("OnDirty","Form_Dirty");
         if (event.cancelled || failed(event)) reject();
+        if (!closed_ && !openCancelled_) applyControlStates();
     }
 }
 
@@ -1922,6 +1932,7 @@ void AccessFormPreview::updateDirtyFromRecord() {
         } catch (const std::exception&) { dirty_=true; }
     }
     if (!dirty_) insertionStarted_=false;
+    if (!closed_ && !openCancelled_) applyControlStates();
 }
 bool AccessFormPreview::undoControlEdit(const QString& name) {
     for (const auto& definition:layout_.controls) {
@@ -2120,6 +2131,7 @@ bool AccessFormPreview::eventFilter(QObject* watched,QEvent* event) {
     return QDialog::eventFilter(watched,event);
 }
 linaccess::VbaExecutionResult AccessFormPreview::runControlBinding(const QString& control,const QString& event,const QString& binding) {
+    if (binding.trimmed().isEmpty()) return {linaccess::VbaExecutionStatus::Completed,{}};
     linaccess::VbaExecutionResult result;
     if (eventProcedure(binding)) result=runHandler(controlEventPrefix(control)+"_"+event);
     else {
