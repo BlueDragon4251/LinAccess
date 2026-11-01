@@ -909,3 +909,23 @@ Validation: host 21/21 (76.53 s), Debian 12 21/21 (63.05 s), Ubuntu 24.04
 exact payload/backend/permission/fixture-exclusion checks. Isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass.
+
+DAO transaction increment: native DBEngine/Application.DBEngine and the single
+project default workspace/database now coordinate real BeginTrans/CommitTrans/
+Rollback savepoints. Tests independently read a temporary project through a
+second connection and verify Recordset.Update rollback, nested commit/outer
+rollback, flags/depth limits, stale fields/bookmarks, snapshot refresh safety,
+clone preflight and close/reopen generations. Typed Workspace VBA helpers execute
+real SQL. A native button commits, explicitly rolls back and handles a duplicate
+key with rollback before refreshing its bound control. CurrentDb.Execute now
+dispatches its argument list to Database.Execute, including dbFailOnError.
+Targeted core/DAO/layout tests pass (8.33 s); rebuilt GUI-disabled core passes
+1/1 (0.49 s). Original API token counts are zero, so original execution counts
+are unchanged. Nested rollback, clones in transactions, forced OS flush,
+Workspace.Close/custom/multiple-database workspaces and full Jet cursor/locking
+semantics remain open.
+Validation: host 21/21 (77.13 s), Debian 12 21/21 (65.79 s), Ubuntu 24.04
+21/21 (59.47 s), freshly rebuilt GUI-disabled core 1/1 (0.49 s). Fresh host/
+distro DEBs pass exact payload/backend/permission/fixture-exclusion checks;
+isolated installed Debian/Ubuntu packages pass backend/counter execution and
+GUI startup. All four original fixture hashes pass.

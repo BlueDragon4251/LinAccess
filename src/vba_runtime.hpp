@@ -81,6 +81,7 @@ public:
     virtual std::shared_ptr<VbaObject> formsCollection() {
         throw VbaRuntimeError(438,"Forms collection unavailable");
     }
+    virtual std::shared_ptr<VbaObject> databaseEngine() { throw VbaRuntimeError(3251,"DBEngine requires a native DAO host"); }
     virtual std::shared_ptr<VbaObject> currentDatabase() {
         throw std::runtime_error("CurrentDb: keine verbundene Datenbank");
     }

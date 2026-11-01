@@ -385,6 +385,7 @@ private:
         if (word == "null") return {};
         if (word == "empty") return VbaValue::empty();
         if (word == "nothing") return VbaValue::reference(nullptr);
+        if (word=="dbengine") return host_ ? VbaValue::reference(host_->databaseEngine()) : VbaValue{};
         if (word == "currentdb") {
             if (take("(")) require(")");
             return host_ ? VbaValue::reference(host_->currentDatabase()) : VbaValue{};
@@ -397,6 +398,7 @@ private:
         if (word == "dbopendynaset") return VbaValue::numeric(2);
         if (word == "dbopensnapshot") return VbaValue::numeric(4);
         if (word == "dbfailonerror") return VbaValue::numeric(128);
+        if (word == "dbforceosflush") return VbaValue::numeric(1);
         if (word == "vbarray") return VbaValue::numeric(8192);
         if (word == "vbbyte") return VbaValue::numeric(17);
         if (word == "true") return VbaValue::logical(true);

@@ -84,6 +84,19 @@ public:
     void gotoNewRecord() override { ++navigatedNew; }
     void requery() override { ++requeries; }
     void executeSql(std::string_view statement) override { sqlStatements.emplace_back(statement); }
+    std::shared_ptr<linaccess::VbaObject> currentDatabase() override {
+        class SqlSink final:public linaccess::VbaObject {
+        public:
+            explicit SqlSink(FakeForm& owner):owner_(owner) {}
+            linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& arguments) override {
+                assert(name=="Execute" && arguments.size()==1);
+                owner_.executeSql(arguments[0].asText()); return {};
+            }
+        private:
+            FakeForm& owner_;
+        };
+        return std::make_shared<SqlSink>(*this);
+    }
     void openForm(std::string_view name) override { openedForms.emplace_back(name); }
     void requeryControl(std::string_view) override { ++controlsRefreshed; }
     void focusControl(std::string_view) override { ++controlsFocused; }

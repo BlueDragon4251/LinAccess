@@ -26,6 +26,7 @@ void testChangeEvents();
 void testTimerEvents();
 void testTextBuffering();
 void testControlUndo();
+void testWorkspaceEvents();
 
 void testFormEvents() {
     testInsertionEvents();
@@ -33,6 +34,7 @@ void testFormEvents() {
     testTimerEvents();
     testTextBuffering();
     testControlUndo();
+    testWorkspaceEvents();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -968,5 +970,65 @@ End Sub
     assert(events()==QStringList({"before:NULL:fresh","control_after:NULL:fresh","form_after:NULL:fresh"}));
     assert(editor->member("OldValue",{}).asText()=="fresh");
     assert(sql.exec("SELECT value FROM records WHERE id=2") && sql.next() && sql.value(0).toString()=="fresh"); sql.finish();
+    assert(form.close());
+}
+
+void testWorkspaceEvents() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","workspace-button-events"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE balances(id INTEGER PRIMARY KEY,amount INTEGER)"));
+    assert(sql.exec("INSERT INTO balances VALUES(1,100),(2,200)"));
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="balances"
+Begin Section
+Begin TextBox
+Name ="amount"
+ControlSource ="amount"
+End
+Begin TextBox
+Name ="lastError"
+Top =400
+End
+Begin CommandButton
+Name ="Transfer"
+OnClick ="[Event Procedure]"
+Top =800
+End
+End
+End
+)FORM";
+    const QByteArray code=R"VBA(Sub Transfer_Click()
+Dim session As DAO.Workspace
+Set session=DBEngine(0)
+If Me.Tag="rollback" Then Set session=Application.DBEngine.Workspaces(0)
+If Me.Tag="fail" Then Set session=DBEngine.Workspaces.Item(0)
+If Not (Application.DBEngine Is DBEngine) Then Err.Raise 5
+If Not (DBEngine(0)(0) Is DBEngine(0)(0)) Then Err.Raise 5
+Me!lastError=0
+On Error GoTo failed
+session.BeginTrans
+CurrentDb.Execute "UPDATE balances SET amount=amount-10 WHERE id=1",dbFailOnError
+CurrentDb.Execute "UPDATE balances SET amount=amount+10 WHERE id=2",dbFailOnError
+If Me.Tag="fail" Then CurrentDb.Execute "INSERT INTO balances VALUES(1,5)",dbFailOnError
+If Me.Tag="rollback" Then
+session.Rollback
+Else
+session.CommitTrans
+End If
+Me.Requery
+Exit Sub
+failed:
+Me!lastError=Err.Number
+session.Rollback
+Me.Requery
+End Sub)VBA";
+    AccessFormPreview form("workspace events",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form); auto* button=form.findChild<QPushButton*>("access-control-Transfer"); assert(button);
+    const auto amount=[&](int id) { sql.prepare("SELECT amount FROM balances WHERE id=?"); sql.addBindValue(id); assert(sql.exec() && sql.next()); const auto value=sql.value(0).toInt(); sql.finish(); return value; };
+    button->click(); assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90 && root->item("lastError").asNumber()==0);
+    root->assign("Tag",VbaValue::string("rollback")); button->click();
+    assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90);
+    root->assign("Tag",VbaValue::string("fail")); button->click();
+    assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90 && root->item("lastError").asNumber()==3022);
     assert(form.close());
 }

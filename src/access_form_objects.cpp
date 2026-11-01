@@ -786,6 +786,7 @@ public:
             if (args[0].kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Eval argument");
             return preview.evalExpression(args[0].asText());
         }
+        if (key=="dbengine" && args.empty()) return linaccess::VbaValue::reference(linaccess::makeDaoEngine(preview.db_));
         if (key=="screen" && args.empty()) {
             if (auto object=preview.screenObject_.lock()) return linaccess::VbaValue::reference(object);
             auto object=std::make_shared<PreviewScreenObject>(preview); preview.screenObject_=object; return linaccess::VbaValue::reference(object);

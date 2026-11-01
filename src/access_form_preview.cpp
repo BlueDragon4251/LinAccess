@@ -486,6 +486,7 @@ public:
     linaccess::VbaValue formatValue(const linaccess::VbaValue& value,std::string_view mask,bool stringResult) override {
         return linaccess::formatAccessValue(value,mask,stringResult);
     }
+    std::shared_ptr<linaccess::VbaObject> databaseEngine() override { return linaccess::makeDaoEngine(preview_.db_); }
     std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(preview_.db_); }
     void executeSql(std::string_view statement) override {
         if (!preview_.db_.isOpen()) throw std::runtime_error("Kein offenes Datenbankprojekt");

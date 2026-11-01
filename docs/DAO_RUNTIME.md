@@ -62,7 +62,8 @@ Top-level error labels, Resume/retry and nested error-number propagation are tes
 Jump targets inside structured blocks, complete error codes and debugger support
 remain unsupported. SQL is still SQLite SQL; no
 Jet/ACE compatibility is inferred from opening a recordset. Persistent QueryDef creation, general query parameters/dependencies (see QUERY_ADAPTER.md),
-Workspace transactions, SQL-join updates, bookmarks, recordset clones,
+Multiple-database/custom Workspace transactions (see DAO_TRANSACTIONS_RUNTIME.md),
+unrestricted join updates and general bookmark/clone semantics,
 Filter/Sort, pessimistic locking, concurrency, ADO and default Field-value coercion
 without `.Value` remain unsupported. Delete currently refreshes the recordset;
 full DAO deleted-record/navigation semantics remain to be implemented.
@@ -115,3 +116,9 @@ Cursor/clone/bookmark operations and the original generated form-search path
 are implemented in a bounded native subset. Exact scope, typed tokens, validation,
 original successes and the missing original control reference are recorded in
 [DAO_CURSOR_RUNTIME.md](DAO_CURSOR_RUNTIME.md).
+
+Project-scoped DBEngine/Workspace transactions, typed Workspace locals, native
+SQL savepoints and rollback/cursor-generation evidence are documented in
+DAO_TRANSACTIONS_RUNTIME.md. CurrentDb.Execute now uses the Database adapter
+including positional dbFailOnError; unsupported transaction combinations fail
+before pretending to provide complete Jet semantics.

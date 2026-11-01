@@ -350,3 +350,10 @@ BeforeUpdate self-change errors are tested with real SQL and other-edit
 preservation. Reentrant new drafts are retained for explicit retry, not silently
 discarded. General Undo events, reentrancy, unbound OldValue and exact
 Currency/Decimal/Date field representation remain open (TEXT_VALUE_RUNTIME.md).
+
+Native project-scoped DBEngine/default Workspace transactions now execute real
+SQL savepoints, commit and single-level rollback, including recordset writes,
+VBA helpers and a real Qt button with handled SQL-error rollback. CurrentDb.Execute
+accepts dbFailOnError through its Database object. DAO_TRANSACTIONS_RUNTIME.md
+records nested rollback, clone, forced-flush, multi-database, Close and Jet cursor
+limits; full DAO transaction parity is not claimed.

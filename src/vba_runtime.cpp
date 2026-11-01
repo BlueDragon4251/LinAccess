@@ -193,7 +193,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex call(R"(^Call\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\((.*)\))?$)", std::regex::icase);
     const std::regex implicitCall(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+(.+)|\((.*)\))?$)", std::regex::icase);
     const std::regex memberCall(R"(^((?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)(?:[.!][A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)+)\s+(.+)$)",std::regex::icase);
-    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(?:Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database|DAO\.TableDef|DAO\.TableDefs))?$)", std::regex::icase);
+    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(?:Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database|DAO\.TableDef|DAO\.TableDefs|DAO\.Workspace|DAO\.Workspaces|DAO\.DBEngine))?$)", std::regex::icase);
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
     const std::regex objectSet(R"(^Set\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
     const std::regex objectAssign(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))*(?:[.!](?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])(?:\([^)]*\))*)*[.!](?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\]))\s*=\s*(.+)$)", std::regex::icase);
@@ -432,8 +432,11 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             statements.push_back({Statement::Type::GoNew, {}, {}, line});
         } else if (std::regex_match(source, requery)) {
             statements.push_back({Statement::Type::Requery, {}, {}, line});
-        } else if (std::regex_match(source, match, runSql)
-                   || std::regex_match(source, match, daoExecute)) {
+        } else if (std::regex_match(source,match,daoExecute)) {
+            const auto expression="CurrentDb().Execute("+trim(match[1].str())+")";
+            if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"DAO Execute argument syntax unsupported",line};
+            statements.push_back({Statement::Type::Evaluate,{},expression,line});
+        } else if (std::regex_match(source, match, runSql)) {
             const auto expr = trim(match[1].str());
             if (!validExpression(expr))
                 return {VbaExecutionStatus::Unsupported, "SQL-Ausdruck: " + expr, line};
@@ -493,7 +496,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 if (!std::regex_match(entry, declared, declaration))
                     return {VbaExecutionStatus::Unsupported, "Variablendeklaration", line};
                 const auto type = lower(declared[2].str());
-                if (!type.empty() && type != "variant" && type != "object" && type != "dao.database"
+                if (!type.empty() && type != "variant" && type != "object" && type != "dao.database" && type != "dao.workspace" && type != "dao.workspaces" && type != "dao.dbengine"
                     && type != "control" && type != "form" && type != "access.control" && type != "access.form"
                     && type != "dao.tabledef" && type != "dao.tabledefs" && type != "dao.recordset" && type != "dao.field" && type != "dao.fields" && type != "dao.querydef" && type != "dao.parameter" && type != "string" && type != "boolean"
                     && type != "integer" && type != "long" && type != "single" && type != "double"

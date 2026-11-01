@@ -377,3 +377,7 @@ Full targets remain open:
 
 - [x] Bound OldValue through form AfterUpdate, text/combo control Undo with
   other-edit preservation, BeforeUpdate self-change rejection and draft retry.
+
+- [x] Bounded project DBEngine/Workspace transactions with real savepoints,
+  nested commit/outer rollback, isolated-reader SQL/VBA/native-button evidence
+  and rollback/connection-generation guards; broader DAO scope remains open.

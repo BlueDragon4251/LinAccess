@@ -14,6 +14,8 @@
 #include <QUuid>
 #include <QElapsedTimer>
 #include <QScopeGuard>
+#include <QPointer>
+#include <QThread>
 #include <algorithm>
 
 namespace linaccess {
@@ -85,8 +87,66 @@ QVariant toSql(const VbaValue& value) {
     default: throw std::runtime_error("DAO: Object cannot be stored in a field");
     }
 }
+struct WorkspaceState {
+    QPointer<QSqlDriver> driver;
+    sqlite3* connection{};
+    bool alive{true};
+    quint64 rollbackRevision{};
+    int clones{};
+    QStringList savepoints;
+    QString prefix=QString("la_dao_")+QUuid::createUuid().toString(QUuid::Id128);
+    std::weak_ptr<VbaObject> engine,workspace,database;
+    void check() const {
+        if (!alive || !driver || !driver->isOpen() || !connection) throw VbaRuntimeError(3420,"DAO: Workspace connection unavailable");
+        if (driver->thread()!=QThread::currentThread()) throw VbaRuntimeError(3251,"DAO: Cross-thread workspace unsupported");
+        const auto handle=driver->handle();
+        if (!handle.isValid() || QByteArray(handle.typeName())!="sqlite3*" || *static_cast<sqlite3* const*>(handle.constData())!=connection)
+            throw VbaRuntimeError(3420,"DAO: Workspace connection was replaced");
+        if (!savepoints.isEmpty() && sqlite3_get_autocommit(connection)) throw VbaRuntimeError(3420,"DAO: Workspace transaction was ended externally");
+    }
+    void sql(const QString& command) {
+        check(); const auto bytes=command.toUtf8();
+        const int result=sqlite3_exec(connection,bytes.constData(),nullptr,nullptr,nullptr);
+        if (result!=SQLITE_OK) throw VbaRuntimeError(result==SQLITE_BUSY || result==SQLITE_LOCKED ? 3260 : 3146,"DAO: Transaction operation failed");
+    }
+    void begin() {
+        check();
+        if (clones) throw VbaRuntimeError(3251,"DAO: Transactions with recordset clones unsupported");
+        if (savepoints.size()>=5) throw VbaRuntimeError(3003,"DAO: Too many nested transactions");
+        const auto name=prefix+"_"+QString::number(savepoints.size());
+        sql("SAVEPOINT "+name); savepoints.append(name);
+    }
+    void commit() {
+        check(); if (savepoints.isEmpty()) throw VbaRuntimeError(3034,"DAO: BeginTrans required");
+        sql("RELEASE "+savepoints.last()); savepoints.removeLast();
+    }
+    void rollback() {
+        check(); if (savepoints.isEmpty()) throw VbaRuntimeError(3034,"DAO: BeginTrans required");
+        if (savepoints.size()!=1) throw VbaRuntimeError(3251,"DAO: Nested rollback unsupported");
+        sql("ROLLBACK TO "+savepoints.first()); ++rollbackRevision;
+        sql("RELEASE "+savepoints.first()); savepoints.clear();
+    }
+};
+std::shared_ptr<WorkspaceState> workspaceState(QSqlDatabase db) {
+    if (!db.isOpen() || !db.driver()) throw VbaRuntimeError(3420,"DAO: Database is closed");
+    const auto handle=db.driver()->handle();
+    if (!handle.isValid() || QByteArray(handle.typeName())!="sqlite3*") throw VbaRuntimeError(3251,"DAO: SQLite workspace required");
+    auto* native=*static_cast<sqlite3* const*>(handle.constData());
+    auto state=db.driver()->property("la_dao_workspace_state").value<std::shared_ptr<WorkspaceState>>();
+    if (state && state->alive && state->connection==native) { state->check(); return state; }
+    state=std::make_shared<WorkspaceState>(); state->driver=db.driver(); state->connection=native;
+    // The SQLite destructor invalidates wrappers even if the Qt driver is reopened.
+    auto* token=new std::shared_ptr<WorkspaceState>(state);
+    if (sqlite3_create_function_v2(native,"linaccess_dao_connection_generation",0,SQLITE_UTF8|SQLITE_DIRECTONLY,token,
+        [](sqlite3_context* context,int,sqlite3_value**) { sqlite3_result_int(context,1); },nullptr,nullptr,
+        [](void* data) { auto* holder=static_cast<std::shared_ptr<WorkspaceState>*>(data); (*holder)->alive=false; (*holder)->connection=nullptr; delete holder; })!=SQLITE_OK)
+        throw VbaRuntimeError(3146,"DAO: Workspace lifetime tracking unavailable");
+    db.driver()->setProperty("la_dao_workspace_state",QVariant::fromValue(state)); return state;
+}
 class Recordset;
 struct RecordsetData {
+    std::shared_ptr<WorkspaceState> workspace;
+    quint64 rollbackRevision{};
     QStringList columns;
     QMap<QString,QString> types;
     QVector<QVariantList> rows;
@@ -112,6 +172,7 @@ class Recordset final : public VbaObject, public std::enable_shared_from_this<Re
 public:
     Recordset(QSqlDatabase db, QString source, bool snapshot, QMap<QString,QVariant> bindings = {},AccessQueryPlan plan={})
         : db_(std::move(db)), source_(std::move(source)), readOnly_(snapshot), bindings_(std::move(bindings)),queryPlan_(std::move(plan)) {
+        data_->workspace=workspaceState(db_); data_->rollbackRevision=data_->workspace->rollbackRevision;
         table_ = db_.tables().contains(source_, Qt::CaseInsensitive);
         readOnly_ |= !table_;
         reload();
@@ -119,15 +180,22 @@ public:
     }
     Recordset(QSqlDatabase db,QStringList columns,QMap<QString,QString> types,QVector<QVariantList> rows,QVector<QVariant> ids)
         : db_(std::move(db)),readOnly_(true),frozen_(true) {
+        data_->workspace=workspaceState(db_); data_->rollbackRevision=data_->workspace->rollbackRevision;
         data_->columns=std::move(columns); data_->types=std::move(types); data_->rows=std::move(rows); data_->ids=std::move(ids);
         for (qsizetype i=0;i<data_->rows.size();++i) data_->bookmarks.append(data_->nextBookmark++);
         data_->cursors.insert(this);
     }
-    ~Recordset() override { data_->cursors.remove(this); }
+    ~Recordset() override { if (cloneCounted_) --data_->workspace->clones; data_->cursors.remove(this); }
+    void checkTransaction() const {
+        data_->workspace->check();
+        if (data_->rollbackRevision!=data_->workspace->rollbackRevision) throw VbaRuntimeError(3420,"DAO: Recordset requires Requery after Rollback");
+    }
     void refreshSnapshot(const QStringList& columns,const QMap<QString,QString>& types,
                          const QVector<QVariantList>& rows,const QVector<QVariant>& ids) {
+        data_->workspace->check();
         if (!frozen_ || columns!=data_->columns || ids.size()!=rows.size() || data_->ids.size()!=data_->rows.size())
             throw VbaRuntimeError(3251,"DAO: Incompatible form snapshot refresh");
+        if (data_->rollbackRevision!=data_->workspace->rollbackRevision) { data_->family=QUuid::createUuid().toRfc4122(); data_->rollbackRevision=data_->workspace->rollbackRevision; }
         QMap<qlonglong,quint64> tokens;
         QMap<Recordset*,QVariant> positions;
         for (qsizetype i=0;i<data_->ids.size();++i) tokens.insert(data_->ids[i].toLongLong(),data_->bookmarks[i]);
@@ -146,6 +214,7 @@ public:
         }
     }
     VbaValue bookmarkAt(qsizetype position) const {
+        checkTransaction();
         if (closed_ || position<0 || position>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: No current record");
         std::vector<unsigned char> bytes(data_->family.begin(),data_->family.end());
         const auto id=data_->bookmarks[position];
@@ -153,6 +222,7 @@ public:
         return VbaValue::byteArray(std::move(bytes));
     }
     qsizetype bookmarkPosition(const VbaValue& value) const {
+        checkTransaction();
         if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null bookmark");
         if (value.kind!=VbaValue::Kind::ByteArray) throw VbaRuntimeError(13,"DAO: Bookmark requires a byte array");
         if (value.bytes.size()!=24 || !std::equal(data_->family.begin(),data_->family.end(),value.bytes.begin(),
@@ -170,16 +240,19 @@ public:
     VbaValue item(std::string_view name) override { return value(text(name)); }
     VbaValue objectItem(std::string_view name) override { return member("Fields",{VbaValue::string(std::string(name))}); }
     void assignItem(std::string_view name,const VbaValue& value) override { set(text(name),value); }
-    QStringList fieldNames() const { require(!closed_,"DAO: Recordset is closed"); return data_->columns; }
+    QStringList fieldNames() const { checkTransaction(); require(!closed_,"DAO: Recordset is closed"); return data_->columns; }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         require(!closed_, "DAO: Recordset is closed");
         const auto key = lower(name);
+        if (key!="close" && key!="requery") checkTransaction();
+        if (key=="transactions" && args.empty()) return VbaValue::logical(true);
         if (key=="findfirst" || key=="findlast" || key=="findnext" || key=="findprevious") {
             if (args.size()!=1) throw VbaRuntimeError(450,"DAO: Find requires one criterion");
             if (args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null criterion");
             find(key,text(args[0].asText())); return {};
         }
         if (key=="clone") {
+            if (!data_->workspace->savepoints.isEmpty()) throw VbaRuntimeError(3251,"DAO: Clone inside transaction unsupported");
             if (!args.empty()) throw VbaRuntimeError(450,"DAO: Clone takes no arguments");
             if (mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
             return VbaValue::reference(std::shared_ptr<Recordset>(new Recordset(*this,CloneTag{})));
@@ -233,10 +306,12 @@ public:
             return {};
         }
         if (key == "requery") {
+            data_->workspace->check();
+            if (data_->rollbackRevision!=data_->workspace->rollbackRevision) { mode_=Mode::Browse; pending_.clear(); changed_.clear(); }
             require(mode_ == Mode::Browse, "DAO: Pending edit");
             reload(); return {};
         }
-        if (key == "close") { closed_ = true; data_->cursors.remove(this); pending_.clear(); changed_.clear(); return {}; }
+        if (key == "close") { if (cloneCounted_) { --data_->workspace->clones; cloneCounted_=false; } closed_ = true; data_->cursors.remove(this); pending_.clear(); changed_.clear(); return {}; }
         return value(text(name)); // implicit default Fields(name).Value
     }
     void assign(std::string_view name, const VbaValue& value) override {
@@ -248,12 +323,14 @@ public:
         set(text(name), value);
     }
     VbaValue value(const QString& name) const {
+        checkTransaction();
         require(!closed_, "DAO: Recordset is closed");
         const int index = column(name);
         if (mode_ != Mode::Browse) return qtFieldValue(pending_[index],data_->types.value(name.toCaseFolded()));
         current(); return qtFieldValue(data_->rows[position_][index],data_->types.value(name.toCaseFolded()));
     }
     void set(const QString& name, const VbaValue& value) {
+        checkTransaction();
         require(!closed_ && mode_ != Mode::Browse, "DAO: Edit or AddNew required");
         const auto index = column(name);
         pending_[index] = sqlFieldValue(value,data_->types.value(name.toCaseFolded())); changed_.insert(index);
@@ -263,6 +340,7 @@ private:
     Recordset(const Recordset& source,CloneTag)
         : data_(source.data_),db_(source.db_),source_(source.source_),bindings_(source.bindings_),
           table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),position_(-1),queryPlan_(source.queryPlan_) {
+        cloneCounted_=true; ++data_->workspace->clones;
         data_->cursors.insert(this);
     }
     enum class Mode { Browse, Edit, Add };
@@ -335,6 +413,8 @@ private:
                 if (cursor->position_>=0 && cursor->position_<data_->ids.size()) previousRows.insert(cursor,data_->ids[cursor->position_]);
         }
         const auto finalize=[&] {
+            if (data_->rollbackRevision!=data_->workspace->rollbackRevision) data_->family=QUuid::createUuid().toRfc4122();
+            data_->rollbackRevision=data_->workspace->rollbackRevision;
             data_->bookmarks.clear();
             for (qsizetype i=0;i<data_->rows.size();++i) {
                 const auto old=table_ ? previousTokens.value(data_->ids[i].toLongLong()) : 0;
@@ -408,7 +488,7 @@ private:
     QSqlDatabase db_;
     QString source_;
     QMap<QString,QVariant> bindings_;
-    bool table_{}, readOnly_{}, closed_{}, frozen_{},noMatch_{};
+    bool table_{}, readOnly_{}, closed_{}, frozen_{},noMatch_{},cloneCounted_{};
     QVariantList pending_;
     QSet<int> changed_;
     qsizetype position_{};
@@ -657,10 +737,12 @@ private:
 };
 class Database final : public VbaObject {
 public:
-    explicit Database(QSqlDatabase db) : db_(std::move(db)) {}
+    explicit Database(QSqlDatabase db) : db_(std::move(db)),workspace_(workspaceState(db_)) {}
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
-        require(db_.isOpen(), "DAO: Database is closed");
+        workspace_->check(); require(db_.isOpen(), "DAO: Database is closed");
         const auto key = lower(name);
+        if (key=="transactions" && args.empty()) return VbaValue::logical(true);
+        if (key=="name" && args.empty()) return VbaValue::string(db_.databaseName().toUtf8().toStdString());
         if (key=="tabledefs") {
             auto definitions=tableDefinitions_.lock();
             if (!definitions) { definitions=std::make_shared<TableDefinitions>(db_); tableDefinitions_=definitions; }
@@ -699,8 +781,102 @@ public:
 private:
     QSqlDatabase db_;
     std::weak_ptr<TableDefinitions> tableDefinitions_;
+    std::shared_ptr<WorkspaceState> workspace_;
     qlonglong affected_{};
 };
+class SingletonDaoCollection final : public VbaObject {
+public:
+    SingletonDaoCollection(std::shared_ptr<VbaObject> object,QString name):object_(std::move(object)),name_(std::move(name)) {}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        const auto key=lower(name);
+        if (key=="count" && args.empty()) { (void)object_->member("Name",{}); return VbaValue::numeric(1); }
+        if (key=="item") return defaultMember(args,true);
+        throw VbaRuntimeError(3251,"DAO: Collection member unsupported");
+    }
+    VbaValue defaultMember(const std::vector<VbaValue>& args,bool) override {
+        if (args.size()!=1) throw VbaRuntimeError(450,"DAO: Collection requires one index");
+        const auto value=scalarVbaValue(args[0]);
+        if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null index");
+        if (value.kind==VbaValue::Kind::Text) {
+            if (text(value.asText()).compare(name_,Qt::CaseInsensitive)!=0) throw VbaRuntimeError(3265,"DAO: Collection item unavailable");
+        } else if (sqlFieldValue(value,"INTEGER").toLongLong()!=0) throw VbaRuntimeError(3265,"DAO: Collection item unavailable");
+        // Validate the underlying connection before returning an item.
+        (void)object_->member("Name",{}); return VbaValue::reference(object_);
+    }
+    VbaValue item(std::string_view name) override { return defaultMember({VbaValue::string(std::string(name))},true); }
+    std::vector<VbaValue> enumerate() override { (void)object_->member("Name",{}); return {VbaValue::reference(object_)}; }
+private:
+    std::shared_ptr<VbaObject> object_;
+    QString name_;
+};
+class Workspace final : public VbaObject {
+public:
+    explicit Workspace(QSqlDatabase db):db_(std::move(db)),state_(workspaceState(db_)) {}
+    VbaValue defaultMember(const std::vector<VbaValue>& args,bool) override { return databases()->defaultMember(args,true); }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        state_->check(); const auto key=lower(name);
+        if (key=="name" && args.empty()) return VbaValue::string("#Default Workspace#");
+        if (key=="databases") { auto collection=databases(); return args.empty() ? VbaValue::reference(collection) : collection->defaultMember(args,true); }
+        if (key=="begintrans" || key=="rollback") {
+            if (!args.empty()) throw VbaRuntimeError(450,"DAO: Transaction method takes no arguments");
+            if (key=="begintrans") state_->begin(); else state_->rollback(); return {};
+        }
+        if (key=="committrans") {
+            if (args.size()>1) throw VbaRuntimeError(450,"DAO: CommitTrans arguments unsupported");
+            if (!args.empty()) {
+                const auto flags=sqlFieldValue(scalarVbaValue(args[0]),"INTEGER");
+                if (args[0].kind==VbaValue::Kind::Null || flags.isNull()) throw VbaRuntimeError(94,"DAO: Invalid Null commit flags");
+                if (flags.toLongLong()==1) throw VbaRuntimeError(3251,"DAO: Forced OS flush unsupported");
+                if (flags.toLongLong()!=0) throw VbaRuntimeError(5,"DAO: Invalid commit flags");
+            }
+            state_->commit(); return {};
+        }
+        throw VbaRuntimeError(3251,"DAO: Workspace member unsupported");
+    }
+private:
+    std::shared_ptr<VbaObject> databases() {
+        state_->check(); auto value=databases_.lock();
+        if (!value) {
+            auto database=state_->database.lock();
+            if (!database) { database=makeDaoDatabase(db_); state_->database=database; }
+            value=std::make_shared<SingletonDaoCollection>(database,db_.databaseName()); databases_=value;
+        }
+        return value;
+    }
+    QSqlDatabase db_;
+    std::shared_ptr<WorkspaceState> state_;
+    std::weak_ptr<VbaObject> databases_;
+};
+class Engine final : public VbaObject {
+public:
+    explicit Engine(QSqlDatabase db):db_(std::move(db)),state_(workspaceState(db_)) {}
+    VbaValue defaultMember(const std::vector<VbaValue>& args,bool) override { return workspaces()->defaultMember(args,true); }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        state_->check(); const auto key=lower(name);
+        if (key=="workspaces") { auto value=workspaces(); return args.empty() ? VbaValue::reference(value) : value->defaultMember(args,true); }
+        if (key=="begintrans" || key=="committrans" || key=="rollback") return workspace()->member(name,args);
+        throw VbaRuntimeError(3251,"DAO: DBEngine member unsupported");
+    }
+private:
+    std::shared_ptr<VbaObject> workspace() {
+        auto value=state_->workspace.lock();
+        if (!value) { value=std::make_shared<Workspace>(db_); state_->workspace=value; }
+        return value;
+    }
+    std::shared_ptr<VbaObject> workspaces() {
+        state_->check(); auto value=workspaces_.lock();
+        if (!value) { value=std::make_shared<SingletonDaoCollection>(workspace(),"#Default Workspace#"); workspaces_=value; }
+        return value;
+    }
+    QSqlDatabase db_;
+    std::shared_ptr<WorkspaceState> state_;
+    std::weak_ptr<VbaObject> workspaces_;
+};
+}
+std::shared_ptr<VbaObject> makeDaoEngine(QSqlDatabase database) {
+    const auto state=workspaceState(database); auto value=state->engine.lock();
+    if (!value) { value=std::make_shared<Engine>(std::move(database)); state->engine=value; }
+    return value;
 }
 std::shared_ptr<VbaObject> makeDaoDatabase(QSqlDatabase database) {
     return std::make_shared<Database>(std::move(database));

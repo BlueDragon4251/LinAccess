@@ -5,6 +5,7 @@
 #include "vba_runtime.hpp"
 #include <QCoreApplication>
 #include <QSqlQuery>
+#include <QTemporaryDir>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -15,6 +16,7 @@
 class Host final : public linaccess::VbaHost {
 public:
     explicit Host(QSqlDatabase db) : db_(db) {}
+    std::shared_ptr<linaccess::VbaObject> databaseEngine() override { return linaccess::makeDaoEngine(db_); }
     std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(db_); }
     std::map<std::string,std::optional<std::string>> fields;
     std::optional<std::string> field(std::string_view name) override { return fields[std::string(name)]; }
@@ -25,9 +27,11 @@ private:
     QSqlDatabase db_;
 };
 void testDaoCursors();
+void testDaoTransactions();
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     testDaoCursors();
+    testDaoTransactions();
     auto db = QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery q(db);
     assert(q.exec("CREATE TABLE items (id INTEGER PRIMARY KEY, qty REAL, label TEXT DEFAULT 'default')"));
@@ -491,4 +495,93 @@ End Sub
     assert(q.exec("SELECT EOF FROM property_collision") && q.next() && q.value(0).toInt()==10); q.finish();
     assert(q.exec("SELECT Fields FROM property_collision") && q.next() && q.value(0).toString()=="changed"); q.finish();
     std::cout << "DAO recordset iteration, edit, insert, fields, cancel, delete and read-only checks passed\n";
+}
+
+void testDaoTransactions() {
+    using linaccess::VbaValue;
+    QTemporaryDir directory; assert(directory.isValid());
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-workspace-writer"); db.setDatabaseName(directory.filePath("project.linaccess")); assert(db.open());
+    QSqlQuery setup(db); assert(setup.exec("CREATE TABLE balances(id INTEGER PRIMARY KEY,amount INTEGER NOT NULL)"));
+    assert(setup.exec("INSERT INTO balances VALUES(1,100),(2,200)")); setup.finish();
+    auto reader=QSqlDatabase::addDatabase("QSQLITE","dao-workspace-reader"); reader.setDatabaseName(db.databaseName()); assert(reader.open());
+    const auto amount=[&](QSqlDatabase source,int id=1) { QSqlQuery q(source); q.prepare("SELECT amount FROM balances WHERE id=?"); q.addBindValue(id); assert(q.exec() && q.next()); return q.value(0).toInt(); };
+    const auto error=[&](const std::function<void()>& operation,int expected) { int number=0; try { operation(); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==expected); };
+    auto engine=linaccess::makeDaoEngine(db),database=linaccess::makeDaoDatabase(db);
+    auto spaces=engine->member("Workspaces",{}).object;
+    auto workspace=engine->defaultMember({VbaValue::numeric(0)},true).object;
+    assert(engine==linaccess::makeDaoEngine(db));
+    assert(workspace==spaces->member("Item",{VbaValue::string("#Default Workspace#")}).object);
+    assert(spaces->member("Count",{}).asNumber()==1 && spaces->enumerate().size()==1);
+    auto databases=workspace->member("Databases",{}).object;
+    assert(databases->member("Count",{}).asNumber()==1 && databases->enumerate().size()==1);
+    const auto defaultDatabase=workspace->defaultMember({VbaValue::numeric(0)},true).object;
+    assert(defaultDatabase->member("Transactions",{}).truthy());
+    assert(defaultDatabase==workspace->defaultMember({VbaValue::numeric(0)},true).object);
+    error([&] { engine->defaultMember({VbaValue::numeric(1)},true); },3265);
+    error([&] { workspace->member("CommitTrans",{}); },3034);
+    error([&] { workspace->member("Rollback",{}); },3034);
+    workspace->member("BeginTrans",{});
+    database->member("Execute",{VbaValue::string("UPDATE balances SET amount=90 WHERE id=1")});
+    database->member("Execute",{VbaValue::string("UPDATE balances SET amount=210 WHERE id=2")});
+    assert(amount(db)==90 && amount(reader)==100);
+    error([&] { workspace->member("CommitTrans",{VbaValue{}}); },94);
+    error([&] { workspace->member("CommitTrans",{VbaValue::numeric(2)}); },5);
+    error([&] { workspace->member("CommitTrans",{VbaValue::numeric(1)}); },3251);
+    assert(amount(reader)==100);
+    workspace->member("CommitTrans",{VbaValue::numeric(0)}); assert(amount(reader)==90 && amount(reader,2)==210);
+    auto rows=database->member("OpenRecordset",{VbaValue::string("balances")}).object;
+    const auto bookmark=rows->member("Bookmark",{});
+    auto field=rows->member("Fields",{VbaValue::string("amount")}).object;
+    auto snapshot=linaccess::makeDaoSnapshot(db,{"id","amount"},{{"id","INTEGER"},{"amount","INTEGER"}},{{1,90},{2,210}},{1,2});
+    workspace->member("BeginTrans",{}); rows->member("Edit",{}); rows->assignItem("amount",VbaValue::numeric(7)); rows->member("Update",{});
+    assert(amount(db)==7 && amount(reader)==90);
+    workspace->member("Rollback",{}); assert(amount(db)==90 && amount(reader)==90);
+    error([&] { field->member("Value",{}); },3420); error([&] { rows->member("EOF",{}); },3420);
+    error([&] { linaccess::refreshDaoSnapshot(snapshot,{"bad"},{},{{1}},{1}); },3251);
+    error([&] { snapshot->member("EOF",{}); },3420);
+    linaccess::refreshDaoSnapshot(snapshot,{"id","amount"},{{"id","INTEGER"},{"amount","INTEGER"}},{{1,90},{2,210}},{1,2});
+    assert(snapshot->item("amount").asNumber()==90);
+    rows->member("Requery",{}); assert(rows->item("amount").asNumber()==90);
+    error([&] { rows->assign("Bookmark",bookmark); },3159);
+    workspace->member("BeginTrans",{}); database->member("Execute",{VbaValue::string("INSERT INTO balances VALUES(3,300)")});
+    workspace->member("BeginTrans",{}); database->member("Execute",{VbaValue::string("UPDATE balances SET amount=8 WHERE id=1")});
+    error([&] { workspace->member("Rollback",{}); },3251); assert(amount(db)==8 && amount(reader)==90);
+    workspace->member("CommitTrans",{}); workspace->member("Rollback",{});
+    QSqlQuery count(db); assert(count.exec("SELECT COUNT(*) FROM balances") && count.next() && count.value(0).toInt()==2); count.finish();
+    assert(amount(db)==90);
+    for(int depth=0;depth<5;++depth) workspace->member("BeginTrans",{});
+    error([&] { workspace->member("BeginTrans",{}); },3003);
+    for(int depth=0;depth<4;++depth) workspace->member("CommitTrans",{});
+    workspace->member("Rollback",{});
+    rows->member("Requery",{}); auto clone=rows->member("Clone",{}).object;
+    error([&] { workspace->member("BeginTrans",{}); },3251); clone->member("Close",{});
+    workspace->member("BeginTrans",{}); error([&] { rows->member("Clone",{}); },3251); workspace->member("Rollback",{});
+    Host host(db);
+    const auto result=linaccess::executeVbaProcedure(R"VBA(Sub Restore(ByVal session As DAO.Workspace)
+session.BeginTrans
+CurrentDb.Execute "UPDATE balances SET amount=999 WHERE id=1",dbFailOnError
+session.Rollback
+End Sub
+Sub Transfer()
+Dim eng As DAO.DBEngine
+Dim spaces As DAO.Workspaces
+Dim session As DAO.Workspace
+Set eng=DBEngine
+Set spaces=eng.Workspaces
+Set session=spaces(0)
+session.BeginTrans
+CurrentDb.Execute "UPDATE balances SET amount=amount-10 WHERE id=1",dbFailOnError
+CurrentDb.Execute "UPDATE balances SET amount=amount+10 WHERE id=2",dbFailOnError
+session.CommitTrans
+Call Restore(DBEngine(0))
+End Sub)VBA","Transfer",host);
+    if (result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Workspace VBA status="<<static_cast<int>(result.status)<<", error="<<result.errorNumber<<", line="<<result.line<<"\n";
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && amount(reader)==80 && amount(reader,2)==220);
+    engine->member("BeginTrans",{}); database->member("Execute",{VbaValue::string("UPDATE balances SET amount=5 WHERE id=1")});
+    db.close(); assert(amount(reader)==80);
+    error([&] { workspace->member("Name",{}); },3420); error([&] { database->member("Name",{}); },3420); error([&] { spaces->member("Count",{}); },3420);
+    assert(db.open()); auto reopened=linaccess::makeDaoEngine(db); assert(reopened!=engine);
+    reopened->member("BeginTrans",{}); linaccess::makeDaoDatabase(db)->member("Execute",{VbaValue::string("UPDATE balances SET amount=70 WHERE id=1")});
+    reopened->member("CommitTrans",{}); assert(amount(reader)==70);
+    reader.close(); db.close();
 }
