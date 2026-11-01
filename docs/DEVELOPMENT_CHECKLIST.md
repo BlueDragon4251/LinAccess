@@ -409,3 +409,6 @@ Full targets remain open:
   with preflight errors, scalar conversion, preserved masked text/selection/SQL,
   read-only-view styling and runtime font persistence across requery/navigation;
   documented >=700 Bold, 8/10-point defaults and unsupported Report OnPrint preflight.
+
+- [x] Bounded multiline ElseIf first-match chains with Null/inactive/side-effect
+  handling, nested loop exits, error retry and displayed native SQL mode selection.

@@ -1007,10 +1007,14 @@ Begin TextBox
 Name ="lastError"
 Top =400
 End
+Begin TextBox
+Name ="branch"
+Top =800
+End
 Begin CommandButton
 Name ="Transfer"
 OnClick ="[Event Procedure]"
-Top =800
+Top =1200
 End
 End
 End
@@ -1019,12 +1023,15 @@ End
 Sub Transfer_Click()
 Dim session As DAO.Workspace
 Set session=DBEngine(0)
-Select Case Me.Tag
-Case "rollback"
+If Me.Tag="rollback" Then
 Set session=Application.DBEngine.Workspaces(0)
-Case "fail"
+Me!branch=1
+ElseIf Me.Tag="fail" Then
 Set session=DBEngine.Workspaces.Item(0)
-End Select
+Me!branch=2
+Else
+Me!branch=3
+End If
 If Not (Application.DBEngine Is DBEngine) Then Err.Raise 5
 If Not (DBEngine(0)(0) Is DBEngine(0)(0)) Then Err.Raise 5
 Me!lastError=0
@@ -1058,11 +1065,11 @@ End Sub)VBA";
     AccessFormPreview form("workspace events",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
     auto root=makePreviewFormObject(form); auto* button=form.findChild<QPushButton*>("access-control-Transfer"); assert(button);
     const auto amount=[&](int id) { sql.prepare("SELECT amount FROM balances WHERE id=?"); sql.addBindValue(id); assert(sql.exec() && sql.next()); const auto value=sql.value(0).toInt(); sql.finish(); return value; };
-    button->click(); assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90 && root->item("lastError").asNumber()==0);
+    button->click(); assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90 && root->item("lastError").asNumber()==0 && root->item("branch").asNumber()==3);
     root->assign("Tag",VbaValue::string("ROLLBACK")); button->click();
-    assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90);
+    assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90 && root->item("branch").asNumber()==1);
     root->assign("Tag",VbaValue::string("fail")); button->click();
-    assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90 && root->item("lastError").asNumber()==3022);
+    assert(amount(1)==90 && amount(2)==210 && root->item("amount").asNumber()==90 && root->item("lastError").asNumber()==3022 && root->item("branch").asNumber()==2);
     assert(form.close());
 }
 

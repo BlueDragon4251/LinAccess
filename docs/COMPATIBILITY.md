@@ -411,3 +411,8 @@ classification. Unexported sizes use documented 8/10-point defaults. Report font
 setters stop with 3251 because the required OnPrint context is not implemented;
 static rendering and getters remain available. These contracts are independently
 checked against Microsoft documentation, not an Access 2003 runtime oracle.
+
+Multiline ElseIf chains now execute in first-match order with skipped later/
+inactive conditions and Null-as-false. Native Qt/SQL tests assert displayed branch
+selection and independent commit/rollback balances. Full conditional grammar,
+TypeOf and Access error-oracle parity remain open (ELSEIF_RUNTIME.md).

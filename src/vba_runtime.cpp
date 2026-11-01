@@ -15,7 +15,7 @@ namespace {
 // This interpreter deliberately reports unsupported VBA instead of silently
 // treating Access/DAO/COM calls as successful no-ops.
 struct Statement {
-    enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, If, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
+    enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
                       Call, SetField, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, ErrorResumeNext, ErrorDisable, Label, Jump, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
@@ -181,6 +181,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex end(R"(^\s*End\s+(Sub|Function)\s*$)", std::regex::icase);
     const std::regex selectStart(R"(^Select\s+Case\s+(.+)$)",std::regex::icase);
     const std::regex selectEnd(R"(^End\s+Select$)",std::regex::icase);
+    const std::regex elseIfThen(R"(^ElseIf\s+(.+)\s+Then\s*$)",std::regex::icase);
     const std::regex ifThen(R"(^If\s+(.+)\s+Then\s*$)", std::regex::icase);
     const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
     const std::regex variableAssignment(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
@@ -417,6 +418,12 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             ++nesting;
             elseSeen.push_back(false);
             blocks.push_back(Statement::Type::If);
+        } else if (std::regex_match(source,match,elseIfThen)) {
+            if (blocks.empty() || blocks.back()!=Statement::Type::If || elseSeen.back())
+                return {VbaExecutionStatus::Error,"ElseIf without If or after Else",line};
+            const auto expression=trim(match[1].str());
+            if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"ElseIf condition unsupported",line};
+            statements.push_back({Statement::Type::ElseIf,{},expression,line});
         } else if (lower(source) == "else") {
             if (blocks.empty() || blocks.back() != Statement::Type::If)
                 return {VbaExecutionStatus::Error, "Else ohne If", line};
@@ -1010,6 +1017,16 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     ? evaluate(instruction.argument).truthy() : false;
                 frames.push_back({active, matched, false});
                 active = active && matched;
+                break;
+            }
+            case Statement::Type::ElseIf: {
+                if (frames.empty() || frames.back().select || frames.back().inElse)
+                    throw VbaRuntimeError(5,"ElseIf stack invalid");
+                auto& frame=frames.back(); active=false;
+                if (frame.parent && !frame.condition) {
+                    const bool matched=evaluate(instruction.expression).truthy();
+                    frame.condition=matched; active=matched;
+                }
                 break;
             }
             case Statement::Type::Else:

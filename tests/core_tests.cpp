@@ -522,6 +522,131 @@ End Function
     }
 
     {
+        FakeForm host;
+        const std::string module=R"VBA(Private reads As Variant
+Function Probe(value As Variant) As Variant
+reads=reads+1
+Probe=value
+End Function
+Function Choose(a As Variant,b As Variant,c As Variant) As Long
+reads=0
+If Probe(a) Then
+Choose=10
+ElseIf Probe(b) Then
+Choose=20
+ElseIf Probe(c) Then
+Choose=30
+Else
+Choose=40
+End If
+Choose=Choose+reads*100
+End Function
+Function Lazy() As Long
+If True Then
+Lazy=1
+ElseIf Probe(1/0) Then
+Lazy=99
+End If
+If False Then
+If Probe(1/0) Then
+Lazy=99
+ElseIf Probe(1/0) Then
+Lazy=99
+Else
+Lazy=99
+End If
+ElseIf True Then
+Lazy=Lazy+1
+ElseIf Probe(1/0) Then
+Lazy=99
+End If
+End Function
+Function Nested() As Long
+Dim i As Long
+For i=1 To 4
+Do
+If i=1 Then
+Nested=Nested+1
+ElseIf i=2 Then
+Select Case i
+Case 2
+If True Then Exit Do
+End Select
+ElseIf i=3 Then
+Exit For
+Else
+Nested=999
+End If
+Nested=Nested+10
+Exit Do
+Loop
+Next
+End Function
+Function RecoverClause() As Long
+Dim divisor As Long
+On Error GoTo failed
+If False Then
+RecoverClause=99
+ElseIf 2/divisor=2 Then
+RecoverClause=7
+Else
+RecoverClause=99
+End If
+Exit Function
+failed:
+divisor=1
+Resume
+End Function
+Function RecoverBody() As Long
+On Error GoTo failed
+If False Then
+RecoverBody=99
+ElseIf True Then
+Err.Raise 11
+RecoverBody=7
+ElseIf 1/0 Then
+RecoverBody=99
+Else
+RecoverBody=99
+End If
+Exit Function
+failed:
+Resume Next
+End Function
+Function NoMatch() As Long
+If False Then
+NoMatch=99
+ElseIf Null Then
+NoMatch=99
+ElseIf False Then
+NoMatch=99
+End If
+NoMatch=NoMatch+1
+End Function
+)VBA";
+        for (const auto& [a,b,c,expected]:std::vector<std::tuple<VbaValue,VbaValue,VbaValue,int>>{
+                {VbaValue::logical(true),VbaValue::logical(true),VbaValue::logical(true),110},
+                {VbaValue::logical(false),VbaValue::logical(true),VbaValue::logical(true),220},
+                {VbaValue::logical(false),VbaValue::logical(false),VbaValue::logical(true),330},
+                {VbaValue::logical(false),VbaValue::logical(false),VbaValue::logical(false),340},
+                {VbaValue{},VbaValue::logical(true),VbaValue{},220}}) {
+            std::vector<VbaValue> args{a,b,c}; auto result=executeVbaProcedureWithArguments(module,"Choose",host,args);
+            assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==expected);
+        }
+        for (const auto& [procedure,expected]:std::vector<std::pair<std::string,int>>{
+                {"Lazy",2},{"Nested",11},{"RecoverClause",7},{"RecoverBody",7},{"NoMatch",1}}) {
+            auto result=executeVbaProcedure(module,procedure,host);
+            assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==expected);
+        }
+        for(const auto& body:std::vector<std::string>{"ElseIf True Then\nEnd If",
+                "If True Then\nElse\nElseIf True Then\nEnd If","If True Then\nElseIf ( Then\nEnd If",
+                "Select Case 1\nCase 1\nElseIf True Then\nEnd Select"}) {
+            host.fields.clear(); auto result=executeVbaProcedure("Sub Invalid()\nMe!Name=42\n"+body+"\nEnd Sub","Invalid",host);
+            assert(result.status!=VbaExecutionStatus::Completed && host.fields.empty());
+        }
+    }
+
+    {
         const std::string module=R"VBA(Private counter As Variant
 Private flag As Boolean
 Public text As String

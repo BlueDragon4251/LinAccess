@@ -1067,3 +1067,19 @@ DEBs pass exact payload/backend/permissions/fixture-exclusion checks; isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass. These measurements follow the documented
 Bold/default-size/report-Print corrections above.
+
+ElseIf increment: multiline chains share one conditional frame and execute only
+the first matching body. Function-side-effect counters prove later and inactive
+conditions are skipped; Null is false. Nested Select/Do/For exits, condition/body
+Resume and invalid syntax before effects are regressed. The native Qt transaction
+button displays an independent branch mode while actual SQL account transfers
+commit, rollback or roll back a handled duplicate-key failure. Branch/control
+values and independently queried balances are asserted. Targeted tests pass
+(36.71 s). Original modules have zero line-start ElseIf clauses; original business
+execution counts are unchanged. ELSEIF_RUNTIME.md records grammar/oracle limits.
+
+Validation: host 21/21 (65.43 s), Debian 12 21/21 (67.65 s), Ubuntu 24.04
+21/21 (60.80 s), rebuilt GUI-disabled core 1/1 (1.29 s). Fresh host/distro
+DEBs pass exact payload/backend/permissions/fixture-exclusion checks; isolated
+installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+All four original fixture hashes pass.
