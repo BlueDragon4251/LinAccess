@@ -48,7 +48,7 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
         {
             SqliteExecutionBudget budget(db);
             QSqlQuery query(db);
-            if (!query.prepare(plan.sql)) queryFailure(query);
+            if (!query.prepare(accessActionSql(db,plan))) queryFailure(query);
             for (auto it=bindings.cbegin();it!=bindings.cend();++it) query.bindValue(it.key(),it.value());
             if (!query.exec()) queryFailure(query);
             if (query.isSelect()) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");

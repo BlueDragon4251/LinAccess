@@ -196,6 +196,38 @@ void aggregateStep(sqlite3_context* context,sqlite3_value* value,bool first) noe
 }
 void firstStep(sqlite3_context* context,int,sqlite3_value** args) noexcept { aggregateStep(context,args[0],true); }
 void lastStep(sqlite3_context* context,int,sqlite3_value** args) noexcept { aggregateStep(context,args[0],false); }
+struct SingleState { sqlite3_value* value; int error; bool seen; };
+bool identicalUpdateValue(sqlite3_value* left,sqlite3_value* right) noexcept {
+    auto& native=api(); const auto type=native.type(left);
+    if (type!=native.type(right)) return false;
+    if (type==SQLITE_NULL) return true;
+    if (type==SQLITE_INTEGER) return native.integer(left)==native.integer(right);
+    if (type==SQLITE_FLOAT) return native.number(left)==native.number(right);
+    if (type==SQLITE_TEXT || type==SQLITE_BLOB) {
+        const auto* a=type==SQLITE_TEXT ? static_cast<const void*>(native.text(left)) : sqlite3_value_blob(left);
+        const auto* b=type==SQLITE_TEXT ? static_cast<const void*>(native.text(right)) : sqlite3_value_blob(right);
+        const auto count=native.bytes(left);
+        return count==native.bytes(right) && (!count || (a && b && std::memcmp(a,b,count)==0));
+    }
+    return false;
+}
+void singleStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+    auto& native=api(); auto* state=static_cast<SingleState*>(native.aggregate(context,sizeof(SingleState)));
+    if (!state) { native.error(context,"LinAccess SQL function error 7",-1); return; }
+    if (state->error) return;
+    if (state->seen) { if (!identicalUpdateValue(state->value,args[0])) state->error=3251; }
+    else { state->seen=true; state->value=native.duplicate(args[0]); if (!state->value) state->error=7; }
+    if (state->error) native.error(context,state->error==7 ? "LinAccess SQL function error 7" : "LinAccess SQL function error 3251",-1);
+}
+void singleFinal(sqlite3_context* context) noexcept {
+    auto& native=api(); auto* state=static_cast<SingleState*>(native.aggregate(context,0));
+    if (!state) { native.nullResult(context); return; }
+    if (state->error) native.error(context,state->error==7 ? "LinAccess SQL function error 7" : "LinAccess SQL function error 3251",-1);
+    else if (state->value) native.result(context,state->value);
+    else native.nullResult(context);
+    if (state->value) native.freeValue(state->value);
+    state->value=nullptr;
+}
 void aggregateFinal(sqlite3_context* context) noexcept {
     auto& native = api();
     auto* state = static_cast<AggregateState*>(native.aggregate(context,0));
@@ -250,6 +282,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
+    ensure("linaccess_jet_update_value",1,nullptr,&singleStep,&singleFinal);
     ensure("linaccess_jet_format_string",2,&formatString,nullptr,nullptr);
     ensure("linaccess_jet_format",2,&formatVariant,nullptr,nullptr);
     ensure("linaccess_jet_concat",2,&concatenate,nullptr,nullptr);

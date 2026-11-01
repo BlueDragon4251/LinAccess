@@ -107,6 +107,9 @@ if(BUILD_TESTING)
         target_include_directories(linaccess_table_import_tests PRIVATE src)
         target_link_libraries(linaccess_table_import_tests PRIVATE linaccess_runtime linaccess_data Qt6::Core Qt6::Sql)
         add_test(NAME table_import_contracts COMMAND linaccess_table_import_tests)
+        add_executable(linaccess_joined_update_tests tests/joined_update_tests.cpp)
+        target_link_libraries(linaccess_joined_update_tests PRIVATE linaccess_data Qt6::Core Qt6::Sql)
+        add_test(NAME joined_update_contracts COMMAND linaccess_joined_update_tests)
         add_executable(linaccess_mdb_tests
             tests/mdb_tests.cpp
 

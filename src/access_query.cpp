@@ -569,6 +569,80 @@ QString pattern(const QString& input) {
     return result;
 }
 }
+namespace {
+QString updateSourceText(const QVector<Token>& tokens,qsizetype begin,qsizetype end) {
+    QStringList parts;
+    for (auto i=begin;i<end;++i) {
+        const auto& token=tokens[i];
+        if (token.kind==Token::Identifier) { auto name=token.value; parts.append('['+name.replace(']',"]]")+']'); }
+        else if (token.kind==Token::String) { auto value=token.value; parts.append('"'+value.replace('"',"\"\"")+'"'); }
+        else parts.append(token.value);
+    }
+    return parts.join(' ');
+}
+AccessQueryPlan compileJoinedUpdate(const QVector<Token>& tokens,qsizetype start) {
+    const auto word=[&](qsizetype index,const char* value) { return index<tokens.size() && tokens[index].kind==Token::Word && tokens[index].value.compare(value,Qt::CaseInsensitive)==0; };
+    const auto name=[&](qsizetype index) { return index<tokens.size() && (tokens[index].kind==Token::Word || tokens[index].kind==Token::Identifier); };
+    const auto check=[](bool valid) { if (!valid) throw VbaRuntimeError(3251,"Joined UPDATE shape unsupported"); };
+    qsizetype set=start+1,end=tokens.size();
+    if (end>start && symbol(tokens[end-1],";")) --end;
+    while (set<end && !word(set,"SET")) ++set;
+    check(set<end);
+    qsizetype joins=0; for (auto i=start+1;i<set;++i) if (word(i,"JOIN")) ++joins;
+    check(joins==1);
+    struct Relation { QString table,alias; };
+    auto position=start+1;
+    while (position<set && symbol(tokens[position],"(")) ++position;
+    const auto relation=[&]() {
+        check(position<set && name(position)); Relation result{tokens[position].value,tokens[position].value}; ++position;
+        if (word(position,"AS")) { ++position; check(name(position)); result.alias=tokens[position++].value; }
+        return result;
+    };
+    const auto left=relation();
+    if (word(position,"INNER")) ++position;
+    check(word(position,"JOIN")); ++position;
+    const auto right=relation(); check(word(position,"ON"));
+    check(left.alias.compare(right.alias,Qt::CaseInsensitive)!=0);
+    qsizetype where=set+1; int depth=0;
+    for (;where<end;++where) {
+        if (symbol(tokens[where],"(")) ++depth;
+        else if (symbol(tokens[where],")")) --depth;
+        if (!depth && word(where,"WHERE")) break;
+    }
+    struct Assignment { QString column; QString expression; };
+    QVector<Assignment> assignments; QString targetAlias; QSet<QString> assigned;
+    auto first=set+1; depth=0;
+    for (auto i=first;i<=where;++i) {
+        if (i<where && symbol(tokens[i],"(")) ++depth;
+        else if (i<where && symbol(tokens[i],")")) --depth;
+        if (i!=where && (depth || !symbol(tokens[i],","))) continue;
+        check(i-first>=5 && name(first) && symbol(tokens[first+1],".") && name(first+2) && symbol(tokens[first+3],"="));
+        if (targetAlias.isEmpty()) targetAlias=tokens[first].value;
+        check(targetAlias.compare(tokens[first].value,Qt::CaseInsensitive)==0);
+        const auto column=tokens[first+2].value; check(!assigned.contains(column.toCaseFolded())); assigned.insert(column.toCaseFolded());
+        assignments.append({column,updateSourceText(tokens,first+4,i)}); first=i+1;
+    }
+    check(!assignments.isEmpty());
+    const auto* target=targetAlias.compare(left.alias,Qt::CaseInsensitive)==0 ? &left : targetAlias.compare(right.alias,Qt::CaseInsensitive)==0 ? &right : nullptr;
+    check(target);
+    const auto key=QString::fromLatin1(QCryptographicHash::hash(updateSourceText(tokens,0,end).toUtf8(),QCryptographicHash::Sha256).toHex());
+    const auto cte="__la_update_"+key,identity="__la_identity_"+key,row="__la_row_"+key;
+    auto accessName=[](QString value) { return '['+value.replace(']',"]]")+']'; };
+    QStringList projection; projection.append(accessName(targetAlias)+'.'+accessName(identity)+" AS "+accessName(row));
+    for (qsizetype i=0;i<assignments.size();++i) projection.append(assignments[i].expression+" AS "+accessName("__la_value_"+QString::number(i)));
+    const auto select=updateSourceText(tokens,0,start)+" SELECT "+projection.join(',')+" FROM "+updateSourceText(tokens,start+1,set)+(where<end ? " WHERE "+updateSourceText(tokens,where+1,end) : QString{});
+    auto plan=compileAccessQuery(select);
+    check(!plan.hiddenRank && !plan.topLimit && plan.makeTable.isEmpty());
+    plan.updateTarget=target->table; plan.updateIdentity=identity; plan.updateSource=plan.sql;
+    const auto prefix="WITH "+identifier(cte)+" AS MATERIALIZED ("; plan.updateSourceOffset=prefix.size();
+    QStringList changes;
+    const auto id=identifier(targetAlias)+'.'+identifier(identity);
+    for (qsizetype i=0;i<assignments.size();++i)
+        changes.append(identifier(assignments[i].column)+"=(SELECT linaccess_jet_update_value("+identifier("__la_value_"+QString::number(i))+") FROM "+identifier(cte)+" WHERE "+identifier(row)+'='+id+')');
+    plan.sql=prefix+plan.updateSource+") UPDATE "+identifier(target->table)+" AS "+identifier(targetAlias)+" SET "+changes.join(',')+" WHERE "+id+" IN (SELECT "+identifier(row)+" FROM "+identifier(cte)+')';
+    return plan;
+}
+}
 QString accessLikePattern(const QString& value) { return pattern(value); }
 AccessQueryPlan compileAccessQuery(const QString& source) {
     auto tokens = tokenize(source);
@@ -601,6 +675,12 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
         }
     }
     require(pos < tokens.size(), "Jet SQL: query body required");
+    if (tokens[pos].kind==Token::Word && tokens[pos].value.compare("UPDATE",Qt::CaseInsensitive)==0) {
+        for (auto i=pos+1;i<tokens.size();++i) {
+            if (tokens[i].kind==Token::Word && tokens[i].value.compare("SET",Qt::CaseInsensitive)==0) break;
+            if (tokens[i].kind==Token::Word && tokens[i].value.compare("JOIN",Qt::CaseInsensitive)==0) return compileJoinedUpdate(tokens,pos);
+        }
+    }
     // Jet make-table queries place INTO between the projection and FROM.
     // Inspect tokens at the outer query depth, never text inside a literal.
     if (tokens[pos].kind==Token::Word && tokens[pos].value.compare("SELECT",Qt::CaseInsensitive)==0) {
@@ -760,6 +840,23 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
         plan.sql="CREATE TABLE "+identifier(plan.makeTable)+" AS "+plan.sql;
     }
     return plan;
+}
+QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
+    if (plan.updateTarget.isEmpty()) return plan.sql;
+    if (!db.tables(QSql::Tables).contains(plan.updateTarget,Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Joined UPDATE requires a writable table target");
+    if (installAccessQueryViews(db)<0) throw VbaRuntimeError(3251,"Joined UPDATE query dependencies unavailable");
+    const auto record=db.record(plan.updateTarget); QString identity;
+    for (const auto* candidate:{"rowid","_rowid_","oid"}) {
+        bool shadowed=false; for (int i=0;i<record.count();++i) shadowed|=record.fieldName(i).compare(candidate,Qt::CaseInsensitive)==0;
+        if (shadowed) continue;
+        QSqlQuery probe(db); if (probe.prepare("SELECT "+identifier(plan.updateTarget)+'.'+identifier(candidate)+" FROM "+identifier(plan.updateTarget)+" LIMIT 0")) { identity=candidate; break; }
+    }
+    if (identity.isEmpty()) throw VbaRuntimeError(3251,"Joined UPDATE row identity unavailable");
+    if (plan.updateSourceOffset<0 || plan.sql.mid(plan.updateSourceOffset,plan.updateSource.size())!=plan.updateSource) throw VbaRuntimeError(3251,"Invalid joined UPDATE plan");
+    auto sql=plan.sql;
+    sql.replace(plan.updateSourceOffset,plan.updateSource.size(),resolveQueryOrigins(db,plan.updateSource));
+    sql.replace(identifier(plan.updateIdentity),identifier(identity));
+    return sql;
 }
 AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& criteria) {
     if (criteria.trimmed().isEmpty()) return source;

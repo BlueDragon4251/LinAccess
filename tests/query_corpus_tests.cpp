@@ -1,4 +1,6 @@
 #include "access_query.hpp"
+#include "access_catalog.hpp"
+#include "vba_source_codec.hpp"
 #include "access_table_import.hpp"
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
@@ -20,6 +22,58 @@
 #endif
 #include <cassert>
 #include <iostream>
+
+namespace {
+void testPreparedOriginalJoinedUpdate(const QDir& root,const QVector<QJsonObject>& definitions,const QString& sourceFile) {
+    using namespace linaccess;
+    QJsonObject artifact;
+    for (const auto& object:definitions) if (object["sha256"].toString()=="5dcb8fb9cfb7e5eb47d6e82989adc3ce77b8574f0481d309764a9829894dc1a9") artifact=object;
+    assert(!artifact.isEmpty()); QFile file(root.filePath(artifact["file"].toString())); assert(file.open(QIODevice::ReadOnly)); const auto raw=file.readAll();
+    assert(QCryptographicHash::hash(raw,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1());
+    const auto source=decodeVbaSource(raw);
+    const QString name="(?:\\[[^\\]]+\\]|[\\p{L}_][\\p{L}\\p{N}_]*)";
+    const QRegularExpression shape("^\\s*UPDATE\\s+("+name+")\\s+INNER\\s+JOIN\\s+("+name+")\\s+ON\\s+(.*?)\\s+SET\\s+("+name+")\\s*\\.\\s*("+name+")\\s*=\\s*("+name+")\\s*\\.\\s*("+name+")\\s*;?\\s*$",QRegularExpression::CaseInsensitiveOption|QRegularExpression::DotMatchesEverythingOption);
+    const auto match=shape.match(source); assert(match.hasMatch());
+    const auto unquote=[](QString value) { return value.startsWith('[') ? value.mid(1,value.size()-2).replace("]]","]") : value; };
+    const auto target=unquote(match.captured(1)),other=unquote(match.captured(2));
+    assert(unquote(match.captured(4)).compare(target,Qt::CaseInsensitive)==0 && unquote(match.captured(6)).compare(other,Qt::CaseInsensitive)==0);
+    const QRegularExpression reference("("+name+")\\s*\\.\\s*("+name+")");
+    auto refs=reference.globalMatch(match.captured(3)); QMap<QString,QString> keys;
+    while (refs.hasNext()) { const auto item=refs.next(); keys.insert(unquote(item.captured(1)).toCaseFolded(),unquote(item.captured(2))); }
+    assert(keys.size()==2 && keys.contains(target.toCaseFolded()) && keys.contains(other.toCaseFolded()));
+    const auto destination=unquote(match.captured(5)),input=unquote(match.captured(7));
+    auto db=QSqlDatabase::addDatabase("QSQLITE","prepared-original-joined-update"); db.setDatabaseName(":memory:"); assert(db.open()); QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
+    assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    AccessCatalog catalog(sourceFile);
+    for (const auto& table:QStringList{target,other}) {
+        const auto schema=parseMdbSchema(catalog.tableSchema(table)); assert(!schema.columns.isEmpty());
+        const bool left=table==target; std::vector<std::vector<CsvField>> rows(2);
+        for (const auto& column:schema.columns) {
+            rows[0].push_back({column.name.toStdString(),true});
+            const bool key=column.name.compare(keys.value(table.toCaseFolded()),Qt::CaseInsensitive)==0;
+            QString value;
+            if (column.sqliteType=="BLOB") { assert(!column.required); rows[1].push_back({"\x1e",false}); continue; }
+            if (column.sourceType=="BOOLEAN" || column.sourceType=="BIT") value=key || left ? "0" : "-1";
+            else if (column.sourceType=="DATETIME" || column.sourceType=="DATE") value=key || left ? "2026-01-01 00:00:00" : "2026-01-02 00:00:00";
+            else if (column.sqliteType=="INTEGER") value=key ? "7" : left ? "11" : "22";
+            else if (column.sqliteType=="REAL") value=key ? "7.5" : left ? "1.25" : "2.75";
+            else value=key ? "shared" : left ? "synthetic target" : "synthetic source";
+            if (left && column.name.compare(destination,Qt::CaseInsensitive)==0) assert(!column.autoNumber);
+            rows[1].push_back({value.toStdString(),true});
+        }
+        importAccessTable(db,"synthetic",table,schema,rows);
+    }
+    const auto quote=[](QString value) { return '"'+value.replace('"',"\"\"")+'"'; };
+    const auto cell=[&](const QString& table,const QString& field) { QSqlQuery read(db); assert(read.exec("SELECT "+quote(field)+" FROM "+quote(table)) && read.next()); const auto value=read.value(0); assert(!read.next()); return value; };
+    const auto expected=cell(other,input),before=cell(target,destination); assert(before!=expected);
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes)VALUES('query',?,?)"); sql.addBindValue(artifact["name"].toString()); sql.addBindValue(raw); assert(sql.exec());
+    auto definition=makeDaoDatabase(db)->member("QueryDefs",{VbaValue::string(artifact["name"].toString().toStdString())}).object;
+    definition->member("Execute",{VbaValue::numeric(128)});
+    assert(definition->member("RecordsAffected",{}).asNumber()==1 && cell(target,destination)==expected);
+    std::cout<<"Original INNER JOIN UPDATE: unchanged source, actual two table schemas, one prepared synthetic target changed to independently read source value\n";
+}
+}
 
 int main(int argc,char** argv) {
     QCoreApplication application(argc,argv);
@@ -117,7 +171,25 @@ int main(int argc,char** argv) {
                 assert(actualCount>=0 && (expectedCount<0 || actualCount==expectedCount)); rows->member("Close",{});
                 executed=true; status="executed_with_test_parameters_no_access_reference_oracle";
             }
-            else if (!plan.sql.startsWith("SELECT ",Qt::CaseInsensitive)) status = "action_query_unexecuted";
+            else if (!plan.sql.startsWith("SELECT ",Qt::CaseInsensitive)) {
+                if (plan.updateTarget.isEmpty()) status="action_query_unexecuted";
+                else {
+                    auto target=plan.updateTarget; target.replace('"',"\"\"");
+                    const auto snapshot=[&] {
+                        QSqlQuery read(db); assert(read.exec("SELECT * FROM \""+target+"\" ORDER BY rowid"));
+                        QVector<QVariantList> rows;
+                        while (read.next()) { QVariantList row; for (int i=0;i<read.record().count();++i) row.append(read.value(i)); rows.append(std::move(row)); }
+                        assert(!read.lastError().isValid()); return rows;
+                    };
+                    const auto before=snapshot();
+                    auto definition=database->member("QueryDefs",{linaccess::VbaValue::string(object["name"].toString().toStdString())}).object;
+                    definition->member("Execute",{linaccess::VbaValue::numeric(128)});
+                    const auto affected=definition->member("RecordsAffected",{}).asNumber(); const auto after=snapshot();
+                    assert(after.size()==before.size() && affected>=0);
+                    if (!affected) assert(after==before);
+                    executed=true; status="executed_joined_action_no_access_reference_oracle";
+                }
+            }
             else {
                 auto definition = database->member("QueryDefs",{linaccess::VbaValue::string(object["name"].toString().toUtf8().toStdString())});
                 auto rows = definition.object->member("OpenRecordset",{linaccess::VbaValue::numeric(4)});
@@ -134,6 +206,14 @@ int main(int argc,char** argv) {
             }
         } catch (const linaccess::VbaRuntimeError& error) {
             errorNumber=error.number;
+            if (object["sha256"].toString()=="5dcb8fb9cfb7e5eb47d6e82989adc3ce77b8574f0481d309764a9829894dc1a9") {
+                const std::string detail=error.what();
+                const auto category=detail=="Joined UPDATE shape unsupported" ? "compiler_shape"
+                    : detail=="Joined UPDATE requires a writable table target" ? "target_kind"
+                    : detail=="Jet SQL function argument invalid" ? "runtime_function"
+                    : detail=="Joined UPDATE row identity unavailable" ? "row_identity" : "other";
+                std::cout<<"Original joined UPDATE boundary: error="<<error.number<<", stage="<<category<<'\n';
+            }
             status = error.number == 3085 ? "unsupported_function_or_compilation"
                 : error.number == 3078 ? "missing_query_dependency" : error.number == 3075 ? "unsupported_sql_grammar"
                 : error.number == 3035 ? "execution_budget_exceeded" : "unsupported_jet_or_binding";
@@ -159,6 +239,7 @@ int main(int argc,char** argv) {
         report.append(QJsonObject{{"artifact_sha256",object["sha256"]},{"status",status},{"executed",executed},{"error_number",errorNumber}});
     }
     assert(report.size() == 100);
+    testPreparedOriginalJoinedUpdate(root,definitions,QString::fromLocal8Bit(argv[2]));
     assert(valueDeclarations==6 && positiveConditionalQueries==3);
     assert(executedDerivedQueries==5 && sourceColumnMismatches==1);
     assert(counts["executed_no_access_reference_oracle"]>=72

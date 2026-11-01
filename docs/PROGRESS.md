@@ -638,3 +638,25 @@ Exact source seeds, random/replication modes, signed-Long overflow, allocation
 timing/gaps, full read-only/DAO Attributes, schema rename/drop cleanup and direct
 SQL explicit-NULL allocation remain open. AUTONUMBER_IMPORT.md records the scope;
 this is not complete Jet counter or full Access 2003 parity.
+
+Joined UPDATE increment: one INNER JOIN can update either direct physical table
+through DAO/QueryDef.Execute. Materialization preserves self-join inputs; a native
+typed aggregate rejects differing candidates with 3251 and statement rollback.
+Tests cover arithmetic, parameters, NULL/text/binary values, identical duplicates,
+ambiguous duplicates, frozen self-joins, aliases, empty matches and unsupported
+views/outer joins/multiple targets/row identities. The new joined_update_contracts
+CTest brings the fixture-enabled suite to 21 tests.
+
+One unchanged original action is additionally executed against actual imported
+schemas with synthetic unique matches: one expected target value changes. With
+full original copied data its candidates conflict; the second action requires an
+outer join and saved-query target. Both remain explicitly bounded errors, so the
+full original corpus remains 77/100 without an Access result oracle. No source
+query, fixture rows or VBA text were added to documentation or logs.
+
+Validation: host Release 21/21 CTests (63.39 s), GUI-disabled core 1/1
+(0.54 s), Debian 12 21/21 (58.71 s), Ubuntu 24.04 21/21 (54.62 s).
+Fresh host/distro DEBs pass payload/backend/permission/fixture-exclusion checks;
+all four original fixture hashes pass.
+Isolated installed Debian/Ubuntu packages also pass allocation/backend and GUI
+startup checks without source-tree or fixture mounts.

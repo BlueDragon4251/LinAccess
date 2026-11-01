@@ -223,3 +223,19 @@ Qt execution paths, record persistence/undo and cancellation tests. This is not
 full Access 2003 shortcut, layout, designer or event parity. An original login
 column-index mismatch and two missing exported key-handler bindings are tracked
 explicitly; no original credentials or source are copied into public evidence.
+
+### Bounded joined action updates
+
+Native DAO Execute/QueryDef.Execute supports one INNER JOIN with a single direct
+physical-table target, qualified assignments, aliases, WHERE and parameters. A
+materialized candidate set freezes self-join inputs. Multiple matches are accepted
+only when every assigned SQLite value has identical type and value; conflicting
+candidates raise 3251 and roll back the statement. Outer joins, saved-query targets,
+multiple targets and tables without an accessible physical row identity remain
+unsupported (3251). This conservative boundary is not Jet updateability parity.
+
+The original INNER JOIN action is exercised unchanged against its actual table
+schemas with synthetic, unique matching input and changes one expected value.
+The full original-data copy has conflicting candidates and is rejected; the other
+original action requires an outer join and saved-query target. Corpus coverage
+therefore remains 77/100, without an Access reference oracle.

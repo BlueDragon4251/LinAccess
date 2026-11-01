@@ -323,3 +323,8 @@ Full targets remain open:
   via direct invocation and native click on synthetic rows.
 - [ ] Complete insertion event pipeline, multi-record/external clipboard formats
   and Access 2003 reference behavior; unsupported contexts fail explicitly.
+
+- [x] Bounded joined action UPDATE: native single-table INNER JOIN execution,
+  frozen source, typed deterministic duplicates, ambiguity rollback, parameters,
+  physical identity checks and unchanged original query on synthetic schema copies.
+- [ ] General Jet joined-query updateability, outer-join targets and Access oracle.

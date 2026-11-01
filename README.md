@@ -403,7 +403,7 @@ Diese Funktion liefert im eingeschränkten Interpreter `10` zurück.
 
 ## Build-Status
 
-Aktuelle lokale Regression (Debian 13 / GCC 14 / Qt 6.8): **20/20 Tests**,
+Aktuelle lokale Regression (Debian 13 / GCC 14 / Qt 6.8): **21/21 Tests**,
 einschließlich vollständigem 29-Tabellen-Zellvergleich und einem echten Kassen-
 DAO-Buttonereignis. Die MDB-Regressionen wurden zusätzlich mit MDBTools 1.0.0
 mehrfach ausgeführt. Private GitHub-Läufe bestätigen zusätzlich Debian 12/13,
