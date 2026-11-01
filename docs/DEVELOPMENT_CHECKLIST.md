@@ -368,3 +368,6 @@ Full targets remain open:
 
 - [x] Trim/LTrim/RTrim and dollar variants: end spaces only, preserved non-space
   whitespace, scalar defaults, Variant Null versus String 94 and VBA error tests.
+
+- [x] Bounded InStr/StrComp: UTF-16 positions/binary order, Option Compare,
+  scalar defaults, Null/errors and native VBA tests; locale matching remains open.

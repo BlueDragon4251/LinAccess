@@ -865,3 +865,14 @@ Ubuntu 24.04 21/21 (61.70 s), GUI-disabled core 1/1 (0.46 s). Fresh
 host/distro DEBs pass exact payload/backend, permissions and fixture-exclusion
 checks. All four original fixture hashes pass.
 Isolated installed Debian/Ubuntu packages pass native backend/counter execution and GUI startup.
+
+String-search/comparison increment: InStr/StrComp now honor Option Compare and
+explicit comparison constants, UTF-16 positions/binary order, Null and bounded
+start/error semantics. Numeric type mismatch reports 13. Core tests include
+actual VBA execution and supplementary-character ordering. Full Windows/Jet
+linguistic matching, variable-length collation and LCIDs remain unsupported.
+GUI-disabled core passes 1/1 (0.49 s).
+Validation: host 21/21 (61.46 s), Debian 12 21/21 (63.75 s), Ubuntu 24.04
+21/21 (58.66 s). Fresh host/distro DEBs pass exact payload/backend/permission
+and fixture-exclusion checks; isolated installed packages pass backend/counter
+execution and native GUI startup. All four original fixture hashes pass.

@@ -44,3 +44,20 @@ resolved once and invalid arity raises 450. Core tests check actual VBA
 procedures and On Error/Err.Number as well as expressions and getter effects.
 No direct trim calls occur in the restored original VBA token inventory, so
 this adds no original-handler execution claim.
+
+## Search and comparison
+
+InStr uses one-based UTF-16 positions and bounded Long start arguments. StrComp
+normalizes comparison results to -1/0/1. Both honor Option Compare and explicit
+vbUseCompareOption/vbBinaryCompare/vbTextCompare/vbDatabaseCompare, preserve
+Null string arguments and resolve scalar defaults once. Invalid numeric text
+raises type mismatch 13; Null numeric arguments raise 94. Binary comparisons
+use UTF-16 ordering, including supplementary characters. Tests cover actual VBA
+Option Compare execution, empty strings, omitted arguments and error handling.
+
+Text/database comparison delegates to the runtime host. The GUI host uses Qt
+case-insensitive comparison; the standalone host supports ASCII folding and
+rejects unsupported non-ASCII comparisons. InStr scans equal-code-unit-length
+substrings without splitting surrogate pairs. Windows/Jet linguistic expansion,
+contraction and locale ordering are not implemented or claimed. Explicit InStr
+LCIDs are rejected with 3251. No Windows Access oracle has verified this scope.

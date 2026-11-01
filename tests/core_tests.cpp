@@ -937,5 +937,29 @@ Me!TrimError=CStr(Err.Number)
 End Sub
 )VBA","TrimStrings",host);
     assert(trimProcedure.status==VbaExecutionStatus::Completed && host.fields["Name"]=="ö  :  x" && host.fields["TrimError"]=="94");
+    assert(evaluate("InStr(\"A😀Z\",\"Z\")").asNumber()==4);
+    assert(evaluate("InStr(2,\"A😀Z\",\"😀\",vbBinaryCompare)").asNumber()==2);
+    assert(evaluate("InStr(3,\"A😀Z\",\"Z\")").asNumber()==4);
+    assert(evaluate("InStr(,\"abc\",\"b\")").asNumber()==2);
+    assert(evaluate("InStr(1,\"ABC\",\"b\",vbTextCompare)").asNumber()==2);
+    assert(evaluate("InStr(\"abc\",\"Z\")").asNumber()==0);
+    assert(evaluate("InStr(\"\",\"\")").asNumber()==0);
+    assert(evaluate("InStr(8,\"abc\",\"\")").asNumber()==8);
+    assert(evaluate("InStr(Null,\"a\")").kind==VbaValue::Kind::Null);
+    assert(evaluate("StrComp(\"A\",\"a\",vbBinaryCompare)").asNumber()==-1);
+    assert(evaluate("StrComp(\"A\",\"a\",vbTextCompare)").asNumber()==0);
+    assert(evaluate("StrComp(\"😀\",\"\",0)").asNumber()==-1 && evaluate("\"😀\"<\"\"").truthy());
+    assert(evaluate("StrComp(Null,\"a\")").kind==VbaValue::Kind::Null);
+    substringError("InStr(0,\"a\",\"a\")",5); substringError("InStr(Null,\"a\",\"a\")",94);
+    substringError("InStr(1,\"a\",\"a\",1031)",3251);
+    substringError("StrComp(\"a\",\"b\",Null)",94); substringError("StrComp(\"a\",\"b\",3)",5);
+    substringError("InStr(\"abc\",\"b\",1)",13);
+    const auto textComparison=executeVbaProcedure(R"VBA(Option Compare Text
+Sub CompareStrings()
+Me!Name=CStr(InStr("ABc","b"))
+Me!Nachname=CStr(StrComp("A","a",vbUseCompareOption))
+End Sub
+)VBA","CompareStrings",host);
+    assert(textComparison.status==VbaExecutionStatus::Completed && host.fields["Name"]=="2" && host.fields["Nachname"]=="0");
     std::cout << "Core tests passed\n";
 }

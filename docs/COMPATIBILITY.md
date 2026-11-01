@@ -331,3 +331,9 @@ Trim/LTrim/RTrim and their String variants now implement end-space removal,
 Variant Null propagation and String-result error 94, while preserving other
 whitespace. Actual VBA procedure/error-handler regressions cover the family;
 this does not extend the remaining code-page/locale/string-type scope.
+
+InStr/StrComp now support UTF-16 positions/binary ordering, Null propagation,
+Option Compare and explicit comparison constants, with actual VBA regressions.
+Text/database comparisons retain host collation limits: Qt case folding in the
+GUI, ASCII folding in the standalone host, no complete Windows/Jet linguistic
+matching or LCID support. See UTF16_STRINGS.md.

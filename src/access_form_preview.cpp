@@ -238,7 +238,7 @@ class PreviewVbaHost final : public linaccess::VbaHost {
 public:
     explicit PreviewVbaHost(AccessFormPreview& preview) : preview_(preview) {}
     int compareStrings(std::string_view left,std::string_view right,linaccess::VbaCompareMode mode) override {
-        if (mode==linaccess::VbaCompareMode::Binary) return left.compare(right);
+        if (mode==linaccess::VbaCompareMode::Binary) return linaccess::VbaHost::compareStrings(left,right,mode);
         return QString::compare(QString::fromUtf8(left.data(),left.size()),QString::fromUtf8(right.data(),right.size()),Qt::CaseInsensitive);
     }
     std::optional<std::string> field(std::string_view name) override {

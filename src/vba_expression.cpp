@@ -427,7 +427,7 @@ private:
                 if (number>=1 && number<=24) return VbaValue::numeric(111+number);
             }
         }
-        static const std::unordered_map<std::string,int> documentConstants{{"accopy",2},{"accmdcopy",190},{"accmdpasteappend",38},{"acformbar",0},{"aceditmenu",1},{"acmenuver70",70},{"acmenuver20",20},{"acmenuver1x",11},{"acselectrecord",8},{"acdelete",6},{"accmdselectrecord",50},{"accmddeleterecord",223},{"acdataerrcontinue",0},{"acdataerrdisplay",1},{"acdeleteok",0},{"acdeletecancel",1},{"acdeleteusercancel",2},{"accmdsaverecord",97},{"acdataform",2},{"acdatatable",0},{"acdataquery",1},{"acdatareport",3},{"acactivedataobject",-1},{"acprevious",0},{"acfirst",2},{"acgoto",4},{"acnext",1},{"aclast",3},{"acnewrec",5},{"acviewnormal",0},{"acviewpreview",2},{"acviewdesign",1},{"acwindownormal",0},{"acnormal",0},{"acdesign",1},{"acpreview",2},{"acformds",3},{"accustomcontrol",119},{"acshiftmask",1},{"acctrlmask",2},{"acaltmask",4},{"acdefault",-1},{"acform",2},{"acreport",3},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
+        static const std::unordered_map<std::string,int> documentConstants{{"vbusecompareoption",-1},{"vbbinarycompare",0},{"vbtextcompare",1},{"vbdatabasecompare",2},{"accopy",2},{"accmdcopy",190},{"accmdpasteappend",38},{"acformbar",0},{"aceditmenu",1},{"acmenuver70",70},{"acmenuver20",20},{"acmenuver1x",11},{"acselectrecord",8},{"acdelete",6},{"accmdselectrecord",50},{"accmddeleterecord",223},{"acdataerrcontinue",0},{"acdataerrdisplay",1},{"acdeleteok",0},{"acdeletecancel",1},{"acdeleteusercancel",2},{"accmdsaverecord",97},{"acdataform",2},{"acdatatable",0},{"acdataquery",1},{"acdatareport",3},{"acactivedataobject",-1},{"acprevious",0},{"acfirst",2},{"acgoto",4},{"acnext",1},{"aclast",3},{"acnewrec",5},{"acviewnormal",0},{"acviewpreview",2},{"acviewdesign",1},{"acwindownormal",0},{"acnormal",0},{"acdesign",1},{"acpreview",2},{"acformds",3},{"accustomcontrol",119},{"acshiftmask",1},{"acctrlmask",2},{"acaltmask",4},{"acdefault",-1},{"acform",2},{"acreport",3},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
         if (const auto constant=documentConstants.find(word);constant!=documentConstants.end()) return VbaValue::numeric(constant->second);
         if (word=="screen") return host_ ? host_->applicationObject()->member("Screen",{}) : VbaValue{};
         if (word=="docmd") return host_ ? host_->applicationObject()->member("DoCmd",{}) : VbaValue{};
@@ -498,7 +498,7 @@ private:
             if (!take(")")) {
                 do {
                     const auto start = index_;
-                    const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
+                    const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="strcomp") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
                     args.push_back(missing ? VbaValue::empty() : expression(1));
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
@@ -610,6 +610,48 @@ private:
                 if (!host_) return {};
                 if (args[1].kind==VbaValue::Kind::Null) throw error("Format mask is Null",94);
                 return host_->formatValue(args[0],args[1].asText(),word=="format$");
+            }
+            if (word=="instr" || word=="strcomp") {
+                if (!host_) return {};
+                const bool search=word=="instr";
+                if (args.size()<2 || args.size()>(search ? 4u : 3u)) throw error("String search/compare argument count invalid",450);
+                const std::size_t first=search && args.size()>2 ? 1 : 0;
+                if (omitted[first] || omitted[first+1]) throw error("String arguments required",450);
+                std::vector<VbaValue> values; for(const auto& arg:args) values.push_back(scalarObjectValue(arg));
+                std::int32_t start=1;
+                if (first && !omitted[0]) start=integer(values[0]);
+                if (start<1) throw error("InStr start must be positive",5);
+                auto mode=compareMode_;
+                const auto compare=first+2;
+                if (values.size()>compare && !omitted[compare]) {
+                    if (search && first && omitted[0]) throw error("InStr start required with compare",450);
+                    const auto choice=integer(values[compare]);
+                    if (choice>=0 && choice<=2) mode=static_cast<VbaCompareMode>(choice);
+                    else if (choice!=-1) throw error(choice>2 && search ? "Locale-ID search comparison unsupported" : "Invalid compare setting",choice>2 && search ? 3251 : 5);
+                }
+                if (values[first].kind==VbaValue::Kind::Null || values[first+1].kind==VbaValue::Kind::Null) return {};
+                const auto left=values[first].asText(),right=values[first+1].asText();
+                if (!search) {
+                    const int result=host_->compareStrings(left,right,mode);
+                    return VbaValue::numeric((result>0)-(result<0));
+                }
+                const auto haystack=utf16String(left),needle=utf16String(right);
+                if (haystack.empty()) return VbaValue::numeric(0);
+                if (needle.empty()) return VbaValue::numeric(start);
+                if (static_cast<std::size_t>(start)>haystack.size() || needle.size()>haystack.size()) return VbaValue::numeric(0);
+                if (mode==VbaCompareMode::Binary) {
+                    const auto found=haystack.find(needle,static_cast<std::size_t>(start-1));
+                    return VbaValue::numeric(found==std::u16string::npos ? 0 : found+1);
+                }
+                const auto boundary=[&](std::size_t position) {
+                    return position==0 || position==haystack.size() || !(haystack[position-1]>=0xd800 && haystack[position-1]<=0xdbff && haystack[position]>=0xdc00 && haystack[position]<=0xdfff);
+                };
+                for (std::size_t position=start-1;position+needle.size()<=haystack.size();++position) {
+                    if (!boundary(position) || !boundary(position+needle.size())) continue;
+                    const auto candidate=utf8String(std::u16string_view(haystack).substr(position,needle.size()));
+                    if (host_->compareStrings(candidate,right,mode)==0) return VbaValue::numeric(position+1);
+                }
+                return VbaValue::numeric(0);
             }
             if (word=="trim" || word=="ltrim" || word=="rtrim" || word=="trim$" || word=="ltrim$" || word=="rtrim$") {
                 if (!host_) return {};
@@ -787,7 +829,7 @@ VbaValue scalarObjectValue(VbaValue value) {
 }
 }
 int VbaHost::compareStrings(std::string_view left,std::string_view right,VbaCompareMode mode) {
-    if (mode==VbaCompareMode::Binary) return left.compare(right);
+    if (mode==VbaCompareMode::Binary) return utf16String(left).compare(utf16String(right));
     const auto fold=[](std::string_view text) {
         auto result=std::string(text);
         for (auto& ch:result) if (ch>='A' && ch<='Z') ch=static_cast<char>(ch-'A'+'a');
@@ -836,7 +878,7 @@ double VbaValue::asNumber() const {
         const auto result = std::stod(text, &consumed);
         if (consumed == text.size() && std::isfinite(result)) return result;
     } catch (...) {}
-    throw error("VBA: Zahl erwartet: " + text);
+    throw error("VBA: Zahl erwartet: " + text,13);
 }
 bool VbaValue::truthy() const {
     if (kind == Kind::Null) return false; // documented reduced semantics
