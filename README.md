@@ -79,6 +79,11 @@ INTEGER-Primärschlüssel native Generierung ohne Wiederverwendung gelöschter
 Höchstwerte. Umfang einschließlich fünf noch nicht generierter Originalspalten:
 [AutoNumber-Import](docs/AUTONUMBER_IMPORT.md).
 
+Begrenztes natives Datensatz-Kopieren/Anfügen verwendet die echte Zwischenablage
+und erzeugt neue Schlüssel nur für tatsächliche AutoNumber-Felder. Der originale
+Kopierhandler behandelt seinen manuellen Schlüsselfehler im Test:
+[Clipboard-Laufzeit und Grenzen](docs/RECORD_CLIPBOARD_RUNTIME.md).
+
 Eine `.deb`-Datei lässt sich nach dem Build erzeugen mit:
 
 ```bash

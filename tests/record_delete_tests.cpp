@@ -101,7 +101,7 @@ End Sub
     for (const auto& args:std::vector<std::vector<VbaValue>>{
         {VbaValue::numeric(0),VbaValue::numeric(1),VbaValue::numeric(8)},
         {VbaValue::numeric(0),VbaValue::numeric(1),VbaValue::numeric(8),VbaValue::empty(),VbaValue::numeric(20)},
-        {VbaValue::numeric(0),VbaValue::numeric(1),VbaValue::numeric(2),VbaValue::empty(),VbaValue::numeric(70)}}) {
+        {VbaValue::numeric(0),VbaValue::numeric(1),VbaValue::numeric(99),VbaValue::empty(),VbaValue::numeric(70)}}) {
         int error=0; try { command->member("DoMenuItem",args); } catch (const VbaRuntimeError& e) { error=e.number; }
         assert(error==3251 && count()==3);
     }

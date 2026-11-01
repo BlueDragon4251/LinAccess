@@ -19,6 +19,12 @@ INTEGER-Primärschlüssel verwenden native AUTOINCREMENT-Generierung. Fünf Spal
 ohne Primärschlüssel sind noch nicht automatisch generiert. Dies ist keine
 vollständige Jet-Zählersemantik: [AutoNumber-Grenzen](AUTONUMBER_IMPORT.md).
 
+Begrenztes Copy/PasteAppend verwendet die echte Zwischenablage und erhält
+native Feldwerte. Tatsächliche AutoNumber-Felder erzeugen neue Schlüssel; manuelle
+Primärschlüssel bleiben erhalten. Der originale Kopierhandler behandelt im Test
+seinen Schlüsselfehler, ohne eine Zeile zu duplizieren. Vollständige Insert-Events
+und Clipboard-Interoperabilität bleiben offen: [Clipboard-Laufzeit](RECORD_CLIPBOARD_RUNTIME.md).
+
 **Aktueller Regressionhinweis:** Der Gesamtimport übernimmt jetzt alle 29
 Kassen-Tabellen mit NULLs, exportierten Schlüsseln/Indizes und Beziehungen atomar.
 Der Schlüsselzeilen-Parserfehler mit MDBTools 1.0.1 ist behoben; MDBTools 1.0.0

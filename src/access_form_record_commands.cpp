@@ -1,6 +1,7 @@
 #include "access_form_preview.hpp"
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
+#include "sqlite_execution.hpp"
 #include <QComboBox>
 #include <QMessageBox>
 #include <QScopedValueRollback>
@@ -63,9 +64,12 @@ void AccessFormPreview::deleteCurrentRecord() {
     if (!sql.prepare("DELETE FROM "+identifier(layout_.recordSource.trimmed())+" WHERE rowid=?"))
         throw VbaRuntimeError(3146,"Delete preparation failed");
     sql.addBindValue(oldId);
-    if (!sql.exec()) {
-        const auto message=sql.lastError().text().toCaseFolded();
-        throw VbaRuntimeError(message.contains("foreign key") ? 3200 : 3146,"Record deletion failed");
+    {
+        linaccess::SqliteExecutionBudget budget(db_);
+        if (!sql.exec()) {
+            const auto message=sql.lastError().text().toCaseFolded();
+            throw VbaRuntimeError(message.contains("foreign key") ? 3200 : message.contains("interrupted") ? 3035 : 3146,"Record deletion failed");
+        }
     }
     if (sql.numRowsAffected()!=1) throw VbaRuntimeError(3021,"Record no longer available");
     sql.finish();

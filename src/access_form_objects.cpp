@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QComboBox>
+#include <QStandardItemModel>
 #include <QCalendarWidget>
 #include <QToolBar>
 #include <QMainWindow>
@@ -277,8 +278,9 @@ public:
         if (key == "name") return linaccess::VbaValue::string(bytes(preview.formName_));
         if (key == "tag") return linaccess::VbaValue::string(bytes(preview.property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(preview.layout_.caption));
-        if (key=="allowdeletions" || key=="selheight") {
+        if (key=="allowdeletions" || key=="allowadditions" || key=="selheight") {
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Record selection/deletion properties require a form");
+            if (key=="allowadditions") return linaccess::VbaValue::logical(preview.layout_.allowAdditions);
             return key=="allowdeletions" ? linaccess::VbaValue::logical(preview.layout_.allowDeletions) : linaccess::VbaValue::numeric(preview.recordSelected_ ? 1 : 0);
         }
         if (key == "recordsource") return linaccess::VbaValue::string(bytes(preview.layout_.recordSource));
@@ -322,7 +324,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="allowdeletions" || key=="selheight" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="setfocus" || key=="filter" || key=="filteron")
+        if (!args.empty() || key=="name" || key=="caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="selheight" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="setfocus" || key=="filter" || key=="filteron")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
@@ -338,6 +340,16 @@ public:
             const auto target=linaccess::daoBookmarkPosition(preview.recordsetSnapshot(),value)+1;
             preview.selectRecord(static_cast<int>(target));
             if (preview.currentRecordIndex_!=target) throw linaccess::VbaRuntimeError(2501,"Bookmark navigation cancelled");
+            return;
+        }
+        if (key=="allowadditions") {
+            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"AllowAdditions requires a form");
+            if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null AllowAdditions");
+            if (preview.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Changing addition policy during record command unsupported");
+            if (!value.truthy() && preview.currentRecordIndex_==0 && preview.dirty_ && !preview.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Addition policy save cancelled");
+            preview.layout_.allowAdditions=value.truthy();
+            if (auto* model=qobject_cast<QStandardItemModel*>(preview.recordSelector_->model());model && model->item(0)) model->item(0)->setEnabled(preview.layout_.allowAdditions);
+            if (preview.currentRecordIndex_==0) preview.loadRecord();
             return;
         }
         if (key=="allowdeletions") {

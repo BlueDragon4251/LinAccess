@@ -24,6 +24,7 @@ remains open. Counts below are measurements, not a percentage compatibility clai
 | Original generated record-search procedures / native selections / missing control-reference failures | 2 / 2 / 1 |
 | Original public Eval function executions on prepared native numeric/Null states | 20 |
 | Original deletion procedure / direct invocation / bound native click on synthetic rows | 1 / 1 / 1 |
+| Original duplicate handler / handled manual-key conflicts via invocation and native click / inserted rows | 1 / 2 / 0 |
 | Current local regression tests | 20 passed |
 
 Recent completed work includes native combo/platform/backend fixes, control event
@@ -587,3 +588,27 @@ core source is unchanged from the preceding verified build. The source's stored
 counter seed, five non-PK generators, random modes and exact Jet allocation/
 overflow semantics remain open; existing projects are not silently rebuilt.
 AUTONUMBER_IMPORT.md records the precise new-import scope.
+
+Single-record clipboard increment: real system clipboard, typed native MIME plus
+quoted TSV, Copy/PasteAppend and selected-record Ctrl+C. Tests preserve Unicode,
+multiline text, NULL/empty distinction, binary data and an exact 64-bit integer
+through actual SQL insertion. Verified AUTOINCREMENT columns generate destination
+keys; manual keys are retained. Malformed/oversized/ambiguous data, incompatible
+shapes, disabled additions, unsupported event/counter contexts and excluded form
+filters fail without inserting partial records. Active-target scope and saved
+snapshot bookmarks are tested. Native AllowAdditions also controls new-record
+navigation/selector availability. Deletion SQL now has a budget limited to SQL
+execution, leaving modal user wait outside that budget.
+
+The original duplicate handler's actual 14-column source schema has a manual PK,
+no AutoNumber. Direct append reports 3022; one unchanged original invocation and
+one real bound click run its native error-message path with the row count still
+one. Completed handler status is not recorded as successful duplication. Full
+insertion event bindings, multi-record/external clipboard formats and exact Access
+conversion/rendering remain open (RECORD_CLIPBOARD_RUNTIME.md).
+
+Validation: host Release 20/20 (76.85 s), GUI-disabled core 1/1 (0.66 s), Debian 12
+20/20 (62.56 s), Ubuntu 24.04 20/20 (57.43 s). Fresh DEBs pass exact payload,
+permissions and backend checks; isolated installed distro packages pass backend
+resolution and bounded offscreen startup. All four original fixture hashes pass.
+Original fixtures remain read-only; all mutation probes use synthetic data/copies.

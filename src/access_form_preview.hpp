@@ -61,6 +61,8 @@ private:
     bool saveRecord();
     void selectCurrentRecordForCommand();
     void deleteCurrentRecord();
+    void copyCurrentRecord();
+    void pasteAppendRecord();
     void clearRecordSelection();
     linaccess::VbaExecutionResult runHandler(const QString& handler);
     linaccess::VbaExecutionResult runControlBinding(const QString& control,const QString& event,const QString& binding);

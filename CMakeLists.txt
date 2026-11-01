@@ -31,7 +31,7 @@ if(LINACCESS_BUILD_GUI)
         src/access_table_import.hpp
 
         src/access_form_import.hpp
-        src/access_form_preview.cpp src/access_form_record_commands.cpp src/native_send_keys.cpp src/access_form_objects.cpp src/access_layout_print.cpp
+        src/access_form_preview.cpp src/access_form_record_commands.cpp src/access_record_clipboard.cpp src/native_send_keys.cpp src/access_form_objects.cpp src/access_layout_print.cpp
         src/access_form_preview.hpp
         src/bridge_importer.cpp
         src/bridge_importer.hpp
@@ -195,7 +195,7 @@ if(BUILD_TESTING)
                 tests/access_form_layout_tests.cpp tests/message_box_tests.cpp tests/close_command_tests.cpp tests/document_lifetime_tests.cpp tests/dynamic_combo_tests.cpp tests/keyboard_commands_tests.cpp tests/active_document_commands_tests.cpp tests/send_keys_tests.cpp tests/calculated_cache_tests.cpp tests/module_state_tests.cpp tests/calendar_tests.cpp tests/filter_tests.cpp tests/form_event_tests.cpp tests/subform_tests.cpp tests/form_object_tests.cpp tests/original_control_tests.cpp tests/report_event_tests.cpp tests/report_corpus_tests.cpp
                  src/access_form_import.hpp
 
-                src/access_form_preview.cpp src/access_form_record_commands.cpp src/native_send_keys.cpp src/access_form_objects.cpp src/access_layout_print.cpp src/access_form_preview.hpp
+                src/access_form_preview.cpp src/access_form_record_commands.cpp src/access_record_clipboard.cpp src/native_send_keys.cpp src/access_form_objects.cpp src/access_layout_print.cpp src/access_form_preview.hpp
                  src/vba_source_codec.hpp
                  src/vba_runtime.hpp
                  src/vba_expression.hpp
@@ -206,6 +206,7 @@ if(BUILD_TESTING)
             target_sources(linaccess_access_layout_tests PRIVATE tests/recordset_navigation_tests.cpp)
             target_sources(linaccess_access_layout_tests PRIVATE tests/row_source_types_tests.cpp)
             target_sources(linaccess_access_layout_tests PRIVATE tests/record_delete_tests.cpp)
+            target_sources(linaccess_access_layout_tests PRIVATE tests/record_clipboard_tests.cpp)
             target_sources(linaccess_access_layout_tests PRIVATE tests/eval_tests.cpp)
             target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::Test Qt6::PrintSupport)
             add_test(NAME access_2003_layouts

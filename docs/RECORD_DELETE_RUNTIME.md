@@ -45,9 +45,10 @@ one explicit call and one actual bound button click. Two prepared synthetic rows
 are independently counted before, during and after native confirmation. The UI
 button is made visible/enabled through runtime properties for this probe. No
 original rows/source/credentials are copied into the regression output. The
-original Copy/PasteAppend procedure remains unsupported at runtime.
+original Copy/PasteAppend manual-key conflict is now tested; see
+RECORD_CLIPBOARD_RUNTIME.md. It is not a successful duplicated row.
 
-Boundaries: multi-record selection/deletion, Copy/PasteAppend, datasheet editing,
+Boundaries: multi-record selection/deletion, full clipboard interoperability, datasheet editing,
 full Access focus/event scheduling, all writable query sources, global warning
 options, callback edits during the guarded operation, concurrent writers/locks,
 tentative snapshot visibility and a Windows
@@ -60,3 +61,5 @@ Contract references (documentation, not an Access 2003 runtime oracle):
 - https://learn.microsoft.com/en-us/office/vba/api/access.form.delete
 - https://learn.microsoft.com/en-us/office/vba/api/access.form.beforedelconfirm(even)
 - https://learn.microsoft.com/en-us/office/vba/api/access.form.afterdelconfirm(even)
+
+Bounded single-record Copy/PasteAppend: RECORD_CLIPBOARD_RUNTIME.md.

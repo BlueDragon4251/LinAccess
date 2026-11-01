@@ -308,10 +308,16 @@ Full targets remain open:
   confirmation and Delete/BeforeDelConfirm/AfterDelConfirm cancellation, rollback,
   bookmark/FK/reentrancy and active-document regression; one original delete
   procedure via explicit invocation and bound native click on synthetic rows.
-- [ ] Legacy Copy/PasteAppend, multi-record selection/deletion, complete writable
+- [ ] Complete clipboard interoperability, multi-record selection/deletion, complete writable
   query sources, full deletion focus/event ordering and Access 2003 oracle.
 - [x] Preserve 21 original AutoNumber flags and native AUTOINCREMENT generation
   for the 16 single-primary-key counters, retaining actual imported values and
   verifying no-reuse on isolated copies (AUTONUMBER_IMPORT.md).
 - [ ] Generate the five non-primary-key counters, preserve stored source seeds,
   random/replication modes and exact Jet allocation/overflow semantics.
+
+- [x] Native single-record Copy/PasteAppend and selected-record Ctrl+C, typed
+  clipboard, real SQL/bookmark/active-target tests and original manual-key conflict
+  via direct invocation and native click on synthetic rows.
+- [ ] Complete insertion event pipeline, multi-record/external clipboard formats
+  and Access 2003 reference behavior; unsupported contexts fail explicitly.

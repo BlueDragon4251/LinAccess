@@ -35,6 +35,8 @@ void testInputBoxes();
 void testRecordsetNavigation();
 void testRowSourceTypes();
 void testRecordDelete();
+void testRecordClipboard();
+void testOriginalClipboard(const QDir&,const QJsonArray&,const QString&);
 void testEval();
 void testOriginalEval(const QDir&,const QJsonArray&);
 void testOriginalRecordsetSearch(const QDir&,const QJsonArray&);
@@ -238,6 +240,7 @@ End Sub
     testRecordsetNavigation();
     testRowSourceTypes();
     testRecordDelete();
+    testRecordClipboard();
     testEval();
     testOriginalEval(directory,objects);
     testOriginalRecordsetSearch(directory,objects);
@@ -260,6 +263,7 @@ End Sub
     testReportEvents();
     testOriginalControls(directory,objects);
     if (argc >= 3) {
+        testOriginalClipboard(directory,objects,QString::fromLocal8Bit(argv[2]));
         testReportCorpus(directory,objects,QString::fromLocal8Bit(argv[2]));
         QTemporaryDir temporary;
         assert(temporary.isValid());
