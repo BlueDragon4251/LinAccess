@@ -226,11 +226,12 @@ explicitly; no original credentials or source are copied into public evidence.
 
 ### Bounded joined action updates
 
-Native DAO Execute/QueryDef.Execute supports one INNER JOIN with a single direct
-physical-table target, qualified assignments, aliases, WHERE and parameters. A
+Native DAO Execute/QueryDef.Execute supports one INNER JOIN, or LEFT/RIGHT JOIN
+with the target on its preserved side, and a single direct physical-table target,
+qualified assignments, aliases, WHERE and parameters. A
 materialized candidate set freezes self-join inputs. Multiple matches are accepted
 only when every assigned SQLite value has identical type and value; conflicting
-candidates raise 3251 and roll back the statement. Outer joins, saved-query targets,
+candidates raise 3251 and roll back the statement. Nullable outer-join targets, FULL joins, saved-query targets,
 multiple targets and tables without an accessible physical row identity remain
 unsupported (3251). This conservative boundary is not Jet updateability parity.
 

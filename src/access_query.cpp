@@ -599,7 +599,13 @@ AccessQueryPlan compileJoinedUpdate(const QVector<Token>& tokens,qsizetype start
         return result;
     };
     const auto left=relation();
+    enum class JoinSide { Inner,Left,Right };
+    auto side=JoinSide::Inner;
     if (word(position,"INNER")) ++position;
+    else if (word(position,"LEFT") || word(position,"RIGHT")) {
+        side=word(position,"LEFT") ? JoinSide::Left : JoinSide::Right; ++position;
+        if (word(position,"OUTER")) ++position;
+    }
     check(word(position,"JOIN")); ++position;
     const auto right=relation(); check(word(position,"ON"));
     check(left.alias.compare(right.alias,Qt::CaseInsensitive)!=0);
@@ -625,6 +631,7 @@ AccessQueryPlan compileJoinedUpdate(const QVector<Token>& tokens,qsizetype start
     check(!assignments.isEmpty());
     const auto* target=targetAlias.compare(left.alias,Qt::CaseInsensitive)==0 ? &left : targetAlias.compare(right.alias,Qt::CaseInsensitive)==0 ? &right : nullptr;
     check(target);
+    check((side!=JoinSide::Left || target==&left) && (side!=JoinSide::Right || target==&right));
     const auto key=QString::fromLatin1(QCryptographicHash::hash(updateSourceText(tokens,0,end).toUtf8(),QCryptographicHash::Sha256).toHex());
     const auto cte="__la_update_"+key,identity="__la_identity_"+key,row="__la_row_"+key;
     auto accessName=[](QString value) { return '['+value.replace(']',"]]")+']'; };

@@ -53,7 +53,9 @@ int main(int argc,char** argv) {
     assert(sql.exec("CREATE TABLE no_rowid(id INTEGER PRIMARY KEY,value INTEGER) WITHOUT ROWID"));
     assert(sql.exec("INSERT INTO no_rowid VALUES(1,0)"));
     for (const auto* text:{
-        "UPDATE target AS d LEFT JOIN source AS s ON d.id=s.id SET d.stock=s.delta",
+        "UPDATE target AS d LEFT JOIN source AS s ON d.id=s.id SET s.delta=1",
+        "UPDATE target AS d RIGHT JOIN source AS s ON d.id=s.id SET d.stock=1",
+        "UPDATE target AS d FULL OUTER JOIN source AS s ON d.id=s.id SET d.stock=1",
         "UPDATE target AS d INNER JOIN source AS s ON d.id=s.id SET d.stock=1,s.delta=2",
         "UPDATE readonly_target AS d INNER JOIN source AS s ON d.id=s.id SET d.stock=1",
         "UPDATE no_rowid AS d INNER JOIN source AS s ON d.id=s.id SET d.value=1"}) {
@@ -61,5 +63,29 @@ int main(int argc,char** argv) {
     }
     execute("UPDATE target AS d INNER JOIN source AS s ON d.id=s.id SET d.stock=1 WHERE s.id=999");
     assert(database->member("RecordsAffected",{}).asNumber()==0);
-    std::cout<<"Joined UPDATE: native arithmetic, parameters, typed NULL/binary values, frozen self-join, ambiguity rollback and writable-target boundaries passed\n";
+    assert(sql.exec("CREATE TABLE outer_left(id INTEGER PRIMARY KEY,value INTEGER)"));
+    assert(sql.exec("CREATE TABLE outer_right(id INTEGER PRIMARY KEY,value INTEGER)"));
+    assert(sql.exec("INSERT INTO outer_left VALUES(1,10),(2,20)"));
+    assert(sql.exec("INSERT INTO outer_right VALUES(1,100),(3,300)"));
+    execute("UPDATE outer_left AS l LEFT OUTER JOIN outer_right AS r ON l.id=r.id SET l.value=r.value");
+    assert(database->member("RecordsAffected",{}).asNumber()==2);
+    assert(sql.exec("SELECT value FROM outer_left ORDER BY id") && sql.next() && sql.value(0).toInt()==100 && sql.next() && sql.value(0).isNull()); sql.finish();
+    execute("UPDATE outer_left AS l LEFT JOIN outer_right AS r ON l.id=r.id SET l.value=7 WHERE r.id Is Null");
+    assert(database->member("RecordsAffected",{}).asNumber()==1);
+    assert(sql.exec("SELECT value FROM outer_left WHERE id=2") && sql.next() && sql.value(0).toInt()==7); sql.finish();
+    execute("UPDATE outer_left AS l RIGHT OUTER JOIN outer_right AS r ON l.id=r.id SET r.value=l.value");
+    assert(database->member("RecordsAffected",{}).asNumber()==2);
+    assert(sql.exec("SELECT value FROM outer_right ORDER BY id") && sql.next() && sql.value(0).toInt()==100 && sql.next() && sql.value(0).isNull()); sql.finish();
+    execute("UPDATE outer_left AS l RIGHT JOIN outer_right AS r ON l.id=r.id SET r.value=9 WHERE l.id Is Null");
+    assert(database->member("RecordsAffected",{}).asNumber()==1);
+    assert(sql.exec("SELECT value FROM outer_right WHERE id=3") && sql.next() && sql.value(0).toInt()==9); sql.finish();
+    assert(sql.exec("CREATE TABLE outer_required(id INTEGER PRIMARY KEY,value INTEGER NOT NULL)"));
+    assert(sql.exec("INSERT INTO outer_required VALUES(1,11),(2,22)"));
+    error=0; try { execute("UPDATE outer_required AS d LEFT JOIN outer_right AS s ON d.id=s.id SET d.value=s.value"); }
+    catch(const VbaRuntimeError& failure) { error=failure.number; } assert(error==3314);
+    assert(sql.exec("SELECT value FROM outer_required ORDER BY id") && sql.next() && sql.value(0).toInt()==11 && sql.next() && sql.value(0).toInt()==22); sql.finish();
+    error=0; try { execute("UPDATE target AS d LEFT JOIN source AS s ON d.id=s.id SET d.stock=s.delta"); }
+    catch(const VbaRuntimeError& failure) { error=failure.number; } assert(error==3251);
+    assert(sql.exec("SELECT stock FROM target ORDER BY id") && sql.next() && sql.value(0).toDouble()==15 && sql.next() && sql.value(0).toDouble()==15 && sql.next() && sql.value(0).toDouble()==25); sql.finish();
+    std::cout<<"Joined UPDATE: native arithmetic, parameters, typed NULL/binary values, frozen self-join, preserved outer targets, NULL/ambiguity/constraint rollback and writable-target boundaries passed\n";
 }

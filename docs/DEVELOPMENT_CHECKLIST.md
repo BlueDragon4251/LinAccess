@@ -353,3 +353,7 @@ Full targets remain open:
 - [x] Original clock Timer handler through its original binding on a prepared
   project copy; two timestamps independently checked (not full startup).
 - [ ] Access modal/timer scheduling and original clock display-locale oracle.
+
+- [x] Single LEFT/RIGHT joined UPDATE to the preserved direct table, including
+  unmatched NULL sources, Is Null filtering, affected counts and atomic rollback.
+- [ ] Nullable-side/FULL joined updates and writable saved-query targets.

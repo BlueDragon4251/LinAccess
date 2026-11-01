@@ -786,3 +786,19 @@ Final timer validation: host Release 21/21 (60.25 s), Debian 12 21/21
 payload/backend/permission/fixture-exclusion checks and all four original hashes
 pass. GUI-disabled core sources are unchanged in this increment.
 Isolated installed Debian/Ubuntu packages pass native backend/counter execution and GUI startup.
+
+Outer joined UPDATE increment: single LEFT/RIGHT [OUTER] JOIN updates now accept
+the preserved direct-table target. Native tests verify missing-source NULLs,
+Is Null filtering, actual affected counts, required-field rollback (3314),
+ambiguity rollback (3251) and rejection of nullable-side/FULL targets. The
+materialized candidate source and existing typed ambiguity guard are preserved.
+Targeted joined contracts/query inventory pass (6.38 s). Corpus coverage remains
+77/100: the original remaining RIGHT action targets its nullable side and a
+saved query. JOINED_UPDATE_RUNTIME.md records the exact boundary; no general
+Jet updateability/result-oracle parity is claimed.
+
+Validation: host Release 21/21 (58.81 s), Debian 12 21/21 (60.34 s),
+Ubuntu 24.04 21/21 (56.05 s). Fresh host/distro DEBs pass exact payload,
+backend, permissions and fixture-exclusion checks; installed distro packages
+pass backend/counter execution and GUI startup. All four original hashes pass.
+GUI-disabled core sources are unchanged.
