@@ -27,8 +27,10 @@
 #include <algorithm>
 
 void testKeyboardEvents();
+void testTextSelection();
 
 void testKeyboardCommands() {
+    testTextSelection();
     using linaccess::VbaValue;
     auto db=QSqlDatabase::addDatabase("QSQLITE","keyboard-commands"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -296,4 +298,77 @@ void testOriginalKeyboardEvents(const QDir& directory,const QJsonArray& objects,
     dismiss.stop(); assert(unexpected==0 && executions==1 && directExecutions==3 && missingBindings==2);
     assert(query.exec("ROLLBACK TO original_keyboard_events")); assert(query.exec("RELEASE original_keyboard_events"));
     std::cout<<"Original KeyPress: "<<executions<<" bound execution, "<<directExecutions<<" explicit calls, "<<missingBindings<<" missing-handler bindings; unchanged native control values verified\n";
+}
+
+void testTextSelection() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","text-selection"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)"));
+    assert(sql.exec("INSERT INTO records VALUES(1,'abcdef')"));
+    assert(sql.exec("CREATE TABLE trace(value TEXT)"));
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="records"
+Begin Section
+Begin TextBox
+Name ="editor"
+ControlSource ="value"
+OnChange ="[Event Procedure]"
+End
+Begin ComboBox
+Name ="combo"
+ControlSource ="value"
+Top =400
+End
+Begin CommandButton
+Name ="button"
+Top =800
+End
+End
+End
+)FORM";
+    const QByteArray code=R"VBA(Sub ReplaceSelection()
+Me.editor.SetFocus
+Me.editor.SelStart=2
+Me.editor.SelLength=2
+If Me.editor.SelText<>"cd" Then Err.Raise 5
+Me.editor.SelText="XY"
+End Sub
+Sub editor_Change()
+CurrentDb.Execute "INSERT INTO trace VALUES('change')"
+End Sub
+)VBA";
+    AccessFormPreview form("selection",layout,code,db); form.show(); form.activateWindow(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form);
+    auto editor=root->objectMember("editor",{}).object,combo=root->objectMember("combo",{}).object;
+    auto* line=form.findChild<QLineEdit*>("access-control-editor"); auto* comboWidget=form.findChild<QComboBox*>("access-control-combo"); assert(line && comboWidget && comboWidget->lineEdit());
+    std::vector<VbaValue> none; assert(form.executeProcedure("ReplaceSelection",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(line->text()=="abXYef" && editor->member("SelStart",{}).asNumber()==4);
+    assert(editor->member("SelLength",{}).asNumber()==0 && editor->member("SelText",{}).kind==VbaValue::Kind::Null);
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT value FROM records") && sql.next() && sql.value(0).toString()=="abXYef"); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM trace") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    editor->assign("SelStart",VbaValue::numeric(1)); editor->assign("SelLength",VbaValue::numeric(99));
+    assert(editor->member("SelText",{}).asText()=="bXYef");
+    editor->assign("SelStart",VbaValue::numeric(99));
+    assert(editor->member("SelStart",{}).asNumber()==6 && editor->member("SelLength",{}).asNumber()==0);
+    for (const auto& [value,expected]:std::vector<std::pair<VbaValue,int>>{{VbaValue::numeric(-1),5},{VbaValue::numeric(32768),6},{VbaValue{},94}}) {
+        int error=0; try { editor->assign("SelLength",value); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==expected);
+    }
+    assert(!form.hasUnsavedChanges());
+    comboWidget->lineEdit()->setFocus(); QApplication::processEvents();
+    int error=0; try { editor->member("SelStart",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==2185);
+    combo->assign("SelStart",VbaValue::numeric(0)); combo->assign("SelLength",VbaValue::numeric(2)); combo->assign("SelText",VbaValue::string("12"));
+    assert(comboWidget->currentText()=="12XYef" && root->item("editor").asText()=="12XYef");
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT value FROM records") && sql.next() && sql.value(0).toString()=="12XYef"); sql.finish();
+    error=0; try { root->objectMember("button",{}).object->member("SelText",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==438);
+    line->setFocus(); QApplication::processEvents();
+    root->assignItem("editor",VbaValue::string("A😀Z"));
+    editor->assign("SelStart",VbaValue::numeric(1)); editor->assign("SelLength",VbaValue::numeric(2));
+    assert(editor->member("SelText",{}).asText()=="😀");
+    editor->assign("SelText",VbaValue::string("ö"));
+    assert(root->item("editor").asText()=="AöZ");
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT value FROM records") && sql.next() && sql.value(0).toString()==QString::fromUtf8("AöZ")); sql.finish();
+    assert(form.close());
 }

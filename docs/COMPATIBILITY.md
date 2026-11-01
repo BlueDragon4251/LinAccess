@@ -289,3 +289,9 @@ Change/KeyUp order, suppressed KeyPress, existing-record changes and a combo edi
 Handler errors remain visible without saving rejected dirty data automatically.
 This does not implement Text-property access, exact Text/Value buffering,
 cascading Text setters, LimitToList/NotInList or complete input/locale parity.
+
+Native SelStart/SelLength/SelText now address focused text/ editable-combo
+editors, including replacement, Null on no selection, focus/range validation
+and UTF-16 selection. Actual Change callbacks and SQL persistence are tested.
+FORM_OBJECT_MODEL.md records clamping and remaining text-buffer/format limits;
+original selection handlers are not claimed (none occur in the VBA fixtures).

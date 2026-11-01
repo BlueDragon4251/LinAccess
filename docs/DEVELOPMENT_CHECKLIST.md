@@ -344,3 +344,6 @@ Full targets remain open:
 - [x] Imported native text/combo OnChange, EventProcPrefix dispatch, programmatic
   Value suppression and KeyDown/KeyPress/BeforeInsert/Change/KeyUp regression.
 - [ ] Text/Value buffering, focused Text setters and cascading Change parity.
+
+- [x] Focused native editor SelStart/SelLength/SelText with replacement,
+  Change/SQL effects, Null/no-selection, validation and UTF-16 regression.

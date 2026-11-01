@@ -58,6 +58,13 @@ protected:
 };
 class PreviewControlObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
+    static QLineEdit* selectionEditor(QWidget* widget) {
+        auto* editor=qobject_cast<QLineEdit*>(widget);
+        if (auto* combo=qobject_cast<QComboBox*>(widget);combo && combo->isEditable()) editor=combo->lineEdit();
+        if (!editor) throw linaccess::VbaRuntimeError(438,"Control has no text selection");
+        if (!editor->hasFocus()) throw linaccess::VbaRuntimeError(2185,"Text selection requires control focus");
+        return editor;
+    }
     PreviewControlObject(AccessFormPreview& preview,QString name) : PreviewObjectBase(preview),name_(std::move(name)) {}
     linaccess::VbaValue scalarValue() override { return member("Value",{}); }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
@@ -78,6 +85,13 @@ public:
                 if (key=="columncount") return linaccess::VbaValue::numeric(definition.columnCount);
                 if (key=="columnwidths") return linaccess::VbaValue::string(bytes(definition.columnWidths));
             }
+        }
+        if (key=="selstart" || key=="sellength" || key=="seltext") {
+            if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected selection property arguments");
+            auto* editor=selectionEditor(widget);
+            if (key=="selstart") return linaccess::VbaValue::numeric(editor->hasSelectedText() ? editor->selectionStart() : editor->cursorPosition());
+            if (key=="sellength") return linaccess::VbaValue::numeric(editor->selectedText().size());
+            return editor->hasSelectedText() ? linaccess::VbaValue::string(bytes(editor->selectedText())) : linaccess::VbaValue{};
         }
         if (key=="column" || key=="spalte") return preview.controlColumnValue(name_,args);
         if (!args.empty() && key!="form" && key!="formular") throw linaccess::VbaRuntimeError(450,"Unexpected control arguments");
@@ -138,6 +152,24 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (key=="selstart" || key=="sellength" || key=="seltext") {
+            auto* editor=selectionEditor(widget);
+            if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null selection property");
+            if (key=="seltext") {
+                preview.ensureWritableControl(bytes(name_));
+                if (editor->isReadOnly()) throw linaccess::VbaRuntimeError(2046,"Editor is read-only");
+                editor->insert(text(value.asText())); return;
+            }
+            const auto position=linaccess::sqlFieldValue(value,"INTEGER").toLongLong();
+            if (position<0) throw linaccess::VbaRuntimeError(5,"Invalid text selection position");
+            if (position>32767) throw linaccess::VbaRuntimeError(6,"Text selection Integer overflow");
+            if (key=="selstart") editor->setCursorPosition(std::min<int>(position,editor->text().size()));
+            else {
+                const int start=editor->hasSelectedText() ? editor->selectionStart() : editor->cursorPosition();
+                editor->setSelection(start,std::min<int>(position,editor->text().size()-start));
+            }
+            return;
+        }
         if (key=="eventprocprefix") {
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null event prefix");
             const auto prefix=text(value.asText());

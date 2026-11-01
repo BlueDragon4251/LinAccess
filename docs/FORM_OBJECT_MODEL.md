@@ -93,3 +93,20 @@ form; Me.control.Requery resolves the caller's instance. A bound non-list data
 control reloads the form record source after normal save/validation. Native
 regressions check external SQL changes, separate caller/target combo models and
 BeforeUpdate cancellation (2501). Unsupported control types still raise errors.
+
+## Native text selection
+
+SelStart, SelLength and SelText use the actual focused QLineEdit or editable
+combo editor. Selection changes do not dirty records; SelText replaces the
+selection (or inserts at the cursor), invokes the native Change path and can
+be saved through normal form validation. No selection returns Null for SelText.
+Unfocused access raises 2185, unsupported control types 438, negative positions
+5, Null assignment 94 and Integer overflow 6. Large valid positions/lengths are
+clamped to the native text bounds. UTF-16 selection is exercised with a surrogate
+pair, replacement and independently read SQL values.
+
+This is a native single-line selection adapter, not full Access Text/Value
+buffering, formatted/multiline text, IME or rich-text parity. The original VBA
+fixtures contain no selection-property calls, so evidence is the documented
+Microsoft selection contract and native Qt/VBA/SQL tests, not original-handler
+execution or a Windows Access reference comparison.

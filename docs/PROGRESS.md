@@ -743,3 +743,18 @@ backend, permissions and fixture-exclusion checks. All four original fixture
 hashes pass. GUI-disabled core sources are unchanged from their preceding
 validated 1/1 build.
 Isolated installed Debian/Ubuntu packages pass native backend/counter execution and GUI startup.
+
+Text selection increment: native focused text/ editable-combo wrappers expose
+SelStart/SelLength/SelText. Native VBA tests replace selected text, check actual
+Change callbacks and SQL values, focus/type/Null/range failures, selection-only
+clean state and UTF-16 surrogate-pair replacement. SelText without selection is
+Null, matching the published Microsoft contract. The targeted layouts pass
+(6.96 s). A read-only token scan of 34 restored VBA files found no selection
+property calls; this adds no original-handler execution claim. Full Text/Value
+buffering and formatted/multiline/input parity remain open.
+
+Validation: host Release 21/21 (62.66 s), Debian 12 21/21 (68.49 s),
+Ubuntu 24.04 21/21 (62.92 s). Fresh host/distro DEBs pass payload/backend,
+permissions and fixture-exclusion checks; all four original fixture hashes
+pass. GUI-disabled core has no changes in this increment.
+Isolated installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
