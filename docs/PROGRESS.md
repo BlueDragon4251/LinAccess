@@ -1007,3 +1007,20 @@ Validation: host 21/21 (86.07 s), Debian 12 21/21 (65.05 s), Ubuntu 24.04
 distro DEBs pass exact payload/backend/permissions/fixture-exclusion checks;
 isolated installed Debian/Ubuntu packages pass backend/counter execution and
 GUI startup. All four original fixture hashes pass.
+
+Do/While increment: Do Until, postcondition Loop While/Until, unconditional Do/Loop,
+While/Wend and Exit Do now execute natively. Static exit binding removes inner
+If/Select/With/For Each frames while preserving the outer object and For loop.
+Tests cover entry/exit and Null conditions, innermost exit, mixed Exit For/Do,
+body/condition error retry and the execution budget. The real Qt transaction
+button performs both account updates through Do Until/Select Case; commit,
+rollback and handled duplicate-key rollback preserve asserted SQL/control values.
+Targeted core/layout/original-heavy tests pass (35.98 s). Original inventory has
+seven existing Do While starts and none of the newly added loop starts; original
+handler execution counts are unchanged. DO_LOOP_RUNTIME.md records the bounds.
+
+Validation: host 21/21 (63.64 s), Debian 12 21/21 (66.30 s), Ubuntu 24.04
+21/21 (60.17 s), rebuilt GUI-disabled core 1/1 (0.98 s). Fresh host/distro
+DEBs pass exact payload/backend/permissions/fixture-exclusion checks; isolated
+installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+All four original fixture hashes pass.

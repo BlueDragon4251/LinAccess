@@ -22,6 +22,15 @@ public:
     }
     std::vector<linaccess::VbaValue> enumerate() override { return values; }
 };
+class LoopContext final : public linaccess::VbaObject {
+public:
+    explicit LoopContext(int number):number_(number) {}
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        assert(name=="Value" && args.empty()); return linaccess::VbaValue::numeric(number_);
+    }
+private:
+    int number_;
+};
 class ScalarProbe final : public linaccess::VbaObject {
 public:
     linaccess::VbaValue value;
@@ -381,12 +390,135 @@ End Function
         host.bracketHost=true; host.bracketFields["a,b"]=VbaValue::numeric(2);
         auto bracket=executeVbaProcedure("Function BracketCase() As Long\nSelect  Case  2\nCase 1, [a,b]\nBracketCase=1\nEnd  Select\nEnd Function","BracketCase",host);
         assert(bracket.status==VbaExecutionStatus::Completed && bracket.typedReturnValue->asNumber()==1);
-        for (const auto& relation:std::vector<std::string>{"= 2","<> 3","< 3","<= 2","> 1",">= 2","Is = 2","Is <> 3","Is < 3","Is <= 2","Is > 1","Is >= 2","2 To 2"}) {
+        for (const auto& relation:std::vector<std::string>{"= 2","<> 3","< 3","<= 2","> 1",">= 2","Is = 2","Is <> 3","Is < 3","Is <= 2","Is > 1","Is >= 2","Is>=2","Is<3","2 To 2"}) {
             auto result=executeVbaProcedure("Function Relation() As Long\nSelect Case 2\nCase "+relation+"\nRelation=1\nEnd Select\nEnd Function","Relation",host);
             assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==1);
         }
         auto binary=executeVbaProcedure("Function BinaryCase() As Long\nSelect Case \"A\"\nCase \"a\"\nBinaryCase=1\nCase Else\nBinaryCase=2\nEnd Select\nEnd Function","BinaryCase",host);
         assert(binary.status==VbaExecutionStatus::Completed && binary.typedReturnValue->asNumber()==2);
+    }
+
+    {
+        FakeForm host;
+        for (const auto& [opening,closing,expected]:std::vector<std::tuple<std::string,std::string,int>>{
+                {"Do While count<3","Loop",3},{"Do Until count=3","Loop",3},
+                {"Do","Loop While count<3",3},{"Do","Loop Until count=3",3},
+                {"While count<3","Wend",3},{"Do While False","Loop",0},
+                {"Do Until True","Loop",0},{"Do","Loop While False",1},
+                {"Do","Loop Until True",1},{"Do While Null","Loop",0},
+                {"Do","Loop While Null",1}}) {
+            auto result=executeVbaProcedure("Function LoopCount() As Long\nDim count As Long\n"+opening+"\ncount=count+1\n"+closing+"\nLoopCount=count\nEnd Function","LoopCount",host);
+            if (result.status!=VbaExecutionStatus::Completed) std::cerr<<"Loop regression status="<<static_cast<int>(result.status)<<", line="<<result.line<<"\n";
+            assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==expected);
+        }
+        const std::string module=R"VBA(Function Nested(outer As Object, inner As Object, items As Object) As Long
+Dim i As Long
+Dim item As Variant
+For i=1 To 2
+With outer
+Do
+For Each item In items
+With inner
+Select Case item
+Case 1
+If True Then Exit Do
+Case Else
+Err.Raise 5
+End Select
+End With
+Next
+Err.Raise 5
+Loop
+Nested=Nested+.Value
+End With
+Next
+End Function
+Function Innermost() As Long
+Dim count As Long
+Do Until count=3
+Do
+Innermost=Innermost+1
+Exit Do
+Loop
+count=count+1
+Loop
+End Function
+Function ExitForInsideDo() As Long
+Dim i As Long
+Do
+For i=1 To 3
+Select Case i
+Case 1
+Exit For
+End Select
+Next
+ExitForInsideDo=ExitForInsideDo+1
+If ExitForInsideDo=2 Then Exit Do
+Loop
+End Function
+Function NullUntil() As Long
+Do Until Null
+NullUntil=NullUntil+1
+If NullUntil=3 Then Exit Do
+Loop
+Do
+NullUntil=NullUntil+1
+If NullUntil=5 Then Exit Do
+Loop Until Null
+End Function
+Function ResumeBody() As Long
+Dim count As Long
+On Error GoTo failed
+Do Until count=2
+count=count+1
+Err.Raise 11
+ResumeBody=ResumeBody+1
+Loop
+Exit Function
+failed:
+Resume Next
+End Function
+Function ResumeCondition() As Long
+Dim divisor As Long
+On Error GoTo failed
+Do
+ResumeCondition=ResumeCondition+1
+Loop Until 2/divisor=2
+Exit Function
+failed:
+divisor=1
+Resume
+End Function
+Function WhileInsideDo() As Long
+Do
+While True
+Select Case 1
+Case 1
+Exit Do
+End Select
+Wend
+Loop
+WhileInsideDo=8
+End Function
+)VBA";
+        auto items=std::make_shared<TestSequence>(); items->values={VbaValue::numeric(1),VbaValue::numeric(2)};
+        std::vector<VbaValue> arguments{VbaValue::reference(std::make_shared<LoopContext>(10)),VbaValue::reference(std::make_shared<LoopContext>(20)),VbaValue::reference(items)};
+        auto nested=executeVbaProcedureWithArguments(module,"Nested",host,arguments);
+        assert(nested.status==VbaExecutionStatus::Completed && nested.typedReturnValue->asNumber()==20);
+        for (const auto& [procedure,expected]:std::vector<std::pair<std::string,int>>{
+                {"Innermost",3},{"ExitForInsideDo",2},{"NullUntil",5},{"ResumeBody",2},{"ResumeCondition",1},{"WhileInsideDo",8}}) {
+            auto result=executeVbaProcedure(module,procedure,host);
+            assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==expected);
+        }
+        for (const auto& body:std::vector<std::string>{"Exit Do","If True Then Exit Do","Loop","Wend",
+                "While True\nExit Do\nWend","Do While True\nWend","While False\nLoop",
+                "Do Until False\nLoop Until True","Do\nIf True Then\nLoop\nEnd If","Do","Do Until (\nLoop"}) {
+            host.fields.clear();
+            auto result=executeVbaProcedure("Sub Invalid()\nMe!Name=42\n"+body+"\nEnd Sub","Invalid",host);
+            assert(result.status!=VbaExecutionStatus::Completed && host.fields.empty());
+        }
+        auto budget=executeVbaProcedure("Sub Forever()\nDo\nLoop\nEnd Sub","Forever",host);
+        assert(budget.status==VbaExecutionStatus::Error && budget.explanation.find("10.000")!=std::string::npos);
     }
 
     {

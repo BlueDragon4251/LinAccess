@@ -385,3 +385,9 @@ with one-time selector evaluation, nested If/For/Exit For and bounded Resume
 handling. Core and native transaction-button tests exercise actual branches and
 SQL commit/rollback. Original modules contain no such blocks; no new original
 execution count or complete VBA grammar claim follows (SELECT_CASE_RUNTIME.md).
+
+Do Until, postcondition Loop While/Until, unconditional Do/Loop, While/Wend and
+Exit Do now use native condition evaluation and explicit nested-frame unwinding.
+Core tests exercise control flow/error retry/budget limits; a real Qt transaction
+button performs its SQL updates through Do Until. No new original handler count
+is claimed; full grammar/error/type parity remains open (DO_LOOP_RUNTIME.md).

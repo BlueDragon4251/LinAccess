@@ -18,13 +18,14 @@ struct Statement {
     enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, If, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
-                      Call, SetField, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, Quit, ErrorResumeNext, ErrorDisable, Label, Jump, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
+                      Call, SetField, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, ErrorResumeNext, ErrorDisable, Label, Jump, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
     std::string argument;
     std::string expression;
     int line{};
     std::string endExpression;
     std::string stepExpression;
     int partner{-1};
+    int conditionalUnwind{}, withUnwind{}, forUnwind{};
 };
 
 std::string trim(std::string text) {
@@ -208,7 +209,8 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex jump(R"(^GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
     const std::regex errorHandler(R"(^On\s+Error\s+GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
     const std::regex resumeLabel(R"(^Resume\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
-    const std::regex whileStart(R"(^Do\s+While\s+(.+)$)", std::regex::icase);
+    const std::regex whileStart(R"(^(Do\s+(While|Until)|While)\s+(.+)$)", std::regex::icase);
+    const std::regex loopEnd(R"(^(Loop|Wend)(?:\s+(While|Until)\s+(.+))?$)",std::regex::icase);
     const std::regex dim(R"(^Dim\s+(.+)$)", std::regex::icase);
     const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*))?$)", std::regex::icase);
     const std::regex forStart(R"(^For\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+?)\s+To\s+(.+?)(?:\s+Step\s+(.+))?$)", std::regex::icase);
@@ -285,6 +287,29 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                     else if (instruction.type==Statement::Type::ExitFor && forDepth==0)
                         return {VbaExecutionStatus::Error,"Exit For without For",instruction.line};
                 }
+                // Bind inline Exit Do only after merging its temporary If
+                // wrapper into the real procedure. All loop partners exist now.
+                std::vector<int> lexical;
+                for (int i=0;i<static_cast<int>(statements.size());++i) {
+                    auto& instruction=statements[i]; const auto type=instruction.type;
+                    if (type==Statement::Type::If || type==Statement::Type::Select || type==Statement::Type::With
+                        || type==Statement::Type::For || type==Statement::Type::ForEach || type==Statement::Type::While)
+                        lexical.push_back(i);
+                    else if (type==Statement::Type::EndIf || type==Statement::Type::EndSelect || type==Statement::Type::EndWith
+                             || type==Statement::Type::Next || type==Statement::Type::EndWhile) lexical.pop_back();
+                    else if (type==Statement::Type::ExitDo) {
+                        auto target=lexical.rbegin();
+                        while (target!=lexical.rend() && (statements[*target].type!=Statement::Type::While || statements[*target].argument=="wend")) ++target;
+                        if (target==lexical.rend()) return {VbaExecutionStatus::Error,"Exit Do without Do",instruction.line};
+                        instruction.partner=statements[*target].partner;
+                        for (auto inner=lexical.rbegin();inner!=target;++inner) {
+                            const auto nested=statements[*inner].type;
+                            if (nested==Statement::Type::If || nested==Statement::Type::Select) ++instruction.conditionalUnwind;
+                            else if (nested==Statement::Type::With) ++instruction.withUnwind;
+                            else if (nested==Statement::Type::For || nested==Statement::Type::ForEach) ++instruction.forUnwind;
+                        }
+                    }
+                }
             }
             if (resolveLabels) for (auto& instruction : statements) {
                 if (instruction.type != Statement::Type::Jump && instruction.type != Statement::Type::ErrorHandler
@@ -339,8 +364,8 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             else {
                 for (const auto& clause:splitArguments(expression)) {
                     const auto range=outsideKeyword(clause,"to");
-                    if (lower(clause).starts_with("is ") || lower(clause).starts_with("is\t") || (!clause.empty() && std::string("<>=").find(clause.front())!=std::string::npos)) {
-                        const auto comparison=trim(lower(clause).starts_with("is") ? clause.substr(2) : clause);
+                    if (outsideKeyword(clause,"is")==0 || (!clause.empty() && std::string("<>=").find(clause.front())!=std::string::npos)) {
+                        const auto comparison=trim(outsideKeyword(clause,"is")==0 ? clause.substr(2) : clause);
                         const auto op=comparison.find_first_not_of("<>=");
                         const auto relation=comparison.substr(0,op);
                         if ((relation!="=" && relation!="<>" && relation!="<" && relation!="<=" && relation!=">" && relation!=">=")
@@ -438,20 +463,29 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             statements[startIndex].partner = nextIndex;
             statements.push_back({Statement::Type::Next, {}, {}, line});
             statements.back().partner = startIndex;
-        } else if (std::regex_match(source, match, whileStart)) {
-            const auto expr = trim(match[1].str());
-            if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported, "Do While-Ausdruck", line};
-            whileStarts.push_back(static_cast<int>(statements.size()));
-            blocks.push_back(Statement::Type::While);
-            statements.push_back({Statement::Type::While, {}, expr, line});
-        } else if (lower(source) == "loop") {
-            if (blocks.empty() || blocks.back() != Statement::Type::While)
-                return {VbaExecutionStatus::Error, "Loop ohne Do While", line};
-            const int start = whileStarts.back();
+        } else if (normalized=="do" || std::regex_match(source,match,whileStart)) {
+            const auto expression=normalized=="do" ? std::string{} : trim(match[3].str());
+            const auto mode=normalized=="do" ? "while" : match[2].matched ? lower(match[2].str()) : "wend";
+            if (!expression.empty() && !validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Loop condition unsupported",line};
+            whileStarts.push_back(static_cast<int>(statements.size())); blocks.push_back(Statement::Type::While);
+            statements.push_back({Statement::Type::While,mode,expression,line});
+        } else if (normalized=="exit do") {
+            statements.push_back({Statement::Type::ExitDo,{},{},line});
+        } else if (std::regex_match(source,match,loopEnd)) {
+            if (blocks.empty() || blocks.back()!=Statement::Type::While)
+                return {VbaExecutionStatus::Error,"Loop/Wend without matching start",line};
+            const int start=whileStarts.back();
+            const bool wend=lower(match[1].str())=="wend";
+            const auto expression=match[3].matched ? trim(match[3].str()) : std::string{};
+            if (wend!=(statements[start].argument=="wend") || (wend && match[2].matched))
+                return {VbaExecutionStatus::Error,"Loop/Wend start mismatch",line};
+            if (!expression.empty() && !statements[start].expression.empty())
+                return {VbaExecutionStatus::Error,"Do has both entry and exit conditions",line};
+            if (!expression.empty() && !validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Loop exit condition unsupported",line};
             whileStarts.pop_back(); blocks.pop_back();
-            statements[start].partner = static_cast<int>(statements.size());
-            statements.push_back({Statement::Type::EndWhile, {}, {}, line});
-            statements.back().partner = start;
+            statements[start].partner=static_cast<int>(statements.size());
+            statements.push_back({Statement::Type::EndWhile,match[2].matched ? lower(match[2].str()) : "while",expression,line});
+            statements.back().partner=start;
         } else if (lower(source) == "on error resume next") {
             statements.push_back({Statement::Type::ErrorResumeNext, {}, {}, line});
         } else if (lower(source) == "on error goto 0") {
@@ -953,8 +987,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     const auto relation=[&](std::string_view op,const std::string& expression) {
                         return compareVbaValues(op,frame.selector,scalarVbaValue(evaluate(expression)),host,compareMode).truthy();
                     };
-                    if (lower(clause).starts_with("is ") || lower(clause).starts_with("is\t") || (!clause.empty() && std::string("<>=").find(clause.front())!=std::string::npos)) {
-                        const auto comparison=trim(lower(clause).starts_with("is") ? clause.substr(2) : clause);
+                    if (outsideKeyword(clause,"is")==0 || (!clause.empty() && std::string("<>=").find(clause.front())!=std::string::npos)) {
+                        const auto comparison=trim(outsideKeyword(clause,"is")==0 ? clause.substr(2) : clause);
                         const auto end=comparison.find_first_not_of("<>=");
                         matched=relation(comparison.substr(0,end),trim(comparison.substr(end)));
                     } else if (const auto range=outsideKeyword(clause,"to"); range!=std::string::npos) {
@@ -1092,11 +1126,26 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (active) (void)evaluate(instruction.expression);
                 break;
             case Statement::Type::While:
-                if (!active || !evaluate(instruction.expression).truthy())
-                    ip = static_cast<std::size_t>(instruction.partner);
+                if (!active || (!instruction.expression.empty()
+                    && evaluate(instruction.expression).truthy()==(instruction.argument=="until")))
+                    ip=static_cast<std::size_t>(instruction.partner);
                 break;
             case Statement::Type::EndWhile:
-                if (active) ip = static_cast<std::size_t>(instruction.partner) - 1;
+                if (active && (instruction.expression.empty()
+                    || evaluate(instruction.expression).truthy()!=(instruction.argument=="until")))
+                    ip=static_cast<std::size_t>(instruction.partner)-1;
+                break;
+            case Statement::Type::ExitDo:
+                if (active) {
+                    if (frames.size()<static_cast<std::size_t>(instruction.conditionalUnwind)
+                        || withFrames.size()<static_cast<std::size_t>(instruction.withUnwind)
+                        || loops.size()<static_cast<std::size_t>(instruction.forUnwind))
+                        throw VbaRuntimeError(5,"Exit Do stack invalid");
+                    frames.resize(frames.size()-instruction.conditionalUnwind);
+                    withFrames.resize(withFrames.size()-instruction.withUnwind);
+                    loops.resize(loops.size()-instruction.forUnwind);
+                    active=true; ip=static_cast<std::size_t>(instruction.partner);
+                }
                 break;
             case Statement::Type::SetVar:
                 if (active) {

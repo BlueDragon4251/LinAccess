@@ -70,7 +70,7 @@ Full targets remain open:
 - [ ] Modules/classes/CodeBehind, scope/lifetime, static/module variables and references.
 - [ ] Calls/returns, ByRef/ByVal, Optional/ParamArray, arrays, properties and collections.
 - [x] Native For Each/Next, Exit For, nested loops and DAO Fields enumeration; real 29-table structure regression.
-- [ ] With, Select Case, remaining Do/While/Exit variants and full conditional semantics.
+- [ ] Complete With/Select Case/Do/While/Exit grammar, type/error and conditional semantics.
 - [x] Imported-form Forms/Controls collections, guarded references, typed cross-form data writes and basic Access control constants.
 - [x] Value/reference contexts for Set and property assignment, dynamic Me(control), DAO Field bang references; six property writes in one original Form_Load verified.
 - [x] Unlinked native embedded child forms, Form references, Requery, typed edits and parent-close cancellation; original complex Form_Load and 15 actual data-driven Tags verified.
@@ -396,3 +396,7 @@ Full targets remain open:
 
 - [x] Bounded multiline Select Case lists/ranges/relations/Else, one-time selector,
   nested conditional/loop stacks, Resume regression and native Qt/SQL branches.
+
+- [x] Bounded Do Until, postcondition Loop While/Until, unconditional Do/Loop,
+  While/Wend and Exit Do with nested frame unwinding, error retry, budget limits
+  and native transaction-button SQL evidence.

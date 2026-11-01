@@ -1025,8 +1025,17 @@ If Not (DBEngine(0)(0) Is DBEngine(0)(0)) Then Err.Raise 5
 Me!lastError=0
 On Error GoTo failed
 session.BeginTrans
+Dim movement As Long
+movement=1
+Do Until movement>2
+Select Case movement
+Case 1
 CurrentDb.Execute "UPDATE balances SET amount=amount-10 WHERE id=1",dbFailOnError
+Case Else
 CurrentDb.Execute "UPDATE balances SET amount=amount+10 WHERE id=2",dbFailOnError
+End Select
+movement=movement+1
+Loop
 If Me.Tag="fail" Then CurrentDb.Execute "INSERT INTO balances VALUES(1,5)",dbFailOnError
 Select Case Me.Tag
 Case "rollback"
