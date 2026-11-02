@@ -1205,3 +1205,24 @@ pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass; repository privacy is unchanged. Earlier
 foreground-color commit b067f9c completed private CI successfully.
+
+## 2026-11-02 — Native SQL RGB and DAO color expressions
+
+Access SQL RGB(...) now registers a real SQLite adapter and shares its channel
+conversion with native VBA. Compiler function/purity recognition handles alias
+reuse and compiled joined-source views, retaining quoted RGB field identifiers.
+SQL error transport now preserves 450 (previously generic 3146). Actual DAO VBA
+reads calculated color fields and persists updates; NULL failures roll back the
+statement, including materialized joined updates. Conflicting source-view colors
+produce 3251 without modifying targets. Core/DAO/query-model/join targeted tests
+pass 4/4 (1.07 s), including parameters, types, arity, clamping and result reset.
+Original 100-query artifact / 32-module lexical RGB inventories are zero; no
+additional original business execution or full Jet parity is claimed. See
+SQL_RGB_RUNTIME.md.
+
+Final validation: host 21/21 (71.72 s), Debian 12 21/21 (73.02 s), Ubuntu
+24.04 21/21 (66.93 s), GUI-disabled core 1/1 (0.90 s). Fresh host/distro DEBs
+pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
+installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+All four original fixture hashes pass. Earlier control-background commit
+714fa54 completed private CI successfully.

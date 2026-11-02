@@ -31,7 +31,8 @@ The native VBA RGB(red,green,blue) intrinsic returns the corresponding packed
 color. Channels use existing scalar/numeric conversion and nearest-even rounding;
 values above 255 clamp to 255 under the documented contract. Empty becomes zero,
 Null is 94, invalid types 13, negative rounded channels 5, nonfinite values 6 and
-wrong argument count 450. This is a VBA intrinsic, not a new SQL UDF. QBColor,
+wrong argument count 450. The same primitive now also backs the native SQL adapter (SQL_RGB_RUNTIME.md).
+QBColor,
 complete typed-Integer coercion/error precedence and Windows oracle comparisons
 remain open.
 

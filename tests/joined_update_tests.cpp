@@ -87,5 +87,25 @@ int main(int argc,char** argv) {
     error=0; try { execute("UPDATE target AS d LEFT JOIN source AS s ON d.id=s.id SET d.stock=s.delta"); }
     catch(const VbaRuntimeError& failure) { error=failure.number; } assert(error==3251);
     assert(sql.exec("SELECT stock FROM target ORDER BY id") && sql.next() && sql.value(0).toDouble()==15 && sql.next() && sql.value(0).toDouble()==15 && sql.next() && sql.value(0).toDouble()==25); sql.finish();
+    assert(sql.exec("CREATE TABLE color_target(id INTEGER PRIMARY KEY,packed INTEGER)"));
+    assert(sql.exec("CREATE TABLE color_source(id INTEGER,r REAL,g REAL,b REAL)"));
+    assert(sql.exec("INSERT INTO color_target VALUES(1,99),(2,99)"));
+    assert(sql.exec("INSERT INTO color_source VALUES(1,255,0,0),(2,0,0,255)"));
+    execute("UPDATE color_target AS d INNER JOIN color_source AS s ON d.id=s.id SET d.packed=RGB(s.r,s.g,s.b)");
+    assert(database->member("RecordsAffected",{}).asNumber()==2);
+    assert(sql.exec("SELECT packed FROM color_target ORDER BY id") && sql.next() && sql.value(0).toInt()==255 && sql.next() && sql.value(0).toInt()==16711680); sql.finish();
+    assert(sql.exec("UPDATE color_target SET packed=99")); assert(sql.exec("UPDATE color_source SET r=NULL WHERE id=2"));
+    error=0; try { execute("UPDATE color_target AS d INNER JOIN color_source AS s ON d.id=s.id SET d.packed=RGB(s.r,s.g,s.b)"); }
+    catch(const VbaRuntimeError& failure) { error=failure.number; } assert(error==94);
+    assert(sql.exec("SELECT MIN(packed),MAX(packed) FROM color_target") && sql.next() && sql.value(0).toInt()==99 && sql.value(1).toInt()==99); sql.finish();
+    assert(sql.exec("UPDATE color_source SET r=0 WHERE id=2"));
+    const auto colorView=compileAccessQuery("SELECT id,RGB(r,g,b) AS shade FROM color_source");
+    assert(sql.exec("CREATE VIEW color_view AS "+colorView.sql));
+    execute("UPDATE color_target AS d INNER JOIN color_view AS s ON d.id=s.id SET d.packed=s.shade");
+    assert(sql.exec("SELECT packed FROM color_target ORDER BY id") && sql.next() && sql.value(0).toInt()==255 && sql.next() && sql.value(0).toInt()==16711680); sql.finish();
+    assert(sql.exec("UPDATE color_target SET packed=99")); assert(sql.exec("INSERT INTO color_source VALUES(1,0,255,0)"));
+    error=0; try { execute("UPDATE color_target AS d INNER JOIN color_view AS s ON d.id=s.id SET d.packed=s.shade"); }
+    catch(const VbaRuntimeError& failure) { error=failure.number; } assert(error==3251);
+    assert(sql.exec("SELECT MIN(packed),MAX(packed) FROM color_target") && sql.next() && sql.value(0).toInt()==99 && sql.value(1).toInt()==99); sql.finish();
     std::cout<<"Joined UPDATE: native arithmetic, parameters, typed NULL/binary values, frozen self-join, preserved outer targets, NULL/ambiguity/constraint rollback and writable-target boundaries passed\n";
 }

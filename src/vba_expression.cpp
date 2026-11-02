@@ -1,4 +1,5 @@
 #include "vba_expression.hpp"
+#include "vba_color.hpp"
 #include "vba_currency.hpp"
 #include "vba_analyzer.hpp"
 
@@ -670,16 +671,7 @@ private:
             }
             if (word=="rgb") {
                 if (!host_) return {};
-                if (args.size()!=3) throw error("RGB requires three color channels",450);
-                std::uint32_t color=0;
-                for (std::size_t index=0;index<3;++index) {
-                    const auto value=scalarObjectValue(args[index]);
-                    const auto channel=bankersRound(value.asNumber());
-                    if (!std::isfinite(channel)) throw error("RGB channel overflow",6);
-                    if (channel<0) throw error("Invalid negative RGB channel",5);
-                    color|=static_cast<std::uint32_t>(std::min(channel,255.0))<<(index*8);
-                }
-                return VbaValue::numeric(color);
+                return vbaRgb(args);
             }
             if ((word == "isnull" || word == "isempty" || word == "len" || word == "cstr"
                 || word == "clng" || word == "cdbl" || word == "ucase"
@@ -843,6 +835,19 @@ VbaValue scalarObjectValue(VbaValue value) {
     throw VbaRuntimeError(28,"Recursive object default value");
 }
 }
+VbaValue vbaRgb(const std::vector<VbaValue>& arguments) {
+    if (arguments.size()!=3) throw error("RGB requires three color channels",450);
+    std::uint32_t color=0;
+    for (std::size_t index=0;index<3;++index) {
+        const auto value=scalarObjectValue(arguments[index]);
+        const auto channel=bankersRound(value.asNumber());
+        if (!std::isfinite(channel)) throw error("RGB channel overflow",6);
+        if (channel<0) throw error("Invalid negative RGB channel",5);
+        color|=static_cast<std::uint32_t>(std::min(channel,255.0))<<(index*8);
+    }
+    return VbaValue::numeric(color);
+}
+
 int VbaHost::compareStrings(std::string_view left,std::string_view right,VbaCompareMode mode) {
     if (mode==VbaCompareMode::Binary) return utf16String(left).compare(utf16String(right));
     const auto fold=[](std::string_view text) {

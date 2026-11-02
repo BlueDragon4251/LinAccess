@@ -455,3 +455,11 @@ no-CodeBehind probes cover 55 original layouts (326 Normal / 587 Transparent /
 414 retained colors). Original business coverage is unchanged. Report runtime
 setters, other control/section backgrounds, disabled-state and Windows rendering
 parity remain open; see [Control backgrounds](CONTROL_BACKGROUND_RUNTIME.md).
+
+RGB(...) now also executes through the native SQL/DAO path, sharing the VBA
+primitive. Quoted names, parameters and alias/view reuse are tested alongside
+real DAO reads/writes and atomic direct/joined update failures. NULL/type/arity
+errors propagate explicitly, including SQL error 450. Original RGB call inventory
+is zero in 100 query artifacts and 32 VBA modules; original business coverage is
+unchanged. This does not establish complete Jet function/coercion parity; see
+[SQL RGB](SQL_RGB_RUNTIME.md).

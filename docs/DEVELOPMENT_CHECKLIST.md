@@ -435,3 +435,7 @@ Full targets remain open:
   real opaque/transparent composite pixels, masked-buffer/SQL/permission/
   navigation preservation and 55 original layout probes (326 Normal / 587
   Transparent / 414 colors); other adapters and full Windows visuals remain open.
+
+- [x] Shared native VBA/SQL RGB primitive with real query/DAO fields, parameters,
+  quoted identifiers, alias/view reuse, error transport and atomic direct/joined
+  updates including invalid channels and conflicting source colors.

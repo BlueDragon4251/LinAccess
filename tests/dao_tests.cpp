@@ -28,10 +28,45 @@ private:
 };
 void testDaoCursors();
 void testDaoTransactions();
+void testSqlRgbDao() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","sql-rgb-dao"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE color_rows(id INTEGER PRIMARY KEY,r REAL,g REAL,b REAL,packed INTEGER)"));
+    assert(sql.exec("INSERT INTO color_rows VALUES(1,255,0,0,0),(2,0,255,0,0)"));
+    Host host(db);
+    const auto painted=linaccess::executeVbaProcedure(R"VBA(Sub PaintRows()
+Dim database As DAO.Database
+Dim rows As DAO.Recordset
+Set database=CurrentDb
+Set rows=database.OpenRecordset("SELECT id,RGB(r,g,b) AS shade FROM color_rows ORDER BY id")
+Me!FirstShade=rows!shade
+rows.MoveNext
+Me!SecondShade=rows!shade
+rows.Close
+database.Execute "UPDATE color_rows SET packed=RGB(r,g,b)"
+Me!ColorAffected=database.RecordsAffected
+End Sub
+)VBA","PaintRows",host);
+    assert(painted.status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["FirstShade"]=="255" && host.fields["SecondShade"]=="65280" && host.fields["ColorAffected"]=="2");
+    assert(sql.exec("SELECT packed FROM color_rows ORDER BY id") && sql.next() && sql.value(0).toInt()==255 && sql.next() && sql.value(0).toInt()==65280); sql.finish();
+    assert(sql.exec("UPDATE color_rows SET packed=99")); assert(sql.exec("INSERT INTO color_rows VALUES(3,NULL,0,0,99)"));
+    const auto rejected=linaccess::executeVbaProcedure(R"VBA(Sub InvalidColor()
+Dim database As DAO.Database
+Set database=CurrentDb
+On Error Resume Next
+database.Execute "UPDATE color_rows SET packed=RGB(r,g,b)"
+Me!ColorError=CStr(Err.Number)
+End Sub
+)VBA","InvalidColor",host);
+    assert(rejected.status==linaccess::VbaExecutionStatus::Completed && host.fields["ColorError"]=="94");
+    assert(sql.exec("SELECT COUNT(*),MIN(packed),MAX(packed) FROM color_rows") && sql.next());
+    assert(sql.value(0).toInt()==3 && sql.value(1).toInt()==99 && sql.value(2).toInt()==99); sql.finish();
+}
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     testDaoCursors();
     testDaoTransactions();
+    testSqlRgbDao();
     auto db = QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery q(db);
     assert(q.exec("CREATE TABLE items (id INTEGER PRIMARY KEY, qty REAL, label TEXT DEFAULT 'default')"));

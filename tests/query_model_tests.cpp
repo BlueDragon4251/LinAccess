@@ -9,6 +9,7 @@
 #undef NDEBUG
 #endif
 #include <cassert>
+#include <iostream>
 int main(int argc, char** argv) {
     QCoreApplication app(argc,argv);
     auto db = QSqlDatabase::addDatabase("QSQLITE");
@@ -29,6 +30,38 @@ int main(int argc, char** argv) {
         assert(!query.exec("SELECT linaccess_jet_len(CAST(x'ff' AS TEXT))"));
         assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==13); query.finish();
 
+    }
+
+    {
+        assert(query.exec("CREATE TABLE color_channels(id INTEGER PRIMARY KEY,r REAL,g REAL,b REAL,[RGB] TEXT)"));
+        assert(query.exec("INSERT INTO color_channels VALUES(1,255,0,0,'first'),(2,0,255,0,'second'),(3,0,0,255,'third'),(4,300,127.5,0.5,'rounded')"));
+        linaccess::AccessQueryModel colors;
+        colors.execute(db,"SELECT [RGB],RGB(r,g,b) AS shade,shade+1 AS next_shade FROM color_channels ORDER BY id");
+        assert(colors.rowCount()==4 && colors.columnCount()==3);
+        const int expected[]={255,65280,16711680,33023};
+        for(int row=0;row<4;++row) {
+            assert(colors.data(colors.index(row,1)).toInt()==expected[row]);
+            assert(colors.data(colors.index(row,2)).toInt()==expected[row]+1);
+        }
+        assert(colors.data(colors.index(0,0)).toString()=="first");
+        colors.execute(db,"PARAMETERS [red] Double,[green] Double,[blue] Double; SELECT rGb([red],[green],[blue]) AS shade",{{"red",1.0},{"green",2.0},{"blue",3.0}});
+        assert(colors.rowCount()==1 && colors.data(colors.index(0,0)).toInt()==197121);
+        colors.execute(db,"SELECT RGB(1e100,0,0) AS shade,RGB(False,0,0) AS black");
+        assert(colors.data(colors.index(0,0)).toInt()==255 && colors.data(colors.index(0,1)).toInt()==0);
+        const auto rejectColor=[&](const QString& sql,int expectedError) {
+            int number=0; try { colors.execute(db,sql); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; }
+            if(number!=expectedError || colors.rowCount()!=0 || colors.columnCount()!=0) std::cerr<<"Synthetic RGB error: expected="<<expectedError<<", actual="<<number<<", rows="<<colors.rowCount()<<", columns="<<colors.columnCount()<<"\n";
+            assert(number==expectedError && colors.rowCount()==0 && colors.columnCount()==0);
+        };
+        rejectColor("SELECT RGB(Null,0,0)",94);
+        rejectColor("SELECT RGB('bad',0,0)",13);
+        rejectColor("SELECT RGB(CAST(1 AS BLOB),0,0)",13);
+        rejectColor("SELECT RGB(True,0,0)",5);
+        rejectColor("SELECT RGB(1,2)",450);
+        rejectColor("SELECT RGB()",450);
+        assert(query.exec("SELECT linaccess_jet_rgb(255,255,255)") && query.next() && query.value(0).toInt()==16777215); query.finish();
+        assert(!query.exec("SELECT linaccess_jet_rgb(Null,0,0)"));
+        assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==94); query.finish();
     }
 
     const auto expensive=QString("WITH RECURSIVE numbers(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM numbers WHERE x<100000) SELECT sum(x) FROM numbers");
