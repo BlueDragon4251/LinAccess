@@ -593,3 +593,7 @@ Full targets remain open:
 - [x] Native VarType scalar-default capability for controls/DAO/Err, recursive/
   single-read/error propagation and actual Qt/SQL type-code/EOF/closed-object
   regression; full COM/class/default/type/lifetime/Windows identities remain open.
+
+- [x] Native ASCII Asc/Chr and supported UTF-16 AscW/ChrW, checked errors/types,
+  actual Qt/DAO/SQL and three unchanged original KeyPress procedures (384 direct/
+  285 Qt cases); ANSI/DBCS/full BSTR/SQL/Windows/business identity remain open.

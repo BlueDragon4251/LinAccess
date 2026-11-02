@@ -677,3 +677,10 @@ and actual Qt/VBA/SQL type-code regression. Err.Number retains Long; existing
 closed recordset data guards now use 3420. Full COM/class/non-Value defaults,
 TypeName class metadata, imported field subtypes and DAO identity remain open.
 See DEFAULT_TYPE_INSPECTION_RUNTIME.md.
+
+Native Asc/Chr execute ASCII0..127 and AscW/ChrW supported UTF-16 cases, with
+checked types/errors, actual Qt/VBA/DAO/SQL and pending/save regression. Three
+unchanged original KeyPress procedures execute over 384 direct/285 Qt input cases
+on prepared native controls, with original byte hashes verified. This is wiring/
+execution evidence, not Windows or full-form/business parity. ANSI/DBCS, byte
+strings, dollar aliases, full BSTR and SQL rewriting remain open. See CHARACTER_FUNCTIONS_RUNTIME.md.

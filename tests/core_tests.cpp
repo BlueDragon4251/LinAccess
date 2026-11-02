@@ -249,7 +249,33 @@ void testDefaultTypeInspection() {
     result=executeVbaProcedure(code,"ErrorNumberType",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==3);
 }
 
+void testCharacterFunctions() {
+    using namespace linaccess;
+    FakeForm host;
+    const auto eval=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,{}); };
+    assert(eval("Asc(\"Apple\")").number==65 && eval("VarType(Asc(\"A\"))=vbInteger").truthy());
+    assert(eval("Asc(Chr(0))").number==0 && eval("Asc(Chr(127))").number==127);
+    assert(eval("Chr(65.5)").asText()=="B" && eval("Chr(10)").asText()=="\n");
+    assert(eval("ChrW(937)").asText()=="Ω" && eval("AscW(\"Ω\")").number==937);
+    assert(eval("AscW(\"耀\")").number==-32768 && eval("AscW(\"😀\")").number==-10179);
+    assert(eval("AscW(ChrW(-32768))").number==-32768 && eval("AscW(ChrW(-1))").number==-1);
+    assert(eval("VarType(AscW(\"Ω\"))=vbInteger").truthy() && eval("TypeName(ChrW(937))").asText()=="String");
+    assert(eval("Asc(12)").number==49 && eval("ChrW(\" 65 \")").asText()=="A");
+    const auto probe=std::make_shared<ScalarProbe>(); probe->value=VbaValue::string("A");
+    assert(evaluateVbaExpression("Asc(probe)",host,{{"probe",VbaValue::reference(probe)}}).number==65 && probe->reads==1);
+    probe->value=VbaValue::numeric(937); assert(evaluateVbaExpression("ChrW(probe)",host,{{"probe",VbaValue::reference(probe)}}).asText()=="Ω" && probe->reads==2);
+    for(const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
+        {"Asc(\"\")",5},{"AscW(Empty)",5},{"Asc(Null)",94},{"Chr(Null)",94},
+        {"Asc(CVErr(11))",13},{"ChrW(\"invalid\")",13},{"Asc(Nothing)",91},
+        {"Asc()",450},{"ChrW(1,2)",450},{"Asc(\"Ω\")",3251},{"Chr(128)",3251},
+        {"ChrW(65536)",5},{"ChrW(-32769)",5},{"ChrW(2147483648)",6},
+        {"ChrW(55357)",3251},{"ChrW(-10179)",3251}}) {
+        int actual=0; try { (void)eval(expression); } catch(const VbaRuntimeError& error) { actual=error.number; } assert(actual==code);
+    }
+}
+
 int main() {
+    testCharacterFunctions();
     testDefaultTypeInspection();
     testTypedNot();
     {

@@ -640,6 +640,24 @@ private:
                 if (args.size()!=1) throw error("IsArray requires one argument",450);
                 return VbaValue::logical(args[0].kind==VbaValue::Kind::ByteArray);
             }
+            if(word=="asc" || word=="ascw" || word=="chr" || word=="chrw") {
+                if(!host_) return {};
+                if(args.size()!=1) throw error("Character conversion requires one argument",450);
+                const auto value=scalarObjectValue(args.front());
+                if(value.kind==VbaValue::Kind::Null) throw error("Invalid Null character argument",94);
+                if(word=="asc" || word=="ascw") {
+                    const auto input=utf16String(value.asText());
+                    if(input.empty()) throw error("Empty character argument",5);
+                    const auto unit=static_cast<int>(input.front());
+                    if(word=="asc" && unit>127) throw error("ANSI character codepage conversion is not implemented",3251);
+                    return VbaValue::integer(static_cast<std::int16_t>(unit>=32768 ? unit-65536 : unit));
+                }
+                const auto code=static_cast<std::int32_t>(coerceVbaModuleValue(value,"long").number);
+                if(code < -32768 || code>65535) throw error("Invalid character code",5);
+                if(word=="chr" && (code<0 || code>127)) throw error("ANSI character codepage conversion is not implemented",3251);
+                const auto unit=static_cast<char16_t>(code<0 ? code+65536 : code);
+                return VbaValue::string(utf8String(std::u16string(1,unit)));
+            }
             if (word=="cbyte" || word=="cint" || word=="clng" || word=="csng" || word=="cdbl" || word=="cbool") {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Conversion requires one argument",450);

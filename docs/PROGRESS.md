@@ -1889,3 +1889,22 @@ Full validation: host 29/29 (106.37 s), Debian 12 29/29 (82.32 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 6d00c90 and 0fd9b43 private CI completed successfully.
+
+## 2026-11-02 — Native character functions and original KeyPress execution
+
+Added native ASCII Asc/Chr and supported UTF-16 AscW/ChrW with checked subtype/
+scalar/range/Null/unsupported-codepage handling. Core and actual bound/calculated
+Qt/VBA/DAO/SQL round-trip/pending-save tests pass 2/2 (1.15 s). New original
+regression SHA-verifies unchanged module bytes and executes three KeyPress
+procedures over 384 direct ASCII and 285 printable Qt cases on prepared native
+controls. Actual field effects/parameter outcomes verify wiring. access_2003_layouts passes
+(12.61 s). GUI suite now has 30 CTests. No full original form/business or Windows
+oracle claim; ANSI/DBCS/full BSTR/SQL/function/keyboard limits remain explicit.
+See CHARACTER_FUNCTIONS_RUNTIME.md.
+
+Full validation: host 30/30 (97.61 s), Debian 12 30/30 (94.31 s), Ubuntu
+24.04 30/30 (83.33 s), Debian 13 30/30 (82.17 s), GUI-disabled core 1/1
+(1.58 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+a357ed9 private CI completed successfully.

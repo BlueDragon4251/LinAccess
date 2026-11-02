@@ -58,6 +58,7 @@ void testFormObjects();
 void testReportEvents();
 void testReportCorpus(const QDir&,const QJsonArray&,const QString&);
 void testOriginalControls(const QDir&,const QJsonArray&);
+void testOriginalAsciiKeyPress(const QDir&,const QJsonArray&);
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
@@ -250,6 +251,7 @@ End Sub
     testDocumentLifetimes();
     testDynamicCombos();
     testKeyboardCommands();
+    testOriginalAsciiKeyPress(directory,objects);
     testOpenFormCommands();
     testActiveDocumentCommands();
     testOptionGroups();
