@@ -2087,3 +2087,22 @@ Full validation: host 38/38 (128.74 s), Debian 12 38/38 (103.69 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 03704c9 private CI completed successfully.
+
+## 2026-11-02 — Bounded Currency/Money query parameters
+
+Reproduced unavailable Currency parameter declarations (0/1). Added typed fixed
+Currency Value/dbCurrency, scalar-once and checked failure retention, numeric
+binding through the lossless +/-2^39 REAL interval and Money alias. Actual native
+DAO/SQL and bound Qt/VBA UPDATE/requery regressions pass 3/3 (0.33 s), checking
+large inserts/recovery, numeric-versus-text comparison, rounding/Null/missing/
+readonly/lifetime and failed assignments without extra effects. GUI suite has
+39 CTests. Full-range/SQL money arithmetic/formatting/result typing/LIKE/Windows
+identity remain open. No full original business workflow increment. See
+CURRENCY_PARAMETERS_RUNTIME.md.
+
+Full validation: host 39/39 (106.15 s), Debian 12 39/39 (110.08 s), Ubuntu
+24.04 39/39 (95.17 s), Debian 13 39/39 (98.20 s), GUI-disabled core 1/1
+(1.87 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+3d5606b private CI completed successfully.

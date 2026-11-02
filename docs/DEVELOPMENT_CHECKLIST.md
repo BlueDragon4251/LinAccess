@@ -633,3 +633,7 @@ Full targets remain open:
 - [x] Bounded native direct-table Currency fields/dbCurrency with lossless REAL
   encoding inside +/-2^39, exact Qt text/DAO/pending/save/OldValue/Undo/copy and
   independent 121613 original values; full-range/SQL/query/Windows money remains open.
+
+- [x] Bounded Currency/Money SQL parameters with fixed Value/dbCurrency, numeric
+  binding, checked rounding/ranges/Null/retention/lifetime and actual Qt/VBA UPDATE;
+  full-range/SQL money/LIKE/result typing/Windows identity remains open.

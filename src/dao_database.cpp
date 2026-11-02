@@ -591,10 +591,21 @@ public:
         source_ = source; plan_ = compiled; values_.clear(); parameterObjects_.clear(); ++generation_;
     }
     VbaValue parameter(const QString& name) const {
-        checkParameter(name); return fromSql(values_.value(name.toCaseFolded()));
+        checkParameter(name);
+        const auto stored=values_.value(name.toCaseFolded());
+        for(const auto& parameter:plan_.parameters)
+            if(parameter.type=="currency" && parameter.name.compare(name,Qt::CaseInsensitive)==0)
+                return qtFieldValue(stored,"CURRENCY_REAL");
+        return fromSql(stored);
     }
     void setParameter(const QString& name, const VbaValue& value) {
-        checkParameter(name); values_.insert(name.toCaseFolded(),toSql(value));
+        checkParameter(name);
+        for(const auto& parameter:plan_.parameters)
+            if(parameter.type=="currency" && parameter.name.compare(name,Qt::CaseInsensitive)==0) {
+                const auto converted=sqlFieldValue(value,"CURRENCY_REAL");
+                values_.insert(name.toCaseFolded(),converted); return;
+            }
+        values_.insert(name.toCaseFolded(),toSql(value));
     }
 private:
     friend class QueryParameter;
@@ -671,7 +682,7 @@ VbaValue QueryParameter::member(std::string_view name, const std::vector<VbaValu
     if (lower(name) == "name") return VbaValue::string(name_.toUtf8().toStdString());
     if (lower(name)=="type") {
         static const QMap<QString,int> types{{"boolean",1},{"yesno",1},{"byte",2},
-            {"short",3},{"integer",4},{"long",4},{"single",6},{"double",7},
+            {"short",3},{"integer",4},{"long",4},{"currency",5},{"single",6},{"double",7},
             {"date",8},{"datetime",8},{"text",10},{"varchar",10},{"char",10}};
         for (const auto& parameter:query_->plan_.parameters) if (parameter.name.compare(name_,Qt::CaseInsensitive)==0) {
             const auto type=types.constFind(parameter.type);

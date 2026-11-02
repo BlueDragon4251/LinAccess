@@ -744,3 +744,10 @@ All 121613 original non-NULL Currency field values match independent CSV decimal
 row/NULL multisets. Qt/VBA/DAO tests cover pending/save/OldValue/Undo/range checks.
 Full-range/SQL operators/parameters/query subtype/locale/Windows money identity
 remain open. See [CURRENCY_FIELDS_RUNTIME.md](CURRENCY_FIELDS_RUNTIME.md).
+
+Currency/Money query parameters now expose checked fixed Currency Value and
+Integer dbCurrency Type, binding numerically through the lossless +/-2^39 REAL
+interval. Native DAO/SQL and actual bound Qt/VBA UPDATE/requery regressions cover
+rounding/ranges/Null/error retention and numeric comparison. Full-range/SQL money
+operators/formatting/result typing/Windows identity remain open; Currency LIKE
+conversion diagnoses 3251. See [CURRENCY_PARAMETERS_RUNTIME.md](CURRENCY_PARAMETERS_RUNTIME.md).

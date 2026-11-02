@@ -1,4 +1,5 @@
 #include "access_query.hpp"
+#include "vba_qt_value.hpp"
 #include "jet_sql_functions.hpp"
 #include "sqlite_execution.hpp"
 #include <QSqlError>
@@ -665,6 +666,7 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
             require(pos < tokens.size() && tokens[pos].kind == Token::Word, "Jet SQL: parameter type required");
             auto type = tokens[pos++].value.toCaseFolded();
             static const QMap<QString,QString> aliases{
+                {"money","currency"},
                 {"bit","boolean"},{"logical","boolean"},{"logical1","boolean"},
                 {"integer","long"},{"int","long"},{"integer4","long"},
                 {"smallint","short"},{"integer2","short"},
@@ -672,9 +674,10 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
                 {"real","single"},{"float4","single"},{"ieeesingle","single"},
                 {"float","double"},{"float8","double"},{"ieeedouble","double"},{"number","double"}};
             type=aliases.value(type,type);
-            const QSet<QString> types{"long","integer","short","byte","single","double","text","varchar","char","boolean","yesno","datetime","date","value"};
+            const QSet<QString> types{"long","integer","short","byte","single","double","currency","text","varchar","char","boolean","yesno","datetime","date","value"};
             require(types.contains(type), "Jet SQL: parameter type unsupported");
             if (pos < tokens.size() && tokens[pos].value == "(") {
+                require(type!="currency","Jet SQL: Currency parameter width unsupported");
                 ++pos; require(pos < tokens.size() && tokens[pos].kind == Token::Other, "Jet SQL: type width required");
                 bool valid = false; const auto width = tokens[pos++].value.toInt(&valid);
                 require(valid && width > 0 && pos < tokens.size() && tokens[pos++].value == ")", "Jet SQL: invalid type width");
@@ -1019,7 +1022,10 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
         }
         QVariant converted = value;
         const auto& type = parameter.type;
-        if (type=="value") {
+        if(type=="currency") {
+            if(parameter.likePattern) throw VbaRuntimeError(3251,"Currency LIKE parameter conversion is not implemented");
+            converted=sqlFieldValue(qtFieldValue(value,{}),"CURRENCY_REAL");
+        } else if (type=="value") {
             const auto kind=value.metaType().id();
             if (kind==QMetaType::Bool) converted=value.toBool() ? -1 : 0;
             else if (kind==QMetaType::QDateTime) {

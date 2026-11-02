@@ -55,6 +55,16 @@ End Sub
 Sub ChangeValue()
 Me!amount=CCur("0.1")+CCur("0.2")
 End Sub
+Function ParameterUpdate(ByVal value As Currency)
+Dim q As DAO.QueryDef
+Set q=CurrentDb.CreateQueryDef("","PARAMETERS p Currency; UPDATE cash SET amount=p WHERE id=1")
+q.Parameters("p").Value=value
+If q.Parameters("p").Type<>dbCurrency Then Err.Raise 5
+If VarType(q.Parameters("p"))<>vbCurrency Then Err.Raise 5
+q.Execute
+Me.Requery
+ParameterUpdate=VarType(q.Parameters("p").Value)
+End Function
 Sub GoLast()
 DoCmd.GoToRecord , , acLast
 End Sub
@@ -118,6 +128,10 @@ End Sub
     int error=0; try { (void)invalid->member("Fields",{VbaValue::string("amount")}).object->member("Value",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==13);
     invalid->member("Close",{}); assert(db.rollback());
     assert(sql.exec("SELECT amount FROM cash WHERE id=1") && sql.next() && sql.value(0).toDouble()==1.2346); sql.finish();
+    std::vector<VbaValue> parameterArguments{VbaValue::currency(5000)};
+    const auto parameterUpdate=form.executeProcedure("ParameterUpdate",parameterArguments);
+    assert(parameterUpdate.status==linaccess::VbaExecutionStatus::Completed && parameterUpdate.typedReturnValue->number==6);
+    assert(model->item("amount").currencyUnits==5000 && model->item("incremented").currencyUnits==5001 && !form.hasUnsavedChanges());
     assert(form.executeProcedure("GoLast",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(editor->text()=="549755813887.9999" && model->item("amount").currencyUnits==5497558138879999LL && !form.hasUnsavedChanges());
     assert(form.executeProcedure("NewRow",none).status==linaccess::VbaExecutionStatus::Completed && model->member("NewRecord",{}).boolean);

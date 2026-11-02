@@ -19,8 +19,9 @@ Writes convert through the existing checked Currency conversion and validate the
 same round trip before field/buffer mutation. Valid Currency outside this backing
 range diagnoses 3251; noncanonical/nonfinite stored numbers diagnose 13. Exact
 full-range unbound Currency arithmetic and existing TEXT-result paths retain
-their previous behavior. QueryDef Currency parameter declarations remain
-unsupported; regression results are explicitly stored via Text parameters.
+their previous behavior. [Currency query parameters](CURRENCY_PARAMETERS_RUNTIME.md) subsequently add
+bounded typed/numeric binding. Exact formatted regression results in this field
+test remain explicitly stored via Text parameters.
 
 Text controls format these fields from recovered integer units, avoiding Double
 string shortening during load, assignment or Ctrl+apostrophe. Pending Text/Value,
@@ -46,7 +47,7 @@ layout and Kassa-DAO regressions also pass. The corrected native test passes 1/1
 GUI suite now has 38 CTests; full validation is recorded in PROGRESS.md.
 
 Full-range exact field storage, raw SQL Currency coercion/operators/aggregates/
-sorting, Currency parameters, saved-query/computed-column subtype propagation,
+sorting, full-range/SQL parameter semantics, saved-query/computed-column subtype propagation,
 Single/Decimal/Date storage and full Jet/Windows parity remain open. Raw SQLite
 writes can still violate the four-decimal/range contract; native reads diagnose
 that storage rather than guessing a value. This bounded native field adapter
