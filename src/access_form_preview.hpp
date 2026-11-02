@@ -61,6 +61,8 @@ private:
     void loadRecords();
     void setFilterState(const QString& filter,bool enabled);
     void loadRecord();
+    static bool supportsControlDefault(const linaccess::AccessVisualControl& control);
+    void initializeControlDefaults(bool unbound);
     bool saveRecord();
     void setTimerInterval(int interval);
     void selectCurrentRecordForCommand();
@@ -106,7 +108,7 @@ private:
     linaccess::VbaValue calculatedControlValue(const QString& name) const;
     void refreshCalculatedControls();
     linaccess::VbaValue controlColumnValue(const QString& name,const std::vector<linaccess::VbaValue>& arguments);
-    void setFieldValue(std::string_view name,const linaccess::VbaValue& value);
+    void setFieldValue(std::string_view name,const linaccess::VbaValue& value,bool initializingDefault=false);
     friend class PreviewVbaHost;
     friend void connectPreviewSqlObjects(QSqlDatabase db);
     friend std::shared_ptr<linaccess::VbaObject> makePreviewFormObject(AccessFormPreview&);

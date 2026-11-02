@@ -416,3 +416,7 @@ Full targets remain open:
 - [x] Bounded Form.AllowEdits import/VBA/user-input policy, programmatic dirty
   exception/save/Undo, unbound/new-row handling, deletion preflight, checkbox and
   group-only Click, callback lifetime and five original flag-retention probes.
+
+- [x] Bounded form-control DefaultValue metadata/templates and literal new-row/
+  unbound initialization, no spurious events/inserts/ID allocation, native VBA/
+  SQL/empty-NULL/mirror/error recovery evidence and 34/15 original metadata probes.

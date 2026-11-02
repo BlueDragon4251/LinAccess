@@ -119,6 +119,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
     QVector<Block> stack;
     QHash<QString, int> sections;
     QHash<QString,AccessControlFont> templateFonts;
+    QHash<QString,QString> templateDefaults;
     static const QRegularExpression begin(R"(^\s*Begin(?:\s+(\w+))?\s*$)",
         QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression property(R"(^\s*([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$)");
@@ -142,6 +143,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 AccessVisualControl item;
                 item.type = type;
                 item.font = templateFonts.value(type);
+                item.defaultValue = templateDefaults.value(type);
                 for (auto it=stack.crbegin();it!=stack.crend();++it)
                     if (it->type=="OptionGroup" && it->control>=0) { item.optionGroupIndex=it->control; break; }
                 item.section = section;
@@ -168,6 +170,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             continue;
         }
         const auto integer = [&] { bool ok = false; const int result = value.toInt(&ok); return ok ? result : 0; };
+        if (key=="DefaultValue" && value.size()>255) throw std::runtime_error("Imported default expression exceeds 255 code units");
+        if (current.controlTemplate && key=="DefaultValue") { templateDefaults[current.type]=value; continue; }
         if (current.controlTemplate && fontProperty(templateFonts[current.type],key,value)) continue;
         if (current.control >= 0) {
             auto& control = form.controls[current.control];

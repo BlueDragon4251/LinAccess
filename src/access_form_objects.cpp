@@ -71,6 +71,10 @@ public:
         auto& preview = checked();
         auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (key=="defaultvalue") {
+            if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected DefaultValue arguments");
+            return linaccess::VbaValue::string(bytes(defaultDefinition().defaultValue));
+        }
         if (fontProperty(key)) {
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected font property arguments");
             (void)fontDefinition();
@@ -208,6 +212,14 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (key=="defaultvalue") {
+            auto& definition=defaultDefinition();
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null DefaultValue");
+            const auto expression=scalar.asText();
+            if (linaccess::vbaStringCodeUnits(expression)>255) throw linaccess::VbaRuntimeError(5,"DefaultValue expression exceeds 255 code units");
+            definition.defaultValue=text(expression); return;
+        }
         if (fontProperty(key)) {
             auto& definition=fontDefinition();
             if (preview.layout_.kind==linaccess::AccessDocumentKind::Report)
@@ -354,6 +366,14 @@ public:
         throw linaccess::VbaRuntimeError(438,"Control property is unavailable or read-only");
     }
 private:
+    linaccess::AccessVisualControl& defaultDefinition() const {
+        if (checked().layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"DefaultValue requires a form control");
+        for(auto& definition:checked().layout_.controls) if(definition.name.compare(name_,Qt::CaseInsensitive)==0) {
+            if (!AccessFormPreview::supportsControlDefault(definition)) throw linaccess::VbaRuntimeError(438,"Control has no native DefaultValue adapter");
+            return definition;
+        }
+        throw linaccess::VbaRuntimeError(2465,"Control unavailable");
+    }
     static bool fontProperty(const QString& key) {
         return key=="fontname" || key=="fontsize" || key=="fontweight" || key=="fontbold" || key=="fontitalic" || key=="fontunderline";
     }

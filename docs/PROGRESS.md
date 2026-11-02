@@ -1105,3 +1105,25 @@ exact payload/backend/permissions/fixture-exclusion checks; isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. Five original flag-retention probes and zero
 original writable-source policy transitions are recorded separately.
+
+Control default increment: DefaultValue now inherits declared control templates
+and exposes native expression-string metadata getters/setters. Numeric/string/
+Null/Boolean literals initialize unbound controls and writable-table new rows
+without data events, Dirty changes, inserts or sequence advances. Existing rows
+and current Value remain independent of metadata changes. Shared fields mirror
+one default; conflicts and unsupported expressions raise explicit errors and
+cannot insert a partial row. Manual input can resolve a failed default. Native
+VBA/Qt/SQL tests cover Unicode, empty-versus-NULL, locked fields, overrides, error/
+scalar/UTF-16 preflight and actual ID/row persistence (targeted 39.04 s).
+All 34 original nonempty metadata entries are retained and 15 unbound literal
+initializations match the separate native expression parser, using an empty DB
+and no supplied original CodeBehind/table data. No original bound-new-record or
+business-handler execution claim follows. Computed/Jet table/default timing/
+typing boundaries remain open (CONTROL_DEFAULT_RUNTIME.md).
+
+Validation: host 21/21 (87.53 s), Debian 12 21/21 (67.46 s), Ubuntu 24.04
+21/21 (62.39 s), GUI-disabled core 1/1 (1.05 s). Fresh host/distro DEBs pass
+exact payload/backend/permissions/fixture-exclusion checks; isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. Original counts remain 34 metadata / 15 unbound
+literal initializations / zero unsupported adapters for these entries.

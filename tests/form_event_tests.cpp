@@ -43,6 +43,7 @@ void testCycleClose();
 void testControlFonts();
 void testAllowEdits();
 void testCheckboxClose();
+void testControlDefaults();
 
 void testFormEvents() {
     testInsertionEvents();
@@ -58,6 +59,7 @@ void testFormEvents() {
     testControlFonts();
     testAllowEdits();
     testCheckboxClose();
+    testControlDefaults();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -1993,4 +1995,238 @@ End
     assert(sql.exec("SELECT COUNT(*) FROM records") && sql.next() && sql.value(0).toInt()==1); sql.finish();
     assert(sql.exec("SELECT COUNT(*) FROM events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
     assert(caller.close());
+}
+
+void testControlDefaults() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","control-default-values"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY AUTOINCREMENT,qty INTEGER DEFAULT 42,txt TEXT,empty TEXT,missing TEXT,flag INTEGER,opt TEXT,locked TEXT,server TEXT DEFAULT 'server')"));
+    assert(sql.exec("INSERT INTO records(qty,txt,flag,opt,locked) VALUES(42,'existing',0,'a','persisted')"));
+    assert(sql.exec("CREATE TABLE trace(event TEXT)"));
+    const QByteArray source=R"FORM(Begin Form
+RecordSource ="records"
+AllowEdits =NotDefault
+BeforeInsert ="[Event Procedure]"
+OnDirty ="[Event Procedure]"
+Begin
+Begin TextBox
+DefaultValue ="5"
+End
+End
+Begin Section
+Begin TextBox
+Name ="id"
+ControlSource ="id"
+DefaultValue ="99"
+Locked =NotDefault
+End
+Begin TextBox
+Name ="qty"
+ControlSource ="qty"
+DefaultValue ="7"
+OnChange ="[Event Procedure]"
+Top =400
+End
+Begin TextBox
+Name ="mirror"
+ControlSource ="qty"
+DefaultValue =""
+Top =800
+End
+Begin TextBox
+Name ="txt"
+ControlSource ="txt"
+DefaultValue ="\"A😀Z\""
+Top =1200
+End
+Begin TextBox
+Name ="empty"
+ControlSource ="empty"
+DefaultValue ="\"\""
+Top =1600
+End
+Begin TextBox
+Name ="missing"
+ControlSource ="missing"
+DefaultValue =""
+Top =2000
+End
+Begin TextBox
+Name ="locked"
+ControlSource ="locked"
+DefaultValue ="\"locked default\""
+Locked =NotDefault
+Top =2400
+End
+Begin CheckBox
+Name ="flag"
+Caption ="Flag"
+ControlSource ="flag"
+DefaultValue ="True"
+Top =2800
+End
+Begin ComboBox
+Name ="opt"
+ControlSource ="opt"
+RowSourceType ="Value List"
+RowSource ="a;b"
+DefaultValue ="\"b\""
+Top =3200
+End
+Begin TextBox
+Name ="unbound"
+Top =3600
+End
+Begin TextBox
+Name ="raw"
+DefaultValue ="\"seed\""
+InputMask ="Password"
+Top =4000
+End
+Begin TextBox
+Name ="null"
+DefaultValue ="Null"
+Top =4400
+End
+Begin CommandButton
+Name ="remember"
+Caption ="Remember"
+OnClick ="[Event Procedure]"
+Top =4800
+End
+End
+End
+)FORM";
+    const QByteArray code=R"VBA(Sub remember_Click()
+Me!qty.DefaultValue="11"
+Me!txt.DefaultValue="""next"""
+Me.Tag=Me!qty.DefaultValue & ":" & Me!txt.DefaultValue
+End Sub
+Sub Form_BeforeInsert(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO trace VALUES('before_insert')"
+End Sub
+Sub Form_Dirty(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO trace VALUES('dirty')"
+End Sub
+Sub qty_Change()
+CurrentDb.Execute "INSERT INTO trace VALUES('change')"
+End Sub
+)VBA";
+    const auto count=[&] { assert(sql.exec("SELECT COUNT(*) FROM records") && sql.next()); const auto value=sql.value(0).toInt(); sql.finish(); return value; };
+    const auto events=[&](const char* event) { sql.prepare("SELECT COUNT(*) FROM trace WHERE event=?"); sql.addBindValue(event); assert(sql.exec() && sql.next()); const auto value=sql.value(0).toInt(); sql.finish(); return value; };
+    const auto sequence=[&] { assert(sql.exec("SELECT seq FROM sqlite_sequence WHERE name='records'") && sql.next()); const auto value=sql.value(0).toInt(); sql.finish(); return value; };
+    {
+        AccessFormPreview untouched("untouched defaults",source,code,db); auto root=makePreviewFormObject(untouched);
+        assert(root->item("qty").asNumber()==42 && root->item("txt").asText()=="existing");
+        assert(root->item("unbound").asNumber()==5 && root->item("raw").asText()=="seed" && root->item("null").kind==VbaValue::Kind::Null);
+        auto* selector=untouched.findChild<QComboBox*>("access-record-selector"); selector->setCurrentIndex(0);
+        assert(root->item("qty").asNumber()==7 && root->item("mirror").asNumber()==7 && root->item("txt").asText()=="A😀Z");
+        assert(root->item("empty").kind==VbaValue::Kind::Text && root->item("empty").asText().empty() && root->item("missing").kind==VbaValue::Kind::Null);
+        assert(root->item("flag").truthy() && root->item("opt").asText()=="b" && root->item("locked").asText()=="locked default");
+        assert(root->item("id").kind==VbaValue::Kind::Null && !untouched.hasUnsavedChanges() && count()==1 && sequence()==1);
+        assert(events("before_insert")==0 && events("dirty")==0 && events("change")==0);
+        assert(untouched.close() && count()==1 && sequence()==1);
+    }
+    AccessFormPreview form("control defaults",source,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form); auto qty=root->objectMember("qty",{}).object; auto txt=root->objectMember("txt",{}).object;
+    auto* selector=form.findChild<QComboBox*>("access-record-selector"); auto* editor=form.findChild<QLineEdit*>("access-control-qty");
+    auto* raw=form.findChild<QLineEdit*>("access-control-raw"); auto* unbound=form.findChild<QLineEdit*>("access-control-unbound");
+    auto* remember=form.findChild<QPushButton*>("access-control-remember"); assert(selector && editor && raw && unbound && remember);
+    assert(qty->member("DefaultValue",{}).asText()=="7" && root->objectMember("mirror",{}).object->member("DefaultValue",{}).asText().empty());
+    assert(raw->displayText()=="****" && !form.hasUnsavedChanges()); remember->click();
+    assert(root->member("Tag",{}).asText()=="11:\"next\"" && qty->member("DefaultValue",{}).asText()=="11" && !form.hasUnsavedChanges());
+    assert(root->item("qty").asNumber()==42 && root->item("txt").asText()=="existing");
+    selector->setCurrentIndex(0); assert(root->item("qty").asNumber()==11 && root->item("mirror").asNumber()==11 && root->item("txt").asText()=="next");
+    assert(!form.hasUnsavedChanges() && events("dirty")==0 && sequence()==1);
+    qty->assign("DefaultValue",VbaValue::string("13")); assert(root->item("qty").asNumber()==11 && !form.hasUnsavedChanges());
+    selector->setCurrentIndex(1); selector->setCurrentIndex(0); assert(root->item("qty").asNumber()==13 && root->item("mirror").asNumber()==13);
+    unbound->setFocus(); unbound->selectAll(); QTest::keyClicks(unbound,"9"); selector->setCurrentIndex(1); selector->setCurrentIndex(0);
+    assert(root->item("unbound").asText()=="9" && root->item("qty").asNumber()==13 && !form.hasUnsavedChanges());
+    editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"12");
+    assert(events("before_insert")==1 && events("dirty")==1 && events("change")==2 && count()==1);
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(count()==2 && sequence()==2 && !form.hasUnsavedChanges());
+    assert(sql.exec("SELECT qty,txt,empty,missing,flag,opt,locked,server FROM records WHERE id=2") && sql.next());
+    assert(sql.value(0).toInt()==12 && sql.value(1).toString()=="next" && !sql.value(2).isNull() && sql.value(2).toString().isEmpty() && sql.value(3).isNull());
+    assert(sql.value(4).toBool() && sql.value(5).toString()=="b" && sql.value(6).toString()=="locked default" && sql.value(7).toString()=="server"); sql.finish();
+    int number=0; try { qty->assign("DefaultValue",VbaValue{}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==94 && qty->member("DefaultValue",{}).asText()=="13");
+    number=0; try { qty->assign("DefaultValue",VbaValue::string(std::string(256,'x'))); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==5 && qty->member("DefaultValue",{}).asText()=="13");
+    number=0; try { qty->member("DefaultValue",{VbaValue::numeric(1)}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==450);
+    number=0; try { root->objectMember("remember",{}).object->member("DefaultValue",{}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==438);
+    qty->assign("DefaultValue",VbaValue::numeric(17)); assert(qty->member("DefaultValue",{}).asText()=="17" && root->item("qty").asNumber()==12 && !form.hasUnsavedChanges());
+    assert(form.close());
+    auto bad=source; bad.replace("Name =\"txt\"\nControlSource =\"txt\"\nDefaultValue =\"\\\"A😀Z\\\"\"","Name =\"txt\"\nControlSource =\"txt\"\nDefaultValue =\"=Now()\"");
+    assert(bad!=source);
+    AccessFormPreview unsupported("unsupported default expression",bad,code,db); auto failed=makePreviewFormObject(unsupported); auto field=failed->objectMember("txt",{}).object;
+    auto* badSelector=unsupported.findChild<QComboBox*>("access-record-selector"); badSelector->setCurrentIndex(0);
+    number=0; try { (void)field->member("Value",{}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; }
+    assert(number==3251 && !unsupported.hasUnsavedChanges() && count()==2);
+    failed->objectMember("qty",{}).object->assign("Value",VbaValue::numeric(8)); number=0;
+    try { failed->assign("Dirty",VbaValue::logical(false)); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; }
+    assert(number==2501 && unsupported.hasUnsavedChanges() && count()==2 && sequence()==2);
+    unsupported.show(); QApplication::setActiveWindow(&unsupported); QApplication::processEvents();
+    auto* badEditor=unsupported.findChild<QLineEdit*>("access-control-txt"); assert(badEditor); badEditor->setFocus(); QTest::keyClicks(badEditor,"manual");
+    failed->assign("Dirty",VbaValue::logical(false)); assert(count()==3 && field->member("Value",{}).asText()=="manual");
+    assert(sql.exec("SELECT txt FROM records WHERE id=3") && sql.next() && sql.value(0).toString()=="manual"); sql.finish(); assert(unsupported.close());
+    auto conflicting=source; conflicting.replace("Name =\"mirror\"\nControlSource =\"qty\"\nDefaultValue =\"\"","Name =\"mirror\"\nControlSource =\"qty\"\nDefaultValue =\"8\"");
+    AccessFormPreview ambiguous("conflicting default expressions",conflicting,{},db); auto conflict=makePreviewFormObject(ambiguous); ambiguous.findChild<QComboBox*>("access-record-selector")->setCurrentIndex(0);
+    for(const auto* name:{"qty","mirror"}) {
+        number=0; try { (void)conflict->item(name); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==3251);
+    }
+    assert(!ambiguous.hasUnsavedChanges() && count()==3 && ambiguous.close());
+    auto overflowing=source; overflowing.replace("Name =\"unbound\"\nTop =3600","Name =\"unbound\"\nDefaultValue =\"1e999\"\nTop =3600");
+    AccessFormPreview overflow("overflow default literal",overflowing,{},db); auto overflowRoot=makePreviewFormObject(overflow); auto overflowField=overflowRoot->objectMember("unbound",{}).object;
+    number=0; try { (void)overflowField->member("Value",{}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==6);
+    overflowField->assign("Value",VbaValue::errorValue(5)); assert(overflowField->member("Value",{}).kind==VbaValue::Kind::Error && overflowField->member("Value",{}).errorNumber==5);
+    overflowField->assign("Value",VbaValue::string("fixed")); assert(overflowField->member("Value",{}).asText()=="fixed" && !overflow.hasUnsavedChanges());
+    std::string emoji; for(int i=0;i<127;++i) emoji+="😀";
+    number=0; try { overflowField->assign("DefaultValue",VbaValue::string("\""+emoji+"\"")); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; }
+    assert(number==5 && overflowField->member("DefaultValue",{}).asText()=="1e999");
+    class DefaultScalar final:public linaccess::VbaObject {
+    public:
+        int reads{};
+        VbaValue scalarValue() override { ++reads; return VbaValue::string("3"); }
+        VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw linaccess::VbaRuntimeError(438,"No default scalar members"); }
+    };
+    auto scalar=std::make_shared<DefaultScalar>(); overflowField->assign("DefaultValue",VbaValue::reference(scalar));
+    assert(scalar->reads==1 && overflowField->member("DefaultValue",{}).asText()=="3" && overflowField->member("Value",{}).asText()=="fixed" && !overflow.hasUnsavedChanges());
+    assert(overflow.close() && count()==3);
+    AccessFormPreview report("report defaults","Begin Report\nBegin Section\nBegin TextBox\nName =\"field\"\nDefaultValue =\"5\"\nEnd\nEnd\nEnd",{},db);
+    auto reportField=makePreviewFormObject(report)->objectMember("field",{}).object;
+    number=0; try { reportField->member("DefaultValue",{}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==438);
+    assert(report.close());
+}
+
+void testOriginalControlDefaults(const QDir& directory,const QJsonArray& objects) {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","original-control-defaults-empty"); db.setDatabaseName(":memory:"); assert(db.open());
+    int retained=0,unbound=0,unsupported=0;
+    for(const auto& entry:objects) {
+        const auto artifact=entry.toObject(); if(artifact["kind"]!="form") continue;
+        QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly)); const auto bytes=input.readAll();
+        assert(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1().toLower());
+        const auto layout=linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(bytes));
+        if(std::none_of(layout.controls.begin(),layout.controls.end(),[](const auto& control) { return !control.defaultValue.isEmpty(); })) continue;
+        AccessFormPreview form(artifact["name"].toString(),bytes,{},db); auto root=makePreviewFormObject(form);
+        for(const auto& control:layout.controls) {
+            if(control.defaultValue.isEmpty()) continue;
+            auto object=root->objectMember(control.name.toUtf8().toStdString(),{}).object;
+            try {
+                assert(object->member("DefaultValue",{}).asText()==control.defaultValue.toUtf8().toStdString()); ++retained;
+            } catch(const linaccess::VbaRuntimeError& failure) { assert(failure.number==438); ++unsupported; continue; }
+            if(!control.controlSource.isEmpty()) continue;
+            auto expression=control.defaultValue.trimmed(); if(expression.startsWith('=')) expression=expression.mid(1).trimmed();
+            // Cross-check original literal metadata against the independent
+            // native Access-expression parser, never executing original handlers.
+            const auto expected=makePreviewApplicationObject(form)->member("Eval",{VbaValue::string(expression.toUtf8().toStdString())});
+            const auto actual=object->member("Value",{});
+            if(expected.kind==VbaValue::Kind::Null) assert(actual.kind==VbaValue::Kind::Null);
+            else if(expected.kind==VbaValue::Kind::Text) assert(actual.asText()==expected.asText());
+            else assert(actual.asNumber()==expected.asNumber());
+            ++unbound;
+        }
+        assert(!form.hasUnsavedChanges() && form.close());
+    }
+    assert(retained>0 && unbound>0);
+    std::cout<<"Original DefaultValue metadata retained: "<<retained<<"; unbound literal initializations: "<<unbound<<"; unsupported control adapters: "<<unsupported<<"\n";
 }

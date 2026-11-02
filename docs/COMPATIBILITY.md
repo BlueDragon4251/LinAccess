@@ -423,3 +423,10 @@ exception until save/Undo. Deletion/policy-change preflight, checkbox Click and
 group-only Click plus close/MsgBox lifetime are tested with real Qt/VBA/SQL.
 Five original flags are retained; their native query sources are already
 read-only, so no original writable-query transition is claimed (ALLOW_EDITS_RUNTIME.md).
+
+Form-control DefaultValue now preserves templates and exposes bounded native
+getters/setters. Literal defaults initialize unbound controls and writable-table
+new rows without dirtying/inserting; shared fields, empty-versus-NULL SQL storage,
+future metadata changes, failed-default recovery and ID nonconsumption are tested.
+Original probes retain 34 entries and initialize 15 unbound literals. Computed/
+Jet table defaults and full new-record typing/timing remain open (CONTROL_DEFAULT_RUNTIME.md).
