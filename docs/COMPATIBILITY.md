@@ -923,3 +923,9 @@ caller. See [SQLite/Jet boundaries](DOCMD_RUNSQL_TRANSACTION_RUNTIME.md).
 OpenForm acHidden initializes a real form and its data/events without showing
 or activating it. The hidden instance remains readable through Forms and can
 be closed by name; see [remaining mode boundaries](HIDDEN_FORM_RUNTIME.md).
+
+## Named native builtins and Nz
+
+Selected native builtins bind named parameters with retained optional/error
+semantics. Nz(Null) now preserves Empty in VBA while query expressions keep
+zero-length text. See [supported names and reference](NAMED_BUILTIN_RUNTIME.md).

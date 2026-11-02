@@ -16,8 +16,10 @@ control and closes it through reordered named arguments.
 
 Unsupported method options remain unsupported after binding. RunSQL's
 UseTransaction option now has a native scoped-savepoint implementation; see
-[transaction scope](DOCMD_RUNSQL_TRANSACTION_RUNTIME.md). Named built-in functions, Access Eval
+[transaction scope](DOCMD_RUNSQL_TRANSACTION_RUNTIME.md). Additional builtin signatures, Access Eval
 named calls, named ParamArray calls, arbitrary DAO/COM method signatures, full
 compile-time evaluation order and Windows binder equivalence remain open.
 Missing scalar/error coercion still uses the bounded Error-Variant behavior,
 not a claim of complete SCODE/BSTR semantics.
+
+Selected native builtin signatures are now supported; see [coverage](NAMED_BUILTIN_RUNTIME.md).

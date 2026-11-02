@@ -301,7 +301,7 @@ End Sub
     sql.finish();
     assert(sql.exec("CREATE TABLE text_lists(value TEXT)"));
     const auto textLists=executeVbaProcedure(R"VBA(Function Parts(ParamArray values() As Variant) As String
-Parts=Join(values,"")
+Parts=Join(Delimiter:="",SourceArray:=values)
 End Function
 Function StoredLabel(ByVal text As String, Optional ByVal suffix As String="!") As String
 StoredLabel=text & suffix

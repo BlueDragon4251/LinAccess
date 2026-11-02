@@ -706,8 +706,55 @@ private:
             const bool named=std::any_of(references.begin(),references.end(),[](const std::string& reference){ return reference.starts_with("@named:"); });
             if(named) {
                 if(!host_) return {};
-                if(accessExpression_ || !resolver_) throw error("Named arguments require a native VBA procedure context",3251);
-                return resolver_(word,args,references);
+                if(accessExpression_) throw error("Named arguments are not implemented in Access expression context",3251);
+                static const std::unordered_map<std::string,VbaArgumentSignature> signatures{
+                    {"msgbox",{{"Prompt","Buttons","Title","HelpFile","Context"},1}},
+                    {"inputbox",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
+                    {"inputbox$",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
+                    {"replace",{{"Expression","Find","Replace","Start","Count","Compare"},3}},
+                    {"split",{{"Expression","Delimiter","Limit","Compare"},1}},
+                    {"join",{{"SourceArray","Delimiter"},1}},
+                    {"filter",{{"SourceArray","Match","Include","Compare"},2}},
+                    {"instrrev",{{"StringCheck","StringMatch","Start","Compare"},2}},
+                    {"strreverse",{{"Expression"},1}},
+                    {"instr",{{"Start","String1","String2","Compare"},0}},
+                    {"strcomp",{{"String1","String2","Compare"},2}},
+                    {"rgb",{{"Red","Green","Blue"},3}}, {"qbcolor",{{"Color"},1}},
+                    {"datediff",{{"Interval","Date1","Date2","FirstDayOfWeek","FirstWeekOfYear"},3}},
+                    {"weekday",{{"Date","FirstDayOfWeek"},1}},
+                    {"left",{{"String","Length"},2}}, {"left$",{{"String","Length"},2}},
+                    {"right",{{"String","Length"},2}}, {"right$",{{"String","Length"},2}},
+                    {"mid",{{"String","Start","Length"},2}}, {"mid$",{{"String","Start","Length"},2}},
+                    {"nz",{{"Value","ValueIfNull"},1}}, {"ismissing",{{"ArgName"},1}},
+                    {"dsum",{{"Expr","Domain","Criteria"},2}}, {"dcount",{{"Expr","Domain","Criteria"},2}}
+                };
+                const auto signature=signatures.find(word);
+                if(signature==signatures.end()) {
+                    if(!resolver_) throw error("Named builtin/procedure arguments are not implemented",3251);
+                    return resolver_(word,args,references);
+                }
+                std::vector<VbaValue> ordered(signature->second.names.size(),VbaValue::empty());
+                std::vector<bool> assigned(ordered.size()),missing(ordered.size(),true);
+                std::vector<std::string> orderedRefs(ordered.size());
+                bool namedSeen=false; std::size_t last=0;
+                for(std::size_t index=0;index<args.size();++index) {
+                    std::size_t target=index; auto reference=references[index];
+                    if(reference.starts_with("@named:")) {
+                        namedSeen=true; const auto separator=reference.find(':',7);
+                        const auto argument=reference.substr(7,separator-7); target=ordered.size();
+                        for(std::size_t parameter=0;parameter<signature->second.names.size();++parameter)
+                            if(lower(signature->second.names[parameter])==argument) { target=parameter; break; }
+                        if(target==ordered.size()) throw error("Named builtin argument not found",448);
+                        reference=reference.substr(separator+1);
+                    } else if(namedSeen) throw error("Positional argument after named builtin argument",450);
+                    if(target>=ordered.size() || assigned[target]) throw error("Builtin argument supplied more than once or too many arguments",450);
+                    assigned[target]=true; missing[target]=omitted[index]; ordered[target]=args[index]; orderedRefs[target]=std::move(reference); last=std::max(last,target);
+                }
+                for(std::size_t index=0;index<signature->second.required;++index) if(missing[index]) throw error("Required builtin argument omitted",450);
+                // InStr has two positional overloads; retain its full four-slot shape.
+                const auto size=word=="instr" ? ordered.size() : last+1;
+                ordered.resize(size); missing.resize(size); orderedRefs.resize(size);
+                args=std::move(ordered); omitted=std::move(missing); references=std::move(orderedRefs);
             }
             const auto one = args.size() == 1;
             if(word=="datediff" || word=="year" || word=="month" || word=="day" || word=="hour" || word=="minute" || word=="second" || word=="weekday") {
@@ -1161,8 +1208,9 @@ private:
             }
             if (word == "nz" && (args.size() == 1 || args.size() == 2)) {
                 if (!host_) return {};
+                if(omitted[0]) throw error("Nz requires a value",450);
                 return args[0].kind == VbaValue::Kind::Null
-                    ? (args.size() == 2 ? args[1] : VbaValue::string("")) : args[0];
+                    ? (args.size() == 2 && !omitted[1] ? args[1] : accessExpression_ ? VbaValue::string("") : VbaValue::empty()) : args[0];
             }
             if (word == "iif" && args.size() == 3) {
                 if (!host_) return {};

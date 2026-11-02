@@ -2594,3 +2594,16 @@ targets pass 4/4 (1.94 s); desktop build passes. No new target or full-matrix ru
 Re-hiding visible documents, report/icon/dialog modes and full Windows event/
 window equivalence remain open; see HIDDEN_FORM_RUNTIME.md. Combined package/
 headless verification will cover a later grouped delivery.
+
+## Native named builtins and Nz correction (2026-11-02)
+
+Selected existing intrinsic functions now bind named values before their native
+implementation, with written evaluation order, defaults and checked duplicate/
+unknown/required conditions. InStr retains full positional shape to distinguish
+its overloads. Native DAO persistence consumes named Join on ParamArray values.
+
+Corrected Nz(Null)'s VBA subtype to Empty using the Microsoft reference; query
+expressions retain zero-length String. Existing arithmetic/concatenation now
+matches the documented examples. Core/DAO/query-model/GUI targets pass 4/4
+(1.76 s); desktop build passes. No new targets/full matrix repeat. Full builtin
+metadata, Object/SCODE and Windows coercion remain open. See NAMED_BUILTIN_RUNTIME.md.

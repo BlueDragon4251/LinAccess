@@ -758,3 +758,8 @@ Full targets remain open:
 
 - [x] Native new-form acHidden opening, Forms/data/OpenArgs lifetime, initial
   Open/Load/Current without synthetic Activate and named close; full modes remain open.
+
+- [x] Selected native builtin named signatures with defaults/overload/error
+  handling and real DAO use; other signatures and full binder parity remain open.
+- [x] Reference-backed Nz(Null) VBA Empty versus query zero-length String,
+  context arithmetic/concatenation and explicit fallback preservation.

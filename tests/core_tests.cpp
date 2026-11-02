@@ -2455,5 +2455,20 @@ End Sub
     assert(host.fields["NamedResult"]=="12" && host.fields["NamedDefault"]=="10");
     assert(host.fields["NamedRefs"]=="2:12" && host.fields["ImplicitNamedRefs"]=="3:22");
     assert(host.fields["NamedError"]=="448");
+    assert(evaluate("Replace(Replace:=\"X\",Expression:=\"a-a\",Find:=\"a\")").asText()=="X-X");
+    assert(evaluate("Join(Delimiter:=\"|\",SourceArray:=Split(Delimiter:=\",\",Expression:=\"a,b\"))").asText()=="a|b");
+    assert(evaluate("InStr(String2:=\"b\",String1:=\"abc\")").asNumber()==2);
+    assert(evaluate("DateDiff(Date2:=\"2024-03-01\",Interval:=\"d\",Date1:=\"2024-02-28\")").asNumber()==2);
+    assert(evaluate("RGB(Blue:=3,Red:=1,Green:=2)").asNumber()==197121);
+    assert(evaluate("Mid(Length:=2,String:=\"abcd\",Start:=2)").asText()=="bc");
+    substringError("Replace(\"a\",Expression:=\"b\",Find:=\"a\",Replace:=\"x\")",450);
+    substringError("Replace(Unknown:=1)",448);
+    assert(evaluate("Nz(Null)").kind==VbaValue::Kind::Empty);
+    assert(evaluate("Nz(Null,)").kind==VbaValue::Kind::Empty);
+    substringError("Nz(,7)",450);
+    assert(evaluate("Nz(Null)+2").asNumber()==2 && evaluate("Nz(Null)&2").asText()=="2");
+    assert(evaluate("Nz(Null)+\"2\"").asText()=="2");
+    assert(evaluate("Nz(ValueIfNull:=7,Value:=Null)").asNumber()==7);
+    assert(evaluateAccessExpression("Nz(Null)",host).kind==VbaValue::Kind::Text);
     std::cout << "Core tests passed\n";
 }
