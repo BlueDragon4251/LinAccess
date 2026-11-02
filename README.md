@@ -526,3 +526,9 @@ Kalendersemantik bleiben offen.
 gegen echte Tabellen- und Abfragequellen um. Tabellenzeilen behalten beim
 Umsortieren ihre Identität; vollständige Jet-Sortier- und Kollationssemantik
 bleibt offen.
+
+[Native Tabellen- und SQL-Editoren](docs/APP_EDITORS_RUNTIME.md) verwenden jetzt
+geprüfte Access-Feldtypen, vierstellige Currency-Konvertierung und vollständige
+lange Memo-Texte. Der SQL-Editor führt Access-Abfragen mit Parametern und
+DAO-Aktionsabfragen aus. Vollständige Datenblatt-, Designer- und Jet-Parität
+bleibt offen.

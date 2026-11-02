@@ -822,3 +822,11 @@ The existing CurrentRecord test covers VBA activation, invalid-state retention,
 initial imported order and query sorting. Expressions, qualified query outputs,
 Jet collations/report APIs/full Windows behavior remain open. See
 [FORM_ORDER_RUNTIME.md](FORM_ORDER_RUNTIME.md).
+
+The actual app table editor now checks source types and Currency conversion,
+preserves long Memo editor text and protects/allocates verified AutoNumbers.
+The custom query editor uses the Access compiler/results and DAO action path,
+including declared parameter prompts and saved action definitions. Existing
+Qt field/main-window tests exercise both real editors on synthetic projects.
+Full datasheet/formatting/constraints/Jet/designer/Windows identity remains open.
+See [APP_EDITORS_RUNTIME.md](APP_EDITORS_RUNTIME.md).

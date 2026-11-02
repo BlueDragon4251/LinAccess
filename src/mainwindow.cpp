@@ -14,6 +14,9 @@
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
+#include "access_table_model.hpp"
+#include "access_table_delegate.hpp"
+#include "access_table_view.hpp"
 #include "access_format.hpp"
 #include "vba_source_codec.hpp"
 
@@ -569,7 +572,7 @@ void MainWindow::showAccessArtifact(int id) {
                 messageError(this, "Formular nicht konvertierbar: Die Datenquelle '"
                     + draft.recordSource + "' fehlt im LinAccess-Projekt. "
                       "Die benötigte Access-Tabelle erst separat importieren. "
-                      "Abfragen werden noch nicht automatisch nach SQLite übersetzt.");
+                      "Für Abfragequellen das native Access-Formular öffnen.");
                 return;
             }
             QSqlQuery existing(db_);
@@ -763,12 +766,15 @@ void MainWindow::showTable(const QString& name) {
     auto* save = addButton(actions, "Speichern");
     auto* discard = addButton(actions, "Verwerfen");
     outer->addLayout(actions);
-    auto* model = new QSqlTableModel(page, db_);
+    auto* model = new linaccess::AccessTableModel(page, db_);
+    connect(model,&linaccess::AccessTableModel::editRejected,page,[this](int number,const QString& message) { statusBar()->showMessage(message+" ("+QString::number(number)+")",10000); });
+    connect(model,&QAbstractItemModel::dataChanged,page,[this] { statusBar()->clearMessage(); });
     model->setTable(name);
     model->setEditStrategy(QSqlTableModel::OnManualSubmit);
-    model->select();
-    auto* table = new QTableView(page);
+    if(!model->select()) { messageError(this,model->lastError().text()); delete page; return; }
+    auto* table = new linaccess::AccessTableView(page);
     table->setModel(model);
+    table->setItemDelegate(new linaccess::AccessTableDelegate(table));
     table->setSortingEnabled(true);
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     outer->addWidget(table);
@@ -806,26 +812,41 @@ void MainWindow::editQuery(const QString& existingName) {
     if (!existingName.isEmpty()) sql->setPlainText(objectDefinition("query", existingName).value("sql").toString());
     outer->addWidget(sql);
     auto* buttons = new QHBoxLayout();
-    auto* run = addButton(buttons, "SELECT ausführen");
+    auto* run = addButton(buttons, "Ausführen");
     auto* save = addButton(buttons, "Speichern");
     outer->addLayout(buttons);
-    auto* model = new QSqlQueryModel(&dialog);
+    auto* model = new linaccess::AccessQueryModel(&dialog);
     auto* view = new QTableView(&dialog);
     view->setModel(model);
     outer->addWidget(view);
-    connect(run, &QPushButton::clicked, &dialog, [this, sql, model] {
-        if (!isSelect(sql->toPlainText())) {
-            messageError(this, "In diesem Editor sind nur SELECT-Abfragen erlaubt.");
-            return;
-        }
-        model->setQuery(sql->toPlainText(), db_);
-        if (model->lastError().isValid()) messageError(this, model->lastError().text());
+    auto* feedback=new QLabel(&dialog); outer->addWidget(feedback);
+    connect(run, &QPushButton::clicked, &dialog, [this, sql, model, view, feedback, &dialog] {
+        try {
+            const auto plan=linaccess::compileAccessQuery(sql->toPlainText());
+            QMap<QString,QVariant> parameters;
+            for(const auto& parameter:plan.parameters) {
+                bool accepted=false;
+                const auto value=QInputDialog::getText(&dialog,"Abfrageparameter",parameter.name+" ("+parameter.type+")",QLineEdit::Normal,{},&accepted);
+                if(!accepted) return;
+                parameters.insert(parameter.name.toCaseFolded(),value);
+            }
+            view->setVisible(false);
+            if(isSelect(plan.sql)) {
+                model->execute(db_,sql->toPlainText(),parameters); view->setVisible(true);
+                feedback->setText(QString("%1 Datensätze").arg(model->rowCount()));
+            } else {
+                const auto definition=linaccess::makeDaoDatabase(db_)->member("CreateQueryDef",{linaccess::VbaValue::string(""),linaccess::VbaValue::string(sql->toPlainText().toUtf8().toStdString())}).object;
+                for(auto it=parameters.cbegin();it!=parameters.cend();++it) definition->member("Parameters",{linaccess::VbaValue::string(it.key().toUtf8().toStdString())}).object->assign("Value",linaccess::qtFieldValue(it.value()));
+                definition->member("Execute",{});
+                feedback->setText(QString("%1 Datensätze geändert").arg(definition->member("RecordsAffected",{}).asNumber()));
+                refreshExplorer();
+            }
+        } catch(const std::exception& error) { feedback->clear(); messageError(&dialog,QString::fromUtf8(error.what())); }
     });
     connect(save, &QPushButton::clicked, &dialog, [this, name, sql, &dialog] {
-        if (!isSelect(sql->toPlainText())) {
-            messageError(this, "Nur SELECT-Abfragen speichern.");
-            return;
-        }
+        try {
+            (void)linaccess::compileAccessQuery(sql->toPlainText());
+        } catch(const std::exception& error) { messageError(&dialog,QString::fromUtf8(error.what())); return; }
         if (saveObject("query", name->text(), {{"sql", sql->toPlainText()}})) dialog.accept();
     });
     dialog.exec();

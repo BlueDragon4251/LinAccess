@@ -2322,3 +2322,38 @@ Shared delivery validation: host 48/48 (81.15 s), GUI-disabled core 1/1
 (1.06 s), host DEB payload/backend/build-ID/permissions/fixture-exclusion checks
 pass. Four original hashes and private visibility rechecked. Three-distribution
 matrix remains at 4225a17; no current-batch distro/remote CI success is claimed.
+
+## 2026-11-02 — Actual app table/query editor batch
+
+Replaced raw app table model with checked source-aware AccessTableModel and a
+native text delegate preserving Currency precision/long Memo contents. Generated
+native/managed AutoNumbers are read-only, hidden behind (AutoWert) while pending,
+and omitted from inserts to allocate through existing defaults. Shared assignment
+conversion checks source integer ranges, Currency, Boolean and dates; rejected
+edits preserve cells and emit generic typed feedback. Binary edits remain blocked.
+The custom SQL dialog now uses the actual Access compiler/model, typed declared
+parameter prompts and DAO action execution/affected rows; action definitions can
+be saved. Unsupported grammar remains diagnosed, not treated as full Jet support.
+
+Existing field/main-window integration tests pass 2/2 (1.68 s): actual Currency
+line editor/max value/rounding/rejection, 50000+1 Memo characters, date/Integer
+edits, SQLite and managed counters, actual SQL dialog CCur/DateDiff execution,
+DAO insertion, Currency parameter prompt and action save. No new target: GUI
+suite remains 48 CTests. Full datasheet/designer/formatting/constraints/OLE/Jet/
+Windows identity remains open. No original business workflow increment. See
+APP_EDITORS_RUNTIME.md. Shared delivery and refreshed distribution validation follow.
+
+Shared full validation before the final sort guard: host 48/48 (115.45 s),
+Debian 12 48/48 (104.07 s), Ubuntu 24.04 48/48 (89.18 s), Debian 13 48/48
+(92.37 s), GUI-disabled core 1/1 (1.49 s); packages and isolated installations pass.
+Found/reproduced Qt's sort/select clearing pending manual edits (new regression
+0/1). Added model/view sorting protection for cached changes and a live editor,
+restoring the header indicator. Final focused editor tests pass on host 2/2
+(1.65 s), Debian 12 2/2 (2.63 s), Ubuntu 24.04 2/2 (2.10 s), Debian 13 2/2
+(1.85 s). All four final packages rebuilt/checked; final isolated distro installs
+pass backend execution/GUI startup. Other 46 tests were not redundantly rerun
+for this isolated guard. Four original fixture hashes pass; private visibility
+rechecked. Original query counts remain 72 ordinary + 5 parameterized executed,
+13 binding/Jet boundaries, 9 missing dependencies and 1 source-column mismatch;
+no Access reference oracle or full business-workflow claim. Remote CI remains
+blocked by the previously confirmed account restriction.

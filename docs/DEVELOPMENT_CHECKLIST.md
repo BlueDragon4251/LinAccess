@@ -686,3 +686,11 @@ Full targets remain open:
 - [x] Native Form.OrderBy/OrderByOn field-list sorting, table identity preservation,
   query ordering, imported defaults, validation/state rollback and existing
   navigation/filter/CurrentRecord regression; expressions/collations/full sorting open.
+
+- [x] App table editor uses checked source types, exact Currency line editors,
+  full long-Memo text, read-only/generated AutoNumbers and native defaults with
+  real Qt/editor/persistence regression; full datasheet/constraints/formatting open.
+
+- [x] App SQL editor uses the Access compiler/model, typed declared parameters,
+  DAO action execution/affected rows and saved actions, verified through its real
+  dialog; complete Jet/designer/editor parity remains open.

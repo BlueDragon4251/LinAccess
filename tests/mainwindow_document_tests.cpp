@@ -9,6 +9,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLineEdit>
+#include <QPlainTextEdit>
+#include <QTableView>
+#include <QInputDialog>
 #include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
@@ -74,6 +77,24 @@ AccessFormPreview* document(const std::string& name) {
     for(auto* widget:QApplication::topLevelWidgets()) if(auto* form=dynamic_cast<AccessFormPreview*>(widget);form && form->isVisible())
         if(makePreviewFormObject(*form)->member("Name",{}).asText()==name) return form;
     return nullptr;
+}
+void exerciseQueryEditor(MainWindow& window,QSqlDatabase db) {
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE sql_editor_audit(value REAL)")); bool saved=false;
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->windowTitle()=="SQL-Abfrage");
+        auto* source=dialog->findChild<QPlainTextEdit*>(); auto* table=dialog->findChild<QTableView*>(); assert(source && table);
+        QPushButton* run=nullptr; QPushButton* save=nullptr;
+        for(auto* button:dialog->findChildren<QPushButton*>()) { if(button->text()=="Ausführen") run=button; if(button->text()=="Speichern") save=button; } assert(run && save);
+        source->setPlainText("SELECT CCur('1.23455') AS money,DateDiff('d',#2/28/2024#,#3/1/2024#) AS days"); run->click();
+        assert(table->model()->rowCount()==1 && table->model()->index(0,0).data().toString()=="1.2346" && table->model()->index(0,1).data().toInt()==2);
+        source->setPlainText("INSERT INTO sql_editor_audit VALUES(CCur('1.23455'))"); run->click(); assert(table->isHidden());
+        assert(sql.exec("SELECT value FROM sql_editor_audit") && sql.next() && sql.value(0).toDouble()==1.2346); sql.finish();
+        source->setPlainText("PARAMETERS p Currency; SELECT p AS amount");
+        QTimer::singleShot(0,dialog,[] { auto* prompt=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(prompt); prompt->setTextValue("0.1"); prompt->accept(); });
+        run->click(); assert(!table->isHidden() && table->model()->index(0,0).data().toString()=="0.1");
+        source->setPlainText("INSERT INTO sql_editor_audit VALUES(CCur('0.2'))"); auto* name=dialog->findChild<QLineEdit*>(); assert(name); name->setText("native_editor_action"); save->click(); saved=dialog->result()==QDialog::Accepted;
+    });
+    action(window,"+ Abfrage")->trigger(); assert(saved);
 }
 void dispose() { QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QApplication::processEvents(); }
 }
@@ -287,6 +308,7 @@ int main(int argc,char** argv) {
     });
     QTest::keyClick(explorer,Qt::Key_N,Qt::ControlModifier);
     assert(refused && hash()==beforeRefusal && QSqlDatabase::database("linaccess-main").databaseName()==third);
+    exerciseQueryEditor(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }
