@@ -1965,3 +1965,22 @@ Full validation: host 33/33 (115.68 s), Debian 12 33/33 (100.31 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 0eb9501 private CI completed successfully.
+
+## 2026-11-02 — Native Ctrl+Page Down/Up record navigation
+
+Reproduced missing native navigation/validation via a failing actual Qt/VBA/SQL
+regression. The shortcuts now use existing next/previous record commands,
+preserving focus, KeyDown cancellation, field/record validation, SQL save,
+Current and lifetime guards. Tests cover text/ComboBox focus, SendKeys both ways,
+no plain Page/Ctrl+Shift record shortcut, first/last/new boundaries, no empty
+insert, disabled additions and self-close in Current. Targeted new/visibility/
+original-layout/Kassa-DAO regressions pass 4/4 (49.62 s). GUI suite has 34 CTests.
+Multi-page scrolling/other views/full Windows keyboard identity remain open.
+No additional complete original business workflow. See RECORD_NAVIGATION_KEYS_RUNTIME.md.
+
+Full validation: host 34/34 (93.76 s), Debian 12 34/34 (104.68 s), Ubuntu
+24.04 34/34 (90.84 s), Debian 13 34/34 (91.94 s), GUI-disabled core 1/1
+(1.55 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+0c4ed45 private CI was still in progress at this checkpoint.

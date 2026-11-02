@@ -2509,6 +2509,10 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
             (void)QMetaObject::invokeMethod(owner,projectCommand,Qt::DirectConnection);
             return true;
         }
+        if ((event->key()==Qt::Key_PageDown || event->key()==Qt::Key_PageUp) && modifiers==Qt::ControlModifier) {
+            (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::integer(event->key()==Qt::Key_PageDown ? 65 : 66)});
+            return true;
+        }
         if (event->key()==Qt::Key_F4 && modifiers==Qt::ShiftModifier) { repeatFind(); return true; }
         if (event->key()==Qt::Key_F && modifiers==Qt::ControlModifier) { openFindDialog(); return true; }
         if (event->key()==Qt::Key_C && modifiers==Qt::ControlModifier && recordSelected_) {

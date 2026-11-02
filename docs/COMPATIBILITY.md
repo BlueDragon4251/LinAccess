@@ -705,3 +705,9 @@ active context. Default record/Close and SendKeys cannot target an all-hidden
 caller; named close/Unload cancellation remain active. Real Qt/VBA/SQL and window/
 original regressions pass. Init/modal/dirty-hide/embedded/report/MDI/full Windows
 behavior remains open; see FORM_VISIBILITY_RUNTIME.md.
+
+Native Ctrl+Page Down/Up now use next/previous record commands, preserving actual
+text/ComboBox focus and existing validation/save/new-row/lifetime guards. Real
+Qt/VBA/SQL tests include KeyDown cancellation, SendKeys and self-close in Current.
+Plain Page keys/multi-page scrolling, other views and complete Windows keyboard
+identity remain open. See [RECORD_NAVIGATION_KEYS_RUNTIME.md](RECORD_NAVIGATION_KEYS_RUNTIME.md).

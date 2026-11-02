@@ -609,3 +609,7 @@ Full targets remain open:
 - [x] Bounded native Form.Visible hide/show with retained lifetime/drafts, hidden
   active-context/default-command protection, actual Qt/VBA/SQL/Unload/self-close
   regression; initialization/modal/dirty-hide/full Windows/MDI identity remains open.
+
+- [x] Native Ctrl+Page Down/Up record navigation through validation/save, actual
+  text/ComboBox focus, KeyDown/SendKeys/boundaries/Current self-close regression;
+  multi-page/other views/full Windows keyboard identity remain open.
