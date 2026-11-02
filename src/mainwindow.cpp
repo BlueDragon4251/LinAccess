@@ -181,6 +181,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setCentralWidget(splitter);
     connect(tabs_, &QTabWidget::tabCloseRequested, this, [this](int index) {
         QWidget* page = tabs_->widget(index);
+        if(!canCloseDataPage(page)) return;
         tabs_->removeTab(index);
         delete page;
     });
@@ -1220,6 +1221,22 @@ void MainWindow::editReport(const QString& existingName) {
             dialog.accept();
     });
     dialog.exec();
+}
+
+bool MainWindow::canCloseDataPage(QWidget* page) {
+    if(!page) return true;
+    for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) {
+        const auto* model=qobject_cast<linaccess::AccessTableModel*>(view->model());
+        if((model && model->isDirty()) || view->hasPendingEditor()) {
+            statusBar()->showMessage("Zelleingabe abschließen und Tabellenänderungen speichern oder verwerfen.",10000); return false;
+        }
+    }
+    return true;
+}
+bool MainWindow::allowProjectClose(const QString& connection) {
+    if(!connection.isEmpty() && connection!=db_.connectionName()) return true;
+    for(int i=0;i<tabs_->count();++i) if(!canCloseDataPage(tabs_->widget(i))) return false;
+    return true;
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {

@@ -12,6 +12,7 @@
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QTableView>
+#include <QTabWidget>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QPointer>
@@ -90,7 +91,21 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     auto* editor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(editor && table->isAncestorOf(editor)); editor->setText("saved-through-shortcut");
     QTest::keyPress(editor,Qt::Key_S,Qt::ControlModifier); QTest::keyRelease(table,Qt::Key_S,Qt::ControlModifier); QApplication::processEvents();
     QSqlQuery query(db); query.prepare("SELECT value FROM shortcut_records WHERE id=?"); query.addBindValue(id); assert(query.exec() && query.next() && query.value(0).toString()=="saved-through-shortcut");
-    assert(!qobject_cast<linaccess::AccessTableModel*>(table->model())->isDirty());
+    auto* model=qobject_cast<linaccess::AccessTableModel*>(table->model()); assert(!model->isDirty());
+    table->setCurrentIndex(model->index(0,1)); table->edit(table->currentIndex()); QApplication::processEvents();
+    auto* live=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(live && window.allowProjectClose(db.connectionName())); live->setText("unsaved-live");
+    assert(!window.close() && live->isVisible() && live->text()=="unsaved-live"); QTest::keyClick(live,Qt::Key_Escape); QApplication::processEvents();
+    assert(model->setData(model->index(0,1),"pending-close")); auto* tabs=window.findChild<QTabWidget*>(); assert(tabs); const auto count=tabs->count(),page=tabs->currentIndex();
+    assert(QMetaObject::invokeMethod(tabs,"tabCloseRequested",Qt::DirectConnection,Q_ARG(int,page)) && tabs->count()==count && model->isDirty());
+    assert(!window.close() && model->isDirty());
+    const auto original=db.databaseName(),alternate=original+".other.linaccess"; assert(QFile::copy(original,alternate));
+    openProject(window,alternate); assert(db.databaseName()==original && model->isDirty());
+    const QByteArray layout="Begin Form\nRecordSource =\"shortcut_records\"\nEnd\n",code="Sub RequestQuit()\nDoCmd.Quit\nEnd Sub\n";
+    auto* preview=AccessFormPreview::showDocument(linaccess::AccessDocumentKind::Form,"pending_data_quit",layout,code,db,&window); assert(preview);
+    std::vector<linaccess::VbaValue> arguments; const auto quit=preview->executeProcedure("RequestQuit",arguments);
+    assert(quit.status==linaccess::VbaExecutionStatus::Error && quit.errorNumber==2501 && preview->isVisible() && model->isDirty()); assert(preview->close()); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QApplication::processEvents();
+    model->revertAll(); assert(!model->isDirty());
+    assert(QMetaObject::invokeMethod(tabs,"tabCloseRequested",Qt::DirectConnection,Q_ARG(int,page)) && tabs->count()==count-1);
 }
 void exerciseQueryEditor(MainWindow& window,QSqlDatabase db) {
     QSqlQuery sql(db); assert(sql.exec("CREATE TABLE sql_editor_audit(value REAL)")); bool saved=false;

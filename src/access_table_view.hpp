@@ -17,6 +17,15 @@ public:
             if(activeEditor()) typed->protectNextSort();
         });
     }
+    bool hasPendingEditor() const {
+        auto* editor=activeEditor(); if(!editor) return false;
+        const auto property=editor->metaObject()->userProperty();
+        const auto stored=editor->property("la_cell_index").value<QPersistentModelIndex>();
+        const QModelIndex target=stored.isValid() ? QModelIndex(stored) : currentIndex();
+        if(!property.isValid() || target.model()!=model()) return true;
+        const auto value=property.read(editor),original=target.data(Qt::EditRole);
+        return value!=original && value.toString()!=original.toString();
+    }
     bool finishEditing() {
         auto* editor=activeEditor(); if(!editor) return true;
         const auto property=editor->metaObject()->userProperty(); if(!property.isValid() || !model()) return false;
@@ -36,7 +45,10 @@ private:
     QWidget* activeEditor() const {
         auto* editor=QApplication::focusWidget();
         while(editor && editor->parentWidget()!=viewport()) editor=editor->parentWidget();
-        return editor && editor->isVisible() ? editor : nullptr;
+        if(editor && editor->isVisible()) return editor;
+        for(auto* candidate:viewport()->findChildren<QWidget*>(QString{},Qt::FindDirectChildrenOnly))
+            if(candidate->isVisible() && candidate->property("la_cell_index").value<QPersistentModelIndex>().isValid()) return candidate;
+        return nullptr;
     }
     QMetaObject::Connection restore_;
 };

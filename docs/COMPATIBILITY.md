@@ -837,3 +837,9 @@ regressions verify pending/committed -1/0, actual shortcut persistence and inval
 Currency editor retention. Full Yes/No constraints, per-record events, undo and
 Access keyboard/visual identity remain open. See
 [APP_EDITORS_RUNTIME.md](APP_EDITORS_RUNTIME.md#checkbox-and-keyboard-cell-completion).
+
+Pending datasheet changes now block tab/window/project close and VBA Quit before
+native forms unload. Real main-window/VBA regression checks cache/live-editor
+retention, unchanged-editor allowance, Quit 2501 with retained caller and close
+after revert. Full automatic record saving/events/undo/window identity remains
+open. See [APP_EDITORS_RUNTIME.md](APP_EDITORS_RUNTIME.md#pending-datasheets-participate-in-close-preflight).

@@ -1,5 +1,6 @@
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
+#include "native_project_close_guard.hpp"
 #include "access_list_box.hpp"
 #include "native_send_keys.hpp"
 #include "native_input_box.hpp"
@@ -1867,6 +1868,8 @@ bool AccessFormPreview::prepareClose() {
     return closeDocuments({this},this);
 }
 bool AccessFormPreview::closeProjectDocuments(const QSqlDatabase& db) {
+    for(auto* widget:QApplication::topLevelWidgets())
+        if(auto* guard=dynamic_cast<linaccess::NativeProjectCloseGuard*>(widget);guard && !guard->allowProjectClose(db.connectionName())) return false;
     const auto key=projectKey(db);
     if (closingProjects().contains(key)) return false;
     closingProjects().insert(key);
@@ -1878,6 +1881,8 @@ bool AccessFormPreview::closeProjectDocuments(const QSqlDatabase& db) {
     return closeDocuments(roots);
 }
 bool AccessFormPreview::closeApplicationDocuments() {
+    for(auto* widget:QApplication::topLevelWidgets())
+        if(auto* guard=dynamic_cast<linaccess::NativeProjectCloseGuard*>(widget);guard && !guard->allowProjectClose({})) return false;
     QVector<AccessFormPreview*> roots;
     QSet<QString> keys;
     for (auto* widget : QApplication::topLevelWidgets())

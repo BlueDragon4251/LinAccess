@@ -700,3 +700,7 @@ Full targets remain open:
 
 - [x] Native table Ctrl+S completes/validates a live cell before transactional
   manual save, retaining invalid editor text; full per-record/undo/key parity open.
+
+- [x] Pending app datasheets participate in tab/window/project/VBA-Quit close
+  preflight, preserving cache/live editor and calling form; unchanged/reverted
+  states close normally; full autosave/events/undo/window semantics remain open.

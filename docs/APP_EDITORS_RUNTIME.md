@@ -54,3 +54,19 @@ old database values before save, final values after save, invalid Currency edito
 retention and action-created table opening through the actual explorer.
 Manual-save batching remains the existing app convention, not complete Access
 per-record event/undo/keyboard parity. No new CTest target is added.
+
+## Pending datasheets participate in close preflight
+
+Native table tabs refuse closing while checked cache changes or a changed live
+editor remain. The app's project/application close participant checks all table
+pages before native forms unload. This covers tab/window close, project switch
+and DoCmd.Quit; rejected Quit reports 2501 and leaves the calling form open.
+Unchanged live editor values do not block closing. Finishing/saving or reverting
+the pending changes allows normal close. The preflight does not write or discard
+the pending data. The small interface keeps the shared form runtime independent
+of the main-window implementation.
+
+The existing main-window test checks a modified live editor, cached changes,
+refused tab/window/project close, native VBA Quit with retained caller, unchanged
+editor allowance and successful tab close after revert. Full Access automatic
+record-save/events/undo/crash recovery and complete window semantics remain open.

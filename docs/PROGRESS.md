@@ -2379,3 +2379,24 @@ permissions/fixture-exclusion checked. Unaffected suite/platform runs were not
 repeated: the previous shared matrix is documented under 644e71d. Four original
 hashes and private visibility rechecked. No new full-suite/distro/remote CI pass
 is claimed for this focused GUI-only delta; account CI restriction remains open.
+
+## 2026-11-02 — Pending datasheets in native document close preflight
+
+Added an app-independent native project close participant and table-page guards,
+covering tab/window/project switch and application/VBA Quit before form unloads.
+Changed live editor/cached values remain untouched; unmodified editor values do
+not falsely block. Reverting changes allows normal close. Existing main-window/
+field regressions pass 2/2 (1.82 s), including actual native VBA Quit 2501 with
+retained caller and no pending data loss. The first alternate-project fixture
+used a nonexistent path, causing the file dialog watchdog; corrected it to an
+existing private test copy. No new test target (suite remains 48). Full automatic
+record saving/events/undo/crash/window/Windows identity remains open; no complete
+original business workflow increment. See APP_EDITORS_RUNTIME.md. Shared host
+validation follows because the common document close path changed.
+
+Shared host delivery validation: 48/48 (83.72 s), rebuilt host DEB passes payload/
+backend/build-ID/permissions/fixture-exclusion checks. All four original hashes
+and private visibility pass. GUI-disabled core sources are unchanged from their
+last checked state. The three-distribution matrix remains at 644e71d; no fresh
+cross-distribution or remote CI success is claimed for this batch. GitHub's
+account restriction remains separate from successful local checks.

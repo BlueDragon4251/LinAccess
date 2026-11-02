@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QJsonObject>
+#include "native_project_close_guard.hpp"
 #include <QMainWindow>
 #include <QSqlDatabase>
 #include <QStringList>
@@ -10,11 +11,12 @@ class QTreeWidget;
 class QTreeWidgetItem;
 class QKeyEvent;
 
-class MainWindow final : public QMainWindow {
+class MainWindow final : public QMainWindow, public linaccess::NativeProjectCloseGuard {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
+    bool allowProjectClose(const QString& connection) override;
     Q_INVOKABLE void focusDatabaseWindow();
     Q_INVOKABLE int selectDatabaseObject(int objectType,const QString& name,bool activate);
 
@@ -27,6 +29,7 @@ private:
     QTreeWidget* explorer_{};
     QTabWidget* tabs_{};
 
+    bool canCloseDataPage(QWidget* page);
     bool hasProject();
     void openDatabase(const QString& path);
     Q_INVOKABLE void newDatabase();
