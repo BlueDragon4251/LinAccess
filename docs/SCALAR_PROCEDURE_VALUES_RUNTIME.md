@@ -31,8 +31,9 @@ String. Targeted core/main-window/layout/original-heavy set: 4/4 (43.12 s). Full
 validation is in PROGRESS.md; original business execution coverage is unchanged.
 
 The synthetic test initially used the unsupported SQL parameter alias BIT; it
-now uses the existing BOOLEAN spelling. BIT and other Boolean SQL aliases remain
-a separate parser gap at this stage, not an implied feature of typed VBA values.
+now uses the existing BOOLEAN spelling. BIT and other Boolean SQL aliases were
+a separate parser gap at this stage; subsequent support is documented in
+SQL_BOOLEAN_PARAMETERS.md, not implied by typed VBA values.
 Other primitive types, numeric subtypes/promotion/literals, full ByRef/loop/error
 semantics, fixed-length Strings, arrays/classes and complete VBA compatibility
 remain open.

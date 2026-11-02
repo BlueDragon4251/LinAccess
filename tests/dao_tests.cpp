@@ -12,6 +12,7 @@
 #include <cassert>
 #include <iostream>
 #include <map>
+#include <limits>
 
 class Host final : public linaccess::VbaHost {
 public:
@@ -62,8 +63,49 @@ End Sub
     assert(sql.exec("SELECT COUNT(*),MIN(packed),MAX(packed) FROM color_rows") && sql.next());
     assert(sql.value(0).toInt()==3 && sql.value(1).toInt()==99 && sql.value(2).toInt()==99); sql.finish();
 }
+void testBooleanQueryParameters() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","boolean-parameters");
+    db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE flags(flag INTEGER)"));
+    assert(sql.exec("INSERT INTO flags VALUES(7)"));
+    auto database=linaccess::makeDaoDatabase(db);
+    using linaccess::VbaValue;
+    for (const auto& alias : {"BIT","BOOLEAN","LOGICAL","LOGICAL1","YESNO"}) {
+        const auto source=QString("PARAMETERS p %1; UPDATE flags SET flag=[p]").arg(alias);
+        auto definition=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string(source.toStdString())}).object;
+        auto parameter=definition->member("Parameters",{VbaValue::string("p")}).object;
+        for (const auto& item : {std::pair{VbaValue::string("False"),0},
+                std::pair{VbaValue::string("TRUE"),-1},
+                std::pair{VbaValue::string("  False  "),0},
+                std::pair{VbaValue::numeric(0),0},
+                std::pair{VbaValue::numeric(-2.5),-1}}) {
+            parameter->assign("Value",item.first);
+            definition->member("Execute",{});
+            assert(sql.exec("SELECT flag FROM flags") && sql.next() && sql.value(0).toInt()==item.second); sql.finish();
+        }
+        parameter->assign("Value",VbaValue::string("not a Boolean"));
+        bool rejected=false;
+        try { definition->member("Execute",{}); }
+        catch (const linaccess::VbaRuntimeError& error) { rejected=error.number==13; }
+        assert(rejected);
+        assert(sql.exec("SELECT flag FROM flags") && sql.next() && sql.value(0).toInt()==-1); sql.finish();
+        const auto plan=linaccess::compileAccessQuery(source);
+        for (const auto& invalid : {QVariant(QString("")),QVariant(std::numeric_limits<double>::infinity()),
+                QVariant(std::numeric_limits<double>::quiet_NaN())}) {
+            bool invalidRejected=false;
+            try { linaccess::bindAccessQueryParameters(plan,{{"p",invalid}}); }
+            catch (const linaccess::VbaRuntimeError& error) { invalidRejected=error.number==13; }
+            assert(invalidRejected);
+        }
+        parameter->assign("Value",VbaValue{});
+        definition->member("Execute",{});
+        assert(sql.exec("SELECT flag FROM flags") && sql.next() && sql.value(0).isNull()); sql.finish();
+    }
+}
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testBooleanQueryParameters();
     testDaoCursors();
     testDaoTransactions();
     testSqlRgbDao();

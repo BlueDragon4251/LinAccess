@@ -513,3 +513,7 @@ Full targets remain open:
   conversion/copyback, pre-effect invalid scalar loop/object guards and actual
   typed DAO Unicode/Boolean persistence; full Variant/object-default/locale/type/
   compiler/reference semantics and other primitive types remain open.
+
+- [x] Declared SQL BIT/BOOLEAN/LOGICAL/LOGICAL1/YESNO parameter aliases, strict
+  finite Boolean binding, NULL preservation and real DAO UPDATE/error atomicity
+  tests; full Parameter metadata, assignment timing and Variant/locale identity open.

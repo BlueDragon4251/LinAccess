@@ -577,3 +577,7 @@ ByVal/reference behavior, retained values after invalid writes, zero SQL effects
 for invalid arguments, false=0/true=-1 and Unicode text parameter persistence.
 Full Variant/object-default/locale/compiler/reference semantics remain open; see
 [Scalar procedure values](SCALAR_PROCEDURE_VALUES_RUNTIME.md).
+
+Declared Boolean SQL parameter aliases and strict pre-execution Boolean binding
+are documented in SQL_BOOLEAN_PARAMETERS.md. This is bounded SQL/DAO support,
+not full DAO type metadata or Variant coercion parity.

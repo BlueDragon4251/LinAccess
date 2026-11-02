@@ -663,7 +663,8 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
             require(tokens[pos].kind == Token::Word || tokens[pos].kind == Token::Identifier, "Jet SQL: parameter name required");
             const auto name = tokens[pos++].value;
             require(pos < tokens.size() && tokens[pos].kind == Token::Word, "Jet SQL: parameter type required");
-            const auto type = tokens[pos++].value.toCaseFolded();
+            auto type = tokens[pos++].value.toCaseFolded();
+            if (type == "bit" || type == "logical" || type == "logical1") type = "boolean";
             const QSet<QString> types{"long","integer","short","byte","single","double","text","varchar","char","boolean","yesno","datetime","date","value"};
             require(types.contains(type), "Jet SQL: parameter type unsupported");
             if (pos < tokens.size() && tokens[pos].value == "(") {
@@ -1043,7 +1044,17 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
             bool valid = false; converted = value.toDouble(&valid);
             if (!valid) throw VbaRuntimeError(13,"DAO: parameter type mismatch");
         } else if (type == "datetime" || type == "date") converted = canonicalDate(value.toString());
-        else if (type == "boolean" || type == "yesno") converted = value.toBool() ? -1 : 0;
+        else if (type == "boolean" || type == "yesno") {
+            const auto spelling = value.toString().trimmed();
+            if (spelling.compare("true",Qt::CaseInsensitive)==0) converted=-1;
+            else if (spelling.compare("false",Qt::CaseInsensitive)==0) converted=0;
+            else {
+                bool valid=false;
+                const auto number=value.toDouble(&valid);
+                if (!valid || !std::isfinite(number)) throw VbaRuntimeError(13,"DAO: parameter type mismatch");
+                converted=number!=0 ? -1 : 0;
+            }
+        }
         else converted = value.toString();
         if (parameter.direct) result.insert(parameter.binding,converted);
         if (parameter.likePattern) result.insert(parameter.binding + "_like",pattern(converted.toString()));

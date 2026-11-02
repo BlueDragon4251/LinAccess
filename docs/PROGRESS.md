@@ -1522,3 +1522,18 @@ DEBs pass payload/backend/permissions/fixture-exclusion checks; isolated distro
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass. Previous ae2f65b private CI completed successfully. Remote repository
 privacy remains enabled.
+
+## 2026-11-02 — Boolean SQL parameter aliases and strict binding
+
+Added Access BIT/LOGICAL/LOGICAL1 aliases to the existing BOOLEAN/YESNO parameter
+parser. Invalid text no longer becomes true through Qt conversion. Native DAO
+tests execute all aliases and check stored 0/-1/NULL and unchanged records after
+error 13; direct binding rejects empty text and nonfinite numbers. See
+SQL_BOOLEAN_PARAMETERS.md for the primary reference and bounded scope.
+
+Validation: host 22/22 (80.58 s), Debian 12 22/22 (86.58 s), Ubuntu
+24.04 22/22 (76.93 s), GUI-disabled core 1/1 (1.05 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+package installations pass backend execution and GUI startup. All four fixture
+hashes pass; repository privacy remains enabled. Previous 4ffa700 private CI
+is still running at this checkpoint; no CI success is assumed.
