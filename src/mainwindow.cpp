@@ -256,6 +256,9 @@ bool MainWindow::eventFilter(QObject* watched,QEvent* event) {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent* event) {
+    if(event->key()==Qt::Key_F6 && (event->modifiers()==Qt::ControlModifier || event->modifiers()==(Qt::ControlModifier|Qt::ShiftModifier))) {
+        AccessFormPreview::cycleProjectDocuments(db_,this,event->modifiers().testFlag(Qt::ShiftModifier)); event->accept(); return;
+    }
     if(event->key()==Qt::Key_F11 && event->modifiers()==Qt::NoModifier) { focusDatabaseWindow(); event->accept(); return; }
     if((event->key()==Qt::Key_O || event->key()==Qt::Key_N) && event->modifiers()==Qt::ControlModifier) {
         if(!QApplication::activeModalWidget()) { if(event->key()==Qt::Key_O) chooseDatabase(); else newDatabase(); }

@@ -1334,3 +1334,20 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. SelectObject commit c675477 completed private CI
 successfully. Repository privacy remains unchanged.
+
+## 2026-11-02 — Native project window cycling
+
+Ctrl+F6/Ctrl+Shift+F6 cycle actual main database/form/report windows in a bounded
+creation-order ring. Actual keyboard/focus/SQL regressions cover both directions
+and wrapping, KeyPreview/control/modal cancellation, hidden/foreign/closed
+exclusion, minimized restoration and a target report closed from BeforeUpdate.
+Native execution guards and weak targets prevent stale activation. Initial
+main-window regression: 1/1 (1.31 s). Full MDI/window-order/table/query/editor
+parity remains open, with no original business coverage increment; see
+WINDOW_CYCLE_RUNTIME.md.
+
+Final validation: host 22/22 (87.58 s), Debian 12 22/22 (72.23 s), Ubuntu
+24.04 22/22 (64.39 s), GUI-disabled core 1/1 (0.95 s). Fresh host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. Repository privacy is unchanged.

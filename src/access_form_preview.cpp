@@ -700,6 +700,8 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
       vba_(linaccess::decodeVbaSource(vbaSource)),
       layout_(linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(source))),
       db_(std::move(database)) {
+    static quint64 nextWindowSequence=0;
+    windowSequence_=++nextWindowSequence;
     static thread_local QStringList constructionStack;
     const auto identity=db_.connectionName()+QChar(0x1f)+formName_.toCaseFolded();
     if (constructionStack.contains(identity) || constructionStack.size()>=16)
@@ -862,6 +864,42 @@ bool AccessFormPreview::event(QEvent* event) {
 }
 
 bool AccessFormPreview::databaseWindowActive(QWidget* window) { return databaseWindowContext().window && (!window || databaseWindowContext().window==window); }
+
+void AccessFormPreview::cycleProjectDocuments(QSqlDatabase database,QWidget* projectWindow,bool backwards,AccessFormPreview* current) {
+    if(!database.isOpen() || !projectWindow || QApplication::activeModalWidget()) return;
+    const auto key=projectKey(database);
+    if(closingProjects().contains(key)) return;
+    if(current && (projectKey(current->db_)!=key || current->closed_ || current->closing_ || activeDocument()!=current)) return;
+    QVector<QPointer<AccessFormPreview>> documents;
+    for(auto* widget:QApplication::topLevelWidgets()) {
+        auto* candidate=dynamic_cast<AccessFormPreview*>(widget);
+        if(candidate && candidate->opened_ && !candidate->closed_ && !candidate->closing_ && !candidate->openCancelled_
+            && candidate->isVisible() && !candidate->isModal() && projectKey(candidate->db_)==key)
+            documents.append(candidate);
+    }
+    std::sort(documents.begin(),documents.end(),[](const auto& left,const auto& right) { return left->windowSequence_<right->windowSequence_; });
+    documents.prepend(nullptr); // Database window, then native documents in creation order.
+    const int index=current ? documents.indexOf(current) : 0;
+    if(index<0) return;
+    const auto targetIndex=(index+(backwards ? documents.size()-1 : 1))%documents.size();
+    const auto selected=documents[targetIndex];
+    const QPointer<AccessFormPreview> source=current;
+    const QPointer<QWidget> owner=projectWindow;
+    ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+    if(source && (!source->commitControls() || source->closed_ || activeDocument()!=source)) return;
+    if(!owner || projectKey(database)!=key || !database.isOpen() || closingProjects().contains(key) || QApplication::activeModalWidget()) return;
+    if(!selected) {
+        // A null entry denotes the database window, not a document closed by validation.
+        if(targetIndex==0)
+            (void)QMetaObject::invokeMethod(owner,"focusDatabaseWindow",Qt::DirectConnection);
+        return;
+    }
+    if(selected->closed_ || selected->closing_ || !selected->isVisible()) return;
+    if(selected->isMinimized()) selected->showNormal();
+    selected->raise(); selected->activateWindow(); selected->activateDocument();
+    if(activeDocument()==selected && !selected->closed_)
+        if(auto* focus=selected->focusWidget(); focus && focus->isEnabled()) focus->setFocus(Qt::ShortcutFocusReason);
+}
 
 void AccessFormPreview::activateDatabaseWindow(QSqlDatabase database,QWidget* window) {
     if (!window || !database.isOpen() || QApplication::activeModalWidget()) return;
@@ -2224,6 +2262,14 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
     if (closed_ || openCancelled_) return false;
     const auto modifiers=event->modifiers() & ~Qt::KeypadModifier;
     try {
+        if(event->key()==Qt::Key_F6 && (modifiers==Qt::ControlModifier || modifiers==(Qt::ControlModifier|Qt::ShiftModifier))) {
+            QWidget* owner=nullptr;
+            for(auto* ancestor=parentWidget();ancestor;ancestor=ancestor->parentWidget())
+                if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+            if(!owner) return false;
+            cycleProjectDocuments(db_,owner,modifiers.testFlag(Qt::ShiftModifier),dynamic_cast<AccessFormPreview*>(window()));
+            return true;
+        }
         const char* projectCommand=nullptr;
         if(event->key()==Qt::Key_F11 && modifiers==Qt::NoModifier) projectCommand="focusDatabaseWindow";
         else if(event->key()==Qt::Key_O && modifiers==Qt::ControlModifier) projectCommand="chooseDatabase";

@@ -501,3 +501,11 @@ Unload cancellation and refusing existing-file overwrite. Switching projects
 from executing native SendKeys is blocked. Direct MDB/ACCDB project editing
 and complete File-menu/keyboard appearance remain open; see
 [Project shortcuts](PROJECT_SHORTCUTS_RUNTIME.md).
+
+Ctrl+F6/Ctrl+Shift+F6 now cycle the actual database window and visible native
+forms/reports in a bounded creation-order ring, restoring focus/minimized
+windows and honoring KeyPreview, validation and modal blocking. Foreign,
+hidden and closed windows are skipped; a target closed during validation is
+not activated. SQL and dirty-state preservation are tested. Full Windows MDI,
+exact Access window ordering and table/query/editor cycling remain open; see
+[Window cycling](WINDOW_CYCLE_RUNTIME.md).

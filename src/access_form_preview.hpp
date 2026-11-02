@@ -50,6 +50,7 @@ public:
     static void quitApplication();
     static void activateDatabaseWindow(QSqlDatabase database,QWidget* window);
     static bool databaseWindowActive(QWidget* window=nullptr);
+    static void cycleProjectDocuments(QSqlDatabase database,QWidget* projectWindow,bool backwards,AccessFormPreview* current=nullptr);
     static AccessFormPreview* showDocument(linaccess::AccessDocumentKind kind,QString name,
         const QByteArray& source,const QByteArray& vba,QSqlDatabase database,QWidget* projectOwner=nullptr);
     void accept() override;
@@ -159,6 +160,7 @@ private:
     QString vba_;
     linaccess::AccessFormLayout layout_;
     QSqlDatabase db_;
+    quint64 windowSequence_{};
     QComboBox* recordSelector_{};
     QTimer* formTimer_{};
     bool timerDispatching_{};

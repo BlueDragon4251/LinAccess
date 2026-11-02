@@ -463,3 +463,8 @@ Full targets remain open:
   and nonmodal native documents, KeyPreview/validation/modal/Unload cancellation,
   overwrite preservation and an executing-VBA project-switch guard; direct
   MDB/ACCDB project editing and complete File-menu/keyboard parity remain open.
+
+- [x] Bounded Ctrl+F6/Ctrl+Shift+F6 native form/report/database-window ring with
+  focus restoration, validation/KeyPreview/modal guards, hidden/closed/foreign
+  exclusion, minimized restoration and target-close lifetime regression; full
+  MDI/window-order and table/query/editor cycling remain open.
