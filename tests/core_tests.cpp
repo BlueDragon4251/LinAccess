@@ -1578,6 +1578,14 @@ End Sub
     assert(evaluate("CBool(\" 2.5 \")").boolean && !evaluate("CBool(\" 0 \")").boolean);
     assert(evaluate("CBool(CCur(\"0.0001\"))").boolean);
     assert(evaluate("VarType(CBool(1))").asNumber()==11 && evaluate("TypeName(CBool(0))").asText()=="Boolean");
+    assert(evaluate("CSng(0.1)").asNumber()==static_cast<double>(0.1f));
+    assert(evaluate("CSng(16777217)").asNumber()==16777216);
+    assert(evaluate("CDbl(16777217)").asNumber()==16777217);
+    assert(evaluate("VarType(CSng(1))=vbSingle").truthy() && evaluate("TypeName(CSng(1))").asText()=="Single");
+    assert(evaluate("VarType(CDbl(CSng(1)))=vbDouble").truthy());
+    assert(evaluate("CStr(CSng(0.1))").asText()=="0.1");
+    assert(evaluate("CSng(Empty)").asNumber()==0 && evaluate("CSng(True)").asNumber()==-1);
+    assert(evaluate("CInt(\" 2.5 \")").asNumber()==2 && evaluate("CLng(\" 3.5 \")").asNumber()==4);
     assert(evaluate("CInt(2.5)").asNumber()==2 && evaluate("CInt(3.5)").asNumber()==4);
     assert(evaluate("CInt(-2.5)").asNumber()==-2 && evaluate("CInt(True)").asNumber()==-1);
     assert(evaluate("CInt(Empty)").asNumber()==0 && evaluate("CInt(CCur(\"1.5\"))").asNumber()==2);
@@ -1621,6 +1629,13 @@ End Sub
     const auto substringError=[&](const char* expression,int expected) {
         int number=0; try { (void)evaluate(expression); } catch(const VbaRuntimeError& failure) { number=failure.number; } if(number!=expected) std::cerr<<"Substring error: expected="<<expected<<", actual="<<number<<", expression="<<expression<<"\n"; assert(number==expected);
     };
+    substringError("CSng(Null)",94); substringError("CSng(CVErr(2015))",13);
+    substringError("CSng(3.5e38)",6); substringError("CSng(1e-50)",3251);
+    substringError("CSng(\"invalid\")",13); substringError("CSng()",450);
+    substringError("CDbl()",450); substringError("CLng(1,2)",450);
+    scalarProbe->value=VbaValue::numeric(0.1); const auto beforeSingle=scalarProbe->reads;
+    const auto singleValue=evaluateVbaExpression("CSng(probe)",host,scalarValues);
+    assert(singleValue.numericType==VbaValue::NumericType::Single && singleValue.number==static_cast<double>(0.1f) && scalarProbe->reads==beforeSingle+1);
     substringError("CInt(Null)",94); substringError("CInt(CVErr(2015))",13);
     substringError("CInt(\"invalid\")",13); substringError("CInt(32767.5)",6);
     substringError("CInt(-32768.6)",6); substringError("CInt()",450); substringError("CInt(1,2)",450);

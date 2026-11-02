@@ -525,3 +525,7 @@ Full targets remain open:
 - [x] Integer/Long value tags for checked fields/locals/parameters/results/defaults,
   Variant copies, native CInt/tagged CLng, VarType/TypeName and VbVarType constants
   with actual DAO persistence; full literal/arithmetic/Variant-storage/Len semantics open.
+
+- [x] Checked Single/Double module/procedure storage, native CSng and conversion
+  dispatch, type identity, float rounding/overflow and actual DAO persistence;
+  Single underflow/For, full formatting/promotion/Variant/locale semantics open.

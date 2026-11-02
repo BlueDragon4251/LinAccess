@@ -27,3 +27,7 @@ remain open. SQL CInt/CLng are not added.
 Len reference: https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/len-function
 
 Validation and actual native SQL regression results are recorded in PROGRESS.md.
+
+Subsequent checked Single/Double storage and CSng are documented in
+FLOATING_VALUES_RUNTIME.md. Full literal/arithmetic/Variant-storage/Len semantics
+remain open.

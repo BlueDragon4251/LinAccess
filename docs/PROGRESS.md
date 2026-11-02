@@ -1588,3 +1588,20 @@ installations pass backend execution and GUI startup. Build rules contain one
 form-preview compile target; the app has no QtTest runtime dependency. All four
 original fixture hashes pass and the repository remains private. Previous
 449f17a private CI was still running at this checkpoint; no success is assumed.
+
+## 2026-11-02 — Checked Single/Double values and CSng
+
+Added checked Single/Double module fields and procedure values, typed defaults/
+results, native CSng and shared scalar conversion dispatch. Native Qt/VBA/DAO
+regressions store distinct rounded Single/Double values, verify overflow/input
+atomicity and bounded reference/loop behavior. Core/DAO/layout/original-heavy
+tests pass 4/4 (42.76 s). Single underflow and For remain explicitly diagnosed;
+full formatting/promotion/literal/Variant/locale/compiler parity remains open.
+No original business execution increment. See FLOATING_VALUES_RUNTIME.md.
+
+Full validation: host 22/22 (92.89 s), Debian 12 22/22 (77.18 s), Ubuntu
+24.04 22/22 (70.00 s), GUI-disabled core 1/1 (1.90 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four fixture hashes
+pass; repository remains private. Previous 9bf6a90 and 449f17a private CI
+completed successfully.

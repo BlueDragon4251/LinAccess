@@ -16,6 +16,7 @@
 void testNumericModuleStates();
 void testNumericProcedureValues();
 void testScalarProcedureValues();
+void testFloatingProcedureValues();
 
 void testModuleStates(const QDir& directory,const QJsonArray& objects) {
     QByteArray globals;
@@ -109,6 +110,7 @@ void testModuleStates(const QDir& directory,const QJsonArray& objects) {
     testNumericModuleStates();
     testNumericProcedureValues();
     testScalarProcedureValues();
+    testFloatingProcedureValues();
 }
 
 void testNumericModuleStates() {
@@ -316,4 +318,95 @@ End Sub
     result=form.executeProcedure("MatchingReference",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Boolean && result.typedReturnValue->boolean);
     result=form.executeProcedure("BadCounter",args); assert(result.status==linaccess::VbaExecutionStatus::Unsupported && result.errorNumber==3251);
     assert(sql.exec("SELECT COUNT(*) FROM scalar_local_events") && sql.next() && sql.value(0).toInt()==2); sql.finish(); assert(form.close());
+}
+
+void testFloatingProcedureValues() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","floating-procedure-values"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    assert(sql.exec("CREATE TABLE floating_values(single_value REAL,double_value REAL)"));
+    assert(sql.exec("CREATE TABLE floating_events(kind TEXT)"));
+    const QByteArray code=R"VBA(Private stored As Single
+Public exposed As Double
+Function ReadSingle() As Single
+ReadSingle=stored
+End Function
+Function SaveFloats(ByVal input As Single) As Double
+Dim narrow As Single
+Dim definition As DAO.QueryDef
+narrow=input
+stored=narrow
+exposed=CDbl(narrow)+1
+Set definition=CurrentDb.CreateQueryDef("", "PARAMETERS a SINGLE,b DOUBLE; INSERT INTO floating_values VALUES([a],[b])")
+definition.Parameters("a").Value=narrow
+definition.Parameters("b").Value=exposed
+definition.Execute
+Me.Tag=TypeName(narrow)&":"&TypeName(exposed)&":"&CStr(VarType(narrow))
+SaveFloats=exposed
+End Function
+Function OverflowSingle() As String
+On Error Resume Next
+stored=CSng(3.5e38)
+OverflowSingle=CStr(Err.Number)&":"&TypeName(stored)
+End Function
+Sub AcceptSingle(ByRef value As Single)
+CurrentDb.Execute "INSERT INTO floating_events VALUES('entered')"
+value=value+0.25
+End Sub
+Function Mismatch() As String
+Dim wide As Double
+wide=1
+On Error Resume Next
+Call AcceptSingle(wide)
+Mismatch=CStr(Err.Number)&":"&TypeName(wide)&":"&CStr(wide)
+End Function
+Function Matching() As Single
+Dim narrow As Single
+narrow=1
+Call AcceptSingle(narrow)
+Matching=narrow
+End Function
+Function Temporary() As String
+Dim wide As Double
+wide=1
+Call AcceptSingle((wide))
+Temporary=TypeName(wide)&":"&CStr(wide)
+End Function
+Function DoubleLoop() As Double
+Dim counter As Double
+For counter=0.5 To 1.5 Step 0.5
+DoubleLoop=DoubleLoop+counter
+Next counter
+End Function
+Sub SingleLoop()
+Dim counter As Single
+CurrentDb.Execute "INSERT INTO floating_events VALUES('unsupported loop')"
+For counter=0 To 1
+Next counter
+End Sub
+)VBA";
+    AccessFormPreview form("floating procedure","Begin Form\nEnd",code,db);
+    auto root=makePreviewFormObject(form);
+    assert(root->member("exposed",{}).number==0 && root->member("exposed",{}).numericType==VbaValue::NumericType::Double);
+    std::vector<VbaValue> args;
+    auto result=form.executeProcedure("ReadSingle",args);
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->number==0 && result.typedReturnValue->numericType==VbaValue::NumericType::Single);
+    args={VbaValue::numeric(16777217)}; result=form.executeProcedure("SaveFloats",args);
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->number==16777217 && result.typedReturnValue->numericType==VbaValue::NumericType::Double && args[0].number==16777217);
+    assert(root->member("Tag",{}).asText()=="Single:Double:4");
+    assert(sql.exec("SELECT single_value,double_value FROM floating_values") && sql.next() && sql.value(0).toDouble()==16777216 && sql.value(1).toDouble()==16777217); sql.finish();
+    for(const auto& bad:std::vector<std::pair<VbaValue,int>>{{VbaValue{},94},{VbaValue::numeric(3.5e38),6},{VbaValue::string("invalid"),13}}) {
+        args={bad.first}; result=form.executeProcedure("SaveFloats",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==bad.second);
+    }
+    assert(sql.exec("SELECT COUNT(*) FROM floating_values") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    args.clear(); result=form.executeProcedure("OverflowSingle",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="6:Single");
+    result=form.executeProcedure("ReadSingle",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->number==16777216 && result.typedReturnValue->numericType==VbaValue::NumericType::Single);
+    result=form.executeProcedure("Mismatch",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="13:Double:1");
+    assert(sql.exec("SELECT COUNT(*) FROM floating_events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
+    result=form.executeProcedure("Matching",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->number==1.25 && result.typedReturnValue->numericType==VbaValue::NumericType::Single);
+    result=form.executeProcedure("Temporary",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="Double:1");
+    result=form.executeProcedure("DoubleLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->number==3 && result.typedReturnValue->numericType==VbaValue::NumericType::Double);
+    result=form.executeProcedure("SingleLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Unsupported && result.errorNumber==3251);
+    assert(sql.exec("SELECT COUNT(*) FROM floating_events") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+    assert(form.close());
 }
