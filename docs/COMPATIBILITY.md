@@ -670,3 +670,10 @@ Native VarType now returns an Integer value, including nested VarType/TypeName,
 Variant-copy/calculated-control and SQL regression. This fixes the previous
 Double result subtype; general object default-property/type inference and full
 Variant/array/Date/Decimal semantics remain open. See VARTYPE_RESULT_RUNTIME.md.
+
+VarType now follows explicitly advertised native scalar defaults for control
+Value, DAO Field/Parameter and Err, with scalar-once/recursive/error handling
+and actual Qt/VBA/SQL type-code regression. Err.Number retains Long; existing
+closed recordset data guards now use 3420. Full COM/class/non-Value defaults,
+TypeName class metadata, imported field subtypes and DAO identity remain open.
+See DEFAULT_TYPE_INSPECTION_RUNTIME.md.

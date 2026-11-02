@@ -50,6 +50,8 @@ class VbaObject {
 public:
     virtual ~VbaObject() = default;
     virtual VbaValue member(std::string_view name, const std::vector<VbaValue>& arguments) = 0;
+    // Advertise a zero-argument scalar default explicitly; getter errors propagate.
+    virtual bool hasScalarDefault() const { return false; }
     virtual VbaValue scalarValue() { throw VbaRuntimeError(13,"Object has no scalar default value"); }
     virtual VbaValue defaultMember(const std::vector<VbaValue>& arguments,bool reference) { return reference ? objectMember("Item",arguments) : member("Item",arguments); }
     virtual VbaValue item(std::string_view name) { return member(name,{}); }

@@ -589,3 +589,7 @@ Full targets remain open:
 - [x] Integer subtype for native VarType results, including nested inspection,
   Byte-array code, actual Qt calculated controls/Variant copies/SQL regression;
   general object inference/full Variant and array identities remain open.
+
+- [x] Native VarType scalar-default capability for controls/DAO/Err, recursive/
+  single-read/error propagation and actual Qt/SQL type-code/EOF/closed-object
+  regression; full COM/class/default/type/lifetime/Windows identities remain open.

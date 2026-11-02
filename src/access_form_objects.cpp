@@ -108,6 +108,7 @@ public:
         return editor;
     }
     PreviewControlObject(AccessFormPreview& preview,QString name) : PreviewObjectBase(preview),name_(std::move(name)) {}
+    bool hasScalarDefault() const override { return true; }
     linaccess::VbaValue scalarValue() override { return member("Value",{}); }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked();

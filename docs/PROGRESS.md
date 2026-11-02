@@ -1870,3 +1870,22 @@ Full validation: host 28/28 (85.88 s), Debian 12 28/28 (84.76 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. 7badc0f
 private CI has now completed successfully; 6d00c90 CI is still running.
+
+## 2026-11-02 — Inspect native scalar default value types
+
+Reproduced Object-only VarType results against independent core/native tests
+(0/2). Advertised native scalar defaults now expose actual control/DAO/Err value
+types; getter failures propagate and recursion is bounded. Err.Number retains
+Long. New native Qt/VBA/SQL CTest stores actual observed codes and distinguishes
+Null, EOF 3021 and closed DAO field/parameter 3420, with no data/dirty changes.
+The regression exposed generic closed-recordset errors, now aligned with native
+3420 guards. Targeted core/native/DAO passes 3/3 (1.38 s); GUI suite has 29 CTests.
+Full class/default/type/storage/Windows semantics remain open. No original
+business execution increment. See DEFAULT_TYPE_INSPECTION_RUNTIME.md.
+
+Full validation: host 29/29 (106.37 s), Debian 12 29/29 (82.32 s), Ubuntu
+24.04 29/29 (75.11 s), Debian 13 29/29 (75.91 s), GUI-disabled core 1/1
+(3.10 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+6d00c90 and 0fd9b43 private CI completed successfully.

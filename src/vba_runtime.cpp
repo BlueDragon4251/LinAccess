@@ -192,7 +192,8 @@ class ErrorObject final : public VbaObject {
 public:
     int number{};
     std::string description;
-    VbaValue scalarValue() override { return VbaValue::numeric(number); }
+    bool hasScalarDefault() const override { return true; }
+    VbaValue scalarValue() override { return VbaValue::longInteger(number); }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         const auto key = lower(std::string(name));
         if (key == "raise") {
@@ -203,7 +204,7 @@ public:
             throw VbaRuntimeError(static_cast<int>(code), "VBA: explizit ausgelöster Fehler");
         }
         if (!args.empty()) throw VbaRuntimeError(5, "Unerwartete Err-Argumente");
-        if (key == "number") return VbaValue::numeric(number);
+        if (key == "number") return VbaValue::longInteger(number);
         if (key == "description") return VbaValue::string(description);
         if (key == "clear") { number = 0; description.clear(); return {}; }
         throw VbaRuntimeError(438, "Err-Mitglied nicht unterstützt");

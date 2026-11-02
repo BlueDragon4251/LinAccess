@@ -162,6 +162,7 @@ VbaValue fieldCollection(std::shared_ptr<Recordset> owner);
 class Field final : public VbaObject {
 public:
     Field(std::shared_ptr<Recordset> owner, QString name) : owner_(std::move(owner)), name_(std::move(name)) {}
+    bool hasScalarDefault() const override { return true; }
     VbaValue scalarValue() override { return member("Value",{}); }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override;
     void assign(std::string_view name, const VbaValue& value) override;
@@ -241,9 +242,9 @@ public:
     VbaValue item(std::string_view name) override { return value(text(name)); }
     VbaValue objectItem(std::string_view name) override { return member("Fields",{VbaValue::string(std::string(name))}); }
     void assignItem(std::string_view name,const VbaValue& value) override { set(text(name),value); }
-    QStringList fieldNames() const { checkTransaction(); require(!closed_,"DAO: Recordset is closed"); return data_->columns; }
+    QStringList fieldNames() const { checkTransaction(); if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed"); return data_->columns; }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
-        require(!closed_, "DAO: Recordset is closed");
+        if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         const auto key = lower(name);
         if (key!="close" && key!="requery") checkTransaction();
         if (key=="transactions" && args.empty()) return VbaValue::logical(true);
@@ -325,14 +326,15 @@ public:
     }
     VbaValue value(const QString& name) const {
         checkTransaction();
-        require(!closed_, "DAO: Recordset is closed");
+        if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         const int index = column(name);
         if (mode_ != Mode::Browse) return qtFieldValue(pending_[index],data_->types.value(name.toCaseFolded()));
         current(); return qtFieldValue(data_->rows[position_][index],data_->types.value(name.toCaseFolded()));
     }
     void set(const QString& name, const VbaValue& value) {
         checkTransaction();
-        require(!closed_ && mode_ != Mode::Browse, "DAO: Edit or AddNew required");
+        if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
+        require(mode_ != Mode::Browse, "DAO: Edit or AddNew required");
         const auto index = column(name);
         pending_[index] = sqlFieldValue(value,data_->types.value(name.toCaseFolded())); changed_.insert(index);
     }
@@ -533,6 +535,7 @@ class QueryDefinition;
 class QueryParameter final : public VbaObject {
 public:
     QueryParameter(std::shared_ptr<QueryDefinition> query, QString name,quint64 generation) : query_(std::move(query)), name_(std::move(name)),generation_(generation) {}
+    bool hasScalarDefault() const override { return true; }
     VbaValue scalarValue() override { return member("Value",{}); }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override;
     void assign(std::string_view name, const VbaValue& value) override;

@@ -174,6 +174,7 @@ std::int32_t integer(const VbaValue& value) {
     return static_cast<std::int32_t>(rounded);
 }
 VbaValue scalarObjectValue(VbaValue value);
+VbaValue typeInspectionValue(VbaValue value);
 VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& right,VbaHost* host,VbaCompareMode mode) {
     if (left.kind==VbaValue::Kind::Error || right.kind==VbaValue::Kind::Error)
         throw error("Error Variant cannot be used as an operand",13);
@@ -648,7 +649,7 @@ private:
             if (word=="ccur" || word=="vartype" || word=="typename") {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Conversion/type function requires one argument",450);
-                const auto& value=args.front();
+                const auto value=word=="vartype" ? typeInspectionValue(args.front()) : args.front();
                 if (word=="ccur") return convertCurrency(value);
                 const int type=value.kind==VbaValue::Kind::Empty ? 0 : value.kind==VbaValue::Kind::Null ? 1
                     : value.kind==VbaValue::Kind::Number ? (value.numericType==VbaValue::NumericType::Byte ? 17 : value.numericType==VbaValue::NumericType::Integer ? 2 : value.numericType==VbaValue::NumericType::Long ? 3 : value.numericType==VbaValue::NumericType::Single ? 4 : 5) : value.kind==VbaValue::Kind::Currency ? 6
@@ -923,6 +924,13 @@ VbaValue VbaValue::byteArray(std::vector<unsigned char> value) { VbaValue v; v.k
 VbaValue VbaValue::currency(std::int64_t units) { VbaValue v; v.kind=Kind::Currency; v.currencyUnits=units; return v; }
 VbaValue VbaValue::logical(bool value) { VbaValue v; v.kind = Kind::Boolean; v.boolean = value; return v; }
 namespace {
+VbaValue typeInspectionValue(VbaValue value) {
+    for (int depth=0;;++depth) {
+        if(value.kind!=VbaValue::Kind::Object || !value.object || !value.object->hasScalarDefault()) return value;
+        if(depth>=16) throw VbaRuntimeError(28,"Recursive object default value");
+        value=value.object->scalarValue();
+    }
+}
 VbaValue scalarObjectValue(VbaValue value) {
     for (int depth=0;depth<16;++depth) {
         if (value.kind!=VbaValue::Kind::Object) return value;

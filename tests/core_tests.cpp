@@ -36,6 +36,7 @@ class ScalarProbe final : public linaccess::VbaObject {
 public:
     linaccess::VbaValue value;
     int reads{};
+    bool hasScalarDefault() const override { return true; }
     linaccess::VbaValue scalarValue() override { ++reads; return value; }
     linaccess::VbaValue member(std::string_view,const std::vector<linaccess::VbaValue>&) override { throw linaccess::VbaRuntimeError(438,"No explicit members"); }
 };
@@ -216,7 +217,40 @@ void testTypedNot() {
     assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->numericType==VbaValue::NumericType::Byte && result.typedReturnValue->number==245);
 }
 
+void testDefaultTypeInspection() {
+    using namespace linaccess;
+    FakeForm host;
+    const auto probe=std::make_shared<ScalarProbe>(); probe->value=VbaValue::byte(4);
+    const VbaVariables variables{{"probe",VbaValue::reference(probe)}};
+    const auto inspect=[&] { return evaluateVbaExpression("VarType(probe)",host,variables); };
+    assert(inspect().number==17 && probe->reads==1);
+    probe->value=VbaValue::string("synthetic"); assert(inspect().number==8 && probe->reads==2);
+    probe->value={}; assert(inspect().number==1 && probe->reads==3);
+    class BrokenDefault final : public VbaObject {
+    public:
+        int reads{};
+        bool hasScalarDefault() const override { return true; }
+        VbaValue scalarValue() override { ++reads; throw VbaRuntimeError(13,"Synthetic getter failure"); }
+        VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw VbaRuntimeError(438,"No member"); }
+    };
+    const auto broken=std::make_shared<BrokenDefault>(); int actual=0;
+    try { (void)evaluateVbaExpression("VarType(value)",host,{{"value",VbaValue::reference(broken)}}); } catch(const VbaRuntimeError& failure) { actual=failure.number; }
+    assert(actual==13 && broken->reads==1);
+    auto container=std::make_shared<TestSequence>();
+    assert(evaluateVbaExpression("VarType(value)",host,{{"value",VbaValue::reference(container)}}).number==9);
+    assert(evaluateVbaExpression("VarType(Nothing)",host,{}).number==9);
+    const auto nested=std::make_shared<ScalarProbe>(); nested->value=VbaValue::reference(container);
+    assert(evaluateVbaExpression("VarType(value)",host,{{"value",VbaValue::reference(nested)}}).number==9 && nested->reads==1);
+    probe->value=VbaValue::reference(probe); const auto before=probe->reads;
+    int error=0; try { (void)inspect(); } catch(const VbaRuntimeError& failure) { error=failure.number; }
+    probe->value=VbaValue::empty(); assert(error==28 && probe->reads==before+16);
+    const std::string code="Function ErrorType() As Integer\nOn Error Resume Next\nErr.Raise(11)\nErrorType=VarType(Err)\nEnd Function\nFunction ErrorNumberType() As Integer\nErrorNumberType=VarType(Err.Number)\nEnd Function";
+    auto result=executeVbaProcedure(code,"ErrorType",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==3);
+    result=executeVbaProcedure(code,"ErrorNumberType",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==3);
+}
+
 int main() {
+    testDefaultTypeInspection();
     testTypedNot();
     {
         FakeForm host;
