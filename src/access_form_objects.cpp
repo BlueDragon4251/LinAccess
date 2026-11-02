@@ -134,6 +134,10 @@ public:
         if (key == "eventprocprefix") return linaccess::VbaValue::string(bytes(preview.controlEventPrefix(name_)));
         if (key == "tag") return linaccess::VbaValue::string(bytes(widget->property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(caption()));
+        if (key=="textalign") {
+            if (!args.empty()) throw linaccess::VbaRuntimeError(450,"TextAlign takes no arguments");
+            return linaccess::VbaValue::numeric(alignmentDefinition().textAlign);
+        }
         if (key == "value") { requireValue(); return preview.getFieldValue(bytes(name_)); }
         if (key=="oldvalue") {
             requireValue();
@@ -246,6 +250,18 @@ public:
             definition.font=std::move(next); preview.applyControlFont(widget,definition); return;
         }
 
+        if (key=="textalign") {
+            auto& definition=alignmentDefinition();
+            if (preview.layout_.kind==linaccess::AccessDocumentKind::Report)
+                throw linaccess::VbaRuntimeError(3251,"Report runtime alignment context is not implemented");
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null TextAlign");
+            const auto number=linaccess::sqlFieldValue(scalar,"INTEGER").toLongLong();
+            if (number<0 || number>255) throw linaccess::VbaRuntimeError(6,"TextAlign Byte overflow");
+            if (number>4) throw linaccess::VbaRuntimeError(5,"Invalid TextAlign setting");
+            if (number==4) throw linaccess::VbaRuntimeError(3251,"Distributed text alignment is not implemented");
+            definition.textAlign=static_cast<int>(number); preview.applyTextAlignment(widget,definition); return;
+        }
         if (key=="oldvalue") throw linaccess::VbaRuntimeError(383,"OldValue is read-only");
         if (key=="text") {
             preview.ensureWritableControl(bytes(name_));
@@ -376,6 +392,13 @@ private:
     }
     static bool fontProperty(const QString& key) {
         return key=="fontname" || key=="fontsize" || key=="fontweight" || key=="fontbold" || key=="fontitalic" || key=="fontunderline";
+    }
+    linaccess::AccessVisualControl& alignmentDefinition() const {
+        for (auto& definition:checked().layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
+            if (!AccessFormPreview::supportsTextAlignment(definition)) throw linaccess::VbaRuntimeError(438,"Control has no native text alignment adapter");
+            return definition;
+        }
+        throw linaccess::VbaRuntimeError(2465,"Control unavailable");
     }
     linaccess::AccessVisualControl& fontDefinition() const {
         for (auto& definition:checked().layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {

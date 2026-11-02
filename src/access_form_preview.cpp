@@ -817,6 +817,35 @@ void AccessFormPreview::applyControlFont(QWidget* widget,const linaccess::Access
     }
 }
 
+bool AccessFormPreview::supportsTextAlignment(const linaccess::AccessVisualControl& control) {
+    return control.type=="TextBox" || (control.type=="Label" && !control.locked);
+}
+
+void AccessFormPreview::applyTextAlignment(QWidget* widget,const linaccess::AccessVisualControl& control) {
+    if (!supportsTextAlignment(control)) return;
+    if (control.textAlign==4) throw linaccess::VbaRuntimeError(3251,"Distributed text alignment is not implemented");
+    Qt::Alignment horizontal=Qt::AlignLeft;
+    if (control.textAlign==2) horizontal=Qt::AlignHCenter;
+    else if (control.textAlign==3) horizontal=Qt::AlignRight;
+    else if (control.textAlign==0 && control.type=="TextBox") {
+        // Use retained value/field types, never guess from numeric-looking text
+        // or evaluate expressions merely to choose a visual alignment.
+        const auto type=widget->property("la_sql_type").toString().toUpper();
+        const auto kind=static_cast<linaccess::VbaValue::Kind>(widget->property("la_vba_kind").toInt());
+        const bool numericField=type.contains("INT") || type.contains("REAL") || type.contains("FLOA")
+            || type.contains("DOUB") || type.contains("NUM") || type.contains("DEC") || type.contains("DATE");
+        if ((!type.isEmpty() && numericField) || (type.isEmpty() && (kind==linaccess::VbaValue::Kind::Number || kind==linaccess::VbaValue::Kind::Currency)))
+            horizontal=Qt::AlignRight;
+    }
+    if (auto* editor=qobject_cast<QLineEdit*>(widget)) editor->setAlignment(horizontal|(editor->alignment()&Qt::AlignVertical_Mask)|Qt::AlignAbsolute);
+    else if (auto* label=qobject_cast<QLabel*>(widget)) label->setAlignment(horizontal|(label->alignment()&Qt::AlignVertical_Mask)|Qt::AlignAbsolute);
+}
+
+void AccessFormPreview::refreshTextAlignments() {
+    for (const auto& control:layout_.controls)
+        if (auto* widget=controls_.value(control.name.toCaseFolded()).data()) applyTextAlignment(widget,control);
+}
+
 void AccessFormPreview::buildControls(QWidget* canvas) {
     for (const auto& control : layout_.controls) {
 
@@ -911,6 +940,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         }
         if (!widget) continue;
         applyControlFont(widget,control);
+        applyTextAlignment(widget,control);
         widget->setObjectName("access-control-" + control.name);
         widget->setProperty("la_access_tag",control.tag);
         if (!dynamic_cast<AccessFormPreview*>(widget)) widget->installEventFilter(this);
@@ -1584,6 +1614,7 @@ void AccessFormPreview::setField(std::string_view name, std::optional<std::strin
     bufferedTextControls_.remove(assignedName); pendingControls_.remove(assignedName); editOriginals_.remove(assignedName);
     rememberControlEdit(widget);
     if (wasNull != !value.has_value() || previous != textOf(widget)) markDirty(assignedName);
+    refreshTextAlignments();
 }
 
 linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) const {
@@ -1674,6 +1705,7 @@ void AccessFormPreview::refreshCalculatedControls() {
         if (control.controlSource.trimmed().startsWith('=')) {
             try { (void)calculatedControlValue(control.name); } catch (const std::exception&) { /* Error is visible on the control. */ }
         }
+    refreshTextAlignments();
 }
 linaccess::VbaValue AccessFormPreview::controlColumnValue(const QString& name,const std::vector<linaccess::VbaValue>& arguments) {
     if (arguments.empty() || arguments.size()>2) throw linaccess::VbaRuntimeError(450,"Column requires column and optional row");
@@ -1744,7 +1776,7 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
         setText(widget,converted.toString()); widget->setProperty("la_null",converted.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
     }
-    if(initializingDefault) return;
+    if(initializingDefault) { refreshTextAlignments(); return; }
     const auto assignedName=QString::fromUtf8(name.data(),name.size());
     bufferedTextControls_.remove(assignedName); pendingControls_.remove(assignedName); editOriginals_.remove(assignedName);
     rememberControlEdit(widget);

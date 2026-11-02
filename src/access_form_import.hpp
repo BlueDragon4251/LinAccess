@@ -39,6 +39,7 @@ struct AccessVisualControl {
     QString defaultValue;
     QString inputMask;
     AccessControlFont font;
+    int textAlign{};
     int optionValue{1};
     int optionGroupIndex{-1};
     QString rowSource;

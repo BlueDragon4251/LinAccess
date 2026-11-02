@@ -430,3 +430,11 @@ new rows without dirtying/inserting; shared fields, empty-versus-NULL SQL storag
 future metadata changes, failed-default recovery and ID nonconsumption are tested.
 Original probes retain 34 entries and initialize 15 unbound literals. Computed/
 Jet table defaults and full new-record typing/timing remain open (CONTROL_DEFAULT_RUNTIME.md).
+
+Native TextBox/Label TextAlign now preserves imported templates and explicit
+General/Left/Center/Right settings, with instance VBA setters and typed General
+alignment. Native Qt/SQL tests preserve input buffers and read-only permissions;
+24 original layouts expose 208 aligned Labels and 226 TextBoxes without supplied
+CodeBehind or rows. Distributed alignment and runtime report setters explicitly
+reject as unsupported. This is bounded horizontal rendering, not complete visual
+parity; see [Text alignment](TEXT_ALIGNMENT_RUNTIME.md).

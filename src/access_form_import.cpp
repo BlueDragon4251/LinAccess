@@ -120,6 +120,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
     QHash<QString, int> sections;
     QHash<QString,AccessControlFont> templateFonts;
     QHash<QString,QString> templateDefaults;
+    QHash<QString,int> templateAlignments;
     static const QRegularExpression begin(R"(^\s*Begin(?:\s+(\w+))?\s*$)",
         QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression property(R"(^\s*([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$)");
@@ -144,6 +145,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 item.type = type;
                 item.font = templateFonts.value(type);
                 item.defaultValue = templateDefaults.value(type);
+                item.textAlign = templateAlignments.value(type);
                 for (auto it=stack.crbegin();it!=stack.crend();++it)
                     if (it->type=="OptionGroup" && it->control>=0) { item.optionGroupIndex=it->control; break; }
                 item.section = section;
@@ -170,6 +172,13 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             continue;
         }
         const auto integer = [&] { bool ok = false; const int result = value.toInt(&ok); return ok ? result : 0; };
+        if (key=="TextAlign" && (current.controlTemplate || current.control>=0)) {
+            bool valid=false; const auto alignment=value.toInt(&valid);
+            if (!valid || alignment<0 || alignment>4) throw std::runtime_error("Invalid imported TextAlign");
+            if (current.controlTemplate) templateAlignments[current.type]=alignment;
+            else form.controls[current.control].textAlign=alignment;
+            continue;
+        }
         if (key=="DefaultValue" && value.size()>255) throw std::runtime_error("Imported default expression exceeds 255 code units");
         if (current.controlTemplate && key=="DefaultValue") { templateDefaults[current.type]=value; continue; }
         if (current.controlTemplate && fontProperty(templateFonts[current.type],key,value)) continue;

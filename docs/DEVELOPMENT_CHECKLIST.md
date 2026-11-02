@@ -420,3 +420,8 @@ Full targets remain open:
 - [x] Bounded form-control DefaultValue metadata/templates and literal new-row/
   unbound initialization, no spurious events/inserts/ID allocation, native VBA/
   SQL/empty-NULL/mirror/error recovery evidence and 34/15 original metadata probes.
+
+- [x] Bounded native TextBox/Label TextAlign metadata/templates and VBA styling,
+  typed General/Left/Center/Right, pending-input/SQL/read-only preservation and
+  24 original layout probes (208 Labels / 226 TextBoxes); distributed/report
+  runtime setters and complete visual parity remain open.

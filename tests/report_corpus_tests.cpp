@@ -319,6 +319,7 @@ void testOriginalPasswordMask(const QDir&,const QJsonArray&);
 void testOriginalControlFonts(const QDir&,const QJsonArray&);
 void testOriginalAllowEdits(const QDir&,const QJsonArray&,QSqlDatabase);
 void testOriginalControlDefaults(const QDir&,const QJsonArray&);
+void testOriginalTextAlignment(const QDir&,const QJsonArray&);
 void testOriginalOpenReport(const QDir&,const QJsonArray&,QSqlDatabase);
 
 void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QString& mdb) {
@@ -982,6 +983,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
     testOriginalControlFonts(directory,objects);
     testOriginalAllowEdits(directory,objects,db);
     testOriginalControlDefaults(directory,objects);
+    testOriginalTextAlignment(directory,objects);
     testOriginalTimer(directory,objects,db);
     testOriginalOpenReport(directory,objects,db);
     testOriginalCalendar(directory,objects,db);

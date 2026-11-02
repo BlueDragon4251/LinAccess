@@ -44,6 +44,7 @@ void testControlFonts();
 void testAllowEdits();
 void testCheckboxClose();
 void testControlDefaults();
+void testTextAlignment();
 
 void testFormEvents() {
     testInsertionEvents();
@@ -60,6 +61,7 @@ void testFormEvents() {
     testAllowEdits();
     testCheckboxClose();
     testControlDefaults();
+    testTextAlignment();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -2204,6 +2206,171 @@ End Sub
     auto reportField=makePreviewFormObject(report)->objectMember("field",{}).object;
     number=0; try { reportField->member("DefaultValue",{}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==438);
     assert(report.close());
+}
+
+void testTextAlignment() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","text-alignment"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,n INTEGER,t TEXT,d DATETIME)"));
+    assert(sql.exec("INSERT INTO records VALUES(1,12,'123','2026-01-02'),(2,34,'456','2026-03-04')"));
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="records"
+Begin
+Begin TextBox
+TextAlign =2
+End
+Begin Label
+TextAlign =3
+End
+End
+Begin Section
+Begin TextBox
+Name ="number"
+ControlSource ="n"
+TextAlign =0
+End
+Begin TextBox
+Name ="text"
+ControlSource ="t"
+TextAlign =0
+Top =400
+End
+Begin TextBox
+Name ="date"
+ControlSource ="d"
+TextAlign =0
+Top =800
+End
+Begin TextBox
+Name ="center"
+ControlSource ="t"
+Top =1200
+End
+Begin TextBox
+Name ="unbound"
+DefaultValue ="7"
+TextAlign =0
+Top =1600
+End
+Begin TextBox
+Name ="calculated"
+ControlSource ="=[number]+1"
+TextAlign =0
+Top =2000
+End
+Begin Label
+Name ="caption"
+Caption ="123"
+Top =2400
+End
+Begin CommandButton
+Name ="style"
+OnClick ="[Event Procedure]"
+Top =2800
+End
+End
+End
+)FORM";
+    const QByteArray code="Sub style_Click()\nMe!number.TextAlign=2\nMe!caption.TextAlign=1\nEnd Sub\n";
+    const auto parsed=linaccess::parseAccessFormLayout(QString::fromUtf8(layout));
+    assert(parsed.controls[0].textAlign==0 && parsed.controls[3].textAlign==2 && parsed.controls[6].textAlign==3);
+    AccessFormPreview form("alignment",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form);
+    const auto object=[&](const char* name) { return root->objectMember(name,{}).object; };
+    const auto editor=[&](const char* name) { auto* value=form.findChild<QLineEdit*>(QString("access-control-")+name); assert(value); return value; };
+    auto* number=editor("number"); auto* text=editor("text"); auto* date=editor("date"); auto* center=editor("center");
+    auto* unbound=editor("unbound"); auto* calculated=editor("calculated");
+    auto* caption=form.findChild<QLabel*>("access-control-caption"); auto* button=form.findChild<QPushButton*>("access-control-style");
+    auto* selector=form.findChild<QComboBox*>("access-record-selector"); assert(caption && button && selector);
+    const auto horizontal=[](Qt::Alignment alignment) { return alignment&Qt::AlignHorizontal_Mask; };
+    const auto aligned=[&](QLineEdit* field,Qt::AlignmentFlag expected) { assert(horizontal(field->alignment())==(expected|Qt::AlignAbsolute)); };
+    aligned(number,Qt::AlignRight); aligned(text,Qt::AlignLeft); aligned(date,Qt::AlignRight);
+    aligned(center,Qt::AlignHCenter); aligned(unbound,Qt::AlignRight); aligned(calculated,Qt::AlignRight);
+    assert(horizontal(caption->alignment())==(Qt::AlignRight|Qt::AlignAbsolute));
+    object("unbound")->assign("Value",VbaValue::string("123")); aligned(unbound,Qt::AlignLeft);
+    object("unbound")->assign("Value",VbaValue::currency(12500)); aligned(unbound,Qt::AlignRight);
+    object("unbound")->assign("Value",VbaValue{}); aligned(unbound,Qt::AlignLeft);
+    object("unbound")->assign("Value",VbaValue::numeric(9)); aligned(unbound,Qt::AlignRight);
+    assert(!form.hasUnsavedChanges());
+    number->setFocus(); number->selectAll(); QTest::keyClicks(number,"27"); number->setSelection(0,1);
+    assert(number->hasFocus() && object("number")->member("Text",{}).asText()=="27" && object("number")->member("Value",{}).asNumber()==12);
+    button->click();
+    const auto click=form.eventResult("control:style:Click"); assert(click && click->status==linaccess::VbaExecutionStatus::Completed);
+    aligned(number,Qt::AlignHCenter); assert(horizontal(caption->alignment())==(Qt::AlignLeft|Qt::AlignAbsolute));
+    assert(number->hasFocus() && number->selectionStart()==0 && number->selectedText()=="2" && form.hasUnsavedChanges());
+    assert(object("number")->member("Value",{}).asNumber()==12 && calculated->text()=="13");
+    assert(sql.exec("SELECT n FROM records WHERE id=1") && sql.next() && sql.value(0).toInt()==12); sql.finish();
+    for (const auto& item:std::vector<std::pair<VbaValue,int>>{{VbaValue{},94},{VbaValue::string("bad"),13},{VbaValue::numeric(-1),6},{VbaValue::numeric(256),6},{VbaValue::numeric(5),5},{VbaValue::numeric(4),3251}}) {
+        int error=0; try { object("number")->assign("TextAlign",item.first); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+        assert(error==item.second && object("number")->member("TextAlign",{}).asNumber()==2); aligned(number,Qt::AlignHCenter);
+    }
+    int error=0; try { object("style")->assign("TextAlign",VbaValue::numeric(1)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==438);
+    error=0; try { object("number")->member("TextAlign",{VbaValue::numeric(1)}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==450);
+    class AlignmentScalar final:public linaccess::VbaObject {
+    public:
+        int reads{};
+        VbaValue scalarValue() override { ++reads; return VbaValue::numeric(2.5); }
+        VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw linaccess::VbaRuntimeError(438,"No members"); }
+    };
+    object("number")->assign("TextAlign",VbaValue::numeric(1));
+    auto scalar=std::make_shared<AlignmentScalar>(); object("number")->assign("TextAlign",VbaValue::reference(scalar));
+    assert(scalar->reads==1 && object("number")->member("TextAlign",{}).asNumber()==2); aligned(number,Qt::AlignHCenter);
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT n,t FROM records WHERE id=1") && sql.next() && sql.value(0).toInt()==27 && sql.value(1).toString()=="123"); sql.finish();
+    assert(calculated->text()=="28"); aligned(calculated,Qt::AlignRight);
+    selector->setCurrentIndex(2); assert(number->text()=="34" && date->text().startsWith("2026-03-04")); aligned(number,Qt::AlignHCenter); aligned(date,Qt::AlignRight);
+    object("number")->assign("TextAlign",VbaValue::numeric(1)); aligned(number,Qt::AlignLeft);
+    object("number")->assign("TextAlign",VbaValue::numeric(3)); aligned(number,Qt::AlignRight);
+    object("number")->assign("TextAlign",VbaValue::numeric(0)); aligned(number,Qt::AlignRight);
+    root->member("Requery",{}); aligned(number,Qt::AlignRight); aligned(center,Qt::AlignHCenter);
+    assert(!form.hasUnsavedChanges() && form.close());
+    AccessFormPreview reopened("fresh alignment",layout,{},db); assert(makePreviewFormObject(reopened)->objectMember("number",{}).object->member("TextAlign",{}).asNumber()==0); assert(reopened.close());
+    assert(sql.exec("CREATE VIEW read_only_source AS SELECT n,t FROM records"));
+    auto readOnlyLayout=layout; readOnlyLayout.replace("RecordSource =\"records\"","RecordSource =\"read_only_source\"");
+    AccessFormPreview readOnly("read-only alignment",readOnlyLayout,{},db);
+    auto readOnlyObject=makePreviewFormObject(readOnly)->objectMember("number",{}).object;
+    auto* readOnlyEditor=readOnly.findChild<QLineEdit*>("access-control-number"); assert(readOnlyEditor && readOnlyEditor->isReadOnly());
+    aligned(readOnlyEditor,Qt::AlignRight); readOnlyObject->assign("TextAlign",VbaValue::numeric(1)); aligned(readOnlyEditor,Qt::AlignLeft);
+    error=0; try { readOnlyObject->assign("Value",VbaValue::numeric(99)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+    assert(error==2448 && readOnlyEditor->isReadOnly() && !readOnly.hasUnsavedChanges() && readOnly.close());
+    AccessFormPreview report("alignment report","Begin Report\nBegin Section\nBegin Label\nName =\"label\"\nTextAlign =2\nCaption =\"Caption\"\nEnd\nEnd\nEnd",{},db);
+    auto reportLabel=makePreviewFormObject(report)->objectMember("label",{}).object;
+    assert(reportLabel->member("TextAlign",{}).asNumber()==2);
+    error=0; try { reportLabel->assign("TextAlign",VbaValue::numeric(1)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+    assert(error==3251 && reportLabel->member("TextAlign",{}).asNumber()==2 && report.close());
+    for(const auto* setting:{"-1","5","bad"}) {
+        bool rejected=false; try { linaccess::parseAccessFormLayout(QString("Begin Form\nBegin Section\nBegin TextBox\nName =\"field\"\nTextAlign =")+setting+"\nEnd\nEnd\nEnd"); } catch(const std::exception&) { rejected=true; } assert(rejected);
+    }
+    error=0; try { AccessFormPreview distributed("unsupported distribution","Begin Form\nBegin Section\nBegin TextBox\nName =\"field\"\nTextAlign =4\nEnd\nEnd\nEnd",{},db); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==3251);
+}
+
+void testOriginalTextAlignment(const QDir& directory,const QJsonArray& objects) {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","original-alignment-empty"); db.setDatabaseName(":memory:"); assert(db.open());
+    int documents=0,labels=0,editors=0;
+    for(const auto& entry:objects) {
+        const auto artifact=entry.toObject(); if(artifact["kind"]!="form" && artifact["kind"]!="report") continue;
+        QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly)); const auto bytes=input.readAll();
+        assert(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1().toLower());
+        const auto layout=linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(bytes));
+        if(std::none_of(layout.controls.begin(),layout.controls.end(),[](const auto& control) { return (control.type=="Label" || control.type=="TextBox") && control.textAlign>=1 && control.textAlign<=3; })) continue;
+        // Empty database and no CodeBehind: only native layout rendering is
+        // exercised, without original rows or business procedures.
+        AccessFormPreview form(artifact["name"].toString(),bytes,{},db); auto root=makePreviewFormObject(form);
+        for(const auto& control:layout.controls) {
+            if((control.type!="Label" && control.type!="TextBox") || control.textAlign<1 || control.textAlign>3) continue;
+            auto* widget=form.findChild<QWidget*>("access-control-"+control.name); assert(widget);
+            Qt::Alignment actual;
+            if(control.type=="Label") { auto* label=qobject_cast<QLabel*>(widget); assert(label); actual=label->alignment(); ++labels; }
+            else { auto* editor=qobject_cast<QLineEdit*>(widget); assert(editor); actual=editor->alignment(); ++editors; }
+            const auto expected=control.textAlign==1 ? Qt::AlignLeft : control.textAlign==2 ? Qt::AlignHCenter : Qt::AlignRight;
+            assert((actual&Qt::AlignHorizontal_Mask)==(expected|Qt::AlignAbsolute));
+            assert(root->objectMember(control.name.toUtf8().toStdString(),{}).object->member("TextAlign",{}).asNumber()==control.textAlign);
+        }
+        assert(!form.hasUnsavedChanges() && form.close()); ++documents;
+    }
+    assert(documents>0 && labels>0 && editors>0);
+    std::cout<<"Original explicit native text alignment: documents="<<documents<<"; labels="<<labels<<"; textboxes="<<editors<<"\n";
 }
 
 void testOriginalControlDefaults(const QDir& directory,const QJsonArray& objects) {

@@ -1141,3 +1141,22 @@ Validation: host 21/21 (67.57 s), Debian 12 21/21 (69.62 s), Ubuntu 24.04
 21/21 (63.46 s), GUI-disabled core 1/1 (1.15 s). Fresh packages pass exact
 payload/backend/permissions/fixture-exclusion checks and isolated Debian/Ubuntu
 backend and GUI startup. All four original fixture hashes remain unchanged.
+
+## 2026-11-02 — Native horizontal text alignment
+
+Imported per-control/template TextAlign now drives native TextBox/Label widgets.
+Explicit zero overrides templates; General uses retained value/field types rather
+than guessing from text or evaluating code. Native VBA updates only instance
+appearance, preserving pending input, selection, focus, fonts and SQL permissions.
+Distributed alignment and unsupported runtime report context reject explicitly.
+The initial targeted pair passed 2/2 (39.17 s); an additional read-only-query
+regression is included in final validation. An empty-DB/no-CodeBehind probe checks
+24 hash-verified original form/report layouts with 208 Labels and 226 TextBoxes.
+No additional original business execution or complete visual parity is claimed.
+See TEXT_ALIGNMENT_RUNTIME.md for boundaries and public contracts.
+
+Final validation: host 21/21 (87.10 s), Debian 12 21/21 (68.95 s), Ubuntu
+24.04 21/21 (62.38 s), GUI-disabled core 1/1 (1.17 s). Fresh host/distro
+DEBs pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
+installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+All four original fixture hashes pass; the repository remains private.
