@@ -1,0 +1,90 @@
+#include "vba_calendar.hpp"
+#include <chrono>
+#include <limits>
+
+namespace linaccess {
+namespace {
+struct Parts { int year=1899,month=12,day=30,hour=0,minute=0,second=0; std::chrono::sys_days date; };
+Parts dateParts(const VbaValue& value) {
+    Parts result;
+    if(value.kind!=VbaValue::Kind::Empty) {
+        if(value.kind!=VbaValue::Kind::Text) throw VbaRuntimeError(3251,"Calendar input requires ISO text; numeric Date coercion is unsupported");
+        const auto& text=value.text;
+        const auto digits=[&](std::size_t begin,std::size_t count) {
+            int number=0;
+            for(auto i=begin;i<begin+count;++i) {
+                if(text[i]<'0' || text[i]>'9') throw VbaRuntimeError(13,"Invalid ISO date digits");
+                number=number*10+text[i]-'0';
+            }
+            return number;
+        };
+        const bool timeOnly=text.size()==8;
+        if(!timeOnly && text.size()!=10 && text.size()!=19) throw VbaRuntimeError(13,"Unambiguous ISO date or time required");
+        if(!timeOnly) {
+            if(text[4]!='-' || text[7]!='-' || (text.size()==19 && text[10]!=' ' && text[10]!='T')) throw VbaRuntimeError(13,"Invalid ISO date separators");
+            result.year=digits(0,4); result.month=digits(5,2); result.day=digits(8,2);
+        }
+        if(timeOnly || text.size()==19) {
+            const auto offset=timeOnly ? 0u : 11u;
+            if(text[offset+2]!=':' || text[offset+5]!=':') throw VbaRuntimeError(13,"Invalid ISO time separators");
+            result.hour=digits(offset,2); result.minute=digits(offset+3,2); result.second=digits(offset+6,2);
+        }
+    }
+    const auto date=std::chrono::year(result.year)/std::chrono::month(result.month)/std::chrono::day(result.day);
+    if(result.year<100 || result.year>9999 || !date.ok() || result.hour>23 || result.minute>59 || result.second>59) throw VbaRuntimeError(13,"Gregorian date or time out of range");
+    result.date=std::chrono::sys_days(date); return result;
+}
+std::int64_t floorWeeks(std::int64_t days) { auto weeks=days/7; if(days%7<0) --weeks; return weeks; }
+}
+VbaValue vbaCalendarFunction(std::string_view name,const std::vector<VbaValue>& arguments) {
+    const bool difference=name=="datediff",weekday=name=="weekday";
+    if(arguments.size()<(difference?3u:1u) || arguments.size()>(difference?5u:weekday?2u:1u)) throw VbaRuntimeError(450,"Calendar function argument count invalid");
+    std::vector<VbaValue> args; for(const auto& value:arguments) args.push_back(scalarVbaValue(value));
+    int firstDay=1;
+    const auto option=difference?3u:1u;
+    if((difference || weekday) && args.size()>option) firstDay=static_cast<int>(coerceVbaModuleValue(args[option],"long").number);
+    if(firstDay==0) throw VbaRuntimeError(3251,"System first weekday requires a regional adapter");
+    if(firstDay<1 || firstDay>7) throw VbaRuntimeError(5,"Invalid first weekday");
+    int firstWeek=1;
+    if(difference && args.size()>4) {
+        firstWeek=static_cast<int>(coerceVbaModuleValue(args[4],"long").number);
+        if(firstWeek==0) throw VbaRuntimeError(3251,"System first week requires a regional adapter");
+        if(firstWeek<1 || firstWeek>3) throw VbaRuntimeError(5,"Invalid first week");
+    }
+    if(!difference) {
+        if(args[0].kind==VbaValue::Kind::Null) return {};
+        const auto date=dateParts(args[0]); int result;
+        if(name=="year") result=date.year;
+        else if(name=="month") result=date.month;
+        else if(name=="day") result=date.day;
+        else if(name=="hour") result=date.hour;
+        else if(name=="minute") result=date.minute;
+        else if(name=="second") result=date.second;
+        else if(weekday) result=(static_cast<int>(std::chrono::weekday(date.date).c_encoding())+7-(firstDay-1))%7+1;
+        else throw VbaRuntimeError(438,"Calendar function unsupported");
+        return VbaValue::integer(static_cast<std::int16_t>(result));
+    }
+    for(const auto& value:args) if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null DateDiff argument");
+    auto interval=args[0].asText(); for(auto& c:interval) if(c>='A' && c<='Z') c+=('a'-'A');
+    const auto left=dateParts(args[1]),right=dateParts(args[2]);
+    const auto bucket=[&](const Parts& date)->std::int64_t {
+        const auto days=date.date.time_since_epoch().count();
+        if(interval=="yyyy") return date.year;
+        if(interval=="q") return date.year*4+(date.month-1)/3;
+        if(interval=="m") return date.year*12+date.month-1;
+        if(interval=="y" || interval=="d") return days;
+        if(interval=="h") return days*24+date.hour;
+        if(interval=="n") return days*1440+date.hour*60+date.minute;
+        if(interval=="s") return days*86400+date.hour*3600+date.minute*60+date.second;
+        if(interval=="ww") {
+            if(firstWeek!=1) throw VbaRuntimeError(3251,"Non-default first-week DateDiff is not validated");
+            return floorWeeks(days-3-(firstDay-1)); // 1970-01-04 was Sunday.
+        }
+        if(interval=="w") throw VbaRuntimeError(3251,"Weekday-interval DateDiff is not validated");
+        throw VbaRuntimeError(5,"Invalid DateDiff interval");
+    };
+    const auto result=bucket(right)-bucket(left);
+    if(result<std::numeric_limits<std::int32_t>::min() || result>std::numeric_limits<std::int32_t>::max()) throw VbaRuntimeError(6,"DateDiff Long overflow");
+    return VbaValue::longInteger(static_cast<std::int32_t>(result));
+}
+}

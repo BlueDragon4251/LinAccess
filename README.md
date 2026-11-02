@@ -516,3 +516,8 @@ INSERT-SELECT und vollständige Jet-Semantik bleiben offen.
 Formulare die aktuelle Position als schreibgeschützten VBA-Long, auch nach
 Navigation und Filterung. Entwurfsansicht und vollständige Windows-Semantik
 bleiben offen.
+
+[Native Datumsfunktionen](docs/CALENDAR_FUNCTIONS_RUNTIME.md) umfassen DateDiff,
+Year/Month/Day, Hour/Minute/Second und Weekday für eindeutige ISO-Werte in VBA
+und SQL. Date-Variants, regionale Datumskonvertierung und vollständige
+Kalendersemantik bleiben offen.

@@ -1,3 +1,4 @@
+#include "vba_calendar.hpp"
 #include "vba_expression.hpp"
 #include "vba_color.hpp"
 #include "vba_currency.hpp"
@@ -470,6 +471,8 @@ private:
             {"vberror",10},{"vbboolean",11},{"vbvariant",12},{"vbdataobject",13},
             {"vbdecimal",14},{"vbbyte",17},{"vbarray",8192}};
         if (const auto type=variantTypes.find(word);type!=variantTypes.end()) return VbaValue::numeric(type->second);
+        static const std::unordered_map<std::string,int> calendarConstants{{"vbusesystem",0},{"vbsunday",1},{"vbmonday",2},{"vbtuesday",3},{"vbwednesday",4},{"vbthursday",5},{"vbfriday",6},{"vbsaturday",7},{"vbfirstjan1",1},{"vbfirstfourdays",2},{"vbfirstfullweek",3}};
+        if(const auto constant=calendarConstants.find(word);constant!=calendarConstants.end()) return VbaValue::integer(constant->second);
         if (word == "true") return VbaValue::logical(true);
         if (word == "false") return VbaValue::logical(false);
         static const std::unordered_map<std::string,int> messageConstants{
@@ -569,7 +572,7 @@ private:
             if (!take(")")) {
                 do {
                     const auto start = index_;
-                    const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="strcomp" || word=="round" || word=="replace") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
+                    const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="strcomp" || word=="round" || word=="replace" || word=="datediff" || word=="weekday") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
                     args.push_back(missing ? VbaValue::empty() : expression(1,word=="isobject"));
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
@@ -578,6 +581,14 @@ private:
                 require(")");
             }
             const auto one = args.size() == 1;
+            if(word=="datediff" || word=="year" || word=="month" || word=="day" || word=="hour" || word=="minute" || word=="second" || word=="weekday") {
+                if(!host_) return {};
+                for(std::size_t i=0;i<omitted.size();++i) if(omitted[i]) {
+                    if(i<(word=="datediff"?3u:1u)) throw error("Required calendar argument omitted",450);
+                    args[i]=VbaValue::integer(1);
+                }
+                return vbaCalendarFunction(word,args);
+            }
             if (word=="isobject") {
                 if (!host_) return {};
                 if(args.size()!=1) throw error("IsObject requires one argument",450);

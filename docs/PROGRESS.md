@@ -2283,3 +2283,22 @@ validation overhead as requested, the distribution matrix was not rerun for
 this batch: last fully checked three-distribution state is 4225a17 (47/47 on
 each platform plus packages/isolated installations). No current-batch distro
 or remote CI success is claimed; the GitHub account restriction remains external.
+
+## 2026-11-02 — Shared native Gregorian calendar function batch
+
+Added shared C++20 ISO/Gregorian DateDiff, Year/Month/Day/Hour/Minute/Second and
+Weekday, native SQL callbacks/compiler/alias integration, weekday/week constants
+and optional defaults. Focused core/query tests pass 2/2 (1.04 s), including real
+VBA procedures, Integer/Long VarType, scalar getter once, leap dates, boundary
+counting/negative results, week starts, Null, errors and Long overflow. No new
+test target: GUI suite remains 48 CTests. Public Microsoft contracts read;
+Windows differential oracle remains unavailable. Date Variants, numeric/locale/
+regional/Hijri/fractional-second/coercion/w/non-default ww-first-week/full calendar
+semantics remain open. No complete original business workflow increment. See
+CALENDAR_FUNCTIONS_RUNTIME.md. Shared validation follows below.
+
+Shared delivery validation: host 48/48 (82.73 s), GUI-disabled core 1/1
+(1.00 s), host DEB payload/backend/build-ID/permissions/fixture-exclusion checks
+pass. Four original hashes and private repository visibility rechecked. The
+three-distribution matrix remains at 4225a17; it was not repeated for this batch.
+No current-batch distribution or remote CI success is claimed.

@@ -411,7 +411,46 @@ void testRoundFunction() {
     }
 }
 
+void testCalendarFunctions() {
+    using namespace linaccess; FakeForm host;
+    const auto eval=[&](const std::string& source) { return evaluateVbaExpression(source,host,{}); };
+    for(const auto& [source,expected]:std::vector<std::pair<std::string,int>>{
+        {R"(Year("2024-02-29 23:59:58"))",2024},{R"(Month("2024-02-29"))",2},{R"(Day("2024-02-29"))",29},
+        {R"(Hour("23:59:58"))",23},{R"(Minute("2024-02-29T23:59:58"))",59},{R"(Second("23:59:58"))",58},
+        {R"(Weekday("2024-03-03"))",1},{R"(Weekday("2024-03-03",vbMonday))",7},{R"(Year(Empty))",1899}}) {
+        const auto result=eval(source); assert(result.asNumber()==expected && result.numericType==VbaValue::NumericType::Integer);
+    }
+    for(const auto& [interval,first,last,expected]:std::vector<std::tuple<std::string,std::string,std::string,int>>{
+        {"yyyy","2023-12-31","2024-01-01",1},{"q","2024-03-31","2024-04-01",1},{"m","2024-01-31","2024-02-01",1},
+        {"d","2024-02-28","2024-03-01",2},{"y","2024-03-01","2024-02-28",-2},
+        {"h","2024-02-29 23:59:59","2024-03-01 00:00:00",1},{"n","23:59:59","23:58:59",-1},
+        {"s","2024-02-29 23:59:59","2024-03-01 00:00:00",1},{"ww","2024-03-02","2024-03-03",1}}) {
+        const auto expression="DateDiff(\""+interval+"\",\""+first+"\",\""+last+"\")"; const auto result=eval(expression);
+        assert(result.asNumber()==expected && result.numericType==VbaValue::NumericType::Long);
+    }
+    assert(eval(R"(DateDiff("ww","2024-03-02","2024-03-03",vbMonday))").asNumber()==0);
+    assert(eval(R"(DateDiff("ww","2024-03-02","2024-03-03",,vbFirstJan1))").asNumber()==1);
+    assert(eval("Year(Null)").kind==VbaValue::Kind::Null && eval("Weekday(Null)").kind==VbaValue::Kind::Null);
+    for(const auto& [source,wanted]:std::vector<std::pair<std::string,int>>{
+        {R"(Year("2023-02-29"))",13},{R"(Hour("24:00:00"))",13},{"Year(1)",3251},{"Year()",450},
+        {R"(DateDiff("invalid","2024-01-01","2024-01-02"))",5},{R"(DateDiff("d",Null,"2024-01-02"))",94},
+        {R"(DateDiff("s","0100-01-01","9999-12-31"))",6},{R"(Weekday("2024-01-01",8))",5},
+        {R"(Weekday("2024-01-01",vbUseSystem))",3251}}) {
+        int error=0; try { (void)eval(source); } catch(const VbaRuntimeError& failure) { error=failure.number; } assert(error==wanted);
+    }
+    const auto probe=std::make_shared<ScalarProbe>(); probe->value=VbaValue::string("2024-02-29");
+    assert(evaluateVbaExpression("Day(probe)",host,{{"probe",VbaValue::reference(probe)}}).asNumber()==29 && probe->reads==1);
+    const auto executed=executeVbaProcedure(R"VBA(Sub CalendarValues()
+Me!YearValue=CStr(Year("2024-02-29"))
+Me!DayDifference=CStr(DateDiff("d","2024-02-28","2024-03-01"))
+Me!CalendarTypes=CStr(VarType(Year("2024-02-29"))) & ":" & CStr(VarType(DateDiff("d","2024-02-28","2024-03-01")))
+End Sub
+)VBA","CalendarValues",host);
+    assert(executed.status==VbaExecutionStatus::Completed && host.fields["YearValue"]=="2024" && host.fields["DayDifference"]=="2" && host.fields["CalendarTypes"]=="2:3");
+}
+
 int main() {
+    testCalendarFunctions();
     testCurrencyRealStorage();
     testIsObjectFunction();
     testStringResultTypes();

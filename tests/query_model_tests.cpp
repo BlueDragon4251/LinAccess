@@ -20,6 +20,12 @@ int main(int argc, char** argv) {
     assert(query.exec("CREATE TABLE samples(id INTEGER, score INTEGER, label TEXT)"));
     assert(query.exec("INSERT INTO samples VALUES(1,10,'one'),(2,20,'two'),(3,20,NULL),(4,30,'four')"));
     {
+        linaccess::AccessQueryModel dates; dates.execute(db,"SELECT DateDiff('d',#2/28/2024#,#3/1/2024#) AS elapsed, Year('2024-02-29') AS yr, Month('2024-02-29') AS mon, Day('2024-02-29') AS dy, Hour('23:59:58') AS hr, Minute('23:59:58') AS mn, Second('23:59:58') AS sec, Weekday('2024-03-03',2) AS wd, Year(Null) AS missing");
+        const int expected[]{2,2024,2,29,23,59,58,7}; assert(dates.rowCount()==1);
+        for(int i=0;i<8;++i) assert(dates.data(dates.index(0,i)).toInt()==expected[i]); assert(dates.data(dates.index(0,8)).isNull());
+        dates.execute(db,"SELECT Year('2024-02-29') AS yr, yr+1 AS following FROM samples WHERE id=1"); assert(dates.data(dates.index(0,1)).toInt()==2025);
+    }
+    {
         linaccess::AccessQueryModel lengths; lengths.execute(db,"SELECT Len('Grüße😀') AS units, Len(Null) AS missing");
         assert(lengths.rowCount()==1 && lengths.data(lengths.index(0,0)).toInt()==7 && lengths.data(lengths.index(0,1)).isNull());
         lengths.execute(db,"SELECT Len('😀') AS units, units+1 AS next_units FROM samples WHERE id=1");

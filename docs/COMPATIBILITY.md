@@ -808,3 +808,10 @@ freezes positional source rows, including exact Currency self-appends and atomic
 multi-row failure. The existing insertion regression covers this extension.
 Joins/TOP/nested/view/HAVING/set-operation/full Jet append semantics remain open.
 See [CURRENCY_INSERT_RUNTIME.md](CURRENCY_INSERT_RUNTIME.md#bounded-insert-select-append).
+
+Native VBA and SQL now share bounded Gregorian DateDiff and seven date/time
+component functions, accepting unambiguous ISO text with Integer/Long VBA
+return types and integer SQL results. Existing core/query tests cover leap days, boundaries, negative
+results, Null, options, aliases and overflow. Date Variants, numeric/locale
+coercion and complete calendar/Windows semantics remain open. See
+[CALENDAR_FUNCTIONS_RUNTIME.md](CALENDAR_FUNCTIONS_RUNTIME.md).

@@ -10,6 +10,7 @@
 #include "vba_runtime.hpp"
 #include "vba_color.hpp"
 #include "vba_round.hpp"
+#include "vba_calendar.hpp"
 #include "vba_currency.hpp"
 #include <QLibrary>
 #include <QSqlDriver>
@@ -166,6 +167,34 @@ void colorFunction(sqlite3_context* context,int count,sqlite3_value** args,bool 
 }
 void rgbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept { colorFunction(context,count,args,false); }
 void qbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept { colorFunction(context,count,args,true); }
+
+void calendarFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view name) noexcept {
+    auto& native=api();
+    try {
+        std::vector<VbaValue> values;
+        for(int i=0;i<count;++i) {
+            const auto type=native.type(args[i]);
+            if(type==SQLITE_NULL) values.emplace_back();
+            else if(type==SQLITE_INTEGER || type==SQLITE_FLOAT) values.push_back(VbaValue::numeric(native.number(args[i])));
+            else if(type==SQLITE_TEXT) {
+                const auto* text=native.text(args[i]); if(!text) throw VbaRuntimeError(7,"SQL date text unavailable");
+                values.push_back(VbaValue::string(std::string(reinterpret_cast<const char*>(text),native.bytes(args[i]))));
+            } else throw VbaRuntimeError(13,"SQL calendar argument must be scalar");
+        }
+        const auto result=vbaCalendarFunction(name,values);
+        if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
+        else native.integerResult(context,static_cast<qlonglong>(result.number));
+    } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
+      catch(...) { native.error(context,"SQL calendar calculation failed",-1); }
+}
+void calendarDatediff(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendarFunction(c,n,a,"datediff"); }
+void calendarYear(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendarFunction(c,n,a,"year"); }
+void calendarMonth(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendarFunction(c,n,a,"month"); }
+void calendarDay(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendarFunction(c,n,a,"day"); }
+void calendarHour(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendarFunction(c,n,a,"hour"); }
+void calendarMinute(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendarFunction(c,n,a,"minute"); }
+void calendarSecond(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendarFunction(c,n,a,"second"); }
+void calendarWeekday(sqlite3_context* c,int n,sqlite3_value** a) noexcept { calendarFunction(c,n,a,"weekday"); }
 
 void currencyNumber(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
     auto& native=api();
@@ -418,6 +447,14 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
     ensure("linaccess_jet_qbcolor",-1,&qbColor,nullptr,nullptr);
     ensure("linaccess_jet_round",-1,&roundNumber,nullptr,nullptr);
+    ensure("linaccess_jet_datediff",-1,&calendarDatediff,nullptr,nullptr);
+    ensure("linaccess_jet_year",-1,&calendarYear,nullptr,nullptr);
+    ensure("linaccess_jet_month",-1,&calendarMonth,nullptr,nullptr);
+    ensure("linaccess_jet_day",-1,&calendarDay,nullptr,nullptr);
+    ensure("linaccess_jet_hour",-1,&calendarHour,nullptr,nullptr);
+    ensure("linaccess_jet_minute",-1,&calendarMinute,nullptr,nullptr);
+    ensure("linaccess_jet_second",-1,&calendarSecond,nullptr,nullptr);
+    ensure("linaccess_jet_weekday",-1,&calendarWeekday,nullptr,nullptr);
     ensure("linaccess_jet_ccur",-1,&currencyNumber,nullptr,nullptr);
     ensure("linaccess_jet_currency_store",1,&currencyStore,nullptr,nullptr);
     ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep,&currencySumFinal);

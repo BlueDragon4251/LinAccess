@@ -678,3 +678,7 @@ Full targets remain open:
 - [x] Bounded physical-source Currency INSERT SELECT append with target
   conversion, frozen positional source, exact Currency self-append, parameters
   and whole-statement rollback; complex/full Jet append semantics remain open.
+
+- [x] Shared native ISO/Gregorian DateDiff and Year/Month/Day/Hour/Minute/Second/
+  Weekday in VBA and SQL, checked types/calendar boundaries/Null/errors and
+  existing-test coverage; Date Variants/numeric/locale/full calendar semantics open.
