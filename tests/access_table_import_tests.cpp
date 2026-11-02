@@ -23,6 +23,13 @@
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     using namespace linaccess;
+    const auto floating=AccessCatalog::floatingSourceTypes("CREATE TABLE [values]\n(\n[price] Currency,\n[ö] Single,\n[odd] Currency] Single NOT NULL,\n[other] Double,\n-- [comment] Currency\n);\n");
+    assert(floating.size()==4 && floating.value("other")=="DOUBLE" && floating.value("price")=="CURRENCY" && floating.value("ö")=="SINGLE" && floating.value("odd] Currency")=="SINGLE");
+    assert(AccessCatalog::floatingSourceTypes("[label] SingleText\n[price] CurrencyOther\n[other] DoubleOther").isEmpty());
+    bool conflict=false; try { (void)AccessCatalog::floatingSourceTypes("[x] Currency\n[x] Single"); } catch(const std::runtime_error&) { conflict=true; } assert(conflict);
+    const auto currencySchema=parseMdbSchema("CREATE TABLE `cash`\n(\n`price` REAL,\n`rate` REAL\n);\n-- LINACCESS_SOURCE_TYPE 7072696365 FLOAT\n-- LINACCESS_SOURCE_TYPE 7072696365 CURRENCY\n-- LINACCESS_SOURCE_TYPE 72617465 SINGLE\n");
+    assert(currencySchema.columns.size()==2 && currencySchema.columns[0].sourceType=="CURRENCY" && currencySchema.columns[1].sourceType=="SINGLE");
+    assert(currencySchema.columns[0].sqliteType=="REAL" && currencySchema.columns[1].sqliteType=="REAL");
     const auto schema = parseMdbSchema(R"SQL(CREATE TABLE `source`
  (
  `part` INTEGER NOT NULL,
@@ -63,6 +70,12 @@ CREATE INDEX `label` ON `source` (`a``b`);
     assert(refused && !db.tables().contains("failed"));
     assert(query.exec("SELECT COUNT(*) FROM _la_import_log"));
     assert(query.next() && query.value(0).toInt() == 1);
+    query.finish();
+    importAccessTable(db,"synthetic-floating-types","floating_types",currencySchema,parseCsvDetailed("price,rate\n1.2345,0.25\n"));
+    assert(query.exec("SELECT definition FROM _la_table_schema WHERE table_name='floating_types'") && query.next());
+    const auto floatingMetadata=QJsonDocument::fromJson(query.value(0).toByteArray()).array(); query.finish();
+    assert(floatingMetadata.size()==2 && floatingMetadata[0].toObject()["source_type"].toString()=="CURRENCY" && floatingMetadata[1].toObject()["source_type"].toString()=="SINGLE");
+
     const auto counter=parseMdbSchema("CREATE TABLE `x`\n(\n`id` int NOT NULL auto_increment,\n`label` varchar\n);\nALTER TABLE `x` ADD PRIMARY KEY (`id`);\n");
     assert(counter.columns.size()==2 && counter.columns[0].autoNumber && !counter.columns[1].autoNumber);
     assert(counter.columns[0].primaryKeyOrder==1);

@@ -4,6 +4,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include <QMap>
 
 namespace linaccess {
 struct AccessCatalogEntry {
@@ -32,6 +33,8 @@ public:
     QString querySql(const QString& name) const;
     QStringList missingQuerySources(const QString& sql) const;
     QString tableSchema(const QString& name) const;
+    // Decode exact Currency/Single/Double labels; storage/coercion remains separate.
+    static QMap<QString,QString> floatingSourceTypes(const QString& accessSchema);
     static QByteArray exportTable(const QString& source, const QString& table);
     static QByteArray tool(const QString& executable, const QStringList& args,
                            const QByteArray& input = {});

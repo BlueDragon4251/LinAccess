@@ -140,12 +140,28 @@ QStringList AccessCatalog::missingQuerySources(const QString& sql) const {
     return result;
 }
 
+QMap<QString,QString> AccessCatalog::floatingSourceTypes(const QString& accessSchema) {
+    QMap<QString,QString> result;
+    // MDBTools' Access backend wraps raw names in brackets without escaping ']'.
+    // Match the final bracket before the exact type, retaining the name verbatim.
+    const QRegularExpression field(R"(^\s*\[(.+)\]\s+(Currency|Single|Double)(?:\s|,|$))",QRegularExpression::CaseInsensitiveOption);
+    for(const auto& line:accessSchema.split('\n')) {
+        const auto match=field.match(line);
+        if(!match.hasMatch()) continue;
+        const auto key=match.captured(1),type=match.captured(2).toUpper();
+        if(result.contains(key) && result.value(key)!=type) throw std::runtime_error("Conflicting Access floating-type metadata");
+        result.insert(key,type);
+    }
+    return result;
+}
+
 QString AccessCatalog::tableSchema(const QString& name) const {
     auto schema = QString::fromUtf8(tool("mdb-schema", {"-T", name, file_, "sqlite"}));
     // MDBTools 1.0.0's SQLite backend omits all keys and indexes. Its MySQL
     // backend exposes them. Read only structural ALTER lines; never execute them.
     {
         const auto metadata = QString::fromUtf8(tool("mdb-schema", {"-T", name, file_, "mysql"}));
+        QSet<QString> knownColumns,floatingColumns;
         const bool needKeys = !schema.contains("PRIMARY KEY", Qt::CaseInsensitive);
         const bool needIndexes = !schema.contains("CREATE INDEX", Qt::CaseInsensitive)
             && !schema.contains("CREATE UNIQUE INDEX", Qt::CaseInsensitive);
@@ -153,7 +169,10 @@ QString AccessCatalog::tableSchema(const QString& name) const {
         for (const auto& line : metadata.split('\n')) {
             const auto field = column.match(line);
             if (field.hasMatch()) {
-                const auto nameBytes = field.captured(1).replace("``","`").toUtf8().toHex();
+                const auto columnName=field.captured(1).replace("``","`");
+                knownColumns.insert(columnName);
+                if(field.captured(2).compare("FLOAT",Qt::CaseInsensitive)==0) floatingColumns.insert(columnName);
+                const auto nameBytes = columnName.toUtf8().toHex();
                 schema += "\n-- LINACCESS_SOURCE_TYPE " + QString::fromLatin1(nameBytes) + ' ' + field.captured(2).toUpper();
                 auto modifiers=field.captured(3);
                 modifiers.remove(QRegularExpression(R"sql('(?:''|[^'])*'|"(?:""|[^"])*")sql"));
@@ -166,6 +185,13 @@ QString AccessCatalog::tableSchema(const QString& name) const {
                                     || line.contains(" ADD UNIQUE INDEX ", Qt::CaseInsensitive))))
                 schema += '\n' + line;
         }
+        const auto exactTypes=floatingSourceTypes(QString::fromUtf8(tool("mdb-schema",{"-T",name,file_,"access"})));
+        for(auto it=exactTypes.cbegin();it!=exactTypes.cend();++it) {
+            if(!knownColumns.contains(it.key())) throw std::runtime_error("Access floating-type column metadata mismatch");
+            schema += "\n-- LINACCESS_SOURCE_TYPE " + QString::fromLatin1(it.key().toUtf8().toHex()) + ' ' + it.value();
+            floatingColumns.remove(it.key());
+        }
+        if(!floatingColumns.isEmpty()) throw std::runtime_error("Access floating source metadata is unavailable");
     }
     return schema;
 }

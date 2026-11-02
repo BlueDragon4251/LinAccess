@@ -729,3 +729,10 @@ defaults; Nothing/closed stored references remain True. Explicit invalid member
 getters retain their native errors. Actual Qt/VBA/DAO parameter/SQL regressions
 verify object kinds and pending-source preservation. Full class/COM/ADO/Windows
 object identity remains open. See [ISOBJECT_RUNTIME.md](ISOBJECT_RUNTIME.md).
+
+New MDB imports preserve Currency/Single/Double source metadata using the additional
+MDBTools Access-schema labels, resolving the MySQL FLOAT ambiguity. All 43 Currency and 57 Double
+original columns are identified; conflicting/missing mappings diagnose
+before import. SQLite REAL conversion/storage and native numeric/SQL precision
+are not made exact by this metadata recovery; existing projects are not migrated.
+See [JET_FLOATING_METADATA.md](JET_FLOATING_METADATA.md).

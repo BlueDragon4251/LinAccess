@@ -2038,3 +2038,30 @@ exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Replace
 commit 3232150 private CI completed successfully earlier in this segment;
 7bf428a was still in progress at the last check.
+
+## 2026-11-02 — Currency/Single/Double source metadata
+
+Analysis of a hash-fixed private test copy established that all 43 original
+MySQL FLOAT columns are Currency. Reproduced missing Currency metadata in the
+original-table regression (0/1, 0/43 labels). Native import now reads MDBTools'
+Access backend and checks exact Currency/Single/Double mappings against known columns;
+source metadata is persisted without guessing ambiguous FLOAT as Single.
+Synthetic parsing/persistence and original-table tests pass 2/2 (7.81 s), retaining
+all CSV cell, Long/Boolean/date/counter checks. GUI suite remains 37 CTests.
+SQLite REAL/CSV conversion/native numeric storage is not made exact by labels;
+full Currency/Single/SQL/precision and existing-project migration remain open.
+No new dependency or complete original business workflow. See JET_FLOATING_METADATA.md.
+
+Distribution validation exposed older MDBTools also exporting 57 Double columns
+as FLOAT (100 ambiguous columns total). Extended the checked Access-backend
+mapping to Double; synthetic and original regressions pass 2/2 (7.81 s). Original
+metadata assertions now require both 43 Currency and 57 Double columns. No source
+data or precision is inferred from the MySQL FLOAT label.
+
+Corrected full validation: host 37/37 (108.10 s), Debian 12 37/37 (118.21 s),
+Ubuntu 24.04 37/37 (100.17 s), Debian 13 37/37 (99.85 s), GUI-disabled core
+1/1 (2.47 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+8dba067 private CI completed successfully. Initial distribution failures were
+resolved by handling older MDBTools' additional Double-to-FLOAT mapping.

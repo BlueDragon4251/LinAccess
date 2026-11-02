@@ -625,3 +625,7 @@ Full targets remain open:
 - [x] Native IsObject with object-preserving parser context, no default getters,
   Nothing/closed-reference identity, explicit getter errors and actual Qt/VBA/DAO/
   SQL pending-source regression; full class/COM/ADO/Windows identity remains open.
+
+- [x] Preserve Currency/Single/Double source labels from MDBTools Access schema on new
+  imports, checked ambiguous mappings and persisted metadata; original 43 Currency/
+  57 Double columns verified. Exact money/Single storage/SQL/runtime semantics remain open.

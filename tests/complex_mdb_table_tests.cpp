@@ -59,6 +59,7 @@ int main(int argc, char** argv) {
     int trueBooleans = 0;
     int typedBooleans = 0;
     int longColumns=0,typedLongValues=0;
+    int currencyColumns=0,doubleColumns=0;
     int formattedDates = 0;
     int counters=0,nativeCounters=0,counterProbes=0,managedProbes=0;
     QStringList failures;
@@ -70,6 +71,10 @@ int main(int argc, char** argv) {
             const auto schema = linaccess::parseMdbSchema(catalog.tableSchema(table));
             for (const auto& column : schema.columns)
                 if (column.sourceType == "BOOLEAN" || column.sourceType == "BIT") ++booleanColumns;
+            for (const auto& column:schema.columns) {
+                if(column.sourceType=="CURRENCY") ++currencyColumns;
+                if(column.sourceType=="DOUBLE") ++doubleColumns;
+            }
             linaccess::importAccessTable(db, source, table, schema, rows);
             int primaryCount=0;
             for (const auto& column:schema.columns) if (column.primaryKeyOrder) ++primaryCount;
@@ -239,6 +244,8 @@ End Function
     std::cout << "Original date columns formatted through native SQL: " << formattedDates << '\n';
     assert(tables.size() == 29);
     assert(imported == 29 && failures.empty());
+    assert(currencyColumns==43 && doubleColumns==57);
+    std::cout<<"Original Currency column metadata: "<<currencyColumns<<", Double columns: "<<doubleColumns<<'\n';
     assert(longColumns==127 && typedLongValues>0);
     std::cout<<"Original Long columns: "<<longColumns<<", typed non-NULL field values: "<<typedLongValues<<'\n';
     assert(counters==21 && nativeCounters==16 && counterProbes==1 && managedProbes==1);

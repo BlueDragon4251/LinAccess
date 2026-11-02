@@ -37,7 +37,9 @@ storage. Source data and stored values are not migrated by this change.
 
 MDBTools' MySQL backend maps both MDB_MONEY and MDB_FLOAT to FLOAT. That metadata
 is insufficient to distinguish Currency and Single, so no blanket Single recovery
-is added. Exact original types need additional metadata before that work.
+is added. The subsequent [floating source metadata](JET_FLOATING_METADATA.md)
+change reads the Access backend to preserve these labels on new imports. It does
+not provide exact Currency/Single storage or numeric runtime recovery.
 
 References:
 - https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/datatypeenum-enumeration-dao
