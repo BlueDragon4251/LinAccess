@@ -669,9 +669,9 @@ private:
                 if (word!="ltrim" && word!="ltrim$") while(last>first && text[last-1]==' ') --last;
                 return VbaValue::string(text.substr(first,last-first));
             }
-            if (word=="rgb") {
+            if (word=="rgb" || word=="qbcolor") {
                 if (!host_) return {};
-                return vbaRgb(args);
+                return word=="rgb" ? vbaRgb(args) : vbaQbColor(args);
             }
             if ((word == "isnull" || word == "isempty" || word == "len" || word == "cstr"
                 || word == "clng" || word == "cdbl" || word == "ucase"
@@ -846,6 +846,16 @@ VbaValue vbaRgb(const std::vector<VbaValue>& arguments) {
         color|=static_cast<std::uint32_t>(std::min(channel,255.0))<<(index*8);
     }
     return VbaValue::numeric(color);
+}
+
+VbaValue vbaQbColor(const std::vector<VbaValue>& arguments) {
+    if (arguments.size()!=1) throw error("QBColor requires one palette index",450);
+    const auto index=integer(scalarObjectValue(arguments[0]));
+    if (index<0 || index>15) throw error("Invalid QBColor palette index",5);
+    constexpr std::uint32_t palette[]={0x000000,0x800000,0x008000,0x808000,
+        0x000080,0x800080,0x008080,0xc0c0c0,0x808080,0xff0000,0x00ff00,
+        0xffff00,0x0000ff,0xff00ff,0x00ffff,0xffffff};
+    return VbaValue::numeric(palette[index]);
 }
 
 int VbaHost::compareStrings(std::string_view left,std::string_view right,VbaCompareMode mode) {

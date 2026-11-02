@@ -141,10 +141,10 @@ void objectValue(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     } catch (const VbaRuntimeError& error) { functionError(context,error); }
       catch (...) { native.error(context,"SQL object resolution failed",-1); }
 }
-void rgbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+void colorFunction(sqlite3_context* context,int count,sqlite3_value** args,bool indexed) noexcept {
     auto& native=api();
     try {
-        if (count!=3) throw VbaRuntimeError(450,"RGB requires three color channels");
+        if (count!=(indexed ? 1 : 3)) throw VbaRuntimeError(450,"Color function argument count invalid");
         std::vector<VbaValue> values;
         for(int index=0;index<count;++index) {
             const auto type=native.type(args[index]);
@@ -153,14 +153,16 @@ void rgbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept 
             else if(type==2) values.push_back(VbaValue::numeric(native.number(args[index])));
             else if(type==3) {
                 const auto* bytes=native.text(args[index]);
-                if(!bytes) throw VbaRuntimeError(7,"SQL RGB string unavailable");
+                if(!bytes) throw VbaRuntimeError(7,"SQL color string unavailable");
                 values.push_back(VbaValue::string(std::string(reinterpret_cast<const char*>(bytes),native.bytes(args[index]))));
-            } else throw VbaRuntimeError(13,"SQL RGB requires scalar channels");
+            } else throw VbaRuntimeError(13,"SQL color function requires scalar arguments");
         }
-        native.integerResult(context,static_cast<qlonglong>(vbaRgb(values).asNumber()));
+        native.integerResult(context,static_cast<qlonglong>((indexed ? vbaQbColor(values) : vbaRgb(values)).asNumber()));
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
-      catch(...) { native.error(context,"SQL RGB calculation failed",-1); }
+      catch(...) { native.error(context,"SQL color calculation failed",-1); }
 }
+void rgbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept { colorFunction(context,count,args,false); }
+void qbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept { colorFunction(context,count,args,true); }
 
 void textLength(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native=api();
@@ -318,6 +320,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_next_counter",2,&nextAccessCounter,nullptr,nullptr);
     ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
+    ensure("linaccess_jet_qbcolor",-1,&qbColor,nullptr,nullptr);
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
     ensure("linaccess_jet_update_value",1,nullptr,&singleStep,&singleFinal);

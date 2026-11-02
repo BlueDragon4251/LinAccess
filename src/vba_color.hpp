@@ -5,4 +5,5 @@
 namespace linaccess {
 // Shared native VBA/SQL RGB channel conversion and packed OLE color.
 VbaValue vbaRgb(const std::vector<VbaValue>& arguments);
+VbaValue vbaQbColor(const std::vector<VbaValue>& arguments);
 }

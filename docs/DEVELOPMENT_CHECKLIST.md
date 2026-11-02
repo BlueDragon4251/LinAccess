@@ -439,3 +439,7 @@ Full targets remain open:
 - [x] Shared native VBA/SQL RGB primitive with real query/DAO fields, parameters,
   quoted identifiers, alias/view reuse, error transport and atomic direct/joined
   updates including invalid channels and conflicting source colors.
+
+- [x] Shared native VBA/SQL QBColor classic 16-entry palette, all-index and
+  conversion/error tests, actual Qt ForeColor/Eval effects, parameter/alias
+  queries and atomic DAO updates through a compiled palette view.

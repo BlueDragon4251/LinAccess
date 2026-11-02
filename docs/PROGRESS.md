@@ -1226,3 +1226,24 @@ pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass. Earlier control-background commit
 714fa54 completed private CI successfully.
+
+## 2026-11-02 — Native classic QBColor palette
+
+The shared native color module now executes QBColor in VBA and SQL, using the
+fixed 16-color values confirmed by Microsoft's public reference table. This
+requires no .NET dependency and does not provide an Access runtime oracle.
+Core tests cover all indices, scalar/rounding/type/range/arity behavior; real
+Qt ForeColor/Eval changes preserve pending masked input and data. SQL tests
+preserve quoted fields and parameter/alias behavior, while native DAO palette-
+view joined updates persist valid colors and roll back invalid source indices.
+Targeted core/DAO/query-model/join/GUI set: 5/5 (9.75 s). Original lexical QBColor
+call inventory is zero across 100 query artifacts / 32 VBA modules; original
+business coverage is unchanged. Full Variant/coercion/theme/Windows parity
+remains open; see QBCOLOR_RUNTIME.md.
+
+Final validation: host 21/21 (71.39 s), Debian 12 21/21 (69.67 s), Ubuntu
+24.04 21/21 (63.52 s), GUI-disabled core 1/1 (1.97 s). Fresh host/distro DEBs
+pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
+installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+All four original fixture hashes pass. Earlier SQL RGB commit 1c82bcb completed
+private CI successfully.

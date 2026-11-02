@@ -463,3 +463,10 @@ errors propagate explicitly, including SQL error 450. Original RGB call inventor
 is zero in 100 query artifacts and 32 VBA modules; original business coverage is
 unchanged. This does not establish complete Jet function/coercion parity; see
 [SQL RGB](SQL_RGB_RUNTIME.md).
+
+QBColor(...) now executes the fixed classic 16-color palette in shared native
+VBA and SQL/DAO paths. All palette indices, parameters/aliases, error transport,
+actual Qt ForeColor/Eval effects and atomic updates through a compiled palette
+view are tested. Original 100-query / 32-module QBColor call inventories are zero,
+so original business coverage is unchanged. This establishes no full Variant/
+Windows color parity; see [QBColor](QBCOLOR_RUNTIME.md).

@@ -1364,6 +1364,15 @@ End Sub
     substringError("RGB(1,2)",450); substringError("RGB(1,2,3,4)",450);
     scalarProbe->value=VbaValue::numeric(12); const auto beforeColor=scalarProbe->reads;
     assert(evaluateVbaExpression("RGB(probe,probe,probe)",host,scalarValues).asNumber()==789516 && scalarProbe->reads==beforeColor+3);
+    const int legacyColors[]={0x000000,0x800000,0x008000,0x808000,0x000080,0x800080,0x008080,0xc0c0c0,0x808080,0xff0000,0x00ff00,0xffff00,0x0000ff,0xff00ff,0x00ffff,0xffffff};
+    for(int index=0;index<16;++index) assert(evaluate(("QBColor("+std::to_string(index)+")").c_str()).asNumber()==legacyColors[index]);
+    assert(evaluate("QBColor(7.5)").asNumber()==0x808080 && evaluate("QBColor(Empty)").asNumber()==0);
+    assert(evaluate("QBColor(\"12\")").asNumber()==255);
+    substringError("QBColor(Null)",94); substringError("QBColor(\"bad\")",13);
+    substringError("QBColor(-1)",5); substringError("QBColor(16)",5);
+    substringError("QBColor()",450); substringError("QBColor(1,2)",450);
+    const auto beforeLegacy=scalarProbe->reads;
+    assert(evaluateVbaExpression("QBColor(probe)",host,scalarValues).asNumber()==255 && scalarProbe->reads==beforeLegacy+1);
     const VbaVariables whitespaceValues{{"text",VbaValue::string(" \t ö\r\n ")}};
     assert(evaluateVbaExpression("Trim(text)",host,whitespaceValues).asText()=="\t ö\r\n");
     scalarProbe->value=VbaValue{};

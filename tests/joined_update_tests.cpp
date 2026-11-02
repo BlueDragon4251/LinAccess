@@ -107,5 +107,16 @@ int main(int argc,char** argv) {
     error=0; try { execute("UPDATE color_target AS d INNER JOIN color_view AS s ON d.id=s.id SET d.packed=s.shade"); }
     catch(const VbaRuntimeError& failure) { error=failure.number; } assert(error==3251);
     assert(sql.exec("SELECT MIN(packed),MAX(packed) FROM color_target") && sql.next() && sql.value(0).toInt()==99 && sql.value(1).toInt()==99); sql.finish();
+    assert(sql.exec("DELETE FROM color_source WHERE g=255"));
+    assert(sql.exec("ALTER TABLE color_source ADD COLUMN palette_index INTEGER"));
+    assert(sql.exec("UPDATE color_source SET palette_index=CASE id WHEN 1 THEN 12 ELSE 9 END"));
+    const auto legacyView=compileAccessQuery("SELECT id,QBColor(palette_index) AS shade FROM color_source");
+    assert(sql.exec("CREATE VIEW legacy_color_view AS "+legacyView.sql));
+    execute("UPDATE color_target AS d INNER JOIN legacy_color_view AS s ON d.id=s.id SET d.packed=s.shade");
+    assert(sql.exec("SELECT packed FROM color_target ORDER BY id") && sql.next() && sql.value(0).toInt()==255 && sql.next() && sql.value(0).toInt()==0xff0000); sql.finish();
+    assert(sql.exec("UPDATE color_target SET packed=99")); assert(sql.exec("UPDATE color_source SET palette_index=16 WHERE id=2"));
+    error=0; try { execute("UPDATE color_target AS d INNER JOIN legacy_color_view AS s ON d.id=s.id SET d.packed=s.shade"); }
+    catch(const VbaRuntimeError& failure) { error=failure.number; } assert(error==5);
+    assert(sql.exec("SELECT MIN(packed),MAX(packed) FROM color_target") && sql.next() && sql.value(0).toInt()==99 && sql.value(1).toInt()==99); sql.finish();
     std::cout<<"Joined UPDATE: native arithmetic, parameters, typed NULL/binary values, frozen self-join, preserved outer targets, NULL/ambiguity/constraint rollback and writable-target boundaries passed\n";
 }

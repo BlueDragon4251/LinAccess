@@ -10,6 +10,8 @@
 #endif
 #include <cassert>
 #include <iostream>
+#include <vector>
+#include <utility>
 int main(int argc, char** argv) {
     QCoreApplication app(argc,argv);
     auto db = QSqlDatabase::addDatabase("QSQLITE");
@@ -62,6 +64,23 @@ int main(int argc, char** argv) {
         assert(query.exec("SELECT linaccess_jet_rgb(255,255,255)") && query.next() && query.value(0).toInt()==16777215); query.finish();
         assert(!query.exec("SELECT linaccess_jet_rgb(Null,0,0)"));
         assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==94); query.finish();
+    }
+
+    {
+        assert(query.exec("CREATE TABLE legacy_palette(idx INTEGER,[QBColor] TEXT)"));
+        for(int index=0;index<16;++index) { query.prepare("INSERT INTO legacy_palette VALUES(?,'entry')"); query.addBindValue(index); assert(query.exec()); query.finish(); }
+        linaccess::AccessQueryModel colors;
+        colors.execute(db,"SELECT [QBColor],QBColor(idx) AS shade,shade+1 AS next_shade FROM legacy_palette ORDER BY idx");
+        assert(colors.rowCount()==16 && colors.data(colors.index(0,0)).toString()=="entry");
+        assert(colors.data(colors.index(1,1)).toInt()==0x800000 && colors.data(colors.index(7,1)).toInt()==0xc0c0c0);
+        assert(colors.data(colors.index(12,1)).toInt()==255 && colors.data(colors.index(15,1)).toInt()==0xffffff);
+        for(int row=0;row<16;++row) assert(colors.data(colors.index(row,2)).toInt()==colors.data(colors.index(row,1)).toInt()+1);
+        colors.execute(db,"PARAMETERS [palette] Double; SELECT qBcOlOr([palette]) AS shade",{{"palette",7.5}});
+        assert(colors.data(colors.index(0,0)).toInt()==0x808080);
+        for(const auto& item:std::vector<std::pair<QString,int>>{{"SELECT QBColor(Null)",94},{"SELECT QBColor('bad')",13},{"SELECT QBColor(CAST(1 AS BLOB))",13},{"SELECT QBColor(-1)",5},{"SELECT QBColor(16)",5},{"SELECT QBColor()",450},{"SELECT QBColor(1,2)",450}}) {
+            int number=0; try { colors.execute(db,item.first); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; }
+            assert(number==item.second && colors.rowCount()==0 && colors.columnCount()==0);
+        }
     }
 
     const auto expensive=QString("WITH RECURSIVE numbers(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM numbers WHERE x<100000) SELECT sum(x) FROM numbers");

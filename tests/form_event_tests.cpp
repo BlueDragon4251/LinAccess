@@ -2419,7 +2419,7 @@ End
 End
 End
 )FORM";
-    const QByteArray code="Sub paint_Click()\nMe!editor.ForeColor=RGB(0,0,255)\nMe!combo.ForeColor=RGB(255,0,0)\nMe!label.ForeColor=RGB(0,255,0)\nMe!check.ForeColor=RGB(255,255,0)\nEnd Sub\n";
+    const QByteArray code="Sub paint_Click()\nMe!editor.ForeColor=RGB(0,0,255)\nMe!combo.ForeColor=RGB(255,0,0)\nMe!label.ForeColor=RGB(0,255,0)\nMe!check.ForeColor=RGB(255,255,0)\nEnd Sub\nSub LegacyColor()\nMe!editor.ForeColor=QBColor(12)\nEnd Sub\n";
     const auto parsed=linaccess::parseAccessFormLayout(QString::fromUtf8(source));
     assert(parsed.controls[0].foreColor==1193046 && parsed.controls[1].foreColor==255 && parsed.controls[2].foreColor==16711680);
     AccessFormPreview form("colors",source,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
@@ -2452,6 +2452,10 @@ End
     auto* canvas=form.findChild<QWidget*>("access-form-canvas"); assert(canvas);
     const auto background=canvas->grab().toImage();
     assert(background.pixelColor(background.width()-1,background.height()-1)==QColor(240,240,240));
+    std::vector<VbaValue> noColorArguments;
+    assert(form.executeProcedure("LegacyColor",noColorArguments).status==linaccess::VbaExecutionStatus::Completed && color(editor)==QColor(255,0,0));
+    object("editor")->assign("ForeColor",makePreviewApplicationObject(form)->member("Eval",{VbaValue::string("QBColor(9)")}));
+    assert(color(editor)==QColor(0,0,255));
     assert(editor->font()==font && editor->hasFocus() && editor->selectionStart()==1 && editor->selectedText()=="res" && editor->displayText()=="*****");
     assert(object("editor")->member("Text",{}).asText()=="fresh" && object("editor")->member("Value",{}).asText()=="one" && form.hasUnsavedChanges());
     assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="one"); sql.finish();
