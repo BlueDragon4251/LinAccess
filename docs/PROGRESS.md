@@ -2560,3 +2560,14 @@ No new test targets or full-suite/distribution repetition. Package/headless
 validation is still the earlier e0afbcd baseline pending a shared later delivery.
 Full builtin/DAO/COM named calls, SCODE/coercion and Windows semantics stay open.
 See NAMED_ARGUMENT_RUNTIME.md and OPTIONAL_ARGUMENT_RUNTIME.md.
+
+## Native form/report OpenArgs programming block (2026-11-02)
+
+Native text/Null OpenArgs is stored before document events, with instance and
+Forms/Reports reads. Existing GUI execution verifies Form_Open/Form_Load and
+Report_Open SQL audit values, parent Null, close/reopen with new args, and a
+current assignment rejection. Nontext values and replacing an open document's
+args fail explicitly. Default data/window mode constants are accepted while
+other modes remain unsupported. Core/DAO/native GUI targets pass 3/3 (1.78 s);
+desktop build passes. No new test target or matrix/package repetition yet.
+See DOCUMENT_OPENARGS_RUNTIME.md for remaining Windows/Variant/property limits.

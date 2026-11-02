@@ -904,3 +904,10 @@ positional holes now execute natively. User-procedure named calls preserve ByRef
 binding; supported native DoCmd methods bind named values through declared
 signatures. See [boundaries](NAMED_ARGUMENT_RUNTIME.md). Built-in/DAO/COM method
 coverage and full declaration/SCODE/Windows semantics remain open.
+
+## Native document OpenArgs
+
+Text/Null OpenArgs now reaches independent native form/report instances before
+opening events and is readable through Me, instance scope and Forms/Reports.
+Reopening after close accepts another value. Nontext values, mutation and other
+opening modes remain bounded; see [OpenArgs runtime](DOCUMENT_OPENARGS_RUNTIME.md).

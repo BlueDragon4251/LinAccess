@@ -692,6 +692,7 @@ public:
             if (key=="allowadditions") return linaccess::VbaValue::logical(preview.layout_.allowAdditions);
             return key=="allowdeletions" ? linaccess::VbaValue::logical(preview.layout_.allowDeletions) : linaccess::VbaValue::numeric(preview.recordSelected_ ? 1 : 0);
         }
+        if(key=="openargs") return preview.openArgs_ ? linaccess::VbaValue::string(bytes(*preview.openArgs_)) : linaccess::VbaValue{};
         if(key=="currentrecord") {
             if(preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"CurrentRecord requires a form");
             if(!preview.dataSourceAvailable_ || preview.layout_.recordSource.trimmed().isEmpty()) throw linaccess::VbaRuntimeError(3251,"CurrentRecord requires an available bound source");
@@ -752,7 +753,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
+        if (!args.empty() || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="openargs" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
@@ -854,7 +855,7 @@ public:
             }
             return;
         }
-        if (key == "name" || key == "recordsource" || key == "newrecord" || key == "currentrecord")
+        if (key == "name" || key == "recordsource" || key == "newrecord" || key == "currentrecord" || key=="openargs")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (preview.setModuleMember(name,value,true)) return;
         PreviewControlObject(preview,preview.controlMemberName(text(name))).assign("Value",value);
@@ -1138,7 +1139,7 @@ public:
             std::vector<linaccess::VbaValue> values;
             for (const auto& arg:args) {
                 auto value=linaccess::scalarVbaValue(arg);
-                if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null OpenReport argument");
+                if (value.kind==linaccess::VbaValue::Kind::Null && values.size()!=5) throw linaccess::VbaRuntimeError(94,"Invalid Null OpenReport argument");
                 values.push_back(std::move(value));
             }
             const auto number=[](const linaccess::VbaValue& value) {
@@ -1154,12 +1155,16 @@ public:
             const auto where=values.size()>3 ? text(values[3].asText()) : QString{};
             if (where.size()>32768) throw linaccess::VbaRuntimeError(5,"Report WhereCondition too long");
             if (values.size()>4 && values[4].kind!=linaccess::VbaValue::Kind::Empty && number(values[4])!=0) throw linaccess::VbaRuntimeError(3251,"Report window mode unsupported");
-            if (values.size()>5 && !values[5].asText().empty()) throw linaccess::VbaRuntimeError(3251,"Report OpenArgs unsupported");
-            preview.openOtherDocument(linaccess::AccessDocumentKind::Report,reportName,where); return {};
+            std::optional<QString> openArgs;
+            if(values.size()>5 && values[5].kind!=linaccess::VbaValue::Kind::Empty && values[5].kind!=linaccess::VbaValue::Kind::Null) {
+                if(values[5].kind!=linaccess::VbaValue::Kind::Text) throw linaccess::VbaRuntimeError(3251,"Report OpenArgs currently requires text or Null");
+                (void)linaccess::vbaStringCodeUnits(values[5].text); openArgs=text(values[5].text);
+            }
+            preview.openOtherDocument(linaccess::AccessDocumentKind::Report,reportName,where,std::move(openArgs)); return {};
         }
         if (key=="openform") {
             const auto request=linaccess::parseVbaOpenFormArguments(args);
-            preview.openOtherForm(text(request.name),text(request.where)); return {};
+            preview.openOtherForm(text(request.name),text(request.where),request.openArgs ? std::optional<QString>(text(*request.openArgs)) : std::nullopt); return {};
         }
         if (key!="close") throw linaccess::VbaRuntimeError(438,"DoCmd member unsupported");
         if (args.size()>3) throw linaccess::VbaRuntimeError(450,"Unexpected Close arguments");

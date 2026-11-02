@@ -888,7 +888,7 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
 }
 VbaOpenFormArguments parseVbaOpenFormArguments(const std::vector<VbaValue>& args) {
     if (args.empty()) throw VbaRuntimeError(450,"OpenForm requires a form name");
-    if (args.size()>4) throw VbaRuntimeError(3251,"OpenForm data/window modes and OpenArgs are unsupported");
+    if (args.size()>7) throw VbaRuntimeError(450,"Too many OpenForm arguments");
     if (args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null form name");
     VbaOpenFormArguments result{args[0].asText(),{}};
     if (result.name.empty()) throw VbaRuntimeError(2102,"Form name is unavailable");
@@ -907,10 +907,23 @@ VbaOpenFormArguments parseVbaOpenFormArguments(const std::vector<VbaValue>& args
         if (args[3].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null WhereCondition");
         result.where=args[3].asText();
     }
+    for(std::size_t index=4;index<std::min<std::size_t>(6,args.size());++index) {
+        if(args[index].kind==VbaValue::Kind::Empty) continue;
+        const auto mode=coerceVbaModuleValue(scalarVbaValue(args[index]),"long").number;
+        if(mode!=(index==4 ? -1 : 0)) throw VbaRuntimeError(3251,"Non-default OpenForm data/window mode is unsupported");
+    }
+    if(args.size()>6) {
+        const auto value=scalarVbaValue(args[6]);
+        if(value.kind!=VbaValue::Kind::Null && value.kind!=VbaValue::Kind::Empty) {
+            if(value.kind!=VbaValue::Kind::Text) throw VbaRuntimeError(3251,"OpenArgs currently requires text or Null");
+            (void)vbaStringCodeUnits(value.text); result.openArgs=value.text;
+        }
+    }
     return result;
 }
 void VbaHost::openFormArguments(const std::vector<VbaValue>& args) {
     const auto request=parseVbaOpenFormArguments(args);
+    if(request.openArgs) throw VbaRuntimeError(3251,"Host does not support OpenArgs");
     if (!request.where.empty()) throw VbaRuntimeError(3251,"Host does not support a form WhereCondition");
     openForm(request.name);
 }

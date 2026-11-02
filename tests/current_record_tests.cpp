@@ -68,9 +68,15 @@ Me.CurrentRecord=1
 End Sub
 Function NamedCommands() As String
 DoCmd.RunSQL SQLStatement:="INSERT INTO named_calls VALUES(1)"
-DoCmd.OpenForm WhereCondition:="[id]=20", FormName:="named_child"
-NamedCommands=Forms("named_child")!label
+DoCmd.OpenForm WhereCondition:="[id]=20", FormName:="named_child", OpenArgs:="payload", DataMode:=acFormPropertySettings, WindowMode:=acWindowNormal
+NamedCommands=Forms("named_child").OpenArgs & ":" & Forms("named_child")!label
 DoCmd.Close Save:=2,ObjectName:="named_child",ObjectType:=2
+DoCmd.OpenForm FormName:="named_child",OpenArgs:="new"
+NamedCommands=NamedCommands & "|" & Forms("named_child").OpenArgs
+DoCmd.Close Save:=2
+DoCmd.OpenReport OpenArgs:="report-value",ReportName:="named_report",View:=acViewPreview
+NamedCommands=NamedCommands & "|" & Reports("named_report").OpenArgs
+DoCmd.Close Save:=acSaveNo,ObjectName:="named_report",ObjectType:=acReport
 End Function
 )VBA";
     AccessFormPreview form("current_record",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents(); auto model=makePreviewFormObject(form);
@@ -105,14 +111,34 @@ End Function
     assert(queryModel->item("id").asNumber()==30); queryModel->assign("OrderBy",VbaValue::string("id ASC")); queryModel->assign("OrderByOn",VbaValue::logical(true));
     assert(queryModel->item("id").asNumber()==10 && queryModel->member("CurrentRecord",{}).asNumber()==1 && queryForm.close());
     assert(sql.exec("CREATE TABLE named_calls(value INTEGER)"));
+    assert(sql.exec("CREATE TABLE open_arg_events(phase TEXT,value TEXT)"));
     sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','named_child',?)");
-    auto childLayout=layout; childLayout.replace("OnCurrent =\"[Event Procedure]\"","");
+    auto childLayout=layout; childLayout.replace("OnCurrent =\"[Event Procedure]\"","OnOpen =\"[Event Procedure]\"\nOnLoad =\"[Event Procedure]\"");
     sql.addBindValue(childLayout); assert(sql.exec()); sql.finish();
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba','Form_named_child',?)");
+    sql.addBindValue(QByteArray(R"VBA(Sub Form_Open(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO open_arg_events VALUES('Open','" & Me.OpenArgs & "')"
+End Sub
+Sub Form_Load()
+CurrentDb.Execute "INSERT INTO open_arg_events VALUES('Load','" & OpenArgs & "')"
+End Sub
+)VBA")); assert(sql.exec()); sql.finish();
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('report','named_report',?)");
+    sql.addBindValue(QByteArray("Begin Report\nRecordSource =\"records\"\nOnOpen =\"[Event Procedure]\"\nEnd\n")); assert(sql.exec()); sql.finish();
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba','Report_named_report',?)");
+    sql.addBindValue(QByteArray(R"VBA(Sub Report_Open(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO open_arg_events VALUES('ReportOpen','" & Me.OpenArgs & "')"
+End Sub
+)VBA")); assert(sql.exec()); sql.finish();
     AccessFormPreview namedForm("named_parent",layout,code,db); namedForm.show(); namedForm.activateWindow(); QApplication::processEvents();
     std::vector<VbaValue> namedArgs; const auto named=namedForm.executeProcedure("NamedCommands",namedArgs);
     if(named.status!=linaccess::VbaExecutionStatus::Completed) qWarning("Named DoCmd error=%d line=%d",named.errorNumber,named.line);
-    assert(named.status==linaccess::VbaExecutionStatus::Completed && named.typedReturnValue->asText()=="second");
+    assert(named.status==linaccess::VbaExecutionStatus::Completed && named.typedReturnValue->asText()=="payload:second|new|report-value");
     assert(sql.exec("SELECT COUNT(*) FROM named_calls") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    assert(makePreviewFormObject(namedForm)->member("OpenArgs",{}).kind==VbaValue::Kind::Null);
+    assert(sql.exec("SELECT COUNT(*) FROM open_arg_events WHERE value IN('payload','new')") && sql.next() && sql.value(0).toInt()==4); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM open_arg_events WHERE phase='ReportOpen' AND value='report-value'") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    int readOnly=0; try { makePreviewFormObject(namedForm)->assign("OpenArgs",VbaValue::string("changed")); } catch(const linaccess::VbaRuntimeError& failure) { readOnly=failure.number; } assert(readOnly==438);
     assert(namedForm.close());
     const QByteArray report="Begin Report\nRecordSource =\"records\"\nEnd\n"; AccessFormPreview reportForm("position_report",report,{},db); auto reportModel=makePreviewFormObject(reportForm);
     int unsupported=0; try { reportModel->member("CurrentRecord",{}); } catch(const linaccess::VbaRuntimeError& error) { unsupported=error.number; } assert(unsupported==438); assert(reportForm.close());

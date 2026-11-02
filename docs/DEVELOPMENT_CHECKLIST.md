@@ -747,3 +747,7 @@ Full targets remain open:
   reordered ByRef references, Optional holes and checked duplicate/unknown names.
 - [x] Signature-bound named native DoCmd arguments with actual SQL, filtered
   child opening/control read/close; unsupported options and other methods stay open.
+
+- [x] Native form/report text OpenArgs before opening events, Null/empty-text
+  storage, instance/collection reads, independent lifetime and reopen; full
+  Variant/mutability/data/window-mode semantics remain open.

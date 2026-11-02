@@ -309,7 +309,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (key == "dirty") return preview_.dirty_ ? "-1" : "0";
         if (key == "newrecord") return preview_.currentRecordIndex_ == 0 ? "-1" : "0";
-        if (key == "currentrecord" || key=="orderby" || key=="orderbyon") return makePreviewFormObject(preview_)->member(name,{}).asField();
+        if (key == "openargs" || key == "currentrecord" || key=="orderby" || key=="orderbyon") return makePreviewFormObject(preview_)->member(name,{}).asField();
         return preview_.getField(name);
     }
     linaccess::VbaValue controlValue(std::string_view name) override { requireInstance(); return preview_.getFieldValue(name); }
@@ -419,7 +419,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
-        if (key=="orderby" || key=="orderbyon" || key=="currentrecord" || key=="visible" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
+        if (key=="openargs" || key=="orderby" || key=="orderbyon" || key=="currentrecord" || key=="visible" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -433,7 +433,7 @@ public:
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
         if (key == "orderby" || key == "orderbyon" || key == "visible" || key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
-        if (key == "selheight" || key == "name" || key == "recordsource" || key == "newrecord" || key == "currentrecord")
+        if (key == "selheight" || key == "name" || key == "recordsource" || key == "newrecord" || key == "currentrecord" || key=="openargs")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
         if (preview_.setModuleMember(name,value,false)) return;
@@ -441,7 +441,7 @@ public:
     }
     void setField(std::string_view name, std::optional<std::string> value) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
-        if(key=="currentrecord") throw linaccess::VbaRuntimeError(438,"Form property is read-only");
+        if(key=="currentrecord" || key=="openargs") throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") {
             if (value && (*value == "0" || *value == "False")) {
                 if (!preview_.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record save cancelled");
@@ -639,7 +639,7 @@ public:
     }
     void openFormArguments(const std::vector<linaccess::VbaValue>& args) override {
         const auto request=linaccess::parseVbaOpenFormArguments(args);
-        preview_.openOtherForm(QString::fromStdString(request.name),QString::fromStdString(request.where));
+        preview_.openOtherForm(QString::fromStdString(request.name),QString::fromStdString(request.where),request.openArgs ? std::optional<QString>(QString::fromStdString(*request.openArgs)) : std::nullopt);
     }
     void openForm(std::string_view name) override {
         preview_.openOtherForm(QString::fromUtf8(name.data(), name.size()));
@@ -656,7 +656,7 @@ private:
     std::vector<bool> moduleScopes_;
     static bool recordProperty(std::string_view name) {
         const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
-        return key=="currentrecord" || key=="orderby" || key=="orderbyon";
+        return key=="openargs" || key=="currentrecord" || key=="orderby" || key=="orderbyon";
     }
     bool instanceScope() const { return moduleScopes_.empty() || moduleScopes_.back(); }
     void requireInstance() const { if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Me is unavailable in a standard module"); }
@@ -744,8 +744,8 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
 
 AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
                                      const QByteArray& vbaSource, QSqlDatabase database,
-                                     QWidget* parent,bool embedded,QString whereCondition)
-    : QDialog(parent), formName_(std::move(formName)),
+                                     QWidget* parent,bool embedded,QString whereCondition,std::optional<QString> openArgs)
+    : QDialog(parent), formName_(std::move(formName)),openArgs_(std::move(openArgs)),
       vba_(linaccess::decodeVbaSource(vbaSource)),
       layout_(linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(source))),
       db_(std::move(database)) {
@@ -2303,11 +2303,11 @@ void AccessFormPreview::closeOtherDocument(int type,const std::optional<QString>
     if (target->closing_ || !target->close()) throw linaccess::VbaRuntimeError(2501,"Close action cancelled");
 }
 
-void AccessFormPreview::openOtherForm(const QString& name,const QString& where) {
-    openOtherDocument(linaccess::AccessDocumentKind::Form,name,where);
+void AccessFormPreview::openOtherForm(const QString& name,const QString& where,std::optional<QString> openArgs) {
+    openOtherDocument(linaccess::AccessDocumentKind::Form,name,where,std::move(openArgs));
 }
 
-void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where) {
+void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where,std::optional<QString> openArgs) {
     const bool report=kind==linaccess::AccessDocumentKind::Report;
     if (closing_ || closingProjects().contains(projectKey(db_))) throw linaccess::VbaRuntimeError(2501,"Project is closing");
     AccessFormPreview* existing=nullptr;
@@ -2321,6 +2321,7 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
         existing=document;
     }
     if (existing) {
+        if(openArgs && existing->openArgs_!=openArgs) throw linaccess::VbaRuntimeError(3251,"Changing OpenArgs of an open document is not implemented");
         if (!where.trimmed().isEmpty()) {
             if (existing->layout_.recordSource.trimmed().isEmpty()) throw linaccess::VbaRuntimeError(3251,"WhereCondition requires a bound document");
             existing->setFilterState(where,true);
@@ -2348,7 +2349,7 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
     QWidget* projectOwner=nullptr;
     for (auto* ancestor=parentWidget();ancestor;ancestor=ancestor->parentWidget())
         if (qobject_cast<QMainWindow*>(ancestor)) { projectOwner=ancestor; break; }
-    auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,db_,projectOwner,false,where);
+    auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,db_,projectOwner,false,where,std::move(openArgs));
     const auto validate=[&] {
         for (const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent","OnNoData"})
             if (const auto outcome=nested->eventResult(event);outcome && failed(*outcome))
