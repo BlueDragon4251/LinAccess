@@ -1117,7 +1117,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         }
         for (std::size_t i = 0; i < names.size(); ++i) {
             auto found = locals.find(lower(names[i]));
-            if (found != locals.end()) assignVariable(found->first,actuals[i]);
+            if (found != locals.end()) {
+                bool arrayUpdate=false;
+                for(const auto& loop:loops) if(loop.arrayRoot==found->first && sameVbaArrayAllocation(loop.array,actuals[i])) arrayUpdate=true;
+                assignVariable(found->first,actuals[i],arrayUpdate);
+            }
         }
         storeAliases();
         if (nested.status != VbaExecutionStatus::Completed)

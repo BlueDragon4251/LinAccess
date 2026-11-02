@@ -733,3 +733,6 @@ Full targets remain open:
 - [x] Trailing Optional scalar parameters with explicit literal defaults,
   checked per-call binding, preserved supplied ByRef/ByVal and real DAO effects;
   Missing/named/positional-hole/full declaration parity remain open.
+
+- [x] Native VBA Like wildcard/digit/list/range/negation matching with comparison
+  precedence, Option Compare, Null and error 93; full locale/BSTR semantics open.

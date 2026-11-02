@@ -2511,3 +2511,22 @@ rerun. Missing/IsMissing, positional holes, named arguments, Object/constant
 expression defaults and complete Optional/ParamArray semantics remain open.
 The previous combined package validation belongs to 7dd65e5; this incremental
 parameter segment has not yet repeated package/headless/distribution validation.
+
+## Native VBA Like and combined parameter delivery (2026-11-02)
+
+Implemented VBA Like at comparison precedence: wildcard/digit/class/range/
+negation matching, empty [] groups, Null, module compare mode and error 93.
+The matcher uses two-row dynamic programming over UTF-16 units. Full Windows
+locale/ligature/BSTR matching remains open; unsupported range/surrogate cases
+fail 3251. Existing DAO execution now combines Split/Filter, array For Each,
+Like conditions, an Optional defaulted function and real SQL persistence.
+
+Allowed same-allocation array element writeback through a ByRef helper inside
+array For Each; later element changes remain visible while copies stay unchanged.
+Full cross-module rebinding/alias semantics remain open.
+
+Final existing core/DAO targets pass 2/2 (1.42 s), GUI-free core 1/1 (1.08 s),
+desktop and GUI-free builds pass. Combined package (including 7235313) passes
+contents/permissions/Build-ID and pinned SQLite backend checks. No new test target
+and no full 48-test/distribution matrix repetition. Original fixtures were never
+modified; all four hashes remain checked. See VBA_LIKE_RUNTIME.md.

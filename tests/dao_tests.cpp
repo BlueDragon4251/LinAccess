@@ -313,7 +313,9 @@ For Each item In selected
 If Len(result)>0 Then
 result=result & "|"
 End If
+If item Like "al*" Then
 result=result & item
+End If
 Next
 CurrentDb.Execute "INSERT INTO text_lists VALUES('" & StoredLabel(result) & "')"
 End Sub

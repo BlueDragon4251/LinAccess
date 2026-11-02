@@ -158,7 +158,7 @@ int precedence(const Token& token) {
     if (text == "or") return 4;
     if (text == "and") return 5;
     if (text == "=" || text == "<>" || text == "<" || text == "<=" ||
-        text == ">" || text == ">=" || text == "is") return 6;
+        text == ">" || text == ">=" || text == "is" || text == "like") return 6;
     if (text == "&") return 7;
     if (text == "+" || text == "-") return 8;
     if (text == "mod") return 9;
@@ -182,6 +182,77 @@ std::int32_t integer(const VbaValue& value) {
 }
 VbaValue scalarObjectValue(VbaValue value);
 VbaValue typeInspectionValue(VbaValue value);
+bool likeMatch(std::u16string_view input,std::u16string_view pattern,VbaHost& host,VbaCompareMode mode) {
+    struct Part {
+        enum class Kind { Literal, Star, Any, Digit, List } kind{Kind::Literal};
+        char16_t literal{};
+        bool negate{};
+        std::vector<std::pair<char16_t,char16_t>> ranges;
+    };
+    const auto compare=[&](char16_t left,char16_t right) {
+        if(mode==VbaCompareMode::Binary) return (left>right)-(left<right);
+        if((left>=0xd800 && left<=0xdfff) || (right>=0xd800 && right<=0xdfff))
+            throw error("Locale-aware Like surrogate comparisons are not implemented",3251);
+        return host.compareStrings(utf8String(std::u16string(1,left)),utf8String(std::u16string(1,right)),mode);
+    };
+    std::vector<Part> parts;
+    for(std::size_t index=0;index<pattern.size();++index) {
+        const auto unit=pattern[index]; Part part;
+        if(unit==u'*') part.kind=Part::Kind::Star;
+        else if(unit==u'?') part.kind=Part::Kind::Any;
+        else if(unit==u'#') part.kind=Part::Kind::Digit;
+        else if(unit==u'[') {
+            part.kind=Part::Kind::List;
+            const auto closing=pattern.find(u']',index+1);
+            if(closing==std::u16string_view::npos) throw error("Invalid Like pattern",93);
+            if(closing==index+1) { index=closing; continue; }
+            std::size_t cursor=index+1;
+            if(pattern[cursor]==u'!') { part.negate=true; ++cursor; }
+            if(cursor==closing) throw error("Invalid empty negated Like class",93);
+            while(cursor<closing) {
+                const auto first=pattern[cursor++]; auto last=first;
+                if(cursor+1<closing && pattern[cursor]==u'-') {
+                    last=pattern[cursor+1]; cursor+=2;
+                    if(mode!=VbaCompareMode::Binary && (first>127 || last>127))
+                        throw error("Non-ASCII Like range collation is not implemented",3251);
+                    if(compare(first,last)>0) throw error("Descending Like range",93);
+                }
+                part.ranges.emplace_back(first,last);
+            }
+            index=closing;
+        } else part.literal=unit;
+        parts.push_back(std::move(part));
+    }
+    // Two rows avoid recursive wildcard backtracking and retain UTF-16 positions.
+    std::vector<unsigned char> previous(input.size()+1),current(input.size()+1);
+    previous[0]=1;
+    for(const auto& part:parts) {
+        std::fill(current.begin(),current.end(),0);
+        if(part.kind==Part::Kind::Star) {
+            current[0]=previous[0];
+            for(std::size_t index=1;index<=input.size();++index) current[index]=previous[index] || current[index-1];
+        } else for(std::size_t index=1;index<=input.size();++index) {
+            if(!previous[index-1]) continue;
+            const auto unit=input[index-1]; bool match=false;
+            switch(part.kind) {
+            case Part::Kind::Any: match=true; break;
+            case Part::Kind::Digit: match=unit>=u'0' && unit<=u'9'; break;
+            case Part::Kind::Literal: match=compare(unit,part.literal)==0; break;
+            case Part::Kind::List:
+                for(const auto& range:part.ranges) {
+                    if(mode!=VbaCompareMode::Binary && range.first!=range.second && unit>127)
+                        throw error("Non-ASCII Like range collation is not implemented",3251);
+                    if(compare(unit,range.first)>=0 && compare(unit,range.second)<=0) { match=true; break; }
+                }
+                match=match!=part.negate; break;
+            case Part::Kind::Star: break;
+            }
+            current[index]=match;
+        }
+        previous.swap(current);
+    }
+    return previous.back()!=0;
+}
 VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& right,VbaHost* host,VbaCompareMode mode) {
     if (left.kind==VbaValue::Kind::Error || right.kind==VbaValue::Kind::Error)
         throw error("Error Variant cannot be used as an operand",13);
@@ -192,6 +263,10 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
     }
     if (left.kind==VbaValue::Kind::Object) return binary(op,scalarObjectValue(left),right,host,mode);
     if (right.kind==VbaValue::Kind::Object) return binary(op,left,scalarObjectValue(right),host,mode);
+    if(op=="like") {
+        if(left.kind==VbaValue::Kind::Null || right.kind==VbaValue::Kind::Null) return {};
+        return VbaValue::logical(likeMatch(utf16String(left.asText()),utf16String(right.asText()),*host,mode));
+    }
     if (op == "&") {
         if (left.kind == VbaValue::Kind::Null && right.kind == VbaValue::Kind::Null) return {};
         return VbaValue::string(left.asText() + right.asText());

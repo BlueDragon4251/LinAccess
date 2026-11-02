@@ -882,3 +882,10 @@ explicit literal defaults and existing ByRef/ByVal binding for supplied values.
 See [exact supported declaration and call boundaries](OPTIONAL_ARGUMENT_RUNTIME.md).
 Missing/IsMissing, positional holes, named arguments and full Optional/ParamArray
 semantics remain open.
+
+## Native VBA Like
+
+Like now executes in VBA expressions/conditions with wildcards, digit matching,
+character lists/ranges/negation, module comparison mode, Null and checked invalid
+patterns. See [exact Unicode/collation boundaries](VBA_LIKE_RUNTIME.md).
+This does not replace the existing SQL LIKE translator or establish full locale parity.

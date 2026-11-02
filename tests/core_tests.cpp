@@ -2278,7 +2278,10 @@ End Sub
     assert(stringArrays.status==VbaExecutionStatus::Completed);
     assert(host.fields["TextArray"]=="0:one|42|three:one/two/three");
     assert(host.fields["StringType"]=="String():8200");
-    const auto arrayLoops=executeVbaProcedure(R"VBA(Sub ArrayLoops()
+    const auto arrayLoops=executeVbaProcedure(R"VBA(Sub ChangeLater(ByRef source As Variant)
+source(1)="changed"
+End Sub
+Sub ArrayLoops()
 Dim words As Variant, original As Variant, item As Variant
 Dim result As String
 words=Split("a,b,c",",")
@@ -2286,7 +2289,7 @@ original=words
 For Each item In words
 result=result & item
 If item="a" Then
-words(1)="changed"
+Call ChangeLater(words)
 End If
 Next
 Me!ArrayLoop=result & ":" & Join(original,",")
@@ -2345,5 +2348,23 @@ End Sub
     assert(host.fields["DefaultArgs"]=="A,B:6" && host.fields["ExplicitArgs"]=="custom:12");
     assert(host.fields["DefaultCounter"]=="8" && host.fields["ExplicitCounter"]=="11");
     assert(host.fields["MissingArgumentError"]=="450");
+    assert(evaluate("\"alpha7\" Like \"a*#\"").truthy());
+    assert(evaluate("\"a7\" Like \"[a-z][!a-z]\"").truthy());
+    assert(!evaluate("\"Abc\" Like \"a*\"").truthy());
+    assert(evaluate("\"[x]\" Like \"[[]?]\"").truthy());
+    assert(evaluate("\"ab\" Like \"a[]b\"").truthy());
+    assert(evaluate("\"😀\" Like \"??\"").truthy());
+    assert(evaluate("Null Like \"*\"").kind==VbaValue::Kind::Null);
+    assert(evaluate("Not \"abc\" Like \"z*\" And True").truthy());
+    substringError("\"x\" Like \"[z-a]\"",93);
+    substringError("\"x\" Like \"[\"",93);
+    const auto likeText=executeVbaProcedure(R"VBA(Option Compare Text
+Sub LikeText()
+If "AB7" Like "[a-z][a-z]#" Then
+Me!LikeText="matched"
+End If
+End Sub
+)VBA","LikeText",host);
+    assert(likeText.status==VbaExecutionStatus::Completed && host.fields["LikeText"]=="matched");
     std::cout << "Core tests passed\n";
 }

@@ -52,7 +52,8 @@ semantics. String-array ReDim remains explicitly unsupported (3251).
 
 Array For Each supports named local/module variables and direct Array/Split/Filter
 results, with a Variant control variable. Named sources expose later element
-changes during iteration while independent copies remain independent. Empty
+changes during iteration, including element updates through a ByRef helper,
+while independent copies remain independent. Empty
 arrays skip the body. Direct source replacement, ReDim and Erase are rejected
 while traversing the source. Allocation replacement detected at Next also fails
 3251. Arbitrary function/property array sources, Byte array enumeration, full
