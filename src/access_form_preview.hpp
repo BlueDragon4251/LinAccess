@@ -32,7 +32,7 @@ class AccessFormPreview final : public QDialog {
 public:
     AccessFormPreview(QString formName, const QByteArray& source,
                       const QByteArray& vbaSource, QSqlDatabase database,
-                      QWidget* parent = nullptr,bool embedded=false,QString whereCondition={},std::optional<QString> openArgs={});
+                      QWidget* parent = nullptr,bool embedded=false,QString whereCondition={},std::optional<QString> openArgs={},int windowMode=0);
 
     linaccess::VbaExecutionResult executeProcedure(const QString& name,std::vector<linaccess::VbaValue>& arguments);
     bool exportLayoutPdf(const QString& path);
@@ -113,8 +113,8 @@ private:
     void undoKeyboardEdit();
     bool undoControlEdit(const QString& name);
     void updateDirtyFromRecord();
-    void openOtherForm(const QString& name,const QString& where={},std::optional<QString> openArgs={});
-    void openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where,std::optional<QString> openArgs={});
+    void openOtherForm(const QString& name,const QString& where={},std::optional<QString> openArgs={},int windowMode=0);
+    void openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where,std::optional<QString> openArgs={},int windowMode=0);
     void closeOtherDocument(int type,const std::optional<QString>& name,int save);
     std::optional<linaccess::VbaValue> getModuleMember(std::string_view name,bool publicOnly);
     bool setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly);

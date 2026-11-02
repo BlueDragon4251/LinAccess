@@ -14,8 +14,9 @@ replace it through OpenForm/OpenReport fails 3251 before filter changes.
 Only text/Null input is currently supported. Other Variant types, OpenArgs
 assignment, exact Empty/Null reopening behavior and Windows property mutability
 remain open. The current property facade rejects assignment with 438.
-OpenForm still rejects nondefault data/window modes (3251); explicit
-acFormPropertySettings/acWindowNormal work. This is not general mode parity.
+OpenForm accepts acFormPropertySettings with acWindowNormal or acHidden; see
+[hidden forms](HIDDEN_FORM_RUNTIME.md). Other data/window modes still fail 3251.
+This is not general mode parity.
 
 The existing native GUI target opens filtered children, reads values in Open and
 Load, closes/reopens with another value, checks a Report_Open value, Null on the

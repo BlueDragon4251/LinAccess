@@ -2584,3 +2584,13 @@ both direct and named syntax. Existing core/DAO/query-model/GUI targets pass 4/4
 SQLite atomicity remains with False; complete Jet partial-failure semantics,
 cross-connection execution and callback reentrancy remain open. See
 DOCMD_RUNSQL_TRANSACTION_RUNTIME.md for the precise transaction boundary.
+
+## Native hidden-form opening (2026-11-02)
+
+New acHidden forms initialize and retain data/OpenArgs independently without
+show/activation. Native GUI SQL audit verifies Open/Load/Current without Activate,
+Visible=False, Forms access and named close. Existing core/DAO/query-model/GUI
+targets pass 4/4 (1.94 s); desktop build passes. No new target or full-matrix run.
+Re-hiding visible documents, report/icon/dialog modes and full Windows event/
+window equivalence remain open; see HIDDEN_FORM_RUNTIME.md. Combined package/
+headless verification will cover a later grouped delivery.

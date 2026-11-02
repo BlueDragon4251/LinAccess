@@ -917,3 +917,9 @@ opening modes remain bounded; see [OpenArgs runtime](DOCUMENT_OPENARGS_RUNTIME.m
 DoCmd.RunSQL evaluates UseTransaction and uses an action savepoint for True;
 False adds no wrapper. Existing outer DAO transactions remain owned by their
 caller. See [SQLite/Jet boundaries](DOCMD_RUNSQL_TRANSACTION_RUNTIME.md).
+
+## Native hidden forms
+
+OpenForm acHidden initializes a real form and its data/events without showing
+or activating it. The hidden instance remains readable through Forms and can
+be closed by name; see [remaining mode boundaries](HIDDEN_FORM_RUNTIME.md).

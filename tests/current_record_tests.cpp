@@ -103,6 +103,9 @@ DoCmd.Close Save:=2
 DoCmd.OpenReport OpenArgs:="report-value",ReportName:="named_report",View:=acViewPreview
 NamedCommands=NamedCommands & "|" & Reports("named_report").OpenArgs
 DoCmd.Close Save:=acSaveNo,ObjectName:="named_report",ObjectType:=acReport
+DoCmd.OpenForm FormName:="named_hidden",WindowMode:=acHidden,OpenArgs:="hidden"
+NamedCommands=NamedCommands & "|" & CStr(Forms("named_hidden").Visible) & ":" & Forms("named_hidden").OpenArgs
+DoCmd.Close ObjectName:="named_hidden",ObjectType:=acForm,Save:=acSaveNo
 End Function
 )VBA";
     AccessFormPreview form("current_record",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents(); auto model=makePreviewFormObject(form);
@@ -157,10 +160,28 @@ End Sub
 CurrentDb.Execute "INSERT INTO open_arg_events VALUES('ReportOpen','" & Me.OpenArgs & "')"
 End Sub
 )VBA")); assert(sql.exec()); sql.finish();
+    auto hiddenLayout=childLayout;
+    hiddenLayout.replace("OnLoad =\"[Event Procedure]\"","OnLoad =\"[Event Procedure]\"\nOnCurrent =\"[Event Procedure]\"\nOnActivate =\"[Event Procedure]\"");
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','named_hidden',?)");
+    sql.addBindValue(hiddenLayout); assert(sql.exec()); sql.finish();
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba','Form_named_hidden',?)");
+    sql.addBindValue(QByteArray(R"VBA(Sub Form_Open(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO open_arg_events VALUES('HiddenOpen','" & Me.OpenArgs & "')"
+End Sub
+Sub Form_Load()
+CurrentDb.Execute "INSERT INTO open_arg_events VALUES('HiddenLoad','" & Me.OpenArgs & "')"
+End Sub
+Sub Form_Current()
+CurrentDb.Execute "INSERT INTO open_arg_events VALUES('HiddenCurrent','" & Me.OpenArgs & "')"
+End Sub
+Sub Form_Activate()
+CurrentDb.Execute "INSERT INTO open_arg_events VALUES('HiddenActivate','" & Me.OpenArgs & "')"
+End Sub
+)VBA")); assert(sql.exec()); sql.finish();
     AccessFormPreview namedForm("named_parent",layout,code,db); namedForm.show(); namedForm.activateWindow(); QApplication::processEvents();
     std::vector<VbaValue> namedArgs; const auto named=namedForm.executeProcedure("NamedCommands",namedArgs);
     if(named.status!=linaccess::VbaExecutionStatus::Completed) qWarning("Named DoCmd error=%d line=%d",named.errorNumber,named.line);
-    assert(named.status==linaccess::VbaExecutionStatus::Completed && named.typedReturnValue->asText()=="payload:second|new|report-value");
+    assert(named.status==linaccess::VbaExecutionStatus::Completed && named.typedReturnValue->asText()=="payload:second|new|report-value|False:hidden");
     assert(sql.exec("SELECT COUNT(*) FROM named_calls") && sql.next() && sql.value(0).toInt()==2); sql.finish();
     const auto nullSql=namedForm.executeProcedure("RunSqlNull",namedArgs);
     assert(nullSql.status==linaccess::VbaExecutionStatus::Completed && nullSql.typedReturnValue->asNumber()==2);
@@ -171,6 +192,7 @@ End Sub
     assert(makePreviewFormObject(namedForm)->member("OpenArgs",{}).kind==VbaValue::Kind::Null);
     assert(sql.exec("SELECT COUNT(*) FROM open_arg_events WHERE value IN('payload','new')") && sql.next() && sql.value(0).toInt()==4); sql.finish();
     assert(sql.exec("SELECT COUNT(*) FROM open_arg_events WHERE phase='ReportOpen' AND value='report-value'") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    assert(sql.exec("SELECT group_concat(phase,',') FROM (SELECT phase FROM open_arg_events WHERE value='hidden' ORDER BY rowid)") && sql.next() && sql.value(0).toString()=="HiddenOpen,HiddenLoad,HiddenCurrent"); sql.finish();
     int readOnly=0; try { makePreviewFormObject(namedForm)->assign("OpenArgs",VbaValue::string("changed")); } catch(const linaccess::VbaRuntimeError& failure) { readOnly=failure.number; } assert(readOnly==438);
     assert(namedForm.close());
     const QByteArray report="Begin Report\nRecordSource =\"records\"\nEnd\n"; AccessFormPreview reportForm("position_report",report,{},db); auto reportModel=makePreviewFormObject(reportForm);

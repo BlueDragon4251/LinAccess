@@ -755,3 +755,6 @@ Full targets remain open:
 - [x] Native DoCmd.RunSQL UseTransaction (named/positional/default), scoped
   action savepoint/cleanup, preserved outer DAO transaction and Null SQL errors;
   complete Jet partial-failure/transaction semantics remain open.
+
+- [x] Native new-form acHidden opening, Forms/data/OpenArgs lifetime, initial
+  Open/Load/Current without synthetic Activate and named close; full modes remain open.
