@@ -777,3 +777,9 @@ DAO and read-only Qt controls. Plan changes/schema refresh invalidate stale
 hints. All 43 original sums pass without explicit casts. Joins/views/HAVING/
 nested/complex/action SQL typing and full money/Windows identity remain open.
 See [CURRENCY_SCHEMA_QUERIES_RUNTIME.md](CURRENCY_SCHEMA_QUERIES_RUNTIME.md).
+
+Proven Currency SELECT operands now use checked fixed-point +, - and *, preserving
+precedence/associativity, four-decimal multiplication rounding, Null and Currency
+result types into DAO/Qt. Actual SQL/report tests include Sum(a+b) and range/
+overflow checks. Mixed/division/complex/action/full-range/Windows SQL arithmetic
+remains open. See [CURRENCY_ARITHMETIC_SQL_RUNTIME.md](CURRENCY_ARITHMETIC_SQL_RUNTIME.md).

@@ -240,59 +240,94 @@ QVector<QString> currencyProjectionTypes(QVector<Token>& tokens,qsizetype start,
         else if(depth==0 && (word(i,"UNION") || word(i,"INTERSECT") || word(i,"EXCEPT"))) return {};
     }
     const auto name=[](const Token& value) { return value.kind==Token::Word || value.kind==Token::Identifier; };
-    QMap<qsizetype,QString> replacements;
-    std::function<QString(QVector<Token>,int,qsizetype)> typeOf=[&](QVector<Token> expression,int recursion,qsizetype offset)->QString {
-        if(recursion>64 || expression.isEmpty()) return {};
-        while(expression.size()>=2 && symbol(expression.front(),"(")) {
+    const auto precedence=[](const Token& token) {
+        const auto value=token.value.toCaseFolded();
+        if(token.kind!=Token::Other && token.kind!=Token::Word) return 0;
+        if(value=="or" || value=="xor" || value=="eqv" || value=="imp") return 1;
+        if(value=="and") return 2;
+        if(value=="=" || value=="<>" || value=="!=" || value=="<" || value==">" || value=="<=" || value==">=" || value=="like" || value=="is" || value=="in") return 3;
+        if(value=="&" || value=="||") return 4;
+        if(value=="+" || value=="-") return 5;
+        if(value=="*" || value=="/" || value=="\\" || value=="%" || value=="mod") return 6;
+        if(value=="^") return 7;
+        return 0;
+    };
+    struct Expression { QString type; QVector<Token> code; };
+    const auto call=[](const QString& function,const QVector<Token>& first,const QVector<Token>& second=QVector<Token>{}) {
+        QVector<Token> code{{Token::Word,function},{Token::Other,"("}}; code+=first;
+        if(!second.empty()) { code.append({Token::Other,","}); code+=second; }
+        code.append({Token::Other,")"}); return code;
+    };
+    std::function<Expression(QVector<Token>,int)> parse=[&](QVector<Token> expression,int recursion)->Expression {
+        const Expression unknown{{},expression};
+        if(recursion>64 || expression.isEmpty()) return unknown;
+        if(expression.size()>=2 && symbol(expression.front(),"(")) {
             int nesting=0; qsizetype close=-1;
             for(qsizetype i=0;i<expression.size();++i) {
                 if(symbol(expression[i],"(")) ++nesting;
                 else if(symbol(expression[i],")") && --nesting==0) { close=i; break; }
             }
-            if(close!=expression.size()-1) break;
-            expression=expression.mid(1,expression.size()-2); ++offset;
+            if(close==expression.size()-1) {
+                auto inner=parse(expression.mid(1,expression.size()-2),recursion+1);
+                if(inner.type.isEmpty()) return unknown;
+                QVector<Token> code{{Token::Other,"("}}; code+=inner.code; code.append({Token::Other,")"}); return {inner.type,code};
+            }
         }
-        if(expression.isEmpty()) return {};
-        if(expression.size()>1 && (symbol(expression.front(),"+") || symbol(expression.front(),"-"))) return typeOf(expression.mid(1),recursion+1,offset+1);
+        qsizetype operation=-1; int lowest=100,nesting=0;
+        for(qsizetype i=0;i<expression.size();++i) {
+            if(symbol(expression[i],"(")) { ++nesting; continue; }
+            if(symbol(expression[i],")")) { --nesting; continue; }
+            if(nesting) continue;
+            const auto rank=precedence(expression[i]); if(!rank) continue;
+            if((symbol(expression[i],"+") || symbol(expression[i],"-")) && (i==0 || precedence(expression[i-1]) || symbol(expression[i-1],"(" ) || symbol(expression[i-1],","))) continue;
+            if(rank<=lowest) { lowest=rank; operation=i; }
+        }
+        if(operation>=0) {
+            auto left=parse(expression.mid(0,operation),recursion+1),right=parse(expression.mid(operation+1),recursion+1);
+            const auto op=expression[operation].value;
+            if(left.type!="CURRENCY_REAL" || right.type!="CURRENCY_REAL" || (op!="+" && op!="-" && op!="*")) return unknown;
+            return {"CURRENCY_REAL",call(op=="+" ? "linaccess_jet_currency_add" : op=="-" ? "linaccess_jet_currency_subtract" : "linaccess_jet_currency_multiply",left.code,right.code)};
+        }
+        if(expression.size()>1 && (symbol(expression.front(),"+") || symbol(expression.front(),"-"))) {
+            auto inner=parse(expression.mid(1),recursion+1); if(inner.type.isEmpty()) return unknown;
+            QVector<Token> code{expression.front(),{Token::Other,"("}}; code+=inner.code; code.append({Token::Other,")"}); return {inner.type,code};
+        }
         if(expression.size()==1 && name(expression.front())) {
-            for(const auto& parameter:parameters) if(parameter.type=="currency" && parameter.name.compare(expression.front().value,Qt::CaseInsensitive)==0) return "CURRENCY_REAL";
+            for(const auto& parameter:parameters) if(parameter.type=="currency" && parameter.name.compare(expression.front().value,Qt::CaseInsensitive)==0) return {"CURRENCY_REAL",expression};
+            if(fields.value(expression.front().value.toCaseFolded())=="CURRENCY_REAL") return {"CURRENCY_REAL",expression};
         }
-        if(expression.size()==1 && name(expression.front()) && fields.value(expression.front().value.toCaseFolded())=="CURRENCY_REAL") return "CURRENCY_REAL";
-        if(expression.size()==3 && name(expression.front()) && symbol(expression[1],".") && name(expression.back()) && fields.value((expression.front().value+'.'+expression.back().value).toCaseFolded())=="CURRENCY_REAL") return "CURRENCY_REAL";
-        if(expression.size()<4 || expression.front().kind!=Token::Word || !symbol(expression[1],"(") || !symbol(expression.back(),")")) return {};
-        const bool currency=expression.front().value.compare("CCur",Qt::CaseInsensitive)==0;
-        const bool sum=expression.front().value.compare("Sum",Qt::CaseInsensitive)==0;
-        if(!currency && !sum) return {};
-        int nesting=0;
+        if(expression.size()==3 && name(expression.front()) && symbol(expression[1],".") && name(expression.back()) && fields.value((expression.front().value+'.'+expression.back().value).toCaseFolded())=="CURRENCY_REAL") return {"CURRENCY_REAL",expression};
+        if(expression.size()<4 || expression.front().kind!=Token::Word || !symbol(expression[1],"(") || !symbol(expression.back(),")")) return unknown;
+        const bool currency=expression.front().value.compare("CCur",Qt::CaseInsensitive)==0,sum=expression.front().value.compare("Sum",Qt::CaseInsensitive)==0;
+        if(!currency && !sum) return unknown;
+        nesting=0;
         for(qsizetype i=1;i<expression.size();++i) {
             if(symbol(expression[i],"(")) ++nesting;
-            else if(symbol(expression[i],")")) { if(--nesting==0 && i!=expression.size()-1) return {}; }
-            else if(nesting==1 && symbol(expression[i],",")) return {};
+            else if(symbol(expression[i],")")) { if(--nesting==0 && i!=expression.size()-1) return unknown; }
+            else if(nesting==1 && symbol(expression[i],",")) return unknown;
         }
-        if(nesting!=0) return {};
-        const auto argument=typeOf(expression.mid(2,expression.size()-3),recursion+1,offset+2);
-        if(sum) {
-            if(argument!="CURRENCY_REAL") return {};
-            replacements.insert(offset,"linaccess_jet_currency_sum");
-        }
-        return "CURRENCY_REAL";
+        if(nesting) return unknown;
+        auto argument=parse(expression.mid(2,expression.size()-3),recursion+1);
+        if(sum && argument.type!="CURRENCY_REAL") return unknown;
+        return {"CURRENCY_REAL",call(sum ? QString("linaccess_jet_currency_sum") : expression.front().value,argument.code)};
     };
     qsizetype first=start+1;
     if(word(first,"DISTINCT") || word(first,"DISTINCTROW") || word(first,"ALL")) ++first;
     if(word(first,"TOP")) first+=2;
-    QVector<QString> result; depth=0;
+    struct Rewrite { qsizetype first,last; QVector<Token> code; };
+    QVector<Rewrite> rewrites; QVector<QString> result; depth=0;
     for(qsizetype i=first;i<=tokens.size();++i) {
         const bool end=i==tokens.size() || (depth==0 && (word(i,"FROM") || word(i,"INTO") || word(i,"WHERE") || word(i,"ORDER") || word(i,"GROUP") || word(i,"HAVING") || symbol(tokens[i],";")));
         if(end || (depth==0 && symbol(tokens[i],","))) {
-            auto expression=tokens.mid(first,i-first);
-            if(expression.size()>=3 && expression[expression.size()-2].kind==Token::Word && expression[expression.size()-2].value.compare("AS",Qt::CaseInsensitive)==0 && name(expression.back())) expression.resize(expression.size()-2);
+            auto expression=tokens.mid(first,i-first); QVector<Token> alias;
+            if(expression.size()>=3 && expression[expression.size()-2].kind==Token::Word && expression[expression.size()-2].value.compare("AS",Qt::CaseInsensitive)==0 && name(expression.back())) { alias=expression.mid(expression.size()-2); expression.resize(expression.size()-2); }
             if((expression.size()==1 && symbol(expression.front(),"*")) || (expression.size()>=3 && symbol(expression.back(),"*") && symbol(expression[expression.size()-2],"."))) return {};
-            result.append(typeOf(expression,0,first)); first=i+1;
+            auto parsed=parse(expression,0); result.append(parsed.type); parsed.code+=alias; rewrites.append({first,i,parsed.code}); first=i+1;
             if(end) break;
         } else if(symbol(tokens[i],"(")) ++depth;
         else if(symbol(tokens[i],")")) --depth;
     }
-    for(auto it=replacements.cbegin();it!=replacements.cend();++it) tokens[it.key()].value=it.value();
+    for(auto it=rewrites.crbegin();it!=rewrites.crend();++it) replaceTokens(tokens,it->first,it->last,it->code);
     return result;
 }
 
@@ -473,7 +508,7 @@ QString resolveQueryOrigins(QSqlDatabase db,const QString& sql) {
         }
         if (expanded.size()>4096 || output.size()+expanded.size()>16384) return sql;
         bool pure=true;
-        static const QSet<QString> functions{"linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","abs","round","linaccess_jet_round","ccur","linaccess_jet_ccur","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","coalesce"};
+        static const QSet<QString> functions{"linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","abs","round","linaccess_jet_round","ccur","linaccess_jet_ccur","linaccess_jet_currency_add","linaccess_jet_currency_subtract","linaccess_jet_currency_multiply","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","coalesce"};
         for (qsizetype j=0;j+1<expanded.size();++j)
             if (name(expanded[j]) && symbol(expanded[j+1],"(") && !functions.contains(expanded[j].value.toCaseFolded())) pure=false;
         if (explicitAlias && pure) aliases.insert(projection.last().value.toCaseFolded(),expanded);
@@ -491,7 +526,7 @@ RightJoinCandidate simpleRightJoin(const QVector<Token>& tokens,qsizetype start)
     const auto name=[](const Token& token) { return token.kind==Token::Word || token.kind==Token::Identifier; };
     const auto word=[&](qsizetype i,const char* value) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0; };
     if (!word(start,"SELECT")) return {};
-    const QSet<QString> scalar{"iif","format","format$","abs","round","linaccess_jet_round","ccur","linaccess_jet_ccur","coalesce","ifnull","nullif","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","trim","ltrim","rtrim","replace","linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat"};
+    const QSet<QString> scalar{"iif","format","format$","abs","round","linaccess_jet_round","ccur","linaccess_jet_ccur","linaccess_jet_currency_add","linaccess_jet_currency_subtract","linaccess_jet_currency_multiply","coalesce","ifnull","nullif","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","trim","ltrim","rtrim","replace","linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat"};
     const QSet<QString> syntax{"where","on","and","or","not","in","is","by"};
     qsizetype from=-1,right=-1,join=-1,on=-1,end=-1; int selects=0,joins=0,depth=0;
     for (qsizetype i=start;i<tokens.size();++i) {
@@ -544,7 +579,7 @@ bool stableTopSource(QSqlDatabase db,const QString& source,QSet<QString> visitin
     if (type=="table") return !sql.trimmed().startsWith("CREATE VIRTUAL",Qt::CaseInsensitive);
     if (type!="view") return false;
     const auto tokens=tokenize(sql);
-    const QSet<QString> pure{"abs","coalesce","ifnull","nullif","iif","sum","linaccess_jet_currency_sum","total","count","min","max","avg","round","linaccess_jet_round","ccur","linaccess_jet_ccur","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","substring","trim","ltrim","rtrim","replace","cast","typeof","rank",
+    const QSet<QString> pure{"abs","coalesce","ifnull","nullif","iif","sum","linaccess_jet_currency_sum","total","count","min","max","avg","round","linaccess_jet_round","ccur","linaccess_jet_ccur","linaccess_jet_currency_add","linaccess_jet_currency_subtract","linaccess_jet_currency_multiply","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","substring","trim","ltrim","rtrim","replace","cast","typeof","rank",
         "linaccess_jet_iif","linaccess_jet_first","linaccess_jet_last","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","linaccess_jet_like_pattern"};
     const QSet<QString> syntax{"from","join","as","in","not","exists","over","by","and","or","on","where","having","is","when","then","else","case"};
     QSet<QString> dependencies; int selects=0; bool inFrom=false;

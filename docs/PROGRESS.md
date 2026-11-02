@@ -2190,3 +2190,22 @@ exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. GitHub's
 previously confirmed account-level CI restriction remains separate from these
 successful local distribution checks; no remote test success is claimed.
+
+## 2026-11-02 — Exact arithmetic of proven Currency query expressions
+
+Reproduced generic Double evaluation for Currency operands (0/1). Added bounded
+projection expression parsing and native fixed-point +,-,* callbacks using shared
+checked Currency arithmetic. Arithmetic/sum/query/schema/object tests pass 5/5
+(0.28 s), covering precedence/associativity/parentheses/signs, four-decimal
+multiplication ties, Null/parameters, Sum(a+b), overflow/backing limits and actual
+readonly Qt report output without source writes. GUI suite has 45 CTests.
+Mixed/division/complex/view/join/action/full-range/Windows semantics remain open;
+no complete original business workflow increment. See
+CURRENCY_ARITHMETIC_SQL_RUNTIME.md.
+
+Full local validation: host 45/45 (105.25 s), Debian 12 45/45 (108.67 s),
+Ubuntu 24.04 45/45 (95.36 s), Debian 13 45/45 (95.63 s), GUI-disabled core
+1/1 (1.72 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. GitHub's
+account-level CI restriction remains separate; no remote test success is claimed.

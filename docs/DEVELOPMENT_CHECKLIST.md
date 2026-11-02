@@ -657,3 +657,7 @@ Full targets remain open:
 - [x] Verified live Currency fields and exact implicit SUM in simple physical-
   table SELECT/DAO/readonly Qt paths, stale-plan/schema/filter safeguards and all
   43 original sums without casts; general/view/join/action/Windows typing remains open.
+
+- [x] Exact proven Currency SELECT +,-,* with precedence/associativity/rounding/
+  Null/parameter/SUM/DAO/Qt report/range/overflow regression; mixed/division/
+  complex/action/full-range/Windows arithmetic remains open.

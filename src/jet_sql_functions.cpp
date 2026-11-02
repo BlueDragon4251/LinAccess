@@ -189,6 +189,20 @@ void currencyNumber(sqlite3_context* context,int count,sqlite3_value** args) noe
       catch(...) { native.error(context,"SQL currency conversion failed",-1); }
 }
 
+void currencyArithmetic(sqlite3_context* context,sqlite3_value** args,std::string_view operation) noexcept {
+    auto& native=api();
+    try {
+        if(native.type(args[0])==SQLITE_NULL || native.type(args[1])==SQLITE_NULL) { native.nullResult(context); return; }
+        for(int i=0;i<2;++i) if(native.type(args[i])!=SQLITE_INTEGER && native.type(args[i])!=SQLITE_FLOAT) throw VbaRuntimeError(13,"Currency arithmetic requires numeric encoding");
+        const auto left=currencyFromRealStorage(native.number(args[0])),right=currencyFromRealStorage(native.number(args[1]));
+        native.numberResult(context,currencyToRealStorage(currencyBinary(operation,left,right)));
+    } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
+      catch(...) { native.error(context,"SQL Currency arithmetic failed",-1); }
+}
+void currencyAdd(sqlite3_context* context,int,sqlite3_value** args) noexcept { currencyArithmetic(context,args,"+"); }
+void currencySubtract(sqlite3_context* context,int,sqlite3_value** args) noexcept { currencyArithmetic(context,args,"-"); }
+void currencyMultiply(sqlite3_context* context,int,sqlite3_value** args) noexcept { currencyArithmetic(context,args,"*"); }
+
 struct CurrencySumState { std::int64_t units; int error; bool seen; };
 void currencySumStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native=api(); auto* state=static_cast<CurrencySumState*>(native.aggregate(context,sizeof(CurrencySumState)));
@@ -401,6 +415,9 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_round",-1,&roundNumber,nullptr,nullptr);
     ensure("linaccess_jet_ccur",-1,&currencyNumber,nullptr,nullptr);
     ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep,&currencySumFinal);
+    ensure("linaccess_jet_currency_add",2,&currencyAdd,nullptr,nullptr);
+    ensure("linaccess_jet_currency_subtract",2,&currencySubtract,nullptr,nullptr);
+    ensure("linaccess_jet_currency_multiply",2,&currencyMultiply,nullptr,nullptr);
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
     ensure("linaccess_jet_update_value",1,nullptr,&singleStep,&singleFinal);
