@@ -18,6 +18,13 @@ if(LINACCESS_BUILD_GUI)
         src/vba_qt_value.cpp src/vba_module_context.cpp src/access_form_import.cpp)
     target_link_libraries(linaccess_data PUBLIC linaccess_runtime Qt6::Core Qt6::Sql linaccess_sqlite)
     target_include_directories(linaccess_data PUBLIC src)
+    # The app and integration tests execute the same native form implementation.
+    # Compile these large translation units once, without adding a runtime DSO.
+    add_library(linaccess_forms STATIC
+        src/access_form_preview.cpp src/access_form_record_commands.cpp src/access_record_clipboard.cpp src/native_send_keys.cpp src/access_form_objects.cpp src/access_layout_print.cpp
+        src/native_input_box.cpp src/access_form_preview.hpp)
+    target_link_libraries(linaccess_forms PUBLIC linaccess_data Qt6::Widgets Qt6::PrintSupport)
+    target_include_directories(linaccess_forms PUBLIC src)
     add_executable(linaccess
 
         src/main.cpp
@@ -31,8 +38,8 @@ if(LINACCESS_BUILD_GUI)
         src/access_table_import.hpp
 
         src/access_form_import.hpp
-        src/access_form_preview.cpp src/access_form_record_commands.cpp src/access_record_clipboard.cpp src/native_send_keys.cpp src/access_form_objects.cpp src/access_layout_print.cpp
-        src/access_form_preview.hpp
+
+
         src/bridge_importer.cpp
         src/bridge_importer.hpp
 
@@ -46,8 +53,7 @@ if(LINACCESS_BUILD_GUI)
 
         src/csv.hpp
     )
-    target_link_libraries(linaccess PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport)
-    target_sources(linaccess PRIVATE src/native_input_box.cpp)
+    target_link_libraries(linaccess PRIVATE linaccess_forms linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport)
     set_target_properties(linaccess PROPERTIES INSTALL_RPATH "$ORIGIN/../lib/linaccess")
     # Cloud workspaces can use umask 0077. Installed system directories must
     # remain traversable by ordinary desktop users in the generated package.
@@ -83,7 +89,7 @@ if(BUILD_TESTING)
         list(REMOVE_ITEM linaccess_mainwindow_test_sources src/main.cpp)
         add_executable(linaccess_mainwindow_tests tests/mainwindow_document_tests.cpp ${linaccess_mainwindow_test_sources})
         target_include_directories(linaccess_mainwindow_tests PRIVATE src)
-        target_link_libraries(linaccess_mainwindow_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport Qt6::Test)
+        target_link_libraries(linaccess_mainwindow_tests PRIVATE linaccess_forms linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport Qt6::Test)
         add_test(NAME mainwindow_documents COMMAND linaccess_mainwindow_tests)
         set_tests_properties(mainwindow_documents PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
         add_test(NAME sqlite_backend_identity COMMAND linaccess --check-sql-backend)
@@ -205,20 +211,20 @@ if(BUILD_TESTING)
                 tests/access_form_layout_tests.cpp tests/message_box_tests.cpp tests/close_command_tests.cpp tests/document_lifetime_tests.cpp tests/dynamic_combo_tests.cpp tests/keyboard_commands_tests.cpp tests/active_document_commands_tests.cpp tests/send_keys_tests.cpp tests/calculated_cache_tests.cpp tests/module_state_tests.cpp tests/calendar_tests.cpp tests/filter_tests.cpp tests/form_event_tests.cpp tests/subform_tests.cpp tests/form_object_tests.cpp tests/original_control_tests.cpp tests/report_event_tests.cpp tests/report_corpus_tests.cpp
                  src/access_form_import.hpp
 
-                src/access_form_preview.cpp src/access_form_record_commands.cpp src/access_record_clipboard.cpp src/native_send_keys.cpp src/access_form_objects.cpp src/access_layout_print.cpp src/access_form_preview.hpp
+
                  src/vba_source_codec.hpp
                  src/vba_runtime.hpp
                  src/vba_expression.hpp
                  src/vba_analyzer.hpp)
             target_include_directories(linaccess_access_layout_tests PRIVATE src)
             target_sources(linaccess_access_layout_tests PRIVATE tests/event_prefix_tests.cpp)
-            target_sources(linaccess_access_layout_tests PRIVATE src/native_input_box.cpp tests/input_box_tests.cpp)
+            target_sources(linaccess_access_layout_tests PRIVATE tests/input_box_tests.cpp)
             target_sources(linaccess_access_layout_tests PRIVATE tests/recordset_navigation_tests.cpp)
             target_sources(linaccess_access_layout_tests PRIVATE tests/row_source_types_tests.cpp)
             target_sources(linaccess_access_layout_tests PRIVATE tests/record_delete_tests.cpp)
             target_sources(linaccess_access_layout_tests PRIVATE tests/record_clipboard_tests.cpp)
             target_sources(linaccess_access_layout_tests PRIVATE tests/eval_tests.cpp)
-            target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::Test Qt6::PrintSupport)
+            target_link_libraries(linaccess_access_layout_tests PRIVATE linaccess_forms linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::Test Qt6::PrintSupport)
             add_test(NAME access_2003_layouts
                 COMMAND linaccess_access_layout_tests "${LINACCESS_COMPLEX_BRIDGE_DIR}")
             set_tests_properties(access_2003_layouts PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

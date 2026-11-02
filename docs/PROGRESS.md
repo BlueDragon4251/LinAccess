@@ -1571,3 +1571,20 @@ backend, permissions and fixture-exclusion checks. Isolated Debian/Ubuntu
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass; repository remains private. Previous 472a23b private CI completed
 successfully.
+
+## 2026-11-02 — Shared native GUI build implementation
+
+App, main-window integration tests and layout tests now link the same static
+linaccess_forms library instead of compiling the form implementation separately
+for each executable. This reduces repeated compilation while retaining native
+execution and the same installed executable; no runtime shared library or QtTest
+app dependency is introduced. The GUI-disabled build remains independent of Qt.
+This build change adds no compatibility catalog point.
+
+Validation: host 22/22 (75.02 s), Debian 12 22/22 (80.86 s), Ubuntu
+24.04 22/22 (72.63 s), GUI-disabled core 1/1 (1.23 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. Build rules contain one
+form-preview compile target; the app has no QtTest runtime dependency. All four
+original fixture hashes pass and the repository remains private. Previous
+449f17a private CI was still running at this checkpoint; no success is assumed.
