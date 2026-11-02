@@ -34,7 +34,8 @@ bounded native model (DYNAMIC_COMBO_RUNTIME.md). Built-in Value/Field Lists are
 supported within that documented scope. Single-selection ListBox now has a
 persistent native QTreeView (NATIVE_LISTBOX_RUNTIME.md). User row-source functions,
 Bounded ColumnHeads is in COLUMN_HEADS_RUNTIME.md; multi-selection, field captions
-and complete Access sizing/rendering remain open.
+and complete Access sizing/rendering remain open. Native Simple/Extended selection
+and its scoped VBA API are in MULTISELECT_LISTBOX_RUNTIME.md.
 
 Calculated textboxes execute bracket field/control references, explicit subform
 Form references, basic scalar expressions and simple Sum(field), Count(field)

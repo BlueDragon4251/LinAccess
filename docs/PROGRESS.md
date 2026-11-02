@@ -1427,3 +1427,24 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. Previous native ListBox commit b916960 completed
 private CI successfully. Repository privacy remains unchanged.
+
+## 2026-11-02 — Native ListBox multiple selection and indexed VBA assignment
+
+Simple/Extended Qt selection now backs Selected/ItemsSelected, ItemData and
+ListIndex getters. An explicit indexed setter protocol handles nested VBA/With/
+bracket targets without getter-as-assignment effects. Actual mouse/keyboard,
+collection/For Each/scalar/error/lifetime and validation tests pass. Multi Value/
+OldValue stay Null while record loading, comparison, mirroring and persistence
+exclude these non-value controls. Saving another or the same bound field leaves
+selection intact; selection alone performs zero inserts on a new row. Extended
+requery clears; selected Simple requery rejects without model/selection loss.
+Targeted core/main-window/layout/original-heavy set: 4/4 (40.66 s). Full Windows
+order/index/type/context, Simple preservation and ListIndex writer remain open;
+no original business execution increment. See MULTISELECT_LISTBOX_RUNTIME.md.
+
+Final validation: host 22/22 (86.50 s), Debian 12 22/22 (72.69 s), Ubuntu
+24.04 22/22 (66.07 s), GUI-disabled core 1/1 (0.93 s). Fresh host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. Previous column-heading commit 9b4fa12 completed
+private CI successfully. Repository privacy remains unchanged.

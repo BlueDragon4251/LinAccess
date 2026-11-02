@@ -1076,10 +1076,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             edit->setReadOnly(control.controlSource.startsWith('='));
             widget = edit;
         } else if(control.type=="ListBox") {
-            if(control.multiSelect) {
-                auto* diagnostic=new QLabel("ListBox-Mehrfachauswahl nicht verfügbar (3251)",canvas);
-                diagnostic->setWordWrap(true); diagnostic->setProperty("la_list_error",3251); widget=diagnostic;
-            } else widget=new AccessListBox(canvas);
+            widget=new AccessListBox(canvas,control.multiSelect);
         } else if (control.type == "ComboBox") {
             auto* combo = new AccessComboBox(canvas);
             combo->setEditable(true);
@@ -1203,8 +1200,8 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             list->selectionEdited=[this,name,list] {
                 if(closed_ || openCancelled_ || loading_ || list->property("la_access_input_readonly").toBool()) return;
                 ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
-                clearDefaultError(list); list->setProperty("la_null",false);
-                markDirty(name,true);
+                clearDefaultError(list); list->setProperty("la_null",list->multiSelectMode()!=0);
+                if(!list->multiSelectMode()) markDirty(name,true);
                 if(closed_ || openCancelled_ || list->property("la_insert_rejected").toBool()) return;
                 refreshCalculatedControls(); pendingControls_.insert(name); (void)commitControl(name);
             };
@@ -1539,7 +1536,7 @@ void AccessFormPreview::loadRecord() {
     clearRecordSelection(); bufferedTextControls_.clear();
     QScopedValueRollback<bool> loading(loading_,true);
     for (const auto& control : layout_.controls) {
-        if (control.controlSource.isEmpty()) continue;
+        if (control.controlSource.isEmpty() || (control.type=="ListBox" && control.multiSelect)) continue;
         auto* widget = controls_.value(control.name.toCaseFolded()).data();
         if (!widget) continue;
         clearDefaultError(widget);
@@ -1568,6 +1565,7 @@ void AccessFormPreview::loadRecord() {
 void AccessFormPreview::markDirty(const QString& name,bool userEdit) {
     if (loading_ || !directTable_ || !dataSourceAvailable_) return;
     auto* editedWidget=controls_.value(name.toCaseFolded()).data();
+    if(auto* list=dynamic_cast<AccessListBox*>(editedWidget); list && list->multiSelectMode()) return;
     if (userEdit && editedWidget) editedWidget->setProperty("la_insert_rejected",false);
     const auto reject=[&] {
         loadRecord();
@@ -1583,6 +1581,7 @@ void AccessFormPreview::markDirty(const QString& name,bool userEdit) {
         if (!bufferedTextControls_.contains(name)) {
             QScopedValueRollback<bool> loading(loading_,true);
             for (const auto& control : layout_.controls) {
+                if(control.type=="ListBox" && control.multiSelect) continue;
                 if (columnIndex(control.controlSource,dataColumns_) != boundColumn) continue;
                 auto* target = controls_.value(control.name.toCaseFolded()).data();
                 if (!target || target == sourceWidget) continue;
@@ -1661,6 +1660,7 @@ bool AccessFormPreview::saveRecord() {
     QVariantList values;
     for (const auto& control : layout_.controls) {
         const int fieldIndex = columnIndex(control.controlSource,dataColumns_);
+        if(control.type=="ListBox" && control.multiSelect) continue;
         auto* widget = controls_.value(control.name.toCaseFolded()).data();
         if (!widget || fieldIndex < 0) continue;
         const auto column = sqlIdentifier(dataColumns_[fieldIndex]);
@@ -1806,8 +1806,8 @@ void AccessFormPreview::reject() { if (prepareClose()) QDialog::reject(); }
 std::optional<std::string> AccessFormPreview::getField(std::string_view name) const {
     auto* widget = controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded()).data();
     if (!widget) throw std::runtime_error("Unbekanntes Access-Control: " + std::string(name));
-    if(widget->property("la_list_error").toInt()) throw linaccess::VbaRuntimeError(3251,"ListBox selection mode is not implemented");
     if(widget->property("la_default_error").toInt()) throw linaccess::VbaRuntimeError(widget->property("la_default_error").toInt(),"Control default unavailable");
+    if(auto* list=dynamic_cast<AccessListBox*>(widget); list && list->multiSelectMode()) return {};
     const auto value = textOf(widget);
     if (widget->property("la_null").toBool()) return std::nullopt;
     return value.toUtf8().toStdString();
@@ -1827,6 +1827,7 @@ void AccessFormPreview::setField(std::string_view name, std::optional<std::strin
     ensureWritableControl(name);
     auto* widget = controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded()).data();
     if (!widget) throw std::runtime_error("Unbekanntes Access-Control: " + std::string(name));
+    if(auto* list=dynamic_cast<AccessListBox*>(widget); list && list->multiSelectMode()) throw linaccess::VbaRuntimeError(3251,"Set multi-selection through Selected, not Value");
     clearDefaultError(widget);
     const bool wasNull = widget->property("la_null").toBool();
     const auto previous = textOf(widget);
@@ -1860,6 +1861,7 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
         const auto row=currentRecordIndex_-1;
         return row>=0 && row<recordRows_.size() ? linaccess::qtFieldValue(recordRows_[row][index],dataTypes_.value(key.toCaseFolded())) : linaccess::VbaValue{};
     }
+    if(auto* list=dynamic_cast<AccessListBox*>(widget); list && list->multiSelectMode()) return {};
     if(widget->property("la_default_error").toInt()) throw linaccess::VbaRuntimeError(widget->property("la_default_error").toInt(),"Control default unavailable");
     if (auto* calendar=qobject_cast<QCalendarWidget*>(widget)) {
         if (calendar->property("la_calendar_bound").toBool()) throw linaccess::VbaRuntimeError(3251,"Bound calendar adapter is unsupported");
@@ -1940,6 +1942,7 @@ linaccess::VbaValue AccessFormPreview::controlColumnValue(const QString& name,co
     auto* combo=qobject_cast<QComboBox*>(widget);
     auto* list=dynamic_cast<AccessListBox*>(widget);
     if (!combo && !list) throw linaccess::VbaRuntimeError(438,"Control has no Column property");
+    if(list && list->multiSelectMode() && arguments.size()==1) throw linaccess::VbaRuntimeError(3251,"Multi-selection Column requires an explicit row");
     const auto index=[](const linaccess::VbaValue& value) {
         if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null column index");
         return linaccess::sqlFieldValue(value,"INTEGER").toLongLong();
@@ -1962,7 +1965,7 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
     else if(!loading_) throw linaccess::VbaRuntimeError(3251,"Default initialization requires loading scope");
     auto* widget = controls_.value(QString::fromUtf8(name.data(),name.size()).toCaseFolded()).data();
     if (!widget) throw linaccess::VbaRuntimeError(2465,"Unknown form control");
-    if(widget->property("la_list_error").toInt()) throw linaccess::VbaRuntimeError(3251,"ListBox selection mode is not implemented");
+    if(auto* list=dynamic_cast<AccessListBox*>(widget); list && list->multiSelectMode()) throw linaccess::VbaRuntimeError(3251,"Set multi-selection through Selected, not Value");
     if (auto* calendar=qobject_cast<QCalendarWidget*>(widget)) {
         if (calendar->property("la_calendar_bound").toBool()) throw linaccess::VbaRuntimeError(3251,"Bound calendar adapter is unsupported");
         if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Calendar requires a date");
@@ -2043,6 +2046,7 @@ void AccessFormPreview::requeryControl(std::string_view name) {
     auto* combo = qobject_cast<QComboBox*>(widget);
     auto* list=dynamic_cast<AccessListBox*>(widget);
     if (!combo && !list) throw linaccess::VbaRuntimeError(438,"Requery for this control type is unsupported");
+    if(list && list->multiSelectMode()==1 && !list->selectedRows().isEmpty()) throw linaccess::VbaRuntimeError(3251,"Simple-mode selection preservation on Requery is not implemented");
     for (const auto& control : layout_.controls) {
         if (control.name.compare(target,Qt::CaseInsensitive)!=0) continue;
         const auto source = control.rowSource.trimmed();
@@ -2145,6 +2149,7 @@ void AccessFormPreview::requeryControl(std::string_view name) {
         } else { setText(widget,old.toString(),old.isNull()); widget->setProperty("la_null",old.isNull()); }
         if (combo && combo->isEditable()) combo->lineEdit()->setModified(editing);
         applyForeColor(widget,control);
+        if(list && list->multiSelectMode()) { pendingControls_.remove(target); editOriginals_.remove(target); }
         return;
     }
 }
@@ -2283,6 +2288,7 @@ void AccessFormPreview::updateDirtyFromRecord() {
     const int row=currentRecordIndex_-1;
     for (const auto& definition : layout_.controls) {
         const int column=columnIndex(definition.controlSource,dataColumns_);
+        if(definition.type=="ListBox" && definition.multiSelect) continue;
         if (column<0 || !controls_.value(definition.name.toCaseFolded())) continue;
         if (bufferedTextControls_.contains(definition.name)) { dirty_=true; continue; }
         const auto expected=row>=0 && row<recordRows_.size() ? recordRows_[row][column] : QVariant{};

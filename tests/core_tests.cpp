@@ -119,6 +119,52 @@ int main() {
     using namespace linaccess;
 
     {
+        class Indexed final:public VbaObject,public std::enable_shared_from_this<Indexed> {
+        public:
+            std::map<int,VbaValue> rows;
+            std::map<std::string,VbaValue> properties;
+            int indexReads{},flagReads{},childReads{},getterReads{};
+            VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+                if(name=="Child") { assert(args.empty()); ++childReads; return VbaValue::reference(shared_from_this()); }
+                if(name=="Index") { assert(args.empty()); ++indexReads; return VbaValue::numeric(1); }
+                if(name=="Flag") { assert(args.empty()); ++flagReads; return VbaValue::logical(true); }
+                if(name=="Selected") { ++getterReads; throw VbaRuntimeError(5,"Getter must not implement assignment"); }
+                throw VbaRuntimeError(438,"Unknown member");
+            }
+            void assign(std::string_view name,const VbaValue& value) override { properties[std::string(name)]=value; }
+            void assignIndexedMember(std::string_view name,const std::vector<VbaValue>& args,const VbaValue& value) override {
+                if(name!="Selected") throw VbaRuntimeError(438,"Unknown indexed property");
+                if(args.size()!=1) throw VbaRuntimeError(450,"Expected one index");
+                rows[static_cast<int>(args[0].asNumber())]=value;
+            }
+        };
+        FakeForm host; auto object=std::make_shared<Indexed>();
+        std::vector<VbaValue> arguments{VbaValue::reference(object)};
+        auto result=executeVbaProcedureWithArguments(R"VBA(Sub Write(target As Object)
+target.Child.[Selected](CLng(target.Index())+1)=target.Flag()
+With target.Child
+.Selected(Len("a=b"))=Not target.Flag()
+End With
+target.[Label.with(=).dot]="x=y"
+target.Plain="ordinary"
+End Sub
+)VBA","Write",host,arguments);
+        assert(result.status==VbaExecutionStatus::Completed && object->rows.size()==2 && object->rows[2].truthy() && !object->rows[3].truthy());
+        assert(object->indexReads==1 && object->flagReads==2 && object->childReads==2 && object->getterReads==0);
+        assert(object->properties["Label.with(=).dot"].asText()=="x=y" && object->properties["Plain"].asText()=="ordinary");
+        for(const auto& target:std::vector<std::string>{"target.Selected(0)+1","target.Selected(0)(1)","target.Plain + target.Plain"}) {
+            const auto invalid=executeVbaProcedureWithArguments("Sub Invalid(target As Object)\n"+target+"=True\nEnd Sub","Invalid",host,arguments);
+            assert((target=="target.Plain + target.Plain" ? invalid.status!=VbaExecutionStatus::Completed : invalid.status==VbaExecutionStatus::Unsupported)
+                && object->rows.size()==2 && object->properties.size()==2 && object->getterReads==0);
+        }
+        result=executeVbaProcedureWithArguments("Sub Bad(target As Object)\nOn Error Resume Next\ntarget.Selected()=True\nMe!Code=CStr(Err.Number)\nEnd Sub","Bad",host,arguments);
+        assert(result.status==VbaExecutionStatus::Completed && host.fields["Code"]=="450");
+        arguments={VbaValue::reference(std::make_shared<LoopContext>(1))};
+        result=executeVbaProcedureWithArguments("Sub Bad(target As Object)\nOn Error Resume Next\ntarget.Value(0)=True\nMe!Code=CStr(Err.Number)\nEnd Sub","Bad",host,arguments);
+        assert(result.status==VbaExecutionStatus::Completed && host.fields["Code"]=="438");
+    }
+
+    {
         FakeForm host;
         assert(evaluateVbaExpression("Eval(\"1+2*3\")",host,{}).asNumber()==7);
         assert(evaluateVbaExpression("Eval(5)",host,{}).asNumber()==5);

@@ -23,7 +23,8 @@ main-window/layout/original-heavy trio: 3/3 (41.19 s). No additional original
 business execution is claimed.
 
 A persistent single-selection ListBox now also uses the real F9 row refresh
-(NATIVE_LISTBOX_RUNTIME.md). Multi-selection remains unsupported. Popup-focused keyboard
+(NATIVE_LISTBOX_RUNTIME.md). Simple/Extended selection now has the explicit requery scope in
+MULTISELECT_LISTBOX_RUNTIME.md. Popup-focused keyboard
 routing, exact Windows cursor/selection/event timing, every lookup mode and
 complete visual/keyboard parity remain open.
 

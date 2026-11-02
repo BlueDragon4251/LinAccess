@@ -540,3 +540,12 @@ data. GUI/VBA/SQL tests cover toggling, template overrides, header clicks, empty
 sources, scalar/errors and read-only report context. Field captions/Field List
 headers and exact Windows index/visual/error behavior remain open; see
 [Column headings](COLUMN_HEADS_RUNTIME.md).
+
+Native ListBox now supports bounded Simple/Extended selection with Selected,
+ItemsSelected, ItemData and ListIndex getters over actual Qt selection state.
+Indexed VBA assignment uses an explicit setter protocol, including With and
+nested expressions. Multi Value stays Null without dirtying/inserting records;
+real SQL tests prove other/same-field edits preserve selected state and stored
+values. Extended requery clears selection; selected Simple requery rejects while
+preserving state. Full Windows event/index/type behavior and the ListIndex writer
+remain open; see [Multiple selection](MULTISELECT_LISTBOX_RUNTIME.md).

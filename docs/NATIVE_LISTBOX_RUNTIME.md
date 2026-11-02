@@ -21,23 +21,23 @@ Old owned models are released on replacement, and obsolete Qt selection models
 are deferred for disposal through Qt ownership.
 
 SaveAsText MultiSelect is retained, including control templates and explicit
-zero overrides. Modes 1/2 produce an explicit 3251 diagnostic and no pretending
-single-selection widget. They do not establish Selected/ItemsSelected support.
-ComboBox's separate read-only ListIndex/ItemData contract is not generalized to
-ListBox, whose full property and selection API remains open.
+zero overrides. Native Simple/Extended selection, Selected/ItemsSelected and
+ListBox ItemData/ListIndex getters are now in MULTISELECT_LISTBOX_RUNTIME.md.
+Their value/persistence, requery and event limits remain explicit; the separate
+ComboBox read-only property contract is not generalized blindly.
 
 Actual GUI/VBA/SQL regressions verify persistent geometry/model identity with
 no popup, hidden/visible widths, typed NULL columns, mouse/arrow selection,
 control events/cancelled saving, SQL persistence, Locked, F9/source replacement,
 failed-source recovery, Null/Undo, unbound defaulted Value Lists, Field Lists,
-report read-only behavior and unsupported MultiSelect. Metadata tests cover
+report read-only behavior and MultiSelect modes. Metadata tests cover
 template inheritance and zero override. Targeted main-window/layout/original-
 heavy trio: 3/3 (40.87 s); final complete validation is in PROGRESS.md.
 Original business execution coverage is unchanged.
 
 This is bounded single-selection presentation, not complete Access ListBox or
 visual parity. Bounded ColumnHeads is now in COLUMN_HEADS_RUNTIME.md. Field
-captions, multi-selection and its VBA API,
+captions and complete multi-selection/VBA behavior,
 exact Windows click/validation/focus order, all row-limit/locale semantics,
 background styling, accessibility and real window-manager/print fidelity remain
 open. Native reports share the visible read-only view; this does not prove full

@@ -59,6 +59,45 @@ protected:
     }
     QPointer<AccessFormPreview> preview_;
 };
+namespace {
+int listRowIndex(const linaccess::VbaValue& argument,int count) {
+    const auto scalar=linaccess::scalarVbaValue(argument);
+    if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null list index");
+    const auto index=linaccess::sqlFieldValue(scalar,"INTEGER").toLongLong();
+    if(index<-2147483648LL || index>2147483647LL) throw linaccess::VbaRuntimeError(6,"List index Long overflow");
+    if(index<0 || index>=count) throw linaccess::VbaRuntimeError(5,"List index out of range");
+    return static_cast<int>(index);
+}
+}
+class PreviewItemsSelectedObject final:public linaccess::VbaObject,private PreviewObjectBase {
+public:
+    PreviewItemsSelectedObject(AccessFormPreview& preview,QString name):PreviewObjectBase(preview),name_(std::move(name)) {}
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        const auto rows=list().selectedRows(); const auto key=text(name).toCaseFolded();
+        if(key=="count") {
+            if(!args.empty()) throw linaccess::VbaRuntimeError(450,"Count takes no arguments");
+            return linaccess::VbaValue::numeric(rows.size());
+        }
+        if(key=="item") {
+            if(args.size()!=1) throw linaccess::VbaRuntimeError(450,"Item requires one index");
+            return linaccess::VbaValue::numeric(rows[listRowIndex(args[0],rows.size())]);
+        }
+        throw linaccess::VbaRuntimeError(438,"Unknown ItemsSelected member");
+    }
+    std::vector<linaccess::VbaValue> enumerate() override {
+        std::vector<linaccess::VbaValue> values;
+        for(const auto row:list().selectedRows()) values.push_back(linaccess::VbaValue::numeric(row));
+        return values;
+    }
+    void assign(std::string_view,const linaccess::VbaValue&) override { (void)checked(); throw linaccess::VbaRuntimeError(383,"ItemsSelected is read-only"); }
+    void assignIndexedMember(std::string_view,const std::vector<linaccess::VbaValue>&,const linaccess::VbaValue&) override { (void)checked(); throw linaccess::VbaRuntimeError(383,"ItemsSelected is read-only"); }
+private:
+    AccessListBox& list() const {
+        auto* list=dynamic_cast<AccessListBox*>(checked().controls_.value(name_.toCaseFolded()).data());
+        if(!list) throw linaccess::VbaRuntimeError(438,"ListBox unavailable"); return *list;
+    }
+    QString name_;
+};
 class PreviewControlObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     static QLineEdit* selectionEditor(QWidget* widget,bool duringUpdate=false) {
@@ -74,6 +113,26 @@ public:
         auto& preview = checked();
         auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if(auto* list=dynamic_cast<AccessListBox*>(widget); list && (key=="selected" || key=="itemsselected" || key=="listindex" || key=="itemdata" || key=="multiselect")) {
+            if(key=="multiselect") {
+                if(!args.empty()) throw linaccess::VbaRuntimeError(450,"MultiSelect takes no arguments");
+                return linaccess::VbaValue::numeric(list->multiSelectMode());
+            }
+            if(key!="itemdata" && preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(3251,"List selection requires native Form view");
+            if(!widget->property("la_rows_loaded").toBool()) preview.requeryControl(bytes(name_));
+            if(key=="itemsselected") {
+                auto collection=std::make_shared<PreviewItemsSelectedObject>(preview,name_);
+                return args.empty() ? linaccess::VbaValue::reference(collection) : collection->member("Item",args);
+            }
+            if(key=="listindex") {
+                if(!args.empty()) throw linaccess::VbaRuntimeError(450,"ListIndex takes no arguments");
+                return linaccess::VbaValue::numeric(list->currentIndex().row());
+            }
+            if(args.size()!=1) throw linaccess::VbaRuntimeError(450,"List property requires one row index");
+            const auto row=listRowIndex(args[0],list->rowCount());
+            if(key=="selected") return linaccess::VbaValue::logical(list->rowSelected(row));
+            return linaccess::qtFieldValue(list->boundData(row));
+        }
         if (key=="defaultvalue") {
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected DefaultValue arguments");
             return linaccess::VbaValue::string(bytes(defaultDefinition().defaultValue));
@@ -181,6 +240,7 @@ public:
         if (key=="oldvalue") {
             requireValue();
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"OldValue requires a form control");
+            if(auto* list=dynamic_cast<AccessListBox*>(widget); list && list->multiSelectMode()) return {};
             for (const auto& definition:preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
                 auto source=definition.controlSource.trimmed();
                 if (source.isEmpty() || source.startsWith('=')) throw linaccess::VbaRuntimeError(3251,"OldValue requires a bound data field");
@@ -255,6 +315,8 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if(dynamic_cast<AccessListBox*>(widget) && (key=="multiselect" || key=="listindex" || key=="selected" || key=="itemsselected" || key=="itemdata"))
+            throw linaccess::VbaRuntimeError(key=="selected" ? 450 : key=="itemsselected" || key=="itemdata" ? 383 : 3251,"ListBox selection assignment requires its supported runtime API");
         if(key=="listindex" || key=="itemdata") {
             (void)listCombo();
             throw linaccess::VbaRuntimeError(383,"ComboBox list property is read-only");
@@ -459,6 +521,25 @@ public:
         }
         throw linaccess::VbaRuntimeError(438,"Control property is unavailable or read-only");
     }
+    void assignIndexedMember(std::string_view name,const std::vector<linaccess::VbaValue>& args,const linaccess::VbaValue& value) override {
+        auto& preview=checked(); auto* widget=control(); const auto key=text(name).toCaseFolded();
+        if(key=="itemdata" && (dynamic_cast<AccessListBox*>(widget) || qobject_cast<QComboBox*>(widget))) throw linaccess::VbaRuntimeError(383,"ItemData is read-only");
+        auto* list=dynamic_cast<AccessListBox*>(widget);
+        if(!list || key!="selected") { linaccess::VbaObject::assignIndexedMember(name,args,value); return; }
+        if(preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(3251,"Selection assignment requires native Form view");
+        if(args.size()!=1) throw linaccess::VbaRuntimeError(450,"Selected requires one row index");
+        if(preview.validatingControl_.compare(name_,Qt::CaseInsensitive)==0) throw linaccess::VbaRuntimeError(2115,"Selection cannot change during BeforeUpdate");
+        if(!widget->property("la_rows_loaded").toBool()) preview.requeryControl(bytes(name_));
+        const auto row=listRowIndex(args[0],list->rowCount()); const auto scalar=linaccess::scalarVbaValue(value);
+        if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Selected setting");
+        const auto selected=linaccess::coerceVbaModuleValue(scalar,"boolean").boolean;
+        if(!list->multiSelectMode()) {
+            if(selected) preview.setFieldValue(bytes(name_),linaccess::qtFieldValue(list->boundData(row)));
+            else if(list->rowSelected(row)) preview.setFieldValue(bytes(name_),{});
+        }
+        list->setRowSelected(row,selected); widget->setProperty("la_null",list->multiSelectMode()!=0 || list->selectedRows().isEmpty());
+        preview.pendingControls_.remove(name_); preview.editOriginals_.remove(name_); preview.rememberControlEdit(widget);
+    }
 private:
     QComboBox* listCombo() const {
         auto& preview=checked();
@@ -503,7 +584,6 @@ private:
         throw linaccess::VbaRuntimeError(438,"Control has no supported Caption property");
     }
     void requireValue() const {
-        if(control()->property("la_list_error").toInt()) throw linaccess::VbaRuntimeError(3251,"ListBox selection mode is not implemented");
         if (qobject_cast<QCalendarWidget*>(control())) return;
         for (const auto& control : checked().layout_.controls)
             if (control.name.compare(name_,Qt::CaseInsensitive)==0 &&

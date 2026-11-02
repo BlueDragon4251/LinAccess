@@ -488,3 +488,9 @@ Full targets remain open:
   ComboBox and single-selection ListBox models, documented header-aware ListCount,
   value-row separation and SQL/scalar/error/report tests; field captions/Field
   List headers/exact Windows extra-index/visual context remain open.
+
+- [x] Bounded native Simple/Extended ListBox selection and Selected/ItemsSelected/
+  ItemData/ListIndex getters, real mouse/keyboard and indexed VBA setters, scalar/
+  collection/lifetime/validation tests and NULL-value field-save/mirroring/new-row
+  safety; Simple selected requery, ListIndex writer, exact Windows events/types/
+  extra-header indices and full VBA array/class semantics remain open.

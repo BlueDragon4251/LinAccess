@@ -51,6 +51,9 @@ public:
     virtual VbaValue objectMember(std::string_view name,const std::vector<VbaValue>& arguments) { return member(name,arguments); }
     virtual VbaValue objectItem(std::string_view name) { return item(name); }
     virtual void assignItem(std::string_view name,const VbaValue& value) { assign(name,value); }
+    virtual void assignIndexedMember(std::string_view,const std::vector<VbaValue>&,const VbaValue&) {
+        throw VbaRuntimeError(438,"Indexed property assignment is not supported by this object");
+    }
     virtual std::vector<VbaValue> enumerate() {
         throw VbaRuntimeError(438,"Object does not support enumeration");
     }

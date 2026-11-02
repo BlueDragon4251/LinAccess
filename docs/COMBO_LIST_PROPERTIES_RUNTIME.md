@@ -15,8 +15,8 @@ indices use 5; exact Windows invalid-index error identity is not established.
 ListIndex is limited to native Form view; report view rejects with 3251. Its
 value during an uncommitted editable text draft also rejects with 3251, because
 exact Windows selection timing has not been established. ItemData can still
-inspect stored row data during that draft without committing it. This does not
-implement the differently documented ListBox property or multi-selection API.
+inspect stored row data during that draft without committing it. The differently documented ListBox property and multi-selection API now have
+their own bounded adapter in MULTISELECT_LISTBOX_RUNTIME.md.
 Full declared Long/Variant subtype identity remains open.
 
 The regression exposed an older null-selection bug: string matching could pick

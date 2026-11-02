@@ -80,7 +80,8 @@ and GUI regressions, not an Access 2003 rendering or edge-semantics oracle.
 The original fixtures declare 17 explicit Table/Query source types and no explicit
 Value/Field List type. No additional original project success is inferred from
 these general built-in source tests. Value-list AddItem/RemoveItem,
-multi-selection/full ListBox behavior and custom row-source callbacks remain open.
+complete ListBox behavior and custom row-source callbacks remain open. Bounded
+Simple/Extended selection is documented in MULTISELECT_LISTBOX_RUNTIME.md.
 
 ## ComboBox ListCount
 

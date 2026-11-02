@@ -54,6 +54,113 @@ std::size_t memberSeparator(const std::string& expression) {
     return result;
 }
 
+struct MemberTarget { std::string name; std::optional<std::string> arguments; };
+std::optional<MemberTarget> memberTarget(const std::string& tail) {
+    std::size_t end=0;
+    if(tail.starts_with('[')) {
+        const auto closing=tail.find(']'); if(closing==std::string::npos || closing==1) return {};
+        end=closing+1;
+    } else {
+        const auto first=tail.empty() ? 0 : static_cast<unsigned char>(tail[0]);
+        if(!std::isalpha(first) && first!='_' && first<128) return {};
+        while(end<tail.size()) {
+            const auto ch=static_cast<unsigned char>(tail[end]);
+            if(!std::isalnum(ch) && ch!='_' && ch<128) break;
+            ++end;
+        }
+    }
+    MemberTarget target{tail.substr(0,end),{}};
+    if(target.name.starts_with('[')) target.name=target.name.substr(1,target.name.size()-2);
+    const auto suffix=trim(tail.substr(end));
+    if(suffix.empty()) return target;
+    if(!suffix.starts_with('(') || !suffix.ends_with(')')) return {};
+    bool quoted=false,bracket=false; int depth=0;
+    for(std::size_t index=0;index<suffix.size();++index) {
+        const char ch=suffix[index];
+        if(bracket) { if(ch==']') bracket=false; continue; }
+        if(ch=='"') {
+            if(quoted && index+1<suffix.size() && suffix[index+1]=='"') { ++index; continue; }
+            quoted=!quoted; continue;
+        }
+        if(quoted) continue;
+        if(ch=='[') bracket=true;
+        else if(ch=='(') ++depth;
+        else if(ch==')' && --depth==0 && index+1<suffix.size()) return {};
+    }
+    if(depth || quoted || bracket) return {};
+    target.arguments=suffix.substr(1,suffix.size()-2); return target;
+}
+
+bool objectPath(const std::string& path) {
+    std::size_t position=0;
+    const auto spaces=[&] { while(position<path.size() && std::isspace(static_cast<unsigned char>(path[position]))) ++position; };
+    while(position<path.size()) {
+        spaces(); if(position==path.size()) return false;
+        if(path[position]=='[') {
+            const auto closing=path.find(']',position+1); if(closing==std::string::npos || closing==position+1) return false;
+            position=closing+1;
+        } else {
+            const auto first=static_cast<unsigned char>(path[position]);
+            if(!std::isalpha(first) && first!='_' && first<128) return false;
+            while(position<path.size()) {
+                const auto ch=static_cast<unsigned char>(path[position]);
+                if(!std::isalnum(ch) && ch!='_' && ch<128) break;
+                ++position;
+            }
+        }
+        spaces();
+        while(position<path.size() && path[position]=='(') {
+            bool quoted=false,bracket=false; int depth=0;
+            do {
+                const char ch=path[position++];
+                if(bracket) { if(ch==']') bracket=false; continue; }
+                if(ch=='"') {
+                    if(quoted && position<path.size() && path[position]=='"') { ++position; continue; }
+                    quoted=!quoted; continue;
+                }
+                if(quoted) continue;
+                if(ch=='[') bracket=true;
+                else if(ch=='(') ++depth;
+                else if(ch==')') --depth;
+            } while(position<path.size() && depth>0);
+            if(depth || quoted || bracket) return false;
+            spaces();
+        }
+        if(position==path.size()) return true;
+        if(path[position]!='.' && path[position]!='!') return false;
+        ++position;
+    }
+    return false;
+}
+
+std::optional<std::pair<std::string,std::string>> topLevelAssignment(const std::string& source) {
+    bool quoted=false,bracket=false; int depth=0;
+    for(std::size_t index=0;index<source.size();++index) {
+        const char ch=source[index];
+        if(bracket) { if(ch==']') bracket=false; continue; }
+        if(ch=='"') {
+            if(quoted && index+1<source.size() && source[index+1]=='"') { ++index; continue; }
+            quoted=!quoted; continue;
+        }
+        if(quoted) continue;
+        if(ch=='[') bracket=true;
+        else if(ch=='(') ++depth;
+        else if(ch==')') --depth;
+        else if(ch=='=' && depth==0) {
+            auto target=trim(source.substr(0,index));
+            return std::pair{std::move(target),trim(source.substr(index+1))};
+        }
+    }
+    return {};
+}
+std::optional<std::pair<std::string,std::string>> objectAssignment(const std::string& source) {
+    auto assignment=topLevelAssignment(source); if(!assignment) return {};
+    const auto separator=memberSeparator(assignment->first);
+    if(separator==std::string::npos || !objectPath(trim(assignment->first.substr(0,separator)))
+        || !memberTarget(trim(assignment->first.substr(separator+1)))) return {};
+    return assignment;
+}
+
 std::string lower(std::string text) {
     std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
@@ -205,7 +312,6 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(?:Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database|DAO\.TableDef|DAO\.TableDefs|DAO\.Workspace|DAO\.Workspaces|DAO\.DBEngine))?$)", std::regex::icase);
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
     const std::regex objectSet(R"(^Set\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
-    const std::regex objectAssign(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))*(?:[.!](?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])(?:\([^)]*\))*)*[.!](?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\]))\s*=\s*(.+)$)", std::regex::icase);
     const std::regex label(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*):$)");
     const std::regex jump(R"(^GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
     const std::regex errorHandler(R"(^On\s+Error\s+GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
@@ -568,13 +674,13 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             auto field = match[2].str();
             if (field.starts_with('[') && field.ends_with(']')) field = field.substr(1, field.size() - 2);
             statements.push_back({Statement::Type::SetField,field,expr,line,match[1].str()});
-        } else if (!relativeSource.empty() && std::regex_match(relativeSource,match,objectAssign)) {
-            const auto target=match[1].str().substr(9),expr=trim(match[2].str());
+        } else if (const auto assignment=objectAssignment(relativeSource); !relativeSource.empty() && assignment) {
+            const auto target=assignment->first.substr(9),expr=assignment->second;
             if (!validExpression(target) || !validExpression(expr)) return {VbaExecutionStatus::Unsupported,"With assignment unsupported",line};
             statements.push_back({Statement::Type::ObjectAssign,target,expr,line});
-        } else if (std::regex_match(source, match, objectAssign)) {
-            const auto target = match[1].str();
-            const auto expr = trim(match[2].str());
+        } else if (const auto assignment=objectAssignment(source); assignment) {
+            const auto& target=assignment->first;
+            const auto& expr=assignment->second;
             if (!validExpression(target) || !validExpression(expr))
                 return {VbaExecutionStatus::Unsupported, "Objektzuweisung", line};
             statements.push_back({Statement::Type::ObjectAssign, target, expr, line});
@@ -608,6 +714,10 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             const auto expression = match[1].str() + "(" + match[2].str() + ")";
             if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Object method arguments",line};
             statements.push_back({Statement::Type::ObjectCall,{},expression,line});
+        } else if (const auto assignment=topLevelAssignment(source); assignment
+            && memberSeparator(assignment->first)!=std::string::npos
+            && objectPath(trim(assignment->first.substr(0,memberSeparator(assignment->first))))) {
+            return {VbaExecutionStatus::Unsupported,"Invalid property assignment target",line};
         } else if (source.find('.') != std::string::npos && validExpression(source)) {
             statements.push_back({Statement::Type::ObjectCall, {}, source, line});
         } else if (std::regex_match(source, match, implicitCall)) {
@@ -1130,12 +1240,20 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::ObjectAssign:
                 if (active) {
                     const auto pos = memberSeparator(instruction.argument);
-                    auto name = instruction.argument.substr(pos + 1);
-                    if (name.starts_with('[') && name.ends_with(']')) name = name.substr(1, name.size() - 2);
+                    const auto target=memberTarget(trim(instruction.argument.substr(pos+1)));
+                    if(!target) throw VbaRuntimeError(5,"Invalid property assignment target");
+                    const auto& name=target->name;
+                    const bool indexed=target->arguments.has_value();
                     const auto object = pos==0 && !withFrames.empty() ? withFrames.back().value : evaluateObject(instruction.argument.substr(0, pos));
                     if (!object.object) throw VbaRuntimeError(91,"Objektvariable nicht gesetzt");
+                    std::vector<VbaValue> indices;
+                    if(indexed) {
+                        const auto inner=trim(*target->arguments);
+                        if(!inner.empty()) for(const auto& expression:splitArguments(inner)) indices.push_back(evaluate(expression));
+                    }
                     const auto value = evaluate(instruction.expression);
-                    if (instruction.argument[pos] == '!') object.object->assignItem(name,value);
+                    if(indexed) object.object->assignIndexedMember(name,indices,value);
+                    else if (instruction.argument[pos] == '!') object.object->assignItem(name,value);
                     else object.object->assign(name,value);
                 }
                 break;
