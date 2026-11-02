@@ -772,3 +772,13 @@ Full targets remain open:
   mutation and complete window-frame/property semantics remain open.
 - [x] Native acIcon and active-document Minimize/Restore/Maximize Qt states,
   including a caller distinct from the target; full window/desktop parity open.
+
+- [x] Accepted native application Quit stops active nested VBA/expression/dialog
+  frames without On Error bypass; rejected Quit remains handleable (2501).
+- [x] Native construction scope prevents later event/show work after startup
+  Quit in Open/Load, including UI opening without an outer procedure.
+- [x] Native Variant/Byte array function results retain typed values rather than
+  forced legacy scalar text; full array/SCODE/return-binding parity remains open.
+- [x] Converted-form opener in mainwindow uses independent native nonmodal opening,
+  retaining source Modal input blocking without wrongly pausing normal VBA calls;
+  complete standard-module application/DoCmd object coverage remains open.

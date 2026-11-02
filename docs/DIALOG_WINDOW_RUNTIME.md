@@ -22,7 +22,8 @@ active document. No new test target is added.
 Dialog reuse of an already-open instance, data/view modes, modal visibility with
 pending edits or other unsupported lifecycle phases, report modes, full desktop
 focus/z-order/frame identity, runtime Modal/PopUp mutation and complete Windows
-behavior remain open. Native application-Quit propagation across suspended VBA
-frames is a separate follow-up; this segment does not claim complete Quit parity.
+behavior remain open. Successful native application Quit now stops suspended VBA frames; see
+[Quit execution](QUIT_EXECUTION_RUNTIME.md). This does not claim every Windows
+shutdown/UI/callback path.
 
 Mode reference: https://learn.microsoft.com/en-us/office/vba/api/access.acwindowmode

@@ -57,6 +57,7 @@ bool AccessFormPreview::renderLayout(QPrinter& printer) {
     return painter.end();
 }
 bool AccessFormPreview::exportLayoutPdf(const QString& path) {
+    if(openCancelled_ || closed_) return false;
     if (QFileInfo(path).suffix().compare("pdf",Qt::CaseInsensitive)!=0) return false;
     QTemporaryDir temporary;
     if (!temporary.isValid()) return false;

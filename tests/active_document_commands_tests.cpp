@@ -141,7 +141,7 @@ End Sub
         {"RunCommand",{},450},{"RunCommand",{VbaValue{}},94},{"RunCommand",{root->objectMember("unset",{})},94},
         {"RunCommand",{VbaValue::errorValue(2042)},13},{"RunCommand",{VbaValue::numeric(2147483648.0)},6},
         {"RunCommand",{VbaValue::numeric(42)},3251},{"Requery",{root->objectMember("unset",{})},94},
-        {"RunSQL",{VbaValue{}},94},{"RunSQL",{},450},{"RunSQL",{VbaValue::string("SELECT 1"),VbaValue::logical(false)},3251},
+        {"RunSQL",{VbaValue{}},94},{"RunSQL",{},450},{"RunSQL",{VbaValue::string("SELECT 1"),VbaValue::logical(false)},2342},
         {"GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(1),VbaValue::numeric(-1)},2105},
         {"GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(4),VbaValue::numeric(99)},2105},
         {"GoToRecord",{VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(0),VbaValue::numeric(99)},2105},

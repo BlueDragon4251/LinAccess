@@ -645,7 +645,11 @@ public:
         if (!preview_.db_.isOpen()) throw linaccess::VbaRuntimeError(3420,"No open native database project");
         const auto execute=[&] {
             auto database=linaccess::makeDaoDatabase(preview_.db_);
-            (void)database->member("Execute",{linaccess::VbaValue::string(std::string(statement))});
+            try { (void)database->member("Execute",{linaccess::VbaValue::string(std::string(statement))}); }
+            catch(const linaccess::VbaRuntimeError& failure) {
+                if(failure.number==3065) throw linaccess::VbaRuntimeError(2342,"RunSQL requires an action SQL statement");
+                throw;
+            }
         };
         if(!useTransaction) { execute(); return; }
         static thread_local quint64 sequence=0;
@@ -798,6 +802,12 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
       vba_(linaccess::decodeVbaSource(vbaSource)),
       layout_(linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(source))),
       db_(std::move(database)) {
+    linaccess::VbaExecutionScope executionScope;
+    const auto stopped=[&] {
+        if(!linaccess::vbaExecutionStopRequested()) return false;
+        openCancelled_=true; return true;
+    };
+    if(stopped()) return;
     if(windowMode<0 || windowMode>3) throw linaccess::VbaRuntimeError(3251,"Native window mode is not implemented");
     nativeDialog_=windowMode==3;
     if(nativeDialog_) { layout_.modal=true; layout_.popup=true; }
@@ -905,7 +915,9 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
                 status_->setText(list->toolTip());
             }
         }
+    if(stopped()) return;
     const auto outcome = formEvent("OnOpen","Form_Open");
+    if(stopped()) return;
     if (outcome.cancelled) { openCancelled_ = true; return; }
     if (report) {
         loadRecords();
@@ -915,9 +927,11 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
         }
     }
     (void)formEvent("OnLoad","Form_Load");
+    if(stopped()) return;
     opened_ = true;
     if (nativeActivationPending_) activateDocument();
     if (!initialCurrentDeferred_) initialCurrent();
+    if(stopped()) return;
     if (!report) setTimerInterval(layout_.timerInterval);
 }
 
@@ -1951,6 +1965,7 @@ bool AccessFormPreview::closeApplicationDocuments() {
 }
 void AccessFormPreview::quitApplication() {
     if (!closeApplicationDocuments()) throw linaccess::VbaRuntimeError(2501,"Quit action cancelled");
+    linaccess::requestVbaExecutionStop();
     QApplication::quit();
 }
 void AccessFormPreview::closeEvent(QCloseEvent* event) {

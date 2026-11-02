@@ -295,4 +295,88 @@ End Sub
     assert(namedForm.close());
     const QByteArray report="Begin Report\nRecordSource =\"records\"\nEnd\n"; AccessFormPreview reportForm("position_report",report,{},db); auto reportModel=makePreviewFormObject(reportForm);
     int unsupported=0; try { reportModel->member("CurrentRecord",{}); } catch(const linaccess::VbaRuntimeError& error) { unsupported=error.number; } assert(unsupported==438); assert(reportForm.close());
+    assert(sql.exec("CREATE TABLE quit_steps(phase TEXT,code INTEGER)"));
+    const QByteArray quitChildLayout="Begin Form\nOnTimer =\"[Event Procedure]\"\nTimerInterval =25\nEnd\n";
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','quit_cancel_child',?)"); sql.addBindValue(quitChildLayout); assert(sql.exec()); sql.finish();
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba','Form_quit_cancel_child',?)");
+    sql.addBindValue(QByteArray(R"VBA(Private attempts As Long
+Sub Form_Timer()
+On Error Resume Next
+attempts=attempts+1
+If attempts=1 Then
+DoCmd.Quit
+CurrentDb.Execute "INSERT INTO quit_steps VALUES('cancel-number'," & CStr(Err.Number) & ")"
+Else
+DoCmd.Close
+End If
+End Sub
+)VBA")); assert(sql.exec()); sql.finish();
+    const QByteArray quitParentLayout="Begin Form\nOnUnload =\"[Event Procedure]\"\nEnd\n";
+    const QByteArray cancelQuitCode=R"VBA(Private preventQuit As Boolean
+Sub Form_Unload(Cancel As Integer)
+If preventQuit Then
+Cancel=1
+End If
+End Sub
+Sub CancelledQuit()
+preventQuit=True
+DoCmd.OpenForm FormName:="quit_cancel_child",WindowMode:=acDialog
+preventQuit=False
+CurrentDb.Execute "INSERT INTO quit_steps VALUES('after-cancel',0)"
+End Sub
+)VBA";
+    AccessFormPreview cancelQuitParent("quit_cancel_parent",quitParentLayout,cancelQuitCode,db); cancelQuitParent.show();
+    QTimer quitDeadline; quitDeadline.setSingleShot(true); QObject::connect(&quitDeadline,&QTimer::timeout,[] { qFatal("Native Quit dialog execution deadline exceeded"); });
+    quitDeadline.start(3000); const auto cancelledQuit=cancelQuitParent.executeProcedure("CancelledQuit",namedArgs); quitDeadline.stop();
+    if(cancelledQuit.status!=linaccess::VbaExecutionStatus::Completed) qWarning("Cancelled Quit error=%d line=%d",cancelledQuit.errorNumber,cancelledQuit.line);
+    assert(cancelledQuit.status==linaccess::VbaExecutionStatus::Completed && !cancelledQuit.exitSub);
+    assert(sql.exec("SELECT COUNT(*) FROM quit_steps WHERE phase='cancel-number' AND code=2501") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM quit_steps WHERE phase='after-cancel'") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    assert(cancelQuitParent.close());
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','quit_child',?)"); sql.addBindValue(quitChildLayout); assert(sql.exec()); sql.finish();
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba','Form_quit_child',?)");
+    sql.addBindValue(QByteArray(R"VBA(Sub Form_Timer()
+DoCmd.Quit()
+CurrentDb.Execute "INSERT INTO quit_steps VALUES('child-after',0)"
+End Sub
+)VBA")); assert(sql.exec()); sql.finish();
+    const QByteArray quitCode=R"VBA(Sub QuitFromDialog()
+On Error Resume Next
+CurrentDb.Execute "INSERT INTO quit_steps VALUES('before',0)"
+DoCmd.OpenForm FormName:="quit_child",WindowMode:=acDialog
+CurrentDb.Execute "INSERT INTO quit_steps VALUES('after',0)"
+End Sub
+)VBA";
+    AccessFormPreview quitParent("quit_parent",QByteArray("Begin Form\nEnd\n"),quitCode,db); quitParent.show();
+    quitDeadline.start(3000); const auto quit=quitParent.executeProcedure("QuitFromDialog",namedArgs); quitDeadline.stop();
+    if(quit.status!=linaccess::VbaExecutionStatus::Completed) qWarning("Quit propagation error=%d line=%d",quit.errorNumber,quit.line);
+    assert(quit.status==linaccess::VbaExecutionStatus::Completed && quit.exitSub);
+    assert(sql.exec("SELECT COUNT(*) FROM quit_steps WHERE phase='before'") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM quit_steps WHERE phase IN('after','child-after')") && sql.next() && sql.value(0).toInt()==0); sql.finish();
+
+    const QByteArray startupLayout="Begin Form\nOnOpen =\"[Event Procedure]\"\nOnLoad =\"[Event Procedure]\"\nEnd\n";
+    const QByteArray openQuit=R"VBA(Sub Form_Open(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO quit_steps VALUES('startup-open-before',0)"
+DoCmd.Quit
+CurrentDb.Execute "INSERT INTO quit_steps VALUES('startup-open-after',0)"
+End Sub
+Sub Form_Load()
+CurrentDb.Execute "INSERT INTO quit_steps VALUES('startup-load-forbidden',0)"
+End Sub
+)VBA";
+    assert(!AccessFormPreview::showDocument(linaccess::AccessDocumentKind::Form,"startup_open_quit",startupLayout,openQuit,db));
+    const QByteArray loadQuit=R"VBA(Sub Form_Open(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO quit_steps VALUES('startup-open-normal',0)"
+End Sub
+Sub Form_Load()
+CurrentDb.Execute "INSERT INTO quit_steps VALUES('startup-load-before',0)"
+DoCmd.Quit()
+CurrentDb.Execute "INSERT INTO quit_steps VALUES('startup-load-after',0)"
+End Sub
+)VBA";
+    AccessFormPreview startupLoad("startup_load_quit",startupLayout,loadQuit,db);
+    assert(startupLoad.cancelledByOpen() && startupLoad.isHidden());
+    assert(sql.exec("SELECT COUNT(*) FROM quit_steps WHERE phase IN('startup-open-before','startup-open-normal','startup-load-before')") && sql.next() && sql.value(0).toInt()==3); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM quit_steps WHERE phase IN('startup-open-after','startup-load-forbidden','startup-load-after')") && sql.next() && sql.value(0).toInt()==0); sql.finish();
+
 }

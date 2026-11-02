@@ -92,6 +92,11 @@ public:
         if (!inputHost) return VbaHost::inputBox(request);
         inputRequest=request; return inputResult;
     }
+    bool rejectQuit=false;
+    void quitApplication() override {
+        if(rejectQuit) throw linaccess::VbaRuntimeError(2501,"Quit cancelled");
+        linaccess::requestVbaExecutionStop();
+    }
     void maximizeForm() override { ++maximized; }
     void gotoLastRecord() override { ++navigatedLast; }
     void gotoNextRecord() override { ++navigatedNext; }
@@ -2470,5 +2475,39 @@ End Sub
     assert(evaluate("Nz(Null)+\"2\"").asText()=="2");
     assert(evaluate("Nz(ValueIfNull:=7,Value:=Null)").asNumber()==7);
     assert(evaluateAccessExpression("Nz(Null)",host).kind==VbaValue::Kind::Text);
+    FakeForm stopHost;
+    const auto stopped=executeVbaProcedure(R"VBA(Function Stopper() As Long
+DoCmd.Quit
+Stopper=1
+End Function
+Function Forbidden() As Long
+Me!Forbidden="bad"
+Forbidden=1
+End Function
+Sub StopFrames()
+On Error Resume Next
+Me!StopResult=Stopper()+Forbidden()
+Me!AfterStop="bad"
+End Sub
+)VBA","StopFrames",stopHost);
+    assert(stopped.status==VbaExecutionStatus::Completed && stopped.exitSub);
+    assert(!stopHost.fields["Forbidden"] && !stopHost.fields["AfterStop"] && !stopHost.fields["StopResult"]);
+    assert(executeVbaProcedure("Sub Fresh()\nMe!Fresh=1\nEnd Sub","Fresh",stopHost).status==VbaExecutionStatus::Completed && stopHost.fields["Fresh"]=="1");
+    stopHost.rejectQuit=true;
+    assert(executeVbaProcedure("Sub CancelQuit()\nOn Error Resume Next\nDoCmd.Quit\nMe!CancelError=CStr(Err.Number)\nEnd Sub","CancelQuit",stopHost).status==VbaExecutionStatus::Completed && stopHost.fields["CancelError"]=="2501");
+    const auto arrayReturn=executeVbaProcedure(R"VBA(Function ReturnedArray() As Variant
+ReturnedArray=Array(4,5)
+End Function
+Sub ArrayReturn()
+Dim a As Variant
+a=ReturnedArray()
+Me!ArrayReturn=CStr(a(0)) & ":" & CStr(UBound(a))
+End Sub
+)VBA","ArrayReturn",host);
+    assert(arrayReturn.status==VbaExecutionStatus::Completed && host.fields["ArrayReturn"]=="4:1");
+    std::vector<VbaValue> byteArguments{VbaValue::byteArray({0,128,255})};
+    const auto byteReturn=executeVbaProcedureWithArguments("Function Echo(ByVal value As Variant) As Variant\nEcho=value\nEnd Function","Echo",host,byteArguments);
+    assert(byteReturn.status==VbaExecutionStatus::Completed && byteReturn.typedReturnValue->kind==VbaValue::Kind::ByteArray);
+    assert(byteReturn.typedReturnValue->bytes==byteArguments[0].bytes && !byteReturn.returnValue);
     std::cout << "Core tests passed\n";
 }

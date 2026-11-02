@@ -375,10 +375,11 @@ class ExpressionParser {
 public:
     ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals,
                      const VbaFunctionResolver& resolver = {},bool objectContext=false,bool accessExpression=false,const VbaValue* withContext=nullptr,bool allowWith=false,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0)
-        : tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase) {}
+        : tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase),executionEpoch_(vbaExecutionEpoch()) {}
 
     VbaValue parse() {
         auto value = expression(1,objectContext_);
+        if(host_ && (vbaExecutionStopRequested() || executionEpoch_!=vbaExecutionEpoch())) throw VbaExecutionStopped{};
         if (peek().type != Token::Type::End)
             throw error("Zusätzliche Zeichen im VBA-Ausdruck: " + peek().value);
         return value;
@@ -396,6 +397,7 @@ private:
         if (!take(wanted)) throw error("Erwartet: " + wanted);
     }
     VbaValue expression(int minPrecedence,bool objectContext=false) {
+        if(host_ && (vbaExecutionStopRequested() || executionEpoch_!=vbaExecutionEpoch())) throw VbaExecutionStopped{};
         auto lhs = primary(objectContext,minPrecedence);
         while (true) {
             const int prec = precedence(peek());
@@ -422,6 +424,7 @@ private:
             return *withContext_;
         }();
         while (nextSymbol("(") || nextSymbol(".") || nextSymbol("!")) {
+            if(host_ && (vbaExecutionStopRequested() || executionEpoch_!=vbaExecutionEpoch())) throw VbaExecutionStopped{};
             if (take("(")) {
                 std::vector<VbaValue> arguments;
                 if (!take(")")) {
@@ -1259,6 +1262,7 @@ private:
     bool allowWith_{};
     VbaCompareMode compareMode_;
     int arrayBase_;
+    std::uint64_t executionEpoch_;
 };
 } // namespace
 
@@ -1290,7 +1294,9 @@ VbaValue VbaHost::eval(std::string_view source) {
             publicFunction=!header.starts_with("private ") && !header.starts_with("private\t");
         }
         if (!publicFunction) throw VbaRuntimeError(2425,"Eval requires a public function");
+        const auto epoch=vbaExecutionEpoch();
         const auto result=executeVbaProcedureWithArguments(*module,name,*this,arguments);
+        if(vbaExecutionStopRequested() || epoch!=vbaExecutionEpoch()) throw VbaExecutionStopped{};
         if (result.status!=VbaExecutionStatus::Completed || !result.typedReturnValue)
             throw VbaRuntimeError(result.errorNumber ? result.errorNumber : 2425,"Eval function execution failed");
         return *result.typedReturnValue;

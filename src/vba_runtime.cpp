@@ -15,6 +15,8 @@
 
 namespace linaccess {
 namespace {
+thread_local std::uint64_t stopEpoch=0;
+thread_local std::vector<std::uint64_t> activeExecutionEpochs;
 // This interpreter deliberately reports unsupported VBA instead of silently
 // treating Access/DAO/COM calls as successful no-ops.
 struct Statement {
@@ -945,10 +947,18 @@ VbaValue initialLocalValue(const std::string& type) {
 struct ReferenceBinding { VbaValue* source{}; std::string type; bool indexedArray{}; bool paramArray{}; };
 }
 
+VbaExecutionScope::VbaExecutionScope() { activeExecutionEpochs.push_back(activeExecutionEpochs.empty() ? stopEpoch : activeExecutionEpochs.back()); }
+VbaExecutionScope::~VbaExecutionScope() { activeExecutionEpochs.pop_back(); }
+std::uint64_t vbaExecutionEpoch() noexcept { return stopEpoch; }
+bool vbaExecutionStopRequested() noexcept { return !activeExecutionEpochs.empty() && activeExecutionEpochs.back()!=stopEpoch; }
+void requestVbaExecutionStop() noexcept { ++stopEpoch; }
+
 static VbaExecutionResult executeProcedure(std::string_view module,
                                        std::string_view procedure,
                                        VbaHost& host, std::vector<VbaValue>& arguments,
                                        const std::vector<ReferenceBinding>* references = nullptr) {
+    VbaExecutionScope executionFrame;
+    if(vbaExecutionStopRequested()) return {VbaExecutionStatus::Completed,{},0,true};
     // Independent of host type, recursive VBA calls must not overflow the
     // native C++ stack. Access' own runtime also terminates stack overflow.
     static thread_local int callDepth = 0;
@@ -1147,7 +1157,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         if (isFunction) {
             const auto value = locals[lower(std::string(procedure))];
             outcome.typedReturnValue = std::make_shared<VbaValue>(value);
-            if (value.kind != VbaValue::Kind::Object && value.kind!=VbaValue::Kind::Error && value.kind!=VbaValue::Kind::Missing) outcome.returnValue = value.asField();
+            if (value.kind != VbaValue::Kind::Object && value.kind!=VbaValue::Kind::Error && value.kind!=VbaValue::Kind::Missing && !isVbaArray(value)) outcome.returnValue = value.asField();
         }
         storeAliases();
         copyArguments();
@@ -1219,6 +1229,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if(external) nested=executeProcedure(*external,name,host,actuals,&bindings);
             }
         }
+        if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
         for (std::size_t i = 0; i < names.size(); ++i) {
             auto found = locals.find(lower(argumentRefs[i]));
             if (found != locals.end()) {
@@ -1270,6 +1281,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     int effects = 0;
     try {
         for (std::size_t ip = 0; ip < instructions.size(); ++ip) {
+            if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
             const auto& instruction = instructions[ip];
             currentLine = instruction.line;
             if (++steps > 10000)
@@ -1403,7 +1415,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 }
                 break;
             case Statement::Type::Quit:
-                if (active) { host.quitApplication(); return completed(instruction.line, true); }
+                if (active) { host.quitApplication(); if(vbaExecutionStopRequested()) throw VbaExecutionStopped{}; return completed(instruction.line,true); }
                 break;
             case Statement::Type::Save:
                 if (active) {
@@ -1688,8 +1700,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::Dim:
                 break; // Already initialized in the procedure declaration scope.
             }
+            if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
             storeAliases();
+            } catch (const VbaExecutionStopped&) { throw;
             } catch (const std::exception& exception) {
+                if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
                 storeAliases();
                 if (!resumeNext && (handler < 0 || handlingError)) throw;
                 const auto* typed = dynamic_cast<const VbaRuntimeError*>(&exception);
@@ -1703,7 +1718,10 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 }
             }
         }
+    } catch (const VbaExecutionStopped&) {
+        return {VbaExecutionStatus::Completed,{},currentLine,true};
     } catch (const std::exception& exc) {
+        if(vbaExecutionStopRequested()) return {VbaExecutionStatus::Completed,{},currentLine,true};
         storeAliases();
         copyArguments();
         VbaExecutionResult failure{VbaExecutionStatus::Error, exc.what(), currentLine};
@@ -1731,10 +1749,12 @@ VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string
     int line=0;
     try {
         const VbaFunctionResolver resolver=[&](std::string_view name,std::vector<VbaValue>& args,const std::vector<std::string>&) {
+            const auto epoch=vbaExecutionEpoch();
             auto outcome=executeVbaProcedureWithArguments(module,name,host,args);
             if (outcome.status==VbaExecutionStatus::ProcedureMissing) {
                 if (const auto external=host.moduleForProcedure(name)) outcome=executeVbaProcedureWithArguments(*external,name,host,args);
             }
+            if(vbaExecutionStopRequested() || epoch!=vbaExecutionEpoch()) throw VbaExecutionStopped{};
             line=outcome.line;
             if (outcome.status!=VbaExecutionStatus::Completed || !outcome.typedReturnValue)
                 throw VbaRuntimeError(outcome.errorNumber ? outcome.errorNumber : 5,outcome.explanation.empty() ? "Event function execution failed" : outcome.explanation);
@@ -1743,8 +1763,10 @@ VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string
         const auto value=evaluateVbaExpression(source,host,{},resolver);
         VbaExecutionResult result{VbaExecutionStatus::Completed,{},line};
         result.typedReturnValue=std::make_shared<VbaValue>(value);
-        if (value.kind!=VbaValue::Kind::Object && value.kind!=VbaValue::Kind::Error) result.returnValue=value.asField();
+        if (value.kind!=VbaValue::Kind::Object && value.kind!=VbaValue::Kind::Error && value.kind!=VbaValue::Kind::Missing && !isVbaArray(value)) result.returnValue=value.asField();
         return result;
+    } catch (const VbaExecutionStopped&) {
+        return {VbaExecutionStatus::Completed,{},line,true};
     } catch (const VbaRuntimeError& error) {
         VbaExecutionResult result{VbaExecutionStatus::Error,error.what(),line}; result.errorNumber=error.number; return result;
     } catch (const std::exception&) {

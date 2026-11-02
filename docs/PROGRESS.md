@@ -2623,3 +2623,20 @@ The earlier grouped adea3f8 snapshot passed GUI-free core build/test 1/1 (1.23 s
 and .deb contents/permissions/Build-ID/pinned-backend checks. This new dialog
 increment has not repeated that grouped packaging/headless validation yet.
 No new CTest targets or full distribution-matrix repetition.
+
+## Quit propagation and grouped validation (2026-11-02)
+
+Accepted native Quit now stops active procedure/expression/dialog frames, including
+Open/Load construction initiated by the UI; cancelled Quit remains error 2501.
+Typed array function returns retain their subtype. The converted-form opener in
+mainwindow now uses independent native document opening. DoCmd.RunSQL SELECT
+reports 2342 while DAO.Execute retains 3065. See QUIT_EXECUTION_RUNTIME.md.
+
+The full existing suite passed 46/48; both failures shared an obsolete RunSQL
+expectation. After correcting the DoCmd-specific error mapping and expectation,
+the two affected targets passed (50.87 s). Thus all 48 existing targets are
+covered by the full run plus focused rerun, not one final 48/48 invocation.
+GUI-free build/test passed 1/1 (1.74 s). All four original fixture SHA-256 checks
+passed. The .deb passed contents, permissions, matching Build-ID and pinned
+SQLite backend checks. No new test targets or distro matrix rerun. Remote CI
+remains blocked by the previously reported billing restriction.

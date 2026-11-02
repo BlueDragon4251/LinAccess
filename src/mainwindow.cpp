@@ -1125,8 +1125,7 @@ void MainWindow::runForm(const QString& name) {
                 code.addBindValue("Form_" + name);
                 const auto module = code.exec() && code.next() ? code.value(0).toByteArray() : QByteArray{};
                 code.finish();
-                AccessFormPreview preview(name,form,module,db_,this);
-                if (!preview.cancelledByOpen()) preview.exec();
+                (void)AccessFormPreview::showDocument(linaccess::AccessDocumentKind::Form,name,form,module,db_,this);
             });
         auto result = linaccess::executeVbaProcedure(vba, procedure, host);
         if (result.status == linaccess::VbaExecutionStatus::Unsupported ||

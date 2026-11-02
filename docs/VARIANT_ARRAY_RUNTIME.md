@@ -59,3 +59,7 @@ while traversing the source. Allocation replacement detected at Next also fails
 3251. Arbitrary function/property array sources, Byte array enumeration, full
 cross-module alias/rebinding and mutation semantics remain open. This does not
 claim Windows Access enumeration parity for those boundaries.
+
+Variant and Byte arrays can also be returned by native VBA functions without
+legacy scalar-text materialization; typed results retain their array values.
+Arbitrary function results in For Each still have the documented source bounds.

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <optional>
+#include <cstdint>
+#include <exception>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -15,6 +17,22 @@ public:
     VbaRuntimeError(int code, const std::string& message) : std::runtime_error(message), number(code) {}
     int number;
 };
+// Successful native application Quit stops existing GUI-thread VBA frames;
+// later independent engine executions get a fresh epoch.
+class VbaExecutionStopped final : public std::exception {
+public:
+    const char* what() const noexcept override { return "VBA execution stopped"; }
+};
+class VbaExecutionScope final {
+public:
+    VbaExecutionScope();
+    ~VbaExecutionScope();
+    VbaExecutionScope(const VbaExecutionScope&)=delete;
+    VbaExecutionScope& operator=(const VbaExecutionScope&)=delete;
+};
+std::uint64_t vbaExecutionEpoch() noexcept;
+bool vbaExecutionStopRequested() noexcept;
+void requestVbaExecutionStop() noexcept;
 enum class VbaCompareMode { Binary, Text, Database };
 class VbaObject;
 struct VbaValue;

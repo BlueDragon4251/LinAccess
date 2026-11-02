@@ -936,3 +936,10 @@ Form acDialog waits for actual close/hide while retaining Unload cancellation;
 acIcon uses minimized Qt windows. Hidden reveal/re-hide, read access to imported/
 overridden Modal/PopUp and active-document Minimize/Restore/Maximize are native.
 See [event/desktop/Quit boundaries](DIALOG_WINDOW_RUNTIME.md).
+
+## Quit and native execution scopes
+
+Successful native application Quit stops active VBA callers/operands and waiting
+dialog frames; cancelled Quit preserves error handling. Startup Quit prevents
+later Open/Load/show work in native construction scopes. Typed array function
+returns remain arrays. See [remaining shutdown scope](QUIT_EXECUTION_RUNTIME.md).
