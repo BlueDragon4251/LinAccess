@@ -17,12 +17,21 @@
 #include <QPointer>
 #include <QThread>
 #include <algorithm>
+#include <limits>
 
 namespace linaccess {
 namespace {
 QString text(std::string_view value) { return QString::fromUtf8(value.data(), value.size()); }
 QString quote(QString name) { return '"' + name.replace('"', "\"\"") + '"'; }
 std::string lower(std::string_view value) { return text(value).toCaseFolded().toStdString(); }
+VbaValue longCount(qlonglong value) {
+    if(value<std::numeric_limits<std::int32_t>::min() || value>std::numeric_limits<std::int32_t>::max()) throw VbaRuntimeError(6,"DAO count exceeds Long range");
+    return VbaValue::longInteger(static_cast<std::int32_t>(value));
+}
+VbaValue integerCount(qlonglong value) {
+    if(value<std::numeric_limits<std::int16_t>::min() || value>std::numeric_limits<std::int16_t>::max()) throw VbaRuntimeError(6,"DAO count exceeds Integer range");
+    return VbaValue::integer(static_cast<std::int16_t>(value));
+}
 void require(bool valid, const char* message) { if (!valid) throw std::runtime_error(message); }
 void exec(QSqlQuery& query, const QString& sql) {
     if (!query.exec(sql)) throw std::runtime_error("DAO: SQL operation failed");
@@ -43,6 +52,8 @@ void exec(QSqlQuery& query, const QString& sql) {
 qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<QString,QVariant>& bindings) {
     if (plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");
     const bool makeTable=!plan.makeTable.isEmpty();
+    const auto statement=plan.sql.trimmed();
+    const bool schemaAction=statement.startsWith("CREATE ",Qt::CaseInsensitive) || statement.startsWith("ALTER ",Qt::CaseInsensitive) || statement.startsWith("DROP ",Qt::CaseInsensitive);
     QSqlQuery guard(db);
     if (makeTable && !guard.exec("SAVEPOINT la_make_table")) queryFailure(guard);
     try {
@@ -54,7 +65,7 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
             for (auto it=bindings.cbegin();it!=bindings.cend();++it) query.bindValue(it.key(),it.value());
             if (!query.exec()) queryFailure(query);
             if (query.isSelect()) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");
-            affected=std::max<qlonglong>(0,query.numRowsAffected()); query.finish();
+            affected=schemaAction ? 0 : std::max<qlonglong>(0,query.numRowsAffected()); query.finish();
             if (makeTable) {
                 if (!query.exec("SELECT COUNT(*) FROM "+quote(plan.makeTable)) || !query.next()) queryFailure(query);
                 affected=query.value(0).toLongLong(); query.finish();
@@ -277,7 +288,7 @@ public:
         if (key=="nomatch") return VbaValue::logical(noMatch_);
         if (key == "eof") return VbaValue::logical(data_->rows.empty() || position_ >= data_->rows.size());
         if (key == "bof") return VbaValue::logical(data_->rows.empty() || position_ < 0);
-        if (key == "recordcount") return VbaValue::numeric(data_->rows.size());
+        if (key == "recordcount") return longCount(data_->rows.size());
         if (key == "movefirst" || key == "movelast" || key == "movenext" || key == "moveprevious") {
             require(mode_ == Mode::Browse, "DAO: Update or CancelUpdate before navigation");
             if (key == "movefirst") position_ = 0;
@@ -508,7 +519,7 @@ public:
     explicit Fields(std::shared_ptr<Recordset> owner) : owner_(std::move(owner)) {}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto key = lower(name);
-        if (key == "count" && args.empty()) return VbaValue::numeric(owner_->fieldNames().size());
+        if (key == "count" && args.empty()) return integerCount(owner_->fieldNames().size());
         if (key == "item" && args.size() == 1) return owner_->member("Fields",args);
         throw VbaRuntimeError(438,"DAO: Fields member unsupported");
     }
@@ -579,7 +590,7 @@ public:
         }
         require(args.empty(),"DAO: Unexpected QueryDef arguments");
         if (key == "sql") return VbaValue::string(source_.toUtf8().toStdString());
-        if (key == "recordsaffected") return VbaValue::numeric(affected_);
+        if (key == "recordsaffected") return longCount(affected_);
         if (key == "close") { closed_ = true; return {}; }
         throw VbaRuntimeError(438,"DAO: QueryDef member unsupported");
     }
@@ -815,7 +826,7 @@ public:
             affected_=executeAction(db_,plan,bindAccessQueryParameters(plan,{}));
             return {};
         }
-        if (key=="recordsaffected" && args.empty()) return VbaValue::numeric(affected_);
+        if (key=="recordsaffected" && args.empty()) return longCount(affected_);
         throw std::runtime_error("DAO: Database member unsupported");
     }
 private:

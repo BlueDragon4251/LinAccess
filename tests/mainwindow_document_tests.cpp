@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLineEdit>
+#include <QLabel>
 #include <QPlainTextEdit>
 #include <QTableView>
 #include <QTabWidget>
@@ -119,6 +120,7 @@ void exerciseQueryEditor(MainWindow& window,QSqlDatabase db) {
         source->setPlainText("SELECT CCur('1.23455') AS money,DateDiff('d',#2/28/2024#,#3/1/2024#) AS days"); run->click();
         assert(table->model()->rowCount()==1 && table->model()->index(0,0).data().toString()=="1.2346" && table->model()->index(0,1).data().toInt()==2);
         source->setPlainText("CREATE TABLE shortcut_records(id INTEGER PRIMARY KEY,value TEXT)"); run->click();
+        bool zeroRows=false; for(auto* label:dialog->findChildren<QLabel*>()) zeroRows|=label->text()=="0 Datensätze geändert"; assert(zeroRows);
         source->setPlainText("INSERT INTO shortcut_records VALUES(1,'before')"); run->click();
         source->setPlainText("INSERT INTO sql_editor_audit VALUES(CCur('1.23455'))"); run->click(); assert(table->isHidden());
         assert(sql.exec("SELECT value FROM sql_editor_audit") && sql.next() && sql.value(0).toDouble()==1.2346); sql.finish();

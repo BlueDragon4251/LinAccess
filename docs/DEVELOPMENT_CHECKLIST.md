@@ -707,3 +707,7 @@ Full targets remain open:
 
 - [x] Native datasheet Ctrl+W/Ctrl+F4 guarded close, page-wide Ctrl+S and deferred
   shortcut-sender deletion with actual key regression; full window/key parity open.
+
+- [x] Checked DAO Long RecordsAffected/RecordCount and Integer Fields.Count,
+  zero DDL counts without stale SQLite changes, preserved DML/make-table counts
+  and real editor feedback; full cursor/metadata/Windows semantics remain open.

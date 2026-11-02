@@ -2415,3 +2415,21 @@ Focused delivery: current host app rebuilt and DEB payload/backend/build-ID/
 permissions/fixture-exclusion checks pass. Four original hashes/private visibility
 pass. No repeated unaffected suite/distro run; shared host suite remains 6dc8a97
 and three-distribution baseline 644e71d. Remote CI account restriction persists.
+
+## 2026-11-02 — Checked DAO count subtypes and schema action counts
+
+Reproduced stale SQLite DDL RecordsAffected (0/1 after selecting the correct
+existing dao_execution test). Added zero CREATE/ALTER/DROP counts while preserving
+DML/joined-action and make-table counts. Database/QueryDef.RecordsAffected and
+loaded Recordset.RecordCount now use checked Long; Fields.Count uses checked
+Integer (public Microsoft contract read). Overflow is 6. Existing DAO/main-window
+tests pass 2/2 (1.79 s), covering actual DDL/DML/SELECT INTO counts, subtypes and
+SQL-editor zero-row feedback. No new CTest target (suite stays 48). Full cursor/
+metadata/error/Windows identity remains open; no original business workflow
+increment. See DAO_COUNTS_RUNTIME.md. Focused delivery validation follows.
+
+Focused delivery: host app rebuilt; DEB payload/backend/build-ID/permissions/
+fixture-exclusion checks pass. Four fixture hashes/private visibility pass.
+Unchanged core and unaffected full-suite/distribution checks were not repeated;
+shared host baseline is 6dc8a97, matrix baseline 644e71d. Remote CI restriction
+remains external; no remote test success is claimed.

@@ -230,8 +230,26 @@ End Sub
     assert(result.status==linaccess::VbaExecutionStatus::Completed && host.fields["TypeStorage"]=="Integer" && host.fields["TypeWriteError"]=="383");
     assert(sql.exec("SELECT value FROM parameter_values") && sql.next() && sql.value(0).toInt()==40000); sql.finish();
 }
+void testDdlRecordsAffected() {
+    using namespace linaccess;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-ddl-counts"); db.setDatabaseName(":memory:"); assert(db.open()); QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE seed(value INTEGER)")); assert(sql.exec("INSERT INTO seed VALUES(1),(2)")); sql.finish();
+    const auto database=makeDaoDatabase(db);
+    const auto execute=[&](const char* source) { database->member("Execute",{VbaValue::string(source)}); const auto count=database->member("RecordsAffected",{}); assert(count.asNumber()==0 && count.numericType==VbaValue::NumericType::Long); };
+    execute("CREATE TABLE ddl_probe(value INTEGER)");
+    const auto definition=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("INSERT INTO ddl_probe SELECT value FROM seed")}).object;
+    definition->member("Execute",{}); auto count=definition->member("RecordsAffected",{}); assert(count.asNumber()==2 && count.numericType==VbaValue::NumericType::Long);
+    execute("ALTER TABLE ddl_probe ADD COLUMN label TEXT");
+    definition->assign("SQL",VbaValue::string("UPDATE ddl_probe SET label='changed'")); definition->member("Execute",{}); count=definition->member("RecordsAffected",{}); assert(count.asNumber()==2 && count.numericType==VbaValue::NumericType::Long);
+    const auto rows=database->member("OpenRecordset",{VbaValue::string("ddl_probe")}).object; count=rows->member("RecordCount",{}); assert(count.asNumber()==2 && count.numericType==VbaValue::NumericType::Long);
+    count=rows->member("Fields",{}).object->member("Count",{}); assert(count.asNumber()==2 && count.numericType==VbaValue::NumericType::Integer); rows->member("Close",{});
+    execute("DROP TABLE ddl_probe");
+    database->member("Execute",{VbaValue::string("SELECT value INTO copied_rows FROM seed")}); count=database->member("RecordsAffected",{}); assert(count.asNumber()==2 && count.numericType==VbaValue::NumericType::Long); execute("DROP TABLE copied_rows");
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testDdlRecordsAffected();
     testDeclaredParameterTypes();
     testIntegerConversionDao();
     testBooleanQueryParameters();

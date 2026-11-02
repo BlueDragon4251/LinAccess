@@ -843,3 +843,10 @@ native forms unload. Real main-window/VBA regression checks cache/live-editor
 retention, unchanged-editor allowance, Quit 2501 with retained caller and close
 after revert. Full automatic record saving/events/undo/window identity remains
 open. See [APP_EDITORS_RUNTIME.md](APP_EDITORS_RUNTIME.md#pending-datasheets-participate-in-close-preflight).
+
+DAO Database/QueryDef.RecordsAffected and loaded Recordset.RecordCount now return
+checked VBA Long; Fields.Count returns Integer. CREATE/ALTER/DROP report zero
+rather than stale SQLite changes; DML and make-table counts remain intact.
+Existing DAO/main-window regressions verify types/counts and actual SQL-editor
+feedback. Full cursor/count/DAO metadata/Windows identity remains open. See
+[DAO_COUNTS_RUNTIME.md](DAO_COUNTS_RUNTIME.md).
