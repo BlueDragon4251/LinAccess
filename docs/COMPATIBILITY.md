@@ -629,3 +629,8 @@ Native Ctrl+apostrophe copies the previous displayed record field into writable
 TextBox edit buffers with actual Qt/VBA/SQL and SendKeys regressions. See
 COPY_PREVIOUS_FIELD_RUNTIME.md; exact Access selection/insertion modes, other
 adapters and complete keyboard parity remain open.
+
+Native Ctrl+Plus/Ctrl+Shift+Equals and RunCommand new/next/previous/first/last now
+use bounded active-document navigation, with real Qt/VBA/SQL policy/validation/
+no-INSERT regressions. See NEW_RECORD_SHORTCUT_RUNTIME.md; full keyboard/layout/
+MDI/updatable-query parity remains open.

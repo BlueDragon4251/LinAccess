@@ -34,20 +34,39 @@ AfterUpdate ="[Event Procedure]"
 Width =4000
 Height =400
 End
+Begin TextBox
+Name ="id"
+ControlSource ="id"
+Locked =-1
+TabStop =0
+Left =4200
+Width =1000
+Height =400
+End
 End
 End
 )FORM";
     const QByteArray code=R"VBA(Sub Navigate(ByVal target As Long)
 DoCmd.GoToRecord , , acGoTo, target
 End Sub
+Sub RunNavigation(ByVal command As Long)
+DoCmd.RunCommand command
+End Sub
+Sub NewViaCommand()
+DoCmd.RunCommand acCmdRecordsGoToNew
+End Sub
 Sub CopyViaSendKeys()
 SendKeys "^'", True
+End Sub
+Sub NewViaSendKeys()
+SendKeys "^{+}", True
 End Sub
 Sub NewRow()
 DoCmd.GoToRecord , , acNewRec
 End Sub
 Sub Form_KeyDown(KeyCode As Integer,Shift As Integer)
 If KeyCode=222 And Shift=acCtrlMask And Me.Tag="blockkey" Then KeyCode=0
+If KeyCode=187 And Me.Tag="blocknew" Then KeyCode=0
 End Sub
 Sub label_Change()
 CurrentDb.Execute "INSERT INTO events VALUES('change')"
@@ -95,12 +114,41 @@ End Sub
     assert(form.executeProcedure("CopyViaSendKeys",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(editor->text()==first && stored(2).toString()=="ok" && model->member("Dirty",{}).boolean);
     QTest::keyClick(editor,Qt::Key_Escape); assert(editor->text()=="ok" && !model->member("Dirty",{}).boolean);
-    assert(form.executeProcedure("NewRow",none).status==linaccess::VbaExecutionStatus::Completed); focus(); copy();
+    model->assign("Tag",VbaValue::string("blocknew")); QTest::keyClick(editor,Qt::Key_Plus,Qt::ControlModifier);
+    assert(!model->member("NewRecord",{}).boolean && !model->member("Dirty",{}).boolean);
+    model->assign("Tag",VbaValue::string("")); model->assign("AllowAdditions",VbaValue::logical(false));
+    QTest::keyClick(editor,Qt::Key_Plus,Qt::ControlModifier); assert(!model->member("NewRecord",{}).boolean && stored(2).toString()=="ok");
+    model->assign("AllowAdditions",VbaValue::logical(true));
+    editor->selectAll(); QTest::keyClicks(editor,"pending");
+    model->assign("AllowAdditions",VbaValue::logical(false)); QTest::keyClick(editor,Qt::Key_Plus,Qt::ControlModifier);
+    assert(stored(2).toString()=="ok" && model->member("Dirty",{}).boolean && editor->text()=="pending");
+    model->assign("AllowAdditions",VbaValue::logical(true)); model->assign("Tag",VbaValue::string("blockupdate"));
+    QTest::keyClick(editor,Qt::Key_Plus,Qt::ControlModifier);
+    assert(!model->member("NewRecord",{}).boolean && model->member("Dirty",{}).boolean && editor->text()=="pending" && stored(2).toString()=="ok");
+    model->assign("Tag",VbaValue::string("")); assert(form.executeProcedure("NewViaSendKeys",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(model->member("NewRecord",{}).boolean && !model->member("Dirty",{}).boolean && stored(2).toString()=="pending");
+    focus(); copy();
     assert(model->member("Dirty",{}).boolean);
     QTest::keyClick(editor,Qt::Key_Escape); assert(!model->member("Dirty",{}).boolean);
     assert(sql.exec("SELECT COUNT(*) FROM entries") && sql.next() && sql.value(0).toInt()==5); sql.finish();
     sql.prepare("UPDATE entries SET label=? WHERE id=1"); sql.addBindValue(QByteArray("binary")); assert(sql.exec()); sql.finish();
     model->member("Requery",{}); navigate(2); copy();
-    assert(editor->text()=="ok" && stored(2).toString()=="ok" && !model->member("Dirty",{}).boolean);
+    assert(editor->text()=="pending" && stored(2).toString()=="pending" && !model->member("Dirty",{}).boolean);
+    QTest::keyClick(editor,Qt::Key_Equal,Qt::ControlModifier|Qt::ShiftModifier);
+    assert(model->member("NewRecord",{}).boolean && !model->member("Dirty",{}).boolean);
+    for(const auto& step:std::vector<std::pair<int,int>>{{67,1},{65,2},{68,5},{66,4}}) {
+        std::vector<VbaValue> command{VbaValue::numeric(step.first)};
+        assert(form.executeProcedure("RunNavigation",command).status==linaccess::VbaExecutionStatus::Completed);
+        assert(model->item("id").asNumber()==step.second && !model->member("Dirty",{}).boolean);
+    }
+    for(const auto incorrect:{24,25,26,27}) {
+        std::vector<VbaValue> command{VbaValue::numeric(incorrect)};
+        const auto rejected=form.executeProcedure("RunNavigation",command);
+        assert(rejected.status==linaccess::VbaExecutionStatus::Error && rejected.errorNumber==3251);
+        assert(model->item("id").asNumber()==4 && !model->member("Dirty",{}).boolean);
+    }
+    assert(form.executeProcedure("NewViaCommand",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(model->member("NewRecord",{}).boolean && !model->member("Dirty",{}).boolean);
+    assert(sql.exec("SELECT COUNT(*) FROM entries") && sql.next() && sql.value(0).toInt()==5); sql.finish();
     assert(form.close());
 }

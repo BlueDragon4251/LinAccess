@@ -557,3 +557,7 @@ Full targets remain open:
 - [x] Native Ctrl+apostrophe previous-record TextBox value replacement through
   real edit/validation/undo events, typed NULL/empty, safe guards and SendKeys/
   Qt/SQL tests; exact Access edit-mode selection and other adapters remain open.
+
+- [x] Native Ctrl+Plus/Ctrl+Shift+Equals new-row navigation and documented
+  RunCommand 28/65-68, KeyPreview/validation/policy/no-INSERT/SendKeys Qt/SQL tests;
+  full keyboard/layout/navigation/MDI/query semantics remain open.

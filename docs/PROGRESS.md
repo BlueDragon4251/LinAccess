@@ -1729,3 +1729,21 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubunt
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass; repository remains private. Previous a374198 private CI completed
 successfully.
+
+## 2026-11-02 — Native new-record keys and navigation RunCommand
+
+Added Ctrl+Plus/Ctrl+Shift+Equals and native SendKeys through existing record
+navigation, including pre-save rejection of disallowed new-record actions.
+Added documented AcCommand new/next/previous/first/last mappings and constants.
+Fixture-independent Qt/VBA/SQL tests verify key/validation cancellation, pending
+record preservation, permitted save/navigation, no implicit new-row INSERT and
+correct command identities. Targeted tests pass 3/3 (1.58 s). Full keyboard/
+layout/navigation/query semantics remain open. No business execution increment.
+See NEW_RECORD_SHORTCUT_RUNTIME.md.
+
+Full validation: host 24/24 (76.77 s), Debian 12 24/24 (81.56 s), Ubuntu
+24.04 24/24 (71.67 s), GUI-disabled core 1/1 (1.29 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass; repository remains private. Previous 1670fd1 private CI completed
+successfully.

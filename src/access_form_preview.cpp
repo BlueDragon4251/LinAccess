@@ -519,6 +519,8 @@ public:
         if (document.layout_.kind==linaccess::AccessDocumentKind::Report) throw linaccess::VbaRuntimeError(438,"Report does not support record navigation");
         if (action<0 || action>5) throw linaccess::VbaRuntimeError(5,"Invalid record navigation action");
         if ((action==0 || action==1 || action==4) && offset<1) throw linaccess::VbaRuntimeError(2105,"Invalid record navigation offset");
+        if (action==5 && (!document.layout_.allowAdditions || !document.directTable_ || !document.dataSourceAvailable_))
+            throw linaccess::VbaRuntimeError(2046,"New records are unavailable");
         if (!document.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record navigation save cancelled");
         const qint64 count=document.recordSelector_->count()-1;
         const qint64 current=document.currentRecordIndex_ ? document.currentRecordIndex_ : count+1;
@@ -666,11 +668,14 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
     }
     if (command=="runcommand") {
         if (args.size()!=1) throw VbaRuntimeError(450,"RunCommand requires one command");
-        if (number(args[0])==97) host.saveRecord();
-        else if (number(args[0])==50) host.selectCurrentRecord();
-        else if (number(args[0])==223) host.deleteCurrentRecord();
-        else if (number(args[0])==190) host.copyCurrentRecord();
-        else if (number(args[0])==38) host.pasteAppendRecord();
+        const auto code=number(args[0]);
+        if (code==28) host.gotoRecord(5);
+        else if (code>=65 && code<=68) { const int actions[]{1,0,2,3}; host.gotoRecord(actions[code-65]); }
+        else if (code==97) host.saveRecord();
+        else if (code==50) host.selectCurrentRecord();
+        else if (code==223) host.deleteCurrentRecord();
+        else if (code==190) host.copyCurrentRecord();
+        else if (code==38) host.pasteAppendRecord();
         else throw VbaRuntimeError(3251,"RunCommand option unsupported");
         return {};
     }
@@ -2361,6 +2366,10 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
         }
         if (event->key()==Qt::Key_C && modifiers==Qt::ControlModifier && recordSelected_) {
             (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(190)}); return true;
+        }
+        if ((event->key()==Qt::Key_Plus && (modifiers==Qt::ControlModifier || modifiers==(Qt::ControlModifier|Qt::ShiftModifier)))
+            || (event->key()==Qt::Key_Equal && modifiers==(Qt::ControlModifier|Qt::ShiftModifier))) {
+            (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(28)}); return true;
         }
         if (event->key()==Qt::Key_Apostrophe && modifiers==Qt::ControlModifier) {
             ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
