@@ -33,7 +33,7 @@ fails with 3251; this limit is a current implementation boundary, not Access par
 ## Remaining boundaries
 
 This is not complete VBA array parity. Typed/fixed/dynamic array declarations,
-full typed ReDim/Preserve/Erase semantics, multidimensional arrays, ParamArray, full array For Each semantics,
+full typed ReDim/Preserve/Erase semantics, multidimensional arrays, full ParamArray semantics, full array For Each semantics,
 qualified VBA.Array and native COM arrays remain open. Individual array elements
 passed to a ByRef parameter fail explicitly with 3251 rather than silently losing
 writes. Nested indexed assignment is not implemented. No Windows Access result

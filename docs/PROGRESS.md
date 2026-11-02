@@ -2530,3 +2530,18 @@ desktop and GUI-free builds pass. Combined package (including 7235313) passes
 contents/permissions/Build-ID and pinned SQLite backend checks. No new test target
 and no full 48-test/distribution matrix repetition. Original fixtures were never
 modified; all four hashes remain checked. See VBA_LIKE_RUNTIME.md.
+
+## Native ParamArray evaluation (2026-11-02)
+
+Native Sub/Function calls now bind a final ParamArray to a zero-based Variant
+array, independently of Option Base. Supports multiple/no extra arguments,
+required preceding arguments, bounds/indexing/For Each/Join, typed results and
+ByVal helper forwarding. Actual DAO writes combine this with Optional defaults.
+
+The first scope is argument evaluation: slot replacement, ReDim, whole-array
+assignment and ByRef forwarding fail explicitly with 3251. Optional/ParamArray
+combinations, named/hole binding, expansion and full slot/reference semantics
+remain open. Existing core/DAO targets pass 2/2 (1.44 s); desktop build passes.
+No new CTest target and no additional package/headless/distribution pass for this
+increment. Last combined package/headless validation belongs to e0afbcd.
+See PARAMARRAY_RUNTIME.md for supported scope and remaining boundaries.

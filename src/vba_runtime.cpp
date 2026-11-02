@@ -212,7 +212,7 @@ public:
     }
 };
 
-struct Parameter { std::string name; bool byReference{true}; std::string type; bool optional{}; std::string defaultExpression; };
+struct Parameter { std::string name; bool byReference{true}; std::string type; bool optional{}; std::string defaultExpression; bool paramArray{}; };
 std::vector<std::string> splitArguments(const std::string& input) {
     std::vector<std::string> args;
     if (trim(input).empty()) return args;
@@ -365,10 +365,18 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 lower(match[2].str()) == lower(std::string(name))) {
                 const auto params = trim(match[3].str());
                 hasCancel = std::regex_match(params, cancelParam);
-                bool optionalSeen=false;
+                bool optionalSeen=false,paramArraySeen=false;
+                const std::regex paramArray(R"(^ParamArray\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+Variant)?$)",std::regex::icase);
                 const std::regex defaultLiteral(R"CONST(^(?:"(?:[^"]|"")*"|[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|True|False|Empty|Null)$)CONST",std::regex::icase);
                 for (const auto& declaration : splitArguments(params)) {
                     std::smatch declared;
+                    if(paramArraySeen) return {VbaExecutionStatus::Unsupported,"ParamArray must be the last parameter",line};
+                    if(std::regex_match(declaration,declared,paramArray)) {
+                        if(optionalSeen) return {VbaExecutionStatus::Unsupported,"Combined Optional and ParamArray declarations are not implemented",line};
+                        paramArraySeen=true;
+                        if(parameters) parameters->push_back({declared[1].str(),false,"paramarray",false,{},true});
+                        continue;
+                    }
                     if (!std::regex_match(declaration, declared, parameter))
                         return {VbaExecutionStatus::Unsupported, "VBA-Parameterdeklaration nicht unterstützt", line};
                     const bool optional=declared[1].matched;
@@ -899,7 +907,7 @@ VbaValue initialLocalValue(const std::string& type) {
     if (!type.empty() && type!="variant") return VbaValue::numeric(0);
     return VbaValue::empty();
 }
-struct ReferenceBinding { VbaValue* source{}; std::string type; bool indexedArray{}; };
+struct ReferenceBinding { VbaValue* source{}; std::string type; bool indexedArray{}; bool paramArray{}; };
 }
 
 static VbaExecutionResult executeProcedure(std::string_view module,
@@ -983,14 +991,22 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         locals[name]=initialLocalValue(resultType); localTypes[name]=resultType;
     }
     const bool implicitCancel = hasCancel && !isFunction && arguments.empty();
-    const auto required=static_cast<std::size_t>(std::count_if(parameters.begin(),parameters.end(),[](const Parameter& parameter){ return !parameter.optional; }));
-    if (!implicitCancel && (arguments.size()<required || arguments.size()>parameters.size())) {
+    const auto required=static_cast<std::size_t>(std::count_if(parameters.begin(),parameters.end(),[](const Parameter& parameter){ return !parameter.optional && !parameter.paramArray; }));
+    const bool variadic=!parameters.empty() && parameters.back().paramArray;
+    if (!implicitCancel && (arguments.size()<required || (!variadic && arguments.size()>parameters.size()))) {
         VbaExecutionResult failure{VbaExecutionStatus::Error,"Falsche Argumentanzahl",0};
         failure.errorNumber=450; return failure;
     }
     try {
         for(std::size_t i=0;i<parameters.size();++i) {
             const auto& parameter=parameters[i]; const auto name=lower(parameter.name);
+            if(parameter.paramArray) {
+                locals[name]=makeVbaArray(std::vector<VbaValue>(arguments.begin()+static_cast<std::ptrdiff_t>(i),arguments.end()),0);
+                localTypes[name]="paramarray";
+                continue;
+            }
+            if(references && i<references->size() && parameter.byReference && (*references)[i].paramArray)
+                throw VbaRuntimeError(3251,"ByRef ParamArray forwarding is not implemented");
             if(references && i<references->size() && !implicitCancel && parameter.byReference && (*references)[i].indexedArray)
                 throw VbaRuntimeError(3251,"ByRef array element binding is not implemented");
             const auto value=implicitCancel ? VbaValue::numeric(0) : i<arguments.size() ? arguments[i]
@@ -1052,7 +1068,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     };
     for(const auto& instruction:instructions) {
         const auto type=variableType(lower(instruction.argument));
-        if(((instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet) && scalarType(type))
+        if(((instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet) && (scalarType(type) || type=="paramarray"))
             || (instruction.type==Statement::Type::For && (type=="boolean" || type=="string" || type=="single" || type=="currency" || type=="byte" || objectType(type)))) {
             VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Declared variable type is unsupported for this loop/object target",instruction.line}; failure.errorNumber=3251; return failure;
         }
@@ -1061,6 +1077,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         if(!arrayElement) for(const auto& loop:loops) if(!loop.arrayRoot.empty() && loop.arrayRoot==name)
             throw VbaRuntimeError(3251,"Array source replacement during For Each is not implemented");
         const auto type=variableType(name);
+        if(type=="paramarray") throw VbaRuntimeError(3251,"ParamArray slot replacement is not implemented");
         locals[name]=checkedType(type) ? coerceVbaModuleValue(value,type) : value;
     };
     const auto equalValue = [](const VbaValue& a, const VbaValue& b) {
@@ -1103,6 +1120,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             const auto type=variableType(lower(expression));
             ReferenceBinding binding{found==locals.end() ? nullptr : &found->second,checkedType(type) ? type : std::string{}};
             for (const auto& alias:aliases) if (alias.name==lower(expression)) binding={alias.source,alias.type};
+            binding.paramArray=type=="paramarray";
             if(expression=="@array_element") binding.indexedArray=true;
             if(const auto target=memberTarget(expression); target && target->arguments) {
                 const auto array=locals.find(lower(target->name));
@@ -1118,6 +1136,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         for (std::size_t i = 0; i < names.size(); ++i) {
             auto found = locals.find(lower(names[i]));
             if (found != locals.end()) {
+                if(variableType(found->first)=="paramarray") {
+                    if(actuals[i].kind!=VbaValue::Kind::Array || actuals[i].object!=found->second.object)
+                        throw VbaRuntimeError(3251,"ParamArray forwarding cannot replace argument slots");
+                    continue;
+                }
                 bool arrayUpdate=false;
                 for(const auto& loop:loops) if(loop.arrayRoot==found->first && sameVbaArrayAllocation(loop.array,actuals[i])) arrayUpdate=true;
                 assignVariable(found->first,actuals[i],arrayUpdate);
@@ -1421,6 +1444,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::ResizeArray:
                 if(active) {
                     const auto name=lower(instruction.argument),type=variableType(name);
+                    if(type=="paramarray") throw VbaRuntimeError(3251,"ParamArray resize is not implemented");
                     if(!type.empty() && type!="variant") throw VbaRuntimeError(13,"ReDim requires a Variant variable");
                     const auto lowerBound=instruction.endExpression.empty() ? arrayBase : static_cast<int>(coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.endExpression)),"long").number);
                     const auto upperBound=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.expression)),"long").number);

@@ -2366,5 +2366,36 @@ End If
 End Sub
 )VBA","LikeText",host);
     assert(likeText.status==VbaExecutionStatus::Completed && host.fields["LikeText"]=="matched");
+    const auto variadicArguments=executeVbaProcedure(R"VBA(Option Base 1
+Function ReadCount(ByVal arguments As Variant) As Long
+ReadCount=UBound(arguments)-LBound(arguments)+1
+End Function
+Function Total(ByVal initial As Long, ParamArray values() As Variant) As Long
+Dim item As Variant
+Total=initial
+Me!ForwardCount=CStr(ReadCount(values))
+For Each item In values
+Total=Total+item
+Next
+Me!ParamArrayBounds=CStr(LBound(values)) & ":" & CStr(UBound(values))
+End Function
+Function Pack(ParamArray values()) As String
+On Error Resume Next
+values(0)="bad"
+Me!ParamWriteError=CStr(Err.Number)
+On Error GoTo 0
+Pack=Join(values,"|")
+End Function
+Sub VariadicArguments()
+Me!VariadicTotal=CStr(Total(5,1,2,3))
+Me!VariadicPack=Pack("a","b","c")
+Me!VariadicEmpty=CStr(Total(7))
+End Sub
+)VBA","VariadicArguments",host);
+    if(variadicArguments.status!=VbaExecutionStatus::Completed) std::cerr<<"ParamArray error="<<variadicArguments.errorNumber<<" line="<<variadicArguments.line<<"\n";
+    assert(variadicArguments.status==VbaExecutionStatus::Completed);
+    assert(host.fields["VariadicTotal"]=="11" && host.fields["VariadicPack"]=="a|b|c");
+    assert(host.fields["VariadicEmpty"]=="7" && host.fields["ParamArrayBounds"]=="0:-1");
+    assert(host.fields["ForwardCount"]=="0" && host.fields["ParamWriteError"]=="3251");
     std::cout << "Core tests passed\n";
 }

@@ -300,7 +300,10 @@ End Sub
     assert(sql.value(0).toInt()==3 && sql.value(1).toInt()==90);
     sql.finish();
     assert(sql.exec("CREATE TABLE text_lists(value TEXT)"));
-    const auto textLists=executeVbaProcedure(R"VBA(Function StoredLabel(ByVal text As String, Optional ByVal suffix As String="!") As String
+    const auto textLists=executeVbaProcedure(R"VBA(Function Parts(ParamArray values() As Variant) As String
+Parts=Join(values,"")
+End Function
+Function StoredLabel(ByVal text As String, Optional ByVal suffix As String="!") As String
 StoredLabel=text & suffix
 End Function
 Sub SaveTextList()
@@ -317,7 +320,7 @@ If item Like "al*" Then
 result=result & item
 End If
 Next
-CurrentDb.Execute "INSERT INTO text_lists VALUES('" & StoredLabel(result) & "')"
+CurrentDb.Execute "INSERT INTO text_lists VALUES('" & StoredLabel(Parts(result)) & "')"
 End Sub
 )VBA","SaveTextList",host);
     assert(textLists.status==VbaExecutionStatus::Completed);

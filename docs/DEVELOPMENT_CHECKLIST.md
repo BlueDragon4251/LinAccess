@@ -736,3 +736,7 @@ Full targets remain open:
 
 - [x] Native VBA Like wildcard/digit/list/range/negation matching with comparison
   precedence, Option Compare, Null and error 93; full locale/BSTR semantics open.
+
+- [x] Native final ParamArray Variant packing, empty/multiple args, bounds,
+  indexing/For Each/Join, ByVal forwarding and DAO effects; slot/reference writes,
+  named/hole/Optional combinations and complete binder semantics remain open.

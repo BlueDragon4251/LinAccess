@@ -17,5 +17,6 @@ are rejected by procedure validation. No new CTest target is added.
 
 Optional parameters without explicit defaults, Missing/IsMissing, positional
 argument holes, named arguments, user-defined constant defaults, Object defaults,
-ParamArray and full VBA declaration/compile-time coercion semantics remain open.
+full VBA declaration/compile-time coercion semantics remain open. Bounded
+ParamArray evaluation is documented separately in [PARAMARRAY_RUNTIME.md](PARAMARRAY_RUNTIME.md).
 This segment does not claim complete VBA argument binding or a Windows oracle.
