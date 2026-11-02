@@ -136,6 +136,13 @@ public:
         if (key == "eventprocprefix") return linaccess::VbaValue::string(bytes(preview.controlEventPrefix(name_)));
         if (key == "tag") return linaccess::VbaValue::string(bytes(widget->property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(caption()));
+        if (key=="backcolor" || key=="backstyle") {
+            const auto& definition=alignmentDefinition();
+            if (key=="backstyle") return linaccess::VbaValue::numeric(definition.backStyle);
+            if (definition.backColor) return linaccess::VbaValue::numeric(*definition.backColor);
+            const auto color=QApplication::palette().color(QPalette::Active,definition.type=="TextBox" ? QPalette::Base : QPalette::Window);
+            return linaccess::VbaValue::numeric(color.red()|(color.green()<<8)|(color.blue()<<16));
+        }
         if (key=="forecolor") {
             const auto& definition=fontDefinition();
             if (definition.foreColor) return linaccess::VbaValue::numeric(*definition.foreColor);
@@ -266,8 +273,26 @@ public:
             if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null ForeColor");
             const auto number=linaccess::sqlFieldValue(scalar,"INTEGER").toLongLong();
             if (number<std::numeric_limits<qint32>::min() || number>std::numeric_limits<qint32>::max()) throw linaccess::VbaRuntimeError(6,"ForeColor Long overflow");
-            (void)preview.resolveForeColor(static_cast<qint32>(number));
+            (void)preview.resolveOleColor(static_cast<qint32>(number));
             definition.foreColor=static_cast<qint32>(number); preview.applyForeColor(widget,definition); return;
+        }
+        if (key=="backcolor" || key=="backstyle") {
+            auto& definition=alignmentDefinition();
+            if (preview.layout_.kind==linaccess::AccessDocumentKind::Report)
+                throw linaccess::VbaRuntimeError(3251,"Report runtime background context is not implemented");
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null background property");
+            const auto number=linaccess::sqlFieldValue(scalar,"INTEGER").toLongLong();
+            if (key=="backstyle") {
+                if (number<0 || number>255) throw linaccess::VbaRuntimeError(6,"BackStyle Byte overflow");
+                if (number>1) throw linaccess::VbaRuntimeError(5,"Invalid BackStyle setting");
+                definition.backStyle=static_cast<int>(number);
+            } else {
+                if (number<std::numeric_limits<qint32>::min() || number>std::numeric_limits<qint32>::max()) throw linaccess::VbaRuntimeError(6,"BackColor Long overflow");
+                (void)preview.resolveOleColor(static_cast<qint32>(number));
+                definition.backColor=static_cast<qint32>(number);
+            }
+            preview.applyControlBackground(widget,definition); return;
         }
         if (key=="textalign") {
             auto& definition=alignmentDefinition();
@@ -414,7 +439,7 @@ private:
     }
     linaccess::AccessVisualControl& alignmentDefinition() const {
         for (auto& definition:checked().layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
-            if (!AccessFormPreview::supportsTextAlignment(definition)) throw linaccess::VbaRuntimeError(438,"Control has no native text alignment adapter");
+            if (!AccessFormPreview::supportsTextAlignment(definition)) throw linaccess::VbaRuntimeError(438,"Control has no native text adapter");
             return definition;
         }
         throw linaccess::VbaRuntimeError(2465,"Control unavailable");

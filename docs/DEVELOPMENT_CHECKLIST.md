@@ -430,3 +430,8 @@ Full targets remain open:
   native pixel evidence, masked buffer/SQL/read-only/popup preservation and
   45 original layout probes (271 RGB / 277 system-color controls); complete
   OLE palettes, backgrounds and Windows visual equivalence remain open.
+
+- [x] Bounded native TextBox/Label BackColor/BackStyle templates and VBA updates,
+  real opaque/transparent composite pixels, masked-buffer/SQL/permission/
+  navigation preservation and 55 original layout probes (326 Normal / 587
+  Transparent / 414 colors); other adapters and full Windows visuals remain open.

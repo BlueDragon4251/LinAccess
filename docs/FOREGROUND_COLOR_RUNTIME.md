@@ -5,7 +5,9 @@ type template inheritance and explicit zero overrides. Malformed/overflowing
 imported decimal values reject with generic diagnostics. Native text-control
 adapters decode ordinary 24-bit OLE colors (red in the low byte) and the two
 original system-color intents: window text 0x80000008 and button text 0x80000012.
-System colors resolve from the current application palette, independently of
+The shared decoder additionally supports window-interior (5) and button-face
+(15) intents introduced with control backgrounds. System colors resolve from the
+current application palette, independently of
 previous instance overrides. Other OLE/system/palette-index encodings explicitly
 report 3251; no Windows palette is invented.
 

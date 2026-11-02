@@ -122,6 +122,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
     QHash<QString,QString> templateDefaults;
     QHash<QString,int> templateAlignments;
     QHash<QString,qint32> templateForeColors;
+    QHash<QString,qint32> templateBackColors;
+    QHash<QString,int> templateBackStyles;
     static const QRegularExpression begin(R"(^\s*Begin(?:\s+(\w+))?\s*$)",
         QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression property(R"(^\s*([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$)");
@@ -148,6 +150,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 item.defaultValue = templateDefaults.value(type);
                 item.textAlign = templateAlignments.value(type);
                 if (templateForeColors.contains(type)) item.foreColor=templateForeColors.value(type);
+                if (templateBackColors.contains(type)) item.backColor=templateBackColors.value(type);
+                item.backStyle=templateBackStyles.value(type,type=="OptionGroup" ? 0 : 1);
                 for (auto it=stack.crbegin();it!=stack.crend();++it)
                     if (it->type=="OptionGroup" && it->control>=0) { item.optionGroupIndex=it->control; break; }
                 item.section = section;
@@ -174,12 +178,19 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             continue;
         }
         const auto integer = [&] { bool ok = false; const int result = value.toInt(&ok); return ok ? result : 0; };
-        if (key=="ForeColor" && (current.controlTemplate || current.control>=0)) {
+        if (key=="BackStyle" && (current.controlTemplate || current.control>=0)) {
+            bool valid=false; const auto style=value.toInt(&valid);
+            if (!valid || style<0 || style>1) throw std::runtime_error("Invalid imported BackStyle");
+            if (current.controlTemplate) templateBackStyles[current.type]=style;
+            else form.controls[current.control].backStyle=style;
+            continue;
+        }
+        if ((key=="ForeColor" || key=="BackColor") && (current.controlTemplate || current.control>=0)) {
             bool valid=false; const auto color=value.toLongLong(&valid);
             if (!valid || color<std::numeric_limits<qint32>::min() || color>std::numeric_limits<qint32>::max())
-                throw std::runtime_error("Invalid imported ForeColor Long");
-            if (current.controlTemplate) templateForeColors[current.type]=static_cast<qint32>(color);
-            else form.controls[current.control].foreColor=static_cast<qint32>(color);
+                throw std::runtime_error("Invalid imported color Long");
+            if (current.controlTemplate) (key=="ForeColor" ? templateForeColors : templateBackColors)[current.type]=static_cast<qint32>(color);
+            else (key=="ForeColor" ? form.controls[current.control].foreColor : form.controls[current.control].backColor)=static_cast<qint32>(color);
             continue;
         }
         if (key=="TextAlign" && (current.controlTemplate || current.control>=0)) {

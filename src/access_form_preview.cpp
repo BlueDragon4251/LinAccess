@@ -821,21 +821,23 @@ void AccessFormPreview::applyControlFont(QWidget* widget,const linaccess::Access
     }
 }
 
-QColor AccessFormPreview::resolveForeColor(qint32 color) {
+QColor AccessFormPreview::resolveOleColor(qint32 color) {
     const auto bits=static_cast<quint32>(color);
     if (bits<=0x00ffffffU) return QColor(bits&255U,(bits>>8)&255U,(bits>>16)&255U);
-    // These two source system-color intents cover all exported original
-    // ForeColor system values. Resolve from the application palette, never
+    // These source system-color intents cover the original foreground and
+    // background values. Resolve from the application palette, never
     // from a previously overridden instance palette.
     const auto native=QApplication::palette();
     if (bits==0x80000008U) return native.color(QPalette::Active,QPalette::Text);
     if (bits==0x80000012U) return native.color(QPalette::Active,QPalette::ButtonText);
-    throw linaccess::VbaRuntimeError(3251,"OLE foreground color adapter is not implemented for this encoding");
+    if (bits==0x80000005U) return native.color(QPalette::Active,QPalette::Base);
+    if (bits==0x8000000fU) return native.color(QPalette::Active,QPalette::Button);
+    throw linaccess::VbaRuntimeError(3251,"OLE color adapter is not implemented for this encoding");
 }
 
 void AccessFormPreview::applyForeColor(QWidget* widget,const linaccess::AccessVisualControl& control) {
     if (!supportsControlFont(control) || !control.foreColor) return;
-    const auto color=resolveForeColor(*control.foreColor);
+    const auto color=resolveOleColor(*control.foreColor);
     const auto apply=[&](QWidget* target) {
         target->ensurePolished();
         auto palette=target->palette();
@@ -848,6 +850,17 @@ void AccessFormPreview::applyForeColor(QWidget* widget,const linaccess::AccessVi
         if (combo->lineEdit()) apply(combo->lineEdit());
         if (combo->view()) apply(combo->view());
     }
+}
+
+void AccessFormPreview::applyControlBackground(QWidget* widget,const linaccess::AccessVisualControl& control) {
+    if (!supportsTextAlignment(control)) return;
+    widget->ensurePolished();
+    const auto role=control.type=="TextBox" ? QPalette::Base : QPalette::Window;
+    const auto background=control.backColor ? resolveOleColor(*control.backColor) : QApplication::palette().color(QPalette::Active,role);
+    auto palette=widget->palette();
+    for(const auto group:{QPalette::Active,QPalette::Inactive}) palette.setColor(group,role,control.backStyle==0 ? QColor(Qt::transparent) : background);
+    widget->setPalette(palette);
+    if (auto* label=qobject_cast<QLabel*>(widget)) label->setAutoFillBackground(control.backStyle==1);
 }
 
 bool AccessFormPreview::supportsTextAlignment(const linaccess::AccessVisualControl& control) {
@@ -974,6 +987,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         if (!widget) continue;
         applyControlFont(widget,control);
         applyForeColor(widget,control);
+        applyControlBackground(widget,control);
         applyTextAlignment(widget,control);
         widget->setObjectName("access-control-" + control.name);
         widget->setProperty("la_access_tag",control.tag);
@@ -1155,6 +1169,7 @@ void AccessFormPreview::applyControlStates() {
             for (auto* button:group->findChildren<QAbstractButton*>()) button->setProperty("la_access_input_readonly",readOnly);
         else if (auto* calendar=qobject_cast<QCalendarWidget*>(widget)) calendar->setEnabled(control.enabled && !calendar->property("la_calendar_bound").toBool());
         applyForeColor(widget,control);
+        applyControlBackground(widget,control);
         const bool focusable=!qobject_cast<QLabel*>(widget) && control.type!="Image" && control.type!="Rectangle" && control.type!="Line";
         if (focusable) {
             widget->setFocusPolicy(control.tabStop ? Qt::StrongFocus : Qt::ClickFocus);

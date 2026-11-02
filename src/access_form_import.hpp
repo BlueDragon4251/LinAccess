@@ -41,6 +41,8 @@ struct AccessVisualControl {
     AccessControlFont font;
     int textAlign{};
     std::optional<qint32> foreColor;
+    std::optional<qint32> backColor;
+    int backStyle{1};
     int optionValue{1};
     int optionGroupIndex{-1};
     QString rowSource;

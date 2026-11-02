@@ -1184,3 +1184,24 @@ DEBs pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass. Earlier text-alignment commit b43e659
 also completed private CI successfully.
+
+## 2026-11-02 — Native control backgrounds
+
+TextBox/Label BackColor/BackStyle import, per-type inheritance, zero overrides
+and native VBA getters/setters now drive opaque or transparent interiors. The
+shared color decoder adds window-interior and button-face system intents. Native
+composite pixels prove Normal/Transparent behavior while pending masked input,
+fonts/foreground/selection/focus and SQL permissions remain intact. Explicit save,
+record navigation/requery, instance reset, scalar/error and report preflight are
+covered. Targeted pair: 2/2 (38.30 s). An empty-DB/no-CodeBehind probe checks
+55 original layouts: 326 Normal / 587 Transparent / 414 retained colors. Original
+32-module lexical inventory has zero .BackColor/.BackStyle references; original
+business coverage is unchanged. See CONTROL_BACKGROUND_RUNTIME.md for active/
+inactive palette scope, unsupported report/other adapters and open visual gaps.
+
+Final validation: host 21/21 (92.70 s), Debian 12 21/21 (72.02 s), Ubuntu
+24.04 21/21 (65.21 s), GUI-disabled core 1/1 (1.02 s). Fresh host/distro DEBs
+pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
+installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+All four original fixture hashes pass; repository privacy is unchanged. Earlier
+foreground-color commit b067f9c completed private CI successfully.

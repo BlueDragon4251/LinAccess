@@ -321,6 +321,7 @@ void testOriginalAllowEdits(const QDir&,const QJsonArray&,QSqlDatabase);
 void testOriginalControlDefaults(const QDir&,const QJsonArray&);
 void testOriginalTextAlignment(const QDir&,const QJsonArray&);
 void testOriginalForeColor(const QDir&,const QJsonArray&);
+void testOriginalBackgrounds(const QDir&,const QJsonArray&);
 void testOriginalOpenReport(const QDir&,const QJsonArray&,QSqlDatabase);
 
 void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QString& mdb) {
@@ -986,6 +987,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
     testOriginalControlDefaults(directory,objects);
     testOriginalTextAlignment(directory,objects);
     testOriginalForeColor(directory,objects);
+    testOriginalBackgrounds(directory,objects);
     testOriginalTimer(directory,objects,db);
     testOriginalOpenReport(directory,objects,db);
     testOriginalCalendar(directory,objects,db);

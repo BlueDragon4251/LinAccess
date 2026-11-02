@@ -447,3 +447,11 @@ probe covers 45 original layouts (271 RGB / 277 system-color controls); no extra
 original handler execution follows. Other OLE encodings and runtime report
 setters reject explicitly; Windows palette/default/full visual identity remains
 open. See [Foreground colors](FOREGROUND_COLOR_RUNTIME.md).
+
+Native TextBox/Label BackColor and BackStyle now retain templates/overrides and
+render Normal/Transparent interiors through actual palettes and label auto-fill.
+Native composite-pixel/VBA/SQL/masked-input/permission regressions and empty-DB/
+no-CodeBehind probes cover 55 original layouts (326 Normal / 587 Transparent /
+414 retained colors). Original business coverage is unchanged. Report runtime
+setters, other control/section backgrounds, disabled-state and Windows rendering
+parity remain open; see [Control backgrounds](CONTROL_BACKGROUND_RUNTIME.md).
