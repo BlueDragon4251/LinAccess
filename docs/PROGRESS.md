@@ -1677,3 +1677,20 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubunt
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass; repository remains private. Previous 653fd0e private CI completed
 successfully.
+
+## 2026-11-02 — Native logical exclusion, equivalence and implication
+
+Added Xor/Eqv/Imp Boolean/null tables, checked numeric bitwise operations and
+logical precedence while retaining arithmetic/power/prefix rules. Core and native
+Qt/VBA/SQL regressions cover truth tables, bit patterns, calculated Boolean
+controls, stored -1/0 values and range errors preventing writes. Targeted tests
+pass 2/2 (0.97 s). SQL rewriting, full mixed-type promotion and existing And/Or
+edge semantics remain open. No business execution increment. See
+LOGICAL_OPERATORS_RUNTIME.md.
+
+Full validation: host 23/23 (77.68 s), Debian 12 23/23 (80.48 s), Ubuntu
+24.04 23/23 (72.18 s), GUI-disabled core 1/1 (1.23 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass; repository remains private. Previous ddf7490 private CI was still
+running at this checkpoint; no success is assumed.

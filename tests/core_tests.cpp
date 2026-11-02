@@ -1633,6 +1633,24 @@ End Function
         assert(evaluate(item.first).asNumber()==item.second);
     assert(evaluate("VarType(CInt(2)^CInt(3))=vbDouble").truthy());
     assert(evaluate("Null^2").kind==VbaValue::Kind::Null && evaluate("2^Null").kind==VbaValue::Kind::Null);
+    for(const auto& item:std::vector<std::pair<const char*,double>>{
+        {"10 Xor 8",2},{"10 Eqv 8",-3},{"8 Imp 10",-1},
+        {"1 Or 2 Xor 3",0},{"0 Eqv 1 Imp 2",3},{"1.5 Xor 2",0},
+        {"0 Imp Null",-1},{"Null Imp -1",-1}})
+        assert(evaluate(item.first).asNumber()==item.second);
+    for(const auto& item:std::vector<std::pair<const char*,std::optional<bool>>>{
+        {"True Xor True",false},{"True Xor False",true},{"False Xor True",true},{"False Xor False",false},
+        {"True Eqv True",true},{"True Eqv False",false},{"False Eqv True",false},{"False Eqv False",true},
+        {"True Imp True",true},{"True Imp False",false},{"True Imp Null",{}},
+        {"False Imp True",true},{"False Imp False",true},{"False Imp Null",true},
+        {"Null Imp True",true},{"Null Imp False",{}},{"Null Imp Null",{}},
+        {"Null Xor True",{}},{"True Eqv Null",{}},{"1 Imp Null",{}},{"Null Imp 1",{}}}) {
+        const auto result=evaluate(item.first);
+        if(!item.second) assert(result.kind==VbaValue::Kind::Null);
+        else assert(result.kind==VbaValue::Kind::Boolean && result.boolean==*item.second);
+    }
+    assert(evaluate("VarType(CInt(10) Eqv CInt(8))=vbInteger").truthy());
+    assert(evaluate("VarType(CLng(10) Xor CLng(8))=vbLong").truthy());
     assert(evaluate("CLng(2.5)").asNumber() == 2);
     assert(evaluate("CLng(3.5)").asNumber() == 4);
     assert(evaluate("CLng(-2.5)").asNumber() == -2);
@@ -1685,6 +1703,9 @@ End Function
     substringError(R"("invalid"^2)",13);
     scalarProbe->value=VbaValue::numeric(3); const auto beforePower=scalarProbe->reads;
     assert(evaluateVbaExpression("probe^2",host,scalarValues).number==9 && scalarProbe->reads==beforePower+1);
+    substringError("1e100 Xor 2",6); substringError(R"("invalid" Eqv 2)",13);
+    scalarProbe->value=VbaValue::numeric(10); const auto beforeExclusive=scalarProbe->reads;
+    assert(evaluateVbaExpression("probe Xor 8",host,scalarValues).number==2 && scalarProbe->reads==beforeExclusive+1);
     substringError("CInt(Null)",94); substringError("CInt(CVErr(2015))",13);
     substringError("CInt(\"invalid\")",13); substringError("CInt(32767.5)",6);
     substringError("CInt(-32768.6)",6); substringError("CInt()",450); substringError("CInt(1,2)",450);

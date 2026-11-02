@@ -18,6 +18,8 @@ int main(int argc,char** argv) {
     assert(sql.exec("INSERT INTO arithmetic_rows VALUES(1,12.6)"));
     assert(sql.exec("CREATE TABLE arithmetic_audit(remainder INTEGER,quotient INTEGER)"));
     assert(sql.exec("CREATE TABLE power_audit(amount REAL)"));
+    assert(sql.exec("CREATE TABLE logical_audit(value INTEGER)"));
+    assert(sql.exec("CREATE TABLE bitwise_audit(exclusion INTEGER,equivalence INTEGER,implication INTEGER)"));
     const QByteArray layout=R"FORM(Begin Form
 RecordSource ="arithmetic_rows"
 Begin Section
@@ -37,11 +39,26 @@ Begin TextBox
 Name ="power"
 ControlSource ="=[qty] ^ 2"
 End
+Begin TextBox
+Name ="logic"
+ControlSource ="=[qty] > 10 Xor [qty] < 0"
+End
 End
 End
 )FORM";
     const QByteArray code=R"VBA(Sub CaptureMath()
 CurrentDb.Execute "INSERT INTO arithmetic_audit VALUES("&CStr(Me!remainder)&","&CStr(Me!quotient)&")"
+End Sub
+Sub CaptureLogic()
+CurrentDb.Execute "INSERT INTO logical_audit VALUES("&CStr(CLng(Me!logic))&")"
+End Sub
+Sub CaptureBitwise()
+CurrentDb.Execute "INSERT INTO bitwise_audit VALUES("&CStr(10 Xor 8)&","&CStr(10 Eqv 8)&","&CStr(8 Imp 10)&")"
+End Sub
+Sub RejectLogicRange()
+Dim value As Long
+value=1e100 Xor 2
+CurrentDb.Execute "INSERT INTO bitwise_audit VALUES(99,99,99)"
 End Sub
 Sub CapturePower()
 CurrentDb.Execute "INSERT INTO power_audit VALUES("&CStr(Me!power)&")"
@@ -74,6 +91,7 @@ End Sub
     auto result=form.executeProcedure("CaptureMath",args); assert(result.status==linaccess::VbaExecutionStatus::Completed);
     assert(model->item("power").kind==VbaValue::Kind::Number && std::abs(model->item("power").number-158.76)<1e-10);
     result=form.executeProcedure("CapturePower",args); assert(result.status==linaccess::VbaExecutionStatus::Completed);
+    result=form.executeProcedure("CaptureLogic",args); assert(result.status==linaccess::VbaExecutionStatus::Completed);
     model->assignItem("qty",VbaValue::numeric(9.5));
     assert(model->member("Dirty",{}).boolean);
     assert(model->item("remainder").kind==VbaValue::Kind::Number && model->item("remainder").number==0 && model->item("quotient").number==2);
@@ -81,10 +99,16 @@ End Sub
     result=form.executeProcedure("CaptureMath",args); assert(result.status==linaccess::VbaExecutionStatus::Completed);
     assert(model->item("power").number==90.25);
     result=form.executeProcedure("CapturePower",args); assert(result.status==linaccess::VbaExecutionStatus::Completed);
+    result=form.executeProcedure("CaptureLogic",args); assert(result.status==linaccess::VbaExecutionStatus::Completed);
     result=form.executeProcedure("RejectPowerDomain",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==5);
     result=form.executeProcedure("RejectPowerOverflow",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==6);
     assert(sql.exec("SELECT amount FROM power_audit ORDER BY rowid") && sql.next() && std::abs(sql.value(0).toDouble()-158.76)<1e-10);
     assert(sql.next() && sql.value(0).toDouble()==90.25 && !sql.next()); sql.finish();
+    result=form.executeProcedure("CaptureBitwise",args); assert(result.status==linaccess::VbaExecutionStatus::Completed);
+    result=form.executeProcedure("RejectLogicRange",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==6);
+    assert(sql.exec("SELECT value FROM logical_audit ORDER BY rowid") && sql.next() && sql.value(0).toInt()==-1);
+    assert(sql.next() && sql.value(0).toInt()==0 && !sql.next()); sql.finish();
+    assert(sql.exec("SELECT exclusion,equivalence,implication FROM bitwise_audit") && sql.next() && sql.value(0).toInt()==2 && sql.value(1).toInt()==-3 && sql.value(2).toInt()==-1 && !sql.next()); sql.finish();
     result=form.executeProcedure("RejectZero",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==11);
     result=form.executeProcedure("RejectOverflow",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==6);
     assert(sql.exec("SELECT remainder,quotient FROM arithmetic_audit ORDER BY rowid") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==2);

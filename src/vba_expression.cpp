@@ -145,16 +145,19 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
 int precedence(const Token& token) {
     if (token.type!=Token::Type::Symbol && token.type!=Token::Type::Word) return 0;
     const auto text = lower(token.value);
-    if (text == "or") return 1;
-    if (text == "and") return 2;
+    if (text == "imp") return 1;
+    if (text == "eqv") return 2;
+    if (text == "xor") return 3;
+    if (text == "or") return 4;
+    if (text == "and") return 5;
     if (text == "=" || text == "<>" || text == "<" || text == "<=" ||
-        text == ">" || text == ">=" || text == "is") return 3;
-    if (text == "&") return 4;
-    if (text == "+" || text == "-") return 5;
-    if (text == "mod") return 6;
-    if (text == "\\") return 7;
-    if (text == "*" || text == "/") return 8;
-    if (text == "^") return 10;
+        text == ">" || text == ">=" || text == "is") return 6;
+    if (text == "&") return 7;
+    if (text == "+" || text == "-") return 8;
+    if (text == "mod") return 9;
+    if (text == "\\") return 10;
+    if (text == "*" || text == "/") return 11;
+    if (text == "^") return 13;
     return 0;
 }
 
@@ -198,6 +201,24 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         if (left.kind == VbaValue::Kind::Boolean && right.kind == VbaValue::Kind::Boolean)
             return VbaValue::logical(op == "and" ? left.boolean && right.boolean : left.boolean || right.boolean);
         return VbaValue::numeric(op == "and" ? integer(left) & integer(right) : integer(left) | integer(right));
+    }
+    if (op=="xor" || op=="eqv" || op=="imp") {
+        const bool leftNull=left.kind==VbaValue::Kind::Null,rightNull=right.kind==VbaValue::Kind::Null;
+        if (leftNull || rightNull) {
+            if (op!="imp") return {};
+            const auto certainTrue=[](const VbaValue& known) { return known.kind==VbaValue::Kind::Boolean ? VbaValue::logical(true) : VbaValue::longInteger(-1); };
+            if (!leftNull && coerceVbaModuleValue(left,"long").number==0) return certainTrue(left);
+            if (!rightNull && coerceVbaModuleValue(right,"long").number==-1) return certainTrue(right);
+            return {};
+        }
+        if (left.kind==VbaValue::Kind::Boolean && right.kind==VbaValue::Kind::Boolean)
+            return VbaValue::logical(op=="xor" ? left.boolean!=right.boolean : op=="eqv" ? left.boolean==right.boolean : !left.boolean || right.boolean);
+        const auto a=static_cast<std::int32_t>(coerceVbaModuleValue(left,"long").number);
+        const auto b=static_cast<std::int32_t>(coerceVbaModuleValue(right,"long").number);
+        const auto answer=op=="xor" ? a^b : op=="eqv" ? ~(a^b) : (~a)|b;
+        const bool narrow=left.kind==VbaValue::Kind::Number && right.kind==VbaValue::Kind::Number
+            && left.numericType==VbaValue::NumericType::Integer && right.numericType==VbaValue::NumericType::Integer;
+        return narrow ? VbaValue::integer(static_cast<std::int16_t>(answer)) : VbaValue::longInteger(answer);
     }
     if (op=="mod" || op=="\\") {
         if (left.kind==VbaValue::Kind::Null || right.kind==VbaValue::Kind::Null) return {};
@@ -360,15 +381,15 @@ private:
     }
     VbaValue atom(bool objectContext,int minPrecedence) {
         if (take("-")) {
-            const auto arg = expression(std::max(9,minPrecedence));
+            const auto arg = expression(std::max(12,minPrecedence));
             return host_ ? arg.kind==VbaValue::Kind::Currency ? negateCurrency(arg) : VbaValue::numeric(-arg.asNumber()) : VbaValue{};
         }
         if (take("+")) {
-            const auto arg = expression(std::max(9,minPrecedence));
+            const auto arg = expression(std::max(12,minPrecedence));
             return host_ ? arg.kind==VbaValue::Kind::Currency ? arg : VbaValue::numeric(arg.asNumber()) : VbaValue{};
         }
         if (take("not")) {
-            const auto arg = expression(std::max(3,minPrecedence)); // comparisons bind before Not in VBA
+            const auto arg = expression(std::max(6,minPrecedence)); // comparisons bind before Not in VBA
             if (!host_ || arg.kind == VbaValue::Kind::Null) return {};
             if (arg.kind == VbaValue::Kind::Boolean) return VbaValue::logical(!arg.boolean);
             return VbaValue::numeric(~integer(arg));

@@ -615,3 +615,8 @@ Native VBA/Access expressions execute caret exponentiation with documented
 left-to-right chaining, sign precedence and checked Double/domain behavior.
 Actual Qt/VBA/SQL audit tests are in POWER_OPERATOR_RUNTIME.md. SQL caret,
 zero-negative powers, complete underflow/rounding/type/error identity remain open.
+
+Native Xor/Eqv/Imp and their logical precedence now execute in VBA and Access
+expressions, with truth-table and actual Qt/VBA/SQL audit regressions. See
+LOGICAL_OPERATORS_RUNTIME.md; SQL rewriting and full mixed-type/Variant/And-Or
+edge semantics remain open.

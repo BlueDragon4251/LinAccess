@@ -545,3 +545,7 @@ Full targets remain open:
 - [x] Native VBA/Access-expression power, documented left-to-right chains, unary
   precedence/Double/null/domain/overflow handling and actual Qt/VBA/SQL tests;
   SQL rewriting and full underflow/rounding/type/error identity remain open.
+
+- [x] Native Xor/Eqv/Imp Boolean/null/bitwise execution, logical precedence and
+  bounded subtype/range handling with actual Qt/VBA/SQL audit tests; SQL rewriting
+  and full Variant/promotion/error/And-Or edge semantics remain open.
