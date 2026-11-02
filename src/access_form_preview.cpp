@@ -830,6 +830,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             widget=group;
         } else if (control.type == "Label") {
             auto* label = new QLabel(control.caption, canvas);
+            label->setTextFormat(Qt::PlainText);
             label->setWordWrap(true);
             widget = label;
         } else if (control.type=="CustomControl" && (control.className.compare("MSCAL.Calendar.7",Qt::CaseInsensitive)==0 || control.className.compare("MSCAL.Kalender-Steuerelement.7",Qt::CaseInsensitive)==0)) {

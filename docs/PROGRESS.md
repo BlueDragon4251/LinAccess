@@ -1127,3 +1127,17 @@ exact payload/backend/permissions/fixture-exclusion checks; isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. Original counts remain 34 metadata / 15 unbound
 literal initializations / zero unsupported adapters for these entries.
+
+## 2026-11-02 — Literal native label captions
+
+Removed Qt automatic HTML interpretation from imported form/report Label widgets.
+HTML-looking Caption text is displayed literally at construction and after native
+VBA Caption assignment. The existing Qt/SQLite font regression covers literal tags,
+entity syntax and newlines while preserving fonts, getter values and clean data
+state. This corrects rendering within the existing catalog scope; the checklist
+count is unchanged. Full mnemonic and visual parity remains open.
+
+Validation: host 21/21 (67.57 s), Debian 12 21/21 (69.62 s), Ubuntu 24.04
+21/21 (63.46 s), GUI-disabled core 1/1 (1.15 s). Fresh packages pass exact
+payload/backend/permissions/fixture-exclusion checks and isolated Debian/Ubuntu
+backend and GUI startup. All four original fixture hashes remain unchanged.

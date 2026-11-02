@@ -1537,7 +1537,7 @@ Top =700
 End
 Begin Label
 Name ="small"
-Caption ="Sample"
+Caption ="<b>A &amp; B</b>"
 FontWeight =400
 FontItalic =0
 FontUnderline =NotDefault
@@ -1607,6 +1607,8 @@ End Sub
     auto* small=form.findChild<QLabel*>("access-control-small"); auto* large=form.findChild<QLabel*>("access-control-large");
     auto* button=form.findChild<QPushButton*>("access-control-button"); auto* combo=form.findChild<QComboBox*>("access-control-combo");
     auto* selector=form.findChild<QComboBox*>("access-record-selector"); assert(editor && sibling && small && large && button && combo && selector);
+    assert(small->textFormat()==Qt::PlainText && small->text()=="<b>A &amp; B</b>");
+    root->objectMember("small",{}).object->assign("Caption",VbaValue::string("Sample"));
     assert(editor->font().family()=="DejaVu Sans" && editor->font().pointSize()==18 && editor->font().italic());
     assert(sibling->font().pointSize()==11 && !sibling->font().italic());
     assert(small->font().pointSize()==10 && small->font().weight()==400 && small->font().underline() && !small->font().italic());
@@ -1619,6 +1621,13 @@ End Sub
     assert(combo->count()==2 && combo->view()->font().pointSize()==12 && combo->view()->font().underline());
     assert(combo->lineEdit()->font().pointSize()==12 && combo->lineEdit()->font().underline());
     assert(QFontMetricsF(large->font()).horizontalAdvance("Sample")>QFontMetricsF(small->font()).horizontalAdvance("Sample")*2);
+    // Access captions are literal even when Qt would recognize rich text.
+    auto labelObject=root->objectMember("small",{}).object;
+    const auto labelFont=small->font();
+    labelObject->assign("Caption",VbaValue::string("<b>A &amp; B</b>\nnext"));
+    assert(small->textFormat()==Qt::PlainText && small->text()=="<b>A &amp; B</b>\nnext");
+    assert(labelObject->member("Caption",{}).asText()=="<b>A &amp; B</b>\nnext" && small->font()==labelFont && !form.hasUnsavedChanges());
+    labelObject->assign("Caption",VbaValue::string("Sample"));
     auto editorObject=root->objectMember("editor",{}).object;
     assert(editorObject->member("FontName",{}).asText()=="DejaVu Sans" && editorObject->member("FontSize",{}).asNumber()==18);
     assert(editorObject->member("FontWeight",{}).asNumber()==400 && !editorObject->member("FontBold",{}).truthy());

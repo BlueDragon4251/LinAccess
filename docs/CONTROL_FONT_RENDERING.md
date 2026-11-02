@@ -106,3 +106,12 @@ DEBs pass exact payload/backend/permissions/fixture-exclusion checks; isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass. These measurements follow the documented
 Bold/default-size/report-Print corrections above.
+
+## Literal label captions
+
+Native Label widgets explicitly use Qt PlainText. HTML-looking imported captions
+and runtime Caption assignments remain literal, including tags, entity syntax
+and line breaks, rather than invoking Qt's automatic rich-text detection. The
+existing native font/data regression covers both construction and the VBA object
+setter, preserving the configured font and clean data state. This does not add
+Access rich-text support or establish complete caption/mnemonic/visual parity.
