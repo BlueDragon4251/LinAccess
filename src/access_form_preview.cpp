@@ -234,7 +234,7 @@ QString textOf(QWidget* editor) {
     }
     return {};
 }
-void setText(QWidget* editor, const QString& text) {
+void setText(QWidget* editor, const QString& text,bool isNull=false) {
     if (auto* group=qobject_cast<QGroupBox*>(editor)) {
         group->setProperty("la_option_value",text);
         if (auto* buttons=group->findChild<QButtonGroup*>("access-options")) {
@@ -251,8 +251,9 @@ void setText(QWidget* editor, const QString& text) {
     else if (auto* checkbox = qobject_cast<QCheckBox*>(editor))
         checkbox->setChecked(text == "-1" || text == "1" || text.compare("true", Qt::CaseInsensitive) == 0);
     else if (auto* combo = qobject_cast<QComboBox*>(editor)) {
+        if(isNull) { combo->setCurrentIndex(-1); combo->setEditText({}); return; }
         if (combo->property("la_rows_loaded").toBool()) {
-            for (int i=0;i<combo->count();++i) if (combo->itemData(i).toString()==text) { combo->setCurrentIndex(i); return; }
+            for (int i=0;i<combo->count();++i) if (!combo->itemData(i).isNull() && combo->itemData(i).toString()==text) { combo->setCurrentIndex(i); return; }
             combo->setCurrentIndex(-1); combo->setEditText(text);
         } else combo->setCurrentText(text);
     }
@@ -1515,7 +1516,7 @@ void AccessFormPreview::loadRecord() {
             else type = "TEXT";
         }
         widget->setProperty("la_sql_type",type);
-        setText(widget,value.toString()); widget->setProperty("la_null",value.isNull());
+        setText(widget,value.toString(),value.isNull()); widget->setProperty("la_null",value.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
     }
     dirty_ = false; insertionStarted_=false; pendingControls_.clear(); editOriginals_.clear();
@@ -1545,7 +1546,7 @@ void AccessFormPreview::markDirty(const QString& name,bool userEdit) {
                 if (columnIndex(control.controlSource,dataColumns_) != boundColumn) continue;
                 auto* target = controls_.value(control.name.toCaseFolded()).data();
                 if (!target || target == sourceWidget) continue;
-                setText(target,textOf(sourceWidget)); target->setProperty("la_null",sourceWidget->property("la_null"));
+                setText(target,textOf(sourceWidget),sourceWidget->property("la_null").toBool()); target->setProperty("la_null",sourceWidget->property("la_null"));
             }
         }
     }
@@ -1790,7 +1791,7 @@ void AccessFormPreview::setField(std::string_view name, std::optional<std::strin
     const auto previous = textOf(widget);
     {
         QScopedValueRollback<bool> loading(loading_,true);
-        setText(widget,value ? QString::fromUtf8(value->data(),value->size()) : QString{});
+        setText(widget,value ? QString::fromUtf8(value->data(),value->size()) : QString{},!value);
         widget->setProperty("la_null",!value.has_value());
     }
     const auto assignedName=QString::fromUtf8(name.data(),name.size());
@@ -1870,7 +1871,7 @@ linaccess::VbaValue AccessFormPreview::calculatedControlValue(const QString& nam
             return remember(value);
         }
         const auto converted=linaccess::sqlFieldValue(value,"");
-        setText(widget,converted.toString()); widget->setProperty("la_null",converted.isNull());
+        setText(widget,converted.toString(),converted.isNull()); widget->setProperty("la_null",converted.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
         widget->setProperty("la_calculation_error",0);
         return remember(value);
@@ -1956,7 +1957,7 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
     const auto before = textOf(widget); const bool wasNull = widget->property("la_null").toBool();
     {
         QScopedValueRollback<bool> loading(loading_,true);
-        setText(widget,converted.toString()); widget->setProperty("la_null",converted.isNull());
+        setText(widget,converted.toString(),converted.isNull()); widget->setProperty("la_null",converted.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
     }
     if(initializingDefault) { refreshTextAlignments(); return; }
@@ -2077,7 +2078,7 @@ void AccessFormPreview::requeryControl(std::string_view name) {
         combo->setProperty("la_rows_error",0);
         if (editing) {
             combo->setCurrentIndex(-1); combo->setEditText(draft); combo->setProperty("la_null",false);
-        } else { setText(combo,old.toString()); combo->setProperty("la_null",old.isNull()); }
+        } else { setText(combo,old.toString(),old.isNull()); combo->setProperty("la_null",old.isNull()); }
         if (combo->isEditable()) combo->lineEdit()->setModified(editing);
         applyForeColor(combo,control);
         return;

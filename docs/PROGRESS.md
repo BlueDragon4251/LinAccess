@@ -1369,3 +1369,22 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. Repository privacy remains unchanged. Earlier
 project-shortcut commit c571fe6 completed private CI successfully.
+
+## 2026-11-02 — Native ComboBox list introspection
+
+Read-only ListIndex/ItemData expose actual selected indices and typed bound row
+values, including ordinal BoundColumn=0. GUI/VBA/SQL regressions cover lazy load,
+null/unmatched/empty selections, scalar-once/index conversions and errors,
+read-only properties, pending-buffer/report boundaries and removal/requery.
+The tests found and fixed NULL-to-empty-string matching in the shared widget
+setter across load, assignment, mirroring and requery. Native ListBox and exact
+Windows pending-buffer/error/subtype behavior remain open. Targeted trio: 3/3
+(40.11 s). No original business execution increment; see
+COMBO_LIST_PROPERTIES_RUNTIME.md.
+
+Final validation: host 22/22 (77.77 s), Debian 12 22/22 (74.25 s), Ubuntu
+24.04 22/22 (67.12 s), GUI-disabled core 1/1 (0.92 s). Fresh host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. Earlier window-cycle commit f09241c completed
+private CI successfully. Repository privacy remains unchanged.

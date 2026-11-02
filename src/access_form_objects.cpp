@@ -90,6 +90,26 @@ public:
             return linaccess::VbaValue::logical(key=="fontbold" ? font.weight()>=700 : key=="fontitalic" ? font.italic() : font.underline());
         }
 
+        if(key=="listindex" || key=="itemdata") {
+            auto* combo=listCombo();
+            if(key=="listindex") {
+                if(!args.empty()) throw linaccess::VbaRuntimeError(450,"ListIndex takes no arguments");
+                if(preview.layout_.kind!=linaccess::AccessDocumentKind::Form)
+                    throw linaccess::VbaRuntimeError(3251,"ListIndex requires native Form view");
+                if(combo->lineEdit() && combo->lineEdit()->isModified())
+                    throw linaccess::VbaRuntimeError(3251,"ListIndex during an uncommitted editable draft is not implemented");
+                if(!combo->property("la_rows_loaded").toBool()) preview.requeryControl(bytes(name_));
+                return linaccess::VbaValue::numeric(combo->currentIndex());
+            }
+            if(args.size()!=1) throw linaccess::VbaRuntimeError(450,"ItemData requires one row index");
+            const auto scalar=linaccess::scalarVbaValue(args[0]);
+            if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null ItemData index");
+            const auto index=linaccess::sqlFieldValue(scalar,"INTEGER").toLongLong();
+            if(index<-2147483648LL || index>2147483647LL) throw linaccess::VbaRuntimeError(6,"ItemData index Long overflow");
+            if(!combo->property("la_rows_loaded").toBool()) preview.requeryControl(bytes(name_));
+            if(index<0 || index>=combo->count()) throw linaccess::VbaRuntimeError(5,"ItemData row index out of range");
+            return linaccess::qtFieldValue(combo->itemData(static_cast<int>(index),Qt::UserRole));
+        }
         if (auto* combo=qobject_cast<QComboBox*>(widget);combo && key=="listcount") {
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected ListCount arguments");
             if (!combo->property("la_rows_loaded").toBool()) preview.requeryControl(bytes(name_));
@@ -231,6 +251,10 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if(key=="listindex" || key=="itemdata") {
+            (void)listCombo();
+            throw linaccess::VbaRuntimeError(383,"ComboBox list property is read-only");
+        }
         if (key=="defaultvalue") {
             auto& definition=defaultDefinition();
             const auto scalar=linaccess::scalarVbaValue(value);
@@ -426,6 +450,13 @@ public:
         throw linaccess::VbaRuntimeError(438,"Control property is unavailable or read-only");
     }
 private:
+    QComboBox* listCombo() const {
+        auto& preview=checked();
+        for(const auto& definition:preview.layout_.controls)
+            if(definition.name.compare(name_,Qt::CaseInsensitive)==0 && definition.type=="ComboBox")
+                if(auto* combo=qobject_cast<QComboBox*>(control())) return combo;
+        throw linaccess::VbaRuntimeError(438,"Control has no native ComboBox list adapter");
+    }
     linaccess::AccessVisualControl& defaultDefinition() const {
         if (checked().layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"DefaultValue requires a form control");
         for(auto& definition:checked().layout_.controls) if(definition.name.compare(name_,Qt::CaseInsensitive)==0) {

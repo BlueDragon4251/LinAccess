@@ -472,3 +472,8 @@ Full targets remain open:
 - [x] F9 real row-model refresh for focused native combo adapters, KeyPreview
   cancellation, draft/focus/dirty/SQL preservation, query-failure recovery and
   F4 popup/cancellation regression; full list-box/popup/Windows timing remains open.
+
+- [x] Bounded read-only native ComboBox ListIndex/ItemData over the actual typed
+  bound-column model, lazy loading, scalar/index/error/report/draft boundaries,
+  BoundColumn=0 and corrected NULL-vs-empty selection; ListBox/multi-selection
+  and exact Windows pending-buffer/error/subtype identity remain open.

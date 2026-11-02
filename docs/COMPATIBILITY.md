@@ -516,3 +516,11 @@ external SQL changes, preserved pending text/dirty/focus/bound IDs, failed refre
 and retry after source recovery. No record save is implied. The combo-backed
 ListBox adapter and full popup/Windows timing remain limited; see
 [Lookup keyboard](LOOKUP_KEYBOARD_RUNTIME.md).
+
+Native ComboBox.ListIndex and ItemData now expose the actual selected row and
+typed bound-column row data, including BoundColumn=0. Tests cover lazy loading,
+read-only/index/scalar errors, report/draft restrictions, row removal and requery
+without SQL changes. Typed NULL widget assignments now clear selection rather
+than accidentally selecting a NULL-key row; non-null empty text remains distinct.
+ListBox/multi-selection and full Windows timing/type/error parity remain open;
+see [Combo list properties](COMBO_LIST_PROPERTIES_RUNTIME.md).

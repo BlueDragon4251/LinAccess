@@ -18,6 +18,7 @@
 void testComboAutoPopup();
 void testCommandRequery();
 void testComboKeyboardRefresh();
+void testComboListProperties();
 
 void testDynamicCombos() {
     using linaccess::VbaValue;
@@ -77,6 +78,74 @@ End Sub
     testCommandRequery();
     testComboAutoPopup();
     testComboKeyboardRefresh();
+    testComboListProperties();
+}
+
+void testComboListProperties() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","combo-list-properties"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE choices(id INTEGER,label TEXT)"));
+    assert(sql.exec("INSERT INTO choices VALUES(10,'first'),(20,'second'),(NULL,'none'),(30,'')"));
+    assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,choice TEXT)")); assert(sql.exec("INSERT INTO records VALUES(1,10)"));
+    const QByteArray layout="Begin Form\nRecordSource =\"records\"\nBegin Section\nBegin ComboBox\nName =\"pick\"\nControlSource =\"choice\"\nRowSource =\"SELECT id,label FROM choices ORDER BY rowid\"\nColumnCount =2\nColumnWidths =\"0;1440\"\nEnd\nBegin TextBox\nName =\"plain\"\nEnd\nEnd\nEnd";
+    const QByteArray code="Sub Inspect()\nMe.Tag=CStr(Me.pick.ListIndex)&\":\"&CStr(Me.pick.ItemData(1))\nEnd Sub\nSub RejectWrite()\nMe.pick.ListIndex=1\nEnd Sub";
+    AccessFormPreview form("list properties",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form),pick=root->objectMember("pick",{}).object;
+    auto* combo=form.findChild<QComboBox*>("access-control-pick"); assert(combo && combo->count()==0);
+    assert(pick->member("ListIndex",{}).asNumber()==0 && combo->count()==4 && !form.hasUnsavedChanges());
+    std::vector<VbaValue> none; assert(form.executeProcedure("Inspect",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(root->member("Tag",{}).asText()=="0:20");
+    assert(pick->member("ItemData",{VbaValue::numeric(2)}).kind==VbaValue::Kind::Null);
+    assert(pick->member("ItemData",{VbaValue::empty()}).asNumber()==10);
+    assert(pick->member("ItemData",{VbaValue::numeric(0.5)}).asNumber()==10);
+    assert(pick->member("ItemData",{VbaValue::numeric(1.5)}).kind==VbaValue::Kind::Null);
+    assert(pick->member("ItemData",{VbaValue::string("1")}).asNumber()==20);
+    class Index final:public linaccess::VbaObject {
+    public:
+        int reads{};
+        VbaValue scalarValue() override { ++reads; return VbaValue::numeric(1); }
+        VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw linaccess::VbaRuntimeError(438,"No members"); }
+    };
+    auto index=std::make_shared<Index>(); assert(pick->member("ItemData",{VbaValue::reference(index)}).asNumber()==20 && index->reads==1);
+    const auto error=[&](const char* name,const std::vector<VbaValue>& args,int expected) {
+        int actual=0; try { pick->member(name,args); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; } assert(actual==expected);
+    };
+    error("ListIndex",{VbaValue::numeric(0)},450); error("ItemData",{},450);
+    error("ItemData",{VbaValue::numeric(0),VbaValue::numeric(1)},450);
+    error("ItemData",{VbaValue{}},94); error("ItemData",{VbaValue::string("bad")},13);
+    error("ItemData",{VbaValue::numeric(-1)},5); error("ItemData",{VbaValue::numeric(4)},5);
+    error("ItemData",{VbaValue::numeric(2147483648.0)},6);
+    for(const auto* name:{"ListIndex","ItemData"}) {
+        int actual=0; try { pick->assign(name,VbaValue::numeric(1)); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; } assert(actual==383);
+        actual=0; try { root->objectMember("plain",{}).object->member(name,{}); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; } assert(actual==438);
+    }
+    const auto rejected=form.executeProcedure("RejectWrite",none); assert(rejected.status==linaccess::VbaExecutionStatus::Error && rejected.errorNumber==383);
+    pick->assign("Value",VbaValue::numeric(20)); assert(pick->member("ListIndex",{}).asNumber()==1);
+    pick->assign("Value",VbaValue{}); assert(pick->member("ListIndex",{}).asNumber()==-1 && combo->currentText().isEmpty());
+    pick->assign("Value",VbaValue::numeric(999)); assert(pick->member("ListIndex",{}).asNumber()==-1);
+    pick->assign("Value",VbaValue::numeric(10)); root->member("Undo",{});
+    combo->lineEdit()->setFocus(); combo->lineEdit()->selectAll(); QTest::keyClicks(combo->lineEdit(),"pending");
+    error("ListIndex",{},3251); assert(pick->member("ItemData",{VbaValue::numeric(1)}).asNumber()==20 && combo->currentText()=="pending");
+    QTest::keyClick(combo->lineEdit(),Qt::Key_Escape); assert(!form.hasUnsavedChanges());
+    pick->assign("BoundColumn",VbaValue::numeric(2)); pick->assign("Value",VbaValue::string("second"));
+    assert(pick->member("ListIndex",{}).asNumber()==1 && pick->member("ItemData",{VbaValue::numeric(1)}).asText()=="second");
+    const auto empty=pick->member("ItemData",{VbaValue::numeric(3)}); assert(empty.kind==VbaValue::Kind::Text && empty.asText().empty());
+    pick->assign("Value",VbaValue::string("")); assert(pick->member("ListIndex",{}).asNumber()==3 && combo->currentText().isEmpty());
+    pick->assign("Value",VbaValue{}); assert(pick->member("ListIndex",{}).asNumber()==-1 && combo->currentText().isEmpty());
+    pick->assign("BoundColumn",VbaValue::numeric(0)); pick->assign("Value",VbaValue::numeric(1));
+    assert(pick->member("ListIndex",{}).asNumber()==1 && pick->member("ItemData",{VbaValue::numeric(1)}).asNumber()==1);
+    pick->assign("BoundColumn",VbaValue::numeric(1)); root->member("Undo",{});
+    assert(pick->member("ListIndex",{}).asNumber()==0 && !form.hasUnsavedChanges());
+    assert(sql.exec("DELETE FROM choices WHERE id=10")); pick->member("Requery",{});
+    assert(pick->member("ListIndex",{}).asNumber()==-1 && pick->member("ItemData",{VbaValue::numeric(0)}).asNumber()==20);
+    assert(sql.exec("SELECT choice FROM records WHERE id=1") && sql.next() && sql.value(0).toInt()==10); sql.finish();
+    assert(form.close());
+    auto reportLayout=layout; reportLayout.replace("Begin Form","Begin Report");
+    AccessFormPreview report("list report",reportLayout,{},db);
+    auto reportPick=makePreviewFormObject(report)->objectMember("pick",{}).object;
+    int actual=0; try { reportPick->member("ListIndex",{}); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; } assert(actual==3251);
+    assert(reportPick->member("ItemData",{VbaValue::numeric(0)}).asNumber()==20); assert(report.close());
 }
 
 void testComboKeyboardRefresh() {
