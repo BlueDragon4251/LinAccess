@@ -595,3 +595,8 @@ Checked Single/Double module/procedure values and native CSng now preserve float
 precision/type identity and reject overflow before effects. Actual SQL persistence
 regressions are documented in FLOATING_VALUES_RUNTIME.md. Single underflow/For,
 full numeric formatting, promotion, literals and Variant semantics remain open.
+
+Declared Currency VBA storage now retains exact four-decimal values and native
+conversion/reference checks. DAO can bind Currency as canonical decimal text to
+TEXT parameters, with a real SQL upper-bound regression. See CURRENCY_STORAGE_RUNTIME.md;
+full Jet Currency columns/SQL arithmetic, mixed promotion and loops remain open.

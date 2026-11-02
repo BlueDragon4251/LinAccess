@@ -1605,3 +1605,21 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubunt
 installations pass backend execution and GUI startup. All four fixture hashes
 pass; repository remains private. Previous 9bf6a90 and 449f17a private CI
 completed successfully.
+
+## 2026-11-02 — Checked Currency storage and exact DAO text transfer
+
+Added declared Currency module/procedure storage and exact checked conversions/
+defaults/results/references. The DAO value adapter preserves canonical Currency
+text instead of rejecting the kind or converting to Double. Actual native
+Qt/VBA/DAO tests persist 922337203685477.5807 through a TEXT parameter, verify SQL
+storage class, overflow preservation and no SQL effects after invalid arguments
+or references. Currency loops reject before effects. Targeted tests: 4/4
+(42.72 s). Full Jet Currency SQL/columns and mixed promotion remain open.
+No original business execution increment. See CURRENCY_STORAGE_RUNTIME.md.
+
+Full validation: host 22/22 (77.08 s), Debian 12 22/22 (79.40 s), Ubuntu
+24.04 22/22 (70.83 s), GUI-disabled core 1/1 (1.07 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass; repository remains private. Previous a8db286 private CI was still
+running at this checkpoint; no success is assumed.

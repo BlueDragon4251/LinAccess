@@ -529,3 +529,7 @@ Full targets remain open:
 - [x] Checked Single/Double module/procedure storage, native CSng and conversion
   dispatch, type identity, float rounding/overflow and actual DAO persistence;
   Single underflow/For, full formatting/promotion/Variant/locale semantics open.
+
+- [x] Declared Currency fields/locals/parameters/results/defaults, exact checked
+  conversion/reference paths and real DAO decimal TEXT transfer at the upper
+  boundary; full Jet Currency columns/SQL, mixed promotion and loops remain open.

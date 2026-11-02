@@ -82,6 +82,7 @@ QVariant toSql(const VbaValue& value) {
     case VbaValue::Kind::Null: return {};
     case VbaValue::Kind::Empty: return QString{};
     case VbaValue::Kind::Number: return value.number;
+    case VbaValue::Kind::Currency: return text(value.asText());
     case VbaValue::Kind::Boolean: return value.boolean ? -1 : 0;
     case VbaValue::Kind::Text: return text(value.text);
     default: throw std::runtime_error("DAO: Object cannot be stored in a field");

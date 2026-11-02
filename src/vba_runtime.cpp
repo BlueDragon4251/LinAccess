@@ -1,5 +1,6 @@
 #include "vba_runtime.hpp"
 #include "vba_expression.hpp"
+#include "vba_currency.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -310,7 +311,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex call(R"(^Call\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\((.*)\))?$)", std::regex::icase);
     const std::regex implicitCall(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+(.+)|\((.*)\))?$)", std::regex::icase);
     const std::regex memberCall(R"(^((?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)(?:[.!][A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)+)\s+(.+)$)",std::regex::icase);
-    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database|DAO\.TableDef|DAO\.TableDefs|DAO\.Workspace|DAO\.Workspaces|DAO\.DBEngine))?$)", std::regex::icase);
+    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(Integer|Long|String|Boolean|Double|Single|Currency|Variant|Object|DAO\.Recordset|DAO\.Database|DAO\.TableDef|DAO\.TableDefs|DAO\.Workspace|DAO\.Workspaces|DAO\.DBEngine))?$)", std::regex::icase);
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
     const std::regex objectSet(R"(^Set\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
     const std::regex label(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*):$)");
@@ -371,7 +372,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 within = true;
                 isFunction = lower(match[1].str()) == "function";
                 const auto declaredResult=lower(match[4].str());
-                if (isFunction && !declaredResult.empty() && declaredResult!="variant" && declaredResult!="boolean" && declaredResult!="string" && declaredResult!="integer" && declaredResult!="long" && declaredResult!="single" && declaredResult!="double" && declaredResult!="byte" && declaredResult!="object")
+                if (isFunction && !declaredResult.empty() && declaredResult!="variant" && declaredResult!="boolean" && declaredResult!="string" && declaredResult!="integer" && declaredResult!="long" && declaredResult!="single" && declaredResult!="double" && declaredResult!="currency" && declaredResult!="byte" && declaredResult!="object")
                     return {VbaExecutionStatus::Unsupported,"Function result type unsupported",line};
                 if (resultType) *resultType=declaredResult;
             } else if (std::regex_match(source, match, anyBegin)
@@ -697,7 +698,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 if (!type.empty() && type != "variant" && type != "object" && type != "dao.database" && type != "dao.workspace" && type != "dao.workspaces" && type != "dao.dbengine"
                     && type != "control" && type != "form" && type != "access.control" && type != "access.form"
                     && type != "dao.tabledef" && type != "dao.tabledefs" && type != "dao.recordset" && type != "dao.field" && type != "dao.fields" && type != "dao.querydef" && type != "dao.parameter" && type != "string" && type != "boolean"
-                    && type != "integer" && type != "long" && type != "single" && type != "double"
+                    && type != "integer" && type != "long" && type != "single" && type != "double" && type != "currency"
                     && type != "byte") return {VbaExecutionStatus::Unsupported, "Variablentyp: " + type, line};
                 statements.push_back({Statement::Type::Dim, declared[1].str(), type, line});
             }
@@ -760,10 +761,10 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
             std::smatch field;
             if (!std::regex_match(entry,field,variable)) throw VbaRuntimeError(3251,"Module declaration unsupported");
             const auto name=lower(field[1].str()),type=lower(field[2].str());
-            if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && type!="integer" && type!="long" && type!="single" && type!="double")
+            if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency")
                 throw VbaRuntimeError(3251,"Module field type unsupported");
             if (state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
-            state->values.emplace(name,type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : type=="single" ? VbaValue::single(0) : type=="double" ? VbaValue::numeric(0) : VbaValue::empty());
+            state->values.emplace(name,type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : type=="single" ? VbaValue::single(0) : type=="double" ? VbaValue::numeric(0) : type=="currency" ? VbaValue::currency(0) : VbaValue::empty());
             state->types.emplace(name,type);
             if (visibility=="public" || visibility=="global") state->publicVariables.insert(name);
         }
@@ -784,6 +785,7 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
         if (value.kind==VbaValue::Kind::Boolean) return VbaValue::string(value.boolean ? "True" : "False");
         return VbaValue::string(value.asText());
     }
+    if (type=="currency") return convertCurrency(value);
     if (type=="boolean") {
         if (value.kind==VbaValue::Kind::Text) {
             const auto text=lower(trim(value.text));
@@ -850,6 +852,7 @@ VbaValue initialLocalValue(const std::string& type) {
     if (type=="integer") return VbaValue::integer(0);
     if (type=="long") return VbaValue::longInteger(0);
     if (type=="single") return VbaValue::single(0);
+    if (type=="currency") return VbaValue::currency(0);
     if (!type.empty() && type!="variant") return VbaValue::numeric(0);
     return VbaValue::empty();
 }
@@ -918,7 +921,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     VbaVariables locals;
     std::unordered_map<std::string,std::string> localTypes;
     const auto integralType=[](std::string_view type) { return type=="integer" || type=="long"; };
-    const auto checkedType=[&](std::string_view type) { return integralType(type) || type=="boolean" || type=="string" || type=="single" || type=="double"; };
+    const auto checkedType=[&](std::string_view type) { return integralType(type) || type=="boolean" || type=="string" || type=="single" || type=="double" || type=="currency"; };
     const auto scalarType=[&](std::string_view type) { return checkedType(type) || type=="byte"; };
     const auto objectType=[](std::string_view type) { return type=="object" || type=="control" || type=="form" || type.starts_with("dao.") || type.starts_with("access."); };
     auto errorState = std::make_shared<ErrorObject>();
@@ -1001,7 +1004,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     for(const auto& instruction:instructions) {
         const auto type=variableType(lower(instruction.argument));
         if(((instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet) && scalarType(type))
-            || (instruction.type==Statement::Type::For && (type=="boolean" || type=="string" || type=="single" || objectType(type)))) {
+            || (instruction.type==Statement::Type::For && (type=="boolean" || type=="string" || type=="single" || type=="currency" || objectType(type)))) {
             VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Declared variable type is unsupported for this loop/object target",instruction.line}; failure.errorNumber=3251; return failure;
         }
     }

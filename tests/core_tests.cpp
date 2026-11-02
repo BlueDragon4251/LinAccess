@@ -1516,6 +1516,28 @@ End Sub
         const auto value=evaluate(text);
         assert(value.kind==VbaValue::Kind::Currency && value.asText()==expected);
     };
+    const std::string typedCurrencyModule=R"VBA(Private amount As Currency
+Public balance As Currency
+Function TypedCurrency(ByVal input As Currency) As Currency
+Dim localAmount As Currency
+localAmount=input
+amount=localAmount
+balance=localAmount
+TypedCurrency=localAmount+CCur("0.0001")
+End Function
+Function DefaultCurrency() As Currency
+Dim untouched As Currency
+DefaultCurrency=untouched
+End Function
+)VBA";
+    assert(host.moduleState(typedCurrencyModule)->values.at("amount").kind==VbaValue::Kind::Currency);
+    assert(host.moduleState(typedCurrencyModule)->values.at("amount").currencyUnits==0);
+    std::vector<VbaValue> typedCurrencyArgs{VbaValue::string("922337203685477.5806")};
+    auto typedCurrencyResult=executeVbaProcedureWithArguments(typedCurrencyModule,"TypedCurrency",host,typedCurrencyArgs);
+    assert(typedCurrencyResult.status==VbaExecutionStatus::Completed && typedCurrencyResult.typedReturnValue->kind==VbaValue::Kind::Currency && typedCurrencyResult.typedReturnValue->currencyUnits==std::numeric_limits<std::int64_t>::max());
+    assert(typedCurrencyArgs[0].kind==VbaValue::Kind::Text);
+    typedCurrencyResult=executeVbaProcedure(typedCurrencyModule,"DefaultCurrency",host);
+    assert(typedCurrencyResult.status==VbaExecutionStatus::Completed && typedCurrencyResult.typedReturnValue->kind==VbaValue::Kind::Currency && typedCurrencyResult.typedReturnValue->currencyUnits==0);
     currencyCheck("CCur(\"922337203685477.5807\")","922337203685477.5807");
     currencyCheck("CCur(\"-922337203685477.5808\")","-922337203685477.5808");
     currencyCheck("CCur(\"1.23445\")","1.2344");

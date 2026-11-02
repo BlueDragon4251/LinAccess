@@ -17,6 +17,7 @@ void testNumericModuleStates();
 void testNumericProcedureValues();
 void testScalarProcedureValues();
 void testFloatingProcedureValues();
+void testCurrencyProcedureValues();
 
 void testModuleStates(const QDir& directory,const QJsonArray& objects) {
     QByteArray globals;
@@ -111,6 +112,7 @@ void testModuleStates(const QDir& directory,const QJsonArray& objects) {
     testNumericProcedureValues();
     testScalarProcedureValues();
     testFloatingProcedureValues();
+    testCurrencyProcedureValues();
 }
 
 void testNumericModuleStates() {
@@ -408,5 +410,87 @@ End Sub
     result=form.executeProcedure("DoubleLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->number==3 && result.typedReturnValue->numericType==VbaValue::NumericType::Double);
     result=form.executeProcedure("SingleLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Unsupported && result.errorNumber==3251);
     assert(sql.exec("SELECT COUNT(*) FROM floating_events") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+    assert(form.close());
+}
+
+void testCurrencyProcedureValues() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","currency-procedure-values"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    assert(sql.exec("CREATE TABLE currency_values(amount TEXT)"));
+    assert(sql.exec("CREATE TABLE currency_events(kind TEXT)"));
+    const QByteArray code=R"VBA(Private stored As Currency
+Public exposed As Currency
+Function ReadCurrency() As Currency
+ReadCurrency=stored
+End Function
+Function SaveCurrency(ByVal input As Currency) As Currency
+Dim amount As Currency
+Dim definition As DAO.QueryDef
+amount=input+CCur("0.0001")
+stored=amount
+exposed=amount
+Set definition=CurrentDb.CreateQueryDef("", "PARAMETERS p TEXT; INSERT INTO currency_values VALUES([p])")
+definition.Parameters("p").Value=amount
+definition.Execute
+SaveCurrency=amount
+End Function
+Function OverflowCurrency() As String
+On Error Resume Next
+stored=stored+CCur("0.0001")
+OverflowCurrency=CStr(Err.Number)&":"&TypeName(stored)
+End Function
+Sub AcceptCurrency(ByRef value As Currency)
+CurrentDb.Execute "INSERT INTO currency_events VALUES('entered')"
+value=value+CCur("0.0001")
+End Sub
+Function Mismatch() As String
+Dim wide As Double
+wide=1
+On Error Resume Next
+Call AcceptCurrency(wide)
+Mismatch=CStr(Err.Number)&":"&TypeName(wide)
+End Function
+Function Matching() As Currency
+Dim amount As Currency
+amount=CCur("1")
+Call AcceptCurrency(amount)
+Matching=amount
+End Function
+Function Temporary() As String
+Dim wide As Double
+wide=1
+Call AcceptCurrency((wide))
+Temporary=TypeName(wide)&":"&CStr(wide)
+End Function
+Sub CurrencyLoop()
+Dim counter As Currency
+CurrentDb.Execute "INSERT INTO currency_events VALUES('unsupported loop')"
+For counter=0 To 1
+Next counter
+End Sub
+)VBA";
+    AccessFormPreview form("currency procedure","Begin Form\nEnd",code,db);
+    auto root=makePreviewFormObject(form);
+    assert(root->member("exposed",{}).kind==VbaValue::Kind::Currency && root->member("exposed",{}).currencyUnits==0);
+    std::vector<VbaValue> args;
+    auto result=form.executeProcedure("ReadCurrency",args);
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Currency && result.typedReturnValue->currencyUnits==0);
+    args={VbaValue::string("922337203685477.5806")}; result=form.executeProcedure("SaveCurrency",args);
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Currency && result.typedReturnValue->asText()=="922337203685477.5807" && args[0].kind==VbaValue::Kind::Text);
+    assert(sql.exec("SELECT amount,typeof(amount) FROM currency_values") && sql.next() && sql.value(0).toString()=="922337203685477.5807" && sql.value(1).toString()=="text"); sql.finish();
+    for(const auto& bad:std::vector<std::pair<VbaValue,int>>{{VbaValue{},94},{VbaValue::errorValue(11),13},{VbaValue::string("922337203685477.5808"),6}}) {
+        args={bad.first}; result=form.executeProcedure("SaveCurrency",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==bad.second);
+    }
+    assert(sql.exec("SELECT COUNT(*) FROM currency_values") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    args.clear(); result=form.executeProcedure("OverflowCurrency",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="6:Currency");
+    result=form.executeProcedure("ReadCurrency",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="922337203685477.5807");
+    root->assign("exposed",VbaValue::string("1.23445")); assert(root->member("exposed",{}).kind==VbaValue::Kind::Currency && root->member("exposed",{}).asText()=="1.2344");
+    result=form.executeProcedure("Mismatch",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="13:Double");
+    assert(sql.exec("SELECT COUNT(*) FROM currency_events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
+    result=form.executeProcedure("Matching",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Currency && result.typedReturnValue->currencyUnits==10001);
+    result=form.executeProcedure("Temporary",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="Double:1");
+    result=form.executeProcedure("CurrencyLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Unsupported && result.errorNumber==3251);
+    assert(sql.exec("SELECT COUNT(*) FROM currency_events") && sql.next() && sql.value(0).toInt()==2); sql.finish();
     assert(form.close());
 }

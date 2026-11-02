@@ -34,3 +34,6 @@ Targeted tests: 4/4 (42.76 s). Full validation is in PROGRESS.md.
 Original application execution coverage is unchanged.
 
 Reference: https://learn.microsoft.com/en-us/office/vba/language/concepts/getting-started/type-conversion-functions
+
+Declared Currency storage and exact DAO decimal text transfer are documented in
+CURRENCY_STORAGE_RUNTIME.md; this does not establish full SQL Currency parity.
