@@ -2467,3 +2467,12 @@ original fixture SHA-256 checks passed. Full GUI/package/distribution validation
 was not repeated for this segment; the last full result belongs to e799b2f.
 No new CTest target and no repeated distribution matrix for this segment.
 Full Access array semantics remain open; see VARIANT_ARRAY_RUNTIME.md.
+
+## Variant array resizing (2026-11-02)
+
+Added one-dimensional Variant ReDim, ReDim Preserve and Erase. Actual procedures
+exercise negative lower bounds, growth/shrinkage, Empty initialization, unchanged
+copies, rejected lower-bound changes and release/reallocation. The existing core
+and DAO targets pass (2/2, 1.27 s); no new target or distribution-matrix repetition.
+Explicit allocation limit: 1,000,000 elements (3251 beyond it). Typed declarations,
+multidimensional arrays, array enumeration and indexed ByRef binding remain open.

@@ -719,3 +719,6 @@ Full targets remain open:
 - [x] Native one-dimensional Variant Array construction, Option Base, checked
   indexing/element replacement, bounds/type inspection and whole-array value/
   ByRef/ByVal semantics with real VBA-to-DAO persistence; full arrays remain open.
+
+- [x] One-dimensional Variant ReDim/Preserve/Erase, Option Base and negative
+  lower bounds, grow/shrink/value-copy preservation; typed/full array parity open.

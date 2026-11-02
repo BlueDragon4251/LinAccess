@@ -1,5 +1,6 @@
 #include "vba_array.hpp"
 #include <limits>
+#include <algorithm>
 namespace linaccess {
 namespace {
 // Immutable storage gives Variant assignment value semantics, including nested arrays.
@@ -27,9 +28,26 @@ std::size_t offset(const VbaValue& value,const std::vector<VbaValue>& indices) {
 }
 bool isVbaArray(const VbaValue& value) { return value.kind==VbaValue::Kind::Array || value.kind==VbaValue::Kind::ByteArray; }
 VbaValue makeVbaArray(std::vector<VbaValue> values,int lowerBound) {
-    if(lowerBound<0 || lowerBound>1 || values.size()>static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) throw VbaRuntimeError(6,"Array size overflow");
+    if(values.size()>static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()) || static_cast<std::int64_t>(lowerBound)+static_cast<std::int64_t>(values.size())-1>std::numeric_limits<std::int32_t>::max()) throw VbaRuntimeError(6,"Array size overflow");
     VbaValue value; value.kind=VbaValue::Kind::Array;
     value.object=std::make_shared<ArrayStorage>(std::move(values),lowerBound); return value;
+}
+VbaValue resizeVbaArray(const VbaValue& value,int lowerBound,int upperBound,bool preserve) {
+    if(value.kind==VbaValue::Kind::ByteArray) throw VbaRuntimeError(3251,"ReDim of Byte arrays is not implemented");
+    const auto count=static_cast<std::int64_t>(upperBound)-lowerBound+1;
+    if(count<=0) throw VbaRuntimeError(9,"Invalid array bounds");
+    // Bound native allocation until interpreter-wide memory accounting exists.
+    if(count>1000000) throw VbaRuntimeError(3251,"Array allocation exceeds the supported runtime limit");
+    if(preserve && value.kind!=VbaValue::Kind::Empty && value.kind!=VbaValue::Kind::Array)
+        throw VbaRuntimeError(13,"Preserve requires an array or uninitialized Variant");
+    if(preserve && value.kind==VbaValue::Kind::Array && storage(value).lower!=lowerBound)
+        throw VbaRuntimeError(9,"Preserve cannot change the lower bound");
+    std::vector<VbaValue> values(static_cast<std::size_t>(count),VbaValue::empty());
+    if(preserve && value.kind==VbaValue::Kind::Array) {
+        const auto& previous=storage(value).values;
+        std::copy_n(previous.begin(),std::min(previous.size(),values.size()),values.begin());
+    }
+    return makeVbaArray(std::move(values),lowerBound);
 }
 VbaValue vbaArrayBound(const VbaValue& value,bool upper) {
     if(!isVbaArray(value)) throw VbaRuntimeError(13,"Array required");

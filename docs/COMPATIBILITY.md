@@ -863,5 +863,6 @@ and full Jet/Windows semantics remain open. See
 
 One-dimensional `Array()` values now support Option Base 0/1, bounds, indexed
 reads/writes, type inspection and whole-array ByRef/ByVal/value copies.
-See [precise boundaries](VARIANT_ARRAY_RUNTIME.md). Declarations, ReDim,
+One-dimensional Variant `ReDim`/`ReDim Preserve` and `Erase` are also implemented.
+See [precise boundaries](VARIANT_ARRAY_RUNTIME.md). Typed declarations,
 multidimensional arrays and array For Each remain unsupported.

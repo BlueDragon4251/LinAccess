@@ -2220,5 +2220,33 @@ End Sub
     if(arrays.status!=VbaExecutionStatus::Completed) std::cerr<<"Array error="<<arrays.errorNumber<<" line="<<arrays.line<<"\n";
     assert(arrays.status==VbaExecutionStatus::Completed);
     assert(host.fields["ArrayResult"]=="42:10:62" && host.fields["ArrayError"]=="9");
+    const auto resized=executeVbaProcedure(R"VBA(Option Base 1
+Sub ResizeVariants()
+Dim a As Variant, copy As Variant
+ReDim a(-2 To 0)
+a(-2)=7
+a(0)=9
+copy=a
+ReDim Preserve a(-2 To 2)
+Me!Grown=CStr(a(-2)) & ":" & CStr(a(0)) & ":" & TypeName(a(2))
+ReDim Preserve a(-2 To -1)
+Me!Shrunk=CStr(UBound(a)) & ":" & CStr(copy(0))
+On Error Resume Next
+ReDim Preserve a(-1 To 3)
+Me!ResizeError=CStr(Err.Number)
+On Error GoTo 0
+ReDim a(2)
+Me!Reset=CStr(LBound(a)) & ":" & TypeName(a(1))
+Erase a
+Me!Erased=TypeName(a)
+ReDim Preserve a(3)
+Me!Reallocated=CStr(UBound(a))
+End Sub
+)VBA","ResizeVariants",host);
+    if(resized.status!=VbaExecutionStatus::Completed) std::cerr<<"Resize error="<<resized.errorNumber<<" line="<<resized.line<<"\n";
+    assert(resized.status==VbaExecutionStatus::Completed);
+    assert(host.fields["Grown"]=="7:9:Empty" && host.fields["Shrunk"]=="-1:9");
+    assert(host.fields["ResizeError"]=="9" && host.fields["Reset"]=="1:Empty");
+    assert(host.fields["Erased"]=="Empty" && host.fields["Reallocated"]=="3");
     std::cout << "Core tests passed\n";
 }

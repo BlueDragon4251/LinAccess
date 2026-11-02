@@ -21,7 +21,7 @@ struct Statement {
     enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
-                      Call, SetField, IndexedAssign, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, ErrorResumeNext, ErrorDisable, Label, Jump, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
+                      Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, ErrorResumeNext, ErrorDisable, Label, Jump, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
     std::string argument;
     std::string expression;
     int line{};
@@ -694,6 +694,25 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             if(indices.size()!=1 || !validExpression(indices[0]) || !validExpression(assignment->second))
                 return {VbaExecutionStatus::Unsupported,"Array assignment syntax unsupported",line};
             statements.push_back({Statement::Type::IndexedAssign,target.name,assignment->second,line,indices[0]});
+        } else if (lower(source).starts_with("redim ") || lower(source).starts_with("redim\t")) {
+            auto declaration=trim(source.substr(5));
+            bool preserve=false;
+            if(lower(declaration).starts_with("preserve ") || lower(declaration).starts_with("preserve\t")) {
+                preserve=true; declaration=trim(declaration.substr(8));
+            }
+            const auto target=memberTarget(declaration);
+            if(!target || !target->arguments || splitArguments(*target->arguments).size()!=1)
+                return {VbaExecutionStatus::Unsupported,"Only one-dimensional Variant ReDim is implemented",line};
+            const auto range=outsideKeyword(*target->arguments,"to");
+            const auto lowerBound=range==std::string::npos ? std::string{} : trim(target->arguments->substr(0,range));
+            const auto upperBound=range==std::string::npos ? *target->arguments : trim(target->arguments->substr(range+2));
+            if((!lowerBound.empty() && !validExpression(lowerBound)) || !validExpression(upperBound))
+                return {VbaExecutionStatus::Unsupported,"Invalid ReDim bounds",line};
+            statements.push_back({Statement::Type::ResizeArray,target->name,upperBound,line,lowerBound,preserve ? "preserve" : ""});
+        } else if (lower(source).starts_with("erase ") || lower(source).starts_with("erase\t")) {
+            const auto target=memberTarget(trim(source.substr(5)));
+            if(!target || target->arguments) return {VbaExecutionStatus::Unsupported,"Only a single Variant array Erase is implemented",line};
+            statements.push_back({Statement::Type::EraseArray,target->name,{},line});
         } else if (std::regex_match(source, match, dim)) {
             std::istringstream declarations(match[1].str());
             std::string entry;
@@ -1373,6 +1392,27 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     withFrames.resize(withFrames.size()-instruction.withUnwind);
                     loops.resize(loops.size()-instruction.forUnwind);
                     active=true; ip=static_cast<std::size_t>(instruction.partner);
+                }
+                break;
+            case Statement::Type::ResizeArray:
+                if(active) {
+                    const auto name=lower(instruction.argument),type=variableType(name);
+                    if(!type.empty() && type!="variant") throw VbaRuntimeError(13,"ReDim requires a Variant variable");
+                    const auto lowerBound=instruction.endExpression.empty() ? arrayBase : static_cast<int>(coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.endExpression)),"long").number);
+                    const auto upperBound=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.expression)),"long").number);
+                    refreshAliases();
+                    const auto found=locals.find(name);
+                    const auto original=found==locals.end() ? VbaValue::empty() : found->second;
+                    assignVariable(name,resizeVbaArray(original,lowerBound,upperBound,instruction.stepExpression=="preserve"));
+                }
+                break;
+            case Statement::Type::EraseArray:
+                if(active) {
+                    const auto name=lower(instruction.argument);
+                    const auto found=locals.find(name);
+                    if(found==locals.end() || !isVbaArray(found->second)) throw VbaRuntimeError(13,"Erase requires an array");
+                    if(found->second.kind!=VbaValue::Kind::Array) throw VbaRuntimeError(3251,"Byte array Erase is not implemented");
+                    assignVariable(name,VbaValue::empty());
                 }
                 break;
             case Statement::Type::IndexedAssign:

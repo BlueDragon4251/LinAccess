@@ -1,6 +1,7 @@
 #pragma once
 #include "vba_expression.hpp"
 namespace linaccess {
+VbaValue resizeVbaArray(const VbaValue& value,int lowerBound,int upperBound,bool preserve);
 bool isVbaArray(const VbaValue& value);
 VbaValue makeVbaArray(std::vector<VbaValue> values,int lowerBound=0);
 VbaValue vbaArrayBound(const VbaValue& value,bool upper);
