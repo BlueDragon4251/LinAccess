@@ -486,3 +486,11 @@ Screen references; default database-window Close/SendKeys reject as unsupported
 rather than editing the last form. Native SQL/focus/error/early-Current checks
 pass through the actual main-window integration. Full MDI/keyboard/WM/error
 identity remains open; see [Database window](DATABASE_WINDOW_RUNTIME.md).
+
+DoCmd.SelectObject now selects real table/query/form/report explorer items or
+already-open native Form/Report windows, including hidden restoration and
+optional-name group selection. Imported source objects use their corresponding
+kind groups; identities use stored metadata. Actual GUI/VBA/SQL tests prove
+validation cancellation, unsaved-record preservation, modal/error boundaries
+and explicit duplicate-name rejection. Open table/query window activation and
+macro/module targets remain unsupported; see [SelectObject](SELECT_OBJECT_RUNTIME.md).

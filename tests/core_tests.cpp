@@ -1368,6 +1368,7 @@ End Sub
     for(int index=0;index<16;++index) assert(evaluate(("QBColor("+std::to_string(index)+")").c_str()).asNumber()==legacyColors[index]);
     assert(evaluate("QBColor(7.5)").asNumber()==0x808080 && evaluate("QBColor(Empty)").asNumber()==0);
     assert(evaluate("QBColor(\"12\")").asNumber()==255);
+    assert(evaluate("acTable").asNumber()==0 && evaluate("acQuery").asNumber()==1 && evaluate("acModule").asNumber()==5);
     substringError("QBColor(Null)",94); substringError("QBColor(\"bad\")",13);
     substringError("QBColor(-1)",5); substringError("QBColor(16)",5);
     substringError("QBColor()",450); substringError("QBColor(1,2)",450);

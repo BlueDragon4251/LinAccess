@@ -16,6 +16,7 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
     Q_INVOKABLE void focusDatabaseWindow();
+    Q_INVOKABLE int selectDatabaseObject(int objectType,const QString& name,bool activate);
 
 private:
     bool eventFilter(QObject* watched,QEvent* event) override;

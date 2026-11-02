@@ -931,7 +931,7 @@ public:
     explicit PreviewDoCmdObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
-        if (key=="domenuitem" || key=="runcommand" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="runsql")
+        if (key=="domenuitem" || key=="runcommand" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="runsql" || key=="selectobject")
             return dispatchPreviewDocumentCommand(preview,key.toStdString(),args);
         if (key=="gotocontrol") {
             if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"GoToControl requires a control name");

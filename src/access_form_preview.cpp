@@ -455,6 +455,43 @@ public:
     void deleteCurrentRecord() { commandDocument().deleteCurrentRecord(); }
     void copyCurrentRecord() { commandDocument().copyCurrentRecord(); }
     void pasteAppendRecord() { commandDocument().pasteAppendRecord(); }
+    void selectObject(int type,const QString& name,bool inDatabase) {
+        if(type<0 || type>3) throw linaccess::VbaRuntimeError(3251,"SelectObject object type is not implemented");
+        if(!inDatabase && name.isEmpty()) throw linaccess::VbaRuntimeError(450,"SelectObject requires an open object name");
+        QWidget* owner=nullptr;
+        if(inDatabase) for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+            if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+        const auto selectDatabase=[&](bool activate) {
+            int error=0;
+            if(!owner || !QMetaObject::invokeMethod(owner,"selectDatabaseObject",Qt::DirectConnection,Q_RETURN_ARG(int,error),Q_ARG(int,type),Q_ARG(QString,name),Q_ARG(bool,activate)))
+                throw linaccess::VbaRuntimeError(3251,"Native database-window selection is unavailable");
+            if(error) throw linaccess::VbaRuntimeError(error,"Database object selection failed");
+        };
+        QPointer<AccessFormPreview> selected;
+        if(inDatabase) selectDatabase(false);
+        else {
+            if(type!=2 && type!=3) throw linaccess::VbaRuntimeError(3251,"Open table/query window selection is not implemented");
+            for(auto* widget:QApplication::topLevelWidgets()) {
+                auto* candidate=dynamic_cast<AccessFormPreview*>(widget);
+                if(!candidate || !candidate->isWindow() || !candidate->opened_ || candidate->closed_ || candidate->openCancelled_
+                    || (candidate->layout_.kind==linaccess::AccessDocumentKind::Form ? 2 : 3)!=type
+                    || candidate->db_.connectionName()!=preview_.db_.connectionName() || candidate->db_.databaseName()!=preview_.db_.databaseName()
+                    || candidate->formName_.compare(name,Qt::CaseInsensitive)!=0) continue;
+                if(selected) throw linaccess::VbaRuntimeError(5,"SelectObject target is ambiguous"); selected=candidate;
+            }
+            if(!selected) throw linaccess::VbaRuntimeError(type==3 ? 2451 : 2450,"SelectObject target is not open");
+            if(QApplication::activeModalWidget() && QApplication::activeModalWidget()!=selected)
+                throw linaccess::VbaRuntimeError(2046,"SelectObject is blocked by a modal window");
+        }
+        auto* current=activePreviewDocument();
+        if(current && current!=selected && !current->closed_ && !current->openCancelled_
+            && current->db_.connectionName()==preview_.db_.connectionName() && current->db_.databaseName()==preview_.db_.databaseName()
+            && !current->commitControls()) throw linaccess::VbaRuntimeError(2501,"SelectObject control validation cancelled");
+        if(inDatabase) { selectDatabase(true); return; }
+        if(!selected || selected->closed_ || selected->closing_) throw linaccess::VbaRuntimeError(2501,"SelectObject target closed during validation");
+        if(selected->isMinimized()) selected->showNormal(); else selected->show();
+        selected->raise(); selected->activateWindow(); selected->activateDocument();
+    }
     void quitApplication() override { AccessFormPreview::quitApplication(); }
     void maximizeForm() override { commandDocument().window()->showMaximized(); }
     void gotoRecord(int action,int offset=1,const QString& name={}) {
@@ -599,6 +636,12 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         return static_cast<int>(result);
     };
     PreviewVbaHost host(preview);
+    if(command=="selectobject") {
+        if(args.empty() || args.size()>3 || args[0].kind==VbaValue::Kind::Empty) throw VbaRuntimeError(450,"SelectObject argument count invalid");
+        const auto name=args.size()>1 && args[1].kind!=VbaValue::Kind::Empty ? QString::fromStdString(args[1].asText()) : QString{};
+        const bool inDatabase=args.size()>2 && args[2].kind!=VbaValue::Kind::Empty ? linaccess::coerceVbaModuleValue(args[2],"boolean").boolean : false;
+        host.selectObject(number(args[0]),name,inDatabase); return {};
+    }
     if (command=="domenuitem") {
         if (args.size()<3 || args.size()>5) throw VbaRuntimeError(450,"DoMenuItem argument count invalid");
         for (std::size_t i=0;i<3;++i) if (args[i].kind==VbaValue::Kind::Empty) throw VbaRuntimeError(450,"DoMenuItem required argument omitted");

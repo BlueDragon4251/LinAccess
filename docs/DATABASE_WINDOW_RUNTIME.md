@@ -59,4 +59,5 @@ references. No extra original business execution is claimed.
 Tests use Qt offscreen. Real window-manager stacking, complete MDI/database-window
 commands, popup/menu/IME focus, every shortcut and exact Access error/order
 identity remain open. This does not implement schema-object deletion, database-
-window SendKeys, default database-window Close, SelectObject or Alt+F11/VBE.
+window SendKeys, default database-window Close or Alt+F11/VBE. Bounded
+SelectObject support is now documented in SELECT_OBJECT_RUNTIME.md.

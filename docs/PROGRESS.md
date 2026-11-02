@@ -1294,3 +1294,26 @@ pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass. Earlier main-window document commit
 da225b8 completed private CI successfully.
+
+## 2026-11-02 — Native SelectObject and object grouping
+
+SelectObject now uses actual project-tree metadata for table/query/form/report
+selection and native open Form/Report activation. Imported source queries, forms
+and reports join their corresponding groups, preserving source status/details.
+Optional empty names choose groups; case-insensitive/scalar identities resolve
+once, with explicit errors for missing or ambiguous targets instead of guessed
+aliases. Control validation and modal blocking preflight selection; dirty form
+records do not save merely on object selection. Real GUI/VBA/SQL regressions
+include a saved query artifact, hidden-form restoration, two-window activation,
+input cancellation, scalar access and intentional source/user-name collision.
+Targeted core/GUI/layout/original-heavy set: 4/4 (41.01 s). Original 32-module
+SelectObject lexical inventory is zero, so original business coverage is
+unchanged. Open table/query window and macro/module targets remain unsupported;
+see SELECT_OBJECT_RUNTIME.md for scope and public contract.
+
+Final validation: host 22/22 (82.81 s), Debian 12 22/22 (72.48 s), Ubuntu
+24.04 22/22 (65.76 s), GUI-disabled core 1/1 (1.24 s). Fresh host/distro DEBs
+pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
+installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+All four original fixture hashes pass. Earlier F11/context commit 6967113
+completed private CI successfully.

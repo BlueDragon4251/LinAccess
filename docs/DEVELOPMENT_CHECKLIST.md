@@ -453,3 +453,8 @@ Full targets remain open:
   KeyPreview/control cancellation, modal blocking, logical database-window
   context, stale-form command guards, explicit-owner saving and Screen/
   activation/early-Current regression through the actual main-window GUI.
+
+- [x] Bounded native DoCmd.SelectObject for real table/query/form/report explorer
+  targets and open native forms/reports, metadata grouping/identity, hidden
+  restoration, omitted names, scalar preflight, validation/modal/error and
+  unsaved SQL preservation; other open-window/object kinds remain unsupported.

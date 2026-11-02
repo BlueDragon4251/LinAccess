@@ -35,6 +35,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMap>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPrinter>
@@ -209,6 +210,32 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     statusBar()->showMessage("Neue SQLite-Datenbank erstellen oder Access-Datei untersuchen");
 }
 
+int MainWindow::selectDatabaseObject(int objectType,const QString& name,bool activate) {
+    if(!db_.isOpen()) return 3078;
+    const QStringList kinds{"table","query","form","report"};
+    if(objectType<0 || objectType>=kinds.size()) return 3251;
+    const auto locate=[&](int& error) -> QTreeWidgetItem* {
+        QTreeWidgetItem* target=nullptr;
+        const std::function<void(QTreeWidgetItem*)> visit=[&](QTreeWidgetItem* item) {
+            if(item->data(0,Qt::UserRole+2).toString()==kinds[objectType]
+                && (name.isEmpty() ? item->data(0,Qt::UserRole+4).toBool()
+                    : !item->data(0,Qt::UserRole+4).toBool() && item->data(0,Qt::UserRole+3).toString().compare(name,Qt::CaseInsensitive)==0)) {
+                if(target) error=5; else target=item;
+            }
+            for(int index=0;index<item->childCount();++index) visit(item->child(index));
+        };
+        for(int index=0;index<explorer_->topLevelItemCount();++index) visit(explorer_->topLevelItem(index));
+        if(!target && !error) error=7874;
+        return target;
+    };
+    int error=0; auto* target=locate(error); if(error) return error;
+    if(QApplication::activeModalWidget()) return 2046;
+    if(!activate) return 0;
+    focusDatabaseWindow(); if(!AccessFormPreview::databaseWindowActive(this)) return 2501;
+    target=locate(error); if(error) return error;
+    explorer_->setCurrentItem(target); explorer_->scrollToItem(target); return 0;
+}
+
 void MainWindow::focusDatabaseWindow() {
     if(!db_.isOpen() || QApplication::activeModalWidget()) return;
     AccessFormPreview::activateDatabaseWindow(db_,this);
@@ -356,11 +383,14 @@ bool MainWindow::saveObject(const QString& kind, const QString& name, const QJso
 void MainWindow::refreshExplorer() {
     explorer_->clear();
     if (!db_.isOpen()) return;
-    const auto group = [this](const QString& label, const QString& kind, const QStringList& names) {
+    QMap<QString,QTreeWidgetItem*> groups;
+    const auto group = [this,&groups](const QString& label, const QString& kind, const QStringList& names) {
         auto* parent = new QTreeWidgetItem(explorer_, {label});
+        groups.insert(kind,parent); parent->setData(0,Qt::UserRole+2,kind); parent->setData(0,Qt::UserRole+4,true);
         for (const auto& name : names) {
             auto* item = new QTreeWidgetItem(parent, {name});
             item->setData(0, Qt::UserRole, kind);
+            item->setData(0,Qt::UserRole+2,kind); item->setData(0,Qt::UserRole+3,name);
         }
         parent->setExpanded(true);
     };
@@ -371,13 +401,16 @@ void MainWindow::refreshExplorer() {
     QSqlQuery artifacts(db_);
     if (artifacts.exec("SELECT id,kind,name,status FROM _la_access_artifacts "
                        "ORDER BY kind,name COLLATE NOCASE")) {
-        auto* accessGroup = new QTreeWidgetItem(explorer_, {"Access-Quellobjekte (nicht ausführbar)"});
+        auto* accessGroup = new QTreeWidgetItem(explorer_, {"Weitere Access-Quellobjekte"});
         while (artifacts.next()) {
-            auto* item = new QTreeWidgetItem(accessGroup, {
+            const auto kind=artifacts.value(1).toString();
+            const bool selectable=kind=="form" || kind=="report" || kind=="query";
+            auto* item = new QTreeWidgetItem(selectable ? groups.value(kind) : accessGroup, {
                 artifacts.value(1).toString() + ": " + artifacts.value(2).toString()
                 + " [" + artifacts.value(3).toString() + "]"});
             item->setData(0, Qt::UserRole, "access_artifact");
             item->setData(0, Qt::UserRole + 1, artifacts.value(0).toInt());
+            if(selectable) { item->setData(0,Qt::UserRole+2,kind); item->setData(0,Qt::UserRole+3,artifacts.value(2).toString()); }
         }
         accessGroup->setExpanded(true);
     }
