@@ -3,6 +3,8 @@
 #include "dao_database.hpp"
 #include "access_table_import.hpp"
 #include "csv.hpp"
+#include "vba_currency.hpp"
+#include <QRegularExpression>
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -59,7 +61,7 @@ int main(int argc, char** argv) {
     int trueBooleans = 0;
     int typedBooleans = 0;
     int longColumns=0,typedLongValues=0;
-    int currencyColumns=0,doubleColumns=0;
+    int currencyColumns=0,doubleColumns=0,typedCurrencyValues=0;
     int formattedDates = 0;
     int counters=0,nativeCounters=0,counterProbes=0,managedProbes=0;
     QStringList failures;
@@ -76,6 +78,43 @@ int main(int argc, char** argv) {
                 if(column.sourceType=="DOUBLE") ++doubleColumns;
             }
             linaccess::importAccessTable(db, source, table, schema, rows);
+            {
+                std::vector<int> indices;
+                for(int i=0;i<schema.columns.size();++i) if(schema.columns[i].sourceType=="CURRENCY") indices.push_back(i);
+                if(!indices.empty()) {
+                    const auto money=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{linaccess::VbaValue::string(table.toStdString())}).object;
+                    std::vector<std::shared_ptr<linaccess::VbaObject>> fields;
+                    for(const auto i:indices) {
+                        const auto field=money->member("Fields",{linaccess::VbaValue::string(schema.columns[i].name.toStdString())}).object;
+                        assert(field->member("Type",{}).number==5); fields.push_back(field);
+                    }
+                    QMap<QByteArray,int> actual,reference;
+                    while(!money->member("EOF",{}).truthy()) {
+                        QJsonArray values;
+                        for(const auto& field:fields) {
+                            const auto value=field->member("Value",{});
+                            if(value.kind==linaccess::VbaValue::Kind::Null) values.append(QJsonValue::Null);
+                            else { assert(value.kind==linaccess::VbaValue::Kind::Currency); values.append(QString::number(value.currencyUnits)); ++typedCurrencyValues; }
+                        }
+                        ++actual[QJsonDocument(values).toJson(QJsonDocument::Compact)]; money->member("MoveNext",{});
+                    }
+                    money->member("Close",{});
+                    const QRegularExpression decimal("^[+-]?[0-9]+(?:\\.[0-9]{1,4})?$");
+                    for(std::size_t row=1;row<rows.size();++row) {
+                        QJsonArray values;
+                        for(const auto i:indices) {
+                            const auto& cell=rows[row][i];
+                            if(!cell.quoted && cell.value=="\x1e") values.append(QJsonValue::Null);
+                            else {
+                                assert(decimal.match(QString::fromStdString(cell.value)).hasMatch());
+                                values.append(QString::number(linaccess::convertCurrency(linaccess::VbaValue::string(cell.value)).currencyUnits));
+                            }
+                        }
+                        ++reference[QJsonDocument(values).toJson(QJsonDocument::Compact)];
+                    }
+                    assert(actual==reference);
+                }
+            }
             int primaryCount=0;
             for (const auto& column:schema.columns) if (column.primaryKeyOrder) ++primaryCount;
             for (const auto& column:schema.columns) if (column.autoNumber) {
@@ -244,8 +283,8 @@ End Function
     std::cout << "Original date columns formatted through native SQL: " << formattedDates << '\n';
     assert(tables.size() == 29);
     assert(imported == 29 && failures.empty());
-    assert(currencyColumns==43 && doubleColumns==57);
-    std::cout<<"Original Currency column metadata: "<<currencyColumns<<", Double columns: "<<doubleColumns<<'\n';
+    assert(currencyColumns==43 && doubleColumns==57 && typedCurrencyValues>0);
+    std::cout<<"Original Currency column metadata: "<<currencyColumns<<", Double columns: "<<doubleColumns<<", typed Currency non-NULL values: "<<typedCurrencyValues<<'\n';
     assert(longColumns==127 && typedLongValues>0);
     std::cout<<"Original Long columns: "<<longColumns<<", typed non-NULL field values: "<<typedLongValues<<'\n';
     assert(counters==21 && nativeCounters==16 && counterProbes==1 && managedProbes==1);

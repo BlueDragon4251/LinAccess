@@ -68,6 +68,39 @@ VbaValue convertCurrency(const VbaValue& value) {
         throw VbaRuntimeError(6,"Currency overflow");
     return VbaValue::currency(static_cast<std::int64_t>(rounded));
 }
+VbaValue currencyFromRealStorage(double value) {
+    static_assert(std::numeric_limits<double>::is_iec559 && std::numeric_limits<double>::digits==53);
+    if(!std::isfinite(value)) throw VbaRuntimeError(13,"Currency REAL storage is not finite");
+    if(std::abs(value)>=549755813888.0) throw VbaRuntimeError(3251,"Currency REAL storage outside the lossless supported range");
+    if(value==0) return VbaValue::currency(0);
+    int exponent=0;
+    const auto fraction=std::frexp(std::abs(value),&exponent);
+    // value*10000 = (53-bit mantissa * 625) / 2^(49-exponent).
+    // The product fits 63 bits. Below 2^39 every four-decimal tick has
+    // a distinct binary64 encoding; use integer rounding, not double scaling.
+    const auto product=static_cast<std::uint64_t>(std::ldexp(fraction,53))*625ULL;
+    const int shift=49-exponent; // At least 10 after the range check.
+    std::uint64_t units=0;
+    if(shift<64) {
+        units=product>>shift;
+        const auto remainder=product&((1ULL<<shift)-1),half=1ULL<<(shift-1);
+        if(remainder>half || (remainder==half && (units&1))) ++units;
+    }
+    const auto signedUnits=std::signbit(value) ? -static_cast<std::int64_t>(units) : static_cast<std::int64_t>(units);
+    if(static_cast<double>(signedUnits)/10000.0!=value)
+        throw VbaRuntimeError(13,"Currency REAL storage is not a canonical four-decimal value");
+    return VbaValue::currency(signedUnits);
+}
+double currencyToRealStorage(const VbaValue& value) {
+    const auto exact=convertCurrency(scalarVbaValue(value));
+    constexpr std::int64_t limit=5497558138880000LL;
+    if(exact.currencyUnits<=-limit || exact.currencyUnits>=limit)
+        throw VbaRuntimeError(3251,"Currency REAL storage outside the lossless supported range");
+    const auto encoded=static_cast<double>(exact.currencyUnits)/10000.0;
+    if(currencyFromRealStorage(encoded).currencyUnits!=exact.currencyUnits)
+        throw VbaRuntimeError(3251,"Currency cannot round trip through REAL storage");
+    return encoded;
+}
 VbaValue currencyBinary(std::string_view op,const VbaValue& left,const VbaValue& right) {
     const __int128 a=left.currencyUnits,b=right.currencyUnits;
     if (op=="+") return checked(a+b);

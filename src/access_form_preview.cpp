@@ -1572,7 +1572,7 @@ void AccessFormPreview::loadRecord() {
             else type = "TEXT";
         }
         widget->setProperty("la_sql_type",type);
-        setText(widget,value.toString(),value.isNull()); widget->setProperty("la_null",value.isNull());
+        setText(widget,qobject_cast<QLineEdit*>(widget) ? linaccess::qtFieldText(value,type) : value.toString(),value.isNull()); widget->setProperty("la_null",value.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
     }
     dirty_ = false; insertionStarted_=false; pendingControls_.clear(); editOriginals_.clear();
@@ -2039,7 +2039,7 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
     const auto before = textOf(widget); const bool wasNull = widget->property("la_null").toBool();
     {
         QScopedValueRollback<bool> loading(loading_,true);
-        setText(widget,converted.toString(),converted.isNull()); widget->setProperty("la_null",converted.isNull());
+        setText(widget,qobject_cast<QLineEdit*>(widget) ? linaccess::qtFieldText(converted,type) : converted.toString(),converted.isNull()); widget->setProperty("la_null",converted.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
     }
     if(initializingDefault) { refreshTextAlignments(); return; }
@@ -2541,7 +2541,7 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
             if(column<0 || row<0 || row>=recordRows_.size()) throw linaccess::VbaRuntimeError(2046,"No previous bound field is available");
             const auto value=recordRows_[row][column];
             if(value.metaType().id()==QMetaType::QByteArray) throw linaccess::VbaRuntimeError(3251,"Copying binary fields is not implemented");
-            const auto text=value.toString(); const bool null=value.isNull();
+            const auto text=linaccess::qtFieldText(value,dataTypes_.value(dataColumns_[column].toCaseFolded())); const bool null=value.isNull();
             if(text.size()>line->maxLength()) throw linaccess::VbaRuntimeError(3251,"Previous field exceeds the native editor capacity");
             if(line->text()==text && line->property("la_null").toBool()==null) return true;
             const auto name=selected->name,binding=selected->onChange;

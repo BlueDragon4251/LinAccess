@@ -2065,3 +2065,25 @@ exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 8dba067 private CI completed successfully. Initial distribution failures were
 resolved by handling older MDBTools' additional Double-to-FLOAT mapping.
+
+## 2026-11-02 — Bounded native Currency fields
+
+Reproduced Double field values despite verified Currency metadata (0/1). Added
+checked binary64-to-int64 Currency tick recovery, bounded strictly inside +/-2^39,
+canonical round-trip validation, DAO dbCurrency and exact native text formatting.
+Core decimal-reference/boundary/10000-value tests and original layout/Kassa-DAO/
+Currency-column regressions pass (4/4 in the initial targeted run). All 121613
+non-NULL original Currency field values match independent CSV decimal row/NULL
+multisets across 43 columns. Corrected actual Qt/VBA/DAO/SQL test passes 1/1
+(0.09 s), including fixed arithmetic/types, pending/save, range checks, DAO
+Edit/Update, large display/OldValue/Undo and copy/new-row without SQL insertion.
+GUI suite has 38 CTests. Full-range/SQL money/parameters/query subtype/locale/
+Windows semantics remain open; no full original business workflow increment.
+See CURRENCY_FIELDS_RUNTIME.md.
+
+Full validation: host 38/38 (128.74 s), Debian 12 38/38 (103.69 s), Ubuntu
+24.04 38/38 (87.32 s), Debian 13 38/38 (91.35 s), GUI-disabled core 1/1
+(2.09 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+03704c9 private CI completed successfully.

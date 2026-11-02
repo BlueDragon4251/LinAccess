@@ -530,7 +530,7 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
     if(lower(name)=="type") {
         if(!args.empty()) throw VbaRuntimeError(450,"Field.Type requires no arguments");
         const auto type=owner_->fieldType(name_).toUpper();
-        const int code=type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : 0;
+        const int code=type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : type=="CURRENCY_REAL" ? 5 : 0;
         if(!code) throw VbaRuntimeError(3251,"Field.Type is not available for this source type");
         return VbaValue::integer(static_cast<std::int16_t>(code));
     }

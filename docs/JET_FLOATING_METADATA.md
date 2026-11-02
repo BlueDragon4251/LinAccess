@@ -22,7 +22,9 @@ prefixes, unusual names, conflicts and persisted metadata. Targeted import/origi
 tests pass 2/2 (7.81 s). GUI suite remains 37 CTests; full validation is recorded
 in PROGRESS.md.
 
-This is source-type metadata recovery. SQLite REAL storage, existing floating
+The metadata change itself is source-type recovery. Subsequent
+[bounded Currency field recovery](CURRENCY_FIELDS_RUNTIME.md) adds lossless
+native direct-field values within its explicit REAL-backing interval. SQLite REAL storage, existing floating
 CSV conversion and generic numeric field adapters are deliberately not relabeled
 as exact Currency/Single execution. Exact decimal import/storage, Currency SQL
 operators/aggregation/sorting/coercion, Single round trips, numeric precision/

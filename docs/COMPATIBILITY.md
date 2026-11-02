@@ -736,3 +736,11 @@ original columns are identified; conflicting/missing mappings diagnose
 before import. SQLite REAL conversion/storage and native numeric/SQL precision
 are not made exact by this metadata recovery; existing projects are not migrated.
 See [JET_FLOATING_METADATA.md](JET_FLOATING_METADATA.md).
+
+Verified direct-table Currency fields now expose fixed Currency values and
+Field.Type=dbCurrency through a checked lossless REAL encoding strictly inside
++/-2^39. Native text load/assignment/copy preserve exact four-decimal units.
+All 121613 original non-NULL Currency field values match independent CSV decimal
+row/NULL multisets. Qt/VBA/DAO tests cover pending/save/OldValue/Undo/range checks.
+Full-range/SQL operators/parameters/query subtype/locale/Windows money identity
+remain open. See [CURRENCY_FIELDS_RUNTIME.md](CURRENCY_FIELDS_RUNTIME.md).

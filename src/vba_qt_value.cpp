@@ -1,4 +1,5 @@
 #include "vba_qt_value.hpp"
+#include "vba_currency.hpp"
 #include <QJsonArray>
 #include <QDateTime>
 #include <QJsonDocument>
@@ -21,6 +22,11 @@ QMap<QString,QString> sqliteColumnTypes(QSqlDatabase db,const QString& table) {
             const auto source = column["source_type"].toString();
             if (source == "BOOLEAN" || source == "BIT") types[column["name"].toString().toCaseFolded()] = "BOOLEAN";
             else if (source == "DATETIME" || source == "DATE") types[column["name"].toString().toCaseFolded()] = "DATETIME";
+            else if(source=="CURRENCY") {
+                const auto name=column["name"].toString().toCaseFolded();
+                if(types.value(name)!="REAL") throw VbaRuntimeError(3251,"Currency source requires the supported REAL backing");
+                types[name]="CURRENCY_REAL";
+            }
             else if (source == "TINYINT") types[column["name"].toString().toCaseFolded()] = "INTEGER1";
             else if (source == "SMALLINT") types[column["name"].toString().toCaseFolded()] = "INTEGER2";
             else if (source == "INT") types[column["name"].toString().toCaseFolded()] = "INTEGER4";
@@ -64,6 +70,16 @@ bool boolean(const QVariant& value) {
 VbaValue qtFieldValue(const QVariant& value,const QString& type) {
     if (value.isNull()) return {};
     if ((integerType(type) || realType(type) || type.contains("BOOL",Qt::CaseInsensitive)) && value.toString().isEmpty()) return {};
+    if(type=="CURRENCY_REAL") {
+        if(value.metaType().id()==QMetaType::QString) {
+            const auto exact=convertCurrency(VbaValue::string(value.toString().toUtf8().toStdString()));
+            (void)currencyToRealStorage(exact); return exact;
+        }
+        if(value.metaType().id()==QMetaType::QByteArray) throw VbaRuntimeError(13,"Binary Currency field storage is unsupported");
+        bool valid=false; const auto number=value.toDouble(&valid);
+        if(!valid) throw VbaRuntimeError(13,"Currency field type mismatch");
+        return currencyFromRealStorage(number);
+    }
     if (type.contains("DATE",Qt::CaseInsensitive)) return VbaValue::string(dateText(value).toUtf8().toStdString());
     if (type.contains("BOOL",Qt::CaseInsensitive) || value.metaType().id() == QMetaType::Bool)
         return VbaValue::logical(boolean(value));
@@ -94,8 +110,13 @@ VbaValue qtFieldValue(const QVariant& value,const QString& type) {
     if (value.metaType().id() == QMetaType::QByteArray) throw VbaRuntimeError(13,"Binary Variant not implemented");
     return VbaValue::string(value.toString().toUtf8().toStdString());
 }
+QString qtFieldText(const QVariant& value,const QString& type) {
+    if(value.isNull()) return {};
+    return type=="CURRENCY_REAL" ? QString::fromStdString(qtFieldValue(value,type).asText()) : value.toString();
+}
 QVariant sqlFieldValue(const VbaValue& value,const QString& type) {
     if (value.kind == VbaValue::Kind::Null) return {};
+    if(type=="CURRENCY_REAL") return currencyToRealStorage(value);
     if (type.contains("DATE",Qt::CaseInsensitive)) {
         if (value.kind != VbaValue::Kind::Text) throw VbaRuntimeError(13,"Date serial Variant conversion not implemented");
         return dateText(QString::fromUtf8(value.text));

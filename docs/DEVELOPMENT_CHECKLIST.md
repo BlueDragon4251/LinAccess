@@ -629,3 +629,7 @@ Full targets remain open:
 - [x] Preserve Currency/Single/Double source labels from MDBTools Access schema on new
   imports, checked ambiguous mappings and persisted metadata; original 43 Currency/
   57 Double columns verified. Exact money/Single storage/SQL/runtime semantics remain open.
+
+- [x] Bounded native direct-table Currency fields/dbCurrency with lossless REAL
+  encoding inside +/-2^39, exact Qt text/DAO/pending/save/OldValue/Undo/copy and
+  independent 121613 original values; full-range/SQL/query/Windows money remains open.

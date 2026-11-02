@@ -1,4 +1,6 @@
 #include "csv.hpp"
+#include "vba_currency.hpp"
+#include <charconv>
 #include "vba_analyzer.hpp"
 #include "vba_runtime.hpp"
 #include "vba_expression.hpp"
@@ -275,6 +277,34 @@ void testCharacterFunctions() {
     }
 }
 
+void testCurrencyRealStorage() {
+    using namespace linaccess;
+    constexpr std::int64_t limit=5497558138880000LL;
+    const auto check=[](std::int64_t units) {
+        const auto exact=VbaValue::currency(units); const auto text=exact.asText();
+        double reference=0; const auto parsed=std::from_chars(text.data(),text.data()+text.size(),reference);
+        assert(parsed.ec==std::errc{} && parsed.ptr==text.data()+text.size());
+        assert(currencyToRealStorage(exact)==reference && currencyFromRealStorage(reference).currencyUnits==units);
+    };
+    for(const auto units:std::vector<std::int64_t>{0,1,-1,9999,-9999,10000,-10000,12345,-12345,limit-1,-limit+1}) check(units);
+    for(int power=0;power<53;++power) for(int offset=-3;offset<=3;++offset) {
+        const auto units=(std::int64_t(1)<<power)+offset;
+        if(units>=0 && units<limit) { check(units); check(-units); }
+    }
+    std::uint64_t state=1234567;
+    for(int i=0;i<10000;++i) { state=state*6364136223846793005ULL+1442695040888963407ULL; const auto units=static_cast<std::int64_t>(state%static_cast<std::uint64_t>(limit)); check(i%2 ? units : -units); }
+    assert(currencyToRealStorage(VbaValue::string("1.23455"))==1.2346);
+    assert(currencyToRealStorage(VbaValue::empty())==0 && currencyToRealStorage(VbaValue::logical(true))==-1);
+    const auto probe=std::make_shared<ScalarProbe>(); probe->value=VbaValue::currency(12345);
+    assert(currencyToRealStorage(VbaValue::reference(probe))==1.2345 && probe->reads==1);
+    for(const auto& [value,expected]:std::vector<std::pair<double,int>>{{0.1+0.2,13},{1.234567,13},{0.00005,13},{std::numeric_limits<double>::denorm_min(),13},{549755813888.0,3251},{-549755813888.0,3251},{std::numeric_limits<double>::infinity(),13},{std::numeric_limits<double>::quiet_NaN(),13}}) {
+        int error=0; try { (void)currencyFromRealStorage(value); } catch(const VbaRuntimeError& failure) { error=failure.number; } assert(error==expected);
+    }
+    for(const auto& [value,expected]:std::vector<std::pair<VbaValue,int>>{{VbaValue::currency(limit),3251},{VbaValue::currency(-limit),3251},{VbaValue::currency(std::numeric_limits<std::int64_t>::max()),3251},{VbaValue::currency(std::numeric_limits<std::int64_t>::min()),3251},{VbaValue{},94},{VbaValue::errorValue(11),13},{VbaValue::reference(nullptr),91}}) {
+        int error=0; try { (void)currencyToRealStorage(value); } catch(const VbaRuntimeError& failure) { error=failure.number; } assert(error==expected);
+    }
+}
+
 void testIsObjectFunction() {
     using namespace linaccess;
     FakeForm host;
@@ -382,6 +412,7 @@ void testRoundFunction() {
 }
 
 int main() {
+    testCurrencyRealStorage();
     testIsObjectFunction();
     testStringResultTypes();
     testReplaceFunction();
