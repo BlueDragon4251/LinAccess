@@ -553,3 +553,7 @@ Full targets remain open:
 - [x] Native Fix/Sgn and checked Abs/Int null/subtype/overflow behavior, exact
   Currency truncation and actual Qt/VBA/SQL calculated-control regressions; full
   Variant/Byte/Date/locale/promotion/SQL function semantics remain open.
+
+- [x] Native Ctrl+apostrophe previous-record TextBox value replacement through
+  real edit/validation/undo events, typed NULL/empty, safe guards and SendKeys/
+  Qt/SQL tests; exact Access edit-mode selection and other adapters remain open.

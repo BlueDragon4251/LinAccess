@@ -1711,3 +1711,21 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubunt
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass; repository remains private. Previous cefe109 private CI completed
 successfully.
+
+## 2026-11-02 — Native previous-field copy shortcut
+
+Added bounded Ctrl+apostrophe field-value replacement for writable native bound
+TextBoxes through existing user buffers/events/validation/undo, preserving NULL/
+empty and preventing implicit record save. A new fixture-independent Qt/VBA/SQL
+CTest covers Unicode, KeyPreview, cancelled/retried validation event ordering,
+read-only/capacity/binary guards, new-row/no-INSERT/undo and SendKeys delivery.
+Targeted test passes 1/1 (0.26 s); GUI suite now has 24 CTests. Exact Access
+edit-mode selection, other adapters and complete keyboard parity remain open.
+No business execution increment. See COPY_PREVIOUS_FIELD_RUNTIME.md.
+
+Full validation: host 24/24 (73.74 s), Debian 12 24/24 (78.93 s), Ubuntu
+24.04 24/24 (71.67 s), GUI-disabled core 1/1 (0.96 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass; repository remains private. Previous a374198 private CI completed
+successfully.

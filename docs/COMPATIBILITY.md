@@ -624,3 +624,8 @@ edge semantics remain open.
 Native Fix/Sgn and corrected Abs/Int now cover documented null behavior, known
 subtypes and exact Currency truncation with real Qt/VBA/SQL regressions. See
 NUMERIC_FUNCTIONS_RUNTIME.md; full type/locale/promotion and SQL rewriting remain open.
+
+Native Ctrl+apostrophe copies the previous displayed record field into writable
+TextBox edit buffers with actual Qt/VBA/SQL and SendKeys regressions. See
+COPY_PREVIOUS_FIELD_RUNTIME.md; exact Access selection/insertion modes, other
+adapters and complete keyboard parity remain open.

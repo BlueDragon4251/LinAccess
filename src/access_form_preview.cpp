@@ -2362,6 +2362,41 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
         if (event->key()==Qt::Key_C && modifiers==Qt::ControlModifier && recordSelected_) {
             (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(190)}); return true;
         }
+        if (event->key()==Qt::Key_Apostrophe && modifiers==Qt::ControlModifier) {
+            ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+            auto* line=qobject_cast<QLineEdit*>(QApplication::focusWidget());
+            const linaccess::AccessVisualControl* selected=nullptr;
+            for(const auto& control:layout_.controls)
+                if(line && controls_.value(control.name.toCaseFolded())==line) { selected=&control; break; }
+            if(!selected || selected->type!="TextBox" || layout_.kind!=linaccess::AccessDocumentKind::Form
+                || !directTable_ || !dataSourceAvailable_ || line->isReadOnly() || !line->isEnabled())
+                throw linaccess::VbaRuntimeError(2046,"Copying the previous field is unavailable");
+            if(auto* modal=QApplication::activeModalWidget(); modal && modal!=window() && !modal->isAncestorOf(line)) return true;
+            ensureWritableControl(selected->name.toStdString());
+            const auto column=columnIndex(selected->controlSource,dataColumns_);
+            const auto row=currentRecordIndex_>0 ? currentRecordIndex_-2 : recordRows_.size()-1;
+            if(column<0 || row<0 || row>=recordRows_.size()) throw linaccess::VbaRuntimeError(2046,"No previous bound field is available");
+            const auto value=recordRows_[row][column];
+            if(value.metaType().id()==QMetaType::QByteArray) throw linaccess::VbaRuntimeError(3251,"Copying binary fields is not implemented");
+            const auto text=value.toString(); const bool null=value.isNull();
+            if(text.size()>line->maxLength()) throw linaccess::VbaRuntimeError(3251,"Previous field exceeds the native editor capacity");
+            if(line->text()==text && line->property("la_null").toBool()==null) return true;
+            const auto name=selected->name,binding=selected->onChange;
+            rememberControlEdit(line);
+            if(!editOriginals_.contains(name)) throw linaccess::VbaRuntimeError(3251,"Current field value cannot be buffered safely");
+            clearDefaultError(line);
+            bufferedTextControls_.insert(name); pendingControls_.insert(name);
+            {
+                QScopedValueRollback<bool> loading(loading_,true);
+                setText(line,text,null); line->setProperty("la_null",null);
+                line->setProperty("la_vba_kind",static_cast<int>(null ? linaccess::VbaValue::Kind::Null : linaccess::VbaValue::Kind::Text));
+            }
+            markDirty(name,true);
+            if(closed_ || openCancelled_ || line->property("la_insert_rejected").toBool()) return true;
+            refreshCalculatedControls();
+            if(!binding.isEmpty()) (void)runControlBinding(name,"Change",binding);
+            return true;
+        }
         if (event->key()==Qt::Key_Delete && modifiers==Qt::NoModifier && recordSelected_) {
             (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(223)}); return true;
         }
