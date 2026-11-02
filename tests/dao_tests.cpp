@@ -122,8 +122,36 @@ End Sub
         assert(sql.exec("SELECT flag FROM flags") && sql.next() && sql.value(0).isNull()); sql.finish();
     }
 }
+void testIntegerConversionDao() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","integer-conversion"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE integer_values(narrow INTEGER,wide INTEGER)"));
+    Host host(db);
+    const auto result=linaccess::executeVbaProcedure(R"VBA(Sub SaveIntegers()
+Dim definition As DAO.QueryDef
+Dim narrow As Integer
+Dim wide As Long
+Dim copy As Variant
+narrow=CInt(2.5)
+wide=CLng(40000.5)
+copy=narrow
+Me!StoredTypes=TypeName(narrow)&":"&TypeName(wide)&":"&CStr(VarType(copy))
+Set definition=CurrentDb.CreateQueryDef("", "PARAMETERS a INTEGER,b LONG; INSERT INTO integer_values VALUES([a],[b])")
+definition.Parameters("a").Value=narrow
+definition.Parameters("b").Value=wide
+definition.Execute
+On Error Resume Next
+narrow=CInt(32767.5)
+Me!IntegerOverflow=CStr(Err.Number)&":"&CStr(narrow)&":"&TypeName(narrow)
+End Sub
+)VBA","SaveIntegers",host);
+    assert(result.status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["StoredTypes"]=="Integer:Long:2" && host.fields["IntegerOverflow"]=="6:2:Integer");
+    assert(sql.exec("SELECT narrow,wide FROM integer_values") && sql.next());
+    assert(sql.value(0).toInt()==2 && sql.value(1).toInt()==40000 && !sql.next()); sql.finish();
+}
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testIntegerConversionDao();
     testBooleanQueryParameters();
     testDaoCursors();
     testDaoTransactions();

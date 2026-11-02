@@ -521,3 +521,7 @@ Full targets remain open:
 - [x] Native VBA CBool with Boolean kind/type identity, Empty/numeric/Currency/
   text/object conversion, strict argument/error checks and actual DAO persistence;
   full locale/Date/SQL conversion and other numeric conversion functions open.
+
+- [x] Integer/Long value tags for checked fields/locals/parameters/results/defaults,
+  Variant copies, native CInt/tagged CLng, VarType/TypeName and VbVarType constants
+  with actual DAO persistence; full literal/arithmetic/Variant-storage/Len semantics open.

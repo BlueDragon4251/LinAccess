@@ -801,6 +801,8 @@ Shadow=small
 End Function
 )VBA";
         FakeForm first,second;
+        assert(first.moduleState(module)->values.at("small").numericType==VbaValue::NumericType::Integer);
+        assert(first.moduleState(module)->values.at("wide").numericType==VbaValue::NumericType::Long);
         assert(executeVbaProcedure(module,"RoundValues",first).status==VbaExecutionStatus::Completed && first.fields["Rounded"]=="2:-4");
         auto result=executeVbaProcedure(module,"StepWide",first); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==39996);
         result=executeVbaProcedure(module,"StepWide",second); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==40000);
@@ -1576,6 +1578,14 @@ End Sub
     assert(evaluate("CBool(\" 2.5 \")").boolean && !evaluate("CBool(\" 0 \")").boolean);
     assert(evaluate("CBool(CCur(\"0.0001\"))").boolean);
     assert(evaluate("VarType(CBool(1))").asNumber()==11 && evaluate("TypeName(CBool(0))").asText()=="Boolean");
+    assert(evaluate("CInt(2.5)").asNumber()==2 && evaluate("CInt(3.5)").asNumber()==4);
+    assert(evaluate("CInt(-2.5)").asNumber()==-2 && evaluate("CInt(True)").asNumber()==-1);
+    assert(evaluate("CInt(Empty)").asNumber()==0 && evaluate("CInt(CCur(\"1.5\"))").asNumber()==2);
+    assert(evaluate("VarType(CInt(1))=vbInteger").truthy());
+    assert(evaluate("VarType(CLng(1))=vbLong").truthy());
+    assert(evaluate("VarType(CDbl(CInt(1)))=vbDouble").truthy());
+    assert(evaluate("VarType(CInt(1))").asNumber()==2 && evaluate("TypeName(CInt(1))").asText()=="Integer");
+    assert(evaluate("VarType(CLng(1))").asNumber()==3 && evaluate("TypeName(CLng(1))").asText()=="Long");
     assert(evaluate("CLng(2.5)").asNumber() == 2);
     assert(evaluate("CLng(3.5)").asNumber() == 4);
     assert(evaluate("CLng(-2.5)").asNumber() == -2);
@@ -1611,6 +1621,12 @@ End Sub
     const auto substringError=[&](const char* expression,int expected) {
         int number=0; try { (void)evaluate(expression); } catch(const VbaRuntimeError& failure) { number=failure.number; } if(number!=expected) std::cerr<<"Substring error: expected="<<expected<<", actual="<<number<<", expression="<<expression<<"\n"; assert(number==expected);
     };
+    substringError("CInt(Null)",94); substringError("CInt(CVErr(2015))",13);
+    substringError("CInt(\"invalid\")",13); substringError("CInt(32767.5)",6);
+    substringError("CInt(-32768.6)",6); substringError("CInt()",450); substringError("CInt(1,2)",450);
+    assert(evaluate("CInt(-32768.5)").asNumber()==-32768);
+    scalarProbe->value=VbaValue::numeric(2.5); const auto beforeInteger=scalarProbe->reads;
+    assert(evaluateVbaExpression("CInt(probe)",host,scalarValues).numericType==VbaValue::NumericType::Integer && scalarProbe->reads==beforeInteger+1);
     substringError("CBool(Null)",94); substringError("CBool(CVErr(2015))",13);
     substringError("CBool(\"\")",13); substringError("CBool(\"invalid\")",13);
     substringError("CBool()",450); substringError("CBool(1,2)",450);

@@ -1552,3 +1552,22 @@ pass payload/backend/permissions/fixture-exclusion checks; isolated Debian/Ubunt
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass; repository remains private. Previous 3add688 private CI is still
 running at this checkpoint, not counted as success.
+
+## 2026-11-02 — Integer/Long storage identity and native CInt
+
+Checked Integer/Long module fields, locals, parameters/results and initial values
+now retain numeric subtype tags. CInt performs checked 16-bit ties-to-even
+conversion; CLng returns a tagged Long. VarType/TypeName and standard VbVarType
+constants expose these identities; Variant copies retain tags. Reference/change
+checks include numeric tags. Core and actual native VBA/DAO tests cover default
+types, copies, stored rounded integer values and overflow preservation.
+Storage-aware Len, literal/arithmetic type rules and other primitive types remain
+open; no original business execution coverage increment. See INTEGER_VALUE_IDENTITY.md.
+
+Targeted core/DAO/layout/original-heavy tests: 4/4 (41.34 s). Full validation:
+host 22/22 (88.34 s), Debian 12 22/22 (77.28 s), Ubuntu 24.04 22/22
+(68.59 s), GUI-disabled core 1/1 (1.38 s). Host/distro DEBs pass payload,
+backend, permissions and fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass; repository remains private. Previous 472a23b private CI completed
+successfully.

@@ -585,3 +585,8 @@ not full DAO type metadata or Variant coercion parity.
 Native VBA CBool returns Boolean values with checked scalar conversion, including
 shared whitespace handling for numeric Boolean text. See CBOOL_RUNTIME.md for
 actual DAO persistence tests and remaining Date/locale/SQL/subtype limitations.
+
+Checked Integer/Long storage and explicit CInt/CLng now retain subtype identity
+for VarType/TypeName, including Variant copies. Standard VbVarType constants are
+available. See INTEGER_VALUE_IDENTITY.md; numeric literals, arithmetic promotion,
+DAO field subtype inference and storage-aware Len remain incomplete.

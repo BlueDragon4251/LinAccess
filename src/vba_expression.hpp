@@ -18,6 +18,7 @@ std::size_t vbaStringCodeUnits(std::string_view text);
 
 struct VbaValue {
     enum class Kind { Null, Empty, Number, Text, Boolean, Object, Error, Currency, ByteArray } kind{Kind::Null};
+    enum class NumericType { Double, Integer, Long } numericType{NumericType::Double};
     double number{};
     std::int64_t currencyUnits{};
     std::string text;
@@ -28,6 +29,8 @@ struct VbaValue {
 
     static VbaValue empty();
     static VbaValue numeric(double value);
+    static VbaValue integer(std::int16_t value);
+    static VbaValue longInteger(std::int32_t value);
     static VbaValue currency(std::int64_t scaledUnits);
     static VbaValue string(std::string value);
     static VbaValue byteArray(std::vector<unsigned char> value);

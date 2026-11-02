@@ -31,3 +31,7 @@ coverage is claimed.
 
 Procedure-local/parameter/result checking now also has a bounded implementation
 in NUMERIC_PROCEDURE_VALUES_RUNTIME.md, with its explicit ByRef/loop/type limits.
+
+Subsequent Integer/Long storage identity, CInt and tagged CLng are documented in
+INTEGER_VALUE_IDENTITY.md. Full literal/arithmetic/Variant-storage/Len semantics
+remain open; the earlier milestone's generic numeric representation is historical.

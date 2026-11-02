@@ -17,3 +17,7 @@ This does not implement CInt, full numeric subtypes, Date/locale/LCID conversion
 SQL CBool, full object-default recursion or exact Access error descriptions.
 Original application execution coverage is unchanged. Full platform validation
 is recorded in PROGRESS.md.
+
+Subsequent Integer/Long storage identity, CInt and tagged CLng are documented in
+INTEGER_VALUE_IDENTITY.md. Full literal/arithmetic/Variant-storage/Len semantics
+remain open; the earlier milestone's generic numeric representation is historical.

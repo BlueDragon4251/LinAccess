@@ -44,3 +44,7 @@ complete VBA numeric parity.
 Boolean/String procedure values now have their own checked scope in
 SCALAR_PROCEDURE_VALUES_RUNTIME.md. Remaining primitive types and full subtype/
 reference/loop/compile semantics stay open.
+
+Subsequent Integer/Long storage identity, CInt and tagged CLng are documented in
+INTEGER_VALUE_IDENTITY.md. Full literal/arithmetic/Variant-storage/Len semantics
+remain open; the earlier milestone's generic numeric representation is historical.

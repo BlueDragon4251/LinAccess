@@ -762,7 +762,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
             if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && type!="integer" && type!="long")
                 throw VbaRuntimeError(3251,"Module field type unsupported");
             if (state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
-            state->values.emplace(name,type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type=="integer" || type=="long" ? VbaValue::numeric(0) : VbaValue::empty());
+            state->values.emplace(name,type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : VbaValue::empty());
             state->types.emplace(name,type);
             if (visibility=="public" || visibility=="global") state->publicVariables.insert(name);
         }
@@ -801,7 +801,7 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
         const auto minimum=type=="integer" ? -32768.0L : -2147483648.0L;
         const auto maximum=type=="integer" ? 32767.0L : 2147483647.0L;
         if(rounded<minimum || rounded>maximum) throw VbaRuntimeError(6,"Module numeric field overflow");
-        return VbaValue::numeric(static_cast<double>(rounded));
+        return type=="integer" ? VbaValue::integer(static_cast<std::int16_t>(rounded)) : VbaValue::longInteger(static_cast<std::int32_t>(rounded));
     }
     throw VbaRuntimeError(3251,"Module field coercion unsupported");
 }
@@ -838,6 +838,8 @@ VbaValue initialLocalValue(const std::string& type) {
     if (type=="object" || type=="control" || type=="form" || type.starts_with("access.") || type.starts_with("dao.")) return VbaValue::reference(nullptr);
     if (type=="string") return VbaValue::string("");
     if (type=="boolean") return VbaValue::logical(false);
+    if (type=="integer") return VbaValue::integer(0);
+    if (type=="long") return VbaValue::longInteger(0);
     if (!type.empty() && type!="variant") return VbaValue::numeric(0);
     return VbaValue::empty();
 }
@@ -938,7 +940,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     && !parameter.type.empty() && parameter.type!="variant" && sourceType!=parameter.type)
                     throw VbaRuntimeError(13,"Known ByRef argument types do not match");
                 if(checkedType(parameter.type) && (converted.kind!=value.kind
-                    || (converted.kind==VbaValue::Kind::Number && converted.number!=value.number)
+                    || (converted.kind==VbaValue::Kind::Number && (converted.number!=value.number || converted.numericType!=value.numericType))
                     || (converted.kind==VbaValue::Kind::Text && converted.text!=value.text)
                     || (converted.kind==VbaValue::Kind::Boolean && converted.boolean!=value.boolean)))
                     throw VbaRuntimeError(13,"ByRef argument requires an unchanged value representation");
@@ -998,7 +1000,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         locals[name]=checkedType(type) ? coerceVbaModuleValue(value,type) : value;
     };
     const auto equalValue = [](const VbaValue& a, const VbaValue& b) {
-        return a.kind == b.kind && a.number == b.number && a.currencyUnits==b.currencyUnits && a.text == b.text
+        return a.kind == b.kind && a.numericType==b.numericType && a.number == b.number && a.currencyUnits==b.currencyUnits && a.text == b.text
             && a.boolean == b.boolean && a.object == b.object && a.errorNumber==b.errorNumber;
     };
     const auto refreshAliases = [&] {

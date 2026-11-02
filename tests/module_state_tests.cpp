@@ -151,7 +151,7 @@ End Sub
         std::vector<VbaValue> args; const auto result=form.executeProcedure(QString::fromUtf8(procedure),args); assert(result.status==linaccess::VbaExecutionStatus::Completed); return result;
     };
     auto root=makePreviewFormObject(first);
-    assert(root->member("exposed",{}).asNumber()==0);
+    assert(root->member("exposed",{}).asNumber()==0 && root->member("exposed",{}).numericType==VbaValue::NumericType::Long);
     assert(call(first,"Increment").typedReturnValue->asNumber()==1 && call(first,"Increment").typedReturnValue->asNumber()==2);
     assert(call(second,"Increment").typedReturnValue->asNumber()==1);
     assert(call(first,"External").typedReturnValue->asNumber()==40000 && call(second,"External").typedReturnValue->asNumber()==80000);
@@ -180,7 +180,14 @@ void testNumericProcedureValues() {
     auto db=QSqlDatabase::addDatabase("QSQLITE","numeric-procedure-values"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery sql(db); assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
     assert(sql.exec("CREATE TABLE numeric_local_audit(small INTEGER,wide INTEGER)")); assert(sql.exec("CREATE TABLE numeric_local_events(kind TEXT)"));
-    const QByteArray code=R"VBA(Function SaveValues(ByVal input As Integer) As Long
+    const QByteArray code=R"VBA(Function NumericTypes() As String
+Dim narrow As Integer
+Dim wide As Long
+Dim copy As Variant
+copy=narrow
+NumericTypes=TypeName(narrow)&":"&CStr(VarType(wide))&":"&TypeName(copy)
+End Function
+Function SaveValues(ByVal input As Integer) As Long
 Dim small As Integer
 Dim wide As Long
 small=input+0.5
@@ -233,7 +240,8 @@ End Sub
         args={invalid.first}; result=form.executeProcedure("SaveValues",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==invalid.second);
     }
     assert(sql.exec("SELECT COUNT(*) FROM numeric_local_audit") && sql.next() && sql.value(0).toInt()==1); sql.finish();
-    args.clear(); result=form.executeProcedure("RejectReference",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="13:3");
+    args.clear(); result=form.executeProcedure("NumericTypes",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="Integer:3:Integer");
+    result=form.executeProcedure("RejectReference",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="13:3");
     assert(sql.exec("SELECT COUNT(*) FROM numeric_local_events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
     result=form.executeProcedure("TemporaryReference",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==3);
     result=form.executeProcedure("ReturnOverflow",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==6);
