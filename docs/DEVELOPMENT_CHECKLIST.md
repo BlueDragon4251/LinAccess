@@ -577,3 +577,7 @@ Full targets remain open:
 - [x] Native Shift+F4/acCmdFindNext/SendKeys repeat the last document-local literal
   search after closing its real dialog; validation, active context, wrapping and
   SQL regression pass; shared/global and complete Find/Replace identity remain open.
+
+- [x] Checked native VBA Byte/CByte subtype, module/local/default/parameter/result/
+  known-ByRef handling and real Qt/DAO Byte parameter SQL regression; full numeric
+  promotion/Byte arrays/counter/locale/Windows identity remain open.

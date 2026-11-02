@@ -311,7 +311,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex call(R"(^Call\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\((.*)\))?$)", std::regex::icase);
     const std::regex implicitCall(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+(.+)|\((.*)\))?$)", std::regex::icase);
     const std::regex memberCall(R"(^((?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)(?:[.!][A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)+)\s+(.+)$)",std::regex::icase);
-    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(Integer|Long|String|Boolean|Double|Single|Currency|Variant|Object|DAO\.Recordset|DAO\.Database|DAO\.TableDef|DAO\.TableDefs|DAO\.Workspace|DAO\.Workspaces|DAO\.DBEngine))?$)", std::regex::icase);
+    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(Byte|Integer|Long|String|Boolean|Double|Single|Currency|Variant|Object|DAO\.Recordset|DAO\.Database|DAO\.TableDef|DAO\.TableDefs|DAO\.Workspace|DAO\.Workspaces|DAO\.DBEngine))?$)", std::regex::icase);
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
     const std::regex objectSet(R"(^Set\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
     const std::regex label(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*):$)");
@@ -761,10 +761,10 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
             std::smatch field;
             if (!std::regex_match(entry,field,variable)) throw VbaRuntimeError(3251,"Module declaration unsupported");
             const auto name=lower(field[1].str()),type=lower(field[2].str());
-            if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency")
+            if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency" && type!="byte")
                 throw VbaRuntimeError(3251,"Module field type unsupported");
             if (state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
-            state->values.emplace(name,type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : type=="single" ? VbaValue::single(0) : type=="double" ? VbaValue::numeric(0) : type=="currency" ? VbaValue::currency(0) : VbaValue::empty());
+            state->values.emplace(name,type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : type=="single" ? VbaValue::single(0) : type=="double" ? VbaValue::numeric(0) : type=="currency" ? VbaValue::currency(0) : type=="byte" ? VbaValue::byte(0) : VbaValue::empty());
             state->types.emplace(name,type);
             if (visibility=="public" || visibility=="global") state->publicVariables.insert(name);
         }
@@ -803,16 +803,17 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
         if(number!=0 && std::abs(number)<std::numeric_limits<float>::denorm_min()) throw VbaRuntimeError(3251,"Single underflow conversion is not validated");
         return VbaValue::single(static_cast<float>(number));
     }
-    if(type=="integer" || type=="long") {
+    if(type=="byte" && value.kind==VbaValue::Kind::Boolean) return VbaValue::byte(value.boolean ? 255 : 0);
+    if(type=="byte" || type=="integer" || type=="long") {
         const auto number=value.kind==VbaValue::Kind::Text ? VbaValue::string(trim(value.text)).asNumber() : value.asNumber();
         if(!std::isfinite(number)) throw VbaRuntimeError(6,"Module numeric field overflow");
         const auto lower=std::floor(static_cast<long double>(number));
         const auto fraction=static_cast<long double>(number)-lower;
         const auto rounded=fraction<0.5L ? lower : fraction>0.5L ? lower+1 : std::fmod(std::abs(lower),2.0L)==0 ? lower : lower+1;
-        const auto minimum=type=="integer" ? -32768.0L : -2147483648.0L;
-        const auto maximum=type=="integer" ? 32767.0L : 2147483647.0L;
+        const auto minimum=type=="byte" ? 0.0L : type=="integer" ? -32768.0L : -2147483648.0L;
+        const auto maximum=type=="byte" ? 255.0L : type=="integer" ? 32767.0L : 2147483647.0L;
         if(rounded<minimum || rounded>maximum) throw VbaRuntimeError(6,"Module numeric field overflow");
-        return type=="integer" ? VbaValue::integer(static_cast<std::int16_t>(rounded)) : VbaValue::longInteger(static_cast<std::int32_t>(rounded));
+        return type=="byte" ? VbaValue::byte(static_cast<unsigned char>(rounded)) : type=="integer" ? VbaValue::integer(static_cast<std::int16_t>(rounded)) : VbaValue::longInteger(static_cast<std::int32_t>(rounded));
     }
     throw VbaRuntimeError(3251,"Module field coercion unsupported");
 }
@@ -849,6 +850,7 @@ VbaValue initialLocalValue(const std::string& type) {
     if (type=="object" || type=="control" || type=="form" || type.starts_with("access.") || type.starts_with("dao.")) return VbaValue::reference(nullptr);
     if (type=="string") return VbaValue::string("");
     if (type=="boolean") return VbaValue::logical(false);
+    if (type=="byte") return VbaValue::byte(0);
     if (type=="integer") return VbaValue::integer(0);
     if (type=="long") return VbaValue::longInteger(0);
     if (type=="single") return VbaValue::single(0);
@@ -921,8 +923,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     VbaVariables locals;
     std::unordered_map<std::string,std::string> localTypes;
     const auto integralType=[](std::string_view type) { return type=="integer" || type=="long"; };
-    const auto checkedType=[&](std::string_view type) { return integralType(type) || type=="boolean" || type=="string" || type=="single" || type=="double" || type=="currency"; };
-    const auto scalarType=[&](std::string_view type) { return checkedType(type) || type=="byte"; };
+    const auto checkedType=[&](std::string_view type) { return integralType(type) || type=="boolean" || type=="string" || type=="single" || type=="double" || type=="currency" || type=="byte"; };
+    const auto scalarType=[&](std::string_view type) { return checkedType(type); };
     const auto objectType=[](std::string_view type) { return type=="object" || type=="control" || type=="form" || type.starts_with("dao.") || type.starts_with("access."); };
     auto errorState = std::make_shared<ErrorObject>();
     locals["err"] = VbaValue::reference(errorState);
@@ -1004,7 +1006,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     for(const auto& instruction:instructions) {
         const auto type=variableType(lower(instruction.argument));
         if(((instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet) && scalarType(type))
-            || (instruction.type==Statement::Type::For && (type=="boolean" || type=="string" || type=="single" || type=="currency" || objectType(type)))) {
+            || (instruction.type==Statement::Type::For && (type=="boolean" || type=="string" || type=="single" || type=="currency" || type=="byte" || objectType(type)))) {
             VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Declared variable type is unsupported for this loop/object target",instruction.line}; failure.errorNumber=3251; return failure;
         }
     }

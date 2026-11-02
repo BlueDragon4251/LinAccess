@@ -1818,3 +1818,22 @@ Full validation: host 27/27 (99.04 s), Debian 12 27/27 (79.78 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 bcb99e8 private CI completed successfully.
+
+## 2026-11-02 — Checked VBA Byte subtype and conversion
+
+Closed an accepted-but-unchecked Byte declaration path. CByte/modules/locals/
+parameters/results now share bounded conversion and explicit Byte type identity;
+known ByRef mismatch and overflow fail without losing the previous value.
+Native Qt/VBA/DAO/SQL tests exercise actual calculated controls, Byte query
+parameters, stored integer values and explicit record save. Core/native targeted
+regression passes 2/2 (0.96 s); GUI suite now has 28 CTests. Full promotion,
+arrays/For counters/locales/Windows oracle remain open. No inspected original
+module uses Byte/CByte, so no original business execution increment is claimed.
+See BYTE_VALUES_RUNTIME.md.
+
+Full validation: host 28/28 (103.95 s), Debian 12 28/28 (88.28 s), Ubuntu
+24.04 28/28 (82.37 s), Debian 13 28/28 (79.53 s), GUI-disabled core 1/1
+(2.89 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+3bcb787 private CI completed successfully.

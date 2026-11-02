@@ -654,3 +654,9 @@ Shift+F4/acCmdFindNext (341)/SendKeys repeat the active form's last executed
 literal search after the modeless dialog closes, with the same validation and
 real SQL navigation. Search history is document-local; shared Access search
 history, exact callback/empty-history identity and full Find/Replace remain open.
+
+VBA Byte/CByte now has checked 0..255 conversion and explicit VarType 17 identity
+through native modules/locals/parameters/results, with real Qt/DAO/SQL regression.
+Known ByRef type mismatch and overflow preserve data; declared Byte For counters
+reject before effects. Full promotion/arrays/locales/Windows identity remain open.
+See BYTE_VALUES_RUNTIME.md; original business execution coverage is unchanged.

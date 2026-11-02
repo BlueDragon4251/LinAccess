@@ -631,10 +631,10 @@ private:
                 if (args.size()!=1) throw error("IsArray requires one argument",450);
                 return VbaValue::logical(args[0].kind==VbaValue::Kind::ByteArray);
             }
-            if (word=="cint" || word=="clng" || word=="csng" || word=="cdbl" || word=="cbool") {
+            if (word=="cbyte" || word=="cint" || word=="clng" || word=="csng" || word=="cdbl" || word=="cbool") {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Conversion requires one argument",450);
-                const auto type=word=="cint" ? "integer" : word=="clng" ? "long" : word=="csng" ? "single" : word=="cdbl" ? "double" : "boolean";
+                const auto type=word=="cbyte" ? "byte" : word=="cint" ? "integer" : word=="clng" ? "long" : word=="csng" ? "single" : word=="cdbl" ? "double" : "boolean";
                 return coerceVbaModuleValue(scalarObjectValue(args.front()),type);
             }
             if (word=="ccur" || word=="vartype" || word=="typename") {
@@ -643,7 +643,7 @@ private:
                 const auto& value=args.front();
                 if (word=="ccur") return convertCurrency(value);
                 const int type=value.kind==VbaValue::Kind::Empty ? 0 : value.kind==VbaValue::Kind::Null ? 1
-                    : value.kind==VbaValue::Kind::Number ? (value.numericType==VbaValue::NumericType::Integer ? 2 : value.numericType==VbaValue::NumericType::Long ? 3 : value.numericType==VbaValue::NumericType::Single ? 4 : 5) : value.kind==VbaValue::Kind::Currency ? 6
+                    : value.kind==VbaValue::Kind::Number ? (value.numericType==VbaValue::NumericType::Byte ? 17 : value.numericType==VbaValue::NumericType::Integer ? 2 : value.numericType==VbaValue::NumericType::Long ? 3 : value.numericType==VbaValue::NumericType::Single ? 4 : 5) : value.kind==VbaValue::Kind::Currency ? 6
                     : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
                     : value.kind==VbaValue::Kind::Error ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : 11;
                 if (word=="vartype") return VbaValue::numeric(type);
@@ -652,7 +652,7 @@ private:
                     throw error("Native object class name unavailable",3251);
                 }
                 return VbaValue::string(type==0 ? "Empty" : type==1 ? "Null" : type==5 ? "Double"
-                    : type==2 ? "Integer" : type==3 ? "Long" : type==4 ? "Single" : type==6 ? "Currency" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : type==8209 ? "Byte()" : "Boolean");
+                    : type==17 ? "Byte" : type==2 ? "Integer" : type==3 ? "Long" : type==4 ? "Single" : type==6 ? "Currency" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : type==8209 ? "Byte()" : "Boolean");
             }
             if (word=="dsum" || word=="dcount") {
                 if (!host_) return {};
@@ -756,6 +756,7 @@ private:
                 if (value.kind==VbaValue::Kind::Boolean || value.kind==VbaValue::Kind::Empty)
                     return coerceVbaModuleValue(result,"integer");
                 if (value.kind==VbaValue::Kind::Number) {
+                    if(value.numericType==VbaValue::NumericType::Byte) return coerceVbaModuleValue(result,"byte");
                     if(value.numericType==VbaValue::NumericType::Integer) return coerceVbaModuleValue(result,"integer");
                     if(value.numericType==VbaValue::NumericType::Long) return coerceVbaModuleValue(result,"long");
                     if(value.numericType==VbaValue::NumericType::Single) return coerceVbaModuleValue(result,"single");
@@ -905,6 +906,7 @@ VbaValue VbaValue::empty() { VbaValue v; v.kind = Kind::Empty; return v; }
 VbaValue VbaValue::errorValue(int number) { VbaValue v; v.kind=Kind::Error; v.errorNumber=number; return v; }
 VbaValue VbaValue::reference(std::shared_ptr<VbaObject> value) { VbaValue v; v.kind = Kind::Object; v.object = std::move(value); return v; }
 VbaValue VbaValue::numeric(double value) { VbaValue v; v.kind = Kind::Number; v.number = value; return v; }
+VbaValue VbaValue::byte(unsigned char value) { auto v=numeric(value); v.numericType=NumericType::Byte; return v; }
 VbaValue VbaValue::single(float value) { auto v=numeric(value); v.numericType=NumericType::Single; return v; }
 VbaValue VbaValue::integer(std::int16_t value) { auto v=numeric(value); v.numericType=NumericType::Integer; return v; }
 VbaValue VbaValue::longInteger(std::int32_t value) { auto v=numeric(value); v.numericType=NumericType::Long; return v; }

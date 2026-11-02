@@ -116,7 +116,80 @@ public:
 };
 }
 
+void testByteValues() {
+    using namespace linaccess;
+    FakeForm host;
+    const auto eval=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,{}); };
+    assert(eval("VarType(CByte(255))=vbByte").truthy() && eval("TypeName(CByte(0))").asText()=="Byte");
+    assert(eval("CByte(254.5)").asNumber()==254 && eval("CByte(2.5)").asNumber()==2 && eval("CByte(3.5)").asNumber()==4);
+    assert(eval("CByte(-0.5)").asNumber()==0 && eval("CByte(Empty)").asNumber()==0);
+    assert(eval("CByte(True)").asNumber()==255 && eval("CByte(False)").asNumber()==0);
+    assert(eval("CByte(CCur(12.5000))").asNumber()==12 && eval("CByte(\" 255 \" )").asNumber()==255);
+    assert(eval("VarType(Abs(CByte(3)))=vbByte And VarType(Int(CByte(3)))=vbByte And VarType(Fix(CByte(3)))=vbByte").truthy());
+    for(const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
+        {"CByte(255.5)",6},{"CByte(-0.6)",6},{"CByte(Null)",94},{"CByte(CVErr(11))",13},
+        {"CByte(\"invalid\")",13},{"CByte()",450},{"CByte(1,2)",450},{"CByte(Nothing)",91}}) {
+        int actual=0; try { (void)eval(expression); } catch(const VbaRuntimeError& error) { actual=error.number; } assert(actual==code);
+    }
+    const auto probe=std::make_shared<ScalarProbe>(); probe->value=VbaValue::numeric(3.5);
+    assert(evaluateVbaExpression("CByte(probe)",host,{{"probe",VbaValue::reference(probe)}}).asNumber()==4 && probe->reads==1);
+    const std::string module=R"VBA(Public tracked As Byte
+Function DefaultByte() As Byte
+End Function
+Function RoundByte(ByVal value As Byte) As Byte
+RoundByte=value
+End Function
+Sub Increment(ByRef value As Byte)
+value=value+1
+End Sub
+Function UpdateByte() As Byte
+Dim value As Byte
+If VarType(value)<>vbByte Then Err.Raise(5)
+value=254
+Call Increment(value)
+tracked=value
+UpdateByte=tracked
+End Function
+Function PreserveOverflow() As Byte
+On Error Resume Next
+tracked=256
+Me!Code=CStr(Err.Number)
+PreserveOverflow=tracked
+End Function
+Sub MismatchByte()
+Dim value As Integer
+value=4
+Call Increment(value)
+Me!Body="entered"
+End Sub
+Function TemporaryByte() As Integer
+Dim value As Integer
+value=4
+Call Increment((value))
+TemporaryByte=value
+End Function
+Sub RejectByteLoop()
+Dim value As Byte
+CurrentDb.Execute "INSERT before byte loop"
+For value=1 To 2
+CurrentDb.Execute "INSERT inside byte loop"
+Next value
+End Sub
+)VBA";
+    auto state=host.moduleState(module); assert(state->values.at("tracked").numericType==VbaValue::NumericType::Byte && state->values.at("tracked").number==0);
+    auto result=executeVbaProcedure(module,"DefaultByte",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->numericType==VbaValue::NumericType::Byte && result.typedReturnValue->number==0);
+    std::vector<VbaValue> arguments{VbaValue::numeric(254.5)};
+    result=executeVbaProcedureWithArguments(module,"RoundByte",host,arguments); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==254 && result.typedReturnValue->numericType==VbaValue::NumericType::Byte);
+    arguments[0]=VbaValue::numeric(256); result=executeVbaProcedureWithArguments(module,"RoundByte",host,arguments); assert(result.status==VbaExecutionStatus::Error && result.errorNumber==6);
+    result=executeVbaProcedure(module,"UpdateByte",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==255 && result.typedReturnValue->numericType==VbaValue::NumericType::Byte);
+    result=executeVbaProcedure(module,"PreserveOverflow",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==255 && host.fields["Code"]=="6");
+    result=executeVbaProcedure(module,"MismatchByte",host); assert(result.status==VbaExecutionStatus::Error && result.errorNumber==13 && !host.fields.contains("Body"));
+    result=executeVbaProcedure(module,"TemporaryByte",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==4);
+    result=executeVbaProcedure(module,"RejectByteLoop",host); assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251 && host.sqlStatements.empty());
+}
+
 int main() {
+    testByteValues();
     using namespace linaccess;
 
     {
