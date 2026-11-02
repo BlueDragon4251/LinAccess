@@ -644,3 +644,8 @@ Long native TextBox values no longer truncate at Qt's default editor limit;
 real SQL regressions preserve Unicode/newlines through unrelated-field saves,
 VBA append and keyboard copy. See LONG_TEXT_VALUES_RUNTIME.md; complete Memo
 multiline UI, formatting and Access field-size limits remain open.
+
+Ctrl+F/acCmdFind now opens native literal text search with actual record navigation,
+case/match/field modes and Qt/VBA/SQL validation/draft/lifetime regressions. See
+FIND_FORM_RUNTIME.md; full Find/Replace, wildcard/format/query/report/datasheet/
+locale/MDI and exact Access 2003 UI parity remain open.

@@ -92,6 +92,7 @@ private:
     bool advanceTabFocus(bool next);
     bool commitControl(const QString& control);
     bool commitControls();
+    void openFindDialog();
     void selectRecord(int target);
     bool prepareClose();
     static bool closeDocuments(const QVector<AccessFormPreview*>& roots,AccessFormPreview* closingRoot=nullptr);
@@ -163,6 +164,7 @@ private:
     QSqlDatabase db_;
     quint64 windowSequence_{};
     QComboBox* recordSelector_{};
+    QPointer<QDialog> findDialog_;
     QTimer* formTimer_{};
     bool timerDispatching_{};
     QLineEdit* filterEditor_{};

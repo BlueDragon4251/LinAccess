@@ -569,3 +569,7 @@ Full targets remain open:
 - [x] Long native TextBox values avoid Qt default truncation, with real SQL
   unchanged-field/VBA append/keyboard copy/Unicode-newline round trips; complete
   Memo multiline UI, formatting and Access field-size limits remain open.
+
+- [x] Native modeless literal form search via Ctrl+F/acCmdFind, field/match/case/
+  advance modes, draft/validation/lifetime/active-context and real Qt/SQL tests;
+  full Find/Replace/wildcard/format/source/locale/MDI/UI identity remain open.

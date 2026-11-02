@@ -1781,3 +1781,22 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubunt
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass; repository remains private. Previous 8c97bcc private CI completed
 successfully.
+
+## 2026-11-02 — Native modeless literal form search
+
+Added actual Ctrl+F/acCmdFind search UI and literal text matching/navigation over
+complete native table forms, with field/match/case/advance modes. Native Qt/VBA/
+SQL tests cover Unicode/long text, active-document calls, masked-prefill safety,
+validation both before and during dialog use, unsaved current/no-match drafts,
+SQL save on navigation and Unload/close lifetime. Targeted tests pass 4/4
+(1.02 s); GUI suite now has 27 CTests. Synthetic UI was visually inspected in
+a private screenshot. Full Find/Replace/wildcard/formatted/source/locale/MDI
+identity remains open. No business execution increment. See FIND_FORM_RUNTIME.md.
+
+Full validation: host 27/27 (109.53 s), Debian 12 27/27 (85.29 s), Ubuntu
+24.04 27/27 (74.94 s), and first Debian 13/trixie full run 27/27 (71.14 s).
+GUI-disabled core passes 1/1 (1.38 s). Host and all three distro DEBs pass
+payload/backend/permissions/fixture-exclusion checks. Isolated installations on
+all three distributions pass backend execution and GUI startup. All four
+original fixture hashes pass; repository remains private. Previous 1b5fa5f
+private CI completed successfully.
