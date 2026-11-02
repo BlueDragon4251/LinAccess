@@ -188,7 +188,36 @@ End Sub
     result=executeVbaProcedure(module,"RejectByteLoop",host); assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251 && host.sqlStatements.empty());
 }
 
+void testTypedNot() {
+    using namespace linaccess;
+    FakeForm host;
+    const auto eval=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,{}); };
+    assert(eval("Not Not CByte(3)").number==3 && eval("VarType(Not Not CByte(3))=vbByte").truthy());
+    assert(eval("Not CByte(0)").number==255 && eval("Not CByte(255)").number==0);
+    assert(eval("VarType(Not CByte(10))=vbByte").truthy() && eval("TypeName(Not CByte(10))").asText()=="Byte");
+    assert(eval("Not CInt(-32768)").number==32767 && eval("VarType(Not CInt(1))=vbInteger").truthy());
+    assert(eval("Not CLng(-2147483648)").number==2147483647 && eval("VarType(Not CLng(1))=vbLong").truthy());
+    assert(eval("Not 10").number==-11 && eval("VarType(Not 10)=vbLong").truthy());
+    assert(eval("Not CSng(2.5)").number==-3 && eval("VarType(Not CSng(2.5))=vbLong").truthy());
+    assert(eval("Not CCur(3.5)").number==-5 && eval("VarType(Not Empty)=vbInteger").truthy());
+    assert(eval("Not Empty").number==-1 && eval("Not Null").kind==VbaValue::Kind::Null);
+    assert(eval("Not False").kind==VbaValue::Kind::Boolean && eval("Not False").boolean && !eval("Not True").boolean);
+    assert(!eval("Not CByte(3)=CByte(3)").boolean && eval("Not 2^3").number==-9);
+    const auto probe=std::make_shared<ScalarProbe>(); probe->value=VbaValue::byte(10);
+    const auto value=evaluateVbaExpression("Not probe",host,{{"probe",VbaValue::reference(probe)}});
+    assert(value.numericType==VbaValue::NumericType::Byte && value.number==245 && probe->reads==1);
+    for(const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
+        {"Not 1e100",6},{"Not \"invalid\"",13},{"Not CVErr(11)",13},{"Not Nothing",91}}) {
+        int actual=0; try { (void)eval(expression); } catch(const VbaRuntimeError& error) { actual=error.number; } assert(actual==code);
+    }
+    const std::string module="Function Invert(ByVal value As Byte) As Byte\nInvert=Not value\nEnd Function\n";
+    std::vector<VbaValue> args{VbaValue::byte(10)};
+    const auto result=executeVbaProcedureWithArguments(module,"Invert",host,args);
+    assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->numericType==VbaValue::NumericType::Byte && result.typedReturnValue->number==245);
+}
+
 int main() {
+    testTypedNot();
     testByteValues();
     using namespace linaccess;
 

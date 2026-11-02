@@ -660,3 +660,8 @@ through native modules/locals/parameters/results, with real Qt/DAO/SQL regressio
 Known ByRef type mismatch and overflow preserve data; declared Byte For counters
 reject before effects. Full promotion/arrays/locales/Windows identity remain open.
 See BYTE_VALUES_RUNTIME.md; original business execution coverage is unchanged.
+
+Native VBA Not now preserves Byte/Integer/Long bit width and result subtype,
+Boolean/Null/Empty and scalar-once behavior, with before/after core and actual
+Qt/VBA/SQL regression. Full promotion/textual Boolean/locale/Jet SQL and Windows
+oracle remain open; see TYPED_NOT_RUNTIME.md.

@@ -581,3 +581,7 @@ Full targets remain open:
 - [x] Checked native VBA Byte/CByte subtype, module/local/default/parameter/result/
   known-ByRef handling and real Qt/DAO Byte parameter SQL regression; full numeric
   promotion/Byte arrays/counter/locale/Windows identity remain open.
+
+- [x] Typed native Not bit inversion for Byte/Integer/Long, Boolean/Null/Empty,
+  scalar default values and checked numeric conversion; reproduced core/Qt/SQL
+  regression fixed; complete mixed/text/locale/Jet SQL identity remains open.

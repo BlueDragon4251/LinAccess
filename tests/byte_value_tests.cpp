@@ -27,6 +27,10 @@ Begin TextBox
 Name ="converted"
 ControlSource ="=CByte([amount])"
 End
+Begin TextBox
+Name ="inverted"
+ControlSource ="=Not CByte([amount])"
+End
 End
 End
 )FORM";
@@ -41,6 +45,16 @@ Set q=CurrentDb.CreateQueryDef("","PARAMETERS p Byte; INSERT INTO byte_audit(val
 If q.Parameters("p").Type<>dbByte Then Err.Raise(5)
 q.Parameters("p").Value=value
 q.Execute
+End Sub
+Sub CaptureNot()
+Dim value As Byte
+value=Not CByte(Me!amount)
+CurrentDb.Execute "INSERT INTO byte_audit VALUES(" & CStr(value) & ")"
+End Sub
+Sub RejectNotRange()
+Dim value As Long
+value=Not 1e100
+CurrentDb.Execute "INSERT INTO byte_audit VALUES(99)"
 End Sub
 Sub RejectByte()
 Dim value As Byte
@@ -68,7 +82,9 @@ End Sub
     assert(model->member("tracked",{}).numericType==VbaValue::NumericType::Byte && model->member("tracked",{}).number==12);
     model->assignItem("amount",VbaValue::numeric(3.5)); assert(model->item("converted").asNumber()==4);
     assert(form.executeProcedure("CaptureByte",none).status==linaccess::VbaExecutionStatus::Completed);
-    for(const auto& name:{"RejectByte","RejectByteArgument"}) {
+    assert(model->item("inverted").asNumber()==251);
+    assert(form.executeProcedure("CaptureNot",none).status==linaccess::VbaExecutionStatus::Completed);
+    for(const auto& name:{"RejectByte","RejectByteArgument","RejectNotRange"}) {
         const auto failure=form.executeProcedure(name,none); assert(failure.status==linaccess::VbaExecutionStatus::Error && failure.errorNumber==6);
     }
     const auto loop=form.executeProcedure("RejectByteLoop",none); assert(loop.status==linaccess::VbaExecutionStatus::Unsupported && loop.errorNumber==3251);
@@ -76,7 +92,8 @@ End Sub
     assert(error==6 && model->member("tracked",{}).number==4);
     assert(sql.exec("SELECT value,typeof(value) FROM byte_audit ORDER BY rowid"));
     assert(sql.next() && sql.value(0).toInt()==12 && sql.value(1).toString()=="integer");
-    assert(sql.next() && sql.value(0).toInt()==4 && sql.value(1).toString()=="integer" && !sql.next()); sql.finish();
+    assert(sql.next() && sql.value(0).toInt()==4 && sql.value(1).toString()=="integer");
+    assert(sql.next() && sql.value(0).toInt()==251 && sql.value(1).toString()=="integer" && !sql.next()); sql.finish();
     assert(sql.exec("SELECT amount FROM byte_source WHERE id=1") && sql.next() && sql.value(0).toDouble()==12.5); sql.finish();
     model->assign("Dirty",VbaValue::logical(false));
     assert(sql.exec("SELECT amount FROM byte_source WHERE id=1") && sql.next() && sql.value(0).toDouble()==3.5); sql.finish();

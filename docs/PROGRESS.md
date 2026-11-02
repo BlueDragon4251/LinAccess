@@ -1837,3 +1837,20 @@ Full validation: host 28/28 (103.95 s), Debian 12 28/28 (88.28 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 3bcb787 private CI completed successfully.
+
+## 2026-11-02 — Typed native Not bit inversion
+
+Reproduced wrong result type/Byte value in independent core and native form
+regressions (0/2 before fix). Not now respects 8/16/32-bit Byte/Integer/Long,
+Boolean/Null/Empty and one scalar default evaluation. Native Qt/VBA/SQL writes
+actual inverted Byte 251; range errors prevent later SQL and explicit source
+record-save behavior is preserved. Targeted tests pass 2/2 (1.08 s). Full mixed
+promotion/text/locale/Jet SQL/Windows semantics remain open. Original business
+execution coverage is unchanged. See TYPED_NOT_RUNTIME.md.
+
+Full validation: host 28/28 (86.11 s), Debian 12 28/28 (84.74 s), Ubuntu
+24.04 28/28 (78.45 s), Debian 13 28/28 (81.28 s), GUI-disabled core 1/1
+(1.70 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+7badc0f private CI is still running at this checkpoint; no CI success is claimed.

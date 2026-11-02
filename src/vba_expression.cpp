@@ -390,9 +390,17 @@ private:
         }
         if (take("not")) {
             const auto arg = expression(std::max(6,minPrecedence)); // comparisons bind before Not in VBA
-            if (!host_ || arg.kind == VbaValue::Kind::Null) return {};
-            if (arg.kind == VbaValue::Kind::Boolean) return VbaValue::logical(!arg.boolean);
-            return VbaValue::numeric(~integer(arg));
+            if (!host_) return {};
+            const auto value=scalarObjectValue(arg);
+            if (value.kind==VbaValue::Kind::Null) return {};
+            if (value.kind==VbaValue::Kind::Boolean) return VbaValue::logical(!value.boolean);
+            if (value.kind==VbaValue::Kind::Empty) return VbaValue::integer(-1);
+            const auto number=static_cast<std::int32_t>(coerceVbaModuleValue(value,"long").number);
+            if(value.kind==VbaValue::Kind::Number && value.numericType==VbaValue::NumericType::Byte)
+                return VbaValue::byte(static_cast<unsigned char>(255-number));
+            if(value.kind==VbaValue::Kind::Number && value.numericType==VbaValue::NumericType::Integer)
+                return VbaValue::integer(static_cast<std::int16_t>(~number));
+            return VbaValue::longInteger(~number);
         }
         if (take("(")) {
             const auto value = expression(1,objectContext);
