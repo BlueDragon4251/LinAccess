@@ -950,3 +950,9 @@ CreateQueryDef (Name, SQLText), QueryDef.OpenRecordset (Type), Execute (Options)
 TableDef.OpenRecordset (Type), and Recordset FindFirst/Last/Next/Previous
 (Criteria). This does not extend the supported recordset modes or optional DAO
 options. Full DAO signatures/default/coercion parity remains open.
+
+Recordset.Move supports signed Long Rows and optional native byte-array Start
+bookmarks on the existing materialized recordset/clone model. It checks pending
+edits, foreign/stale tokens, empty/current-boundary movement and Long overflow;
+movement beyond available rows sets BOF/EOF. This does not implement server-side
+cursors, dbForwardOnly, bookmark constants or exact Windows locking behavior.

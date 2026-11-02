@@ -187,6 +187,7 @@ public:
         const auto key=lower(name);
         if (key=="findfirst" || key=="findlast" || key=="findnext" || key=="findprevious")
             return VbaArgumentSignature{{"Criteria"},1};
+        if (key=="move") return VbaArgumentSignature{{"Rows","Start"},1};
         return {};
     }
     Recordset(QSqlDatabase db, QString source, bool snapshot, QMap<QString,QVariant> bindings = {},AccessQueryPlan plan={})
@@ -269,6 +270,20 @@ public:
             if (args.size()!=1) throw VbaRuntimeError(450,"DAO: Find requires one criterion");
             if (args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null criterion");
             find(key,text(args[0].asText())); return {};
+        }
+        if (key=="move") {
+            if (args.empty() || args.size()>2) throw VbaRuntimeError(450,"DAO: Move requires Rows and optional Start");
+            if (mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
+            if (args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null movement");
+            const auto distance=sqlFieldValue(args[0],"INTEGER4").toLongLong();
+            const auto origin=args.size()==2 ? bookmarkPosition(args[1]) : position_;
+            if (data_->rows.empty() || (origin<0 && distance<=0) ||
+                (origin>=data_->rows.size() && distance>=0))
+                throw VbaRuntimeError(3021,"DAO: No current record");
+            const auto destination=static_cast<qlonglong>(origin)+distance;
+            position_=static_cast<qsizetype>(std::clamp<qlonglong>(destination,-1,data_->rows.size()));
+            noMatch_=false;
+            return {};
         }
         if (key=="clone") {
             if (!data_->workspace->savepoints.isEmpty()) throw VbaRuntimeError(3251,"DAO: Clone inside transaction unsupported");

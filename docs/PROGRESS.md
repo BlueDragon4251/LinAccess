@@ -2655,3 +2655,12 @@ arguments and named FindFirst criteria against real SQLite data. No new target.
 Desktop build and the existing dao_execution target pass (0.30 s) for this
 increment. Grouped packaging/full-suite evidence remains the preceding Quit
 snapshot; neither was repeated for this argument-metadata-only increment.
+
+## Native DAO relative/bookmark movement (2026-11-02)
+
+Implemented Recordset.Move Rows, Start with native Long conversion and bookmark
+validation, independent cursor positioning, boundary clamping and pending-edit
+guards. Method signature supports named Rows/Start. Existing cursor regression
+checks relative movement, bookmark offset, EOF return, stale-token rejection
+and Long overflow. Desktop build and dao_execution pass (0.30 s); no new target,
+full-suite/package rerun or claim of full DAO/Windows cursor equivalence.

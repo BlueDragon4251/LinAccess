@@ -34,6 +34,14 @@ void testDaoCursors() {
     clone->member("MoveFirst",{}); assert(!clone->member("NoMatch",{}).truthy());
     find(clone,"FindFirst","label Like 't*'"); assert(clone->item("id").asNumber()==2);
     const auto second=clone->member("Bookmark",{}); assert(second.kind==VbaValue::Kind::ByteArray && !second.bytes.empty());
+    clone->member("Move",{VbaValue::longInteger(2)}); assert(clone->item("id").asNumber()==4);
+    clone->member("Move",{VbaValue::longInteger(-1),second}); assert(clone->item("id").asNumber()==1);
+    clone->member("Move",{VbaValue::longInteger(99)}); assert(clone->member("EOF",{}).truthy());
+    expect(3021,[&] { clone->member("Move",{VbaValue::longInteger(1)}); });
+    clone->member("Move",{VbaValue::longInteger(-1)}); assert(clone->item("id").asNumber()==4);
+    expect(3159,[&] { clone->member("Move",{VbaValue::longInteger(0),VbaValue::byteArray({})}); });
+    expect(6,[&] { clone->member("Move",{VbaValue::numeric(2147483648.0)}); });
+    clone->member("Move",{VbaValue::longInteger(0),second});
     source->assign("Bookmark",second); assert(source->item("id").asNumber()==2);
     const bool legacyDqs=query.exec("SELECT \"legacy_string\""); query.finish();
     expect(3070,[&] { find(clone,"FindFirst","[missing_field]=1"); });

@@ -286,6 +286,7 @@ Full targets remain open:
   named/statement arguments, Windows Help and Access 2003 rendering oracle.
 - [x] DAO clone cursor isolation, typed byte-array bookmarks, bounded Find methods/
   NoMatch, shared writes, deletion/rowid-reuse and stale/foreign token checks.
+  Includes bounded Recordset.Move with Long Rows and optional native Start bookmark.
 - [x] Restricted form Recordset.Clone + Form.Bookmark navigation through validation,
   shared saved values and original generated search regression: two successful
   native selections; third original missing-control reference remains error 2465.
