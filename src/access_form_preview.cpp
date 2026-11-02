@@ -2303,7 +2303,16 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
         if (event->key()==Qt::Key_F9 && modifiers==Qt::ShiftModifier) {
             (void)makePreviewFormObject(*this)->member("Requery",{}); return true;
         }
-        if (event->key()==Qt::Key_F9 && modifiers==Qt::NoModifier) { refreshCalculatedControls(); return true; }
+        if (event->key()==Qt::Key_F9 && modifiers==Qt::NoModifier) {
+            ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+            const auto* focus=QApplication::focusWidget();
+            for(const auto& control:layout_.controls) {
+                auto* combo=qobject_cast<QComboBox*>(controls_.value(control.name.toCaseFolded()).data());
+                if(combo && (focus==combo || focus==combo->lineEdit())) { requeryControl(control.name.toUtf8().toStdString()); break; }
+            }
+            if(!closed_ && !openCancelled_) refreshCalculatedControls();
+            return true;
+        }
         if ((event->key()==Qt::Key_W || event->key()==Qt::Key_F4) && modifiers==Qt::ControlModifier) {
             (void)window()->close(); return true;
         }

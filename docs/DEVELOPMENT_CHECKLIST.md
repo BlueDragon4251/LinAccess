@@ -468,3 +468,7 @@ Full targets remain open:
   focus restoration, validation/KeyPreview/modal guards, hidden/closed/foreign
   exclusion, minimized restoration and target-close lifetime regression; full
   MDI/window-order and table/query/editor cycling remain open.
+
+- [x] F9 real row-model refresh for focused native combo adapters, KeyPreview
+  cancellation, draft/focus/dirty/SQL preservation, query-failure recovery and
+  F4 popup/cancellation regression; full list-box/popup/Windows timing remains open.

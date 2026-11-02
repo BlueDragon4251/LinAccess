@@ -17,6 +17,7 @@
 
 void testComboAutoPopup();
 void testCommandRequery();
+void testComboKeyboardRefresh();
 
 void testDynamicCombos() {
     using linaccess::VbaValue;
@@ -75,6 +76,49 @@ End Sub
     assert(form.close());
     testCommandRequery();
     testComboAutoPopup();
+    testComboKeyboardRefresh();
+}
+
+void testComboKeyboardRefresh() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","combo-keyboard-refresh"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE choices(id INTEGER,label TEXT)"));
+    assert(sql.exec("INSERT INTO choices VALUES(10,'first'),(20,'second')"));
+    assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,choice INTEGER)"));
+    assert(sql.exec("INSERT INTO records VALUES(1,10)"));
+    const QByteArray layout="Begin Form\nRecordSource =\"records\"\nKeyPreview =NotDefault\nOnKeyDown =\"[Event Procedure]\"\nBegin Section\nBegin ComboBox\nName =\"pick\"\nControlSource =\"choice\"\nRowSource =\"SELECT id,label FROM choices ORDER BY id\"\nColumnCount =2\nColumnWidths =\"0;1440\"\nEnd\nEnd\nEnd";
+    const QByteArray code="Sub Form_KeyDown(KeyCode As Integer,Shift As Integer)\nIf Me.Tag=\"block\" And (KeyCode=vbKeyF9 Or KeyCode=vbKeyF4) Then KeyCode=0\nEnd Sub";
+    AccessFormPreview form("keyboard refresh",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form); auto control=root->objectMember("pick",{}).object;
+    assert(control->member("Column",{VbaValue::numeric(1),VbaValue::numeric(0)}).asText()=="first");
+    auto* combo=form.findChild<QComboBox*>("access-control-pick"); assert(combo);
+    auto* editor=combo->lineEdit(); editor->setFocus();
+    root->assign("Tag",VbaValue::string("block"));
+    QTest::keyClick(editor,Qt::Key_F4); assert(!combo->view()->isVisible());
+    assert(sql.exec("UPDATE choices SET label='updated' WHERE id=10"));
+    assert(sql.exec("INSERT INTO choices VALUES(30,'third')"));
+    QPointer<QAbstractItemModel> previous=combo->model();
+    QTest::keyClick(editor,Qt::Key_F9); assert(combo->model()==previous && combo->count()==2 && combo->currentText()=="first");
+    root->assign("Tag",VbaValue::string(""));
+    QTest::keyClick(editor,Qt::Key_F9);
+    assert(!previous && combo->count()==3 && combo->currentText()=="updated" && editor->hasFocus());
+    assert(!form.hasUnsavedChanges() && control->member("Value",{}).asNumber()==10);
+    QTest::keyClick(editor,Qt::Key_F4); QApplication::processEvents(); assert(combo->view()->isVisible()); combo->hidePopup(); editor->setFocus();
+    editor->selectAll(); QTest::keyClicks(editor,"pen");
+    assert(editor->isModified() && form.hasUnsavedChanges());
+    QTest::keyClick(editor,Qt::Key_F9);
+    assert(combo->currentText()=="pen" && editor->isModified() && editor->hasFocus() && form.hasUnsavedChanges());
+    previous=combo->model(); assert(sql.exec("DROP TABLE choices"));
+    QTest::keyClick(editor,Qt::Key_F9);
+    assert(combo->model()==previous && combo->count()==3 && combo->currentText()=="pen" && editor->isModified());
+    assert(sql.exec("CREATE TABLE choices(id INTEGER,label TEXT)")); assert(sql.exec("INSERT INTO choices VALUES(10,'recovered')"));
+    QTest::keyClick(editor,Qt::Key_F9);
+    assert(!previous && combo->count()==1 && combo->currentText()=="pen" && editor->isModified());
+    assert(sql.exec("SELECT choice FROM records WHERE id=1") && sql.next() && sql.value(0).toInt()==10); sql.finish();
+    QTest::keyClick(editor,Qt::Key_Escape);
+    assert(control->member("Value",{}).asNumber()==10 && combo->currentText()=="recovered" && !form.hasUnsavedChanges());
+    assert(form.close());
 }
 
 void testComboAutoPopup() {

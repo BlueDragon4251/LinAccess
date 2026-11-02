@@ -509,3 +509,10 @@ hidden and closed windows are skipped; a target closed during validation is
 not activated. SQL and dirty-state preservation are tested. Full Windows MDI,
 exact Access window ordering and table/query/editor cycling remain open; see
 [Window cycling](WINDOW_CYCLE_RUNTIME.md).
+
+F9 now reloads the focused native combo adapter's actual row model and retains
+form recalculation. Native KeyPreview can cancel F9/F4; tests cover F4 opening,
+external SQL changes, preserved pending text/dirty/focus/bound IDs, failed refresh
+and retry after source recovery. No record save is implied. The combo-backed
+ListBox adapter and full popup/Windows timing remain limited; see
+[Lookup keyboard](LOOKUP_KEYBOARD_RUNTIME.md).

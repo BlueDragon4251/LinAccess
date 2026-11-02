@@ -1351,3 +1351,21 @@ Final validation: host 22/22 (87.58 s), Debian 12 22/22 (72.23 s), Ubuntu
 pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. Repository privacy is unchanged.
+
+## 2026-11-02 — Focused lookup keyboard refresh
+
+F9 reloads the focused native combo adapter's actual row model, then recalculates
+form expressions. Other focus and Shift+F9 keep their existing scopes. Native
+keyboard cancellation and execution guards apply. Actual GUI/SQL tests cover
+F4 opening/cancellation, F9 cancellation and external updates, retained bound ID,
+pending text/focus/dirty state, failed-query model preservation, source recovery
+and Escape undo without SQL saving. Targeted trio: 3/3 (41.19 s). Complete
+ListBox/popup/Windows timing remains open; no original business increment.
+See LOOKUP_KEYBOARD_RUNTIME.md.
+
+Final validation: host 22/22 (74.18 s), Debian 12 22/22 (80.56 s), Ubuntu
+24.04 22/22 (71.75 s), GUI-disabled core 1/1 (1.02 s). Fresh host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. Repository privacy remains unchanged. Earlier
+project-shortcut commit c571fe6 completed private CI successfully.
