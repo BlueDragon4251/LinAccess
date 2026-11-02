@@ -1623,3 +1623,22 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubunt
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass; repository remains private. Previous a8db286 private CI was still
 running at this checkpoint; no success is assumed.
+
+## 2026-11-02 — SQL numeric parameter types and DAO Type metadata
+
+Corrected SQL INTEGER from 16-bit to the documented 32-bit Long domain and added
+numeric aliases with real Single binding precision/finite checks. Declared DAO
+Parameter.Type returns documented Integer/DataTypeEnum values and is read-only
+for the native Access workspace. Common unqualified DAO type constants are
+available. Tests cover bounds, NULL, invalid/nonfinite values without SQL effects,
+metadata arity/read-only/replacement/close behavior and actual VBA Type=dbLong
+execution storing 40000. Five targeted tests pass (42.06 s); final native read-only
+VBA case passes DAO-only verification (0.26 s). Inference, Size and full conversion
+contracts remain open. See DAO_PARAMETER_TYPES.md. No business execution increment.
+
+Full validation: host 22/22 (75.62 s), Debian 12 22/22 (83.00 s), Ubuntu
+24.04 22/22 (73.46 s), GUI-disabled core 1/1 (1.02 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass; repository remains private. Previous d8557a7 private CI completed
+successfully.

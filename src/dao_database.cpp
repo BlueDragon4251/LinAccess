@@ -653,10 +653,22 @@ VbaValue QueryParameter::member(std::string_view name, const std::vector<VbaValu
     if (!args.empty()) throw VbaRuntimeError(450,"DAO: Unexpected Parameter arguments");
     if (lower(name) == "value") return query_->parameter(name_);
     if (lower(name) == "name") return VbaValue::string(name_.toUtf8().toStdString());
+    if (lower(name)=="type") {
+        static const QMap<QString,int> types{{"boolean",1},{"yesno",1},{"byte",2},
+            {"short",3},{"integer",4},{"long",4},{"single",6},{"double",7},
+            {"date",8},{"datetime",8},{"text",10},{"varchar",10},{"char",10}};
+        for (const auto& parameter:query_->plan_.parameters) if (parameter.name.compare(name_,Qt::CaseInsensitive)==0) {
+            const auto type=types.constFind(parameter.type);
+            if (type==types.cend()) throw VbaRuntimeError(3251,"DAO: inferred parameter type is not validated");
+            return VbaValue::integer(static_cast<std::int16_t>(type.value()));
+        }
+        throw VbaRuntimeError(3265,"DAO: Parameter not found");
+    }
     throw VbaRuntimeError(438,"DAO: Parameter member unsupported");
 }
 void QueryParameter::assign(std::string_view name, const VbaValue& value) {
     query_->parameterGeneration(generation_);
+    if (lower(name)=="type") throw VbaRuntimeError(383,"DAO: Parameter Type is read-only in an Access workspace");
     require(lower(name) == "value","DAO: Parameter property is not writable");
     query_->setParameter(name_,value);
 }

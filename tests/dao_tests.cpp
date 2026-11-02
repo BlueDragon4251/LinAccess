@@ -94,6 +94,7 @@ End Sub
         const auto source=QString("PARAMETERS p %1; UPDATE flags SET flag=[p]").arg(alias);
         auto definition=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string(source.toStdString())}).object;
         auto parameter=definition->member("Parameters",{VbaValue::string("p")}).object;
+        assert(parameter->member("Type",{}).asNumber()==1);
         for (const auto& item : {std::pair{VbaValue::string("False"),0},
                 std::pair{VbaValue::string("TRUE"),-1},
                 std::pair{VbaValue::string("  False  "),0},
@@ -135,7 +136,7 @@ narrow=CInt(2.5)
 wide=CLng(40000.5)
 copy=narrow
 Me!StoredTypes=TypeName(narrow)&":"&TypeName(wide)&":"&CStr(VarType(copy))
-Set definition=CurrentDb.CreateQueryDef("", "PARAMETERS a INTEGER,b LONG; INSERT INTO integer_values VALUES([a],[b])")
+Set definition=CurrentDb.CreateQueryDef("", "PARAMETERS a SHORT,b LONG; INSERT INTO integer_values VALUES([a],[b])")
 definition.Parameters("a").Value=narrow
 definition.Parameters("b").Value=wide
 definition.Execute
@@ -149,8 +150,89 @@ End Sub
     assert(sql.exec("SELECT narrow,wide FROM integer_values") && sql.next());
     assert(sql.value(0).toInt()==2 && sql.value(1).toInt()==40000 && !sql.next()); sql.finish();
 }
+void testDeclaredParameterTypes() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","declared-parameter-types"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE parameter_values(value)")); assert(sql.exec("INSERT INTO parameter_values VALUES(7)"));
+    auto database=linaccess::makeDaoDatabase(db);
+    const auto definition=[&](const QString& spelling) {
+        return database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string(QString("PARAMETERS p %1; UPDATE parameter_values SET value=[p]").arg(spelling).toStdString())}).object;
+    };
+    for(const auto* alias:{"INTEGER","LONG","INT","INTEGER4"}) {
+        auto query=definition(alias); auto parameter=query->member("Parameters",{VbaValue::string("p")}).object;
+        const auto type=parameter->member("Type",{}); assert(type.number==4 && type.numericType==VbaValue::NumericType::Integer);
+        for(const auto value:{-2147483648.0,2147483647.0}) {
+            parameter->assign("Value",VbaValue::numeric(value)); query->member("Execute",{});
+            assert(sql.exec("SELECT value FROM parameter_values") && sql.next() && sql.value(0).toDouble()==value); sql.finish();
+        }
+        parameter->assign("Value",VbaValue::numeric(2147483648.0));
+        int rejected=0; try { query->member("Execute",{}); } catch(const linaccess::VbaRuntimeError& error) { rejected=error.number; } assert(rejected==13);
+        assert(sql.exec("SELECT value FROM parameter_values") && sql.next() && sql.value(0).toLongLong()==2147483647); sql.finish();
+    }
+    for(const auto* alias:{"SHORT","SMALLINT","INTEGER2","BYTE","TINYINT","INTEGER1"}) {
+        auto query=definition(alias); auto parameter=query->member("Parameters",{VbaValue::string("p")}).object;
+        const bool byte=QString(alias)=="BYTE" || QString(alias)=="TINYINT" || QString(alias)=="INTEGER1";
+        assert(parameter->member("Type",{}).number==(byte ? 2 : 3));
+        parameter->assign("Value",VbaValue::numeric(byte ? 255 : 32767)); query->member("Execute",{});
+        parameter->assign("Value",VbaValue::numeric(byte ? 256 : 32768));
+        int rejected=0; try { query->member("Execute",{}); } catch(const linaccess::VbaRuntimeError& error) { rejected=error.number; } assert(rejected==13);
+        assert(sql.exec("SELECT value FROM parameter_values") && sql.next() && sql.value(0).toInt()==(byte ? 255 : 32767)); sql.finish();
+    }
+    for(const auto* alias:{"SINGLE","REAL","FLOAT4","IEEESINGLE","DOUBLE","FLOAT","FLOAT8","IEEEDOUBLE","NUMBER"}) {
+        auto query=definition(alias); auto parameter=query->member("Parameters",{VbaValue::string("p")}).object;
+        const auto name=QString(alias); const bool single=name=="SINGLE" || name=="REAL" || name=="FLOAT4" || name=="IEEESINGLE";
+        assert(parameter->member("Type",{}).number==(single ? 6 : 7));
+        parameter->assign("Value",VbaValue::numeric(0.1)); query->member("Execute",{});
+        assert(sql.exec("SELECT value FROM parameter_values") && sql.next() && sql.value(0).toDouble()==(single ? static_cast<double>(0.1f) : 0.1)); sql.finish();
+        std::vector<double> invalid{std::numeric_limits<double>::infinity(),std::numeric_limits<double>::quiet_NaN()};
+        if(single) invalid.push_back(3.5e38);
+        for(const auto value:invalid) {
+            parameter->assign("Value",VbaValue::numeric(value));
+            int rejected=0; try { query->member("Execute",{}); } catch(const linaccess::VbaRuntimeError& error) { rejected=error.number; } assert(rejected==13);
+            assert(sql.exec("SELECT value FROM parameter_values") && sql.next() && sql.value(0).toDouble()==(single ? static_cast<double>(0.1f) : 0.1)); sql.finish();
+        }
+        if(single) {
+            parameter->assign("Value",VbaValue::numeric(1e-50));
+            int rejected=0; try { query->member("Execute",{}); } catch(const linaccess::VbaRuntimeError& error) { rejected=error.number; } assert(rejected==3251);
+        }
+        parameter->assign("Value",VbaValue{}); query->member("Execute",{});
+        assert(sql.exec("SELECT value FROM parameter_values") && sql.next() && sql.value(0).isNull()); sql.finish();
+    }
+    for(const auto& item:std::vector<std::pair<const char*,int>>{{"TEXT",10},{"VARCHAR",10},{"CHAR",10},{"DATE",8},{"DATETIME",8}}) {
+        auto query=definition(item.first); auto parameter=query->member("Parameters",{VbaValue::string("p")}).object;
+        assert(parameter->member("Type",{}).number==item.second);
+        int rejected=0; try { parameter->member("Type",{VbaValue::numeric(1)}); } catch(const linaccess::VbaRuntimeError& error) { rejected=error.number; } assert(rejected==450);
+    }
+    auto unknown=definition("VALUE")->member("Parameters",{VbaValue::string("p")}).object;
+    int unknownType=0; try { unknown->member("Type",{}); } catch(const linaccess::VbaRuntimeError& error) { unknownType=error.number; } assert(unknownType==3251);
+    auto query=definition("LONG"); auto parameter=query->member("Parameters",{VbaValue::string("p")}).object;
+    parameter->assign("Value",VbaValue::numeric(123)); const auto source=query->member("SQL",{}).asText();
+    int rejected=0; try { parameter->assign("Type",VbaValue::numeric(3)); } catch(const linaccess::VbaRuntimeError& error) { rejected=error.number; }
+    assert(rejected==383 && parameter->member("Type",{}).number==4 && parameter->member("Value",{}).number==123 && query->member("SQL",{}).asText()==source);
+    query->assign("SQL",VbaValue::string("PARAMETERS p SHORT; UPDATE parameter_values SET value=[p]"));
+    rejected=0; try { parameter->member("Type",{}); } catch(const linaccess::VbaRuntimeError& error) { rejected=error.number; } assert(rejected==3420);
+    parameter=query->member("Parameters",{VbaValue::string("p")}).object; assert(parameter->member("Type",{}).number==3);
+    query->member("Close",{}); rejected=0; try { parameter->member("Type",{}); } catch(const linaccess::VbaRuntimeError& error) { rejected=error.number; } assert(rejected==3420);
+    Host host(db);
+    const auto result=linaccess::executeVbaProcedure(R"VBA(Sub InspectType()
+Dim definition As DAO.QueryDef
+Set definition=CurrentDb.CreateQueryDef("", "PARAMETERS p INTEGER; UPDATE parameter_values SET value=[p]")
+On Error Resume Next
+definition.Parameters("p").Type=dbInteger
+Me!TypeWriteError=CStr(Err.Number)
+If definition.Parameters("p").Type=dbLong Then
+definition.Parameters("p").Value=40000
+definition.Execute
+End If
+Me!TypeStorage=TypeName(definition.Parameters("p").Type)
+End Sub
+)VBA","InspectType",host);
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && host.fields["TypeStorage"]=="Integer" && host.fields["TypeWriteError"]=="383");
+    assert(sql.exec("SELECT value FROM parameter_values") && sql.next() && sql.value(0).toInt()==40000); sql.finish();
+}
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testDeclaredParameterTypes();
     testIntegerConversionDao();
     testBooleanQueryParameters();
     testDaoCursors();

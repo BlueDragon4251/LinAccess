@@ -664,7 +664,14 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
             const auto name = tokens[pos++].value;
             require(pos < tokens.size() && tokens[pos].kind == Token::Word, "Jet SQL: parameter type required");
             auto type = tokens[pos++].value.toCaseFolded();
-            if (type == "bit" || type == "logical" || type == "logical1") type = "boolean";
+            static const QMap<QString,QString> aliases{
+                {"bit","boolean"},{"logical","boolean"},{"logical1","boolean"},
+                {"integer","long"},{"int","long"},{"integer4","long"},
+                {"smallint","short"},{"integer2","short"},
+                {"tinyint","byte"},{"integer1","byte"},
+                {"real","single"},{"float4","single"},{"ieeesingle","single"},
+                {"float","double"},{"float8","double"},{"ieeedouble","double"},{"number","double"}};
+            type=aliases.value(type,type);
             const QSet<QString> types{"long","integer","short","byte","single","double","text","varchar","char","boolean","yesno","datetime","date","value"};
             require(types.contains(type), "Jet SQL: parameter type unsupported");
             if (pos < tokens.size() && tokens[pos].value == "(") {
@@ -1036,13 +1043,18 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
             const auto floor = std::floor(real); const auto fraction = real - floor;
             const auto rounded = fraction < 0.5 ? floor : fraction > 0.5 ? floor+1
                 : std::fmod(std::abs(floor),2.0) == 0 ? floor : floor+1;
-            const qlonglong minimum = type == "byte" ? 0 : type == "long" ? -2147483648LL : -32768;
-            const qlonglong maximum = type == "byte" ? 255 : type == "long" ? 2147483647LL : 32767;
+            const qlonglong minimum = type == "byte" ? 0 : (type == "long" || type == "integer") ? -2147483648LL : -32768;
+            const qlonglong maximum = type == "byte" ? 255 : (type == "long" || type == "integer") ? 2147483647LL : 32767;
             if (!valid || !std::isfinite(rounded) || rounded < minimum || rounded > maximum) throw VbaRuntimeError(13,"DAO: parameter type mismatch");
             converted = static_cast<qlonglong>(rounded);
         } else if (type == "single" || type == "double") {
-            bool valid = false; converted = value.toDouble(&valid);
-            if (!valid) throw VbaRuntimeError(13,"DAO: parameter type mismatch");
+            bool valid = false; const auto number = value.toDouble(&valid);
+            if (!valid || !std::isfinite(number)) throw VbaRuntimeError(13,"DAO: parameter type mismatch");
+            if (type=="single") {
+                if (std::abs(number)>std::numeric_limits<float>::max()) throw VbaRuntimeError(13,"DAO: Single parameter overflow");
+                if (number!=0 && std::abs(number)<std::numeric_limits<float>::denorm_min()) throw VbaRuntimeError(3251,"Single parameter underflow is not validated");
+                converted=static_cast<double>(static_cast<float>(number));
+            } else converted=number;
         } else if (type == "datetime" || type == "date") converted = canonicalDate(value.toString());
         else if (type == "boolean" || type == "yesno") {
             const auto spelling = value.toString().trimmed();

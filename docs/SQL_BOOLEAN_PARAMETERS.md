@@ -21,3 +21,7 @@ This does not add Parameter.Type, complete DAO assignment-time conversion,
 Variant Empty identity, localized Boolean spellings, Boolean DDL aliases or
 complete Access/Jet parameter/error timing compatibility. Full validation is
 recorded in PROGRESS.md.
+
+Subsequent declared Parameter.Type metadata and corrected numeric declarations
+are documented in DAO_PARAMETER_TYPES.md. Full DAO typing/inference/Size semantics
+remain open.

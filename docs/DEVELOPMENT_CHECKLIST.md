@@ -533,3 +533,7 @@ Full targets remain open:
 - [x] Declared Currency fields/locals/parameters/results/defaults, exact checked
   conversion/reference paths and real DAO decimal TEXT transfer at the upper
   boundary; full Jet Currency columns/SQL, mixed promotion and loops remain open.
+
+- [x] Correct 32-bit SQL INTEGER and numeric parameter aliases, rounded/finite
+  Single bindings, declared DAO Parameter.Type/enum constants and read-only/
+  lifetime checks with real SQL tests; inference/Size/full coercion remain open.

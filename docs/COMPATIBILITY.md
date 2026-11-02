@@ -600,3 +600,8 @@ Declared Currency VBA storage now retains exact four-decimal values and native
 conversion/reference checks. DAO can bind Currency as canonical decimal text to
 TEXT parameters, with a real SQL upper-bound regression. See CURRENCY_STORAGE_RUNTIME.md;
 full Jet Currency columns/SQL arithmetic, mixed promotion and loops remain open.
+
+SQL INTEGER parameters now use the documented 32-bit Long range, independently
+of 16-bit VBA Integer. Numeric parameter aliases, Single rounding/finite checks
+and declared DAO Parameter.Type/read-only/lifetime behavior have real SQL/VBA
+regressions. See DAO_PARAMETER_TYPES.md; inference, Size and full coercion remain open.

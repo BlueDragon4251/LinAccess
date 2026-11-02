@@ -396,6 +396,11 @@ private:
             {"acoptionbutton",105},{"accheckbox",106},{"actextbox",109},{"aclistbox",110},
             {"accombobox",111},{"acsubform",112},{"actogglebutton",122}};
         if (const auto type = controlTypes.find(word); type != controlTypes.end()) return VbaValue::numeric(type->second);
+        static const std::unordered_map<std::string,int> daoTypes{
+            {"dbboolean",1},{"dbbyte",2},{"dbinteger",3},{"dblong",4},{"dbcurrency",5},
+            {"dbsingle",6},{"dbdouble",7},{"dbdate",8},{"dbbinary",9},{"dbtext",10},
+            {"dblongbinary",11},{"dbmemo",12},{"dbguid",15}};
+        if (const auto type=daoTypes.find(word);type!=daoTypes.end()) return VbaValue::longInteger(type->second);
         if (word == "dbopendynaset") return VbaValue::numeric(2);
         if (word == "dbopensnapshot") return VbaValue::numeric(4);
         if (word == "dbfailonerror") return VbaValue::numeric(128);
