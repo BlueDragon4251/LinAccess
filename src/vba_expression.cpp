@@ -132,6 +132,8 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
             if (pos == input.size()) throw error("Schließende ] fehlt");
             tokens.push_back({Token::Type::Bracket, std::string(input.substr(start, pos - start))});
             ++pos;
+        } else if(ch==':' && pos+1<input.size() && input[pos+1]=='=') {
+            tokens.push_back({Token::Type::Symbol,":="}); pos+=2;
         } else {
             std::string symbol(1, ch);
             if ((ch == '<' || ch == '>') && pos + 1 < input.size() &&
@@ -254,7 +256,7 @@ bool likeMatch(std::u16string_view input,std::u16string_view pattern,VbaHost& ho
     return previous.back()!=0;
 }
 VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& right,VbaHost* host,VbaCompareMode mode) {
-    if (left.kind==VbaValue::Kind::Error || right.kind==VbaValue::Kind::Error)
+    if (left.kind==VbaValue::Kind::Error || right.kind==VbaValue::Kind::Error || left.kind==VbaValue::Kind::Missing || right.kind==VbaValue::Kind::Missing)
         throw error("Error Variant cannot be used as an operand",13);
     if (op == "is") {
         if (left.kind != VbaValue::Kind::Object || right.kind != VbaValue::Kind::Object)
@@ -440,11 +442,19 @@ private:
             if (member.type != Token::Type::Word && member.type != Token::Type::Bracket)
                 throw error("Objektmitglied erwartet");
             std::vector<VbaValue> args;
+            std::vector<std::string> argumentNames;
+            std::vector<bool> omittedArguments;
             if (take("(")) {
                 if (!take(")")) {
                     do {
-                        const bool omitted=(lower(member.value)=="openform" || lower(member.value)=="openreport" || lower(member.value)=="gotorecord" || lower(member.value)=="domenuitem" || lower(member.value)=="selectobject") && (nextSymbol(",") || nextSymbol(")"));
+                        std::string argumentName;
+                        if(peek().type==Token::Type::Word && index_+1<tokens_.size() && tokens_[index_+1].value==":=") {
+                            argumentName=lower(consume().value); consume();
+                        }
+                        const bool omitted=(lower(member.value)=="openform" || lower(member.value)=="openreport" || lower(member.value)=="gotorecord" || lower(member.value)=="domenuitem" || lower(member.value)=="selectobject" || lower(member.value)=="close") && (nextSymbol(",") || nextSymbol(")"));
                         args.push_back(omitted ? VbaValue::empty() : expression(1));
+                        if(!argumentName.empty() && omitted) throw error("Named method argument requires a value",450);
+                        argumentNames.push_back(std::move(argumentName)); omittedArguments.push_back(omitted);
                     } while (take(",") || (accessExpression_ && take(";")));
                     require(")");
                 }
@@ -455,6 +465,26 @@ private:
                 if (value.kind != VbaValue::Kind::Object || !value.object)
                     throw error("Objektvariable nicht gesetzt", 91);
                 if (item && !args.empty()) throw error("Bang lookup arguments unsupported",450);
+                if(std::any_of(argumentNames.begin(),argumentNames.end(),[](const std::string& name){ return !name.empty(); })) {
+                    const auto signature=value.object->argumentSignature(member.value);
+                    if(!signature) throw error("Named method arguments are not implemented for this member",3251);
+                    std::vector<VbaValue> ordered(signature->names.size(),VbaValue::empty());
+                    std::vector<bool> assigned(signature->names.size()),provided(signature->names.size());
+                    bool namedSeen=false; std::size_t last=0;
+                    for(std::size_t index=0;index<args.size();++index) {
+                        std::size_t target=index;
+                        if(!argumentNames[index].empty()) {
+                            namedSeen=true; target=signature->names.size();
+                            for(std::size_t parameter=0;parameter<signature->names.size();++parameter)
+                                if(lower(signature->names[parameter])==argumentNames[index]) { target=parameter; break; }
+                            if(target==signature->names.size()) throw error("Named method argument not found",448);
+                        } else if(namedSeen) throw error("Positional argument after named argument",450);
+                        if(target>=ordered.size() || assigned[target]) throw error("Method argument supplied more than once or too many arguments",450);
+                        ordered[target]=args[index]; assigned[target]=true; provided[target]=!omittedArguments[index]; last=std::max(last,target);
+                    }
+                    for(std::size_t index=0;index<signature->required;++index) if(!provided[index]) throw error("Required method argument omitted",450);
+                    ordered.resize(last+1); args=std::move(ordered);
+                }
                 const bool reference=objectContext || nextSymbol(".") || nextSymbol("!");
                 value = item ? (reference ? value.object->objectItem(member.value) : value.object->item(member.value))
                     : (reference ? value.object->objectMember(member.value,args) : value.object->member(member.value,args));
@@ -648,9 +678,15 @@ private:
             std::vector<bool> omitted;
             if (!take(")")) {
                 do {
+                    std::string argumentName;
+                    if(peek().type==Token::Type::Word && index_+1<tokens_.size() && tokens_[index_+1].value==":=") {
+                        argumentName=lower(consume().value); consume();
+                    }
                     const auto start = index_;
-                    const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="weekday") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
-                    args.push_back(missing ? VbaValue::empty() : expression(1,word=="isobject"));
+                    const bool builtinDefaults=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="weekday");
+                    const bool missing=nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";"));
+                    args.push_back(missing ? (builtinDefaults ? VbaValue::empty() : VbaValue::missing()) : expression(1,word=="isobject"));
+                    if(!argumentName.empty() && missing) throw error("Named argument requires a value",450);
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
                         ? tokens_[start].value : "");
@@ -663,8 +699,15 @@ private:
                         }
                         if(whole && variable!=locals_.end() && isVbaArray(variable->second)) references.back()="@array_element";
                     }
+                    if(!argumentName.empty()) references.back()="@named:"+argumentName+":"+references.back();
                 } while (take(",") || (accessExpression_ && take(";")));
                 require(")");
+            }
+            const bool named=std::any_of(references.begin(),references.end(),[](const std::string& reference){ return reference.starts_with("@named:"); });
+            if(named) {
+                if(!host_) return {};
+                if(accessExpression_ || !resolver_) throw error("Named arguments require a native VBA procedure context",3251);
+                return resolver_(word,args,references);
             }
             const auto one = args.size() == 1;
             if(word=="datediff" || word=="year" || word=="month" || word=="day" || word=="hour" || word=="minute" || word=="second" || word=="weekday") {
@@ -744,12 +787,13 @@ private:
             }
             if(word=="array") {
                 if(!host_) return {};
+                if(std::find(omitted.begin(),omitted.end(),true)!=omitted.end()) throw error("Array elements cannot be omitted",450);
                 return makeVbaArray(std::move(args),arrayBase_);
             }
             if(word=="lbound" || word=="ubound") {
                 if(!host_) return {};
-                if(args.empty() || args.size()>2) throw error("Array bound requires one or two arguments",450);
-                if(args.size()==2 && coerceVbaModuleValue(scalarVbaValue(args[1]),"long").number!=1) throw error("Array dimension out of range",9);
+                if(args.empty() || args.size()>2 || omitted[0]) throw error("Array bound requires one or two arguments",450);
+                if(args.size()==2 && !omitted[1] && coerceVbaModuleValue(scalarVbaValue(args[1]),"long").number!=1) throw error("Array dimension out of range",9);
                 return vbaArrayBound(args[0],word=="ubound");
             }
             if (word=="isarray") {
@@ -794,7 +838,7 @@ private:
                 const int type=value.kind==VbaValue::Kind::Empty ? 0 : value.kind==VbaValue::Kind::Null ? 1
                     : value.kind==VbaValue::Kind::Number ? (value.numericType==VbaValue::NumericType::Byte ? 17 : value.numericType==VbaValue::NumericType::Integer ? 2 : value.numericType==VbaValue::NumericType::Long ? 3 : value.numericType==VbaValue::NumericType::Single ? 4 : 5) : value.kind==VbaValue::Kind::Currency ? 6
                     : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
-                    : value.kind==VbaValue::Kind::Error ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : value.kind==VbaValue::Kind::Array ? vbaArrayType(value) : 11;
+                    : (value.kind==VbaValue::Kind::Error || value.kind==VbaValue::Kind::Missing) ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : value.kind==VbaValue::Kind::Array ? vbaArrayType(value) : 11;
                 if (word=="vartype") return VbaValue::integer(static_cast<std::int16_t>(type));
                 if (type==9) {
                     if (!value.object) return VbaValue::string("Nothing");
@@ -808,10 +852,15 @@ private:
                 if (args.size()<2 || args.size()>3) throw error("Domain aggregate requires two or three arguments",450);
                 return host_->domainAggregate(word,args);
             }
+            if(word=="ismissing") {
+                if(!host_) return {};
+                if(args.size()!=1) throw error("IsMissing requires one argument",450);
+                return VbaValue::logical(args[0].kind==VbaValue::Kind::Missing);
+            }
             if (word=="iserror" || word=="cverr") {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Error function requires one argument",450);
-                if (word=="iserror") return VbaValue::logical(args[0].kind==VbaValue::Kind::Error);
+                if (word=="iserror") return VbaValue::logical(args[0].kind==VbaValue::Kind::Error || args[0].kind==VbaValue::Kind::Missing);
                 if (args[0].kind==VbaValue::Kind::Null) throw error("Invalid Null CVErr argument",94);
                 const auto number=integer(args[0]);
                 if (number<0 || number>65535) throw error("CVErr number out of range");
@@ -1201,6 +1250,7 @@ VbaValue VbaHost::eval(std::string_view source) {
     const VbaVariables variables;
     auto value=scalarVbaValue(ExpressionParser(source,this,variables,functions,false,true,nullptr,false,VbaCompareMode::Database).parse());
     if (value.kind==VbaValue::Kind::Error) throw VbaRuntimeError(value.errorNumber ? value.errorNumber : 13,"Eval expression failed");
+    if (value.kind==VbaValue::Kind::Missing) throw VbaRuntimeError(13,"Eval cannot return a missing argument");
     if (isVbaArray(value)) throw VbaRuntimeError(13,"Eval cannot return a byte array");
     return value;
 }
@@ -1217,6 +1267,7 @@ VbaValue VbaHost::fieldValue(std::string_view name) {
     return value ? VbaValue::string(*value) : VbaValue{};
 }
 void VbaHost::setFieldValue(std::string_view name,const VbaValue& value) { setField(name,value.asField()); }
+VbaValue VbaValue::missing() { VbaValue v; v.kind=Kind::Missing; return v; }
 VbaValue VbaValue::empty() { VbaValue v; v.kind = Kind::Empty; return v; }
 VbaValue VbaValue::errorValue(int number) { VbaValue v; v.kind=Kind::Error; v.errorNumber=number; return v; }
 VbaValue VbaValue::reference(std::shared_ptr<VbaObject> value) { VbaValue v; v.kind = Kind::Object; v.object = std::move(value); return v; }
@@ -1286,7 +1337,7 @@ std::size_t vbaStringCodeUnits(std::string_view text) { return utf16String(text)
 VbaValue scalarVbaValue(VbaValue value) { return scalarObjectValue(std::move(value)); }
 std::string VbaValue::asText() const {
     if (kind==Kind::ByteArray || kind==Kind::Array) throw error("Byte array cannot be implicitly converted to text",13);
-    if (kind==Kind::Error) throw error("Error Variant cannot be implicitly converted to text",13);
+    if (kind==Kind::Error || kind==Kind::Missing) throw error("Error Variant cannot be implicitly converted to text",13);
     if (kind==Kind::Object) return scalarObjectValue(*this).asText();
     if (kind == Kind::Text) return text;
     if (kind==Kind::Currency) {
@@ -1307,7 +1358,7 @@ std::string VbaValue::asText() const {
 }
 double VbaValue::asNumber() const {
     if (kind==Kind::ByteArray || kind==Kind::Array) throw error("Byte array cannot be implicitly converted to number",13);
-    if (kind==Kind::Error) throw error("Error Variant cannot be implicitly converted to number",13);
+    if (kind==Kind::Error || kind==Kind::Missing) throw error("Error Variant cannot be implicitly converted to number",13);
     if (kind==Kind::Object) return scalarObjectValue(*this).asNumber();
     if (kind == Kind::Empty) return 0;
     if (kind == Kind::Number) return number;

@@ -896,3 +896,11 @@ Native VBA Sub/Function calls pack variable trailing arguments into a real
 zero-based Variant array for indexing, For Each, Join and ByVal forwarding.
 Slot/reference mutation and full argument binding remain open; see
 [precise supported ParamArray scope](PARAMARRAY_RUNTIME.md).
+
+## Missing values and named calls
+
+Optional arguments without explicit defaults, distinct Missing/IsMissing and
+positional holes now execute natively. User-procedure named calls preserve ByRef
+binding; supported native DoCmd methods bind named values through declared
+signatures. See [boundaries](NAMED_ARGUMENT_RUNTIME.md). Built-in/DAO/COM method
+coverage and full declaration/SCODE/Windows semantics remain open.

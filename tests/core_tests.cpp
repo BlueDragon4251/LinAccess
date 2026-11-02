@@ -2397,5 +2397,63 @@ End Sub
     assert(host.fields["VariadicTotal"]=="11" && host.fields["VariadicPack"]=="a|b|c");
     assert(host.fields["VariadicEmpty"]=="7" && host.fields["ParamArrayBounds"]=="0:-1");
     assert(host.fields["ForwardCount"]=="0" && host.fields["ParamWriteError"]=="3251");
+    const auto missingArguments=executeVbaProcedure(R"VBA(Function Inspect(Optional value As Variant, Optional ByVal count As Long) As String
+Inspect=CStr(IsMissing(value)) & ":" & CStr(count) & ":" & TypeName(value)
+End Function
+Function Forward(Optional value) As String
+Forward=Inspect(value)
+Me!ForwardMissing=CStr(IsMissing(value))
+End Function
+Function Pass(Optional value) As Variant
+Pass=value
+End Function
+Sub Capture(Optional value, Optional ByVal count As Long=9)
+Me!HoleCall=Inspect(value,count)
+End Sub
+Sub MissingArguments()
+Me!MissingDefault=Inspect()
+Me!ExplicitEmpty=Inspect(Empty,3)
+Me!ExplicitNull=Inspect(Null)
+Me!ErrorNotMissing=Inspect(CVErr(448))
+Me!FunctionHole=Inspect(,3)
+Call Capture(,4)
+Me!ForwardResult=Forward()
+Me!ReturnMissing=CStr(IsMissing(Pass()))
+End Sub
+)VBA","MissingArguments",host);
+    if(missingArguments.status!=VbaExecutionStatus::Completed) std::cerr<<"Missing error="<<missingArguments.errorNumber<<" line="<<missingArguments.line<<"\n";
+    assert(missingArguments.status==VbaExecutionStatus::Completed);
+    assert(host.fields["MissingDefault"]=="True:0:Error" && host.fields["ExplicitEmpty"]=="False:3:Empty");
+    assert(host.fields["ExplicitNull"]=="False:0:Null" && host.fields["ErrorNotMissing"]=="False:0:Error");
+    assert(host.fields["FunctionHole"]=="True:3:Error" && host.fields["HoleCall"]=="True:4:Error");
+    assert(host.fields["ForwardMissing"]=="True" && host.fields["ForwardResult"]=="True:0:Error");
+    assert(host.fields["ReturnMissing"]=="True");
+    const auto namedArguments=executeVbaProcedure(R"VBA(Function Multiply(ByVal amount As Long, Optional ByVal factor As Long=2) As Long
+Multiply=amount*factor
+End Function
+Sub Change(ByRef first As Long, ByRef second As Long)
+first=first+1
+second=second+10
+End Sub
+Sub NamedArguments()
+Dim a As Long, b As Long
+a=1
+b=2
+Me!NamedResult=CStr(Multiply(factor:=3,amount:=4))
+Me!NamedDefault=CStr(Multiply(amount:=5))
+Call Change(second:=b,first:=a)
+Me!NamedRefs=CStr(a) & ":" & CStr(b)
+Change second:=b,first:=a
+Me!ImplicitNamedRefs=CStr(a) & ":" & CStr(b)
+On Error Resume Next
+Me!UnknownName=Multiply(unknown:=3)
+Me!NamedError=CStr(Err.Number)
+End Sub
+)VBA","NamedArguments",host);
+    if(namedArguments.status!=VbaExecutionStatus::Completed) std::cerr<<"Named error="<<namedArguments.errorNumber<<" line="<<namedArguments.line<<"\n";
+    assert(namedArguments.status==VbaExecutionStatus::Completed);
+    assert(host.fields["NamedResult"]=="12" && host.fields["NamedDefault"]=="10");
+    assert(host.fields["NamedRefs"]=="2:12" && host.fields["ImplicitNamedRefs"]=="3:22");
+    assert(host.fields["NamedError"]=="448");
     std::cout << "Core tests passed\n";
 }

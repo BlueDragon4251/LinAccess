@@ -1095,6 +1095,21 @@ public:
 class PreviewDoCmdObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewDoCmdObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        const auto key=text(name).toCaseFolded();
+        using Signature=linaccess::VbaArgumentSignature;
+        if(key=="openform") return Signature{{"FormName","View","FilterName","WhereCondition","DataMode","WindowMode","OpenArgs"},1};
+        if(key=="openreport") return Signature{{"ReportName","View","FilterName","WhereCondition","WindowMode","OpenArgs"},1};
+        if(key=="close") return Signature{{"ObjectType","ObjectName","Save"},0};
+        if(key=="gotorecord") return Signature{{"ObjectType","ObjectName","Record","Offset"},0};
+        if(key=="runsql") return Signature{{"SQLStatement","UseTransaction"},1};
+        if(key=="runcommand") return Signature{{"Command"},1};
+        if(key=="gotocontrol") return Signature{{"ControlName"},1};
+        if(key=="requery") return Signature{{"ControlName"},0};
+        if(key=="selectobject") return Signature{{"ObjectType","ObjectName","InDatabaseWindow"},1};
+        if(key=="domenuitem") return Signature{{"MenuBar","MenuName","Command","Subcommand","Version"},3};
+        return {};
+    }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
         if (key=="domenuitem" || key=="runcommand" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="runsql" || key=="selectobject")
@@ -1156,8 +1171,8 @@ public:
                 throw linaccess::VbaRuntimeError(6,"Close argument overflow");
             return static_cast<int>(integer);
         };
-        const int type=args.empty() ? -1 : number(args[0]);
-        const auto objectName=args.size()>1 ? std::optional<QString>(text(args[1].asText())) : std::nullopt;
+        const int type=args.empty() || args[0].kind==linaccess::VbaValue::Kind::Empty ? -1 : number(args[0]);
+        const auto objectName=args.size()>1 && args[1].kind!=linaccess::VbaValue::Kind::Empty ? std::optional<QString>(text(args[1].asText())) : std::nullopt;
         const int save=args.size()>2 ? number(args[2]) : 0;
         preview.closeOtherDocument(type,objectName,save); return {};
     }

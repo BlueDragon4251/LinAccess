@@ -66,6 +66,12 @@ End Function
 Sub WritePosition()
 Me.CurrentRecord=1
 End Sub
+Function NamedCommands() As String
+DoCmd.RunSQL SQLStatement:="INSERT INTO named_calls VALUES(1)"
+DoCmd.OpenForm WhereCondition:="[id]=20", FormName:="named_child"
+NamedCommands=Forms("named_child")!label
+DoCmd.Close Save:=2,ObjectName:="named_child",ObjectType:=2
+End Function
 )VBA";
     AccessFormPreview form("current_record",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents(); auto model=makePreviewFormObject(form);
     const auto position=[&](int wanted) { const auto value=model->member("CurrentRecord",{}); assert(value.kind==VbaValue::Kind::Number && value.numericType==VbaValue::NumericType::Long && value.asNumber()==wanted); auto* editor=form.findChild<QLineEdit*>("access-control-position"); assert(editor && editor->text()==QString::number(wanted)); };
@@ -98,6 +104,16 @@ End Sub
     AccessFormPreview queryForm("sorted_query",queryLayout,{},db); auto queryModel=makePreviewFormObject(queryForm);
     assert(queryModel->item("id").asNumber()==30); queryModel->assign("OrderBy",VbaValue::string("id ASC")); queryModel->assign("OrderByOn",VbaValue::logical(true));
     assert(queryModel->item("id").asNumber()==10 && queryModel->member("CurrentRecord",{}).asNumber()==1 && queryForm.close());
+    assert(sql.exec("CREATE TABLE named_calls(value INTEGER)"));
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','named_child',?)");
+    auto childLayout=layout; childLayout.replace("OnCurrent =\"[Event Procedure]\"","");
+    sql.addBindValue(childLayout); assert(sql.exec()); sql.finish();
+    AccessFormPreview namedForm("named_parent",layout,code,db); namedForm.show(); namedForm.activateWindow(); QApplication::processEvents();
+    std::vector<VbaValue> namedArgs; const auto named=namedForm.executeProcedure("NamedCommands",namedArgs);
+    if(named.status!=linaccess::VbaExecutionStatus::Completed) qWarning("Named DoCmd error=%d line=%d",named.errorNumber,named.line);
+    assert(named.status==linaccess::VbaExecutionStatus::Completed && named.typedReturnValue->asText()=="second");
+    assert(sql.exec("SELECT COUNT(*) FROM named_calls") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    assert(namedForm.close());
     const QByteArray report="Begin Report\nRecordSource =\"records\"\nEnd\n"; AccessFormPreview reportForm("position_report",report,{},db); auto reportModel=makePreviewFormObject(reportForm);
     int unsupported=0; try { reportModel->member("CurrentRecord",{}); } catch(const linaccess::VbaRuntimeError& error) { unsupported=error.number; } assert(unsupported==438); assert(reportForm.close());
 }

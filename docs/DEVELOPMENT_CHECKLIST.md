@@ -740,3 +740,10 @@ Full targets remain open:
 - [x] Native final ParamArray Variant packing, empty/multiple args, bounds,
   indexing/For Each/Join, ByVal forwarding and DAO effects; slot/reference writes,
   named/hole/Optional combinations and complete binder semantics remain open.
+
+- [x] Optional typed defaults without literals, distinct Missing/IsMissing,
+  metadata/Empty/Null separation, argument holes and non-aliasing missing forwarding.
+- [x] Native VBA named Sub/Function calls with written evaluation order,
+  reordered ByRef references, Optional holes and checked duplicate/unknown names.
+- [x] Signature-bound named native DoCmd arguments with actual SQL, filtered
+  child opening/control read/close; unsupported options and other methods stay open.

@@ -17,7 +17,7 @@ namespace linaccess {
 std::size_t vbaStringCodeUnits(std::string_view text);
 
 struct VbaValue {
-    enum class Kind { Null, Empty, Number, Text, Boolean, Object, Error, Currency, ByteArray, Array } kind{Kind::Null};
+    enum class Kind { Null, Empty, Number, Text, Boolean, Object, Error, Currency, ByteArray, Array, Missing } kind{Kind::Null};
     enum class NumericType { Double, Integer, Long, Single, Byte } numericType{NumericType::Double};
     double number{};
     std::int64_t currencyUnits{};
@@ -28,6 +28,7 @@ struct VbaValue {
     std::vector<unsigned char> bytes;
 
     static VbaValue empty();
+    static VbaValue missing();
     static VbaValue numeric(double value);
     static VbaValue single(float value);
     static VbaValue byte(unsigned char value);
@@ -45,10 +46,13 @@ struct VbaValue {
     std::optional<std::string> asField() const;
 };
 
+struct VbaArgumentSignature { std::vector<std::string> names; std::size_t required{}; };
+
 // Late-bound Access/DAO members. Unknown properties and methods must throw.
 class VbaObject {
 public:
     virtual ~VbaObject() = default;
+    virtual std::optional<VbaArgumentSignature> argumentSignature(std::string_view) const { return {}; }
     virtual VbaValue member(std::string_view name, const std::vector<VbaValue>& arguments) = 0;
     // Advertise a zero-argument scalar default explicitly; getter errors propagate.
     virtual bool hasScalarDefault() const { return false; }
@@ -84,6 +88,7 @@ struct VbaModuleState {
 };
 VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type);
 
+// Native procedure calls encode named bindings as @named:parameter:reference.
 using VbaFunctionResolver = std::function<VbaValue(std::string_view, std::vector<VbaValue>&,
                                                  const std::vector<std::string>&)>;
 bool validVbaExpression(std::string_view expression,bool withContext=false);

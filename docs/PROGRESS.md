@@ -2545,3 +2545,18 @@ remain open. Existing core/DAO targets pass 2/2 (1.44 s); desktop build passes.
 No new CTest target and no additional package/headless/distribution pass for this
 increment. Last combined package/headless validation belongs to e0afbcd.
 See PARAMARRAY_RUNTIME.md for supported scope and remaining boundaries.
+
+## Native Missing and named argument programming block (2026-11-02)
+
+Implemented Optional without explicit defaults, a distinct Missing Variant,
+IsMissing/Error metadata, positional holes and Missing forwarding that does not
+write callee defaults into omitted caller slots. Added user-procedure named
+binding with reordered values/references, duplicate/unknown/required checks,
+and native DoCmd parameter signatures. Existing GUI execution performs real SQL,
+opens a filtered child, reads its record-bound control and closes it by name.
+
+Existing core/DAO/current-record targets pass 3/3 (1.94 s); desktop build passes.
+No new test targets or full-suite/distribution repetition. Package/headless
+validation is still the earlier e0afbcd baseline pending a shared later delivery.
+Full builtin/DAO/COM named calls, SCODE/coercion and Windows semantics stay open.
+See NAMED_ARGUMENT_RUNTIME.md and OPTIONAL_ARGUMENT_RUNTIME.md.

@@ -320,7 +320,7 @@ If item Like "al*" Then
 result=result & item
 End If
 Next
-CurrentDb.Execute "INSERT INTO text_lists VALUES('" & StoredLabel(Parts(result)) & "')"
+CurrentDb.Execute "INSERT INTO text_lists VALUES('" & StoredLabel(suffix:="!",text:=Parts(result)) & "')"
 End Sub
 )VBA","SaveTextList",host);
     assert(textLists.status==VbaExecutionStatus::Completed);

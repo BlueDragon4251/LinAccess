@@ -239,6 +239,13 @@ std::vector<std::string> splitArguments(const std::string& input) {
     return args;
 }
 
+struct CallArgument { std::string name,expression; };
+CallArgument callArgument(const std::string& source) {
+    static const std::regex named(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*:=\s*(.*)$)");
+    std::smatch match;
+    if(std::regex_match(source,match,named)) return {lower(match[1].str()),trim(match[2].str())};
+    return {{},source};
+}
 std::size_t outsideKeyword(const std::string& source,std::string_view keyword,std::size_t start=0) {
     bool quoted=false,bracket=false; int depth=0;
     for (std::size_t i=0;i<source.size();++i) {
@@ -275,7 +282,7 @@ std::string inlineStatementLines(const std::string& source) {
         if (bracket) { if (ch==']') { if (i+1<result.size() && result[i+1]==']') ++i; else bracket=false; } continue; }
         if (ch=='"') quoted=true; else if (ch=='[') bracket=true;
         else if (ch=='(') ++depth; else if (ch==')') --depth;
-        else if (ch==':' && depth==0) result[i]='\n';
+        else if (ch==':' && depth==0 && (i+1>=result.size() || result[i+1]!='=')) result[i]='\n';
     }
     return result;
 }
@@ -381,9 +388,9 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                         return {VbaExecutionStatus::Unsupported, "VBA-Parameterdeklaration nicht unterstützt", line};
                     const bool optional=declared[1].matched;
                     const auto defaultExpression=trim(declared[5].str());
-                    if((optionalSeen && !optional) || (optional && defaultExpression.empty()) || (!optional && !defaultExpression.empty()))
-                        return {VbaExecutionStatus::Unsupported,"Optional parameters require explicit defaults and must follow required parameters",line};
-                    if(optional && (!std::regex_match(defaultExpression,defaultLiteral) || !validVbaExpression(defaultExpression)))
+                    if((optionalSeen && !optional) || (!optional && !defaultExpression.empty()))
+                        return {VbaExecutionStatus::Unsupported,"Optional parameters must follow required parameters",line};
+                    if(optional && !defaultExpression.empty() && (!std::regex_match(defaultExpression,defaultLiteral) || !validVbaExpression(defaultExpression)))
                         return {VbaExecutionStatus::Unsupported,"Optional parameter defaults currently require scalar literals",line};
                     const auto type=lower(declared[4].str());
                     if(optional && lower(defaultExpression)=="null" && !type.empty() && type!="variant")
@@ -661,11 +668,22 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             statements.push_back({Statement::Type::Evaluate,{},expression,line});
         } else if (std::regex_match(source, match, runSql)) {
             const auto expr = trim(match[1].str());
+            const auto arguments=splitArguments(expr);
+            if(std::any_of(arguments.begin(),arguments.end(),[](const std::string& argument){ return !callArgument(argument).name.empty(); })) {
+                const auto expression="DoCmd.RunSQL("+expr+")";
+                if(!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Named RunSQL syntax unsupported",line};
+                statements.push_back({Statement::Type::ObjectCall,{},expression,line}); continue;
+            }
             if (!validExpression(expr))
                 return {VbaExecutionStatus::Unsupported, "SQL-Ausdruck: " + expr, line};
             statements.push_back({Statement::Type::ExecuteSql, {}, expr, line});
         } else if (std::regex_match(source, match, openForm)) {
             const auto args=splitArguments(match[1].str());
+            if(std::any_of(args.begin(),args.end(),[](const std::string& argument){ return !callArgument(argument).name.empty(); })) {
+                const auto expression="DoCmd.OpenForm("+match[1].str()+")";
+                if(!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Named OpenForm syntax unsupported",line};
+                statements.push_back({Statement::Type::ObjectCall,{},expression,line}); continue;
+            }
             if (args.empty() || args.front().empty() || args.size()>7) return {VbaExecutionStatus::Unsupported,"OpenForm arguments unsupported",line};
             for (const auto& arg:args) if (!arg.empty() && !validExpression(arg)) return {VbaExecutionStatus::Unsupported,"OpenForm argument expression unsupported",line};
             statements.push_back({Statement::Type::OpenForm,{},match[1].str(),line});
@@ -692,7 +710,8 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 statements.push_back({Statement::Type::Evaluate,{},expression,line}); continue;
             }
             for (const auto& arg : splitArguments(args))
-                if (!validExpression(arg)) return {VbaExecutionStatus::Unsupported, "Aufrufargument", line};
+                if(const auto parsed=callArgument(arg); (!parsed.expression.empty() && !validExpression(parsed.expression)) || (!parsed.name.empty() && parsed.expression.empty()))
+                    return {VbaExecutionStatus::Unsupported,"Aufrufargument",line};
             statements.push_back({Statement::Type::Call, match[1].str(), args, line});
         } else if (std::regex_match(source, match, assignment)) {
             const auto expr = trim(match[3].str());
@@ -774,7 +793,8 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
         } else if (std::regex_match(source, match, implicitCall)) {
             const auto args = match[2].matched ? match[2].str() : match[3].str();
             for (const auto& arg : splitArguments(args))
-                if (!validExpression(arg)) return {VbaExecutionStatus::Unsupported, "Aufrufargument", line};
+                if(const auto parsed=callArgument(arg); (!parsed.expression.empty() && !validExpression(parsed.expression)) || (!parsed.name.empty() && parsed.expression.empty()))
+                    return {VbaExecutionStatus::Unsupported,"Aufrufargument",line};
             statements.push_back({Statement::Type::Call, match[1].str(), args, line});
         } else {
             return {VbaExecutionStatus::Unsupported, "VBA-Anweisung noch nicht unterstützt: " + source, line};
@@ -997,22 +1017,29 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         VbaExecutionResult failure{VbaExecutionStatus::Error,"Falsche Argumentanzahl",0};
         failure.errorNumber=450; return failure;
     }
+    std::vector<bool> omittedParameters(parameters.size(),false);
     try {
         for(std::size_t i=0;i<parameters.size();++i) {
             const auto& parameter=parameters[i]; const auto name=lower(parameter.name);
             if(parameter.paramArray) {
+                for(auto position=i;position<arguments.size();++position) if(arguments[position].kind==VbaValue::Kind::Missing)
+                    throw VbaRuntimeError(450,"ParamArray argument holes are not implemented");
                 locals[name]=makeVbaArray(std::vector<VbaValue>(arguments.begin()+static_cast<std::ptrdiff_t>(i),arguments.end()),0);
                 localTypes[name]="paramarray";
                 continue;
             }
-            if(references && i<references->size() && parameter.byReference && (*references)[i].paramArray)
+            const bool omitted=!implicitCancel && (i>=arguments.size() || arguments[i].kind==VbaValue::Kind::Missing);
+            omittedParameters[i]=omitted;
+            if(omitted && !parameter.optional) throw VbaRuntimeError(450,"Required argument omitted");
+            if(!omitted && references && i<references->size() && parameter.byReference && (*references)[i].paramArray)
                 throw VbaRuntimeError(3251,"ByRef ParamArray forwarding is not implemented");
-            if(references && i<references->size() && !implicitCancel && parameter.byReference && (*references)[i].indexedArray)
+            if(!omitted && references && i<references->size() && !implicitCancel && parameter.byReference && (*references)[i].indexedArray)
                 throw VbaRuntimeError(3251,"ByRef array element binding is not implemented");
-            const auto value=implicitCancel ? VbaValue::numeric(0) : i<arguments.size() ? arguments[i]
-                : evaluateVbaExpression(parameter.defaultExpression,host,{});
+            const auto value=implicitCancel ? VbaValue::numeric(0) : !omitted ? arguments[i]
+                : !parameter.defaultExpression.empty() ? evaluateVbaExpression(parameter.defaultExpression,host,{})
+                : parameter.type.empty() || parameter.type=="variant" ? VbaValue::missing() : initialLocalValue(parameter.type);
             const auto converted=checkedType(parameter.type) ? coerceVbaModuleValue(value,parameter.type) : value;
-            if(references && i<references->size() && !implicitCancel && parameter.byReference && (*references)[i].source) {
+            if(!omitted && references && i<references->size() && !implicitCancel && parameter.byReference && (*references)[i].source) {
                 const auto& sourceType=(*references)[i].type;
                 if((checkedType(parameter.type) || checkedType(sourceType)) && !sourceType.empty() && sourceType!="variant"
                     && !parameter.type.empty() && parameter.type!="variant" && sourceType!=parameter.type)
@@ -1037,7 +1064,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     std::vector<Alias> aliases;
     if (references && !implicitCancel)
         for (std::size_t i = 0; i < parameters.size() && i<references->size(); ++i)
-            if (parameters[i].byReference && (*references)[i].source)
+            if (!omittedParameters[i] && parameters[i].byReference && (*references)[i].source)
                 aliases.push_back({lower(parameters[i].name), (*references)[i].source, *(*references)[i].source,(*references)[i].type});
     std::vector<std::shared_ptr<VbaModuleState>> stateOwners;
     try {
@@ -1098,14 +1125,14 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     const auto copyArguments = [&] {
         if (!implicitCancel)
             for (std::size_t i = 0; i < parameters.size() && i<arguments.size(); ++i)
-                if (parameters[i].byReference) arguments[i] = locals[lower(parameters[i].name)];
+                if (!omittedParameters[i] && parameters[i].byReference) arguments[i] = locals[lower(parameters[i].name)];
     };
     auto completed = [&](int line, bool exited) {
         VbaExecutionResult outcome{VbaExecutionStatus::Completed, {}, line, exited};
         if (isFunction) {
             const auto value = locals[lower(std::string(procedure))];
             outcome.typedReturnValue = std::make_shared<VbaValue>(value);
-            if (value.kind != VbaValue::Kind::Object && value.kind!=VbaValue::Kind::Error) outcome.returnValue = value.asField();
+            if (value.kind != VbaValue::Kind::Object && value.kind!=VbaValue::Kind::Error && value.kind!=VbaValue::Kind::Missing) outcome.returnValue = value.asField();
         }
         storeAliases();
         copyArguments();
@@ -1114,8 +1141,16 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     };
     const auto invoke = [&](std::string_view name, std::vector<VbaValue>& actuals,
                             const std::vector<std::string>& names, bool needsValue) -> VbaValue {
+        std::vector<std::string> argumentNames,argumentRefs;
+        for(const auto& reference:names) {
+            if(reference.starts_with("@named:")) {
+                const auto separator=reference.find(':',7);
+                if(separator==std::string::npos) throw VbaRuntimeError(450,"Invalid named argument binding");
+                argumentNames.push_back(reference.substr(7,separator-7)); argumentRefs.push_back(reference.substr(separator+1));
+            } else { argumentNames.emplace_back(); argumentRefs.push_back(reference); }
+        }
         std::vector<ReferenceBinding> bindings;
-        for (const auto& expression : names) {
+        for (const auto& expression : argumentRefs) {
             auto found = locals.find(lower(expression));
             const auto type=variableType(lower(expression));
             ReferenceBinding binding{found==locals.end() ? nullptr : &found->second,checkedType(type) ? type : std::string{}};
@@ -1128,13 +1163,49 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             }
             bindings.push_back(binding);
         }
-        auto nested = executeProcedure(module, name, host, actuals, &bindings);
-        if (nested.status == VbaExecutionStatus::ProcedureMissing) {
-            const auto external = host.moduleForProcedure(name);
-            if (external) nested = executeProcedure(*external, name, host, actuals, &bindings);
+        VbaExecutionResult nested;
+        const bool named=std::any_of(argumentNames.begin(),argumentNames.end(),[](const std::string& value){ return !value.empty(); });
+        if(named) {
+            std::string targetModule(module);
+            std::vector<Statement> compiled; std::vector<Parameter> parameters;
+            bool function=false,cancel=false;
+            auto declaration=parseProcedure(targetModule,name,compiled,function,cancel,&parameters);
+            if(declaration.status==VbaExecutionStatus::ProcedureMissing) {
+                const auto external=host.moduleForProcedure(name);
+                if(external) {
+                    targetModule=*external; compiled.clear(); parameters.clear();
+                    declaration=parseProcedure(targetModule,name,compiled,function,cancel,&parameters);
+                }
+            }
+            if(declaration.status!=VbaExecutionStatus::Completed) throw VbaRuntimeError(3251,"Named arguments require a supported VBA procedure declaration");
+            if(std::any_of(parameters.begin(),parameters.end(),[](const Parameter& parameter){ return parameter.paramArray; }))
+                throw VbaRuntimeError(3251,"Named ParamArray calls are not implemented");
+            std::vector<VbaValue> ordered(parameters.size(),VbaValue::missing());
+            std::vector<ReferenceBinding> orderedBindings(parameters.size());
+            std::vector<bool> assigned(parameters.size(),false);
+            std::vector<std::size_t> mapping; bool namedSeen=false;
+            for(std::size_t index=0;index<actuals.size();++index) {
+                std::size_t target=index;
+                if(!argumentNames[index].empty()) {
+                    namedSeen=true; target=parameters.size();
+                    for(std::size_t parameter=0;parameter<parameters.size();++parameter)
+                        if(lower(parameters[parameter].name)==lower(argumentNames[index])) { target=parameter; break; }
+                    if(target==parameters.size()) throw VbaRuntimeError(448,"Named argument not found");
+                } else if(namedSeen) throw VbaRuntimeError(450,"Positional arguments cannot follow named arguments");
+                if(target>=parameters.size() || assigned[target]) throw VbaRuntimeError(450,"Argument supplied more than once or too many arguments");
+                assigned[target]=true; ordered[target]=actuals[index]; orderedBindings[target]=bindings[index]; mapping.push_back(target);
+            }
+            nested=executeProcedure(targetModule,name,host,ordered,&orderedBindings);
+            for(std::size_t index=0;index<actuals.size();++index) actuals[index]=ordered[mapping[index]];
+        } else {
+            nested=executeProcedure(module,name,host,actuals,&bindings);
+            if(nested.status==VbaExecutionStatus::ProcedureMissing) {
+                const auto external=host.moduleForProcedure(name);
+                if(external) nested=executeProcedure(*external,name,host,actuals,&bindings);
+            }
         }
         for (std::size_t i = 0; i < names.size(); ++i) {
-            auto found = locals.find(lower(names[i]));
+            auto found = locals.find(lower(argumentRefs[i]));
             if (found != locals.end()) {
                 if(variableType(found->first)=="paramarray") {
                     if(actuals[i].kind!=VbaValue::Kind::Array || actuals[i].object!=found->second.object)
@@ -1377,8 +1448,13 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (active) {
                     const auto expressions = splitArguments(instruction.expression);
                     std::vector<VbaValue> actuals;
-                    for (const auto& expression : expressions) actuals.push_back(evaluate(expression));
-                    (void)invoke(instruction.argument, actuals, expressions, false);
+                    std::vector<std::string> references;
+                    for(const auto& expression:expressions) {
+                        const auto parsed=callArgument(expression);
+                        actuals.push_back(parsed.expression.empty() ? VbaValue::missing() : evaluate(parsed.expression));
+                        references.push_back(parsed.name.empty() ? parsed.expression : "@named:"+parsed.name+":"+parsed.expression);
+                    }
+                    (void)invoke(instruction.argument,actuals,references,false);
                 }
                 break;
             case Statement::Type::SetField:
