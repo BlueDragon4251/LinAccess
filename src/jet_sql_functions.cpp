@@ -189,6 +189,11 @@ void currencyNumber(sqlite3_context* context,int count,sqlite3_value** args) noe
       catch(...) { native.error(context,"SQL currency conversion failed",-1); }
 }
 
+void currencyStore(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    if(count==1 && api().type(args[0])==SQLITE_NULL) { api().nullResult(context); return; }
+    currencyNumber(context,count,args);
+}
+
 void currencyArithmetic(sqlite3_context* context,sqlite3_value** args,std::string_view operation) noexcept {
     auto& native=api();
     try {
@@ -414,6 +419,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_qbcolor",-1,&qbColor,nullptr,nullptr);
     ensure("linaccess_jet_round",-1,&roundNumber,nullptr,nullptr);
     ensure("linaccess_jet_ccur",-1,&currencyNumber,nullptr,nullptr);
+    ensure("linaccess_jet_currency_store",1,&currencyStore,nullptr,nullptr);
     ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep,&currencySumFinal);
     ensure("linaccess_jet_currency_add",2,&currencyAdd,nullptr,nullptr);
     ensure("linaccess_jet_currency_subtract",2,&currencySubtract,nullptr,nullptr);

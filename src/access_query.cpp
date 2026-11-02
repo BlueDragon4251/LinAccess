@@ -1006,8 +1006,82 @@ static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPla
     if(fields.isEmpty()) return source;
     auto resolved=compileCurrencyQuery(source.source,fields); resolved.currencyContextResolved=true; return resolved;
 }
+// Only direct physical-table UPDATEs enter this path. Joined actions retain
+// their existing materialized-source/identity handling.
+static QString currencyUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
+    if(plan.source.isEmpty() || plan.sql!=plan.compiledSql) return plan.sql;
+    const auto tokens=tokenize(plan.source);
+    const auto word=[&](qsizetype i,const char* value) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0; };
+    const auto name=[&](qsizetype i) { return i<tokens.size() && (tokens[i].kind==Token::Word || tokens[i].kind==Token::Identifier); };
+    qsizetype pos=0;
+    if(word(0,"PARAMETERS")) { while(pos<tokens.size() && !symbol(tokens[pos],";")) ++pos; ++pos; }
+    if(!word(pos,"UPDATE") || !name(pos+1)) return plan.sql;
+    const auto requested=tokens[++pos].value; ++pos;
+    QString alias;
+    if(word(pos,"AS")) { ++pos; if(!name(pos)) return plan.sql; alias=tokens[pos++].value; }
+    else if(!word(pos,"SET") && name(pos)) alias=tokens[pos++].value;
+    if(!word(pos,"SET")) return plan.sql;
+    const auto start=++pos;
+    qsizetype end=tokens.size(),where=-1; int depth=0;
+    QVector<qsizetype> separators;
+    for(qsizetype i=start;i<tokens.size();++i) {
+        if(word(i,"SELECT") || word(i,"FROM") || word(i,"RETURNING")) return plan.sql;
+        if(symbol(tokens[i],"(")) ++depth;
+        else if(symbol(tokens[i],")")) --depth;
+        else if(depth==0 && word(i,"WHERE")) { if(where>=0) return plan.sql; where=i; }
+        else if(depth==0 && symbol(tokens[i],",") && where<0) separators.append(i);
+        else if(depth==0 && symbol(tokens[i],";")) { if(i!=tokens.size()-1) return plan.sql; end=i; }
+        if(depth<0) return plan.sql;
+    }
+    if(depth!=0) return plan.sql;
+    QString table;
+    for(const auto& candidate:db.tables(QSql::Tables)) if(candidate.compare(requested,Qt::CaseInsensitive)==0) { table=candidate; break; }
+    if(table.isEmpty()) return plan.sql;
+    const auto types=sqliteColumnTypes(db,table);
+    QMap<QString,QString> fields;
+    for(auto it=types.cbegin();it!=types.cend();++it) if(it.value()=="CURRENCY_REAL") {
+        fields.insert(it.key(),it.value()); fields.insert(table.toCaseFolded()+'.'+it.key(),it.value());
+        if(!alias.isEmpty()) fields.insert(alias.toCaseFolded()+'.'+it.key(),it.value());
+    }
+    if(fields.isEmpty()) return plan.sql;
+    struct Assignment { QString column; QVector<Token> expression; bool currency; };
+    QVector<Assignment> assignments; bool currencyTarget=false;
+    separators.append(where>=0 ? where : end);
+    for(const auto stop:separators) {
+        QString column;
+        if(name(pos) && pos+1<stop && symbol(tokens[pos+1],"=")) { column=tokens[pos].value; pos+=2; }
+        else if(name(pos) && pos+3<stop && symbol(tokens[pos+1],".") && name(pos+2) && symbol(tokens[pos+3],"=")) {
+            const auto qualifier=tokens[pos].value;
+            if(qualifier.compare(alias.isEmpty()?table:alias,Qt::CaseInsensitive)!=0) return plan.sql;
+            column=tokens[pos+2].value; pos+=4;
+        } else return plan.sql;
+        if(pos>=stop) return plan.sql;
+        const bool currency=types.value(column.toCaseFolded())=="CURRENCY_REAL";
+        currencyTarget|=currency; assignments.append({column,tokens.mid(pos,stop-pos),currency}); pos=stop+1;
+    }
+    if(!currencyTarget) return plan.sql;
+    QStringList declarations;
+    for(const auto& parameter:plan.parameters) declarations.append(renderJetTokens({{Token::Identifier,parameter.name}})+' '+parameter.type);
+    const auto header=declarations.isEmpty()?QString{}:"PARAMETERS "+declarations.join(',')+"; ";
+    const auto expression=[&](const QVector<Token>& code) {
+        const auto compiled=compileCurrencyQuery(header+"SELECT "+renderJetTokens(code)+" AS [__la_currency_expr]",fields).sql;
+        const QString prefix="SELECT ",suffix=" AS "+identifier("__la_currency_expr");
+        if(!compiled.startsWith(prefix) || !compiled.endsWith(suffix)) throw VbaRuntimeError(3251,"Currency UPDATE expression shape unsupported");
+        return compiled.mid(prefix.size(),compiled.size()-prefix.size()-suffix.size());
+    };
+    QStringList set;
+    for(const auto& assignment:assignments) {
+        auto value=expression(assignment.expression);
+        if(assignment.currency) value="linaccess_jet_currency_store("+value+')';
+        set.append(identifier(assignment.column)+'='+value);
+    }
+    auto result="UPDATE "+identifier(table)+(alias.isEmpty()?QString{}:" AS "+identifier(alias))+" SET "+set.join(',');
+    if(where>=0) result+=" WHERE "+expression(tokens.mid(where+1,end-where-1));
+    installJetSqlFunctions(db);
+    return result;
+}
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
-    if (plan.updateTarget.isEmpty()) return plan.sql;
+    if (plan.updateTarget.isEmpty()) return currencyUpdateSql(db,plan);
     if (!db.tables(QSql::Tables).contains(plan.updateTarget,Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Joined UPDATE requires a writable table target");
     if (installAccessQueryViews(db)<0) throw VbaRuntimeError(3251,"Joined UPDATE query dependencies unavailable");
     const auto record=db.record(plan.updateTarget); QString identity;

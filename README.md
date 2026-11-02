@@ -501,3 +501,8 @@ einen begrenzten, tatsächlich ausgeführten Pfad für Escape, Umschalt+Enter,
 F9/Umschalt+F9, F2, Enter sowie Strg+W/Strg+F4. KeyPreview und gebundene VBA-
 KeyDown/KeyPress/KeyUp-Ereignisse können Eingaben abbrechen oder ASCII-Zeichen
 ersetzen. Vollständige Access-2003-Oberflächen- und Tastaturparität ist weiterhin offen.
+
+[Currency in einfachen UPDATE-Anweisungen](docs/CURRENCY_UPDATE_RUNTIME.md)
+prüft Zielspalten vor dem Schreiben und erhält vier Dezimalstellen. Native
+DAO-/VBA-/Qt-Tests prüfen auch den vollständigen Rollback bei Konvertierungsfehlern;
+komplexe Aktionsabfragen und vollständige Jet-Semantik bleiben offen.

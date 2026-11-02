@@ -783,3 +783,9 @@ precedence/associativity, four-decimal multiplication rounding, Null and Currenc
 result types into DAO/Qt. Actual SQL/report tests include Sum(a+b) and range/
 overflow checks. Mixed/division/complex/action/full-range/Windows SQL arithmetic
 remains open. See [CURRENCY_ARITHMETIC_SQL_RUNTIME.md](CURRENCY_ARITHMETIC_SQL_RUNTIME.md).
+
+Simple physical-table UPDATE now checks Currency targets before writing, with
+four-decimal conversion and exact proven RHS arithmetic. DAO/VBA/Qt regressions
+cover parameters, aliases, simultaneous assignments, NULL and statement-wide
+rollback on conversion errors. Joined/append/complex/full Jet semantics remain
+open. See [CURRENCY_UPDATE_RUNTIME.md](CURRENCY_UPDATE_RUNTIME.md).

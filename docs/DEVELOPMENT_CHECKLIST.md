@@ -661,3 +661,8 @@ Full targets remain open:
 - [x] Exact proven Currency SELECT +,-,* with precedence/associativity/rounding/
   Null/parameter/SUM/DAO/Qt report/range/overflow regression; mixed/division/
   complex/action/full-range/Windows arithmetic remains open.
+
+- [x] Simple physical-table Currency UPDATE target conversion and proven RHS
+  arithmetic, parameter/alias/qualified/multi-assignment/NULL/range/atomic-error
+  regression through actual DAO/VBA/Qt; joined/append/complex/full Jet semantics
+  remain open.

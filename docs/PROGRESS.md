@@ -2209,3 +2209,27 @@ Ubuntu 24.04 45/45 (95.36 s), Debian 13 45/45 (95.63 s), GUI-disabled core
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. GitHub's
 account-level CI restriction remains separate; no remote test success is claimed.
+
+## 2026-11-02 — Checked Currency targets in simple UPDATE
+
+Reproduced unchecked Double assignment in the new regression (0/1). Added
+bounded physical-table UPDATE token handling, live Currency metadata, original
+parameter bindings, checked nullable target conversion and reuse of proven
+fixed-point RHS arithmetic. Initial regression passes; expanded tests verify
+aliases/qualified names, simultaneous assignments, ordinary columns, ordered
+parameters, Null, text rounding, range errors and statement-wide rollback.
+A mixed Double half-value assertion was invalid because binary evaluation
+precedes target conversion; replaced it with an unambiguous mixed-value check,
+retaining exact text/Currency rounding checks. Final targeted UPDATE test passes
+(1/1); the other 10 selected Currency/layout/original Kassa tests passed in the
+expanded run. Native VBA/DAO/Qt update/requery and exact boundary display checked.
+GUI suite has 46 CTests. Joined/append/complex/full Jet/Windows semantics remain
+open; no complete original business workflow increment. See
+CURRENCY_UPDATE_RUNTIME.md. Full local validation follows below.
+
+Full local validation: host 46/46 (105.91 s), Debian 12 46/46 (111.22 s),
+Ubuntu 24.04 46/46 (96.44 s), Debian 13 46/46 (97.80 s), GUI-disabled core
+1/1 (1.32 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. GitHub's
+account-level CI restriction remains separate; no remote test success is claimed.
