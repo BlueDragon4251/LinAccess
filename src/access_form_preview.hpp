@@ -13,6 +13,7 @@
 #include <optional>
 
 class QComboBox;
+class QColor;
 class QTimer;
 class QLabel;
 class QWidget;
@@ -57,6 +58,8 @@ private:
     linaccess::VbaValue evalExpression(std::string_view expression);
     static bool supportsControlFont(const linaccess::AccessVisualControl& control);
     void applyControlFont(QWidget* widget,const linaccess::AccessVisualControl& control);
+    static QColor resolveForeColor(qint32 color);
+    static void applyForeColor(QWidget* widget,const linaccess::AccessVisualControl& control);
     static bool supportsTextAlignment(const linaccess::AccessVisualControl& control);
     static void applyTextAlignment(QWidget* widget,const linaccess::AccessVisualControl& control);
     void refreshTextAlignments();

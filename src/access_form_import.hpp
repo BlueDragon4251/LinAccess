@@ -40,6 +40,7 @@ struct AccessVisualControl {
     QString inputMask;
     AccessControlFont font;
     int textAlign{};
+    std::optional<qint32> foreColor;
     int optionValue{1};
     int optionGroupIndex{-1};
     QString rowSource;

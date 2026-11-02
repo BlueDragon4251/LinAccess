@@ -40,6 +40,8 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QColor>
+#include <QPalette>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
@@ -691,7 +693,9 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     auto* canvas = new QWidget(scroll);
     canvas->setObjectName("access-form-canvas");
     canvas->setAutoFillBackground(true);
-    canvas->setStyleSheet("#access-form-canvas { background: #f0f0f0; }");
+    auto canvasPalette=canvas->palette();
+    canvasPalette.setColor(QPalette::Window,QColor(240,240,240));
+    canvas->setPalette(canvasPalette);
     canvas->setFixedSize(qBound(400, pixels(layout_.width) + 70, 3500),
                          qBound(250, pixels(layout_.height) + 90, 3500));
     buildControls(canvas);
@@ -814,6 +818,35 @@ void AccessFormPreview::applyControlFont(QWidget* widget,const linaccess::Access
     if (auto* combo=qobject_cast<QComboBox*>(widget)) {
         if (combo->lineEdit()) combo->lineEdit()->setFont(font);
         combo->view()->setFont(font);
+    }
+}
+
+QColor AccessFormPreview::resolveForeColor(qint32 color) {
+    const auto bits=static_cast<quint32>(color);
+    if (bits<=0x00ffffffU) return QColor(bits&255U,(bits>>8)&255U,(bits>>16)&255U);
+    // These two source system-color intents cover all exported original
+    // ForeColor system values. Resolve from the application palette, never
+    // from a previously overridden instance palette.
+    const auto native=QApplication::palette();
+    if (bits==0x80000008U) return native.color(QPalette::Active,QPalette::Text);
+    if (bits==0x80000012U) return native.color(QPalette::Active,QPalette::ButtonText);
+    throw linaccess::VbaRuntimeError(3251,"OLE foreground color adapter is not implemented for this encoding");
+}
+
+void AccessFormPreview::applyForeColor(QWidget* widget,const linaccess::AccessVisualControl& control) {
+    if (!supportsControlFont(control) || !control.foreColor) return;
+    const auto color=resolveForeColor(*control.foreColor);
+    const auto apply=[&](QWidget* target) {
+        target->ensurePolished();
+        auto palette=target->palette();
+        for (const auto group:{QPalette::Active,QPalette::Inactive})
+            for (const auto role:{QPalette::Text,QPalette::WindowText,QPalette::ButtonText}) palette.setColor(group,role,color);
+        target->setPalette(palette);
+    };
+    apply(widget);
+    if (auto* combo=qobject_cast<QComboBox*>(widget)) {
+        if (combo->lineEdit()) apply(combo->lineEdit());
+        if (combo->view()) apply(combo->view());
     }
 }
 
@@ -940,6 +973,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         }
         if (!widget) continue;
         applyControlFont(widget,control);
+        applyForeColor(widget,control);
         applyTextAlignment(widget,control);
         widget->setObjectName("access-control-" + control.name);
         widget->setProperty("la_access_tag",control.tag);
@@ -1104,7 +1138,8 @@ void AccessFormPreview::applyControlStates() {
             line->setEchoMode(passwordDisplay ? QLineEdit::Password : QLineEdit::Normal);
             if (passwordDisplay) {
                 if (!line->property("la_password_original_style").isValid()) line->setProperty("la_password_original_style",line->styleSheet());
-                line->setStyleSheet(line->property("la_password_original_style").toString()+"\nQLineEdit { lineedit-password-character: 42; lineedit-password-mask-delay: 0; }");
+                const auto passwordStyle=line->property("la_password_original_style").toString()+"\nQLineEdit { lineedit-password-character: 42; lineedit-password-mask-delay: 0; }";
+                if (line->styleSheet()!=passwordStyle) line->setStyleSheet(passwordStyle);
             } else if (line->property("la_password_original_style").isValid()) {
                 line->setStyleSheet(line->property("la_password_original_style").toString()); line->setProperty("la_password_original_style",QVariant{});
             }
@@ -1119,6 +1154,7 @@ void AccessFormPreview::applyControlStates() {
         else if (auto* group=qobject_cast<QGroupBox*>(widget))
             for (auto* button:group->findChildren<QAbstractButton*>()) button->setProperty("la_access_input_readonly",readOnly);
         else if (auto* calendar=qobject_cast<QCalendarWidget*>(widget)) calendar->setEnabled(control.enabled && !calendar->property("la_calendar_bound").toBool());
+        applyForeColor(widget,control);
         const bool focusable=!qobject_cast<QLabel*>(widget) && control.type!="Image" && control.type!="Rectangle" && control.type!="Line";
         if (focusable) {
             widget->setFocusPolicy(control.tabStop ? Qt::StrongFocus : Qt::ClickFocus);
@@ -1896,6 +1932,7 @@ void AccessFormPreview::requeryControl(std::string_view name) {
             combo->setCurrentIndex(-1); combo->setEditText(draft); combo->setProperty("la_null",false);
         } else { setText(combo,old.toString()); combo->setProperty("la_null",old.isNull()); }
         if (combo->isEditable()) combo->lineEdit()->setModified(editing);
+        applyForeColor(combo,control);
         return;
     }
 }

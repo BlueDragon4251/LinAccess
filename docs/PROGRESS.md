@@ -1160,3 +1160,27 @@ Final validation: host 21/21 (87.10 s), Debian 12 21/21 (68.95 s), Ubuntu
 DEBs pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass; the repository remains private.
+
+## 2026-11-02 — Native foreground colors and VBA RGB
+
+Imported/inherited ForeColor metadata now colors native text adapters and combo
+editors/popups. RGB and the two original system-color intents resolve correctly
+from independent application palettes; other encodings and runtime report
+setters reject explicitly. Native RGB(...) enables actual VBA color expressions.
+Qt stylesheet initialization exposed palette resets: canvas background now uses
+a native palette, password styling avoids redundant reapplication, and explicit
+colors survive control-state updates/navigation. Native label/canvas pixels and
+masked pending input/selection/focus, SQL save, read-only permissions, popup
+requery, scalar/errors and fresh instance/report preflight are tested.
+The initial targeted trio passed 3/3 (41.97 s); additional canvas/default-getter
+checks are included in final validation. Empty-DB/no-CodeBehind original probes
+check 45 layouts with 271 RGB and 277 system-color controls. Original 32-module
+lexical inventory has zero RGB calls / zero .ForeColor references, establishing
+no extra original business execution. See FOREGROUND_COLOR_RUNTIME.md.
+
+Final validation: host 21/21 (86.73 s), Debian 12 21/21 (72.41 s), Ubuntu
+24.04 21/21 (64.26 s), GUI-disabled core 1/1 (1.17 s). Fresh host/distro
+DEBs pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
+installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+All four original fixture hashes pass. Earlier text-alignment commit b43e659
+also completed private CI successfully.

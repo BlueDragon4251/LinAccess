@@ -438,3 +438,12 @@ alignment. Native Qt/SQL tests preserve input buffers and read-only permissions;
 CodeBehind or rows. Distributed alignment and runtime report setters explicitly
 reject as unsupported. This is bounded horizontal rendering, not complete visual
 parity; see [Text alignment](TEXT_ALIGNMENT_RUNTIME.md).
+
+Native form-control ForeColor now imports/inherits signed OLE metadata, renders
+RGB plus window/button-text system-color intents in Qt, and supports VBA RGB(...)
+assignments without saving data. Real masked input, SQL, popup requery, read-only
+permissions and native rendered pixels are tested. An empty-DB/no-CodeBehind
+probe covers 45 original layouts (271 RGB / 277 system-color controls); no extra
+original handler execution follows. Other OLE encodings and runtime report
+setters reject explicitly; Windows palette/default/full visual identity remains
+open. See [Foreground colors](FOREGROUND_COLOR_RUNTIME.md).

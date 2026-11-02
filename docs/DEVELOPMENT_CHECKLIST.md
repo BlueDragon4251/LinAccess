@@ -425,3 +425,8 @@ Full targets remain open:
   typed General/Left/Center/Right, pending-input/SQL/read-only preservation and
   24 original layout probes (208 Labels / 226 TextBoxes); distributed/report
   runtime setters and complete visual parity remain open.
+
+- [x] Bounded native ForeColor templates/RGB/system text colors and VBA RGB(...),
+  native pixel evidence, masked buffer/SQL/read-only/popup preservation and
+  45 original layout probes (271 RGB / 277 system-color controls); complete
+  OLE palettes, backgrounds and Windows visual equivalence remain open.

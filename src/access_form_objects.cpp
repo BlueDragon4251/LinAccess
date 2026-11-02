@@ -8,6 +8,8 @@
 #include <QAbstractButton>
 #include <QAction>
 #include <QLabel>
+#include <QColor>
+#include <QPalette>
 #include <QLineEdit>
 #include <QComboBox>
 #include <QStandardItemModel>
@@ -134,6 +136,12 @@ public:
         if (key == "eventprocprefix") return linaccess::VbaValue::string(bytes(preview.controlEventPrefix(name_)));
         if (key == "tag") return linaccess::VbaValue::string(bytes(widget->property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(caption()));
+        if (key=="forecolor") {
+            const auto& definition=fontDefinition();
+            if (definition.foreColor) return linaccess::VbaValue::numeric(*definition.foreColor);
+            const auto color=widget->palette().color(QPalette::Active,qobject_cast<QLabel*>(widget) ? QPalette::WindowText : qobject_cast<QAbstractButton*>(widget) ? QPalette::ButtonText : QPalette::Text);
+            return linaccess::VbaValue::numeric(color.red()|(color.green()<<8)|(color.blue()<<16));
+        }
         if (key=="textalign") {
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"TextAlign takes no arguments");
             return linaccess::VbaValue::numeric(alignmentDefinition().textAlign);
@@ -250,6 +258,17 @@ public:
             definition.font=std::move(next); preview.applyControlFont(widget,definition); return;
         }
 
+        if (key=="forecolor") {
+            auto& definition=fontDefinition();
+            if (preview.layout_.kind==linaccess::AccessDocumentKind::Report)
+                throw linaccess::VbaRuntimeError(3251,"Report runtime foreground color context is not implemented");
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null ForeColor");
+            const auto number=linaccess::sqlFieldValue(scalar,"INTEGER").toLongLong();
+            if (number<std::numeric_limits<qint32>::min() || number>std::numeric_limits<qint32>::max()) throw linaccess::VbaRuntimeError(6,"ForeColor Long overflow");
+            (void)preview.resolveForeColor(static_cast<qint32>(number));
+            definition.foreColor=static_cast<qint32>(number); preview.applyForeColor(widget,definition); return;
+        }
         if (key=="textalign") {
             auto& definition=alignmentDefinition();
             if (preview.layout_.kind==linaccess::AccessDocumentKind::Report)

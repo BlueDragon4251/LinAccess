@@ -668,6 +668,19 @@ private:
                 if (word!="ltrim" && word!="ltrim$") while(last>first && text[last-1]==' ') --last;
                 return VbaValue::string(text.substr(first,last-first));
             }
+            if (word=="rgb") {
+                if (!host_) return {};
+                if (args.size()!=3) throw error("RGB requires three color channels",450);
+                std::uint32_t color=0;
+                for (std::size_t index=0;index<3;++index) {
+                    const auto value=scalarObjectValue(args[index]);
+                    const auto channel=bankersRound(value.asNumber());
+                    if (!std::isfinite(channel)) throw error("RGB channel overflow",6);
+                    if (channel<0) throw error("Invalid negative RGB channel",5);
+                    color|=static_cast<std::uint32_t>(std::min(channel,255.0))<<(index*8);
+                }
+                return VbaValue::numeric(color);
+            }
             if ((word == "isnull" || word == "isempty" || word == "len" || word == "cstr"
                 || word == "clng" || word == "cdbl" || word == "ucase"
                 || word == "lcase" || word == "abs" || word == "int"

@@ -1352,6 +1352,18 @@ End Sub
     assert(evaluate("LTrim(Null)").kind==VbaValue::Kind::Null && evaluate("RTrim(Null)").kind==VbaValue::Kind::Null);
     substringError("Trim$(Null)",94); substringError("LTrim$(Null)",94); substringError("RTrim$(Null)",94);
     substringError("Trim()",450);
+    assert(evaluate("RGB(255,0,0)").asNumber()==255);
+    assert(evaluate("RGB(0,255,0)").asNumber()==65280);
+    assert(evaluate("RGB(0,0,255)").asNumber()==16711680);
+    assert(evaluate("RGB(255,255,255)").asNumber()==16777215);
+    assert(evaluate("RGB(300,127.5,0.5)").asNumber()==33023);
+    assert(evaluate("RGB(1e100,0,0)").asNumber()==255);
+    assert(evaluate("RGB(Empty,0,0)").asNumber()==0);
+    substringError("RGB(Null,0,0)",94); substringError("RGB(-1,0,0)",5);
+    substringError("RGB(\"bad\",0,0)",13); substringError("RGB(CVErr(5),0,0)",13);
+    substringError("RGB(1,2)",450); substringError("RGB(1,2,3,4)",450);
+    scalarProbe->value=VbaValue::numeric(12); const auto beforeColor=scalarProbe->reads;
+    assert(evaluateVbaExpression("RGB(probe,probe,probe)",host,scalarValues).asNumber()==789516 && scalarProbe->reads==beforeColor+3);
     const VbaVariables whitespaceValues{{"text",VbaValue::string(" \t ö\r\n ")}};
     assert(evaluateVbaExpression("Trim(text)",host,whitespaceValues).asText()=="\t ö\r\n");
     scalarProbe->value=VbaValue{};

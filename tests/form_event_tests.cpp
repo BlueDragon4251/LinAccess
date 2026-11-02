@@ -14,6 +14,9 @@
 #include <QCheckBox>
 #include <QLineEdit>
 #include <QLabel>
+#include <QColor>
+#include <QPalette>
+#include <QImage>
 #include <QFontMetricsF>
 #include <QAbstractItemView>
 #include <QRadioButton>
@@ -45,6 +48,7 @@ void testAllowEdits();
 void testCheckboxClose();
 void testControlDefaults();
 void testTextAlignment();
+void testForeColor();
 
 void testFormEvents() {
     testInsertionEvents();
@@ -62,6 +66,7 @@ void testFormEvents() {
     testCheckboxClose();
     testControlDefaults();
     testTextAlignment();
+    testForeColor();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-events");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
@@ -2343,6 +2348,186 @@ End
         bool rejected=false; try { linaccess::parseAccessFormLayout(QString("Begin Form\nBegin Section\nBegin TextBox\nName =\"field\"\nTextAlign =")+setting+"\nEnd\nEnd\nEnd"); } catch(const std::exception&) { rejected=true; } assert(rejected);
     }
     error=0; try { AccessFormPreview distributed("unsupported distribution","Begin Form\nBegin Section\nBegin TextBox\nName =\"field\"\nTextAlign =4\nEnd\nEnd\nEnd",{},db); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==3251);
+}
+
+void testForeColor() {
+    using linaccess::VbaValue;
+    auto native=QApplication::palette(); auto custom=native;
+    custom.setColor(QPalette::Active,QPalette::Text,QColor(12,34,56));
+    custom.setColor(QPalette::Active,QPalette::ButtonText,QColor(65,43,21));
+    QApplication::setPalette(custom);
+    auto db=QSqlDatabase::addDatabase("QSQLITE","forecolor"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)"));
+    assert(sql.exec("INSERT INTO records VALUES(1,'one'),(2,'two')"));
+    const QByteArray source=R"FORM(Begin Form
+RecordSource ="records"
+Begin
+Begin TextBox
+ForeColor =255
+End
+Begin Label
+ForeColor =16711680
+End
+End
+Begin Section
+Begin TextBox
+Name ="editor"
+ControlSource ="value"
+InputMask ="Password"
+ForeColor =1193046
+End
+Begin TextBox
+Name ="sibling"
+ControlSource ="value"
+Top =400
+End
+Begin Label
+Name ="label"
+Caption ="Literal"
+Top =800
+End
+Begin CommandButton
+Name ="paint"
+ForeColor =-2147483630
+OnClick ="[Event Procedure]"
+Top =1200
+End
+Begin ComboBox
+Name ="combo"
+RowSourceType ="Value List"
+RowSource ="one;two"
+ForeColor =32768
+Top =1600
+End
+Begin CheckBox
+Name ="check"
+ForeColor =65280
+Top =2000
+End
+Begin Rectangle
+Name ="shape"
+ForeColor =255
+Top =2400
+End
+Begin TextBox
+Name ="black"
+ForeColor =0
+Top =2800
+End
+End
+End
+)FORM";
+    const QByteArray code="Sub paint_Click()\nMe!editor.ForeColor=RGB(0,0,255)\nMe!combo.ForeColor=RGB(255,0,0)\nMe!label.ForeColor=RGB(0,255,0)\nMe!check.ForeColor=RGB(255,255,0)\nEnd Sub\n";
+    const auto parsed=linaccess::parseAccessFormLayout(QString::fromUtf8(source));
+    assert(parsed.controls[0].foreColor==1193046 && parsed.controls[1].foreColor==255 && parsed.controls[2].foreColor==16711680);
+    AccessFormPreview form("colors",source,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form);
+    const auto object=[&](const char* name) { return root->objectMember(name,{}).object; };
+    auto* editor=form.findChild<QLineEdit*>("access-control-editor"); auto* sibling=form.findChild<QLineEdit*>("access-control-sibling");
+    auto* label=form.findChild<QLabel*>("access-control-label"); auto* button=form.findChild<QPushButton*>("access-control-paint");
+    auto* combo=form.findChild<QComboBox*>("access-control-combo"); auto* check=form.findChild<QCheckBox*>("access-control-check");
+    auto* selector=form.findChild<QComboBox*>("access-record-selector"); assert(editor && sibling && label && button && combo && check && selector);
+    const auto color=[](QWidget* widget,QPalette::ColorRole role=QPalette::Text) { return widget->palette().color(QPalette::Active,role); };
+    assert(color(editor)==QColor(86,52,18) && color(sibling)==QColor(255,0,0));
+    assert(color(label,QPalette::WindowText)==QColor(0,0,255) && color(button,QPalette::ButtonText)==QColor(65,43,21));
+    assert(object("paint")->member("ForeColor",{}).asNumber()==-2147483630.0);
+    assert(color(form.findChild<QLineEdit*>("access-control-black"))==QColor(0,0,0) && object("black")->member("ForeColor",{}).asNumber()==0);
+    if (!(color(combo)==QColor(0,128,0) && color(combo->lineEdit())==QColor(0,128,0) && color(combo->view())==QColor(0,128,0)))
+        std::cerr<<"Synthetic combo color: control="<<color(combo).name().toStdString()<<", editor="<<color(combo->lineEdit()).name().toStdString()<<", popup="<<color(combo->view()).name().toStdString()<<"\n";
+    assert(color(combo)==QColor(0,128,0) && color(combo->lineEdit())==QColor(0,128,0) && color(combo->view())==QColor(0,128,0));
+    const auto font=editor->font(); const auto disabled=editor->palette().color(QPalette::Disabled,QPalette::Text);
+    const auto selected=editor->palette().color(QPalette::Active,QPalette::HighlightedText);
+    editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"fresh"); editor->setSelection(1,3);
+    button->click(); const auto click=form.eventResult("control:paint:Click"); assert(click && click->status==linaccess::VbaExecutionStatus::Completed);
+    assert(color(editor)==QColor(0,0,255) && color(sibling)==QColor(255,0,0) && color(label,QPalette::WindowText)==QColor(0,255,0));
+    assert(color(check,QPalette::WindowText)==QColor(255,255,0) && color(combo->lineEdit())==QColor(255,0,0) && color(combo->view())==QColor(255,0,0));
+    const auto rendered=label->grab().toImage(); int greenPixels=0;
+    for(int y=0;y<rendered.height();++y) for(int x=0;x<rendered.width();++x) {
+        const auto pixel=rendered.pixelColor(x,y);
+        if(pixel.green()>pixel.red()+80 && pixel.green()>pixel.blue()+80) ++greenPixels;
+    }
+    assert(greenPixels>0);
+    auto* canvas=form.findChild<QWidget*>("access-form-canvas"); assert(canvas);
+    const auto background=canvas->grab().toImage();
+    assert(background.pixelColor(background.width()-1,background.height()-1)==QColor(240,240,240));
+    assert(editor->font()==font && editor->hasFocus() && editor->selectionStart()==1 && editor->selectedText()=="res" && editor->displayText()=="*****");
+    assert(object("editor")->member("Text",{}).asText()=="fresh" && object("editor")->member("Value",{}).asText()=="one" && form.hasUnsavedChanges());
+    assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="one"); sql.finish();
+    for(const auto& item:std::vector<std::pair<VbaValue,int>>{{VbaValue{},94},{VbaValue::string("bad"),13},{VbaValue::numeric(2147483648.0),6},{VbaValue::numeric(-2147483649.0),6},{VbaValue::numeric(-1),3251},{VbaValue::numeric(16777216),3251},{VbaValue::numeric(-2147483631.0),3251}}) {
+        int error=0; try { object("editor")->assign("ForeColor",item.first); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+        assert(error==item.second && object("editor")->member("ForeColor",{}).asNumber()==16711680 && color(editor)==QColor(0,0,255));
+    }
+    object("editor")->assign("ForeColor",VbaValue::numeric(-2147483640.0)); assert(color(editor)==QColor(12,34,56));
+    assert(object("editor")->member("ForeColor",{}).asNumber()==-2147483640.0);
+    object("editor")->assign("ForeColor",VbaValue::numeric(-2147483630.0)); assert(color(editor)==QColor(65,43,21));
+    class ColorScalar final:public linaccess::VbaObject {
+    public:
+        int reads{};
+        VbaValue scalarValue() override { ++reads; return VbaValue::numeric(255.5); }
+        VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw linaccess::VbaRuntimeError(438,"No members"); }
+    };
+    auto scalar=std::make_shared<ColorScalar>(); object("editor")->assign("ForeColor",VbaValue::reference(scalar));
+    assert(scalar->reads==1 && object("editor")->member("ForeColor",{}).asNumber()==256 && color(editor)==QColor(0,1,0));
+    assert(editor->palette().color(QPalette::Disabled,QPalette::Text)==disabled && editor->palette().color(QPalette::Active,QPalette::HighlightedText)==selected);
+    int error=0; try { object("shape")->assign("ForeColor",VbaValue::numeric(255)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==438);
+    error=0; try { object("editor")->member("ForeColor",{VbaValue::numeric(1)}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==450);
+    root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="fresh"); sql.finish();
+    selector->setCurrentIndex(2); assert(editor->text()=="two" && color(editor)==QColor(0,1,0));
+    object("combo")->member("Requery",{}); assert(combo->count()==2 && color(combo->view())==QColor(255,0,0) && color(combo->lineEdit())==QColor(255,0,0));
+    assert(!form.hasUnsavedChanges() && form.close());
+    error=0; try { object("editor")->member("ForeColor",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==2450);
+    AccessFormPreview fresh("fresh colors",source,{},db); assert(fresh.findChild<QLineEdit*>("access-control-editor")->palette().color(QPalette::Active,QPalette::Text)==QColor(86,52,18)); assert(fresh.close());
+    assert(sql.exec("CREATE VIEW read_only_colors AS SELECT * FROM records")); auto readOnlySource=source; readOnlySource.replace("RecordSource =\"records\"","RecordSource =\"read_only_colors\"");
+    AccessFormPreview readOnly("read-only colors",readOnlySource,{},db); auto readOnlyField=makePreviewFormObject(readOnly)->objectMember("editor",{}).object;
+    readOnlyField->assign("ForeColor",VbaValue::numeric(255)); auto* locked=readOnly.findChild<QLineEdit*>("access-control-editor");
+    assert(locked && locked->isReadOnly() && color(locked)==QColor(255,0,0));
+    error=0; try { readOnlyField->assign("Value",VbaValue::string("blocked")); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+    assert(error==2448 && !readOnly.hasUnsavedChanges() && readOnly.close());
+    AccessFormPreview report("report colors","Begin Report\nBegin Section\nBegin Label\nName =\"label\"\nForeColor =255\nCaption =\"Caption\"\nEnd\nEnd\nEnd",{},db);
+    auto reportLabel=makePreviewFormObject(report)->objectMember("label",{}).object; assert(reportLabel->member("ForeColor",{}).asNumber()==255);
+    error=0; try { reportLabel->assign("ForeColor",VbaValue::numeric(65280)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+    assert(error==3251 && reportLabel->member("ForeColor",{}).asNumber()==255 && report.close());
+    AccessFormPreview defaultColor("native color default","Begin Form\nBegin Section\nBegin TextBox\nName =\"field\"\nEnd\nEnd\nEnd",{},db);
+    assert(makePreviewFormObject(defaultColor)->objectMember("field",{}).object->member("ForeColor",{}).asNumber()==(12|(34<<8)|(56<<16)));
+    assert(!defaultColor.hasUnsavedChanges() && defaultColor.close());
+    bool rejected=false; try { linaccess::parseAccessFormLayout("Begin Form\nBegin Section\nBegin TextBox\nName =\"field\"\nForeColor =2147483648\nEnd\nEnd\nEnd"); } catch(const std::exception&) { rejected=true; } assert(rejected);
+    error=0; try { AccessFormPreview unsupported("unsupported color","Begin Form\nBegin Section\nBegin TextBox\nName =\"field\"\nForeColor =-2147483631\nEnd\nEnd\nEnd",{},db); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==3251);
+    QApplication::setPalette(native);
+}
+
+void testOriginalForeColor(const QDir& directory,const QJsonArray& objects) {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","original-forecolor-empty"); db.setDatabaseName(":memory:"); assert(db.open());
+    int documents=0,rgb=0,system=0;
+    const auto supported=[](const auto& control) {
+        return !(control.locked && control.type!="TextBox") && control.foreColor &&
+            (control.type=="TextBox" || control.type=="Label" || control.type=="CommandButton" || control.type=="ComboBox" || control.type=="ListBox" || control.type=="CheckBox" || control.type=="OptionButton" || control.type=="ToggleButton");
+    };
+    for(const auto& entry:objects) {
+        const auto artifact=entry.toObject(); if(artifact["kind"]!="form" && artifact["kind"]!="report") continue;
+        QFile input(directory.filePath(artifact["file"].toString())); assert(input.open(QIODevice::ReadOnly)); const auto bytes=input.readAll();
+        assert(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()==artifact["sha256"].toString().toLatin1().toLower());
+        const auto layout=linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(bytes));
+        if(std::none_of(layout.controls.begin(),layout.controls.end(),supported)) continue;
+        AccessFormPreview form(artifact["name"].toString(),bytes,{},db); auto root=makePreviewFormObject(form);
+        for(const auto& control:layout.controls) {
+            if(!supported(control)) continue;
+            auto* widget=form.findChild<QWidget*>("access-control-"+control.name); assert(widget);
+            const auto bits=static_cast<quint32>(*control.foreColor); QColor expected;
+            if(bits<=0xffffffU) { expected=QColor(bits&255U,(bits>>8)&255U,(bits>>16)&255U); ++rgb; }
+            else { assert(bits==0x80000008U || bits==0x80000012U); expected=QApplication::palette().color(QPalette::Active,bits==0x80000008U ? QPalette::Text : QPalette::ButtonText); ++system; }
+            const auto role=qobject_cast<QLabel*>(widget) ? QPalette::WindowText : qobject_cast<QAbstractButton*>(widget) ? QPalette::ButtonText : QPalette::Text;
+            assert(widget->palette().color(QPalette::Active,role)==expected);
+            assert(root->objectMember(control.name.toUtf8().toStdString(),{}).object->member("ForeColor",{}).asNumber()==*control.foreColor);
+            if(auto* combo=qobject_cast<QComboBox*>(widget)) {
+                assert(combo->lineEdit() && combo->lineEdit()->palette().color(QPalette::Active,QPalette::Text)==expected);
+                assert(combo->view()->palette().color(QPalette::Active,QPalette::Text)==expected);
+            }
+        }
+        assert(!form.hasUnsavedChanges() && form.close()); ++documents;
+    }
+    assert(documents>0 && rgb>0 && system>0);
+    std::cout<<"Original native ForeColor: documents="<<documents<<"; RGB controls="<<rgb<<"; system-color controls="<<system<<"\n";
 }
 
 void testOriginalTextAlignment(const QDir& directory,const QJsonArray& objects) {
