@@ -666,3 +666,7 @@ Full targets remain open:
   arithmetic, parameter/alias/qualified/multi-assignment/NULL/range/atomic-error
   regression through actual DAO/VBA/Qt; joined/append/complex/full Jet semantics
   remain open.
+
+- [x] Simple single-row physical-table Currency INSERT VALUES target conversion,
+  explicit/positional/reordered columns, parameter/exact-expression/NULL/error/
+  DAO/VBA/Qt regression; append/select/complex/full Jet semantics remain open.

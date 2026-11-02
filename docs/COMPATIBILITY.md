@@ -789,3 +789,10 @@ four-decimal conversion and exact proven RHS arithmetic. DAO/VBA/Qt regressions
 cover parameters, aliases, simultaneous assignments, NULL and statement-wide
 rollback on conversion errors. Joined/append/complex/full Jet semantics remain
 open. See [CURRENCY_UPDATE_RUNTIME.md](CURRENCY_UPDATE_RUNTIME.md).
+
+Simple single-row physical-table INSERT VALUES now converts Currency targets,
+preserving parameter order and exact proven Currency expressions. Actual DAO/
+VBA/Qt tests cover explicit/positional/reordered columns, omitted/NULL values,
+rounding and failed inserts without partial rows. INSERT SELECT, complex/default/
+constraint/full Jet semantics remain open. See
+[CURRENCY_INSERT_RUNTIME.md](CURRENCY_INSERT_RUNTIME.md).

@@ -1006,6 +1006,70 @@ static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPla
     if(fields.isEmpty()) return source;
     auto resolved=compileCurrencyQuery(source.source,fields); resolved.currencyContextResolved=true; return resolved;
 }
+static QString currencyActionExpression(const AccessQueryPlan& plan,const QVector<Token>& code,const QMap<QString,QString>& fields={}) {
+    QStringList declarations;
+    for(const auto& parameter:plan.parameters) declarations.append(renderJetTokens({{Token::Identifier,parameter.name}})+' '+parameter.type);
+    const auto header=declarations.isEmpty()?QString{}:"PARAMETERS "+declarations.join(',')+"; ";
+    const auto compiled=compileCurrencyQuery(header+"SELECT "+renderJetTokens(code)+" AS [__la_currency_expr]",fields).sql;
+    const QString prefix="SELECT ",suffix=" AS "+identifier("__la_currency_expr");
+    if(!compiled.startsWith(prefix) || !compiled.endsWith(suffix)) throw VbaRuntimeError(3251,"Currency action expression shape unsupported");
+    return compiled.mid(prefix.size(),compiled.size()-prefix.size()-suffix.size());
+}
+
+static QString currencyInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
+    if(plan.source.isEmpty() || plan.sql!=plan.compiledSql) return plan.sql;
+    const auto tokens=tokenize(plan.source);
+    const auto word=[&](qsizetype i,const char* value) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0; };
+    const auto name=[&](qsizetype i) { return i<tokens.size() && (tokens[i].kind==Token::Word || tokens[i].kind==Token::Identifier); };
+    qsizetype pos=0;
+    if(word(0,"PARAMETERS")) { while(pos<tokens.size() && !symbol(tokens[pos],";")) ++pos; ++pos; }
+    if(!word(pos,"INSERT") || !word(pos+1,"INTO") || !name(pos+2)) return plan.sql;
+    const auto requested=tokens[pos+2].value; pos+=3;
+    QString table;
+    for(const auto& candidate:db.tables(QSql::Tables)) if(candidate.compare(requested,Qt::CaseInsensitive)==0) { table=candidate; break; }
+    if(table.isEmpty()) return plan.sql;
+    QStringList columns;
+    if(pos<tokens.size() && symbol(tokens[pos],"(")) {
+        ++pos;
+        while(true) {
+            if(!name(pos)) return plan.sql;
+            columns.append(tokens[pos++].value);
+            if(pos>=tokens.size()) return plan.sql;
+            if(symbol(tokens[pos],")")) { ++pos; break; }
+            if(!symbol(tokens[pos++],",")) return plan.sql;
+        }
+    } else {
+        const auto record=db.record(table);
+        for(int i=0;i<record.count();++i) columns.append(record.fieldName(i));
+    }
+    if(!word(pos,"VALUES") || pos+1>=tokens.size() || !symbol(tokens[pos+1],"(")) return plan.sql;
+    pos+=2; auto start=pos; int depth=0; bool closed=false; QVector<QVector<Token>> expressions;
+    for(;pos<tokens.size();++pos) {
+        if(word(pos,"SELECT")) return plan.sql;
+        if(symbol(tokens[pos],"(")) ++depth;
+        else if(symbol(tokens[pos],")")) {
+            if(depth==0) { if(pos==start) return plan.sql; expressions.append(tokens.mid(start,pos-start)); ++pos; closed=true; break; }
+            --depth;
+        } else if(depth==0 && symbol(tokens[pos],",")) {
+            if(pos==start) return plan.sql;
+            expressions.append(tokens.mid(start,pos-start)); start=pos+1;
+        }
+    }
+    if(pos<tokens.size() && symbol(tokens[pos],";")) ++pos;
+    if(!closed || pos!=tokens.size() || expressions.size()!=columns.size()) return plan.sql;
+    const auto types=sqliteColumnTypes(db,table); bool currency=false;
+    for(const auto& column:columns) currency|=types.value(column.toCaseFolded())=="CURRENCY_REAL";
+    if(!currency) return plan.sql;
+    QStringList targets,values;
+    for(qsizetype i=0;i<columns.size();++i) {
+        targets.append(identifier(columns[i])); auto value=currencyActionExpression(plan,expressions[i]);
+        if(types.value(columns[i].toCaseFolded())=="CURRENCY_REAL") value="linaccess_jet_currency_store("+value+')';
+        values.append(value);
+    }
+    installJetSqlFunctions(db);
+    return "INSERT INTO "+identifier(table)+'('+targets.join(',')+") VALUES ("+values.join(',')+')';
+}
+
 // Only direct physical-table UPDATEs enter this path. Joined actions retain
 // their existing materialized-source/identity handling.
 static QString currencyUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
@@ -1060,15 +1124,7 @@ static QString currencyUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
         currencyTarget|=currency; assignments.append({column,tokens.mid(pos,stop-pos),currency}); pos=stop+1;
     }
     if(!currencyTarget) return plan.sql;
-    QStringList declarations;
-    for(const auto& parameter:plan.parameters) declarations.append(renderJetTokens({{Token::Identifier,parameter.name}})+' '+parameter.type);
-    const auto header=declarations.isEmpty()?QString{}:"PARAMETERS "+declarations.join(',')+"; ";
-    const auto expression=[&](const QVector<Token>& code) {
-        const auto compiled=compileCurrencyQuery(header+"SELECT "+renderJetTokens(code)+" AS [__la_currency_expr]",fields).sql;
-        const QString prefix="SELECT ",suffix=" AS "+identifier("__la_currency_expr");
-        if(!compiled.startsWith(prefix) || !compiled.endsWith(suffix)) throw VbaRuntimeError(3251,"Currency UPDATE expression shape unsupported");
-        return compiled.mid(prefix.size(),compiled.size()-prefix.size()-suffix.size());
-    };
+    const auto expression=[&](const QVector<Token>& code) { return currencyActionExpression(plan,code,fields); };
     QStringList set;
     for(const auto& assignment:assignments) {
         auto value=expression(assignment.expression);
@@ -1081,7 +1137,10 @@ static QString currencyUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     return result;
 }
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
-    if (plan.updateTarget.isEmpty()) return currencyUpdateSql(db,plan);
+    if (plan.updateTarget.isEmpty()) {
+        const auto insert=currencyInsertSql(db,plan);
+        return insert==plan.sql ? currencyUpdateSql(db,plan) : insert;
+    }
     if (!db.tables(QSql::Tables).contains(plan.updateTarget,Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Joined UPDATE requires a writable table target");
     if (installAccessQueryViews(db)<0) throw VbaRuntimeError(3251,"Joined UPDATE query dependencies unavailable");
     const auto record=db.record(plan.updateTarget); QString identity;

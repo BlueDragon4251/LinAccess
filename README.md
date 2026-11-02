@@ -506,3 +506,8 @@ ersetzen. Vollständige Access-2003-Oberflächen- und Tastaturparität ist weite
 prüft Zielspalten vor dem Schreiben und erhält vier Dezimalstellen. Native
 DAO-/VBA-/Qt-Tests prüfen auch den vollständigen Rollback bei Konvertierungsfehlern;
 komplexe Aktionsabfragen und vollständige Jet-Semantik bleiben offen.
+
+[Currency in einfachen INSERT-VALUES-Anweisungen](docs/CURRENCY_INSERT_RUNTIME.md)
+konvertiert Geldbeträge vor dem Einfügen. DAO-/VBA-/Qt-Regressionen prüfen
+Spaltenreihenfolge, Parameter, Rundung und Fehler ohne teilweise eingefügte Zeile.
+INSERT-SELECT und vollständige Jet-Semantik bleiben offen.

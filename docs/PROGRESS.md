@@ -2233,3 +2233,24 @@ Ubuntu 24.04 46/46 (96.44 s), Debian 13 46/46 (97.80 s), GUI-disabled core
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. GitHub's
 account-level CI restriction remains separate; no remote test success is claimed.
+
+## 2026-11-02 — Checked Currency targets in single-row INSERT VALUES
+
+New regression reproduces missing target conversion (0/1). Added bounded
+physical-table INSERT VALUES conversion with explicit/positional/reordered
+columns, original parameter bindings, omitted/Null values and exact proven
+Currency expressions. INSERT/UPDATE regressions pass 2/2 (0.12 s). Invalid
+second-column values insert no row; malformed incomplete VALUES remains a syntax
+error. Real VBA/DAO insertion, form requery/navigation, Currency VarType/units and
+Qt display pass. Test initially referenced an unavailable native CurrentRecord
+member; corrected the assertion to the inserted field identity instead. That
+separate API gap remains open. GUI suite has 47 CTests. Append/complex/default/
+constraint/full Jet/Windows semantics remain open; no complete original business
+workflow increment. See CURRENCY_INSERT_RUNTIME.md. Full validation follows.
+
+Full local validation: host 47/47 (97.83 s), Debian 12 47/47 (103.93 s),
+Ubuntu 24.04 47/47 (91.06 s), Debian 13 47/47 (91.90 s), GUI-disabled core
+1/1 (1.31 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. GitHub's
+account-level CI restriction remains separate; no remote test success is claimed.
