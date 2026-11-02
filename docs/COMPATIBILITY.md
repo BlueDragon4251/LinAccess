@@ -850,3 +850,11 @@ rather than stale SQLite changes; DML and make-table counts remain intact.
 Existing DAO/main-window regressions verify types/counts and actual SQL-editor
 feedback. Full cursor/count/DAO metadata/Windows identity remains open. See
 [DAO_COUNTS_RUNTIME.md](DAO_COUNTS_RUNTIME.md).
+
+Bounded physical-table SQL UPDATE/INSERT/append now checks verified source Byte,
+Integer, Long, Boolean and canonical date targets alongside Currency. Shared
+rounding/ranges/Null conversion and whole-statement rollback are exercised by
+actual DAO SQL; unmarked ordinary SQLite storage is preserved. Date years are
+limited to 0100–9999. Date Variants, locale/complex/general expression coercion
+and full Jet/Windows semantics remain open. See
+[TYPED_SQL_WRITES_RUNTIME.md](TYPED_SQL_WRITES_RUNTIME.md).

@@ -40,11 +40,14 @@ std::string_view integerSubtype(const QString& type) {
     return name=="INTEGER1" ? "byte" : name=="INTEGER2" ? "integer" : name=="INTEGER4" ? "long" : "";
 }
 QString dateText(const QVariant& value) {
-    if (value.metaType().id() == QMetaType::QDateTime)
-        return value.toDateTime().toString("yyyy-MM-dd HH:mm:ss");
+    if (value.metaType().id() == QMetaType::QDateTime) {
+        const auto date=value.toDateTime();
+        if(!date.isValid() || date.date().year()<100 || date.date().year()>9999) throw VbaRuntimeError(13,"Date field year out of range");
+        return date.toString("yyyy-MM-dd HH:mm:ss");
+    }
     for (const auto& format : QStringList{"yyyy-MM-dd HH:mm:ss","yyyy-MM-dd"}) {
         const auto parsed = QDateTime::fromString(value.toString(),format);
-        if (parsed.isValid()) return parsed.toString("yyyy-MM-dd HH:mm:ss");
+        if (parsed.isValid() && parsed.date().year()>=100 && parsed.date().year()<=9999) return parsed.toString("yyyy-MM-dd HH:mm:ss");
     }
     const auto time = QTime::fromString(value.toString(),"HH:mm:ss");
     if (time.isValid()) return "1899-12-30 " + time.toString("HH:mm:ss");

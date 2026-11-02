@@ -711,3 +711,7 @@ Full targets remain open:
 - [x] Checked DAO Long RecordsAffected/RecordCount and Integer Fields.Count,
   zero DDL counts without stale SQLite changes, preserved DML/make-table counts
   and real editor feedback; full cursor/metadata/Windows semantics remain open.
+
+- [x] Bounded simple SQL writes check verified Byte/Integer/Long/Boolean/date
+  targets, shared rounding/ranges/canonical storage/Null/atomic late-row failure
+  and unmarked-SQLite preservation; complex/full Jet coercion remains open.

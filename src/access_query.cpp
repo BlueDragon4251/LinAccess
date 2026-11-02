@@ -1010,6 +1010,15 @@ static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPla
     if(fields.isEmpty()) return source;
     auto resolved=compileCurrencyQuery(source.source,fields); resolved.currencyContextResolved=true; return resolved;
 }
+static bool checkedSqlStorageType(const QString& type) {
+    static const QSet<QString> types{"CURRENCY_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DATE","DATETIME"};
+    return types.contains(type);
+}
+static QString checkedSqlStorageValue(const QString& type,const QString& value) {
+    if(type=="CURRENCY_REAL") return "linaccess_jet_currency_store("+value+')';
+    if(checkedSqlStorageType(type)) return "linaccess_jet_field_store("+literal(type)+','+value+')';
+    return value;
+}
 static QString currencyParameterHeader(const AccessQueryPlan& plan) {
     QStringList declarations;
     for(const auto& parameter:plan.parameters) declarations.append(renderJetTokens({{Token::Identifier,parameter.name}})+' '+parameter.type);
@@ -1018,11 +1027,11 @@ static QString currencyParameterHeader(const AccessQueryPlan& plan) {
 static QString currencyActionExpression(const AccessQueryPlan& plan,const QVector<Token>& code,const QMap<QString,QString>& fields={}) {
     const auto compiled=compileCurrencyQuery(currencyParameterHeader(plan)+"SELECT "+renderJetTokens(code)+" AS [__la_currency_expr]",fields).sql;
     const QString prefix="SELECT ",suffix=" AS "+identifier("__la_currency_expr");
-    if(!compiled.startsWith(prefix) || !compiled.endsWith(suffix)) throw VbaRuntimeError(3251,"Currency action expression shape unsupported");
+    if(!compiled.startsWith(prefix) || !compiled.endsWith(suffix)) throw VbaRuntimeError(3251,"Typed action expression shape unsupported");
     return compiled.mid(prefix.size(),compiled.size()-prefix.size()-suffix.size());
 }
 
-static QString currencyInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
+static QString checkedInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     if(plan.source.isEmpty() || plan.sql!=plan.compiledSql) return plan.sql;
     const auto tokens=tokenize(plan.source);
     const auto word=[&](qsizetype i,const char* value) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0; };
@@ -1048,9 +1057,9 @@ static QString currencyInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
         const auto record=db.record(table);
         for(int i=0;i<record.count();++i) columns.append(record.fieldName(i));
     }
-    const auto types=sqliteColumnTypes(db,table); bool currency=false;
-    for(const auto& column:columns) currency|=types.value(column.toCaseFolded())=="CURRENCY_REAL";
-    if(!currency) return plan.sql;
+    const auto types=sqliteColumnTypes(db,table); bool checked=false;
+    for(const auto& column:columns) checked|=checkedSqlStorageType(types.value(column.toCaseFolded()));
+    if(!checked) return plan.sql;
     if(word(pos,"SELECT")) {
         // Keep append inference bounded to one physical SELECT source. The CTE
         // fixes positional labels (including duplicate output names) and freezes
@@ -1075,12 +1084,12 @@ static QString currencyInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
         auto select=resolveCurrencyQuery(db,compileAccessQuery(currencyParameterHeader(plan)+renderJetTokens(tokens.mid(pos))));
         if(accessQueryColumns(db,select).size()!=columns.size()) return plan.sql;
         auto source=resolveQueryOrigins(db,select.sql).trimmed(); if(source.endsWith(';')) source.chop(1);
-        QString cte="__la_currency_append";
+        QString cte="__la_typed_append";
         while(std::any_of(tokens.cbegin(),tokens.cend(),[&](const Token& token) { return token.value.compare(cte,Qt::CaseInsensitive)==0; })) cte+='_';
         QStringList targets,labels,values;
         for(qsizetype i=0;i<columns.size();++i) {
             targets.append(identifier(columns[i])); const auto label=identifier("c"+QString::number(i)); labels.append(label);
-            values.append(types.value(columns[i].toCaseFolded())=="CURRENCY_REAL" ? "linaccess_jet_currency_store("+label+')' : label);
+            values.append(checkedSqlStorageValue(types.value(columns[i].toCaseFolded()),label));
         }
         installJetSqlFunctions(db);
         return "WITH "+identifier(cte)+'('+labels.join(',')+") AS MATERIALIZED ("+source+") INSERT INTO "+identifier(table)+'('+targets.join(',')+") SELECT "+values.join(',')+" FROM "+identifier(cte);
@@ -1103,7 +1112,7 @@ static QString currencyInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     QStringList targets,values;
     for(qsizetype i=0;i<columns.size();++i) {
         targets.append(identifier(columns[i])); auto value=currencyActionExpression(plan,expressions[i]);
-        if(types.value(columns[i].toCaseFolded())=="CURRENCY_REAL") value="linaccess_jet_currency_store("+value+')';
+        value=checkedSqlStorageValue(types.value(columns[i].toCaseFolded()),value);
         values.append(value);
     }
     installJetSqlFunctions(db);
@@ -1112,7 +1121,7 @@ static QString currencyInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
 
 // Only direct physical-table UPDATEs enter this path. Joined actions retain
 // their existing materialized-source/identity handling.
-static QString currencyUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
+static QString checkedUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     if(plan.source.isEmpty() || plan.sql!=plan.compiledSql) return plan.sql;
     const auto tokens=tokenize(plan.source);
     const auto word=[&](qsizetype i,const char* value) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0; };
@@ -1147,9 +1156,8 @@ static QString currencyUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
         fields.insert(it.key(),it.value()); fields.insert(table.toCaseFolded()+'.'+it.key(),it.value());
         if(!alias.isEmpty()) fields.insert(alias.toCaseFolded()+'.'+it.key(),it.value());
     }
-    if(fields.isEmpty()) return plan.sql;
-    struct Assignment { QString column; QVector<Token> expression; bool currency; };
-    QVector<Assignment> assignments; bool currencyTarget=false;
+    struct Assignment { QString column; QVector<Token> expression; QString targetType; };
+    QVector<Assignment> assignments; bool checkedTarget=false;
     separators.append(where>=0 ? where : end);
     for(const auto stop:separators) {
         QString column;
@@ -1160,15 +1168,15 @@ static QString currencyUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
             column=tokens[pos+2].value; pos+=4;
         } else return plan.sql;
         if(pos>=stop) return plan.sql;
-        const bool currency=types.value(column.toCaseFolded())=="CURRENCY_REAL";
-        currencyTarget|=currency; assignments.append({column,tokens.mid(pos,stop-pos),currency}); pos=stop+1;
+        const auto targetType=types.value(column.toCaseFolded());
+        checkedTarget|=checkedSqlStorageType(targetType); assignments.append({column,tokens.mid(pos,stop-pos),targetType}); pos=stop+1;
     }
-    if(!currencyTarget) return plan.sql;
+    if(!checkedTarget) return plan.sql;
     const auto expression=[&](const QVector<Token>& code) { return currencyActionExpression(plan,code,fields); };
     QStringList set;
     for(const auto& assignment:assignments) {
         auto value=expression(assignment.expression);
-        if(assignment.currency) value="linaccess_jet_currency_store("+value+')';
+        value=checkedSqlStorageValue(assignment.targetType,value);
         set.append(identifier(assignment.column)+'='+value);
     }
     auto result="UPDATE "+identifier(table)+(alias.isEmpty()?QString{}:" AS "+identifier(alias))+" SET "+set.join(',');
@@ -1178,8 +1186,8 @@ static QString currencyUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
 }
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     if (plan.updateTarget.isEmpty()) {
-        const auto insert=currencyInsertSql(db,plan);
-        return insert==plan.sql ? currencyUpdateSql(db,plan) : insert;
+        const auto insert=checkedInsertSql(db,plan);
+        return insert==plan.sql ? checkedUpdateSql(db,plan) : insert;
     }
     if (!db.tables(QSql::Tables).contains(plan.updateTarget,Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Joined UPDATE requires a writable table target");
     if (installAccessQueryViews(db)<0) throw VbaRuntimeError(3251,"Joined UPDATE query dependencies unavailable");

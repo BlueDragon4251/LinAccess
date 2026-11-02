@@ -247,9 +247,39 @@ void testDdlRecordsAffected() {
     database->member("Execute",{VbaValue::string("SELECT value INTO copied_rows FROM seed")}); count=database->member("RecordsAffected",{}); assert(count.asNumber()==2 && count.numericType==VbaValue::NumericType::Long); execute("DROP TABLE copied_rows");
 }
 
+void testTypedSqlTargets() {
+    using namespace linaccess;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","typed-sql-targets"); db.setDatabaseName(":memory:"); assert(db.open()); QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE typed(id INTEGER PRIMARY KEY,b INTEGER,s INTEGER,l INTEGER,flag INTEGER,stamp TEXT,money REAL)"));
+    assert(sql.exec("CREATE TABLE _la_table_schema(table_name TEXT PRIMARY KEY,definition TEXT)"));
+    sql.prepare("INSERT INTO _la_table_schema VALUES('typed',?)"); sql.addBindValue(QStringLiteral(R"JSON([{"name":"b","source_type":"TINYINT"},{"name":"s","source_type":"SMALLINT"},{"name":"l","source_type":"INT"},{"name":"flag","source_type":"BOOLEAN"},{"name":"stamp","source_type":"DATETIME"},{"name":"money","source_type":"CURRENCY"}])JSON")); assert(sql.exec());
+    assert(sql.exec("INSERT INTO typed VALUES(1,10,20,30,0,'2024-02-29 12:00:00',0.1),(2,11,21,31,-1,NULL,0.2)")); sql.finish();
+    const auto database=makeDaoDatabase(db);
+    const auto execute=[&](const char* source) { database->member("Execute",{VbaValue::string(source)}); };
+    const auto row=[&](int id) { assert(sql.exec("SELECT b,s,l,flag,stamp,money FROM typed WHERE id="+QString::number(id)) && sql.next()); QVariantList values; for(int i=0;i<6;++i) values.append(sql.value(i)); sql.finish(); return values; };
+    const auto fail=[&](const char* source,int wanted) { int code=0; try { execute(source); } catch(const VbaRuntimeError& error) { code=error.number; } assert(code==wanted); };
+    execute("UPDATE typed SET b=2.5,s=-3.5,l=40000,flag=1,stamp='2024-03-01' WHERE id=1");
+    auto values=row(1); assert(values[0].toDouble()==2 && values[1].toDouble()==-4 && values[2].toInt()==40000 && values[3].toInt()==-1 && values[4].toString()=="2024-03-01 00:00:00");
+    const auto before=row(1),second=row(2);
+    fail("UPDATE typed SET s=IIf(id=1,12,40000)",6); assert(row(1)==before && row(2)==second);
+    fail("UPDATE typed SET b=-1 WHERE id=1",6); fail("UPDATE typed SET l=2147483648 WHERE id=1",6);
+    fail("UPDATE typed SET stamp='invalid' WHERE id=1",13); fail("UPDATE typed SET stamp='0001-01-01' WHERE id=1",13); assert(row(1)==before);
+    execute("UPDATE typed SET flag='false',b=NULL WHERE id=1"); assert(row(1)[0].isNull() && row(1)[3].toInt()==0);
+    execute("INSERT INTO typed(id,b,s,l,flag,stamp,money) VALUES(3,2.5,-3.5,40000,1,'2024-03-01','1.23455')"); values=row(3);
+    assert(values[0].toInt()==2 && values[1].toInt()==-4 && values[3].toInt()==-1 && values[4].toString()=="2024-03-01 00:00:00" && values[5].toDouble()==1.2346);
+    fail("INSERT INTO typed(id,s) SELECT id+10,IIf(id=1,2.5,40000) FROM typed WHERE id IN(1,2)",6);
+    assert(sql.exec("SELECT COUNT(*) FROM typed") && sql.next() && sql.value(0).toInt()==3); sql.finish();
+    execute("INSERT INTO typed(id,s) SELECT id+10,2.5 FROM typed WHERE id IN(1,2)"); assert(row(11)[1].toInt()==2 && row(12)[1].toInt()==2);
+    const auto parameterized=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("PARAMETERS p Double; UPDATE typed SET s=p WHERE id=2")}).object;
+    parameterized->member("Parameters",{VbaValue::string("p")}).object->assign("Value",VbaValue::numeric(2.5)); parameterized->member("Execute",{}); assert(row(2)[1].toInt()==2);
+    assert(sql.exec("CREATE TABLE ordinary(value INTEGER)")); assert(sql.exec("INSERT INTO ordinary VALUES(1)")); execute("UPDATE ordinary SET value=0.5");
+    assert(sql.exec("SELECT value FROM ordinary") && sql.next() && sql.value(0).toDouble()==0.5); sql.finish();
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     testDdlRecordsAffected();
+    testTypedSqlTargets();
     testDeclaredParameterTypes();
     testIntegerConversionDao();
     testBooleanQueryParameters();

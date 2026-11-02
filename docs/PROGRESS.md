@@ -2433,3 +2433,24 @@ fixture-exclusion checks pass. Four fixture hashes/private visibility pass.
 Unchanged core and unaffected full-suite/distribution checks were not repeated;
 shared host baseline is 6dc8a97, matrix baseline 644e71d. Remote CI restriction
 remains external; no remote test success is claimed.
+
+## 2026-11-02 — Checked source scalar targets in simple SQL writes
+
+Reproduced unchecked typed targets (0/1). Generalized the existing bounded
+Currency write parser to source Byte/Integer/Long/Boolean/date targets, retaining
+Currency's separate exact converter and arithmetic. Added shared scalar callback,
+Null handling, canonical Boolean/date storage and 0100–9999 date validation for
+text/QDateTime read/conversion. Existing DAO/Currency insert/update tests pass
+3/3 (0.42 s), including banker ties/range errors, invalid dates, late-row UPDATE/
+append rollback, declared Double parameters and ordinary unmarked SQLite behavior.
+No new target (suite remains 48). Joined/complex/full Jet expression/constraint/
+Date Variant/locale/Windows semantics remain open; no original workflow increment.
+See TYPED_SQL_WRITES_RUNTIME.md. Shared delivery/platform validation follows.
+
+Shared delivery validation: host 48/48 (84.02 s), Debian 12 48/48 (99.21 s),
+Ubuntu 24.04 48/48 (86.65 s), Debian 13 48/48 (87.95 s). Host/all three distro
+DEBs pass payload/backend/build-ID/permissions/fixture-exclusion checks; isolated
+distro installs pass backend execution/GUI startup. GUI-disabled core sources
+are unchanged from their last checked state. All four original hashes/private
+visibility pass. Remote CI remains blocked by the previously confirmed account
+restriction; no remote success is claimed.

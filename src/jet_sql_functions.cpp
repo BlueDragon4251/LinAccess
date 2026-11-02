@@ -12,6 +12,8 @@
 #include "vba_round.hpp"
 #include "vba_calendar.hpp"
 #include "vba_currency.hpp"
+#include "vba_qt_value.hpp"
+#include <QSet>
 #include <QLibrary>
 #include <QSqlDriver>
 #include <QSqlQuery>
@@ -221,6 +223,29 @@ void currencyNumber(sqlite3_context* context,int count,sqlite3_value** args) noe
 void currencyStore(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
     if(count==1 && api().type(args[0])==SQLITE_NULL) { api().nullResult(context); return; }
     currencyNumber(context,count,args);
+}
+
+void fieldStore(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    auto& native=api();
+    try {
+        if(count!=2 || native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(450,"Field conversion requires type and value");
+        const auto type=scalarText(args[0]);
+        static const QSet<QString> supported{"INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DATE","DATETIME"};
+        if(!supported.contains(type)) throw VbaRuntimeError(3251,"SQL field target type unsupported");
+        if(native.type(args[1])==SQLITE_NULL) { native.nullResult(context); return; }
+        VbaValue input;
+        if(native.type(args[1])==SQLITE_INTEGER) input=VbaValue::numeric(static_cast<double>(native.integer(args[1])));
+        else if(native.type(args[1])==SQLITE_FLOAT) input=VbaValue::numeric(native.number(args[1]));
+        else if(native.type(args[1])==SQLITE_TEXT) {
+            const auto* bytes=native.text(args[1]); if(!bytes) throw VbaRuntimeError(7,"SQL field text unavailable");
+            input=VbaValue::string(std::string(reinterpret_cast<const char*>(bytes),native.bytes(args[1])));
+        } else throw VbaRuntimeError(13,"SQL field input must be scalar");
+        const auto result=sqlFieldValue(input,type);
+        if(result.isNull()) native.nullResult(context);
+        else if(result.metaType().id()==QMetaType::QString) returnText(context,result.toString());
+        else native.integerResult(context,result.toLongLong());
+    } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
+      catch(...) { native.error(context,"SQL field conversion failed",-1); }
 }
 
 void currencyArithmetic(sqlite3_context* context,sqlite3_value** args,std::string_view operation) noexcept {
@@ -457,6 +482,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_weekday",-1,&calendarWeekday,nullptr,nullptr);
     ensure("linaccess_jet_ccur",-1,&currencyNumber,nullptr,nullptr);
     ensure("linaccess_jet_currency_store",1,&currencyStore,nullptr,nullptr);
+    ensure("linaccess_jet_field_store",2,&fieldStore,nullptr,nullptr);
     ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep,&currencySumFinal);
     ensure("linaccess_jet_currency_add",2,&currencyAdd,nullptr,nullptr);
     ensure("linaccess_jet_currency_subtract",2,&currencySubtract,nullptr,nullptr);
