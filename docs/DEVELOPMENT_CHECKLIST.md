@@ -704,3 +704,6 @@ Full targets remain open:
 - [x] Pending app datasheets participate in tab/window/project/VBA-Quit close
   preflight, preserving cache/live editor and calling form; unchanged/reverted
   states close normally; full autosave/events/undo/window semantics remain open.
+
+- [x] Native datasheet Ctrl+W/Ctrl+F4 guarded close, page-wide Ctrl+S and deferred
+  shortcut-sender deletion with actual key regression; full window/key parity open.

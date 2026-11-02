@@ -2400,3 +2400,18 @@ and private visibility pass. GUI-disabled core sources are unchanged from their
 last checked state. The three-distribution matrix remains at 644e71d; no fresh
 cross-distribution or remote CI success is claimed for this batch. GitHub's
 account restriction remains separate from successful local checks.
+
+## 2026-11-02 — Guarded datasheet close shortcuts
+
+Added native page-scoped Ctrl+W/Ctrl+F4 through the existing close preflight and
+page-wide Ctrl+S. Accepted tab close releases model queries and defers page/widget
+deletion until the shortcut sender finishes. Actual main-window key regression
+passes 1/1 (1.45 s): pending Ctrl+W refuses without loss, reverted Ctrl+F4 closes.
+No new CTest target or broad suite repetition for this focused UI delta. Full
+MDI/window/keyboard identity remains open. See APP_EDITORS_RUNTIME.md. Host
+package validation follows; prior shared host suite is 6dc8a97 (48/48).
+
+Focused delivery: current host app rebuilt and DEB payload/backend/build-ID/
+permissions/fixture-exclusion checks pass. Four original hashes/private visibility
+pass. No repeated unaffected suite/distro run; shared host suite remains 6dc8a97
+and three-distribution baseline 644e71d. Remote CI account restriction persists.

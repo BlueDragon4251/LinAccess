@@ -70,3 +70,10 @@ The existing main-window test checks a modified live editor, cached changes,
 refused tab/window/project close, native VBA Quit with retained caller, unchanged
 editor allowance and successful tab close after revert. Full Access automatic
 record-save/events/undo/crash recovery and complete window semantics remain open.
+
+Ctrl+W and Ctrl+F4 close the active datasheet page through the same pending-data
+preflight. Ctrl+S also works while a page action button has focus. Accepted tab
+closure releases SQL model queries and defers widget deletion so the shortcut
+sender can finish its event. The existing main-window test checks refused Ctrl+W
+with pending changes and accepted Ctrl+F4 after revert. No complete shortcut/
+MDI/window parity is claimed.

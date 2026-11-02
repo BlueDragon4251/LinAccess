@@ -95,8 +95,9 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     table->setCurrentIndex(model->index(0,1)); table->edit(table->currentIndex()); QApplication::processEvents();
     auto* live=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(live && window.allowProjectClose(db.connectionName())); live->setText("unsaved-live");
     assert(!window.close() && live->isVisible() && live->text()=="unsaved-live"); QTest::keyClick(live,Qt::Key_Escape); QApplication::processEvents();
-    assert(model->setData(model->index(0,1),"pending-close")); auto* tabs=window.findChild<QTabWidget*>(); assert(tabs); const auto count=tabs->count(),page=tabs->currentIndex();
-    assert(QMetaObject::invokeMethod(tabs,"tabCloseRequested",Qt::DirectConnection,Q_ARG(int,page)) && tabs->count()==count && model->isDirty());
+    assert(model->setData(model->index(0,1),"pending-close")); auto* tabs=window.findChild<QTabWidget*>(); assert(tabs); const auto count=tabs->count();
+    QApplication::setActiveWindow(&window); table->setFocus(); QTest::keyClick(table,Qt::Key_W,Qt::ControlModifier); QApplication::processEvents();
+    assert(tabs->count()==count && model->isDirty());
     assert(!window.close() && model->isDirty());
     const auto original=db.databaseName(),alternate=original+".other.linaccess"; assert(QFile::copy(original,alternate));
     openProject(window,alternate); assert(db.databaseName()==original && model->isDirty());
@@ -105,7 +106,8 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     std::vector<linaccess::VbaValue> arguments; const auto quit=preview->executeProcedure("RequestQuit",arguments);
     assert(quit.status==linaccess::VbaExecutionStatus::Error && quit.errorNumber==2501 && preview->isVisible() && model->isDirty()); assert(preview->close()); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QApplication::processEvents();
     model->revertAll(); assert(!model->isDirty());
-    assert(QMetaObject::invokeMethod(tabs,"tabCloseRequested",Qt::DirectConnection,Q_ARG(int,page)) && tabs->count()==count-1);
+    QApplication::setActiveWindow(&window); table->setFocus(); QTest::keyPress(table,Qt::Key_F4,Qt::ControlModifier); QTest::keyRelease(&window,Qt::Key_F4,Qt::ControlModifier); QApplication::processEvents();
+    assert(tabs->count()==count-1);
 }
 void exerciseQueryEditor(MainWindow& window,QSqlDatabase db) {
     QSqlQuery sql(db); assert(sql.exec("CREATE TABLE sql_editor_audit(value REAL)")); bool saved=false;

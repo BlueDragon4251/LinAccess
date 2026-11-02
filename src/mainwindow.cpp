@@ -182,8 +182,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(tabs_, &QTabWidget::tabCloseRequested, this, [this](int index) {
         QWidget* page = tabs_->widget(index);
         if(!canCloseDataPage(page)) return;
-        tabs_->removeTab(index);
-        delete page;
+        tabs_->removeTab(index); page->hide();
+        for(auto* model:page->findChildren<QSqlTableModel*>()) model->clear();
+        page->deleteLater();
     });
     connect(explorer_, &QTreeWidget::itemDoubleClicked,
             this, &MainWindow::openExplorerItem);
@@ -797,9 +798,15 @@ void MainWindow::showTable(const QString& name) {
         if (!db_.commit()) { messageError(this, db_.lastError().text()); return; }
         model->select();
     });
-    auto* saveShortcut=new QShortcut(QKeySequence::Save,table);
+    auto* saveShortcut=new QShortcut(QKeySequence::Save,page);
     saveShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(saveShortcut,&QShortcut::activated,save,&QPushButton::click);
+    for(const auto key:{QKeySequence(Qt::ControlModifier|Qt::Key_W),QKeySequence(Qt::ControlModifier|Qt::Key_F4)}) {
+        auto* closeShortcut=new QShortcut(key,page); closeShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(closeShortcut,&QShortcut::activated,page,[this,page] {
+            const auto index=tabs_->indexOf(page); if(index>=0) emit tabs_->tabCloseRequested(index);
+        });
+    }
     tabs_->setCurrentIndex(tabs_->addTab(page, name));
 }
 
