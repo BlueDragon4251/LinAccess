@@ -605,3 +605,7 @@ Full targets remain open:
 - [x] Shared native VBA/SQL bankers Round, documented half cases, explicit fixed
   Currency, actual Qt/DAO/SQL/pending/save/rollback regression; Single/high
   precision/full IEEE/locale/Jet money/Windows identity remain open.
+
+- [x] Bounded native Form.Visible hide/show with retained lifetime/drafts, hidden
+  active-context/default-command protection, actual Qt/VBA/SQL/Unload/self-close
+  regression; initialization/modal/dirty-hide/full Windows/MDI identity remains open.

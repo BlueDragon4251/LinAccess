@@ -1945,3 +1945,23 @@ Full validation: host 32/32 (104.95 s), Debian 12 32/32 (97.80 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 446b0c5 private CI completed successfully.
+
+## 2026-11-02 — Native form visibility and hidden-document context
+
+Added explicit Form.Visible for actual activated Qt windows, preserving loaded
+hidden forms and drafts on show. Explicit hide clears active context; formerly
+activated hidden callers cannot receive default record/unnamed Close without an
+active target. Named Close and hidden project-close Unload cancellation still
+work. New actual Qt/VBA/SQL test verifies no implicit save/close/finished,
+scalar-once/Null, pending-hide rejection, dirty show, hidden command/SendKeys
+failure and self-close during Deactivate. Targeted visibility/mainwindow/original
+layout/Kassa-DAO passes 4/4 (48.48 s); GUI suite has 33 CTests. Init/modal/dirty-hide/
+embedded/report/full focus/MDI/Windows identity remains open. No complete original
+business workflow increment. See FORM_VISIBILITY_RUNTIME.md.
+
+Full validation: host 33/33 (115.68 s), Debian 12 33/33 (100.31 s), Ubuntu
+24.04 33/33 (90.73 s), Debian 13 33/33 (90.20 s), GUI-disabled core 1/1
+(3.14 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+0eb9501 private CI completed successfully.

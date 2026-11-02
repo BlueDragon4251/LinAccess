@@ -97,6 +97,7 @@ private:
     void repeatFind();
     void selectRecord(int target);
     bool prepareClose();
+    void setDocumentVisible(bool visible);
     static bool closeDocuments(const QVector<AccessFormPreview*>& roots,AccessFormPreview* closingRoot=nullptr);
     bool event(QEvent* event) override;
     void activateDocument();
@@ -205,6 +206,7 @@ private:
     bool saving_{};
     bool recordCommandRunning_{};
     bool findingRecord_{};
+    bool visibilityChanging_{};
     bool recordSelected_{};
     bool navigating_{};
     bool cyclingFocus_{};

@@ -405,7 +405,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
-        if (key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
+        if (key=="visible" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -418,7 +418,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
-        if (key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
+        if (key == "visible" || key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
         if (key == "selheight" || key == "name" || key == "recordsource" || key == "newrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
@@ -620,6 +620,7 @@ private:
         auto* document=activePreviewDocument();
         if (preview_.opened_ && document && !document->closed_ && !document->openCancelled_
             && document->db_.connectionName()==preview_.db_.connectionName() && document->db_.databaseName()==preview_.db_.databaseName()) return *document;
+        if(preview_.hasActivated_ && preview_.isHidden()) throw linaccess::VbaRuntimeError(2046,"Record command requires an active native document");
         return preview_;
     }
     std::vector<bool> moduleScopes_;
@@ -881,6 +882,11 @@ void AccessFormPreview::initialCurrent() {
 bool AccessFormPreview::event(QEvent* event) {
     const auto type=event->type();
     const auto result=QDialog::event(event);
+    if(type==QEvent::Hide && isWindow() && isHidden() && opened_ && !closed_ && !closing_ && !openCancelled_ && activeDocument()==this) {
+        ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+        activeDocument().clear();
+        (void)formEvent("OnDeactivate","Form_Deactivate");
+    }
     if (type==QEvent::WindowActivate && isWindow()) {
         nativeActivationPending_=true;
         if (opened_) activateDocument();
@@ -938,7 +944,7 @@ void AccessFormPreview::activateDatabaseWindow(QSqlDatabase database,QWidget* wi
 }
 
 void AccessFormPreview::activateDocument() {
-    if (!opened_ || closed_ || closing_ || openCancelled_ || !isWindow()) return;
+    if (!opened_ || closed_ || closing_ || openCancelled_ || !isWindow() || isHidden()) return;
     hasActivated_=true;
     databaseWindowContext()={};
     auto& active=activeDocument();
@@ -1779,6 +1785,20 @@ bool AccessFormPreview::closeDocuments(const QVector<AccessFormPreview*>& roots,
     }
     return true;
 }
+void AccessFormPreview::setDocumentVisible(bool visible) {
+    using linaccess::VbaRuntimeError;
+    ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+    if(closed_ || openCancelled_) throw VbaRuntimeError(2450,"Form is closed");
+    if(layout_.kind!=linaccess::AccessDocumentKind::Form) throw VbaRuntimeError(438,"Visible requires a native form");
+    if(!opened_ || !hasActivated_ || !initialCurrentDispatched_ || !isWindow() || closing_ || recordCommandRunning_ || saving_ || navigating_ || loading_ || visibilityChanging_)
+        throw VbaRuntimeError(3251,"Changing form visibility during this lifecycle phase is not implemented");
+    if(visible==!isHidden()) return;
+    if(isModal() || QApplication::activeModalWidget()) throw VbaRuntimeError(3251,"Modal form visibility changes are not implemented");
+    if(!visible && (dirty_ || !pendingControls_.isEmpty() || !bufferedTextControls_.isEmpty()))
+        throw VbaRuntimeError(3251,"Hiding a form with pending edits is not implemented");
+    QScopedValueRollback<bool> changing(visibilityChanging_,true);
+    QDialog::setVisible(visible);
+}
 bool AccessFormPreview::prepareClose() {
     if (closed_ || openCancelled_) return true;
     return closeDocuments({this},this);
@@ -2205,8 +2225,9 @@ void AccessFormPreview::closeOtherDocument(int type,const std::optional<QString>
             }
         }
     } else {
-        if (matches(activeDocument())) target=activeDocument();
-        else if (matches(this)) target=this;
+        if (matches(activeDocument()) && !activeDocument()->isHidden()) target=activeDocument();
+        else if (matches(this) && (!hasActivated_ || !isHidden())) target=this;
+        else if(hasActivated_ && isHidden()) throw linaccess::VbaRuntimeError(2046,"Close requires an active native document");
     }
     if (!target) throw linaccess::VbaRuntimeError(type==3 ? 2451 : 2450,"Close target is unavailable");
     // The native preview has no pending design-edit session. Save options apply

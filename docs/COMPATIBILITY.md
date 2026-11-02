@@ -698,3 +698,10 @@ adapter, replacing SQLite half-away delegation. Core/actual Qt/VBA/DAO/SQL
 regression covers half cases, explicit fixed Currency, pending/save and failed
 UPDATE atomicity. Precision0..15 is bounded; Single/high precision/full binary/
 locale/type/Jet money/Windows behavior remain open. See ROUND_RUNTIME.md.
+
+Explicit native Form.Visible can show/hide already activated steady-state forms,
+retains hidden document lifetime and drafts on show, and clears stale hidden
+active context. Default record/Close and SendKeys cannot target an all-hidden
+caller; named close/Unload cancellation remain active. Real Qt/VBA/SQL and window/
+original regressions pass. Init/modal/dirty-hide/embedded/report/MDI/full Windows
+behavior remains open; see FORM_VISIBILITY_RUNTIME.md.
