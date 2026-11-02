@@ -26,6 +26,10 @@ std::string lower(std::string s) {
     return s;
 }
 VbaRuntimeError error(const std::string& reason, int code = 5) { return VbaRuntimeError(code, reason); }
+VbaValue stringLongResult(std::size_t value) {
+    if(value>static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) throw error("String result exceeds VBA Long",6);
+    return VbaValue::longInteger(static_cast<std::int32_t>(value));
+}
 VbaValue clockValue(const std::string& word) {
     const auto now=std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     std::tm local{};
@@ -769,15 +773,15 @@ private:
                 const auto left=values[first].asText(),right=values[first+1].asText();
                 if (!search) {
                     const int result=host_->compareStrings(left,right,mode);
-                    return VbaValue::numeric((result>0)-(result<0));
+                    return VbaValue::integer(static_cast<std::int16_t>((result>0)-(result<0)));
                 }
                 const auto haystack=utf16String(left),needle=utf16String(right);
-                if (haystack.empty()) return VbaValue::numeric(0);
-                if (needle.empty()) return VbaValue::numeric(start);
-                if (static_cast<std::size_t>(start)>haystack.size() || needle.size()>haystack.size()) return VbaValue::numeric(0);
+                if (haystack.empty()) return stringLongResult(0);
+                if (needle.empty()) return stringLongResult(start);
+                if (static_cast<std::size_t>(start)>haystack.size() || needle.size()>haystack.size()) return stringLongResult(0);
                 if (mode==VbaCompareMode::Binary) {
                     const auto found=haystack.find(needle,static_cast<std::size_t>(start-1));
-                    return VbaValue::numeric(found==std::u16string::npos ? 0 : found+1);
+                    return stringLongResult(found==std::u16string::npos ? 0 : found+1);
                 }
                 const auto boundary=[&](std::size_t position) {
                     return position==0 || position==haystack.size() || !(haystack[position-1]>=0xd800 && haystack[position-1]<=0xdbff && haystack[position]>=0xdc00 && haystack[position]<=0xdfff);
@@ -785,9 +789,9 @@ private:
                 for (std::size_t position=start-1;position+needle.size()<=haystack.size();++position) {
                     if (!boundary(position) || !boundary(position+needle.size())) continue;
                     const auto candidate=utf8String(std::u16string_view(haystack).substr(position,needle.size()));
-                    if (host_->compareStrings(candidate,right,mode)==0) return VbaValue::numeric(position+1);
+                    if (host_->compareStrings(candidate,right,mode)==0) return stringLongResult(position+1);
                 }
-                return VbaValue::numeric(0);
+                return stringLongResult(0);
             }
             if (word=="trim" || word=="ltrim" || word=="rtrim" || word=="trim$" || word=="ltrim$" || word=="rtrim$") {
                 if (!host_) return {};
@@ -846,7 +850,7 @@ private:
                 if (word == "isempty") return VbaValue::logical(value.kind == VbaValue::Kind::Empty);
                 if (word == "len") {
                     const auto scalar=scalarObjectValue(value);
-                    return scalar.kind==VbaValue::Kind::Null ? VbaValue{} : VbaValue::numeric(vbaStringCodeUnits(scalar.asText()));
+                    return scalar.kind==VbaValue::Kind::Null ? VbaValue{} : stringLongResult(vbaStringCodeUnits(scalar.asText()));
                 }
                 if (word == "cstr") {
                     if (value.kind==VbaValue::Kind::Error) return VbaValue::string("Error "+std::to_string(value.errorNumber));

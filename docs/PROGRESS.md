@@ -2002,3 +2002,20 @@ Full validation: host 35/35 (93.88 s), Debian 12 35/35 (98.10 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Visibility
 commit 0c4ed45 private CI completed successfully; 100e57c was still in progress.
+
+## 2026-11-02 — Native string-function result types
+
+Reproduced Double-versus-Long mismatch in core regression (0/1). Supported Len
+string measurements/InStr now return checked Long, StrComp Integer; Null remains
+Null. Core and actual Qt/VBA/DAO parameter/SQL type-code regressions pass 2/2
+(1.04 s), including Unicode positions, nested inspection, pending/save and Null
+Undo without source changes. GUI suite has 36 CTests. Numeric/UDT Len storage,
+complete locale/BSTR/Windows and SQL result subtype propagation remain open.
+No additional complete original business workflow. See STRING_RESULT_TYPES_RUNTIME.md.
+
+Full validation: host 36/36 (101.85 s), Debian 12 36/36 (101.77 s), Ubuntu
+24.04 36/36 (87.96 s), Debian 13 36/36 (92.16 s), GUI-disabled core 1/1
+(1.77 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Navigation
+commit 100e57c private CI completed successfully; 3232150 was still in progress.

@@ -617,3 +617,7 @@ Full targets remain open:
 - [x] Native VBA/calculated Replace with UTF-16 suffix/count/compare, scalar-once
   checked arguments, actual Qt/DAO parameter/SQL pending/save/Undo regressions;
   full Windows collation/BSTR/error identity and Jet SQL Replace remain open.
+
+- [x] Restore native Long results for supported Len/InStr and Integer for StrComp,
+  checked range/Null, actual Qt/VBA/DAO parameter/SQL type-code/pending/save/Undo
+  regression; numeric/UDT Len/full Windows/SQL subtype identity remains open.

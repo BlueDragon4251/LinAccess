@@ -275,6 +275,24 @@ void testCharacterFunctions() {
     }
 }
 
+void testStringResultTypes() {
+    using namespace linaccess;
+    FakeForm host;
+    const auto eval=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,{}); };
+    for(const auto* expression:{R"VBA(Len("A😀b"))VBA",R"VBA(InStr("A😀b","b"))VBA",R"VBA(InStr("abc","z"))VBA",R"VBA(InStr(2,"abc",""))VBA"}) {
+        const auto result=eval(expression); assert(result.kind==VbaValue::Kind::Number && result.numericType==VbaValue::NumericType::Long);
+    }
+    assert(eval(R"VBA(Len("A😀b"))VBA").number==4 && eval(R"VBA(InStr("A😀b","b"))VBA").number==4);
+    assert(eval(R"VBA(InStr(2147483647,"a",""))VBA").number==2147483647);
+    for(const auto* expression:{R"VBA(StrComp("a","b"))VBA",R"VBA(StrComp("b","a"))VBA",R"VBA(StrComp("a","a"))VBA"}) {
+        const auto result=eval(expression); assert(result.kind==VbaValue::Kind::Number && result.numericType==VbaValue::NumericType::Integer);
+    }
+    assert(eval(R"VBA(VarType(Len("a"))=vbLong)VBA").truthy());
+    assert(eval(R"VBA(TypeName(InStr("a","a")))VBA").asText()=="Long");
+    assert(eval(R"VBA(VarType(StrComp("a","b"))=vbInteger)VBA").truthy());
+    assert(eval(R"VBA(Len(Null))VBA").kind==VbaValue::Kind::Null && eval(R"VBA(InStr(Null,"a"))VBA").kind==VbaValue::Kind::Null && eval(R"VBA(StrComp("a",Null))VBA").kind==VbaValue::Kind::Null);
+}
+
 void testReplaceFunction() {
     using namespace linaccess;
     FakeForm host;
@@ -347,6 +365,7 @@ void testRoundFunction() {
 }
 
 int main() {
+    testStringResultTypes();
     testReplaceFunction();
     testRoundFunction();
     testCharacterFunctions();

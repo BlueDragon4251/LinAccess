@@ -717,3 +717,9 @@ UTF-16 suffix semantics and scalar-once inputs. Actual Qt/VBA/DAO parameter/SQL
 regressions cover pending/save/Undo and rejection before side effects. Full
 Windows linguistic/BSTR/error identity and Jet SQL Replace remain open. See
 [REPLACE_RUNTIME.md](REPLACE_RUNTIME.md).
+
+Supported native Len string measurements/InStr positions now return Long;
+StrComp returns Integer, preserving Null. Actual Qt/VBA/DAO parameter/SQL tests
+verify numeric values and VarType codes through pending/save/Null/Undo. Len
+numeric/UDT storage sizes and full Windows/SQL subtype propagation remain open.
+See [STRING_RESULT_TYPES_RUNTIME.md](STRING_RESULT_TYPES_RUNTIME.md).
