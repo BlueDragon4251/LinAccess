@@ -2,6 +2,7 @@
 #include "native_input_box.hpp"
 #include <QCloseEvent>
 #include <QKeyEvent>
+#include <QShortcut>
 
 #include "access_inspector.hpp"
 #include "access_form_import.hpp"
@@ -783,7 +784,8 @@ void MainWindow::showTable(const QString& name) {
         if (table->currentIndex().isValid()) model->removeRow(table->currentIndex().row());
     });
     connect(discard, &QPushButton::clicked, page, [model] { model->revertAll(); });
-    connect(save, &QPushButton::clicked, page, [this, model] {
+    connect(save, &QPushButton::clicked, page, [this, model, table] {
+        if(!table->finishEditing()) return;
         if (!db_.transaction()) { messageError(this, db_.lastError().text()); return; }
         if (!model->submitAll()) {
             const auto problem = model->lastError().text();
@@ -794,6 +796,9 @@ void MainWindow::showTable(const QString& name) {
         if (!db_.commit()) { messageError(this, db_.lastError().text()); return; }
         model->select();
     });
+    auto* saveShortcut=new QShortcut(QKeySequence::Save,table);
+    saveShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(saveShortcut,&QShortcut::activated,save,&QPushButton::click);
     tabs_->setCurrentIndex(tabs_->addTab(page, name));
 }
 

@@ -2357,3 +2357,25 @@ rechecked. Original query counts remain 72 ordinary + 5 parameterized executed,
 13 binding/Jet boundaries, 9 missing dependencies and 1 source-column mismatch;
 no Access reference oracle or full business-workflow claim. Remote CI remains
 blocked by the previously confirmed account restriction.
+
+## 2026-11-02 — Native datasheet checkbox/keyboard completion batch
+
+Added checked Boolean checkbox roles and Space toggling with -1/0 persistence,
+plus table Ctrl+S invoking manual-save transactions only after checked live-cell
+completion. Delegate persistent indices identify the edited cell; invalid values
+remain in the editor, valid values reach the model before reset/save. Existing
+native field/main-window paths pass; no new CTest target (suite remains 48).
+A checkbox test assumed unsorted row order; corrected it to locate record identity.
+The main-window shortcut fixture initially referenced a prior project table;
+now creates its own table via the real SQL editor before opening it in explorer.
+Actual Space/Ctrl+S, pending database value retention, final persistence and
+invalid Currency editor retention are checked. Full Yes/No defaults/Null, per-row
+save events/undo/keyboard/Windows identity remain open. See APP_EDITORS_RUNTIME.md.
+No complete original business workflow increment. Delivery validation follows.
+
+Delivery: native field regression passed (0.26 s), final main-window regression
+passed 1/1 (1.43 s); current host app rebuilt and DEB payload/backend/build-ID/
+permissions/fixture-exclusion checked. Unaffected suite/platform runs were not
+repeated: the previous shared matrix is documented under 644e71d. Four original
+hashes and private visibility rechecked. No new full-suite/distro/remote CI pass
+is claimed for this focused GUI-only delta; account CI restriction remains open.

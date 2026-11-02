@@ -1,6 +1,7 @@
 #include "mainwindow.hpp"
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
+#include "access_table_view.hpp"
 #include <QAction>
 #include <QApplication>
 #include <QCryptographicHash>
@@ -78,6 +79,19 @@ AccessFormPreview* document(const std::string& name) {
         if(makePreviewFormObject(*form)->member("Name",{}).asText()==name) return form;
     return nullptr;
 }
+void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
+    auto* explorer=window.findChild<QTreeWidget*>("database-explorer"); assert(explorer); QTreeWidgetItem* selected=nullptr;
+    for(QTreeWidgetItemIterator item(explorer);*item;++item) if((*item)->data(0,Qt::UserRole).toString()=="table" && (*item)->text(0)=="shortcut_records") { selected=*item; break; }
+    assert(selected && QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,selected),Q_ARG(int,0)));
+    linaccess::AccessTableView* table=nullptr;
+    for(auto* candidate:window.findChildren<QTableView*>()) if(auto* typed=dynamic_cast<linaccess::AccessTableView*>(candidate)) table=typed;
+    assert(table && table->model()->rowCount()>0); const auto id=table->model()->index(0,0).data().toInt();
+    table->setCurrentIndex(table->model()->index(0,1)); QApplication::setActiveWindow(&window); table->setFocus(); table->edit(table->currentIndex()); QApplication::processEvents();
+    auto* editor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(editor && table->isAncestorOf(editor)); editor->setText("saved-through-shortcut");
+    QTest::keyPress(editor,Qt::Key_S,Qt::ControlModifier); QTest::keyRelease(table,Qt::Key_S,Qt::ControlModifier); QApplication::processEvents();
+    QSqlQuery query(db); query.prepare("SELECT value FROM shortcut_records WHERE id=?"); query.addBindValue(id); assert(query.exec() && query.next() && query.value(0).toString()=="saved-through-shortcut");
+    assert(!qobject_cast<linaccess::AccessTableModel*>(table->model())->isDirty());
+}
 void exerciseQueryEditor(MainWindow& window,QSqlDatabase db) {
     QSqlQuery sql(db); assert(sql.exec("CREATE TABLE sql_editor_audit(value REAL)")); bool saved=false;
     QTimer::singleShot(0,&window,[&] {
@@ -87,6 +101,8 @@ void exerciseQueryEditor(MainWindow& window,QSqlDatabase db) {
         for(auto* button:dialog->findChildren<QPushButton*>()) { if(button->text()=="Ausführen") run=button; if(button->text()=="Speichern") save=button; } assert(run && save);
         source->setPlainText("SELECT CCur('1.23455') AS money,DateDiff('d',#2/28/2024#,#3/1/2024#) AS days"); run->click();
         assert(table->model()->rowCount()==1 && table->model()->index(0,0).data().toString()=="1.2346" && table->model()->index(0,1).data().toInt()==2);
+        source->setPlainText("CREATE TABLE shortcut_records(id INTEGER PRIMARY KEY,value TEXT)"); run->click();
+        source->setPlainText("INSERT INTO shortcut_records VALUES(1,'before')"); run->click();
         source->setPlainText("INSERT INTO sql_editor_audit VALUES(CCur('1.23455'))"); run->click(); assert(table->isHidden());
         assert(sql.exec("SELECT value FROM sql_editor_audit") && sql.next() && sql.value(0).toDouble()==1.2346); sql.finish();
         source->setPlainText("PARAMETERS p Currency; SELECT p AS amount");
@@ -309,6 +325,7 @@ int main(int argc,char** argv) {
     QTest::keyClick(explorer,Qt::Key_N,Qt::ControlModifier);
     assert(refused && hash()==beforeRefusal && QSqlDatabase::database("linaccess-main").databaseName()==third);
     exerciseQueryEditor(window,db);
+    exerciseTableSave(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

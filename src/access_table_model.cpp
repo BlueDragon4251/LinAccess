@@ -37,6 +37,15 @@ void AccessTableModel::sort(int column,Qt::SortOrder order) {
 }
 QString AccessTableModel::columnType(int column) const { return types_.value(record().fieldName(column).toCaseFolded()); }
 QVariant AccessTableModel::data(const QModelIndex& index,int role) const {
+    if(index.isValid() && columnType(index.column()).contains("BOOL",Qt::CaseInsensitive)) {
+        if(role==Qt::CheckStateRole) {
+            const auto value=QSqlTableModel::data(index,Qt::EditRole);
+            if(value.isNull()) return Qt::PartiallyChecked;
+            try { return qtFieldValue(value,"BOOLEAN").boolean ? Qt::Checked : Qt::Unchecked; }
+            catch(const VbaRuntimeError&) { return {}; }
+        }
+        if(role==Qt::DisplayRole) return {};
+    }
     const auto raw=QSqlTableModel::data(index,role);
     if(!index.isValid() || (role!=Qt::DisplayRole && role!=Qt::EditRole)) return raw;
     const auto name=record().fieldName(index.column()).toCaseFolded(),type=types_.value(name);
@@ -49,6 +58,7 @@ Qt::ItemFlags AccessTableModel::flags(const QModelIndex& index) const {
     auto result=QSqlTableModel::flags(index); if(!index.isValid()) return result;
     const auto type=columnType(index.column());
     if(metadataError_ || generated_.contains(record().fieldName(index.column()).toCaseFolded()) || type.contains("BLOB",Qt::CaseInsensitive)) return result & ~Qt::ItemIsEditable;
+    if(type.contains("BOOL",Qt::CaseInsensitive)) result |= Qt::ItemIsUserCheckable;
     if(checkedDisplay(type)) {
         try { (void)qtFieldValue(QSqlTableModel::data(index,Qt::EditRole),type); }
         catch(const VbaRuntimeError&) { result &= ~Qt::ItemIsEditable; }
@@ -56,17 +66,24 @@ Qt::ItemFlags AccessTableModel::flags(const QModelIndex& index) const {
     return result;
 }
 bool AccessTableModel::setData(const QModelIndex& index,const QVariant& value,int role) {
-    if(role!=Qt::EditRole) return QSqlTableModel::setData(index,value,role);
     if(!index.isValid() || index.model()!=this) return false;
+    const bool checkbox=role==Qt::CheckStateRole && columnType(index.column()).contains("BOOL",Qt::CaseInsensitive);
+    if(role!=Qt::EditRole && !checkbox) return QSqlTableModel::setData(index,value,role);
     if(!(flags(index)&Qt::ItemIsEditable)) return reject(2448);
     try {
         const auto type=columnType(index.column());
-        const bool emptyNumeric=value.metaType().id()==QMetaType::QString && value.toString().isEmpty()
+        QVariant input=value;
+        if(checkbox) {
+            bool valid=false; const auto state=value.toInt(&valid);
+            if(!valid || state<Qt::Unchecked || state>Qt::Checked) return reject(5);
+            input=state==Qt::PartiallyChecked ? QVariant{} : QVariant(state==Qt::Checked);
+        }
+        const bool emptyNumeric=input.metaType().id()==QMetaType::QString && input.toString().isEmpty()
             && (type=="CURRENCY_REAL" || type.contains("INT",Qt::CaseInsensitive) || type.contains("REAL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive));
-        const auto scalar=emptyNumeric ? VbaValue{} : qtFieldValue(value,(type.contains("BOOL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive))?type:QString{});
+        const auto scalar=emptyNumeric ? VbaValue{} : qtFieldValue(input,(type.contains("BOOL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive))?type:QString{});
         const auto converted=sqlFieldValue(scalar,type);
-        const bool accepted=QSqlTableModel::setData(index,converted,role);
-        if(accepted) setLastError({});
+        const bool accepted=QSqlTableModel::setData(index,converted,Qt::EditRole);
+        if(accepted) { setLastError({}); if(checkbox) emit dataChanged(index,index,{Qt::CheckStateRole}); }
         return accepted;
     } catch(const VbaRuntimeError& error) { return reject(error.number); }
 }

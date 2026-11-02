@@ -37,3 +37,20 @@ Qt's default sort/select would otherwise clear them. The previous header indicat
 is restored and the user is asked to finish/save/discard the edit. The existing
 field integration test reproduces the cache-loss bug before the fix, then checks
 both cached edits and still-open editor text without resets or writes.
+
+## Checkbox and keyboard cell completion
+
+Verified Boolean columns now expose native Qt checkbox state, with Space toggling
+and checked persistence as -1/0. Existing stored Null is displayed partially
+checked; this does not claim complete Jet Yes/No defaults/Null constraints.
+Checkbox edits remain pending until Save.
+
+Ctrl+S in the app's table view invokes the existing manual-save transaction.
+The view first reads and validates any live cell editor through its actual index
+and editor value property. Invalid input stays focused and is not discarded or
+written; valid input enters the checked cache before editor close/submission.
+The existing native field/main-window tests check real Space and Ctrl+S events,
+old database values before save, final values after save, invalid Currency editor
+retention and action-created table opening through the actual explorer.
+Manual-save batching remains the existing app convention, not complete Access
+per-record event/undo/keyboard parity. No new CTest target is added.

@@ -830,3 +830,10 @@ including declared parameter prompts and saved action definitions. Existing
 Qt field/main-window tests exercise both real editors on synthetic projects.
 Full datasheet/formatting/constraints/Jet/designer/Windows identity remains open.
 See [APP_EDITORS_RUNTIME.md](APP_EDITORS_RUNTIME.md).
+
+The native app table view now provides Boolean checkboxes/Space and Ctrl+S with
+checked live-editor completion before manual-save transactions. Existing GUI
+regressions verify pending/committed -1/0, actual shortcut persistence and invalid
+Currency editor retention. Full Yes/No constraints, per-record events, undo and
+Access keyboard/visual identity remain open. See
+[APP_EDITORS_RUNTIME.md](APP_EDITORS_RUNTIME.md#checkbox-and-keyboard-cell-completion).

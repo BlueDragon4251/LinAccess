@@ -694,3 +694,9 @@ Full targets remain open:
 - [x] App SQL editor uses the Access compiler/model, typed declared parameters,
   DAO action execution/affected rows and saved actions, verified through its real
   dialog; complete Jet/designer/editor parity remains open.
+
+- [x] Native app Boolean table checkboxes with Space, pending edits and checked
+  -1/0 persistence; full Yes/No defaults/Null/visual identity remain open.
+
+- [x] Native table Ctrl+S completes/validates a live cell before transactional
+  manual save, retaining invalid editor text; full per-record/undo/key parity open.

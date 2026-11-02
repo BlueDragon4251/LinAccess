@@ -151,10 +151,10 @@ End Sub
     model->member("Undo",{}); assert(model->item("amount").kind==VbaValue::Kind::Null && !form.hasUnsavedChanges());
     assert(sql.exec("SELECT COUNT(*) FROM cash") && sql.next() && sql.value(0).toInt()==4); sql.finish();
     assert(form.close());
-    assert(sql.exec("CREATE TABLE grid(id INTEGER PRIMARY KEY AUTOINCREMENT,amount REAL,memo TEXT,small INTEGER,stamp DATETIME,secondary INTEGER NOT NULL DEFAULT("+linaccess::accessCounterDefault("grid","secondary")+"))"));
+    assert(sql.exec("CREATE TABLE grid(id INTEGER PRIMARY KEY AUTOINCREMENT,amount REAL,memo TEXT,small INTEGER,stamp DATETIME,secondary INTEGER NOT NULL DEFAULT("+linaccess::accessCounterDefault("grid","secondary")+"),flag INTEGER)"));
     linaccess::createAccessCounter(db,"grid","secondary");
-    sql.prepare("INSERT INTO _la_table_schema VALUES('grid',?)"); sql.addBindValue(QStringLiteral(R"JSON([{"name":"amount","source_type":"CURRENCY"},{"name":"small","source_type":"SMALLINT"},{"name":"stamp","source_type":"DATETIME"}])JSON")); assert(sql.exec());
-    sql.prepare("INSERT INTO grid(amount,memo,small,stamp) VALUES(?,?,?,?)"); sql.addBindValue(549755813887.9999); sql.addBindValue(QString(50000,'x')); sql.addBindValue(32767); sql.addBindValue("2024-02-29 12:34:56"); assert(sql.exec()); sql.finish();
+    sql.prepare("INSERT INTO _la_table_schema VALUES('grid',?)"); sql.addBindValue(QStringLiteral(R"JSON([{"name":"amount","source_type":"CURRENCY"},{"name":"small","source_type":"SMALLINT"},{"name":"stamp","source_type":"DATETIME"},{"name":"flag","source_type":"BOOLEAN"}])JSON")); assert(sql.exec());
+    sql.prepare("INSERT INTO grid(amount,memo,small,stamp,flag) VALUES(?,?,?,?,?)"); sql.addBindValue(549755813887.9999); sql.addBindValue(QString(50000,'x')); sql.addBindValue(32767); sql.addBindValue("2024-02-29 12:34:56"); sql.addBindValue(0); assert(sql.exec()); sql.finish();
     linaccess::AccessTableModel grid(nullptr,db); grid.setTable("grid"); grid.setEditStrategy(QSqlTableModel::OnManualSubmit); assert(grid.select());
     assert(!(grid.flags(grid.index(0,0))&Qt::ItemIsEditable));
     assert(grid.data(grid.index(0,1),Qt::EditRole).toString()=="549755813887.9999");
@@ -171,6 +171,10 @@ End Sub
     grid.sort(2,Qt::DescendingOrder); assert(gridRejected==2501 && grid.isDirty() && grid.data(grid.index(0,1)).toString()=="1.2346");
     assert(!grid.setData(grid.index(0,1),"549755813888") && gridRejected==3251 && grid.data(grid.index(0,1)).toString()=="1.2346");
     assert(!grid.setData(grid.index(0,3),32768) && gridRejected==6 && grid.data(grid.index(0,3)).toInt()==32767);
+    view.setCurrentIndex(grid.index(0,1)); view.edit(grid.index(0,1)); QApplication::processEvents();
+    auto* pending=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(pending); pending->setText("549755813888");
+    assert(!view.finishEditing() && QApplication::focusWidget()==pending && pending->text()=="549755813888" && grid.data(grid.index(0,1)).toString()=="1.2346");
+    pending->setText("1.23455"); assert(view.finishEditing() && grid.data(grid.index(0,1)).toString()=="1.2346");
     auto* memoEditor=delegate.createEditor(&view,option,grid.index(0,2)); auto* memoText=qobject_cast<QLineEdit*>(memoEditor); assert(memoText);
     delegate.setEditorData(memoEditor,grid.index(0,2)); assert(memoText->text().size()==50000); memoText->insert("z"); delegate.setModelData(memoEditor,&grid,grid.index(0,2)); delete memoEditor;
     assert(grid.setData(grid.index(0,4),QDateTime(QDate(2024,3,1),QTime(1,2,3))));
@@ -179,5 +183,12 @@ End Sub
     assert(grid.insertRow(grid.rowCount())); const auto inserted=grid.rowCount()-1; assert(grid.data(grid.index(inserted,0)).toString()=="(AutoWert)" && grid.data(grid.index(inserted,5)).toString()=="(AutoWert)" && !(grid.flags(grid.index(inserted,5))&Qt::ItemIsEditable));
     assert(grid.setData(grid.index(inserted,1),"0.00015") && grid.setData(grid.index(inserted,2),"new")); assert(db.transaction() && grid.submitAll() && db.commit());
     assert(sql.exec("SELECT id,amount,secondary FROM grid ORDER BY id DESC") && sql.next() && sql.value(0).toInt()==2 && sql.value(2).toInt()==2 && linaccess::currencyFromRealStorage(sql.value(1).toDouble()).currencyUnits==2); sql.finish();
+
+    const int boolRow=grid.data(grid.index(0,0)).toInt()==1 ? 0 : 1;
+    assert(grid.flags(grid.index(boolRow,6))&Qt::ItemIsUserCheckable); assert(grid.data(grid.index(boolRow,6),Qt::CheckStateRole).toInt()==Qt::Unchecked && grid.data(grid.index(1-boolRow,6),Qt::CheckStateRole).toInt()==Qt::PartiallyChecked);
+    view.setCurrentIndex(grid.index(boolRow,6)); view.setFocus(); QApplication::processEvents(); QTest::keyClick(&view,Qt::Key_Space);
+    assert(grid.data(grid.index(boolRow,6),Qt::CheckStateRole).toInt()==Qt::Checked && grid.isDirty());
+    assert(sql.exec("SELECT flag FROM grid WHERE id=1") && sql.next() && sql.value(0).toInt()==0); sql.finish();
+    assert(db.transaction() && grid.submitAll() && db.commit()); assert(sql.exec("SELECT flag FROM grid WHERE id=1") && sql.next() && sql.value(0).toInt()==-1); sql.finish();
 
 }
