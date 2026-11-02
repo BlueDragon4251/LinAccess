@@ -715,3 +715,7 @@ Full targets remain open:
 - [x] Bounded simple SQL writes check verified Byte/Integer/Long/Boolean/date
   targets, shared rounding/ranges/canonical storage/Null/atomic late-row failure
   and unmarked-SQLite preservation; complex/full Jet coercion remains open.
+
+- [x] Native one-dimensional Variant Array construction, Option Base, checked
+  indexing/element replacement, bounds/type inspection and whole-array value/
+  ByRef/ByVal semantics with real VBA-to-DAO persistence; full arrays remain open.

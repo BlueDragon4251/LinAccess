@@ -2454,3 +2454,16 @@ distro installs pass backend execution/GUI startup. GUI-disabled core sources
 are unchanged from their last checked state. All four original hashes/private
 visibility pass. Remote CI remains blocked by the previously confirmed account
 restriction; no remote success is claimed.
+
+## Native Variant array runtime (2026-11-02)
+
+Implemented one-dimensional Array values, Option Base 0/1, Long bounds,
+checked indexed reads/writes, type inspection, immutable-backed value copies and
+whole-array ByRef/ByVal execution. Actual VBA loops persist modified array values
+through DAO into a synthetic SQLite database. Indexed ByRef elements fail 3251.
+Final focused existing core/DAO tests passed (2/2, 1.37 s), including nested
+reads and explicit rejection of unsupported indexed ByRef writes. All four
+original fixture SHA-256 checks passed. Full GUI/package/distribution validation
+was not repeated for this segment; the last full result belongs to e799b2f.
+No new CTest target and no repeated distribution matrix for this segment.
+Full Access array semantics remain open; see VARIANT_ARRAY_RUNTIME.md.

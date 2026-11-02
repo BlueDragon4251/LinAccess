@@ -858,3 +858,10 @@ actual DAO SQL; unmarked ordinary SQLite storage is preserved. Date years are
 limited to 0100–9999. Date Variants, locale/complex/general expression coercion
 and full Jet/Windows semantics remain open. See
 [TYPED_SQL_WRITES_RUNTIME.md](TYPED_SQL_WRITES_RUNTIME.md).
+
+## Native Variant array subset
+
+One-dimensional `Array()` values now support Option Base 0/1, bounds, indexed
+reads/writes, type inspection and whole-array ByRef/ByVal/value copies.
+See [precise boundaries](VARIANT_ARRAY_RUNTIME.md). Declarations, ReDim,
+multidimensional arrays and array For Each remain unsupported.

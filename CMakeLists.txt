@@ -3,7 +3,7 @@ project(LinAccess VERSION 0.7.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_library(linaccess_runtime STATIC src/vba_runtime.cpp src/vba_expression.cpp src/vba_currency.cpp src/vba_round.cpp src/vba_calendar.cpp src/vba_analyzer.cpp src/csv.cpp)
+add_library(linaccess_runtime STATIC src/vba_runtime.cpp src/vba_expression.cpp src/vba_currency.cpp src/vba_round.cpp src/vba_calendar.cpp src/vba_array.cpp src/vba_analyzer.cpp src/csv.cpp)
 target_include_directories(linaccess_runtime PUBLIC src)
 
 option(LINACCESS_BUILD_GUI "Build the native Qt desktop application" ON)

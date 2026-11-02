@@ -1,3 +1,4 @@
+#include "vba_array.hpp"
 #include "vba_runtime.hpp"
 #include "vba_expression.hpp"
 #include "vba_currency.hpp"
@@ -20,7 +21,7 @@ struct Statement {
     enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
-                      Call, SetField, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, ErrorResumeNext, ErrorDisable, Label, Jump, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
+                      Call, SetField, IndexedAssign, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, ErrorResumeNext, ErrorDisable, Label, Jump, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
     std::string argument;
     std::string expression;
     int line{};
@@ -687,6 +688,12 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             if (!validExpression(target) || !validExpression(expr))
                 return {VbaExecutionStatus::Unsupported, "Objektzuweisung", line};
             statements.push_back({Statement::Type::ObjectAssign, target, expr, line});
+        } else if (const auto assignment=topLevelAssignment(source); assignment && memberSeparator(assignment->first)==std::string::npos && memberTarget(assignment->first) && memberTarget(assignment->first)->arguments) {
+            const auto target=*memberTarget(assignment->first);
+            const auto indices=splitArguments(*target.arguments);
+            if(indices.size()!=1 || !validExpression(indices[0]) || !validExpression(assignment->second))
+                return {VbaExecutionStatus::Unsupported,"Array assignment syntax unsupported",line};
+            statements.push_back({Statement::Type::IndexedAssign,target.name,assignment->second,line,indices[0]});
         } else if (std::regex_match(source, match, dim)) {
             std::istringstream declarations(match[1].str());
             std::string entry;
@@ -859,7 +866,7 @@ VbaValue initialLocalValue(const std::string& type) {
     if (!type.empty() && type!="variant") return VbaValue::numeric(0);
     return VbaValue::empty();
 }
-struct ReferenceBinding { VbaValue* source{}; std::string type; };
+struct ReferenceBinding { VbaValue* source{}; std::string type; bool indexedArray{}; };
 }
 
 static VbaExecutionResult executeProcedure(std::string_view module,
@@ -948,6 +955,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     try {
         for(std::size_t i=0;i<parameters.size();++i) {
             const auto& parameter=parameters[i]; const auto name=lower(parameter.name);
+            if(references && !implicitCancel && parameter.byReference && (*references)[i].indexedArray)
+                throw VbaRuntimeError(3251,"ByRef array element binding is not implemented");
             const auto value=implicitCancel ? VbaValue::numeric(0) : arguments[i];
             const auto converted=checkedType(parameter.type) ? coerceVbaModuleValue(value,parameter.type) : value;
             if(references && !implicitCancel && parameter.byReference && (*references)[i].source) {
@@ -1017,7 +1026,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     };
     const auto equalValue = [](const VbaValue& a, const VbaValue& b) {
         return a.kind == b.kind && a.numericType==b.numericType && a.number == b.number && a.currencyUnits==b.currencyUnits && a.text == b.text
-            && a.boolean == b.boolean && a.object == b.object && a.errorNumber==b.errorNumber;
+            && a.boolean == b.boolean && a.object == b.object && a.bytes == b.bytes && a.errorNumber==b.errorNumber;
     };
     const auto refreshAliases = [&] {
         for (auto& alias : aliases) { locals[alias.name] = *alias.source; alias.before = *alias.source; }
@@ -1055,6 +1064,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             const auto type=variableType(lower(expression));
             ReferenceBinding binding{found==locals.end() ? nullptr : &found->second,checkedType(type) ? type : std::string{}};
             for (const auto& alias:aliases) if (alias.name==lower(expression)) binding={alias.source,alias.type};
+            if(expression=="@array_element") binding.indexedArray=true;
+            if(const auto target=memberTarget(expression); target && target->arguments) {
+                const auto array=locals.find(lower(target->name));
+                if(array!=locals.end() && isVbaArray(array->second)) binding.indexedArray=true;
+            }
             bindings.push_back(binding);
         }
         auto nested = executeProcedure(module, name, host, actuals, &bindings);
@@ -1077,12 +1091,15 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                                             const std::vector<std::string>& refs) {
         return invoke(name, args, refs, true);
     };
+    int arrayBase=0;
     auto compareMode=VbaCompareMode::Binary;
     {
         std::istringstream source{std::string(module)}; std::string line;
         const std::regex option(R"(^\s*Option\s+Compare\s+(Binary|Text|Database)\s*(?:'.*)?$)",std::regex::icase);
+        const std::regex baseOption(R"(^\s*Option\s+Base\s+([01])\s*(?:'.*)?$)",std::regex::icase);
         while (std::getline(source,line)) {
             std::smatch match;
+            if(std::regex_match(line,match,baseOption)) arrayBase=match[1].str()=="1" ? 1 : 0;
             if (std::regex_match(line,match,option)) {
                 const auto mode=lower(match[1].str());
                 compareMode=mode=="database" ? VbaCompareMode::Database : mode=="text" ? VbaCompareMode::Text : VbaCompareMode::Binary;
@@ -1090,10 +1107,10 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         }
     }
     const auto evaluate = [&](std::string_view expression) {
-        return evaluateVbaExpression(expression, host, locals, resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode);
+        return evaluateVbaExpression(expression, host, locals, resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase);
     };
     const auto evaluateObject = [&](std::string_view expression) {
-        return evaluateVbaObjectExpression(expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode);
+        return evaluateVbaObjectExpression(expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase);
     };
     bool active = true;
     int currentLine = 0;
@@ -1356,6 +1373,17 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     withFrames.resize(withFrames.size()-instruction.withUnwind);
                     loops.resize(loops.size()-instruction.forUnwind);
                     active=true; ip=static_cast<std::size_t>(instruction.partner);
+                }
+                break;
+            case Statement::Type::IndexedAssign:
+                if(active) {
+                    const auto name=lower(instruction.argument);
+                    const auto index=coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.endExpression)),"long");
+                    const auto value=evaluate(instruction.expression);
+                    refreshAliases();
+                    const auto found=locals.find(name);
+                    if(found==locals.end()) throw VbaRuntimeError(13,"Array variable required");
+                    assignVariable(name,withVbaArrayElement(found->second,{index},value));
                 }
                 break;
             case Statement::Type::SetVar:

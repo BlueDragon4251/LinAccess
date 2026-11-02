@@ -1,3 +1,4 @@
+#include "vba_array.hpp"
 #include "vba_calendar.hpp"
 #include "vba_expression.hpp"
 #include "vba_color.hpp"
@@ -296,8 +297,8 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
 class ExpressionParser {
 public:
     ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals,
-                     const VbaFunctionResolver& resolver = {},bool objectContext=false,bool accessExpression=false,const VbaValue* withContext=nullptr,bool allowWith=false,VbaCompareMode compareMode=VbaCompareMode::Binary)
-        : tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode) {}
+                     const VbaFunctionResolver& resolver = {},bool objectContext=false,bool accessExpression=false,const VbaValue* withContext=nullptr,bool allowWith=false,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0)
+        : tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase) {}
 
     VbaValue parse() {
         auto value = expression(1,objectContext_);
@@ -352,6 +353,7 @@ private:
                 }
                 if (host_) {
                     try {
+                        if(isVbaArray(value)) { value=vbaArrayElement(value,arguments); continue; }
                         if (value.kind!=VbaValue::Kind::Object || !value.object) throw error("Default member requires an object",91);
                         value=value.object->defaultMember(arguments,objectContext || nextSymbol(".") || nextSymbol("!") || nextSymbol("("));
                     } catch(const VbaRuntimeError& failure) { if (!accessExpression_) throw; value=VbaValue::errorValue(failure.number); }
@@ -563,7 +565,7 @@ private:
         }
         if (nextSymbol("(")) {
             const auto variable=locals_.find(word);
-            if (variable!=locals_.end() && variable->second.kind==VbaValue::Kind::Object) return variable->second;
+            if (variable!=locals_.end() && (variable->second.kind==VbaValue::Kind::Object || isVbaArray(variable->second))) return variable->second;
         }
         if (take("(")) {
             std::vector<VbaValue> args;
@@ -577,6 +579,15 @@ private:
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
                         ? tokens_[start].value : "");
+                    if(host_ && index_>start+3 && tokens_[start].type==Token::Type::Word && tokens_[start+1].value=="(" && tokens_[index_-1].value==")") {
+                        const auto variable=locals_.find(lower(tokens_[start].value));
+                        int depth=0; bool whole=true;
+                        for(auto cursor=start+1;cursor<index_;++cursor) {
+                            if(tokens_[cursor].value=="(") ++depth;
+                            else if(tokens_[cursor].value==")" && --depth==0 && cursor+1<index_) whole=false;
+                        }
+                        if(whole && variable!=locals_.end() && isVbaArray(variable->second)) references.back()="@array_element";
+                    }
                 } while (take(",") || (accessExpression_ && take(";")));
                 require(")");
             }
@@ -656,10 +667,20 @@ private:
                 if (number>=0) result.insert(result.begin(),' ');
                 return VbaValue::string(std::move(result));
             }
+            if(word=="array") {
+                if(!host_) return {};
+                return makeVbaArray(std::move(args),arrayBase_);
+            }
+            if(word=="lbound" || word=="ubound") {
+                if(!host_) return {};
+                if(args.empty() || args.size()>2) throw error("Array bound requires one or two arguments",450);
+                if(args.size()==2 && coerceVbaModuleValue(scalarVbaValue(args[1]),"long").number!=1) throw error("Array dimension out of range",9);
+                return vbaArrayBound(args[0],word=="ubound");
+            }
             if (word=="isarray") {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("IsArray requires one argument",450);
-                return VbaValue::logical(args[0].kind==VbaValue::Kind::ByteArray);
+                return VbaValue::logical(isVbaArray(args[0]));
             }
             if(word=="round") {
                 if(!host_) return {};
@@ -698,14 +719,14 @@ private:
                 const int type=value.kind==VbaValue::Kind::Empty ? 0 : value.kind==VbaValue::Kind::Null ? 1
                     : value.kind==VbaValue::Kind::Number ? (value.numericType==VbaValue::NumericType::Byte ? 17 : value.numericType==VbaValue::NumericType::Integer ? 2 : value.numericType==VbaValue::NumericType::Long ? 3 : value.numericType==VbaValue::NumericType::Single ? 4 : 5) : value.kind==VbaValue::Kind::Currency ? 6
                     : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
-                    : value.kind==VbaValue::Kind::Error ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : 11;
+                    : value.kind==VbaValue::Kind::Error ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : value.kind==VbaValue::Kind::Array ? 8204 : 11;
                 if (word=="vartype") return VbaValue::integer(static_cast<std::int16_t>(type));
                 if (type==9) {
                     if (!value.object) return VbaValue::string("Nothing");
                     throw error("Native object class name unavailable",3251);
                 }
                 return VbaValue::string(type==0 ? "Empty" : type==1 ? "Null" : type==5 ? "Double"
-                    : type==17 ? "Byte" : type==2 ? "Integer" : type==3 ? "Long" : type==4 ? "Single" : type==6 ? "Currency" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : type==8209 ? "Byte()" : "Boolean");
+                    : type==17 ? "Byte" : type==2 ? "Integer" : type==3 ? "Long" : type==4 ? "Single" : type==6 ? "Currency" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : type==8209 ? "Byte()" : type==8204 ? "Variant()" : "Boolean");
             }
             if (word=="dsum" || word=="dcount") {
                 if (!host_) return {};
@@ -940,6 +961,7 @@ private:
     const VbaValue* withContext_{};
     bool allowWith_{};
     VbaCompareMode compareMode_;
+    int arrayBase_;
 };
 } // namespace
 
@@ -979,7 +1001,7 @@ VbaValue VbaHost::eval(std::string_view source) {
     const VbaVariables variables;
     auto value=scalarVbaValue(ExpressionParser(source,this,variables,functions,false,true,nullptr,false,VbaCompareMode::Database).parse());
     if (value.kind==VbaValue::Kind::Error) throw VbaRuntimeError(value.errorNumber ? value.errorNumber : 13,"Eval expression failed");
-    if (value.kind==VbaValue::Kind::ByteArray) throw VbaRuntimeError(13,"Eval cannot return a byte array");
+    if (isVbaArray(value)) throw VbaRuntimeError(13,"Eval cannot return a byte array");
     return value;
 }
 std::optional<VbaValue> VbaHost::resolveIdentifier(std::string_view,bool) { return std::nullopt; }
@@ -1063,7 +1085,7 @@ int VbaHost::compareStrings(std::string_view left,std::string_view right,VbaComp
 std::size_t vbaStringCodeUnits(std::string_view text) { return utf16String(text).size(); }
 VbaValue scalarVbaValue(VbaValue value) { return scalarObjectValue(std::move(value)); }
 std::string VbaValue::asText() const {
-    if (kind==Kind::ByteArray) throw error("Byte array cannot be implicitly converted to text",13);
+    if (kind==Kind::ByteArray || kind==Kind::Array) throw error("Byte array cannot be implicitly converted to text",13);
     if (kind==Kind::Error) throw error("Error Variant cannot be implicitly converted to text",13);
     if (kind==Kind::Object) return scalarObjectValue(*this).asText();
     if (kind == Kind::Text) return text;
@@ -1084,7 +1106,7 @@ std::string VbaValue::asText() const {
     return stream.str();
 }
 double VbaValue::asNumber() const {
-    if (kind==Kind::ByteArray) throw error("Byte array cannot be implicitly converted to number",13);
+    if (kind==Kind::ByteArray || kind==Kind::Array) throw error("Byte array cannot be implicitly converted to number",13);
     if (kind==Kind::Error) throw error("Error Variant cannot be implicitly converted to number",13);
     if (kind==Kind::Object) return scalarObjectValue(*this).asNumber();
     if (kind == Kind::Empty) return 0;
@@ -1119,12 +1141,12 @@ bool validVbaExpression(std::string_view text,bool withContext) {
     catch (...) { return false; }
 }
 VbaValue evaluateVbaExpression(std::string_view text, VbaHost& host,
-                               const VbaVariables& vars, const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode) {
-    return ExpressionParser(text, &host, vars, resolver,false,false,withContext,false,compareMode).parse();
+                               const VbaVariables& vars, const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode,int arrayBase) {
+    return ExpressionParser(text, &host, vars, resolver,false,false,withContext,false,compareMode,arrayBase).parse();
 }
 VbaValue evaluateVbaObjectExpression(std::string_view text,VbaHost& host,
-                                    const VbaVariables& vars,const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode) {
-    return ExpressionParser(text,&host,vars,resolver,true,false,withContext,false,compareMode).parse();
+                                    const VbaVariables& vars,const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode,int arrayBase) {
+    return ExpressionParser(text,&host,vars,resolver,true,false,withContext,false,compareMode,arrayBase).parse();
 }
 VbaValue evaluateAccessExpression(std::string_view text,VbaHost& host) {
     const VbaVariables variables;

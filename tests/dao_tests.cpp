@@ -276,8 +276,33 @@ void testTypedSqlTargets() {
     assert(sql.exec("SELECT value FROM ordinary") && sql.next() && sql.value(0).toDouble()==0.5); sql.finish();
 }
 
+void testVariantArraysDao() {
+    using namespace linaccess;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","variant-array-dao");
+    db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE array_rows(id INTEGER PRIMARY KEY,amount INTEGER)"));
+    Host host(db);
+    const auto result=executeVbaProcedure(R"VBA(Option Base 1
+Sub SaveArray()
+Dim values As Variant, original As Variant
+Dim i As Long
+values=Array(12,24,36)
+original=values
+values(2)=42
+For i=LBound(values) To UBound(values)
+CurrentDb.Execute "INSERT INTO array_rows VALUES(" & CStr(i) & "," & CStr(values(i)) & ")"
+Next
+Me!Original=original(2)
+End Sub
+)VBA","SaveArray",host);
+    assert(result.status==VbaExecutionStatus::Completed && host.fields["Original"]=="24");
+    assert(sql.exec("SELECT COUNT(*),SUM(amount) FROM array_rows") && sql.next());
+    assert(sql.value(0).toInt()==3 && sql.value(1).toInt()==90);
+    sql.finish(); db.close();
+}
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testVariantArraysDao();
     testDdlRecordsAffected();
     testTypedSqlTargets();
     testDeclaredParameterTypes();

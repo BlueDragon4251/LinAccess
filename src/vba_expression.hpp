@@ -17,7 +17,7 @@ namespace linaccess {
 std::size_t vbaStringCodeUnits(std::string_view text);
 
 struct VbaValue {
-    enum class Kind { Null, Empty, Number, Text, Boolean, Object, Error, Currency, ByteArray } kind{Kind::Null};
+    enum class Kind { Null, Empty, Number, Text, Boolean, Object, Error, Currency, ByteArray, Array } kind{Kind::Null};
     enum class NumericType { Double, Integer, Long, Single, Byte } numericType{NumericType::Double};
     double number{};
     std::int64_t currencyUnits{};
@@ -88,8 +88,8 @@ using VbaFunctionResolver = std::function<VbaValue(std::string_view, std::vector
                                                  const std::vector<std::string>&)>;
 bool validVbaExpression(std::string_view expression,bool withContext=false);
 VbaValue evaluateVbaExpression(std::string_view expression, VbaHost& host,
-                               const VbaVariables& variables, const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary);
+                               const VbaVariables& variables, const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0);
 VbaValue evaluateVbaObjectExpression(std::string_view expression,VbaHost& host,
-                                    const VbaVariables& variables,const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary);
+                                    const VbaVariables& variables,const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0);
 VbaValue evaluateAccessExpression(std::string_view expression,VbaHost& host);
 }

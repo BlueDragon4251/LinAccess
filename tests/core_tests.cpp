@@ -2169,5 +2169,56 @@ Me!Nachname=CStr(StrComp("A","a",vbUseCompareOption))
 End Sub
 )VBA","CompareStrings",host);
     assert(textComparison.status==VbaExecutionStatus::Completed && host.fields["Name"]=="2" && host.fields["Nachname"]=="0");
+    assert(evaluate("IsArray(Array(1,2))").truthy());
+    assert(evaluate("VarType(Array())").asNumber()==8204);
+    assert(evaluate("TypeName(Array())").asText()=="Variant()");
+    assert(evaluate("LBound(Array())").asNumber()==0 && evaluate("UBound(Array())").asNumber()==-1);
+    assert(evaluate("Array(10,20)(1)").asNumber()==20);
+    substringError("Array(1)(2)",9); substringError("UBound(Array(1),2)",9);
+    substringError("CStr(Array(1))",13);
+    substringError("Array(1)(Null)",94); substringError("LBound(7)",13);
+    assert(evaluate("Array(Array(5,8))(0)(1)").asNumber()==8);
+    assert(!evaluate("IsObject(Array(1))").truthy());
+    const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
+value=99
+End Sub
+Sub RejectElement()
+Dim a As Variant
+a=Array(1)
+On Error Resume Next
+Call Change(a(0))
+Me!IndexedReferenceError=CStr(Err.Number)
+Me!UnchangedElement=a(0)
+End Sub
+)VBA","RejectElement",host);
+    assert(indexedReference.status==VbaExecutionStatus::Completed);
+    assert(host.fields["IndexedReferenceError"]=="3251" && host.fields["UnchangedElement"]=="1");
+    const auto arrays=executeVbaProcedure(R"VBA(Option Base 1
+Sub Modify(ByRef items As Variant)
+items(1)=42
+End Sub
+Sub PrivateCopy(ByVal items As Variant)
+items(1)=99
+End Sub
+Sub Arrays()
+Dim a As Variant, b As Variant
+Dim i As Long, total As Long
+a=Array(10,20)
+b=a
+a(1)=30
+Call Modify(a)
+Call PrivateCopy(a)
+For i=LBound(a) To UBound(a)
+total=total+a(i)
+Next
+Me!ArrayResult=CStr(a(1)) & ":" & CStr(b(1)) & ":" & CStr(total)
+On Error Resume Next
+a(0)=7
+Me!ArrayError=CStr(Err.Number)
+End Sub
+)VBA","Arrays",host);
+    if(arrays.status!=VbaExecutionStatus::Completed) std::cerr<<"Array error="<<arrays.errorNumber<<" line="<<arrays.line<<"\n";
+    assert(arrays.status==VbaExecutionStatus::Completed);
+    assert(host.fields["ArrayResult"]=="42:10:62" && host.fields["ArrayError"]=="9");
     std::cout << "Core tests passed\n";
 }
