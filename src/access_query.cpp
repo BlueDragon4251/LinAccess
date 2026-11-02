@@ -1,5 +1,6 @@
 #include "access_query.hpp"
 #include <functional>
+#include <algorithm>
 #include "vba_qt_value.hpp"
 #include "jet_sql_functions.hpp"
 #include "sqlite_execution.hpp"
@@ -1006,11 +1007,13 @@ static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPla
     if(fields.isEmpty()) return source;
     auto resolved=compileCurrencyQuery(source.source,fields); resolved.currencyContextResolved=true; return resolved;
 }
-static QString currencyActionExpression(const AccessQueryPlan& plan,const QVector<Token>& code,const QMap<QString,QString>& fields={}) {
+static QString currencyParameterHeader(const AccessQueryPlan& plan) {
     QStringList declarations;
     for(const auto& parameter:plan.parameters) declarations.append(renderJetTokens({{Token::Identifier,parameter.name}})+' '+parameter.type);
-    const auto header=declarations.isEmpty()?QString{}:"PARAMETERS "+declarations.join(',')+"; ";
-    const auto compiled=compileCurrencyQuery(header+"SELECT "+renderJetTokens(code)+" AS [__la_currency_expr]",fields).sql;
+    return declarations.isEmpty()?QString{}:"PARAMETERS "+declarations.join(',')+"; ";
+}
+static QString currencyActionExpression(const AccessQueryPlan& plan,const QVector<Token>& code,const QMap<QString,QString>& fields={}) {
+    const auto compiled=compileCurrencyQuery(currencyParameterHeader(plan)+"SELECT "+renderJetTokens(code)+" AS [__la_currency_expr]",fields).sql;
     const QString prefix="SELECT ",suffix=" AS "+identifier("__la_currency_expr");
     if(!compiled.startsWith(prefix) || !compiled.endsWith(suffix)) throw VbaRuntimeError(3251,"Currency action expression shape unsupported");
     return compiled.mid(prefix.size(),compiled.size()-prefix.size()-suffix.size());
@@ -1042,6 +1045,43 @@ static QString currencyInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
         const auto record=db.record(table);
         for(int i=0;i<record.count();++i) columns.append(record.fieldName(i));
     }
+    const auto types=sqliteColumnTypes(db,table); bool currency=false;
+    for(const auto& column:columns) currency|=types.value(column.toCaseFolded())=="CURRENCY_REAL";
+    if(!currency) return plan.sql;
+    if(word(pos,"SELECT")) {
+        // Keep append inference bounded to one physical SELECT source. The CTE
+        // fixes positional labels (including duplicate output names) and freezes
+        // self-appends before conversion/insertion starts.
+        qsizetype from=-1; int depth=0;
+        for(qsizetype i=pos+1;i<tokens.size();++i) {
+            if(word(i,"SELECT") || word(i,"TOP") || word(i,"JOIN") || word(i,"UNION") || word(i,"INTERSECT") || word(i,"EXCEPT") || word(i,"HAVING")) return plan.sql;
+            if(symbol(tokens[i],"(")) ++depth;
+            else if(symbol(tokens[i],")")) --depth;
+            else if(depth==0 && word(i,"FROM")) { if(from>=0) return plan.sql; from=i; }
+            if(depth<0 || (symbol(tokens[i],";") && i!=tokens.size()-1)) return plan.sql;
+        }
+        if(depth!=0) return plan.sql;
+        if(from>=0) {
+            if(!name(from+1) || !db.tables(QSql::Tables).contains(tokens[from+1].value,Qt::CaseInsensitive)) return plan.sql;
+            const auto boundary=[&](qsizetype i) { return i>=tokens.size() || word(i,"WHERE") || word(i,"GROUP") || word(i,"ORDER") || symbol(tokens[i],";"); };
+            qsizetype next=from+2;
+            if(word(next,"AS")) { ++next; if(!name(next)) return plan.sql; ++next; }
+            else if(!boundary(next) && name(next)) ++next;
+            if(!boundary(next)) return plan.sql;
+        }
+        auto select=resolveCurrencyQuery(db,compileAccessQuery(currencyParameterHeader(plan)+renderJetTokens(tokens.mid(pos))));
+        if(accessQueryColumns(db,select).size()!=columns.size()) return plan.sql;
+        auto source=resolveQueryOrigins(db,select.sql).trimmed(); if(source.endsWith(';')) source.chop(1);
+        QString cte="__la_currency_append";
+        while(std::any_of(tokens.cbegin(),tokens.cend(),[&](const Token& token) { return token.value.compare(cte,Qt::CaseInsensitive)==0; })) cte+='_';
+        QStringList targets,labels,values;
+        for(qsizetype i=0;i<columns.size();++i) {
+            targets.append(identifier(columns[i])); const auto label=identifier("c"+QString::number(i)); labels.append(label);
+            values.append(types.value(columns[i].toCaseFolded())=="CURRENCY_REAL" ? "linaccess_jet_currency_store("+label+')' : label);
+        }
+        installJetSqlFunctions(db);
+        return "WITH "+identifier(cte)+'('+labels.join(',')+") AS MATERIALIZED ("+source+") INSERT INTO "+identifier(table)+'('+targets.join(',')+") SELECT "+values.join(',')+" FROM "+identifier(cte);
+    }
     if(!word(pos,"VALUES") || pos+1>=tokens.size() || !symbol(tokens[pos+1],"(")) return plan.sql;
     pos+=2; auto start=pos; int depth=0; bool closed=false; QVector<QVector<Token>> expressions;
     for(;pos<tokens.size();++pos) {
@@ -1057,9 +1097,6 @@ static QString currencyInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     }
     if(pos<tokens.size() && symbol(tokens[pos],";")) ++pos;
     if(!closed || pos!=tokens.size() || expressions.size()!=columns.size()) return plan.sql;
-    const auto types=sqliteColumnTypes(db,table); bool currency=false;
-    for(const auto& column:columns) currency|=types.value(column.toCaseFolded())=="CURRENCY_REAL";
-    if(!currency) return plan.sql;
     QStringList targets,values;
     for(qsizetype i=0;i<columns.size();++i) {
         targets.append(identifier(columns[i])); auto value=currencyActionExpression(plan,expressions[i]);

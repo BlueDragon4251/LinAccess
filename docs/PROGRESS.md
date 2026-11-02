@@ -2254,3 +2254,32 @@ Ubuntu 24.04 47/47 (91.06 s), Debian 13 47/47 (91.90 s), GUI-disabled core
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. GitHub's
 account-level CI restriction remains separate; no remote test success is claimed.
+
+## 2026-11-02 — Bound Form.CurrentRecord and Currency append batch
+
+Added read-only Long CurrentRecord for supported bound forms, typed native
+Me/Forms/Screen/unqualified/calculated-control lookup, current-event positions,
+filtered navigation/new-row ordinals and no-save/read-only/lifecycle safeguards.
+Regression reproduced missing member (0/1), then passes 1/1 (0.14 s). Public
+Microsoft property contract inspected; no Windows differential run available.
+Unbound/design/report/unknown new-row ordinals explicitly remain outside scope.
+See CURRENT_RECORD_RUNTIME.md.
+
+Extended the existing Currency INSERT regression (no additional executable) to
+multi-row physical-source INSERT SELECT, checked target conversion, frozen
+positional source rows, exact self-append arithmetic, original parameter order
+and atomic late-row failure. Reproduced unchecked append, then combined
+CurrentRecord/INSERT tests pass 2/2 (0.13 s). Complex join/TOP/view/nested/HAVING/
+set-operation/default/constraint/full Jet append remains open. See
+CURRENCY_INSERT_RUNTIME.md. GUI suite has 48 CTests. User requested less repeated
+verification overhead: feature work is now batched, with focused checks during
+implementation and a shared full delivery validation before push. No full
+original business workflow increment. Full local validation follows.
+
+Shared delivery validation: host 48/48 (84.12 s), GUI-disabled core 1/1;
+host DEB payload/backend/build-ID/permissions/fixture-exclusion checks pass.
+All four original hashes pass; repository remains private. To reduce repeated
+validation overhead as requested, the distribution matrix was not rerun for
+this batch: last fully checked three-distribution state is 4225a17 (47/47 on
+each platform plus packages/isolated installations). No current-batch distro
+or remote CI success is claimed; the GitHub account restriction remains external.

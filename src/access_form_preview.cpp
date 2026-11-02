@@ -308,13 +308,14 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (key == "dirty") return preview_.dirty_ ? "-1" : "0";
         if (key == "newrecord") return preview_.currentRecordIndex_ == 0 ? "-1" : "0";
+        if (key == "currentrecord") return makePreviewFormObject(preview_)->member("CurrentRecord",{}).asField();
         return preview_.getField(name);
     }
     linaccess::VbaValue controlValue(std::string_view name) override { requireInstance(); return preview_.getFieldValue(name); }
     void enterModule(std::string_view source) override { moduleScopes_.push_back(source==preview_.vba_.toUtf8().toStdString()); ++nativeExecutionDepth(); }
     void leaveModule() noexcept override { moduleScopes_.pop_back(); --nativeExecutionDepth(); disposeClosedForms(); }
     bool hasInstanceIdentifier(std::string_view name) override {
-        return instanceScope() && preview_.controls_.contains(preview_.controlMemberName(QString::fromUtf8(name.data(),name.size())).toCaseFolded());
+        return instanceScope() && (QString::fromUtf8(name.data(),name.size()).compare("CurrentRecord",Qt::CaseInsensitive)==0 || preview_.controls_.contains(preview_.controlMemberName(QString::fromUtf8(name.data(),name.size())).toCaseFolded()));
     }
     std::shared_ptr<linaccess::VbaModuleState> moduleState(std::string_view source) override {
         if (source!=preview_.vba_.toUtf8().toStdString() && !linaccess::isVbaClassModule(source))
@@ -330,13 +331,19 @@ public:
         if (!instanceScope()) return std::nullopt;
         if (auto value=preview_.getModuleMember(name,false)) return value;
         const auto canonical=memberControlName(name);
-        if (!preview_.controls_.contains(QString::fromStdString(canonical).toCaseFolded())) return std::nullopt;
+        if (!preview_.controls_.contains(QString::fromStdString(canonical).toCaseFolded())) {
+            if(QString::fromUtf8(name.data(),name.size()).compare("CurrentRecord",Qt::CaseInsensitive)==0) return makePreviewFormObject(preview_)->member("CurrentRecord",{});
+            return std::nullopt;
+        }
         return reference ? makePreviewFormObject(preview_)->objectItem(canonical) : preview_.getFieldValue(canonical);
     }
     bool assignIdentifier(std::string_view name,const linaccess::VbaValue& value) override {
         if (!instanceScope()) return false;
         const auto canonical=memberControlName(name);
-        if (!preview_.controls_.contains(QString::fromStdString(canonical).toCaseFolded())) return false;
+        if (!preview_.controls_.contains(QString::fromStdString(canonical).toCaseFolded())) {
+            if(QString::fromUtf8(name.data(),name.size()).compare("CurrentRecord",Qt::CaseInsensitive)==0) throw linaccess::VbaRuntimeError(438,"Form property is read-only");
+            return false;
+        }
         preview_.setFieldValue(canonical,value); return true;
     }
     linaccess::VbaValue bracketValue(std::string_view name,bool reference) override {
@@ -345,7 +352,13 @@ public:
     }
     linaccess::VbaValue expressionValue(std::string_view name,bool reference) override {
         try { return reference ? makePreviewFormObject(preview_)->objectItem(name) : preview_.getFieldValue(name); }
-        catch(const linaccess::VbaRuntimeError& failure) { return linaccess::VbaValue::errorValue(failure.number); }
+        catch(const linaccess::VbaRuntimeError& failure) {
+            if(failure.number==2465 && QString::fromUtf8(name.data(),name.size()).compare("CurrentRecord",Qt::CaseInsensitive)==0) {
+                try { return makePreviewFormObject(preview_)->member("CurrentRecord",{}); }
+                catch(const linaccess::VbaRuntimeError& propertyFailure) { return linaccess::VbaValue::errorValue(propertyFailure.number); }
+            }
+            return linaccess::VbaValue::errorValue(failure.number);
+        }
     }
     linaccess::VbaValue domainAggregate(std::string_view function,const std::vector<linaccess::VbaValue>& args) override {
         if (args.size()<2 || args.size()>3) throw linaccess::VbaRuntimeError(450,"Invalid domain aggregate arguments");
@@ -405,7 +418,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
-        if (key=="visible" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
+        if (key=="currentrecord" || key=="visible" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -419,7 +432,7 @@ public:
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
         if (key == "visible" || key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
-        if (key == "selheight" || key == "name" || key == "recordsource" || key == "newrecord")
+        if (key == "selheight" || key == "name" || key == "recordsource" || key == "newrecord" || key == "currentrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
         if (preview_.setModuleMember(name,value,false)) return;
@@ -427,6 +440,7 @@ public:
     }
     void setField(std::string_view name, std::optional<std::string> value) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if(key=="currentrecord") throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") {
             if (value && (*value == "0" || *value == "False")) {
                 if (!preview_.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record save cancelled");

@@ -796,3 +796,15 @@ VBA/Qt tests cover explicit/positional/reordered columns, omitted/NULL values,
 rounding and failed inserts without partial rows. INSERT SELECT, complex/default/
 constraint/full Jet semantics remain open. See
 [CURRENCY_INSERT_RUNTIME.md](CURRENCY_INSERT_RUNTIME.md).
+
+Bound native forms now expose CurrentRecord as a read-only Long position,
+including filtered navigation and the supported new-record row. Real VBA/Qt/SQL
+Current-event auditing verifies types and pending edits without implicit saves.
+Unbound/design/report/full Windows behavior remains outside this bounded path.
+See [CURRENT_RECORD_RUNTIME.md](CURRENT_RECORD_RUNTIME.md).
+
+Simple physical-source INSERT SELECT append now converts Currency targets and
+freezes positional source rows, including exact Currency self-appends and atomic
+multi-row failure. The existing insertion regression covers this extension.
+Joins/TOP/nested/view/HAVING/set-operation/full Jet append semantics remain open.
+See [CURRENCY_INSERT_RUNTIME.md](CURRENCY_INSERT_RUNTIME.md#bounded-insert-select-append).

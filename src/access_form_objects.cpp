@@ -692,6 +692,13 @@ public:
             if (key=="allowadditions") return linaccess::VbaValue::logical(preview.layout_.allowAdditions);
             return key=="allowdeletions" ? linaccess::VbaValue::logical(preview.layout_.allowDeletions) : linaccess::VbaValue::numeric(preview.recordSelected_ ? 1 : 0);
         }
+        if(key=="currentrecord") {
+            if(preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"CurrentRecord requires a form");
+            if(!preview.dataSourceAvailable_ || preview.layout_.recordSource.trimmed().isEmpty()) throw linaccess::VbaRuntimeError(3251,"CurrentRecord requires an available bound source");
+            if(preview.currentRecordIndex_>0) return linaccess::VbaValue::longInteger(preview.currentRecordIndex_);
+            if(!preview.directTable_ || !preview.layout_.allowAdditions || preview.dataTruncated_) throw linaccess::VbaRuntimeError(3251,"CurrentRecord has no supported current row");
+            return linaccess::VbaValue::longInteger(static_cast<std::int32_t>(preview.recordRows_.size()+1));
+        }
         if (key == "recordsource") return linaccess::VbaValue::string(bytes(preview.layout_.recordSource));
         if (key=="recordset") {
             (void)preview.recordsetSnapshot();
@@ -741,7 +748,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron")
+        if (!args.empty() || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
@@ -836,7 +843,7 @@ public:
             }
             return;
         }
-        if (key == "name" || key == "recordsource" || key == "newrecord")
+        if (key == "name" || key == "recordsource" || key == "newrecord" || key == "currentrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (preview.setModuleMember(name,value,true)) return;
         PreviewControlObject(preview,preview.controlMemberName(text(name))).assign("Value",value);

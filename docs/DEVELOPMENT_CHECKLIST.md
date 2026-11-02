@@ -670,3 +670,11 @@ Full targets remain open:
 - [x] Simple single-row physical-table Currency INSERT VALUES target conversion,
   explicit/positional/reordered columns, parameter/exact-expression/NULL/error/
   DAO/VBA/Qt regression; append/select/complex/full Jet semantics remain open.
+
+- [x] Bound native Form.CurrentRecord as read-only Long through Me/Forms/Screen/
+  unqualified VBA/calculated controls, navigation/filter/new-row/Current-event/
+  pending-edit/lifecycle regression; unbound/design/full Windows behavior open.
+
+- [x] Bounded physical-source Currency INSERT SELECT append with target
+  conversion, frozen positional source, exact Currency self-append, parameters
+  and whole-statement rollback; complex/full Jet append semantics remain open.

@@ -511,3 +511,8 @@ komplexe Aktionsabfragen und vollständige Jet-Semantik bleiben offen.
 konvertiert Geldbeträge vor dem Einfügen. DAO-/VBA-/Qt-Regressionen prüfen
 Spaltenreihenfolge, Parameter, Rundung und Fehler ohne teilweise eingefügte Zeile.
 INSERT-SELECT und vollständige Jet-Semantik bleiben offen.
+
+[Form.CurrentRecord](docs/CURRENT_RECORD_RUNTIME.md) liefert für gebundene native
+Formulare die aktuelle Position als schreibgeschützten VBA-Long, auch nach
+Navigation und Filterung. Entwurfsansicht und vollständige Windows-Semantik
+bleiben offen.

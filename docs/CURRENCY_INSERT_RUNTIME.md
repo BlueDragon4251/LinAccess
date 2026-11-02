@@ -21,3 +21,20 @@ INSERT SELECT/append queries, multiple-row VALUES extensions, views/generated
 columns, comprehensive defaults/constraints and full Jet/Windows/locale behavior
 are not covered by this bounded path. The backing range from
 CURRENCY_FIELDS_RUNTIME.md still applies. Full Access parity remains open.
+
+## Bounded INSERT SELECT append
+
+Simple SELECT append sources now receive the same target conversion. One
+physical source table (or a constant projection), optional alias, predicates,
+ordering/grouping and normal projection naming use the existing query compiler.
+Proven physical Currency expressions reuse fixed-point arithmetic. A materialized
+CTE freezes the source and assigns positional labels, avoiding duplicate-label
+ambiguity and self-append feedback. Its internal name avoids source-token
+collisions. Original parameter declarations/bindings remain unchanged.
+
+The existing insertion regression now checks a two-row text append whose second
+row fails (no rows retained), successful four-decimal conversion of both rows,
+exact Currency self-append and declared parameters in append projections. There
+is no new test executable for this extension. Joins, TOP, nested sources, views,
+HAVING and set operations retain their prior paths; complete append/Jet/default/
+constraint/Windows semantics remain open.

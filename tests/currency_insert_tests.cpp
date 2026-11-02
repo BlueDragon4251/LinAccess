@@ -51,4 +51,16 @@ End Function
     const auto result=form.executeProcedure("InsertCurrency",args);
     assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->number==6 && model->item("a").currencyUnits==3000 && model->item("id").asNumber()==6 && !form.hasUnsavedChanges());
     assert(form.findChild<QLineEdit*>("access-control-a")->text()=="0.3" && form.close());
+    assert(sql.exec("CREATE TABLE append_source(id INTEGER,value TEXT)")); assert(sql.exec("INSERT INTO append_source VALUES(7,'2.34565'),(8,'invalid')"));
+    int appendError=0; try { execute("INSERT INTO cash(id,a) SELECT id,value FROM append_source ORDER BY id"); } catch(const linaccess::VbaRuntimeError& failure) { appendError=failure.number; }
+    assert(appendError==13); assert(sql.exec("SELECT COUNT(*) FROM cash") && sql.next() && sql.value(0).toInt()==5); sql.finish();
+    assert(sql.exec("UPDATE append_source SET value='0.00015' WHERE id=8"));
+    assert(execute("INSERT INTO cash(id,a) SELECT id,value FROM append_source ORDER BY id")==2);
+    assert(linaccess::currencyFromRealStorage(stored(7).toDouble()).currencyUnits==23456 && linaccess::currencyFromRealStorage(stored(8).toDouble()).currencyUnits==2);
+    assert(execute("INSERT INTO cash(id,a) SELECT id+100,a+a FROM cash WHERE id=3")==1 && stored(103).toDouble()==0.6);
+    auto appendParameter=query("PARAMETERS amount Text(255), rowid Long; INSERT INTO cash(id,a) SELECT rowid,amount FROM append_source WHERE id=7");
+    appendParameter->member("Parameters",{VbaValue::string("amount")}).object->assign("Value",VbaValue::string("1.23455"));
+    appendParameter->member("Parameters",{VbaValue::string("rowid")}).object->assign("Value",VbaValue::longInteger(9)); appendParameter->member("Execute",{});
+    assert(linaccess::currencyFromRealStorage(stored(9).toDouble()).currencyUnits==12346);
+
 }
