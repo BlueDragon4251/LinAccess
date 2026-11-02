@@ -649,3 +649,7 @@ Full targets remain open:
 - [x] Proven root CCur/Currency-parameter query types through DAO, query-table
   display and readonly Qt controls/empty/filter/TOP/DISTINCT/saved queries;
   general SQL/view/alias/aggregate/arithmetic/Windows typing remains open.
+
+- [x] Exact native sums of proven Currency expressions/parameters with grouped/
+  Null/cancellation/overflow/range/Qt report regression and 43 independent original
+  column sums; implicit field/view/complex/full SQL money/Windows semantics remain open.

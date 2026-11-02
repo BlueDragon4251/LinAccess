@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
     int trueBooleans = 0;
     int typedBooleans = 0;
     int longColumns=0,typedLongValues=0;
-    int currencyColumns=0,doubleColumns=0,typedCurrencyValues=0;
+    int currencyColumns=0,doubleColumns=0,typedCurrencyValues=0,currencySums=0,unsupportedCurrencySums=0;
     int formattedDates = 0;
     int counters=0,nativeCounters=0,counterProbes=0,managedProbes=0;
     QStringList failures;
@@ -113,6 +113,28 @@ int main(int argc, char** argv) {
                         ++reference[QJsonDocument(values).toJson(QJsonDocument::Compact)];
                     }
                     assert(actual==reference);
+                    for(const auto i:indices) {
+                        __int128 expected=0; bool any=false;
+                        for(std::size_t row=1;row<rows.size();++row) {
+                            const auto& cell=rows[row][i];
+                            if(!cell.quoted && cell.value=="\x1e") continue;
+                            expected+=linaccess::convertCurrency(linaccess::VbaValue::string(cell.value)).currencyUnits; any=true;
+                        }
+                        const auto quote=[](QString value) { return '['+value.replace(']',"]]")+']'; };
+                        const auto field=quote(schema.columns[i].name);
+                        const auto plan=linaccess::compileAccessQuery("SELECT Sum(CCur("+field+")) AS total FROM "+quote(table)+" WHERE "+field+" IS NOT NULL");
+                        if(expected<=-5497558138880000LL || expected>=5497558138880000LL) {
+                            int error=0; try { (void)linaccess::executeAccessQueryPlan(db,plan,{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+                            assert(error==3251 || error==6); ++unsupportedCurrencySums;
+                        } else {
+                            const auto result=linaccess::executeAccessQueryPlan(db,plan,{});
+                            assert(result.rows.size()==1 && result.types.value("total")=="CURRENCY_REAL");
+                            if(!any) assert(result.rows[0][0].isNull());
+                            else assert(linaccess::currencyFromRealStorage(result.rows[0][0].toDouble()).currencyUnits==static_cast<std::int64_t>(expected));
+                            ++currencySums;
+                        }
+                    }
+
                 }
             }
             int primaryCount=0;
@@ -284,6 +306,8 @@ End Function
     assert(tables.size() == 29);
     assert(imported == 29 && failures.empty());
     assert(currencyColumns==43 && doubleColumns==57 && typedCurrencyValues>0);
+    assert(currencySums+unsupportedCurrencySums==43);
+    std::cout<<"Original Currency sums: "<<currencySums<<", outside supported backing: "<<unsupportedCurrencySums<<'\n';
     std::cout<<"Original Currency column metadata: "<<currencyColumns<<", Double columns: "<<doubleColumns<<", typed Currency non-NULL values: "<<typedCurrencyValues<<'\n';
     assert(longColumns==127 && typedLongValues>0);
     std::cout<<"Original Long columns: "<<longColumns<<", typed non-NULL field values: "<<typedLongValues<<'\n';

@@ -2146,3 +2146,25 @@ Full validation: host 42/42 (120.79 s), Debian 12 42/42 (103.74 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 ca35ddd private CI completed successfully.
+
+## 2026-11-02 — Exact sums of proven Currency expressions
+
+Reproduced residual/generic SUM result for explicit Currency input (0/1). Added
+checked integer-unit aggregate and bounded projection rewrite/type propagation.
+Sum/query/object regressions pass 3/3 (0.16 s), covering grouping/Null/empty,
+Currency parameters, large cancellation, final range/int64 overflow and actual
+Qt report display. All 43 original Currency-column sums match independent wide-
+integer CSV decimal sums, with zero outside backing range (7.91 s); all 121613
+individual value and existing CSV/Long/Boolean/date/counter checks remain active.
+GUI suite has 43 CTests. Implicit field/view/complex aggregate inference and full
+SQL money/parser/locale/Windows semantics remain open; no full original business
+workflow increment. See CURRENCY_SUM_RUNTIME.md.
+
+Full local validation: host 43/43 (104.29 s), Debian 12 43/43 (103.88 s),
+Ubuntu 24.04 43/43 (90.98 s), Debian 13 43/43 (92.46 s), GUI-disabled core
+1/1 (1.86 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private.
+Remote e9d0f60 CI did not start any job steps: GitHub reported an account-level
+billing/spending restriction. This is an external CI blocker, not a successful
+remote test run; local distribution checks above completed independently.

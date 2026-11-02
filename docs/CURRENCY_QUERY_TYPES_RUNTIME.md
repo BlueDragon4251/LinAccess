@@ -8,7 +8,8 @@ range failure before SQL effects. The existing named-reference syntax and
 optional .Value suffix are retained; SQL Screen syntax is not added.
 
 The query compiler now records proven projection types for complete unqualified
-CCur calls and direct declared Currency/Money parameters. Parentheses and unary
+CCur calls and direct declared Currency/Money parameters. Subsequent
+[Currency sums](CURRENCY_SUM_RUNTIME.md) also retain proven aggregate types. Parentheses and unary
 +/- preserve this bounded encoding. SELECT modifiers retain ordinal alignment;
 filters copy the proven source descriptors. This is bounded token inspection,
 not a general SQL type inferencer. UNION/INTERSECT/EXCEPT, wildcard expansion and

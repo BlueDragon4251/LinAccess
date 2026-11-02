@@ -764,3 +764,9 @@ table display and read-only Qt form/report fields, including empty/filter/TOP/
 DISTINCT/saved-query paths. Ambiguous/wildcard/set-operation results keep unknown
 types. Full SQL typing/object grammar/money arithmetic/Windows parity remains
 open. See [CURRENCY_QUERY_TYPES_RUNTIME.md](CURRENCY_QUERY_TYPES_RUNTIME.md).
+
+Proven Currency SELECT sums now use native checked integer units, preserving
+Currency/Null and diagnosing overflow/output range. Actual SQL/DAO/Qt grouping/
+cancellation/parameter/empty/report tests and all 43 independent original Currency
+CSV sums pass. General implicit field/view/complex aggregate inference and full
+SQL money/Windows semantics remain open. See [CURRENCY_SUM_RUNTIME.md](CURRENCY_SUM_RUNTIME.md).

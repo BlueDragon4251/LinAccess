@@ -230,7 +230,7 @@ void adaptObjectReferences(QVector<Token>& tokens,qsizetype start) {
         i+=replacement.size()-1;
     }
 }
-QVector<QString> currencyProjectionTypes(const QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters) {
+QVector<QString> currencyProjectionTypes(QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters) {
     const auto word=[&](qsizetype i,const char* text) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(text,Qt::CaseInsensitive)==0; };
     if(!word(start,"SELECT")) return {};
     int depth=0;
@@ -240,7 +240,8 @@ QVector<QString> currencyProjectionTypes(const QVector<Token>& tokens,qsizetype 
         else if(depth==0 && (word(i,"UNION") || word(i,"INTERSECT") || word(i,"EXCEPT"))) return {};
     }
     const auto name=[](const Token& value) { return value.kind==Token::Word || value.kind==Token::Identifier; };
-    std::function<QString(QVector<Token>,int)> typeOf=[&](QVector<Token> expression,int recursion)->QString {
+    QMap<qsizetype,QString> replacements;
+    std::function<QString(QVector<Token>,int,qsizetype)> typeOf=[&](QVector<Token> expression,int recursion,qsizetype offset)->QString {
         if(recursion>64 || expression.isEmpty()) return {};
         while(expression.size()>=2 && symbol(expression.front(),"(")) {
             int nesting=0; qsizetype close=-1;
@@ -249,21 +250,30 @@ QVector<QString> currencyProjectionTypes(const QVector<Token>& tokens,qsizetype 
                 else if(symbol(expression[i],")") && --nesting==0) { close=i; break; }
             }
             if(close!=expression.size()-1) break;
-            expression=expression.mid(1,expression.size()-2);
+            expression=expression.mid(1,expression.size()-2); ++offset;
         }
         if(expression.isEmpty()) return {};
-        if(expression.size()>1 && (symbol(expression.front(),"+") || symbol(expression.front(),"-"))) return typeOf(expression.mid(1),recursion+1);
+        if(expression.size()>1 && (symbol(expression.front(),"+") || symbol(expression.front(),"-"))) return typeOf(expression.mid(1),recursion+1,offset+1);
         if(expression.size()==1 && name(expression.front())) {
             for(const auto& parameter:parameters) if(parameter.type=="currency" && parameter.name.compare(expression.front().value,Qt::CaseInsensitive)==0) return "CURRENCY_REAL";
         }
-        if(expression.size()<4 || expression.front().kind!=Token::Word || expression.front().value.compare("CCur",Qt::CaseInsensitive)!=0 || !symbol(expression[1],"(") || !symbol(expression.back(),")")) return {};
+        if(expression.size()<4 || expression.front().kind!=Token::Word || !symbol(expression[1],"(") || !symbol(expression.back(),")")) return {};
+        const bool currency=expression.front().value.compare("CCur",Qt::CaseInsensitive)==0;
+        const bool sum=expression.front().value.compare("Sum",Qt::CaseInsensitive)==0;
+        if(!currency && !sum) return {};
         int nesting=0;
         for(qsizetype i=1;i<expression.size();++i) {
             if(symbol(expression[i],"(")) ++nesting;
             else if(symbol(expression[i],")")) { if(--nesting==0 && i!=expression.size()-1) return {}; }
             else if(nesting==1 && symbol(expression[i],",")) return {};
         }
-        return nesting==0 ? QString("CURRENCY_REAL") : QString{};
+        if(nesting!=0) return {};
+        const auto argument=typeOf(expression.mid(2,expression.size()-3),recursion+1,offset+2);
+        if(sum) {
+            if(argument!="CURRENCY_REAL") return {};
+            replacements.insert(offset,"linaccess_jet_currency_sum");
+        }
+        return "CURRENCY_REAL";
     };
     qsizetype first=start+1;
     if(word(first,"DISTINCT") || word(first,"DISTINCTROW") || word(first,"ALL")) ++first;
@@ -275,11 +285,12 @@ QVector<QString> currencyProjectionTypes(const QVector<Token>& tokens,qsizetype 
             auto expression=tokens.mid(first,i-first);
             if(expression.size()>=3 && expression[expression.size()-2].kind==Token::Word && expression[expression.size()-2].value.compare("AS",Qt::CaseInsensitive)==0 && name(expression.back())) expression.resize(expression.size()-2);
             if((expression.size()==1 && symbol(expression.front(),"*")) || (expression.size()>=3 && symbol(expression.back(),"*") && symbol(expression[expression.size()-2],"."))) return {};
-            result.append(typeOf(expression,0)); first=i+1;
+            result.append(typeOf(expression,0,first)); first=i+1;
             if(end) break;
         } else if(symbol(tokens[i],"(")) ++depth;
         else if(symbol(tokens[i],")")) --depth;
     }
+    for(auto it=replacements.cbegin();it!=replacements.cend();++it) tokens[it.key()].value=it.value();
     return result;
 }
 
@@ -531,7 +542,7 @@ bool stableTopSource(QSqlDatabase db,const QString& source,QSet<QString> visitin
     if (type=="table") return !sql.trimmed().startsWith("CREATE VIRTUAL",Qt::CaseInsensitive);
     if (type!="view") return false;
     const auto tokens=tokenize(sql);
-    const QSet<QString> pure{"abs","coalesce","ifnull","nullif","iif","sum","total","count","min","max","avg","round","linaccess_jet_round","ccur","linaccess_jet_ccur","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","substring","trim","ltrim","rtrim","replace","cast","typeof","rank",
+    const QSet<QString> pure{"abs","coalesce","ifnull","nullif","iif","sum","linaccess_jet_currency_sum","total","count","min","max","avg","round","linaccess_jet_round","ccur","linaccess_jet_ccur","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","substring","trim","ltrim","rtrim","replace","cast","typeof","rank",
         "linaccess_jet_iif","linaccess_jet_first","linaccess_jet_last","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","linaccess_jet_like_pattern"};
     const QSet<QString> syntax{"from","join","as","in","not","exists","over","by","and","or","on","where","having","is","when","then","else","case"};
     QSet<QString> dependencies; int selects=0; bool inFrom=false;

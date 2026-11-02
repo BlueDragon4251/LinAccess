@@ -189,6 +189,30 @@ void currencyNumber(sqlite3_context* context,int count,sqlite3_value** args) noe
       catch(...) { native.error(context,"SQL currency conversion failed",-1); }
 }
 
+struct CurrencySumState { std::int64_t units; int error; bool seen; };
+void currencySumStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+    auto& native=api(); auto* state=static_cast<CurrencySumState*>(native.aggregate(context,sizeof(CurrencySumState)));
+    if(!state) { native.error(context,"LinAccess SQL function error 7",-1); return; }
+    if(state->error || native.type(args[0])==SQLITE_NULL) return;
+    try {
+        const auto type=native.type(args[0]);
+        if(type!=SQLITE_INTEGER && type!=SQLITE_FLOAT) throw VbaRuntimeError(13,"Currency sum requires numeric encoding");
+        const auto value=currencyFromRealStorage(native.number(args[0]));
+        state->units=currencyBinary("+",VbaValue::currency(state->units),value).currencyUnits;
+        state->seen=true;
+    } catch(const VbaRuntimeError& failure) { state->error=failure.number; functionError(context,failure); }
+      catch(...) { state->error=7; native.error(context,"LinAccess SQL function error 7",-1); }
+}
+void currencySumFinal(sqlite3_context* context) noexcept {
+    auto& native=api(); const auto* state=static_cast<CurrencySumState*>(native.aggregate(context,0));
+    try {
+        if(state && state->error) throw VbaRuntimeError(state->error,"Currency sum failed");
+        if(!state || !state->seen) { native.nullResult(context); return; }
+        native.numberResult(context,currencyToRealStorage(VbaValue::currency(state->units)));
+    } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
+      catch(...) { native.error(context,"SQL Currency sum failed",-1); }
+}
+
 void roundNumber(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
     auto& native=api();
     try {
@@ -376,6 +400,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_qbcolor",-1,&qbColor,nullptr,nullptr);
     ensure("linaccess_jet_round",-1,&roundNumber,nullptr,nullptr);
     ensure("linaccess_jet_ccur",-1,&currencyNumber,nullptr,nullptr);
+    ensure("linaccess_jet_currency_sum",1,nullptr,&currencySumStep,&currencySumFinal);
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
     ensure("linaccess_jet_update_value",1,nullptr,&singleStep,&singleFinal);
