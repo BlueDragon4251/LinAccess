@@ -929,3 +929,10 @@ be closed by name; see [remaining mode boundaries](HIDDEN_FORM_RUNTIME.md).
 Selected native builtins bind named parameters with retained optional/error
 semantics. Nz(Null) now preserves Empty in VBA while query expressions keep
 zero-length text. See [supported names and reference](NAMED_BUILTIN_RUNTIME.md).
+
+## Native dialog and window continuation
+
+Form acDialog waits for actual close/hide while retaining Unload cancellation;
+acIcon uses minimized Qt windows. Hidden reveal/re-hide, read access to imported/
+overridden Modal/PopUp and active-document Minimize/Restore/Maximize are native.
+See [event/desktop/Quit boundaries](DIALOG_WINDOW_RUNTIME.md).

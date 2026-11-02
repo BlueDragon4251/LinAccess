@@ -10,7 +10,7 @@ Existing native GUI execution audits Open/Load/Current order through actual SQL,
 checks that Activate did not run, reads the hidden instance and closes it. No
 new CTest target is added.
 
-Normal opening keeps existing activation behavior. Re-requesting hidden mode
-for an already-visible document is explicitly unsupported (3251); full existing
-window transitions, hidden reports, icon/dialog modes, focus/desktop integration
-and Windows event equivalence remain open. This is not complete window parity.
+Normal opening keeps existing activation behavior. Existing visible forms can now be hidden through the native visibility guards,
+and first-time reveal is supported. Guarded lifecycle/pending-edit cases, hidden
+reports, full window transitions and Windows event equivalence remain open.
+Icon/dialog behavior is documented separately in DIALOG_WINDOW_RUNTIME.md. This is not complete window parity.

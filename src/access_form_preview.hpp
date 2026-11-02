@@ -211,6 +211,7 @@ private:
     bool recordCommandRunning_{};
     bool findingRecord_{};
     bool visibilityChanging_{};
+    bool nativeDialog_{};
     bool recordSelected_{};
     bool navigating_{};
     bool cyclingFocus_{};

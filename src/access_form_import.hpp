@@ -90,6 +90,7 @@ struct AccessFormLayout {
     QString orderBy;
     bool orderByOnLoad{};
     bool modal{};
+    bool popup{};
     bool keyPreview{};
     int timerInterval{};
     int cycle{};

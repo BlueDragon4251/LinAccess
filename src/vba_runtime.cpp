@@ -910,7 +910,7 @@ VbaOpenFormArguments parseVbaOpenFormArguments(const std::vector<VbaValue>& args
     for(std::size_t index=4;index<std::min<std::size_t>(6,args.size());++index) {
         if(args[index].kind==VbaValue::Kind::Empty) continue;
         const auto mode=coerceVbaModuleValue(scalarVbaValue(args[index]),"long").number;
-        if(index==5 && mode==1) result.windowMode=1;
+        if(index==5 && (mode==1 || mode==2 || mode==3)) result.windowMode=static_cast<int>(mode);
         else if(mode!=(index==4 ? -1 : 0)) throw VbaRuntimeError(3251,"OpenForm data/window mode is unsupported");
     }
     if(args.size()>6) {

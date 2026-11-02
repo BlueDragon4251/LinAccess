@@ -295,6 +295,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             }
             else if (key == "KeyPreview") form.keyPreview = accessBoolean(value,false);
             else if (key == "Modal") form.modal = accessBoolean(value,false);
+            else if (key == "PopUp") form.popup = accessBoolean(value,false);
             else if (key == "FilterOnLoad") form.filterOnLoad = accessBoolean(value,false);
             else if (key == "Width") form.width = integer();
         } else if (current.type == "Section" || current.type == "FormHeader"

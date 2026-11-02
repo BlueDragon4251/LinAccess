@@ -763,3 +763,12 @@ Full targets remain open:
   handling and real DAO use; other signatures and full binder parity remain open.
 - [x] Reference-backed Nz(Null) VBA Empty versus query zero-length String,
   context arithmetic/concatenation and explicit fallback preservation.
+
+- [x] Native new-form acDialog caller wait through close/hide and cancelled
+  Unload, with deferred document lifetime; full Quit/desktop semantics remain open.
+- [x] Native initial hidden reveal and guarded re-hide through Visible/OpenForm;
+  full pending-edit/lifecycle/Windows visibility behavior remains open.
+- [x] Imported/native Modal and PopUp reads with acDialog overrides; runtime
+  mutation and complete window-frame/property semantics remain open.
+- [x] Native acIcon and active-document Minimize/Restore/Maximize Qt states,
+  including a caller distinct from the target; full window/desktop parity open.

@@ -2607,3 +2607,19 @@ expressions retain zero-length String. Existing arithmetic/concatenation now
 matches the documented examples. Core/DAO/query-model/GUI targets pass 4/4
 (1.76 s); desktop build passes. No new targets/full matrix repeat. Full builtin
 metadata, Object/SCODE and Windows coercion remain open. See NAMED_BUILTIN_RUNTIME.md.
+
+## Native dialog/window programming block (2026-11-02)
+
+Implemented form acDialog with real Qt modality and caller continuation only
+on close/hide, retaining cancelled Unload. Added imported/readable Modal/PopUp,
+hidden first reveal/guarded re-hide, icon opening and active-document Minimize/
+Restore/Maximize. Existing GUI SQL audits verify dialog event/caller ordering,
+cancelled then accepted Unload, hidden events and Qt minimized/restored states
+with a distinct caller. Core/DAO/query-model/GUI targets pass 4/4 (1.99 s);
+desktop build passes. Full application-Quit propagation is the next follow-up;
+other Window/desktop/data/view/property limits are in DIALOG_WINDOW_RUNTIME.md.
+
+The earlier grouped adea3f8 snapshot passed GUI-free core build/test 1/1 (1.23 s)
+and .deb contents/permissions/Build-ID/pinned-backend checks. This new dialog
+increment has not repeated that grouped packaging/headless validation yet.
+No new CTest targets or full distribution-matrix repetition.

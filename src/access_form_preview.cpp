@@ -27,6 +27,7 @@
 #include <QCloseEvent>
 #include <QKeyEvent>
 #include <QTimer>
+#include <QEventLoop>
 #include <QScopedValueRollback>
 #include <QScopeGuard>
 #include <QSignalBlocker>
@@ -62,6 +63,24 @@
 #include <stdexcept>
 
 namespace {
+void waitForNativeDialog(QDialog* document) {
+    if(!document || !document->isVisible()) return;
+    QEventLoop loop;
+    class VisibilityWatcher final : public QObject {
+    public:
+        explicit VisibilityWatcher(QEventLoop& loop):loop_(loop) {}
+        bool eventFilter(QObject* watched,QEvent* event) override {
+            if(event->type()==QEvent::Hide) loop_.quit();
+            return QObject::eventFilter(watched,event);
+        }
+    private:
+        QEventLoop& loop_;
+    } watcher(loop);
+    document->installEventFilter(&watcher);
+    QObject::connect(document,&QDialog::finished,&loop,&QEventLoop::quit);
+    QObject::connect(document,&QObject::destroyed,&loop,&QEventLoop::quit);
+    loop.exec();
+}
 QPointer<AccessFormPreview>& activeDocument() {
     static QPointer<AccessFormPreview> document;
     return document;
@@ -309,7 +328,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (key == "dirty") return preview_.dirty_ ? "-1" : "0";
         if (key == "newrecord") return preview_.currentRecordIndex_ == 0 ? "-1" : "0";
-        if (key == "openargs" || key == "currentrecord" || key=="orderby" || key=="orderbyon") return makePreviewFormObject(preview_)->member(name,{}).asField();
+        if (key == "modal" || key == "popup" || key == "openargs" || key == "currentrecord" || key=="orderby" || key=="orderbyon") return makePreviewFormObject(preview_)->member(name,{}).asField();
         return preview_.getField(name);
     }
     linaccess::VbaValue controlValue(std::string_view name) override { requireInstance(); return preview_.getFieldValue(name); }
@@ -419,7 +438,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
-        if (key=="openargs" || key=="orderby" || key=="orderbyon" || key=="currentrecord" || key=="visible" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
+        if (key=="modal" || key=="popup" || key=="openargs" || key=="orderby" || key=="orderbyon" || key=="currentrecord" || key=="visible" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -432,7 +451,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
-        if (key == "orderby" || key == "orderbyon" || key == "visible" || key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
+        if (key == "modal" || key == "popup" || key == "orderby" || key == "orderbyon" || key == "visible" || key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
         if (key == "selheight" || key == "name" || key == "recordsource" || key == "newrecord" || key == "currentrecord" || key=="openargs")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
@@ -441,6 +460,7 @@ public:
     }
     void setField(std::string_view name, std::optional<std::string> value) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if(key=="modal" || key=="popup") throw linaccess::VbaRuntimeError(3251,"Runtime Modal/PopUp mutation is not implemented");
         if(key=="currentrecord" || key=="openargs") throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") {
             if (value && (*value == "0" || *value == "False")) {
@@ -530,6 +550,8 @@ public:
     }
     void quitApplication() override { AccessFormPreview::quitApplication(); }
     void maximizeForm() override { commandDocument().window()->showMaximized(); }
+    void minimizeForm() { commandDocument().window()->showMinimized(); }
+    void restoreForm() { auto* window=commandDocument().window(); window->showNormal(); window->activateWindow(); }
     void gotoRecord(int action,int offset=1,const QString& name={}) {
         AccessFormPreview* selected=nullptr;
         if (name.isEmpty()) selected=&commandDocument();
@@ -677,7 +699,7 @@ private:
     std::vector<bool> moduleScopes_;
     static bool recordProperty(std::string_view name) {
         const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
-        return key=="openargs" || key=="currentrecord" || key=="orderby" || key=="orderbyon";
+        return key=="modal" || key=="popup" || key=="openargs" || key=="currentrecord" || key=="orderby" || key=="orderbyon";
     }
     bool instanceScope() const { return moduleScopes_.empty() || moduleScopes_.back(); }
     void requireInstance() const { if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Me is unavailable in a standard module"); }
@@ -743,9 +765,12 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         else throw VbaRuntimeError(3251,"RunCommand option unsupported");
         return {};
     }
-    if (command=="maximize") {
-        if (!args.empty()) throw VbaRuntimeError(450,"Maximize takes no arguments");
-        host.maximizeForm(); return {};
+    if (command=="maximize" || command=="minimize" || command=="restore") {
+        if (!args.empty()) throw VbaRuntimeError(450,"Window command takes no arguments");
+        if(command=="maximize") host.maximizeForm();
+        else if(command=="minimize") host.minimizeForm();
+        else host.restoreForm();
+        return {};
     }
     if (command=="requery") {
         if (args.size()>1) throw VbaRuntimeError(450,"Requery argument count invalid");
@@ -773,7 +798,9 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
       vba_(linaccess::decodeVbaSource(vbaSource)),
       layout_(linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(source))),
       db_(std::move(database)) {
-    if(windowMode!=0 && windowMode!=1) throw linaccess::VbaRuntimeError(3251,"Native window mode is not implemented");
+    if(windowMode<0 || windowMode>3) throw linaccess::VbaRuntimeError(3251,"Native window mode is not implemented");
+    nativeDialog_=windowMode==3;
+    if(nativeDialog_) { layout_.modal=true; layout_.popup=true; }
     static quint64 nextWindowSequence=0;
     windowSequence_=++nextWindowSequence;
     static thread_local QStringList constructionStack;
@@ -1879,14 +1906,17 @@ void AccessFormPreview::setDocumentVisible(bool visible) {
     ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
     if(closed_ || openCancelled_) throw VbaRuntimeError(2450,"Form is closed");
     if(layout_.kind!=linaccess::AccessDocumentKind::Form) throw VbaRuntimeError(438,"Visible requires a native form");
-    if(!opened_ || !hasActivated_ || !initialCurrentDispatched_ || !isWindow() || closing_ || recordCommandRunning_ || saving_ || navigating_ || loading_ || visibilityChanging_)
+    const bool firstShow=!hasActivated_ && isHidden() && visible;
+    if(!opened_ || (!hasActivated_ && !firstShow) || !initialCurrentDispatched_ || !isWindow() || closing_ || recordCommandRunning_ || saving_ || navigating_ || loading_ || visibilityChanging_)
         throw VbaRuntimeError(3251,"Changing form visibility during this lifecycle phase is not implemented");
     if(visible==!isHidden()) return;
-    if(isModal() || QApplication::activeModalWidget()) throw VbaRuntimeError(3251,"Modal form visibility changes are not implemented");
+    auto* modal=QApplication::activeModalWidget();
+    if((isModal() && !nativeDialog_) || (modal && modal!=this)) throw VbaRuntimeError(3251,"Modal form visibility change is not implemented for this context");
     if(!visible && (dirty_ || !pendingControls_.isEmpty() || !bufferedTextControls_.isEmpty()))
         throw VbaRuntimeError(3251,"Hiding a form with pending edits is not implemented");
     QScopedValueRollback<bool> changing(visibilityChanging_,true);
     QDialog::setVisible(visible);
+    if(firstShow) { activateWindow(); activateDocument(); }
 }
 bool AccessFormPreview::prepareClose() {
     if (closed_ || openCancelled_) return true;
@@ -2333,7 +2363,7 @@ void AccessFormPreview::openOtherForm(const QString& name,const QString& where,s
 }
 
 void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where,std::optional<QString> openArgs,int windowMode) {
-    if(windowMode!=0 && windowMode!=1) throw linaccess::VbaRuntimeError(3251,"Native window mode is not implemented");
+    if(windowMode<0 || windowMode>3) throw linaccess::VbaRuntimeError(3251,"Native window mode is not implemented");
     const bool report=kind==linaccess::AccessDocumentKind::Report;
     if (closing_ || closingProjects().contains(projectKey(db_))) throw linaccess::VbaRuntimeError(2501,"Project is closing");
     AccessFormPreview* existing=nullptr;
@@ -2347,13 +2377,16 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
         existing=document;
     }
     if (existing) {
-        if(windowMode==1 && !existing->isHidden()) throw linaccess::VbaRuntimeError(3251,"Hiding an already visible document through OpenForm is not implemented");
+        if(windowMode==3) throw linaccess::VbaRuntimeError(3251,"acDialog reuse of an open document is not implemented");
         if(openArgs && existing->openArgs_!=openArgs) throw linaccess::VbaRuntimeError(3251,"Changing OpenArgs of an open document is not implemented");
         if (!where.trimmed().isEmpty()) {
             if (existing->layout_.recordSource.trimmed().isEmpty()) throw linaccess::VbaRuntimeError(3251,"WhereCondition requires a bound document");
             existing->setFilterState(where,true);
         }
-        if(windowMode!=1) { existing->show(); existing->raise(); existing->activateWindow(); existing->activateDocument(); }
+        if(windowMode==1) {
+            if(!existing->isHidden()) existing->setDocumentVisible(false);
+        } else if(windowMode==2) { existing->showMinimized(); existing->activateDocument(); }
+        else { existing->show(); existing->raise(); existing->activateWindow(); existing->activateDocument(); }
         return;
     }
     QSqlQuery query(db_);
@@ -2389,15 +2422,17 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
             throw linaccess::VbaRuntimeError(3251,"WhereCondition requires a bound document");
     };
     validate();
-    // Modal blocks user interaction with other windows. Unlike acDialog it
-    // does not suspend the VBA caller, so neither path enters QDialog::exec.
-    if(windowMode!=1) { nested->show(); nested->activateWindow(); nested->activateDocument(); }
+    // Layout Modal blocks input; acDialog additionally waits below. Keep native
+    // ownership/deferred disposal instead of transferring lifetime to exec().
+    if(windowMode==2) { nested->showMinimized(); nested->activateDocument(); }
+    else if(windowMode!=1) { nested->show(); nested->activateWindow(); nested->activateDocument(); }
     validate();
     // A handler may close its own window and then enter another Qt event
     // loop (e.g. MsgBox). Retain all closing native windows until the outermost
     // VBA call unwinds, including callers with executing child handlers.
     QObject::connect(nested.get(),&QDialog::finished,nested.get(),[form=nested.get()] { deferFormDisposal(form); });
-    (void)nested.release();
+    auto* document=nested.release();
+    if(windowMode==3) waitForNativeDialog(document);
 }
 
 void AccessFormPreview::rememberControlEdit(QObject* watched) {

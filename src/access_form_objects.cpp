@@ -692,6 +692,8 @@ public:
             if (key=="allowadditions") return linaccess::VbaValue::logical(preview.layout_.allowAdditions);
             return key=="allowdeletions" ? linaccess::VbaValue::logical(preview.layout_.allowDeletions) : linaccess::VbaValue::numeric(preview.recordSelected_ ? 1 : 0);
         }
+        if(key=="modal") return linaccess::VbaValue::logical(preview.layout_.modal);
+        if(key=="popup") return linaccess::VbaValue::logical(preview.layout_.popup);
         if(key=="openargs") return preview.openArgs_ ? linaccess::VbaValue::string(bytes(*preview.openArgs_)) : linaccess::VbaValue{};
         if(key=="currentrecord") {
             if(preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"CurrentRecord requires a form");
@@ -753,7 +755,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="openargs" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
+        if (!args.empty() || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="openargs" || key=="modal" || key=="popup" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
@@ -763,6 +765,7 @@ public:
     }
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if(key=="modal" || key=="popup") throw linaccess::VbaRuntimeError(3251,"Runtime Modal/PopUp mutation is not implemented");
         if(key=="visible") {
             const auto scalar=linaccess::scalarVbaValue(value);
             if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Visible");
@@ -1113,7 +1116,7 @@ public:
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
-        if (key=="domenuitem" || key=="runcommand" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="runsql" || key=="selectobject")
+        if (key=="domenuitem" || key=="runcommand" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="minimize" || key=="restore" || key=="runsql" || key=="selectobject")
             return dispatchPreviewDocumentCommand(preview,key.toStdString(),args);
         if (key=="gotocontrol") {
             if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"GoToControl requires a control name");

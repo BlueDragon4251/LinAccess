@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QLineEdit>
 #include <QSqlQuery>
+#include <QTimer>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -66,6 +67,34 @@ End Function
 Sub WritePosition()
 Me.CurrentRecord=1
 End Sub
+Sub OpenIcon()
+DoCmd.OpenForm FormName:="named_icon",WindowMode:=acIcon,OpenArgs:="icon"
+End Sub
+Sub CloseIcon()
+DoCmd.Close ObjectName:="named_icon",ObjectType:=acForm,Save:=acSaveNo
+End Sub
+Sub MinimizeWindow()
+DoCmd.Minimize
+End Sub
+Sub RestoreWindow()
+DoCmd.Restore
+End Sub
+Sub MaximizeWindow()
+DoCmd.Maximize
+End Sub
+Function DialogSequence() As String
+CurrentDb.Execute "INSERT INTO dialog_events(phase,mode) VALUES('Before','close')"
+DoCmd.OpenForm FormName:="named_dialog",WindowMode:=acDialog,OpenArgs:="close"
+CurrentDb.Execute "INSERT INTO dialog_events(phase,mode) VALUES('After','close')"
+CurrentDb.Execute "INSERT INTO dialog_events(phase,mode) VALUES('Before','hide')"
+DoCmd.OpenForm FormName:="named_dialog",WindowMode:=acDialog,OpenArgs:="hide"
+DialogSequence=CStr(Forms("named_dialog").Modal) & ":" & CStr(Forms("named_dialog").PopUp) & ":" & CStr(Forms("named_dialog").Visible)
+CurrentDb.Execute "INSERT INTO dialog_events(phase,mode) VALUES('After','hide')"
+DoCmd.Close ObjectName:="named_dialog",ObjectType:=acForm,Save:=acSaveNo
+CurrentDb.Execute "INSERT INTO dialog_events(phase,mode) VALUES('Before','cancel')"
+DoCmd.OpenForm FormName:="named_dialog",WindowMode:=acDialog,OpenArgs:="cancel"
+CurrentDb.Execute "INSERT INTO dialog_events(phase,mode) VALUES('After','cancel')"
+End Function
 Function RunSqlNull() As Long
 On Error Resume Next
 DoCmd.RunSQL SQLStatement:=Null
@@ -105,6 +134,11 @@ NamedCommands=NamedCommands & "|" & Reports("named_report").OpenArgs
 DoCmd.Close Save:=acSaveNo,ObjectName:="named_report",ObjectType:=acReport
 DoCmd.OpenForm FormName:="named_hidden",WindowMode:=acHidden,OpenArgs:="hidden"
 NamedCommands=NamedCommands & "|" & CStr(Forms("named_hidden").Visible) & ":" & Forms("named_hidden").OpenArgs
+CurrentDb.Execute "INSERT INTO open_arg_events VALUES('BeforeReveal','hidden')"
+Forms("named_hidden").Visible=True
+NamedCommands=NamedCommands & ":" & CStr(Forms("named_hidden").Visible)
+DoCmd.OpenForm FormName:="named_hidden",WindowMode:=acHidden
+NamedCommands=NamedCommands & ":" & CStr(Forms("named_hidden").Visible)
 DoCmd.Close ObjectName:="named_hidden",ObjectType:=acForm,Save:=acSaveNo
 End Function
 )VBA";
@@ -178,10 +212,48 @@ Sub Form_Activate()
 CurrentDb.Execute "INSERT INTO open_arg_events VALUES('HiddenActivate','" & Me.OpenArgs & "')"
 End Sub
 )VBA")); assert(sql.exec()); sql.finish();
+    assert(sql.exec("CREATE TABLE dialog_events(phase TEXT,mode TEXT,modal INTEGER,popup INTEGER)"));
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','named_dialog',?)");
+    sql.addBindValue(QByteArray("Begin Form\nRecordSource =\"records\"\nOnOpen =\"[Event Procedure]\"\nOnLoad =\"[Event Procedure]\"\nOnActivate =\"[Event Procedure]\"\nOnCurrent =\"[Event Procedure]\"\nOnTimer =\"[Event Procedure]\"\nTimerInterval =25\nOnUnload =\"[Event Procedure]\"\nEnd\n")); assert(sql.exec()); sql.finish();
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba','Form_named_dialog',?)");
+    sql.addBindValue(QByteArray(R"VBA(Private attempts As Long
+Sub Form_Open(Cancel As Integer)
+CurrentDb.Execute "INSERT INTO dialog_events VALUES('Open','" & OpenArgs & "'," & CStr(CLng(Me.Modal)) & "," & CStr(CLng(Me.PopUp)) & ")"
+End Sub
+Sub Form_Load()
+CurrentDb.Execute "INSERT INTO dialog_events(phase,mode) VALUES('Load','" & OpenArgs & "')"
+End Sub
+Sub Form_Activate()
+CurrentDb.Execute "INSERT INTO dialog_events(phase,mode) VALUES('Activate','" & OpenArgs & "')"
+End Sub
+Sub Form_Current()
+CurrentDb.Execute "INSERT INTO dialog_events(phase,mode) VALUES('Current','" & OpenArgs & "')"
+End Sub
+Sub Form_Timer()
+On Error Resume Next
+attempts=attempts+1
+CurrentDb.Execute "INSERT INTO dialog_events(phase,mode) VALUES('Timer','" & OpenArgs & "')"
+If OpenArgs="hide" Then
+Me.Visible=False
+Else
+DoCmd.Close
+End If
+End Sub
+Sub Form_Unload(Cancel As Integer)
+If OpenArgs="cancel" And attempts=1 Then
+Cancel=1
+CurrentDb.Execute "INSERT INTO dialog_events(phase,mode) VALUES('UnloadCancel','" & OpenArgs & "')"
+Else
+CurrentDb.Execute "INSERT INTO dialog_events(phase,mode) VALUES('Unload','" & OpenArgs & "')"
+End If
+End Sub
+)VBA")); assert(sql.exec()); sql.finish();
+    sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','named_icon',?)");
+    sql.addBindValue(QByteArray("Begin Form\nRecordSource =\"records\"\nEnd\n")); assert(sql.exec()); sql.finish();
     AccessFormPreview namedForm("named_parent",layout,code,db); namedForm.show(); namedForm.activateWindow(); QApplication::processEvents();
     std::vector<VbaValue> namedArgs; const auto named=namedForm.executeProcedure("NamedCommands",namedArgs);
     if(named.status!=linaccess::VbaExecutionStatus::Completed) qWarning("Named DoCmd error=%d line=%d",named.errorNumber,named.line);
-    assert(named.status==linaccess::VbaExecutionStatus::Completed && named.typedReturnValue->asText()=="payload:second|new|report-value|False:hidden");
+    assert(named.status==linaccess::VbaExecutionStatus::Completed && named.typedReturnValue->asText()=="payload:second|new|report-value|False:hidden:True:False");
     assert(sql.exec("SELECT COUNT(*) FROM named_calls") && sql.next() && sql.value(0).toInt()==2); sql.finish();
     const auto nullSql=namedForm.executeProcedure("RunSqlNull",namedArgs);
     assert(nullSql.status==linaccess::VbaExecutionStatus::Completed && nullSql.typedReturnValue->asNumber()==2);
@@ -192,8 +264,34 @@ End Sub
     assert(makePreviewFormObject(namedForm)->member("OpenArgs",{}).kind==VbaValue::Kind::Null);
     assert(sql.exec("SELECT COUNT(*) FROM open_arg_events WHERE value IN('payload','new')") && sql.next() && sql.value(0).toInt()==4); sql.finish();
     assert(sql.exec("SELECT COUNT(*) FROM open_arg_events WHERE phase='ReportOpen' AND value='report-value'") && sql.next() && sql.value(0).toInt()==1); sql.finish();
-    assert(sql.exec("SELECT group_concat(phase,',') FROM (SELECT phase FROM open_arg_events WHERE value='hidden' ORDER BY rowid)") && sql.next() && sql.value(0).toString()=="HiddenOpen,HiddenLoad,HiddenCurrent"); sql.finish();
+    assert(sql.exec("SELECT group_concat(phase,',') FROM (SELECT phase FROM open_arg_events WHERE value='hidden' ORDER BY rowid)") && sql.next() && sql.value(0).toString()=="HiddenOpen,HiddenLoad,HiddenCurrent,BeforeReveal,HiddenActivate"); sql.finish();
     int readOnly=0; try { makePreviewFormObject(namedForm)->assign("OpenArgs",VbaValue::string("changed")); } catch(const linaccess::VbaRuntimeError& failure) { readOnly=failure.number; } assert(readOnly==438);
+    QTimer deadline; deadline.setSingleShot(true); QObject::connect(&deadline,&QTimer::timeout,[] { qFatal("Native dialog execution deadline exceeded"); }); deadline.start(3000);
+    const auto dialogs=namedForm.executeProcedure("DialogSequence",namedArgs); deadline.stop();
+    if(dialogs.status!=linaccess::VbaExecutionStatus::Completed) qWarning("Dialog error=%d line=%d",dialogs.errorNumber,dialogs.line);
+    assert(dialogs.status==linaccess::VbaExecutionStatus::Completed && dialogs.typedReturnValue->asText()=="True:True:False");
+    for(const auto& mode:{QString("close"),QString("hide"),QString("cancel")}) {
+        sql.prepare("SELECT group_concat(phase,',') FROM (SELECT phase FROM dialog_events WHERE mode=? ORDER BY rowid)"); sql.addBindValue(mode); assert(sql.exec() && sql.next());
+        const auto wanted=mode=="close" ? "Before,Open,Load,Activate,Current,Timer,Unload,After" : mode=="hide" ? "Before,Open,Load,Activate,Current,Timer,After,Unload" : "Before,Open,Load,Activate,Current,Timer,UnloadCancel,Timer,Unload,After";
+        assert(sql.value(0).toString()==wanted); sql.finish();
+    }
+    assert(sql.exec("SELECT COUNT(*) FROM dialog_events WHERE phase='Open' AND modal=-1 AND popup=-1") && sql.next() && sql.value(0).toInt()==3); sql.finish();
+    namedForm.activateWindow(); QApplication::setActiveWindow(&namedForm); QApplication::processEvents();
+    assert(namedForm.executeProcedure("OpenIcon",namedArgs).status==linaccess::VbaExecutionStatus::Completed);
+    QPointer<AccessFormPreview> icon;
+    for(auto* widget:QApplication::topLevelWidgets()) if(auto* candidate=dynamic_cast<AccessFormPreview*>(widget); candidate && candidate->isMinimized() && candidate!=&namedForm) {
+        if(makePreviewFormObject(*candidate)->member("Name",{}).asText()=="named_icon") icon=candidate;
+    }
+    assert(icon && icon->isMinimized() && !namedForm.isMinimized());
+    assert(makePreviewFormObject(*icon)->member("OpenArgs",{}).asText()=="icon");
+    assert(namedForm.executeProcedure("RestoreWindow",namedArgs).status==linaccess::VbaExecutionStatus::Completed && !icon->isMinimized());
+    assert(namedForm.executeProcedure("MinimizeWindow",namedArgs).status==linaccess::VbaExecutionStatus::Completed && icon->isMinimized() && !namedForm.isMinimized());
+    assert(namedForm.executeProcedure("CloseIcon",namedArgs).status==linaccess::VbaExecutionStatus::Completed);
+    namedForm.activateWindow(); QApplication::setActiveWindow(&namedForm); QApplication::processEvents();
+    assert(namedForm.executeProcedure("MinimizeWindow",namedArgs).status==linaccess::VbaExecutionStatus::Completed && namedForm.isMinimized());
+    assert(namedForm.executeProcedure("RestoreWindow",namedArgs).status==linaccess::VbaExecutionStatus::Completed && !namedForm.isMinimized() && !namedForm.isMaximized());
+    assert(namedForm.executeProcedure("MaximizeWindow",namedArgs).status==linaccess::VbaExecutionStatus::Completed && namedForm.isMaximized());
+    assert(namedForm.executeProcedure("RestoreWindow",namedArgs).status==linaccess::VbaExecutionStatus::Completed && !namedForm.isMinimized() && !namedForm.isMaximized());
     assert(namedForm.close());
     const QByteArray report="Begin Report\nRecordSource =\"records\"\nEnd\n"; AccessFormPreview reportForm("position_report",report,{},db); auto reportModel=makePreviewFormObject(reportForm);
     int unsupported=0; try { reportModel->member("CurrentRecord",{}); } catch(const linaccess::VbaRuntimeError& error) { unsupported=error.number; } assert(unsupported==438); assert(reportForm.close());
