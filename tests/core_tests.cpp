@@ -275,6 +275,50 @@ void testCharacterFunctions() {
     }
 }
 
+void testReplaceFunction() {
+    using namespace linaccess;
+    FakeForm host;
+    const auto eval=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,{}); };
+    for(const auto& [expression,expected]:std::vector<std::pair<std::string,std::string>>{
+        {R"VBA(Replace("red/red/red","red","blue"))VBA","blue/blue/blue"},
+        {R"VBA(Replace("red/red/red","red","blue",5))VBA","blue/blue"},
+        {R"VBA(Replace("red/red/red","red","blue",5,1))VBA","blue/red"},
+        {R"VBA(Replace("red/red/red","red","blue",5,0))VBA","red/red"},
+        {R"VBA(Replace("red/red/red","","blue",3))VBA","d/red/red"},
+        {R"VBA(Replace("red/red/red","red",""))VBA","//"},
+        {R"VBA(Replace("aaaaa","aa","b"))VBA","bba"},
+        {R"VBA(Replace("😀x😀","😀","Ω"))VBA","ΩxΩ"},
+        {R"VBA(Replace("a-A","a","X",,,1))VBA","X-X"},
+        {R"VBA(Replace("a-A","a","X",,,0))VBA","X-A"},
+        {R"VBA(Replace("abc","b","x",99))VBA",""},
+        {R"VBA(Replace("","b","x"))VBA",""},
+        {R"VBA(Replace(123,2,4))VBA","143"}}) assert(eval(expression).asText()==expected);
+    assert(eval(R"VBA(Replace("a" & Chr(0) & "a","a","x"))VBA").asText()==std::string("x\0x",3));
+    assert(eval(R"VBA(VarType(Replace("a","a","x"))=vbString)VBA").truthy());
+    assert(eval(R"VBA(Replace("abcd","b","X",2.5))VBA").asText()=="Xcd");
+    assert(eval(R"VBA(Replace("aaaa","a","x",1,1.5))VBA").asText()=="xxaa");
+    assert(eval(R"VBA(Replace("aaaa","a","x",1,Empty))VBA").asText()=="aaaa");
+    const auto start=std::make_shared<ScalarProbe>(),count=std::make_shared<ScalarProbe>(),compare=std::make_shared<ScalarProbe>();
+    start->value=VbaValue::integer(2); count->value=VbaValue::integer(1); compare->value=VbaValue::integer(1);
+    assert(evaluateVbaExpression(R"VBA(Replace("aAa","a","x",start,count,compare))VBA",host,{{"start",VbaValue::reference(start)},{"count",VbaValue::reference(count)},{"compare",VbaValue::reference(compare)}}).asText()=="xa");
+    assert(start->reads==1 && count->reads==1 && compare->reads==1);
+    const auto text=std::make_shared<ScalarProbe>(),needle=std::make_shared<ScalarProbe>(),replacement=std::make_shared<ScalarProbe>();
+    text->value=VbaValue::string("one-one"); needle->value=VbaValue::string("one"); replacement->value=VbaValue::string("two");
+    assert(evaluateVbaExpression("Replace(text,needle,replacement)",host,{{"text",VbaValue::reference(text)},{"needle",VbaValue::reference(needle)},{"replacement",VbaValue::reference(replacement)}}).asText()=="two-two");
+    assert(text->reads==1 && needle->reads==1 && replacement->reads==1);
+    for(const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
+        {R"VBA(Replace())VBA",450},{R"VBA(Replace("a",,"x"))VBA",450},
+        {R"VBA(Replace(Null,"a","x"))VBA",94},{R"VBA(Replace("a",Null,"x"))VBA",94},
+        {R"VBA(Replace("a","a",Null))VBA",94},{R"VBA(Replace("a","a","x",Null))VBA",94},
+        {R"VBA(Replace("a","a","x",1,Null))VBA",94},{R"VBA(Replace("a","a","x",1,-1,Null))VBA",94},
+        {R"VBA(Replace("a","a","x",0))VBA",5},{R"VBA(Replace("a","a","x",1,-2))VBA",5},
+        {R"VBA(Replace("a","a","x",1,-1,3))VBA",5},{R"VBA(Replace("a","a","x",2147483648))VBA",6},
+        {R"VBA(Replace(CVErr(11),"a","x"))VBA",13},{R"VBA(Replace(Nothing,"a","x"))VBA",91},
+        {R"VBA(Replace("😀a","x","y",2))VBA",3251}}) {
+        int actual=0; try { (void)eval(expression); } catch(const VbaRuntimeError& error) { actual=error.number; } assert(actual==code);
+    }
+}
+
 void testRoundFunction() {
     using namespace linaccess;
     FakeForm host;
@@ -303,6 +347,7 @@ void testRoundFunction() {
 }
 
 int main() {
+    testReplaceFunction();
     testRoundFunction();
     testCharacterFunctions();
     testDefaultTypeInspection();

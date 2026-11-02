@@ -711,3 +711,9 @@ text/ComboBox focus and existing validation/save/new-row/lifetime guards. Real
 Qt/VBA/SQL tests include KeyDown cancellation, SendKeys and self-close in Current.
 Plain Page keys/multi-page scrolling, other views and complete Windows keyboard
 identity remain open. See [RECORD_NAVIGATION_KEYS_RUNTIME.md](RECORD_NAVIGATION_KEYS_RUNTIME.md).
+
+Native VBA/calculated-control Replace supports checked start/count/compare,
+UTF-16 suffix semantics and scalar-once inputs. Actual Qt/VBA/DAO parameter/SQL
+regressions cover pending/save/Undo and rejection before side effects. Full
+Windows linguistic/BSTR/error identity and Jet SQL Replace remain open. See
+[REPLACE_RUNTIME.md](REPLACE_RUNTIME.md).

@@ -1984,3 +1984,21 @@ Full validation: host 34/34 (93.76 s), Debian 12 34/34 (104.68 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 0c4ed45 private CI was still in progress at this checkpoint.
+
+## 2026-11-02 — Native VBA Replace
+
+Reproduced unavailable Replace via failing core regression (0/1). Added native
+UTF-16 suffix/non-overlap/count/compare handling with optional omissions,
+scalar-once inputs and checked errors. Core and actual Qt/VBA/DAO parameter/SQL
+regressions pass 2/2 (1.13 s), covering pending/save/Undo, Unicode/module
+comparison and failed arguments without SQL effects. Additional tests cover
+numeric rounding/types and scalar-once optional arguments. GUI suite has 35
+CTests. Full Windows collation/BSTR/error identity and Jet SQL Replace remain
+open; no additional complete original business workflow. See REPLACE_RUNTIME.md.
+
+Full validation: host 35/35 (93.88 s), Debian 12 35/35 (98.10 s), Ubuntu
+24.04 35/35 (86.33 s), Debian 13 35/35 (87.27 s), GUI-disabled core 1/1
+(1.55 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Visibility
+commit 0c4ed45 private CI completed successfully; 100e57c was still in progress.

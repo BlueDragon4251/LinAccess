@@ -565,7 +565,7 @@ private:
             if (!take(")")) {
                 do {
                     const auto start = index_;
-                    const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="strcomp" || word=="round") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
+                    const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="strcomp" || word=="round" || word=="replace") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
                     args.push_back(missing ? VbaValue::empty() : expression(1));
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
@@ -706,6 +706,46 @@ private:
                 if (!host_) return {};
                 if (args[1].kind==VbaValue::Kind::Null) throw error("Format mask is Null",94);
                 return host_->formatValue(args[0],args[1].asText(),word=="format$");
+            }
+            if (word=="replace") {
+                if (!host_) return {};
+                if (args.size()<3 || args.size()>6 || omitted[0] || omitted[1] || omitted[2])
+                    throw error("Replace requires three to six arguments",450);
+                std::vector<VbaValue> values;
+                for(std::size_t i=0;i<args.size();++i) {
+                    values.push_back(scalarObjectValue(args[i]));
+                    if(!omitted[i] && values.back().kind==VbaValue::Kind::Null) throw error("Invalid Null Replace argument",94);
+                }
+                const auto start=values.size()>3 && !omitted[3] ? integer(values[3]) : 1;
+                const auto count=values.size()>4 && !omitted[4] ? integer(values[4]) : -1;
+                if(start<1 || count<-1) throw error("Invalid Replace start/count",5);
+                auto mode=VbaCompareMode::Binary;
+                if(values.size()>5 && !omitted[5]) {
+                    const auto choice=integer(values[5]);
+                    if(choice==-1) mode=compareMode_;
+                    else if(choice>=0 && choice<=2) mode=static_cast<VbaCompareMode>(choice);
+                    else throw error("Invalid Replace comparison",5);
+                }
+                const auto input=utf16String(values[0].asText()),needle=utf16String(values[1].asText()),replacement=utf16String(values[2].asText());
+                if(static_cast<std::size_t>(start)>input.size()) return VbaValue::string("");
+                const auto boundary=[&](std::size_t position) {
+                    return position==0 || position==input.size() || !(input[position-1]>=0xd800 && input[position-1]<=0xdbff && input[position]>=0xdc00 && input[position]<=0xdfff);
+                };
+                std::size_t position=start-1;
+                if(!boundary(position)) throw error("Replace start splits a UTF-16 surrogate",3251);
+                std::u16string output;
+                std::size_t replaced=0;
+                while(position<input.size()) {
+                    bool match=false;
+                    if(!needle.empty() && (count==-1 || replaced<static_cast<std::size_t>(count)) && needle.size()<=input.size()-position) {
+                        const auto candidate=std::u16string_view(input).substr(position,needle.size());
+                        match=mode==VbaCompareMode::Binary ? candidate==needle
+                            : boundary(position) && boundary(position+needle.size()) && host_->compareStrings(utf8String(candidate),values[1].asText(),mode)==0;
+                    }
+                    if(match) { output.append(replacement); position+=needle.size(); ++replaced; }
+                    else output.push_back(input[position++]);
+                }
+                return VbaValue::string(utf8String(output));
             }
             if (word=="instr" || word=="strcomp") {
                 if (!host_) return {};

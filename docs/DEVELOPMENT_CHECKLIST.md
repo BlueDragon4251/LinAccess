@@ -613,3 +613,7 @@ Full targets remain open:
 - [x] Native Ctrl+Page Down/Up record navigation through validation/save, actual
   text/ComboBox focus, KeyDown/SendKeys/boundaries/Current self-close regression;
   multi-page/other views/full Windows keyboard identity remain open.
+
+- [x] Native VBA/calculated Replace with UTF-16 suffix/count/compare, scalar-once
+  checked arguments, actual Qt/DAO parameter/SQL pending/save/Undo regressions;
+  full Windows collation/BSTR/error identity and Jet SQL Replace remain open.
