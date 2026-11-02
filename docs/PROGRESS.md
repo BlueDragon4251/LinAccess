@@ -2476,3 +2476,10 @@ copies, rejected lower-bound changes and release/reallocation. The existing core
 and DAO targets pass (2/2, 1.27 s); no new target or distribution-matrix repetition.
 Explicit allocation limit: 1,000,000 elements (3251 beyond it). Typed declarations,
 multidimensional arrays, array enumeration and indexed ByRef binding remain open.
+
+Combined array delivery validation: desktop app build and GUI-free core build
+passed; GUI-free core test 1/1 (1.10 s). The new host .deb passed package-content,
+permissions, reference Build-ID and pinned SQLite 3.54.1 backend checks. All four
+original fixture hashes remain verified. Remote branch confirmed at 18b2bec and
+repository privacy confirmed true. No full 48-test or distribution matrix rerun;
+the last full matrix remains e799b2f.
