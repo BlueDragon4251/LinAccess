@@ -759,10 +759,10 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
             std::smatch field;
             if (!std::regex_match(entry,field,variable)) throw VbaRuntimeError(3251,"Module declaration unsupported");
             const auto name=lower(field[1].str()),type=lower(field[2].str());
-            if (!type.empty() && type!="variant" && type!="boolean" && type!="string")
+            if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && type!="integer" && type!="long")
                 throw VbaRuntimeError(3251,"Module field type unsupported");
             if (state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
-            state->values.emplace(name,type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : VbaValue::empty());
+            state->values.emplace(name,type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type=="integer" || type=="long" ? VbaValue::numeric(0) : VbaValue::empty());
             state->types.emplace(name,type);
             if (visibility=="public" || visibility=="global") state->publicVariables.insert(name);
         }
@@ -790,6 +790,17 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
         }
         try { return VbaValue::logical(value.asNumber()!=0); }
         catch (...) { throw VbaRuntimeError(13,"Module Boolean field type mismatch"); }
+    }
+    if(type=="integer" || type=="long") {
+        const auto number=value.asNumber();
+        if(!std::isfinite(number)) throw VbaRuntimeError(6,"Module numeric field overflow");
+        const auto lower=std::floor(static_cast<long double>(number));
+        const auto fraction=static_cast<long double>(number)-lower;
+        const auto rounded=fraction<0.5L ? lower : fraction>0.5L ? lower+1 : std::fmod(std::abs(lower),2.0L)==0 ? lower : lower+1;
+        const auto minimum=type=="integer" ? -32768.0L : -2147483648.0L;
+        const auto maximum=type=="integer" ? 32767.0L : 2147483647.0L;
+        if(rounded<minimum || rounded>maximum) throw VbaRuntimeError(6,"Module numeric field overflow");
+        return VbaValue::numeric(static_cast<double>(rounded));
     }
     throw VbaRuntimeError(3251,"Module field coercion unsupported");
 }

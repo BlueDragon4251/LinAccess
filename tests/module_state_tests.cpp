@@ -13,6 +13,8 @@
 #endif
 #include <cassert>
 
+void testNumericModuleStates();
+
 void testModuleStates(const QDir& directory,const QJsonArray& objects) {
     QByteArray globals;
     int classModules=0,classFields=0;
@@ -102,4 +104,69 @@ void testModuleStates(const QDir& directory,const QJsonArray& objects) {
     assert(call(second,"ReadGlobal").typedReturnValue->asText().empty());
     assert(call(second,"External").typedReturnValue->asNumber()==1);
     assert(second.close() && reopened.close() && separate.close());
+    testNumericModuleStates();
+}
+
+void testNumericModuleStates() {
+    using linaccess::VbaValue;
+    const auto open=[](const char* connection) {
+        auto db=QSqlDatabase::addDatabase("QSQLITE",QString::fromUtf8(connection)); db.setDatabaseName(":memory:"); assert(db.open());
+        QSqlQuery query(db); assert(query.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+        assert(query.exec("CREATE TABLE numeric_audit(value INTEGER)"));
+        query.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba','numeric helper',?)");
+        query.addBindValue(QByteArray("Public projectTotal As Long\nPublic Function NumericSharedNext() As Variant\nprojectTotal=projectTotal+40000\nNumericSharedNext=projectTotal\nEnd Function")); assert(query.exec()); return db;
+    };
+    auto db=open("numeric-module-values"),otherDb=open("numeric-module-other");
+    const QByteArray code=R"VBA(Private small As Integer
+Public exposed As Long
+Function Increment() As Variant
+small=small+1
+Increment=small
+End Function
+Function External() As Variant
+External=NumericSharedNext()
+End Function
+Sub RoundValues()
+small=2.5
+exposed=3.5
+Me.Tag=CStr(small)&":"&CStr(exposed)
+End Sub
+Function OverflowSmall() As Variant
+On Error Resume Next
+small=32767
+small=small+1
+Me.Tag=CStr(Err.Number)
+OverflowSmall=small
+End Function
+Sub Persist()
+CurrentDb.Execute "INSERT INTO numeric_audit(value) VALUES("&CStr(exposed)&")"
+End Sub
+)VBA";
+    AccessFormPreview first("numeric first","Begin Form\nEnd",code,db),second("numeric second","Begin Form\nEnd",code,db),separate("numeric separate","Begin Form\nEnd",code,otherDb);
+    const auto call=[](AccessFormPreview& form,const char* procedure) {
+        std::vector<VbaValue> args; const auto result=form.executeProcedure(QString::fromUtf8(procedure),args); assert(result.status==linaccess::VbaExecutionStatus::Completed); return result;
+    };
+    auto root=makePreviewFormObject(first);
+    assert(root->member("exposed",{}).asNumber()==0);
+    assert(call(first,"Increment").typedReturnValue->asNumber()==1 && call(first,"Increment").typedReturnValue->asNumber()==2);
+    assert(call(second,"Increment").typedReturnValue->asNumber()==1);
+    assert(call(first,"External").typedReturnValue->asNumber()==40000 && call(second,"External").typedReturnValue->asNumber()==80000);
+    assert(call(separate,"External").typedReturnValue->asNumber()==40000);
+    call(first,"RoundValues"); assert(root->member("Tag",{}).asText()=="2:4" && root->member("exposed",{}).asNumber()==4);
+    assert(call(first,"OverflowSmall").typedReturnValue->asNumber()==32767 && root->member("Tag",{}).asText()=="6");
+    call(first,"Persist"); QSqlQuery sql(db); assert(sql.exec("SELECT value FROM numeric_audit") && sql.next() && sql.value(0).toInt()==4); sql.finish();
+    root->assign("exposed",VbaValue::numeric(2147483647));
+    for(const auto& invalid:std::vector<std::pair<VbaValue,int>>{{VbaValue::numeric(2147483648.0),6},{VbaValue{},94},{VbaValue::string("bad"),13}}) {
+        int actual=0; try { root->assign("exposed",invalid.first); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; }
+        assert(actual==invalid.second && root->member("exposed",{}).asNumber()==2147483647);
+    }
+    root->assign("exposed",VbaValue::numeric(-2147483648.0)); assert(root->member("exposed",{}).asNumber()==-2147483648.0);
+    int actual=0; try { root->member("small",{}); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; } assert(actual==2465);
+    assert(makePreviewFormObject(second)->member("exposed",{}).asNumber()==0);
+    assert(first.close()); actual=0; try { root->member("exposed",{}); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; } assert(actual==2450);
+    AccessFormPreview reopened("numeric reopened","Begin Form\nEnd",code,db);
+    assert(call(reopened,"Increment").typedReturnValue->asNumber()==1 && call(reopened,"External").typedReturnValue->asNumber()==120000);
+    linaccess::resetVbaProjectState(db);
+    assert(call(second,"External").typedReturnValue->asNumber()==40000 && call(separate,"External").typedReturnValue->asNumber()==80000);
+    assert(second.close() && separate.close() && reopened.close());
 }

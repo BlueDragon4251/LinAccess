@@ -499,3 +499,7 @@ Full targets remain open:
   measured 3/5-row viewport, 40-row scrolling/SQL selection, retained draft/model
   identity and scalar/error/report limits; full Windows header/theme/screen-edge/
   open-popup timing and declared Integer identity remain open.
+
+- [x] Bounded Integer/Long module fields with zero defaults, 16/32-bit rounded
+  assignment/range/error preservation, private/public/project lifetime and actual
+  SQL tests; full numeric subtype/arithmetic/ByRef/array/class identity remains open.

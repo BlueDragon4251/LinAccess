@@ -556,3 +556,10 @@ a later SQL row and preserve pending text/model identity on property changes.
 Report mutation and invalid conversions reject explicitly. Full Windows heading/
 theme/screen-edge/open-popup timing remains open; see
 [Popup rows](COMBO_LISTROWS_RUNTIME.md).
+
+Module-level Integer/Long fields now have numeric zero defaults and checked
+16/32-bit rounded assignments. Core/native GUI/SQL tests verify failed-write
+preservation, visibility, per-form/private and shared project state, reset and
+actual SQL execution. This establishes storage/assignment scope, with full
+numeric subtype/intermediate arithmetic/ByRef/array/class behavior still open;
+see [Numeric module fields](NUMERIC_MODULE_FIELDS_RUNTIME.md).

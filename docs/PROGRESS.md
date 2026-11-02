@@ -1465,3 +1465,21 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. Previous multiple-selection commit fc7ba53
 completed private CI successfully. Repository privacy remains unchanged.
+
+## 2026-11-02 — Integer and Long module fields
+
+Native module declarations now admit Integer/Long with zero defaults and rounded
+16/32-bit assignment checks. Core and actual GUI/VBA/SQL tests verify overflow/
+Null/type errors without stored-value corruption, visibility/shadow rules,
+per-instance private state and shared standard-module Long state, database
+isolation, close/reopen/project reset and SQL insertion. Targeted core/main-window/
+layout/original-heavy set: 4/4 (42.34 s). Full subtype/intermediate arithmetic/
+ByRef/array/class behavior remains open; no extra original business execution
+is claimed. See NUMERIC_MODULE_FIELDS_RUNTIME.md.
+
+Final validation: host 22/22 (75.17 s), Debian 12 22/22 (75.89 s), Ubuntu
+24.04 22/22 (69.00 s), GUI-disabled core 1/1 (0.90 s). Fresh host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. Previous popup-row commit 552f10f completed private
+CI successfully. Repository privacy remains unchanged.

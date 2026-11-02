@@ -12,6 +12,7 @@
 #include <map>
 #include <tuple>
 #include <optional>
+#include <limits>
 
 namespace {
 class TestSequence final : public linaccess::VbaObject {
@@ -762,6 +763,61 @@ End Function
         const auto declarations=createVbaModuleState("Public first,second As String\nPrivate flag As Boolean\n");
         assert(declarations->values.at("first").kind==VbaValue::Kind::Empty && declarations->values.at("second").asText().empty());
         assert(declarations->publicVariables.size()==2 && !declarations->publicVariables.contains("flag"));
+    }
+
+    {
+        const auto declarations=createVbaModuleState("Public untyped,small As Integer,wide As Long\nPrivate hidden As Long\n");
+        assert(declarations->values.at("untyped").kind==VbaValue::Kind::Empty && declarations->values.at("small").asNumber()==0 && declarations->values.at("wide").asNumber()==0);
+        assert(declarations->publicVariables.size()==3 && !declarations->publicVariables.contains("hidden"));
+        const std::string module=R"VBA(Private small As Integer
+Public wide As Long
+Function StepWide() As Variant
+wide=wide+40000
+StepWide=wide
+End Function
+Sub RoundValues()
+small=2.5
+wide=-3.5
+Me!Rounded=CStr(small)&":"&CStr(wide)
+End Sub
+Function OverflowSmall() As Variant
+On Error Resume Next
+small=32767
+small=small+1
+Me!Code=CStr(Err.Number)
+OverflowSmall=small
+End Function
+Function OverflowWide() As Variant
+On Error Resume Next
+wide=2147483647
+wide=wide+1
+Me!Code=CStr(Err.Number)
+OverflowWide=wide
+End Function
+Function Shadow() As Variant
+Dim small As Long
+small=90000
+Shadow=small
+End Function
+)VBA";
+        FakeForm first,second;
+        assert(executeVbaProcedure(module,"RoundValues",first).status==VbaExecutionStatus::Completed && first.fields["Rounded"]=="2:-4");
+        auto result=executeVbaProcedure(module,"StepWide",first); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==39996);
+        result=executeVbaProcedure(module,"StepWide",second); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==40000);
+        result=executeVbaProcedure(module,"OverflowSmall",first); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==32767 && first.fields["Code"]=="6");
+        result=executeVbaProcedure(module,"OverflowWide",first); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==2147483647 && first.fields["Code"]=="6");
+        result=executeVbaProcedure(module,"Shadow",first); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==90000 && first.moduleState(module)->values.at("small").asNumber()==32767);
+        assert(coerceVbaModuleValue(VbaValue::numeric(-32768.5),"integer").asNumber()==-32768);
+        assert(coerceVbaModuleValue(VbaValue::numeric(-2147483648.5),"long").asNumber()==-2147483648.0);
+        assert(coerceVbaModuleValue(VbaValue::logical(true),"integer").asNumber()==-1 && coerceVbaModuleValue(VbaValue::empty(),"long").asNumber()==0);
+        assert(coerceVbaModuleValue(VbaValue::currency(25000),"integer").asNumber()==2);
+        for(const auto& [type,value,expected]:std::vector<std::tuple<std::string,VbaValue,int>>{
+            {"integer",VbaValue::numeric(32767.5),6},{"long",VbaValue::numeric(2147483647.5),6},
+            {"long",VbaValue::numeric(std::numeric_limits<double>::infinity()),6},{"integer",VbaValue{},94},
+            {"long",VbaValue::string("bad"),13},{"integer",VbaValue::errorValue(11),13}}) {
+            int actual=0; try { coerceVbaModuleValue(value,type); } catch(const VbaRuntimeError& failure) { actual=failure.number; } assert(actual==expected);
+        }
+        int actual=0; try { createVbaModuleState("Public rows() As Long\n"); } catch(const VbaRuntimeError& failure) { actual=failure.number; } assert(actual==3251);
     }
 
     {
