@@ -458,3 +458,8 @@ Full targets remain open:
   targets and open native forms/reports, metadata grouping/identity, hidden
   restoration, omitted names, scalar preflight, validation/modal/error and
   unsaved SQL preservation; other open-window/object kinds remain unsupported.
+
+- [x] Bounded Ctrl+O/Ctrl+N real project open/create dialogs from the main window
+  and nonmodal native documents, KeyPreview/validation/modal/Unload cancellation,
+  overwrite preservation and an executing-VBA project-switch guard; direct
+  MDB/ACCDB project editing and complete File-menu/keyboard parity remain open.

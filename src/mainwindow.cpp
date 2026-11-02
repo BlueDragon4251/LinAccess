@@ -257,6 +257,10 @@ bool MainWindow::eventFilter(QObject* watched,QEvent* event) {
 
 void MainWindow::keyPressEvent(QKeyEvent* event) {
     if(event->key()==Qt::Key_F11 && event->modifiers()==Qt::NoModifier) { focusDatabaseWindow(); event->accept(); return; }
+    if((event->key()==Qt::Key_O || event->key()==Qt::Key_N) && event->modifiers()==Qt::ControlModifier) {
+        if(!QApplication::activeModalWidget()) { if(event->key()==Qt::Key_O) chooseDatabase(); else newDatabase(); }
+        event->accept(); return;
+    }
     QMainWindow::keyPressEvent(event);
 }
 

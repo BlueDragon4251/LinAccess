@@ -494,3 +494,10 @@ kind groups; identities use stored metadata. Actual GUI/VBA/SQL tests prove
 validation cancellation, unsaved-record preservation, modal/error boundaries
 and explicit duplicate-name rejection. Open table/query window activation and
 macro/module targets remain unsupported; see [SelectObject](SELECT_OBJECT_RUNTIME.md).
+
+Ctrl+O/Ctrl+N now invoke actual LinAccess project open/create dialogs from the
+main window and nonmodal native documents, preserving KeyPreview/control/modal/
+Unload cancellation and refusing existing-file overwrite. Switching projects
+from executing native SendKeys is blocked. Direct MDB/ACCDB project editing
+and complete File-menu/keyboard appearance remain open; see
+[Project shortcuts](PROJECT_SHORTCUTS_RUNTIME.md).

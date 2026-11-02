@@ -29,8 +29,8 @@ private:
 
     bool hasProject();
     void openDatabase(const QString& path);
-    void newDatabase();
-    void chooseDatabase();
+    Q_INVOKABLE void newDatabase();
+    Q_INVOKABLE void chooseDatabase();
     void inspectAccess();
     void inspectBridgeExport();
     void showAccessArtifact(int id);

@@ -6,6 +6,8 @@
 #include <QCryptographicHash>
 #include <QDialog>
 #include <QFileDialog>
+#include <QFile>
+#include <QFileInfo>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPointer>
@@ -30,14 +32,21 @@ QAction* action(MainWindow& window,const QString& text) {
     for(auto* candidate:window.findChildren<QAction*>()) if(candidate->text()==text) return candidate;
     assert(false); return nullptr;
 }
-void openProject(MainWindow& window,const QString& path) {
+void openProject(MainWindow& window,const QString& path,QWidget* shortcutTarget=nullptr) {
     bool selected=false;
     QTimer::singleShot(0,&window,[&] {
         auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog);
         dialog->selectFile(path); selected=true;
         static_cast<QDialog*>(dialog)->accept();
     });
-    action(window,"Öffnen")->trigger(); assert(selected);
+    if(shortcutTarget) { QTest::keyPress(shortcutTarget,Qt::Key_O,Qt::ControlModifier); QTest::keyRelease(&window,Qt::Key_O,Qt::ControlModifier); }
+    else action(window,"Öffnen")->trigger();
+    assert(selected);
+}
+void cancelProjectShortcut(QWidget* target,Qt::Key key) {
+    bool rejected=false;
+    QTimer::singleShot(0,target,[&] { auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog); rejected=true; dialog->reject(); });
+    QTest::keyClick(target,key,Qt::ControlModifier); assert(rejected);
 }
 int artifact(QSqlDatabase db,const QString& kind,const QString& name,const QByteArray& bytes) {
     QSqlQuery sql(db);
@@ -86,7 +95,7 @@ int main(int argc,char** argv) {
     const QByteArray form="Begin Form\nRecordSource =\"records\"\nKeyPreview =NotDefault\nOnKeyDown =\"[Event Procedure]\"\nOnActivate =\"[Event Procedure]\"\nOnDeactivate =\"[Event Procedure]\"\nOnLoad =\"[Event Procedure]\"\nOnUnload =\"[Event Procedure]\"\nBegin Section\nBegin TextBox\nName =\"editor\"\nControlSource =\"value\"\nBeforeUpdate =\"[Event Procedure]\"\nEnd\nEnd\nEnd";
     const QByteArray code="Sub Form_Load()\nCurrentDb.Execute \"INSERT INTO events(kind) VALUES('load')\"\nEnd Sub\nSub Form_Unload(Cancel As Integer)\nIf Me.Tag=\"hold\" Then Cancel=True\nEnd Sub\nSub CloseSelf()\nDoCmd.Close\nMsgBox \"Synthetic retained document\"\nEnd Sub\n"
         "Sub Form_Activate()\nCurrentDb.Execute \"INSERT INTO events(kind) VALUES('activate')\"\nEnd Sub\nSub Form_Deactivate()\nCurrentDb.Execute \"INSERT INTO events(kind) VALUES('deactivate')\"\nEnd Sub\n"
-        "Sub Form_KeyDown(KeyCode As Integer,Shift As Integer)\nIf KeyCode=vbKeyF11 And Me.Tag=\"block-f11\" Then KeyCode=0\nEnd Sub\n"
+        "Sub Form_KeyDown(KeyCode As Integer,Shift As Integer)\nIf KeyCode=vbKeyF11 And Me.Tag=\"block-f11\" Then KeyCode=0\nIf Me.Tag=\"block-project\" And (Shift And acCtrlMask)<>0 Then\nIf KeyCode=vbKeyO Or KeyCode=vbKeyN Then KeyCode=0\nEnd If\nEnd Sub\n"
         "Sub editor_BeforeUpdate(Cancel As Integer)\nIf Me.Tag=\"cancel-focus\" Then Cancel=True\nEnd Sub\n"
         "Sub BackgroundSave()\nOn Error Resume Next\nDoCmd.RunCommand 97\nMe.Tag=CStr(Err.Number)\nEnd Sub\n"
         "Sub BackgroundKeys()\nOn Error Resume Next\nSendKeys \"x\",True\nMe.Tag=CStr(Err.Number)\nEnd Sub\n"
@@ -97,7 +106,8 @@ int main(int argc,char** argv) {
         "Sub SelectSourceForm()\nDoCmd.SelectObject acForm,\"ENTRY\",True\nEnd Sub\n"
         "Sub SelectQuery()\nDoCmd.SelectObject acQuery,\"source_query\",True\nEnd Sub\n"
         "Sub SelectEntry()\nDoCmd.SelectObject acForm,\"entry\",False\nEnd Sub\n"
-        "Sub SelectReport()\nDoCmd.SelectObject acReport,\"report\",False\nEnd Sub\n";
+        "Sub SelectReport()\nDoCmd.SelectObject acReport,\"report\",False\nEnd Sub\n"
+        "Sub ProjectKeysWhileRunning()\nSendKeys \"^o\",True\nMe.Tag=\"returned\"\nEnd Sub\n";
     const int formId=artifact(db,"form","entry",form); artifact(db,"vba","Form_entry",code);
     const int queryId=artifact(db,"query","source_query","SELECT value FROM records");
     auto report=form; report.replace("Begin Form","Begin Report"); report.replace("OnLoad =\"[Event Procedure]\"\n",""); report.replace("OnUnload =\"[Event Procedure]\"\n","");
@@ -116,6 +126,19 @@ int main(int argc,char** argv) {
     openArtifact(window,formId); assert(document("entry")==entry);
     QSqlQuery sql(db); assert(sql.exec("SELECT COUNT(*) FROM events WHERE kind='load'") && sql.next() && sql.value(0).toInt()==1); sql.finish();
     auto root=makePreviewFormObject(*entry); auto* editor=entry->findChild<QLineEdit*>("access-control-editor"); assert(editor);
+    std::vector<linaccess::VbaValue> arguments;
+    QApplication::setActiveWindow(entry); editor->setFocus(); root->assign("Tag",linaccess::VbaValue::string("block-project"));
+    QTest::keyClick(editor,Qt::Key_O,Qt::ControlModifier); QTest::keyClick(editor,Qt::Key_N,Qt::ControlModifier);
+    assert(editor->hasFocus() && !QApplication::activeModalWidget() && db.databaseName()==first);
+    root->assign("Tag",linaccess::VbaValue::string(""));
+    for(const auto key:{Qt::Key_O,Qt::Key_N}) {
+        QApplication::setActiveWindow(entry); editor->setFocus(); cancelProjectShortcut(editor,key);
+        assert(entry && db.databaseName()==first && db.isOpen());
+    }
+    QApplication::setActiveWindow(entry); editor->setFocus(); QApplication::processEvents();
+    assert(entry->executeProcedure("ProjectKeysWhileRunning",arguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(entry && db.databaseName()==first && root->member("Tag",{}).asText()=="returned" && !QApplication::activeModalWidget());
+    root->assign("Tag",linaccess::VbaValue::string(""));
     QApplication::setActiveWindow(entry); editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"fresh");
     assert(entry->hasUnsavedChanges());
     auto* explorer=window.findChild<QTreeWidget*>("database-explorer"); assert(explorer);
@@ -137,7 +160,6 @@ int main(int argc,char** argv) {
     for(const auto& property:std::vector<std::pair<const char*,int>>{{"ActiveForm",2450},{"ActiveControl",2474}}) {
         int error=0; try { screen->member(property.first,{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==property.second);
     }
-    std::vector<linaccess::VbaValue> arguments;
     for(const auto& procedure:std::vector<std::pair<const char*,const char*>>{{"BackgroundSave","2046"},{"BackgroundKeys","3251"},{"BackgroundClose","3251"}}) {
         assert(entry->executeProcedure(procedure.first,arguments).status==linaccess::VbaExecutionStatus::Completed);
         assert(root->member("Tag",{}).asText()==procedure.second && entry->isVisible());
@@ -193,7 +215,7 @@ int main(int argc,char** argv) {
     assert(entry->executeProcedure("SelectEntry",arguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(entry->executeProcedure("ExplicitSave",arguments).status==linaccess::VbaExecutionStatus::Completed);
     root->assign("Tag",linaccess::VbaValue::string("hold"));
-    openProject(window,second); assert(db.databaseName()==first && db.isOpen() && entry && entry->isVisible());
+    QApplication::setActiveWindow(entry); editor->setFocus(); openProject(window,second,editor); assert(db.databaseName()==first && db.isOpen() && entry && entry->isVisible());
     root->assign("Tag",linaccess::VbaValue::string(""));
     QApplication::setActiveWindow(entry); editor->setFocus(); QApplication::processEvents();
     bool retained=false;
@@ -209,10 +231,25 @@ int main(int argc,char** argv) {
     openArtifact(window,modalId); QPointer<AccessFormPreview> modalWindow=document("modal"); assert(modalWindow && modalWindow->isModal() && QApplication::activeModalWidget()==modalWindow);
     auto* modalEditor=modalWindow->findChild<QLineEdit*>("access-control-editor"); assert(modalEditor); modalEditor->setFocus(); QTest::keyClick(modalEditor,Qt::Key_F11);
     assert(QApplication::activeModalWidget()==modalWindow && !AccessFormPreview::databaseWindowActive());
+    QTest::keyClick(modalEditor,Qt::Key_O,Qt::ControlModifier); QTest::keyClick(modalEditor,Qt::Key_N,Qt::ControlModifier); assert(QApplication::activeModalWidget()==modalWindow);
     selection=modalWindow->executeProcedure("SelectTable",arguments); assert(selection.status==linaccess::VbaExecutionStatus::Error && selection.errorNumber==2046 && QApplication::activeModalWidget()==modalWindow);
     assert(modalWindow->close()); dispose(); assert(!modalWindow && QApplication::activeModalWidget()==nullptr);
     openArtifact(window,cancelId); assert(!document("cancel") && QApplication::activeModalWidget()==nullptr);
-    openProject(window,second); assert(QSqlDatabase::database("linaccess-main").databaseName()==second);
+    openProject(window,second,explorer); assert(QSqlDatabase::database("linaccess-main").databaseName()==second);
+    const auto third=temporary.filePath("third.linaccess"); bool created=false;
+    QTimer::singleShot(0,&window,[&] { auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog); created=true; dialog->selectFile(third); static_cast<QDialog*>(dialog)->accept(); });
+    QTest::keyClick(explorer,Qt::Key_N,Qt::ControlModifier);
+    assert(created && QFileInfo::exists(third) && QSqlDatabase::database("linaccess-main").databaseName()==third);
+    const auto hash=[&] { QFile input(first); assert(input.open(QIODevice::ReadOnly)); return QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256); };
+    const auto beforeRefusal=hash(); bool refused=false;
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        dialog->setOption(QFileDialog::DontConfirmOverwrite,true); dialog->selectFile(first);
+        QTimer::singleShot(0,&window,[&] { auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget()); assert(box); refused=true; box->accept(); });
+        static_cast<QDialog*>(dialog)->accept();
+    });
+    QTest::keyClick(explorer,Qt::Key_N,Qt::ControlModifier);
+    assert(refused && hash()==beforeRefusal && QSqlDatabase::database("linaccess-main").databaseName()==third);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

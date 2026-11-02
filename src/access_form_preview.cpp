@@ -2224,15 +2224,21 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
     if (closed_ || openCancelled_) return false;
     const auto modifiers=event->modifiers() & ~Qt::KeypadModifier;
     try {
-        if(event->key()==Qt::Key_F11 && modifiers==Qt::NoModifier) {
+        const char* projectCommand=nullptr;
+        if(event->key()==Qt::Key_F11 && modifiers==Qt::NoModifier) projectCommand="focusDatabaseWindow";
+        else if(event->key()==Qt::Key_O && modifiers==Qt::ControlModifier) projectCommand="chooseDatabase";
+        else if(event->key()==Qt::Key_N && modifiers==Qt::ControlModifier) projectCommand="newDatabase";
+        if(projectCommand) {
             if(isModal() || QApplication::activeModalWidget()) return true;
             QWidget* owner=nullptr;
             for(auto* ancestor=parentWidget();ancestor;ancestor=ancestor->parentWidget())
                 if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
-            if(!owner || owner->metaObject()->indexOfMethod("focusDatabaseWindow()")<0) return false;
+            if(!owner || owner->metaObject()->indexOfMethod((QByteArray(projectCommand)+"()").constData())<0) return false;
+            if(event->key()!=Qt::Key_F11 && nativeExecutionDepth()!=0)
+                throw linaccess::VbaRuntimeError(3251,"Project switching from executing native code is not implemented");
             ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
             if(!commitControls() || closed_ || openCancelled_) return true;
-            (void)QMetaObject::invokeMethod(owner,"focusDatabaseWindow",Qt::DirectConnection);
+            (void)QMetaObject::invokeMethod(owner,projectCommand,Qt::DirectConnection);
             return true;
         }
         if (event->key()==Qt::Key_C && modifiers==Qt::ControlModifier && recordSelected_) {

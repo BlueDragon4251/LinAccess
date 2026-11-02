@@ -1317,3 +1317,20 @@ pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass. Earlier F11/context commit 6967113
 completed private CI successfully.
+
+## 2026-11-02 — Project open/create keyboard shortcuts
+
+Ctrl+O/Ctrl+N now route to real project dialogs after native KeyPreview/control
+validation. Real production GUI tests cover both dialog cancellations, modal
+blocking, Unload cancellation, successful open/create and byte-identical
+existing-file refusal. Synchronous native SendKeys cannot replace its executing
+module's project. Targeted trio: 3/3 (39.37 s). Scope remains SQLite project
+operations, with direct MDB/ACCDB editing and full keyboard/File-menu parity
+open; see PROJECT_SHORTCUTS_RUNTIME.md. No original business increment.
+
+Final validation: host 22/22 (74.54 s), Debian 12 22/22 (73.35 s), Ubuntu
+24.04 22/22 (66.01 s), GUI-disabled core 1/1 (1.04 s). Fresh host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. SelectObject commit c675477 completed private CI
+successfully. Repository privacy remains unchanged.
