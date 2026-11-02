@@ -821,6 +821,108 @@ End Function
     }
 
     {
+        const std::string module=R"VBA(Sub RoundLocals()
+Dim small As Integer
+Dim wide As Long
+small=2.5
+wide=-3.5
+Me!Rounded=CStr(small)&":"&CStr(wide)
+On Error Resume Next
+small=32768
+Me!SmallCode=CStr(Err.Number)
+wide=2147483648
+Me!WideCode=CStr(Err.Number)
+Me!Preserved=CStr(small)&":"&CStr(wide)
+End Sub
+Function RoundedResult() As Integer
+RoundedResult=3.5
+End Function
+Function InvalidResult() As Integer
+InvalidResult=32768
+End Function
+Sub Consume(ByVal value As Integer)
+Me!Seen=CStr(value)
+End Sub
+Sub ChangeLong(ByRef value As Long)
+Me!Body="entered"
+value=value+1
+End Sub
+Sub Mismatch()
+Dim narrow As Integer
+narrow=3
+On Error Resume Next
+Call ChangeLong(narrow)
+Me!Code=CStr(Err.Number)
+Me!Seen=CStr(narrow)
+End Sub
+Sub Temporary()
+Dim narrow As Integer
+narrow=3
+Call ChangeLong((narrow))
+Me!Seen=CStr(narrow)
+End Sub
+Function ReferenceOverflow() As Variant
+Dim wide As Long
+wide=2147483647
+On Error Resume Next
+Call ChangeLong(wide)
+Me!Code=CStr(Err.Number)
+ReferenceOverflow=wide
+End Function
+Function CountTyped() As Long
+Dim i As Integer
+For i=1 To 3
+CountTyped=CountTyped+i
+Next i
+Me!Counter=CStr(i)
+End Function
+Sub OverflowCounter()
+Dim i As Integer
+For i=32767 To 32767
+Me!Body="entered"
+Next i
+End Sub
+Sub FractionalCounter()
+Dim i As Long
+For i=1 To 2.5
+Me!Body="entered"
+Next i
+End Sub
+Sub InvalidEnumerator(items As Object)
+Dim item As Integer
+Me!Body="entered"
+For Each item In items
+Me!Seen=CStr(item)
+Next item
+End Sub
+Sub InvalidSet(value As Object)
+Dim number As Long
+Me!Body="entered"
+Set number=value
+End Sub
+)VBA";
+        FakeForm host;
+        assert(executeVbaProcedure(module,"RoundLocals",host).status==VbaExecutionStatus::Completed && host.fields["Rounded"]=="2:-4" && host.fields["Preserved"]=="2:-4");
+        assert(host.fields["SmallCode"]=="6" && host.fields["WideCode"]=="6");
+        auto result=executeVbaProcedure(module,"RoundedResult",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==4);
+        result=executeVbaProcedure(module,"InvalidResult",host); assert(result.status==VbaExecutionStatus::Error && result.errorNumber==6);
+        std::vector<VbaValue> args{VbaValue::numeric(1.5)};
+        result=executeVbaProcedureWithArguments(module,"Consume",host,args); assert(result.status==VbaExecutionStatus::Completed && host.fields["Seen"]=="2" && args[0].asNumber()==1.5);
+        args={VbaValue{}}; result=executeVbaProcedureWithArguments(module,"Consume",host,args); assert(result.status==VbaExecutionStatus::Error && result.errorNumber==94 && host.fields["Seen"]=="2");
+        FakeForm mismatch; result=executeVbaProcedure(module,"Mismatch",mismatch); assert(result.status==VbaExecutionStatus::Completed && mismatch.fields["Code"]=="13" && mismatch.fields["Seen"]=="3" && !mismatch.fields.contains("Body"));
+        FakeForm temporary; result=executeVbaProcedure(module,"Temporary",temporary); assert(result.status==VbaExecutionStatus::Completed && temporary.fields["Seen"]=="3" && temporary.fields["Body"]=="entered");
+        result=executeVbaProcedure(module,"ReferenceOverflow",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==2147483647 && host.fields["Code"]=="6");
+        result=executeVbaProcedure(module,"CountTyped",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==6 && host.fields["Counter"]=="4");
+        result=executeVbaProcedure(module,"OverflowCounter",host); assert(result.status==VbaExecutionStatus::Error && result.errorNumber==6);
+        FakeForm fractional; result=executeVbaProcedure(module,"FractionalCounter",fractional); assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251 && !fractional.fields.contains("Body"));
+        auto sequence=std::make_shared<TestSequence>(); sequence->values={VbaValue::numeric(1)}; args={VbaValue::reference(sequence)};
+        for(const auto* procedure:{"InvalidEnumerator","InvalidSet"}) {
+            FakeForm invalid; result=executeVbaProcedureWithArguments(module,procedure,invalid,args);
+            assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251 && !invalid.fields.contains("Body"));
+        }
+    }
+
+    {
         FakeForm form;
         const std::string module=R"VBA(Function Calculate() As Variant
 Dim amount As Variant

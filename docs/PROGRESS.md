@@ -1483,3 +1483,22 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. Previous popup-row commit 552f10f completed private
 CI successfully. Repository privacy remains unchanged.
+
+## 2026-11-02 — Checked Integer/Long procedure values
+
+Parameter types now survive parsing into execution. Checked assignments cover
+Integer/Long locals, parameters/results and integral For counters. Known ByRef
+conflicts reject before callee effects; matching references and parenthesized
+temporaries retain native copyback scope. Invalid numeric Set/For Each targets
+reject before body effects. Core and native GUI/VBA/SQL tests cover rounding,
+overflow/preserved values, SQL persistence and zero SQL effects for invalid
+arguments/references. Targeted four-test set: 4/4 (43.64 s). Full subtype/promotion/
+Variant-reference/loop/compile/error timing remains open; no new original business
+execution is claimed. See NUMERIC_PROCEDURE_VALUES_RUNTIME.md.
+
+Final validation: host 22/22 (79.98 s), Debian 12 22/22 (78.62 s), Ubuntu
+24.04 22/22 (70.77 s), GUI-disabled core 1/1 (1.11 s). Fresh host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. Previous numeric-module commit 581862c completed
+private CI successfully. Repository privacy remains unchanged.

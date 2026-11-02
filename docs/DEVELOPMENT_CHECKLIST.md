@@ -503,3 +503,8 @@ Full targets remain open:
 - [x] Bounded Integer/Long module fields with zero defaults, 16/32-bit rounded
   assignment/range/error preservation, private/public/project lifetime and actual
   SQL tests; full numeric subtype/arithmetic/ByRef/array/class identity remains open.
+
+- [x] Bounded checked Integer/Long locals, parameters, function results and integral
+  For counters, known ByRef conflicts/temporaries/copyback and pre-effect invalid
+  scalar-object/enumerator guards with real SQL tests; full subtype/promotion/
+  Variant-reference/loop/compile/error timing and other types remain open.

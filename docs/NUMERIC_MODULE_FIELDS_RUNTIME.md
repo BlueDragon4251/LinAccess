@@ -28,3 +28,6 @@ VarType/TypeName/Len identity, typed intermediate arithmetic/promotion/overflow,
 all ByRef type contracts, arrays, Single/Double/Byte/Date module fields, locale
 coercion and classes remain open. No additional original business execution
 coverage is claimed.
+
+Procedure-local/parameter/result checking now also has a bounded implementation
+in NUMERIC_PROCEDURE_VALUES_RUNTIME.md, with its explicit ByRef/loop/type limits.

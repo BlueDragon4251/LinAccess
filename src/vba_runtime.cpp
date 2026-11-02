@@ -208,7 +208,7 @@ public:
     }
 };
 
-struct Parameter { std::string name; bool byReference{true}; };
+struct Parameter { std::string name; bool byReference{true}; std::string type; };
 std::vector<std::string> splitArguments(const std::string& input) {
     std::vector<std::string> args;
     if (trim(input).empty()) return args;
@@ -309,7 +309,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex call(R"(^Call\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\((.*)\))?$)", std::regex::icase);
     const std::regex implicitCall(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+(.+)|\((.*)\))?$)", std::regex::icase);
     const std::regex memberCall(R"(^((?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)(?:[.!][A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)+)\s+(.+)$)",std::regex::icase);
-    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(?:Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database|DAO\.TableDef|DAO\.TableDefs|DAO\.Workspace|DAO\.Workspaces|DAO\.DBEngine))?$)", std::regex::icase);
+    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(Integer|Long|String|Boolean|Double|Single|Variant|Object|DAO\.Recordset|DAO\.Database|DAO\.TableDef|DAO\.TableDefs|DAO\.Workspace|DAO\.Workspaces|DAO\.DBEngine))?$)", std::regex::icase);
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
     const std::regex objectSet(R"(^Set\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
     const std::regex label(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*):$)");
@@ -365,7 +365,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                     std::smatch declared;
                     if (!std::regex_match(declaration, declared, parameter))
                         return {VbaExecutionStatus::Unsupported, "VBA-Parameterdeklaration nicht unterstützt", line};
-                    if (parameters) parameters->push_back({declared[2].str(), lower(declared[1].str()) != "byval"});
+                    if (parameters) parameters->push_back({declared[2].str(), lower(declared[1].str()) != "byval",lower(declared[3].str())});
                 }
                 within = true;
                 isFunction = lower(match[1].str()) == "function";
@@ -903,6 +903,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     struct WithFrame { std::size_t instruction; VbaValue value; bool pending{}; };
     std::vector<WithFrame> withFrames,faultWithFrames;
     VbaVariables locals;
+    std::unordered_map<std::string,std::string> localTypes;
+    const auto integralType=[](std::string_view type) { return type=="integer" || type=="long"; };
     auto errorState = std::make_shared<ErrorObject>();
     locals["err"] = VbaValue::reference(errorState);
     bool resumeNext = false;
@@ -912,17 +914,38 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     std::vector<Frame> faultFrames;
     std::vector<LoopFrame> faultLoops;
     bool faultActive = true;
-    if (isFunction) locals[lower(std::string(procedure))] = initialLocalValue(resultType);
+    if (isFunction) {
+        const auto name=lower(std::string(procedure));
+        locals[name]=initialLocalValue(resultType); localTypes[name]=resultType;
+    }
     const bool implicitCancel = hasCancel && !isFunction && arguments.empty();
     if (!implicitCancel && parameters.size() != arguments.size()) {
         VbaExecutionResult failure{VbaExecutionStatus::Error,"Falsche Argumentanzahl",0};
         failure.errorNumber=450; return failure;
     }
-    for (std::size_t i = 0; i < parameters.size(); ++i)
-        locals[lower(parameters[i].name)] = implicitCancel ? VbaValue::numeric(0) : arguments[i];
+    try {
+        for(std::size_t i=0;i<parameters.size();++i) {
+            const auto& parameter=parameters[i]; const auto name=lower(parameter.name);
+            const auto value=implicitCancel ? VbaValue::numeric(0) : arguments[i];
+            const auto converted=integralType(parameter.type) ? coerceVbaModuleValue(value,parameter.type) : value;
+            if(references && !implicitCancel && parameter.byReference && (*references)[i].source) {
+                const auto& sourceType=(*references)[i].type;
+                if((integralType(parameter.type) || integralType(sourceType)) && !sourceType.empty() && sourceType!="variant"
+                    && !parameter.type.empty() && parameter.type!="variant" && sourceType!=parameter.type)
+                    throw VbaRuntimeError(13,"Known ByRef argument types do not match");
+                if(integralType(parameter.type) && (converted.kind!=value.kind || converted.number!=value.number))
+                    throw VbaRuntimeError(13,"ByRef numeric argument requires an unchanged value representation");
+            }
+            locals[name]=converted; localTypes[name]=parameter.type;
+        }
+    } catch(const VbaRuntimeError& error) {
+        VbaExecutionResult failure{VbaExecutionStatus::Error,"Parameter conversion failed",0}; failure.errorNumber=error.number; return failure;
+    }
     // Declarations bind for the whole procedure, including skipped branches.
-    for (const auto& instruction:instructions) if (instruction.type==Statement::Type::Dim)
-        locals.try_emplace(lower(instruction.argument),initialLocalValue(instruction.expression));
+    for (const auto& instruction:instructions) if (instruction.type==Statement::Type::Dim) {
+        const auto name=lower(instruction.argument);
+        if(locals.try_emplace(name,initialLocalValue(instruction.expression)).second) localTypes[name]=instruction.expression;
+    }
     struct Alias { std::string name; VbaValue* source; VbaValue before; std::string type; };
     std::vector<Alias> aliases;
     if (references && !implicitCancel)
@@ -951,6 +974,19 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     } catch (const VbaRuntimeError& error) {
         VbaExecutionResult failure{VbaExecutionStatus::Error,"Module state initialization failed",0}; failure.errorNumber=error.number; return failure;
     }
+    const auto variableType=[&](const std::string& name) -> std::string {
+        if(const auto found=localTypes.find(name); found!=localTypes.end()) return found->second;
+        for(const auto& alias:aliases) if(alias.name==name) return alias.type;
+        return {};
+    };
+    for(const auto& instruction:instructions)
+        if((instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet) && integralType(variableType(lower(instruction.argument)))) {
+            VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Numeric variable cannot receive this object/enumerator assignment",instruction.line}; failure.errorNumber=3251; return failure;
+        }
+    const auto assignVariable=[&](const std::string& name,const VbaValue& value) {
+        const auto type=variableType(name);
+        locals[name]=integralType(type) ? coerceVbaModuleValue(value,type) : value;
+    };
     const auto equalValue = [](const VbaValue& a, const VbaValue& b) {
         return a.kind == b.kind && a.number == b.number && a.currencyUnits==b.currencyUnits && a.text == b.text
             && a.boolean == b.boolean && a.object == b.object && a.errorNumber==b.errorNumber;
@@ -988,7 +1024,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         std::vector<ReferenceBinding> bindings;
         for (const auto& expression : names) {
             auto found = locals.find(lower(expression));
-            ReferenceBinding binding{found==locals.end() ? nullptr : &found->second,{}};
+            const auto type=variableType(lower(expression));
+            ReferenceBinding binding{found==locals.end() ? nullptr : &found->second,integralType(type) ? type : std::string{}};
             for (const auto& alias:aliases) if (alias.name==lower(expression)) binding={alias.source,alias.type};
             bindings.push_back(binding);
         }
@@ -999,7 +1036,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         }
         for (std::size_t i = 0; i < names.size(); ++i) {
             auto found = locals.find(lower(names[i]));
-            if (found != locals.end()) found->second = actuals[i];
+            if (found != locals.end()) assignVariable(found->first,actuals[i]);
         }
         storeAliases();
         if (nested.status != VbaExecutionStatus::Completed)
@@ -1297,7 +1334,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (active) {
                     const auto value=evaluate(instruction.expression);
                     const auto name=lower(instruction.argument);
-                    if (locals.contains(name) || !host.assignIdentifier(instruction.argument,value)) locals[name]=value;
+                    if (locals.contains(name) || !host.assignIdentifier(instruction.argument,value)) assignVariable(name,value);
                 }
                 break;
             case Statement::Type::ForEach: {
@@ -1335,7 +1372,14 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (!std::isfinite(initial) || !std::isfinite(end)
                     || !std::isfinite(step) || step == 0)
                     throw std::runtime_error("Ungültige For-Schrittweite/Grenze");
-                locals[lower(instruction.argument)] = VbaValue::numeric(initial);
+                const auto counter=lower(instruction.argument),type=variableType(counter);
+                if(integralType(type)) {
+                    if(std::floor(initial)!=initial || std::floor(end)!=end || std::floor(step)!=step)
+                        throw VbaRuntimeError(3251,"Fractional typed For limits and steps are not implemented");
+                    (void)coerceVbaModuleValue(VbaValue::numeric(end),type);
+                    (void)coerceVbaModuleValue(VbaValue::numeric(step),type);
+                }
+                assignVariable(counter,VbaValue::numeric(initial));
                 if ((step > 0 && initial > end) || (step < 0 && initial < end)) {
                     ip = static_cast<std::size_t>(instruction.partner);
                 } else {
@@ -1361,7 +1405,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 }
                 const auto nextValue = locals[name].asNumber() + loops.back().step;
                 if (!std::isfinite(nextValue)) throw std::runtime_error("For-Zählerüberlauf");
-                locals[name] = VbaValue::numeric(nextValue);
+                assignVariable(name,VbaValue::numeric(nextValue));
                 if ((loops.back().step > 0 && nextValue <= loops.back().end)
                     || (loops.back().step < 0 && nextValue >= loops.back().end))
                     ip = static_cast<std::size_t>(loops.back().forIndex);

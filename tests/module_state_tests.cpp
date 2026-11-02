@@ -14,6 +14,7 @@
 #include <cassert>
 
 void testNumericModuleStates();
+void testNumericProcedureValues();
 
 void testModuleStates(const QDir& directory,const QJsonArray& objects) {
     QByteArray globals;
@@ -105,6 +106,7 @@ void testModuleStates(const QDir& directory,const QJsonArray& objects) {
     assert(call(second,"External").typedReturnValue->asNumber()==1);
     assert(second.close() && reopened.close() && separate.close());
     testNumericModuleStates();
+    testNumericProcedureValues();
 }
 
 void testNumericModuleStates() {
@@ -169,4 +171,72 @@ End Sub
     linaccess::resetVbaProjectState(db);
     assert(call(second,"External").typedReturnValue->asNumber()==40000 && call(separate,"External").typedReturnValue->asNumber()==80000);
     assert(second.close() && separate.close() && reopened.close());
+}
+
+void testNumericProcedureValues() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","numeric-procedure-values"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    assert(sql.exec("CREATE TABLE numeric_local_audit(small INTEGER,wide INTEGER)")); assert(sql.exec("CREATE TABLE numeric_local_events(kind TEXT)"));
+    const QByteArray code=R"VBA(Function SaveValues(ByVal input As Integer) As Long
+Dim small As Integer
+Dim wide As Long
+small=input+0.5
+Call AdvanceInteger(small)
+wide=40000+small
+CurrentDb.Execute "INSERT INTO numeric_local_audit VALUES("&CStr(small)&","&CStr(wide)&")"
+SaveValues=wide+0.5
+End Function
+Sub AdvanceInteger(ByRef value As Integer)
+value=value+1
+End Sub
+Sub ChangeLong(ByRef value As Long)
+CurrentDb.Execute "INSERT INTO numeric_local_events VALUES('entered')"
+value=value+1
+End Sub
+Function RejectReference() As String
+Dim narrow As Integer
+narrow=3
+On Error Resume Next
+Call ChangeLong(narrow)
+RejectReference=CStr(Err.Number)&":"&CStr(narrow)
+End Function
+Function TemporaryReference() As Integer
+Dim narrow As Integer
+narrow=3
+Call ChangeLong((narrow))
+TemporaryReference=narrow
+End Function
+Function ReturnOverflow() As Integer
+ReturnOverflow=32768
+End Function
+Sub BadLoop()
+Dim i As Integer
+For i=1 To 2.5
+CurrentDb.Execute "INSERT INTO numeric_local_events VALUES('bad loop')"
+Next i
+End Sub
+Sub BadEnumerator(items As Object)
+Dim item As Long
+CurrentDb.Execute "INSERT INTO numeric_local_events VALUES('bad enum')"
+For Each item In items
+Next item
+End Sub
+)VBA";
+    AccessFormPreview form("numeric procedure","Begin Form\nBegin Section\nBegin TextBox\nName =\"display\"\nEnd\nEnd\nEnd",code,db);
+    std::vector<VbaValue> args{VbaValue::numeric(2.5)};
+    auto result=form.executeProcedure("SaveValues",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==40004 && args[0].asNumber()==2.5);
+    assert(sql.exec("SELECT small,wide FROM numeric_local_audit") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==40003); sql.finish();
+    for(const auto& invalid:std::vector<std::pair<VbaValue,int>>{{VbaValue{},94},{VbaValue::numeric(32768),6},{VbaValue::string("bad"),13}}) {
+        args={invalid.first}; result=form.executeProcedure("SaveValues",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==invalid.second);
+    }
+    assert(sql.exec("SELECT COUNT(*) FROM numeric_local_audit") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    args.clear(); result=form.executeProcedure("RejectReference",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="13:3");
+    assert(sql.exec("SELECT COUNT(*) FROM numeric_local_events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
+    result=form.executeProcedure("TemporaryReference",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==3);
+    result=form.executeProcedure("ReturnOverflow",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==6);
+    result=form.executeProcedure("BadLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==3251);
+    args={makePreviewFormObject(form)->member("Controls",{})}; result=form.executeProcedure("BadEnumerator",args); assert(result.status==linaccess::VbaExecutionStatus::Unsupported && result.errorNumber==3251);
+    assert(sql.exec("SELECT COUNT(*) FROM numeric_local_events") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    assert(form.close());
 }

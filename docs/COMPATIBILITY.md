@@ -563,3 +563,10 @@ preservation, visibility, per-form/private and shared project state, reset and
 actual SQL execution. This establishes storage/assignment scope, with full
 numeric subtype/intermediate arithmetic/ByRef/array/class behavior still open;
 see [Numeric module fields](NUMERIC_MODULE_FIELDS_RUNTIME.md).
+
+Procedure-local Integer/Long assignments, parameters, results and integral For
+counters now use checked widths. Core/native GUI/SQL tests cover conversion,
+write preservation, ByVal input, known ByRef conflicts and temporaries, copyback
+and pre-effect invalid targets. Fractional typed For bounds reject explicitly;
+full subtype/promotion/Variant-reference/loop/compile timing remains open. See
+[Numeric procedure values](NUMERIC_PROCEDURE_VALUES_RUNTIME.md).
