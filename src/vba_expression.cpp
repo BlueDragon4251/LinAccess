@@ -577,6 +577,11 @@ private:
                 if (args.size()!=1) throw error("IsArray requires one argument",450);
                 return VbaValue::logical(args[0].kind==VbaValue::Kind::ByteArray);
             }
+            if (word=="cbool") {
+                if (!host_) return {};
+                if (args.size()!=1) throw error("CBool requires one argument",450);
+                return coerceVbaModuleValue(scalarObjectValue(args.front()),"boolean");
+            }
             if (word=="ccur" || word=="vartype" || word=="typename") {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Conversion/type function requires one argument",450);

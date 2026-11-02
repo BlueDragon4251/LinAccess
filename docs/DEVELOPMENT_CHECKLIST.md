@@ -517,3 +517,7 @@ Full targets remain open:
 - [x] Declared SQL BIT/BOOLEAN/LOGICAL/LOGICAL1/YESNO parameter aliases, strict
   finite Boolean binding, NULL preservation and real DAO UPDATE/error atomicity
   tests; full Parameter metadata, assignment timing and Variant/locale identity open.
+
+- [x] Native VBA CBool with Boolean kind/type identity, Empty/numeric/Currency/
+  text/object conversion, strict argument/error checks and actual DAO persistence;
+  full locale/Date/SQL conversion and other numeric conversion functions open.

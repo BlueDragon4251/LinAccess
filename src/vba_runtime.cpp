@@ -787,6 +787,7 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
         if (value.kind==VbaValue::Kind::Text) {
             const auto text=lower(trim(value.text));
             if (text=="true" || text=="false") return VbaValue::logical(text=="true");
+            return VbaValue::logical(VbaValue::string(trim(value.text)).asNumber()!=0);
         }
         try { return VbaValue::logical(value.asNumber()!=0); }
         catch (...) { throw VbaRuntimeError(13,"Module Boolean field type mismatch"); }

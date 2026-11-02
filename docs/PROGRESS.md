@@ -1537,3 +1537,18 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubunt
 package installations pass backend execution and GUI startup. All four fixture
 hashes pass; repository privacy remains enabled. Previous 4ffa700 private CI
 is still running at this checkpoint; no CI success is assumed.
+
+## 2026-11-02 — Native VBA CBool conversion
+
+Added actual Boolean CBool results, one-time object scalar resolution and native
+94/13/91/450 errors. Shared typed Boolean conversion now accepts numeric text
+with surrounding spaces. Core and real VBA/DAO tests verify Boolean type identity,
+Currency, Empty, text/numeric conversion, errors and stored SQL zero/true=-1.
+Targeted tests 2/2 (1.18 s). Scope and remaining gaps: CBOOL_RUNTIME.md.
+
+Full validation: host 22/22 (78.97 s), Debian 12 22/22 (76.80 s), Ubuntu
+24.04 22/22 (67.83 s), GUI-disabled core 1/1 (1.57 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks; isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass; repository remains private. Previous 3add688 private CI is still
+running at this checkpoint, not counted as success.

@@ -69,6 +69,25 @@ void testBooleanQueryParameters() {
     QSqlQuery sql(db);
     assert(sql.exec("CREATE TABLE flags(flag INTEGER)"));
     assert(sql.exec("INSERT INTO flags VALUES(7)"));
+    Host host(db);
+    const auto converted=linaccess::executeVbaProcedure(R"VBA(Sub ConvertBoolean()
+Dim definition As DAO.QueryDef
+Set definition=CurrentDb.CreateQueryDef("", "PARAMETERS p BIT; UPDATE flags SET flag=[p]")
+definition.Parameters("p").Value=CBool("False")
+definition.Execute
+Me!FalseType=TypeName(CBool(0))
+Me!TrueNumber=CStr(CLng(CBool(-2.5)))
+On Error Resume Next
+definition.Parameters("p").Value=CBool(Null)
+Me!NullError=CStr(Err.Number)
+definition.Parameters("p").Value=CBool("invalid")
+Me!TypeError=CStr(Err.Number)
+End Sub
+)VBA","ConvertBoolean",host);
+    assert(converted.status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["FalseType"]=="Boolean" && host.fields["TrueNumber"]=="-1");
+    assert(host.fields["NullError"]=="94" && host.fields["TypeError"]=="13");
+    assert(sql.exec("SELECT flag FROM flags") && sql.next() && sql.value(0).toInt()==0); sql.finish();
     auto database=linaccess::makeDaoDatabase(db);
     using linaccess::VbaValue;
     for (const auto& alias : {"BIT","BOOLEAN","LOGICAL","LOGICAL1","YESNO"}) {

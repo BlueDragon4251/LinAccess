@@ -1570,6 +1570,12 @@ End Sub
     assert(evaluate("Not 1 = 2").truthy());
     assert(evaluate("6 And 3").asNumber() == 2);
     assert(evaluate("4 Or 1").asNumber() == 5);
+    assert(evaluate("CBool(Empty)").kind==VbaValue::Kind::Boolean && !evaluate("CBool(Empty)").boolean);
+    assert(!evaluate("CBool(0)").boolean && evaluate("CBool(-0.25)").boolean);
+    assert(!evaluate("CBool(\"False\")").boolean && evaluate("CBool(\" TrUe \")").boolean);
+    assert(evaluate("CBool(\" 2.5 \")").boolean && !evaluate("CBool(\" 0 \")").boolean);
+    assert(evaluate("CBool(CCur(\"0.0001\"))").boolean);
+    assert(evaluate("VarType(CBool(1))").asNumber()==11 && evaluate("TypeName(CBool(0))").asText()=="Boolean");
     assert(evaluate("CLng(2.5)").asNumber() == 2);
     assert(evaluate("CLng(3.5)").asNumber() == 4);
     assert(evaluate("CLng(-2.5)").asNumber() == -2);
@@ -1605,6 +1611,13 @@ End Sub
     const auto substringError=[&](const char* expression,int expected) {
         int number=0; try { (void)evaluate(expression); } catch(const VbaRuntimeError& failure) { number=failure.number; } if(number!=expected) std::cerr<<"Substring error: expected="<<expected<<", actual="<<number<<", expression="<<expression<<"\n"; assert(number==expected);
     };
+    substringError("CBool(Null)",94); substringError("CBool(CVErr(2015))",13);
+    substringError("CBool(\"\")",13); substringError("CBool(\"invalid\")",13);
+    substringError("CBool()",450); substringError("CBool(1,2)",450);
+    substringError("CBool(Nothing)",91);
+    scalarProbe->value=VbaValue::string("False"); const auto beforeBoolean=scalarProbe->reads;
+    const auto convertedBoolean=evaluateVbaExpression("CBool(probe)",host,scalarValues);
+    assert(convertedBoolean.kind==VbaValue::Kind::Boolean && !convertedBoolean.boolean && scalarProbe->reads==beforeBoolean+1);
     substringError("CLng(Null)",94); substringError("CDbl(Null)",94);
     substringError("Left$(Null,2)",94); substringError("Mid$(Null,1)",94);
     substringError("Left(\"abc\",Null)",94); substringError("Left(\"abc\",-1)",5);

@@ -581,3 +581,7 @@ Full Variant/object-default/locale/compiler/reference semantics remain open; see
 Declared Boolean SQL parameter aliases and strict pre-execution Boolean binding
 are documented in SQL_BOOLEAN_PARAMETERS.md. This is bounded SQL/DAO support,
 not full DAO type metadata or Variant coercion parity.
+
+Native VBA CBool returns Boolean values with checked scalar conversion, including
+shared whitespace handling for numeric Boolean text. See CBOOL_RUNTIME.md for
+actual DAO persistence tests and remaining Date/locale/SQL/subtype limitations.
