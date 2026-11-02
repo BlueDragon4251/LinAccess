@@ -561,3 +561,7 @@ Full targets remain open:
 - [x] Native Ctrl+Plus/Ctrl+Shift+Equals new-row navigation and documented
   RunCommand 28/65-68, KeyPreview/validation/policy/no-INSERT/SendKeys Qt/SQL tests;
   full keyboard/layout/navigation/MDI/query semantics remain open.
+
+- [x] Native Ctrl+Minus/SendKeys deletion through actual validation/callback/
+  confirmation/savepoint behavior, Qt No/Yes/default-No and foreign-key tests;
+  batch/datasheet/query/complete keyboard and Windows event identity remain open.

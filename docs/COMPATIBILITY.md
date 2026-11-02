@@ -634,3 +634,8 @@ Native Ctrl+Plus/Ctrl+Shift+Equals and RunCommand new/next/previous/first/last n
 use bounded active-document navigation, with real Qt/VBA/SQL policy/validation/
 no-INSERT regressions. See NEW_RECORD_SHORTCUT_RUNTIME.md; full keyboard/layout/
 MDI/updatable-query parity remains open.
+
+Native Ctrl+Minus/SendKeys use the existing bounded form Delete Record pipeline,
+with fixture-independent real Qt No/Yes/default-No, callback/validation and
+foreign-key regressions. See DELETE_KEY_RUNTIME.md; full datasheet/batch/query
+and exact Windows keyboard/event behavior remain open.

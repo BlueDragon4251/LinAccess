@@ -2371,6 +2371,9 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
             || (event->key()==Qt::Key_Equal && modifiers==(Qt::ControlModifier|Qt::ShiftModifier))) {
             (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(28)}); return true;
         }
+        if (event->key()==Qt::Key_Minus && modifiers==Qt::ControlModifier) {
+            (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(223)}); return true;
+        }
         if (event->key()==Qt::Key_Apostrophe && modifiers==Qt::ControlModifier) {
             ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
             auto* line=qobject_cast<QLineEdit*>(QApplication::focusWidget());

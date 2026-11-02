@@ -1747,3 +1747,20 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubunt
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass; repository remains private. Previous 1670fd1 private CI completed
 successfully.
+
+## 2026-11-02 — Native record deletion shortcut
+
+Added Ctrl+Minus through the existing active-document deletion command. A new
+fixture-independent Qt/VBA/SQL CTest verifies KeyPreview/policies/validation,
+Delete and confirmation callback cancellation, default-No real dialogs, user
+No/Yes, SendKeys and an attempted deletion rejected by a foreign key. Data and
+position/after-status checks cover rollback and commit behavior. Targeted tests
+pass 2/2 (0.90 s); GUI suite now has 25 CTests. Full batch/datasheet/query/Windows
+keyboard identity remains open. No business execution increment. See DELETE_KEY_RUNTIME.md.
+
+Full validation: host 25/25 (76.88 s), Debian 12 25/25 (81.66 s), Ubuntu
+24.04 25/25 (72.69 s), GUI-disabled core 1/1 (1.31 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass; repository remains private. Previous 07d8511 private CI completed
+successfully.
