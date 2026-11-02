@@ -48,6 +48,8 @@ public:
     static bool closeProjectDocuments(const QSqlDatabase& database);
     static bool closeApplicationDocuments();
     static void quitApplication();
+    static void activateDatabaseWindow(QSqlDatabase database,QWidget* window);
+    static bool databaseWindowActive(QWidget* window=nullptr);
     static AccessFormPreview* showDocument(linaccess::AccessDocumentKind kind,QString name,
         const QByteArray& source,const QByteArray& vba,QSqlDatabase database,QWidget* projectOwner=nullptr);
     void accept() override;
@@ -182,6 +184,7 @@ private:
     bool directTable_{};
     bool openCancelled_{};
     bool opened_{};
+    bool hasActivated_{};
     bool nativeActivationPending_{};
     bool initialCurrentDeferred_{};
     bool initialCurrentDispatched_{};

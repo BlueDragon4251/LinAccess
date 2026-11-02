@@ -899,6 +899,7 @@ public:
         auto& owner=checked(); const auto key=text(name).toCaseFolded();
         if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected Screen arguments");
         if (key=="activeform") {
+            if(AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(2450,"Active form unavailable in database window");
             auto* form=activePreviewDocument();
             if (!form) for (auto* widget=QApplication::activeWindow();widget;widget=widget->parentWidget())
                 if (auto* candidate=dynamic_cast<AccessFormPreview*>(widget)) { form=candidate; break; }
@@ -908,6 +909,7 @@ public:
             throw linaccess::VbaRuntimeError(2450,"Active form unavailable");
         }
         if (key=="activecontrol") {
+            if(AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(2474,"Active control unavailable in database window");
             QWidget* focus=QApplication::focusWidget();
             if (auto* document=activePreviewDocument();document && !document->closed_ && !document->openCancelled_
                 && document->db_.connectionName()==owner.db_.connectionName() && document->db_.databaseName()==owner.db_.databaseName())
@@ -933,6 +935,7 @@ public:
             return dispatchPreviewDocumentCommand(preview,key.toStdString(),args);
         if (key=="gotocontrol") {
             if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"GoToControl requires a control name");
+            if(preview.hasActivated_ && AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(2046,"GoToControl requires an active native document");
             if (args[0].kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null control name");
             auto requested=text(args[0].asText());
             if (requested.startsWith('[') && requested.endsWith(']')) { requested=requested.mid(1,requested.size()-2); requested.replace("]]","]"); }

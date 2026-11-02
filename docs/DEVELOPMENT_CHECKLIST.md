@@ -448,3 +448,8 @@ Full targets remain open:
   window/file-dialog/explorer route, singleton reuse, modal metadata, Open/
   Unload cancellation, SQL saving and deferred self-close/MsgBox lifetime;
   legacy generated-form modal migration and complete MDI/F11 remain open.
+
+- [x] Bounded Access 2003 F11 explorer activation/restored splitter, native
+  KeyPreview/control cancellation, modal blocking, logical database-window
+  context, stale-form command guards, explicit-owner saving and Screen/
+  activation/early-Current regression through the actual main-window GUI.

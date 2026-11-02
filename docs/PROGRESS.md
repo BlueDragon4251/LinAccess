@@ -1271,3 +1271,26 @@ pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass; repository privacy is unchanged. Earlier
 QBColor commit 6920d36 completed private CI successfully.
+
+## 2026-11-02 — Classic F11 and database-window context
+
+F11 activates the actual main project explorer and restores collapsed width,
+matching the archived 2003 bring-to-front contract rather than modern hide/show.
+It follows native KeyPreview/BeforeUpdate handling, respects modal windows and
+does not call form-record save. Logical database-window context clears stale
+Screen targets and blocks default record/GoToControl operations; unsupported
+Close/SendKeys targets reject explicitly. Named/explicit-owner scopes retain
+existing behavior, including Me.Dirty=False while the explorer is active.
+A first-activation marker preserves early Current initialization. Actual GUI/
+SQL tests cover all these paths, repeated F11, Deactivate/Activate, modal/control
+cancellation and the existing close/MsgBox/project-switch regressions. Final
+targeted trio: 3/3 (39.79 s). Original lexical vbKeyF11/SelectObject inventories
+are zero across 32 modules, with no new business-execution claim. Full WM/MDI/
+keyboard/error identity remains open; see DATABASE_WINDOW_RUNTIME.md.
+
+Final validation: host 22/22 (90.58 s), Debian 12 22/22 (72.36 s), Ubuntu
+24.04 22/22 (66.48 s), GUI-disabled core 1/1 (1.08 s). Fresh host/distro DEBs
+pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
+installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+All four original fixture hashes pass. Earlier main-window document commit
+da225b8 completed private CI successfully.

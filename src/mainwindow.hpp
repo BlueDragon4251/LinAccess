@@ -8,14 +8,18 @@
 class QTabWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
+class QKeyEvent;
 
 class MainWindow final : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
+    Q_INVOKABLE void focusDatabaseWindow();
 
 private:
+    bool eventFilter(QObject* watched,QEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
     QSqlDatabase db_;
     QString databasePath_;

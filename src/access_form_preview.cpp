@@ -64,6 +64,8 @@ QPointer<AccessFormPreview>& activeDocument() {
     static QPointer<AccessFormPreview> document;
     return document;
 }
+struct DatabaseWindowContext { QPointer<QWidget> window; QString project; };
+DatabaseWindowContext& databaseWindowContext() { static DatabaseWindowContext context; return context; }
 QSet<QString>& closingProjects() { static QSet<QString> projects; return projects; }
 QString projectKey(const QSqlDatabase& db) { return db.connectionName()+QChar(0)+db.databaseName(); }
 int& nativeExecutionDepth() { static thread_local int depth=0; return depth; }
@@ -547,11 +549,13 @@ public:
         (void)database->member("Execute",{linaccess::VbaValue::string(std::string(statement))});
     }
     void sendKeys(std::string_view keys,bool wait) override {
+        if (preview_.hasActivated_ && AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(3251,"Database-window SendKeys target is not implemented");
         linaccess::sendNativeKeys(&preview_,QString::fromUtf8(keys.data(),keys.size()),wait,
             [preview=QPointer<AccessFormPreview>(&preview_)](int number) {
                 if (preview && preview->status_) preview->status_->setText("SendKeys: Fehler "+QString::number(number));
             },[context=QPointer<AccessFormPreview>(&preview_)]() -> QWidget* {
                 if (!context || context->closed_ || context->openCancelled_) return nullptr;
+                if (context->hasActivated_ && AccessFormPreview::databaseWindowActive()) return nullptr;
                 auto* document=activePreviewDocument();
                 if (!context->opened_ || !document || document->closed_ || document->openCancelled_
                     || document->db_.connectionName()!=context->db_.connectionName() || document->db_.databaseName()!=context->db_.databaseName()) document=context;
@@ -567,6 +571,7 @@ public:
     }
 private:
     AccessFormPreview& commandDocument() {
+        if (preview_.hasActivated_ && AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(2046,"Record command requires an active native document");
         auto* document=activePreviewDocument();
         if (preview_.opened_ && document && !document->closed_ && !document->openCancelled_
             && document->db_.connectionName()==preview_.db_.connectionName() && document->db_.databaseName()==preview_.db_.databaseName()) return *document;
@@ -813,8 +818,23 @@ bool AccessFormPreview::event(QEvent* event) {
     return result;
 }
 
+bool AccessFormPreview::databaseWindowActive(QWidget* window) { return databaseWindowContext().window && (!window || databaseWindowContext().window==window); }
+
+void AccessFormPreview::activateDatabaseWindow(QSqlDatabase database,QWidget* window) {
+    if (!window || !database.isOpen() || QApplication::activeModalWidget()) return;
+    auto& context=databaseWindowContext();
+    if(context.window==window && context.project==projectKey(database)) return;
+    ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+    context={window,projectKey(database)};
+    const auto previous=activeDocument(); activeDocument().clear();
+    if(previous && previous->opened_ && !previous->closed_ && !previous->openCancelled_)
+        (void)previous->formEvent("OnDeactivate","Form_Deactivate");
+}
+
 void AccessFormPreview::activateDocument() {
     if (!opened_ || closed_ || closing_ || openCancelled_ || !isWindow()) return;
+    hasActivated_=true;
+    databaseWindowContext()={};
     auto& active=activeDocument();
     if (active==this) return;
     const auto previous=active;
@@ -2004,6 +2024,8 @@ bool AccessFormPreview::setModuleMember(std::string_view name,const linaccess::V
 void AccessFormPreview::closeOtherDocument(int type,const std::optional<QString>& name,int save) {
     if (type!=-1 && type!=2 && type!=3) throw linaccess::VbaRuntimeError(3251,"Closing this object type is unsupported");
     if (save<0 || save>2) throw linaccess::VbaRuntimeError(5,"Invalid Close save option");
+    if (hasActivated_ && databaseWindowActive() && (!name || name->isEmpty()))
+        throw linaccess::VbaRuntimeError(3251,"Default database-window Close target is not implemented");
     const auto matches=[&](AccessFormPreview* document) {
         return document && document->isWindow() && !document->closed_ && !document->openCancelled_
             && document->db_.connectionName()==db_.connectionName()
@@ -2159,6 +2181,17 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
     if (closed_ || openCancelled_) return false;
     const auto modifiers=event->modifiers() & ~Qt::KeypadModifier;
     try {
+        if(event->key()==Qt::Key_F11 && modifiers==Qt::NoModifier) {
+            if(isModal() || QApplication::activeModalWidget()) return true;
+            QWidget* owner=nullptr;
+            for(auto* ancestor=parentWidget();ancestor;ancestor=ancestor->parentWidget())
+                if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+            if(!owner || owner->metaObject()->indexOfMethod("focusDatabaseWindow()")<0) return false;
+            ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+            if(!commitControls() || closed_ || openCancelled_) return true;
+            (void)QMetaObject::invokeMethod(owner,"focusDatabaseWindow",Qt::DirectConnection);
+            return true;
+        }
         if (event->key()==Qt::Key_C && modifiers==Qt::ControlModifier && recordSelected_) {
             (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(190)}); return true;
         }

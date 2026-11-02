@@ -1,6 +1,7 @@
 #include "mainwindow.hpp"
 #include "native_input_box.hpp"
 #include <QCloseEvent>
+#include <QKeyEvent>
 
 #include "access_inspector.hpp"
 #include "access_form_import.hpp"
@@ -164,6 +165,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* splitter = new QSplitter(this);
     explorer_ = new QTreeWidget(splitter);
     explorer_->setObjectName("database-explorer");
+    explorer_->installEventFilter(this);
     explorer_->setHeaderHidden(true);
     explorer_->setMinimumWidth(220);
     tabs_ = new QTabWidget(splitter);
@@ -205,6 +207,30 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
     viewMenu->addAction(projectActions.last());
     statusBar()->showMessage("Neue SQLite-Datenbank erstellen oder Access-Datei untersuchen");
+}
+
+void MainWindow::focusDatabaseWindow() {
+    if(!db_.isOpen() || QApplication::activeModalWidget()) return;
+    AccessFormPreview::activateDatabaseWindow(db_,this);
+    if(!AccessFormPreview::databaseWindowActive(this)) return; // A handler may activate another document.
+    if(isMinimized()) showNormal(); else show();
+    raise(); activateWindow(); explorer_->show();
+    if(auto* splitter=qobject_cast<QSplitter*>(explorer_->parentWidget())) {
+        auto sizes=splitter->sizes();
+        if(sizes.size()>1 && sizes[0]==0) { sizes[0]=qMax(200,splitter->width()/5); sizes[1]=qMax(1,splitter->width()-sizes[0]); splitter->setSizes(sizes); }
+    }
+    explorer_->setFocus(Qt::ShortcutFocusReason);
+}
+
+bool MainWindow::eventFilter(QObject* watched,QEvent* event) {
+    if(watched==explorer_ && event->type()==QEvent::FocusIn && db_.isOpen())
+        AccessFormPreview::activateDatabaseWindow(db_,this);
+    return QMainWindow::eventFilter(watched,event);
+}
+
+void MainWindow::keyPressEvent(QKeyEvent* event) {
+    if(event->key()==Qt::Key_F11 && event->modifiers()==Qt::NoModifier) { focusDatabaseWindow(); event->accept(); return; }
+    QMainWindow::keyPressEvent(event);
 }
 
 bool MainWindow::hasProject() {
@@ -272,6 +298,7 @@ void MainWindow::openDatabase(const QString& path) {
     setWindowTitle("LinAccess — " + QFileInfo(path).fileName());
     statusBar()->showMessage(path);
     refreshExplorer();
+    if(explorer_->hasFocus()) AccessFormPreview::activateDatabaseWindow(db_,this);
 }
 
 QStringList MainWindow::tableNames() {

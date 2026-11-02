@@ -478,3 +478,11 @@ lifetime are tested through the production main-window/file-dialog/explorer
 route on temporary projects. The legacy generated-form editor remains modal
 and full F11/MDI/designer parity stays open; see
 [Main-window documents](MAINWINDOW_DOCUMENT_RUNTIME.md).
+
+Classic F11 now activates the project explorer and restores collapsed width,
+after native KeyPreview/control validation, while modal forms retain focus.
+An explicit database-window context prevents stale-form record commands and
+Screen references; default database-window Close/SendKeys reject as unsupported
+rather than editing the last form. Native SQL/focus/error/early-Current checks
+pass through the actual main-window integration. Full MDI/keyboard/WM/error
+identity remains open; see [Database window](DATABASE_WINDOW_RUNTIME.md).

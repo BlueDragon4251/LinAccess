@@ -44,5 +44,6 @@ The older generated/partially converted LinAccess form editor still runs in its
 existing modal dialog and uses its prior nested opener. Converting only that
 child to nonmodal would leave it blocked by the still-modal legacy caller. Its
 renderer/host migration is a separate open task. Source inspector/editor dialogs
-otherwise retain their existing role. Full Access database-window/F11, MDI/menu/
+otherwise retain their existing role. Bounded classic F11/explorer focus now exists (DATABASE_WINDOW_RUNTIME.md).
+Full database-window command, MDI/menu/
 designer, acDialog and Windows modal/focus/event parity are not established here.
