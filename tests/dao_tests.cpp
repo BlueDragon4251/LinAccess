@@ -300,7 +300,10 @@ End Sub
     assert(sql.value(0).toInt()==3 && sql.value(1).toInt()==90);
     sql.finish();
     assert(sql.exec("CREATE TABLE text_lists(value TEXT)"));
-    const auto textLists=executeVbaProcedure(R"VBA(Sub SaveTextList()
+    const auto textLists=executeVbaProcedure(R"VBA(Function StoredLabel(ByVal text As String, Optional ByVal suffix As String="!") As String
+StoredLabel=text & suffix
+End Function
+Sub SaveTextList()
 Dim words As Variant, selected As Variant, item As Variant
 Dim result As String
 words=Split("alpha,beta,alps",",")
@@ -312,11 +315,11 @@ result=result & "|"
 End If
 result=result & item
 Next
-CurrentDb.Execute "INSERT INTO text_lists VALUES('" & result & "')"
+CurrentDb.Execute "INSERT INTO text_lists VALUES('" & StoredLabel(result) & "')"
 End Sub
 )VBA","SaveTextList",host);
     assert(textLists.status==VbaExecutionStatus::Completed);
-    assert(sql.exec("SELECT value FROM text_lists") && sql.next() && sql.value(0).toString()=="alpha|alt|alps");
+    assert(sql.exec("SELECT value FROM text_lists") && sql.next() && sql.value(0).toString()=="alpha|alt|alps!");
     sql.finish(); db.close();
 }
 int main(int argc, char** argv) {

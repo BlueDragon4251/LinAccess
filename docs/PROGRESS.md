@@ -2499,3 +2499,15 @@ original fixture hashes passed. Packaging used an installed staging tree to avoi
 recompiling unrelated test binaries. No new CTest target or full distribution
 matrix repetition.
 See VARIANT_ARRAY_RUNTIME.md and REVERSE_STRING_RUNTIME.md for exact boundaries.
+
+## Optional scalar parameter defaults (2026-11-02)
+
+Implemented omitted trailing Optional parameters with explicit scalar-literal
+defaults in native Sub/Function execution, fresh checked binding per call and
+preserved supplied ByRef/ByVal behavior. Required arity still fails 450. Native
+VBA function defaults also feed actual DAO insertions. Existing core/DAO targets
+pass 2/2 (1.53 s); desktop build passed. No new test target or full-suite/matrix
+rerun. Missing/IsMissing, positional holes, named arguments, Object/constant
+expression defaults and complete Optional/ParamArray semantics remain open.
+The previous combined package validation belongs to 7dd65e5; this incremental
+parameter segment has not yet repeated package/headless/distribution validation.

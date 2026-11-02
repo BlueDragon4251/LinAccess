@@ -2319,5 +2319,31 @@ End Sub
     assert(evaluate("StrReverse(\"abö\")").asText()=="öba");
     substringError("InStrRev(Null,\"a\")",94); substringError("InStrRev(\"a\",\"a\",0)",5);
     substringError("StrReverse(Null)",94); substringError("StrReverse(\"😀\")",3251);
+    const auto optionalArguments=executeVbaProcedure(R"VBA(Function Describe(ByVal quantity As Long, Optional ByVal factor As Long=2, Optional ByVal prefix As String="A,B") As String
+Describe=prefix & ":" & CStr(quantity*factor)
+End Function
+Sub OptionalCounter(Optional ByRef counter As Long=7)
+counter=counter+1
+Me!DefaultCounter=CStr(counter)
+End Sub
+Sub OptionalArguments()
+Dim counter As Long
+Me!DefaultArgs=Describe(3)
+Me!ExplicitArgs=Describe(3,4,"custom")
+Call OptionalCounter()
+counter=10
+Call OptionalCounter(counter)
+Me!ExplicitCounter=CStr(counter)
+Call OptionalCounter()
+On Error Resume Next
+Me!RequiredMissing=Describe()
+Me!MissingArgumentError=CStr(Err.Number)
+End Sub
+)VBA","OptionalArguments",host);
+    if(optionalArguments.status!=VbaExecutionStatus::Completed) std::cerr<<"Optional error="<<optionalArguments.errorNumber<<" line="<<optionalArguments.line<<"\n";
+    assert(optionalArguments.status==VbaExecutionStatus::Completed);
+    assert(host.fields["DefaultArgs"]=="A,B:6" && host.fields["ExplicitArgs"]=="custom:12");
+    assert(host.fields["DefaultCounter"]=="8" && host.fields["ExplicitCounter"]=="11");
+    assert(host.fields["MissingArgumentError"]=="450");
     std::cout << "Core tests passed\n";
 }

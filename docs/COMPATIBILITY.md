@@ -874,3 +874,11 @@ live later-element updates on named sources. See [array limits](VARIANT_ARRAY_RU
 InStrRev/StrReverse execute in both VBA and compiled native SQL, including scalar
 projection aliases and typed error transport; see [string boundaries](REVERSE_STRING_RUNTIME.md).
 These changes do not establish full array, Unicode BSTR or Jet function parity.
+
+## Optional parameter defaults
+
+Sub/Function calls support omitted trailing Optional scalar arguments with
+explicit literal defaults and existing ByRef/ByVal binding for supplied values.
+See [exact supported declaration and call boundaries](OPTIONAL_ARGUMENT_RUNTIME.md).
+Missing/IsMissing, positional holes, named arguments and full Optional/ParamArray
+semantics remain open.

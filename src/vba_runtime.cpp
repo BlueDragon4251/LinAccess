@@ -212,7 +212,7 @@ public:
     }
 };
 
-struct Parameter { std::string name; bool byReference{true}; std::string type; };
+struct Parameter { std::string name; bool byReference{true}; std::string type; bool optional{}; std::string defaultExpression; };
 std::vector<std::string> splitArguments(const std::string& input) {
     std::vector<std::string> args;
     if (trim(input).empty()) return args;
@@ -313,7 +313,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     const std::regex call(R"(^Call\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\((.*)\))?$)", std::regex::icase);
     const std::regex implicitCall(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+(.+)|\((.*)\))?$)", std::regex::icase);
     const std::regex memberCall(R"(^((?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)(?:[.!][A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\([^)]*\))?)+)\s+(.+)$)",std::regex::icase);
-    const std::regex parameter(R"(^(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(Byte|Integer|Long|String|Boolean|Double|Single|Currency|Variant|Object|DAO\.Recordset|DAO\.Database|DAO\.TableDef|DAO\.TableDefs|DAO\.Workspace|DAO\.Workspaces|DAO\.DBEngine))?$)", std::regex::icase);
+    const std::regex parameter(R"(^(?:(Optional)\s+)?(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(Byte|Integer|Long|String|Boolean|Double|Single|Currency|Variant|Object|DAO\.Recordset|DAO\.Database|DAO\.TableDef|DAO\.TableDefs|DAO\.Workspace|DAO\.Workspaces|DAO\.DBEngine))?(?:\s*=\s*(.+))?$)", std::regex::icase);
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
     const std::regex objectSet(R"(^Set\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
     const std::regex label(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*):$)");
@@ -365,11 +365,25 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 lower(match[2].str()) == lower(std::string(name))) {
                 const auto params = trim(match[3].str());
                 hasCancel = std::regex_match(params, cancelParam);
+                bool optionalSeen=false;
+                const std::regex defaultLiteral(R"CONST(^(?:"(?:[^"]|"")*"|[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|True|False|Empty|Null)$)CONST",std::regex::icase);
                 for (const auto& declaration : splitArguments(params)) {
                     std::smatch declared;
                     if (!std::regex_match(declaration, declared, parameter))
                         return {VbaExecutionStatus::Unsupported, "VBA-Parameterdeklaration nicht unterstützt", line};
-                    if (parameters) parameters->push_back({declared[2].str(), lower(declared[1].str()) != "byval",lower(declared[3].str())});
+                    const bool optional=declared[1].matched;
+                    const auto defaultExpression=trim(declared[5].str());
+                    if((optionalSeen && !optional) || (optional && defaultExpression.empty()) || (!optional && !defaultExpression.empty()))
+                        return {VbaExecutionStatus::Unsupported,"Optional parameters require explicit defaults and must follow required parameters",line};
+                    if(optional && (!std::regex_match(defaultExpression,defaultLiteral) || !validVbaExpression(defaultExpression)))
+                        return {VbaExecutionStatus::Unsupported,"Optional parameter defaults currently require scalar literals",line};
+                    const auto type=lower(declared[4].str());
+                    if(optional && lower(defaultExpression)=="null" && !type.empty() && type!="variant")
+                        return {VbaExecutionStatus::Unsupported,"Null defaults require a Variant parameter",line};
+                    if(optional && (type=="object" || type.starts_with("dao.")))
+                        return {VbaExecutionStatus::Unsupported,"Optional object parameters are not implemented",line};
+                    optionalSeen=optionalSeen || optional;
+                    if (parameters) parameters->push_back({declared[3].str(), lower(declared[2].str()) != "byval",type,optional,defaultExpression});
                 }
                 within = true;
                 isFunction = lower(match[1].str()) == "function";
@@ -969,18 +983,20 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         locals[name]=initialLocalValue(resultType); localTypes[name]=resultType;
     }
     const bool implicitCancel = hasCancel && !isFunction && arguments.empty();
-    if (!implicitCancel && parameters.size() != arguments.size()) {
+    const auto required=static_cast<std::size_t>(std::count_if(parameters.begin(),parameters.end(),[](const Parameter& parameter){ return !parameter.optional; }));
+    if (!implicitCancel && (arguments.size()<required || arguments.size()>parameters.size())) {
         VbaExecutionResult failure{VbaExecutionStatus::Error,"Falsche Argumentanzahl",0};
         failure.errorNumber=450; return failure;
     }
     try {
         for(std::size_t i=0;i<parameters.size();++i) {
             const auto& parameter=parameters[i]; const auto name=lower(parameter.name);
-            if(references && !implicitCancel && parameter.byReference && (*references)[i].indexedArray)
+            if(references && i<references->size() && !implicitCancel && parameter.byReference && (*references)[i].indexedArray)
                 throw VbaRuntimeError(3251,"ByRef array element binding is not implemented");
-            const auto value=implicitCancel ? VbaValue::numeric(0) : arguments[i];
+            const auto value=implicitCancel ? VbaValue::numeric(0) : i<arguments.size() ? arguments[i]
+                : evaluateVbaExpression(parameter.defaultExpression,host,{});
             const auto converted=checkedType(parameter.type) ? coerceVbaModuleValue(value,parameter.type) : value;
-            if(references && !implicitCancel && parameter.byReference && (*references)[i].source) {
+            if(references && i<references->size() && !implicitCancel && parameter.byReference && (*references)[i].source) {
                 const auto& sourceType=(*references)[i].type;
                 if((checkedType(parameter.type) || checkedType(sourceType)) && !sourceType.empty() && sourceType!="variant"
                     && !parameter.type.empty() && parameter.type!="variant" && sourceType!=parameter.type)
@@ -1004,7 +1020,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     struct Alias { std::string name; VbaValue* source; VbaValue before; std::string type; };
     std::vector<Alias> aliases;
     if (references && !implicitCancel)
-        for (std::size_t i = 0; i < parameters.size(); ++i)
+        for (std::size_t i = 0; i < parameters.size() && i<references->size(); ++i)
             if (parameters[i].byReference && (*references)[i].source)
                 aliases.push_back({lower(parameters[i].name), (*references)[i].source, *(*references)[i].source,(*references)[i].type});
     std::vector<std::shared_ptr<VbaModuleState>> stateOwners;
@@ -1064,7 +1080,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     };
     const auto copyArguments = [&] {
         if (!implicitCancel)
-            for (std::size_t i = 0; i < parameters.size(); ++i)
+            for (std::size_t i = 0; i < parameters.size() && i<arguments.size(); ++i)
                 if (parameters[i].byReference) arguments[i] = locals[lower(parameters[i].name)];
     };
     auto completed = [&](int line, bool exited) {

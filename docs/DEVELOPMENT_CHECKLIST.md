@@ -729,3 +729,7 @@ Full targets remain open:
   constructors, live later-element writes and value copies; full alias parity open.
 - [x] Native VBA and SQL InStrRev/StrReverse, UTF-16 positions, defaults,
   projection aliases and checked errors; full BSTR/locale/Jet typing remain open.
+
+- [x] Trailing Optional scalar parameters with explicit literal defaults,
+  checked per-call binding, preserved supplied ByRef/ByVal and real DAO effects;
+  Missing/named/positional-hole/full declaration parity remain open.
