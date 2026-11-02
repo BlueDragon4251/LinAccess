@@ -443,7 +443,7 @@ private:
             auto plan=queryPlan_;
             if (plan.sql.isEmpty()) plan.sql=source_;
             const auto result = executeAccessQueryPlan(db_,plan,bindings_);
-            data_->columns = result.columns; data_->rows = result.rows; data_->ids.clear(); finalize();
+            data_->columns = result.columns; data_->types=result.types; data_->rows = result.rows; data_->ids.clear(); finalize();
             return;
         }
         SqliteExecutionBudget budget(db_);

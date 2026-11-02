@@ -1470,7 +1470,7 @@ void AccessFormPreview::loadRecords() {
                 }
                 if (filterOn_) plan=linaccess::filterAccessQueryPlan(db_,plan,filter_);
                 auto result = linaccess::executeAccessQueryPlan(db_,plan,linaccess::bindAccessQueryParameters(plan,{}));
-                dataColumns_ = result.columns;
+                dataColumns_ = result.columns; dataTypes_=result.types;
                 dataTruncated_ = result.rows.size() > 10000;
                 recordRows_ = result.rows.mid(0,10000);
                 for (int i = 0; i < recordRows_.size(); ++i)

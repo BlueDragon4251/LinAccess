@@ -24,8 +24,9 @@ full validation is recorded in PROGRESS.md.
 
 This adds bounded typed parameter values and numeric binding. It does not add
 full-range storage, exact Currency SQL operators/aggregates/formatting, complete
-Jet coercion/type propagation or Windows parity. Query scalar results still use
-existing generic SQLite metadata. For exact formatted TEXT use explicit native
+Jet coercion/type propagation or Windows parity. [Proven root query projections](CURRENCY_QUERY_TYPES_RUNTIME.md) subsequently
+preserve Currency types; general query typing still uses existing generic SQLite
+metadata. For exact formatted TEXT use explicit native
 VBA formatting into Text parameters; automatic SQLite numeric-to-TEXT formatting
 is not claimed lossless for large amounts. Non-NULL Currency LIKE conversion
 explicitly diagnoses 3251. Currency width syntax is rejected by the bounded

@@ -2124,3 +2124,25 @@ Full validation: host 40/40 (100.19 s), Debian 12 40/40 (108.66 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 d1e3ac1 private CI completed successfully.
+
+## 2026-11-02 — Currency SQL references and proven query result types
+
+Reproduced rejected Currency SQL object scalars and missing query Field.Type
+(0/2). Added checked numeric object encoding and proven root CCur/Currency-
+parameter projection descriptors, carried through results into DAO/Qt controls
+and exact query-table display. Filters preserve descriptors; ambiguous/wildcard/
+set operations keep unknown types. Native object/result/converter/parameter/
+field regressions pass 5/5 (0.25 s); extended report/saved-query/TOP/empty tests
+pass 2/2 (0.12 s). Checks include accepted pending Value/no save, ranges, numeric
+comparison, Forms/Formulare/Reports/Berichte/.Value, Nullable/EOF, parentheses/
+unary signs, DISTINCT, filters and actual readonly Qt display. GUI suite has
+42 CTests. General SQL typing/object grammar/SQL Screen/locale/money arithmetic/
+Windows identity remain open; no full original business workflow increment.
+See CURRENCY_QUERY_TYPES_RUNTIME.md.
+
+Full validation: host 42/42 (120.79 s), Debian 12 42/42 (103.74 s), Ubuntu
+24.04 42/42 (89.02 s), Debian 13 42/42 (89.21 s), GUI-disabled core 1/1
+(1.89 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+ca35ddd private CI completed successfully.

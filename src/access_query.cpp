@@ -1,4 +1,5 @@
 #include "access_query.hpp"
+#include <functional>
 #include "vba_qt_value.hpp"
 #include "jet_sql_functions.hpp"
 #include "sqlite_execution.hpp"
@@ -229,6 +230,59 @@ void adaptObjectReferences(QVector<Token>& tokens,qsizetype start) {
         i+=replacement.size()-1;
     }
 }
+QVector<QString> currencyProjectionTypes(const QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters) {
+    const auto word=[&](qsizetype i,const char* text) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(text,Qt::CaseInsensitive)==0; };
+    if(!word(start,"SELECT")) return {};
+    int depth=0;
+    for(qsizetype i=start+1;i<tokens.size();++i) {
+        if(symbol(tokens[i],"(")) ++depth;
+        else if(symbol(tokens[i],")")) --depth;
+        else if(depth==0 && (word(i,"UNION") || word(i,"INTERSECT") || word(i,"EXCEPT"))) return {};
+    }
+    const auto name=[](const Token& value) { return value.kind==Token::Word || value.kind==Token::Identifier; };
+    std::function<QString(QVector<Token>,int)> typeOf=[&](QVector<Token> expression,int recursion)->QString {
+        if(recursion>64 || expression.isEmpty()) return {};
+        while(expression.size()>=2 && symbol(expression.front(),"(")) {
+            int nesting=0; qsizetype close=-1;
+            for(qsizetype i=0;i<expression.size();++i) {
+                if(symbol(expression[i],"(")) ++nesting;
+                else if(symbol(expression[i],")") && --nesting==0) { close=i; break; }
+            }
+            if(close!=expression.size()-1) break;
+            expression=expression.mid(1,expression.size()-2);
+        }
+        if(expression.isEmpty()) return {};
+        if(expression.size()>1 && (symbol(expression.front(),"+") || symbol(expression.front(),"-"))) return typeOf(expression.mid(1),recursion+1);
+        if(expression.size()==1 && name(expression.front())) {
+            for(const auto& parameter:parameters) if(parameter.type=="currency" && parameter.name.compare(expression.front().value,Qt::CaseInsensitive)==0) return "CURRENCY_REAL";
+        }
+        if(expression.size()<4 || expression.front().kind!=Token::Word || expression.front().value.compare("CCur",Qt::CaseInsensitive)!=0 || !symbol(expression[1],"(") || !symbol(expression.back(),")")) return {};
+        int nesting=0;
+        for(qsizetype i=1;i<expression.size();++i) {
+            if(symbol(expression[i],"(")) ++nesting;
+            else if(symbol(expression[i],")")) { if(--nesting==0 && i!=expression.size()-1) return {}; }
+            else if(nesting==1 && symbol(expression[i],",")) return {};
+        }
+        return nesting==0 ? QString("CURRENCY_REAL") : QString{};
+    };
+    qsizetype first=start+1;
+    if(word(first,"DISTINCT") || word(first,"DISTINCTROW") || word(first,"ALL")) ++first;
+    if(word(first,"TOP")) first+=2;
+    QVector<QString> result; depth=0;
+    for(qsizetype i=first;i<=tokens.size();++i) {
+        const bool end=i==tokens.size() || (depth==0 && (word(i,"FROM") || word(i,"INTO") || word(i,"WHERE") || word(i,"ORDER") || word(i,"GROUP") || word(i,"HAVING") || symbol(tokens[i],";")));
+        if(end || (depth==0 && symbol(tokens[i],","))) {
+            auto expression=tokens.mid(first,i-first);
+            if(expression.size()>=3 && expression[expression.size()-2].kind==Token::Word && expression[expression.size()-2].value.compare("AS",Qt::CaseInsensitive)==0 && name(expression.back())) expression.resize(expression.size()-2);
+            if((expression.size()==1 && symbol(expression.front(),"*")) || (expression.size()>=3 && symbol(expression.back(),"*") && symbol(expression[expression.size()-2],"."))) return {};
+            result.append(typeOf(expression,0)); first=i+1;
+            if(end) break;
+        } else if(symbol(tokens[i],"(")) ++depth;
+        else if(symbol(tokens[i],")")) --depth;
+    }
+    return result;
+}
+
 void preserveQualifiedProjectionNames(QVector<Token>& tokens,qsizetype start) {
     const auto word=[&](qsizetype i,const char* value) {
         return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0;
@@ -693,6 +747,7 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
         }
     }
     require(pos < tokens.size(), "Jet SQL: query body required");
+    plan.resultTypes=currencyProjectionTypes(tokens,pos,plan.parameters);
     if (tokens[pos].kind==Token::Word && tokens[pos].value.compare("UPDATE",Qt::CaseInsensitive)==0) {
         for (auto i=pos+1;i<tokens.size();++i) {
             if (tokens[i].kind==Token::Word && tokens[i].value.compare("SET",Qt::CaseInsensitive)==0) break;
@@ -892,6 +947,7 @@ AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& sou
     const auto marker="FROM "+identifier("__la_filter_source");
     filtered.sql.replace(filtered.sql.indexOf(marker),marker.size(),"FROM ("+sql+") AS "+identifier("__la_filter_source"));
     filtered.parameters=source.parameters;
+    filtered.resultTypes=source.resultTypes;
     return filtered;
 }
 int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
@@ -1137,6 +1193,12 @@ AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan&
     AccessQueryResult result;
     const int count = query.record().count() - (prepared.hiddenRank ? 1 : 0);
     for (int i = 0; i < count; ++i) result.columns.append(query.record().fieldName(i));
+    if(plan.resultTypes.size()==count) {
+        QMap<QString,int> names;
+        for(const auto& column:result.columns) ++names[column.toCaseFolded()];
+        for(int i=0;i<count;++i) if(!plan.resultTypes[i].isEmpty() && names.value(result.columns[i].toCaseFolded())==1)
+            result.types.insert(result.columns[i].toCaseFolded(),plan.resultTypes[i]);
+    }
     while (query.next()) {
         if (prepared.hiddenRank && query.value(count).toLongLong() > plan.topLimit) break;
         if (result.rows.size() >= 100000) throw VbaRuntimeError(3035,"Query row limit exceeded");
@@ -1157,7 +1219,13 @@ QVariant AccessQueryModel::data(const QModelIndex& index, int role) const {
     if (!index.isValid() || index.row() < 0 || index.row() >= rowCount() ||
         index.column() < 0 || index.column() >= columnCount() ||
         (role != Qt::DisplayRole && role != Qt::EditRole)) return {};
-    return result_.rows[index.row()][index.column()];
+    const auto value=result_.rows[index.row()][index.column()];
+    const auto type=result_.types.value(result_.columns[index.column()].toCaseFolded());
+    if(role==Qt::DisplayRole && type=="CURRENCY_REAL") {
+        try { return qtFieldText(value,type); }
+        catch(const VbaRuntimeError& error) { return QString("#Fehler (%1)").arg(error.number); }
+    }
+    return value;
 }
 QVariant AccessQueryModel::headerData(int section, Qt::Orientation orientation, int role) const {
     if (role != Qt::DisplayRole || section < 0) return {};

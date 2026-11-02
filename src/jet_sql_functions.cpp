@@ -133,6 +133,7 @@ void objectValue(sqlite3_context* context,int,sqlite3_value** args) noexcept {
         case VbaValue::Kind::Null: native.nullResult(context); break;
         case VbaValue::Kind::Empty: native.integerResult(context,0); break;
         case VbaValue::Kind::Boolean: native.integerResult(context,result.boolean ? -1 : 0); break;
+        case VbaValue::Kind::Currency: native.numberResult(context,currencyToRealStorage(result)); break;
         case VbaValue::Kind::Number:
             if (!std::isfinite(result.number)) throw VbaRuntimeError(6,"SQL object number overflow");
             native.numberResult(context,result.number); break;

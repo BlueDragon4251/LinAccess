@@ -24,8 +24,9 @@ tick, and verifies rejection before unwanted SQL changes. Converter/parameter/
 field tests pass 3/3 (0.16 s). GUI suite now has 40 CTests; full validation is
 recorded in PROGRESS.md.
 
-This is an explicit bounded SQL conversion. Generic query result metadata still
-returns existing SQLite numeric types; full Currency result-type propagation,
+This is an explicit bounded SQL conversion. The subsequent [query type adapter](CURRENCY_QUERY_TYPES_RUNTIME.md) preserves
+proven root CCur/parameter result types. Other query metadata still uses generic
+SQLite types; full Currency result-type propagation,
 full-range storage, regional Currency strings/formatting, exact SQL Currency
 operators/aggregates and Windows parity remain open. Unwrapped raw arithmetic
 is not made Currency-aware. No complete original business workflow is added.

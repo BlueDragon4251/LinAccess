@@ -757,3 +757,10 @@ lossless REAL output. Actual SQL/DAO/Qt/VBA regressions cover decimal rounding,
 large values/errors/aliases and a failed multi-row UPDATE without partial writes.
 Full query Currency subtype/SQL arithmetic/locale/Windows identity remains open.
 See [CURRENCY_SQL_RUNTIME.md](CURRENCY_SQL_RUNTIME.md).
+
+Currency SQL object references now bind numerically through the checked encoder.
+Proven root CCur/Currency-parameter projections retain Currency into DAO, query-
+table display and read-only Qt form/report fields, including empty/filter/TOP/
+DISTINCT/saved-query paths. Ambiguous/wildcard/set-operation results keep unknown
+types. Full SQL typing/object grammar/money arithmetic/Windows parity remains
+open. See [CURRENCY_QUERY_TYPES_RUNTIME.md](CURRENCY_QUERY_TYPES_RUNTIME.md).

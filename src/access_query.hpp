@@ -30,10 +30,12 @@ struct AccessQueryPlan {
     QString updateIdentity;
     QString updateSource;
     qsizetype updateSourceOffset{};
+    QVector<QString> resultTypes; // Proven projection types; empty entries are unknown.
 };
 struct AccessQueryResult {
     QStringList columns;
     QVector<QVariantList> rows;
+    QMap<QString,QString> types; // Only proven, unambiguous output-column types.
 };
 AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan& plan,
                                        const QMap<QString,QVariant>& bindings);

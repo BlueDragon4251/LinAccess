@@ -641,3 +641,11 @@ Full targets remain open:
 - [x] Explicit bounded native SQL CCur through shared conversion, decimal rounding/
   ranges/errors/aliases and real DAO atomic UPDATE/Qt/VBA requery regression;
   full query Currency subtype/SQL arithmetic/locale/Windows identity remains open.
+
+- [x] Checked numeric Currency SQL Forms/Formulare/Reports/Berichte references,
+  actual Qt/VBA/DAO numeric/pending/no-save/range regression; full object grammar/
+  SQL Screen/locale/Windows identity remains open.
+
+- [x] Proven root CCur/Currency-parameter query types through DAO, query-table
+  display and readonly Qt controls/empty/filter/TOP/DISTINCT/saved queries;
+  general SQL/view/alias/aggregate/arithmetic/Windows typing remains open.
