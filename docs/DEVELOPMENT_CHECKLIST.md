@@ -537,3 +537,7 @@ Full targets remain open:
 - [x] Correct 32-bit SQL INTEGER and numeric parameter aliases, rounded/finite
   Single bindings, declared DAO Parameter.Type/enum constants and read-only/
   lifetime checks with real SQL tests; inference/Size/full coercion remain open.
+
+- [x] Native VBA/Access-expression integer division and rounded Mod, correct
+  precedence/sign/null/overflow behavior and fixture-independent Qt calculated-
+  control/SQL/save tests; SQL rewriting and full numeric promotion remain open.

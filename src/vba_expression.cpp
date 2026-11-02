@@ -131,7 +131,7 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
                 (input[pos + 1] == '=' || (ch == '<' && input[pos + 1] == '>'))) {
                 symbol.push_back(input[++pos]);
             }
-            if (std::string("+-*/&=<>!.,()").find(ch) == std::string::npos && !(accessExpression && ch==';'))
+            if (std::string("+-*/\\&=<>!.,()").find(ch) == std::string::npos && !(accessExpression && ch==';'))
                 throw error("Nicht unterstütztes VBA-Ausdruckszeichen: " + symbol);
             tokens.push_back({Token::Type::Symbol, symbol});
             ++pos;
@@ -151,7 +151,9 @@ int precedence(const Token& token) {
         text == ">" || text == ">=" || text == "is") return 3;
     if (text == "&") return 4;
     if (text == "+" || text == "-") return 5;
-    if (text == "*" || text == "/" || text == "mod") return 6;
+    if (text == "mod") return 6;
+    if (text == "\\") return 7;
+    if (text == "*" || text == "/") return 8;
     return 0;
 }
 
@@ -196,6 +198,19 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
             return VbaValue::logical(op == "and" ? left.boolean && right.boolean : left.boolean || right.boolean);
         return VbaValue::numeric(op == "and" ? integer(left) & integer(right) : integer(left) | integer(right));
     }
+    if (op=="mod" || op=="\\") {
+        if (left.kind==VbaValue::Kind::Null || right.kind==VbaValue::Kind::Null) return {};
+        const auto a=static_cast<std::int64_t>(coerceVbaModuleValue(left,"long").number);
+        const auto b=static_cast<std::int64_t>(coerceVbaModuleValue(right,"long").number);
+        if (b==0) throw error("Integer division by zero",11);
+        const auto answer=op=="mod" ? a%b : a/b;
+        const bool narrow=left.kind==VbaValue::Kind::Number && right.kind==VbaValue::Kind::Number
+            && left.numericType==VbaValue::NumericType::Integer && right.numericType==VbaValue::NumericType::Integer;
+        if (answer<(narrow ? std::numeric_limits<std::int16_t>::min() : std::numeric_limits<std::int32_t>::min())
+            || answer>(narrow ? std::numeric_limits<std::int16_t>::max() : std::numeric_limits<std::int32_t>::max()))
+            throw error("Integer arithmetic overflow",6);
+        return narrow ? VbaValue::integer(static_cast<std::int16_t>(answer)) : VbaValue::longInteger(static_cast<std::int32_t>(answer));
+    }
     if (left.kind == VbaValue::Kind::Empty && right.kind == VbaValue::Kind::Text)
         return binary(op, VbaValue::string(""), right,host,mode);
     if (right.kind == VbaValue::Kind::Empty && left.kind == VbaValue::Kind::Text)
@@ -233,9 +248,6 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
     else if (op == "/") {
         if (b == 0) throw error("VBA: Division durch Null", 11);
         answer = a / b;
-    } else if (op == "mod") {
-        if (b == 0) throw error("VBA: Modulo durch Null", 11);
-        answer = std::fmod(a, b);
     } else throw error("Nicht unterstützter Operator " + op);
     if (!std::isfinite(answer)) throw error("VBA: Ungültiges numerisches Ergebnis");
     return VbaValue::numeric(answer);
@@ -336,11 +348,11 @@ private:
     }
     VbaValue atom(bool objectContext) {
         if (take("-")) {
-            const auto arg = expression(7);
+            const auto arg = expression(9);
             return host_ ? arg.kind==VbaValue::Kind::Currency ? negateCurrency(arg) : VbaValue::numeric(-arg.asNumber()) : VbaValue{};
         }
         if (take("+")) {
-            const auto arg = expression(7);
+            const auto arg = expression(9);
             return host_ ? arg.kind==VbaValue::Kind::Currency ? arg : VbaValue::numeric(arg.asNumber()) : VbaValue{};
         }
         if (take("not")) {

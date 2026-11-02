@@ -1616,6 +1616,16 @@ End Function
     assert(evaluate("VarType(CDbl(CInt(1)))=vbDouble").truthy());
     assert(evaluate("VarType(CInt(1))").asNumber()==2 && evaluate("TypeName(CInt(1))").asText()=="Integer");
     assert(evaluate("VarType(CLng(1))").asNumber()==3 && evaluate("TypeName(CLng(1))").asText()=="Long");
+    for(const auto& item:std::vector<std::pair<const char*,double>>{
+        {R"(12.6 Mod 5)",3},{R"(12 Mod 4.3)",0},{R"(10 Mod 3 * 2)",4},
+        {R"(20 Mod 6 \ 2)",2},{R"(20 \ 6 Mod 3)",0},{R"(20 \ 6 * 2)",1},
+        {R"(19 \ 4)",4},{R"(-19 \ 4)",-4},{R"(19 \ -4)",-4},
+        {R"(-7 Mod 3)",-1},{R"(7 Mod -3)",1},{R"(4.5 \ 1.5)",2},
+        {R"(Empty Mod "5")",0},{R"(Empty \ 5)",0},{R"(-2147483648 Mod -1)",0}})
+        assert(evaluate(item.first).asNumber()==item.second);
+    assert(evaluate(R"(VarType(CInt(7) Mod CInt(3)))").asNumber()==2);
+    assert(evaluate(R"(VarType(CLng(7) \ CLng(3)))").asNumber()==3);
+    assert(evaluate(R"(Null Mod 0)").kind==VbaValue::Kind::Null && evaluate(R"(Null \ 0)").kind==VbaValue::Kind::Null);
     assert(evaluate("CLng(2.5)").asNumber() == 2);
     assert(evaluate("CLng(3.5)").asNumber() == 4);
     assert(evaluate("CLng(-2.5)").asNumber() == -2);
@@ -1658,6 +1668,11 @@ End Function
     scalarProbe->value=VbaValue::numeric(0.1); const auto beforeSingle=scalarProbe->reads;
     const auto singleValue=evaluateVbaExpression("CSng(probe)",host,scalarValues);
     assert(singleValue.numericType==VbaValue::NumericType::Single && singleValue.number==static_cast<double>(0.1f) && scalarProbe->reads==beforeSingle+1);
+    substringError(R"(7 \ 0.5)",11); substringError("7 Mod 0.5",11);
+    substringError(R"(-2147483648 \ -1)",6); substringError(R"(CInt(-32768) \ CInt(-1))",6);
+    substringError(R"("invalid" Mod 2)",13); substringError(R"(1e100 \ 2)",6);
+    scalarProbe->value=VbaValue::numeric(12.6); const auto beforeDivision=scalarProbe->reads;
+    assert(evaluateVbaExpression(R"(probe \ 5)",host,scalarValues).number==2 && scalarProbe->reads==beforeDivision+1);
     substringError("CInt(Null)",94); substringError("CInt(CVErr(2015))",13);
     substringError("CInt(\"invalid\")",13); substringError("CInt(32767.5)",6);
     substringError("CInt(-32768.6)",6); substringError("CInt()",450); substringError("CInt(1,2)",450);

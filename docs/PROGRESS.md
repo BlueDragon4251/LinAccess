@@ -1642,3 +1642,21 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubunt
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass; repository remains private. Previous d8557a7 private CI completed
 successfully.
+
+## 2026-11-02 — Native integer division and corrected Mod
+
+Added native backslash integer division and replaced floating Mod with checked
+rounded integer remainder. Corrected multiplication/integer-division/Mod
+precedence; signed, Null/Empty, range and zero-denominator handling are tested.
+A new fixture-independent Qt/VBA/SQL regression verifies calculated controls,
+pending edits, explicit save and zero-division/overflow preventing later SQL.
+Targeted core/GUI tests pass 2/2 (0.96 s). GUI suite now has 23 CTests.
+SQL rewriting and complete numeric promotion remain open; no original business
+execution increment. See INTEGER_OPERATORS_RUNTIME.md.
+
+Full validation: host 23/23 (84.08 s), Debian 12 23/23 (87.04 s), Ubuntu
+24.04 23/23 (78.45 s), GUI-disabled core 1/1 (1.46 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass; repository remains private. Previous 27b7f99 private CI completed
+successfully.

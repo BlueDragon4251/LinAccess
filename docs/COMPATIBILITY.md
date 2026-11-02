@@ -605,3 +605,8 @@ SQL INTEGER parameters now use the documented 32-bit Long range, independently
 of 16-bit VBA Integer. Numeric parameter aliases, Single rounding/finite checks
 and declared DAO Parameter.Type/read-only/lifetime behavior have real SQL/VBA
 regressions. See DAO_PARAMETER_TYPES.md; inference, Size and full coercion remain open.
+
+Native VBA/Access expressions now execute integer division and rounded Mod with
+correct bounded precedence/sign/range behavior. A fixture-independent Qt form
+regression verifies calculated controls, SQL effects and save/error behavior.
+See INTEGER_OPERATORS_RUNTIME.md; SQL rewriting and full numeric promotion remain open.
