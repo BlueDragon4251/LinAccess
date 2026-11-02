@@ -565,3 +565,7 @@ Full targets remain open:
 - [x] Native Ctrl+Minus/SendKeys deletion through actual validation/callback/
   confirmation/savepoint behavior, Qt No/Yes/default-No and foreign-key tests;
   batch/datasheet/query/complete keyboard and Windows event identity remain open.
+
+- [x] Long native TextBox values avoid Qt default truncation, with real SQL
+  unchanged-field/VBA append/keyboard copy/Unicode-newline round trips; complete
+  Memo multiline UI, formatting and Access field-size limits remain open.

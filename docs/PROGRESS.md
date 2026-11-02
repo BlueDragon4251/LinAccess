@@ -1764,3 +1764,20 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubunt
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass; repository remains private. Previous 07d8511 private CI completed
 successfully.
+
+## 2026-11-02 — Preserve long native TextBox values
+
+Reproduced a native SQL round-trip failure when saving another field while a
+long Memo was limited by QLineEdit's default capacity. Native TextBoxes now use
+the int editor capacity. A new fixture-independent Qt/VBA/SQL regression preserves
+over 40000 UTF-16 units with Unicode/newlines through unrelated-field update,
+VBA append and Ctrl+apostrophe pending copy/save. Targeted tests pass 4/4
+(0.99 s); GUI suite now has 26 CTests. Full Memo multiline/format/field-size
+parity remains open. No business execution increment. See LONG_TEXT_VALUES_RUNTIME.md.
+
+Full validation: host 26/26 (77.64 s), Debian 12 26/26 (83.70 s), Ubuntu
+24.04 26/26 (74.38 s), GUI-disabled core 1/1 (1.17 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass; repository remains private. Previous 8c97bcc private CI completed
+successfully.

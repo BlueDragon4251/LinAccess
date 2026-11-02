@@ -639,3 +639,8 @@ Native Ctrl+Minus/SendKeys use the existing bounded form Delete Record pipeline,
 with fixture-independent real Qt No/Yes/default-No, callback/validation and
 foreign-key regressions. See DELETE_KEY_RUNTIME.md; full datasheet/batch/query
 and exact Windows keyboard/event behavior remain open.
+
+Long native TextBox values no longer truncate at Qt's default editor limit;
+real SQL regressions preserve Unicode/newlines through unrelated-field saves,
+VBA append and keyboard copy. See LONG_TEXT_VALUES_RUNTIME.md; complete Memo
+multiline UI, formatting and Access field-size limits remain open.

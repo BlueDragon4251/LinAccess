@@ -109,7 +109,7 @@ End Sub
     navigate(2); model->assignItem("label",VbaValue::string("readonly target")); model->assign("Dirty",VbaValue::logical(false));
     editor->setReadOnly(true); copy(); assert(editor->text()=="readonly target" && !model->member("Dirty",{}).boolean); editor->setReadOnly(false);
     model->assignItem("label",VbaValue::string("ok")); model->assign("Dirty",VbaValue::logical(false));
-    editor->setMaxLength(2); copy(); assert(editor->text()=="ok" && !model->member("Dirty",{}).boolean && stored(2).toString()=="ok"); editor->setMaxLength(32767);
+    const auto editorCapacity=editor->maxLength(); editor->setMaxLength(2); copy(); assert(editor->text()=="ok" && !model->member("Dirty",{}).boolean && stored(2).toString()=="ok"); editor->setMaxLength(editorCapacity);
     std::vector<VbaValue> none;
     assert(form.executeProcedure("CopyViaSendKeys",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(editor->text()==first && stored(2).toString()=="ok" && model->member("Dirty",{}).boolean);

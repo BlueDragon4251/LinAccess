@@ -1078,6 +1078,9 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             });
         } else if (control.type == "TextBox") {
             auto* edit = new QLineEdit(canvas);
+            // QLineEdit defaults to 32767 UTF-16 units. A bound Memo may be
+            // longer, and saving any field writes the bound control values.
+            edit->setMaxLength(std::numeric_limits<int>::max());
             edit->setReadOnly(control.controlSource.startsWith('='));
             widget = edit;
         } else if(control.type=="ListBox") {
