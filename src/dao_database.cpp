@@ -306,6 +306,8 @@ public:
         require(args.empty(), "DAO: Unexpected Recordset arguments");
         if (key=="bookmark") return bookmarkAt(position_);
         if (key=="bookmarkable") return VbaValue::logical(true);
+        if (key=="updatable") return VbaValue::logical(!readOnly_);
+        if (key=="editmode") return VbaValue::integer(mode_==Mode::Browse ? 0 : mode_==Mode::Edit ? 1 : 2);
         if (key=="nomatch") return VbaValue::logical(noMatch_);
         if (key == "eof") return VbaValue::logical(data_->rows.empty() || position_ >= data_->rows.size());
         if (key == "bof") return VbaValue::logical(data_->rows.empty() || position_ < 0);
@@ -349,6 +351,8 @@ public:
         return value(text(name)); // implicit default Fields(name).Value
     }
     void assign(std::string_view name, const VbaValue& value) override {
+        if (lower(name)=="editmode" || lower(name)=="updatable")
+            throw VbaRuntimeError(438,"DAO: Recordset metadata is read-only");
         if (lower(name)=="bookmark") {
             if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
             if (mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");

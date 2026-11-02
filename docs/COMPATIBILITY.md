@@ -956,3 +956,8 @@ bookmarks on the existing materialized recordset/clone model. It checks pending
 edits, foreign/stale tokens, empty/current-boundary movement and Long overflow;
 movement beyond available rows sets BOF/EOF. This does not implement server-side
 cursors, dbForwardOnly, bookmark constants or exact Windows locking behavior.
+
+Native Recordset.EditMode reports the actual cursor buffer state as Integer
+(0/1/2), with dbEditNone/dbEditInProgress/dbEditAdd constants. Updatable reports
+the existing native table/snapshot write capability. Both are read-only; this
+is not a claim of full DAO server-permission/locking capability detection.

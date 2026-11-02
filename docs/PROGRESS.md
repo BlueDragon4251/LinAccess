@@ -2664,3 +2664,13 @@ guards. Method signature supports named Rows/Start. Existing cursor regression
 checks relative movement, bookmark offset, EOF return, stale-token rejection
 and Long overflow. Desktop build and dao_execution pass (0.30 s); no new target,
 full-suite/package rerun or claim of full DAO/Windows cursor equivalence.
+
+## Native DAO edit metadata (2026-11-02)
+
+Recordset.EditMode returns Integer dbEditNone/dbEditInProgress/dbEditAdd from
+the actual per-cursor buffer state; Updatable returns the real table/snapshot
+write capability. Both metadata properties reject assignment. Added native
+VBA dbEdit constants. Existing clone/edit/add/update/snapshot regression now
+checks these values. Desktop build and existing core/DAO targets pass 2/2
+(1.64 s). No new target or repeated full-suite/package run. Concurrent server
+permissions, locks and all Windows DAO capability rules remain outside scope.

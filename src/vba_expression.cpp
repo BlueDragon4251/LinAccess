@@ -573,6 +573,9 @@ private:
         if (const auto type=daoTypes.find(word);type!=daoTypes.end()) return VbaValue::longInteger(type->second);
         if (word == "dbopendynaset") return VbaValue::numeric(2);
         if (word == "dbopensnapshot") return VbaValue::numeric(4);
+        if (word == "dbeditnone") return VbaValue::integer(0);
+        if (word == "dbeditinprogress") return VbaValue::integer(1);
+        if (word == "dbeditadd") return VbaValue::integer(2);
         if (word == "dbfailonerror") return VbaValue::numeric(128);
         if (word == "dbforceosflush") return VbaValue::numeric(1);
         static const std::unordered_map<std::string,int> variantTypes{
