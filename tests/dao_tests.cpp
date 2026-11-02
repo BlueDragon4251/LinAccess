@@ -298,6 +298,25 @@ End Sub
     assert(result.status==VbaExecutionStatus::Completed && host.fields["Original"]=="24");
     assert(sql.exec("SELECT COUNT(*),SUM(amount) FROM array_rows") && sql.next());
     assert(sql.value(0).toInt()==3 && sql.value(1).toInt()==90);
+    sql.finish();
+    assert(sql.exec("CREATE TABLE text_lists(value TEXT)"));
+    const auto textLists=executeVbaProcedure(R"VBA(Sub SaveTextList()
+Dim words As Variant, selected As Variant, item As Variant
+Dim result As String
+words=Split("alpha,beta,alps",",")
+words(1)="alt"
+selected=Filter(words,"al")
+For Each item In selected
+If Len(result)>0 Then
+result=result & "|"
+End If
+result=result & item
+Next
+CurrentDb.Execute "INSERT INTO text_lists VALUES('" & result & "')"
+End Sub
+)VBA","SaveTextList",host);
+    assert(textLists.status==VbaExecutionStatus::Completed);
+    assert(sql.exec("SELECT value FROM text_lists") && sql.next() && sql.value(0).toString()=="alpha|alt|alps");
     sql.finish(); db.close();
 }
 int main(int argc, char** argv) {

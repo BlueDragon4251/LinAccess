@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstring>
 #include "vba_runtime.hpp"
+#include "vba_expression.hpp"
 #include "vba_color.hpp"
 #include "vba_round.hpp"
 #include "vba_calendar.hpp"
@@ -170,6 +171,46 @@ void colorFunction(sqlite3_context* context,int count,sqlite3_value** args,bool 
 void rgbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept { colorFunction(context,count,args,false); }
 void qbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept { colorFunction(context,count,args,true); }
 
+// Scalar SQL adapter: functions run in the native VBA expression engine without
+// a form, database-object or UI context. SQL data are bound values, never code.
+class ScalarStringHost final : public VbaHost {
+public:
+    std::optional<std::string> field(std::string_view) override { throw VbaRuntimeError(3251,"SQL scalar has no form context"); }
+    void setField(std::string_view,std::optional<std::string>) override { throw VbaRuntimeError(3251,"SQL scalar cannot assign fields"); }
+    void message(std::string_view) override { throw VbaRuntimeError(3251,"SQL scalar has no UI context"); }
+    void saveRecord() override { throw VbaRuntimeError(3251,"SQL scalar cannot save forms"); }
+};
+void reverseStringFunction(sqlite3_context* context,int count,sqlite3_value** args,bool reverse) noexcept {
+    auto& native=api();
+    try {
+        if((reverse && count!=1) || (!reverse && (count<2 || count>4))) throw VbaRuntimeError(450,"Invalid reverse string SQL arity");
+        VbaVariables values;
+        std::string expression=reverse ? "StrReverse(" : "InStrRev(";
+        for(int index=0;index<count;++index) {
+            const auto name="_la_arg"+std::to_string(index);
+            VbaValue value;
+            const auto type=native.type(args[index]);
+            if(type==1) value=VbaValue::numeric(static_cast<double>(native.integer(args[index])));
+            else if(type==2) value=VbaValue::numeric(native.number(args[index]));
+            else if(type==3) {
+                const auto* bytes=native.text(args[index]); const auto size=native.bytes(args[index]);
+                if(!bytes && size) throw VbaRuntimeError(13,"SQL text conversion failed");
+                value=VbaValue::string(bytes ? std::string(reinterpret_cast<const char*>(bytes),size) : std::string{});
+            } else if(type!=5) throw VbaRuntimeError(13,"Binary reverse string input is unsupported");
+            values.emplace(name,std::move(value));
+            if(index) expression+=',';
+            expression+=name;
+        }
+        expression+=')';
+        ScalarStringHost host;
+        const auto result=evaluateVbaExpression(expression,host,values);
+        if(reverse) native.textResult(context,result.text.data(),static_cast<int>(result.text.size()),reinterpret_cast<void (*)(void*)>(-1));
+        else native.integerResult(context,static_cast<qlonglong>(result.number));
+    } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
+      catch(...) { native.error(context,"SQL reverse string evaluation failed",-1); }
+}
+void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noexcept { reverseStringFunction(context,count,args,true); }
+void stringInStrRev(sqlite3_context* context,int count,sqlite3_value** args) noexcept { reverseStringFunction(context,count,args,false); }
 void calendarFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view name) noexcept {
     auto& native=api();
     try {
@@ -472,6 +513,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
     ensure("linaccess_jet_qbcolor",-1,&qbColor,nullptr,nullptr);
     ensure("linaccess_jet_round",-1,&roundNumber,nullptr,nullptr);
+    ensure("linaccess_jet_strreverse",-1,&stringReverse,nullptr,nullptr);
+    ensure("linaccess_jet_instrrev",-1,&stringInStrRev,nullptr,nullptr);
     ensure("linaccess_jet_datediff",-1,&calendarDatediff,nullptr,nullptr);
     ensure("linaccess_jet_year",-1,&calendarYear,nullptr,nullptr);
     ensure("linaccess_jet_month",-1,&calendarMonth,nullptr,nullptr);

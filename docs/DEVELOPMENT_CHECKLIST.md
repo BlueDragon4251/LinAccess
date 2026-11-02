@@ -722,3 +722,10 @@ Full targets remain open:
 
 - [x] One-dimensional Variant ReDim/Preserve/Erase, Option Base and negative
   lower bounds, grow/shrink/value-copy preservation; typed/full array parity open.
+
+- [x] Native Split/Join/Filter with String arrays, typed element replacement,
+  zero-based bounds, limits/compare/Unicode and real VBA-to-DAO list persistence.
+- [x] Bounded array For Each with Variant control, named sources/direct
+  constructors, live later-element writes and value copies; full alias parity open.
+- [x] Native VBA and SQL InStrRev/StrReverse, UTF-16 positions, defaults,
+  projection aliases and checked errors; full BSTR/locale/Jet typing remain open.

@@ -20,6 +20,16 @@ int main(int argc, char** argv) {
     assert(query.exec("CREATE TABLE samples(id INTEGER, score INTEGER, label TEXT)"));
     assert(query.exec("INSERT INTO samples VALUES(1,10,'one'),(2,20,'two'),(3,20,NULL),(4,30,'four')"));
     {
+        linaccess::AccessQueryModel reversed;
+        reversed.execute(db,"SELECT InStrRev('abcabc','bc') AS pos,StrReverse('abö') AS backwards, InStrRev('A😀x😀','😀') AS units");
+        assert(reversed.rowCount()==1 && reversed.data(reversed.index(0,0)).toInt()==5);
+        assert(reversed.data(reversed.index(0,1)).toString()=="öba" && reversed.data(reversed.index(0,2)).toInt()==5);
+        reversed.execute(db,"SELECT InStrRev(label,'o') AS pos,pos+1 AS following FROM samples WHERE id=1");
+        assert(reversed.data(reversed.index(0,0)).toInt()==1 && reversed.data(reversed.index(0,1)).toInt()==2);
+        assert(!query.exec("SELECT linaccess_jet_strreverse(CAST(x'ff' AS TEXT))"));
+        assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==13); query.finish();
+    }
+    {
         linaccess::AccessQueryModel dates; dates.execute(db,"SELECT DateDiff('d',#2/28/2024#,#3/1/2024#) AS elapsed, Year('2024-02-29') AS yr, Month('2024-02-29') AS mon, Day('2024-02-29') AS dy, Hour('23:59:58') AS hr, Minute('23:59:58') AS mn, Second('23:59:58') AS sec, Weekday('2024-03-03',2) AS wd, Year(Null) AS missing");
         const int expected[]{2,2024,2,29,23,59,58,7}; assert(dates.rowCount()==1);
         for(int i=0;i<8;++i) assert(dates.data(dates.index(0,i)).toInt()==expected[i]); assert(dates.data(dates.index(0,8)).isNull());

@@ -942,6 +942,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         std::size_t itemIndex{};
         std::size_t frameDepth{};
         std::size_t withDepth{};
+        VbaValue array;
+        std::string arrayRoot;
     };
     std::vector<Frame> frames;
     std::vector<LoopFrame> loops;
@@ -1039,7 +1041,9 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Declared variable type is unsupported for this loop/object target",instruction.line}; failure.errorNumber=3251; return failure;
         }
     }
-    const auto assignVariable=[&](const std::string& name,const VbaValue& value) {
+    const auto assignVariable=[&](const std::string& name,const VbaValue& value,bool arrayElement=false) {
+        if(!arrayElement) for(const auto& loop:loops) if(!loop.arrayRoot.empty() && loop.arrayRoot==name)
+            throw VbaRuntimeError(3251,"Array source replacement during For Each is not implemented");
         const auto type=variableType(name);
         locals[name]=checkedType(type) ? coerceVbaModuleValue(value,type) : value;
     };
@@ -1423,7 +1427,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     refreshAliases();
                     const auto found=locals.find(name);
                     if(found==locals.end()) throw VbaRuntimeError(13,"Array variable required");
-                    assignVariable(name,withVbaArrayElement(found->second,{index},value));
+                    assignVariable(name,withVbaArrayElement(found->second,{index},value),true);
                 }
                 break;
             case Statement::Type::SetVar:
@@ -1436,8 +1440,30 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::ForEach: {
                 if (!active) { ip = static_cast<std::size_t>(instruction.partner); break; }
                 const auto collection = evaluate(instruction.expression);
+                if(isVbaArray(collection)) {
+                    if(collection.kind!=VbaValue::Kind::Array) throw VbaRuntimeError(3251,"For Each Byte arrays is not implemented");
+                    const auto name=lower(instruction.argument),type=variableType(name);
+                    if(!type.empty() && type!="variant") throw VbaRuntimeError(13,"Array For Each control must be Variant");
+                    LoopFrame loop{static_cast<int>(ip)};
+                    loop.array=collection;
+                    const auto source=lower(trim(instruction.expression));
+                    if(const auto variable=locals.find(source); variable!=locals.end()) {
+                        if(source==name) throw VbaRuntimeError(3251,"Array source and For Each control must be distinct");
+                        loop.arrayRoot=source;
+                    } else if(!std::regex_search(source,std::regex(R"(^(array|split|filter)\s*\()"))) {
+                        throw VbaRuntimeError(3251,"Array For Each requires a named variable or Array/Split/Filter result");
+                    }
+                    loop.frameDepth=frames.size(); loop.withDepth=withFrames.size();
+                    const auto lowerBound=static_cast<std::int32_t>(vbaArrayBound(collection,false).number);
+                    if(vbaArrayBound(collection,true).number<lowerBound) ip=static_cast<std::size_t>(instruction.partner);
+                    else {
+                        locals[name]=vbaArrayElement(collection,{VbaValue::longInteger(lowerBound)});
+                        loops.push_back(std::move(loop));
+                    }
+                    break;
+                }
                 if (collection.kind != VbaValue::Kind::Object)
-                    throw VbaRuntimeError(424,"For Each requires an object collection");
+                    throw VbaRuntimeError(424,"For Each requires an object collection or supported array");
                 if (!collection.object) throw VbaRuntimeError(91,"For Each object is not set");
                 LoopFrame loop{static_cast<int>(ip)};
                 loop.items = collection.object->enumerate();
@@ -1493,6 +1519,17 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 const auto name = lower(start.argument);
                 if (start.type == Statement::Type::ForEach) {
                     auto& loop = loops.back();
+                    if(loop.array.kind==VbaValue::Kind::Array) {
+                        const auto found=locals.find(loop.arrayRoot);
+                        const auto& current=loop.arrayRoot.empty() ? loop.array : found==locals.end() ? VbaValue{} : found->second;
+                        if(!sameVbaArrayAllocation(loop.array,current)) throw VbaRuntimeError(3251,"Array replacement or resizing during For Each is not implemented");
+                        const auto nextIndex=static_cast<std::int64_t>(vbaArrayBound(loop.array,false).number)+static_cast<std::int64_t>(++loop.itemIndex);
+                        if(nextIndex<=vbaArrayBound(loop.array,true).number) {
+                            locals[name]=vbaArrayElement(current,{VbaValue::longInteger(static_cast<std::int32_t>(nextIndex))});
+                            ip=static_cast<std::size_t>(loop.forIndex);
+                        } else loops.pop_back();
+                        break;
+                    }
                     if (++loop.itemIndex < loop.items.size()) {
                         locals[name] = loop.items[loop.itemIndex];
                         ip = static_cast<std::size_t>(loop.forIndex);

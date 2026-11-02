@@ -574,7 +574,7 @@ private:
             if (!take(")")) {
                 do {
                     const auto start = index_;
-                    const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="strcomp" || word=="round" || word=="replace" || word=="datediff" || word=="weekday") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
+                    const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="weekday") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
                     args.push_back(missing ? VbaValue::empty() : expression(1,word=="isobject"));
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
@@ -719,14 +719,14 @@ private:
                 const int type=value.kind==VbaValue::Kind::Empty ? 0 : value.kind==VbaValue::Kind::Null ? 1
                     : value.kind==VbaValue::Kind::Number ? (value.numericType==VbaValue::NumericType::Byte ? 17 : value.numericType==VbaValue::NumericType::Integer ? 2 : value.numericType==VbaValue::NumericType::Long ? 3 : value.numericType==VbaValue::NumericType::Single ? 4 : 5) : value.kind==VbaValue::Kind::Currency ? 6
                     : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
-                    : value.kind==VbaValue::Kind::Error ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : value.kind==VbaValue::Kind::Array ? 8204 : 11;
+                    : value.kind==VbaValue::Kind::Error ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : value.kind==VbaValue::Kind::Array ? vbaArrayType(value) : 11;
                 if (word=="vartype") return VbaValue::integer(static_cast<std::int16_t>(type));
                 if (type==9) {
                     if (!value.object) return VbaValue::string("Nothing");
                     throw error("Native object class name unavailable",3251);
                 }
                 return VbaValue::string(type==0 ? "Empty" : type==1 ? "Null" : type==5 ? "Double"
-                    : type==17 ? "Byte" : type==2 ? "Integer" : type==3 ? "Long" : type==4 ? "Single" : type==6 ? "Currency" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : type==8209 ? "Byte()" : type==8204 ? "Variant()" : "Boolean");
+                    : type==17 ? "Byte" : type==2 ? "Integer" : type==3 ? "Long" : type==4 ? "Single" : type==6 ? "Currency" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : type==8209 ? "Byte()" : type==8204 ? "Variant()" : type==8200 ? "String()" : "Boolean");
             }
             if (word=="dsum" || word=="dcount") {
                 if (!host_) return {};
@@ -747,6 +747,90 @@ private:
                 if (!host_) return {};
                 if (args[1].kind==VbaValue::Kind::Null) throw error("Format mask is Null",94);
                 return host_->formatValue(args[0],args[1].asText(),word=="format$");
+            }
+            if(word=="filter") {
+                if(!host_) return {};
+                if(args.size()<2 || args.size()>4 || omitted[0] || omitted[1]) throw error("Filter requires two to four arguments",450);
+                if(args[0].kind==VbaValue::Kind::Null) throw error("Invalid Null Filter array",94);
+                if(args[0].kind!=VbaValue::Kind::Array) throw error("Filter requires a String or Variant array",13);
+                const auto match=scalarObjectValue(args[1]);
+                if(match.kind==VbaValue::Kind::Null) throw error("Invalid Null Filter match",94);
+                const auto needle=utf16String(match.asText());
+                const bool include=args.size()>2 && !omitted[2] ? coerceVbaModuleValue(scalarObjectValue(args[2]),"boolean").boolean : true;
+                auto mode=VbaCompareMode::Binary;
+                if(args.size()>3 && !omitted[3]) {
+                    const auto choice=integer(scalarObjectValue(args[3]));
+                    if(choice==-1) mode=compareMode_;
+                    else if(choice>=0 && choice<=2) mode=static_cast<VbaCompareMode>(choice);
+                    else throw error("Invalid Filter comparison",5);
+                }
+                std::vector<std::string> selected;
+                for(const auto& value:vbaArrayValues(args[0])) {
+                    if(value.kind==VbaValue::Kind::Null) throw error("Invalid Null Filter element",94);
+                    if(value.kind!=VbaValue::Kind::Text) throw error("Filter currently requires text elements",3251);
+                    const auto input=utf16String(value.text);
+                    bool found=needle.empty();
+                    for(std::size_t position=0; !found && position<=input.size() && needle.size()<=input.size()-position; ++position) {
+                        const auto boundary=[&](std::size_t index) {
+                            return index==0 || index==input.size() || !(input[index-1]>=0xd800 && input[index-1]<=0xdbff && input[index]>=0xdc00 && input[index]<=0xdfff);
+                        };
+                        const auto candidate=std::u16string_view(input).substr(position,needle.size());
+                        found=mode==VbaCompareMode::Binary ? candidate==needle : boundary(position) && boundary(position+needle.size()) && host_->compareStrings(utf8String(candidate),match.asText(),mode)==0;
+                    }
+                    if(found==include) selected.push_back(value.text);
+                }
+                return makeVbaStringArray(std::move(selected));
+            }
+            if(word=="split" || word=="join") {
+                if(!host_) return {};
+                const bool split=word=="split";
+                if(args.empty() || args.size()>(split ? 4u : 2u) || omitted[0]) throw error("Invalid text array function arguments",450);
+                std::vector<VbaValue> values; values.reserve(args.size());
+                for(std::size_t i=0;i<args.size();++i) {
+                    values.push_back(!split && i==0 ? args[i] : scalarObjectValue(args[i]));
+                    if(!omitted[i] && values.back().kind==VbaValue::Kind::Null) throw error("Invalid Null text array argument",94);
+                }
+                const auto delimiter=values.size()>1 && !omitted[1] ? values[1].asText() : " ";
+                if(!split) {
+                    if(values[0].kind!=VbaValue::Kind::Array) throw error("Join requires a one-dimensional Variant or String array",13);
+                    (void)utf16String(delimiter);
+                    std::string output; bool first=true;
+                    for(const auto& item:vbaArrayValues(values[0])) {
+                        const auto value=scalarObjectValue(item);
+                        if(value.kind==VbaValue::Kind::Null) throw error("Invalid Null Join element",94);
+                        if(!first) output+=delimiter;
+                        const auto text=value.asText(); (void)utf16String(text);
+                        output+=text; first=false;
+                    }
+                    return VbaValue::string(std::move(output));
+                }
+                const auto limit=values.size()>2 && !omitted[2] ? integer(values[2]) : -1;
+                if(limit< -1) throw error("Invalid Split limit",5);
+                auto mode=VbaCompareMode::Binary;
+                if(values.size()>3 && !omitted[3]) {
+                    const auto choice=integer(values[3]);
+                    if(choice==-1) mode=compareMode_;
+                    else if(choice>=0 && choice<=2) mode=static_cast<VbaCompareMode>(choice);
+                    else throw error("Invalid Split comparison",5);
+                }
+                const auto input=utf16String(values[0].asText()),needle=utf16String(delimiter);
+                std::vector<std::string> parts;
+                if(limit==0 || input.empty()) return makeVbaStringArray(std::move(parts));
+                std::size_t begin=0,position=0;
+                const auto boundary=[&](std::size_t index) {
+                    return index==0 || index==input.size() || !(input[index-1]>=0xd800 && input[index-1]<=0xdbff && input[index]>=0xdc00 && input[index]<=0xdfff);
+                };
+                while(!needle.empty() && needle.size()<=input.size()-position && (limit==-1 || parts.size()+1<static_cast<std::size_t>(limit))) {
+                    const auto candidate=std::u16string_view(input).substr(position,needle.size());
+                    const bool match=mode==VbaCompareMode::Binary ? candidate==needle
+                        : boundary(position) && boundary(position+needle.size()) && host_->compareStrings(utf8String(candidate),delimiter,mode)==0;
+                    if(match) {
+                        parts.push_back(utf8String(std::u16string_view(input).substr(begin,position-begin)));
+                        position+=needle.size(); begin=position;
+                    } else ++position;
+                }
+                parts.push_back(utf8String(std::u16string_view(input).substr(begin)));
+                return makeVbaStringArray(std::move(parts));
             }
             if (word=="replace") {
                 if (!host_) return {};
@@ -787,6 +871,47 @@ private:
                     else output.push_back(input[position++]);
                 }
                 return VbaValue::string(utf8String(output));
+            }
+            if(word=="strreverse" || word=="instrrev") {
+                if(!host_) return {};
+                const bool reverse=word=="strreverse";
+                if(args.empty() || args.size()>(reverse ? 1u : 4u) || omitted[0] || (!reverse && (args.size()<2 || omitted[1])))
+                    throw error("Invalid reverse string function arguments",450);
+                std::vector<VbaValue> values;
+                for(std::size_t i=0;i<args.size();++i) {
+                    values.push_back(scalarObjectValue(args[i]));
+                    if(!omitted[i] && values.back().kind==VbaValue::Kind::Null) throw error("Invalid Null reverse string argument",94);
+                }
+                auto input=utf16String(values[0].asText());
+                if(reverse) {
+                    std::reverse(input.begin(),input.end());
+                    return VbaValue::string(utf8String(input));
+                }
+                const auto needle=utf16String(values[1].asText());
+                const auto start=values.size()>2 && !omitted[2] ? integer(values[2]) : -1;
+                if(start==0 || start< -1) throw error("Invalid InStrRev start",5);
+                auto mode=VbaCompareMode::Binary;
+                if(values.size()>3 && !omitted[3]) {
+                    const auto choice=integer(values[3]);
+                    if(choice==-1) mode=compareMode_;
+                    else if(choice>=0 && choice<=2) mode=static_cast<VbaCompareMode>(choice);
+                    else throw error("Invalid InStrRev comparison",5);
+                }
+                if(input.size()>static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) throw error("InStrRev string length overflow",6);
+                const auto end=start==-1 ? input.size() : static_cast<std::size_t>(start);
+                if(input.empty() || end>input.size()) return VbaValue::longInteger(0);
+                if(needle.empty()) return VbaValue::longInteger(static_cast<std::int32_t>(end));
+                if(needle.size()>end) return VbaValue::longInteger(0);
+                const auto boundary=[&](std::size_t index) {
+                    return index==0 || index==input.size() || !(input[index-1]>=0xd800 && input[index-1]<=0xdbff && input[index]>=0xdc00 && input[index]<=0xdfff);
+                };
+                for(auto position=static_cast<std::int64_t>(end-needle.size());position>=0;--position) {
+                    const auto offset=static_cast<std::size_t>(position);
+                    const auto candidate=std::u16string_view(input).substr(offset,needle.size());
+                    const bool found=mode==VbaCompareMode::Binary ? candidate==needle : boundary(offset) && boundary(offset+needle.size()) && host_->compareStrings(utf8String(candidate),values[1].asText(),mode)==0;
+                    if(found) return VbaValue::longInteger(static_cast<std::int32_t>(position+1));
+                }
+                return VbaValue::longInteger(0);
             }
             if (word=="instr" || word=="strcomp") {
                 if (!host_) return {};

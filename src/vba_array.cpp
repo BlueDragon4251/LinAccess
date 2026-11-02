@@ -8,7 +8,9 @@ class ArrayStorage final : public VbaObject {
 public:
     const std::vector<VbaValue> values;
     const int lower;
-    ArrayStorage(std::vector<VbaValue> elements,int bound):values(std::move(elements)),lower(bound) {}
+    const bool strings;
+    const std::shared_ptr<const char> allocation;
+    ArrayStorage(std::vector<VbaValue> elements,int bound,bool stringElements=false,std::shared_ptr<const char> identity={}):values(std::move(elements)),lower(bound),strings(stringElements),allocation(identity ? std::move(identity) : std::make_shared<const char>(0)) {}
     VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw VbaRuntimeError(13,"Array is not an object"); }
 };
 const ArrayStorage& storage(const VbaValue& value) {
@@ -32,8 +34,23 @@ VbaValue makeVbaArray(std::vector<VbaValue> values,int lowerBound) {
     VbaValue value; value.kind=VbaValue::Kind::Array;
     value.object=std::make_shared<ArrayStorage>(std::move(values),lowerBound); return value;
 }
+VbaValue makeVbaStringArray(std::vector<std::string> values) {
+    std::vector<VbaValue> elements; elements.reserve(values.size());
+    for(auto& value:values) elements.push_back(VbaValue::string(std::move(value)));
+    VbaValue result; result.kind=VbaValue::Kind::Array;
+    result.object=std::make_shared<ArrayStorage>(std::move(elements),0,true); return result;
+}
+bool sameVbaArrayAllocation(const VbaValue& left,const VbaValue& right) {
+    return left.kind==VbaValue::Kind::Array && right.kind==VbaValue::Kind::Array && storage(left).allocation==storage(right).allocation;
+}
+int vbaArrayType(const VbaValue& value) {
+    if(value.kind==VbaValue::Kind::ByteArray) return 8209;
+    return storage(value).strings ? 8200 : 8204;
+}
+std::vector<VbaValue> vbaArrayValues(const VbaValue& value) { return storage(value).values; }
 VbaValue resizeVbaArray(const VbaValue& value,int lowerBound,int upperBound,bool preserve) {
     if(value.kind==VbaValue::Kind::ByteArray) throw VbaRuntimeError(3251,"ReDim of Byte arrays is not implemented");
+    if(value.kind==VbaValue::Kind::Array && storage(value).strings) throw VbaRuntimeError(3251,"ReDim of String arrays is not implemented");
     const auto count=static_cast<std::int64_t>(upperBound)-lowerBound+1;
     if(count<=0) throw VbaRuntimeError(9,"Invalid array bounds");
     // Bound native allocation until interpreter-wide memory accounting exists.
@@ -67,7 +84,10 @@ VbaValue withVbaArrayElement(const VbaValue& value,const std::vector<VbaValue>& 
         auto bytes=value.bytes; bytes[index]=static_cast<unsigned char>(coerceVbaModuleValue(element,"byte").number);
         return VbaValue::byteArray(std::move(bytes));
     }
-    auto values=storage(value).values; values[index]=element;
-    return makeVbaArray(std::move(values),storage(value).lower);
+    const auto& original=storage(value);
+    auto values=original.values;
+    values[index]=original.strings ? coerceVbaModuleValue(scalarVbaValue(element),"string") : element;
+    VbaValue result; result.kind=VbaValue::Kind::Array;
+    result.object=std::make_shared<ArrayStorage>(std::move(values),original.lower,original.strings,original.allocation); return result;
 }
 }

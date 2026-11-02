@@ -865,4 +865,12 @@ One-dimensional `Array()` values now support Option Base 0/1, bounds, indexed
 reads/writes, type inspection and whole-array ByRef/ByVal/value copies.
 One-dimensional Variant `ReDim`/`ReDim Preserve` and `Erase` are also implemented.
 See [precise boundaries](VARIANT_ARRAY_RUNTIME.md). Typed declarations,
-multidimensional arrays and array For Each remain unsupported.
+multidimensional arrays and full array For Each parity remain unsupported.
+
+## Native text lists and reverse string functions
+
+VBA Split/Join/Filter use real String arrays; bounded array For Each includes
+live later-element updates on named sources. See [array limits](VARIANT_ARRAY_RUNTIME.md).
+InStrRev/StrReverse execute in both VBA and compiled native SQL, including scalar
+projection aliases and typed error transport; see [string boundaries](REVERSE_STRING_RUNTIME.md).
+These changes do not establish full array, Unicode BSTR or Jet function parity.

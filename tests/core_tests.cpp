@@ -2248,5 +2248,76 @@ End Sub
     assert(host.fields["Grown"]=="7:9:Empty" && host.fields["Shrunk"]=="-1:9");
     assert(host.fields["ResizeError"]=="9" && host.fields["Reset"]=="1:Empty");
     assert(host.fields["Erased"]=="Empty" && host.fields["Reallocated"]=="3");
+    assert(evaluate("Join(Split(\"a,,b,\",\",\"),\"|\")").asText()=="a||b|");
+    assert(evaluate("Join(Split(\"a,b,c\",\",\",2),\"|\")").asText()=="a|b,c");
+    assert(evaluate("Join(Split(\"a b\"))").asText()=="a b");
+    assert(evaluate("Join(Split(\"oneXtwoxtail\",\"x\",,vbTextCompare),\"|\")").asText()=="one|two|tail");
+    assert(evaluate("Join(Split(\"ö😀x😀\",\"😀\"),\"|\")").asText()=="ö|x|");
+    assert(evaluate("VarType(Split(\"a b\"))").asNumber()==8200);
+    assert(evaluate("TypeName(Split(\"a b\"))").asText()=="String()");
+    assert(evaluate("UBound(Split(\"\"))").asNumber()==-1);
+    assert(evaluate("UBound(Split(\"a b\",,0))").asNumber()==-1);
+    assert(evaluate("Join(Split(\"a b\",\"\"),\"|\")").asText()=="a b");
+    substringError("Split(Null)",94); substringError("Split(\"a\",Null)",94);
+    substringError("Split(\"a\",,-2)",5); substringError("Join(Array(Null))",94);
+    substringError("Join(7)",13);
+    assert(evaluate("Join(Filter(Split(\"alpha,beta,alps\",\",\"),\"al\"),\"|\")").asText()=="alpha|alps");
+    assert(evaluate("Join(Filter(Array(\"Abc\",\"xyz\"),\"a\",False,vbTextCompare),\"|\")").asText()=="xyz");
+    assert(evaluate("UBound(Filter(Array(\"a\"),\"z\"))").asNumber()==-1);
+    substringError("Filter(Array(\"a\"),Null)",94);
+    const auto stringArrays=executeVbaProcedure(R"VBA(Option Base 1
+Sub TextArrays()
+Dim words As Variant, original As Variant
+words=Split("one,two,three",",")
+original=words
+words(1)=42
+Me!TextArray=CStr(LBound(words)) & ":" & Join(words,"|") & ":" & Join(original,"/")
+Me!StringType=TypeName(words) & ":" & CStr(VarType(words))
+End Sub
+)VBA","TextArrays",host);
+    assert(stringArrays.status==VbaExecutionStatus::Completed);
+    assert(host.fields["TextArray"]=="0:one|42|three:one/two/three");
+    assert(host.fields["StringType"]=="String():8200");
+    const auto arrayLoops=executeVbaProcedure(R"VBA(Sub ArrayLoops()
+Dim words As Variant, original As Variant, item As Variant
+Dim result As String
+words=Split("a,b,c",",")
+original=words
+For Each item In words
+result=result & item
+If item="a" Then
+words(1)="changed"
+End If
+Next
+Me!ArrayLoop=result & ":" & Join(original,",")
+result=""
+For Each item In Filter(Array("alpha","beta","alps"),"al")
+result=result & item & ";"
+Next
+Me!TemporaryLoop=result
+For Each item In Array()
+Me!EmptyLoop="bad"
+Next
+On Error Resume Next
+For Each item In words
+ReDim words(3)
+Next
+Me!LoopResizeError=CStr(Err.Number)
+End Sub
+)VBA","ArrayLoops",host);
+    assert(arrayLoops.status==VbaExecutionStatus::Completed);
+    assert(host.fields["ArrayLoop"]=="achangedc:a,b,c");
+    assert(host.fields["TemporaryLoop"]=="alpha;alps;" && !host.fields["EmptyLoop"]);
+    assert(host.fields["LoopResizeError"]=="3251");
+    assert(evaluate("InStrRev(\"abcabc\",\"bc\")").asNumber()==5);
+    assert(evaluate("InStrRev(\"abcabc\",\"bc\",5)").asNumber()==2);
+    assert(evaluate("InStrRev(\"AbcaBC\",\"bc\",,vbTextCompare)").asNumber()==5);
+    assert(evaluate("InStrRev(\"a😀x😀\",\"😀\")").asNumber()==5);
+    assert(evaluate("InStrRev(\"abc\",\"\")").asNumber()==3);
+    assert(evaluate("InStrRev(\"abc\",\"a\",4)").asNumber()==0);
+    assert(evaluate("VarType(InStrRev(\"a\",\"a\"))").asNumber()==3);
+    assert(evaluate("StrReverse(\"abö\")").asText()=="öba");
+    substringError("InStrRev(Null,\"a\")",94); substringError("InStrRev(\"a\",\"a\",0)",5);
+    substringError("StrReverse(Null)",94); substringError("StrReverse(\"😀\")",3251);
     std::cout << "Core tests passed\n";
 }

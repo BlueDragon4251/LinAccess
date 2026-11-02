@@ -2483,3 +2483,19 @@ permissions, reference Build-ID and pinned SQLite 3.54.1 backend checks. All fou
 original fixture hashes remain verified. Remote branch confirmed at 18b2bec and
 repository privacy confirmed true. No full 48-test or distribution matrix rerun;
 the last full matrix remains e799b2f.
+
+## Native text-list and reverse-string programming block (2026-11-02)
+
+Implemented native Split, Join and Filter with typed String arrays; bounded array
+For Each observes later element writes while preserving independent value copies.
+Actual VBA list filtering/enumeration persists through DAO. Added InStrRev and
+StrReverse to VBA and compiled Access SQL through a shared native runtime adapter,
+with projection-alias use and strict malformed Unicode/error handling. Full BSTR,
+array declaration/rebinding/alias, locale and Jet projection typing remain open.
+Final existing core/DAO/query-model targets passed 3/3 (1.55 s), including the
+UTF-8 Join guard. Desktop and GUI-free builds passed; GUI-free core 1/1 (1.01 s).
+The .deb passed content/permissions/Build-ID/pinned-backend checks and all four
+original fixture hashes passed. Packaging used an installed staging tree to avoid
+recompiling unrelated test binaries. No new CTest target or full distribution
+matrix repetition.
+See VARIANT_ARRAY_RUNTIME.md and REVERSE_STRING_RUNTIME.md for exact boundaries.
