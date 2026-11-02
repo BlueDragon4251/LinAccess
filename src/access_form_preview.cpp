@@ -757,6 +757,37 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     if (!report) setTimerInterval(layout_.timerInterval);
 }
 
+AccessFormPreview* AccessFormPreview::showDocument(linaccess::AccessDocumentKind kind,QString name,
+    const QByteArray& source,const QByteArray& vba,QSqlDatabase database,QWidget* projectOwner) {
+    if (closingProjects().contains(projectKey(database))) throw linaccess::VbaRuntimeError(2501,"Project is closing");
+    ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+    QPointer<AccessFormPreview> existing;
+    for(auto* widget:QApplication::topLevelWidgets()) {
+        auto* document=dynamic_cast<AccessFormPreview*>(widget);
+        if(!document || !document->opened_ || document->closed_ || document->openCancelled_ || document->layout_.kind!=kind
+            || document->db_.connectionName()!=database.connectionName() || document->db_.databaseName()!=database.databaseName()
+            || document->formName_.compare(name,Qt::CaseInsensitive)!=0) continue;
+        if(existing) throw linaccess::VbaRuntimeError(5,"Document target instance is ambiguous");
+        existing=document;
+    }
+    if(existing) {
+        if(existing->closing_) throw linaccess::VbaRuntimeError(2501,"Document is closing");
+        existing->show(); existing->raise(); existing->activateWindow(); existing->activateDocument();
+        return existing && !existing->closed_ ? existing.data() : nullptr;
+    }
+    if(linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(source)).kind!=kind)
+        throw linaccess::VbaRuntimeError(kind==linaccess::AccessDocumentKind::Report ? 2103 : 2102,"Document target kind mismatch");
+    QWidget* owner=nullptr;
+    for(auto* ancestor=projectOwner;ancestor;ancestor=ancestor->parentWidget())
+        if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+    auto document=std::make_unique<AccessFormPreview>(std::move(name),source,vba,std::move(database),owner);
+    if(document->openCancelled_ || document->closed_) return nullptr;
+    document->show(); document->activateWindow(); document->activateDocument();
+    if(document->openCancelled_ || document->closed_) return nullptr;
+    QObject::connect(document.get(),&QDialog::finished,document.get(),[form=document.get()] { deferFormDisposal(form); });
+    return document.release();
+}
+
 void AccessFormPreview::setTimerInterval(int interval) {
     if (layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Timer requires a form");
     if (interval<0) throw linaccess::VbaRuntimeError(5,"Invalid TimerInterval");

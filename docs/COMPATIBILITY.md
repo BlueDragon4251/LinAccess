@@ -470,3 +470,11 @@ actual Qt ForeColor/Eval effects and atomic updates through a compiled palette
 view are tested. Original 100-query / 32-module QBColor call inventories are zero,
 so original business coverage is unchanged. This establishes no full Variant/
 Windows color parity; see [QBColor](QBCOLOR_RUNTIME.md).
+
+Imported form/report opening from the main-window source inspector now uses
+managed independent windows, not a nested exec loop. Native modal metadata,
+same-instance reuse, cancelled Open/Unload, real SQL save and close/MsgBox
+lifetime are tested through the production main-window/file-dialog/explorer
+route on temporary projects. The legacy generated-form editor remains modal
+and full F11/MDI/designer parity stays open; see
+[Main-window documents](MAINWINDOW_DOCUMENT_RUNTIME.md).

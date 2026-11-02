@@ -1247,3 +1247,27 @@ pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
 installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
 All four original fixture hashes pass. Earlier SQL RGB commit 1c82bcb completed
 private CI successfully.
+
+## 2026-11-02 — Main-window imported-document lifetime
+
+Source-inspector form/report opening now closes the details dialog and uses
+managed native windows with imported Modal metadata, instead of stack previews
+inside exec. Repeated opening reuses the same project/kind/name instance; read
+cursors finish before construction. Deferred disposal protects closing documents
+through outer VBA calls. The new mainwindow_documents test compiles actual GUI
+sources and drives the real project/file-dialog/explorer path on temporary
+SQLite projects, proving Load once, independent nonmodal form/report lifetime,
+actual SQL save, cancelled project switch/Unload, modal/Open-cancel behavior and
+self-close/MsgBox retention. Initial targeted trio: 3/3 (38.93 s). Full fixture-
+enabled desktop suite now has 22 CTests. No original business-coverage increment
+is claimed. The legacy partially converted/generated form editor retains its
+modal opener pending caller/renderer migration, since changing its child alone
+would block that child. Full F11/MDI/acDialog/focus parity remains open; see
+MAINWINDOW_DOCUMENT_RUNTIME.md.
+
+Final validation: host 22/22 (89.26 s), Debian 12 22/22 (72.86 s), Ubuntu
+24.04 22/22 (64.99 s), GUI-disabled core 1/1 (0.94 s). Fresh host/distro DEBs
+pass exact payload/backend/permissions/fixture-exclusion checks. Isolated
+installed Debian/Ubuntu packages pass backend/counter execution and GUI startup.
+All four original fixture hashes pass; repository privacy is unchanged. Earlier
+QBColor commit 6920d36 completed private CI successfully.

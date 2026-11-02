@@ -48,6 +48,8 @@ public:
     static bool closeProjectDocuments(const QSqlDatabase& database);
     static bool closeApplicationDocuments();
     static void quitApplication();
+    static AccessFormPreview* showDocument(linaccess::AccessDocumentKind kind,QString name,
+        const QByteArray& source,const QByteArray& vba,QSqlDatabase database,QWidget* projectOwner=nullptr);
     void accept() override;
     void reject() override;
 

@@ -163,6 +163,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     auto* splitter = new QSplitter(this);
     explorer_ = new QTreeWidget(splitter);
+    explorer_->setObjectName("database-explorer");
     explorer_->setHeaderHidden(true);
     explorer_->setMinimumWidth(220);
     tabs_ = new QTabWidget(splitter);
@@ -393,19 +394,23 @@ void MainWindow::showAccessArtifact(int id) {
         return;
     }
     QDialog dialog(this);
-    dialog.setWindowTitle(query.value(0).toString() + ": " + query.value(1).toString());
+    dialog.setObjectName("access-artifact-details");
+    const auto artifactName=query.value(1).toString();
+    dialog.setWindowTitle(query.value(0).toString() + ": " + artifactName);
     dialog.resize(850, 680);
     auto* outer = new QVBoxLayout(&dialog);
     const auto kind = query.value(0).toString();
     const auto status = query.value(2).toString();
+    const auto format=query.value(3).toString();
+    const auto detail=query.value(4).toString();
+    const auto bytes=query.value(5).toByteArray();
+    query.finish();
     outer->addWidget(new QLabel("Status: " + status
-        + " | Format: " + query.value(3).toString()
+        + " | Format: " + format
         + " | Access-Layouts und vollständiges VBA sind NICHT kompatibel."));
-    if (!query.value(4).toString().isEmpty())
-        outer->addWidget(new QLabel(query.value(4).toString()));
+    if (!detail.isEmpty()) outer->addWidget(new QLabel(detail));
     auto* source = new QPlainTextEdit(&dialog);
     source->setReadOnly(true);
-    const auto bytes = query.value(5).toByteArray();
     source->setPlainText((kind == "vba"
         ? linaccess::decodeVbaSource(bytes.left(512 * 1024))
         : QString::fromUtf8(bytes.left(512 * 1024)))
@@ -457,28 +462,32 @@ void MainWindow::showAccessArtifact(int id) {
     if (kind == "report" && status == "source_only" && !bytes.isEmpty()) {
         auto* open = new QPushButton("Access-Bericht öffnen (Layoutansicht)", &dialog);
         outer->addWidget(open);
-        const auto name = query.value(1).toString();
-        connect(open, &QPushButton::clicked, &dialog, [this, name, bytes] {
-            QSqlQuery vba(db_);
-            vba.prepare("SELECT source_bytes FROM _la_access_artifacts WHERE kind='vba' AND name=? ORDER BY id DESC LIMIT 1");
-            vba.addBindValue("Report_" + name);
-            const auto module = vba.exec() && vba.next() ? vba.value(0).toByteArray() : QByteArray{};
-            AccessFormPreview preview(name,bytes,module,db_,this);
-            if (!preview.cancelledByOpen()) preview.exec();
+        const auto name = artifactName;
+        connect(open, &QPushButton::clicked, &dialog, [this, name, bytes, &dialog] {
+            try {
+                QSqlQuery vba(db_);
+                vba.prepare("SELECT source_bytes FROM _la_access_artifacts WHERE kind='vba' AND name=? ORDER BY id DESC LIMIT 1");
+                vba.addBindValue("Report_" + name);
+                const auto module = vba.exec() && vba.next() ? vba.value(0).toByteArray() : QByteArray{};
+                vba.finish(); dialog.accept();
+                (void)AccessFormPreview::showDocument(linaccess::AccessDocumentKind::Report,name,bytes,module,db_,this);
+            } catch(const std::exception& error) { messageError(this,QString::fromUtf8(error.what())); }
         });
     }
     if (kind == "form" && status == "source_only" && !bytes.isEmpty()) {
-        const auto formName = query.value(1).toString();
+        const auto formName = artifactName;
         auto* open = new QPushButton("Access-Formular öffnen (Originalanordnung soweit unterstützt)", &dialog);
         outer->addWidget(open);
-        connect(open, &QPushButton::clicked, &dialog, [this, formName, bytes] {
-            QSqlQuery vba(db_);
-            vba.prepare("SELECT source_bytes FROM _la_access_artifacts WHERE kind='vba' "
-                        "AND name=? ORDER BY id DESC LIMIT 1");
-            vba.addBindValue("Form_" + formName);
-            const auto module = vba.exec() && vba.next() ? vba.value(0).toByteArray() : QByteArray{};
-            AccessFormPreview preview(formName, bytes, module, db_, this);
-            if (!preview.cancelledByOpen()) preview.exec();
+        connect(open, &QPushButton::clicked, &dialog, [this, formName, bytes, &dialog] {
+            try {
+                QSqlQuery vba(db_);
+                vba.prepare("SELECT source_bytes FROM _la_access_artifacts WHERE kind='vba' "
+                            "AND name=? ORDER BY id DESC LIMIT 1");
+                vba.addBindValue("Form_" + formName);
+                const auto module = vba.exec() && vba.next() ? vba.value(0).toByteArray() : QByteArray{};
+                vba.finish(); dialog.accept();
+                (void)AccessFormPreview::showDocument(linaccess::AccessDocumentKind::Form,formName,bytes,module,db_,this);
+            } catch(const std::exception& error) { messageError(this,QString::fromUtf8(error.what())); }
         });
         auto* convert = new QPushButton("Als natives Formular übernehmen (Teilkonvertierung)", &dialog);
         outer->addWidget(convert);
@@ -1008,12 +1017,14 @@ void MainWindow::runForm(const QString& name) {
                 if (!query.exec() || !query.next())
                     throw std::runtime_error("DoCmd.OpenForm: Formularquelle fehlt: " + name.toStdString());
                 const auto form = query.value(0).toByteArray();
+                query.finish();
                 QSqlQuery code(db_);
                 code.prepare("SELECT source_bytes FROM _la_access_artifacts "
                              "WHERE kind='vba' AND name=? ORDER BY id DESC LIMIT 1");
                 code.addBindValue("Form_" + name);
                 const auto module = code.exec() && code.next() ? code.value(0).toByteArray() : QByteArray{};
-                AccessFormPreview preview(name, form, module, db_, this);
+                code.finish();
+                AccessFormPreview preview(name,form,module,db_,this);
                 if (!preview.cancelledByOpen()) preview.exec();
             });
         auto result = linaccess::executeVbaProcedure(vba, procedure, host);

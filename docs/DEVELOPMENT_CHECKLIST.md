@@ -443,3 +443,8 @@ Full targets remain open:
 - [x] Shared native VBA/SQL QBColor classic 16-entry palette, all-index and
   conversion/error tests, actual Qt ForeColor/Eval effects, parameter/alias
   queries and atomic DAO updates through a compiled palette view.
+
+- [x] Managed independent imported form/report opening from the actual main
+  window/file-dialog/explorer route, singleton reuse, modal metadata, Open/
+  Unload cancellation, SQL saving and deferred self-close/MsgBox lifetime;
+  legacy generated-form modal migration and complete MDI/F11 remain open.
