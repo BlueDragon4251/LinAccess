@@ -113,6 +113,10 @@ public:
         auto& preview = checked();
         auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if(key=="listrows") {
+            if(!args.empty()) throw linaccess::VbaRuntimeError(450,"ListRows takes no arguments");
+            return linaccess::VbaValue::numeric(listCombo()->maxVisibleItems());
+        }
         if(auto* list=dynamic_cast<AccessListBox*>(widget); list && (key=="selected" || key=="itemsselected" || key=="listindex" || key=="itemdata" || key=="multiselect")) {
             if(key=="multiselect") {
                 if(!args.empty()) throw linaccess::VbaRuntimeError(450,"MultiSelect takes no arguments");
@@ -315,6 +319,17 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if(key=="listrows") {
+            auto* combo=listCombo();
+            if(preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(3251,"Runtime ListRows requires native Form view");
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null ListRows");
+            const auto rows=linaccess::sqlFieldValue(scalar,"INTEGER").toLongLong();
+            if(rows<-32768 || rows>32767) throw linaccess::VbaRuntimeError(6,"ListRows Integer overflow");
+            if(rows<1 || rows>255) throw linaccess::VbaRuntimeError(5,"ListRows must be from 1 to 255");
+            for(auto& definition:preview.layout_.controls) if(definition.name.compare(name_,Qt::CaseInsensitive)==0) definition.listRows=static_cast<int>(rows);
+            combo->setMaxVisibleItems(static_cast<int>(rows)); return;
+        }
         if(dynamic_cast<AccessListBox*>(widget) && (key=="multiselect" || key=="listindex" || key=="selected" || key=="itemsselected" || key=="itemdata"))
             throw linaccess::VbaRuntimeError(key=="selected" ? 450 : key=="itemsselected" || key=="itemdata" ? 383 : 3251,"ListBox selection assignment requires its supported runtime API");
         if(key=="listindex" || key=="itemdata") {

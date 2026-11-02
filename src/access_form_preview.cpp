@@ -1080,6 +1080,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         } else if (control.type == "ComboBox") {
             auto* combo = new AccessComboBox(canvas);
             combo->setEditable(true);
+            combo->setMaxVisibleItems(control.listRows);
             combo->preparePopup=[this,combo,name=control.name] {
                 try {
                     if (!combo->property("la_rows_loaded").toBool()) requeryControl(name.toStdString());

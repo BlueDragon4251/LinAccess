@@ -1448,3 +1448,20 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. Previous column-heading commit 9b4fa12 completed
 private CI successfully. Repository privacy remains unchanged.
+
+## 2026-11-02 — Native ComboBox popup row cap
+
+ListRows now retains templates/default 16 and drives the actual Qt maximum
+visible data-row setting. Native VBA/GUI/SQL tests measure 3/5-row viewports,
+scroll and persist an item beyond the initial viewport, and retain pending text,
+dirty state and model identity. Integer/property range, scalar-once, invalid
+metadata and report limits are checked. Initial targeted layout suite: 1/1
+(9.70 s). Full Windows heading/theme/screen-edge/open-popup timing remains open;
+no original business coverage increment. See COMBO_LISTROWS_RUNTIME.md.
+
+Final validation: host 22/22 (91.26 s), Debian 12 22/22 (74.80 s), Ubuntu
+24.04 22/22 (67.20 s), GUI-disabled core 1/1 (0.94 s). Fresh host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. Previous multiple-selection commit fc7ba53
+completed private CI successfully. Repository privacy remains unchanged.

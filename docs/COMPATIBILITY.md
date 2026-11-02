@@ -549,3 +549,10 @@ real SQL tests prove other/same-field edits preserve selected state and stored
 values. Extended requery clears selection; selected Simple requery rejects while
 preserving state. Full Windows event/index/type behavior and the ListIndex writer
 remain open; see [Multiple selection](MULTISELECT_LISTBOX_RUNTIME.md).
+
+ComboBox.ListRows now uses the documented default/range and controls the actual
+Qt popup data-row cap. Native tests measure 3/5-row viewports, scroll/select/save
+a later SQL row and preserve pending text/model identity on property changes.
+Report mutation and invalid conversions reject explicitly. Full Windows heading/
+theme/screen-edge/open-popup timing remains open; see
+[Popup rows](COMBO_LISTROWS_RUNTIME.md).

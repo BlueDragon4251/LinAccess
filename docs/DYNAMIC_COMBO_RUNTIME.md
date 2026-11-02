@@ -101,3 +101,9 @@ ListCount tokens, both in comments. No executed original caller is claimed.
 
 Contract reference (current documentation, not Access 2003 runtime verification):
 https://learn.microsoft.com/en-us/office/vba/api/access.combobox.rowsourcetype
+
+## ComboBox popup row cap
+
+Native ListRows now retains template/default metadata and drives the actual Qt
+popup cap, with real viewport/scroll/SQL persistence tests. See
+COMBO_LISTROWS_RUNTIME.md for range, conversion and visual-context limits.

@@ -126,6 +126,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
     QHash<QString,int> templateBackStyles;
     QHash<QString,int> templateMultiSelect;
     QHash<QString,bool> templateColumnHeads;
+    QHash<QString,int> templateListRows;
     static const QRegularExpression begin(R"(^\s*Begin(?:\s+(\w+))?\s*$)",
         QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression property(R"(^\s*([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$)");
@@ -153,6 +154,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 item.textAlign = templateAlignments.value(type);
                 item.multiSelect = templateMultiSelect.value(type);
                 item.columnHeads = templateColumnHeads.value(type);
+                item.listRows = templateListRows.value(type,16);
                 if (templateForeColors.contains(type)) item.foreColor=templateForeColors.value(type);
                 if (templateBackColors.contains(type)) item.backColor=templateBackColors.value(type);
                 item.backStyle=templateBackStyles.value(type,type=="OptionGroup" ? 0 : 1);
@@ -182,6 +184,13 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             continue;
         }
         const auto integer = [&] { bool ok = false; const int result = value.toInt(&ok); return ok ? result : 0; };
+        if(key=="ListRows" && (current.controlTemplate || current.control>=0)) {
+            bool valid=false; const auto rows=value.toInt(&valid);
+            if(!valid || rows<1 || rows>255) throw std::runtime_error("Invalid imported ListRows");
+            if(current.controlTemplate) templateListRows[current.type]=rows;
+            else form.controls[current.control].listRows=rows;
+            continue;
+        }
         if(key=="ColumnHeads" && (current.controlTemplate || current.control>=0)) {
             const auto setting=accessBoolean(value,false);
             if(current.controlTemplate) templateColumnHeads[current.type]=setting;

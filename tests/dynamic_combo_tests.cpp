@@ -11,6 +11,7 @@
 #include <QStyle>
 #include <QStyleOptionComboBox>
 #include <QHeaderView>
+#include <QScrollBar>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -24,6 +25,7 @@ void testComboListProperties();
 void testNativeListBox();
 void testColumnHeads();
 void testMultiSelectListBox();
+void testComboListRows();
 
 void testDynamicCombos() {
     using linaccess::VbaValue;
@@ -87,6 +89,60 @@ End Sub
     testNativeListBox();
     testColumnHeads();
     testMultiSelectListBox();
+    testComboListRows();
+}
+
+void testComboListRows() {
+    using linaccess::VbaValue;
+    const auto metadata=linaccess::parseAccessFormLayout(QStringLiteral("Begin Form\nBegin ComboBox\nListRows =4\nEnd\nBegin Section\nBegin ComboBox\nName =\"inherited\"\nEnd\nBegin ComboBox\nName =\"override\"\nListRows =2\nEnd\nEnd\nEnd"));
+    assert(metadata.controls.size()==2 && metadata.controls[0].listRows==4 && metadata.controls[1].listRows==2);
+    const auto defaults=linaccess::parseAccessFormLayout(QStringLiteral("Begin Form\nBegin Section\nBegin ComboBox\nName =\"default\"\nEnd\nEnd\nEnd")); assert(defaults.controls[0].listRows==16);
+    for(const auto* invalid:{"0","256","bad"}) {
+        bool rejected=false; try { (void)linaccess::parseAccessFormLayout(QStringLiteral("Begin Form\nBegin ComboBox\nListRows =")+invalid+"\nEnd\nEnd"); } catch(const std::exception&) { rejected=true; } assert(rejected);
+    }
+    auto db=QSqlDatabase::addDatabase("QSQLITE","popup-list-rows"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE choices(id INTEGER,label TEXT)"));
+    sql.prepare("INSERT INTO choices VALUES(?,?)"); for(int row=1;row<=40;++row) { sql.bindValue(0,row); sql.bindValue(1,QStringLiteral("item%1").arg(row)); assert(sql.exec()); }
+    assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,choice INTEGER)")); assert(sql.exec("INSERT INTO records VALUES(1,1)"));
+    const QByteArray layout="Begin Form\nRecordSource =\"records\"\nBegin Section\nBegin ComboBox\nName =\"pick\"\nControlSource =\"choice\"\nRowSource =\"SELECT id,label FROM choices ORDER BY id\"\nColumnCount =2\nColumnWidths =\"0;1440\"\nListRows =3\nWidth =3000\nHeight =300\nEnd\nBegin TextBox\nName =\"plain\"\nTop =700\nEnd\nEnd\nEnd";
+    AccessFormPreview form("popup rows",layout,"Sub ResizeRows()\nMe.pick.ListRows=5\nEnd Sub",db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto root=makePreviewFormObject(form),pick=root->objectMember("pick",{}).object;
+    auto* combo=form.findChild<QComboBox*>("access-control-pick"); assert(combo && combo->count()==0 && combo->maxVisibleItems()==3 && pick->member("ListRows",{}).asNumber()==3);
+    const auto popup=[&](int maximum) {
+        pick->member("Dropdown",{}); QApplication::processEvents(); auto* view=qobject_cast<QTreeView*>(combo->view()); assert(view && view->isVisible());
+        assert(view->model()->rowCount()==40 && view->verticalScrollBar()->maximum()>view->verticalScrollBar()->minimum());
+        assert(view->visualRect(view->model()->index(maximum-1,1)).bottom()<=view->viewport()->height()+1);
+        assert(view->visualRect(view->model()->index(maximum,1)).top()>=view->viewport()->height()-1);
+        return view;
+    };
+    auto* view=popup(3); const int heightThree=view->viewport()->height(); combo->hidePopup();
+    QPointer<QAbstractItemModel> model=combo->model(); std::vector<VbaValue> none; assert(form.executeProcedure("ResizeRows",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(combo->model()==model && combo->maxVisibleItems()==5 && !form.hasUnsavedChanges()); view=popup(5); assert(view->viewport()->height()>heightThree);
+    const auto later=view->model()->index(20,1); view->scrollTo(later,QAbstractItemView::PositionAtCenter); QApplication::processEvents();
+    QTest::qWait(QApplication::doubleClickInterval()+20);
+    QTest::mouseClick(view->viewport(),Qt::LeftButton,Qt::NoModifier,view->visualRect(later).center()); QApplication::processEvents();
+    assert(pick->member("Value",{}).asNumber()==21 && form.hasUnsavedChanges()); root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT choice FROM records WHERE id=1") && sql.next() && sql.value(0).toInt()==21); sql.finish();
+    combo->lineEdit()->setFocus(); combo->lineEdit()->selectAll(); QTest::keyClicks(combo->lineEdit(),"pending");
+    pick->assign("ListRows",VbaValue::numeric(1.5)); assert(combo->maxVisibleItems()==2 && combo->model()==model && combo->currentText()=="pending" && combo->lineEdit()->isModified() && form.hasUnsavedChanges());
+    for(const auto& invalid:std::vector<std::pair<VbaValue,int>>{{VbaValue{},94},{VbaValue::numeric(0),5},{VbaValue::numeric(-1),5},{VbaValue::numeric(256),5},{VbaValue::numeric(255.5),5},{VbaValue::numeric(32768),6},{VbaValue::string("bad"),13}}) {
+        int actual=0; try { pick->assign("ListRows",invalid.first); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; }
+        assert(actual==invalid.second && combo->maxVisibleItems()==2 && combo->model()==model && combo->currentText()=="pending");
+    }
+    QTest::keyClick(combo->lineEdit(),Qt::Key_Escape); assert(!form.hasUnsavedChanges() && pick->member("Value",{}).asNumber()==21);
+    class Rows final:public linaccess::VbaObject {
+    public:
+        int reads{};
+        VbaValue scalarValue() override { ++reads; return VbaValue::numeric(4); }
+        VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw linaccess::VbaRuntimeError(438,"No members"); }
+    };
+    auto scalar=std::make_shared<Rows>(); pick->assign("ListRows",VbaValue::reference(scalar)); assert(scalar->reads==1 && combo->maxVisibleItems()==4 && combo->model()==model);
+    int actual=0; try { pick->member("ListRows",{VbaValue::numeric(0)}); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; } assert(actual==450);
+    actual=0; try { root->objectMember("plain",{}).object->member("ListRows",{}); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; } assert(actual==438);
+    assert(form.close());
+    auto reportSource=layout; reportSource.replace("Begin Form","Begin Report"); AccessFormPreview report("popup report",reportSource,{},db);
+    auto reportPick=makePreviewFormObject(report)->objectMember("pick",{}).object; assert(reportPick->member("ListRows",{}).asNumber()==3);
+    actual=0; try { reportPick->assign("ListRows",VbaValue::numeric(5)); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; } assert(actual==3251); assert(report.close());
 }
 
 void testMultiSelectListBox() {

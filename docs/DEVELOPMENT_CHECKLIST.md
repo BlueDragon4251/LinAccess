@@ -494,3 +494,8 @@ Full targets remain open:
   collection/lifetime/validation tests and NULL-value field-save/mirroring/new-row
   safety; Simple selected requery, ListIndex writer, exact Windows events/types/
   extra-header indices and full VBA array/class semantics remain open.
+
+- [x] Native ComboBox ListRows template/default/VBA range and actual popup cap,
+  measured 3/5-row viewport, 40-row scrolling/SQL selection, retained draft/model
+  identity and scalar/error/report limits; full Windows header/theme/screen-edge/
+  open-popup timing and declared Integer identity remain open.
