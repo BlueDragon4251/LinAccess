@@ -618,10 +618,31 @@ public:
     }
     std::shared_ptr<linaccess::VbaObject> databaseEngine() override { return linaccess::makeDaoEngine(preview_.db_); }
     std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(preview_.db_); }
-    void executeSql(std::string_view statement) override {
-        if (!preview_.db_.isOpen()) throw std::runtime_error("Kein offenes Datenbankprojekt");
-        auto database = linaccess::makeDaoDatabase(preview_.db_);
-        (void)database->member("Execute",{linaccess::VbaValue::string(std::string(statement))});
+    void executeSql(std::string_view statement) override { runSql(statement,true); }
+    void runSql(std::string_view statement,bool useTransaction) {
+        if (!preview_.db_.isOpen()) throw linaccess::VbaRuntimeError(3420,"No open native database project");
+        const auto execute=[&] {
+            auto database=linaccess::makeDaoDatabase(preview_.db_);
+            (void)database->member("Execute",{linaccess::VbaValue::string(std::string(statement))});
+        };
+        if(!useTransaction) { execute(); return; }
+        static thread_local quint64 sequence=0;
+        const auto savepoint=QString("la_docmd_runsql_%1").arg(++sequence);
+        QSqlQuery transaction(preview_.db_);
+        const auto failure=[&] {
+            const int code=transaction.lastError().nativeErrorCode().toInt() & 255;
+            throw linaccess::VbaRuntimeError(code==5 || code==6 ? 3260 : 3146,"Native RunSQL transaction operation failed");
+        };
+        if(!transaction.exec("SAVEPOINT "+savepoint)) failure();
+        try {
+            execute();
+            if(!transaction.exec("RELEASE "+savepoint)) failure();
+        } catch(...) {
+            const bool rolledBack=transaction.exec("ROLLBACK TO "+savepoint);
+            const bool released=transaction.exec("RELEASE "+savepoint);
+            if(!rolledBack || !released) throw linaccess::VbaRuntimeError(3146,"Native RunSQL transaction cleanup failed");
+            throw;
+        }
     }
     void sendKeys(std::string_view keys,bool wait) override {
         if (preview_.hasActivated_ && AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(3251,"Database-window SendKeys target is not implemented");
@@ -700,8 +721,11 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
     }
     if (command=="runsql") {
         if (args.empty() || args.size()>2) throw VbaRuntimeError(450,"RunSQL argument count invalid");
-        if (args.size()>1) throw VbaRuntimeError(3251,"RunSQL transaction option unsupported");
-        host.executeSql(args[0].asText()); return {};
+        const bool useTransaction=args.size()<2 || args[1].kind==VbaValue::Kind::Empty
+            ? true : coerceVbaModuleValue(scalarVbaValue(args[1]),"boolean").boolean;
+        const auto statement=scalarVbaValue(args[0]);
+        if(statement.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null RunSQL statement");
+        host.runSql(statement.asText(),useTransaction); return {};
     }
     if (command=="runcommand") {
         if (args.size()!=1) throw VbaRuntimeError(450,"RunCommand requires one command");

@@ -911,3 +911,9 @@ Text/Null OpenArgs now reaches independent native form/report instances before
 opening events and is readable through Me, instance scope and Forms/Reports.
 Reopening after close accepts another value. Nontext values, mutation and other
 opening modes remain bounded; see [OpenArgs runtime](DOCUMENT_OPENARGS_RUNTIME.md).
+
+## Native RunSQL transaction option
+
+DoCmd.RunSQL evaluates UseTransaction and uses an action savepoint for True;
+False adds no wrapper. Existing outer DAO transactions remain owned by their
+caller. See [SQLite/Jet boundaries](DOCMD_RUNSQL_TRANSACTION_RUNTIME.md).

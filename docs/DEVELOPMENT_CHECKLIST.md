@@ -751,3 +751,7 @@ Full targets remain open:
 - [x] Native form/report text OpenArgs before opening events, Null/empty-text
   storage, instance/collection reads, independent lifetime and reopen; full
   Variant/mutability/data/window-mode semantics remain open.
+
+- [x] Native DoCmd.RunSQL UseTransaction (named/positional/default), scoped
+  action savepoint/cleanup, preserved outer DAO transaction and Null SQL errors;
+  complete Jet partial-failure/transaction semantics remain open.

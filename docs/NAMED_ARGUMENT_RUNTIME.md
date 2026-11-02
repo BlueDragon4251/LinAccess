@@ -14,8 +14,9 @@ Close distinguishes omitted ObjectType/ObjectName from explicit numeric values.
 A native GUI regression executes SQL, opens a filtered child, reads its bound
 control and closes it through reordered named arguments.
 
-Unsupported method options remain unsupported after binding: e.g. RunSQL's
-UseTransaction option is not implemented. Named built-in functions, Access Eval
+Unsupported method options remain unsupported after binding. RunSQL's
+UseTransaction option now has a native scoped-savepoint implementation; see
+[transaction scope](DOCMD_RUNSQL_TRANSACTION_RUNTIME.md). Named built-in functions, Access Eval
 named calls, named ParamArray calls, arbitrary DAO/COM method signatures, full
 compile-time evaluation order and Windows binder equivalence remain open.
 Missing scalar/error coercion still uses the bounded Error-Variant behavior,

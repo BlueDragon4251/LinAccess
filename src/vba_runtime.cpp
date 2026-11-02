@@ -669,7 +669,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
         } else if (std::regex_match(source, match, runSql)) {
             const auto expr = trim(match[1].str());
             const auto arguments=splitArguments(expr);
-            if(std::any_of(arguments.begin(),arguments.end(),[](const std::string& argument){ return !callArgument(argument).name.empty(); })) {
+            if(arguments.size()>1 || std::any_of(arguments.begin(),arguments.end(),[](const std::string& argument){ return !callArgument(argument).name.empty(); })) {
                 const auto expression="DoCmd.RunSQL("+expr+")";
                 if(!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Named RunSQL syntax unsupported",line};
                 statements.push_back({Statement::Type::ObjectCall,{},expression,line}); continue;
@@ -1433,7 +1433,9 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::ExecuteSql:
                 if (active) {
                     if (++effects > 1000) throw std::runtime_error("VBA-Effektbudget erreicht");
-                    host.executeSql(evaluate(instruction.expression).asText());
+                    const auto statement=scalarVbaValue(evaluate(instruction.expression));
+                    if(statement.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null RunSQL statement");
+                    host.executeSql(statement.asText());
                 }
                 break;
             case Statement::Type::OpenForm:

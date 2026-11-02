@@ -2571,3 +2571,16 @@ args fail explicitly. Default data/window mode constants are accepted while
 other modes remain unsupported. Core/DAO/native GUI targets pass 3/3 (1.78 s);
 desktop build passes. No new test target or matrix/package repetition yet.
 See DOCUMENT_OPENARGS_RUNTIME.md for remaining Windows/Variant/property limits.
+
+## Native RunSQL UseTransaction (2026-11-02)
+
+RunSQL evaluates positional/named/default UseTransaction. True uses a unique
+native savepoint with checked release/rollback cleanup; False adds no wrapper.
+Existing DAO workspace transactions remain active and own their outer rollback.
+Native GUI execution verifies successful calls, late unique failure with original
+3022, continued execution, outer DAO rollback and Null SQL rejection (94) through
+both direct and named syntax. Existing core/DAO/query-model/GUI targets pass 4/4
+(1.83 s), desktop build passes. No new target or full matrix/package repetition.
+SQLite atomicity remains with False; complete Jet partial-failure semantics,
+cross-connection execution and callback reentrancy remain open. See
+DOCMD_RUNSQL_TRANSACTION_RUNTIME.md for the precise transaction boundary.

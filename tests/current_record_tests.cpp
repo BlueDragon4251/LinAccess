@@ -66,8 +66,34 @@ End Function
 Sub WritePosition()
 Me.CurrentRecord=1
 End Sub
+Function RunSqlNull() As Long
+On Error Resume Next
+DoCmd.RunSQL SQLStatement:=Null
+If Err.Number=94 Then
+RunSqlNull=RunSqlNull+1
+End If
+Err.Clear
+DoCmd.RunSQL Null
+If Err.Number=94 Then
+RunSqlNull=RunSqlNull+1
+End If
+End Function
+Function RunSqlTransactions() As Long
+On Error Resume Next
+DoCmd.RunSQL SQLStatement:="INSERT INTO named_unique VALUES(2),(1)",UseTransaction:=True
+RunSqlTransactions=Err.Number
+On Error GoTo 0
+DoCmd.RunSQL "INSERT INTO named_unique VALUES(3)",False
+DBEngine(0).BeginTrans
+DoCmd.RunSQL "INSERT INTO named_unique VALUES(4)"
+On Error Resume Next
+DoCmd.RunSQL SQLStatement:="INSERT INTO named_unique VALUES(5),(1)",UseTransaction:=True
+On Error GoTo 0
+DBEngine(0).Rollback
+End Function
 Function NamedCommands() As String
-DoCmd.RunSQL SQLStatement:="INSERT INTO named_calls VALUES(1)"
+DoCmd.RunSQL SQLStatement:="INSERT INTO named_calls VALUES(1)",UseTransaction:=True
+DoCmd.RunSQL "INSERT INTO named_calls VALUES(2)",False
 DoCmd.OpenForm WhereCondition:="[id]=20", FormName:="named_child", OpenArgs:="payload", DataMode:=acFormPropertySettings, WindowMode:=acWindowNormal
 NamedCommands=Forms("named_child").OpenArgs & ":" & Forms("named_child")!label
 DoCmd.Close Save:=2,ObjectName:="named_child",ObjectType:=2
@@ -111,6 +137,7 @@ End Function
     assert(queryModel->item("id").asNumber()==30); queryModel->assign("OrderBy",VbaValue::string("id ASC")); queryModel->assign("OrderByOn",VbaValue::logical(true));
     assert(queryModel->item("id").asNumber()==10 && queryModel->member("CurrentRecord",{}).asNumber()==1 && queryForm.close());
     assert(sql.exec("CREATE TABLE named_calls(value INTEGER)"));
+    assert(sql.exec("CREATE TABLE named_unique(value INTEGER UNIQUE)")); assert(sql.exec("INSERT INTO named_unique VALUES(1)"));
     assert(sql.exec("CREATE TABLE open_arg_events(phase TEXT,value TEXT)"));
     sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','named_child',?)");
     auto childLayout=layout; childLayout.replace("OnCurrent =\"[Event Procedure]\"","OnOpen =\"[Event Procedure]\"\nOnLoad =\"[Event Procedure]\"");
@@ -134,7 +161,13 @@ End Sub
     std::vector<VbaValue> namedArgs; const auto named=namedForm.executeProcedure("NamedCommands",namedArgs);
     if(named.status!=linaccess::VbaExecutionStatus::Completed) qWarning("Named DoCmd error=%d line=%d",named.errorNumber,named.line);
     assert(named.status==linaccess::VbaExecutionStatus::Completed && named.typedReturnValue->asText()=="payload:second|new|report-value");
-    assert(sql.exec("SELECT COUNT(*) FROM named_calls") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM named_calls") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+    const auto nullSql=namedForm.executeProcedure("RunSqlNull",namedArgs);
+    assert(nullSql.status==linaccess::VbaExecutionStatus::Completed && nullSql.typedReturnValue->asNumber()==2);
+    const auto transactions=namedForm.executeProcedure("RunSqlTransactions",namedArgs);
+    if(transactions.status!=linaccess::VbaExecutionStatus::Completed) qWarning("RunSQL transaction error=%d line=%d",transactions.errorNumber,transactions.line);
+    assert(transactions.status==linaccess::VbaExecutionStatus::Completed && transactions.typedReturnValue->asNumber()==3022);
+    assert(sql.exec("SELECT COUNT(*),SUM(value) FROM named_unique") && sql.next() && sql.value(0).toInt()==2 && sql.value(1).toInt()==4); sql.finish();
     assert(makePreviewFormObject(namedForm)->member("OpenArgs",{}).kind==VbaValue::Kind::Null);
     assert(sql.exec("SELECT COUNT(*) FROM open_arg_events WHERE value IN('payload','new')") && sql.next() && sql.value(0).toInt()==4); sql.finish();
     assert(sql.exec("SELECT COUNT(*) FROM open_arg_events WHERE phase='ReportOpen' AND value='report-value'") && sql.next() && sql.value(0).toInt()==1); sql.finish();
