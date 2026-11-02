@@ -943,3 +943,10 @@ Successful native application Quit stops active VBA callers/operands and waiting
 dialog frames; cancelled Quit preserves error handling. Startup Quit prevents
 later Open/Load/show work in native construction scopes. Typed array function
 returns remain arrays. See [remaining shutdown scope](QUIT_EXECUTION_RUNTIME.md).
+
+Native DAO named arguments are supported for the implemented parameter subset of
+Database.OpenRecordset (Name, Type), Execute (Query, Options), temporary
+CreateQueryDef (Name, SQLText), QueryDef.OpenRecordset (Type), Execute (Options),
+TableDef.OpenRecordset (Type), and Recordset FindFirst/Last/Next/Previous
+(Criteria). This does not extend the supported recordset modes or optional DAO
+options. Full DAO signatures/default/coercion parity remains open.

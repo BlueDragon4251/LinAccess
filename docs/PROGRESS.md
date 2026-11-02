@@ -2640,3 +2640,18 @@ GUI-free build/test passed 1/1 (1.74 s). All four original fixture SHA-256 check
 passed. The .deb passed contents, permissions, matching Build-ID and pinned
 SQLite backend checks. No new test targets or distro matrix rerun. Remote CI
 remains blocked by the previously reported billing restriction.
+
+## Named DAO method arguments (2026-11-02)
+
+Existing native Database.OpenRecordset/Execute/temporary CreateQueryDef,
+QueryDef.OpenRecordset/Execute, TableDef.OpenRecordset and Recordset Find methods
+now advertise their implemented argument names to the expression binder. Written
+argument evaluation order and duplicate/unknown/required checks use the existing
+binder. Unsupported optional Options/LockEdit parameters are not advertised or
+silently ignored. Existing native method/type/SQL restrictions still apply.
+The existing DAO regression now uses reordered named recordset/action/query
+arguments and named FindFirst criteria against real SQLite data. No new target.
+
+Desktop build and the existing dao_execution target pass (0.30 s) for this
+increment. Grouped packaging/full-suite evidence remains the preceding Quit
+snapshot; neither was repeated for this argument-metadata-only increment.

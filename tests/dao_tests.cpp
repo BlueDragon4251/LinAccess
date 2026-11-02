@@ -38,12 +38,12 @@ void testSqlRgbDao() {
 Dim database As DAO.Database
 Dim rows As DAO.Recordset
 Set database=CurrentDb
-Set rows=database.OpenRecordset("SELECT id,RGB(r,g,b) AS shade FROM color_rows ORDER BY id")
+Set rows=database.OpenRecordset(Type:=4, Name:="SELECT id,RGB(r,g,b) AS shade FROM color_rows ORDER BY id")
 Me!FirstShade=rows!shade
-rows.MoveNext
+rows.FindFirst Criteria:="id=2"
 Me!SecondShade=rows!shade
 rows.Close
-database.Execute "UPDATE color_rows SET packed=RGB(r,g,b)"
+database.Execute Options:=128, Query:="UPDATE color_rows SET packed=RGB(r,g,b)"
 Me!ColorAffected=database.RecordsAffected
 End Sub
 )VBA","PaintRows",host);
@@ -72,7 +72,7 @@ void testBooleanQueryParameters() {
     Host host(db);
     const auto converted=linaccess::executeVbaProcedure(R"VBA(Sub ConvertBoolean()
 Dim definition As DAO.QueryDef
-Set definition=CurrentDb.CreateQueryDef("", "PARAMETERS p BIT; UPDATE flags SET flag=[p]")
+Set definition=CurrentDb.CreateQueryDef(SQLText:="PARAMETERS p BIT; UPDATE flags SET flag=[p]", Name:="")
 definition.Parameters("p").Value=CBool("False")
 definition.Execute
 Me!FalseType=TypeName(CBool(0))

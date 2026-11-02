@@ -183,6 +183,12 @@ private:
 };
 class Recordset final : public VbaObject, public std::enable_shared_from_this<Recordset> {
 public:
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        const auto key=lower(name);
+        if (key=="findfirst" || key=="findlast" || key=="findnext" || key=="findprevious")
+            return VbaArgumentSignature{{"Criteria"},1};
+        return {};
+    }
     Recordset(QSqlDatabase db, QString source, bool snapshot, QMap<QString,QVariant> bindings = {},AccessQueryPlan plan={})
         : db_(std::move(db)), source_(std::move(source)), readOnly_(snapshot), bindings_(std::move(bindings)),queryPlan_(std::move(plan)) {
         data_->workspace=workspaceState(db_); data_->rollbackRevision=data_->workspace->rollbackRevision;
@@ -571,6 +577,12 @@ private:
 class QueryParameters;
 class QueryDefinition final : public VbaObject, public std::enable_shared_from_this<QueryDefinition> {
 public:
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        const auto key=lower(name);
+        if (key=="openrecordset") return VbaArgumentSignature{{"Type"},0};
+        if (key=="execute") return VbaArgumentSignature{{"Options"},0};
+        return {};
+    }
     QueryDefinition(QSqlDatabase db, QString source) : db_(std::move(db)), source_(std::move(source)), plan_(compileAccessQuery(source_)) {}
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         if (closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
@@ -724,6 +736,11 @@ QStringList nativeTableNames(QSqlDatabase db) {
 }
 class TableDefinition final : public VbaObject {
 public:
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        const auto key=lower(name);
+        if (key=="openrecordset") return VbaArgumentSignature{{"Type"},0};
+        return {};
+    }
     TableDefinition(QSqlDatabase db,QString name) : db_(std::move(db)),name_(std::move(name)) {}
     bool valid() {
         if (invalidated_ || !db_.isOpen() || !nativeTableNames(db_).contains(name_,Qt::CaseInsensitive)) invalidated_=true;
@@ -788,6 +805,13 @@ private:
 };
 class Database final : public VbaObject {
 public:
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        const auto key=lower(name);
+        if (key=="openrecordset") return VbaArgumentSignature{{"Name","Type"},1};
+        if (key=="execute") return VbaArgumentSignature{{"Query","Options"},1};
+        if (key=="createquerydef") return VbaArgumentSignature{{"Name","SQLText"},2};
+        return {};
+    }
     explicit Database(QSqlDatabase db) : db_(std::move(db)),workspace_(workspaceState(db_)) {}
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         workspace_->check(); require(db_.isOpen(), "DAO: Database is closed");
