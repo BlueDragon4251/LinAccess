@@ -601,3 +601,7 @@ Full targets remain open:
 - [x] Restore declared Byte/Integer/Long field subtypes and bounded Field.Type
   from unambiguous import metadata, Qt/VBA/SQL bounds/pending/save tests and all
   127 original INT columns/471904 values; raw SQL/full Jet/type identity remains open.
+
+- [x] Shared native VBA/SQL bankers Round, documented half cases, explicit fixed
+  Currency, actual Qt/DAO/SQL/pending/save/rollback regression; Single/high
+  precision/full IEEE/locale/Jet money/Windows identity remain open.

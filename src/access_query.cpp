@@ -405,7 +405,7 @@ QString resolveQueryOrigins(QSqlDatabase db,const QString& sql) {
         }
         if (expanded.size()>4096 || output.size()+expanded.size()>16384) return sql;
         bool pure=true;
-        static const QSet<QString> functions{"linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","abs","round","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","coalesce"};
+        static const QSet<QString> functions{"linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","abs","round","linaccess_jet_round","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","coalesce"};
         for (qsizetype j=0;j+1<expanded.size();++j)
             if (name(expanded[j]) && symbol(expanded[j+1],"(") && !functions.contains(expanded[j].value.toCaseFolded())) pure=false;
         if (explicitAlias && pure) aliases.insert(projection.last().value.toCaseFolded(),expanded);
@@ -423,7 +423,7 @@ RightJoinCandidate simpleRightJoin(const QVector<Token>& tokens,qsizetype start)
     const auto name=[](const Token& token) { return token.kind==Token::Word || token.kind==Token::Identifier; };
     const auto word=[&](qsizetype i,const char* value) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0; };
     if (!word(start,"SELECT")) return {};
-    const QSet<QString> scalar{"iif","format","format$","abs","round","coalesce","ifnull","nullif","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","trim","ltrim","rtrim","replace","linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat"};
+    const QSet<QString> scalar{"iif","format","format$","abs","round","linaccess_jet_round","coalesce","ifnull","nullif","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","trim","ltrim","rtrim","replace","linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat"};
     const QSet<QString> syntax{"where","on","and","or","not","in","is","by"};
     qsizetype from=-1,right=-1,join=-1,on=-1,end=-1; int selects=0,joins=0,depth=0;
     for (qsizetype i=start;i<tokens.size();++i) {
@@ -476,7 +476,7 @@ bool stableTopSource(QSqlDatabase db,const QString& source,QSet<QString> visitin
     if (type=="table") return !sql.trimmed().startsWith("CREATE VIRTUAL",Qt::CaseInsensitive);
     if (type!="view") return false;
     const auto tokens=tokenize(sql);
-    const QSet<QString> pure{"abs","coalesce","ifnull","nullif","iif","sum","total","count","min","max","avg","round","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","substring","trim","ltrim","rtrim","replace","cast","typeof","rank",
+    const QSet<QString> pure{"abs","coalesce","ifnull","nullif","iif","sum","total","count","min","max","avg","round","linaccess_jet_round","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","substring","trim","ltrim","rtrim","replace","cast","typeof","rank",
         "linaccess_jet_iif","linaccess_jet_first","linaccess_jet_last","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","linaccess_jet_like_pattern"};
     const QSet<QString> syntax{"from","join","as","in","not","exists","over","by","and","or","on","where","having","is","when","then","else","case"};
     QSet<QString> dependencies; int selects=0; bool inFrom=false;
@@ -837,7 +837,7 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
             output << (token.value.endsWith('$') ? "linaccess_jet_format_string" : "linaccess_jet_format");
         else if (token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="(" && token.value.compare("Len",Qt::CaseInsensitive)==0)
             output << "linaccess_jet_len";
-        else if (token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="(" && (token.value.compare("RGB",Qt::CaseInsensitive)==0 || token.value.compare("QBColor",Qt::CaseInsensitive)==0))
+        else if (token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="(" && (token.value.compare("RGB",Qt::CaseInsensitive)==0 || token.value.compare("QBColor",Qt::CaseInsensitive)==0 || token.value.compare("Round",Qt::CaseInsensitive)==0))
             output << "linaccess_jet_"+token.value.toCaseFolded();
         else if (token.kind == Token::Word && i + 1 < tokens.size() && tokens[i+1].value == "("
                  && (token.value.compare("IIf",Qt::CaseInsensitive)==0 || token.value.compare("First",Qt::CaseInsensitive)==0

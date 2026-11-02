@@ -692,3 +692,9 @@ SQL data. Generic SQLite INTEGER remains generic; raw SQL range enforcement,
 query types, full Field.Type/errors and other exact Jet types remain open.
 MySQL FLOAT conflates Currency/Single and is not blindly reclassified.
 See INTEGER_FIELD_TYPES_RUNTIME.md.
+
+Round now executes shared native bankers rounding in VBA and the Access SQL
+adapter, replacing SQLite half-away delegation. Core/actual Qt/VBA/DAO/SQL
+regression covers half cases, explicit fixed Currency, pending/save and failed
+UPDATE atomicity. Precision0..15 is bounded; Single/high precision/full binary/
+locale/type/Jet money/Windows behavior remain open. See ROUND_RUNTIME.md.

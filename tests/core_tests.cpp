@@ -13,6 +13,7 @@
 #include <tuple>
 #include <optional>
 #include <limits>
+#include <cmath>
 
 namespace {
 class TestSequence final : public linaccess::VbaObject {
@@ -274,7 +275,35 @@ void testCharacterFunctions() {
     }
 }
 
+void testRoundFunction() {
+    using namespace linaccess;
+    FakeForm host;
+    const auto eval=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,{}); };
+    assert(eval("Round(2.5)").number==2 && eval("Round(3.5)").number==4 && eval("Round(-2.5)").number==-2 && eval("Round(-3.5)").number==-4);
+    for(const auto& sample:std::vector<std::pair<std::string,double>>{{"Round(0.12335,4)",0.1234},{"Round(0.12345,4)",0.1234},{"Round(0.12355,4)",0.1236},{"Round(0.12365,4)",0.1236},{"Round(0.00005,4)",0}})
+        assert(std::abs(eval(sample.first).number-sample.second)<1e-12);
+    assert(eval("Round(Null)").kind==VbaValue::Kind::Null && eval("Round(\" 2.5 \")").number==2);
+    assert(eval("VarType(Round(CInt(1)))=vbInteger").truthy() && eval("VarType(Round(CLng(1)))=vbLong").truthy() && eval("VarType(Round(CByte(1)))=vbByte").truthy());
+    assert(eval("Round(True)").number==-1 && eval("VarType(Round(Empty))=vbInteger").truthy());
+    const auto positive=eval("Round(CCur(\"1.25\"),1)"),negative=eval("Round(CCur(\"-1.35\"),1)");
+    assert(positive.kind==VbaValue::Kind::Currency && positive.currencyUnits==12000 && negative.currencyUnits==-14000);
+    assert(eval("Round(CCur(\"922337203685477.0001\"),0)").asText()=="922337203685477");
+    assert(eval("Round(CCur(\"922337203685477.1234\"),3)").asText()=="922337203685477.123");
+    assert(eval("Round(2.5,)").number==2);
+    assert(eval("Round(CCur(\"922337203685477.5807\"),4)").currencyUnits==std::numeric_limits<std::int64_t>::max());
+    const auto number=std::make_shared<ScalarProbe>(),precision=std::make_shared<ScalarProbe>(); number->value=VbaValue::numeric(2.5); precision->value=VbaValue::integer(0);
+    assert(evaluateVbaExpression("Round(number,precision)",host,{{"number",VbaValue::reference(number)},{"precision",VbaValue::reference(precision)}}).number==2 && number->reads==1 && precision->reads==1);
+    for(const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
+        {"Round()",450},{"Round(,1)",450},{"Round(1,2,3)",450},{"Round(1,-1)",5},{"Round(1,Null)",94},
+        {"Round(CVErr(11))",13},{"Round(\"invalid\")",13},{"Round(Nothing)",91},
+        {"Round(1,16)",3251},{"Round(CSng(1.5))",3251},{"Round(1e300,15)",3251},
+        {"Round(CCur(\"922337203685477.5807\"),0)",6},{"Round(CCur(\"-922337203685477.5808\"),3)",6}}) {
+        int actual=0; try { (void)eval(expression); } catch(const VbaRuntimeError& error) { actual=error.number; } assert(actual==code);
+    }
+}
+
 int main() {
+    testRoundFunction();
     testCharacterFunctions();
     testDefaultTypeInspection();
     testTypedNot();

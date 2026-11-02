@@ -9,6 +9,7 @@
 #include <cstring>
 #include "vba_runtime.hpp"
 #include "vba_color.hpp"
+#include "vba_round.hpp"
 #include <QLibrary>
 #include <QSqlDriver>
 #include <QSqlQuery>
@@ -163,6 +164,34 @@ void colorFunction(sqlite3_context* context,int count,sqlite3_value** args,bool 
 }
 void rgbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept { colorFunction(context,count,args,false); }
 void qbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept { colorFunction(context,count,args,true); }
+
+void roundNumber(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    auto& native=api();
+    try {
+        if(count<1 || count>2) throw VbaRuntimeError(450,"Round requires one or two arguments");
+        std::vector<VbaValue> values;
+        for(int index=0;index<count;++index) {
+            const auto type=native.type(args[index]);
+            if(type==5) values.emplace_back();
+            else if(type==1) {
+                const auto integer=native.integer(args[index]);
+                if(index==0 && (integer < -9007199254740992LL || integer>9007199254740992LL))
+                    throw VbaRuntimeError(3251,"Exact SQL integer Round input is unavailable");
+                values.push_back(VbaValue::numeric(static_cast<double>(integer)));
+            } else if(type==2) values.push_back(VbaValue::numeric(native.number(args[index])));
+            else if(type==3) {
+                const auto* bytes=native.text(args[index]);
+                if(!bytes) throw VbaRuntimeError(7,"SQL Round string unavailable");
+                values.push_back(VbaValue::string(std::string(reinterpret_cast<const char*>(bytes),native.bytes(args[index]))));
+            } else throw VbaRuntimeError(13,"Round requires scalar arguments");
+        }
+        const auto result=vbaRound(values);
+        if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
+        else if(result.kind==VbaValue::Kind::Number) native.numberResult(context,result.number);
+        else throw VbaRuntimeError(13,"SQL Round result type unavailable");
+    } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
+      catch(...) { native.error(context,"SQL rounding failed",-1); }
+}
 
 void textLength(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native=api();
@@ -321,6 +350,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_iif",3,&iif,nullptr,nullptr);
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
     ensure("linaccess_jet_qbcolor",-1,&qbColor,nullptr,nullptr);
+    ensure("linaccess_jet_round",-1,&roundNumber,nullptr,nullptr);
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
     ensure("linaccess_jet_update_value",1,nullptr,&singleStep,&singleFinal);

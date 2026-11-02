@@ -1,6 +1,7 @@
 #include "vba_expression.hpp"
 #include "vba_color.hpp"
 #include "vba_currency.hpp"
+#include "vba_round.hpp"
 #include "vba_analyzer.hpp"
 
 #include <algorithm>
@@ -564,7 +565,7 @@ private:
             if (!take(")")) {
                 do {
                     const auto start = index_;
-                    const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="strcomp") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
+                    const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="strcomp" || word=="round") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
                     args.push_back(missing ? VbaValue::empty() : expression(1));
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
@@ -639,6 +640,11 @@ private:
                 if (!host_) return {};
                 if (args.size()!=1) throw error("IsArray requires one argument",450);
                 return VbaValue::logical(args[0].kind==VbaValue::Kind::ByteArray);
+            }
+            if(word=="round") {
+                if(!host_) return {};
+                if(args.empty() || omitted[0]) throw error("Round requires an expression",450);
+                return vbaRound(args);
             }
             if(word=="asc" || word=="ascw" || word=="chr" || word=="chrw") {
                 if(!host_) return {};

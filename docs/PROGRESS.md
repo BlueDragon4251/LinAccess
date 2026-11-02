@@ -1927,3 +1927,21 @@ Full validation: host 31/31 (90.79 s), Debian 12 31/31 (94.73 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 94f6302 private CI completed successfully.
+
+## 2026-11-02 — Shared native bankers Round
+
+Reproduced incorrect Access-SQL half rounding via SQLite (0/1 before fix).
+The SQL rewrite/callback and VBA now share native C++ rounding, with bounded
+precision/subtypes/scalar/error behavior and exact explicit Currency quantization.
+Core/actual Qt/VBA/QueryDef/SQL tests pass 2/2 (1.00 s), including Microsoft
+examples, pending/save, exact large fractional Currency TEXT and failed mixed
+UPDATE without partial changes. GUI suite has 32 CTests. Single/high precision,
+full binary/type/locale/Jet money/Windows identity remain open. No additional
+original business workflow is claimed. See ROUND_RUNTIME.md.
+
+Full validation: host 32/32 (104.95 s), Debian 12 32/32 (97.80 s), Ubuntu
+24.04 32/32 (86.23 s), Debian 13 32/32 (86.65 s), GUI-disabled core 1/1
+(2.74 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+446b0c5 private CI completed successfully.
