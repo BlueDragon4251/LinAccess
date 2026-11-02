@@ -549,3 +549,7 @@ Full targets remain open:
 - [x] Native Xor/Eqv/Imp Boolean/null/bitwise execution, logical precedence and
   bounded subtype/range handling with actual Qt/VBA/SQL audit tests; SQL rewriting
   and full Variant/promotion/error/And-Or edge semantics remain open.
+
+- [x] Native Fix/Sgn and checked Abs/Int null/subtype/overflow behavior, exact
+  Currency truncation and actual Qt/VBA/SQL calculated-control regressions; full
+  Variant/Byte/Date/locale/promotion/SQL function semantics remain open.

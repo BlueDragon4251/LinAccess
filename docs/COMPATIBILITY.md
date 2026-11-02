@@ -620,3 +620,7 @@ Native Xor/Eqv/Imp and their logical precedence now execute in VBA and Access
 expressions, with truth-table and actual Qt/VBA/SQL audit regressions. See
 LOGICAL_OPERATORS_RUNTIME.md; SQL rewriting and full mixed-type/Variant/And-Or
 edge semantics remain open.
+
+Native Fix/Sgn and corrected Abs/Int now cover documented null behavior, known
+subtypes and exact Currency truncation with real Qt/VBA/SQL regressions. See
+NUMERIC_FUNCTIONS_RUNTIME.md; full type/locale/promotion and SQL rewriting remain open.

@@ -1694,3 +1694,20 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubunt
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass; repository remains private. Previous ddf7490 private CI was still
 running at this checkpoint; no success is assumed.
+
+## 2026-11-02 — Native Fix/Sgn and checked Abs/Int
+
+Added Fix and Sgn; corrected documented Abs/Int Null propagation and known
+numeric subtype preservation, including checked minimum-integer Abs overflow.
+Currency Fix uses exact scaled units. Core and fixture-independent native
+Qt/VBA/SQL tests verify negative rounding/sign values, Currency precision and
+overflow preventing later SQL. Targeted tests pass 2/2 (1.02 s). Full Variant/
+Byte/Date/locale/promotion/SQL function parity remains open. No business execution
+increment. See NUMERIC_FUNCTIONS_RUNTIME.md.
+
+Full validation: host 23/23 (74.01 s), Debian 12 23/23 (80.44 s), Ubuntu
+24.04 23/23 (72.40 s), GUI-disabled core 1/1 (1.32 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass; repository remains private. Previous cefe109 private CI completed
+successfully.

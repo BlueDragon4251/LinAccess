@@ -1651,6 +1651,16 @@ End Function
     }
     assert(evaluate("VarType(CInt(10) Eqv CInt(8))=vbInteger").truthy());
     assert(evaluate("VarType(CLng(10) Xor CLng(8))=vbLong").truthy());
+    assert(evaluate("Abs(Null)").kind==VbaValue::Kind::Null && evaluate("Int(Null)").kind==VbaValue::Kind::Null && evaluate("Fix(Null)").kind==VbaValue::Kind::Null);
+    assert(evaluate("Abs(-3.75)").number==3.75 && evaluate("Int(-3.75)").number==-4 && evaluate("Fix(-3.75)").number==-3);
+    assert(evaluate("Sgn(-3.75)").number==-1 && evaluate("Sgn(0)").number==0 && evaluate("Sgn(3.75)").number==1);
+    assert(evaluate("Abs(Empty)").number==0 && evaluate("Fix(Empty)").number==0 && evaluate("Abs(True)").number==1);
+    assert(evaluate("VarType(Abs(CInt(-3)))=vbInteger").truthy());
+    assert(evaluate("VarType(Fix(CLng(-3)))=vbLong").truthy());
+    assert(evaluate("VarType(Int(CSng(-3.75)))=vbSingle").truthy());
+    assert(evaluate("VarType(Sgn(1))=vbInteger").truthy());
+    assert(evaluate("Fix(CCur(\"-922337203685477.5808\"))").asText()=="-922337203685477");
+    assert(evaluate("VarType(Fix(CCur(1.2)))=vbCurrency").truthy());
     assert(evaluate("CLng(2.5)").asNumber() == 2);
     assert(evaluate("CLng(3.5)").asNumber() == 4);
     assert(evaluate("CLng(-2.5)").asNumber() == -2);
@@ -1706,6 +1716,11 @@ End Function
     substringError("1e100 Xor 2",6); substringError(R"("invalid" Eqv 2)",13);
     scalarProbe->value=VbaValue::numeric(10); const auto beforeExclusive=scalarProbe->reads;
     assert(evaluateVbaExpression("probe Xor 8",host,scalarValues).number==2 && scalarProbe->reads==beforeExclusive+1);
+    substringError("Abs(CInt(-32768))",6); substringError("Abs(CLng(-2147483648))",6);
+    substringError("Sgn(Null)",94); substringError("Fix(CVErr(2015))",13);
+    substringError("Abs()",450); substringError("Int(1,2)",450); substringError("Fix()",450); substringError("Sgn()",450);
+    scalarProbe->value=VbaValue::numeric(-3.75); const auto beforeFix=scalarProbe->reads;
+    assert(evaluateVbaExpression("Fix(probe)",host,scalarValues).number==-3 && scalarProbe->reads==beforeFix+1);
     substringError("CInt(Null)",94); substringError("CInt(CVErr(2015))",13);
     substringError("CInt(\"invalid\")",13); substringError("CInt(32767.5)",6);
     substringError("CInt(-32768.6)",6); substringError("CInt()",450); substringError("CInt(1,2)",450);

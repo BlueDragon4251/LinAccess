@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cmath>
 
+void testNumericFunctions();
+
 int main(int argc,char** argv) {
     QApplication app(argc,argv);
     using linaccess::VbaValue;
@@ -115,5 +117,62 @@ End Sub
     assert(sql.next() && sql.value(0).toInt()==0 && sql.value(1).toInt()==2 && !sql.next()); sql.finish();
     model->assign("Dirty",VbaValue::logical(false));
     assert(sql.exec("SELECT qty FROM arithmetic_rows") && sql.next() && sql.value(0).toDouble()==9.5); sql.finish();
+    assert(form.close());
+    testNumericFunctions();
+}
+
+void testNumericFunctions() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","numeric-function-documents"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    assert(sql.exec("CREATE TABLE numeric_rows(id INTEGER PRIMARY KEY,amount REAL)"));
+    assert(sql.exec("INSERT INTO numeric_rows VALUES(1,-3.75)"));
+    assert(sql.exec("CREATE TABLE numeric_audit(absolute REAL,floor_value INTEGER,truncated INTEGER,sign_value INTEGER)"));
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="numeric_rows"
+Begin Section
+Begin TextBox
+Name ="amount"
+ControlSource ="amount"
+End
+Begin TextBox
+Name ="abs_value"
+ControlSource ="=Abs([amount])"
+End
+Begin TextBox
+Name ="int_value"
+ControlSource ="=Int([amount])"
+End
+Begin TextBox
+Name ="fix_value"
+ControlSource ="=Fix([amount])"
+End
+Begin TextBox
+Name ="sign_value"
+ControlSource ="=Sgn([amount])"
+End
+End
+End
+)FORM";
+    const QByteArray code=R"VBA(Sub Capture()
+CurrentDb.Execute "INSERT INTO numeric_audit VALUES("&CStr(Me!abs_value)&","&CStr(Me!int_value)&","&CStr(Me!fix_value)&","&CStr(Me!sign_value)&")"
+End Sub
+Sub RejectAbsOverflow()
+Dim value As Long
+value=Abs(CLng(-2147483648))
+CurrentDb.Execute "INSERT INTO numeric_audit VALUES(99,99,99,99)"
+End Sub
+)VBA";
+    AccessFormPreview form("numeric functions",layout,code,db);
+    auto model=makePreviewFormObject(form);
+    assert(model->item("abs_value").number==3.75 && model->item("int_value").number==-4);
+    assert(model->item("fix_value").number==-3 && model->item("sign_value").number==-1);
+    assert(!model->member("Dirty",{}).boolean);
+    std::vector<VbaValue> args;
+    auto result=form.executeProcedure("Capture",args); assert(result.status==linaccess::VbaExecutionStatus::Completed);
+    result=form.executeProcedure("RejectAbsOverflow",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==6);
+    assert(sql.exec("SELECT absolute,floor_value,truncated,sign_value FROM numeric_audit") && sql.next());
+    assert(sql.value(0).toDouble()==3.75 && sql.value(1).toInt()==-4 && sql.value(2).toInt()==-3 && sql.value(3).toInt()==-1 && !sql.next()); sql.finish();
     assert(form.close());
 }

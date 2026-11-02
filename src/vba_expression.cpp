@@ -733,9 +733,38 @@ private:
                 if (!host_) return {};
                 return word=="rgb" ? vbaRgb(args) : vbaQbColor(args);
             }
+            if (word=="abs" || word=="int" || word=="fix" || word=="sgn") {
+                if (!host_) return {};
+                if (args.size()!=1) throw error("Numeric function requires one argument",450);
+                const auto value=scalarObjectValue(args.front());
+                if (value.kind==VbaValue::Kind::Null) {
+                    if(word=="sgn") throw error("Invalid Null sign argument",94);
+                    return {};
+                }
+                if (word=="sgn") {
+                    const auto number=coerceVbaModuleValue(value,"double").number;
+                    return VbaValue::integer(static_cast<std::int16_t>((number>0)-(number<0)));
+                }
+                if (value.kind==VbaValue::Kind::Currency) {
+                    if(word=="abs") return value.currencyUnits<0 ? negateCurrency(value) : value;
+                    if(word=="int") return floorCurrency(value);
+                    return VbaValue::currency((value.currencyUnits/10000)*10000);
+                }
+                const auto number=coerceVbaModuleValue(value,"double").number;
+                const auto answer=word=="abs" ? std::abs(number) : word=="int" ? std::floor(number) : std::trunc(number);
+                const auto result=VbaValue::numeric(answer==0 ? 0 : answer);
+                if (value.kind==VbaValue::Kind::Boolean || value.kind==VbaValue::Kind::Empty)
+                    return coerceVbaModuleValue(result,"integer");
+                if (value.kind==VbaValue::Kind::Number) {
+                    if(value.numericType==VbaValue::NumericType::Integer) return coerceVbaModuleValue(result,"integer");
+                    if(value.numericType==VbaValue::NumericType::Long) return coerceVbaModuleValue(result,"long");
+                    if(value.numericType==VbaValue::NumericType::Single) return coerceVbaModuleValue(result,"single");
+                }
+                return result;
+            }
             if ((word == "isnull" || word == "isempty" || word == "len" || word == "cstr"
                 || word == "ucase"
-                || word == "lcase" || word == "abs" || word == "int"
+                || word == "lcase"
                 || word == "isnumeric" || word == "val") && one) {
                 if (!host_) return {};
                 const auto& value = args[0];
@@ -750,9 +779,6 @@ private:
                     if (value.kind == VbaValue::Kind::Null) throw error("VBA: Ungültige Verwendung von Null", 94);
                     return VbaValue::string(value.asText());
                 }
-                if (word == "abs") return value.kind==VbaValue::Kind::Currency
-                    ? value.currencyUnits<0 ? negateCurrency(value) : value : VbaValue::numeric(std::abs(value.asNumber()));
-                if (word == "int") return value.kind==VbaValue::Kind::Currency ? floorCurrency(value) : VbaValue::numeric(std::floor(value.asNumber()));
                 if (word == "isnumeric") {
                     try { (void)value.asNumber(); return VbaValue::logical(true); }
                     catch (...) { return VbaValue::logical(false); }
