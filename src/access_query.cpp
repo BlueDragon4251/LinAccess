@@ -1213,6 +1213,35 @@ AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& unt
     filtered.source.clear(); filtered.compiledSql.clear();
     return filtered;
 }
+QString accessOrderByClause(const QString& orderBy,const QStringList& columns,const QString& tableQualifier) {
+    const auto tokens=tokenize(orderBy); if(tokens.isEmpty()) return {};
+    QStringList parts; qsizetype pos=0;
+    while(pos<tokens.size()) {
+        const auto& token=tokens[pos++];
+        if(token.kind!=Token::Word && token.kind!=Token::Identifier) throw VbaRuntimeError(3251,"OrderBy requires output field names");
+        auto requested=token.value;
+        if(pos<tokens.size() && symbol(tokens[pos],".")) {
+            if(tableQualifier.isEmpty() || requested.compare(tableQualifier,Qt::CaseInsensitive)!=0 || pos+1>=tokens.size()
+                || (tokens[pos+1].kind!=Token::Word && tokens[pos+1].kind!=Token::Identifier)) throw VbaRuntimeError(3251,"OrderBy qualifier unavailable");
+            requested=tokens[pos+1].value; pos+=2;
+        }
+        QString column; int matches=0;
+        for(const auto& candidate:columns) if(candidate.compare(requested,Qt::CaseInsensitive)==0) { column=candidate; ++matches; }
+        if(matches!=1) throw VbaRuntimeError(3251,"OrderBy field unavailable or ambiguous");
+        auto part=identifier(column);
+        if(pos<tokens.size() && tokens[pos].kind==Token::Word && (tokens[pos].value.compare("ASC",Qt::CaseInsensitive)==0 || tokens[pos].value.compare("DESC",Qt::CaseInsensitive)==0)) part+=' '+tokens[pos++].value.toUpper();
+        parts.append(part);
+        if(pos==tokens.size()) break;
+        if(!symbol(tokens[pos++],",") || pos==tokens.size()) throw VbaRuntimeError(3251,"OrderBy field list unsupported");
+    }
+    return " ORDER BY "+parts.join(',');
+}
+AccessQueryPlan sortAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& orderBy) {
+    if(orderBy.trimmed().isEmpty()) return source;
+    const auto clause=accessOrderByClause(orderBy,accessQueryColumns(db,source));
+    auto sorted=filterAccessQueryPlan(db,source,"True"); sorted.sql+=clause;
+    return sorted;
+}
 int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
     auto* driver = db.driver();
     if (freshConnection) {

@@ -2302,3 +2302,23 @@ Shared delivery validation: host 48/48 (82.73 s), GUI-disabled core 1/1
 pass. Four original hashes and private repository visibility rechecked. The
 three-distribution matrix remains at 4225a17; it was not repeated for this batch.
 No current-batch distribution or remote CI success is claimed.
+
+## 2026-11-02 — Native form ordering and active-field sort commands
+
+Added OrderBy/OrderByOn with token-validated output-field lists, ASC/DESC,
+verified direct-table qualification, imported initial flags, native table/query
+sorting and rollback/validation safeguards. Physical table row identities survive
+reordering; query sources without row identities preserve ordinal only. Existing
+CurrentRecord/calculated-control/Current-event behavior stays connected. Added
+unqualified VBA property routing and active-document DoCmd sort commands 163/164
+(verified against Microsoft's AcCommand enum). Invalid/unbound/calculated/binary
+focused-field commands are guarded; full sort/collation/report/design/Windows
+semantics remain open. Existing form_current_record regression first reproduces
+missing properties (0/1), then passes with imported/query/VBA/qualified/sort-command
+coverage. No new test target: suite remains 48 CTests. No complete original
+business workflow increment. See FORM_ORDER_RUNTIME.md. Shared validation follows.
+
+Shared delivery validation: host 48/48 (81.15 s), GUI-disabled core 1/1
+(1.06 s), host DEB payload/backend/build-ID/permissions/fixture-exclusion checks
+pass. Four original hashes and private visibility rechecked. Three-distribution
+matrix remains at 4225a17; no current-batch distro/remote CI success is claimed.

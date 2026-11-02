@@ -815,3 +815,10 @@ return types and integer SQL results. Existing core/query tests cover leap days,
 results, Null, options, aliases and overflow. Date Variants, numeric/locale
 coercion and complete calendar/Windows semantics remain open. See
 [CALENDAR_FUNCTIONS_RUNTIME.md](CALENDAR_FUNCTIONS_RUNTIME.md).
+
+Native bound forms now apply OrderBy/OrderByOn through actual table/query
+execution, preserving table row identity, pending validation and filtered results.
+The existing CurrentRecord test covers VBA activation, invalid-state retention,
+initial imported order and query sorting. Expressions, qualified query outputs,
+Jet collations/report APIs/full Windows behavior remain open. See
+[FORM_ORDER_RUNTIME.md](FORM_ORDER_RUNTIME.md).

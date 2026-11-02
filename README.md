@@ -521,3 +521,8 @@ bleiben offen.
 Year/Month/Day, Hour/Minute/Second und Weekday für eindeutige ISO-Werte in VBA
 und SQL. Date-Variants, regionale Datumskonvertierung und vollständige
 Kalendersemantik bleiben offen.
+
+[Native Formularsortierung](docs/FORM_ORDER_RUNTIME.md) setzt OrderBy/OrderByOn
+gegen echte Tabellen- und Abfragequellen um. Tabellenzeilen behalten beim
+Umsortieren ihre Identität; vollständige Jet-Sortier- und Kollationssemantik
+bleibt offen.

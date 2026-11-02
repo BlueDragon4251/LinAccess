@@ -72,6 +72,7 @@ private:
     void buildControls(QWidget* canvas);
     void loadRecords();
     void setFilterState(const QString& filter,bool enabled);
+    void setOrderState(const QString& orderBy,bool enabled);
     void loadRecord();
     static bool supportsControlDefault(const linaccess::AccessVisualControl& control);
     void initializeControlDefaults(bool unbound);
@@ -175,6 +176,8 @@ private:
     QCheckBox* filterToggle_{};
     QString filter_;
     bool filterOn_{};
+    QString orderBy_;
+    bool orderByOn_{},changingOrder_{};
     bool changingFilter_{};
     QLabel* status_{};
     QMap<QString,QPointer<QWidget>> controls_;

@@ -62,6 +62,8 @@ AccessQueryPlan compileAccessQuery(const QString& source);
 // Resolves compiled action metadata against the live writable destination.
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan);
 AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& criteria);
+QString accessOrderByClause(const QString& orderBy,const QStringList& columns,const QString& tableQualifier={});
+AccessQueryPlan sortAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& orderBy);
 int installAccessQueryViews(QSqlDatabase db, bool freshConnection = false);
 QString accessQuerySource(QSqlDatabase db, const QString& name);
 QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan,

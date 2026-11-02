@@ -705,6 +705,10 @@ public:
             return linaccess::VbaValue::reference(std::make_shared<PreviewRecordsetObject>(preview));
         }
         if (key=="bookmark") return linaccess::daoBookmarkAt(preview.recordsetSnapshot(),preview.currentRecordIndex_-1);
+        if(key=="orderby" || key=="orderbyon") {
+            if(preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"OrderBy requires a form");
+            return key=="orderby" ? linaccess::VbaValue::string(bytes(preview.orderBy_)) : linaccess::VbaValue::logical(preview.orderByOn_);
+        }
         if (key=="filter") return linaccess::VbaValue::string(bytes(preview.filter_));
         if (key=="filteron") return linaccess::VbaValue::logical(preview.filterOn_);
         if (key=="timerinterval") {
@@ -748,7 +752,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron")
+        if (!args.empty() || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
@@ -817,6 +821,13 @@ public:
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"KeyPreview requires a form");
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null KeyPreview");
             preview.layout_.keyPreview=value.truthy(); return;
+        }
+        if(key=="orderby" || key=="orderbyon") {
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null sort property");
+            const auto order=key=="orderby" ? text(scalar.asText()) : preview.orderBy_;
+            const auto enabled=key=="orderbyon" ? linaccess::coerceVbaModuleValue(scalar,"boolean").boolean : preview.orderByOn_;
+            preview.setOrderState(order,enabled); return;
         }
         if (key=="filter" || key=="filteron") {
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null filter property");

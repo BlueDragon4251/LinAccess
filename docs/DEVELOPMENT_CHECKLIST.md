@@ -682,3 +682,7 @@ Full targets remain open:
 - [x] Shared native ISO/Gregorian DateDiff and Year/Month/Day/Hour/Minute/Second/
   Weekday in VBA and SQL, checked types/calendar boundaries/Null/errors and
   existing-test coverage; Date Variants/numeric/locale/full calendar semantics open.
+
+- [x] Native Form.OrderBy/OrderByOn field-list sorting, table identity preservation,
+  query ordering, imported defaults, validation/state rollback and existing
+  navigation/filter/CurrentRecord regression; expressions/collations/full sorting open.

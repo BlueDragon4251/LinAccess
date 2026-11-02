@@ -50,6 +50,19 @@ End Sub
 Sub NewRow()
 DoCmd.RunCommand 28
 End Sub
+Function SortRows()
+OrderBy="[records].[id] DESC"
+OrderByOn=True
+SortRows=Me.CurrentRecord
+End Function
+Function SortAscending()
+DoCmd.RunCommand acCmdSortAscending
+SortAscending=Me.OrderBy
+End Function
+Function SortDescending()
+DoCmd.RunCommand acCmdSortDescending
+SortDescending=Me.OrderBy
+End Function
 Sub WritePosition()
 Me.CurrentRecord=1
 End Sub
@@ -64,11 +77,27 @@ End Sub
     assert(sql.exec("SELECT label FROM records WHERE id=20") && sql.next() && sql.value(0).toString()=="second"); sql.finish();
     result=run("WritePosition"); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==438); position(2); assert(form.hasUnsavedChanges()); model->member("Undo",{});
     assert(run("LastRow").status==linaccess::VbaExecutionStatus::Completed); position(3);
+    model->assign("OrderBy",VbaValue::string("[id] DESC")); assert(!model->member("OrderByOn",{}).truthy()); position(3);
+    result=run("SortRows"); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==1); position(1); assert(model->item("id").asNumber()==30);
+    int badOrder=0; try { model->assign("OrderBy",VbaValue::string("missing DESC")); } catch(const linaccess::VbaRuntimeError& error) { badOrder=error.number; }
+    assert(badOrder==3251 && model->member("OrderBy",{}).asText()=="[records].[id] DESC" && model->member("OrderByOn",{}).truthy()); position(1);
+    model->assign("OrderByOn",VbaValue::logical(false)); position(3);
+    auto* activeField=form.findChild<QLineEdit*>("access-control-label"); activeField->setFocus(); QApplication::processEvents(); assert(QApplication::focusWidget()==activeField);
+    result=run("SortAscending"); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="[label] ASC"); position(3);
+    result=run("SortDescending"); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="[label] DESC"); position(1);
+    model->assign("OrderByOn",VbaValue::logical(false)); position(3);
     model->assign("Filter",VbaValue::string("id>=20")); model->assign("FilterOn",VbaValue::logical(true)); position(2);
     assert(run("NewRow").status==linaccess::VbaExecutionStatus::Completed); position(3); assert(model->member("NewRecord",{}).truthy() && !form.hasUnsavedChanges());
     assert(sql.exec("SELECT COUNT(*) FROM records") && sql.next() && sql.value(0).toInt()==3); sql.finish();
     assert(sql.exec("SELECT COUNT(*),MIN(type),MAX(type) FROM positions") && sql.next() && sql.value(0).toInt()>=5 && sql.value(1).toInt()==3 && sql.value(2).toInt()==3); sql.finish();
     assert(form.close()); int closed=0; try { model->member("CurrentRecord",{}); } catch(const linaccess::VbaRuntimeError& error) { closed=error.number; } assert(closed==2450);
+    const QByteArray sortedLayout="Begin Form\nRecordSource =\"records\"\nOrderBy =\"[id] DESC\"\nOrderByOn =-1\nEnd\n";
+    AccessFormPreview sorted("sorted_on_open",sortedLayout,{},db); auto sortedModel=makePreviewFormObject(sorted);
+    assert(sortedModel->member("OrderByOn",{}).truthy() && sortedModel->item("id").asNumber()==30 && sorted.close());
+    const QByteArray queryLayout="Begin Form\nRecordSource =\"SELECT id,label FROM records ORDER BY id DESC\"\nEnd\n";
+    AccessFormPreview queryForm("sorted_query",queryLayout,{},db); auto queryModel=makePreviewFormObject(queryForm);
+    assert(queryModel->item("id").asNumber()==30); queryModel->assign("OrderBy",VbaValue::string("id ASC")); queryModel->assign("OrderByOn",VbaValue::logical(true));
+    assert(queryModel->item("id").asNumber()==10 && queryModel->member("CurrentRecord",{}).asNumber()==1 && queryForm.close());
     const QByteArray report="Begin Report\nRecordSource =\"records\"\nEnd\n"; AccessFormPreview reportForm("position_report",report,{},db); auto reportModel=makePreviewFormObject(reportForm);
     int unsupported=0; try { reportModel->member("CurrentRecord",{}); } catch(const linaccess::VbaRuntimeError& error) { unsupported=error.number; } assert(unsupported==438); assert(reportForm.close());
 }

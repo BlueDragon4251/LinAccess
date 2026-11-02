@@ -308,14 +308,14 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (key == "dirty") return preview_.dirty_ ? "-1" : "0";
         if (key == "newrecord") return preview_.currentRecordIndex_ == 0 ? "-1" : "0";
-        if (key == "currentrecord") return makePreviewFormObject(preview_)->member("CurrentRecord",{}).asField();
+        if (key == "currentrecord" || key=="orderby" || key=="orderbyon") return makePreviewFormObject(preview_)->member(name,{}).asField();
         return preview_.getField(name);
     }
     linaccess::VbaValue controlValue(std::string_view name) override { requireInstance(); return preview_.getFieldValue(name); }
     void enterModule(std::string_view source) override { moduleScopes_.push_back(source==preview_.vba_.toUtf8().toStdString()); ++nativeExecutionDepth(); }
     void leaveModule() noexcept override { moduleScopes_.pop_back(); --nativeExecutionDepth(); disposeClosedForms(); }
     bool hasInstanceIdentifier(std::string_view name) override {
-        return instanceScope() && (QString::fromUtf8(name.data(),name.size()).compare("CurrentRecord",Qt::CaseInsensitive)==0 || preview_.controls_.contains(preview_.controlMemberName(QString::fromUtf8(name.data(),name.size())).toCaseFolded()));
+        return instanceScope() && (recordProperty(name) || preview_.controls_.contains(preview_.controlMemberName(QString::fromUtf8(name.data(),name.size())).toCaseFolded()));
     }
     std::shared_ptr<linaccess::VbaModuleState> moduleState(std::string_view source) override {
         if (source!=preview_.vba_.toUtf8().toStdString() && !linaccess::isVbaClassModule(source))
@@ -332,7 +332,7 @@ public:
         if (auto value=preview_.getModuleMember(name,false)) return value;
         const auto canonical=memberControlName(name);
         if (!preview_.controls_.contains(QString::fromStdString(canonical).toCaseFolded())) {
-            if(QString::fromUtf8(name.data(),name.size()).compare("CurrentRecord",Qt::CaseInsensitive)==0) return makePreviewFormObject(preview_)->member("CurrentRecord",{});
+            if(recordProperty(name)) return makePreviewFormObject(preview_)->member(name,{});
             return std::nullopt;
         }
         return reference ? makePreviewFormObject(preview_)->objectItem(canonical) : preview_.getFieldValue(canonical);
@@ -341,7 +341,7 @@ public:
         if (!instanceScope()) return false;
         const auto canonical=memberControlName(name);
         if (!preview_.controls_.contains(QString::fromStdString(canonical).toCaseFolded())) {
-            if(QString::fromUtf8(name.data(),name.size()).compare("CurrentRecord",Qt::CaseInsensitive)==0) throw linaccess::VbaRuntimeError(438,"Form property is read-only");
+            if(recordProperty(name)) { makePreviewFormObject(preview_)->assign(name,value); return true; }
             return false;
         }
         preview_.setFieldValue(canonical,value); return true;
@@ -353,8 +353,8 @@ public:
     linaccess::VbaValue expressionValue(std::string_view name,bool reference) override {
         try { return reference ? makePreviewFormObject(preview_)->objectItem(name) : preview_.getFieldValue(name); }
         catch(const linaccess::VbaRuntimeError& failure) {
-            if(failure.number==2465 && QString::fromUtf8(name.data(),name.size()).compare("CurrentRecord",Qt::CaseInsensitive)==0) {
-                try { return makePreviewFormObject(preview_)->member("CurrentRecord",{}); }
+            if(failure.number==2465 && recordProperty(name)) {
+                try { return makePreviewFormObject(preview_)->member(name,{}); }
                 catch(const linaccess::VbaRuntimeError& propertyFailure) { return linaccess::VbaValue::errorValue(propertyFailure.number); }
             }
             return linaccess::VbaValue::errorValue(failure.number);
@@ -418,7 +418,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
-        if (key=="currentrecord" || key=="visible" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
+        if (key=="orderby" || key=="orderbyon" || key=="currentrecord" || key=="visible" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -431,7 +431,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
-        if (key == "visible" || key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
+        if (key == "orderby" || key == "orderbyon" || key == "visible" || key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
         if (key == "selheight" || key == "name" || key == "recordsource" || key == "newrecord" || key == "currentrecord")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
@@ -475,6 +475,21 @@ public:
     void pasteAppendRecord() { commandDocument().pasteAppendRecord(); }
     void findRecords() { commandDocument().openFindDialog(); }
     void repeatFind() { commandDocument().repeatFind(); }
+    void sortRecords(bool descending) {
+        auto& document=commandDocument();
+        if(document.layout_.kind!=linaccess::AccessDocumentKind::Form || !document.dataSourceAvailable_) throw linaccess::VbaRuntimeError(2046,"Sorting requires an active bound form");
+        const auto* focus=QApplication::focusWidget();
+        for(const auto& control:document.layout_.controls) {
+            const auto* widget=document.controls_.value(control.name.toCaseFolded()).data();
+            if(!widget || !focus || (widget!=focus && !widget->isAncestorOf(focus))) continue;
+            const auto column=columnIndex(control.controlSource,document.dataColumns_);
+            if(column<0) continue;
+            auto name=document.dataColumns_[column];
+            if(document.dataTypes_.value(name.toCaseFolded()).contains("BLOB",Qt::CaseInsensitive)) throw linaccess::VbaRuntimeError(2046,"Binary fields cannot be sorted by this command");
+            name.replace(']',"]]"); document.setOrderState('['+name+']'+(descending?" DESC":" ASC"),true); return;
+        }
+        throw linaccess::VbaRuntimeError(2046,"Sorting requires an active bound field control");
+    }
     void selectObject(int type,const QString& name,bool inDatabase) {
         if(type<0 || type>3) throw linaccess::VbaRuntimeError(3251,"SelectObject object type is not implemented");
         if(!inDatabase && name.isEmpty()) throw linaccess::VbaRuntimeError(450,"SelectObject requires an open object name");
@@ -638,6 +653,10 @@ private:
         return preview_;
     }
     std::vector<bool> moduleScopes_;
+    static bool recordProperty(std::string_view name) {
+        const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        return key=="currentrecord" || key=="orderby" || key=="orderbyon";
+    }
     bool instanceScope() const { return moduleScopes_.empty() || moduleScopes_.back(); }
     void requireInstance() const { if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Me is unavailable in a standard module"); }
     AccessFormPreview& preview_;
@@ -689,6 +708,7 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         if (code==28) host.gotoRecord(5);
         else if (code==30) host.findRecords();
         else if (code==341) host.repeatFind();
+        else if(code==163 || code==164) host.sortRecords(code==164);
         else if (code>=65 && code<=68) { const int actions[]{1,0,2,3}; host.gotoRecord(actions[code-65]); }
         else if (code==97) host.saveRecord();
         else if (code==50) host.selectCurrentRecord();
@@ -740,6 +760,7 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     else if (layout_.modal) setWindowModality(Qt::ApplicationModal);
     filter_=whereCondition.trimmed().isEmpty() ? layout_.filter : whereCondition;
     filterOn_=whereCondition.trimmed().isEmpty() ? layout_.filterOnLoad && !filter_.trimmed().isEmpty() : true;
+    orderBy_=layout_.orderBy; orderByOn_=layout_.orderByOnLoad && !orderBy_.trimmed().isEmpty();
     initialCurrentDeferred_=!embedded && eventProcedure(layout_.events.value("onactivate"));
     if (db_.isOpen()) connectPreviewSqlObjects(db_);
     static qlonglong openingSequence = 0;
@@ -1483,6 +1504,7 @@ void AccessFormPreview::loadRecords() {
                     plan = linaccess::compileAccessQuery(sql);
                 }
                 if (filterOn_) plan=linaccess::filterAccessQueryPlan(db_,plan,filter_);
+                if(orderByOn_) plan=linaccess::sortAccessQueryPlan(db_,plan,orderBy_);
                 auto result = linaccess::executeAccessQueryPlan(db_,plan,linaccess::bindAccessQueryParameters(plan,{}));
                 dataColumns_ = result.columns; dataTypes_=result.types;
                 dataTruncated_ = result.rows.size() > 10000;
@@ -1496,7 +1518,10 @@ void AccessFormPreview::loadRecords() {
                 QSqlQuery query(db_);
                 auto name=source; name.replace(']',"]]");
                 const auto plan=linaccess::compileAccessQuery("SELECT rowid AS [__la_rowid],* FROM ["+name+"]"+(filterOn_ && !filter_.trimmed().isEmpty() ? " WHERE "+filter_ : QString{}));
-                if (!query.prepare(plan.sql) || !query.exec()) {
+                QStringList sortColumns; const auto record=db_.record(source);
+                for(int i=0;i<record.count();++i) sortColumns.append(record.fieldName(i));
+                const auto order=orderByOn_ ? linaccess::accessOrderByClause(orderBy_,sortColumns,source) : QString{};
+                if (!query.prepare(plan.sql+order) || !query.exec()) {
                     const auto message=query.lastError().text().toCaseFolded();
                     const auto typed=linaccess::jetSqlFunctionErrorNumber(message.toStdString());
                     const auto code=typed ? *typed : (message.contains("syntax error") || message.contains("incomplete input")) ? 3075 : message.contains("no such table") ? 3078 : message.contains("no such function") ? 3085 : message.contains("interrupted") ? 3035 : 3146;
@@ -1535,8 +1560,32 @@ void AccessFormPreview::loadRecords() {
         : "Die Datenquelle ist nicht verfügbar oder ihre Ausführung wurde abgebrochen: " + source);
 }
 
+void AccessFormPreview::setOrderState(const QString& orderBy,bool enabled) {
+    if(layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"OrderBy requires a form");
+    if(recordCommandRunning_ || changingOrder_ || changingFilter_) throw linaccess::VbaRuntimeError(3251,"Reentrant record sorting unsupported");
+    const bool reload=orderByOn_!=enabled || (enabled && orderBy_!=orderBy);
+    if(!reload || (!enabled && layout_.recordSource.trimmed().isEmpty())) { orderBy_=orderBy; orderByOn_=enabled; return; }
+    if(layout_.recordSource.trimmed().isEmpty() || !dataSourceAvailable_) throw linaccess::VbaRuntimeError(3251,"Sort source unavailable");
+    if(enabled) (void)linaccess::accessOrderByClause(orderBy,dataColumns_,directTable_ ? layout_.recordSource.trimmed() : QString{});
+    QScopedValueRollback<bool> changing(changingOrder_,true);
+    if(!saveRecord()) throw linaccess::VbaRuntimeError(2501,"Sort change cancelled");
+    const auto oldOrder=orderBy_; const bool oldEnabled=orderByOn_; const auto oldIndex=currentRecordIndex_;
+    const auto oldId=oldIndex>0 && oldIndex<=rowIds_.size() ? rowIds_[oldIndex-1] : QVariant{};
+    orderBy_=orderBy; orderByOn_=enabled; loadRecords();
+    if(!dataSourceAvailable_) {
+        const auto number=dataSourceErrorNumber_ ? dataSourceErrorNumber_ : 3146;
+        orderBy_=oldOrder; orderByOn_=oldEnabled; loadRecords();
+        if(dataSourceAvailable_) {
+            const auto index=oldIndex==0 ? 0 : !oldId.isNull() ? rowIds_.indexOf(oldId)+1 : qMin(oldIndex,recordSelector_->count()-1);
+            const QSignalBlocker blocked(recordSelector_); recordSelector_->setCurrentIndex(qMax(0,index)); currentRecordIndex_=qMax(0,index); loadRecord();
+        }
+        throw linaccess::VbaRuntimeError(number,"Sort execution failed");
+    }
+    if(opened_ && initialCurrentDispatched_) (void)formEvent("OnCurrent","Form_Current");
+}
+
 void AccessFormPreview::setFilterState(const QString& filter,bool enabled) {
-    if (recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Filter change during record command unsupported");
+    if (recordCommandRunning_ || changingOrder_) throw linaccess::VbaRuntimeError(3251,"Filter change during record/sort command unsupported");
     const bool reload=filterOn_!=enabled || (enabled && filter_!=filter);
     if (reload && changingFilter_) throw linaccess::VbaRuntimeError(3251,"Reentrant filter change unsupported");
     if (reload && !enabled && layout_.recordSource.trimmed().isEmpty()) {

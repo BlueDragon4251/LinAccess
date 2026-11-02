@@ -87,6 +87,8 @@ struct AccessFormLayout {
     int width{9000};
     QString filter;
     bool filterOnLoad{};
+    QString orderBy;
+    bool orderByOnLoad{};
     bool modal{};
     bool keyPreview{};
     int timerInterval{};
