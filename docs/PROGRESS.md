@@ -1854,3 +1854,19 @@ Full validation: host 28/28 (86.11 s), Debian 12 28/28 (84.74 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 7badc0f private CI is still running at this checkpoint; no CI success is claimed.
+
+## 2026-11-02 — Integer return subtype for VarType
+
+Reproduced core and actual calculated-form failures from returning supported
+VarType codes as Double (0/2 before fix). Native VarType now returns Integer;
+nested inspection, Null/Error/Byte-array codes, Variant copy, calculated display
+and actual SQL capture pass 2/2 (1.14 s). Full object-default inference, arrays,
+Date/Decimal and Windows oracle remain open. No original business execution
+increment is claimed. See VARTYPE_RESULT_RUNTIME.md.
+
+Full validation: host 28/28 (85.88 s), Debian 12 28/28 (84.76 s), Ubuntu
+24.04 28/28 (75.57 s), Debian 13 28/28 (78.50 s), GUI-disabled core 1/1
+(1.59 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. 7badc0f
+private CI has now completed successfully; 6d00c90 CI is still running.

@@ -218,6 +218,16 @@ void testTypedNot() {
 
 int main() {
     testTypedNot();
+    {
+        FakeForm host;
+        const auto inspect=[&](const std::string& expression) { return linaccess::evaluateVbaExpression(expression,host,{}); };
+        assert(inspect("VarType(VarType(CByte(1)))=vbInteger").truthy());
+        assert(inspect("TypeName(VarType(Null))").asText()=="Integer");
+        assert(inspect("VarType(Null)").number==1 && inspect("VarType(CVErr(11))").number==10);
+        const auto bytes=linaccess::VbaValue::byteArray({1,2,3});
+        const auto code=linaccess::evaluateVbaExpression("VarType(bytes)",host,{{"bytes",bytes}});
+        assert(code.number==8209 && code.numericType==linaccess::VbaValue::NumericType::Integer);
+    }
     testByteValues();
     using namespace linaccess;
 

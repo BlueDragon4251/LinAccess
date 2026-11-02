@@ -665,3 +665,8 @@ Native VBA Not now preserves Byte/Integer/Long bit width and result subtype,
 Boolean/Null/Empty and scalar-once behavior, with before/after core and actual
 Qt/VBA/SQL regression. Full promotion/textual Boolean/locale/Jet SQL and Windows
 oracle remain open; see TYPED_NOT_RUNTIME.md.
+
+Native VarType now returns an Integer value, including nested VarType/TypeName,
+Variant-copy/calculated-control and SQL regression. This fixes the previous
+Double result subtype; general object default-property/type inference and full
+Variant/array/Date/Decimal semantics remain open. See VARTYPE_RESULT_RUNTIME.md.

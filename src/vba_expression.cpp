@@ -654,7 +654,7 @@ private:
                     : value.kind==VbaValue::Kind::Number ? (value.numericType==VbaValue::NumericType::Byte ? 17 : value.numericType==VbaValue::NumericType::Integer ? 2 : value.numericType==VbaValue::NumericType::Long ? 3 : value.numericType==VbaValue::NumericType::Single ? 4 : 5) : value.kind==VbaValue::Kind::Currency ? 6
                     : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
                     : value.kind==VbaValue::Kind::Error ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : 11;
-                if (word=="vartype") return VbaValue::numeric(type);
+                if (word=="vartype") return VbaValue::integer(static_cast<std::int16_t>(type));
                 if (type==9) {
                     if (!value.object) return VbaValue::string("Nothing");
                     throw error("Native object class name unavailable",3251);

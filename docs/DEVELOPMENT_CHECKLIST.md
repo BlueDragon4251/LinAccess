@@ -585,3 +585,7 @@ Full targets remain open:
 - [x] Typed native Not bit inversion for Byte/Integer/Long, Boolean/Null/Empty,
   scalar default values and checked numeric conversion; reproduced core/Qt/SQL
   regression fixed; complete mixed/text/locale/Jet SQL identity remains open.
+
+- [x] Integer subtype for native VarType results, including nested inspection,
+  Byte-array code, actual Qt calculated controls/Variant copies/SQL regression;
+  general object inference/full Variant and array identities remain open.
