@@ -74,6 +74,7 @@ struct AccessVisualControl {
     bool visible{true};
     bool enabled{true};
     bool locked{};
+    bool defaultButton{};
     bool tabStop{true};
     int tabIndex{};
 };

@@ -1264,7 +1264,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         widget->setProperty("la_access_tag",control.tag);
         if (!dynamic_cast<AccessFormPreview*>(widget)) widget->installEventFilter(this);
         if (auto* combo=qobject_cast<QComboBox*>(widget); combo && combo->isEditable()) combo->lineEdit()->installEventFilter(this);
-        if (auto* button=qobject_cast<QPushButton*>(widget)) button->setAutoDefault(false);
+        if (auto* button=qobject_cast<QPushButton*>(widget)) { button->setAutoDefault(false); button->setDefault(control.type=="CommandButton" && control.defaultButton); }
         widget->setGeometry(pixels(control.left), pixels(control.top),
                             qMax(12, pixels(control.width)), qMax(14, pixels(control.height)));
         if (control.optionGroupIndex>=0) {
@@ -2746,6 +2746,12 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
             auto* focus=QApplication::focusWidget();
             if (auto* button=qobject_cast<QPushButton*>(focus); button && isAncestorOf(button)) { button->click(); return true; }
             if (!commitControls()) return true;
+            for (const auto& control:layout_.controls) {
+                auto* button=qobject_cast<QPushButton*>(controls_.value(control.name.toCaseFolded()).data());
+                if (control.type=="CommandButton" && button && button->isDefault() && button->isEnabled() && button->isVisible()) {
+                    button->click(); return true;
+                }
+            }
             (void)focusNextPrevChild(true); return true;
         }
     } catch (const std::exception& error) { if (status_) status_->setText(QString::fromUtf8(error.what())); return true; }

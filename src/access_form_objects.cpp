@@ -7,6 +7,7 @@
 #include "vba_qt_value.hpp"
 #include <QApplication>
 #include <QAbstractButton>
+#include <QPushButton>
 #include <QAction>
 #include <QLabel>
 #include <QColor>
@@ -281,6 +282,12 @@ public:
                 return key=="tabstop" ? linaccess::VbaValue::logical(definition.tabStop) : linaccess::VbaValue::numeric(definition.tabIndex);
             }
         }
+        if (key=="default") {
+            for (const auto& definition:preview.layout_.controls)
+                if (definition.name.compare(name_,Qt::CaseInsensitive)==0 && definition.type=="CommandButton")
+                    return linaccess::VbaValue::logical(qobject_cast<QPushButton*>(widget)->isDefault());
+            throw linaccess::VbaRuntimeError(438,"Default requires a command button");
+        }
         if (key == "visible") return linaccess::VbaValue::logical(!widget->isHidden());
         if (key == "enabled") return linaccess::VbaValue::logical(widget->isEnabled());
         if (key == "controltype") {
@@ -320,6 +327,21 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
+        if (key=="default") {
+            auto* button=qobject_cast<QPushButton*>(widget);
+            bool command=false;
+            for(const auto& definition:preview.layout_.controls)
+                if(definition.name.compare(name_,Qt::CaseInsensitive)==0) command=definition.type=="CommandButton";
+            if(!button || !command) throw linaccess::VbaRuntimeError(438,"Default requires a command button");
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Default");
+            const bool enabled=scalar.truthy();
+            for(auto& definition:preview.layout_.controls) {
+                if(definition.name.compare(name_,Qt::CaseInsensitive)==0) definition.defaultButton=enabled;
+                else if(enabled && definition.type=="CommandButton") definition.defaultButton=false;
+            }
+            button->setDefault(enabled); return;
+        }
         if(key=="listrows") {
             auto* combo=listCombo();
             if(preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(3251,"Runtime ListRows requires native Form view");

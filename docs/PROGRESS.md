@@ -2683,3 +2683,16 @@ Prompt/save-none design modes still fail explicitly. Existing form_current_recor
 regression passes (0.50 s), including named Application.Quit inside acDialog and
 no child/caller continuation. Desktop build passes. No new test target or
 full-suite/package rerun; see QUIT_EXECUTION_RUNTIME.md for scope.
+
+## Native default command buttons (2026-11-02)
+
+SaveAsText Default metadata (including control templates) now configures native
+CommandButton defaults. Enter in a form editor validates pending controls and
+invokes the visible/enabled default button; a focused command button retains
+priority. VBA reads/writes Default use the actual Qt default state and selecting
+another default clears the previous one. Null assignment is rejected. Existing
+GUI regression uses real key events and SQL writes to check imported defaults,
+runtime switching and focused-button priority. Desktop build and existing
+form_current_record target pass (0.49 s). No new target. Cancel-button/Escape,
+multiline EnterKeyBehavior, subform and complete Windows keyboard parity remain
+open; this increment does not claim those semantics.

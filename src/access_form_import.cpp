@@ -127,6 +127,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
     QHash<QString,int> templateMultiSelect;
     QHash<QString,bool> templateColumnHeads;
     QHash<QString,int> templateListRows;
+    QHash<QString,bool> templateDefaultButtons;
     static const QRegularExpression begin(R"(^\s*Begin(?:\s+(\w+))?\s*$)",
         QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression property(R"(^\s*([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$)");
@@ -149,6 +150,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 control = static_cast<int>(form.controls.size());
                 AccessVisualControl item;
                 item.type = type;
+                item.defaultButton=templateDefaultButtons.value(type,false);
                 item.font = templateFonts.value(type);
                 item.defaultValue = templateDefaults.value(type);
                 item.textAlign = templateAlignments.value(type);
@@ -184,6 +186,12 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             continue;
         }
         const auto integer = [&] { bool ok = false; const int result = value.toInt(&ok); return ok ? result : 0; };
+        if(key=="Default" && (current.controlTemplate || current.control>=0)) {
+            const auto setting=accessBoolean(value,false);
+            if(current.controlTemplate) templateDefaultButtons[current.type]=setting;
+            else form.controls[current.control].defaultButton=setting;
+            continue;
+        }
         if(key=="ListRows" && (current.controlTemplate || current.control>=0)) {
             bool valid=false; const auto rows=value.toInt(&valid);
             if(!valid || rows<1 || rows>255) throw std::runtime_error("Invalid imported ListRows");

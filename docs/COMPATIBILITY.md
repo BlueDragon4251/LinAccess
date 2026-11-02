@@ -961,3 +961,9 @@ Native Recordset.EditMode reports the actual cursor buffer state as Integer
 (0/1/2), with dbEditNone/dbEditInProgress/dbEditAdd constants. Updatable reports
 the existing native table/snapshot write capability. Both are read-only; this
 is not a claim of full DAO server-permission/locking capability detection.
+
+Native form CommandButton.Default is imported (including control templates),
+readable/writable via VBA, and used for Enter from supported form editors after
+control validation. A focused command button takes priority; hidden/disabled
+defaults are skipped. Cancel/Escape, multiline EnterKeyBehavior, subform focus
+and full Access 2003 keyboard/rendering equivalence remain open.

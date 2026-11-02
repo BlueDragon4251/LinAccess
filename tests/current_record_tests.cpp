@@ -4,6 +4,8 @@
 #include <QLineEdit>
 #include <QSqlQuery>
 #include <QTimer>
+#include <QPushButton>
+#include <QTest>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -15,6 +17,51 @@ int main(int argc,char** argv) {
     assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
     assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,label TEXT)")); assert(sql.exec("INSERT INTO records VALUES(10,'first'),(20,'second'),(30,'third')"));
     assert(sql.exec("CREATE TABLE positions(position INTEGER,type INTEGER)"));
+    {
+        const QByteArray buttons=R"FORM(Begin Form
+Begin Section
+Begin TextBox
+Name ="input"
+End
+Begin CommandButton
+Name ="accept"
+Caption ="Accept"
+Default =-1
+OnClick ="[Event Procedure]"
+Top =500
+End
+Begin CommandButton
+Name ="other"
+Caption ="Other"
+OnClick ="[Event Procedure]"
+Top =1000
+End
+End
+End
+)FORM";
+        const QByteArray handlers=R"VBA(Sub accept_Click()
+CurrentDb.Execute "INSERT INTO positions VALUES(101,0)"
+End Sub
+Sub other_Click()
+CurrentDb.Execute "INSERT INTO positions VALUES(102,0)"
+End Sub
+)VBA";
+        AccessFormPreview defaults("default_buttons",buttons,handlers,db); defaults.show(); QApplication::processEvents();
+        auto* input=defaults.findChild<QLineEdit*>("access-control-input");
+        auto* accept=defaults.findChild<QPushButton*>("access-control-accept");
+        auto* other=defaults.findChild<QPushButton*>("access-control-other");
+        assert(input && accept && other && accept->isDefault());
+        input->setFocus(); QTest::keyClick(input,Qt::Key_Return);
+        assert(sql.exec("SELECT COUNT(*) FROM positions WHERE position=101") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+        auto controls=makePreviewFormObject(defaults)->member("Controls",{}).object;
+        auto second=controls->member("Item",{VbaValue::string("other")}).object;
+        second->assign("Default",VbaValue::logical(true)); assert(!accept->isDefault() && other->isDefault());
+        input->setFocus(); QTest::keyClick(input,Qt::Key_Return);
+        assert(sql.exec("SELECT COUNT(*) FROM positions WHERE position=102") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+        accept->setFocus(); QTest::keyClick(accept,Qt::Key_Return);
+        assert(sql.exec("SELECT COUNT(*) FROM positions WHERE position=101") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+        assert(defaults.close()); assert(sql.exec("DELETE FROM positions"));
+    }
     const QByteArray layout=R"FORM(Begin Form
 RecordSource ="records"
 OnCurrent ="[Event Procedure]"
