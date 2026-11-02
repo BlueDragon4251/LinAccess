@@ -162,6 +162,9 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 item.backStyle=templateBackStyles.value(type,type=="OptionGroup" ? 0 : 1);
                 for (auto it=stack.crbegin();it!=stack.crend();++it)
                     if (it->type=="OptionGroup" && it->control>=0) { item.optionGroupIndex=it->control; break; }
+                if (type=="Label")
+                    for (auto it=stack.crbegin();it!=stack.crend();++it)
+                        if (it->control>=0) { item.attachedControlIndex=it->control; break; }
                 item.section = section;
                 form.controls.push_back(item);
             }

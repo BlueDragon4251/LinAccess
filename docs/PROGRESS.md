@@ -2696,3 +2696,18 @@ runtime switching and focused-button priority. Desktop build and existing
 form_current_record target pass (0.49 s). No new target. Cancel-button/Escape,
 multiline EnterKeyBehavior, subform and complete Windows keyboard parity remain
 open; this increment does not claim those semantics.
+
+Grouped delivery check for c63c584: GUI-free build/test 1/1 (1.25 s), matching
+.deb Build-ID/permissions/contents/pinned SQLite backend, all four original
+fixture SHA-256 checks and private repository status pass. No distro matrix
+rerun; remote CI billing restriction unchanged.
+
+## Attached-label keyboard access (2026-11-02)
+
+The SaveAsText parser now retains an attached label's parent control index.
+Native labels attached to text/combo/list editors use Qt buddy mnemonic focus,
+including ampersand captions. Existing GUI regression checks structural binding
+and real Alt+I focus transfer. Desktop build and form_current_record pass
+(0.48 s). No new target. Detached-label heuristics, duplicate mnemonic cycling,
+label mouse-event rules and complete Windows accessibility/printing equivalence
+remain open. Grouped packaging/headless evidence above covers c63c584 only.

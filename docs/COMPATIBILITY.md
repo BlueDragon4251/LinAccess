@@ -967,3 +967,8 @@ readable/writable via VBA, and used for Enter from supported form editors after
 control validation. A focused command button takes priority; hidden/disabled
 defaults are skipped. Cancel/Escape, multiline EnterKeyBehavior, subform focus
 and full Access 2003 keyboard/rendering equivalence remain open.
+
+Imported labels nested beneath supported TextBox/ComboBox/ListBox controls keep
+their attachment and use native Qt buddy mnemonics for Alt-letter editor focus.
+Detached-label heuristics, duplicate mnemonic cycling and full Windows label
+mouse/accessibility/printing behavior are not claimed.

@@ -45,6 +45,7 @@ struct AccessVisualControl {
     int backStyle{1};
     int optionValue{1};
     int optionGroupIndex{-1};
+    int attachedControlIndex{-1};
     QString rowSource;
     QString rowSourceType;
     int boundColumn{1};

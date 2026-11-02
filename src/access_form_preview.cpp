@@ -1373,6 +1373,14 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         }
         ++renderedControls_;
     }
+    for (const auto& control:layout_.controls) {
+        if (control.type!="Label" || control.attachedControlIndex<0 || control.attachedControlIndex>=layout_.controls.size()) continue;
+        const auto& target=layout_.controls[control.attachedControlIndex];
+        if (target.type!="TextBox" && target.type!="ComboBox" && target.type!="ListBox") continue;
+        auto* label=qobject_cast<QLabel*>(controls_.value(control.name.toCaseFolded()).data());
+        auto* buddy=controls_.value(target.name.toCaseFolded()).data();
+        if (label && buddy) label->setBuddy(buddy);
+    }
     initializeControlDefaults(true);
     applyControlStates();
 }

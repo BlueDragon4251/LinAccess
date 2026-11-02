@@ -6,6 +6,7 @@
 #include <QTimer>
 #include <QPushButton>
 #include <QTest>
+#include <QLabel>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -22,6 +23,10 @@ int main(int argc,char** argv) {
 Begin Section
 Begin TextBox
 Name ="input"
+Begin Label
+Name ="input_label"
+Caption ="&Input"
+End
 End
 Begin CommandButton
 Name ="accept"
@@ -51,6 +56,10 @@ End Sub
         auto* accept=defaults.findChild<QPushButton*>("access-control-accept");
         auto* other=defaults.findChild<QPushButton*>("access-control-other");
         assert(input && accept && other && accept->isDefault());
+        auto* label=defaults.findChild<QLabel*>("access-control-input_label"); assert(label && label->buddy()==input);
+        defaults.activateWindow(); other->setFocus(); QApplication::processEvents();
+        QTest::keyClick(other,Qt::Key_I,Qt::AltModifier); QApplication::processEvents();
+        assert(input->hasFocus());
         input->setFocus(); QTest::keyClick(input,Qt::Key_Return);
         assert(sql.exec("SELECT COUNT(*) FROM positions WHERE position=101") && sql.next() && sql.value(0).toInt()==1); sql.finish();
         auto controls=makePreviewFormObject(defaults)->member("Controls",{}).object;
