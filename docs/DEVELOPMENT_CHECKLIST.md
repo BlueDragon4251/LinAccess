@@ -541,3 +541,7 @@ Full targets remain open:
 - [x] Native VBA/Access-expression integer division and rounded Mod, correct
   precedence/sign/null/overflow behavior and fixture-independent Qt calculated-
   control/SQL/save tests; SQL rewriting and full numeric promotion remain open.
+
+- [x] Native VBA/Access-expression power, documented left-to-right chains, unary
+  precedence/Double/null/domain/overflow handling and actual Qt/VBA/SQL tests;
+  SQL rewriting and full underflow/rounding/type/error identity remain open.

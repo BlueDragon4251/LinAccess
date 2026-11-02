@@ -1660,3 +1660,20 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubunt
 installations pass backend execution and GUI startup. All four original fixture
 hashes pass; repository remains private. Previous 27b7f99 private CI completed
 successfully.
+
+## 2026-11-02 — Native VBA power operator
+
+Added caret power with documented left-to-right chaining and corrected prefix
+operand precedence for unary signs. Core and native Qt/VBA/SQL tests verify
+calculated powers, actual audit writes, Double identity and domain/overflow
+preventing later SQL. Targeted tests pass 2/2 (1.19 s). Zero-negative powers and
+complete underflow explicitly diagnose 3251; SQL rewriting and full libm/type/
+error identity remain open. No original business execution increment. See
+POWER_OPERATOR_RUNTIME.md.
+
+Full validation: host 23/23 (75.61 s), Debian 12 23/23 (81.19 s), Ubuntu
+24.04 23/23 (70.64 s), GUI-disabled core 1/1 (1.08 s). Host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated Debian/Ubuntu
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass; repository remains private. Previous 653fd0e private CI completed
+successfully.

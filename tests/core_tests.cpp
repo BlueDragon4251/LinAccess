@@ -1626,6 +1626,13 @@ End Function
     assert(evaluate(R"(VarType(CInt(7) Mod CInt(3)))").asNumber()==2);
     assert(evaluate(R"(VarType(CLng(7) \ CLng(3)))").asNumber()==3);
     assert(evaluate(R"(Null Mod 0)").kind==VbaValue::Kind::Null && evaluate(R"(Null \ 0)").kind==VbaValue::Kind::Null);
+    for(const auto& item:std::vector<std::pair<const char*,double>>{
+        {"3^3^3",19683},{"2^3^2",64},{"-2^2",-4},{"(-2)^2",4},
+        {"2^-2",0.25},{"2^-2^3",0.015625},{"-2^-2^3",-0.015625},
+        {"2*-3^2",-18},{"(-2)^-3",-0.125},{"0^0",1},{"Empty^2",0}})
+        assert(evaluate(item.first).asNumber()==item.second);
+    assert(evaluate("VarType(CInt(2)^CInt(3))=vbDouble").truthy());
+    assert(evaluate("Null^2").kind==VbaValue::Kind::Null && evaluate("2^Null").kind==VbaValue::Kind::Null);
     assert(evaluate("CLng(2.5)").asNumber() == 2);
     assert(evaluate("CLng(3.5)").asNumber() == 4);
     assert(evaluate("CLng(-2.5)").asNumber() == -2);
@@ -1673,6 +1680,11 @@ End Function
     substringError(R"("invalid" Mod 2)",13); substringError(R"(1e100 \ 2)",6);
     scalarProbe->value=VbaValue::numeric(12.6); const auto beforeDivision=scalarProbe->reads;
     assert(evaluateVbaExpression(R"(probe \ 5)",host,scalarValues).number==2 && scalarProbe->reads==beforeDivision+1);
+    substringError("(-2)^0.5",5); substringError("1e200^2",6);
+    substringError("0^-1",3251); substringError("1e-200^2",3251);
+    substringError(R"("invalid"^2)",13);
+    scalarProbe->value=VbaValue::numeric(3); const auto beforePower=scalarProbe->reads;
+    assert(evaluateVbaExpression("probe^2",host,scalarValues).number==9 && scalarProbe->reads==beforePower+1);
     substringError("CInt(Null)",94); substringError("CInt(CVErr(2015))",13);
     substringError("CInt(\"invalid\")",13); substringError("CInt(32767.5)",6);
     substringError("CInt(-32768.6)",6); substringError("CInt()",450); substringError("CInt(1,2)",450);

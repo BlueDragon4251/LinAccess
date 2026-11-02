@@ -131,7 +131,7 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
                 (input[pos + 1] == '=' || (ch == '<' && input[pos + 1] == '>'))) {
                 symbol.push_back(input[++pos]);
             }
-            if (std::string("+-*/\\&=<>!.,()").find(ch) == std::string::npos && !(accessExpression && ch==';'))
+            if (std::string("+-*/\\^&=<>!.,()").find(ch) == std::string::npos && !(accessExpression && ch==';'))
                 throw error("Nicht unterstütztes VBA-Ausdruckszeichen: " + symbol);
             tokens.push_back({Token::Type::Symbol, symbol});
             ++pos;
@@ -154,6 +154,7 @@ int precedence(const Token& token) {
     if (text == "mod") return 6;
     if (text == "\\") return 7;
     if (text == "*" || text == "/") return 8;
+    if (text == "^") return 10;
     return 0;
 }
 
@@ -210,6 +211,17 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
             || answer>(narrow ? std::numeric_limits<std::int16_t>::max() : std::numeric_limits<std::int32_t>::max()))
             throw error("Integer arithmetic overflow",6);
         return narrow ? VbaValue::integer(static_cast<std::int16_t>(answer)) : VbaValue::longInteger(static_cast<std::int32_t>(answer));
+    }
+    if (op=="^") {
+        if (left.kind==VbaValue::Kind::Null || right.kind==VbaValue::Kind::Null) return {};
+        const auto base=coerceVbaModuleValue(left,"double").number;
+        const auto exponent=coerceVbaModuleValue(right,"double").number;
+        if (base<0 && std::floor(exponent)!=exponent) throw error("Negative power base requires an integer exponent",5);
+        if (base==0 && exponent<0) throw error("Zero-base negative powers are not validated",3251);
+        const auto answer=std::pow(base,exponent);
+        if (!std::isfinite(answer)) throw error("Power result overflow",6);
+        if (answer==0 && base!=0) throw error("Power underflow is not validated",3251);
+        return VbaValue::numeric(answer);
     }
     if (left.kind == VbaValue::Kind::Empty && right.kind == VbaValue::Kind::Text)
         return binary(op, VbaValue::string(""), right,host,mode);
@@ -278,7 +290,7 @@ private:
         if (!take(wanted)) throw error("Erwartet: " + wanted);
     }
     VbaValue expression(int minPrecedence,bool objectContext=false) {
-        auto lhs = primary(objectContext);
+        auto lhs = primary(objectContext,minPrecedence);
         while (true) {
             const int prec = precedence(peek());
             if (prec < minPrecedence) break;
@@ -296,9 +308,9 @@ private:
         }
         return lhs;
     }
-    VbaValue primary(bool objectContext) {
+    VbaValue primary(bool objectContext,int minPrecedence) {
         auto value = [&] {
-            if (!nextSymbol(".") && !nextSymbol("!")) return atom(objectContext);
+            if (!nextSymbol(".") && !nextSymbol("!")) return atom(objectContext,minPrecedence);
             if (!host_ && allowWith_) return VbaValue{};
             if (!withContext_) throw error("With object context unavailable",91);
             return *withContext_;
@@ -346,17 +358,17 @@ private:
         }
         return value;
     }
-    VbaValue atom(bool objectContext) {
+    VbaValue atom(bool objectContext,int minPrecedence) {
         if (take("-")) {
-            const auto arg = expression(9);
+            const auto arg = expression(std::max(9,minPrecedence));
             return host_ ? arg.kind==VbaValue::Kind::Currency ? negateCurrency(arg) : VbaValue::numeric(-arg.asNumber()) : VbaValue{};
         }
         if (take("+")) {
-            const auto arg = expression(9);
+            const auto arg = expression(std::max(9,minPrecedence));
             return host_ ? arg.kind==VbaValue::Kind::Currency ? arg : VbaValue::numeric(arg.asNumber()) : VbaValue{};
         }
         if (take("not")) {
-            const auto arg = expression(3); // comparisons bind before Not in VBA
+            const auto arg = expression(std::max(3,minPrecedence)); // comparisons bind before Not in VBA
             if (!host_ || arg.kind == VbaValue::Kind::Null) return {};
             if (arg.kind == VbaValue::Kind::Boolean) return VbaValue::logical(!arg.boolean);
             return VbaValue::numeric(~integer(arg));

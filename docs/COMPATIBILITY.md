@@ -610,3 +610,8 @@ Native VBA/Access expressions now execute integer division and rounded Mod with
 correct bounded precedence/sign/range behavior. A fixture-independent Qt form
 regression verifies calculated controls, SQL effects and save/error behavior.
 See INTEGER_OPERATORS_RUNTIME.md; SQL rewriting and full numeric promotion remain open.
+
+Native VBA/Access expressions execute caret exponentiation with documented
+left-to-right chaining, sign precedence and checked Double/domain behavior.
+Actual Qt/VBA/SQL audit tests are in POWER_OPERATOR_RUNTIME.md. SQL caret,
+zero-negative powers, complete underflow/rounding/type/error identity remain open.
