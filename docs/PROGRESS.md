@@ -1800,3 +1800,21 @@ payload/backend/permissions/fixture-exclusion checks. Isolated installations on
 all three distributions pass backend execution and GUI startup. All four
 original fixture hashes pass; repository remains private. Previous 1b5fa5f
 private CI completed successfully.
+
+## 2026-11-02 — Repeat native form search after closing the dialog
+
+Moved actual matching/navigation into a lifetime-guarded native method with
+per-document search history. Shift+F4, documented acCmdFindNext (341) and SendKeys
+reuse it without reopening the dialog. Real Qt/VBA/SQL regression verifies
+closed-dialog advance/wrap, active-document routing from a hidden caller,
+no-history diagnostics and validation cancellation preserving draft/SQL/position.
+Targeted find_form_documents passes (0.13 s). Full/shared Access search-history
+and Find/Replace semantics remain open. No business execution increment.
+See FIND_FORM_RUNTIME.md.
+
+Full validation: host 27/27 (99.04 s), Debian 12 27/27 (79.78 s), Ubuntu
+24.04 27/27 (71.50 s), Debian 13 27/27 (73.47 s), GUI-disabled core 1/1
+(1.64 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+bcb99e8 private CI completed successfully.

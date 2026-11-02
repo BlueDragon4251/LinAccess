@@ -460,6 +460,7 @@ public:
     void copyCurrentRecord() { commandDocument().copyCurrentRecord(); }
     void pasteAppendRecord() { commandDocument().pasteAppendRecord(); }
     void findRecords() { commandDocument().openFindDialog(); }
+    void repeatFind() { commandDocument().repeatFind(); }
     void selectObject(int type,const QString& name,bool inDatabase) {
         if(type<0 || type>3) throw linaccess::VbaRuntimeError(3251,"SelectObject object type is not implemented");
         if(!inDatabase && name.isEmpty()) throw linaccess::VbaRuntimeError(450,"SelectObject requires an open object name");
@@ -672,6 +673,7 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         const auto code=number(args[0]);
         if (code==28) host.gotoRecord(5);
         else if (code==30) host.findRecords();
+        else if (code==341) host.repeatFind();
         else if (code>=65 && code<=68) { const int actions[]{1,0,2,3}; host.gotoRecord(actions[code-65]); }
         else if (code==97) host.saveRecord();
         else if (code==50) host.selectCurrentRecord();
@@ -2379,68 +2381,83 @@ void AccessFormPreview::openFindDialog() {
     auto* close=new QPushButton("&Schließen",dialog); close->setObjectName("access-find-close"); buttons->addWidget(next); buttons->addWidget(close); box->addLayout(buttons);
     next->setEnabled(!initialText.isEmpty()); connect(query,&QLineEdit::textChanged,next,[next](const QString& text) { next->setEnabled(!text.isEmpty()); });
     connect(close,&QPushButton::clicked,dialog,&QDialog::reject); connect(this,&QDialog::finished,dialog,&QDialog::reject);
-    struct Search { QString text,field; int mode{-1}; bool sensitive{},advance{}; };
-    const auto search=std::make_shared<Search>(); const QPointer<AccessFormPreview> self(this); const QPointer<QDialog> guarded(dialog);
-    connect(next,&QPushButton::clicked,dialog,[self,guarded,query,scope,match,sensitive,result,search] {
+    const QPointer<AccessFormPreview> self(this); const QPointer<QDialog> guarded(dialog);
+    connect(next,&QPushButton::clicked,dialog,[self,guarded,query,scope,match,sensitive,result] {
         if(!self || !guarded || self->closed_ || self->openCancelled_) return;
-        ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
         try {
-            if(self->recordCommandRunning_ || self->dataTruncated_) throw VbaRuntimeError(3251,"Die Suche ist während dieses Vorgangs nicht verfügbar.");
-            const auto text=query->text(),field=scope->currentData().toString(); const auto mode=match->currentIndex(); const bool caseSensitive=sensitive->isChecked();
-            if(text.isEmpty()) return;
-            if(!self->commitControls() || !self || !guarded || self->closed_ || self->openCancelled_) {
-                if(guarded) result->setText("Suche durch Formularvalidierung abgebrochen."); return;
-            }
-            if(search->text!=text || search->field!=field || search->mode!=mode || search->sensitive!=caseSensitive) {
-                search->text=text; search->field=field; search->mode=mode; search->sensitive=caseSensitive; search->advance=false;
-            }
-            QVector<int> columns;
-            for(int column=0;column<self->dataColumns_.size();++column) {
-                const auto& name=self->dataColumns_[column]; const auto type=self->dataTypes_.value(name.toCaseFolded());
-                if((field.isEmpty() || name.compare(field,Qt::CaseInsensitive)==0)
-                    && (type.contains("TEXT",Qt::CaseInsensitive) || type.contains("CHAR",Qt::CaseInsensitive) || type.contains("CLOB",Qt::CaseInsensitive))) columns<<column;
-            }
-            if(columns.isEmpty()) throw VbaRuntimeError(3265,"Das Suchfeld ist nicht mehr verfügbar.");
-            const bool virtualRow=self->currentRecordIndex_==0 && self->layout_.allowAdditions;
-            const int count=self->recordRows_.size()+(virtualRow ? 1 : 0);
-            if(!count) { result->setText("Keine Datensätze vorhanden."); return; }
-            const int current=self->currentRecordIndex_>0 ? self->currentRecordIndex_-1 : virtualRow ? count-1 : 0;
-            const int start=(current+(search->advance ? 1 : 0))%count;
-            int found=-1;
-            for(int offset=0;offset<count && found<0;++offset) {
-                const auto row=(start+offset)%count;
-                for(const auto column:columns) {
-                    QVariant value=row<self->recordRows_.size() ? self->recordRows_[row][column] : QVariant{};
-                    if(row==current && (self->dirty_ || virtualRow)) {
-                        for(const auto& control:self->layout_.controls) {
-                            if(control.type=="ListBox" && control.multiSelect) continue;
-                            if(columnIndex(control.controlSource,self->dataColumns_)!=column) continue;
-                            const auto pending=self->getFieldValue(control.name.toStdString());
-                            value=pending.kind==linaccess::VbaValue::Kind::Null ? QVariant{} : QVariant(QString::fromStdString(pending.asText())); break;
-                        }
-                    }
-                    if(value.isNull() || value.metaType().id()==QMetaType::QByteArray) continue;
-                    const auto candidate=value.toString(); const auto cs=caseSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
-                    if(mode==1 ? candidate.compare(text,cs)==0 : mode==2 ? candidate.startsWith(text,cs) : candidate.contains(text,cs)) { found=row; break; }
-                }
-            }
-            if(found<0) { result->setText("Keine Übereinstimmung gefunden."); return; }
-            if(found!=current) {
-                const auto id=self->rowIds_[found];
-                if(!self->saveRecord() || !self || !guarded || self->closed_ || self->openCancelled_) {
-                    if(guarded) result->setText("Suche durch Formularvalidierung abgebrochen."); return;
-                }
-                const auto position=self->rowIds_.indexOf(id);
-                if(position<0) { result->setText("Gefundener Datensatz ist nicht mehr verfügbar."); return; }
-                self->selectRecord(position+1);
-                if(!self || !guarded || self->closed_ || self->currentRecordIndex_<1
-                    || self->rowIds_.value(self->currentRecordIndex_-1)!=id) return;
-            }
-            search->advance=true;
-            result->setText(self->currentRecordIndex_==0 ? "Aktueller neuer Datensatz gefunden." : QString("Datensatz %1 gefunden.").arg(self->currentRecordIndex_));
+            const auto message=self->findNextRecord(query->text(),scope->currentData().toString(),match->currentIndex(),sensitive->isChecked());
+            if(guarded) result->setText(message);
         } catch(const std::exception& error) { if(guarded) result->setText(QString::fromUtf8(error.what())); }
     });
     dialog->show(); dialog->activateWindow(); query->setFocus(); query->selectAll();
+}
+QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bool caseSensitive) {
+    using linaccess::VbaRuntimeError;
+    ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+    if(closed_ || openCancelled_ || layout_.kind!=linaccess::AccessDocumentKind::Form || !directTable_ || !dataSourceAvailable_ || dataTruncated_)
+        throw VbaRuntimeError(3251,"Die Suche ist für diese Datenquelle nicht verfügbar.");
+    if(findingRecord_) throw VbaRuntimeError(3251,"Eine Suche wird bereits ausgeführt.");
+    QScopedValueRollback<bool> searching(findingRecord_,true);
+    const QPointer<AccessFormPreview> self(this); auto* search=&findState_;
+    if(self->recordCommandRunning_ || self->dataTruncated_) throw VbaRuntimeError(3251,"Die Suche ist während dieses Vorgangs nicht verfügbar.");
+    if(text.isEmpty()) throw VbaRuntimeError(2046,"Keine vorherige Suche vorhanden.");
+    if(!self->commitControls() || !self || self->closed_ || self->openCancelled_) {
+        return "Suche durch Formularvalidierung abgebrochen.";
+    }
+    if(search->text!=text || search->field!=field || search->mode!=mode || search->sensitive!=caseSensitive) {
+        search->text=text; search->field=field; search->mode=mode; search->sensitive=caseSensitive; search->advance=false;
+    }
+    QVector<int> columns;
+    for(int column=0;column<self->dataColumns_.size();++column) {
+        const auto& name=self->dataColumns_[column]; const auto type=self->dataTypes_.value(name.toCaseFolded());
+        if((field.isEmpty() || name.compare(field,Qt::CaseInsensitive)==0)
+            && (type.contains("TEXT",Qt::CaseInsensitive) || type.contains("CHAR",Qt::CaseInsensitive) || type.contains("CLOB",Qt::CaseInsensitive))) columns<<column;
+    }
+    if(columns.isEmpty()) throw VbaRuntimeError(3265,"Das Suchfeld ist nicht mehr verfügbar.");
+    const bool virtualRow=self->currentRecordIndex_==0 && self->layout_.allowAdditions;
+    const int count=self->recordRows_.size()+(virtualRow ? 1 : 0);
+    if(!count) { return "Keine Datensätze vorhanden."; }
+    const int current=self->currentRecordIndex_>0 ? self->currentRecordIndex_-1 : virtualRow ? count-1 : 0;
+    const int start=(current+(search->advance ? 1 : 0))%count;
+    int found=-1;
+    for(int offset=0;offset<count && found<0;++offset) {
+        const auto row=(start+offset)%count;
+        for(const auto column:columns) {
+            QVariant value=row<self->recordRows_.size() ? self->recordRows_[row][column] : QVariant{};
+            if(row==current && (self->dirty_ || virtualRow)) {
+                for(const auto& control:self->layout_.controls) {
+                    if(control.type=="ListBox" && control.multiSelect) continue;
+                    if(columnIndex(control.controlSource,self->dataColumns_)!=column) continue;
+                    const auto pending=self->getFieldValue(control.name.toStdString());
+                    value=pending.kind==linaccess::VbaValue::Kind::Null ? QVariant{} : QVariant(QString::fromStdString(pending.asText())); break;
+                }
+            }
+            if(value.isNull() || value.metaType().id()==QMetaType::QByteArray) continue;
+            const auto candidate=value.toString(); const auto cs=caseSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
+            if(mode==1 ? candidate.compare(text,cs)==0 : mode==2 ? candidate.startsWith(text,cs) : candidate.contains(text,cs)) { found=row; break; }
+        }
+    }
+    if(found<0) { return "Keine Übereinstimmung gefunden."; }
+    if(found!=current) {
+        const auto id=self->rowIds_[found];
+        if(!self->saveRecord() || !self || self->closed_ || self->openCancelled_) {
+            return "Suche durch Formularvalidierung abgebrochen.";
+        }
+        const auto position=self->rowIds_.indexOf(id);
+        if(position<0) { return "Gefundener Datensatz ist nicht mehr verfügbar."; }
+        self->selectRecord(position+1);
+        if(!self || self->closed_ || self->currentRecordIndex_<1
+            || self->rowIds_.value(self->currentRecordIndex_-1)!=id) return "Suche durch Formularereignis abgebrochen.";
+    }
+    search->advance=true;
+    return self->currentRecordIndex_==0 ? "Aktueller neuer Datensatz gefunden." : QString("Datensatz %1 gefunden.").arg(self->currentRecordIndex_);
+}
+void AccessFormPreview::repeatFind() {
+    ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+    if(findState_.text.isEmpty()) throw linaccess::VbaRuntimeError(2046,"Keine vorherige Suche vorhanden.");
+    const auto message=findNextRecord(findState_.text,findState_.field,findState_.mode,findState_.sensitive);
+    if(status_) status_->setText(message);
+    if(findDialog_) if(auto* result=findDialog_->findChild<QLabel*>("access-find-result")) result->setText(message);
 }
 bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
     if (closed_ || openCancelled_) return false;
@@ -2471,6 +2488,7 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
             (void)QMetaObject::invokeMethod(owner,projectCommand,Qt::DirectConnection);
             return true;
         }
+        if (event->key()==Qt::Key_F4 && modifiers==Qt::ShiftModifier) { repeatFind(); return true; }
         if (event->key()==Qt::Key_F && modifiers==Qt::ControlModifier) { openFindDialog(); return true; }
         if (event->key()==Qt::Key_C && modifiers==Qt::ControlModifier && recordSelected_) {
             (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(190)}); return true;

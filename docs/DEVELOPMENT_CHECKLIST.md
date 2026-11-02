@@ -573,3 +573,7 @@ Full targets remain open:
 - [x] Native modeless literal form search via Ctrl+F/acCmdFind, field/match/case/
   advance modes, draft/validation/lifetime/active-context and real Qt/SQL tests;
   full Find/Replace/wildcard/format/source/locale/MDI/UI identity remain open.
+
+- [x] Native Shift+F4/acCmdFindNext/SendKeys repeat the last document-local literal
+  search after closing its real dialog; validation, active context, wrapping and
+  SQL regression pass; shared/global and complete Find/Replace identity remain open.

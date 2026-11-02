@@ -81,12 +81,19 @@ End Function
 Sub FindActive()
 DoCmd.RunCommand acCmdFind
 End Sub
+Sub FindNextActive()
+DoCmd.RunCommand acCmdFindNext
+End Sub
+Sub RepeatViaSendKeys()
+SendKeys "+{F4}", True
+End Sub
 )VBA";
     AccessFormPreview caller("hidden find caller","Begin Form\nEnd",callerCode,db);
     std::vector<VbaValue> none;
     auto active=caller.executeProcedure("ActiveName",none); assert(active.status==linaccess::VbaExecutionStatus::Completed && active.typedReturnValue->asText()=="find records");
     assert(caller.executeProcedure("FindActive",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(form.findChildren<QDialog*>("access-find-dialog").size()==1 && caller.findChildren<QDialog*>("access-find-dialog").isEmpty());
+    const auto noHistory=caller.executeProcedure("FindNextActive",none); assert(noHistory.status==linaccess::VbaExecutionStatus::Error && noHistory.errorNumber==2046);
     field->setCurrentIndex(field->findData("name")); match->setCurrentIndex(1); query->setText("needleö"); query->setFocus(); QTest::keyClick(query,Qt::Key_Return); assert(model->item("id").number==2);
     field->setCurrentIndex(0); match->setCurrentIndex(0); query->setText("Needle"); next->click(); assert(model->item("id").number==2);
     next->click(); assert(model->item("id").number==3); next->click(); assert(model->item("id").number==4);
@@ -95,6 +102,20 @@ End Sub
     field->setCurrentIndex(field->findData("name")); sensitive->setChecked(false); query->setText("NeedleÖ"); next->click(); assert(model->item("id").number==2);
     query->setText("Needle*"); next->click(); assert(model->item("id").number==2 && result->text()=="Keine Übereinstimmung gefunden.");
     query->setText(""); assert(!next->isEnabled());
+    field->setCurrentIndex(0); match->setCurrentIndex(0); sensitive->setChecked(false); query->setText("Needle"); next->click(); assert(model->item("id").number==2);
+    close->click(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);
+    assert(!form.findChild<QDialog*>("access-find-dialog"));
+    focus(); QTest::keyClick(editor,Qt::Key_F4,Qt::ShiftModifier); assert(model->item("id").number==3 && !form.findChild<QDialog*>("access-find-dialog"));
+    assert(caller.executeProcedure("FindNextActive",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(model->item("id").number==4 && !caller.findChild<QDialog*>("access-find-dialog"));
+    focus(); assert(caller.executeProcedure("RepeatViaSendKeys",none).status==linaccess::VbaExecutionStatus::Completed); assert(model->item("id").number==2);
+    QTest::keyClick(editor,Qt::Key_F3); assert(model->item("id").number==2);
+    editor->selectAll(); QTest::keyClicks(editor,"blocked repeat"); model->assign("Tag",VbaValue::string("blockupdate"));
+    QTest::keyClick(editor,Qt::Key_F4,Qt::ShiftModifier); assert(model->item("id").number==2 && stored(2)=="NeedleÖ" && model->member("Dirty",{}).boolean);
+    assert(!form.findChild<QDialog*>("access-find-dialog")); model->assign("Tag",VbaValue::string("")); model->member("Undo",{});
+    QTest::keyClick(editor,Qt::Key_F,Qt::ControlModifier); dialog=form.findChild<QDialog*>("access-find-dialog"); assert(dialog);
+    query=dialog->findChild<QLineEdit*>("access-find-text"); field=dialog->findChild<QComboBox*>("access-find-field"); match=dialog->findChild<QComboBox*>("access-find-match"); sensitive=dialog->findChild<QCheckBox*>("access-find-case");
+    next=dialog->findChild<QPushButton*>("access-find-next"); close=dialog->findChild<QPushButton*>("access-find-close"); result=dialog->findChild<QLabel*>("access-find-result");
     focus(); QTest::keyClick(editor,Qt::Key_F,Qt::ControlModifier); assert(form.findChildren<QDialog*>("access-find-dialog").size()==1);
     focus(); editor->selectAll(); QTest::keyClicks(editor,"draft0"); model->assign("Tag",VbaValue::string("blockupdate"));
     query->setText("NeedleÖ"); match->setCurrentIndex(1); sensitive->setChecked(false); next->click();

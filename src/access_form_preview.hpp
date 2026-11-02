@@ -93,6 +93,8 @@ private:
     bool commitControl(const QString& control);
     bool commitControls();
     void openFindDialog();
+    QString findNextRecord(QString text,QString field,int mode,bool caseSensitive);
+    void repeatFind();
     void selectRecord(int target);
     bool prepareClose();
     static bool closeDocuments(const QVector<AccessFormPreview*>& roots,AccessFormPreview* closingRoot=nullptr);
@@ -165,6 +167,7 @@ private:
     quint64 windowSequence_{};
     QComboBox* recordSelector_{};
     QPointer<QDialog> findDialog_;
+    struct FindState { QString text,field; int mode{-1}; bool sensitive{},advance{}; } findState_;
     QTimer* formTimer_{};
     bool timerDispatching_{};
     QLineEdit* filterEditor_{};
@@ -201,6 +204,7 @@ private:
     bool loading_{};
     bool saving_{};
     bool recordCommandRunning_{};
+    bool findingRecord_{};
     bool recordSelected_{};
     bool navigating_{};
     bool cyclingFocus_{};

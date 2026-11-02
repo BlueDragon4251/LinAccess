@@ -649,3 +649,8 @@ Ctrl+F/acCmdFind now opens native literal text search with actual record navigat
 case/match/field modes and Qt/VBA/SQL validation/draft/lifetime regressions. See
 FIND_FORM_RUNTIME.md; full Find/Replace, wildcard/format/query/report/datasheet/
 locale/MDI and exact Access 2003 UI parity remain open.
+
+Shift+F4/acCmdFindNext (341)/SendKeys repeat the active form's last executed
+literal search after the modeless dialog closes, with the same validation and
+real SQL navigation. Search history is document-local; shared Access search
+history, exact callback/empty-history identity and full Find/Replace remain open.

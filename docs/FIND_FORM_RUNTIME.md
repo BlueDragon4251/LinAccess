@@ -37,3 +37,25 @@ search rather than claiming complete results.
 References:
 - https://support.microsoft.com/en-us/office/keyboard-shortcuts-for-access-70a673e4-4f7b-4300-b8e5-3320fa6606e2
 - https://learn.microsoft.com/en-us/office/vba/api/access.accommand
+
+## Repeat the last literal search
+
+Shift+F4, RunCommand acCmdFindNext (341) and native SendKeys now reuse the
+last executed literal search on the active form after the utility closes.
+Search text, field, match mode, case and advance state belong to the document;
+closing the dialog no longer discards them. The same native matching,
+validation, draft preservation and SQL save/navigation path serves both UI and
+repeat commands. Recursive search from callbacks is rejected explicitly.
+No previous executed search diagnoses command unavailable (2046).
+
+The synthetic Qt/VBA/SQL regression additionally closes/deletes the real dialog,
+uses Shift+F4 to advance, invokes a hidden caller's acCmdFindNext on the active
+form, wraps with SendKeys and verifies that F3 does not navigate. A cancelled
+field validation keeps the pending draft, stored SQL value and current record
+without reopening the dialog. Targeted find_form_documents passes (0.13 s).
+
+This is document-local search history. Shared history across documents/projects,
+exact Windows callback/empty-history/focus behavior, source changes and complete
+Access Find/Replace semantics still require reference coverage. No additional
+original business workflow is claimed. Microsoft documents Shift+F4 for repeating
+the last closed-dialog search in Form/Datasheet view; the shortcut is not F3.
