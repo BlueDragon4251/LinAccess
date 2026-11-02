@@ -37,3 +37,7 @@ original-heavy trio: 3/3 (40.11 s). No new original business execution is claime
 Public references:
 - https://learn.microsoft.com/en-us/office/vba/api/access.combobox.listindex
 - https://learn.microsoft.com/en-us/office/vba/api/access.combobox.itemdata
+
+ColumnHeads is now implemented within COLUMN_HEADS_RUNTIME.md. Its documented
+ListCount includes a visual header row independently of selectable model data;
+exact Windows behavior at that extra index boundary remains unverified.

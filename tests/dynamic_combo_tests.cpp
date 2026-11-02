@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <QStyle>
 #include <QStyleOptionComboBox>
+#include <QHeaderView>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -21,6 +22,7 @@ void testCommandRequery();
 void testComboKeyboardRefresh();
 void testComboListProperties();
 void testNativeListBox();
+void testColumnHeads();
 
 void testDynamicCombos() {
     using linaccess::VbaValue;
@@ -82,6 +84,71 @@ End Sub
     testComboKeyboardRefresh();
     testComboListProperties();
     testNativeListBox();
+    testColumnHeads();
+}
+
+void testColumnHeads() {
+    using linaccess::VbaValue;
+    const auto metadata=linaccess::parseAccessFormLayout(QStringLiteral("Begin Form\nBegin ListBox\nColumnHeads =NotDefault\nEnd\nBegin Section\nBegin ListBox\nName =\"inherited\"\nEnd\nBegin ListBox\nName =\"plain\"\nColumnHeads =0\nEnd\nEnd\nEnd"));
+    assert(metadata.controls.size()==2 && metadata.controls[0].columnHeads && !metadata.controls[1].columnHeads);
+    auto db=QSqlDatabase::addDatabase("QSQLITE","column-heads"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE choices(id INTEGER,label TEXT)")); assert(sql.exec("INSERT INTO choices VALUES(10,'first'),(20,'second')"));
+    assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,choice INTEGER)")); assert(sql.exec("INSERT INTO records VALUES(1,10)"));
+    const QByteArray layout="Begin Form\nRecordSource =\"records\"\nBegin Section\nBegin ListBox\nName =\"pick\"\nControlSource =\"choice\"\nRowSource =\"SELECT id,label AS [Display label] FROM choices ORDER BY id\"\nColumnCount =2\nColumnHeads =NotDefault\nColumnWidths =\"0;1440\"\nWidth =4000\nHeight =1800\nEnd\nEnd\nEnd";
+    for(const auto* kind:{"ListBox","ComboBox"}) {
+        auto source=layout; source.replace("Begin ListBox",QByteArray("Begin ")+kind);
+        AccessFormPreview form(QString::fromUtf8(kind),source,"Sub ShowHeads()\nMe.pick.ColumnHeads=True\nEnd Sub",db);
+        form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+        auto root=makePreviewFormObject(form),pick=root->objectMember("pick",{}).object;
+        assert(pick->member("ColumnHeads",{}).truthy() && pick->member("ListCount",{}).asNumber()==3);
+        auto* combo=form.findChild<QComboBox*>("access-control-pick");
+        auto* view=combo ? qobject_cast<QTreeView*>(combo->view()) : form.findChild<QTreeView*>("access-control-pick");
+        assert(view && view->model()->rowCount()==2 && !view->isHeaderHidden() && view->isColumnHidden(0));
+        assert(view->model()->headerData(1,Qt::Horizontal).toString()=="Display label");
+        if(combo) { pick->member("Dropdown",{}); QApplication::processEvents(); }
+        assert(view->header()->isVisible());
+        QTest::mouseClick(view->header()->viewport(),Qt::LeftButton,Qt::NoModifier,QPoint(view->header()->sectionViewportPosition(1)+10,view->header()->height()/2));
+        assert(pick->member("Value",{}).asNumber()==10 && !form.hasUnsavedChanges()); if(combo) combo->hidePopup();
+        pick->assign("Value",VbaValue::numeric(20)); QPointer<QAbstractItemModel> previous=view->model();
+        pick->assign("ColumnHeads",VbaValue::logical(false));
+        assert(!previous && view->isHeaderHidden() && pick->member("ListCount",{}).asNumber()==2 && pick->member("Value",{}).asNumber()==20 && form.hasUnsavedChanges());
+        std::vector<VbaValue> none; assert(form.executeProcedure("ShowHeads",none).status==linaccess::VbaExecutionStatus::Completed);
+        assert(!view->isHeaderHidden() && pick->member("ListCount",{}).asNumber()==3 && pick->member("Value",{}).asNumber()==20);
+        for(const auto& invalid:std::vector<std::pair<VbaValue,int>>{{VbaValue{},94},{VbaValue::string("bad"),13}}) {
+            previous=view->model(); int actual=0; try { pick->assign("ColumnHeads",invalid.first); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; }
+            assert(actual==invalid.second && view->model()==previous && pick->member("ColumnHeads",{}).truthy());
+        }
+        previous=view->model(); int actual=0;
+        try { pick->assign("RowSourceType",VbaValue::string("Field List")); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; }
+        assert(actual==3251 && view->model()==previous && pick->member("RowSourceType",{}).asText().empty());
+        class Heads final:public linaccess::VbaObject {
+        public:
+            int reads{};
+            VbaValue scalarValue() override { ++reads; return VbaValue::logical(true); }
+            VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw linaccess::VbaRuntimeError(438,"No members"); }
+        };
+        auto scalar=std::make_shared<Heads>(); pick->assign("ColumnHeads",VbaValue::reference(scalar)); assert(scalar->reads==1);
+        root->member("Undo",{});
+        pick->assign("RowSource",VbaValue::string("SELECT id,label FROM choices WHERE id<0"));
+        assert(view->model()->rowCount()==0 && pick->member("ListCount",{}).asNumber()==1);
+        pick->assign("BoundColumn",VbaValue::numeric(0)); pick->assign("RowSourceType",VbaValue::string("Value List"));
+        pick->assign("RowSource",VbaValue::string("ID;Heading;10;first;20;second"));
+        assert(view->model()->rowCount()==2 && pick->member("ListCount",{}).asNumber()==3 && view->model()->headerData(1,Qt::Horizontal).toString()=="Heading");
+        pick->assign("Value",VbaValue::numeric(1)); assert(pick->member("Value",{}).asNumber()==1);
+        assert(pick->member("Column",{VbaValue::numeric(1),VbaValue::numeric(0)}).asText()=="first");
+        if(combo) assert(pick->member("ListIndex",{}).asNumber()==1 && pick->member("ItemData",{VbaValue::numeric(1)}).asNumber()==1);
+        pick->assign("ColumnHeads",VbaValue::logical(false));
+        assert(view->model()->rowCount()==3 && pick->member("ListCount",{}).asNumber()==3 && view->isHeaderHidden());
+        assert(pick->member("Column",{VbaValue::numeric(1),VbaValue::numeric(0)}).asText()=="Heading");
+        pick->assign("ColumnHeads",VbaValue::logical(true)); pick->assign("RowSource",VbaValue::string(""));
+        assert(view->model()->rowCount()==0 && pick->member("ListCount",{}).asNumber()==0);
+        root->member("Undo",{}); assert(form.close());
+        assert(sql.exec("SELECT choice FROM records WHERE id=1") && sql.next() && sql.value(0).toInt()==10); sql.finish();
+    }
+    auto reportSource=layout; reportSource.replace("Begin Form","Begin Report"); AccessFormPreview report("headed report",reportSource,{},db);
+    auto reportPick=makePreviewFormObject(report)->objectMember("pick",{}).object;
+    assert(reportPick->member("ColumnHeads",{}).truthy() && reportPick->member("ListCount",{}).asNumber()==3);
+    int actual=0; try { reportPick->assign("ColumnHeads",VbaValue::logical(false)); } catch(const linaccess::VbaRuntimeError& failure) { actual=failure.number; } assert(actual==3251); assert(report.close());
 }
 
 void testNativeListBox() {

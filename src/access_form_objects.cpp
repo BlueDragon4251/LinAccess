@@ -114,10 +114,11 @@ public:
         if ((qobject_cast<QComboBox*>(widget) || dynamic_cast<AccessListBox*>(widget)) && key=="listcount") {
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected ListCount arguments");
             if (!widget->property("la_rows_loaded").toBool()) preview.requeryControl(bytes(name_));
-            if(auto* list=dynamic_cast<AccessListBox*>(widget)) return linaccess::VbaValue::numeric(list->rowCount());
-            return linaccess::VbaValue::numeric(qobject_cast<QComboBox*>(widget)->count());
+            const int headers=widget->property("la_header_rows").toInt();
+            if(auto* list=dynamic_cast<AccessListBox*>(widget)) return linaccess::VbaValue::numeric(list->rowCount()+headers);
+            return linaccess::VbaValue::numeric(qobject_cast<QComboBox*>(widget)->count()+headers);
         }
-        if ((qobject_cast<QComboBox*>(widget) || dynamic_cast<AccessListBox*>(widget)) && (key=="rowsource" || key=="rowsourcetype" || key=="boundcolumn" || key=="columncount" || key=="columnwidths")) {
+        if ((qobject_cast<QComboBox*>(widget) || dynamic_cast<AccessListBox*>(widget)) && (key=="rowsource" || key=="rowsourcetype" || key=="boundcolumn" || key=="columncount" || key=="columnwidths" || key=="columnheads")) {
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected combo property arguments");
             for (const auto& definition : preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
                 if (key=="rowsource") return linaccess::VbaValue::string(bytes(definition.rowSource));
@@ -125,6 +126,7 @@ public:
                 if (key=="boundcolumn") return linaccess::VbaValue::numeric(definition.boundColumn);
                 if (key=="columncount") return linaccess::VbaValue::numeric(definition.columnCount);
                 if (key=="columnwidths") return linaccess::VbaValue::string(bytes(definition.columnWidths));
+                if (key=="columnheads") return linaccess::VbaValue::logical(definition.columnHeads);
             }
         }
         if (key=="text") {
@@ -371,13 +373,19 @@ public:
             }
             throw linaccess::VbaRuntimeError(2465,"Control unavailable");
         }
-        if ((qobject_cast<QComboBox*>(widget) || dynamic_cast<AccessListBox*>(widget)) && (key=="rowsource" || key=="rowsourcetype" || key=="boundcolumn" || key=="columncount" || key=="columnwidths")) {
+        if ((qobject_cast<QComboBox*>(widget) || dynamic_cast<AccessListBox*>(widget)) && (key=="rowsource" || key=="rowsourcetype" || key=="boundcolumn" || key=="columncount" || key=="columnwidths" || key=="columnheads")) {
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null combo property");
             for (auto& definition : preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
                 const auto previous=definition;
                 if (key=="rowsource") definition.rowSource=text(value.asText());
                 if (key=="rowsourcetype") definition.rowSourceType=text(value.asText());
                 if (key=="columnwidths") definition.columnWidths=text(value.asText());
+                if(key=="columnheads") {
+                    if(preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(3251,"Runtime ColumnHeads requires native Form view");
+                    const auto scalar=linaccess::scalarVbaValue(value);
+                    if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null ColumnHeads");
+                    definition.columnHeads=linaccess::coerceVbaModuleValue(scalar,"boolean").boolean;
+                }
                 if (key=="boundcolumn" || key=="columncount") {
                     const auto number=linaccess::sqlFieldValue(value,"INTEGER").toLongLong();
                     if (number<(key=="columncount" ? 1 : 0) || number>255) throw linaccess::VbaRuntimeError(5,"Invalid combo column configuration");

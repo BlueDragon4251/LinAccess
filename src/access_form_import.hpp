@@ -49,6 +49,7 @@ struct AccessVisualControl {
     QString rowSourceType;
     int boundColumn{1};
     int columnCount{1};
+    bool columnHeads{};
     int multiSelect{};
     QString columnWidths;
     QString sourceObject;

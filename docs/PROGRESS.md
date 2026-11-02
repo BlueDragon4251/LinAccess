@@ -1408,3 +1408,22 @@ Final validation: host 22/22 (89.70 s), Debian 12 22/22 (74.62 s), Ubuntu
 pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. Repository privacy remains unchanged.
+
+## 2026-11-02 — Native column headings and header-aware ListCount
+
+ColumnHeads now retains source templates and explicit false overrides, exposes
+native VBA state and renders actual query/value-list QHeaderViews. Query names/
+aliases supply labels; Value Lists consume their first row as headings. ListCount
+includes the separate visual heading per the documented rule. Actual ComboBox/
+ListBox GUI/VBA/SQL tests cover header clicks, toggling, bound/dirty state, empty
+counts, scalar/errors, data ordinals and report context. Initial targeted layout
+test: 1/1 (9.01 s). Field captions/Field List headers/exact Windows extra-index/
+visual/error context remain open; no new original business execution is claimed.
+See COLUMN_HEADS_RUNTIME.md.
+
+Final validation: host 22/22 (89.09 s), Debian 12 22/22 (73.71 s), Ubuntu
+24.04 22/22 (65.85 s), GUI-disabled core 1/1 (0.89 s). Fresh host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. Previous native ListBox commit b916960 completed
+private CI successfully. Repository privacy remains unchanged.

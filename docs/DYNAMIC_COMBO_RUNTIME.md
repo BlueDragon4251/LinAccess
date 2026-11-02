@@ -79,7 +79,7 @@ and GUI regressions, not an Access 2003 rendering or edge-semantics oracle.
 
 The original fixtures declare 17 explicit Table/Query source types and no explicit
 Value/Field List type. No additional original project success is inferred from
-these general built-in source tests. ColumnHeads, value-list AddItem/RemoveItem,
+these general built-in source tests. Value-list AddItem/RemoveItem,
 multi-selection/full ListBox behavior and custom row-source callbacks remain open.
 
 ## ComboBox ListCount
@@ -90,7 +90,8 @@ Value List, Field List and Table/Query use the same row-source loader; a loaded
 model is reused until explicit Requery or source-property assignment. Empty lists
 return zero. Arguments fail with 450; unsupported property assignment remains
 438. Persistent single-selection ListBox also exposes ListCount through the shared
-model; ColumnHeads and full ListBox behavior remain unsupported.
+model. Bounded ColumnHeads/header-aware ListCount is now in COLUMN_HEADS_RUNTIME.md;
+full ListBox behavior remains unsupported.
 
 Native GUI/VBA/SQL regressions check initial lazy loading, preserved selection and
 Dirty state, actual SQL INSERT of the VBA result, source changes, explicit Requery,

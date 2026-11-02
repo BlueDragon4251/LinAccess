@@ -33,7 +33,8 @@ Dynamic metadata, hidden columns and multicolumn popup presentation now have a
 bounded native model (DYNAMIC_COMBO_RUNTIME.md). Built-in Value/Field Lists are
 supported within that documented scope. Single-selection ListBox now has a
 persistent native QTreeView (NATIVE_LISTBOX_RUNTIME.md). User row-source functions,
-ColumnHeads, multi-selection and complete Access sizing/rendering remain open.
+Bounded ColumnHeads is in COLUMN_HEADS_RUNTIME.md; multi-selection, field captions
+and complete Access sizing/rendering remain open.
 
 Calculated textboxes execute bracket field/control references, explicit subform
 Form references, basic scalar expressions and simple Sum(field), Count(field)

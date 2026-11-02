@@ -532,3 +532,11 @@ report read-only behavior, defaults and failed-source recovery. MultiSelect
 metadata is retained; modes 1/2 show 3251 instead of a single-selection substitute.
 Full headers/multi-selection/ListBox API/visual/event parity remains open; see
 [Native ListBox](NATIVE_LISTBOX_RUNTIME.md).
+
+ColumnHeads now renders actual native ComboBox/ListBox header views using SQL
+projection names or the first Value List row. Header-aware ListCount follows
+the documented query/value-list rule; headers remain separate from selectable
+data. GUI/VBA/SQL tests cover toggling, template overrides, header clicks, empty
+sources, scalar/errors and read-only report context. Field captions/Field List
+headers and exact Windows index/visual/error behavior remain open; see
+[Column headings](COLUMN_HEADS_RUNTIME.md).

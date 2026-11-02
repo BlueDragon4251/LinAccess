@@ -36,7 +36,8 @@ heavy trio: 3/3 (40.87 s); final complete validation is in PROGRESS.md.
 Original business execution coverage is unchanged.
 
 This is bounded single-selection presentation, not complete Access ListBox or
-visual parity. ColumnHeads/field captions, multi-selection and its VBA API,
+visual parity. Bounded ColumnHeads is now in COLUMN_HEADS_RUNTIME.md. Field
+captions, multi-selection and its VBA API,
 exact Windows click/validation/focus order, all row-limit/locale semantics,
 background styling, accessibility and real window-manager/print fidelity remain
 open. Native reports share the visible read-only view; this does not prove full

@@ -2050,6 +2050,7 @@ void AccessFormPreview::requeryControl(std::string_view name) {
         const auto sourceType=control.rowSourceType.toCaseFolded();
         const bool values=sourceType=="value list" || sourceType=="wertliste";
         const bool fields=sourceType=="field list" || sourceType=="feldliste";
+        if(fields && control.columnHeads) throw linaccess::VbaRuntimeError(3251,"Field List ColumnHeads semantics are not implemented");
         if (!values && !fields && !sourceType.isEmpty() && sourceType!="table/query" && sourceType!="tabelle/abfrage")
             throw linaccess::VbaRuntimeError(3251,"Row source type unsupported");
         if (values) result=linaccess::parseAccessValueList(source,control.columnCount);
@@ -2067,6 +2068,16 @@ void AccessFormPreview::requeryControl(std::string_view name) {
         }
         if (control.boundColumn<0 || control.columnCount<1 || control.columnCount>255 || (!result.columns.empty() && control.boundColumn>result.columns.size()))
             throw linaccess::VbaRuntimeError(5,"Invalid row source column configuration");
+        QStringList headings=result.columns;
+        int headingRows=control.columnHeads && !headings.isEmpty() ? 1 : 0;
+        if(values && control.columnHeads) {
+            headings.clear(); headingRows=result.rows.isEmpty() ? 0 : 1;
+            if(!result.rows.isEmpty()) {
+                const auto first=result.rows.takeFirst();
+                for(int column=0;column<control.columnCount;++column) headings.append(first.value(column).toString());
+            }
+        }
+        while(headings.size()<control.columnCount) headings.append(QString{});
         QVector<int> widths;
         const auto specifications=control.columnWidths.split(';');
         if (specifications.size()>255) throw linaccess::VbaRuntimeError(5,"Too many column widths");
@@ -2095,6 +2106,7 @@ void AccessFormPreview::requeryControl(std::string_view name) {
         const QSignalBlocker blocked(widget);
         auto* model=new QStandardItemModel(widget);
         model->setColumnCount(control.columnCount);
+        model->setHorizontalHeaderLabels(headings.mid(0,control.columnCount));
         for (int index=0;index<result.rows.size();++index) {
             const auto& row=result.rows[index];
             const auto bound=control.boundColumn==0 ? QVariant(index) : row.value(control.boundColumn-1);
@@ -2113,6 +2125,7 @@ void AccessFormPreview::requeryControl(std::string_view name) {
             view->setSelectionBehavior(QAbstractItemView::SelectRows); combo->setView(view);
         }
         view->setFont(widget->font());
+        view->setHeaderHidden(!control.columnHeads);
         int displayColumn=-1;
         for (int column=0;column<control.columnCount;++column) {
             const auto width=widths.value(column,-1);
@@ -2123,6 +2136,7 @@ void AccessFormPreview::requeryControl(std::string_view name) {
         if(list) list->setDisplayColumn(displayColumn<0 ? 0 : displayColumn); else combo->setModelColumn(displayColumn<0 ? 0 : displayColumn);
         widget->setProperty("la_rows_loaded",true);
         widget->setProperty("la_rows_error",0);
+        widget->setProperty("la_header_rows",headingRows);
         if(list && widget->property("la_list_source_tooltip").isValid()) {
             widget->setToolTip(widget->property("la_list_source_tooltip").toString()); widget->setProperty("la_list_source_tooltip",QVariant{});
         }

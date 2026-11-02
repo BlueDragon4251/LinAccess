@@ -483,3 +483,8 @@ Full targets remain open:
   mouse/keyboard/control validation, SQL save/Undo/Locked/report/failure-recovery
   tests and retained MultiSelect diagnostics; complete headers/multi-selection/
   ListBox API/Windows visual and event parity remain open.
+
+- [x] Bounded native ColumnHeads templates/VBA/real header views for query/value
+  ComboBox and single-selection ListBox models, documented header-aware ListCount,
+  value-row separation and SQL/scalar/error/report tests; field captions/Field
+  List headers/exact Windows extra-index/visual context remain open.
