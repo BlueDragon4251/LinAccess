@@ -29,8 +29,8 @@ regressions remain mandatory.
 
 Supported SQL/table/saved-query sources execute through the native query adapter.
 User-defined row-source functions, automatic dependency refresh, full combo event
-ordering, Access multicolumn sizing/rendering parity and true ListBox presentation
-remain open. This adapter is not general Access control compatibility. Tests mutate
+ordering and complete Access multicolumn sizing/rendering parity remain open.
+Persistent single-selection ListBox presentation is now in NATIVE_LISTBOX_RUNTIME.md. This adapter is not general Access control compatibility. Tests mutate
 only disposable SQLite data; original fixture bytes remain unchanged.
 
 Validation (31 October 2026): final Release build and all 18 CTests passed
@@ -80,7 +80,7 @@ and GUI regressions, not an Access 2003 rendering or edge-semantics oracle.
 The original fixtures declare 17 explicit Table/Query source types and no explicit
 Value/Field List type. No additional original project success is inferred from
 these general built-in source tests. ColumnHeads, value-list AddItem/RemoveItem,
-full ListBox rendering and custom row-source callback protocol remain open.
+multi-selection/full ListBox behavior and custom row-source callbacks remain open.
 
 ## ComboBox ListCount
 
@@ -89,7 +89,8 @@ loads the configured real row source without opening a popup or moving focus.
 Value List, Field List and Table/Query use the same row-source loader; a loaded
 model is reused until explicit Requery or source-property assignment. Empty lists
 return zero. Arguments fail with 450; unsupported property assignment remains
-438. ColumnHeads and full ListBox behavior remain unsupported.
+438. Persistent single-selection ListBox also exposes ListCount through the shared
+model; ColumnHeads and full ListBox behavior remain unsupported.
 
 Native GUI/VBA/SQL regressions check initial lazy loading, preserved selection and
 Dirty state, actual SQL INSERT of the VBA result, source changes, explicit Requery,

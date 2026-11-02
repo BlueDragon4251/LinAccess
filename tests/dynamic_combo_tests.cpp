@@ -1,5 +1,6 @@
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
+#include "access_list_box.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QLineEdit>
@@ -19,6 +20,7 @@ void testComboAutoPopup();
 void testCommandRequery();
 void testComboKeyboardRefresh();
 void testComboListProperties();
+void testNativeListBox();
 
 void testDynamicCombos() {
     using linaccess::VbaValue;
@@ -79,6 +81,78 @@ End Sub
     testComboAutoPopup();
     testComboKeyboardRefresh();
     testComboListProperties();
+    testNativeListBox();
+}
+
+void testNativeListBox() {
+    using linaccess::VbaValue;
+    const auto metadata=linaccess::parseAccessFormLayout(QStringLiteral("Begin Form\nBegin ListBox\nMultiSelect =2\nEnd\nBegin Section\nBegin ListBox\nName =\"inherited\"\nEnd\nBegin ListBox\nName =\"single\"\nMultiSelect =0\nEnd\nEnd\nEnd"));
+    assert(metadata.controls.size()==2 && metadata.controls[0].multiSelect==2 && metadata.controls[1].multiSelect==0);
+    auto db=QSqlDatabase::addDatabase("QSQLITE","native-list-box"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE choices(id INTEGER,label TEXT,extra REAL)"));
+    assert(sql.exec("INSERT INTO choices VALUES(10,'first',NULL),(20,'second',2.5)"));
+    assert(sql.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,choice INTEGER)")); assert(sql.exec("INSERT INTO records VALUES(1,10)"));
+    assert(sql.exec("CREATE TABLE events(kind TEXT)"));
+    const QByteArray layout="Begin Form\nRecordSource =\"records\"\nBegin Section\nBegin ListBox\nName =\"pick\"\nControlSource =\"choice\"\nRowSource =\"SELECT id,label,extra FROM choices ORDER BY id\"\nColumnCount =3\nColumnWidths =\"0;1440;720\"\nWidth =4000\nHeight =1800\nBeforeUpdate =\"[Event Procedure]\"\nAfterUpdate =\"[Event Procedure]\"\nOnClick =\"[Event Procedure]\"\nEnd\nEnd\nEnd";
+    const QByteArray code="Sub pick_BeforeUpdate(Cancel As Integer)\nIf Me.Tag=\"block\" Then Cancel=True\nEnd Sub\nSub pick_AfterUpdate()\nCurrentDb.Execute \"INSERT INTO events VALUES('updated')\"\nEnd Sub\nSub pick_Click()\nCurrentDb.Execute \"INSERT INTO events VALUES('clicked')\"\nEnd Sub";
+    AccessFormPreview form("native list",layout,code,db); form.show(); QApplication::setActiveWindow(&form); QApplication::processEvents();
+    auto* list=dynamic_cast<AccessListBox*>(form.findChild<QTreeView*>("access-control-pick"));
+    assert(list && list->isVisible() && !list->isWindow() && !form.findChild<QComboBox*>("access-control-pick"));
+    assert(list->rowCount()==2 && list->model()->columnCount()==3 && list->currentIndex().row()==0);
+    assert(list->isColumnHidden(0) && list->columnWidth(1)==96 && !QApplication::activePopupWidget());
+    auto root=makePreviewFormObject(form),pick=root->objectMember("pick",{}).object;
+    assert(pick->member("ListCount",{}).asNumber()==2 && pick->member("Column",{VbaValue::numeric(2),VbaValue::numeric(0)}).kind==VbaValue::Kind::Null);
+    const auto click=[&](int row) { QTest::mouseClick(list->viewport(),Qt::LeftButton,Qt::NoModifier,list->visualRect(list->model()->index(row,1)).center()); QApplication::processEvents(); };
+    const auto count=[&](const char* kind) { QSqlQuery query(db); query.prepare("SELECT COUNT(*) FROM events WHERE kind=?"); query.addBindValue(kind); assert(query.exec() && query.next()); return query.value(0).toInt(); };
+    click(1); assert(pick->member("Value",{}).asNumber()==20 && form.hasUnsavedChanges() && count("updated")==1 && count("clicked")==1);
+    assert(sql.exec("SELECT choice FROM records WHERE id=1") && sql.next() && sql.value(0).toInt()==10); sql.finish();
+    root->assign("Tag",VbaValue::string("block")); click(0);
+    assert(count("updated")==1 && count("clicked")==1);
+    int error=0; try { root->assign("Dirty",VbaValue::logical(false)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==2501);
+    root->member("Undo",{}); root->assign("Tag",VbaValue::string("")); click(1); root->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT choice FROM records WHERE id=1") && sql.next() && sql.value(0).toInt()==20); sql.finish();
+    list->setFocus(); QTest::keyClick(list,Qt::Key_Up); assert(pick->member("Value",{}).asNumber()==10 && form.hasUnsavedChanges()); root->member("Undo",{});
+    pick->assign("Locked",VbaValue::logical(true)); assert(pick->member("Locked",{}).truthy()); click(0); QTest::keyClick(list,Qt::Key_Up);
+    assert(pick->member("Value",{}).asNumber()==20 && !form.hasUnsavedChanges()); pick->assign("Locked",VbaValue::logical(false));
+    QPointer<QAbstractItemModel> previous=list->model(); assert(sql.exec("INSERT INTO choices VALUES(30,'third',3.5)"));
+    list->setFocus(); QTest::keyClick(list,Qt::Key_F9);
+    assert(!previous && list->rowCount()==3 && pick->member("Value",{}).asNumber()==20 && !form.hasUnsavedChanges());
+    previous=list->model(); error=0; try { pick->assign("RowSource",VbaValue::string("SELECT absent FROM choices")); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+    assert(error && list->model()==previous && list->rowCount()==3);
+    pick->assign("Value",VbaValue{}); assert(!list->currentIndex().isValid() && list->selectionModel()->selectedRows().isEmpty()); root->member("Undo",{});
+    assert(list->currentIndex().row()==1 && !form.hasUnsavedChanges());
+    assert(form.close());
+    auto unbound=layout; unbound.replace("RecordSource =\"records\"\n",""); unbound.replace("ControlSource =\"choice\"\n","");
+    auto failedSource=unbound; failedSource.replace("FROM choices ORDER BY id","FROM deferred_choices ORDER BY id");
+    AccessFormPreview recovery("list recovery",failedSource,{},db); recovery.show(); QApplication::setActiveWindow(&recovery); QApplication::processEvents();
+    auto* recovering=recovery.findChild<QTreeView*>("access-control-pick"); assert(recovering && recovering->property("la_rows_error").toInt()>0);
+    assert(sql.exec("CREATE TABLE deferred_choices(id INTEGER,label TEXT,extra REAL)")); assert(sql.exec("INSERT INTO deferred_choices VALUES(10,'recovered',1)"));
+    recovering->setFocus(); QTest::keyClick(recovering,Qt::Key_F9);
+    assert(recovering->model()->rowCount()==1 && recovering->property("la_rows_error").toInt()==0 && recovering->toolTip().isEmpty()); assert(recovery.close());
+    auto values=unbound; values.replace("SELECT id,label,extra FROM choices ORDER BY id","10;first;1;20;second;2");
+    values.replace("Name =\"pick\"","Name =\"pick\"\nRowSourceType =\"Value List\"\nDefaultValue =\"10\"");
+    AccessFormPreview valueForm("value list",values,{},db); valueForm.show(); QApplication::setActiveWindow(&valueForm); QApplication::processEvents();
+    auto valuePick=makePreviewFormObject(valueForm)->objectMember("pick",{}).object;
+    auto* valueList=valueForm.findChild<QTreeView*>("access-control-pick"); assert(valueList && valueList->model()->rowCount()==2 && valueList->currentIndex().row()==0);
+    assert(valuePick->member("Column",{VbaValue::numeric(2),VbaValue::numeric(1)}).asText()=="2");
+    QTest::mouseClick(valueList->viewport(),Qt::LeftButton,Qt::NoModifier,valueList->visualRect(valueList->model()->index(1,1)).center());
+    assert(valuePick->member("Value",{}).asText()=="20" && !valueForm.hasUnsavedChanges()); assert(valueForm.close());
+    auto fields=unbound; fields.replace("SELECT id,label,extra FROM choices ORDER BY id","choices");
+    fields.replace("ColumnCount =3","RowSourceType =\"Field List\"\nColumnCount =1"); fields.replace("0;1440;720","1440");
+    AccessFormPreview fieldForm("field list",fields,{},db); auto fieldPick=makePreviewFormObject(fieldForm)->objectMember("pick",{}).object;
+    auto* fieldList=fieldForm.findChild<QTreeView*>("access-control-pick"); assert(fieldList && fieldList->model()->rowCount()==3);
+    fieldPick->assign("Value",VbaValue::string("label")); assert(fieldList->currentIndex().row()==1 && fieldPick->member("Value",{}).asText()=="label"); assert(fieldForm.close());
+    auto reportLayout=layout; reportLayout.replace("Begin Form","Begin Report");
+    AccessFormPreview report("list report",reportLayout,{},db); report.show(); QApplication::setActiveWindow(&report); QApplication::processEvents();
+    auto reportPick=makePreviewFormObject(report)->objectMember("pick",{}).object; auto* reportList=report.findChild<QTreeView*>("access-control-pick"); assert(reportList && reportList->currentIndex().row()==1);
+    QTest::mouseClick(reportList->viewport(),Qt::LeftButton,Qt::NoModifier,reportList->visualRect(reportList->model()->index(0,1)).center());
+    QTest::keyClick(reportList,Qt::Key_Up); assert(reportPick->member("Value",{}).asNumber()==20 && !report.hasUnsavedChanges()); assert(report.close());
+    auto multiple=layout; multiple.replace("Begin ListBox\n","Begin ListBox\nMultiSelect =2\n");
+    AccessFormPreview unsupported("multiple list",multiple,{},db);
+    assert(!unsupported.findChild<QTreeView*>("access-control-pick"));
+    auto rejected=makePreviewFormObject(unsupported)->objectMember("pick",{}).object; error=0;
+    try { rejected->member("Value",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==3251); assert(unsupported.close());
 }
 
 void testComboListProperties() {

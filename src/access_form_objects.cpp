@@ -1,4 +1,5 @@
 #include "access_form_objects.hpp"
+#include "access_list_box.hpp"
 #include "jet_sql_functions.hpp"
 #include "dao_database.hpp"
 #include <QThread>
@@ -110,12 +111,13 @@ public:
             if(index<0 || index>=combo->count()) throw linaccess::VbaRuntimeError(5,"ItemData row index out of range");
             return linaccess::qtFieldValue(combo->itemData(static_cast<int>(index),Qt::UserRole));
         }
-        if (auto* combo=qobject_cast<QComboBox*>(widget);combo && key=="listcount") {
+        if ((qobject_cast<QComboBox*>(widget) || dynamic_cast<AccessListBox*>(widget)) && key=="listcount") {
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected ListCount arguments");
-            if (!combo->property("la_rows_loaded").toBool()) preview.requeryControl(bytes(name_));
-            return linaccess::VbaValue::numeric(combo->count());
+            if (!widget->property("la_rows_loaded").toBool()) preview.requeryControl(bytes(name_));
+            if(auto* list=dynamic_cast<AccessListBox*>(widget)) return linaccess::VbaValue::numeric(list->rowCount());
+            return linaccess::VbaValue::numeric(qobject_cast<QComboBox*>(widget)->count());
         }
-        if (qobject_cast<QComboBox*>(widget) && (key=="rowsource" || key=="rowsourcetype" || key=="boundcolumn" || key=="columncount" || key=="columnwidths")) {
+        if ((qobject_cast<QComboBox*>(widget) || dynamic_cast<AccessListBox*>(widget)) && (key=="rowsource" || key=="rowsourcetype" || key=="boundcolumn" || key=="columncount" || key=="columnwidths")) {
             if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected combo property arguments");
             for (const auto& definition : preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
                 if (key=="rowsource") return linaccess::VbaValue::string(bytes(definition.rowSource));
@@ -205,7 +207,7 @@ public:
         if (key=="locked" || key=="tabstop" || key=="tabindex") {
             for (const auto& definition:preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
                 if (key=="locked") {
-                    if (definition.type!="TextBox") throw linaccess::VbaRuntimeError(3251,"Locked adapter requires a TextBox");
+                    if (definition.type!="TextBox" && !dynamic_cast<AccessListBox*>(widget)) throw linaccess::VbaRuntimeError(3251,"Locked adapter is not implemented for this control");
                     return linaccess::VbaValue::logical(definition.locked);
                 }
                 if (qobject_cast<QLabel*>(widget)) throw linaccess::VbaRuntimeError(438,"Control has no tab properties");
@@ -369,7 +371,7 @@ public:
             }
             throw linaccess::VbaRuntimeError(2465,"Control unavailable");
         }
-        if (qobject_cast<QComboBox*>(widget) && (key=="rowsource" || key=="rowsourcetype" || key=="boundcolumn" || key=="columncount" || key=="columnwidths")) {
+        if ((qobject_cast<QComboBox*>(widget) || dynamic_cast<AccessListBox*>(widget)) && (key=="rowsource" || key=="rowsourcetype" || key=="boundcolumn" || key=="columncount" || key=="columnwidths")) {
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null combo property");
             for (auto& definition : preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
                 const auto previous=definition;
@@ -406,7 +408,7 @@ public:
             if (scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null control state");
             for (auto& definition:preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
                 if (key=="tabstop" && qobject_cast<QLabel*>(widget)) throw linaccess::VbaRuntimeError(438,"Control has no tab properties");
-                if (key=="locked" && definition.type!="TextBox") throw linaccess::VbaRuntimeError(3251,"Locked adapter requires a TextBox");
+                if (key=="locked" && definition.type!="TextBox" && !dynamic_cast<AccessListBox*>(widget)) throw linaccess::VbaRuntimeError(3251,"Locked adapter is not implemented for this control");
                 if (key=="visible") definition.visible=scalar.truthy();
                 if (key=="enabled") definition.enabled=scalar.truthy();
                 if (key=="locked") definition.locked=scalar.truthy();
@@ -493,6 +495,7 @@ private:
         throw linaccess::VbaRuntimeError(438,"Control has no supported Caption property");
     }
     void requireValue() const {
+        if(control()->property("la_list_error").toInt()) throw linaccess::VbaRuntimeError(3251,"ListBox selection mode is not implemented");
         if (qobject_cast<QCalendarWidget*>(control())) return;
         for (const auto& control : checked().layout_.controls)
             if (control.name.compare(name_,Qt::CaseInsensitive)==0 &&

@@ -1388,3 +1388,23 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. Earlier window-cycle commit f09241c completed
 private CI successfully. Repository privacy remains unchanged.
+
+## 2026-11-02 — Persistent native single-selection ListBox
+
+ListBox now uses a persistent QTreeView over the shared real typed row-source
+model. SQL/Value/Field Lists, bound/unbound/default/NULL values, hidden widths,
+actual mouse/arrow selection, control validation/cancellation and SQL save/Undo
+are tested. Locked/report display blocks user value edits; F9/source assignment
+reloads rows and failed initial sources recover. Old selection models are
+released through Qt ownership. MultiSelect metadata inherits templates and
+explicit zero overrides; modes 1/2 show an explicit unsupported diagnostic.
+Targeted trio: 3/3 (40.87 s). Complete headers/multi-selection/ListBox API/Windows
+visual/event identity remains open. No original business coverage increment;
+see NATIVE_LISTBOX_RUNTIME.md. Earlier ComboBox introspection commit 85d7436
+completed private CI successfully.
+
+Final validation: host 22/22 (89.70 s), Debian 12 22/22 (74.62 s), Ubuntu
+24.04 22/22 (66.04 s), GUI-disabled core 1/1 (0.91 s). Fresh host/distro DEBs
+pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
+Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
+original fixture hashes pass. Repository privacy remains unchanged.

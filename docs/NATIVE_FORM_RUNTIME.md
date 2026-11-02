@@ -30,9 +30,10 @@ field index, or zero for ListIndex. The selected bound value is separate from
 the displayed first column. Metadata ColumnCount/BoundColumn is preserved.
 
 Dynamic metadata, hidden columns and multicolumn popup presentation now have a
-bounded native model (DYNAMIC_COMBO_RUNTIME.md). Value/field lists, user row-source
-functions and complete Access sizing/list rendering remain open. ListBox currently
-shares the Qt combo adapter; it does not reproduce Access listbox presentation.
+bounded native model (DYNAMIC_COMBO_RUNTIME.md). Built-in Value/Field Lists are
+supported within that documented scope. Single-selection ListBox now has a
+persistent native QTreeView (NATIVE_LISTBOX_RUNTIME.md). User row-source functions,
+ColumnHeads, multi-selection and complete Access sizing/rendering remain open.
 
 Calculated textboxes execute bracket field/control references, explicit subform
 Form references, basic scalar expressions and simple Sum(field), Count(field)

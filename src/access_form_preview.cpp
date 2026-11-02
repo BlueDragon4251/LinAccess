@@ -1,5 +1,6 @@
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
+#include "access_list_box.hpp"
 #include "native_send_keys.hpp"
 #include "native_input_box.hpp"
 
@@ -223,6 +224,7 @@ bool failed(const linaccess::VbaExecutionResult& result) {
     return result.status == linaccess::VbaExecutionStatus::Error || result.status == linaccess::VbaExecutionStatus::Unsupported;
 }
 QString textOf(QWidget* editor) {
+    if(auto* list=dynamic_cast<AccessListBox*>(editor)) return list->valueText();
     if (qobject_cast<QGroupBox*>(editor)) return editor->property("la_option_value").toString();
     if (auto* calendar=qobject_cast<QCalendarWidget*>(editor)) return calendar->selectedDate().toString(Qt::ISODate)+" 00:00:00";
     if (auto* line = qobject_cast<QLineEdit*>(editor)) return line->text();
@@ -235,6 +237,7 @@ QString textOf(QWidget* editor) {
     return {};
 }
 void setText(QWidget* editor, const QString& text,bool isNull=false) {
+    if(auto* list=dynamic_cast<AccessListBox*>(editor)) { list->setValueText(text,isNull); return; }
     if (auto* group=qobject_cast<QGroupBox*>(editor)) {
         group->setProperty("la_option_value",text);
         if (auto* buttons=group->findChild<QButtonGroup*>("access-options")) {
@@ -792,6 +795,18 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     }
     const bool report = layout_.kind==linaccess::AccessDocumentKind::Report;
     if (!report) loadRecords();
+    for(const auto& control:layout_.controls)
+        if(auto* list=dynamic_cast<AccessListBox*>(controls_.value(control.name.toCaseFolded()).data())) {
+            try { requeryControl(control.name.toUtf8().toStdString()); }
+            catch(const std::exception& error) {
+                const auto* typed=dynamic_cast<const linaccess::VbaRuntimeError*>(&error);
+                const int number=typed ? typed->number : 5;
+                list->setProperty("la_rows_error",number);
+                list->setProperty("la_list_source_tooltip",list->toolTip());
+                list->setToolTip("Listendaten nicht verfügbar ("+QString::number(number)+")");
+                status_->setText(list->toolTip());
+            }
+        }
     const auto outcome = formEvent("OnOpen","Form_Open");
     if (outcome.cancelled) { openCancelled_ = true; return; }
     if (report) {
@@ -932,7 +947,7 @@ void AccessFormPreview::activateDocument() {
 }
 
 bool AccessFormPreview::supportsControlFont(const linaccess::AccessVisualControl& control) {
-    return !(control.locked && control.type!="TextBox") &&
+    return !(control.locked && control.type!="TextBox" && control.type!="ListBox") &&
         (control.type=="TextBox" || control.type=="Label" || control.type=="CommandButton"
          || control.type=="ComboBox" || control.type=="ListBox" || control.type=="CheckBox"
          || control.type=="OptionButton" || control.type=="ToggleButton");
@@ -1060,7 +1075,12 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             auto* edit = new QLineEdit(canvas);
             edit->setReadOnly(control.controlSource.startsWith('='));
             widget = edit;
-        } else if (control.type == "ComboBox" || control.type == "ListBox") {
+        } else if(control.type=="ListBox") {
+            if(control.multiSelect) {
+                auto* diagnostic=new QLabel("ListBox-Mehrfachauswahl nicht verfügbar (3251)",canvas);
+                diagnostic->setWordWrap(true); diagnostic->setProperty("la_list_error",3251); widget=diagnostic;
+            } else widget=new AccessListBox(canvas);
+        } else if (control.type == "ComboBox") {
             auto* combo = new AccessComboBox(canvas);
             combo->setEditable(true);
             combo->preparePopup=[this,combo,name=control.name] {
@@ -1161,6 +1181,11 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         if (!control.onDblClick.isEmpty()) {
             widget->setProperty("la_access_dblclick",control.onDblClick);
             widget->setProperty("la_access_control_name",control.name); widget->installEventFilter(this);
+            if(auto* list=dynamic_cast<AccessListBox*>(widget)) {
+                list->viewport()->setProperty("la_access_dblclick",control.onDblClick);
+                list->viewport()->setProperty("la_access_control_name",control.name);
+                list->viewport()->installEventFilter(this);
+            }
         }
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Null));
         if (auto* line = qobject_cast<QLineEdit*>(widget)) {
@@ -1174,6 +1199,21 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
                 if (!loading_) { bufferedTextControls_.insert(name); pendingControls_.insert(name); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text)); }
             });
             connect(line,&QLineEdit::editingFinished,this,[this,name] { if (!loading_) (void)commitControl(name); });
+        } else if(auto* list=dynamic_cast<AccessListBox*>(widget)) {
+            list->selectionEdited=[this,name,list] {
+                if(closed_ || openCancelled_ || loading_ || list->property("la_access_input_readonly").toBool()) return;
+                ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+                clearDefaultError(list); list->setProperty("la_null",false);
+                markDirty(name,true);
+                if(closed_ || openCancelled_ || list->property("la_insert_rejected").toBool()) return;
+                refreshCalculatedControls(); pendingControls_.insert(name); (void)commitControl(name);
+            };
+            connect(list,&QTreeView::clicked,this,[this,name,list,binding=control.onClick] {
+                if(closed_ || openCancelled_ || loading_ || layout_.kind!=linaccess::AccessDocumentKind::Form) return;
+                ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+                if(!commitControl(name) || closed_ || openCancelled_) return;
+                (void)runControlBinding(name,"Click",binding);
+            });
         } else if (auto* combo = qobject_cast<QComboBox*>(widget)) {
             if (auto* editor=combo->lineEdit()) {
                 connect(editor,&QLineEdit::textEdited,this,[this,name] {
@@ -1220,7 +1260,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
 }
 
 bool AccessFormPreview::supportsControlDefault(const linaccess::AccessVisualControl& control) {
-    return control.optionGroupIndex<0 && !(control.locked && control.type!="TextBox") &&
+    return control.optionGroupIndex<0 && !control.multiSelect && !(control.locked && control.type!="TextBox" && control.type!="ListBox") &&
         (control.type=="TextBox" || control.type=="ComboBox" || control.type=="ListBox" || control.type=="CheckBox" || control.type=="OptionButton" || control.type=="OptionGroup");
 }
 void AccessFormPreview::initializeControlDefaults(bool unbound) {
@@ -1766,6 +1806,7 @@ void AccessFormPreview::reject() { if (prepareClose()) QDialog::reject(); }
 std::optional<std::string> AccessFormPreview::getField(std::string_view name) const {
     auto* widget = controls_.value(QString::fromUtf8(name.data(), name.size()).toCaseFolded()).data();
     if (!widget) throw std::runtime_error("Unbekanntes Access-Control: " + std::string(name));
+    if(widget->property("la_list_error").toInt()) throw linaccess::VbaRuntimeError(3251,"ListBox selection mode is not implemented");
     if(widget->property("la_default_error").toInt()) throw linaccess::VbaRuntimeError(widget->property("la_default_error").toInt(),"Control default unavailable");
     const auto value = textOf(widget);
     if (widget->property("la_null").toBool()) return std::nullopt;
@@ -1829,11 +1870,13 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
         return widget->property("la_null").toBool() ? linaccess::VbaValue{} : linaccess::VbaValue::numeric(widget->property("la_option_value").toInt());
     }
     if (auto* button=qobject_cast<QAbstractButton*>(widget);button && !button->property("la_option_group_name").toString().isEmpty()) return linaccess::VbaValue::logical(button->isChecked());
-    if (!qobject_cast<QLineEdit*>(widget) && !qobject_cast<QComboBox*>(widget) && !qobject_cast<QCheckBox*>(widget))
+    if (!qobject_cast<QLineEdit*>(widget) && !qobject_cast<QComboBox*>(widget) && !qobject_cast<QCheckBox*>(widget) && !dynamic_cast<AccessListBox*>(widget))
         throw linaccess::VbaRuntimeError(438,"Control has no Value property");
     if (static_cast<linaccess::VbaValue::Kind>(widget->property("la_vba_kind").toInt())==linaccess::VbaValue::Kind::Error)
         return linaccess::VbaValue::errorValue(widget->property("la_error_number").toInt());
     if (widget->property("la_null").toBool()) return {};
+    if(auto* list=dynamic_cast<AccessListBox*>(widget); list && list->currentIndex().isValid())
+        return linaccess::qtFieldValue(list->boundData(list->currentIndex().row()),widget->property("la_sql_type").toString());
     if (auto* combo=qobject_cast<QComboBox*>(widget);combo && combo->property("la_rows_loaded").toBool() && combo->currentIndex()>=0 && combo->currentText()==combo->itemText(combo->currentIndex()))
         return linaccess::qtFieldValue(combo->currentData(),widget->property("la_sql_type").toString());
     auto type = widget->property("la_sql_type").toString();
@@ -1893,8 +1936,10 @@ void AccessFormPreview::refreshCalculatedControls() {
 }
 linaccess::VbaValue AccessFormPreview::controlColumnValue(const QString& name,const std::vector<linaccess::VbaValue>& arguments) {
     if (arguments.empty() || arguments.size()>2) throw linaccess::VbaRuntimeError(450,"Column requires column and optional row");
-    auto* combo=qobject_cast<QComboBox*>(controls_.value(name.toCaseFolded()).data());
-    if (!combo) throw linaccess::VbaRuntimeError(438,"Control has no Column property");
+    auto* widget=controls_.value(name.toCaseFolded()).data();
+    auto* combo=qobject_cast<QComboBox*>(widget);
+    auto* list=dynamic_cast<AccessListBox*>(widget);
+    if (!combo && !list) throw linaccess::VbaRuntimeError(438,"Control has no Column property");
     const auto index=[](const linaccess::VbaValue& value) {
         if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null column index");
         return linaccess::sqlFieldValue(value,"INTEGER").toLongLong();
@@ -1903,12 +1948,12 @@ linaccess::VbaValue AccessFormPreview::controlColumnValue(const QString& name,co
     int count=1;
     for (const auto& control : layout_.controls) if (control.name.compare(name,Qt::CaseInsensitive)==0) count=control.columnCount;
     if (column<0 || column>=count) throw linaccess::VbaRuntimeError(5,"Column index out of range");
-    if (arguments.size()==1 && combo->property("la_null").toBool()) return {};
-    if (!combo->property("la_rows_loaded").toBool()) requeryControl(name.toUtf8().toStdString());
-    const auto row=arguments.size()==2 ? index(arguments[1]) : combo->currentIndex();
+    if (arguments.size()==1 && widget->property("la_null").toBool()) return {};
+    if (!widget->property("la_rows_loaded").toBool()) requeryControl(name.toUtf8().toStdString());
+    const auto row=arguments.size()==2 ? index(arguments[1]) : list ? list->currentIndex().row() : combo->currentIndex();
     if (row<0 && arguments.size()==1) return {};
-    if (row<0 || row>=combo->count()) throw linaccess::VbaRuntimeError(5,"Column row index out of range");
-    const auto values=combo->itemData(row,Qt::UserRole+1).toList();
+    if (row<0 || row>=(list ? list->rowCount() : combo->count())) throw linaccess::VbaRuntimeError(5,"Column row index out of range");
+    const auto values=list ? list->rowValues(row) : combo->itemData(row,Qt::UserRole+1).toList();
     if (column>=values.size()) throw linaccess::VbaRuntimeError(5,"Column not present in row source");
     return linaccess::qtFieldValue(values[column]);
 }
@@ -1917,6 +1962,7 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
     else if(!loading_) throw linaccess::VbaRuntimeError(3251,"Default initialization requires loading scope");
     auto* widget = controls_.value(QString::fromUtf8(name.data(),name.size()).toCaseFolded()).data();
     if (!widget) throw linaccess::VbaRuntimeError(2465,"Unknown form control");
+    if(widget->property("la_list_error").toInt()) throw linaccess::VbaRuntimeError(3251,"ListBox selection mode is not implemented");
     if (auto* calendar=qobject_cast<QCalendarWidget*>(widget)) {
         if (calendar->property("la_calendar_bound").toBool()) throw linaccess::VbaRuntimeError(3251,"Bound calendar adapter is unsupported");
         if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Calendar requires a date");
@@ -1991,11 +2037,12 @@ void AccessFormPreview::requeryControl(std::string_view name) {
     for (const auto& control : layout_.controls)
         if (control.name.compare(target,Qt::CaseInsensitive)==0 && !control.controlSource.isEmpty()
             && !control.controlSource.startsWith('=') && columnIndex(control.controlSource,dataColumns_)>=0
-            && !qobject_cast<QComboBox*>(widget)) {
+            && !qobject_cast<QComboBox*>(widget) && !dynamic_cast<AccessListBox*>(widget)) {
             (void)makePreviewFormObject(*this)->member("Requery",{}); return;
         }
     auto* combo = qobject_cast<QComboBox*>(widget);
-    if (!combo) throw linaccess::VbaRuntimeError(438,"Requery for this control type is unsupported");
+    auto* list=dynamic_cast<AccessListBox*>(widget);
+    if (!combo && !list) throw linaccess::VbaRuntimeError(438,"Requery for this control type is unsupported");
     for (const auto& control : layout_.controls) {
         if (control.name.compare(target,Qt::CaseInsensitive)!=0) continue;
         const auto source = control.rowSource.trimmed();
@@ -2035,8 +2082,8 @@ void AccessFormPreview::requeryControl(std::string_view name) {
             if (!std::isfinite(amount) || amount*scale>32767) throw linaccess::VbaRuntimeError(5,"Column width out of range");
             widths.append(qRound(amount*scale));
         }
-        const bool editing=combo->isEditable() && combo->lineEdit()->isModified();
-        const auto draft=combo->currentText();
+        const bool editing=combo && combo->isEditable() && combo->lineEdit()->isModified();
+        const auto draft=combo ? combo->currentText() : QString{};
         QVariant old;
         try { old=linaccess::sqlFieldValue(getFieldValue(target.toStdString()),""); }
         catch (const linaccess::VbaRuntimeError& error) {
@@ -2045,8 +2092,8 @@ void AccessFormPreview::requeryControl(std::string_view name) {
             if (!editing || (error.number!=13 && error.number!=6)) throw;
             old=combo->currentText();
         }
-        const QSignalBlocker blocked(combo);
-        auto* model=new QStandardItemModel(combo);
+        const QSignalBlocker blocked(widget);
+        auto* model=new QStandardItemModel(widget);
         model->setColumnCount(control.columnCount);
         for (int index=0;index<result.rows.size();++index) {
             const auto& row=result.rows[index];
@@ -2059,13 +2106,13 @@ void AccessFormPreview::requeryControl(std::string_view name) {
         }
         // QComboBox deletes its previous owned model inside setModel.
         // Do not dereference or schedule that freed model afterwards.
-        combo->setModel(model);
-        auto* view=qobject_cast<QTreeView*>(combo->view());
+        if(list) list->setModel(model); else combo->setModel(model);
+        auto* view=list ? static_cast<QTreeView*>(list) : qobject_cast<QTreeView*>(combo->view());
         if (!view) {
             view=new QTreeView(combo); view->setRootIsDecorated(false); view->setHeaderHidden(true);
             view->setSelectionBehavior(QAbstractItemView::SelectRows); combo->setView(view);
         }
-        view->setFont(combo->font());
+        view->setFont(widget->font());
         int displayColumn=-1;
         for (int column=0;column<control.columnCount;++column) {
             const auto width=widths.value(column,-1);
@@ -2073,14 +2120,17 @@ void AccessFormPreview::requeryControl(std::string_view name) {
             if (width>0) view->setColumnWidth(column,width);
             if (width!=0 && displayColumn<0) displayColumn=column;
         }
-        combo->setModelColumn(displayColumn<0 ? 0 : displayColumn);
-        combo->setProperty("la_rows_loaded",true);
-        combo->setProperty("la_rows_error",0);
+        if(list) list->setDisplayColumn(displayColumn<0 ? 0 : displayColumn); else combo->setModelColumn(displayColumn<0 ? 0 : displayColumn);
+        widget->setProperty("la_rows_loaded",true);
+        widget->setProperty("la_rows_error",0);
+        if(list && widget->property("la_list_source_tooltip").isValid()) {
+            widget->setToolTip(widget->property("la_list_source_tooltip").toString()); widget->setProperty("la_list_source_tooltip",QVariant{});
+        }
         if (editing) {
             combo->setCurrentIndex(-1); combo->setEditText(draft); combo->setProperty("la_null",false);
-        } else { setText(combo,old.toString(),old.isNull()); combo->setProperty("la_null",old.isNull()); }
-        if (combo->isEditable()) combo->lineEdit()->setModified(editing);
-        applyForeColor(combo,control);
+        } else { setText(widget,old.toString(),old.isNull()); widget->setProperty("la_null",old.isNull()); }
+        if (combo && combo->isEditable()) combo->lineEdit()->setModified(editing);
+        applyForeColor(widget,control);
         return;
     }
 }
@@ -2308,7 +2358,9 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
             ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
             const auto* focus=QApplication::focusWidget();
             for(const auto& control:layout_.controls) {
-                auto* combo=qobject_cast<QComboBox*>(controls_.value(control.name.toCaseFolded()).data());
+                auto* widget=controls_.value(control.name.toCaseFolded()).data();
+                if(auto* list=dynamic_cast<AccessListBox*>(widget); list && (focus==list || focus==list->viewport())) { requeryControl(control.name.toUtf8().toStdString()); break; }
+                auto* combo=qobject_cast<QComboBox*>(widget);
                 if(combo && (focus==combo || focus==combo->lineEdit())) { requeryControl(control.name.toUtf8().toStdString()); break; }
             }
             if(!closed_ && !openCancelled_) refreshCalculatedControls();

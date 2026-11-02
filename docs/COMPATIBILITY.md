@@ -524,3 +524,11 @@ without SQL changes. Typed NULL widget assignments now clear selection rather
 than accidentally selecting a NULL-key row; non-null empty text remains distinct.
 ListBox/multi-selection and full Windows timing/type/error parity remain open;
 see [Combo list properties](COMBO_LIST_PROPERTIES_RUNTIME.md).
+
+Single-selection ListBox now renders as a persistent native QTreeView with real
+SQL/Value/Field List models, hidden columns and typed bound values. Actual
+mouse/keyboard/VBA/SQL regressions cover cancellation, saving/Undo, Locked,
+report read-only behavior, defaults and failed-source recovery. MultiSelect
+metadata is retained; modes 1/2 show 3251 instead of a single-selection substitute.
+Full headers/multi-selection/ListBox API/visual/event parity remains open; see
+[Native ListBox](NATIVE_LISTBOX_RUNTIME.md).

@@ -477,3 +477,9 @@ Full targets remain open:
   bound-column model, lazy loading, scalar/index/error/report/draft boundaries,
   BoundColumn=0 and corrected NULL-vs-empty selection; ListBox/multi-selection
   and exact Windows pending-buffer/error/subtype identity remain open.
+
+- [x] Persistent native single-selection ListBox QTreeView with shared real typed
+  SQL/value/field rows, hidden columns, defaults, bound/unbound/NULL values,
+  mouse/keyboard/control validation, SQL save/Undo/Locked/report/failure-recovery
+  tests and retained MultiSelect diagnostics; complete headers/multi-selection/
+  ListBox API/Windows visual and event parity remain open.
