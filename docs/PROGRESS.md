@@ -2106,3 +2106,21 @@ Full validation: host 39/39 (106.15 s), Debian 12 39/39 (110.08 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 3d5606b private CI completed successfully.
+
+## 2026-11-02 — Bounded native SQL CCur
+
+Reproduced unavailable SQL converter (0/1). Added SQL rewrite/registration and
+shared native Currency conversion with bounded REAL output and typed errors.
+Actual converter/parameter/field regressions pass 3/3 (0.16 s), including decimal
+rounding, booleans/numeric expressions/large values, literals/aliases, invalid
+arguments, DAO multi-row action rollback and actual bound Qt/VBA UPDATE/requery.
+GUI suite has 40 CTests. Full query Currency subtype propagation, full-range/
+regional/SQL arithmetic/aggregate/Windows identity remain open. No additional
+complete original business workflow. See CURRENCY_SQL_RUNTIME.md.
+
+Full validation: host 40/40 (100.19 s), Debian 12 40/40 (108.66 s), Ubuntu
+24.04 40/40 (93.62 s), Debian 13 40/40 (97.47 s), GUI-disabled core 1/1
+(1.93 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+d1e3ac1 private CI completed successfully.

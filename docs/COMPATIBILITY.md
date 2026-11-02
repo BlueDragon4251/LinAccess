@@ -751,3 +751,9 @@ interval. Native DAO/SQL and actual bound Qt/VBA UPDATE/requery regressions cove
 rounding/ranges/Null/error retention and numeric comparison. Full-range/SQL money
 operators/formatting/result typing/Windows identity remain open; Currency LIKE
 conversion diagnoses 3251. See [CURRENCY_PARAMETERS_RUNTIME.md](CURRENCY_PARAMETERS_RUNTIME.md).
+
+Unqualified SQL CCur now shares checked native Currency conversion and bounded
+lossless REAL output. Actual SQL/DAO/Qt/VBA regressions cover decimal rounding,
+large values/errors/aliases and a failed multi-row UPDATE without partial writes.
+Full query Currency subtype/SQL arithmetic/locale/Windows identity remains open.
+See [CURRENCY_SQL_RUNTIME.md](CURRENCY_SQL_RUNTIME.md).

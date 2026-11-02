@@ -637,3 +637,7 @@ Full targets remain open:
 - [x] Bounded Currency/Money SQL parameters with fixed Value/dbCurrency, numeric
   binding, checked rounding/ranges/Null/retention/lifetime and actual Qt/VBA UPDATE;
   full-range/SQL money/LIKE/result typing/Windows identity remains open.
+
+- [x] Explicit bounded native SQL CCur through shared conversion, decimal rounding/
+  ranges/errors/aliases and real DAO atomic UPDATE/Qt/VBA requery regression;
+  full query Currency subtype/SQL arithmetic/locale/Windows identity remains open.

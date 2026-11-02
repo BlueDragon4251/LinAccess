@@ -10,6 +10,7 @@
 #include "vba_runtime.hpp"
 #include "vba_color.hpp"
 #include "vba_round.hpp"
+#include "vba_currency.hpp"
 #include <QLibrary>
 #include <QSqlDriver>
 #include <QSqlQuery>
@@ -164,6 +165,28 @@ void colorFunction(sqlite3_context* context,int count,sqlite3_value** args,bool 
 }
 void rgbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept { colorFunction(context,count,args,false); }
 void qbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept { colorFunction(context,count,args,true); }
+
+void currencyNumber(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    auto& native=api();
+    try {
+        if(count!=1) throw VbaRuntimeError(450,"CCur requires one argument");
+        VbaValue value;
+        const auto type=native.type(args[0]);
+        if(type==1) {
+            const auto integer=native.integer(args[0]);
+            if(integer < -9007199254740992LL || integer>9007199254740992LL)
+                throw VbaRuntimeError(3251,"Exact SQL integer Currency input is unavailable");
+            value=VbaValue::numeric(static_cast<double>(integer));
+        } else if(type==2) value=VbaValue::numeric(native.number(args[0]));
+        else if(type==3) {
+            const auto* bytes=native.text(args[0]);
+            if(!bytes) throw VbaRuntimeError(7,"SQL Currency string unavailable");
+            value=VbaValue::string(std::string(reinterpret_cast<const char*>(bytes),native.bytes(args[0])));
+        } else if(type!=5) throw VbaRuntimeError(13,"CCur requires a scalar argument");
+        native.numberResult(context,currencyToRealStorage(value));
+    } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
+      catch(...) { native.error(context,"SQL currency conversion failed",-1); }
+}
 
 void roundNumber(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
     auto& native=api();
@@ -351,6 +374,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
     ensure("linaccess_jet_qbcolor",-1,&qbColor,nullptr,nullptr);
     ensure("linaccess_jet_round",-1,&roundNumber,nullptr,nullptr);
+    ensure("linaccess_jet_ccur",-1,&currencyNumber,nullptr,nullptr);
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);
     ensure("linaccess_jet_last",1,nullptr,&lastStep,&aggregateFinal);
     ensure("linaccess_jet_update_value",1,nullptr,&singleStep,&singleFinal);
