@@ -570,7 +570,7 @@ private:
                 do {
                     const auto start = index_;
                     const bool missing=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="strcomp" || word=="round" || word=="replace") && (nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";")));
-                    args.push_back(missing ? VbaValue::empty() : expression(1));
+                    args.push_back(missing ? VbaValue::empty() : expression(1,word=="isobject"));
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
                         ? tokens_[start].value : "");
@@ -578,6 +578,11 @@ private:
                 require(")");
             }
             const auto one = args.size() == 1;
+            if (word=="isobject") {
+                if (!host_) return {};
+                if(args.size()!=1) throw error("IsObject requires one argument",450);
+                return VbaValue::logical(args[0].kind==VbaValue::Kind::Object);
+            }
             if (word=="eval") {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Eval requires one argument",450);

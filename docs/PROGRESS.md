@@ -2019,3 +2019,22 @@ Full validation: host 36/36 (101.85 s), Debian 12 36/36 (101.77 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Navigation
 commit 100e57c private CI completed successfully; 3232150 was still in progress.
+
+## 2026-11-02 — Native VBA IsObject
+
+Reproduced unavailable intrinsic in core regression (0/1). Added Boolean object-
+reference inspection and argument parser object context without scalar defaults.
+Nothing/closed stored references remain True; explicit invalid member getters
+still fail. Core and actual Qt/VBA/DAO parameter/SQL tests pass 2/2 (1.30 s),
+including forms/controls/collection/Err/recordsets/fields/closed/Set Nothing,
+3420 before SQL effects and pending text/source/Undo preservation. GUI suite has
+37 CTests. Full classes/COM/ADO/object-model/Windows identity remain open. No new
+complete original business workflow. See ISOBJECT_RUNTIME.md.
+
+Full validation: host 37/37 (103.25 s), Debian 12 37/37 (105.47 s), Ubuntu
+24.04 37/37 (90.26 s), Debian 13 37/37 (94.48 s), GUI-disabled core 1/1
+(1.71 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Replace
+commit 3232150 private CI completed successfully earlier in this segment;
+7bf428a was still in progress at the last check.

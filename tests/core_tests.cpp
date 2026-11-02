@@ -275,6 +275,23 @@ void testCharacterFunctions() {
     }
 }
 
+void testIsObjectFunction() {
+    using namespace linaccess;
+    FakeForm host;
+    const auto eval=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,{}); };
+    for(const auto* expression:{"IsObject(Nothing)","Not IsObject(Empty)","Not IsObject(Null)","Not IsObject(42)",R"VBA(Not IsObject("text"))VBA","Not IsObject(True)","Not IsObject(CVErr(11))"}) {
+        const auto value=eval(expression); assert(value.kind==VbaValue::Kind::Boolean && value.boolean);
+    }
+    const auto probe=std::make_shared<ScalarProbe>(); probe->value=VbaValue::numeric(42);
+    assert(evaluateVbaExpression("IsObject(probe)",host,{{"probe",VbaValue::reference(probe)}}).boolean && probe->reads==0);
+    assert(!evaluateVbaExpression("IsObject(probe+0)",host,{{"probe",VbaValue::reference(probe)}}).boolean && probe->reads==1);
+    assert(!evaluateVbaExpression("IsObject(bytes)",host,{{"bytes",VbaValue::byteArray({1,2,3})}}).boolean);
+    assert(eval("TypeName(IsObject(Nothing))").asText()=="Boolean");
+    for(const auto& [expression,code]:std::vector<std::pair<std::string,int>>{{"IsObject()",450},{"IsObject(1,2)",450},{"IsObject(probe.Value)",438}}) {
+        int actual=0; try { (void)evaluateVbaExpression(expression,host,{{"probe",VbaValue::reference(probe)}}); } catch(const VbaRuntimeError& error) { actual=error.number; } assert(actual==code);
+    }
+}
+
 void testStringResultTypes() {
     using namespace linaccess;
     FakeForm host;
@@ -365,6 +382,7 @@ void testRoundFunction() {
 }
 
 int main() {
+    testIsObjectFunction();
     testStringResultTypes();
     testReplaceFunction();
     testRoundFunction();

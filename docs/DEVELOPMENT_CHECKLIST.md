@@ -621,3 +621,7 @@ Full targets remain open:
 - [x] Restore native Long results for supported Len/InStr and Integer for StrComp,
   checked range/Null, actual Qt/VBA/DAO parameter/SQL type-code/pending/save/Undo
   regression; numeric/UDT Len/full Windows/SQL subtype identity remains open.
+
+- [x] Native IsObject with object-preserving parser context, no default getters,
+  Nothing/closed-reference identity, explicit getter errors and actual Qt/VBA/DAO/
+  SQL pending-source regression; full class/COM/ADO/Windows identity remains open.

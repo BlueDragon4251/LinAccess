@@ -723,3 +723,9 @@ StrComp returns Integer, preserving Null. Actual Qt/VBA/DAO parameter/SQL tests
 verify numeric values and VarType codes through pending/save/Null/Undo. Len
 numeric/UDT storage sizes and full Windows/SQL subtype propagation remain open.
 See [STRING_RESULT_TYPES_RUNTIME.md](STRING_RESULT_TYPES_RUNTIME.md).
+
+Native IsObject preserves object-reference context without resolving scalar
+defaults; Nothing/closed stored references remain True. Explicit invalid member
+getters retain their native errors. Actual Qt/VBA/DAO parameter/SQL regressions
+verify object kinds and pending-source preservation. Full class/COM/ADO/Windows
+object identity remains open. See [ISOBJECT_RUNTIME.md](ISOBJECT_RUNTIME.md).
