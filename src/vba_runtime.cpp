@@ -905,6 +905,9 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     VbaVariables locals;
     std::unordered_map<std::string,std::string> localTypes;
     const auto integralType=[](std::string_view type) { return type=="integer" || type=="long"; };
+    const auto checkedType=[&](std::string_view type) { return integralType(type) || type=="boolean" || type=="string"; };
+    const auto scalarType=[&](std::string_view type) { return checkedType(type) || type=="single" || type=="double" || type=="byte"; };
+    const auto objectType=[](std::string_view type) { return type=="object" || type=="control" || type=="form" || type.starts_with("dao.") || type.starts_with("access."); };
     auto errorState = std::make_shared<ErrorObject>();
     locals["err"] = VbaValue::reference(errorState);
     bool resumeNext = false;
@@ -927,14 +930,17 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         for(std::size_t i=0;i<parameters.size();++i) {
             const auto& parameter=parameters[i]; const auto name=lower(parameter.name);
             const auto value=implicitCancel ? VbaValue::numeric(0) : arguments[i];
-            const auto converted=integralType(parameter.type) ? coerceVbaModuleValue(value,parameter.type) : value;
+            const auto converted=checkedType(parameter.type) ? coerceVbaModuleValue(value,parameter.type) : value;
             if(references && !implicitCancel && parameter.byReference && (*references)[i].source) {
                 const auto& sourceType=(*references)[i].type;
-                if((integralType(parameter.type) || integralType(sourceType)) && !sourceType.empty() && sourceType!="variant"
+                if((checkedType(parameter.type) || checkedType(sourceType)) && !sourceType.empty() && sourceType!="variant"
                     && !parameter.type.empty() && parameter.type!="variant" && sourceType!=parameter.type)
                     throw VbaRuntimeError(13,"Known ByRef argument types do not match");
-                if(integralType(parameter.type) && (converted.kind!=value.kind || converted.number!=value.number))
-                    throw VbaRuntimeError(13,"ByRef numeric argument requires an unchanged value representation");
+                if(checkedType(parameter.type) && (converted.kind!=value.kind
+                    || (converted.kind==VbaValue::Kind::Number && converted.number!=value.number)
+                    || (converted.kind==VbaValue::Kind::Text && converted.text!=value.text)
+                    || (converted.kind==VbaValue::Kind::Boolean && converted.boolean!=value.boolean)))
+                    throw VbaRuntimeError(13,"ByRef argument requires an unchanged value representation");
             }
             locals[name]=converted; localTypes[name]=parameter.type;
         }
@@ -979,13 +985,16 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         for(const auto& alias:aliases) if(alias.name==name) return alias.type;
         return {};
     };
-    for(const auto& instruction:instructions)
-        if((instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet) && integralType(variableType(lower(instruction.argument)))) {
-            VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Numeric variable cannot receive this object/enumerator assignment",instruction.line}; failure.errorNumber=3251; return failure;
+    for(const auto& instruction:instructions) {
+        const auto type=variableType(lower(instruction.argument));
+        if(((instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet) && scalarType(type))
+            || (instruction.type==Statement::Type::For && (type=="boolean" || type=="string" || objectType(type)))) {
+            VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Declared variable type cannot receive this loop/object assignment",instruction.line}; failure.errorNumber=3251; return failure;
         }
+    }
     const auto assignVariable=[&](const std::string& name,const VbaValue& value) {
         const auto type=variableType(name);
-        locals[name]=integralType(type) ? coerceVbaModuleValue(value,type) : value;
+        locals[name]=checkedType(type) ? coerceVbaModuleValue(value,type) : value;
     };
     const auto equalValue = [](const VbaValue& a, const VbaValue& b) {
         return a.kind == b.kind && a.number == b.number && a.currencyUnits==b.currencyUnits && a.text == b.text
@@ -1025,7 +1034,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         for (const auto& expression : names) {
             auto found = locals.find(lower(expression));
             const auto type=variableType(lower(expression));
-            ReferenceBinding binding{found==locals.end() ? nullptr : &found->second,integralType(type) ? type : std::string{}};
+            ReferenceBinding binding{found==locals.end() ? nullptr : &found->second,checkedType(type) ? type : std::string{}};
             for (const auto& alias:aliases) if (alias.name==lower(expression)) binding={alias.source,alias.type};
             bindings.push_back(binding);
         }

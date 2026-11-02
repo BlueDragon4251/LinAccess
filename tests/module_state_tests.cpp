@@ -15,6 +15,7 @@
 
 void testNumericModuleStates();
 void testNumericProcedureValues();
+void testScalarProcedureValues();
 
 void testModuleStates(const QDir& directory,const QJsonArray& objects) {
     QByteArray globals;
@@ -107,6 +108,7 @@ void testModuleStates(const QDir& directory,const QJsonArray& objects) {
     assert(second.close() && reopened.close() && separate.close());
     testNumericModuleStates();
     testNumericProcedureValues();
+    testScalarProcedureValues();
 }
 
 void testNumericModuleStates() {
@@ -239,4 +241,71 @@ End Sub
     args={makePreviewFormObject(form)->member("Controls",{})}; result=form.executeProcedure("BadEnumerator",args); assert(result.status==linaccess::VbaExecutionStatus::Unsupported && result.errorNumber==3251);
     assert(sql.exec("SELECT COUNT(*) FROM numeric_local_events") && sql.next() && sql.value(0).toInt()==1); sql.finish();
     assert(form.close());
+}
+
+void testScalarProcedureValues() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","scalar-procedure-values"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    assert(sql.exec("CREATE TABLE scalar_local_audit(flag INTEGER,label TEXT)")); assert(sql.exec("CREATE TABLE scalar_local_events(kind TEXT)"));
+    const QByteArray code=R"VBA(Function PersistTyped(ByVal flag As Boolean,ByVal label As String) As String
+Dim localFlag As Boolean
+Dim localText As String
+Dim q As Object
+localFlag=flag
+localText=label
+Set q=CurrentDb.CreateQueryDef("","PARAMETERS pFlag BOOLEAN,pLabel TEXT; INSERT INTO scalar_local_audit VALUES([pFlag],[pLabel])")
+q.Parameters("pFlag").Value=localFlag
+q.Parameters("pLabel").Value=localText
+q.Execute
+PersistTyped=CStr(localFlag)&":"&localText
+End Function
+Sub FlipBoolean(ByRef value As Boolean)
+CurrentDb.Execute "INSERT INTO scalar_local_events VALUES('entered')"
+value=Not value
+End Sub
+Function RejectReference() As String
+Dim label As String
+label="False"
+On Error Resume Next
+Call FlipBoolean(label)
+RejectReference=CStr(Err.Number)&":"&label
+End Function
+Function TemporaryReference() As String
+Dim label As String
+label="False"
+Call FlipBoolean((label))
+TemporaryReference=label
+End Function
+Function MatchingReference() As Boolean
+Dim flag As Boolean
+flag=0
+Call FlipBoolean(flag)
+MatchingReference=flag
+End Function
+Sub BadCounter()
+Dim flag As Boolean
+CurrentDb.Execute "INSERT INTO scalar_local_events VALUES('bad counter')"
+For flag=0 To 1
+Next flag
+End Sub
+)VBA";
+    AccessFormPreview form("scalar procedure","Begin Form\nEnd",code,db);
+    std::vector<VbaValue> args{VbaValue::string("False"),VbaValue::numeric(42)};
+    auto result=form.executeProcedure("PersistTyped",args);
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="False:42" && args[0].kind==VbaValue::Kind::Text && args[1].kind==VbaValue::Kind::Number);
+    assert(sql.exec("SELECT flag,label FROM scalar_local_audit") && sql.next() && sql.value(0).toInt()==0 && sql.value(1).toString()=="42"); sql.finish();
+    const std::string label="ö 'alpha' 😀"; args={VbaValue::numeric(1),VbaValue::string(label)};
+    result=form.executeProcedure("PersistTyped",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="True:"+label);
+    assert(sql.exec("SELECT flag,label FROM scalar_local_audit ORDER BY rowid DESC") && sql.next() && sql.value(0).toInt()==-1 && sql.value(1).toString()==QString::fromStdString(label)); sql.finish();
+    for(const auto& bad:std::vector<std::pair<VbaValue,int>>{{VbaValue{},94},{VbaValue::errorValue(11),13}}) {
+        args={VbaValue::logical(true),bad.first}; result=form.executeProcedure("PersistTyped",args); assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==bad.second);
+    }
+    assert(sql.exec("SELECT COUNT(*) FROM scalar_local_audit") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+    args.clear(); result=form.executeProcedure("RejectReference",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="13:False");
+    assert(sql.exec("SELECT COUNT(*) FROM scalar_local_events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
+    result=form.executeProcedure("TemporaryReference",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="False");
+    result=form.executeProcedure("MatchingReference",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Boolean && result.typedReturnValue->boolean);
+    result=form.executeProcedure("BadCounter",args); assert(result.status==linaccess::VbaExecutionStatus::Unsupported && result.errorNumber==3251);
+    assert(sql.exec("SELECT COUNT(*) FROM scalar_local_events") && sql.next() && sql.value(0).toInt()==2); sql.finish(); assert(form.close());
 }

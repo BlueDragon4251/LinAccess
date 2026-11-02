@@ -923,6 +923,78 @@ End Sub
     }
 
     {
+        const std::string module=R"VBA(Sub LocalValues()
+Dim flag As Boolean
+Dim label As String
+flag="False"
+label=42
+Me!Converted=CStr(flag)&":"&label
+On Error Resume Next
+flag=Null
+Me!FlagCode=CStr(Err.Number)
+label=Null
+Me!TextCode=CStr(Err.Number)
+Me!Preserved=CStr(flag)&":"&label
+End Sub
+Function BooleanResult() As Boolean
+BooleanResult=1.5
+End Function
+Function StringResult() As String
+StringResult=True
+End Function
+Function Combine(ByVal flag As Boolean,ByVal label As String) As String
+Me!Body="entered"
+If flag Then
+Combine=label
+Else
+Combine="off"
+End If
+End Function
+Sub FlipBoolean(ByRef value As Boolean)
+value=Not value
+End Sub
+Sub ExtendString(ByRef value As String)
+value=value&"!"
+End Sub
+Function References() As String
+Dim flag As Boolean
+Dim label As String
+flag=0
+label=7
+Call FlipBoolean(flag)
+Call ExtendString(label)
+References=CStr(flag)&":"&label
+End Function
+Sub BadFor()
+Dim flag As Boolean
+Me!Body="entered"
+For flag=0 To 1
+Next flag
+End Sub
+Sub BadEnumerator(items As Object)
+Dim item As String
+Me!Body="entered"
+For Each item In items
+Next item
+End Sub
+)VBA";
+        FakeForm host; auto result=executeVbaProcedure(module,"LocalValues",host);
+        assert(result.status==VbaExecutionStatus::Completed && host.fields["Converted"]=="False:42" && host.fields["Preserved"]=="False:42" && host.fields["FlagCode"]=="94" && host.fields["TextCode"]=="94");
+        result=executeVbaProcedure(module,"BooleanResult",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Boolean && result.typedReturnValue->boolean);
+        result=executeVbaProcedure(module,"StringResult",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Text && result.typedReturnValue->text=="True");
+        std::vector<VbaValue> args{VbaValue::string("False"),VbaValue::numeric(42)};
+        result=executeVbaProcedureWithArguments(module,"Combine",host,args);
+        assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="off" && args[0].kind==VbaValue::Kind::Text && args[1].kind==VbaValue::Kind::Number);
+        args={VbaValue::numeric(1),VbaValue::logical(true)}; result=executeVbaProcedureWithArguments(module,"Combine",host,args); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="True");
+        FakeForm invalid; args={VbaValue{},VbaValue::numeric(42)}; result=executeVbaProcedureWithArguments(module,"Combine",invalid,args); assert(result.status==VbaExecutionStatus::Error && result.errorNumber==94 && !invalid.fields.contains("Body"));
+        args={VbaValue::logical(true),VbaValue::errorValue(11)}; result=executeVbaProcedureWithArguments(module,"Combine",invalid,args); assert(result.status==VbaExecutionStatus::Error && result.errorNumber==13 && !invalid.fields.contains("Body"));
+        result=executeVbaProcedure(module,"References",host); assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="True:7!");
+        result=executeVbaProcedure(module,"BadFor",invalid); assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251 && !invalid.fields.contains("Body"));
+        auto sequence=std::make_shared<TestSequence>(); sequence->values={VbaValue::string("value")}; args={VbaValue::reference(sequence)};
+        result=executeVbaProcedureWithArguments(module,"BadEnumerator",invalid,args); assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251 && !invalid.fields.contains("Body"));
+    }
+
+    {
         FakeForm form;
         const std::string module=R"VBA(Function Calculate() As Variant
 Dim amount As Variant

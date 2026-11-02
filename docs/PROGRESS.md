@@ -1502,3 +1502,23 @@ pass payload/backend/permissions/fixture-exclusion checks. Isolated installed
 Debian/Ubuntu packages pass backend/counter execution and GUI startup. All four
 original fixture hashes pass. Previous numeric-module commit 581862c completed
 private CI successfully. Repository privacy remains unchanged.
+
+## 2026-11-02 — Checked Boolean and String procedure values
+
+Procedure locals, parameters, results and known-reference metadata now preserve
+Boolean/String conversion semantics. Core and native GUI/VBA/DAO tests cover
+False text, typed result kinds, error preservation, ByVal/reference/temporary
+behavior, Unicode/apostrophes and stored Boolean 0/-1 values. Invalid declared
+scalar loop/object targets reject before body effects. A synthetic parameter
+test exposed the separate unsupported BIT alias and was corrected to the already
+supported BOOLEAN spelling; no BIT support is implied. Targeted four-test set:
+4/4 (43.12 s). Full Variant/object-default/locale/compiler/reference semantics
+remain open; no original business execution increment. See
+SCALAR_PROCEDURE_VALUES_RUNTIME.md.
+
+Full validation: host 22/22 (75.41 s), Debian 12 22/22 (77.21 s), Ubuntu
+24.04 22/22 (69.27 s), GUI-disabled core 1/1 (1.25 s). Host and distro
+DEBs pass payload/backend/permissions/fixture-exclusion checks; isolated distro
+installations pass backend execution and GUI startup. All four original fixture
+hashes pass. Previous ae2f65b private CI completed successfully. Remote repository
+privacy remains enabled.

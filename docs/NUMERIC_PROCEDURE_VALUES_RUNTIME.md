@@ -40,3 +40,7 @@ subtypes, typed intermediate arithmetic/promotion/literals, other primitive loca
 and parameter types, complete ByRef/loop/type-error timing, arrays/classes and a
 full VBA AST remain open. These checked storage/assignment paths do not establish
 complete VBA numeric parity.
+
+Boolean/String procedure values now have their own checked scope in
+SCALAR_PROCEDURE_VALUES_RUNTIME.md. Remaining primitive types and full subtype/
+reference/loop/compile semantics stay open.

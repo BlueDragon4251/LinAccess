@@ -508,3 +508,8 @@ Full targets remain open:
   For counters, known ByRef conflicts/temporaries/copyback and pre-effect invalid
   scalar-object/enumerator guards with real SQL tests; full subtype/promotion/
   Variant-reference/loop/compile/error timing and other types remain open.
+
+- [x] Checked Boolean/String locals, parameter/result kinds and known-reference
+  conversion/copyback, pre-effect invalid scalar loop/object guards and actual
+  typed DAO Unicode/Boolean persistence; full Variant/object-default/locale/type/
+  compiler/reference semantics and other primitive types remain open.

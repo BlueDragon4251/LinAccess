@@ -570,3 +570,10 @@ write preservation, ByVal input, known ByRef conflicts and temporaries, copyback
 and pre-effect invalid targets. Fractional typed For bounds reject explicitly;
 full subtype/promotion/Variant-reference/loop/compile timing remains open. See
 [Numeric procedure values](NUMERIC_PROCEDURE_VALUES_RUNTIME.md).
+
+Boolean/String procedure storage now converts values instead of retaining
+incompatible numeric/text kinds. Core/native DAO tests cover typed returns,
+ByVal/reference behavior, retained values after invalid writes, zero SQL effects
+for invalid arguments, false=0/true=-1 and Unicode text parameter persistence.
+Full Variant/object-default/locale/compiler/reference semantics remain open; see
+[Scalar procedure values](SCALAR_PROCEDURE_VALUES_RUNTIME.md).
