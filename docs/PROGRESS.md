@@ -1908,3 +1908,22 @@ Full validation: host 30/30 (97.61 s), Debian 12 30/30 (94.31 s), Ubuntu
 exclusion checks. Isolated installations pass backend execution and GUI startup.
 All four original fixture hashes pass; repository remains private. Previous
 a357ed9 private CI completed successfully.
+
+## 2026-11-02 — Declared native integer field types
+
+Recovered Byte/Integer/Long identity from unambiguous imported integer metadata,
+with checked scalar writes and bounded readonly Field.Type. Native Qt/VBA/DAO/
+SQL tests cover range preservation, rounding, pending/save, generic 53-bit data
+and invalid stored values. Targeted tests pass 3/3 (6.98 s). Strengthened original
+MDB regression verifies all 127 INT columns and 471904 non-NULL Long field values
+against independent SQL integer-row/NULL multisets; full CSV cell comparison
+remains active (7.58 s). GUI suite has 31 CTests. MySQL FLOAT mixes Currency/
+Single, so no blanket floating reclassification is made. Full raw SQL/Jet/type/
+DAO/Windows identity remains open. See INTEGER_FIELD_TYPES_RUNTIME.md.
+
+Full validation: host 31/31 (90.79 s), Debian 12 31/31 (94.73 s), Ubuntu
+24.04 31/31 (83.44 s), Debian 13 31/31 (84.25 s), GUI-disabled core 1/1
+(1.91 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. Previous
+94f6302 private CI completed successfully.

@@ -684,3 +684,11 @@ unchanged original KeyPress procedures execute over 384 direct/285 Qt input case
 on prepared native controls, with original byte hashes verified. This is wiring/
 execution evidence, not Windows or full-form/business parity. ANSI/DBCS, byte
 strings, dollar aliases, full BSTR and SQL rewriting remain open. See CHARACTER_FUNCTIONS_RUNTIME.md.
+
+Unambiguous imported TINYINT/SMALLINT/INT metadata now restores native Byte/
+Integer/Long field values and bounded readonly DAO Field.Type. Real Qt/VBA/SQL
+regression and 127 original INT columns/471904 non-NULL values are checked against
+SQL data. Generic SQLite INTEGER remains generic; raw SQL range enforcement,
+query types, full Field.Type/errors and other exact Jet types remain open.
+MySQL FLOAT conflates Currency/Single and is not blindly reclassified.
+See INTEGER_FIELD_TYPES_RUNTIME.md.

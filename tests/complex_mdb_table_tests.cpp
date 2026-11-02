@@ -58,6 +58,7 @@ int main(int argc, char** argv) {
     int booleanColumns = 0;
     int trueBooleans = 0;
     int typedBooleans = 0;
+    int longColumns=0,typedLongValues=0;
     int formattedDates = 0;
     int counters=0,nativeCounters=0,counterProbes=0,managedProbes=0;
     QStringList failures;
@@ -120,6 +121,40 @@ End Function
             assert(enumeration.status == linaccess::VbaExecutionStatus::Completed);
             assert(enumeration.typedReturnValue && enumeration.typedReturnValue->asNumber() == schema.columns.size());
 
+            {
+                const auto numericRows=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{linaccess::VbaValue::string(table.toStdString()),linaccess::VbaValue::numeric(4)}).object;
+                std::vector<std::shared_ptr<linaccess::VbaObject>> fields;
+                QStringList projections; QMap<QByteArray,int> actualIntegers,referenceIntegers;
+                const auto quote=[](QString value) { return '"'+value.replace('"',"\"\"")+'"'; };
+                for(const auto& column:schema.columns) if(column.sourceType=="INT") {
+                    const auto field=numericRows->member("Fields",{linaccess::VbaValue::string(column.name.toStdString())}).object;
+                    assert(field->member("Type",{}).number==4 && field->member("Type",{}).numericType==linaccess::VbaValue::NumericType::Integer);
+                    fields.push_back(field); projections<<quote(column.name); ++longColumns;
+                }
+                while(!numericRows->member("EOF",{}).truthy()) {
+                    QJsonArray actual;
+                    for(const auto& field:fields) {
+                        const auto value=field->member("Value",{});
+                        if(value.kind==linaccess::VbaValue::Kind::Null) { actual.append(QJsonValue::Null); continue; }
+                        assert(value.kind==linaccess::VbaValue::Kind::Number && value.numericType==linaccess::VbaValue::NumericType::Long);
+                        assert(value.number>=-2147483648.0 && value.number<=2147483647.0); ++typedLongValues;
+                        actual.append(QString::number(static_cast<qlonglong>(value.number)));
+                    }
+                    ++actualIntegers[QJsonDocument(actual).toJson(QJsonDocument::Compact)];
+                    numericRows->member("MoveNext",{});
+                }
+                QSqlQuery reference(db); assert(reference.exec("SELECT "+(projections.isEmpty() ? QString("1") : projections.join(','))+" FROM "+quote(table)));
+                while(reference.next()) {
+                    QJsonArray expected;
+                    for(int i=0;i<projections.size();++i) {
+                        if(reference.value(i).isNull()) expected.append(QJsonValue::Null);
+                        else expected.append(QString::number(reference.value(i).toLongLong()));
+                    }
+                    ++referenceIntegers[QJsonDocument(expected).toJson(QJsonDocument::Compact)];
+                }
+                reference.finish(); assert(actualIntegers==referenceIntegers);
+                numericRows->member("Close",{});
+            }
             bool hasBoolean = false;
             for (const auto& column : schema.columns) hasBoolean |= column.sourceType == "BOOLEAN" || column.sourceType == "BIT";
             if (hasBoolean && rows.size() > 1) {
@@ -204,6 +239,8 @@ End Function
     std::cout << "Original date columns formatted through native SQL: " << formattedDates << '\n';
     assert(tables.size() == 29);
     assert(imported == 29 && failures.empty());
+    assert(longColumns==127 && typedLongValues>0);
+    std::cout<<"Original Long columns: "<<longColumns<<", typed non-NULL field values: "<<typedLongValues<<'\n';
     assert(counters==21 && nativeCounters==16 && counterProbes==1 && managedProbes==1);
     std::cout<<"Original counter metadata: "<<counters<<", native single-PK counters: "<<nativeCounters<<", isolated insert/delete/no-reuse probes: "<<counterProbes<<'\n';
     assert(original.open(QIODevice::ReadOnly));

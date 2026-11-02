@@ -21,11 +21,18 @@ QMap<QString,QString> sqliteColumnTypes(QSqlDatabase db,const QString& table) {
             const auto source = column["source_type"].toString();
             if (source == "BOOLEAN" || source == "BIT") types[column["name"].toString().toCaseFolded()] = "BOOLEAN";
             else if (source == "DATETIME" || source == "DATE") types[column["name"].toString().toCaseFolded()] = "DATETIME";
+            else if (source == "TINYINT") types[column["name"].toString().toCaseFolded()] = "INTEGER1";
+            else if (source == "SMALLINT") types[column["name"].toString().toCaseFolded()] = "INTEGER2";
+            else if (source == "INT") types[column["name"].toString().toCaseFolded()] = "INTEGER4";
         }
     }
     return types;
 }
 namespace {
+std::string_view integerSubtype(const QString& type) {
+    const auto name=type.trimmed().toUpper();
+    return name=="INTEGER1" ? "byte" : name=="INTEGER2" ? "integer" : name=="INTEGER4" ? "long" : "";
+}
 QString dateText(const QVariant& value) {
     if (value.metaType().id() == QMetaType::QDateTime)
         return value.toDateTime().toString("yyyy-MM-dd HH:mm:ss");
@@ -60,10 +67,21 @@ VbaValue qtFieldValue(const QVariant& value,const QString& type) {
     if (type.contains("DATE",Qt::CaseInsensitive)) return VbaValue::string(dateText(value).toUtf8().toStdString());
     if (type.contains("BOOL",Qt::CaseInsensitive) || value.metaType().id() == QMetaType::Bool)
         return VbaValue::logical(boolean(value));
+    if(const auto subtype=integerSubtype(type); !subtype.empty()) {
+        if(value.metaType().id()==QMetaType::Double || value.metaType().id()==QMetaType::Float) {
+            const auto number=value.toDouble();
+            if(!std::isfinite(number) || std::trunc(number)!=number) throw VbaRuntimeError(13,"Integer field storage is not integral");
+        }
+        if(value.metaType().id()==QMetaType::ULongLong && value.toULongLong()>2147483647ULL) throw VbaRuntimeError(6,"Integer field overflow");
+        if(value.metaType().id()==QMetaType::QByteArray) throw VbaRuntimeError(13,"Binary integer field storage is unsupported");
+        bool valid=false; const auto integer=value.toLongLong(&valid);
+        if(!valid) throw VbaRuntimeError(13,"Integer field type mismatch");
+        return coerceVbaModuleValue(VbaValue::numeric(static_cast<double>(integer)),subtype);
+    }
     if (integerType(type) || value.metaType().id() == QMetaType::Int || value.metaType().id() == QMetaType::LongLong) {
         bool valid = false; const auto integer = value.toLongLong(&valid);
         if (!valid) throw VbaRuntimeError(13,"Integer field type mismatch");
-        // A Double-only numeric Variant must not silently round a 64-bit integer.
+        // Generic SQLite integers still use Double; do not silently round 64-bit data.
         if (integer < -9007199254740992LL || integer > 9007199254740992LL)
             throw VbaRuntimeError(6,"Exact 64-bit integer Variant not implemented");
         return VbaValue::numeric(static_cast<double>(integer));
@@ -85,6 +103,10 @@ QVariant sqlFieldValue(const VbaValue& value,const QString& type) {
     if (type.contains("BOOL",Qt::CaseInsensitive)) {
         const auto converted = value.kind == VbaValue::Kind::Text ? QVariant(QString::fromStdString(value.text)) : QVariant(value.asNumber());
         return boolean(converted) ? -1 : 0;
+    }
+    if(const auto subtype=integerSubtype(type); !subtype.empty()) {
+        const auto converted=coerceVbaModuleValue(value,subtype);
+        return static_cast<qlonglong>(converted.number);
     }
     if (integerType(type)) {
         const auto number = value.asNumber();

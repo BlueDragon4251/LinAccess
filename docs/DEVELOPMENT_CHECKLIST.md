@@ -597,3 +597,7 @@ Full targets remain open:
 - [x] Native ASCII Asc/Chr and supported UTF-16 AscW/ChrW, checked errors/types,
   actual Qt/DAO/SQL and three unchanged original KeyPress procedures (384 direct/
   285 Qt cases); ANSI/DBCS/full BSTR/SQL/Windows/business identity remain open.
+
+- [x] Restore declared Byte/Integer/Long field subtypes and bounded Field.Type
+  from unambiguous import metadata, Qt/VBA/SQL bounds/pending/save tests and all
+  127 original INT columns/471904 values; raw SQL/full Jet/type identity remains open.
