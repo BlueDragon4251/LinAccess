@@ -336,7 +336,7 @@ End Sub
     sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','quit_child',?)"); sql.addBindValue(quitChildLayout); assert(sql.exec()); sql.finish();
     sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba','Form_quit_child',?)");
     sql.addBindValue(QByteArray(R"VBA(Sub Form_Timer()
-DoCmd.Quit()
+Application.Quit(Option:=acQuitSaveAll)
 CurrentDb.Execute "INSERT INTO quit_steps VALUES('child-after',0)"
 End Sub
 )VBA")); assert(sql.exec()); sql.finish();

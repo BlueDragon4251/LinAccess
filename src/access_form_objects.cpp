@@ -1106,6 +1106,7 @@ public:
         if(key=="openreport") return Signature{{"ReportName","View","FilterName","WhereCondition","WindowMode","OpenArgs"},1};
         if(key=="close") return Signature{{"ObjectType","ObjectName","Save"},0};
         if(key=="gotorecord") return Signature{{"ObjectType","ObjectName","Record","Offset"},0};
+        if(key=="quit") return Signature{{"Options"},0};
         if(key=="runsql") return Signature{{"SQLStatement","UseTransaction"},1};
         if(key=="runcommand") return Signature{{"Command"},1};
         if(key=="gotocontrol") return Signature{{"ControlName"},1};
@@ -1134,7 +1135,12 @@ public:
             return {};
         }
         if (key=="quit") {
-            if (!args.empty()) throw linaccess::VbaRuntimeError(3251,"Quit options unsupported");
+            if (args.size()>1) throw linaccess::VbaRuntimeError(450,"Quit accepts one option");
+            if (!args.empty() && args[0].kind!=linaccess::VbaValue::Kind::Empty) {
+                if (args[0].kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Quit option");
+                if (linaccess::sqlFieldValue(args[0],"INTEGER4").toLongLong()!=1)
+                    throw linaccess::VbaRuntimeError(3251,"Quit prompt/save-none design options unsupported");
+            }
             AccessFormPreview::quitApplication(); return {};
         }
         if (key=="openreport") {
@@ -1188,8 +1194,13 @@ public:
 class PreviewApplicationObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewApplicationObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if (text(name).compare("Quit",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Option"},0};
+        return {};
+    }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if (key=="quit") return PreviewDoCmdObject(preview).member("Quit",args);
         if (key=="eval") {
             if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"Eval requires one argument");
             if (args[0].kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Eval argument");

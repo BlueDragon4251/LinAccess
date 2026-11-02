@@ -22,3 +22,12 @@ forcing legacy text materialization. Existing core cases exercise both.
 
 Full shutdown through arbitrary external C++ callbacks, every Windows error/UI
 path and cross-thread/distributed behavior remain open. No new CTest target.
+
+Application.Quit now delegates to the same native close preflight and execution
+stop as DoCmd.Quit. Both accept omitted/Empty/default acQuitSaveAll (1); native
+named signatures use Application Option and DoCmd Options respectively. Null is
+94, extra arguments 450, and unsupported prompt/save-none design options remain
+3251. acQuitPrompt/acQuitSaveAll/acQuitSaveNone constants are available. This
+does not implement Access design-object save/prompt semantics. The existing GUI
+regression exercises named Application.Quit from the active modal child and
+verifies neither its SQL continuation nor the suspended caller continues.

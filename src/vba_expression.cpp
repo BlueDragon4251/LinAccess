@@ -573,6 +573,9 @@ private:
         if (const auto type=daoTypes.find(word);type!=daoTypes.end()) return VbaValue::longInteger(type->second);
         if (word == "dbopendynaset") return VbaValue::numeric(2);
         if (word == "dbopensnapshot") return VbaValue::numeric(4);
+        if (word == "acquitprompt") return VbaValue::integer(0);
+        if (word == "acquitsaveall") return VbaValue::integer(1);
+        if (word == "acquitsavenone") return VbaValue::integer(2);
         if (word == "dbeditnone") return VbaValue::integer(0);
         if (word == "dbeditinprogress") return VbaValue::integer(1);
         if (word == "dbeditadd") return VbaValue::integer(2);

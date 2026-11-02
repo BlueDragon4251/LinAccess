@@ -2674,3 +2674,12 @@ VBA dbEdit constants. Existing clone/edit/add/update/snapshot regression now
 checks these values. Desktop build and existing core/DAO targets pass 2/2
 (1.64 s). No new target or repeated full-suite/package run. Concurrent server
 permissions, locks and all Windows DAO capability rules remain outside scope.
+
+## Native Application.Quit entry point (2026-11-02)
+
+Application.Quit and named default save-all options now reach the native
+DoCmd.Quit close/cancellation/frame-stop path; added AcQuitOption constants.
+Prompt/save-none design modes still fail explicitly. Existing form_current_record
+regression passes (0.50 s), including named Application.Quit inside acDialog and
+no child/caller continuation. Desktop build passes. No new test target or
+full-suite/package rerun; see QUIT_EXECUTION_RUNTIME.md for scope.
