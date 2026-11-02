@@ -31,6 +31,9 @@ struct AccessQueryPlan {
     QString updateSource;
     qsizetype updateSourceOffset{};
     QVector<QString> resultTypes; // Proven projection types; empty entries are unknown.
+    QString source;
+    QString compiledSql;
+    bool currencyContextResolved{};
 };
 struct AccessQueryResult {
     QStringList columns;

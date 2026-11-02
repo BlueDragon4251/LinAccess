@@ -653,3 +653,7 @@ Full targets remain open:
 - [x] Exact native sums of proven Currency expressions/parameters with grouped/
   Null/cancellation/overflow/range/Qt report regression and 43 independent original
   column sums; implicit field/view/complex/full SQL money/Windows semantics remain open.
+
+- [x] Verified live Currency fields and exact implicit SUM in simple physical-
+  table SELECT/DAO/readonly Qt paths, stale-plan/schema/filter safeguards and all
+  43 original sums without casts; general/view/join/action/Windows typing remains open.

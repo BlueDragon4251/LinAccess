@@ -2168,3 +2168,25 @@ All four original fixture hashes pass; repository remains private.
 Remote e9d0f60 CI did not start any job steps: GitHub reported an account-level
 billing/spending restriction. This is an external CI blocker, not a successful
 remote test run; local distribution checks above completed independently.
+
+## 2026-11-02 — Verified Currency columns in simple table queries
+
+Reproduced missing implicit query type (0/1). Added bounded live physical-table
+Currency resolution, qualified/aliased fields, exact implicit Sum(column), result
+metadata through DAO/readonly Qt and filter propagation. SQL changes clear stale
+hints; previously resolved source metadata refreshes before reuse. Initial
+Currency tests pass 4/4 (0.21 s); expanded query/object/sum/original-layout/Kassa/
+table run passes, with final full-suite rebuild below. All 43 original sums now
+use plain Sum(column) and match independent CSV integers; all 121613 individual
+Currency comparisons remain active. GUI suite has 44 CTests. General/view/join/
+nested/HAVING/action/complex SQL typing and full money/Windows semantics remain
+open; no complete original business workflow increment. See
+CURRENCY_SCHEMA_QUERIES_RUNTIME.md.
+
+Full local validation: host 44/44 (122.41 s), Debian 12 44/44 (108.77 s),
+Ubuntu 24.04 44/44 (88.35 s), Debian 13 44/44 (94.54 s), GUI-disabled core
+1/1 (2.28 s). Host/all three distro DEBs pass payload/backend/permissions/fixture-
+exclusion checks. Isolated installations pass backend execution and GUI startup.
+All four original fixture hashes pass; repository remains private. GitHub's
+previously confirmed account-level CI restriction remains separate from these
+successful local distribution checks; no remote test success is claimed.

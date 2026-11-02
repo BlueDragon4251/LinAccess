@@ -230,7 +230,7 @@ void adaptObjectReferences(QVector<Token>& tokens,qsizetype start) {
         i+=replacement.size()-1;
     }
 }
-QVector<QString> currencyProjectionTypes(QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters) {
+QVector<QString> currencyProjectionTypes(QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters,const QMap<QString,QString>& fields) {
     const auto word=[&](qsizetype i,const char* text) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(text,Qt::CaseInsensitive)==0; };
     if(!word(start,"SELECT")) return {};
     int depth=0;
@@ -257,6 +257,8 @@ QVector<QString> currencyProjectionTypes(QVector<Token>& tokens,qsizetype start,
         if(expression.size()==1 && name(expression.front())) {
             for(const auto& parameter:parameters) if(parameter.type=="currency" && parameter.name.compare(expression.front().value,Qt::CaseInsensitive)==0) return "CURRENCY_REAL";
         }
+        if(expression.size()==1 && name(expression.front()) && fields.value(expression.front().value.toCaseFolded())=="CURRENCY_REAL") return "CURRENCY_REAL";
+        if(expression.size()==3 && name(expression.front()) && symbol(expression[1],".") && name(expression.back()) && fields.value((expression.front().value+'.'+expression.back().value).toCaseFolded())=="CURRENCY_REAL") return "CURRENCY_REAL";
         if(expression.size()<4 || expression.front().kind!=Token::Word || !symbol(expression[1],"(") || !symbol(expression.back(),")")) return {};
         const bool currency=expression.front().value.compare("CCur",Qt::CaseInsensitive)==0;
         const bool sum=expression.front().value.compare("Sum",Qt::CaseInsensitive)==0;
@@ -717,7 +719,9 @@ AccessQueryPlan compileJoinedUpdate(const QVector<Token>& tokens,qsizetype start
 }
 }
 QString accessLikePattern(const QString& value) { return pattern(value); }
-AccessQueryPlan compileAccessQuery(const QString& source) {
+static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields);
+AccessQueryPlan compileAccessQuery(const QString& source) { return compileCurrencyQuery(source,{}); }
+static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields) {
     auto tokens = tokenize(source);
     require(!tokens.empty(), "Jet SQL: empty query");
     AccessQueryPlan plan;
@@ -758,7 +762,7 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
         }
     }
     require(pos < tokens.size(), "Jet SQL: query body required");
-    plan.resultTypes=currencyProjectionTypes(tokens,pos,plan.parameters);
+    plan.resultTypes=currencyProjectionTypes(tokens,pos,plan.parameters,fields);
     if (tokens[pos].kind==Token::Word && tokens[pos].value.compare("UPDATE",Qt::CaseInsensitive)==0) {
         for (auto i=pos+1;i<tokens.size();++i) {
             if (tokens[i].kind==Token::Word && tokens[i].value.compare("SET",Qt::CaseInsensitive)==0) break;
@@ -927,7 +931,45 @@ AccessQueryPlan compileAccessQuery(const QString& source) {
         if (plan.topLimit || !plan.rightJoinSql.isEmpty()) throw VbaRuntimeError(3251,"Make-table TOP/RIGHT JOIN materialization unsupported");
         plan.sql="CREATE TABLE "+identifier(plan.makeTable)+" AS "+plan.sql;
     }
+    plan.source=source; plan.compiledSql=plan.sql;
     return plan;
+}
+static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPlan& input) {
+    if(input.source.isEmpty()) return input;
+    if(input.sql!=input.compiledSql) { auto changed=input; changed.resultTypes.clear(); changed.source.clear(); return changed; }
+    const auto source=input.currencyContextResolved ? compileAccessQuery(input.source) : input;
+    if(!source.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) return source;
+    const auto tokens=tokenize(source.source);
+    const auto word=[&](qsizetype i,const char* value) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0; };
+    const auto name=[&](qsizetype i) { return i<tokens.size() && (tokens[i].kind==Token::Word || tokens[i].kind==Token::Identifier); };
+    qsizetype body=0;
+    if(word(0,"PARAMETERS")) { while(body<tokens.size() && !symbol(tokens[body],";")) ++body; ++body; }
+    if(!word(body,"SELECT")) return source;
+    qsizetype from=-1; int depth=0;
+    for(qsizetype i=body+1;i<tokens.size();++i) {
+        if(word(i,"SELECT") || word(i,"HAVING") || word(i,"UNION") || word(i,"INTERSECT") || word(i,"EXCEPT")) return source;
+        if(symbol(tokens[i],"(")) ++depth;
+        else if(symbol(tokens[i],")")) --depth;
+        else if(depth==0 && word(i,"FROM")) { if(from>=0) return source; from=i; }
+        if(from>=0 && word(i,"SUM") && i+1<tokens.size() && symbol(tokens[i+1],"(")) return source;
+    }
+    if(from<0 || !name(from+1)) return source;
+    const auto boundary=[&](qsizetype i) { return i>=tokens.size() || word(i,"WHERE") || word(i,"GROUP") || word(i,"ORDER") || word(i,"LIMIT") || symbol(tokens[i],";"); };
+    qsizetype next=from+2; QString alias;
+    if(word(next,"AS")) { ++next; if(!name(next)) return source; alias=tokens[next++].value; }
+    else if(!boundary(next) && name(next)) alias=tokens[next++].value;
+    if(!boundary(next)) return source;
+    QString table;
+    for(const auto& candidate:db.tables()) if(candidate.compare(tokens[from+1].value,Qt::CaseInsensitive)==0) { table=candidate; break; }
+    if(table.isEmpty()) return source;
+    QMap<QString,QString> fields;
+    const auto types=sqliteColumnTypes(db,table);
+    for(auto it=types.cbegin();it!=types.cend();++it) if(it.value()=="CURRENCY_REAL") {
+        fields.insert(it.key(),it.value()); fields.insert(table.toCaseFolded()+'.'+it.key(),it.value());
+        if(!alias.isEmpty()) fields.insert(alias.toCaseFolded()+'.'+it.key(),it.value());
+    }
+    if(fields.isEmpty()) return source;
+    auto resolved=compileCurrencyQuery(source.source,fields); resolved.currencyContextResolved=true; return resolved;
 }
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     if (plan.updateTarget.isEmpty()) return plan.sql;
@@ -946,7 +988,8 @@ QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     sql.replace(identifier(plan.updateIdentity),identifier(identity));
     return sql;
 }
-AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& criteria) {
+AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& untyped,const QString& criteria) {
+    const auto source=resolveCurrencyQuery(db,untyped);
     if (criteria.trimmed().isEmpty()) return source;
     if (!source.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) throw VbaRuntimeError(3065,"Filter source requires SELECT");
     installJetSqlFunctions(db);
@@ -959,6 +1002,7 @@ AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& sou
     filtered.sql.replace(filtered.sql.indexOf(marker),marker.size(),"FROM ("+sql+") AS "+identifier("__la_filter_source"));
     filtered.parameters=source.parameters;
     filtered.resultTypes=source.resultTypes;
+    filtered.source.clear(); filtered.compiledSql.clear();
     return filtered;
 }
 int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
@@ -1158,8 +1202,9 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
         throw VbaRuntimeError(3146,"SQL operation failed");
 }
 namespace {
-struct PreparedAccessQuery { QSqlQuery query; bool hiddenRank; };
-PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& plan) {
+struct PreparedAccessQuery { QSqlQuery query; bool hiddenRank; QVector<QString> types; };
+PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& untyped) {
+    const auto plan=resolveCurrencyQuery(db,untyped);
     if (!plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
         throw VbaRuntimeError(3065,"Query result requires SELECT");
     const bool topOne=useTopOneBoundary(db,plan);
@@ -1167,7 +1212,7 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& pl
     if (missingSqlDependency(db,source)) throw VbaRuntimeError(3078,"SQL dependency unavailable");
     QSqlQuery query(db);
     if (!query.prepare(resolveQueryOrigins(db,source))) failAccessQuery(query);
-    return {std::move(query),plan.hiddenRank && !topOne};
+    return {std::move(query),plan.hiddenRank && !topOne,plan.resultTypes};
 }
 }
 QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan) {
@@ -1204,11 +1249,11 @@ AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan&
     AccessQueryResult result;
     const int count = query.record().count() - (prepared.hiddenRank ? 1 : 0);
     for (int i = 0; i < count; ++i) result.columns.append(query.record().fieldName(i));
-    if(plan.resultTypes.size()==count) {
+    if(prepared.types.size()==count) {
         QMap<QString,int> names;
         for(const auto& column:result.columns) ++names[column.toCaseFolded()];
-        for(int i=0;i<count;++i) if(!plan.resultTypes[i].isEmpty() && names.value(result.columns[i].toCaseFolded())==1)
-            result.types.insert(result.columns[i].toCaseFolded(),plan.resultTypes[i]);
+        for(int i=0;i<count;++i) if(!prepared.types[i].isEmpty() && names.value(result.columns[i].toCaseFolded())==1)
+            result.types.insert(result.columns[i].toCaseFolded(),prepared.types[i]);
     }
     while (query.next()) {
         if (prepared.hiddenRank && query.value(count).toLongLong() > plan.topLimit) break;

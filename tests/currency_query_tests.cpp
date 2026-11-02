@@ -12,6 +12,7 @@
 #undef NDEBUG
 #endif
 #include <cassert>
+#include <optional>
 
 int main(int argc,char** argv) {
     QApplication app(argc,argv); assert(argc==2);
@@ -58,6 +59,50 @@ End Function
         for(int i=0;i<9;++i) assert(sql.next() && linaccess::currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==(i<6 ? 1000 : i==6 ? 5497558138879999LL : 2500));
         assert(!sql.next()); sql.finish(); assert(sql.exec("SELECT amount FROM cash") && sql.next() && sql.value(0).toDouble()==0.1); sql.finish();
         model->member("Undo",{}); assert(!form.hasUnsavedChanges() && report.close() && form.close()); return 0;
+    }
+    if(QString::fromLatin1(argv[1])=="schema") {
+        assert(sql.exec("INSERT INTO cash VALUES(0.2),(-0.3),(NULL)"));
+        auto database=linaccess::makeDaoDatabase(db);
+        const auto open=[&](const std::string& source) { return database->member("OpenRecordset",{VbaValue::string(source)}).object; };
+        auto rows=open("SELECT amount FROM cash ORDER BY rowid"); auto field=rows->member("Fields",{VbaValue::string("amount")}).object;
+        assert(field->member("Type",{}).number==5);
+        for(const auto expected:std::vector<std::optional<std::int64_t>>{1000,2000,-3000,{}}) {
+            const auto value=field->member("Value",{}); assert(expected ? value.kind==VbaValue::Kind::Currency && value.currencyUnits==*expected : value.kind==VbaValue::Kind::Null); rows->member("MoveNext",{});
+        }
+        rows->member("Close",{});
+        for(const auto* source:{"SELECT cash.amount AS money FROM cash WHERE rowid=1","SELECT c.amount AS money FROM cash AS c WHERE rowid=1","SELECT Sum(c.amount) AS money FROM cash AS c"}) {
+            rows=open(source); field=rows->member("Fields",{VbaValue::string("money")}).object;
+            assert(field->member("Type",{}).number==5 && field->member("Value",{}).kind==VbaValue::Kind::Currency); rows->member("Close",{});
+        }
+        const auto base=linaccess::compileAccessQuery("SELECT Sum(amount) AS total FROM cash");
+        const auto filtered=linaccess::filterAccessQueryPlan(db,base,"total=0");
+        auto result=linaccess::executeAccessQueryPlan(db,filtered,{}); assert(result.rows.size()==1 && result.rows[0][0].toDouble()==0 && result.types.value("total")=="CURRENCY_REAL");
+        auto modified=linaccess::compileAccessQuery("SELECT amount FROM cash"); modified.sql="SELECT 2 AS amount";
+        result=linaccess::executeAccessQueryPlan(db,modified,{}); assert(result.rows[0][0].toInt()==2 && result.types.isEmpty());
+        modified=linaccess::compileAccessQuery("SELECT CCur('0.1') AS amount"); modified.sql="SELECT 2 AS amount";
+        result=linaccess::executeAccessQueryPlan(db,modified,{}); assert(result.rows[0][0].toInt()==2 && result.types.isEmpty());
+        auto resolved=linaccess::filterAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT amount FROM cash"),{});
+        auto changedResolved=resolved; changedResolved.sql="SELECT 2 AS amount";
+        result=linaccess::executeAccessQueryPlan(db,changedResolved,{}); assert(result.rows[0][0].toInt()==2 && result.types.isEmpty());
+        assert(sql.exec("UPDATE _la_table_schema SET definition=replace(definition,'CURRENCY','FLOAT') WHERE table_name='cash'"));
+        result=linaccess::executeAccessQueryPlan(db,resolved,{}); assert(result.types.isEmpty());
+        assert(sql.exec("UPDATE _la_table_schema SET definition=replace(definition,'FLOAT','CURRENCY') WHERE table_name='cash'"));
+        result=linaccess::executeAccessQueryPlan(db,resolved,{}); assert(result.types.value("amount")=="CURRENCY_REAL");
+        assert(sql.exec("CREATE TABLE ordinary(amount REAL)")); assert(sql.exec("INSERT INTO ordinary VALUES(0.1),(0.2),(-0.3)"));
+        for(const auto* source:{"SELECT Sum(amount) AS total FROM ordinary","SELECT Sum(amount) AS total FROM cash HAVING 1","SELECT cash.amount FROM cash JOIN ordinary ON 1"}) {
+            const auto plan=linaccess::compileAccessQuery(source); assert(linaccess::executeAccessQueryPlan(db,plan,{}).types.isEmpty());
+        }
+        const QByteArray formLayout="Begin Form\nRecordSource =\"SELECT amount FROM cash WHERE rowid=1\"\nBegin Section\nBegin TextBox\nName =\"amount\"\nControlSource =\"amount\"\nEnd\nEnd\nEnd\n";
+        AccessFormPreview form("implicit_currency",formLayout,{},db); form.show(); QApplication::processEvents(); auto model=makePreviewFormObject(form);
+        assert(model->item("amount").kind==VbaValue::Kind::Currency && model->item("amount").currencyUnits==1000);
+        assert(form.findChild<QLineEdit*>("access-control-amount")->isReadOnly()); assert(form.close());
+        const QByteArray reportLayout="Begin Report\nRecordSource =\"SELECT Sum(amount) AS total FROM cash\"\nBegin Section\nBegin TextBox\nName =\"total\"\nControlSource =\"total\"\nEnd\nEnd\nEnd\n";
+        AccessFormPreview report("implicit_sum",reportLayout,{},db); report.show(); QApplication::processEvents();
+        assert(makePreviewFormObject(report)->item("total").kind==VbaValue::Kind::Currency && makePreviewFormObject(report)->item("total").currencyUnits==0); assert(report.close());
+        assert(db.transaction()); assert(sql.exec("UPDATE cash SET amount=1.234567 WHERE rowid=1"));
+        rows=open("SELECT amount FROM cash WHERE rowid=1"); int error=0;
+        try { (void)rows->member("Fields",{VbaValue::string("amount")}).object->member("Value",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==13);
+        rows->member("Close",{}); assert(db.rollback()); return 0;
     }
     assert(QString::fromLatin1(argv[1])=="results");
     auto database=linaccess::makeDaoDatabase(db);

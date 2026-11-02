@@ -770,3 +770,10 @@ Currency/Null and diagnosing overflow/output range. Actual SQL/DAO/Qt grouping/
 cancellation/parameter/empty/report tests and all 43 independent original Currency
 CSV sums pass. General implicit field/view/complex aggregate inference and full
 SQL money/Windows semantics remain open. See [CURRENCY_SUM_RUNTIME.md](CURRENCY_SUM_RUNTIME.md).
+
+Simple single-physical-table query projections now use verified live Currency
+metadata for plain/qualified/aliased fields and exact Sum(column), carried into
+DAO and read-only Qt controls. Plan changes/schema refresh invalidate stale
+hints. All 43 original sums pass without explicit casts. Joins/views/HAVING/
+nested/complex/action SQL typing and full money/Windows identity remain open.
+See [CURRENCY_SCHEMA_QUERIES_RUNTIME.md](CURRENCY_SCHEMA_QUERIES_RUNTIME.md).

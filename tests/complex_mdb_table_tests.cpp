@@ -122,7 +122,7 @@ int main(int argc, char** argv) {
                         }
                         const auto quote=[](QString value) { return '['+value.replace(']',"]]")+']'; };
                         const auto field=quote(schema.columns[i].name);
-                        const auto plan=linaccess::compileAccessQuery("SELECT Sum(CCur("+field+")) AS total FROM "+quote(table)+" WHERE "+field+" IS NOT NULL");
+                        const auto plan=linaccess::compileAccessQuery("SELECT Sum("+field+") AS total FROM "+quote(table)+" WHERE "+field+" IS NOT NULL");
                         if(expected<=-5497558138880000LL || expected>=5497558138880000LL) {
                             int error=0; try { (void)linaccess::executeAccessQueryPlan(db,plan,{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
                             assert(error==3251 || error==6); ++unsupportedCurrencySums;
