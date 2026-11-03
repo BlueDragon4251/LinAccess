@@ -360,6 +360,8 @@ Unterstützung, Tests und offene Grenzen stehen unter [DAO-Laufzeit](docs/DAO_RU
 `Recordset.GetRows(Anzahl)` liefert bei ausdrücklich positiver Zeilenzahl echte
 zweidimensionale Variant-Arrays mit typisierten Feldwerten; VBA-Indizierung,
 Dimensionsgrenzen und mehrdimensionales `ReDim Preserve` sind nativ angebunden.
+`ReDim ... As Typ` prüft außerdem primitive Elementtypen in vorhandenen
+Variant-Variablen; feste/typisierte Array-Deklarationen sind noch nicht vollständig.
 Optionale Defaults und vollständige DAO-/Array-Parität bleiben offen;
 siehe [Datenübergabe](docs/DAO_GETROWS_RUNTIME.md).
 

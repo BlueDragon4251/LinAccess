@@ -8,10 +8,10 @@ class ArrayStorage final : public VbaObject {
 public:
     const std::vector<VbaValue> values;
     const std::vector<VbaArrayDimension> bounds;
-    const bool strings;
+    const std::string elementType;
     const std::shared_ptr<const char> allocation;
-    ArrayStorage(std::vector<VbaValue> elements,std::vector<VbaArrayDimension> dimensions,bool stringElements=false,std::shared_ptr<const char> identity={})
-        :values(std::move(elements)),bounds(std::move(dimensions)),strings(stringElements),allocation(identity ? std::move(identity) : std::make_shared<const char>(0)) {}
+    ArrayStorage(std::vector<VbaValue> elements,std::vector<VbaArrayDimension> dimensions,std::string type="variant",std::shared_ptr<const char> identity={})
+        :values(std::move(elements)),bounds(std::move(dimensions)),elementType(std::move(type)),allocation(identity ? std::move(identity) : std::make_shared<const char>(0)) {}
     VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw VbaRuntimeError(13,"Array is not an object"); }
 };
 const ArrayStorage& storage(const VbaValue& value) {
@@ -25,9 +25,14 @@ std::vector<VbaArrayDimension> singleDimension(int lower,std::size_t count) {
     if(upper<std::numeric_limits<std::int32_t>::min() || upper>std::numeric_limits<std::int32_t>::max()) throw VbaRuntimeError(6,"Array bound overflow");
     return {{lower,static_cast<int>(upper)}};
 }
-VbaValue array(std::vector<VbaValue> values,std::vector<VbaArrayDimension> bounds,bool strings=false,std::shared_ptr<const char> allocation={}) {
+VbaValue array(std::vector<VbaValue> values,std::vector<VbaArrayDimension> bounds,std::string elementType="variant",std::shared_ptr<const char> allocation={}) {
+    if(elementType=="byte" && bounds.size()==1 && bounds[0].lower==0) {
+        std::vector<unsigned char> bytes; bytes.reserve(values.size());
+        for(const auto& value:values) bytes.push_back(static_cast<unsigned char>(value.number));
+        return VbaValue::byteArray(std::move(bytes));
+    }
     VbaValue value; value.kind=VbaValue::Kind::Array;
-    value.object=std::make_shared<ArrayStorage>(std::move(values),std::move(bounds),strings,std::move(allocation)); return value;
+    value.object=std::make_shared<ArrayStorage>(std::move(values),std::move(bounds),std::move(elementType),std::move(allocation)); return value;
 }
 std::size_t boundedShapeSize(const std::vector<VbaArrayDimension>& bounds) {
     if(bounds.empty() || bounds.size()>60) throw VbaRuntimeError(9,"Array dimension count out of range");
@@ -74,14 +79,30 @@ VbaValue makeVbaArrayWithBounds(std::vector<VbaValue> values,std::vector<VbaArra
 VbaValue makeVbaStringArray(std::vector<std::string> values) {
     std::vector<VbaValue> elements; elements.reserve(values.size());
     for(auto& value:values) elements.push_back(VbaValue::string(std::move(value)));
-    auto bounds=singleDimension(0,elements.size()); return array(std::move(elements),std::move(bounds),true);
+    auto bounds=singleDimension(0,elements.size()); return array(std::move(elements),std::move(bounds),"string");
 }
 bool sameVbaArrayAllocation(const VbaValue& left,const VbaValue& right) {
     return left.kind==VbaValue::Kind::Array && right.kind==VbaValue::Kind::Array && storage(left).allocation==storage(right).allocation;
 }
 int vbaArrayType(const VbaValue& value) {
     if(value.kind==VbaValue::Kind::ByteArray) return 8209;
-    return storage(value).strings ? 8200 : 8204;
+    const auto& type=storage(value).elementType;
+    if(type=="byte") return 8209;
+    if(type=="integer") return 8194;
+    if(type=="long") return 8195;
+    if(type=="single") return 8196;
+    if(type=="double") return 8197;
+    if(type=="currency") return 8198;
+    if(type=="date") return 8199;
+    if(type=="string") return 8200;
+    if(type=="boolean") return 8203;
+    return 8204;
+}
+std::string vbaArrayTypeName(const VbaValue& value) {
+    if(value.kind==VbaValue::Kind::ByteArray) return "Byte()";
+    auto type=storage(value).elementType;
+    if(!type.empty()) type[0]=static_cast<char>(type[0]-'a'+'A');
+    return type+"()";
 }
 std::size_t vbaArrayRank(const VbaValue& value) { return value.kind==VbaValue::Kind::ByteArray ? 1 : storage(value).bounds.size(); }
 std::size_t vbaArraySize(const VbaValue& value) { return value.kind==VbaValue::Kind::ByteArray ? value.bytes.size() : storage(value).values.size(); }
@@ -91,47 +112,36 @@ VbaValue vbaArrayLinearElement(const VbaValue& value,std::size_t index) {
     return value.kind==VbaValue::Kind::ByteArray ? VbaValue::byte(value.bytes[index]) : storage(value).values[index];
 }
 VbaValue resizeVbaArray(const VbaValue& value,int lowerBound,int upperBound,bool preserve) {
-    const bool bytes=value.kind==VbaValue::Kind::ByteArray;
-    const bool strings=value.kind==VbaValue::Kind::Array && storage(value).strings;
-    if((bytes || strings) && !preserve) throw VbaRuntimeError(3251,"Non-Preserve typed array resize is not implemented");
-    if(bytes && lowerBound!=0) throw VbaRuntimeError(9,"Preserve cannot change the Byte array lower bound");
-    const auto count=static_cast<std::int64_t>(upperBound)-lowerBound+1;
-    if(count<=0) throw VbaRuntimeError(9,"Invalid array bounds");
-    if(count>1000000) throw VbaRuntimeError(3251,"Array allocation exceeds the supported runtime limit");
-    if(bytes) {
-        auto result=value.bytes; result.resize(static_cast<std::size_t>(count),0);
-        return VbaValue::byteArray(std::move(result));
-    }
-    if(preserve && value.kind!=VbaValue::Kind::Empty && value.kind!=VbaValue::Kind::Array) throw VbaRuntimeError(13,"Preserve requires an array or uninitialized Variant");
-    if(preserve && value.kind==VbaValue::Kind::Array && (storage(value).bounds.size()!=1 || storage(value).bounds[0].lower!=lowerBound))
-        throw VbaRuntimeError(9,"Preserve cannot change rank or lower bound");
-    std::vector<VbaValue> values(static_cast<std::size_t>(count),strings ? VbaValue::string("") : VbaValue::empty());
-    if(preserve && value.kind==VbaValue::Kind::Array) {
-        const auto& previous=storage(value).values;
-        std::copy_n(previous.begin(),std::min(previous.size(),values.size()),values.begin());
-    }
-    return array(std::move(values),{{lowerBound,upperBound}},strings);
+    return resizeVbaArrayWithBounds(value,{{lowerBound,upperBound}},preserve);
 }
-VbaValue resizeVbaArrayWithBounds(const VbaValue& value,std::vector<VbaArrayDimension> bounds,bool preserve) {
-    if(bounds.size()==1) return resizeVbaArray(value,bounds[0].lower,bounds[0].upper,preserve);
+VbaValue resizeVbaArrayWithBounds(const VbaValue& value,std::vector<VbaArrayDimension> bounds,bool preserve,std::string elementType) {
     const auto count=boundedShapeSize(bounds);
     for(const auto& bound:bounds) if(bound.upper<bound.lower) throw VbaRuntimeError(9,"Invalid ReDim bounds");
-    if(value.kind==VbaValue::Kind::ByteArray || (value.kind==VbaValue::Kind::Array && storage(value).strings))
-        throw VbaRuntimeError(3251,"Multidimensional typed array resize is not implemented");
-    if(preserve && value.kind!=VbaValue::Kind::Empty && value.kind!=VbaValue::Kind::Array) throw VbaRuntimeError(13,"Preserve requires an array or uninitialized Variant");
-    if(preserve && value.kind==VbaValue::Kind::Array) {
-        const auto& original=storage(value);
-        if(original.bounds.size()!=bounds.size()) throw VbaRuntimeError(9,"Preserve cannot change array rank");
+    const bool originalArray=isVbaArray(value);
+    const auto previousType=value.kind==VbaValue::Kind::ByteArray ? std::string("byte")
+        : value.kind==VbaValue::Kind::Array ? storage(value).elementType : std::string("variant");
+    if(elementType.empty()) elementType=previousType;
+    if(elementType!="variant" && elementType!="byte" && elementType!="integer" && elementType!="long" && elementType!="single"
+        && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string")
+        throw VbaRuntimeError(3251,"Array element type is not implemented");
+    if(preserve && value.kind!=VbaValue::Kind::Empty && !originalArray) throw VbaRuntimeError(13,"Preserve requires an array or uninitialized Variant");
+    if(preserve && originalArray) {
+        if(elementType!=previousType) throw VbaRuntimeError(13,"Preserve cannot change array element type");
+        const auto previousBounds=value.kind==VbaValue::Kind::ByteArray ? singleDimension(0,value.bytes.size()) : storage(value).bounds;
+        if(previousBounds.size()!=bounds.size()) throw VbaRuntimeError(9,"Preserve cannot change array rank");
         for(std::size_t dimension=0;dimension<bounds.size();++dimension)
-            if(bounds[dimension].lower!=original.bounds[dimension].lower || (dimension+1<bounds.size() && bounds[dimension].upper!=original.bounds[dimension].upper))
+            if(bounds[dimension].lower!=previousBounds[dimension].lower || (dimension+1<bounds.size() && bounds[dimension].upper!=previousBounds[dimension].upper))
                 throw VbaRuntimeError(9,"Preserve can resize only the last upper bound");
     }
-    std::vector<VbaValue> values(count,VbaValue::empty());
-    if(preserve && value.kind==VbaValue::Kind::Array) {
-        const auto& previous=storage(value).values;
-        std::copy_n(previous.begin(),std::min(previous.size(),values.size()),values.begin());
+    if(elementType=="byte" && bounds.size()==1 && bounds[0].lower==0) {
+        std::vector<unsigned char> bytes(count,0);
+        if(preserve && value.kind==VbaValue::Kind::ByteArray) std::copy_n(value.bytes.begin(),std::min(count,value.bytes.size()),bytes.begin());
+        return VbaValue::byteArray(std::move(bytes));
     }
-    return array(std::move(values),std::move(bounds));
+    const auto initial=elementType=="variant" ? VbaValue::empty() : coerceVbaModuleValue(VbaValue::empty(),elementType);
+    std::vector<VbaValue> values(count,initial);
+    if(preserve && originalArray) for(std::size_t i=0;i<std::min(count,vbaArraySize(value));++i) values[i]=vbaArrayLinearElement(value,i);
+    return array(std::move(values),std::move(bounds),std::move(elementType));
 }
 VbaValue vbaArrayBound(const VbaValue& value,bool upper,int dimension) {
     if(!isVbaArray(value)) throw VbaRuntimeError(13,"Array required");
@@ -151,7 +161,7 @@ VbaValue withVbaArrayElement(const VbaValue& value,const std::vector<VbaValue>& 
         return VbaValue::byteArray(std::move(bytes));
     }
     const auto& original=storage(value); auto values=original.values;
-    values[index]=original.strings ? coerceVbaModuleValue(scalarVbaValue(element),"string") : element;
-    return array(std::move(values),original.bounds,original.strings,original.allocation);
+    values[index]=original.elementType=="variant" ? element : coerceVbaModuleValue(scalarVbaValue(element),original.elementType);
+    return array(std::move(values),original.bounds,original.elementType,original.allocation);
 }
 }

@@ -27,14 +27,14 @@ copies retain their previous elements and bounds. `Erase a` releases this Varian
 array and restores Empty; a subsequent ReDim Preserve can allocate it again.
 
 This path targets variables declared As Variant (or implicit Variant variables).
-Typed array declarations, non-Preserve String/Byte resizing, Byte-array Erase
+Typed array declarations, full Byte-array Erase
 and multiple declarations per statement remain unsupported. An explicit 1,000,000-element allocation limit
 fails with 3251; this limit is a current implementation boundary, not Access parity.
 
 ## Remaining boundaries
 
 This is not complete VBA array parity. Typed/fixed/dynamic array declarations,
-full typed ReDim/Preserve/Erase semantics, full ParamArray semantics, full array For Each semantics,
+full typed declaration/Erase semantics, full ParamArray semantics, full array For Each semantics,
 full library/reference binding and native COM arrays remain open. Individual array elements
 passed to a ByRef parameter fail explicitly with 3251 rather than silently losing
 writes. Nested indexed assignment is not implemented. No Windows Access result
@@ -53,7 +53,8 @@ semantics. ReDim Preserve now resizes existing String/Byte arrays held by Varian
 variables, retaining type and prefix, defaulting new String cells to empty text
 and Byte cells to zero. Lower bounds cannot change (Byte remains zero-based).
 Value copies/ByVal inputs remain independent, while supported ByRef Variant
-writeback receives the resized value. Non-Preserve typed resizing remains 3251.
+writeback receives the resized value. Non-Preserve resizing now retains the element type and initializes new storage
+with the corresponding typed defaults.
 
 Array For Each supports named local/module variables and direct Array/Split/Filter
 results, with a Variant control variable. Named sources expose later element
@@ -91,10 +92,37 @@ Preserve changes execute in the existing core test target. No new targets.
 
 DAO GetRows constructs genuine zero-based field/record matrices from actual
 materialized SQL records; see [DAO_GETROWS_RUNTIME.md](DAO_GETROWS_RUNTIME.md).
-Typed/fixed/dynamic array declarations and multidimensional typed arrays remain
-open. This extends Variant values and ReDim, not the full declaration grammar
+Typed/fixed/dynamic array declarations, Object/user-defined/fixed-length String
+arrays and full Byte enumeration/Erase remain open. This extends Variant values and ReDim, not the full declaration grammar
 or native Windows SAFEARRAY/COM interoperability. Existing one-million-cell
 runtime allocation bounds remain explicit.
 
 Full desktop suite 48/48 (92.36 s), rebuilt GUI-free core 1/1 (1.50 s), Debian
 payload/permissions/Build-ID/pinned SQLite and all four fixture hashes pass.
+
+## Typed ReDim inside Variant variables (2026-11-03)
+
+Existing Variant variables accept ReDim bounds As Byte/Integer/Long/Single/
+Double/Currency/Date/Boolean/String/Variant. Storage retains the element type;
+VarType includes the correct array flag/subtype and TypeName reports the actual
+array type. Element assignment applies existing checked scalar conversion.
+Default cells are typed zero, False, empty text or Date serial zero; Variant
+cells remain Empty. Overflow/failed assignment preserves the old element.
+
+Without As, resize retains the previous element type. Non-Preserve clears old
+contents; Preserve retains values and rejects element-type changes (native 13)
+as well as the existing rank/lower/earlier-dimension restrictions. Variant
+container copies remain independent. Zero-based one-dimensional Byte values
+retain compact byte storage and native byte interoperability.
+
+This does not implement declaring a new typed array variable: typed ReDim on a
+fresh undeclared name refuses 3251. Existing scalar variables cannot become
+arrays through this route. Object/user-defined/fixed-length String arrays and
+full typed declaration grammar remain open. Join/Filter retain their one-
+dimensional String/Variant scope; newly supported numeric typed array kinds
+refuse 3251 on those operations. Exact Access error precedence remains open.
+
+Existing core tests execute typed integer matrices/defaults/coercion/overflow,
+Preserve/type guards, String reset, Byte/Currency/Date/Boolean values and metadata.
+Full desktop 48/48 (89.81 s), rebuilt GUI-free core 1/1 (1.45 s), Debian package
+and all four original fixture hashes pass. No new test targets.
