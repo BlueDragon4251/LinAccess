@@ -173,9 +173,14 @@ End Sub
     assert(owner.executeProcedure("QueuedThenOpen",none).status==linaccess::VbaExecutionStatus::Completed);
     auto target=makePreviewFormsObject(owner)->item("target").object;
     assert(target->item("value").asText()=="native" && caller->text()=="caller typed");
-    QApplication::processEvents();
-    assert(target->item("value").asText()=="later" && caller->text()=="caller typed");
+    auto* destination=activePreviewDocument(); assert(destination && destination!=&owner);
+    const QPointer<QLineEdit> destinationEditor=destination->findChild<QLineEdit*>("access-control-value"); assert(destinationEditor);
+    assert(QTest::qWaitFor([&] { return destinationEditor && destinationEditor->hasFocus() && destinationEditor->text()=="later"; },2000));
+    // Real focused typing changes Text first. Value stays original until the
+    // following Save validates the control; inactive-widget injection bypassed it.
+    assert(target->item("value").asText()=="native" && caller->text()=="caller typed");
     assert(owner.executeProcedure("SaveActive",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(target->item("value").asText()=="later");
     assert(query.exec("SELECT value FROM records WHERE id=1") && query.next() && query.value(0).toString()=="later"); query.finish();
     AccessFormPreview sibling("sibling",definition,{},db,nullptr,false,"[id]=3"); sibling.show(); QApplication::setActiveWindow(&sibling); QApplication::processEvents();
     assert(owner.executeProcedure("TypeActive",none).status==linaccess::VbaExecutionStatus::Completed);

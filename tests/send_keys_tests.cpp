@@ -50,6 +50,19 @@ DoCmd.GoToControl "first"
 SendKeys .keys,False
 End With
 End Sub
+Sub QueuedPair()
+DoCmd.GoToControl "first"
+SendKeys "abc",False
+DoCmd.SendKeys "XYZ",False
+End Sub
+Sub QueuedThenYield()
+DoCmd.GoToControl "first"
+SendKeys "abc",False
+DoCmd.SendKeys "XYZ",False
+DoEvents
+If Me.first.Text<>"abcXYZ" Then Err.Raise 5
+Me.Tag="queue-drained"
+End Sub
 Sub NullDefault()
 With CodeContextObject
 SendKeys .unset,False
@@ -88,13 +101,17 @@ End Sub
     assert(queued.executeProcedure("ObjectNullDefault",none).errorNumber==94);
     object->assignItem("keys",VbaValue::string("queued"));
     assert(queued.executeProcedure("Queued",none).status==linaccess::VbaExecutionStatus::Completed);
-    assert(first->text().isEmpty() && object->item("keys").asText()=="queued"); QApplication::processEvents(); assert(first->text()=="queued");
+    assert(first->text().isEmpty() && object->item("keys").asText()=="queued"); assert(QTest::qWaitFor([&] { return first->text()=="queued"; },2000));
     assert(queued.executeProcedure("Invalid",none).errorNumber==3251);
     assert(first->text()=="queued" && first->selectedText().isEmpty());
     first->clear(); assert(queued.executeProcedure("Unicode",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(first->text()==QString::fromUtf8("Grüße😀"));
     first->clear(); assert(queued.executeProcedure("Escaped",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(first->text()=="+^%(){}");
+    first->clear(); assert(queued.executeProcedure("QueuedPair",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(QTest::qWaitFor([&] { return first->text()=="abcXYZ"; },2000));
+    first->clear(); assert(queued.executeProcedure("QueuedThenYield",none).status==linaccess::VbaExecutionStatus::Completed);
+    assert(first->text()=="abcXYZ" && object->member("Tag",{}).asText()=="queue-drained");
     first->clear(); assert(queued.executeProcedure("Queued",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(queued.close()); QApplication::processEvents(); assert(first->text().isEmpty());
 

@@ -1144,6 +1144,7 @@ public:
         if(key=="quit") return Signature{{"Options"},0};
         if(key=="runsql") return Signature{{"SQLStatement","UseTransaction"},1};
         if(key=="runcommand") return Signature{{"Command"},1};
+        if(key=="sendkeys") return Signature{{"Keys","Wait"},1};
         if(key=="findrecord") return Signature{{"FindWhat","Match","MatchCase","Search","SearchAsFormatted","OnlyCurrentField","FindFirst"},1};
         if(key=="gotocontrol") return Signature{{"ControlName"},1};
         if(key=="requery") return Signature{{"ControlName"},0};
@@ -1153,7 +1154,7 @@ public:
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
-        if (key=="domenuitem" || key=="runcommand" || key=="findrecord" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="minimize" || key=="restore" || key=="runsql" || key=="selectobject")
+        if (key=="domenuitem" || key=="runcommand" || key=="sendkeys" || key=="findrecord" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="minimize" || key=="restore" || key=="runsql" || key=="selectobject")
             return dispatchPreviewDocumentCommand(preview,key.toStdString(),args);
         if(key=="opentable") {
             if(args.empty() || args.size()>3 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"OpenTable requires a table name and at most three arguments");

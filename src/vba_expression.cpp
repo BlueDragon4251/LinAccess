@@ -619,7 +619,7 @@ private:
                         if(peek().type==Token::Type::Word && index_+1<tokens_.size() && tokens_[index_+1].value==":=") {
                             argumentName=lower(consume().value); consume();
                         }
-                        const bool omitted=(missingDefaults || lower(member.value)=="openform" || lower(member.value)=="openreport" || lower(member.value)=="gotorecord" || lower(member.value)=="domenuitem" || lower(member.value)=="selectobject" || lower(member.value)=="close") && (nextSymbol(",") || nextSymbol(")"));
+                        const bool omitted=(missingDefaults || memberKey=="sendkeys" || lower(member.value)=="openform" || lower(member.value)=="openreport" || lower(member.value)=="gotorecord" || lower(member.value)=="domenuitem" || lower(member.value)=="selectobject" || lower(member.value)=="close") && (nextSymbol(",") || nextSymbol(")"));
                         args.push_back(omitted ? missingDefaults ? VbaValue::missing() : VbaValue::empty() : expression(1));
                         if(!argumentName.empty() && omitted) throw error("Named method argument requires a value",450);
                         argumentNames.push_back(std::move(argumentName)); omittedArguments.push_back(omitted);
