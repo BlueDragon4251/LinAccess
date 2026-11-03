@@ -1198,3 +1198,23 @@ menu selection/check state, database focus, stale disposed report entries and al
 prior cycling/cancellation cases; passes 1/1 (1.59 s), affected targets build.
 Full MDI/arrangement, hidden/modal/datasheet window-list and Access pixel/event
 oracle remain open. GUI-free runtime unchanged; no new target or full-suite repeat.
+
+
+## Native bounded Date Variant foundation (2026-11-03)
+
+The runtime now has a distinct Date Variant carrying an OLE Automation double,
+checked CDate from numeric/Empty/Boolean values or unambiguous Gregorian ISO text,
+and Date locals/module fields/parameters/function results. VarType/TypeName and
+numeric conversion preserve Date identity; Len(Date) is 8 and IsNumeric(Date) is
+false. Calendar functions accept the typed value. ISO text conversion handles
+the OLE negative-fraction convention; ordinary supported Date addition/subtraction
+preserves Date or yields a numeric date difference. Negative fractional arithmetic
+and text/date arithmetic remain explicit 3251 boundaries.
+
+This is a runtime foundation, not completed Date compatibility: Now/Date/Time
+still use their previous ISO text path until the adapters are migrated. Qt/DAO
+Date reads/writes, date literals, localized CDate/CStr, complete arithmetic and
+subsecond/OLE edge rules remain open. Rebuilt desktop suite passes 48/48 in one run (84.76 s), including the latest
+Window-menu/list paths; GUI-free build/test passes 1/1 (1.39 s). Debian package
+contents/permissions/Build-ID/backend checks and four fixture SHA-256 checks pass.
+No new test target. These checks verify the bounded foundation, not full Date parity.

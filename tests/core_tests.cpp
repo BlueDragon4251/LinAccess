@@ -465,6 +465,17 @@ void testRoundFunction() {
 void testCalendarFunctions() {
     using namespace linaccess; FakeForm host;
     const auto eval=[&](const std::string& source) { return evaluateVbaExpression(source,host,{}); };
+    assert(eval("VarType(CDate(2.5))=vbDate").truthy() && eval("TypeName(CDate(2.5))").asText()=="Date");
+    assert(!eval("IsNumeric(CDate(2.5))").truthy() && eval("Len(CDate(2.5))").asNumber()==8);
+    assert(eval("CDbl(CDate(2.5))").asNumber()==2.5);
+    assert(eval(R"(CDbl(CDate("1899-12-29 06:00:00")))").asNumber()==-1.25);
+    assert(eval(R"(CStr(CDate(-1.25)))").asText()=="1899-12-29 06:00:00");
+    assert(eval(R"(Year(CDate("2024-02-29")))").asNumber()==2024);
+    assert(eval(R"(CStr(CDate("2024-02-28")+1))").asText()=="2024-02-29");
+    assert(eval(R"(CDate("2024-03-01")-CDate("2024-02-28"))").asNumber()==2);
+    std::vector<VbaValue> dateArguments{eval("CDate(\"2024-02-28\")")};
+    const auto typed=executeVbaProcedureWithArguments("Function TypedDate(ByVal input As Date) As Date\nDim value As Date\nvalue=input+1\nTypedDate=value\nEnd Function","TypedDate",host,dateArguments);
+    assert(typed.status==VbaExecutionStatus::Completed && typed.typedReturnValue && typed.typedReturnValue->kind==VbaValue::Kind::Date && typed.typedReturnValue->asText()=="2024-02-29");
     for(const auto& [source,expected]:std::vector<std::pair<std::string,int>>{
         {R"(DatePart("q","2024-05-01"))",2},{R"(DatePart("y","2024-12-31"))",366},
         {R"(DatePart("w","2024-03-03",vbMonday))",7},{R"(DatePart("ww","2024-01-07"))",2},
@@ -488,6 +499,7 @@ void testCalendarFunctions() {
     assert(eval("Year(Null)").kind==VbaValue::Kind::Null && eval("Weekday(Null)").kind==VbaValue::Kind::Null);
     for(const auto& [source,wanted]:std::vector<std::pair<std::string,int>>{
         {R"(Year("2023-02-29"))",13},{R"(Hour("24:00:00"))",13},{"Year(1)",3251},{"Year()",450},
+        {"CDate(Null)",94},{"CDate(2958466)",6},{"CDate(-657435)",6},{"CDate(-1.25)+1",3251},
         {R"(DatePart("ww","2024-01-01",,vbFirstFourDays))",3251},{R"(DatePart("bad","2024-01-01"))",5},
         {R"(DateDiff("invalid","2024-01-01","2024-01-02"))",5},{R"(DateDiff("d",Null,"2024-01-02"))",94},
         {R"(DateDiff("s","0100-01-01","9999-12-31"))",6},{R"(Weekday("2024-01-01",8))",5},

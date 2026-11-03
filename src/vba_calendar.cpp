@@ -1,11 +1,15 @@
 #include "vba_calendar.hpp"
 #include <chrono>
 #include <limits>
+#include <cmath>
+#include <iomanip>
+#include <sstream>
 
 namespace linaccess {
 namespace {
 struct Parts { int year=1899,month=12,day=30,hour=0,minute=0,second=0; std::chrono::sys_days date; };
 Parts dateParts(const VbaValue& value) {
+    if(value.kind==VbaValue::Kind::Date) return dateParts(VbaValue::string(vbaDateText(value.number)));
     Parts result;
     if(value.kind!=VbaValue::Kind::Empty) {
         if(value.kind!=VbaValue::Kind::Text) throw VbaRuntimeError(3251,"Calendar input requires ISO text; numeric Date coercion is unsupported");
@@ -35,6 +39,31 @@ Parts dateParts(const VbaValue& value) {
     result.date=std::chrono::sys_days(date); return result;
 }
 std::int64_t floorWeeks(std::int64_t days) { auto weeks=days/7; if(days%7<0) --weeks; return weeks; }
+}
+VbaValue vbaDateValue(const VbaValue& input) {
+    const auto value=scalarVbaValue(input);
+    if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null Date conversion");
+    if(value.kind==VbaValue::Kind::Date) return value;
+    if(value.kind!=VbaValue::Kind::Text) return VbaValue::dateSerial(value.asNumber());
+    const auto parts=dateParts(value);
+    const auto epoch=std::chrono::sys_days(std::chrono::year(1899)/12/30);
+    const auto days=(parts.date-epoch).count();
+    const auto fraction=(parts.hour*3600+parts.minute*60+parts.second)/86400.0;
+    return VbaValue::dateSerial(days<0 ? days-fraction : days+fraction);
+}
+std::string vbaDateText(double serial) {
+    (void)VbaValue::dateSerial(serial); // Check before integral conversion.
+    const auto days=static_cast<int>(std::trunc(serial));
+    auto seconds=static_cast<int>(std::floor(std::abs(serial-days)*86400.0+0.000001));
+    if(seconds==86400) seconds=86399; // Keep whole-second display within the represented day.
+    const auto date=std::chrono::year_month_day(std::chrono::sys_days(std::chrono::year(1899)/12/30)+std::chrono::days(days));
+    std::ostringstream text; text.imbue(std::locale::classic()); text<<std::setfill('0');
+    if(days!=0 || seconds==0) text<<std::setw(4)<<int(date.year())<<'-'<<std::setw(2)<<unsigned(date.month())<<'-'<<std::setw(2)<<unsigned(date.day());
+    if(seconds) {
+        if(days!=0) text<<' ';
+        text<<std::setw(2)<<seconds/3600<<':'<<std::setw(2)<<(seconds/60)%60<<':'<<std::setw(2)<<seconds%60;
+    }
+    return text.str();
 }
 VbaValue vbaCalendarFunction(std::string_view name,const std::vector<VbaValue>& arguments) {
     if(name=="datepart") {

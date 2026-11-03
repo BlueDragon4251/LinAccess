@@ -371,6 +371,16 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         return VbaValue::string(left.text + right.text);
     if (left.kind==VbaValue::Kind::Currency && right.kind==VbaValue::Kind::Currency && (op=="+" || op=="-" || op=="*"))
         return currencyBinary(op,left,right);
+    if((left.kind==VbaValue::Kind::Date || right.kind==VbaValue::Kind::Date) && (op=="+" || op=="-")) {
+        if(left.kind==VbaValue::Kind::Text || right.kind==VbaValue::Kind::Text) throw error("Text/Date arithmetic coercion is not implemented",3251);
+        const auto a=left.asNumber(),b=right.asNumber();
+        if((left.kind==VbaValue::Kind::Date && a<0 && a!=std::trunc(a)) || (right.kind==VbaValue::Kind::Date && b<0 && b!=std::trunc(b)))
+            throw error("Negative fractional Date arithmetic is not validated",3251);
+        if(op=="-" && left.kind==VbaValue::Kind::Date && right.kind==VbaValue::Kind::Date) return VbaValue::numeric(a-b);
+        const auto result=op=="+" ? a+b : a-b;
+        if(result<0 && result!=std::trunc(result)) throw error("Negative fractional Date arithmetic is not validated",3251);
+        return VbaValue::dateSerial(result);
+    }
     const auto a = left.asNumber(), b = right.asNumber();
     double answer = 0;
     if (op == "+") answer = a + b;
@@ -778,6 +788,7 @@ private:
                     {"instr",{{"Start","String1","String2","Compare"},0}},
                     {"strcomp",{{"String1","String2","Compare"},2}},
                     {"rgb",{{"Red","Green","Blue"},3}}, {"qbcolor",{{"Color"},1}},
+                    {"cdate",{{"Expression"},1}},
                     {"datepart",{{"Interval","Date","FirstDayOfWeek","FirstWeekOfYear"},2}},
                     {"datediff",{{"Interval","Date1","Date2","FirstDayOfWeek","FirstWeekOfYear"},3}},
                     {"weekday",{{"Date","FirstDayOfWeek"},1}},
@@ -816,6 +827,11 @@ private:
                 args=std::move(ordered); omitted=std::move(missing); references=std::move(orderedRefs);
             }
             const auto one = args.size() == 1;
+            if(word=="cdate") {
+                if(!host_) return {};
+                if(args.size()!=1 || omitted[0]) throw error("CDate requires one argument",450);
+                return vbaDateValue(args[0]);
+            }
             if(word=="datepart" || word=="datediff" || word=="year" || word=="month" || word=="day" || word=="hour" || word=="minute" || word=="second" || word=="weekday") {
                 if(!host_) return {};
                 for(std::size_t i=0;i<omitted.size();++i) if(omitted[i]) {
@@ -989,7 +1005,7 @@ private:
                 if (word=="ccur") return convertCurrency(value);
                 const int type=value.kind==VbaValue::Kind::Empty ? 0 : value.kind==VbaValue::Kind::Null ? 1
                     : value.kind==VbaValue::Kind::Number ? (value.numericType==VbaValue::NumericType::Byte ? 17 : value.numericType==VbaValue::NumericType::Integer ? 2 : value.numericType==VbaValue::NumericType::Long ? 3 : value.numericType==VbaValue::NumericType::Single ? 4 : 5) : value.kind==VbaValue::Kind::Currency ? 6
-                    : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
+                    : value.kind==VbaValue::Kind::Date ? 7 : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
                     : (value.kind==VbaValue::Kind::Error || value.kind==VbaValue::Kind::Missing) ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : value.kind==VbaValue::Kind::Array ? vbaArrayType(value) : 11;
                 if (word=="vartype") return VbaValue::integer(static_cast<std::int16_t>(type));
                 if (type==9) {
@@ -997,7 +1013,7 @@ private:
                     throw error("Native object class name unavailable",3251);
                 }
                 return VbaValue::string(type==0 ? "Empty" : type==1 ? "Null" : type==5 ? "Double"
-                    : type==17 ? "Byte" : type==2 ? "Integer" : type==3 ? "Long" : type==4 ? "Single" : type==6 ? "Currency" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : type==8209 ? "Byte()" : type==8204 ? "Variant()" : type==8200 ? "String()" : "Boolean");
+                    : type==17 ? "Byte" : type==2 ? "Integer" : type==3 ? "Long" : type==4 ? "Single" : type==6 ? "Currency" : type==7 ? "Date" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : type==8209 ? "Byte()" : type==8204 ? "Variant()" : type==8200 ? "String()" : "Boolean");
             }
             if (word=="dsum" || word=="dcount") {
                 if (!host_) return {};
@@ -1393,6 +1409,7 @@ private:
                 if (word == "isempty") return VbaValue::logical(value.kind == VbaValue::Kind::Empty);
                 if (word == "len") {
                     const auto scalar=scalarObjectValue(value);
+                    if(scalar.kind==VbaValue::Kind::Date) return VbaValue::longInteger(8);
                     return scalar.kind==VbaValue::Kind::Null ? VbaValue{} : stringLongResult(vbaStringCodeUnits(scalar.asText()));
                 }
                 if (word == "cstr") {
@@ -1401,7 +1418,7 @@ private:
                     return VbaValue::string(value.asText());
                 }
                 if (word == "isnumeric") {
-                    try { (void)value.asNumber(); return VbaValue::logical(true); }
+                    try { const auto scalar=scalarObjectValue(value); if(scalar.kind==VbaValue::Kind::Date) return VbaValue::logical(false); (void)scalar.asNumber(); return VbaValue::logical(true); }
                     catch (...) { return VbaValue::logical(false); }
                 }
             }
@@ -1521,6 +1538,10 @@ VbaValue VbaValue::missing() { VbaValue v; v.kind=Kind::Missing; return v; }
 VbaValue VbaValue::empty() { VbaValue v; v.kind = Kind::Empty; return v; }
 VbaValue VbaValue::errorValue(int number) { VbaValue v; v.kind=Kind::Error; v.errorNumber=number; return v; }
 VbaValue VbaValue::reference(std::shared_ptr<VbaObject> value) { VbaValue v; v.kind = Kind::Object; v.object = std::move(value); return v; }
+VbaValue VbaValue::dateSerial(double value) {
+    if(!std::isfinite(value) || value<=-657435.0 || value>=2958466.0) throw error("Date serial out of range",6);
+    VbaValue result; result.kind=Kind::Date; result.number=value; return result;
+}
 VbaValue VbaValue::numeric(double value) { VbaValue v; v.kind = Kind::Number; v.number = value; return v; }
 VbaValue VbaValue::byte(unsigned char value) { auto v=numeric(value); v.numericType=NumericType::Byte; return v; }
 VbaValue VbaValue::single(float value) { auto v=numeric(value); v.numericType=NumericType::Single; return v; }
@@ -1590,6 +1611,7 @@ std::string VbaValue::asText() const {
     if (kind==Kind::Error || kind==Kind::Missing) throw error("Error Variant cannot be implicitly converted to text",13);
     if (kind==Kind::Object) return scalarObjectValue(*this).asText();
     if (kind == Kind::Text) return text;
+    if (kind==Kind::Date) return vbaDateText(number);
     if (kind==Kind::Currency) {
         const auto magnitude=currencyUnits<0 ? static_cast<std::uint64_t>(-(currencyUnits+1))+1 : static_cast<std::uint64_t>(currencyUnits);
         auto whole=std::to_string(magnitude/10000);
@@ -1611,7 +1633,7 @@ double VbaValue::asNumber() const {
     if (kind==Kind::Error || kind==Kind::Missing) throw error("Error Variant cannot be implicitly converted to number",13);
     if (kind==Kind::Object) return scalarObjectValue(*this).asNumber();
     if (kind == Kind::Empty) return 0;
-    if (kind == Kind::Number) return number;
+    if (kind == Kind::Number || kind==Kind::Date) return number;
     if (kind == Kind::Currency) return static_cast<double>(currencyUnits)/10000;
     if (kind == Kind::Boolean) return boolean ? -1.0 : 0.0; // VBA True = -1.
     if (kind == Kind::Null) throw error("VBA: Null kann nicht in Zahl umgewandelt werden",94);
