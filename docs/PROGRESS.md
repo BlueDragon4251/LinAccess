@@ -3055,3 +3055,17 @@ raises 3251 because Windows locale mapping is not implemented; malformed UTF-8
 raises 13. This replaces the former misleading unchanged/nonportable byte result,
 not a claim of full Unicode/collation parity. Existing core/DAO/query-model checks
 pass 3/3 (1.64 s). Desktop affected targets build; GUI-free build/test passes 1/1 (1.36 s). No new target/full-suite/package repeat.
+
+
+## Native bounded DatePart (2026-11-03)
+
+DatePart now returns actual Integer year/quarter/month/day-of-year/day/weekday/
+week/hour/minute/second values on the existing Gregorian ISO calendar path.
+Named Interval/Date/FirstDayOfWeek/FirstWeekOfYear arguments and optional holes
+are supported. Week numbering implements the Jan-1 rule with explicit weekday;
+other week rules/system regional settings raise 3251. Null date propagates Null;
+invalid interval/options and required omissions remain typed errors. Native SQL
+uses the shared evaluator. Core/DAO/query-model checks pass 3/3 (1.68 s),
+GUI-free build/test passes 1/1 (1.29 s), desktop affected targets build.
+No new target/full-suite/package repeat. Numeric Date coercion, actual Date
+Variants, localized input, Hijri and full Access week-number oracle remain open.

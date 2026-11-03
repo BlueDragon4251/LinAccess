@@ -461,6 +461,9 @@ void testCalendarFunctions() {
     using namespace linaccess; FakeForm host;
     const auto eval=[&](const std::string& source) { return evaluateVbaExpression(source,host,{}); };
     for(const auto& [source,expected]:std::vector<std::pair<std::string,int>>{
+        {R"(DatePart("q","2024-05-01"))",2},{R"(DatePart("y","2024-12-31"))",366},
+        {R"(DatePart("w","2024-03-03",vbMonday))",7},{R"(DatePart("ww","2024-01-07"))",2},
+        {R"(DatePart(Date:="2024-02-29 23:59:58",Interval:="s"))",58},
         {R"(Year("2024-02-29 23:59:58"))",2024},{R"(Month("2024-02-29"))",2},{R"(Day("2024-02-29"))",29},
         {R"(Hour("23:59:58"))",23},{R"(Minute("2024-02-29T23:59:58"))",59},{R"(Second("23:59:58"))",58},
         {R"(Weekday("2024-03-03"))",1},{R"(Weekday("2024-03-03",vbMonday))",7},{R"(Year(Empty))",1899}}) {
@@ -476,9 +479,11 @@ void testCalendarFunctions() {
     }
     assert(eval(R"(DateDiff("ww","2024-03-02","2024-03-03",vbMonday))").asNumber()==0);
     assert(eval(R"(DateDiff("ww","2024-03-02","2024-03-03",,vbFirstJan1))").asNumber()==1);
+    assert(eval("DatePart(\"m\",Null)").kind==VbaValue::Kind::Null);
     assert(eval("Year(Null)").kind==VbaValue::Kind::Null && eval("Weekday(Null)").kind==VbaValue::Kind::Null);
     for(const auto& [source,wanted]:std::vector<std::pair<std::string,int>>{
         {R"(Year("2023-02-29"))",13},{R"(Hour("24:00:00"))",13},{"Year(1)",3251},{"Year()",450},
+        {R"(DatePart("ww","2024-01-01",,vbFirstFourDays))",3251},{R"(DatePart("bad","2024-01-01"))",5},
         {R"(DateDiff("invalid","2024-01-01","2024-01-02"))",5},{R"(DateDiff("d",Null,"2024-01-02"))",94},
         {R"(DateDiff("s","0100-01-01","9999-12-31"))",6},{R"(Weekday("2024-01-01",8))",5},
         {R"(Weekday("2024-01-01",vbUseSystem))",3251}}) {

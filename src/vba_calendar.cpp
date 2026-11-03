@@ -37,6 +37,40 @@ Parts dateParts(const VbaValue& value) {
 std::int64_t floorWeeks(std::int64_t days) { auto weeks=days/7; if(days%7<0) --weeks; return weeks; }
 }
 VbaValue vbaCalendarFunction(std::string_view name,const std::vector<VbaValue>& arguments) {
+    if(name=="datepart") {
+        if(arguments.size()<2 || arguments.size()>4) throw VbaRuntimeError(450,"DatePart requires two to four arguments");
+        std::vector<VbaValue> args; for(const auto& value:arguments) args.push_back(scalarVbaValue(value));
+        if(args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null DatePart interval");
+        const auto option=[&](std::size_t index,int maximum) {
+            if(index>=args.size()) return 1;
+            const auto value=static_cast<int>(coerceVbaModuleValue(args[index],"long").number);
+            if(value==0) throw VbaRuntimeError(3251,"DatePart system calendar option requires a regional adapter");
+            if(value<1 || value>maximum) throw VbaRuntimeError(5,"Invalid DatePart calendar option");
+            return value;
+        };
+        const auto firstDay=option(2,7),firstWeek=option(3,3);
+        if(args[1].kind==VbaValue::Kind::Null) return {};
+        auto interval=args[0].asText(); for(auto& ch:interval) if(ch>='A' && ch<='Z') ch+=('a'-'A');
+        const auto date=dateParts(args[1]);
+        const auto january=std::chrono::sys_days(std::chrono::year(date.year)/std::chrono::January/1);
+        const auto dayOfYear=static_cast<int>((date.date-january).count())+1;
+        int result;
+        if(interval=="yyyy") result=date.year;
+        else if(interval=="q") result=(date.month-1)/3+1;
+        else if(interval=="m") result=date.month;
+        else if(interval=="y") result=dayOfYear;
+        else if(interval=="d") result=date.day;
+        else if(interval=="w") result=(static_cast<int>(std::chrono::weekday(date.date).c_encoding())+7-(firstDay-1))%7+1;
+        else if(interval=="ww") {
+            if(firstWeek!=1) throw VbaRuntimeError(3251,"Non-default first-week DatePart is not validated");
+            const auto offset=(static_cast<int>(std::chrono::weekday(january).c_encoding())+7-(firstDay-1))%7;
+            result=(dayOfYear-1+offset)/7+1;
+        } else if(interval=="h") result=date.hour;
+        else if(interval=="n") result=date.minute;
+        else if(interval=="s") result=date.second;
+        else throw VbaRuntimeError(5,"Invalid DatePart interval");
+        return VbaValue::integer(static_cast<std::int16_t>(result));
+    }
     const bool difference=name=="datediff",weekday=name=="weekday";
     if(arguments.size()<(difference?3u:1u) || arguments.size()>(difference?5u:weekday?2u:1u)) throw VbaRuntimeError(450,"Calendar function argument count invalid");
     std::vector<VbaValue> args; for(const auto& value:arguments) args.push_back(scalarVbaValue(value));

@@ -728,7 +728,7 @@ private:
                         argumentName=lower(consume().value); consume();
                     }
                     const auto start = index_;
-                    const bool builtinDefaults=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="weekday");
+                    const bool builtinDefaults=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="datepart" || word=="weekday");
                     const bool missing=nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";"));
                     args.push_back(missing ? (builtinDefaults ? VbaValue::empty() : VbaValue::missing()) : expression(1,word=="isobject"));
                     if(!argumentName.empty() && missing) throw error("Named argument requires a value",450);
@@ -778,6 +778,7 @@ private:
                     {"instr",{{"Start","String1","String2","Compare"},0}},
                     {"strcomp",{{"String1","String2","Compare"},2}},
                     {"rgb",{{"Red","Green","Blue"},3}}, {"qbcolor",{{"Color"},1}},
+                    {"datepart",{{"Interval","Date","FirstDayOfWeek","FirstWeekOfYear"},2}},
                     {"datediff",{{"Interval","Date1","Date2","FirstDayOfWeek","FirstWeekOfYear"},3}},
                     {"weekday",{{"Date","FirstDayOfWeek"},1}},
                     {"left",{{"String","Length"},2}}, {"left$",{{"String","Length"},2}},
@@ -815,10 +816,10 @@ private:
                 args=std::move(ordered); omitted=std::move(missing); references=std::move(orderedRefs);
             }
             const auto one = args.size() == 1;
-            if(word=="datediff" || word=="year" || word=="month" || word=="day" || word=="hour" || word=="minute" || word=="second" || word=="weekday") {
+            if(word=="datepart" || word=="datediff" || word=="year" || word=="month" || word=="day" || word=="hour" || word=="minute" || word=="second" || word=="weekday") {
                 if(!host_) return {};
                 for(std::size_t i=0;i<omitted.size();++i) if(omitted[i]) {
-                    if(i<(word=="datediff"?3u:1u)) throw error("Required calendar argument omitted",450);
+                    if(i<(word=="datediff"?3u:word=="datepart"?2u:1u)) throw error("Required calendar argument omitted",450);
                     args[i]=VbaValue::integer(1);
                 }
                 return vbaCalendarFunction(word,args);
