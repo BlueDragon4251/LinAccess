@@ -1828,3 +1828,13 @@ rows, pending inserts/deletes and new-record placeholder behavior remain bounded
 unsupported paths. See TABLE_DOCUMENT_RUNTIME.md. Full desktop 48/48 (91.33 s),
 GUI-free 1/1 (2.49 s), Debian checks and four fixture hashes pass.
 Theoretical checklist: 297 checked / 71 open scoped points.
+
+
+## Native table SortAscending/SortDescending (2026-11-03)
+
+Actual current-field SQL sorting retains the current record by primary key,
+including readonly tables and checked sole-record updates. Unrelated drafts are
+refused. Jet/Windows collation parity remains open. TABLE_DOCUMENT_RUNTIME.md
+records the scope. Existing main-window 1/1 (2.08 s); last full/package baseline
+e4e0900 / API 714a96e, 48/48 (91.33 s).
+Theoretical checklist: 298 checked / 71 open scoped points.

@@ -3760,3 +3760,19 @@ fixture hashes pass. Existing focused trio passes 3/3 (16.79 s), exercising
 300 actual SQL rows, named/default/relative targets, sole-record SQL persistence,
 constraint failure/retry and untouched multirow drafts. Fixtures explicitly sort
 ascending; production navigation follows the current view order. No new targets.
+
+
+## Native table sort commands (2026-11-03)
+
+Interpreted ascending/descending sort acts on the actual current field through
+Qt/SQL, retaining the primary-key record and field after fetching as needed.
+Readonly sorting works; a sole current edit is checked/saved, unrelated drafts
+are explicitly refused. See TABLE_DOCUMENT_RUNTIME.md.
+
+Existing main-window regression passes 1/1 (2.08 s): real ascending/descending
+SQL row order, readonly sorting, primary-key/current-field retention past the
+initial batch, checked sole-record persistence and refusal of unrelated drafts.
+Last complete suite/package baseline remains e4e0900 / private API 714a96e,
+48/48 (91.33 s), GUI-free core 1/1 (2.49 s). This controller change is
+focused-verified, without adding test targets.
+Theoretical checklist: 298 checked / 71 open scoped points.

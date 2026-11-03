@@ -446,3 +446,14 @@ fehlende sichere Identität und neue Platzhalterzeilen bleiben explizit begrenzt
 Details docs/TABLE_DOCUMENT_RUNTIME.md. Trio 3/3 (16.79 s), Vollsuite 48/48
 (91.33 s), GUI-freier Core 1/1 (2.49 s), Debian-Paket und vier Fixture-Hashes
 bestanden. Keine neuen Testtargets; auch vorherige Tabellenbefehle voll mitgeprüft.
+
+
+## Native Tabellen-Sortierbefehle (2026-11-03)
+
+RunCommand SortAscending/SortDescending sortiert das aktuelle Tabellenfeld über
+Qt/SQL. Primärschlüssel-Datensatz und Spalte bleiben nach begrenztem Nachladen
+erhalten. Readonly-Sortierung und geprüftes Speichern eines allein geänderten
+aktuellen Datensatzes funktionieren; fremde Entwürfe bleiben geschützt.
+Details docs/TABLE_DOCUMENT_RUNTIME.md, MainWindow 1/1 (2.08 s). Vollsuite/Paket
+zuletzt e4e0900 / privat 714a96e, 48/48 (91.33 s), GUI-frei 1/1 (2.49 s).
+Dieses Controller-Inkrement ist gezielt geprüft; keine neuen Testtargets.

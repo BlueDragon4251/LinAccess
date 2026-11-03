@@ -177,3 +177,23 @@ fixture hashes pass. Existing focused trio passes 3/3 (16.79 s), exercising
 300 actual SQL rows, named/default/relative targets, sole-record SQL persistence,
 constraint failure/retry and untouched multirow drafts. Fixtures explicitly sort
 ascending; production navigation follows the current view order. No new targets.
+
+
+## Native table sort commands (2026-11-03)
+
+DoCmd/Application RunCommand acCmdSortAscending/acCmdSortDescending sort the
+actual native table by its active column through Qt/SQL and update the real
+header indicator. A sole changed existing current record can be checked/saved
+first; unrelated dirty rows and insert/delete batches remain explicit 3251.
+The active field and primary-key record are restored after SQL sorting, fetching
+rows as necessary within the bounded native search budget. Tables without a
+primary key do not claim stable current-record identity across the sort.
+Collation and NULL ordering use the existing native project SQL contract; this
+is not full Jet/Windows locale or multi-column Access sort parity.
+
+Existing main-window regression passes 1/1 (2.08 s): real ascending/descending
+SQL row order, readonly sorting, primary-key/current-field retention past the
+initial batch, checked sole-record persistence and refusal of unrelated drafts.
+Last complete suite/package baseline remains e4e0900 / private API 714a96e,
+48/48 (91.33 s), GUI-free core 1/1 (2.49 s). This controller change is
+focused-verified, without adding test targets.
