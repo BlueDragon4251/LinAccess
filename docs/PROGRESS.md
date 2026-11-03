@@ -3836,3 +3836,19 @@ Full rebuilt desktop suite passes 48/48 (97.33 s), GUI-free core 1/1 (1.86 s),
 Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. No extra test targets. This also covers the preceding
 search-direction extension and the typed native invocation/state changes.
+
+## Scoped table keys and DoCmd.SendKeys (2026-11-03)
+
+Native table cells and their owned Find/Zoom dialogs now resolve actual focus
+per key. Global and named/omitted DoCmd.SendKeys share ordered queued delivery,
+modal continuation and DoEvents draining. Project identity stays fixed, queued
+focus changes cannot type into an old caller, and real Text/Value/SQL buffering
+is retained. Canonical scope and resource limits: TABLE_KEYBOARD_RUNTIME.md.
+Existing main-window/layout pair 2/2 (17.52 s), original Kassa event target
+1/1 (38.68 s); no new targets. The original async probe now yields the full
+queue instead of assuming one processEvents call; receiver/content checks stay.
+Theoretical checklist: 310 checked / 72 open scoped points.
+
+Full rebuilt desktop suite passes 48/48 (93.79 s), GUI-free core 1/1 (2.27 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. No additional test targets.

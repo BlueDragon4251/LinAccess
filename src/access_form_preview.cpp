@@ -622,6 +622,7 @@ public:
         ++nativeExecutionDepth();
         const auto leave=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
         QCoreApplication::processEvents(QEventLoop::AllEvents);
+        linaccess::drainNativeKeys();
         if(linaccess::vbaExecutionStopRequested()) throw linaccess::VbaExecutionStopped{};
         return 0;
     }
@@ -765,17 +766,37 @@ public:
         }
     }
     void sendKeys(std::string_view keys,bool wait) override {
-        if (usesActiveTableContext() && AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(3251,"Database-window SendKeys target is not implemented");
+        ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+        QPointer<QWidget> owner;
+        for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+            if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+        const auto tableContext=[owner]() -> QVariantMap {
+            QVariantMap result;
+            if(owner && owner->metaObject()->indexOfMethod("tableKeyboardContext()")>=0)
+                (void)QMetaObject::invokeMethod(owner,"tableKeyboardContext",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result));
+            return result;
+        };
+        if(usesActiveTableContext() && AccessFormPreview::databaseWindowActive() && !tableContext().value("handled").toBool())
+            throw linaccess::VbaRuntimeError(3251,"Database-window SendKeys target is not implemented");
+        const auto connection=preview_.db_.connectionName(),database=preview_.db_.databaseName();
         linaccess::sendNativeKeys(&preview_,QString::fromUtf8(keys.data(),keys.size()),wait,
             [preview=QPointer<AccessFormPreview>(&preview_)](int number) {
                 if (preview && preview->status_) preview->status_->setText("SendKeys: Fehler "+QString::number(number));
-            },[context=QPointer<AccessFormPreview>(&preview_)]() -> QWidget* {
+            },[context=QPointer<AccessFormPreview>(&preview_),tableContext,connection,database]() -> QWidget* {
                 if (!context || context->closed_ || context->openCancelled_) return nullptr;
-                if (context->hasActivated_ && AccessFormPreview::databaseWindowActive()) return nullptr;
+                const auto table=tableContext();
+                if(table.value("handled").toBool()) {
+                    if(table.value("connection").toString()!=connection || table.value("database").toString()!=database) return nullptr;
+                    return qobject_cast<QWidget*>(table.value("target").value<QObject*>());
+                }
+                if ((context->hasActivated_ || context->property("la_explicit_table_context").toBool()) && AccessFormPreview::databaseWindowActive()) return nullptr;
                 auto* document=activePreviewDocument();
                 if (!context->opened_ || !document || document->closed_ || document->openCancelled_
-                    || document->db_.connectionName()!=context->db_.connectionName() || document->db_.databaseName()!=context->db_.databaseName()) document=context;
-                return document->focusWidget();
+                    || document->db_.connectionName()!=connection || document->db_.databaseName()!=database) document=context;
+                if(document->db_.connectionName()!=connection || document->db_.databaseName()!=database) return nullptr;
+                auto* focus=QApplication::focusWidget(); auto* parent=focus;
+                while(parent && parent!=document) parent=parent->parentWidget();
+                return parent ? focus : nullptr;
             });
     }
     void openFormArguments(const std::vector<linaccess::VbaValue>& args) override {
@@ -820,6 +841,11 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         return static_cast<int>(result);
     };
     PreviewVbaHost host(preview);
+    if(command=="sendkeys") {
+        if(args.empty() || args.size()>2 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"SendKeys argument count invalid");
+        const bool wait=args.size()>1 && args[1].kind!=VbaValue::Kind::Missing ? linaccess::coerceVbaModuleValue(args[1],"boolean").boolean : false;
+        host.sendKeys(args[0].asText(),wait); return {};
+    }
     if(command=="findrecord") {
         if(args.empty() || args.size()>7 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"FindRecord argument count invalid");
         const auto optionalNumber=[&](std::size_t index,int fallback) { return index>=args.size() || args[index].kind==VbaValue::Kind::Missing ? fallback : number(args[index]); };

@@ -6,6 +6,14 @@
 #include <QWidget>
 #include <QMap>
 #include <QVector>
+#include <QEventLoop>
+#include <QScopeGuard>
+#include <utility>
+#include <deque>
+#include <exception>
+#include <memory>
+#include <QTimer>
+#include <QElapsedTimer>
 
 namespace linaccess {
 namespace {
@@ -100,26 +108,139 @@ QWidget* focused(QWidget* scope,const std::function<QWidget*()>& resolver) {
         || (!resolver && widget!=scope && !scope->isAncestorOf(widget))) throw VbaRuntimeError(2110,"Native keyboard focus unavailable");
     return widget;
 }
-void deliver(QWidget* scope,const QVector<Key>& keys,const std::function<QWidget*()>& resolver) {
-    const QPointer<QWidget> guardedScope(scope);
-    for (const auto& key:keys) {
-        QPointer<QWidget> target=focused(guardedScope,resolver);
+struct KeyBatch {
+    QPointer<QWidget> scope;
+    QVector<Key> keys;
+    std::function<void(int)> failure;
+    std::function<QWidget*()> resolver;
+    std::uint64_t epoch{};
+    qsizetype next{};
+    int inFlight{};
+    bool finished{},scheduled{},synchronous{};
+    std::exception_ptr error;
+    QPointer<QEventLoop> waiter;
+    QElapsedTimer focusWait;
+};
+using Batch=std::shared_ptr<KeyBatch>;
+thread_local std::deque<Batch> pending;
+thread_local Batch issuing;
+thread_local bool kickScheduled=false;
+thread_local qsizetype pendingKeys=0;
+thread_local std::uint64_t dispatchedKeys=0;
+thread_local int keyHandlerDepth=0;
+constexpr qsizetype queueLimit=65536;
+void schedule(const Batch& batch);
+void kick();
+void complete(const Batch& batch) {
+    if(batch->finished || batch->inFlight || batch->next<batch->keys.size()) return;
+    batch->finished=true;
+    if(batch->waiter) batch->waiter->quit();
+    if(!batch->synchronous && batch->scope && batch->error) {
+        try { std::rethrow_exception(batch->error); }
+        catch(const VbaExecutionStopped&) {}
+        catch(const VbaRuntimeError& error) { if(batch->failure) batch->failure(error.number); }
+        catch(...) { if(batch->failure) batch->failure(3251); }
+    }
+}
+void release(const Batch& batch) {
+    if(issuing==batch && batch->next>=batch->keys.size()) { issuing.reset(); kick(); }
+}
+void abort(const Batch& batch,std::exception_ptr error) {
+    if(batch->finished) return;
+    pendingKeys-=batch->keys.size()-batch->next;
+    batch->next=batch->keys.size(); batch->error=std::move(error);
+    release(batch); complete(batch);
+}
+void step(const Batch& batch) {
+    if(batch->finished) return;
+    if(batch->epoch!=vbaExecutionEpoch() || vbaExecutionStopRequested()) { abort(batch,std::make_exception_ptr(VbaExecutionStopped{})); return; }
+    if(!batch->scope) {
+        abort(batch,batch->synchronous ? std::make_exception_ptr(VbaRuntimeError(2110,"Native keyboard scope closed")) : std::exception_ptr{}); return;
+    }
+    if(keyHandlerDepth>=32) { abort(batch,std::make_exception_ptr(VbaRuntimeError(3035,"SendKeys delivery nesting exceeded"))); return; }
+    if(batch->next>=batch->keys.size()) { complete(batch); return; }
+    ++batch->inFlight; ++keyHandlerDepth;
+    const auto leave=qScopeGuard([batch] { --keyHandlerDepth; --batch->inFlight; complete(batch); });
+    try {
+        QPointer<QWidget> target;
+        try { target=focused(batch->scope,batch->resolver); }
+        catch(const VbaRuntimeError& error) {
+            if(error.number!=2110) throw;
+            if(!batch->focusWait.isValid()) batch->focusWait.start();
+            if(batch->focusWait.elapsed()>=500) throw;
+            QTimer::singleShot(1,QCoreApplication::instance(),[batch] { schedule(batch); });
+            return;
+        }
+        batch->focusWait.invalidate();
+        const auto key=batch->keys[batch->next++]; --pendingKeys; ++dispatchedKeys;
+        // Queue the continuation before delivery: a modal key handler can run
+        // its own Qt loop, where the remaining keys must still be available.
+        if(batch->next<batch->keys.size()) schedule(batch); else release(batch);
         QKeyEvent press(QEvent::KeyPress,key.code,key.modifiers,key.text);
         QApplication::sendEvent(target,&press);
-        if (target) { QKeyEvent release(QEvent::KeyRelease,key.code,key.modifiers,key.text); QApplication::sendEvent(target,&release); }
-    }
+        if(target) { QKeyEvent up(QEvent::KeyRelease,key.code,key.modifiers,key.text); QApplication::sendEvent(target,&up); }
+        if(batch->epoch!=vbaExecutionEpoch() || vbaExecutionStopRequested()) throw VbaExecutionStopped{};
+    } catch(...) { abort(batch,std::current_exception()); }
+}
+void schedule(const Batch& batch) {
+    if(batch->scheduled || batch->finished) return;
+    batch->scheduled=true;
+    // Give platform activation/focus events a turn before resolving the next
+    // receiver. This also works inside native modal event loops.
+    QTimer::singleShot(0,QCoreApplication::instance(),[batch] {
+        QTimer::singleShot(0,QCoreApplication::instance(),[batch] { batch->scheduled=false; step(batch); });
+    });
+}
+void kick() {
+    if(kickScheduled || issuing || pending.empty()) return;
+    kickScheduled=true;
+    QTimer::singleShot(0,QCoreApplication::instance(),[] {
+        kickScheduled=false;
+        if(issuing) return;
+        while(!pending.empty()) {
+            auto batch=pending.front(); pending.pop_front();
+            if(batch->finished) continue;
+            if(batch->epoch!=vbaExecutionEpoch()) { abort(batch,std::make_exception_ptr(VbaExecutionStopped{})); continue; }
+            if(!batch->scope) { abort(batch,{}); continue; }
+            issuing=batch; schedule(batch); return;
+        }
+    });
 }
 }
 void sendNativeKeys(QWidget* scope,const QString& source,bool wait,std::function<void(int)> failure,std::function<QWidget*()> resolver) {
-    const auto keys=KeyParser(source).parse(); // Validate the whole sequence before emitting anything.
-    if (keys.isEmpty()) return;
-    (void)focused(scope,resolver);
-    if (wait) { deliver(scope,keys,resolver); return; }
-    const QPointer<QWidget> guarded(scope);
-    QMetaObject::invokeMethod(scope,[guarded,keys,failure=std::move(failure),resolver=std::move(resolver)] {
-        if (!guarded) return;
-        try { deliver(guarded,keys,resolver); }
-        catch(const VbaRuntimeError& error) { if (failure) failure(error.number); }
-    },Qt::QueuedConnection);
+    auto keys=KeyParser(source).parse(); // Validate the whole sequence before emitting anything.
+    if(keys.isEmpty()) return;
+    if(!scope) throw VbaRuntimeError(2110,"Native keyboard scope unavailable");
+    try { (void)focused(scope,resolver); }
+    catch(const VbaRuntimeError& error) { if(error.number!=2110 || !resolver) throw; }
+    if(pendingKeys+keys.size()>queueLimit) throw VbaRuntimeError(3035,"SendKeys queue budget exceeded");
+    auto batch=std::make_shared<KeyBatch>();
+    batch->scope=scope; batch->keys=std::move(keys); batch->failure=std::move(failure); batch->resolver=std::move(resolver);
+    batch->epoch=vbaExecutionEpoch(); batch->synchronous=wait;
+    pendingKeys+=batch->keys.size();
+    if(!wait) { pending.push_back(batch); kick(); return; }
+    QEventLoop loop; batch->waiter=&loop;
+    // Preserve immediate first-key delivery when nothing precedes it. Further
+    // keys use the same ordered queue as asynchronous batches.
+    if(!issuing && pending.empty()) { issuing=batch; step(batch); }
+    else { pending.push_back(batch); kick(); }
+    if(!batch->finished) loop.exec(QEventLoop::ExcludeUserInputEvents);
+    batch->waiter=nullptr;
+    if(!batch->finished) abort(batch,std::make_exception_ptr(VbaExecutionStopped{}));
+    if(batch->error) std::rethrow_exception(batch->error);
+}
+void drainNativeKeys() {
+    const auto start=dispatchedKeys;
+    while(pendingKeys) {
+        if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
+        if(dispatchedKeys-start>static_cast<std::uint64_t>(queueLimit)) {
+            const auto error=std::make_exception_ptr(VbaRuntimeError(3035,"SendKeys DoEvents budget exceeded"));
+            auto current=issuing; if(current) abort(current,error);
+            auto queued=std::move(pending); pending.clear();
+            for(const auto& batch:queued) abort(batch,error);
+            std::rethrow_exception(error);
+        }
+        QCoreApplication::processEvents(QEventLoop::AllEvents);
+    }
 }
 }

@@ -1884,3 +1884,18 @@ Incompatible subtypes, nontext partial matching, all-field API/formatted/locale/
 wildcard behavior remain open. Canonical details: TYPED_FIND_RUNTIME.md.
 Full desktop 48/48 (97.33 s), GUI-free core 1/1 (1.86 s), Debian checks and four
 fixture hashes pass. No new targets. Checklist: 308 checked / 72 open points.
+
+## Scoped native table SendKeys and DoCmd.SendKeys (2026-11-03)
+
+Active table cells and owned Find/Zoom dialogs accept actual Qt key delivery,
+with immutable originating project identity and fresh focus resolution per key.
+DoCmd.SendKeys supports named/omitted arguments and defaults Wait=False. FIFO
+batches continue inside modal handlers; Wait=True and DoEvents drain checked
+work. Real Text edit buffers precede Value/SQL commit. Database explorer,
+external applications and parentless table/root dialogs remain outside scope.
+TABLE_KEYBOARD_RUNTIME.md specifies cancellation, limits and regression scope.
+Full Access grammar/timing/layout equivalence is not claimed.
+
+Full rebuilt desktop suite passes 48/48 (93.79 s), GUI-free core 1/1 (2.27 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. No additional test targets.

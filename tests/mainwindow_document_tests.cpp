@@ -152,6 +152,35 @@ Sub OpenEditableTable()
 DoCmd.OpenTable "command_edit"
 Me.Tag="edit-opened"
 End Sub
+Sub FindTableByKeys()
+SendKeys "^f^ainitial{ENTER}",True
+End Sub
+Sub ZoomTableByKeys()
+SendKeys "+{F2}{ESC}",True
+End Sub
+Sub CloseTableFindByKeys()
+DoCmd.SendKeys "{ESC}",True
+End Sub
+Sub SendTableKeys()
+SendKeys "{F2}^akey-typed{TAB}",True
+Me.Tag="table-keys"
+End Sub
+Sub SendTableKeysDoCmd()
+DoCmd.SendKeys Keys:="{F2}^amethod-keys{TAB}",Wait:=True
+Me.Tag="docmd-table-keys"
+End Sub
+Sub QueueTableKeys()
+DoCmd.SendKeys Keys:="{F2}^aqueued-keys{TAB}"
+Me.Tag="queued-table-keys"
+End Sub
+Sub RejectTableKeySequence()
+DoCmd.SendKeys "^a{UNSUPPORTED_KEY}",True
+Me.Tag="must-not-run"
+End Sub
+Sub RejectNullTableKeys()
+DoCmd.SendKeys Null,True
+Me.Tag="must-not-run"
+End Sub
 Sub SaveActiveTable()
 DoCmd.RunCommand acCmdSaveRecord
 Me.Tag="table-saved"
@@ -518,7 +547,49 @@ End Sub
     assert(mixed->executeProcedure("CloseTypedFindTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     assert(mixed->executeProcedure("OpenEditableTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     const QPointer<QWidget> editablePage=documentTabs->currentWidget(); auto* editableView=nativeTable(editablePage);
-    auto* editableModel=qobject_cast<linaccess::AccessTableModel*>(editableView->model()); assert(editableModel && !editableModel->isReadOnly() && editableModel->setData(editableModel->index(0,1),"changed"));
+    auto* editableModel=qobject_cast<linaccess::AccessTableModel*>(editableView->model()); assert(editableModel && !editableModel->isReadOnly());
+    const auto callerTextBeforeKeys=mixedEditor->text();
+    const auto focusEditable=[&] {
+        assert(editableView->finishEditing()); QApplication::processEvents(); QApplication::setActiveWindow(&window);
+        editableView->setCurrentIndex(editableModel->index(0,1)); editableView->setFocus(); assert(editableView->hasFocus());
+    };
+    focusEditable();
+    const auto keyFindResult=mixed->executeProcedure("FindTableByKeys",selectArguments);
+    assert(keyFindResult.status==linaccess::VbaExecutionStatus::Completed);
+    QPointer<QDialog> keysFind=editableView->findChild<QDialog*>("native-table-find-dialog"); assert(keysFind && keysFind->isVisible());
+    assert(keysFind->findChild<QLineEdit*>("native-table-find-text")->text()=="initial" && keysFind->findChild<QLabel*>("native-table-find-result")->text().contains("Übereinstimmung"));
+    assert(!editableModel->isDirty() && mixedEditor->text()==callerTextBeforeKeys);
+    assert(mixed->executeProcedure("CloseTableFindByKeys",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!keysFind);
+    focusEditable();
+    bool modalFallback=false; QTimer modalWatch; modalWatch.setSingleShot(true);
+    QObject::connect(&modalWatch,&QTimer::timeout,[&] { modalFallback=true; if(auto* modal=qobject_cast<QDialog*>(QApplication::activeModalWidget())) modal->reject(); }); modalWatch.start(2000);
+    assert(mixed->executeProcedure("ZoomTableByKeys",selectArguments).status==linaccess::VbaExecutionStatus::Completed); modalWatch.stop();
+    assert(!modalFallback && !QApplication::activeModalWidget() && !editableModel->isDirty());
+    focusEditable();
+    assert(mixed->executeProcedure("SendTableKeys",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(editableModel->index(0,1).data(Qt::EditRole).toString()=="key-typed" && editableModel->isDirty() && mixedEditor->text()==callerTextBeforeKeys);
+    focusEditable();
+    assert(mixed->executeProcedure("SendTableKeysDoCmd",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(editableModel->index(0,1).data(Qt::EditRole).toString()=="method-keys" && mixedEditor->text()==callerTextBeforeKeys);
+    assert(mixed->executeProcedure("RejectTableKeySequence",selectArguments).errorNumber==3251);
+    assert(mixed->executeProcedure("RejectNullTableKeys",selectArguments).errorNumber==94);
+    assert(editableModel->index(0,1).data(Qt::EditRole).toString()=="method-keys" && makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="docmd-table-keys");
+    focusEditable();
+    assert(mixed->executeProcedure("QueueTableKeys",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    window.focusDatabaseWindow(); QApplication::processEvents();
+    assert(editableModel->index(0,1).data(Qt::EditRole).toString()=="method-keys" && mixedEditor->text()==callerTextBeforeKeys);
+    assert(QTest::qWaitFor([&] {
+        for(const auto* label:mixed->findChildren<QLabel*>()) if(label->text().contains("SendKeys: Fehler 2110")) return true;
+        return false;
+    },2000));
+    assert(window.activateOpenTable("command_edit")==0); focusEditable();
+    assert(mixed->executeProcedure("QueueTableKeys",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(QTest::qWaitFor([&] { return editableModel->index(0,1).data(Qt::EditRole).toString()=="queued-keys"; },2000));
+    assert(mixedEditor->text()==callerTextBeforeKeys);
+    assert(unchanged.exec("SELECT value FROM command_edit") && unchanged.next() && unchanged.value(0).toString()=="initial"); unchanged.finish();
+    assert(editableView->finishEditing() && editableModel->setData(editableModel->index(0,1),"changed"));
+    makePreviewFormObject(*mixed)->assign("Tag",linaccess::VbaValue::string("edit-opened"));
     assert(!editableModel->setReadOnly(true) && !editableModel->isReadOnly() && editableModel->isDirty());
     editableView->setCurrentIndex(editableModel->index(0,1));
     assert(mixed->executeProcedure("SelectTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);

@@ -518,3 +518,18 @@ Readonly-Suche, ungültige Datumseingabe, Caller-Me, FindNext und unveränderte
 SQL-Werte/NULLs/Binärdaten geprüft. Kanonisch docs/TYPED_FIND_RUNTIME.md.
 Trio 3/3 (2.79 s), Vollsuite 48/48 (97.33 s), GUI-freier Core 1/1 (1.86 s),
 Debian-Paket und vier Originalfixture-Hashes bestanden; keine neuen Testtargets.
+
+## Native Tabellen-Tasten und DoCmd.SendKeys (2026-11-03)
+
+Echte Zell-/Find-/Zoom-Fokussierung pro Taste, unveränderliche Projektidentität,
+benannte/ausgelassene DoCmd.SendKeys-Argumente und Wait=False-Standard. FIFO-Queue
+setzt innerhalb modaler Keyhandler fort; Wait=True wartet, DoEvents leert mit
+interaktiver Qt-Verarbeitung. Text bleibt bis Validierung vom gebundenen Value
+getrennt; Save erreicht echtes SQL. Keine Rückleitung auf alte Aufrufer bei
+Datenbankfenster-Fokus. Kanonisch docs/TABLE_KEYBOARD_RUNTIME.md. Originaler
+Wait=False-Probe wartet jetzt auf die Queue statt auf genau einen Qt-Durchlauf;
+Empfänger-, Inhalts- und Ereignisprüfungen bleiben bestehen. Paar 2/2 (17.52 s),
+originaler Kassen-Ereignislauf 1/1 (38.68 s), keine neuen Testtargets.
+
+Vollsuite 48/48 (93.79 s), GUI-freier Core 1/1 (2.27 s), Debian-Paketprüfung
+inklusive Build-ID/SQLite 3.54.1 sowie alle vier Originalfixture-Hashes bestanden.

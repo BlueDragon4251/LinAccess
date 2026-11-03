@@ -444,6 +444,23 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
     return tableCommandFailure(3251,"Dieser native Tabellenbefehl ist noch nicht implementiert.");
 }
 
+QVariantMap MainWindow::tableKeyboardContext() {
+    const QPointer<QWidget> page=activeDataPage_;
+    if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
+    bool native=false;
+    for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate);view && qobject_cast<linaccess::AccessTableModel*>(view->model())) { native=true; break; }
+    if(!native) return {};
+    QVariantMap result{{"handled",true},{"connection",db_.connectionName()},{"database",db_.databaseName()}};
+    auto* focus=QApplication::focusWidget();
+    auto* parent=focus;
+    while(parent && parent!=page) parent=parent->parentWidget();
+    if(!focus || !parent) return result; // QWidget::isAncestorOf stops at a dialog window.
+
+    if(auto* modal=QApplication::activeModalWidget(); modal && modal!=focus->window()) return result;
+    result.insert("target",QVariant::fromValue(static_cast<QObject*>(focus)));
+    return result;
+}
+
 QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
     QPointer<QWidget> page=activeDataPage_;
     if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};

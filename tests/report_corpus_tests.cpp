@@ -9,6 +9,7 @@
 #include "vba_source_codec.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_qt_value.hpp"
+#include "native_send_keys.hpp"
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -731,6 +732,9 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                     expectedEntry.replace(start,queuedEditor->selectedText().size(),keyText);
                 }
                 QApplication::processEvents();
+                // Wait=False queues the entire sequence. Yield as DoEvents
+                // does, including continuations after native focus changes.
+                linaccess::drainNativeKeys();
                 int changed=0; for (const auto& entry:before) if (entry.first && entry.first->text()!=entry.second) ++changed;
                 assert(delivery.presses>0 && delivery.dialogs==0);
                 assert(changed>0 || QApplication::focusWidget()!=previousFocus || QApplication::activePopupWidget());
