@@ -314,3 +314,18 @@ Access-Navigation weiterhin offen. Bestehende MainWindow-/Currency-Targets
 2/2 (2.01 s), einschließlich 300 Datensätzen und unverändertem SQL bis Save.
 Vollsuite/Paket zuletzt e15ff33 / privat c381897, 48/48 (88.41 s); diese kleine
 Ergänzung ist gezielt geprüft. Details docs/KEYBOARD_RUNTIME.md.
+
+
+## Mausvalidierung und Datenblatt-Kontextmenü (2026-11-03)
+
+Normaler Editorabschluss validiert vor dem Verwerfen des Widgets. Ein ungültiger
+Wert bleibt bei Mauswechsel erhalten, aktuelle Zelle/Fokus werden zurückgesetzt;
+Escape/RevertModelCache bleibt bewusstes Verwerfen. Verlust vor Fix reproduziert.
+Natives Tabellen-Kontextmenü: echtes Copy/Paste/Zoom/Datensatz-/Spalten-/Gesamtwahl
+über die bestehenden geprüften Operationen. Dirty-Paste deaktiviert, Auswahl bei
+Rechtsklick darin erhalten, Tastaturmenü an aktueller Zelle. Keine Filter-/
+Cut-/vollständige Kontextmenü- oder Pixelparität behaupten. Vollständige
+Fenster-/Fokuspolitik und externe Modell-Resets weiterhin offen.
+MainWindow-/Currency-Targets 2/2 (2.25 s), keine neuen Targets. Vollsuite/Paket
+zuletzt e15ff33 / privat c381897, 48/48 (88.41 s); diese View-Ergänzungen gezielt
+geprüft. Details docs/KEYBOARD_RUNTIME.md.

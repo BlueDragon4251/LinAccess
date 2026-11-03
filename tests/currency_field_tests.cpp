@@ -17,6 +17,8 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QTest>
+#include <QTimer>
+#include <QContextMenuEvent>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -187,6 +189,8 @@ End Sub
     }
     QTest::keyClick(pending,Qt::Key_Tab,Qt::ShiftModifier); QApplication::processEvents();
     assert(QApplication::focusWidget()==pending && pending->text()=="549755813888" && grid.data(grid.index(0,1)).toString()=="1.2346");
+    QTest::mouseClick(view.viewport(),Qt::LeftButton,Qt::NoModifier,view.visualRect(grid.index(0,0)).center()); QApplication::processEvents();
+    assert(QApplication::focusWidget()==pending && pending->text()=="549755813888" && view.currentIndex()==grid.index(0,1));
     QApplication::clipboard()->setText("unchanged-invalid-editor");
     assert(!view.copySelection() && QApplication::clipboard()->text()=="unchanged-invalid-editor" && QApplication::focusWidget()==pending);
     const auto guardedRows=grid.rowCount();
@@ -266,7 +270,14 @@ End Function
         assert(cells.rowCount()==300 && sheet.selectionModel()->selectedIndexes().size()==600 && sheet.copySelection());
         const auto all=QApplication::clipboard()->text(); assert(all.split("\r\n").size()==300 && all.startsWith("1\trow-1\r\n") && all.endsWith("300\trow-300") && !cells.isDirty());
         assert(cells.setData(cells.index(0,1),"a\tb\"c\n")); sheet.setCurrentIndex(cells.index(0,1)); sheet.selectionModel()->select(cells.index(0,1),QItemSelectionModel::ClearAndSelect);
-        assert(sheet.copySelection() && QApplication::clipboard()->text()=="\"a\tb\"\"c\n\"");
+        QTimer::singleShot(0,&sheet,[&] {
+            auto* menu=qobject_cast<QMenu*>(QApplication::activePopupWidget()); assert(menu && menu->objectName()=="native-datasheet-context-menu");
+            auto* copy=menu->findChild<QAction*>("datasheet-copy"); auto* paste=menu->findChild<QAction*>("datasheet-paste");
+            assert(copy && copy->isEnabled() && paste && !paste->isEnabled()); menu->setActiveAction(copy); QTest::keyClick(menu,Qt::Key_Return);
+        });
+        const auto contextPoint=sheet.visualRect(cells.index(0,1)).center();
+        QContextMenuEvent context(QContextMenuEvent::Mouse,contextPoint,sheet.viewport()->mapToGlobal(contextPoint)); QApplication::sendEvent(sheet.viewport(),&context);
+        assert(QApplication::clipboard()->text()=="\"a\tb\"\"c\n\"");
         const auto quoted=QApplication::clipboard()->text(); cells.revertAll();
         sheet.setCurrentIndex(cells.index(0,1)); QTest::keyClick(&sheet,Qt::Key_V,Qt::ControlModifier);
         assert(cells.data(cells.index(0,1),Qt::EditRole).toString()=="a\tb\"c\n" && cells.isDirty());
