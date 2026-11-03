@@ -3349,3 +3349,17 @@ Core/DAO pass 2/2 (2.02 s); GUI-free core passes 1/1 (1.41 s). Rebuilt app and
 native layout/original DAO regression pass 2/2 (51.49 s). Existing test targets
 only. Last grouped full suite/package/hash baseline remains aafff2b; no full
 Collection/COM/Access parity claim.
+
+
+## Typed Collection module/call bindings (2026-11-03)
+
+Collection-typed module fields retain native references between procedure calls.
+Required Collection parameters and function results enforce the native class.
+ByVal shares mutations but keeps replacement local; ByRef replaces the caller
+reference. Nothing remains a valid typed initial/reference value. Optional
+object parameters and complete class/reference semantics remain unsupported.
+Core/DAO targeted checks pass 2/2 (1.88 s); rebuilt GUI-free core passes 1/1
+(2.28 s). Complete rebuilt desktop suite passes 48/48 in one run (92.80 s).
+Debian package contents/permissions/Build-ID/pinned backend checks pass, all four
+original hashes pass, and the remote repository remains private. Existing test
+targets only; no complete Collection/Access or new distro-matrix claim.

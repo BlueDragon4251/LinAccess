@@ -500,6 +500,45 @@ End Function
     if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Collection regression status="<<static_cast<int>(result.status)<<" error="<<result.errorNumber<<" line="<<result.line<<"\n";
     assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Currency && result.typedReturnValue->currencyUnits==47500);
     assert(host.fields["CollectionOrder"]=="1.25:1.25:1.5" && host.fields["CollectionDuplicate"]=="457" && host.fields["CollectionMutation"]=="3251" && host.fields["CollectionCount"]=="2" && host.fields["CollectionType"]=="Collection");
+    const std::string module=R"VBA(Private pending As Collection
+Sub InitializeItems()
+Set pending=New Collection
+pending.Add 1
+End Sub
+Sub Append(ByRef items As Collection)
+items.Add 2
+End Sub
+Sub ReplaceVal(ByVal items As Collection)
+items.Add 4
+Set items=New Collection
+items.Add 5
+End Sub
+Sub ReplaceRef(ByRef items As Collection)
+Set items=New Collection
+items.Add 3
+End Sub
+Sub MutateItems()
+Append pending
+ReplaceVal pending
+End Sub
+Sub ReplaceItems()
+ReplaceRef pending
+End Sub
+Function CountItems() As Long
+CountItems=pending.Count
+End Function
+Function MakeItems() As Collection
+Set MakeItems=New Collection
+MakeItems.Add CCur("1.25")
+End Function
+)VBA";
+    assert(executeVbaProcedure(module,"InitializeItems",host).status==VbaExecutionStatus::Completed);
+    assert(executeVbaProcedure(module,"MutateItems",host).status==VbaExecutionStatus::Completed);
+    auto count=executeVbaProcedure(module,"CountItems",host); assert(count.status==VbaExecutionStatus::Completed && count.returnValue=="3");
+    assert(executeVbaProcedure(module,"ReplaceItems",host).status==VbaExecutionStatus::Completed);
+    count=executeVbaProcedure(module,"CountItems",host); assert(count.status==VbaExecutionStatus::Completed && count.returnValue=="1");
+    const auto factory=executeVbaProcedure(module,"MakeItems",host);
+    assert(factory.status==VbaExecutionStatus::Completed && factory.typedReturnValue && factory.typedReturnValue->kind==VbaValue::Kind::Object && factory.typedReturnValue->object->member("Item",{VbaValue::integer(1)}).currencyUnits==12500);
     const auto value=evaluateVbaObjectExpression("New Collection",host,{});
     value.object->member("Add",{VbaValue::dateSerial(2),VbaValue::string("date")});
     value.object->member("Add",{VbaValue{}});

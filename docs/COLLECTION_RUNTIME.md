@@ -1,8 +1,11 @@
 # Native VBA Collection subset
 
 `Set items = New Collection` and `New VBA.Collection` create a native C++ ordered
-collection. Procedure-local `Dim items As Collection` initializes to Nothing and
-rejects Set assignments of other native classes with error 13. Existing Object
+collection. `Dim items As Collection` and Collection-typed module fields initialize to
+Nothing and reject other native classes with error 13. Typed Collection function
+results and required parameters are supported. ByVal shares the collection but
+keeps reference replacement local; ByRef can replace the caller reference.
+Module-held references persist across procedure calls. Existing Object
 and Variant references can share the same collection.
 
 Implemented members are Add(Item, Key, Before, After), Item(Index), Remove(Index)
@@ -20,7 +23,7 @@ bounds the implementation until Access mutation-during-enumeration behavior is
 available. Existing DAO/Forms enumeration behavior is unchanged.
 
 Limits remain explicit: regional/non-ASCII keys, nested Collection items (also
-inside arrays), automatic As New, Collection-typed module fields/parameters and
+inside arrays), automatic As New, Optional Collection parameters and
 complete class/reference semantics are not implemented. Recursive collection
 ownership is rejected to prevent shared-reference cycles. Item traversal and
 allocation have bounded budgets. Unknown members and write attempts fail; this

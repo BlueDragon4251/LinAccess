@@ -855,3 +855,7 @@ of complete Access parity. Existing broader open items remain open.
 - [x] Native ordered Collection construction, typed local/default/keyed access,
   Add/Remove/Count/named insertion, Variant/object identity and leased For Each;
   regional keys, cyclic lifetime and complete class semantics remain open.
+
+- [x] Typed Collection module persistence, required ByVal/ByRef parameters and
+  function results, shared mutation/local replacement and caller rebinding;
+  Optional object parameters and complete class/reference semantics remain open.
