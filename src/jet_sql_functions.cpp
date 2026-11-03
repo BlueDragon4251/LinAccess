@@ -180,12 +180,12 @@ public:
     void message(std::string_view) override { throw VbaRuntimeError(3251,"SQL scalar has no UI context"); }
     void saveRecord() override { throw VbaRuntimeError(3251,"SQL scalar cannot save forms"); }
 };
-void reverseStringFunction(sqlite3_context* context,int count,sqlite3_value** args,bool reverse) noexcept {
+void scalarStringFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view name,int minimum,int maximum) noexcept {
     auto& native=api();
     try {
-        if((reverse && count!=1) || (!reverse && (count<2 || count>4))) throw VbaRuntimeError(450,"Invalid reverse string SQL arity");
+        if(count<minimum || count>maximum) throw VbaRuntimeError(450,"Invalid scalar string SQL arity");
         VbaVariables values;
-        std::string expression=reverse ? "StrReverse(" : "InStrRev(";
+        std::string expression=std::string(name)+"(";
         for(int index=0;index<count;++index) {
             const auto name="_la_arg"+std::to_string(index);
             VbaValue value;
@@ -196,7 +196,7 @@ void reverseStringFunction(sqlite3_context* context,int count,sqlite3_value** ar
                 const auto* bytes=native.text(args[index]); const auto size=native.bytes(args[index]);
                 if(!bytes && size) throw VbaRuntimeError(13,"SQL text conversion failed");
                 value=VbaValue::string(bytes ? std::string(reinterpret_cast<const char*>(bytes),size) : std::string{});
-            } else if(type!=5) throw VbaRuntimeError(13,"Binary reverse string input is unsupported");
+            } else if(type!=5) throw VbaRuntimeError(13,"Binary scalar string input is unsupported");
             values.emplace(name,std::move(value));
             if(index) expression+=',';
             expression+=name;
@@ -204,13 +204,19 @@ void reverseStringFunction(sqlite3_context* context,int count,sqlite3_value** ar
         expression+=')';
         ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
-        if(reverse) native.textResult(context,result.text.data(),static_cast<int>(result.text.size()),reinterpret_cast<void (*)(void*)>(-1));
-        else native.integerResult(context,static_cast<qlonglong>(result.number));
+        if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
+        else if(result.kind==VbaValue::Kind::Text) native.textResult(context,result.text.data(),static_cast<int>(result.text.size()),reinterpret_cast<void (*)(void*)>(-1));
+        else if(result.kind==VbaValue::Kind::Number) native.integerResult(context,static_cast<qlonglong>(result.number));
+        else throw VbaRuntimeError(13,"Unsupported scalar string SQL result");
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
-      catch(...) { native.error(context,"SQL reverse string evaluation failed",-1); }
+      catch(...) { native.error(context,"SQL scalar string evaluation failed",-1); }
 }
-void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noexcept { reverseStringFunction(context,count,args,true); }
-void stringInStrRev(sqlite3_context* context,int count,sqlite3_value** args) noexcept { reverseStringFunction(context,count,args,false); }
+void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"StrReverse",1,1); }
+void stringInStrRev(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"InStrRev",2,4); }
+void stringAsc(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"Asc",1,1); }
+void stringAscW(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"AscW",1,1); }
+void stringChr(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"Chr",1,1); }
+void stringChrW(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"ChrW",1,1); }
 void calendarFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view name) noexcept {
     auto& native=api();
     try {
@@ -513,6 +519,10 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
     ensure("linaccess_jet_qbcolor",-1,&qbColor,nullptr,nullptr);
     ensure("linaccess_jet_round",-1,&roundNumber,nullptr,nullptr);
+    ensure("linaccess_jet_asc",-1,&stringAsc,nullptr,nullptr);
+    ensure("linaccess_jet_ascw",-1,&stringAscW,nullptr,nullptr);
+    ensure("linaccess_jet_chr",-1,&stringChr,nullptr,nullptr);
+    ensure("linaccess_jet_chrw",-1,&stringChrW,nullptr,nullptr);
     ensure("linaccess_jet_strreverse",-1,&stringReverse,nullptr,nullptr);
     ensure("linaccess_jet_instrrev",-1,&stringInStrRev,nullptr,nullptr);
     ensure("linaccess_jet_datediff",-1,&calendarDatediff,nullptr,nullptr);

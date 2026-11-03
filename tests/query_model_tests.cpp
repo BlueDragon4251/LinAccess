@@ -26,6 +26,17 @@ int main(int argc, char** argv) {
         assert(reversed.data(reversed.index(0,1)).toString()=="öba" && reversed.data(reversed.index(0,2)).toInt()==5);
         reversed.execute(db,"SELECT InStrRev(label,'o') AS pos,pos+1 AS following FROM samples WHERE id=1");
         assert(reversed.data(reversed.index(0,0)).toInt()==1 && reversed.data(reversed.index(0,1)).toInt()==2);
+        assert(!query.exec("SELECT linaccess_jet_strreverse(Null)"));
+        assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==94); query.finish();
+        reversed.execute(db,"SELECT InStrRev(Null,'x') AS missing,InStrRev('x',Null) AS pos");
+        assert(reversed.data(reversed.index(0,0)).isNull() && reversed.data(reversed.index(0,1)).isNull());
+        reversed.execute(db,"SELECT Count(InStrRev(label,'o')) FROM samples");
+        assert(reversed.data(reversed.index(0,0)).toInt()==3);
+        reversed.execute(db,"SELECT AscW('Ω') AS code,ChrW(937) AS glyph,Chr(34) AS quotation,Chr(Asc(label)) AS first FROM samples WHERE id=1");
+        assert(reversed.data(reversed.index(0,0)).toInt()==937 && reversed.data(reversed.index(0,1)).toString()=="Ω");
+        assert(reversed.data(reversed.index(0,2)).toString()=="\"" && reversed.data(reversed.index(0,3)).toString()=="o");
+        assert(!query.exec("SELECT linaccess_jet_chrw(55296)"));
+        assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==3251); query.finish();
         assert(!query.exec("SELECT linaccess_jet_strreverse(CAST(x'ff' AS TEXT))"));
         assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==13); query.finish();
     }

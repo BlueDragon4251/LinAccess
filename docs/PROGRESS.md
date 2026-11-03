@@ -2937,3 +2937,20 @@ parameter. Desktop build and core/DAO/original syntax targets pass 3/3 (2.46 s);
 GUI-free build/test passes 1/1 (1.87 s). No new target/full-suite/package repeat.
 Complete decimal literal inference, all unary/suffix/leading-zero edge rules,
 Const declarations and raw Jet SQL literal translation remain open.
+
+## Native character SQL bridge and reverse-search Null (2026-11-03)
+
+Asc/AscW/Chr/ChrW now execute through registered native SQL callbacks with bound
+scalar arguments, no UI context and shared VBA conversion logic. Added native
+Chr$/ChrW$ and named String/CharCode argument signatures. Existing ANSI ASCII and
+isolated-surrogate boundaries remain explicit; full codepages/BSTR support and
+all SQL result metadata remain open.
+
+Reference correction: InStrRev returns Null for Null string arguments, while
+StrReverse(Null) raises 94. Native core now follows that distinction and the SQL
+scalar emitter preserves actual Null results. Existing SQL regression verifies
+character conversion on real rows, Unicode roundtrip, typed errors and Count
+excluding Null reverse-search results; core checks named/dollar conversions.
+Desktop build and core/DAO/query-model targets pass 3/3 (1.62 s). No new target or
+full-suite/package repeat. GUI-free follow-up is recorded with the next delivery.
+References: Microsoft Learn InStrRev/StrReverse function return rules.

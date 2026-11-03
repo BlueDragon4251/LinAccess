@@ -2325,7 +2325,8 @@ End Sub
     assert(evaluate("InStrRev(\"abc\",\"a\",4)").asNumber()==0);
     assert(evaluate("VarType(InStrRev(\"a\",\"a\"))").asNumber()==3);
     assert(evaluate("StrReverse(\"abö\")").asText()=="öba");
-    substringError("InStrRev(Null,\"a\")",94); substringError("InStrRev(\"a\",\"a\",0)",5);
+    assert(evaluate("InStrRev(Null,\"a\")").kind==VbaValue::Kind::Null && evaluate("InStrRev(\"a\",Null)").kind==VbaValue::Kind::Null);
+    substringError("InStrRev(\"a\",\"a\",Null)",94); substringError("InStrRev(\"a\",\"a\",0)",5);
     substringError("StrReverse(Null)",94); substringError("StrReverse(\"😀\")",3251);
     const auto optionalArguments=executeVbaProcedure(R"VBA(Function Describe(ByVal quantity As Long, Optional ByVal factor As Long=2, Optional ByVal prefix As String="A,B") As String
 Describe=prefix & ":" & CStr(quantity*factor)
@@ -2591,5 +2592,7 @@ End Function
     substringError("&H100000000",6); substringError("&H10000%",6);
     const auto basedDefault=executeVbaProcedure("Function BasedDefault(Optional value As Long=&HFFFF&) As Long\nBasedDefault=value\nEnd Function","BasedDefault",host);
     assert(basedDefault.status==VbaExecutionStatus::Completed && basedDefault.returnValue=="65535");
+    assert(evaluate("AscW(String:=ChrW$(CharCode:=937))").asNumber()==937);
+    assert(evaluate("Chr$(CharCode:=34)").asText()=="\"");
     std::cout << "Core tests passed\n";
 }

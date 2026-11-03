@@ -1031,3 +1031,9 @@ Native expressions now parse checked &H/&O integer patterns, %/& suffixes and
 supported Optional based-literal defaults, preserving Integer/Long identity and
 signed bit patterns. Full literal/unary/suffix inference and raw Jet SQL based
 literal translation remain open.
+
+Native Asc/AscW/Chr/ChrW are now available in SQL through shared VBA callbacks;
+Chr$/ChrW$ and named character arguments work in VBA. ANSI remains ASCII-only
+and isolated surrogate output is explicitly unsupported. InStrRev Null string
+arguments now return Null in VBA/SQL; StrReverse(Null) still raises 94. Full
+codepage/BSTR/result-metadata equivalence remains open.

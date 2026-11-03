@@ -756,6 +756,9 @@ private:
                     {"msgbox",{{"Prompt","Buttons","Title","HelpFile","Context"},1}},
                     {"inputbox",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
                     {"inputbox$",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
+                    {"asc",{{"String"},1}}, {"ascw",{{"String"},1}},
+                    {"chr",{{"CharCode"},1}}, {"chr$",{{"CharCode"},1}},
+                    {"chrw",{{"CharCode"},1}}, {"chrw$",{{"CharCode"},1}},
                     {"replace",{{"Expression","Find","Replace","Start","Count","Compare"},3}},
                     {"split",{{"Expression","Delimiter","Limit","Compare"},1}},
                     {"join",{{"SourceArray","Delimiter"},1}},
@@ -898,7 +901,7 @@ private:
                 if(args.empty() || omitted[0]) throw error("Round requires an expression",450);
                 return vbaRound(args);
             }
-            if(word=="asc" || word=="ascw" || word=="chr" || word=="chrw") {
+            if(word=="asc" || word=="ascw" || word=="chr" || word=="chr$" || word=="chrw" || word=="chrw$") {
                 if(!host_) return {};
                 if(args.size()!=1) throw error("Character conversion requires one argument",450);
                 const auto value=scalarObjectValue(args.front());
@@ -912,7 +915,7 @@ private:
                 }
                 const auto code=static_cast<std::int32_t>(coerceVbaModuleValue(value,"long").number);
                 if(code < -32768 || code>65535) throw error("Invalid character code",5);
-                if(word=="chr" && (code<0 || code>127)) throw error("ANSI character codepage conversion is not implemented",3251);
+                if((word=="chr" || word=="chr$") && (code<0 || code>127)) throw error("ANSI character codepage conversion is not implemented",3251);
                 const auto unit=static_cast<char16_t>(code<0 ? code+65536 : code);
                 return VbaValue::string(utf8String(std::u16string(1,unit)));
             }
@@ -1096,8 +1099,9 @@ private:
                 std::vector<VbaValue> values;
                 for(std::size_t i=0;i<args.size();++i) {
                     values.push_back(scalarObjectValue(args[i]));
-                    if(!omitted[i] && values.back().kind==VbaValue::Kind::Null) throw error("Invalid Null reverse string argument",94);
+                    if(!omitted[i] && values.back().kind==VbaValue::Kind::Null && (reverse || i>=2)) throw error("Invalid Null reverse string argument",94);
                 }
+                if(!reverse && (values[0].kind==VbaValue::Kind::Null || values[1].kind==VbaValue::Kind::Null)) return {};
                 auto input=utf16String(values[0].asText());
                 if(reverse) {
                     std::reverse(input.begin(),input.end());
