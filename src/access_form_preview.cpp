@@ -506,6 +506,41 @@ public:
         if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
         return true;
     }
+    bool findTableRecord(const QString& text,int mode,bool sensitive,bool first) {
+        if(!usesActiveTableContext()) return false;
+        QWidget* owner=nullptr;
+        for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+            if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+        if(!owner || owner->metaObject()->indexOfMethod("findTableRecord(QString,int,bool,bool)")<0) return false;
+        QVariantMap result;
+        if(!QMetaObject::invokeMethod(owner,"findTableRecord",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),
+            Q_ARG(QString,text),Q_ARG(int,mode),Q_ARG(bool,sensitive),Q_ARG(bool,first)))
+            throw linaccess::VbaRuntimeError(3251,"Native FindRecord dispatch is unavailable");
+        if(!result.value("handled").toBool()) return false;
+        const int error=result.value("error").toInt();
+        if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
+        return true;
+    }
+    void findFormRecord(const QString& text,int mode,bool sensitive,bool first) {
+        auto& document=commandDocument();
+        if(auto* modal=QApplication::activeModalWidget(); modal && modal!=document.window())
+            throw linaccess::VbaRuntimeError(2046,"FindRecord is blocked by a modal window");
+        QString field;
+        const auto* focus=QApplication::focusWidget();
+        for(const auto& control:document.layout_.controls) {
+            auto* widget=document.controls_.value(control.name.toCaseFolded()).data();
+            const auto* combo=qobject_cast<QComboBox*>(widget);
+            if(!widget || (widget!=focus && (!combo || combo->lineEdit()!=focus))) continue;
+            const auto column=columnIndex(control.controlSource,document.dataColumns_);
+            if(column<0) continue;
+            const auto type=document.dataTypes_.value(document.dataColumns_[column].toCaseFolded());
+            if(!(type.contains("TEXT",Qt::CaseInsensitive) || type.contains("CHAR",Qt::CaseInsensitive) || type.contains("CLOB",Qt::CaseInsensitive)))
+                throw linaccess::VbaRuntimeError(3251,"FindRecord currently supports a bound text field");
+            field=document.dataColumns_[column]; break;
+        }
+        if(field.isEmpty()) throw linaccess::VbaRuntimeError(2046,"No active bound text field for FindRecord");
+        (void)document.findNextRecord(text,field,mode,sensitive,first ? 1 : 2,true);
+    }
     void saveRecord() override {
         if(tableCommand(97)) return;
         if (!commandDocument().saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record save cancelled");
@@ -748,7 +783,7 @@ public:
     }
 private:
     AccessFormPreview& commandDocument() {
-        if (preview_.hasActivated_ && AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(2046,"Record command requires an active native document");
+        if (usesActiveTableContext() && AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(2046,"Record command requires an active native document");
         auto* document=activePreviewDocument();
         if ((preview_.opened_ || usesActiveTableContext()) && document && !document->closed_ && !document->openCancelled_
             && document->db_.connectionName()==preview_.db_.connectionName() && document->db_.databaseName()==preview_.db_.databaseName()) return *document;
@@ -781,6 +816,21 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         return static_cast<int>(result);
     };
     PreviewVbaHost host(preview);
+    if(command=="findrecord") {
+        if(args.empty() || args.size()>7 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"FindRecord argument count invalid");
+        const auto optionalNumber=[&](std::size_t index,int fallback) { return index>=args.size() || args[index].kind==VbaValue::Kind::Missing ? fallback : number(args[index]); };
+        const auto optionalBoolean=[&](std::size_t index,bool fallback) { return index>=args.size() || args[index].kind==VbaValue::Kind::Missing ? fallback : linaccess::coerceVbaModuleValue(args[index],"boolean").boolean; };
+        const int match=optionalNumber(1,1),search=optionalNumber(3,2),field=optionalNumber(5,-1);
+        const bool sensitive=optionalBoolean(2,false),formatted=optionalBoolean(4,false),first=optionalBoolean(6,true);
+        if(match<0 || match>2 || search<0 || search>2 || (field!=0 && field!=-1)) throw VbaRuntimeError(5,"Invalid FindRecord option");
+        if(args[0].kind!=VbaValue::Kind::Text || search!=2 || field!=-1 || formatted)
+            throw VbaRuntimeError(3251,"FindRecord currently supports literal current-text-field SearchAll without formatted search");
+        const auto text=QString::fromStdString(args[0].asText());
+        if(text.isEmpty() || text.contains('*') || text.contains('?') || text.contains('#') || text.contains('[') || text.contains(']'))
+            throw VbaRuntimeError(3251,"Empty/wildcard FindRecord is not implemented");
+        if(!host.findTableRecord(text,match,sensitive,first)) host.findFormRecord(text,match,sensitive,first);
+        return {};
+    }
     if(command=="selectobject") {
         if(args.empty() || args.size()>3 || args[0].kind==VbaValue::Kind::Empty) throw VbaRuntimeError(450,"SelectObject argument count invalid");
         const auto name=args.size()>1 && args[1].kind!=VbaValue::Kind::Empty ? QString::fromStdString(args[1].asText()) : QString{};
@@ -2740,17 +2790,19 @@ void AccessFormPreview::openFindDialog() {
     });
     dialog->show(); dialog->activateWindow(); query->setFocus(); query->selectAll();
 }
-QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bool caseSensitive) {
+QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bool caseSensitive,int origin,bool requireValidation) {
     using linaccess::VbaRuntimeError;
     ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
     if(closed_ || openCancelled_ || layout_.kind!=linaccess::AccessDocumentKind::Form || !directTable_ || !dataSourceAvailable_ || dataTruncated_)
         throw VbaRuntimeError(3251,"Die Suche ist für diese Datenquelle nicht verfügbar.");
+    if(origin<0 || origin>2) throw VbaRuntimeError(5,"Ungültiger Suchbeginn.");
     if(findingRecord_) throw VbaRuntimeError(3251,"Eine Suche wird bereits ausgeführt.");
     QScopedValueRollback<bool> searching(findingRecord_,true);
     const QPointer<AccessFormPreview> self(this); auto* search=&findState_;
     if(self->recordCommandRunning_ || self->dataTruncated_) throw VbaRuntimeError(3251,"Die Suche ist während dieses Vorgangs nicht verfügbar.");
     if(text.isEmpty()) throw VbaRuntimeError(2046,"Keine vorherige Suche vorhanden.");
     if(!self->commitControls() || !self || self->closed_ || self->openCancelled_) {
+        if(requireValidation) throw VbaRuntimeError(2501,"FindRecord validation cancelled");
         return "Suche durch Formularvalidierung abgebrochen.";
     }
     if(search->text!=text || search->field!=field || search->mode!=mode || search->sensitive!=caseSensitive) {
@@ -2767,7 +2819,7 @@ QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bo
     const int count=self->recordRows_.size()+(virtualRow ? 1 : 0);
     if(!count) { return "Keine Datensätze vorhanden."; }
     const int current=self->currentRecordIndex_>0 ? self->currentRecordIndex_-1 : virtualRow ? count-1 : 0;
-    const int start=(current+(search->advance ? 1 : 0))%count;
+    const int start=origin==1 ? 0 : (current+((origin==2 || search->advance) ? 1 : 0))%count;
     int found=-1;
     for(int offset=0;offset<count && found<0;++offset) {
         const auto row=(start+offset)%count;
@@ -2790,13 +2842,19 @@ QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bo
     if(found!=current) {
         const auto id=self->rowIds_[found];
         if(!self->saveRecord() || !self || self->closed_ || self->openCancelled_) {
+            if(requireValidation) throw VbaRuntimeError(2501,"FindRecord record save cancelled");
             return "Suche durch Formularvalidierung abgebrochen.";
         }
         const auto position=self->rowIds_.indexOf(id);
-        if(position<0) { return "Gefundener Datensatz ist nicht mehr verfügbar."; }
+        if(position<0) {
+            if(requireValidation) throw VbaRuntimeError(2501,"FindRecord target no longer available");
+            return "Gefundener Datensatz ist nicht mehr verfügbar.";
+        }
         self->selectRecord(position+1);
-        if(!self || self->closed_ || self->currentRecordIndex_<1
-            || self->rowIds_.value(self->currentRecordIndex_-1)!=id) return "Suche durch Formularereignis abgebrochen.";
+        if(!self || self->closed_ || self->currentRecordIndex_<1 || self->rowIds_.value(self->currentRecordIndex_-1)!=id) {
+            if(requireValidation) throw VbaRuntimeError(2501,"FindRecord navigation cancelled by form event");
+            return "Suche durch Formularereignis abgebrochen.";
+        }
     }
     search->advance=true;
     return self->currentRecordIndex_==0 ? "Aktueller neuer Datensatz gefunden." : QString("Datensatz %1 gefunden.").arg(self->currentRecordIndex_);

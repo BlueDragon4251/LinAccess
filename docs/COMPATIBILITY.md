@@ -1850,3 +1850,15 @@ clipboard/payload untouched. Numeric/date/formatted/wildcard/locale/Replace and
 DoCmd.FindRecord remain open. Canonical details: TABLE_FIND_RUNTIME.md.
 Full desktop 48/48 (92.69 s), GUI-free 1/1 (2.45 s), Debian checks and four fixture
 hashes pass; no new targets. Theoretical checklist: 301 checked / 72 open points.
+
+
+## Bounded native DoCmd.FindRecord (2026-11-03)
+
+Literal current-text-field SearchAll runs on actual active table/form records,
+with named/Missing/Empty arguments, match/case modes, first/next origin and normal
+no-match completion. Locked fields are searchable; canceled form validation is
+2501 and preserves the draft/caller separation. Explicit table context blocks
+old-caller fallback in the database window. General numeric/date/formatted/all-
+field/directional/wildcard behavior remains open; see FIND_RECORD_RUNTIME.md.
+Full desktop 48/48 (88.05 s), GUI-free core 1/1 (1.99 s), Debian checks and four
+fixture hashes pass; no new targets. Checklist: 303 checked / 72 open points.

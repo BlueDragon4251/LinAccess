@@ -474,3 +474,20 @@ Kanonisch docs/TABLE_FIND_RUNTIME.md; Zahlen/Datum/Format/Wildcards/Locale/Repla
 und DoCmd.FindRecord nicht von diesem Inkrement abgedeckt.
 Vollsuite 48/48 (92.69 s), GUI-freier Core 1/1 (2.45 s), Debian-Paket und vier
 Fixture-Hashes bestanden, keine neuen Testtargets. Enthält auch Sortierbefehle.
+
+
+## Nativer DoCmd.FindRecord-Teilumfang (2026-11-03)
+
+FindRecord durchsucht das aktuelle gebundene Textfeld tatsächlicher aktiver
+Tabellen/Formulare mit SearchAll, Literaltext, Teil/Ganz/Anfang, Groß-/Kleinschreibung
+und erstem/folgendem Suchbeginn. Benannte/ausgelassene Argumente sind Missing;
+explizites Empty wird normal koerziert (Match=0, FindFirst=False), nicht ersetzt.
+Readonly-Felder sind suchbar, kein Treffer ist normale Rückkehr. Formvalidierungs-
+abbruch wird 2501 vor nachfolgendem VBA, Entwurf und aufrufendes Me bleiben erhalten.
+Expliziter Tabellenkontext verhindert auch beim nie aktivierten Aufrufer einen
+Rückfall auf das alte Formular aus dem Datenbankfenster. Initialisierung ohne
+expliziten Dokumentwechsel bleibt unverändert im eigenen Kontext.
+Allfelder/Zahlen/Datum/Format/Richtung/Wildcards/volle Access-Fehlerpriorität offen.
+Kanonisch docs/FIND_RECORD_RUNTIME.md mit geprüften Microsoft-Parameterreferenzen.
+Trio 3/3 (15.83 s), Vollsuite 48/48 (88.05 s), GUI-freier Core 1/1 (1.99 s),
+Debian-Paket und vier Originalfixture-Hashes bestanden. Keine neuen Testtargets.

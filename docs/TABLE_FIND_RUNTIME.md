@@ -17,8 +17,9 @@ FindNext without a prior nonempty search is 2046. Empty tables can open Find.
 The real model fetches rows past Qt's initial SQL batch. Search is bounded to one
 million text cells, with no partial-result success when the budget is exceeded.
 NULL/BLOB values and hidden rows/columns are skipped. Numeric/date/display-format,
-Jet wildcard/Windows collation, reverse direction, Replace and programmatic
-DoCmd.FindRecord are not implemented by this text-search increment.
+Jet wildcard/Windows collation, reverse direction and Replace are not
+implemented by this text-search increment. Bounded programmatic DoCmd.FindRecord
+is specified separately in [FIND_RECORD_RUNTIME.md](FIND_RECORD_RUNTIME.md).
 
 Before scanning, the production controller saves a sole changed existing current
 record through the checked transactional SaveRecord path and restores its primary
