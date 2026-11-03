@@ -39,7 +39,7 @@ void exec(QSqlQuery& query, const QString& sql) {
 [[noreturn]] void queryFailure(const QSqlQuery& query) {
     const auto message = query.lastError().text().toCaseFolded();
     if (const auto code=jetSqlFunctionErrorNumber(message.toUtf8().toStdString()))
-        throw VbaRuntimeError(*code,"Jet SQL function argument invalid");
+        throw VbaRuntimeError(*code,jetSqlFunctionErrorExplanation(message.toUtf8().toStdString()));
     if (message.contains("unique constraint") || message.contains("primary key")) throw VbaRuntimeError(3022,"DAO: Duplicate key");
     if (message.contains("not null")) throw VbaRuntimeError(3314,"DAO: Required value missing");
     if (message.contains("already exists")) throw VbaRuntimeError(3010,"DAO: destination table already exists");

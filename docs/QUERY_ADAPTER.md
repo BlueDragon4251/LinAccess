@@ -43,7 +43,9 @@ All 100 original Kassa query artifacts are hash-checked and classified against a
 separate imported SQLite database. Current local run: 72 executed without extra
 parameters and five with parameters selected from actual data (77 total), nine
 missing query dependencies, eleven other Jet/binding failures, one source-column
-mismatch and two actions unexecuted by this runner. Parameterized results are
+mismatch and two joined actions refused with explicit boundaries (conflicting
+source values for one target, and an unsupported nullable-side outer-join target).
+Parameterized results are
 compared against positive independent filter counts. Action mutation is verified
 separately with typed QueryDefs tests. Reports contain hashes/status/error codes,
 not values or raw SQL. See QUERY_ORIGINS.md for the remaining six-column mismatch.

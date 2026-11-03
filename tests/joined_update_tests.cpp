@@ -35,7 +35,7 @@ int main(int argc,char** argv) {
     assert(sql.exec("ROLLBACK TO identical_source") && sql.exec("RELEASE identical_source"));
     assert(sql.exec("INSERT INTO source VALUES(2,7,'ambiguous',0,NULL)"));
     int error=0; try { execute("UPDATE target AS d INNER JOIN source AS s ON d.id=s.id SET d.stock=d.stock+s.delta"); }
-    catch (const VbaRuntimeError& failure) { error=failure.number; } assert(error==3251);
+    catch (const VbaRuntimeError& failure) { error=failure.number; assert(std::string(failure.what())=="Joined UPDATE has conflicting source values for one target"); } assert(error==3251);
     assert(sql.exec("SELECT stock FROM target ORDER BY id") && sql.next() && sql.value(0).toDouble()==15);
     assert(sql.next() && sql.value(0).toDouble()==25 && sql.next() && sql.value(0).toDouble()==30); sql.finish();
     execute("UPDATE target AS d INNER JOIN target AS s ON d.id=s.id+1 SET d.stock=s.stock");

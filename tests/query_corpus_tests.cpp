@@ -118,7 +118,7 @@ int main(int argc,char** argv) {
         "e074e74467212cd73520402ffb4239aef220557883d048a2be672de10c3d48de"};
     int valueDeclarations=0,executedDerivedQueries=0,sourceColumnMismatches=0,positiveConditionalQueries=0;
     for (const auto& object : definitions) {
-        QString status;
+        QString status,errorReason;
         bool executed = false; int errorNumber=0;
         assert(db.transaction());
         try {
@@ -206,10 +206,17 @@ int main(int argc,char** argv) {
             }
         } catch (const linaccess::VbaRuntimeError& error) {
             errorNumber=error.number;
+            const std::string explanation=error.what();
+            if(explanation=="Joined UPDATE has conflicting source values for one target") errorReason="joined_update_source_conflict";
+            else if(explanation=="Joined UPDATE shape unsupported") errorReason="joined_update_shape";
+            else if(explanation=="Joined UPDATE nullable-side target is not implemented") errorReason="joined_update_nullable_target";
+            else if(explanation=="Joined UPDATE requires a writable table target") errorReason="joined_update_target";
+            else if(explanation=="Joined UPDATE row identity unavailable") errorReason="joined_update_identity";
             if (object["sha256"].toString()=="5dcb8fb9cfb7e5eb47d6e82989adc3ce77b8574f0481d309764a9829894dc1a9") {
                 const std::string detail=error.what();
                 const auto category=detail=="Joined UPDATE shape unsupported" ? "compiler_shape"
                     : detail=="Joined UPDATE requires a writable table target" ? "target_kind"
+                    : detail=="Joined UPDATE has conflicting source values for one target" ? "source_conflict"
                     : detail=="Jet SQL function argument invalid" ? "runtime_function"
                     : detail=="Joined UPDATE row identity unavailable" ? "row_identity" : "other";
                 std::cout<<"Original joined UPDATE boundary: error="<<error.number<<", stage="<<category<<'\n';
@@ -236,7 +243,7 @@ int main(int argc,char** argv) {
         assert(db.rollback());
         if (executed && derivedQueryHashes.contains(object["sha256"].toString())) ++executedDerivedQueries;
         ++counts[status];
-        report.append(QJsonObject{{"artifact_sha256",object["sha256"]},{"status",status},{"executed",executed},{"error_number",errorNumber}});
+        report.append(QJsonObject{{"artifact_sha256",object["sha256"]},{"status",status},{"executed",executed},{"error_number",errorNumber},{"error_reason",errorReason}});
     }
     assert(report.size() == 100);
     testPreparedOriginalJoinedUpdate(root,definitions,QString::fromLocal8Bit(argv[2]));

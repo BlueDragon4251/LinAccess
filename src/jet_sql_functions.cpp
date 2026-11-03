@@ -503,12 +503,12 @@ void singleStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     if (state->error) return;
     if (state->seen) { if (!identicalUpdateValue(state->value,args[0])) state->error=3251; }
     else { state->seen=true; state->value=native.duplicate(args[0]); if (!state->value) state->error=7; }
-    if (state->error) native.error(context,state->error==7 ? "LinAccess SQL function error 7" : "LinAccess SQL function error 3251",-1);
+    if (state->error) native.error(context,state->error==7 ? "LinAccess SQL function error 7" : "LinAccess SQL function error 3251: ambiguous joined update",-1);
 }
 void singleFinal(sqlite3_context* context) noexcept {
     auto& native=api(); auto* state=static_cast<SingleState*>(native.aggregate(context,0));
     if (!state) { native.nullResult(context); return; }
-    if (state->error) native.error(context,state->error==7 ? "LinAccess SQL function error 7" : "LinAccess SQL function error 3251",-1);
+    if (state->error) native.error(context,state->error==7 ? "LinAccess SQL function error 7" : "LinAccess SQL function error 3251: ambiguous joined update",-1);
     else if (state->value) native.result(context,state->value);
     else native.nullResult(context);
     if (state->value) native.freeValue(state->value);
@@ -536,6 +536,11 @@ std::optional<int> jetSqlFunctionErrorNumber(std::string_view foldedMessage) {
     if (parsed.ec!=std::errc{}) return {};
     if (number==5 || number==6 || number==7 || number==13 || number==94 || number==438 || number==450 || number==3035 || number==3146 || number==3061 || number==2450 || number==2451 || number==2455 || number==2465 || number==3251 || number==3085) return number;
     return {};
+}
+std::string jetSqlFunctionErrorExplanation(std::string_view foldedMessage) {
+    if(foldedMessage.find("linaccess sql function error 3251: ambiguous joined update")!=std::string_view::npos)
+        return "Joined UPDATE has conflicting source values for one target";
+    return "Jet SQL function argument invalid";
 }
 void installJetSqlFunctions(QSqlDatabase db) {
     // Keep QSQLITE and all native handle calls on the exact pinned backend.

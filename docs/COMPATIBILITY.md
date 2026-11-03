@@ -1527,3 +1527,20 @@ projection alias arithmetic. GUI-free core passes 1/1 (1.55 s). Existing targets
 only. No full VBA storage-layout or new package/full-suite claim after 4ba1819.
 The CLI token remains invalid; these source commits are locally secured pending
 authentication renewal, rather than claimed as already pushed.
+
+
+## Precise joined UPDATE refusal diagnostics (2026-11-03)
+
+Conflicting joined source values now retain error 3251 with a dedicated, fixed
+explanation through both DAO and shared-query execution. Nullable-side outer-
+join writes also have a distinct refusal instead of a generic grammar failure.
+The private 100-query inventory records fixed reason codes, not raw SQL/values.
+Actual original boundaries are one joined_update_source_conflict and one
+joined_update_nullable_target. The executed count remains 77/100; no arbitrary
+source row is selected and no Access equivalence is invented. Original binding/
+dependency/source-column failures remain unresolved.
+DAO/query/join/inventory checks pass 4/4 (6.91 s); after the final nullable-side
+classification, join/inventory pass 2/2 (7.48 s). The ambiguity regression also
+checks the stable explanation and unchanged target rows. Existing targets only.
+Full suite/package baseline remains local 4ba1819, and CLI push authentication
+still requires renewal.
