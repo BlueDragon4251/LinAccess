@@ -4,6 +4,7 @@
 #include "access_list_box.hpp"
 #include "native_send_keys.hpp"
 #include "native_input_box.hpp"
+#include "native_clock_keys.hpp"
 
 #include "vba_runtime.hpp"
 #include "vba_module_context.hpp"
@@ -2800,10 +2801,7 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
         if (event->key()==Qt::Key_Minus && modifiers==Qt::ControlModifier) {
             (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(223)}); return true;
         }
-        const bool insertDate=event->key()==Qt::Key_Semicolon && modifiers==Qt::ControlModifier;
-        const bool insertTime=(event->key()==Qt::Key_Semicolon || event->key()==Qt::Key_Colon)
-            && modifiers==(Qt::ControlModifier|Qt::ShiftModifier);
-        if(insertDate || insertTime) {
+        if(const auto clockText=linaccess::nativeClockKeyText(*event)) {
             ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
             auto* line=qobject_cast<QLineEdit*>(QApplication::focusWidget());
             const linaccess::AccessVisualControl* selected=nullptr;
@@ -2813,7 +2811,7 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
                 || line->isReadOnly() || !line->isEnabled()) throw linaccess::VbaRuntimeError(2046,"Clock insertion is unavailable");
             if(auto* modal=QApplication::activeModalWidget(); modal && modal!=window() && !modal->isAncestorOf(line)) return true;
             ensureWritableControl(selected->name.toStdString());
-            const auto text=QDateTime::currentDateTime().toString(insertDate ? "yyyy-MM-dd" : "HH:mm:ss");
+            const auto& text=*clockText;
             if(line->text().size()-line->selectedText().size()+text.size()>line->maxLength())
                 throw linaccess::VbaRuntimeError(3251,"Clock text exceeds the native editor capacity");
             rememberControlEdit(line);

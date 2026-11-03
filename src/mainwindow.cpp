@@ -49,6 +49,7 @@
 #include <QSqlQuery>
 #include <QSqlQueryModel>
 #include <QSqlRecord>
+#include <QSqlIndex>
 #include <QSqlTableModel>
 #include <QStatusBar>
 #include <QSplitter>
@@ -818,6 +819,17 @@ void MainWindow::showTable(const QString& name) {
     connect(discard, &QPushButton::clicked, page, [model] { model->revertAll(); });
     connect(save, &QPushButton::clicked, page, [this, model, table] {
         if(!table->finishEditing()) return;
+        const auto selected=table->currentIndex();
+        const auto primary=model->primaryKey();
+        QMap<QString,QVariant> selectedKey;
+        if(selected.isValid() && primary.count()) {
+            const auto record=model->record(selected.row());
+            for(int i=0;i<primary.count();++i) {
+                const auto field=primary.fieldName(i); const auto value=record.value(field);
+                if(value.isNull()) { selectedKey.clear(); break; }
+                selectedKey.insert(field,value);
+            }
+        }
         if (!db_.transaction()) { messageError(this, db_.lastError().text()); return; }
         if (!model->submitAll()) {
             const auto problem = model->lastError().text();
@@ -826,7 +838,25 @@ void MainWindow::showTable(const QString& name) {
             return;
         }
         if (!db_.commit()) { messageError(this, db_.lastError().text()); return; }
-        model->select();
+        if(!model->select()) { messageError(this,model->lastError().text()); return; }
+        // Model submission/reset invalidates Qt indexes. Restore the same keyed
+        // record rather than a row number that may now identify another row.
+        if(!selectedKey.isEmpty()) {
+            int row=0;
+            while(row<1000000) {
+                if(row>=model->rowCount()) {
+                    if(!model->canFetchMore()) break;
+                    const auto count=model->rowCount(); model->fetchMore();
+                    if(model->rowCount()==count) break;
+                }
+                const auto record=model->record(row);
+                bool matches=true;
+                for(auto key=selectedKey.cbegin();key!=selectedKey.cend();++key)
+                    if(record.value(key.key())!=key.value()) { matches=false; break; }
+                if(matches) { table->setCurrentIndex(model->index(row,selected.column())); table->scrollTo(table->currentIndex()); break; }
+                ++row;
+            }
+        }
     });
     auto* saveShortcut=new QShortcut(QKeySequence::Save,page);
     saveShortcut->setContext(Qt::WidgetWithChildrenShortcut);

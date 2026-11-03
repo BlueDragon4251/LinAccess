@@ -3376,3 +3376,21 @@ refuse mutation. The existing layout target passes 1/1 (13.58 s), exercising
 actual keys, Change, cancelled save, SQL Date/time persistence and read-only
 refusal. App builds. Regional Access date masks and datasheet keys remain open
 in this increment; full-suite/package baseline remains 8dc6afa.
+
+
+## Datasheet clock keys and keyed cell restoration (2026-11-03)
+
+Forms and native editable datasheet text cells share one Qt clock-key mapping.
+The table view starts editing the selected cell; an already open delegate editor
+preserves the caret/selection. Ctrl+S retains existing validation/manual-submit
+behavior and persists the actual inserted value. Read-only/non-text editors do
+not mutate. ISO date/whole-second time formatting remains bounded.
+Saving a table now restores the selected existing record/column by its complete
+primary key after model reset, including when sort order moves that record.
+Search is bounded to one million fetched rows; absent/NULL/new-generated keys
+and complete large-table/no-key selection semantics remain open.
+Main-window regression passes 1/1 (1.65 s), proving real date/time keys, persisted
+SQL values, partial replacement and keyed restoration as sorting moves the same
+record twice. The shared-helper form layout target also passed in the preceding
+integration run. App builds; existing targets only. Last full suite/package/hash
+baseline remains 8dc6afa; no complete datasheet/regional-format parity claim.

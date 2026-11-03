@@ -862,3 +862,8 @@ of complete Access parity. Existing broader open items remain open.
 
 - [x] Native form Ctrl+semicolon / Ctrl+Shift+colon date/time insertion through
   edit buffers, Change, validation and real Date persistence; regional masks open.
+
+- [x] Native editable datasheet text-cell date/time shortcuts, starting edit or
+  replacing a live selection, with real Ctrl+S persistence; regional masks open.
+- [x] Existing keyed datasheet cell restored after save/model reset and sort
+  movement, with composite-key comparison and bounded search; new/no-key open.

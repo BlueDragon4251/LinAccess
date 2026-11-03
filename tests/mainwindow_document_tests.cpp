@@ -25,6 +25,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QDateTime>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
 #ifdef NDEBUG
@@ -94,6 +95,26 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     QTest::keyPress(editor,Qt::Key_S,Qt::ControlModifier); QTest::keyRelease(table,Qt::Key_S,Qt::ControlModifier); QApplication::processEvents();
     QSqlQuery query(db); query.prepare("SELECT value FROM shortcut_records WHERE id=?"); query.addBindValue(id); assert(query.exec() && query.next() && query.value(0).toString()=="saved-through-shortcut");
     auto* model=qobject_cast<linaccess::AccessTableModel*>(table->model()); assert(!model->isDirty());
+    assert(table->currentIndex().isValid() && model->index(table->currentIndex().row(),0).data().toInt()==id);
+    assert(query.exec("INSERT INTO shortcut_records VALUES(999,'m-middle')")); query.finish(); assert(model->select());
+    table->sortByColumn(1,Qt::AscendingOrder);
+    int clockRow=-1; for(int row=0;row<model->rowCount();++row) if(model->index(row,0).data().toInt()==id) clockRow=row;
+    assert(clockRow==1); table->setCurrentIndex(model->index(clockRow,1));
+    QApplication::setActiveWindow(&window); table->setFocus();
+    const auto beforeDate=QDate::currentDate(); QTest::keyClick(table,Qt::Key_Semicolon,Qt::ControlModifier);
+    auto* clockEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(clockEditor && table->isAncestorOf(clockEditor));
+    const auto clockDate=clockEditor->text(); assert(clockDate==beforeDate.toString(Qt::ISODate) || clockDate==QDate::currentDate().toString(Qt::ISODate));
+    QTest::keyPress(clockEditor,Qt::Key_S,Qt::ControlModifier); QTest::keyRelease(table,Qt::Key_S,Qt::ControlModifier); QApplication::processEvents();
+    query.prepare("SELECT value FROM shortcut_records WHERE id=?"); query.addBindValue(id); assert(query.exec() && query.next() && query.value(0).toString()==clockDate); query.finish();
+    assert(table->currentIndex().row()==0 && model->index(table->currentIndex().row(),0).data().toInt()==id);
+    table->edit(table->currentIndex()); QApplication::processEvents(); clockEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(clockEditor);
+    clockEditor->setText("prefix-suffix"); clockEditor->setSelection(7,6); QTest::keyClick(clockEditor,Qt::Key_Colon,Qt::ControlModifier|Qt::ShiftModifier);
+    const auto clockTime=clockEditor->text(); assert(clockTime.startsWith("prefix-") && QTime::fromString(clockTime.mid(7),"HH:mm:ss").isValid());
+    QTest::keyPress(clockEditor,Qt::Key_S,Qt::ControlModifier); QTest::keyRelease(table,Qt::Key_S,Qt::ControlModifier); QApplication::processEvents();
+    query.prepare("SELECT value FROM shortcut_records WHERE id=?"); query.addBindValue(id); assert(query.exec() && query.next() && query.value(0).toString()==clockTime); query.finish();
+    assert(table->currentIndex().row()==1 && model->index(table->currentIndex().row(),0).data().toInt()==id);
+    assert(query.exec("DELETE FROM shortcut_records WHERE id=999")); query.finish(); assert(model->select());
+    table->sortByColumn(0,Qt::AscendingOrder); table->setCurrentIndex(model->index(0,1));
     QApplication::setActiveWindow(&window); table->setFocus(); const auto originalRows=model->rowCount();
     QTest::keyClick(table,Qt::Key_Plus,Qt::ControlModifier|Qt::ShiftModifier); QApplication::processEvents();
     assert(model->rowCount()==originalRows+1 && table->currentIndex().row()==originalRows);

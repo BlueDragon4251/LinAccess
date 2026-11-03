@@ -1,5 +1,7 @@
 #pragma once
 #include "access_table_model.hpp"
+#include "native_clock_keys.hpp"
+#include <QLineEdit>
 #include <QTableView>
 #include <QHeaderView>
 #include <QApplication>
@@ -60,6 +62,17 @@ public:
     }
 protected:
     void keyPressEvent(QKeyEvent* event) override {
+        if(const auto text=nativeClockKeyText(*event)) {
+            if(currentIndex().isValid() && currentIndex().flags().testFlag(Qt::ItemIsEditable)) {
+                const bool fresh=!activeEditor();
+                if(fresh) edit(currentIndex());
+                if(auto* editor=qobject_cast<QLineEdit*>(activeEditor());editor && editor->isEnabled() && !editor->isReadOnly()) {
+                    if(fresh) editor->selectAll();
+                    if(editor->text().size()-editor->selectedText().size()+text->size()<=editor->maxLength()) editor->insert(*text);
+                }
+            }
+            event->accept(); return;
+        }
         const auto modifiers=event->modifiers() & ~Qt::KeypadModifier;
         if((modifiers==Qt::ControlModifier || modifiers==(Qt::ControlModifier|Qt::ShiftModifier))
             && (event->key()==Qt::Key_Plus || (event->key()==Qt::Key_Equal && modifiers.testFlag(Qt::ShiftModifier)))) {
