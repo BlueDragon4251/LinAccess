@@ -1022,3 +1022,7 @@ array/COM semantics remain open; see VARIANT_ARRAY_RUNTIME.md.
 Optional Let now supports the existing native value-assignment forms, including
 array elements and object properties; invalid non-assignment Let forms fail
 before execution. Property Let declarations and full VBA grammar remain open.
+
+Native numeric And/Or now enforce checked VBA Long bounds, preserve Integer
+results for Integer pairs, and return Long for the other supported non-Null
+numeric cases. Complete Byte/mixed/Null promotion matrices remain open.

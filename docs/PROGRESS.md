@@ -2899,3 +2899,14 @@ cursor property. Desktop build and core/DAO targets pass 2/2 (1.61 s), original
 VBA inventory passes (0.91 s), and GUI-free build/test passes 1/1 (1.30 s). No new
 target/full-suite/package repeat. Property Let declarations, unsupported lvalue
 forms and the complete lexer/AST remain open.
+
+## Checked native numeric And/Or (2026-11-03)
+
+Non-Null numeric And/Or now coerce through checked 32-bit VBA Long operands
+instead of accepting host-wide 64-bit bit masks. Two declared Integer operands
+retain Integer results; other numeric cases currently return Long, matching the
+existing bounded Xor/Eqv/Imp path. Boolean-only behavior remains native Boolean.
+Core regression checks subtype, banker rounding and 32-bit overflow. Desktop
+build and core/DAO targets pass 2/2 (1.66 s). No new target/full-suite/package
+repeat. Complete Byte/mixed/Null promotion matrices and all Windows operator
+coercion behavior remain open.

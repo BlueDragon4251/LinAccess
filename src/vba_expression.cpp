@@ -285,7 +285,12 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         }
         if (left.kind == VbaValue::Kind::Boolean && right.kind == VbaValue::Kind::Boolean)
             return VbaValue::logical(op == "and" ? left.boolean && right.boolean : left.boolean || right.boolean);
-        return VbaValue::numeric(op == "and" ? integer(left) & integer(right) : integer(left) | integer(right));
+        const auto a=static_cast<std::int32_t>(coerceVbaModuleValue(left,"long").number);
+        const auto b=static_cast<std::int32_t>(coerceVbaModuleValue(right,"long").number);
+        const auto answer=op=="and" ? a&b : a|b;
+        const bool narrow=left.kind==VbaValue::Kind::Number && right.kind==VbaValue::Kind::Number
+            && left.numericType==VbaValue::NumericType::Integer && right.numericType==VbaValue::NumericType::Integer;
+        return narrow ? VbaValue::integer(static_cast<std::int16_t>(answer)) : VbaValue::longInteger(answer);
     }
     if (op=="xor" || op=="eqv" || op=="imp") {
         const bool leftNull=left.kind==VbaValue::Kind::Null,rightNull=right.kind==VbaValue::Kind::Null;

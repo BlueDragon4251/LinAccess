@@ -2578,5 +2578,9 @@ End Function
     assert(letValues.status==VbaExecutionStatus::Completed && letValues.returnValue=="7" && host.fields["LetAssignment"]=="5");
     const auto invalidLet=executeVbaProcedure("Sub InvalidLet()\nLet MsgBox \"invalid assignment\"\nEnd Sub","InvalidLet",host);
     assert(invalidLet.status==VbaExecutionStatus::Error);
+    assert(evaluate("VarType(CInt(3) And CInt(1))=vbInteger").truthy());
+    assert(evaluate("VarType(CLng(3) Or CLng(4))=vbLong").truthy());
+    assert(evaluate("1.5 And 2").asNumber()==2);
+    substringError("2147483648 And 0",6); substringError("-2147483649 Or 0",6);
     std::cout << "Core tests passed\n";
 }
