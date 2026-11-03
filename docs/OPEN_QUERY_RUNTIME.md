@@ -34,10 +34,27 @@ parameter cancel/checked Currency, rejects action queries without data changes,
 and verifies a query remains after its VBA opener closes itself. No new targets.
 
 This is a bounded readonly datasheet path. Default/acEdit updateability, other
-views, action-query UI/warnings, query record navigation/Save/Copy/Find/Requery,
+views, action-query UI/warnings, query record navigation/Save/Copy/Find,
 SelectObject query activation, linked/provider behavior and complete Access
 window/event/error-priority parity remain open. SQL compatibility remains the
 executor's measured subset; query presence is not execution compatibility.
 
 Microsoft reference:
 https://learn.microsoft.com/en-us/office/vba/api/access.docmd.openquery
+
+## Requery and Shift+F9
+
+Requery on the active readonly query document and its native Shift+F9 shortcut
+reload the current saved definition and prompt declared parameters again. A new
+real SQL result is materialized separately; only successful execution replaces
+the existing model. Errors and cancelled parameters preserve the old rows/model.
+Successful replacement selects the first row and retains the bounded column.
+
+The old document may close during execution without deleting the executing
+replacement model or resurrecting the closed tab. Same-query recursive execution
+refuses 3251. Project close/replacement is blocked while the SQL executor runs;
+project identity and document lifetime are checked before publishing results.
+The existing main-window target covers fresh SQL values/definitions, actual
+Shift+F9, parameter cancellation/conversion and an actual SQLite scalar callback
+that requests reentry/project close and destroys the original page mid-query.
+These are native lifetime guarantees, not an Access-wide reentrancy claim.

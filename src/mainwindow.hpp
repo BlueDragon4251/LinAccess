@@ -7,6 +7,7 @@
 #include <QStringList>
 #include <QPointer>
 #include <QVariantMap>
+#include <QSet>
 
 class QTabWidget;
 class QTreeWidget;
@@ -42,11 +43,14 @@ private:
     QTreeWidget* explorer_{};
     QTabWidget* tabs_{};
     QPointer<QWidget> activeDataPage_;
+    int queryExecutionDepth_{};
+    QSet<QString> executingQueries_;
 
     bool finishActiveDataEditors();
     bool activateDataPage(QWidget* page);
     QWidget* findOpenTable(const QString& name) const;
     QWidget* findOpenQuery(const QString& name) const;
+    QVariantMap loadQueryDocument(const QString& name,int view,int mode,QWidget* refresh);
     QVariantMap saveDataPage(QWidget* page,bool interactive);
 
     bool canCloseDataPage(QWidget* page);
