@@ -365,6 +365,10 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
     if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
     if(QApplication::activeModalWidget()) return tableCommandFailure(2046,"Tabellenbefehl ist durch ein modales Fenster blockiert.");
     if(command==97) return saveDataPage(page,false);
+    if(command>=65 && command<=68) {
+        const int actions[]{1,0,2,3};
+        return navigateTableDocument({},actions[command-65],1,false);
+    }
     if(command==50 || command==190 || command==179) {
         QPointer<linaccess::AccessTableView> table;
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
@@ -385,6 +389,59 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         return {{"handled",true},{"error",0}};
     }
     return tableCommandFailure(3251,"Dieser native Tabellenbefehl ist noch nicht implementiert.");
+}
+
+QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int offset,bool explicitTable) {
+    const bool active= !activePreviewDocument() && AccessFormPreview::databaseWindowActive(this) && activeDataPage_
+        && tabs_->indexOf(activeDataPage_)>=0 && tabs_->currentWidget()==activeDataPage_;
+    if(!explicitTable && !active) return {};
+    if(action<0 || action>5) return tableCommandFailure(5,"Ungültige Datensatznavigation.");
+    if((action==0 || action==1 || action==4) && offset<1) return tableCommandFailure(2105,"Ungültiger Datensatzabstand.");
+    if(action==5) return tableCommandFailure(3251,"Neue Tabellenzeilen über GoToRecord sind noch nicht implementiert.");
+    if(!db_.isOpen() || QApplication::activeModalWidget()) return tableCommandFailure(2046,"Tabellennavigation ist in diesem Kontext nicht verfügbar.");
+    QPointer<MainWindow> self=this;
+    QPointer<QWidget> page=name.isEmpty() ? (active ? activeDataPage_.data() : nullptr) : findOpenTable(name);
+    if(!page) return tableCommandFailure(3251,"Die angeforderte offene Tabelle ist nicht verfügbar.");
+    if((!active || page!=activeDataPage_) && !activateDataPage(page)) return tableCommandFailure(2501,"Tabellenaktivierung wurde abgebrochen.");
+    if(!self || !page) return tableCommandFailure(2501,"Tabellendokument wurde während der Aktivierung geschlossen.");
+    QPointer<linaccess::AccessTableView> table;
+    for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
+    QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
+    if(!table || !model) return tableCommandFailure(2046,"Kein natives Tabellendokument.");
+    if(!table->finishEditing()) return tableModelFailure(model,2501);
+    if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während der Validierung geschlossen.");
+    // Only the current existing record may be saved here. A manual-submit cache
+    // can also contain unrelated drafts, insertions and deletions.
+    if(model->isDirty()) {
+        if(!model->canSubmitCurrentRecordAlone(table->currentIndex().row()))
+            return tableCommandFailure(3251,"Navigation mit mehreren Tabellenentwürfen oder neuen/gelöschten Zeilen ist noch nicht implementiert.");
+        const auto saved=saveDataPage(page,false);
+        if(saved.value("error").toInt()) return saved;
+        if(!self || !page || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde beim Speichern geschlossen.");
+    }
+    const auto current=table->currentIndex();
+    qint64 target=action==2 ? 0 : action==4 ? static_cast<qint64>(offset)-1
+        : action==0 ? static_cast<qint64>(current.row())-offset : static_cast<qint64>(current.row())+offset;
+    if((action==0 || action==1) && !current.isValid()) return tableCommandFailure(2105,"Kein aktueller Datensatz.");
+    if(target<0 && action!=3) return tableCommandFailure(2105,"Der angeforderte Datensatz ist nicht verfügbar.");
+    constexpr int rowLimit=1000000;
+    if(target>=rowLimit && action!=3) return tableCommandFailure(3251,"Datensatzziel überschreitet die native Navigationsgrenze.");
+    while(model->canFetchMore() && (action==3 || target>=model->rowCount())) {
+        if(model->rowCount()>=rowLimit) return tableCommandFailure(3251,"Datensatzmenge überschreitet die native Navigationsgrenze.");
+        const int before=model->rowCount(); model->fetchMore();
+        if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde beim Laden geschlossen.");
+        if(model->rowCount()>rowLimit) return tableCommandFailure(3251,"Datensatzmenge überschreitet die native Navigationsgrenze.");
+        if(model->rowCount()==before) {
+            if(model->lastError().isValid()) return tableModelFailure(model,3146);
+            break;
+        }
+    }
+    if(action==3) target=static_cast<qint64>(model->rowCount())-1;
+    if(target<0 || target>=model->rowCount()) return tableCommandFailure(2105,"Der angeforderte Datensatz ist nicht verfügbar.");
+    const auto destination=model->index(static_cast<int>(target),current.isValid() ? current.column() : 0);
+    if(!destination.isValid()) return tableCommandFailure(2105,"Der angeforderte Datensatz ist nicht verfügbar.");
+    table->setCurrentIndex(destination); table->scrollTo(destination); table->setFocus();
+    return {{"handled",true},{"error",0}};
 }
 
 QVariantMap MainWindow::closeTableDocument(int type,const QString& name,int save) {

@@ -158,6 +158,27 @@ Sub SaveActiveTableViaApplication()
 Application.RunCommand Command:=acCmdSaveRecord
 Me.Tag="application-table-saved"
 End Sub
+Sub OpenNavigationTable()
+DoCmd.OpenTable "command_navigation"
+End Sub
+Sub FirstNamedTableRecord()
+DoCmd.GoToRecord acTable,"command_navigation",acFirst
+End Sub
+Sub NamedTableRecord300()
+DoCmd.GoToRecord acTable,"command_navigation",acGoTo,300
+End Sub
+Sub LastTableRecord()
+Application.RunCommand Command:=acCmdRecordsGoToLast
+End Sub
+Sub PreviousTableRecord()
+DoCmd.RunCommand acCmdRecordsGoToPrevious
+End Sub
+Sub NextTableRecord()
+DoCmd.GoToRecord
+End Sub
+Sub CloseNavigationTable()
+DoCmd.Close acTable,"command_navigation"
+End Sub
 Sub ZoomTableCell()
 DoCmd.RunCommand acCmdZoomBox
 End Sub
@@ -188,6 +209,8 @@ End Sub
     assert(unchanged.exec("INSERT INTO command_readonly VALUES(1,1.25,-1),(2,NULL,NULL)"));
     assert(unchanged.exec("CREATE TABLE command_edit(id INTEGER PRIMARY KEY AUTOINCREMENT,value TEXT CHECK(value!='blocked'))"));
     assert(unchanged.exec("INSERT INTO command_edit VALUES(1,'initial')"));
+    assert(unchanged.exec("CREATE TABLE command_navigation(id INTEGER PRIMARY KEY,value TEXT CHECK(value!='blocked'))"));
+    assert(unchanged.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<300) INSERT INTO command_navigation SELECT x,'row-'||x FROM n"));
     action(window,"Aktualisieren")->trigger(); openArtifact(window,mixedId); QPointer<AccessFormPreview> mixed=document("tab_cycle_form"); assert(mixed);
     auto* mixedEditor=mixed->findChild<QLineEdit*>("access-control-focus"); assert(mixedEditor); QApplication::setActiveWindow(mixed); mixedEditor->setFocus(); QApplication::processEvents();
     QTest::keyClick(mixedEditor,Qt::Key_F6,Qt::ControlModifier); QApplication::processEvents(); assert(explorer->hasFocus());
@@ -226,6 +249,38 @@ End Sub
     assert(mixed->executeProcedure("ZoomTableCell",selectArguments).status==linaccess::VbaExecutionStatus::Completed && !readonlyModel->isDirty());
     QApplication::setActiveWindow(&window); readonlyView->setFocus(); QApplication::processEvents();
     assert(unchanged.exec("SELECT value,flag FROM command_readonly WHERE id=1") && unchanged.next() && unchanged.value(0).toDouble()==1.25 && unchanged.value(1).toInt()==-1); unchanged.finish();
+    assert(mixed->executeProcedure("OpenNavigationTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
+    auto* navigationView=nativeTable(documentTabs->currentWidget());
+    auto* navigationModel=qobject_cast<linaccess::AccessTableModel*>(navigationView->model()); assert(navigationModel);
+    navigationView->sortByColumn(0,Qt::AscendingOrder);
+    navigationView->setCurrentIndex(navigationModel->index(0,1));
+    assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(navigationView->currentIndex().row()==299 && navigationView->currentIndex().column()==1 && navigationModel->rowCount()==300);
+    assert(mixed->executeProcedure("PreviousTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==298);
+    assert(mixed->executeProcedure("NextTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==299);
+    assert(mixed->executeProcedure("NextTableRecord",selectArguments).errorNumber==2105 && navigationView->currentIndex().row()==299);
+    assert(window.activateOpenTable("command_readonly")==0);
+    assert(mixed->executeProcedure("FirstNamedTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->currentWidget()==navigationView->parentWidget());
+    assert(navigationView->currentIndex().row()==0);
+    assert(mixed->executeProcedure("NamedTableRecord300",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==299);
+    navigationView->setCurrentIndex(navigationModel->index(0,1));
+    assert(navigationModel->setData(navigationModel->index(0,1),"navigation-saved"));
+    assert(navigationModel->setData(navigationModel->index(1,1),"other-draft"));
+    assert(mixed->executeProcedure("LastTableRecord",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==0 && navigationModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="row-1"); unchanged.finish();
+    assert(mixed->executeProcedure("SaveActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==299);
+    assert(navigationModel->setData(navigationModel->index(299,1),"automatic-navigation-save"));
+    assert(mixed->executeProcedure("PreviousTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(navigationView->currentIndex().row()==298 && !navigationModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=300") && unchanged.next() && unchanged.value(0).toString()=="automatic-navigation-save"); unchanged.finish();
+
+    assert(navigationModel->setData(navigationModel->index(298,1),"blocked"));
+    assert(mixed->executeProcedure("NextTableRecord",selectArguments).errorNumber==3146 && navigationView->currentIndex().row()==298 && navigationModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=299") && unchanged.next() && unchanged.value(0).toString()=="row-299"); unchanged.finish();
+    assert(navigationModel->setData(navigationModel->index(298,1),"navigation-retry"));
+    assert(mixed->executeProcedure("NextTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==299 && !navigationModel->isDirty());
+    assert(mixed->executeProcedure("CloseNavigationTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     assert(mixed->executeProcedure("OpenEditableTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     const QPointer<QWidget> editablePage=documentTabs->currentWidget(); auto* editableView=nativeTable(editablePage);
     auto* editableModel=qobject_cast<linaccess::AccessTableModel*>(editableView->model()); assert(editableModel && !editableModel->isReadOnly() && editableModel->setData(editableModel->index(0,1),"changed"));

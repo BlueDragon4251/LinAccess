@@ -946,3 +946,7 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native table DoCmd/Application acCmdCopy uses the actual checked TSV selection, including readonly and dirty cached rows without SQL submission.
 
 - [x] Native table acCmdZoomBox uses checked typed cached edits and readonly viewing; Cancel completes without mutation and SelectRecord preserves its active field.
+
+- [x] Bounded named/default table GoToRecord and native First/Previous/Next/Last use actual view order and fetch SQL rows beyond the initial Qt batch.
+- [x] Table navigation transactionally saves a sole changed existing current record with primary-key restoration; SQL failure retains the draft for retry.
+- [ ] General table navigation with unrelated multirow drafts, inserted/deleted current records, and Access addition-row/error equivalence.

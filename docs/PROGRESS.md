@@ -3742,3 +3742,21 @@ fixed without losing whole-row selection. See TABLE_DOCUMENT_RUNTIME.md.
 Existing main-window/Currency targets 2/2 (2.47 s); full/package baseline remains
 2dd59b2 / API 32cb556, 48/48 (91.15 s). No new targets.
 Theoretical checklist: 295 checked / 70 open scoped points.
+
+
+## Native table record navigation and checked autosave (2026-11-03)
+
+Named/default GoToRecord and native First/Previous/Next/Last navigate actual
+SQL-backed view order, including rows past Qt's initial batch. A sole changed
+existing record with a primary key is saved transactionally before relative
+navigation. Multiple drafts, inserts/deletes and unsafe current identity remain
+explicit unsupported boundaries. SQL failure retains the current row/draft for
+correction and retry. Canonical details: TABLE_DOCUMENT_RUNTIME.md.
+Theoretical checklist: 297 checked / 71 open scoped points.
+
+Full rebuilt desktop suite passes 48/48 (91.33 s), GUI-free core 1/1 (2.49 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. Existing focused trio passes 3/3 (16.79 s), exercising
+300 actual SQL rows, named/default/relative targets, sole-record SQL persistence,
+constraint failure/retry and untouched multirow drafts. Fixtures explicitly sort
+ascending; production navigation follows the current view order. No new targets.
