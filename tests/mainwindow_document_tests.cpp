@@ -159,6 +159,48 @@ Sub OpenReadQuery()
 DoCmd.OpenQuery QueryName:="command_query_doc",DataMode:=acReadOnly
 Me.Tag="query-opened"
 End Sub
+Sub QueryLastRecord()
+DoCmd.GoToRecord , , acLast
+Me.Tag="query-last"
+End Sub
+Sub QueryNamedRecord()
+DoCmd.GoToRecord ObjectType:=acDataQuery,ObjectName:="COMMAND_QUERY_DOC",Record:=acGoTo,Offset:=2
+Me.Tag="query-named"
+End Sub
+Sub QueryAbsentRecord()
+DoCmd.GoToRecord acDataQuery,"absent_query",acFirst
+End Sub
+Sub QueryCopyRecord()
+DoCmd.RunCommand acCmdSelectRecord
+DoCmd.RunCommand acCmdCopy
+End Sub
+Sub QuerySelectAll()
+DoCmd.RunCommand acCmdSelectAllRecords
+End Sub
+Sub QueryCopyByKeys()
+DoCmd.SendKeys "^c",True
+Me.Tag="query-keys"
+End Sub
+Sub QueryFirstCommand()
+DoCmd.RunCommand acCmdRecordsGoToFirst
+End Sub
+Sub QueryNextRecord()
+DoCmd.GoToRecord
+End Sub
+Sub QueryNewRecord()
+DoCmd.GoToRecord , , acNewRec
+End Sub
+Sub SelectReadQuery()
+DoCmd.SelectObject acQuery,"COMMAND_QUERY_DOC",False
+Me.Tag="query-selected"
+End Sub
+Sub SelectParameterQuery()
+DoCmd.SelectObject acQuery,"command_parameter_doc",False
+End Sub
+Sub SelectAbsentQuery()
+DoCmd.SelectObject acQuery,"absent_query",False
+Me.Tag="unreachable-query"
+End Sub
 Sub OpenParameterQuery()
 DoCmd.OpenQuery "command_parameter_doc",,acReadOnly
 Me.Tag="parameter-opened"
@@ -465,6 +507,31 @@ End Sub
     auto* queryView=queryPage->findChild<QTableView*>("native-query-view"); assert(queryView && dynamic_cast<linaccess::AccessQueryModel*>(queryView->model()));
     assert(queryView->model()->rowCount()==2 && queryView->model()->index(0,1).data().toDouble()==1.25 && !queryView->model()->index(0,1).flags().testFlag(Qt::ItemIsEditable));
     assert(mixedEditor->text()==callerBeforeQueries && makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="query-opened");
+    queryView->setCurrentIndex(queryView->model()->index(0,1));
+    assert(mixed->executeProcedure("QueryLastRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->currentIndex().row()==1 && queryView->currentIndex().column()==1);
+    assert(mixed->executeProcedure("QueryNextRecord",selectArguments).errorNumber==2105 && queryView->currentIndex().row()==1);
+    assert(mixed->executeProcedure("QueryFirstCommand",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->currentIndex().row()==0);
+    assert(mixed->executeProcedure("QueryNextRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->currentIndex().row()==1);
+    assert(mixed->executeProcedure("QueryNewRecord",selectArguments).errorNumber==2448 && queryView->model()->rowCount()==2);
+    queryView->setCurrentIndex(queryView->model()->index(0,1));
+    QApplication::setActiveWindow(&window); queryView->setFocus(); QApplication::processEvents();
+    QApplication::clipboard()->setText("query-copy-sentinel"); QTest::keyClick(queryView,Qt::Key_C,Qt::ControlModifier);
+    assert(QApplication::clipboard()->text()=="1.25");
+    QApplication::clipboard()->setText("query-copy-sentinel"); QTest::keyClick(queryView,Qt::Key_Insert,Qt::ControlModifier);
+    assert(QApplication::clipboard()->text()=="1.25");
+    queryView->setColumnHidden(1,true); QApplication::clipboard()->setText("query-copy-sentinel");
+    assert(window.dispatchTableCommand(190).value("error").toInt()==3251 && QApplication::clipboard()->text()=="query-copy-sentinel");
+    queryView->setColumnHidden(1,false);
+    assert(mixed->executeProcedure("QueryCopyByKeys",selectArguments).status==linaccess::VbaExecutionStatus::Completed && QApplication::clipboard()->text()=="1.25");
+    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="query-keys");
+    assert(mixed->executeProcedure("QueryCopyRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(queryView->selectionModel()->selectedIndexes().size()==3 && QApplication::clipboard()->text().startsWith("1\t1.25\t"));
+    assert(mixed->executeProcedure("QuerySelectAll",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->selectionModel()->selectedIndexes().size()==6);
+    queryView->setCurrentIndex(queryView->model()->index(0,1));
+
+
+    assert(window.navigateTableDocument({},2,1,true).value("error").toInt()==3251);
+
     auto queryDescriptor=makePreviewApplicationObject(*mixed)->member("CurrentData",{}).object->member("AllQueries",{}).object->member("Item",{linaccess::VbaValue::string("command_query_doc")}).object;
     assert(queryDescriptor->member("IsLoaded",{}).boolean);
     assert(mixed->executeProcedure("OpenReadQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->currentWidget()==queryPage && documentTabs->count()==beforeQueries+1);
@@ -525,6 +592,21 @@ End Sub
     assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).errorNumber==2501 && parameterView->model()==oldParameterResult && parameterView->model()->index(0,0).data().toString()=="1.2346");
     QTimer::singleShot(0,&window,[] { auto* dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog); dialog->setTextValue("2.5"); dialog->accept(); });
     assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && parameterView->model()->index(0,0).data().toDouble()==2.5);
+    const QPointer<QWidget> parameterPage=documentTabs->currentWidget();
+    assert(mixed->executeProcedure("OpenReadQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    const QPointer<QWidget> selectQueryPage=documentTabs->currentWidget();
+    assert(mixed->executeProcedure("SelectParameterQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->currentWidget()==parameterPage);
+    const int beforeSelect=documentTabs->count();
+    assert(mixed->executeProcedure("QueryNamedRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->currentWidget()==selectQueryPage);
+    assert(selectQueryPage->findChild<QTableView*>("native-query-view")->currentIndex().row()==1);
+    assert(mixed->executeProcedure("QueryAbsentRecord",selectArguments).errorNumber==3251 && documentTabs->currentWidget()==selectQueryPage);
+    assert(mixed->executeProcedure("SelectParameterQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->currentWidget()==parameterPage);
+
+    assert(mixed->executeProcedure("SelectReadQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->currentWidget()==selectQueryPage && documentTabs->count()==beforeSelect);
+    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="query-selected");
+    assert(mixed->executeProcedure("SelectAbsentQuery",selectArguments).errorNumber==3251 && documentTabs->currentWidget()==selectQueryPage && documentTabs->count()==beforeSelect);
+    assert(mixed->executeProcedure("CloseReadQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(mixed->executeProcedure("SelectParameterQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->currentWidget()==parameterPage);
     assert(mixed->executeProcedure("CloseParameterQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     openArtifact(window,queryCallerId); QPointer<AccessFormPreview> queryCaller=document("query_lifetime_caller"); assert(queryCaller);
     assert(queryCaller->executeProcedure("OpenAndClose",selectArguments).status==linaccess::VbaExecutionStatus::Completed);

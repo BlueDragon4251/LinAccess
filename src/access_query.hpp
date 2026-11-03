@@ -51,6 +51,7 @@ public:
     int rowCount(const QModelIndex& parent = {}) const override { return parent.isValid() ? 0 : result_.rows.size(); }
     int columnCount(const QModelIndex& parent = {}) const override { return parent.isValid() ? 0 : result_.columns.size(); }
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+    QString clipboardText(const QModelIndex& index) const;
     QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
 private:
     AccessQueryResult result_;

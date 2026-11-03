@@ -586,17 +586,16 @@ public:
         QPointer<AccessFormPreview> selected;
         if(inDatabase) selectDatabase(false);
         else {
-            if(type==0) {
+            if(type==0 || type==1) {
                 if(QApplication::activeModalWidget()) throw linaccess::VbaRuntimeError(2046,"SelectObject is blocked by a modal window");
                 int error=0;
-                if(!owner || owner->metaObject()->indexOfMethod("activateOpenTable(QString)")<0
-                    || !QMetaObject::invokeMethod(owner,"activateOpenTable",Qt::DirectConnection,Q_RETURN_ARG(int,error),Q_ARG(QString,name)))
-                    throw linaccess::VbaRuntimeError(3251,"Native open-table selection is unavailable");
-                if(error) throw linaccess::VbaRuntimeError(error,"Open table selection failed");
+                const char* method=type==0 ? "activateOpenTable" : "activateOpenQuery";
+                if(!owner || !QMetaObject::invokeMethod(owner,method,Qt::DirectConnection,Q_RETURN_ARG(int,error),Q_ARG(QString,name)))
+                    throw linaccess::VbaRuntimeError(3251,"Native open-datasheet selection is unavailable");
+                if(error) throw linaccess::VbaRuntimeError(error,"Open datasheet selection failed");
                 preview_.setProperty("la_explicit_table_context",true);
                 return;
             }
-            if(type!=2 && type!=3) throw linaccess::VbaRuntimeError(3251,"Open query window selection is not implemented");
             for(auto* widget:QApplication::topLevelWidgets()) {
                 auto* candidate=dynamic_cast<AccessFormPreview*>(widget);
                 if(!candidate || !candidate->isWindow() || !candidate->opened_ || candidate->closed_ || candidate->openCancelled_
@@ -645,6 +644,19 @@ public:
         if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
         preview_.setProperty("la_explicit_table_context",true);
         return true;
+    }
+    void queryNavigation(int action,int offset,const QString& name) {
+        QWidget* owner=nullptr;
+        for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+            if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+        QVariantMap result;
+        if(!owner || !QMetaObject::invokeMethod(owner,"navigateQueryDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),
+            Q_ARG(QString,name),Q_ARG(int,action),Q_ARG(int,offset)))
+            throw linaccess::VbaRuntimeError(3251,"Native query navigation is unavailable");
+        const int error=result.value("error").toInt();
+        if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
+        if(!result.value("handled").toBool()) throw linaccess::VbaRuntimeError(3251,"Query navigation was not handled");
+        preview_.setProperty("la_explicit_table_context",true);
     }
     void gotoRecord(int action,int offset=1,const QString& name={}) {
         if(name.isEmpty() && tableNavigation(action,offset,name,false)) return;
@@ -942,12 +954,13 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         if (args.size()>4) throw VbaRuntimeError(450,"GoToRecord argument count invalid");
         const auto type=!args.empty() && args[0].kind!=VbaValue::Kind::Empty ? number(args[0]) : -1;
         const auto name=args.size()>1 && args[1].kind!=VbaValue::Kind::Empty ? QString::fromStdString(args[1].asText()) : QString{};
-        if ((type!=-1 && type!=0 && type!=2) || (!name.isEmpty() && type!=0 && type!=2)) throw VbaRuntimeError(3251,"GoToRecord object type unsupported");
+        if ((type!=-1 && type!=0 && type!=1 && type!=2) || (!name.isEmpty() && type!=0 && type!=1 && type!=2)) throw VbaRuntimeError(3251,"GoToRecord object type unsupported");
         const auto action=args.size()>2 && args[2].kind!=VbaValue::Kind::Empty ? number(args[2]) : 1;
         const auto offset=args.size()>3 && args[3].kind!=VbaValue::Kind::Empty ? number(args[3]) : 1;
         if(type==0) {
             if(!host.tableNavigation(action,offset,name,true)) throw VbaRuntimeError(3251,"Native table navigation is unavailable");
-        } else host.gotoRecord(action,offset,name);
+        } else if(type==1) host.queryNavigation(action,offset,name);
+        else host.gotoRecord(action,offset,name);
         return {};
     }
     throw VbaRuntimeError(438,"Document command unsupported");

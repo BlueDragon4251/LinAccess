@@ -1,4 +1,5 @@
 #include "mainwindow.hpp"
+#include "native_grid_clipboard.hpp"
 #include "native_input_box.hpp"
 #include "native_edit_menu.hpp"
 #include <QCloseEvent>
@@ -487,6 +488,13 @@ QVariantMap MainWindow::loadQueryDocument(const QString& name,int view,int mode,
             auto* close=new QShortcut(key,document); close->setContext(Qt::WidgetWithChildrenShortcut);
             connect(close,&QShortcut::activated,document,[this,document] { const int index=tabs_->indexOf(document); if(index>=0) emit tabs_->tabCloseRequested(index); });
         }
+        for(const auto key:{QKeySequence(Qt::ControlModifier|Qt::Key_C),QKeySequence(Qt::ControlModifier|Qt::Key_Insert)}) {
+            auto* copy=new QShortcut(key,document); copy->setContext(Qt::WidgetWithChildrenShortcut);
+            connect(copy,&QShortcut::activated,document,[this] {
+                const auto result=dispatchTableCommand(190);
+                if(result.value("error").toInt()) statusBar()->showMessage(result.value("description").toString(),10000);
+            });
+        }
         auto* requery=new QShortcut(QKeySequence(Qt::ShiftModifier|Qt::Key_F9),document);
         requery->setContext(Qt::WidgetWithChildrenShortcut);
         connect(requery,&QShortcut::activated,document,[this] {
@@ -523,6 +531,29 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
     const QPointer<QWidget> page=activeDataPage_;
     if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
     if(QApplication::activeModalWidget()) return tableCommandFailure(2046,"Tabellenbefehl ist durch ein modales Fenster blockiert.");
+    if(page->property("la_project_object_kind").toString()=="query" && (command==50 || command==109)) {
+        auto* view=page->findChild<QTableView*>("native-query-view");
+        if(!view || !view->model() || !view->selectionModel()) return tableCommandFailure(2046,"Kein natives Abfrageergebnis verfügbar.");
+        if(command==50) {
+            if(!view->currentIndex().isValid()) return tableCommandFailure(2046,"Kein aktueller Abfragedatensatz.");
+            view->selectionModel()->select(view->currentIndex(),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);
+        } else {
+            if(static_cast<qint64>(view->model()->rowCount())*view->model()->columnCount()>1000000)
+                return tableCommandFailure(3251,"Abfrageauswahl überschreitet die native Zellgrenze.");
+            view->selectAll();
+        }
+        view->setFocus(); return {{"handled",true},{"error",0}};
+    }
+    if(page->property("la_project_object_kind").toString()=="query" && command==190) {
+        auto* view=page->findChild<QTableView*>("native-query-view");
+        auto* model=view ? dynamic_cast<linaccess::AccessQueryModel*>(view->model()) : nullptr;
+        if(!model) return tableCommandFailure(2046,"Kein natives Abfrageergebnis verfügbar.");
+        try {
+            const auto text=linaccess::nativeGridClipboardText(*view,[model](const QModelIndex& index) { return model->clipboardText(index); });
+            QApplication::clipboard()->setText(text);
+            return {{"handled",true},{"error",0}};
+        } catch(const linaccess::VbaRuntimeError& error) { return tableCommandFailure(error.number,"Die Abfrageauswahl kann nicht verlustfrei als Text kopiert werden."); }
+    }
     if(command==97) return saveDataPage(page,false);
     if(command>=65 && command<=68) {
         const int actions[]{1,0,2,3};
@@ -670,6 +701,10 @@ QVariantMap MainWindow::tableKeyboardContext() {
     if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
     bool native=false;
     for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate);view && qobject_cast<linaccess::AccessTableModel*>(view->model())) { native=true; break; }
+    if(!native && page->property("la_project_object_kind").toString()=="query") {
+        auto* view=page->findChild<QTableView*>("native-query-view");
+        native=view && dynamic_cast<linaccess::AccessQueryModel*>(view->model());
+    }
     if(!native) return {};
     QVariantMap result{{"handled",true},{"connection",db_.connectionName()},{"database",db_.databaseName()}};
     auto* focus=QApplication::focusWidget();
@@ -710,6 +745,17 @@ QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
     } catch(const linaccess::VbaRuntimeError& error) { return tableCommandFailure(error.number,QString::fromUtf8(error.what())); }
 }
 
+QVariantMap MainWindow::navigateQueryDocument(const QString& name,int action,int offset) {
+    if(!db_.isOpen() || QApplication::activeModalWidget()) return tableCommandFailure(2046,"Abfragenavigation ist in diesem Kontext nicht verfügbar.");
+    const QPointer<QWidget> page=name.isEmpty() ? activeDataPage_.data() : findOpenQuery(name);
+    if(!page || tabs_->indexOf(page)<0 || page->property("la_project_object_kind").toString()!="query")
+        return tableCommandFailure(3251,"Die angeforderte offene Abfrage ist nicht verfügbar.");
+    const QPointer<MainWindow> self=this;
+    if(!activateDataPage(page)) return tableCommandFailure(2501,"Abfrageaktivierung wurde abgebrochen.");
+    if(!self || !page) return tableCommandFailure(2501,"Abfragedokument wurde während der Aktivierung geschlossen.");
+    return navigateTableDocument({},action,offset,false);
+}
+
 QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int offset,bool explicitTable) {
     const bool active= !activePreviewDocument() && AccessFormPreview::databaseWindowActive(this) && activeDataPage_
         && tabs_->indexOf(activeDataPage_)>=0 && tabs_->currentWidget()==activeDataPage_;
@@ -722,6 +768,23 @@ QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int
     if(!page) return tableCommandFailure(3251,"Die angeforderte offene Tabelle ist nicht verfügbar.");
     if((!active || page!=activeDataPage_) && !activateDataPage(page)) return tableCommandFailure(2501,"Tabellenaktivierung wurde abgebrochen.");
     if(!self || !page) return tableCommandFailure(2501,"Tabellendokument wurde während der Aktivierung geschlossen.");
+    if(page->property("la_project_object_kind").toString()=="query") {
+        if(explicitTable) return tableCommandFailure(3251,"Die aktive Abfrage ist keine Tabelle.");
+        const QPointer<QTableView> view=page->findChild<QTableView*>("native-query-view");
+        auto* result=view ? dynamic_cast<linaccess::AccessQueryModel*>(view->model()) : nullptr;
+        if(!result) return tableCommandFailure(2046,"Kein natives Abfrageergebnis verfügbar.");
+        if(action==5) return tableCommandFailure(2448,"Schreibgeschützte Abfrage erlaubt keinen neuen Datensatz.");
+        const auto current=view->currentIndex();
+        if((action==0 || action==1) && !current.isValid()) return tableCommandFailure(2105,"Kein aktueller Datensatz.");
+        const qint64 target=action==2 ? 0 : action==3 ? static_cast<qint64>(result->rowCount())-1
+            : action==4 ? static_cast<qint64>(offset)-1
+            : static_cast<qint64>(current.row())+(action==0 ? -static_cast<qint64>(offset) : offset);
+        if(target<0 || target>=result->rowCount()) return tableCommandFailure(2105,"Der angeforderte Datensatz ist nicht verfügbar.");
+        const auto destination=result->index(static_cast<int>(target),current.isValid() ? current.column() : 0);
+        if(!destination.isValid()) return tableCommandFailure(2105,"Der angeforderte Datensatz ist nicht verfügbar.");
+        view->setCurrentIndex(destination); view->scrollTo(destination); view->setFocus();
+        return {{"handled",true},{"error",0}};
+    }
     QPointer<linaccess::AccessTableView> table;
     for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
     QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
@@ -814,6 +877,14 @@ int MainWindow::openTableDocument(const QString& name,int view,int mode) {
     for(const auto& candidate:tableNames()) if(candidate.compare(name,Qt::CaseInsensitive)==0) { canonical=candidate; break; }
     if(canonical.isEmpty()) return 7874;
     return showTable(canonical,mode==2,false);
+}
+
+int MainWindow::activateOpenQuery(const QString& name) {
+    if(!db_.isOpen() || QApplication::activeModalWidget()) return 2046;
+    if(name.isEmpty()) return 450;
+    auto* page=findOpenQuery(name);
+    if(!page) return 3251;
+    return activateDataPage(page) ? 0 : 2501;
 }
 
 int MainWindow::activateOpenTable(const QString& name) {
