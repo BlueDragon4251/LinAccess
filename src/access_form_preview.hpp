@@ -98,6 +98,7 @@ private:
     bool advanceTabFocus(bool next);
     bool commitControl(const QString& control);
     bool commitControls();
+    bool zoomFocusedText();
     void openFindDialog();
     QString findNextRecord(QString text,QString field,int mode,bool caseSensitive);
     void repeatFind();

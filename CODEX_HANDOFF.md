@@ -266,7 +266,23 @@ in den Entwurf und erhält ungültige Eingaben. Umschalt+F2 öffnet echten nativ
 mehrzeiligen Zoom aus Tabellen-View oder Zelleditor. Abbrechen/unverändertes OK
 erhalten Werte, Null und originale Zeilenenden; geänderte Texte bleiben im
 Manual-Submit-Entwurf. Besitzer-/Indexlebensdauer im Dialog wird bewacht.
-Formular-Zoom und vollständige Windows-Darstellung sind noch offen.
+Formular-TextBox-Zoom ist im folgenden Inkrement ergänzt; vollständige
+Windows-Darstellung bleibt offen.
 Details docs/KEYBOARD_RUNTIME.md. Vollsuite 48/48 (86.44 s), Debian-Prüfungen
 und vier Originalfixture-Hashes bestanden; GUI-freier Core zuletzt 1/1 (2.63 s),
 danach ausschließlich Qt-Änderungen. Keine vollständige Access-Parität.
+
+
+## Formular-Zoom und nativer VBA-Befehl (2026-11-03)
+
+Umschalt+F2 verwendet nun denselben nativen Zoom für Formular-TextBoxes.
+Eigener Feldpuffer, Change, Schreibschutz und abbrechbares BeforeUpdate bleiben
+erhalten. Während des Dialogs wird nur das editingFinished dieses Feldes
+unterdrückt, nicht der globale Loading-Zustand über die Ereignisschleife gesetzt.
+DoCmd.RunCommand acCmdZoomBox=179 löst das aktive Dokument/Steuerelement auf;
+unpassender Fokus ergibt 2046. Application.RunCommand unterstützt denselben
+vorhandenen Befehlsumfang samt benanntem Command-Argument, unbekannte Optionen
+weiterhin 3251. Bare RunCommand, alle AcCommand-Optionen und volle Zoom-Parität offen.
+Bestehender Layout-Target 1/1 (14.90 s), GUI-freier Core 1/1 (1.53 s).
+Letzte Vollsuite lokal 2fcaf98 / privater API-Stand ab5e6cd: 48/48 (86.44 s).
+Für dieses Inkrement keine erneute Vollsuite behaupten. Details KEYBOARD_RUNTIME.md.
