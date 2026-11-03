@@ -2,6 +2,7 @@
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
 #include "access_table_view.hpp"
+#include "access_query.hpp"
 #include <QAction>
 #include <QApplication>
 #include <QCryptographicHash>
@@ -147,6 +148,39 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     artifact(db,"vba","Form_tab_cycle_form",R"VBA(Sub SelectOpenTable()
 DoCmd.SelectObject acTable,"SHORTCUT_RECORDS",False
 Me.Tag="table-selected"
+End Sub
+Sub OpenReadQuery()
+DoCmd.OpenQuery QueryName:="command_query_doc",DataMode:=acReadOnly
+Me.Tag="query-opened"
+End Sub
+Sub OpenParameterQuery()
+DoCmd.OpenQuery "command_parameter_doc",,acReadOnly
+Me.Tag="parameter-opened"
+End Sub
+Sub OpenActionQuery()
+DoCmd.OpenQuery "command_action_doc",,acReadOnly
+Me.Tag="action-opened"
+End Sub
+Sub UnsupportedQueryEdit()
+DoCmd.OpenQuery "command_query_doc"
+Me.Tag="edit-opened"
+End Sub
+Sub MissingQuery()
+DoCmd.OpenQuery "absent_query",,acReadOnly
+End Sub
+Sub NullQuery()
+DoCmd.OpenQuery Null,,acReadOnly
+End Sub
+Sub CloseReadQuery()
+DoCmd.Close acQuery,"command_query_doc",acSaveNo
+Me.Tag="query-closed"
+End Sub
+Sub CloseActiveQuery()
+DoCmd.Close
+Me.Tag="active-query-closed"
+End Sub
+Sub CloseParameterQuery()
+DoCmd.Close acQuery,"command_parameter_doc"
 End Sub
 Sub OpenReadonlyTable()
 DoCmd.OpenTable TableName:="command_readonly",DataMode:=acReadOnly
@@ -394,6 +428,11 @@ End Sub
     assert(unchanged.exec("INSERT INTO command_readonly VALUES(1,1.25,-1),(2,NULL,NULL)"));
     assert(unchanged.exec("CREATE TABLE command_edit(id INTEGER PRIMARY KEY AUTOINCREMENT,value TEXT CHECK(value!='blocked'))"));
     assert(unchanged.exec("INSERT INTO command_edit VALUES(1,'initial')"));
+    assert(unchanged.exec(R"SQL(INSERT INTO _la_objects(kind,name,definition) VALUES('query','command_query_doc','{"sql":"SELECT id,value,flag FROM command_readonly ORDER BY id"}'))SQL"));
+    artifact(db,"query","command_parameter_doc","PARAMETERS p Currency; SELECT p AS amount");
+    artifact(db,"query","command_action_doc","DELETE FROM command_readonly");
+    const int queryCallerId=artifact(db,"form","query_lifetime_caller","Begin Form\nEnd\n");
+    artifact(db,"vba","Form_query_lifetime_caller","Sub OpenAndClose()\nDoCmd.OpenQuery \"command_query_doc\",,acReadOnly\nDoCmd.Close acForm,\"query_lifetime_caller\"\nEnd Sub\n");
     assert(unchanged.exec("CREATE TABLE command_typed_find(id INTEGER PRIMARY KEY,value REAL,money CURRENCY_REAL,stamp DATETIME,flag BOOLEAN,payload BLOB)"));
     assert(unchanged.exec("INSERT INTO command_typed_find VALUES(1,1.2345678901234567,0.1001,'2020-02-29 12:34:56',-1,x'0102'),(2,1.2345678901234565,0.1,'1899-12-30 06:00:00',NULL,x'0102'),(3,42,-0.0001,'2020-02-29 12:34:57',0,x'0102'),(4,NULL,NULL,NULL,0,x'0102')"));
     assert(unchanged.exec("CREATE TABLE command_record_edits(id INTEGER PRIMARY KEY,value TEXT)"));
@@ -413,6 +452,36 @@ End Sub
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* typed=dynamic_cast<linaccess::AccessTableView*>(candidate)) result=typed;
         assert(result); return result;
     };
+    const int beforeQueries=documentTabs->count();
+    const auto callerBeforeQueries=mixedEditor->text();
+    assert(mixed->executeProcedure("OpenReadQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->count()==beforeQueries+1);
+    QPointer<QWidget> queryPage=documentTabs->currentWidget();
+    auto* queryView=queryPage->findChild<QTableView*>("native-query-view"); assert(queryView && dynamic_cast<linaccess::AccessQueryModel*>(queryView->model()));
+    assert(queryView->model()->rowCount()==2 && queryView->model()->index(0,1).data().toDouble()==1.25 && !queryView->model()->index(0,1).flags().testFlag(Qt::ItemIsEditable));
+    assert(mixedEditor->text()==callerBeforeQueries && makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="query-opened");
+    auto queryDescriptor=makePreviewApplicationObject(*mixed)->member("CurrentData",{}).object->member("AllQueries",{}).object->member("Item",{linaccess::VbaValue::string("command_query_doc")}).object;
+    assert(queryDescriptor->member("IsLoaded",{}).boolean);
+    assert(mixed->executeProcedure("OpenReadQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->currentWidget()==queryPage && documentTabs->count()==beforeQueries+1);
+    assert(mixed->executeProcedure("UnsupportedQueryEdit",selectArguments).errorNumber==3251);
+    assert(mixed->executeProcedure("MissingQuery",selectArguments).errorNumber==7874 && mixed->executeProcedure("NullQuery",selectArguments).errorNumber==94);
+    assert(mixed->executeProcedure("OpenActionQuery",selectArguments).errorNumber==3251);
+    assert(unchanged.exec("SELECT count(*) FROM command_readonly") && unchanged.next() && unchanged.value(0).toInt()==2); unchanged.finish();
+    assert(mixed->executeProcedure("CloseActiveQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && !queryDescriptor->member("IsLoaded",{}).boolean && mixed->isVisible());
+    QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!queryPage && mixed->isVisible());
+    QTimer::singleShot(0,&window,[] { auto* dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog); dialog->reject(); });
+    assert(mixed->executeProcedure("OpenParameterQuery",selectArguments).errorNumber==2501 && documentTabs->count()==beforeQueries);
+    QTimer::singleShot(0,&window,[] { auto* dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog); dialog->setTextValue("1.23455"); dialog->accept(); });
+    assert(mixed->executeProcedure("OpenParameterQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    auto* parameterView=documentTabs->currentWidget()->findChild<QTableView*>("native-query-view"); assert(parameterView && parameterView->model()->index(0,0).data().toString()=="1.2346");
+    assert(mixed->executeProcedure("CloseParameterQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    openArtifact(window,queryCallerId); QPointer<AccessFormPreview> queryCaller=document("query_lifetime_caller"); assert(queryCaller);
+    assert(queryCaller->executeProcedure("OpenAndClose",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QApplication::processEvents();
+    assert(!queryCaller && queryDescriptor->member("IsLoaded",{}).boolean && documentTabs->count()==beforeQueries+1);
+    auto* independentQuery=documentTabs->currentWidget()->findChild<QTableView*>("native-query-view"); assert(independentQuery);
+    QApplication::setActiveWindow(&window); independentQuery->setFocus(); QApplication::processEvents();
+    QTest::keyClick(independentQuery,Qt::Key_F4,Qt::ControlModifier); QApplication::processEvents();
+    assert(!queryDescriptor->member("IsLoaded",{}).boolean && documentTabs->count()==beforeQueries);
     assert(mixed->executeProcedure("OpenReadonlyTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     const QPointer<QWidget> readonlyPage=documentTabs->currentWidget(); auto* readonlyView=nativeTable(readonlyPage);
     auto* readonlyModel=qobject_cast<linaccess::AccessTableModel*>(readonlyView->model()); assert(readonlyModel && readonlyModel->isReadOnly() && readonlyModel->rowCount()==2);

@@ -608,7 +608,7 @@ private:
             if (member.type != Token::Type::Word && member.type != Token::Type::Bracket)
                 throw error("Objektmitglied erwartet");
             const auto memberKey=lower(member.value);
-            const bool missingDefaults=memberKey=="add" || memberKey=="opentable" || memberKey=="findrecord";
+            const bool missingDefaults=memberKey=="add" || memberKey=="opentable" || memberKey=="openquery" || memberKey=="findrecord";
             std::vector<VbaValue> args;
             std::vector<std::string> argumentNames;
             std::vector<bool> omittedArguments;

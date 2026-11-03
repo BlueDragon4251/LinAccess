@@ -389,6 +389,105 @@ QVariantMap MainWindow::saveDataPage(QWidget* page,bool interactive) {
     return {{"handled",true},{"error",0}};
 }
 
+QWidget* MainWindow::findOpenQuery(const QString& name) const {
+    for(int index=0;index<tabs_->count();++index) {
+        auto* page=tabs_->widget(index);
+        if(page->property("la_project_object_kind").toString()=="query"
+            && page->property("la_project_object_name").toString().compare(name,Qt::CaseInsensitive)==0) return page;
+    }
+    return nullptr;
+}
+
+QVariantMap MainWindow::openQueryDocument(const QString& name,int view,int mode) {
+    if(!db_.isOpen() || QApplication::activeModalWidget()) return tableCommandFailure(2046,"Abfrage kann in diesem Kontext nicht geöffnet werden.");
+    if(view!=0 || mode!=2) return tableCommandFailure(3251,"Abfrage-Dokumente unterstützen bisher nur Normalansicht mit ausdrücklich acReadOnly.");
+    if(name.isEmpty()) return tableCommandFailure(7874,"Kein Abfragename angegeben.");
+    if(auto* existing=findOpenQuery(name)) {
+        if(!activateDataPage(existing)) return tableCommandFailure(2501,"Abfrageaktivierung wurde abgebrochen.");
+        return {{"handled",true},{"error",0}};
+    }
+    const QPointer<MainWindow> self=this;
+    const auto database=db_; const auto identity=db_.databaseName();
+    const auto generation=property("la_project_generation").toULongLong();
+    const auto alive=[self,identity,generation] {
+        return self && self->db_.isOpen() && self->db_.databaseName()==identity && self->property("la_project_generation").toULongLong()==generation;
+    };
+    try {
+        QString source,canonical; bool native=false,imported=false;
+        QSqlQuery query(database);
+        if(!query.prepare("SELECT name,definition FROM main._la_objects WHERE kind='query' AND name=? COLLATE NOCASE")) return tableCommandFailure(3146,"Abfragekatalog konnte nicht vorbereitet werden.");
+        query.addBindValue(name);
+        if(!query.exec()) return tableCommandFailure(3146,"Abfragekatalog konnte nicht gelesen werden.");
+        while(query.next()) {
+            if(native) return tableCommandFailure(5,"Mehrdeutiger Abfragename.");
+            native=true; canonical=query.value(0).toString();
+            source=QJsonDocument::fromJson(query.value(1).toString().toUtf8()).object().value("sql").toString();
+        }
+        if(query.lastError().isValid()) return tableCommandFailure(3146,"Abfragekatalog konnte nicht vollständig gelesen werden.");
+        if(!query.prepare("SELECT name,source_bytes FROM main._la_access_artifacts WHERE kind='query' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1")) return tableCommandFailure(3146,"Importkatalog konnte nicht vorbereitet werden.");
+        query.addBindValue(name);
+        if(!query.exec()) return tableCommandFailure(3146,"Importkatalog konnte nicht gelesen werden.");
+        if(query.next()) {
+            imported=true;
+            if(!native) { canonical=query.value(0).toString(); source=linaccess::decodeVbaSource(query.value(1).toByteArray()); }
+        }
+        if(query.lastError().isValid()) return tableCommandFailure(3146,"Importkatalog konnte nicht vollständig gelesen werden.");
+        query.finish();
+        if(native && imported) return tableCommandFailure(5,"Mehrdeutiger nativer/importierter Abfragename.");
+        if(!native && !imported) return tableCommandFailure(7874,"Gespeicherte Abfrage nicht gefunden.");
+        if(source.trimmed().isEmpty()) return tableCommandFailure(3251,"Gespeicherte Abfragedefinition ist nicht ausführbar.");
+        const auto plan=linaccess::compileAccessQuery(source);
+        if(!plan.makeTable.isEmpty() || !isSelect(plan.sql)) return tableCommandFailure(3251,"Nur schreibgeschützte SELECT-Abfragen werden als Dokument geöffnet.");
+        if(!finishActiveDataEditors() || !AccessFormPreview::activateProjectDocument(database,this,nullptr)) return tableCommandFailure(2501,"Dokumentwechsel wurde abgebrochen.");
+        if(!alive()) return tableCommandFailure(2501,"Projekt wurde während des Dokumentwechsels geschlossen.");
+        QMap<QString,QVariant> parameters;
+        for(const auto& parameter:plan.parameters) {
+            bool accepted=false;
+            const auto value=QInputDialog::getText(self,"Abfrageparameter",parameter.name+" ("+parameter.type+")",QLineEdit::Normal,{},&accepted);
+            if(!alive() || !accepted) return tableCommandFailure(2501,"Abfrageparameter wurden abgebrochen.");
+            parameters.insert(parameter.name.toCaseFolded(),value);
+        }
+        auto page=std::make_unique<QWidget>();
+        auto* layout=new QVBoxLayout(page.get());
+        layout->addWidget(new QLabel("Abfrage: "+canonical+" — Schreibgeschützt",page.get()));
+        auto* model=new linaccess::AccessQueryModel(page.get());
+        model->execute(database,source,parameters);
+        if(!alive() || linaccess::vbaExecutionStopRequested()) return tableCommandFailure(2501,"Abfrageöffnung wurde beendet.");
+        auto* table=new QTableView(page.get()); table->setObjectName("native-query-view"); table->setModel(model); table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        table->installEventFilter(this); layout->addWidget(table);
+        auto* document=page.release(); document->setParent(tabs_);
+        const QPointer<QWidget> registered=document;
+        tagProjectObject(document,this,db_,"query",canonical); document->setProperty("la_project_object_scope","tab");
+        for(const auto key:{QKeySequence(Qt::ControlModifier|Qt::Key_W),QKeySequence(Qt::ControlModifier|Qt::Key_F4)}) {
+            auto* close=new QShortcut(key,document); close->setContext(Qt::WidgetWithChildrenShortcut);
+            connect(close,&QShortcut::activated,document,[this,document] { const int index=tabs_->indexOf(document); if(index>=0) emit tabs_->tabCloseRequested(index); });
+        }
+        tabs_->setCurrentIndex(tabs_->addTab(document,"Abfrage: "+canonical));
+        const bool activated=activateDataPage(document);
+        if(!alive() || !registered) return tableCommandFailure(2501,"Abfragedokument wurde während der Aktivierung geschlossen.");
+        if(!activated) {
+            const int index=tabs_->indexOf(document); if(index>=0) tabs_->removeTab(index);
+            document->deleteLater(); return tableCommandFailure(2501,"Abfrageaktivierung wurde abgebrochen.");
+        }
+        table->setFocus();
+        return {{"handled",true},{"error",0}};
+    } catch(const linaccess::VbaExecutionStopped&) { return tableCommandFailure(2501,"Abfrageöffnung wurde beendet."); }
+    catch(const linaccess::VbaRuntimeError& error) { return tableCommandFailure(error.number,QString::fromUtf8(error.what())); }
+    catch(const std::exception&) { return tableCommandFailure(3146,"Abfrage konnte nicht ausgeführt werden."); }
+}
+
+QVariantMap MainWindow::closeQueryDocument(int type,const QString& name,int save) {
+    const bool active=!activePreviewDocument() && AccessFormPreview::databaseWindowActive(this) && activeDataPage_
+        && tabs_->currentWidget()==activeDataPage_ && activeDataPage_->property("la_project_object_kind").toString()=="query";
+    if(type!=1 && !(type==-1 && active)) return {};
+    if(save<0 || save>2) return tableCommandFailure(5,"Ungültige Speicheroption.");
+    if(!db_.isOpen() || QApplication::activeModalWidget()) return tableCommandFailure(2046,"Abfrage kann in diesem Kontext nicht geschlossen werden.");
+    const QPointer<QWidget> page=name.isEmpty() ? (active ? activeDataPage_.data() : nullptr) : findOpenQuery(name);
+    if(!page || tabs_->indexOf(page)<0) return tableCommandFailure(3251,"Die angeforderte offene Abfrage ist nicht verfügbar.");
+    tabs_->removeTab(tabs_->indexOf(page)); page->hide(); page->deleteLater();
+    return {{"handled",true},{"error",0}};
+}
+
 QVariantMap MainWindow::dispatchTableCommand(int command) {
     const QPointer<QWidget> page=activeDataPage_;
     if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
@@ -699,7 +798,7 @@ bool MainWindow::activateDataPage(QWidget* page) {
     tabs_->setCurrentWidget(selected); activeDataPage_=selected;
     if(isMinimized()) showNormal(); else show();
     raise(); activateWindow();
-    for(auto* candidate:selected->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) {
+    for(auto* view:selected->findChildren<QTableView*>()) {
         view->setFocus(Qt::ShortcutFocusReason); return true;
     }
     selected->setFocus(Qt::ShortcutFocusReason); return true;

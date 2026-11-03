@@ -23,6 +23,8 @@ public:
     Q_INVOKABLE void cycleDocument(bool backwards);
     Q_INVOKABLE int activateOpenTable(const QString& name);
     Q_INVOKABLE int openTableDocument(const QString& name,int view,int mode);
+    Q_INVOKABLE QVariantMap openQueryDocument(const QString& name,int view,int mode);
+    Q_INVOKABLE QVariantMap closeQueryDocument(int type,const QString& name,int save);
     Q_INVOKABLE QVariantMap dispatchTableCommand(int command);
     Q_INVOKABLE QVariantMap closeTableDocument(int type,const QString& name,int save);
     Q_INVOKABLE QVariantMap navigateTableDocument(const QString& name,int action,int offset,bool explicitTable);
@@ -44,6 +46,7 @@ private:
     bool finishActiveDataEditors();
     bool activateDataPage(QWidget* page);
     QWidget* findOpenTable(const QString& name) const;
+    QWidget* findOpenQuery(const QString& name) const;
     QVariantMap saveDataPage(QWidget* page,bool interactive);
 
     bool canCloseDataPage(QWidget* page);

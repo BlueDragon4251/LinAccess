@@ -693,3 +693,22 @@ Core 1/1 (1.51 s), keine neuen Targets.
 Vollsuite 48/48 (101.66 s), GUI-freier Core 1/1 (1.51 s), Debian-Prüfung
 inklusive Build-ID/SQLite 3.54.1 und vier Originalfixture-Hashes bestanden.
 CurrentData-Metadaten/echter UI-Zustand eingeschlossen; keine neuen Testtargets.
+
+## Echte readonly Abfragedokumente (2026-11-03)
+
+DoCmd.OpenQuery öffnet native/importierte gespeicherte SELECTs als echte Tabs
+mit ausdrücklich acReadOnly/Normalansicht, tatsächlichen SQL-Ergebnissen und
+typisierten Parameterdialogen. Missing/default acEdit bleibt unverändert,
+bisher nicht unterstütztes Editieren wird 3251 statt still readonly; Aktions-/
+MakeTable-/andere Ansichten vor Ausführung abgelehnt. Parameterabbruch 2501
+erzeugt kein Dokument, Currency-Konversion am Ergebnis geprüft. Root-eigener
+Tab überlebt aufrufendes Formular, dessen Me bleibt erhalten. Wiederverwendung,
+benanntes/default Query-Close, Strg+F4 und CurrentData.IsLoaded folgen echter
+Tab-Lebensdauer. Fensterwechsel fokussiert die tatsächliche Ergebnistabelle.
+Kanonisch docs/OPEN_QUERY_RUNTIME.md; allgemeine Query-Befehle/Updateability,
+Requery/SelectObject und vollständige Access-UI-/Fehlerpriorität bleiben offen.
+MainWindow gezielt 1/1 (3.35 s), keine neuen Testtargets.
+
+Vollsuite 48/48 (90.08 s), GUI-freier Core 1/1 (1.58 s), Debian-Prüfung
+inklusive Build-ID/SQLite 3.54.1 und vier Originalfixture-Hashes bestanden.
+Parameterloses Close schließt aktive readonly Abfrage statt Aufrufer. Keine neuen Targets.
