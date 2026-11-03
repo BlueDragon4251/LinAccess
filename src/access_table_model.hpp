@@ -22,6 +22,7 @@ public:
     Qt::ItemFlags flags(const QModelIndex& index) const override;
     bool setData(const QModelIndex& index,const QVariant& value,int role=Qt::EditRole) override;
     QString clipboardText(const QModelIndex& index) const;
+    bool repeatPreviousValue(const QModelIndex& target);
     bool setDataBlock(const QModelIndex& first,const QVector<QVector<QString>>& values);
 signals:
     void editRejected(int number,const QString& message);

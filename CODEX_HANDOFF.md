@@ -246,3 +246,14 @@ erhalten. Geerbtes direktes Qt submitAll bietet diese Garantie nicht.
 Details und Grenzen in docs/DATASHEET_CLIPBOARD_RUNTIME.md.
 Vollsuite 48/48 (86.21 s), GUI-freier Core 1/1 (2.63 s), Debian-Prüfungen
 und vier Originalfixture-Hashes bestanden. Keine vollständige Access-Parität.
+
+
+## Privater Stand und Datenblatt-Tastenkürzel (2026-11-03)
+
+Geprüftes Bereichseinfügen/Speichern: lokal 24854bf, privat remote 33981e2,
+identischer Tree caca8e5ef7c1de87a10390a3b14d7272a700c895. Vollsuite 48/48.
+Danach Strg+Apostroph im nativen Tabellen-View ergänzt: voriger Modell-Datensatz,
+gleiches Feld, geprüfte Currency/Date/Boolean/Null-Übernahme nur in den Entwurf.
+Keine SQL-Autospeicherung, keine Binär-/AutoNumber-Übernahme. Bestehende
+MainWindow-/Currency-Targets gezielt bestanden; Details/Grenzen in
+docs/KEYBOARD_RUNTIME.md. Gesamtsuite/Paket für diese Ergänzung nicht neu behaupten.

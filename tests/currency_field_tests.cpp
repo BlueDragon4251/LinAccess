@@ -269,6 +269,19 @@ End Function
         assert(sql.exec("SELECT value FROM copy_cells WHERE id=1") && sql.next() && sql.value(0).toString()=="a\tb\"c\n"); sql.finish();
     }
     {
+        assert(sql.exec("CREATE TABLE repeat_cells(id INTEGER PRIMARY KEY AUTOINCREMENT,amount CURRENCY_REAL,stamp DATETIME,flag BOOLEAN,note TEXT,payload BLOB)"));
+        assert(sql.exec("INSERT INTO repeat_cells VALUES(1,549755813887.9999,'2024-02-29 12:34:56',1,NULL,x'0102'),(2,0,NULL,0,'old',NULL)"));
+        linaccess::AccessTableModel repeated(nullptr,db); repeated.setTable("repeat_cells"); repeated.setEditStrategy(QSqlTableModel::OnManualSubmit); assert(repeated.select());
+        for(int column=1;column<=4;++column) assert(repeated.repeatPreviousValue(repeated.index(1,column)));
+        assert(repeated.clipboardText(repeated.index(1,1))=="549755813887.9999" && repeated.clipboardText(repeated.index(1,2))=="2024-02-29 12:34:56" && repeated.clipboardText(repeated.index(1,3))=="True");
+        assert(repeated.data(repeated.index(1,4),Qt::EditRole).isNull());
+        assert(!repeated.repeatPreviousValue(repeated.index(0,1)) && !repeated.repeatPreviousValue(repeated.index(1,0)) && !repeated.repeatPreviousValue(repeated.index(1,5)));
+        assert(sql.exec("SELECT amount,note FROM repeat_cells WHERE id=2") && sql.next() && sql.value(0).toDouble()==0 && sql.value(1).toString()=="old"); sql.finish();
+        assert(repeated.submitTransactionally());
+        assert(sql.exec("SELECT amount,stamp,flag,note,payload FROM repeat_cells WHERE id=2") && sql.next());
+        assert(linaccess::currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==5497558138879999LL && sql.value(1).toString()=="2024-02-29 12:34:56" && sql.value(2).toInt()==-1 && sql.value(3).isNull() && sql.value(4).isNull()); sql.finish();
+    }
+    {
         assert(sql.exec("CREATE TABLE paste_constraints(id INTEGER PRIMARY KEY,amount INTEGER UNIQUE)"));
         assert(sql.exec("INSERT INTO paste_constraints VALUES(1,1),(2,2)"));
         linaccess::AccessTableModel constrained(nullptr,db); constrained.setTable("paste_constraints"); constrained.setEditStrategy(QSqlTableModel::OnManualSubmit); assert(constrained.select());

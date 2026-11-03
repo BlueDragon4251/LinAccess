@@ -113,3 +113,21 @@ SQL values, partial replacement and keyed restoration as sorting moves the same
 record twice. The shared-helper form layout target also passed in the preceding
 integration run. App builds; existing targets only. Last full suite/package/hash
 baseline remains 8dc6afa; no complete datasheet/regional-format parity claim.
+
+
+## Datasheet previous-record value key (2026-11-03)
+
+Ctrl+apostrophe in the native table view copies the same column from the
+immediately preceding displayed model row into the current manual-submit draft.
+Checked Currency/date/Boolean conversion and independent SQL NULL preserve the
+supported field types. Existing drafts are retained; SQL is not submitted.
+First-row/no-current, hidden source/target, generated/read-only and binary
+contexts do not mutate. Active text-editor insertion/caret behavior, filtered
+multiuser record identity and complete Access keyboard parity remain open.
+The main-window test verifies actual key dispatch and unchanged SQL before Save;
+the Currency target verifies high exact Currency, Date, True stored as -1, NULL,
+AutoNumber/BLOB refusal and actual persistence. A focused two-target run passes
+2/2 (1.95 s); final typed case passes 1/1 (0.40 s). No new targets.
+Full suite/package baseline remains source 24854bf (48/48, 86.21 s), privately
+published as 33981e26e528c0d708ba2a2f3be265aedf3a01ea with identical source tree
+caca8e5ef7c1de87a10390a3b14d7272a700c895. This key increment is focused-verified.

@@ -128,7 +128,12 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     assert(query.exec("SELECT COUNT(*) FROM shortcut_records WHERE value IN ('first-range','second-range')") && query.next() && query.value(0).toInt()==2); query.finish();
     assert(table->pasteSelection()); if(model->isDirty()) model->revertAll();
     QTest::keyClick(table,Qt::Key_A,Qt::ControlModifier); assert(table->selectionModel()->selectedIndexes().size()==model->rowCount()*model->columnCount());
-    table->setCurrentIndex(model->index(clockRow,1));
+    table->setCurrentIndex(model->index(1,1));
+    const auto previous=model->index(0,1).data().toString();
+    QTest::keyClick(table,Qt::Key_Apostrophe,Qt::ControlModifier);
+    assert(model->index(1,1).data().toString()==previous && model->isDirty());
+    assert(query.exec("SELECT COUNT(DISTINCT value) FROM shortcut_records") && query.next() && query.value(0).toInt()==2); query.finish();
+    model->revertAll(); table->setCurrentIndex(model->index(clockRow,1));
     const auto beforeDate=QDate::currentDate(); QTest::keyClick(table,Qt::Key_Semicolon,Qt::ControlModifier);
     auto* clockEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(clockEditor && table->isAncestorOf(clockEditor));
     const auto clockDate=clockEditor->text(); assert(clockDate==beforeDate.toString(Qt::ISODate) || clockDate==QDate::currentDate().toString(Qt::ISODate));
