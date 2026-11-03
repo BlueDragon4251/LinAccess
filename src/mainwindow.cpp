@@ -369,7 +369,7 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         const int actions[]{1,0,2,3};
         return navigateTableDocument({},actions[command-65],1,false);
     }
-    if(command==50 || command==190 || command==179) {
+    if(command==50 || command==190 || command==179 || command==163 || command==164) {
         QPointer<linaccess::AccessTableView> table;
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
@@ -378,6 +378,42 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
             if(!table->copySelection()) return tableModelFailure(model,2501);
         } else if(command==179) {
             if(!table->zoomCurrentCell()) return tableModelFailure(model,2046);
+        } else if(command==163 || command==164) {
+            QPointer<MainWindow> self=this;
+            if(!table->finishEditing()) return tableModelFailure(model,2501);
+            if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während der Validierung geschlossen.");
+            if(model->isDirty()) {
+                if(!model->canSubmitCurrentRecordAlone(table->currentIndex().row()))
+                    return tableCommandFailure(3251,"Sortieren mit weiteren Tabellenentwürfen ist noch nicht implementiert.");
+                const auto saved=saveDataPage(page,false);
+                if(saved.value("error").toInt()) return saved;
+            }
+            if(!self || !table || !model || !table->currentIndex().isValid()) return tableCommandFailure(2501,"Keine aktive Tabellenzelle nach dem Speichern.");
+            const int column=table->currentIndex().column();
+            QMap<QString,QVariant> key;
+            const auto primary=model->primaryKey();
+            const auto record=model->record(table->currentIndex().row());
+            for(int field=0;field<primary.count();++field) key.insert(primary.fieldName(field),record.value(primary.fieldName(field)));
+            table->sortByColumn(column,command==164 ? Qt::DescendingOrder : Qt::AscendingOrder);
+            if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während der Sortierung geschlossen.");
+            if(model->lastError().isValid()) return tableModelFailure(model,3146);
+            if(!key.isEmpty()) {
+                int row=0;
+                for(;row<1000000;++row) {
+                    while(row>=model->rowCount() && model->canFetchMore()) {
+                        const int before=model->rowCount(); model->fetchMore();
+                        if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde beim Laden geschlossen.");
+                        if(model->rowCount()==before) break;
+                    }
+                    if(row>=model->rowCount()) break;
+                    const auto candidate=model->record(row);
+                    bool matches=true;
+                    for(auto field=key.cbegin();field!=key.cend();++field)
+                        if(candidate.value(field.key())!=field.value()) { matches=false; break; }
+                    if(matches) { table->setCurrentIndex(model->index(row,column)); table->scrollTo(table->currentIndex()); break; }
+                }
+                if(row>=1000000) return tableCommandFailure(3251,"Aktueller Datensatz überschreitet die native Suchgrenze nach der Sortierung.");
+            }
         } else {
             if(!table->finishEditing()) return tableModelFailure(model,2501);
             if(!table || !model || !table->currentIndex().isValid()) return tableCommandFailure(2501,"Tabellenauswahl ist nicht mehr verfügbar.");

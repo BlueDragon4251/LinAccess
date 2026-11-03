@@ -950,3 +950,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Bounded named/default table GoToRecord and native First/Previous/Next/Last use actual view order and fetch SQL rows beyond the initial Qt batch.
 - [x] Table navigation transactionally saves a sole changed existing current record with primary-key restoration; SQL failure retains the draft for retry.
 - [ ] General table navigation with unrelated multirow drafts, inserted/deleted current records, and Access addition-row/error equivalence.
+
+- [x] Native table RunCommand SortAscending/SortDescending sorts the actual field, preserves primary-key/current-column identity and readonly access, saves a sole current update and protects unrelated drafts.

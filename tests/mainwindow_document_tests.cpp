@@ -158,6 +158,12 @@ Sub SaveActiveTableViaApplication()
 Application.RunCommand Command:=acCmdSaveRecord
 Me.Tag="application-table-saved"
 End Sub
+Sub SortTableAscending()
+DoCmd.RunCommand acCmdSortAscending
+End Sub
+Sub SortTableDescending()
+Application.RunCommand Command:=acCmdSortDescending
+End Sub
 Sub OpenNavigationTable()
 DoCmd.OpenTable "command_navigation"
 End Sub
@@ -248,6 +254,11 @@ End Sub
     });
     assert(mixed->executeProcedure("ZoomTableCell",selectArguments).status==linaccess::VbaExecutionStatus::Completed && !readonlyModel->isDirty());
     QApplication::setActiveWindow(&window); readonlyView->setFocus(); QApplication::processEvents();
+    readonlyView->setCurrentIndex(readonlyModel->index(readonlyRow,0));
+    assert(mixed->executeProcedure("SortTableAscending",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(readonlyModel->isReadOnly() && !readonlyModel->isDirty() && readonlyModel->index(0,0).data().toInt()==1 && readonlyView->currentIndex().row()==0);
+    assert(mixed->executeProcedure("SortTableDescending",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(readonlyModel->index(0,0).data().toInt()==2 && readonlyView->currentIndex().row()==1);
     assert(unchanged.exec("SELECT value,flag FROM command_readonly WHERE id=1") && unchanged.next() && unchanged.value(0).toDouble()==1.25 && unchanged.value(1).toInt()==-1); unchanged.finish();
     assert(mixed->executeProcedure("OpenNavigationTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     auto* navigationView=nativeTable(documentTabs->currentWidget());
@@ -267,9 +278,18 @@ End Sub
     assert(navigationModel->setData(navigationModel->index(0,1),"navigation-saved"));
     assert(navigationModel->setData(navigationModel->index(1,1),"other-draft"));
     assert(mixed->executeProcedure("LastTableRecord",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==0 && navigationModel->isDirty());
+    assert(mixed->executeProcedure("SortTableDescending",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==0 && navigationModel->isDirty());
     assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="row-1"); unchanged.finish();
     assert(mixed->executeProcedure("SaveActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==299);
+    navigationView->setCurrentIndex(navigationModel->index(299,0));
+    assert(mixed->executeProcedure("SortTableDescending",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(navigationModel->index(0,0).data().toInt()==300 && navigationView->currentIndex().row()==0 && navigationView->currentIndex().column()==0);
+    assert(navigationModel->setData(navigationModel->index(0,1),"sort-saved"));
+    assert(mixed->executeProcedure("SortTableAscending",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(navigationView->currentIndex().row()==299 && navigationModel->index(299,0).data().toInt()==300 && !navigationModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=300") && unchanged.next() && unchanged.value(0).toString()=="sort-saved"); unchanged.finish();
+    navigationView->setCurrentIndex(navigationModel->index(299,1));
     assert(navigationModel->setData(navigationModel->index(299,1),"automatic-navigation-save"));
     assert(mixed->executeProcedure("PreviousTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(navigationView->currentIndex().row()==298 && !navigationModel->isDirty());
