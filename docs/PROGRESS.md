@@ -3248,3 +3248,19 @@ system daylight-saving gap, with canonical unchanged SQL storage. App/affected
 GUI targets build; Qt-field plus both original targets pass 3/3 (49.75 s) under
 TZ=Europe/Berlin. No new CTest target or GUI-free repeat (runtime unchanged).
 Full regional/calendar/ActiveX/Date edge parity remains open.
+
+
+## Native DateValue/TimeValue and DateDiff weekday interval (2026-11-03)
+
+DateValue removes the time from a native Date or supported ISO value; TimeValue
+returns its time as Date. Named Date/Time arguments, DateValue Null error 94 and
+the documented TimeValue Null propagation are implemented. Other scalar input
+families remain 3251 boundaries, not locale guesses. Unambiguous 24-hour HH:mm
+and ISO date/time without seconds are accepted and normalized. Regional/month-
+name/12-hour parsing and full negative-OLE representation rules remain open.
+DateDiff w now counts whole origin-weekday intervals from Gregorian day distance,
+including reverse spans and time-of-day-independent boundaries. System/week-year
+options retain their previously documented restrictions.
+Core/DAO/query-model checks pass 3/3 (1.82 s); GUI-free build/test passes 1/1
+(1.42 s), affected desktop targets build. Existing targets only; no additional
+full-suite/package repeat before the next grouped language check.

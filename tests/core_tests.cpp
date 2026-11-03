@@ -465,6 +465,10 @@ void testRoundFunction() {
 void testCalendarFunctions() {
     using namespace linaccess; FakeForm host;
     const auto eval=[&](const std::string& source) { return evaluateVbaExpression(source,host,{}); };
+    assert(eval("CStr(DateValue(Date:=\"2024-02-29 12:34:56\"))").asText()=="2024-02-29");
+    assert(eval("CStr(TimeValue(Time:=\"2024-02-29T12:34\"))").asText()=="12:34:00");
+    assert(eval("CStr(TimeValue(CDate(-1.25)))").asText()=="06:00:00" && eval("TimeValue(Null)").kind==VbaValue::Kind::Null);
+    assert(eval("CStr(CDate(\"14:24\"))").asText()=="14:24:00");
     assert(eval("TypeName(CDate(2958465)-(-1))").asText()=="Double" && eval("CDate(2958465)-(-1)").asNumber()==2958466);
     assert(eval("CStr(DateAdd(Date:=\"2024-01-31\",Number:=1,Interval:=\"m\"))").asText()=="2024-02-29");
     assert(eval("CStr(DateAdd(\"yyyy\",1,\"2024-02-29\"))").asText()=="2025-02-28");
@@ -506,12 +510,16 @@ void testCalendarFunctions() {
         const auto expression="DateDiff(\""+interval+"\",\""+first+"\",\""+last+"\")"; const auto result=eval(expression);
         assert(result.asNumber()==expected && result.numericType==VbaValue::NumericType::Long);
     }
+    assert(eval(R"(DateDiff("w","2024-01-01 23:00:00","2024-01-08 01:00:00"))").asNumber()==1);
+    assert(eval(R"(DateDiff("w","2024-01-09","2024-01-01",vbMonday))").asNumber()==-1);
+    assert(eval(R"(DateDiff("w","2024-01-01","2024-01-07"))").asNumber()==0);
     assert(eval(R"(DateDiff("ww","2024-03-02","2024-03-03",vbMonday))").asNumber()==0);
     assert(eval(R"(DateDiff("ww","2024-03-02","2024-03-03",,vbFirstJan1))").asNumber()==1);
     assert(eval("DatePart(\"m\",Null)").kind==VbaValue::Kind::Null);
     assert(eval("Year(Null)").kind==VbaValue::Kind::Null && eval("Weekday(Null)").kind==VbaValue::Kind::Null);
     for(const auto& [source,wanted]:std::vector<std::pair<std::string,int>>{
         {R"(Year("2023-02-29"))",13},{R"(Hour("24:00:00"))",13},{"Year(1)",3251},{"Year()",450},
+        {"DateValue(Null)",94},{"TimeValue(\"2024-02-30 12:00\")",13},{"DateValue(1)",3251},
         {"DateAdd(\"m\",1,\"9999-12-31\")",5},{"DateAdd(\"bad\",1,0)",5},{"DateAdd(\"d\",Null,0)",94},
         {"DateSerial(24,1,1)",3251},{"DateSerial(100,1,0)",5},{"TimeSerial(32768,0,0)",6},
         {"DateSerial(2024,Null,1)",94},{"TimeSerial(1,2)",450},{"CDate(Null)",94},{"CDate(2958466)",6},{"CDate(-657435)",6},{"CDate(-1.25)+1",3251},

@@ -246,6 +246,8 @@ template<unsigned mask,bool subtract>
 void calendarDateArithmetic(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
     scalarBuiltinFunction(context,count,args,subtract ? "-" : "+",2,2,mask);
 }
+void calendarDateValue(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"DateValue",1,1); }
+void calendarTimeValue(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"TimeValue",1,1); }
 void calendarDateAdd(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"DateAdd",3,3); }
 void unsupportedDateSumStep(sqlite3_context*,int,sqlite3_value**) noexcept {}
 void unsupportedDateSumFinal(sqlite3_context* context) noexcept { functionError(context,VbaRuntimeError(3251,"Date-valued SUM is not implemented")); }
@@ -584,6 +586,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_date_subtract_1",-1,&calendarDateArithmetic<1,true>,nullptr,nullptr);
     ensure("linaccess_jet_date_subtract_2",-1,&calendarDateArithmetic<2,true>,nullptr,nullptr);
     ensure("linaccess_jet_date_subtract_3",-1,&calendarDateArithmetic<3,true>,nullptr,nullptr);
+    ensure("linaccess_jet_datevalue",-1,&calendarDateValue,nullptr,nullptr);
+    ensure("linaccess_jet_timevalue",-1,&calendarTimeValue,nullptr,nullptr);
     ensure("linaccess_jet_dateadd",-1,&calendarDateAdd,nullptr,nullptr);
     ensure("linaccess_jet_date_sum",1,nullptr,&unsupportedDateSumStep,&unsupportedDateSumFinal);
     ensure("linaccess_jet_dateserial",-1,&calendarDateSerial,nullptr,nullptr);

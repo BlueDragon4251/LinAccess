@@ -47,13 +47,13 @@ QString dateText(const QVariant& value) {
         return date.toString("yyyy-MM-dd HH:mm:ss");
     }
     const auto text=value.toString();
-    if(text.size()==10 || (text.size()==19 && (text[10]==' ' || text[10]=='T'))) {
+    if(text.size()==10 || ((text.size()==16 || text.size()==19) && (text[10]==' ' || text[10]=='T'))) {
         const auto date=QDate::fromString(text.left(10),Qt::ISODate);
-        const auto time=text.size()==10 ? QTime(0,0) : QTime::fromString(text.mid(11),"HH:mm:ss");
+        const auto time=text.size()==10 ? QTime(0,0) : QTime::fromString(text.mid(11),text.size()==16 ? "HH:mm" : "HH:mm:ss");
         if(date.isValid() && date.year()>=100 && date.year()<=9999 && time.isValid())
             return date.toString(Qt::ISODate)+" "+time.toString("HH:mm:ss");
     }
-    const auto time = QTime::fromString(value.toString(),"HH:mm:ss");
+    const auto time = QTime::fromString(value.toString(),text.size()==5 ? "HH:mm" : "HH:mm:ss");
     if (time.isValid()) return "1899-12-30 " + time.toString("HH:mm:ss");
     throw VbaRuntimeError(13,"Date field requires an ISO date/time value");
 }

@@ -47,6 +47,11 @@ int main(int argc, char** argv) {
         assert(arithmetic.types.value("following")=="DATETIME" && arithmetic.types.value("elapsed")=="DOUBLE");
         assert(arithmetic.rows[0][0].toString()=="2024-02-29 12:00:00" && arithmetic.rows[0][1].toDouble()==1);
         assert(arithmetic.rows[1][0].isNull() && arithmetic.rows[1][1].isNull());
+        const auto parts=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT DateValue('2024-02-29 12:34') AS d,TimeValue('14:24') AS t,TimeValue(Null) AS missing"),{});
+        assert(parts.types.value("d")=="DATETIME" && parts.rows[0][0].toString()=="2024-02-29 00:00:00");
+        assert(parts.rows[0][1].toString()=="1899-12-30 14:24:00" && parts.rows[0][2].isNull());
+        reversed.execute(db,"SELECT DateDiff('w','2024-01-01','2024-01-09') AS weeks");
+        assert(reversed.data(reversed.index(0,0)).toInt()==1);
         const auto summed=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT SUM(stamp-CDate('2024-02-27 12:00:00')) AS elapsed FROM native_dates"),{});
         assert(summed.rows[0][0].toDouble()==1 && summed.types.value("elapsed")=="DOUBLE");
         reversed.execute(db,"SELECT DateAdd('m',1,'2024-01-31') AS shifted,DateAdd('d',1,Null) AS missing");

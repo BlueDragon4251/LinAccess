@@ -22,16 +22,18 @@ Parts dateParts(const VbaValue& value) {
             }
             return number;
         };
-        const bool timeOnly=text.size()==8;
-        if(!timeOnly && text.size()!=10 && text.size()!=19) throw VbaRuntimeError(13,"Unambiguous ISO date or time required");
+        const bool timeOnly=text.size()==5 || text.size()==8;
+        const bool hasTime=timeOnly || text.size()==16 || text.size()==19;
+        const bool hasSeconds=text.size()==8 || text.size()==19;
+        if(!timeOnly && text.size()!=10 && text.size()!=16 && text.size()!=19) throw VbaRuntimeError(13,"Unambiguous ISO date or time required");
         if(!timeOnly) {
-            if(text[4]!='-' || text[7]!='-' || (text.size()==19 && text[10]!=' ' && text[10]!='T')) throw VbaRuntimeError(13,"Invalid ISO date separators");
+            if(text[4]!='-' || text[7]!='-' || (hasTime && text[10]!=' ' && text[10]!='T')) throw VbaRuntimeError(13,"Invalid ISO date separators");
             result.year=digits(0,4); result.month=digits(5,2); result.day=digits(8,2);
         }
-        if(timeOnly || text.size()==19) {
+        if(hasTime) {
             const auto offset=timeOnly ? 0u : 11u;
-            if(text[offset+2]!=':' || text[offset+5]!=':') throw VbaRuntimeError(13,"Invalid ISO time separators");
-            result.hour=digits(offset,2); result.minute=digits(offset+3,2); result.second=digits(offset+6,2);
+            if(text[offset+2]!=':' || (hasSeconds && text[offset+5]!=':')) throw VbaRuntimeError(13,"Invalid ISO time separators");
+            result.hour=digits(offset,2); result.minute=digits(offset+3,2); result.second=hasSeconds ? digits(offset+6,2) : 0;
         }
     }
     const auto date=std::chrono::year(result.year)/std::chrono::month(result.month)/std::chrono::day(result.day);
@@ -66,6 +68,17 @@ std::string vbaDateText(double serial) {
     return text.str();
 }
 VbaValue vbaCalendarFunction(std::string_view name,const std::vector<VbaValue>& arguments) {
+    if(name=="datevalue" || name=="timevalue") {
+        if(arguments.size()!=1) throw VbaRuntimeError(450,"Date/time value requires one argument");
+        const auto value=scalarVbaValue(arguments[0]);
+        if(value.kind==VbaValue::Kind::Null) {
+            if(name=="timevalue") return {};
+            throw VbaRuntimeError(94,"Invalid Null DateValue argument");
+        }
+        if(value.kind!=VbaValue::Kind::Date && value.kind!=VbaValue::Kind::Text) throw VbaRuntimeError(3251,"Date/time value currently requires Date or ISO text");
+        const auto date=vbaDateValue(value);
+        return VbaValue::dateSerial(name=="datevalue" ? std::trunc(date.number) : std::abs(date.number-std::trunc(date.number)));
+    }
     if(name=="dateadd") {
         if(arguments.size()!=3) throw VbaRuntimeError(450,"DateAdd requires three arguments");
         std::vector<VbaValue> args; for(const auto& value:arguments) args.push_back(scalarVbaValue(value));
@@ -183,6 +196,7 @@ VbaValue vbaCalendarFunction(std::string_view name,const std::vector<VbaValue>& 
     for(const auto& value:args) if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null DateDiff argument");
     auto interval=args[0].asText(); for(auto& c:interval) if(c>='A' && c<='Z') c+=('a'-'A');
     const auto left=dateParts(args[1]),right=dateParts(args[2]);
+    if(interval=="w") return VbaValue::longInteger(static_cast<std::int32_t>((right.date-left.date).count()/7));
     const auto bucket=[&](const Parts& date)->std::int64_t {
         const auto days=date.date.time_since_epoch().count();
         if(interval=="yyyy") return date.year;
@@ -196,7 +210,6 @@ VbaValue vbaCalendarFunction(std::string_view name,const std::vector<VbaValue>& 
             if(firstWeek!=1) throw VbaRuntimeError(3251,"Non-default first-week DateDiff is not validated");
             return floorWeeks(days-3-(firstDay-1)); // 1970-01-04 was Sunday.
         }
-        if(interval=="w") throw VbaRuntimeError(3251,"Weekday-interval DateDiff is not validated");
         throw VbaRuntimeError(5,"Invalid DateDiff interval");
     };
     const auto result=bucket(right)-bucket(left);

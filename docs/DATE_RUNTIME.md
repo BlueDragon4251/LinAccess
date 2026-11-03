@@ -10,6 +10,11 @@ Date-Lokale, Modulfelder, Parameter und Funktionsrückgaben behalten ihren Typ.
 Date-Variant kann bei Addition/Subtraktion zu Double werden; eine anschließende
 Zuweisung an einen deklarierten Date-Wert bleibt bereichsgeprüft.
 
+`DateValue` und `TimeValue` trennen Datum und Uhrzeit für Date/ISO-Werte;
+TimeValue übernimmt Null, DateValue meldet dafür 94. Eindeutige 24-Stunden-
+Minutenangaben werden normalisiert. DateDiff mit `w` zählt ganze Wochenabstände
+vom Ausgangswochentag; System-/Wochenjahrgrenzen bleiben begrenzt.
+
 `Now`, `Date` und `Time` liefern Date-Variants. `CDate` unterstützt numerische
 Serienwerte und eindeutigen gregorianischen ISO-Text. `DateSerial` und `TimeSerial`
 normalisieren relative Monats-, Tages- und Zeitangaben. Zweistellige
@@ -43,7 +48,7 @@ abgewiesen, auch bei leerer Eingabe. Fest als Date deklarierte SQL-Projektionen
 weisen einen Bereichsüberlauf ab.
 
 Offen bleiben unter anderem regionale Eingabe/Anzeige und Jahresfenster, Hijri,
-vollständige Date-Literale, DateValue/TimeValue, sämtliche OLE-/Variant-Promotionen,
+vollständige Date-Literale, regionale DateValue/TimeValue-Eingaben, sämtliche OLE-/Variant-Promotionen,
 Untersekundenspeicherung, der vollständige Kalender-Control-Adapter sowie alle
 SQL-Operatoren, Filter-/Aktions-/CASE-/CAST-/Aggregat- und komplexen Quelltypen.
 DatePart/DateDiff haben weiterhin die in COMPATIBILITY.md dokumentierten
