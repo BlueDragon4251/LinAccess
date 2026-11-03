@@ -1080,3 +1080,17 @@ core tests exercise composed identities, argument conversion and runtime errors;
 core/DAO pass 2/2 (1.77 s), GUI-free passes 1/1 (1.37 s), desktop all-target build
 passes. No new test target/full-suite/package repeat. This increment does not
 add their Jet SQL registration or prove all Access/Windows floating-point edges.
+
+
+## Native datasheet record shortcuts (2026-11-03)
+
+The table view now handles Ctrl+Plus (including Ctrl+Shift+Equals) and Ctrl+Minus
+through the same insertion/deletion paths used by its buttons. Both validate any
+live editor before changing the manual-submit model; failed validation preserves
+the editor and row set. Insertion selects the new row. Existing main-window GUI
+regression inserts/saves/deletes/saves a record with real key events and verifies
+SQL persistence. Main-window/currency-field checks pass 2/2 (1.85 s); additional
+invalid-editor guard check passes 1/1 (0.26 s). Desktop affected targets build.
+This retains explicit Save semantics; Access automatic record save, complete
+selection/deletion confirmation behavior and the full datasheet keyboard oracle
+remain open. No new test target or unrelated full-suite/package repeat.

@@ -781,10 +781,8 @@ void MainWindow::showTable(const QString& name) {
     table->setSortingEnabled(true);
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     outer->addWidget(table);
-    connect(add, &QPushButton::clicked, page, [model] { model->insertRow(model->rowCount()); });
-    connect(remove, &QPushButton::clicked, page, [model, table] {
-        if (table->currentIndex().isValid()) model->removeRow(table->currentIndex().row());
-    });
+    connect(add, &QPushButton::clicked, page, [table] { (void)table->insertRecord(); });
+    connect(remove, &QPushButton::clicked, page, [table] { (void)table->deleteCurrentRecord(); });
     connect(discard, &QPushButton::clicked, page, [model] { model->revertAll(); });
     connect(save, &QPushButton::clicked, page, [this, model, table] {
         if(!table->finishEditing()) return;

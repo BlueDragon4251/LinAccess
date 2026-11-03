@@ -174,6 +174,8 @@ End Sub
     view.setCurrentIndex(grid.index(0,1)); view.edit(grid.index(0,1)); QApplication::processEvents();
     auto* pending=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(pending); pending->setText("549755813888");
     assert(!view.finishEditing() && QApplication::focusWidget()==pending && pending->text()=="549755813888" && grid.data(grid.index(0,1)).toString()=="1.2346");
+    const auto guardedRows=grid.rowCount();
+    assert(!view.insertRecord() && !view.deleteCurrentRecord() && grid.rowCount()==guardedRows && QApplication::focusWidget()==pending);
     pending->setText("1.23455"); assert(view.finishEditing() && grid.data(grid.index(0,1)).toString()=="1.2346");
     auto* memoEditor=delegate.createEditor(&view,option,grid.index(0,2)); auto* memoText=qobject_cast<QLineEdit*>(memoEditor); assert(memoText);
     delegate.setEditorData(memoEditor,grid.index(0,2)); assert(memoText->text().size()==50000); memoText->insert("z"); delegate.setModelData(memoEditor,&grid,grid.index(0,2)); delete memoEditor;

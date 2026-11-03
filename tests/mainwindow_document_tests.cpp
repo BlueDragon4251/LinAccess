@@ -93,6 +93,18 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     QTest::keyPress(editor,Qt::Key_S,Qt::ControlModifier); QTest::keyRelease(table,Qt::Key_S,Qt::ControlModifier); QApplication::processEvents();
     QSqlQuery query(db); query.prepare("SELECT value FROM shortcut_records WHERE id=?"); query.addBindValue(id); assert(query.exec() && query.next() && query.value(0).toString()=="saved-through-shortcut");
     auto* model=qobject_cast<linaccess::AccessTableModel*>(table->model()); assert(!model->isDirty());
+    QApplication::setActiveWindow(&window); table->setFocus(); const auto originalRows=model->rowCount();
+    QTest::keyClick(table,Qt::Key_Plus,Qt::ControlModifier|Qt::ShiftModifier); QApplication::processEvents();
+    assert(model->rowCount()==originalRows+1 && table->currentIndex().row()==originalRows);
+    assert(model->setData(model->index(originalRows,1),"keyboard-insert"));
+    QTest::keyClick(table,Qt::Key_S,Qt::ControlModifier); QApplication::processEvents();
+    assert(query.exec("SELECT COUNT(*) FROM shortcut_records WHERE value='keyboard-insert'") && query.next() && query.value(0).toInt()==1);
+    int added=-1; for(int row=0;row<model->rowCount();++row) if(model->index(row,1).data().toString()=="keyboard-insert") added=row;
+    assert(added>=0); table->setCurrentIndex(model->index(added,1));
+    QTest::keyClick(table,Qt::Key_Minus,Qt::ControlModifier); QApplication::processEvents();
+    QTest::keyClick(table,Qt::Key_S,Qt::ControlModifier); QApplication::processEvents();
+    assert(query.exec("SELECT COUNT(*) FROM shortcut_records WHERE value='keyboard-insert'") && query.next() && query.value(0).toInt()==0);
+    assert(model->rowCount()==originalRows && !model->isDirty());
     table->setCurrentIndex(model->index(0,1)); table->edit(table->currentIndex()); QApplication::processEvents();
     auto* live=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(live && window.allowProjectClose(db.connectionName())); live->setText("unsaved-live");
     assert(!window.close() && live->isVisible() && live->text()=="unsaved-live"); QTest::keyClick(live,Qt::Key_Escape); QApplication::processEvents();

@@ -6,6 +6,7 @@
 #include <QSignalBlocker>
 #include <QMetaProperty>
 #include <QPersistentModelIndex>
+#include <QKeyEvent>
 namespace linaccess {
 class AccessTableView final : public QTableView {
 public:
@@ -34,12 +35,40 @@ public:
         if(target.model()!=model() || !model()->setData(target,property.read(editor),Qt::EditRole)) return false;
         QTableView::closeEditor(editor,QAbstractItemDelegate::NoHint); return true;
     }
+    bool insertRecord() {
+        auto* typed=qobject_cast<AccessTableModel*>(model());
+        if(!typed || !finishEditing()) return false;
+        const auto row=typed->rowCount();
+        if(!typed->insertRow(row)) return false;
+        setCurrentIndex(typed->index(row,0)); scrollTo(currentIndex()); setFocus();
+        return true;
+    }
+    bool deleteCurrentRecord() {
+        auto* typed=qobject_cast<AccessTableModel*>(model());
+        if(!typed || !currentIndex().isValid() || !finishEditing()) return false;
+        const auto row=currentIndex().row(),column=currentIndex().column();
+        if(!typed->removeRow(row)) return false;
+        if(typed->rowCount()) setCurrentIndex(typed->index(qMin(row,typed->rowCount()-1),column));
+        return true;
+    }
     void setModel(QAbstractItemModel* model) override {
         disconnect(restore_); QTableView::setModel(model);
         if(auto* typed=qobject_cast<AccessTableModel*>(model))
             restore_=connect(typed,&AccessTableModel::sortRestored,this,[this](int column,Qt::SortOrder order) {
                 const QSignalBlocker blocked(horizontalHeader()); horizontalHeader()->setSortIndicator(column,order);
             });
+    }
+protected:
+    void keyPressEvent(QKeyEvent* event) override {
+        const auto modifiers=event->modifiers() & ~Qt::KeypadModifier;
+        if((modifiers==Qt::ControlModifier || modifiers==(Qt::ControlModifier|Qt::ShiftModifier))
+            && (event->key()==Qt::Key_Plus || (event->key()==Qt::Key_Equal && modifiers.testFlag(Qt::ShiftModifier)))) {
+            (void)insertRecord(); event->accept(); return;
+        }
+        if(modifiers==Qt::ControlModifier && event->key()==Qt::Key_Minus) {
+            (void)deleteCurrentRecord(); event->accept(); return;
+        }
+        QTableView::keyPressEvent(event);
     }
 private:
     QWidget* activeEditor() const {
