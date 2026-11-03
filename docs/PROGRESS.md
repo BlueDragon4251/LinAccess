@@ -3231,3 +3231,20 @@ passes 1/1 (1.36 s), affected desktop targets build. Real GUI checks verify nume
 Date storage and unchanged state after precision refusal. No new target/full-suite/
 package repeat. README and handoff link the consolidated DATE_RUNTIME.md limits;
 last grouped baseline remains a8d3061, with following focused increments recorded.
+
+
+## Typed native calendar values and civil Date input (2026-11-03)
+
+Unbound native MSCAL calendar values now return Date Variants and accept Date or
+numeric OLE input in addition to supported ISO text. The date-only/time/bound
+restrictions remain explicit. Both original popup-calendar event paths copy the
+actual selected Date to their independently focused target and preserve SQL
+object-value comparison behavior. Synthetic checks verify native/number setters,
+Date type, invalid input preservation and the unchanged bound-calendar boundary.
+
+Date-field ISO parsing now validates QDate/QTime independently instead of asking
+QDateTime to resolve a local instant. This accepts valid civil times inside a
+system daylight-saving gap, with canonical unchanged SQL storage. App/affected
+GUI targets build; Qt-field plus both original targets pass 3/3 (49.75 s) under
+TZ=Europe/Berlin. No new CTest target or GUI-free repeat (runtime unchanged).
+Full regional/calendar/ActiveX/Date edge parity remains open.

@@ -8,6 +8,7 @@
 #include "vba_runtime.hpp"
 #include "vba_module_context.hpp"
 #include "vba_currency.hpp"
+#include "vba_calendar.hpp"
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
@@ -2151,7 +2152,7 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
     if(widget->property("la_default_error").toInt()) throw linaccess::VbaRuntimeError(widget->property("la_default_error").toInt(),"Control default unavailable");
     if (auto* calendar=qobject_cast<QCalendarWidget*>(widget)) {
         if (calendar->property("la_calendar_bound").toBool()) throw linaccess::VbaRuntimeError(3251,"Bound calendar adapter is unsupported");
-        return widget->property("la_null").toBool() ? linaccess::VbaValue{} : linaccess::VbaValue::string((calendar->selectedDate().toString(Qt::ISODate)+" 00:00:00").toStdString());
+        return widget->property("la_null").toBool() ? linaccess::VbaValue{} : linaccess::vbaDateValue(linaccess::VbaValue::string(calendar->selectedDate().toString(Qt::ISODate).toStdString()));
     }
     if (qobject_cast<QGroupBox*>(widget)) {
         if (widget->property("la_option_error").toInt()) throw linaccess::VbaRuntimeError(3251,"Option group default expression unsupported");
@@ -2256,8 +2257,8 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
     if (auto* calendar=qobject_cast<QCalendarWidget*>(widget)) {
         if (calendar->property("la_calendar_bound").toBool()) throw linaccess::VbaRuntimeError(3251,"Bound calendar adapter is unsupported");
         if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Calendar requires a date");
-        if (value.kind!=linaccess::VbaValue::Kind::Text) throw linaccess::VbaRuntimeError(13,"Calendar requires an ISO date value");
-        const auto text=QString::fromStdString(value.text); const auto date=QDate::fromString(text.left(10),Qt::ISODate);
+        const auto text=value.kind==linaccess::VbaValue::Kind::Text ? QString::fromStdString(value.text) : linaccess::sqlFieldValue(linaccess::vbaDateValue(value),"DATETIME").toString();
+        const auto date=QDate::fromString(text.left(10),Qt::ISODate);
         if (!date.isValid() || (text.size()!=10 && (text.size()!=19 || !QDateTime::fromString(text,"yyyy-MM-dd HH:mm:ss").isValid()))
             || date<calendar->minimumDate() || date>calendar->maximumDate()) throw linaccess::VbaRuntimeError(13,"Invalid calendar date");
         if (text.size()==19 && QDateTime::fromString(text,"yyyy-MM-dd HH:mm:ss").time()!=QTime(0,0))

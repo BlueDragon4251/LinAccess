@@ -225,6 +225,9 @@ End Function
     assert(sql.exec("SELECT stamp FROM grid WHERE id=1") && sql.next() && sql.value(0).toString()=="1900-01-01 12:00:00"); sql.finish();
     int datePrecision=0; try { dateObject->assignItem("stamp",linaccess::VbaValue::dateSerial(2.123456789)); } catch(const linaccess::VbaRuntimeError& error) { datePrecision=error.number; }
     assert(datePrecision==3251 && dateObject->item("stamp").asNumber()==2.5 && !dateForm.hasUnsavedChanges());
+    dateObject->assignItem("stamp",linaccess::VbaValue::string("2024-03-31 02:30:00")); dateObject->assign("Dirty",linaccess::VbaValue::logical(false));
+    assert(dateObject->item("stamp").asText()=="2024-03-31 02:30:00");
+    assert(sql.exec("SELECT stamp FROM grid WHERE id=1") && sql.next() && sql.value(0).toString()=="2024-03-31 02:30:00"); sql.finish();
     assert(dateForm.close());
 
 }

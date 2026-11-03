@@ -26,6 +26,12 @@ feinere Date-Werte werden mit 3251 abgewiesen, bevor ein Feld verändert wird.
 Interne und ungebundene Date-Werte behalten ihren Double-Serienwert. Die bisherige
 ISO-Anzeige ist keine Nachbildung regionaler Access-Formatierung.
 
+Ungebundene native MSCAL-Kalender liefern Date-Werte und akzeptieren ISO-Text,
+Date oder numerische Serienwerte für reine Kalenderdaten. Gebundene Kalender,
+Zeitanteile und vollständige ActiveX-Kompatibilität bleiben begrenzt. Der
+Datumsfeld-Textparser prüft Datum und Uhrzeit getrennt von der Systemzeitzone;
+eine Sommerzeit-Lücke macht einen gültigen zivilen Access-Wert nicht ungültig.
+
 Der SQL-Adapter führt CDate, DateSerial, TimeSerial und DateAdd nativ aus. Direkte
 Konstruktor- und Uhrfunktionsprojektionen behalten DATETIME-Metadaten. Bei
 Datumsfeldern nutzt die Ergebnisbindung die physische SQLite-Spaltenherkunft

@@ -151,7 +151,7 @@ void testOriginalCalendar(const QDir& directory,const QJsonArray& objects,QSqlDa
     const auto event=filter.eventResult("control:"+target+":dblclick");
     assert(event && event->status==linaccess::VbaExecutionStatus::Completed);
     const auto actual=makePreviewFormObject(filter)->item(target.toStdString());
-    assert(actual.kind==linaccess::VbaValue::Kind::Text && actual.asText()==(wanted.toString(Qt::ISODate)+" 00:00:00").toStdString());
+    assert(actual.kind==linaccess::VbaValue::Kind::Date && actual.asNumber()==QDate(1899,12,30).daysTo(wanted));
     // Repeat against the other original event binding: Screen and the shared
     // global target must follow the newly focused control, not the first one.
     auto* other=filter.findChild<QLineEdit*>("access-control-"+targets.back()); assert(other);
@@ -195,13 +195,18 @@ End
     assert(object->member("Name",{}).asText()=="calendar");
     assert(form.findChild<QCalendarWidget*>("access-control-calendar") && !form.findChild<QCalendarWidget*>("access-control-unsupported"));
     object->assign("Value",linaccess::VbaValue::string("2003-02-03"));
-    assert(object->member("Value",{}).asText()=="2003-02-03 00:00:00");
+    assert(object->member("Value",{}).kind==linaccess::VbaValue::Kind::Date && object->member("Value",{}).asText()=="2003-02-03");
     for (const auto& [value,error]:std::vector<std::pair<linaccess::VbaValue,int>>{
-        {linaccess::VbaValue{},94},{linaccess::VbaValue::numeric(1),13},
+        {linaccess::VbaValue{},94},
         {linaccess::VbaValue::string("2003-02-30"),13},{linaccess::VbaValue::string("2003-02-03 12:30:00"),3251}}) {
         try { object->assign("Value",value); assert(false); } catch(const linaccess::VbaRuntimeError& failure) { assert(failure.number==error); }
-        assert(object->member("Value",{}).asText()=="2003-02-03 00:00:00");
+        assert(object->member("Value",{}).kind==linaccess::VbaValue::Kind::Date && object->member("Value",{}).asText()=="2003-02-03");
     }
+    const auto serial=QDate(1899,12,30).daysTo(QDate(2003,2,4));
+    object->assign("Value",linaccess::VbaValue::dateSerial(serial));
+    assert(object->member("Value",{}).asNumber()==serial);
+    object->assign("Value",linaccess::VbaValue::numeric(serial+1));
+    assert(form.findChild<QCalendarWidget*>("access-control-calendar")->selectedDate()==QDate(2003,2,5));
     QSqlQuery query(db); assert(query.exec("CREATE TABLE stamps(id INTEGER PRIMARY KEY,stamp DATETIME)"));
     assert(query.exec("INSERT INTO stamps VALUES(1,'2003-01-01 12:30:00')"));
     auto bound=source; bound.replace("Begin Form\n","Begin Form\nRecordSource =\"stamps\"\n"); bound.replace("Name =\"calendar\"","Name =\"calendar\"\nControlSource =\"stamp\"");

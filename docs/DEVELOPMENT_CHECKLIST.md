@@ -834,3 +834,12 @@ of complete Access parity. Existing broader open items remain open.
   regression retained, complete formatting/precision/edit-event oracle remains open.
 - [x] Guarded Window menu next/previous/database/Close All and numbered visible
   form/report list with stale-entry protection; full MDI/datasheet list remains open.
+
+- [x] Native DateSerial/TimeSerial and DateAdd with checked arguments, relative
+  normalization/month clamping and typed SQL projections; region/Hijri remain open.
+- [x] Typed Date SELECT addition/subtraction and numeric Date-difference SUM,
+  with metadata/Null/nesting checks; full SQL clause/operator coverage remains open.
+- [x] Date Variant overflow promotion, numeric bound-Date assignment and explicit
+  subsecond storage refusal without mutation; full Date coercion matrix open.
+- [x] Native unbound calendar Date values and original focused-target popup
+  transfers, plus civil Date input across system DST gaps; full ActiveX open.
