@@ -3614,3 +3614,25 @@ Ctrl+End/Home, rejected keys including both Shift+Tab encodings, valid Tab cache
 updates and unchanged SQL until explicit Save. No new targets. Full suite/package
 baseline remains local e15ff33 / API c381897, 48/48 (88.41 s); this increment is
 focused-verified. Theoretical checklist: 279 checked / 70 open scoped points.
+
+
+## Native mouse validation and datasheet context menu (2026-11-03)
+
+A normal native editor-close request now validates the field before disposal.
+Rejected input stays alive, and mouse selection/focus returns to its original
+cell after the transition. Escape's explicit RevertModelCache remains a discard
+operation; model destruction/reset can still invalidate an editor. The mouse
+loss was reproduced before the fix. Complete inter-window/focus policy parity
+remains open.
+The table view also has a real native context menu for Copy, checked range Paste,
+text Zoom, record/column/all selection. Right-click within an existing selection
+preserves it. Paste is enabled only for its supported clean editable target and
+text clipboard; keyboard-triggered context menus anchor at the current cell.
+Actions call the existing checked native operations; cut/range delete, filter,
+all Access context commands and pixel/menu parity are not claimed.
+Existing main-window/Currency targets pass 2/2 (2.25 s), including actual rejected
+mouse navigation, retained editor/focus/current cell, Escape regressions and
+real popup action dispatch into quoted TSV clipboard with dirty Paste disabled.
+Last full suite/package remains e15ff33 / API c381897, 48/48 (88.41 s). These
+Qt view increments are focused-verified, with the same existing 48 targets.
+Theoretical checklist: 281 checked / 70 open scoped points.

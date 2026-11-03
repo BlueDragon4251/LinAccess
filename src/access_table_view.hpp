@@ -12,6 +12,8 @@
 #include <QItemSelectionModel>
 #include <limits>
 #include <QTableView>
+#include <QMenu>
+#include <QContextMenuEvent>
 #include <QHeaderView>
 #include <QApplication>
 #include <QSignalBlocker>
@@ -164,6 +166,62 @@ public:
             });
     }
 protected:
+    void contextMenuEvent(QContextMenuEvent* event) override {
+        if(!model() || !selectionModel() || !finishEditing()) { event->accept(); return; }
+        if(event->reason()==QContextMenuEvent::Mouse) {
+            const auto clicked=indexAt(event->pos());
+            if(clicked.isValid() && !selectionModel()->isSelected(clicked)) setCurrentIndex(clicked);
+        }
+        QPointer<AccessTableView> self=this;
+        QMenu menu; menu.setObjectName("native-datasheet-context-menu");
+        const auto add=[&](const char* name,const QString& label,bool enabled) {
+            auto* action=menu.addAction(label); action->setObjectName(QString("datasheet-")+name); action->setEnabled(enabled); return action;
+        };
+        const bool native=qobject_cast<AccessTableModel*>(model())!=nullptr;
+        auto* copy=add("copy","&Kopieren\tStrg+C",native && selectionModel()->hasSelection());
+        const auto* clipboard=QApplication::clipboard()->mimeData();
+        auto* paste=add("paste","&Einfügen\tStrg+V",canPasteSelection() && clipboard && clipboard->hasText());
+        menu.addSeparator();
+        auto* zoom=add("zoom","&Zoom...\tUmschalt+F2",native && currentIndex().isValid());
+        menu.addSeparator();
+        auto* row=add("select-row","&Datensatz markieren\tUmschalt+Leertaste",currentIndex().isValid());
+        auto* column=add("select-column","&Spalte markieren\tStrg+Leertaste",currentIndex().isValid());
+        auto* all=add("select-all","&Alles markieren\tStrg+A",model()->rowCount()>0 && model()->columnCount()>0);
+        const auto position=event->reason()==QContextMenuEvent::Keyboard && currentIndex().isValid()
+            ? viewport()->mapToGlobal(visualRect(currentIndex()).center()) : event->globalPos();
+        auto* chosen=menu.exec(position);
+        if(!self) return;
+        if(chosen==copy) (void)copySelection();
+        else if(chosen==paste) (void)pasteSelection();
+        else if(chosen==zoom) (void)zoomCurrentCell();
+        else if(chosen==row && currentIndex().isValid()) selectionModel()->select(currentIndex(),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);
+        else if(chosen==column && currentIndex().isValid() && fetchSelectionRows()) selectionModel()->select(currentIndex(),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Columns);
+        else if(chosen==all && fetchSelectionRows()) selectAll();
+        event->accept();
+    }
+    void closeEditor(QWidget* widget,QAbstractItemDelegate::EndEditHint hint) override {
+        QPointer<AccessTableView> self=this;
+        QPointer<QWidget> editor=widget;
+        const auto target=widget ? widget->property("la_cell_index").value<QPersistentModelIndex>() : QPersistentModelIndex{};
+        if(hint!=QAbstractItemDelegate::RevertModelCache && editor && editor->isVisible() && target.isValid() && target.model()==model()) {
+            if(!commitNativeCellEditor(editor,target)) {
+                if(!self || !editor) return;
+                if(selectionModel() && target.isValid()) {
+                    const QSignalBlocker blocked(selectionModel());
+                    selectionModel()->setCurrentIndex(target,QItemSelectionModel::ClearAndSelect);
+                }
+                // Restore focus after the mouse/focus transition completes;
+                // keeping the editor alive retains the rejected text.
+                QMetaObject::invokeMethod(editor,[editor] {
+                    if(editor && editor->isVisible() && editor->isEnabled() && editor->window()->isActiveWindow())
+                        editor->setFocus(Qt::OtherFocusReason);
+                },Qt::QueuedConnection);
+                return;
+            }
+            if(!self || !editor) return;
+        }
+        QTableView::closeEditor(widget,hint);
+    }
     void keyPressEvent(QKeyEvent* event) override {
         const auto selectionModifiers=event->modifiers() & ~Qt::KeypadModifier;
         if(event->key()==Qt::Key_End && selectionModifiers==Qt::ControlModifier) {
