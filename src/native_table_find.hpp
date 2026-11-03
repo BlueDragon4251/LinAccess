@@ -17,6 +17,7 @@ struct NativeTableFindArguments {
     QString text;
     int column{-1},mode{};
     bool sensitive{};
+    int origin{}; // 0: continue dialog search, 1: first record, 2: next record.
 };
 inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString,int>>& columns,
                                      NativeTableFindArguments initial,std::function<QString(NativeTableFindArguments)> search) {

@@ -100,7 +100,7 @@ private:
     bool commitControls();
     bool zoomFocusedText();
     void openFindDialog();
-    QString findNextRecord(QString text,QString field,int mode,bool caseSensitive);
+    QString findNextRecord(QString text,QString field,int mode,bool caseSensitive,int origin=0,bool requireValidation=false);
     void repeatFind();
     void selectRecord(int target);
     bool prepareClose();

@@ -3792,3 +3792,20 @@ Full rebuilt desktop suite passes 48/48 (92.69 s), GUI-free core 1/1 (2.45 s),
 Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. No additional test targets. This also covers the preceding
 native table sort commands and the final weak-owner reentrancy guard.
+
+
+## Bounded native DoCmd.FindRecord (2026-11-03)
+
+Current-text-field SearchAll executes on actual active tables/forms with named
+and omitted argument binding, distinct explicit Empty coercion, first/next origin
+and normal no-match completion. Readonly fields work; form validation cancellation
+raises 2501 before subsequent VBA statements. Explicit document context prevents
+old-caller fallback from the database window. General formatted/numeric/all-field/
+directional/wildcard behavior remains open. Canonical scope: FIND_RECORD_RUNTIME.md.
+Existing trio 3/3 (15.83 s), GUI-free core 1/1 (1.99 s). No new targets.
+Theoretical checklist: 303 checked / 72 open scoped points.
+
+Full rebuilt desktop suite passes 48/48 (88.05 s). Debian payload/permissions/
+Build-ID/pinned SQLite checks and all four original fixture hashes pass. The
+GUI-free core baseline after binding/constant changes is 1/1 (1.99 s); subsequent
+form extensions are Qt-only. No additional test targets.

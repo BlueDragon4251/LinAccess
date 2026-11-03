@@ -444,6 +444,23 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
     return tableCommandFailure(3251,"Dieser native Tabellenbefehl ist noch nicht implementiert.");
 }
 
+QVariantMap MainWindow::findTableRecord(const QString& text,int mode,bool sensitive,bool first) {
+    QPointer<QWidget> page=activeDataPage_;
+    if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
+    if(QApplication::activeModalWidget()) return tableCommandFailure(2046,"FindRecord ist durch ein modales Fenster blockiert.");
+    if(mode<0 || mode>2) return tableCommandFailure(5,"Ungültiger FindRecord-Vergleich.");
+    if(text.isEmpty() || text.contains('*') || text.contains('?') || text.contains('#') || text.contains('[') || text.contains(']'))
+        return tableCommandFailure(3251,"Leere und Wildcard-FindRecord-Suchen sind noch nicht implementiert.");
+    QPointer<linaccess::AccessTableView> table;
+    for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
+    QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
+    if(!table || !model || !table->currentIndex().isValid()) return tableCommandFailure(2046,"Kein aktuelles Tabellenfeld für FindRecord.");
+    const int column=table->currentIndex().column();
+    if(table->isColumnHidden(column) || !model->isTextColumn(column)) return tableCommandFailure(3251,"FindRecord unterstützt hier nur das aktuelle sichtbare Textfeld.");
+    if(table->findText({text,column,mode,sensitive,first ? 1 : 2})<0) return tableModelFailure(model,2501);
+    return {{"handled",true},{"error",0}};
+}
+
 QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int offset,bool explicitTable) {
     const bool active= !activePreviewDocument() && AccessFormPreview::databaseWindowActive(this) && activeDataPage_
         && tabs_->indexOf(activeDataPage_)>=0 && tabs_->currentWidget()==activeDataPage_;

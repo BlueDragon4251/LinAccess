@@ -87,6 +87,22 @@ End Sub
 Sub RepeatViaSendKeys()
 SendKeys "+{F4}", True
 End Sub
+Sub FindBeta()
+DoCmd.FindRecord FindWhat:="BETA",MatchCase:=False
+Me.Tag="findrecord-beta"
+End Sub
+Sub FindAlpha()
+DoCmd.FindRecord "Alpha"
+Me.Tag="findrecord-alpha"
+End Sub
+Sub FindNeedleAfterCurrent()
+DoCmd.FindRecord "needle",acAnywhere,,,,,False
+Me.Tag="findrecord-after"
+End Sub
+Sub FindAbsent()
+DoCmd.FindRecord "absent"
+Me.Tag="findrecord-nohit"
+End Sub
 )VBA";
     AccessFormPreview caller("hidden find caller","Begin Form\nEnd",callerCode,db);
     std::vector<VbaValue> none;
@@ -131,6 +147,22 @@ End Sub
     assert(model->item("id").number==2 && stored(2)=="NeedleÖ" && model->member("Dirty",{}).boolean);
     query->setText("missing"); next->click(); assert(model->item("id").number==2 && stored(2)=="NeedleÖ");
     query->setText("Alpha"); next->click(); assert(model->item("id").number==1 && stored(2)=="draft" && !model->member("Dirty",{}).boolean);
+    close=dialog->findChild<QPushButton*>("access-find-close"); close->click(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);
+    focus(); assert(caller.executeProcedure("FindBeta",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==3);
+    assert(makePreviewFormObject(caller)->member("Tag",{}).asText()=="findrecord-beta");
+    assert(caller.executeProcedure("FindAlpha",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==1);
+    assert(caller.executeProcedure("FindNeedleAfterCurrent",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==4);
+    assert(caller.executeProcedure("FindBeta",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==3);
+    assert(caller.executeProcedure("FindAbsent",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==3);
+    focus(); editor->selectAll(); QTest::keyClicks(editor,"blocked API search"); model->assign("Tag",VbaValue::string("blockupdate"));
+    assert(caller.executeProcedure("FindAlpha",none).errorNumber==2501 && model->item("id").number==3 && stored(3)=="beta" && model->member("Dirty",{}).boolean);
+    assert(makePreviewFormObject(caller)->member("Tag",{}).asText()=="findrecord-nohit");
+    model->assign("Tag",VbaValue::string("")); model->member("Undo",{});
+    focus(); assert(caller.executeProcedure("FindAlpha",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==1);
+    nameControl->assign("Locked",VbaValue::logical(true)); focus();
+    assert(caller.executeProcedure("FindBeta",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==3 && stored(3)=="beta");
+    nameControl->assign("Locked",VbaValue::logical(false));
+    focus(); QTest::keyClick(editor,Qt::Key_F,Qt::ControlModifier); dialog=form.findChild<QDialog*>("access-find-dialog"); assert(dialog && dialog->isVisible());
     assert(caller.close());
     model->assign("Tag",VbaValue::string("blockclose")); assert(!form.close() && dialog->isVisible());
     model->assign("Tag",VbaValue::string("")); const QPointer<QDialog> guarded(dialog); assert(form.close());
