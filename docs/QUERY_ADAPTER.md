@@ -32,23 +32,23 @@ Implemented with execution tests:
   timestamps. MDBTools exports both date formats as yyyy-MM-dd HH:mm:ss so dates
   are not compared against locale-dependent CSV strings. Subsecond Jet precision,
   regional calendars and exact Date Variant semantics remain open.
-- SQL execution is bounded using the native distro Qt SQLite handle and the
-  loaded SQLite progress-handler API (no SQLite implementation is embedded).
+- SQL execution is bounded using Qt’s native SQLite handle and the
+  pinned SQLite progress-handler API with checked backend identity.
   Interrupted fetches fail instead of returning partial recordsets. A recursive
   query and a query interrupted after its first row exercise both paths.
 
 ## Original corpus measurement
 
 All 100 original Kassa query artifacts are hash-checked and classified against a
-separate imported SQLite database. Current local run: 72 executed without extra
-parameters and five with parameters selected from actual data (77 total), nine
-missing query dependencies, eleven other Jet/binding failures, one source-column
-mismatch and two joined actions refused with explicit boundaries (conflicting
+separate imported SQLite database. Current local run: 73 executed without extra
+parameters and five with parameters selected from actual data (78 total), nine
+missing query dependencies, eight binding/context failures, three source-column
+mismatches and two joined actions refused with explicit boundaries (conflicting
 source values for one target, and an unsupported nullable-side outer-join target).
 Parameterized results are
 compared against positive independent filter counts. Action mutation is verified
 separately with typed QueryDefs tests. Reports contain hashes/status/error codes,
-not values or raw SQL. See QUERY_ORIGINS.md for the remaining six-column mismatch.
+not values or raw SQL. See QUERY_ORIGINS.md for the checked stored-source/schema mismatches and qualified query lineage.
 
 Execution without a Microsoft Access reference result is not proof of original
 query semantics. The report says executed_no_access_reference_oracle explicitly.

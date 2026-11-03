@@ -2138,3 +2138,18 @@ package and four original fixture SHA-256 checks pass. No new test targets;
 previous full suite remains the query-search 48/48 baseline (90.46 s).
 OPEN_QUERY_RUNTIME.md states limits. Checklist: 339 checked / 72 open scoped
 points, not an overall parity percentage.
+
+## Qualified saved-query lineage and original corpus (2026-11-03)
+
+Three-part query.relation.field references now bind to unique actual output
+labels through checked direct projections in stored view definitions, including
+ranked TOP wrappers and two input views over one physical table. Physical-only
+UNION metadata, ambiguous origins and deeper qualifications are not guessed.
+One unchanged original query now executes: current corpus 78/100 (73 ordinary,
+five data-parameter cases), still without an Access result oracle. Three remaining
+column failures are checked against unchanged saved source definitions (two) or
+the original MDB table schema (one). Other remaining cases: nine missing query
+dependencies, eight binding/context failures, two guarded joined actions.
+QUERY_ORIGINS.md is the canonical scope. Full desktop 48/48 (90.47 s), GUI-free
+core 1/1 (1.67 s), Debian package and four fixture SHA-256 checks pass. No new
+test targets. Checklist: 340 checked / 72 open scoped points, not total parity.

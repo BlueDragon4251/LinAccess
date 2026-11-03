@@ -18,7 +18,7 @@ preparing a zero-row projection, without stepping the statement. A base-field
 reference is rebound to a visible source column only when exactly one lineage
 match exists. Source aliases and output labels are retained. Explicit/nested
 JOIN sources are supported; comma joins, nested scopes, computed-field origins,
-intermediate view lineage and more complex qualification remain incomplete.
+wildcard logical lineage and deeper qualification remain incomplete.
 Ambiguous repeated origins are rejected by the normal SQL error path.
 
 Earlier SELECT aliases can be expanded when their expressions use only known
@@ -30,8 +30,8 @@ views are repaired in dependency passes; user views and tables are not replaced.
 ## Original regression evidence
 
 All 100 unchanged Kassa queries remain hash-checked on an isolated MDB import.
-The current run executes 72 without extra parameters and five with parameters:
-77 total, without a Microsoft Access result oracle. For those five, a non-Null
+The current run executes 73 without extra parameters and five with parameters:
+78 total, without a Microsoft Access result oracle. For those five, a non-Null
 parameter is selected from actual unfiltered results; the DAO filtered row count
 must be positive and equal an independent C++ filter count. Values are not
 included in reports. Synthetic tests separately check exact returned values,
@@ -47,8 +47,8 @@ substitute a similarly named column from another table. A Microsoft Access
 comparison is required to distinguish an original query/source mismatch from
 additional Access name-resolution behavior. This query is not counted executed.
 
-Remaining corpus classifications: nine missing query dependencies, eleven
-other Jet/binding failures, that one source-column mismatch, and two joined
+Remaining corpus classifications: nine missing query dependencies, eight
+binding/context failures, three source-column mismatches, and two joined
 UPDATE boundaries. The runner now attempts the INNER JOIN action on an isolated
 full data copy; differing candidates are rejected with 3251. The other action
 requires an outer join and a saved-query target (3251). One unchanged original
@@ -76,7 +76,7 @@ record counts and a non-NULL first-row value on the imported original MDB copy:
 - `e074e74467212cd73520402ffb4239aef220557883d048a2be672de10c3d48de`
 
 These include a dependent lookup query; they are not three independent IIf
-implementations. The corpus now executes 77/100 (72 ordinary plus five with
+implementations. At the conditional-alias checkpoint the corpus executed 77/100 (72 ordinary plus five with
 independently checked data parameters). Overall execution counts have lower-bound
 regression assertions. This demonstrates native execution on actual rows, not
 Microsoft Access result equivalence or exact Currency arithmetic in SQL.
@@ -85,3 +85,43 @@ Validation for the conditional-alias stage: all 18 CTests passed (56.43 seconds)
 a fresh Debian package passed current executable Build ID/content/permission
 checks, and all four original fixture SHA-256 checks passed unchanged. The
 GUI-disabled runtime sources did not change in this SQL-only stage.
+
+## Three-part saved-query qualification (2026-11-03)
+
+A visible saved-query/view source can qualify a direct output field by its
+source relation: query.relation.field. The binder resolves that three-part path
+to the exact actual SQLite output label, including duplicate labels such as
+id:1. Source aliases are retained; a unique match is required within one visible
+view. Four-part paths, ambiguous owners, duplicate origin projections and unknown
+origins retain checked SQL failure rather than choosing a candidate.
+
+SQLite physical metadata alone cannot distinguish two input views over the same
+base table. The binder therefore follows direct, checked projections in the
+actual stored temp/main view definitions, matching their positions to prepared
+output labels. Direct wrappers propagate verified paths through ranked TOP
+views. Relation aliases/input labels must resolve uniquely. Traversal is bounded
+to 16 levels and never steps value expressions. Compound/nested SELECTs,
+computed projections and wildcard expansion do not supply inferred logical paths.
+Physical lineage for this new three-part path is used only through proven direct
+projections; UNION's first reported physical origin is not treated as a complete
+origin proof. Existing ordinary alias expansion retains its purity guards.
+
+Unchanged original artifact
+32b25d06328e208b7d2e94ec33a17422fca977ef7b5988e6b040123562c890ec now
+executes on the full isolated import. Synthetic real SQL checks distinct values
+from duplicate labels and two view inputs over the same base table, WHERE/ORDER
+binding, and refusal of ambiguous/unknown/compound/overqualified paths.
+The current original corpus is 78/100 executed: 73 ordinary and five with checked
+data-selected parameters. No Microsoft Access result oracle is available.
+
+Three remaining source-column cases are now independently classified: two
+unchanged saved source definitions omit the requested field, and one requested
+field is absent from the original MDB table schema as well as its import. The
+runner checks the original bytes/schema; it does not invent another column or
+infer a complete Access application state. Nine missing dependencies, eight
+binding/context failures and two joined-action guards remain alongside those
+three cases. These 22 cases are not claimed executed.
+
+Full desktop suite passes 48/48 (90.47 s), GUI-free core 1/1 (1.67 s), Debian
+payload/permissions/Build-ID/pinned SQLite checks and all four original fixture
+SHA-256 checks pass. No new test targets or original source changes.
