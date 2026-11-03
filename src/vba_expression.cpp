@@ -738,7 +738,7 @@ private:
                 "array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
                 "doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
                 "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdate","cstr","str","str$","format","format$",
-                "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len",
+                "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
@@ -1575,6 +1575,17 @@ private:
                     if(suffix=='^') throw error("64-bit Val suffix is not implemented",3251);
                 }
                 return result;
+            }
+            if(word=="lenb") {
+                if(!host_) return {};
+                if(args.size()!=1 || omitted[0]) throw error("LenB requires one argument",450);
+                const auto scalar=scalarObjectValue(args[0]);
+                if(scalar.kind==VbaValue::Kind::Null) return {};
+                if(scalar.kind==VbaValue::Kind::Empty) return VbaValue::longInteger(0);
+                if(scalar.kind!=VbaValue::Kind::Text) throw error("LenB non-string storage layout is not implemented",3251);
+                const auto units=vbaStringCodeUnits(scalar.text);
+                if(units>static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()/2)) throw error("LenB result overflow",6);
+                return VbaValue::longInteger(static_cast<std::int32_t>(units*2));
             }
             if ((word == "isnull" || word == "isempty" || word == "len" || word == "cstr"
                 || word == "isnumeric") && one) {

@@ -1511,3 +1511,19 @@ That commit's CLI push was blocked by an invalid GH_TOKEN; the authenticated
 GitHub connector confirms private visibility and remote head 825047c. No raw
 credentials were inspected; local development continues pending renewed CLI
 authentication. No claim that these pending commits are already remote.
+
+
+## Native Unicode-string LenB (2026-11-03)
+
+VBA LenB/VBA.LenB and native SQL LenB count UTF-16 storage bytes for actual
+Unicode strings (without a terminator), including supplementary characters and
+embedded NUL. Results are checked Long values in VBA; Null propagates and Empty
+returns zero. Native scalar defaults use the existing object conversion path.
+SQL uses bound input values through the same native evaluator and participates
+in saved-query/alias validation. Non-string storage layout, UDT padding and
+named LenB binding remain explicitly unsupported; numeric inputs report 3251.
+Core/DAO/query checks pass 3/3 (2.34 s), including real SQL column/NUL input and
+projection alias arithmetic. GUI-free core passes 1/1 (1.55 s). Existing targets
+only. No full VBA storage-layout or new package/full-suite claim after 4ba1819.
+The CLI token remains invalid; these source commits are locally secured pending
+authentication renewal, rather than claimed as already pushed.

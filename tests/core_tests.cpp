@@ -2288,6 +2288,12 @@ End Function
     assert(evaluate(".5+2e1").asNumber()==20.5);
     assert(evaluate("1E-2").asNumber()==0.01);
     assert(evaluate("Len(\"Grüße😀\")").asNumber()==7);
+    assert(evaluate("VBA.LenB(\"Grüße😀\")").asNumber()==14 && evaluate("VarType(LenB(\"a\"))=vbLong").truthy());
+    assert(evaluate("LenB(Null)").kind==VbaValue::Kind::Null && evaluate("LenB(Empty)").asNumber()==0);
+    for(const auto& [source,expected]:std::vector<std::pair<std::string,int>>{{"LenB(1)",3251},{"LenB()",450},{"LenB(1,2)",450}}) {
+        int actual=0; try { (void)evaluate(source); } catch(const VbaRuntimeError& error) { actual=error.number; } assert(actual==expected);
+    }
+
     auto scalarProbe=std::make_shared<ScalarProbe>(); scalarProbe->value=VbaValue::string("ö😀");
     const VbaVariables scalarValues{{"probe",VbaValue::reference(scalarProbe)}};
     assert(evaluateVbaExpression("Len(probe)",host,scalarValues).asNumber()==3 && scalarProbe->reads==1);
@@ -2295,6 +2301,7 @@ End Function
     assert(evaluateVbaExpression("Len(probe)",host,scalarValues).kind==VbaValue::Kind::Null && scalarProbe->reads==2);
     const VbaVariables unicodeValues{{"embedded",VbaValue::string(std::string("A\0B",3))},{"invalid",VbaValue::string(std::string(1,static_cast<char>(0xff)))}};
     assert(evaluateVbaExpression("Len(embedded)",host,unicodeValues).asNumber()==3);
+    assert(evaluateVbaExpression("LenB(embedded)",host,unicodeValues).asNumber()==6);
     assert(evaluateVbaExpression("Mid(embedded,2,1)",host,unicodeValues).asText()==std::string(1,'\0'));
     int invalidUnicode=0; try { (void)evaluateVbaExpression("Len(invalid)",host,unicodeValues); } catch(const VbaRuntimeError& failure) { invalidUnicode=failure.number; } assert(invalidUnicode==13);
 

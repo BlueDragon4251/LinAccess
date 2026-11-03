@@ -875,3 +875,6 @@ of complete Access parity. Existing broader open items remain open.
 
 - [x] Shared acyclic nested Collection/Variant-array graphs and nested For Each,
   with indirect cycle refusal before mutation; cyclic object lifetime stays open.
+
+- [x] Native Unicode-string LenB UTF-16 byte counts, Null/Empty, qualified calls
+  and bound SQL/alias execution; numeric/UDT storage layout remains open.
