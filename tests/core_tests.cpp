@@ -261,6 +261,12 @@ void testCharacterFunctions() {
     using namespace linaccess;
     FakeForm host;
     const auto eval=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,{}); };
+    assert(eval("Hex(Number:=459)").asText()=="1CB" && eval("Oct$(459)").asText()=="713");
+    assert(eval("Hex$(-1)").asText()=="FFFFFFFF" && eval("Oct(-1)").asText()=="37777777777");
+    assert(eval("Hex(Empty)").asText()=="0" && eval("Hex(10.5)").asText()=="A");
+    assert(eval("Hex(CInt(-1))").asText()=="FFFF" && eval("Oct(CInt(-1))").asText()=="177777");
+    assert(eval("Hex(CLng(-1))").asText()=="FFFFFFFF");
+    assert(eval("Oct(Null)").kind==VbaValue::Kind::Null);
     assert(eval("Space(3)").asText()=="   " && eval("Space$(0)").asText().empty());
     assert(eval("String(Character:=\"Ωtail\",Number:=3)").asText()=="ΩΩΩ");
     assert(eval("String$(3,321)").asText()=="AAA" && eval("Len(String(3,0))").asNumber()==3);
@@ -277,6 +283,7 @@ void testCharacterFunctions() {
     assert(evaluateVbaExpression("Asc(probe)",host,{{"probe",VbaValue::reference(probe)}}).number==65 && probe->reads==1);
     probe->value=VbaValue::numeric(937); assert(evaluateVbaExpression("ChrW(probe)",host,{{"probe",VbaValue::reference(probe)}}).asText()=="Ω" && probe->reads==2);
     for(const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
+        {"Space(Null)",94},{"Space$(Null)",94},{"Hex$(Null)",94},{"Oct(2147483648)",6},{"Hex(1,2)",450},
         {"Space(-1)",5},{"Space(1000001)",3251},{"String(2,\"\")",5},{"String$(2,Null)",94},
         {"String(2,128)",3251},{"String(2)",450},{"Space(2147483648)",6},
         {"Asc(\"\")",5},{"AscW(Empty)",5},{"Asc(Null)",94},{"Chr(Null)",94},

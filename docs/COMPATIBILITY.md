@@ -1044,7 +1044,7 @@ codepage/BSTR/result-metadata equivalence remains open.
 Space/Space$ and String/String$ execute in the C++ VBA evaluator; plain Space and
 String also use the registered native SQL scalar bridge. Named Number/Character
 arguments, checked Long counts, first UTF-16 text unit, ASCII numeric codes with
-modulo 256, embedded NUL and Variant Null versus dollar-variant error 94 are
+modulo 256, embedded NUL and String Variant Null versus dollar-variant error 94 are
 implemented. Negative counts raise 5, counts above 1,000,000 raise explicit 3251;
 ANSI bytes above 127 and isolated surrogates remain unsupported. Full Windows
 codepage and argument-evaluation edge parity is not claimed.
@@ -1052,3 +1052,19 @@ Existing core/DAO/query-model targets pass 3/3 (1.77 s); desktop all-target buil
 passes. Prior character SQL GUI-free follow-up passed 1/1 (1.37 s). GUI-free build/test passes 1/1 (1.45 s). The Debian package passes contents,
 permissions, Build-ID and pinned SQLite backend smoke checks; all four original
 fixture SHA-256 checks pass. Full desktop suite passes 48/48 in one run (85.23 s).
+
+
+## Native Hex/Oct conversion and repetition correction (2026-11-03)
+
+Hex/Hex$/Oct/Oct$ now convert native scalar values with checked, rounded Long
+coercion, uppercase hexadecimal, zero/Empty and Variant Null versus dollar error
+94. Integer inputs preserve 16-bit negative patterns, other supported numeric
+inputs use 32 bits. Plain Hex/Oct execute through the native SQL bridge on real
+row values, preserving Null. Named Number arguments are supported. This does not
+complete decimal literal inference, 64-bit VBA or all SQL type metadata.
+Space(Null) now raises 94 instead of the previously over-broad Null propagation;
+String retains its documented Variant Null behavior. Existing core/DAO/query-model
+checks pass 3/3 (1.67 s), including explicit Integer/Long conversions. Desktop
+all-target build passes. No new test target, full-suite or package repeat for
+this increment. Last grouped verification remains 68bdfd0: 48/48, GUI-free,
+Debian package and four fixture hashes.

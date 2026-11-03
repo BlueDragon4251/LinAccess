@@ -756,6 +756,8 @@ private:
                     {"msgbox",{{"Prompt","Buttons","Title","HelpFile","Context"},1}},
                     {"inputbox",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
                     {"inputbox$",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
+                    {"hex",{{"Number"},1}}, {"hex$",{{"Number"},1}},
+                    {"oct",{{"Number"},1}}, {"oct$",{{"Number"},1}},
                     {"space",{{"Number"},1}}, {"space$",{{"Number"},1}},
                     {"string",{{"Number","Character"},2}}, {"string$",{{"Number","Character"},2}},
                     {"asc",{{"String"},1}}, {"ascw",{{"String"},1}},
@@ -903,6 +905,22 @@ private:
                 if(args.empty() || omitted[0]) throw error("Round requires an expression",450);
                 return vbaRound(args);
             }
+            if(word=="hex" || word=="hex$" || word=="oct" || word=="oct$") {
+                if(!host_) return {};
+                if(args.size()!=1 || omitted[0]) throw error("Base conversion requires one argument",450);
+                const auto value=scalarObjectValue(args[0]);
+                if(value.kind==VbaValue::Kind::Null) {
+                    if(word.back()=='$') throw error("Invalid Null base conversion argument",94);
+                    return {};
+                }
+                auto bits=static_cast<std::uint32_t>(static_cast<std::int32_t>(coerceVbaModuleValue(value,"long").number));
+                if(value.kind==VbaValue::Kind::Number && value.numericType==VbaValue::NumericType::Integer) bits&=0xffffU;
+                const auto base=word.starts_with("hex") ? 16U : 8U;
+                std::string result;
+                do { result.push_back("0123456789ABCDEF"[bits%base]); bits/=base; } while(bits);
+                std::reverse(result.begin(),result.end());
+                return VbaValue::string(std::move(result));
+            }
             if(word=="space" || word=="space$" || word=="string" || word=="string$") {
                 if(!host_) return {};
                 const bool spaces=word=="space" || word=="space$";
@@ -911,7 +929,7 @@ private:
                 const auto number=scalarObjectValue(args[0]);
                 const auto character=spaces ? VbaValue::string(" ") : scalarObjectValue(args[1]);
                 if(number.kind==VbaValue::Kind::Null || character.kind==VbaValue::Kind::Null) {
-                    if(word.back()=='$') throw error("Invalid Null repetition argument",94);
+                    if(spaces || word.back()=='$') throw error("Invalid Null repetition argument",94);
                     return {};
                 }
                 const auto count=static_cast<std::int32_t>(coerceVbaModuleValue(number,"long").number);

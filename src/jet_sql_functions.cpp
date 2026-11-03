@@ -213,6 +213,8 @@ void scalarStringFunction(sqlite3_context* context,int count,sqlite3_value** arg
 }
 void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"StrReverse",1,1); }
 void stringInStrRev(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"InStrRev",2,4); }
+void stringHex(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"Hex",1,1); }
+void stringOct(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"Oct",1,1); }
 void stringSpace(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"Space",1,1); }
 void stringRepeat(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"String",2,2); }
 void stringAsc(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"Asc",1,1); }
@@ -524,6 +526,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_asc",-1,&stringAsc,nullptr,nullptr);
     ensure("linaccess_jet_ascw",-1,&stringAscW,nullptr,nullptr);
     ensure("linaccess_jet_chr",-1,&stringChr,nullptr,nullptr);
+    ensure("linaccess_jet_hex",-1,&stringHex,nullptr,nullptr);
+    ensure("linaccess_jet_oct",-1,&stringOct,nullptr,nullptr);
     ensure("linaccess_jet_space",-1,&stringSpace,nullptr,nullptr);
     ensure("linaccess_jet_string",-1,&stringRepeat,nullptr,nullptr);
     ensure("linaccess_jet_chrw",-1,&stringChrW,nullptr,nullptr);
