@@ -4137,3 +4137,17 @@ the bounded String/Variant path. VARIANT_ARRAY_RUNTIME.md defines the scope.
 Full desktop 48/48 (89.81 s), freshly rebuilt GUI-free core 1/1 (1.45 s), Debian
 package and four original fixture hashes pass; no new targets. Checklist:
 344 checked / 72 open scoped points, not total Access parity.
+
+## Array object references and Byte Erase (2026-11-03)
+
+Set on Variant array cells stores actual native object/Nothing references.
+Container copies retain independent entries with shared object identity; existing
+Variant containers support ReDim As Object with Nothing defaults, metadata and
+Preserve. Native DAO objects retrieved from real arrays execute SQL and cursor
+methods. Invalid scalar/object index writes preserve entries, and implicit
+Object-array default-member writes remain explicit 3251. Byte arrays held in
+Variant variables now Erase to Empty with supported ByRef writeback/copy isolation.
+VARIANT_ARRAY_RUNTIME.md specifies remaining declaration/class/COM limits.
+Full desktop suite 48/48 (92.45 s), fresh GUI-free core 1/1 (1.79 s), Debian
+package and all four original fixture hashes pass; no new targets. Checklist:
+346 checked / 72 open scoped points, not overall parity.

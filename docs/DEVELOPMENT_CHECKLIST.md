@@ -1023,3 +1023,6 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Explicit-positive-NumRows DAO GetRows returns real zero-based typed field/record matrices, including native binary cells, with next-unread cursor advance and conversion-failure position preservation.
 
 - [x] ReDim As primitive type in existing Variant containers retains actual typed defaults/coercion/metadata and Preserve type guards, while full typed declarations and unsupported intrinsic array-kind paths remain explicit.
+
+- [x] Set on Variant/Object-array cells preserves actual native references/Nothing, independent container copies and shared object identity; ReDim As Object defaults and Preserve use checked native binding.
+- [x] Erase of Byte arrays inside Variant variables releases the container to Empty with supported ByRef propagation while independent byte copies retain contents/bounds.

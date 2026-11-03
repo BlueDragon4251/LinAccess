@@ -678,6 +678,12 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             statements.push_back({Statement::Type::ErrorResumeNext, {}, {}, line});
         } else if (lower(source) == "on error goto 0") {
             statements.push_back({Statement::Type::ErrorDisable, {}, {}, line});
+        } else if (const auto objectArrayAssignment=topLevelAssignment((lower(source).starts_with("set ") || lower(source).starts_with("set\t")) ? trim(source.substr(3)) : std::string{});
+            objectArrayAssignment && memberSeparator(objectArrayAssignment->first)==std::string::npos && memberTarget(objectArrayAssignment->first) && memberTarget(objectArrayAssignment->first)->arguments) {
+            const auto target=*memberTarget(objectArrayAssignment->first); const auto indices=splitArguments(*target.arguments);
+            if(indices.empty() || indices.size()>60 || !std::all_of(indices.begin(),indices.end(),[&](const auto& index) { return !trim(index).empty() && validExpression(index); }) || !validExpression(objectArrayAssignment->second))
+                return {VbaExecutionStatus::Unsupported,"Object array assignment syntax unsupported",line};
+            statements.push_back({Statement::Type::IndexedAssign,target.name,objectArrayAssignment->second,line,*target.arguments,"object"});
         } else if (std::regex_match(source, match, objectSet)) {
             const auto expr = trim(match[2].str());
             if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported, "Set-Ausdruck", line};
@@ -787,7 +793,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             if(const auto as=outsideKeyword(declaration,"as");as!=std::string::npos) {
                 elementType=lower(trim(declaration.substr(as+2))); declaration=trim(declaration.substr(0,as));
                 if(elementType!="variant" && elementType!="byte" && elementType!="integer" && elementType!="long" && elementType!="single"
-                    && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string")
+                    && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string" && elementType!="object")
                     return {VbaExecutionStatus::Unsupported,"ReDim element type unsupported",line};
             }
             const auto target=memberTarget(declaration);
@@ -1647,7 +1653,6 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     const auto name=lower(instruction.argument);
                     const auto found=locals.find(name);
                     if(found==locals.end() || !isVbaArray(found->second)) throw VbaRuntimeError(13,"Erase requires an array");
-                    if(found->second.kind!=VbaValue::Kind::Array) throw VbaRuntimeError(3251,"Byte array Erase is not implemented");
                     assignVariable(name,VbaValue::empty());
                 }
                 break;
@@ -1656,10 +1661,14 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     const auto name=lower(instruction.argument);
                     std::vector<VbaValue> indices;
                     for(const auto& expression:splitArguments(instruction.endExpression)) indices.push_back(coerceVbaModuleValue(scalarVbaValue(evaluate(expression)),"long"));
-                    const auto value=evaluate(instruction.expression);
+                    const bool object=instruction.stepExpression=="object";
+                    const auto value=object ? evaluateObject(instruction.expression) : evaluate(instruction.expression);
+                    if(object && value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set requires an object reference");
                     refreshAliases();
                     const auto found=locals.find(name);
                     if(found==locals.end()) throw VbaRuntimeError(13,"Array variable required");
+                    if(object && (!isVbaArray(found->second) || (vbaArrayType(found->second)!=8204 && vbaArrayType(found->second)!=8201))) throw VbaRuntimeError(13,"Object references require a Variant or Object array");
+                    if(!object && isVbaArray(found->second) && vbaArrayType(found->second)==8201) throw VbaRuntimeError(3251,"Object array default-member assignment is not implemented");
                     assignVariable(name,withVbaArrayElement(found->second,indices,value),true);
                 }
                 break;

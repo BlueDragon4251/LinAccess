@@ -95,6 +95,7 @@ int vbaArrayType(const VbaValue& value) {
     if(type=="currency") return 8198;
     if(type=="date") return 8199;
     if(type=="string") return 8200;
+    if(type=="object") return 8201;
     if(type=="boolean") return 8203;
     return 8204;
 }
@@ -122,7 +123,7 @@ VbaValue resizeVbaArrayWithBounds(const VbaValue& value,std::vector<VbaArrayDime
         : value.kind==VbaValue::Kind::Array ? storage(value).elementType : std::string("variant");
     if(elementType.empty()) elementType=previousType;
     if(elementType!="variant" && elementType!="byte" && elementType!="integer" && elementType!="long" && elementType!="single"
-        && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string")
+        && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string" && elementType!="object")
         throw VbaRuntimeError(3251,"Array element type is not implemented");
     if(preserve && value.kind!=VbaValue::Kind::Empty && !originalArray) throw VbaRuntimeError(13,"Preserve requires an array or uninitialized Variant");
     if(preserve && originalArray) {
@@ -138,7 +139,7 @@ VbaValue resizeVbaArrayWithBounds(const VbaValue& value,std::vector<VbaArrayDime
         if(preserve && value.kind==VbaValue::Kind::ByteArray) std::copy_n(value.bytes.begin(),std::min(count,value.bytes.size()),bytes.begin());
         return VbaValue::byteArray(std::move(bytes));
     }
-    const auto initial=elementType=="variant" ? VbaValue::empty() : coerceVbaModuleValue(VbaValue::empty(),elementType);
+    const auto initial=elementType=="variant" ? VbaValue::empty() : elementType=="object" ? VbaValue::reference(nullptr) : coerceVbaModuleValue(VbaValue::empty(),elementType);
     std::vector<VbaValue> values(count,initial);
     if(preserve && originalArray) for(std::size_t i=0;i<std::min(count,vbaArraySize(value));++i) values[i]=vbaArrayLinearElement(value,i);
     return array(std::move(values),std::move(bounds),std::move(elementType));
@@ -161,7 +162,8 @@ VbaValue withVbaArrayElement(const VbaValue& value,const std::vector<VbaValue>& 
         return VbaValue::byteArray(std::move(bytes));
     }
     const auto& original=storage(value); auto values=original.values;
-    values[index]=original.elementType=="variant" ? element : coerceVbaModuleValue(scalarVbaValue(element),original.elementType);
+    if(original.elementType=="object" && element.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Object array requires object references");
+    values[index]=(original.elementType=="variant" || original.elementType=="object") ? element : coerceVbaModuleValue(scalarVbaValue(element),original.elementType);
     return array(std::move(values),original.bounds,original.elementType,original.allocation);
 }
 }
