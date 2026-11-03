@@ -6,6 +6,7 @@
 #include "sqlite_execution.hpp"
 #include <QSqlError>
 #include <QSqlRecord>
+#include <QSqlIndex>
 #include "vba_runtime.hpp"
 #include "vba_source_codec.hpp"
 #include <QSqlQuery>
@@ -1691,6 +1692,37 @@ AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan&
     }
     if (query.lastError().isValid()) failAccessQuery(query);
     return result;
+}
+QString editableAccessQueryTable(QSqlDatabase db,const QString& source) {
+    const auto plan=compileAccessQuery(source);
+    auto tokens=tokenize(plan.sql,true);
+    if(!tokens.isEmpty() && symbol(tokens.last(),";")) tokens.removeLast();
+    if(!plan.parameters.isEmpty() || !plan.makeTable.isEmpty() || plan.topLimit || plan.hiddenRank || tokens.size()!=4
+        || tokens[0].kind!=Token::Word || tokens[0].value.compare("SELECT",Qt::CaseInsensitive)!=0 || !symbol(tokens[1],"*")
+        || tokens[2].kind!=Token::Word || tokens[2].value.compare("FROM",Qt::CaseInsensitive)!=0
+        || (tokens[3].kind!=Token::Word && tokens[3].kind!=Token::Identifier))
+        throw VbaRuntimeError(3251,"Editable query currently requires SELECT * FROM one keyed table");
+    const auto requested=tokens[3].value;
+    if(db.driverName()!="QSQLITE" || requested.startsWith("_la_",Qt::CaseInsensitive) || requested.startsWith("sqlite_",Qt::CaseInsensitive))
+        throw VbaRuntimeError(3251,"Editable query target is not a supported user table");
+    QSqlQuery metadata(db);
+    if(!metadata.prepare("SELECT 1 FROM temp.sqlite_schema WHERE name=? COLLATE NOCASE")) throw VbaRuntimeError(3146,"Editable target metadata unavailable");
+    metadata.addBindValue(requested); if(!metadata.exec()) throw VbaRuntimeError(3146,"Editable target metadata unavailable");
+    if(metadata.next()) throw VbaRuntimeError(3251,"Shadowed editable query targets are not implemented");
+    if(!metadata.prepare("SELECT name FROM main.sqlite_schema WHERE type='table' AND name=? COLLATE NOCASE")) throw VbaRuntimeError(3146,"Editable target metadata unavailable");
+    metadata.addBindValue(requested); if(!metadata.exec()) throw VbaRuntimeError(3146,"Editable target metadata unavailable");
+    if(!metadata.next()) throw VbaRuntimeError(3251,"Editable query requires a physical main table");
+    const auto table=metadata.value(0).toString(); metadata.finish();
+    if(db.primaryIndex(table).count()==0) throw VbaRuntimeError(3251,"Editable query requires a real primary key");
+    if(!metadata.exec("PRAGMA main.table_xinfo("+identifier(table)+")")) throw VbaRuntimeError(3146,"Editable target columns unavailable");
+    int columns=0;
+    while(metadata.next()) {
+        if(metadata.value(6).toInt()!=0) throw VbaRuntimeError(3251,"Editable queries over hidden/generated columns are not implemented");
+        ++columns;
+    }
+    if(metadata.lastError().isValid()) throw VbaRuntimeError(3146,"Editable target columns could not be fully read");
+    if(columns!=db.record(table).count()) throw VbaRuntimeError(3251,"Editable query projection does not match its table model");
+    return table;
 }
 void AccessQueryModel::execute(QSqlDatabase db, const QString& source, const QMap<QString,QVariant>& parameters) {
     beginResetModel(); result_ = {}; endResetModel();

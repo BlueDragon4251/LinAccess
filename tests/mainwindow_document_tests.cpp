@@ -155,6 +155,16 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
 DoCmd.SelectObject acTable,"SHORTCUT_RECORDS",False
 Me.Tag="table-selected"
 End Sub
+Sub OpenEditableQuery()
+DoCmd.OpenQuery "command_edit_query"
+Me.Tag="query-edit-opened"
+End Sub
+Sub EditableQueryAsReadonly()
+DoCmd.OpenQuery "command_edit_query",,acReadOnly
+End Sub
+Sub CloseEditableQuery()
+DoCmd.Close acQuery,"command_edit_query",acSaveNo
+End Sub
 Sub OpenReadQuery()
 DoCmd.OpenQuery QueryName:="command_query_doc",DataMode:=acReadOnly
 Me.Tag="query-opened"
@@ -492,10 +502,11 @@ End Sub
     assert(unchanged.exec("CREATE TABLE command_edit(id INTEGER PRIMARY KEY AUTOINCREMENT,value TEXT CHECK(value!='blocked'))"));
     assert(unchanged.exec("INSERT INTO command_edit VALUES(1,'initial')"));
     assert(unchanged.exec(R"SQL(INSERT INTO _la_objects(kind,name,definition) VALUES('query','command_query_doc','{"sql":"SELECT id,value,flag FROM command_readonly ORDER BY id"}'))SQL"));
+    assert(unchanged.exec(R"SQL(INSERT INTO _la_objects(kind,name,definition) VALUES('query','command_edit_query','{"sql":"SELECT * FROM command_edit"}'))SQL"));
     artifact(db,"query","command_parameter_doc","PARAMETERS p Currency; SELECT p AS amount");
     artifact(db,"query","command_action_doc","DELETE FROM command_readonly");
     const int queryCallerId=artifact(db,"form","query_lifetime_caller","Begin Form\nEnd\n");
-    artifact(db,"vba","Form_query_lifetime_caller","Sub OpenAndClose()\nDoCmd.OpenQuery \"command_query_doc\",,acReadOnly\nDoCmd.Close acForm,\"query_lifetime_caller\"\nEnd Sub\n");
+    artifact(db,"vba","Form_query_lifetime_caller","Sub OpenAndClose()\nDoCmd.OpenQuery \"command_query_doc\",,acReadOnly\nDoCmd.Close acForm,\"query_lifetime_caller\"\nEnd Sub\nSub OpenEditableAndClose()\nDoCmd.OpenQuery \"command_edit_query\"\nDoCmd.Close acForm,\"query_lifetime_caller\"\nEnd Sub\n");
     assert(unchanged.exec("CREATE TABLE command_typed_find(id INTEGER PRIMARY KEY,value REAL,money CURRENCY_REAL,stamp DATETIME,flag BOOLEAN,payload BLOB)"));
     assert(unchanged.exec("INSERT INTO command_typed_find VALUES(1,1.2345678901234567,0.1001,'2020-02-29 12:34:56',-1,x'0102'),(2,1.2345678901234565,0.1,'1899-12-30 06:00:00',NULL,x'0102'),(3,42,-0.0001,'2020-02-29 12:34:57',0,x'0102'),(4,NULL,NULL,NULL,0,x'0102')"));
     assert(unchanged.exec("CREATE TABLE command_record_edits(id INTEGER PRIMARY KEY,value TEXT)"));
@@ -517,6 +528,38 @@ End Sub
     };
     const int beforeQueries=documentTabs->count();
     const auto callerBeforeQueries=mixedEditor->text();
+    assert(mixed->executeProcedure("OpenEditableQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->count()==beforeQueries+1);
+    QPointer<QWidget> editableQueryPage=documentTabs->currentWidget();
+    auto* editableQueryView=dynamic_cast<linaccess::AccessTableView*>(editableQueryPage->findChild<QTableView*>("native-editable-query-view")); assert(editableQueryView);
+    auto* editableQueryModel=qobject_cast<linaccess::AccessTableModel*>(editableQueryView->model()); assert(editableQueryModel && !editableQueryModel->isReadOnly());
+    const int queryValueColumn=editableQueryModel->fieldIndex("value"); assert(queryValueColumn>=0 && editableQueryView->currentIndex().isValid());
+    auto editableDescriptor=makePreviewApplicationObject(*mixed)->member("CurrentData",{}).object->member("AllQueries",{}).object->member("Item",{linaccess::VbaValue::string("command_edit_query")}).object;
+    auto sourceTableDescriptor=makePreviewApplicationObject(*mixed)->member("CurrentData",{}).object->member("AllTables",{}).object->member("Item",{linaccess::VbaValue::string("command_edit")}).object;
+    assert(editableDescriptor->member("IsLoaded",{}).boolean && !sourceTableDescriptor->member("IsLoaded",{}).boolean && window.activateOpenTable("command_edit")==3251);
+    assert(mixed->executeProcedure("EditableQueryAsReadonly",selectArguments).errorNumber==3251 && documentTabs->currentWidget()==editableQueryPage);
+    assert(window.openTableDocument("command_edit",0,1)==3251);
+    assert(editableQueryModel->setData(editableQueryModel->index(0,queryValueColumn),"query-updated"));
+    assert(unchanged.exec("SELECT value FROM command_edit WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="initial"); unchanged.finish();
+    QSqlQuery sourceShadow(editableQueryModel->database());
+    assert(sourceShadow.exec("CREATE TEMP TABLE command_edit(id INTEGER PRIMARY KEY,value TEXT)"));
+    assert(mixed->executeProcedure("SaveActiveTable",selectArguments).errorNumber==3251 && editableQueryModel->isDirty());
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).errorNumber==3251 && editableQueryModel->isDirty());
+    assert(sourceShadow.exec("DROP TABLE temp.command_edit"));
+    assert(mixed->executeProcedure("SaveActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && !editableQueryModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_edit WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="query-updated"); unchanged.finish();
+    assert(unchanged.exec("UPDATE command_edit SET value='query-refreshed' WHERE id=1"));
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && editableQueryModel->index(0,queryValueColumn).data().toString()=="query-refreshed");
+    assert(unchanged.exec(R"SQL(UPDATE _la_objects SET definition='{"sql":"SELECT * FROM command_edit WHERE id=1"}' WHERE kind='query' AND name='command_edit_query')SQL"));
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).errorNumber==3251 && documentTabs->currentWidget()==editableQueryPage);
+    assert(unchanged.exec(R"SQL(UPDATE _la_objects SET definition='{"sql":"SELECT * FROM command_edit"}' WHERE kind='query' AND name='command_edit_query')SQL"));
+    assert(editableQueryModel->setData(editableQueryModel->index(0,queryValueColumn),"blocked"));
+    assert(mixed->executeProcedure("CloseEditableQuery",selectArguments).status==linaccess::VbaExecutionStatus::Error && editableDescriptor->member("IsLoaded",{}).boolean && editableQueryModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_edit WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="query-refreshed"); unchanged.finish();
+    editableQueryModel->revertAll(); assert(editableQueryModel->setData(editableQueryModel->index(0,queryValueColumn),"query-closed"));
+    assert(mixed->executeProcedure("CloseEditableQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && !editableDescriptor->member("IsLoaded",{}).boolean);
+    QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!editableQueryPage && mixed->isVisible() && mixedEditor->text()==callerBeforeQueries);
+    assert(unchanged.exec("SELECT value FROM command_edit WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="query-closed"); unchanged.finish();
+    assert(unchanged.exec("UPDATE command_edit SET value='initial' WHERE id=1"));
     assert(mixed->executeProcedure("OpenReadQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->count()==beforeQueries+1);
     QPointer<QWidget> queryPage=documentTabs->currentWidget();
     auto* queryView=queryPage->findChild<QTableView*>("native-query-view"); assert(queryView && dynamic_cast<linaccess::AccessQueryModel*>(queryView->model()));
@@ -676,6 +719,11 @@ End Sub
     assert(mixed->executeProcedure("CloseReadQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(mixed->executeProcedure("SelectParameterQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->currentWidget()==parameterPage);
     assert(mixed->executeProcedure("CloseParameterQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    openArtifact(window,queryCallerId); QPointer<AccessFormPreview> editQueryCaller=document("query_lifetime_caller"); assert(editQueryCaller);
+    assert(editQueryCaller->executeProcedure("OpenEditableAndClose",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QApplication::processEvents();
+    assert(!editQueryCaller && editableDescriptor->member("IsLoaded",{}).boolean);
+    assert(window.closeQueryDocument(1,"command_edit_query",0).value("error").toInt()==0 && !editableDescriptor->member("IsLoaded",{}).boolean);
     openArtifact(window,queryCallerId); QPointer<AccessFormPreview> queryCaller=document("query_lifetime_caller"); assert(queryCaller);
     assert(queryCaller->executeProcedure("OpenAndClose",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QApplication::processEvents();

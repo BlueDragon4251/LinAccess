@@ -1026,3 +1026,6 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 
 - [x] Set on Variant/Object-array cells preserves actual native references/Nothing, independent container copies and shared object identity; ReDim As Object defaults and Preserve use checked native binding.
 - [x] Erase of Byte arrays inside Variant variables releases the container to Empty with supported ByRef propagation while independent byte copies retain contents/bounds.
+
+- [x] Default/acEdit OpenQuery supports real keyed single-table SELECT-star datasheets, record save/validated close/requery and independent caller lifetime.
+- [x] Editable query documents retain query identity and reject competing writable source tabs, changed saved definitions and source-schema/shadow changes without discarding drafts.
