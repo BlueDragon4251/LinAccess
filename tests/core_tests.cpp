@@ -2582,5 +2582,14 @@ End Function
     assert(evaluate("VarType(CLng(3) Or CLng(4))=vbLong").truthy());
     assert(evaluate("1.5 And 2").asNumber()==2);
     substringError("2147483648 And 0",6); substringError("-2147483649 Or 0",6);
+    assert(evaluate("&H8000").asNumber()==-32768 && evaluate("&HFFFF&").asNumber()==65535);
+    assert(evaluate("VarType(&HFFFF)=vbInteger And VarType(&HFFFF&)=vbLong").truthy());
+    assert(evaluate("Not &H80000000&").asNumber()==2147483647);
+    assert(evaluate("&HFF00& And &H0F0F&").asNumber()==3840);
+    assert(evaluate("&O177777").asNumber()==-1 && evaluate("&O37777777777&").asNumber()==-1);
+    assert(evaluate("\"mask=\" & &HFF&").asText()=="mask=255");
+    substringError("&H100000000",6); substringError("&H10000%",6);
+    const auto basedDefault=executeVbaProcedure("Function BasedDefault(Optional value As Long=&HFFFF&) As Long\nBasedDefault=value\nEnd Function","BasedDefault",host);
+    assert(basedDefault.status==VbaExecutionStatus::Completed && basedDefault.returnValue=="65535");
     std::cout << "Core tests passed\n";
 }

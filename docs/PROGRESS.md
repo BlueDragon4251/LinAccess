@@ -2925,3 +2925,15 @@ GUI-free build/test passed 1/1 (1.44 s). Matching .deb Build-ID, pinned SQLite
 backend smoke, package contents/permissions, all four original fixture SHA-256
 checks and repository privacy passed. No distro matrix repeat; remote CI billing
 restriction unchanged. Last single-run 48/48 evidence remains 992d082.
+
+## Native based integer literals (2026-11-03)
+
+Expression lexing now recognizes hexadecimal &H and octal &O integers with
+checked 32-bit patterns, Integer/Long identity and explicit %/& suffixes. Signed
+16/32-bit patterns reach actual native bitwise operations; based literals also
+work in supported Optional literal defaults. Existing core checks cover masks,
+Not, subtype, concatenation, octal values, range failures and a default Long
+parameter. Desktop build and core/DAO/original syntax targets pass 3/3 (2.46 s);
+GUI-free build/test passes 1/1 (1.87 s). No new target/full-suite/package repeat.
+Complete decimal literal inference, all unary/suffix/leading-zero edge rules,
+Const declarations and raw Jet SQL literal translation remain open.

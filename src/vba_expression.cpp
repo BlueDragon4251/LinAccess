@@ -98,6 +98,13 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
                    (std::isalnum(static_cast<unsigned char>(input[pos])) || static_cast<unsigned char>(input[pos]) >= 0x80 || input[pos] == '_')) ++pos;
             if (pos<input.size() && input[pos]=='$') ++pos;
             tokens.push_back({Token::Type::Word, std::string(input.substr(start, pos - start))});
+        } else if(ch=='&' && pos+2<input.size()
+            && (((input[pos+1]=='h' || input[pos+1]=='H') && std::isxdigit(static_cast<unsigned char>(input[pos+2])))
+                || ((input[pos+1]=='o' || input[pos+1]=='O') && input[pos+2]>='0' && input[pos+2]<='7'))) {
+            const auto start=pos; const bool hex=input[pos+1]=='h' || input[pos+1]=='H'; pos+=2;
+            while(pos<input.size() && (hex ? std::isxdigit(static_cast<unsigned char>(input[pos]))!=0 : input[pos]>='0' && input[pos]<='7')) ++pos;
+            if(pos<input.size() && (input[pos]=='&' || input[pos]=='%')) ++pos;
+            tokens.push_back({Token::Type::Number,std::string(input.substr(start,pos-start))});
         } else if (std::isdigit(static_cast<unsigned char>(ch)) || (ch=='.' && pos+1<input.size() && std::isdigit(static_cast<unsigned char>(input[pos+1])))) {
             const auto start=pos;
             while (pos<input.size() && std::isdigit(static_cast<unsigned char>(input[pos]))) ++pos;
@@ -542,6 +549,22 @@ private:
         }
         if (tok.type == Token::Type::Text) return VbaValue::string(tok.value);
         if (tok.type == Token::Type::Number) {
+            if(tok.value.starts_with('&')) {
+                const bool forceLong=tok.value.back()=='&',forceInteger=tok.value.back()=='%';
+                const auto digits=tok.value.substr(2,tok.value.size()-2-(forceLong || forceInteger ? 1 : 0));
+                std::size_t consumed=0; std::uint64_t magnitude;
+                try { magnitude=std::stoull(digits,&consumed,tok.value[1]=='h' || tok.value[1]=='H' ? 16 : 8); }
+                catch(const std::out_of_range&) { throw error("Based integer literal overflow",6); }
+                catch(const std::invalid_argument&) { throw error("Invalid based integer literal",5); }
+                if(consumed!=digits.size()) throw error("Invalid based integer literal",5);
+                if(magnitude>0xffffffffULL || (forceInteger && magnitude>0xffff)) throw error("Based integer literal overflow",6);
+                if(!forceLong && magnitude<=0xffff) {
+                    const auto signedValue=static_cast<std::int64_t>(magnitude)-(magnitude>0x7fff ? 0x10000LL : 0);
+                    return VbaValue::integer(static_cast<std::int16_t>(signedValue));
+                }
+                const auto signedValue=static_cast<std::int64_t>(magnitude)-(magnitude>0x7fffffff ? 0x100000000LL : 0);
+                return VbaValue::longInteger(static_cast<std::int32_t>(signedValue));
+            }
             std::size_t consumed = 0;
             double number;
             try { number=std::stod(tok.value,&consumed); }

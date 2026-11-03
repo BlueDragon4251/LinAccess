@@ -1026,3 +1026,8 @@ before execution. Property Let declarations and full VBA grammar remain open.
 Native numeric And/Or now enforce checked VBA Long bounds, preserve Integer
 results for Integer pairs, and return Long for the other supported non-Null
 numeric cases. Complete Byte/mixed/Null promotion matrices remain open.
+
+Native expressions now parse checked &H/&O integer patterns, %/& suffixes and
+supported Optional based-literal defaults, preserving Integer/Long identity and
+signed bit patterns. Full literal/unary/suffix inference and raw Jet SQL based
+literal translation remain open.

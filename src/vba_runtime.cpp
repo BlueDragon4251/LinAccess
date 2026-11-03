@@ -376,7 +376,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 hasCancel = std::regex_match(params, cancelParam);
                 bool optionalSeen=false,paramArraySeen=false;
                 const std::regex paramArray(R"(^ParamArray\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+Variant)?$)",std::regex::icase);
-                const std::regex defaultLiteral(R"CONST(^(?:"(?:[^"]|"")*"|[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|True|False|Empty|Null)$)CONST",std::regex::icase);
+                const std::regex defaultLiteral(R"CONST(^(?:"(?:[^"]|"")*"|[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|[+-]?&H[0-9A-F]+[&%]?|[+-]?&O[0-7]+[&%]?|True|False|Empty|Null)$)CONST",std::regex::icase);
                 for (const auto& declaration : splitArguments(params)) {
                     std::smatch declared;
                     if(paramArraySeen) return {VbaExecutionStatus::Unsupported,"ParamArray must be the last parameter",line};
