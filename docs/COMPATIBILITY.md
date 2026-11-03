@@ -1862,3 +1862,13 @@ old-caller fallback in the database window. General numeric/date/formatted/all-
 field/directional/wildcard behavior remains open; see FIND_RECORD_RUNTIME.md.
 Full desktop 48/48 (88.05 s), GUI-free core 1/1 (1.99 s), Debian checks and four
 fixture hashes pass; no new targets. Checklist: 303 checked / 72 open points.
+
+
+## Native table/form search directions (2026-11-03)
+
+Up/Down search stops at record boundaries; SearchAll wraps. Table/form dialogs,
+FindRecord and direction-preserving FindNext share these real record paths.
+Existing trio 3/3 (16.70 s); full/package baseline a71acc9 / API f9367b0,
+48/48 (88.05 s). General formatted/numeric/all-field/wildcard/locale search and
+full error/selection equivalence remain open. See FIND_RECORD_RUNTIME.md.
+Theoretical checklist: 304 checked / 72 open scoped points.

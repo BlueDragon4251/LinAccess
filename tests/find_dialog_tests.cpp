@@ -99,6 +99,15 @@ Sub FindNeedleAfterCurrent()
 DoCmd.FindRecord "needle",acAnywhere,,,,,False
 Me.Tag="findrecord-after"
 End Sub
+Sub FindUpBeta()
+DoCmd.FindRecord "beta",Search:=acUp,FindFirst:=False
+End Sub
+Sub FindDownAlphaNoWrap()
+DoCmd.FindRecord "Alpha",Search:=acDown,FindFirst:=False
+End Sub
+Sub FindUpFromFirstAlpha()
+DoCmd.FindRecord "Alpha",Search:=acUp,FindFirst:=True
+End Sub
 Sub FindAbsent()
 DoCmd.FindRecord "absent"
 Me.Tag="findrecord-nohit"
@@ -111,6 +120,11 @@ End Sub
     assert(form.findChildren<QDialog*>("access-find-dialog").size()==1 && caller.findChildren<QDialog*>("access-find-dialog").isEmpty());
     const auto noHistory=caller.executeProcedure("FindNextActive",none); assert(noHistory.status==linaccess::VbaExecutionStatus::Error && noHistory.errorNumber==2046);
     field->setCurrentIndex(field->findData("name")); match->setCurrentIndex(1); query->setText("needleö"); query->setFocus(); QTest::keyClick(query,Qt::Key_Return); assert(model->item("id").number==2);
+    auto* direction=dialog->findChild<QComboBox*>("access-find-direction"); assert(direction);
+    direction->setCurrentIndex(direction->findData(1)); query->setText("prefix needleÖ suffix"); next->click(); assert(model->item("id").number==4);
+    direction->setCurrentIndex(direction->findData(0)); query->setText("beta"); next->click(); assert(model->item("id").number==3);
+    query->setText("prefix needleÖ suffix"); next->click(); assert(model->item("id").number==3 && result->text()=="Keine Übereinstimmung gefunden.");
+    direction->setCurrentIndex(direction->findData(2)); query->setText("needleö"); next->click(); assert(model->item("id").number==2);
     field->setCurrentIndex(0); match->setCurrentIndex(0); query->setText("Needle"); next->click(); assert(model->item("id").number==2);
     next->click(); assert(model->item("id").number==3); next->click(); assert(model->item("id").number==4);
     field->setCurrentIndex(field->findData("name")); match->setCurrentIndex(2); sensitive->setChecked(true); next->click(); assert(model->item("id").number==2);
@@ -152,6 +166,9 @@ End Sub
     assert(makePreviewFormObject(caller)->member("Tag",{}).asText()=="findrecord-beta");
     assert(caller.executeProcedure("FindAlpha",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==1);
     assert(caller.executeProcedure("FindNeedleAfterCurrent",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==4);
+    assert(caller.executeProcedure("FindUpBeta",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==3);
+    assert(caller.executeProcedure("FindDownAlphaNoWrap",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==3);
+    assert(caller.executeProcedure("FindUpFromFirstAlpha",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==1);
     assert(caller.executeProcedure("FindBeta",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==3);
     assert(caller.executeProcedure("FindAbsent",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==3);
     focus(); editor->selectAll(); QTest::keyClicks(editor,"blocked API search"); model->assign("Tag",VbaValue::string("blockupdate"));

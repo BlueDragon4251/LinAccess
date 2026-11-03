@@ -506,22 +506,22 @@ public:
         if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
         return true;
     }
-    bool findTableRecord(const QString& text,int mode,bool sensitive,bool first) {
+    bool findTableRecord(const QString& text,int mode,bool sensitive,bool first,int direction) {
         if(!usesActiveTableContext()) return false;
         QWidget* owner=nullptr;
         for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
             if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
-        if(!owner || owner->metaObject()->indexOfMethod("findTableRecord(QString,int,bool,bool)")<0) return false;
+        if(!owner || owner->metaObject()->indexOfMethod("findTableRecord(QString,int,bool,bool,int)")<0) return false;
         QVariantMap result;
         if(!QMetaObject::invokeMethod(owner,"findTableRecord",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),
-            Q_ARG(QString,text),Q_ARG(int,mode),Q_ARG(bool,sensitive),Q_ARG(bool,first)))
+            Q_ARG(QString,text),Q_ARG(int,mode),Q_ARG(bool,sensitive),Q_ARG(bool,first),Q_ARG(int,direction)))
             throw linaccess::VbaRuntimeError(3251,"Native FindRecord dispatch is unavailable");
         if(!result.value("handled").toBool()) return false;
         const int error=result.value("error").toInt();
         if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
         return true;
     }
-    void findFormRecord(const QString& text,int mode,bool sensitive,bool first) {
+    void findFormRecord(const QString& text,int mode,bool sensitive,bool first,int direction) {
         auto& document=commandDocument();
         if(auto* modal=QApplication::activeModalWidget(); modal && modal!=document.window())
             throw linaccess::VbaRuntimeError(2046,"FindRecord is blocked by a modal window");
@@ -539,7 +539,7 @@ public:
             field=document.dataColumns_[column]; break;
         }
         if(field.isEmpty()) throw linaccess::VbaRuntimeError(2046,"No active bound text field for FindRecord");
-        (void)document.findNextRecord(text,field,mode,sensitive,first ? 1 : 2,true);
+        (void)document.findNextRecord(text,field,mode,sensitive,first ? 1 : 2,true,direction);
     }
     void saveRecord() override {
         if(tableCommand(97)) return;
@@ -823,12 +823,12 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         const int match=optionalNumber(1,1),search=optionalNumber(3,2),field=optionalNumber(5,-1);
         const bool sensitive=optionalBoolean(2,false),formatted=optionalBoolean(4,false),first=optionalBoolean(6,true);
         if(match<0 || match>2 || search<0 || search>2 || (field!=0 && field!=-1)) throw VbaRuntimeError(5,"Invalid FindRecord option");
-        if(args[0].kind!=VbaValue::Kind::Text || search!=2 || field!=-1 || formatted)
-            throw VbaRuntimeError(3251,"FindRecord currently supports literal current-text-field SearchAll without formatted search");
+        if(args[0].kind!=VbaValue::Kind::Text || field!=-1 || formatted)
+            throw VbaRuntimeError(3251,"FindRecord currently supports literal current-text-field search without formatted search");
         const auto text=QString::fromStdString(args[0].asText());
         if(text.isEmpty() || text.contains('*') || text.contains('?') || text.contains('#') || text.contains('[') || text.contains(']'))
             throw VbaRuntimeError(3251,"Empty/wildcard FindRecord is not implemented");
-        if(!host.findTableRecord(text,match,sensitive,first)) host.findFormRecord(text,match,sensitive,first);
+        if(!host.findTableRecord(text,match,sensitive,first,search)) host.findFormRecord(text,match,sensitive,first,search);
         return {};
     }
     if(command=="selectobject") {
@@ -2773,7 +2773,10 @@ void AccessFormPreview::openFindDialog() {
     if(!initialField.isEmpty()) scope->setCurrentIndex(scope->findData(initialField));
     auto* match=new QComboBox(dialog); match->setObjectName("access-find-match"); match->addItems({"Teil des Feldinhalts","Ganzes Feld","Feldanfang"});
     auto* sensitive=new QCheckBox("Groß-/Kleinschreibung beachten",dialog); sensitive->setObjectName("access-find-case");
+    auto* direction=new QComboBox(dialog); direction->setObjectName("access-find-direction");
+    direction->addItem("Alle Datensätze",2); direction->addItem("Nach unten",1); direction->addItem("Nach oben",0);
     fields->addRow("Suchen nach:",query); fields->addRow("Suchen in:",scope); fields->addRow("Vergleichen:",match);
+    fields->addRow("Suchrichtung:",direction);
     box->addLayout(fields); box->addWidget(sensitive); box->addWidget(new QLabel("Text wird wörtlich gesucht.",dialog));
     auto* result=new QLabel(dialog); result->setObjectName("access-find-result"); result->setWordWrap(true); box->addWidget(result);
     auto* buttons=new QHBoxLayout; auto* next=new QPushButton("&Weitersuchen",dialog); next->setObjectName("access-find-next"); next->setDefault(true);
@@ -2781,21 +2784,21 @@ void AccessFormPreview::openFindDialog() {
     next->setEnabled(!initialText.isEmpty()); connect(query,&QLineEdit::textChanged,next,[next](const QString& text) { next->setEnabled(!text.isEmpty()); });
     connect(close,&QPushButton::clicked,dialog,&QDialog::reject); connect(this,&QDialog::finished,dialog,&QDialog::reject);
     const QPointer<AccessFormPreview> self(this); const QPointer<QDialog> guarded(dialog);
-    connect(next,&QPushButton::clicked,dialog,[self,guarded,query,scope,match,sensitive,result] {
+    connect(next,&QPushButton::clicked,dialog,[self,guarded,query,scope,match,sensitive,direction,result] {
         if(!self || !guarded || self->closed_ || self->openCancelled_) return;
         try {
-            const auto message=self->findNextRecord(query->text(),scope->currentData().toString(),match->currentIndex(),sensitive->isChecked());
+            const auto message=self->findNextRecord(query->text(),scope->currentData().toString(),match->currentIndex(),sensitive->isChecked(),0,false,direction->currentData().toInt());
             if(guarded) result->setText(message);
         } catch(const std::exception& error) { if(guarded) result->setText(QString::fromUtf8(error.what())); }
     });
     dialog->show(); dialog->activateWindow(); query->setFocus(); query->selectAll();
 }
-QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bool caseSensitive,int origin,bool requireValidation) {
+QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bool caseSensitive,int origin,bool requireValidation,int direction) {
     using linaccess::VbaRuntimeError;
     ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
     if(closed_ || openCancelled_ || layout_.kind!=linaccess::AccessDocumentKind::Form || !directTable_ || !dataSourceAvailable_ || dataTruncated_)
         throw VbaRuntimeError(3251,"Die Suche ist für diese Datenquelle nicht verfügbar.");
-    if(origin<0 || origin>2) throw VbaRuntimeError(5,"Ungültiger Suchbeginn.");
+    if(origin<0 || origin>2 || direction<0 || direction>2) throw VbaRuntimeError(5,"Ungültiger Suchbeginn oder Suchrichtung.");
     if(findingRecord_) throw VbaRuntimeError(3251,"Eine Suche wird bereits ausgeführt.");
     QScopedValueRollback<bool> searching(findingRecord_,true);
     const QPointer<AccessFormPreview> self(this); auto* search=&findState_;
@@ -2805,8 +2808,8 @@ QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bo
         if(requireValidation) throw VbaRuntimeError(2501,"FindRecord validation cancelled");
         return "Suche durch Formularvalidierung abgebrochen.";
     }
-    if(search->text!=text || search->field!=field || search->mode!=mode || search->sensitive!=caseSensitive) {
-        search->text=text; search->field=field; search->mode=mode; search->sensitive=caseSensitive; search->advance=false;
+    if(search->text!=text || search->field!=field || search->mode!=mode || search->sensitive!=caseSensitive || search->direction!=direction) {
+        search->text=text; search->field=field; search->mode=mode; search->sensitive=caseSensitive; search->direction=direction; search->advance=false;
     }
     QVector<int> columns;
     for(int column=0;column<self->dataColumns_.size();++column) {
@@ -2819,10 +2822,13 @@ QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bo
     const int count=self->recordRows_.size()+(virtualRow ? 1 : 0);
     if(!count) { return "Keine Datensätze vorhanden."; }
     const int current=self->currentRecordIndex_>0 ? self->currentRecordIndex_-1 : virtualRow ? count-1 : 0;
-    const int start=origin==1 ? 0 : (current+((origin==2 || search->advance) ? 1 : 0))%count;
+    const int step=direction==0 ? -1 : 1;
+    const int start=origin==1 ? 0 : current+((origin==2 || search->advance) ? step : 0);
     int found=-1;
     for(int offset=0;offset<count && found<0;++offset) {
-        const auto row=(start+offset)%count;
+        const qint64 candidateRow=static_cast<qint64>(start)+static_cast<qint64>(step)*offset;
+        if(direction!=2 && (candidateRow<0 || candidateRow>=count)) break;
+        const int row=static_cast<int>((candidateRow%count+count)%count);
         for(const auto column:columns) {
             QVariant value=row<self->recordRows_.size() ? self->recordRows_[row][column] : QVariant{};
             if(row==current && (self->dirty_ || virtualRow)) {
@@ -2862,7 +2868,7 @@ QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bo
 void AccessFormPreview::repeatFind() {
     ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
     if(findState_.text.isEmpty()) throw linaccess::VbaRuntimeError(2046,"Keine vorherige Suche vorhanden.");
-    const auto message=findNextRecord(findState_.text,findState_.field,findState_.mode,findState_.sensitive);
+    const auto message=findNextRecord(findState_.text,findState_.field,findState_.mode,findState_.sensitive,0,false,findState_.direction);
     if(status_) status_->setText(message);
     if(findDialog_) if(auto* result=findDialog_->findChild<QLabel*>("access-find-result")) result->setText(message);
 }
