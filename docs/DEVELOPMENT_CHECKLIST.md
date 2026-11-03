@@ -82,6 +82,8 @@ Full targets remain open:
 - [ ] OpenRecordset, Fields/default members, EOF/BOF, navigation and bookmarks.
 - [ ] Edit/AddNew/Update/Delete, QueryDefs/Parameters/TableDefs and Requery.
 - [ ] Form record sources, filters/sort, focus and control state with real persistence.
+  Bounded direct-table DataEntry is implemented; writable-query/complete Windows
+  semantics remain open (DATA_ENTRY_RUNTIME.md).
 - [ ] Open/Load/Current/Dirty/BeforeUpdate/AfterUpdate/Close/Unload ordering and Cancel.
 - [ ] Mouse/keyboard/timer/combo/subform events; real Kassa UI actions verified.
 - [ ] Access SetWarnings/dialog semantics without additional per-SQL consent prompts.

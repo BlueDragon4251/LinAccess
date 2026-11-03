@@ -72,6 +72,8 @@ private:
     void buildControls(QWidget* canvas);
     void loadRecords();
     void setFilterState(const QString& filter,bool enabled);
+    void setDataEntryState(bool enabled);
+    void setAdditionPolicy(bool enabled);
     void setOrderState(const QString& orderBy,bool enabled);
     void loadRecord();
     static bool supportsControlDefault(const linaccess::AccessVisualControl& control);
@@ -180,6 +182,8 @@ private:
     QString orderBy_;
     bool orderByOn_{},changingOrder_{};
     bool changingFilter_{};
+    bool changingDataEntry_{};
+    QSet<qlonglong> dataEntryRows_;
     QLabel* status_{};
     QMap<QString,QPointer<QWidget>> controls_;
     QMap<QString,QPointer<AccessFormPreview>> subforms_;

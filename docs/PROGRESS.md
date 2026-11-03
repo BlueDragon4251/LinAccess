@@ -2806,3 +2806,18 @@ since the prior successful 1/1 GUI-free check (1.37 s); no redundant repeat.
 No new CTest targets, distro matrix repeat or remote CI success claim. Remote CI
 remains blocked by the previously reported billing restriction. Complete Access
 2003 parity is still not established.
+
+## Native direct-table DataEntry (2026-11-03)
+
+Implemented imported and live VBA DataEntry with SQL-bound own-entry rowids,
+actual insertion persistence, key-change tracking, committed-deletion cleanup,
+10000-row limit and AllowAdditions dependency. DataEntry=False saves and removes
+filter/sort; a fresh entry transition clears the session. Grouped OR filters
+prevent existing-row leakage. Native host/property routes support Me/unqualified
+DataEntry; active non-table sources fail explicitly. acFormAdd is still open.
+
+Existing native GUI regression enters two real rows, changes a key, compares
+session versus physical counts, switches through VBA and toggles AllowAdditions.
+Desktop build and form_current_record pass (0.60 s). No new test target or
+full-suite/package repeat; previous grouped verification remains 992d082.
+See DATA_ENTRY_RUNTIME.md for external SQL/rollback/query/reference boundaries.

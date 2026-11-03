@@ -176,6 +176,69 @@ End Sub
         assert(caller.executeProcedure("ReadOnlyClose",args).status==linaccess::VbaExecutionStatus::Completed);
         assert(caller.close()); assert(sql.exec("DELETE FROM positions"));
     }
+    {
+        assert(sql.exec("CREATE TABLE entry_records(id INTEGER PRIMARY KEY,label TEXT)"));
+        assert(sql.exec("INSERT INTO entry_records VALUES(1,'old first'),(2,'old second')"));
+        const QByteArray entryLayout=R"FORM(Begin Form
+RecordSource ="entry_records"
+DataEntry =-1
+Filter ="id=1 Or id>0"
+FilterOnLoad =-1
+OrderBy ="id DESC"
+OrderByOnLoad =-1
+Begin Section
+Begin TextBox
+Name ="id"
+ControlSource ="id"
+End
+Begin TextBox
+Name ="label"
+ControlSource ="label"
+Top =500
+End
+End
+End
+)FORM";
+        const QByteArray entryCode=R"VBA(Sub StoreEntry()
+If Not DataEntry Then Err.Raise 5
+DoCmd.RunCommand acCmdSaveRecord
+End Sub
+Sub ShowAll()
+Me.DataEntry=False
+End Sub
+Sub StartEntry()
+Me.DataEntry=True
+End Sub
+Sub NewEntry()
+DoCmd.GoToRecord Record:=acNewRec
+End Sub
+)VBA";
+        AccessFormPreview entries("entry_form",entryLayout,entryCode,db); entries.show(); entries.activateWindow(); QApplication::processEvents();
+        auto form=makePreviewFormObject(entries); auto records=form->member("Recordset",{}).object;
+        assert(form->member("DataEntry",{}).truthy() && form->member("NewRecord",{}).truthy() && records->member("RecordCount",{}).asNumber()==0);
+        auto* label=entries.findChild<QLineEdit*>("access-control-label"); auto* key=entries.findChild<QLineEdit*>("access-control-id"); assert(label && key);
+        label->setFocus(); QTest::keyClicks(label,"fresh"); std::vector<VbaValue> args;
+        assert(entries.executeProcedure("StoreEntry",args).status==linaccess::VbaExecutionStatus::Completed);
+        assert(records->member("RecordCount",{}).asNumber()==1 && form->item("label").asText()=="fresh");
+        assert(sql.exec("SELECT COUNT(*) FROM entry_records") && sql.next() && sql.value(0).toInt()==3); sql.finish();
+        key->setFocus(); key->selectAll(); QTest::keyClicks(key,"13");
+        assert(entries.executeProcedure("StoreEntry",args).status==linaccess::VbaExecutionStatus::Completed);
+        assert(form->item("id").asNumber()==13 && records->member("RecordCount",{}).asNumber()==1);
+        assert(entries.executeProcedure("NewEntry",args).status==linaccess::VbaExecutionStatus::Completed);
+        label->setFocus(); QTest::keyClicks(label,"second fresh");
+        assert(entries.executeProcedure("StoreEntry",args).status==linaccess::VbaExecutionStatus::Completed);
+        assert(records->member("RecordCount",{}).asNumber()==2);
+        assert(entries.executeProcedure("ShowAll",args).status==linaccess::VbaExecutionStatus::Completed);
+        assert(!form->member("DataEntry",{}).truthy() && !form->member("FilterOn",{}).truthy() && !form->member("OrderByOn",{}).truthy());
+        assert(records->member("RecordCount",{}).asNumber()==4);
+        assert(entries.executeProcedure("StartEntry",args).status==linaccess::VbaExecutionStatus::Completed);
+        assert(records->member("RecordCount",{}).asNumber()==0);
+        form->assign("AllowAdditions",VbaValue::logical(false));
+        assert(form->member("DataEntry",{}).truthy() && records->member("RecordCount",{}).asNumber()==4 && !form->member("NewRecord",{}).truthy());
+        form->assign("AllowAdditions",VbaValue::logical(true));
+        assert(records->member("RecordCount",{}).asNumber()==0 && form->member("NewRecord",{}).truthy());
+        assert(entries.close());
+    }
     const QByteArray layout=R"FORM(Begin Form
 RecordSource ="records"
 OnCurrent ="[Event Procedure]"

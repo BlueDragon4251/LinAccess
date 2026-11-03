@@ -997,3 +997,9 @@ when an Integer primary-key edit changes rowid. Direct external SQL/trigger-driv
 identity replacement and exact Windows LastModified edge/error semantics remain
 open; native form saves now also preserve committed key-change identities; see
 FORM_KEY_IDENTITY_RUNTIME.md.
+
+Native direct-table Form.DataEntry now imports/read/writes the actual entry
+session with bound SQL membership, real insert/key-change persistence and
+AllowAdditions dependency. DataEntry=False removes active filter/sort and restores
+all rows. Writable query entry sources and acFormAdd remain unsupported; see
+DATA_ENTRY_RUNTIME.md for limits and verification.

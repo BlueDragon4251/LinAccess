@@ -328,7 +328,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (key == "dirty") return preview_.dirty_ ? "-1" : "0";
         if (key == "newrecord") return preview_.currentRecordIndex_ == 0 ? "-1" : "0";
-        if (key == "modal" || key == "popup" || key == "openargs" || key == "currentrecord" || key=="orderby" || key=="orderbyon") return makePreviewFormObject(preview_)->member(name,{}).asField();
+        if (key == "dataentry" || key == "modal" || key == "popup" || key == "openargs" || key == "currentrecord" || key=="orderby" || key=="orderbyon") return makePreviewFormObject(preview_)->member(name,{}).asField();
         return preview_.getField(name);
     }
     linaccess::VbaValue controlValue(std::string_view name) override { requireInstance(); return preview_.getFieldValue(name); }
@@ -438,7 +438,7 @@ public:
         if (key == "name") return linaccess::VbaValue::string(preview_.formName_.toUtf8().toStdString());
         if (key == "caption") return makePreviewFormObject(preview_)->member("Caption",{});
         if (key == "tag") return makePreviewFormObject(preview_)->member("Tag",{});
-        if (key=="modal" || key=="popup" || key=="openargs" || key=="orderby" || key=="orderbyon" || key=="currentrecord" || key=="visible" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
+        if (key=="dataentry" || key=="modal" || key=="popup" || key=="openargs" || key=="orderby" || key=="orderbyon" || key=="currentrecord" || key=="visible" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
@@ -451,7 +451,7 @@ public:
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (preview_.layout_.kind==linaccess::AccessDocumentKind::Report && key=="dirty")
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
-        if (key == "modal" || key == "popup" || key == "orderby" || key == "orderbyon" || key == "visible" || key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
+        if (key == "dataentry" || key == "modal" || key == "popup" || key == "orderby" || key == "orderbyon" || key == "visible" || key == "caption" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") { makePreviewFormObject(preview_)->assign(key.toUtf8().toStdString(),value); return; }
         if (key == "selheight" || key == "name" || key == "recordsource" || key == "newrecord" || key == "currentrecord" || key=="openargs")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") { setField(name,value.asField()); return; }
@@ -460,7 +460,7 @@ public:
     }
     void setField(std::string_view name, std::optional<std::string> value) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
-        if(key=="modal" || key=="popup") throw linaccess::VbaRuntimeError(3251,"Runtime Modal/PopUp mutation is not implemented");
+        if(key=="dataentry" || key=="modal" || key=="popup") throw linaccess::VbaRuntimeError(3251,"Runtime Modal/PopUp mutation is not implemented");
         if(key=="currentrecord" || key=="openargs") throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (key == "dirty") {
             if (value && (*value == "0" || *value == "False")) {
@@ -703,7 +703,7 @@ private:
     std::vector<bool> moduleScopes_;
     static bool recordProperty(std::string_view name) {
         const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
-        return key=="modal" || key=="popup" || key=="openargs" || key=="currentrecord" || key=="orderby" || key=="orderbyon";
+        return key=="dataentry" || key=="modal" || key=="popup" || key=="openargs" || key=="currentrecord" || key=="orderby" || key=="orderbyon";
     }
     bool instanceScope() const { return moduleScopes_.empty() || moduleScopes_.back(); }
     void requireInstance() const { if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Me is unavailable in a standard module"); }
@@ -812,8 +812,12 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     if(dataMode!=-1 && dataMode!=1 && dataMode!=2) throw linaccess::VbaRuntimeError(3251,"Native data mode is not implemented");
     if(dataMode==1 || dataMode==2) {
         if(layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(3251,"DataMode requires a form");
+        if(dataMode==1) layout_.dataEntry=false;
         layout_.allowEdits=dataMode==1; layout_.allowAdditions=dataMode==1; layout_.allowDeletions=dataMode==1;
     }
+    if(layout_.dataEntry && layout_.allowAdditions && !layout_.recordSource.trimmed().isEmpty()
+        && (layout_.kind!=linaccess::AccessDocumentKind::Form || !db_.tables().contains(layout_.recordSource.trimmed(),Qt::CaseInsensitive)))
+        throw linaccess::VbaRuntimeError(3251,"Native DataEntry requires a direct table source");
     nativeDialog_=windowMode==3;
     if(nativeDialog_) { layout_.modal=true; layout_.popup=true; }
     static quint64 nextWindowSequence=0;
@@ -1607,11 +1611,21 @@ void AccessFormPreview::loadRecords() {
                 linaccess::SqliteExecutionBudget budget(db_);
                 QSqlQuery query(db_);
                 auto name=source; name.replace(']',"]]");
-                const auto plan=linaccess::compileAccessQuery("SELECT rowid AS [__la_rowid],* FROM ["+name+"]"+(filterOn_ && !filter_.trimmed().isEmpty() ? " WHERE "+filter_ : QString{}));
+                const auto plan=linaccess::compileAccessQuery("SELECT rowid AS [__la_rowid],* FROM ["+name+"]"+(filterOn_ && !filter_.trimmed().isEmpty() ? " WHERE ("+filter_+")" : QString{}));
                 QStringList sortColumns; const auto record=db_.record(source);
                 for(int i=0;i<record.count();++i) sortColumns.append(record.fieldName(i));
                 const auto order=orderByOn_ ? linaccess::accessOrderByClause(orderBy_,sortColumns,source) : QString{};
-                if (!query.prepare(plan.sql+order) || !query.exec()) {
+                auto statement=plan.sql;
+                QVariantList entryBindings;
+                if(layout_.dataEntry && layout_.allowAdditions) {
+                    const bool hasWhere=filterOn_ && !filter_.trimmed().isEmpty();
+                    QStringList entryPlaceholders;
+                    for(const auto id:dataEntryRows_) { entryPlaceholders.append("?"); entryBindings.append(id); }
+                    statement+=(hasWhere ? " AND " : " WHERE ")+(entryPlaceholders.isEmpty() ? QString("0") : "rowid IN ("+entryPlaceholders.join(',')+")");
+                }
+                const bool prepared=query.prepare(statement+order);
+                if(prepared) for(const auto& id:entryBindings) query.addBindValue(id);
+                if (!prepared || !query.exec()) {
                     const auto message=query.lastError().text().toCaseFolded();
                     const auto typed=linaccess::jetSqlFunctionErrorNumber(message.toStdString());
                     const auto code=typed ? *typed : (message.contains("syntax error") || message.contains("incomplete input")) ? 3075 : message.contains("no such table") ? 3078 : message.contains("no such function") ? 3085 : message.contains("interrupted") ? 3035 : 3146;
@@ -1648,6 +1662,48 @@ void AccessFormPreview::loadRecords() {
         ? "Access-Layout: " + QString::number(renderedControls_) + " Elemente, "
             + QString::number(recordRows_.size()) + " Datensätze." + (!directTable_ ? " Datenquelle schreibgeschützt." : "") + (dataTruncated_ ? " Anzeige auf die ersten 10000 begrenzt." : "")
         : "Die Datenquelle ist nicht verfügbar oder ihre Ausführung wurde abgebrochen: " + source);
+}
+
+void AccessFormPreview::setDataEntryState(bool enabled) {
+    if(layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"DataEntry requires a form");
+    if(recordCommandRunning_ || changingDataEntry_ || changingFilter_ || changingOrder_)
+        throw linaccess::VbaRuntimeError(3251,"Reentrant DataEntry transition unsupported");
+    const bool bound=!layout_.recordSource.trimmed().isEmpty();
+    if(enabled && layout_.allowAdditions && bound && !directTable_) throw linaccess::VbaRuntimeError(3251,"Native DataEntry requires a direct table source");
+    if(layout_.dataEntry==enabled && (enabled || (!filterOn_ && !orderByOn_))) return;
+    QScopedValueRollback<bool> changing(changingDataEntry_,true);
+    if(!saveRecord()) throw linaccess::VbaRuntimeError(2501,"DataEntry save cancelled");
+    if(closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"Form closed during DataEntry validation");
+    layout_.dataEntry=enabled; dataEntryRows_.clear();
+    if(!enabled) {
+        filterOn_=false; orderByOn_=false;
+        if(filterToggle_) { const QSignalBlocker blocked(filterToggle_); filterToggle_->setChecked(false); }
+    }
+    if(!bound) return;
+    if(!enabled && currentRecordIndex_==0) currentRecordIndex_=-1;
+    loadRecords(); applyControlStates();
+    if(opened_ && initialCurrentDispatched_) (void)formEvent("OnCurrent","Form_Current");
+}
+
+void AccessFormPreview::setAdditionPolicy(bool enabled) {
+    if(layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"AllowAdditions requires a form");
+    if(recordCommandRunning_ || changingDataEntry_) throw linaccess::VbaRuntimeError(3251,"Changing addition policy during record command unsupported");
+    if(layout_.allowAdditions==enabled) return;
+    if(layout_.dataEntry && !layout_.recordSource.trimmed().isEmpty()) {
+        if(enabled && !directTable_) throw linaccess::VbaRuntimeError(3251,"Native DataEntry requires a direct table source");
+        QScopedValueRollback<bool> changing(changingDataEntry_,true);
+        if(!saveRecord()) throw linaccess::VbaRuntimeError(2501,"Addition policy save cancelled");
+        if(closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"Form closed during addition policy validation");
+        layout_.allowAdditions=enabled; dataEntryRows_.clear();
+        if(!enabled && currentRecordIndex_==0) currentRecordIndex_=-1;
+        loadRecords(); applyControlStates();
+        if(opened_ && initialCurrentDispatched_) (void)formEvent("OnCurrent","Form_Current");
+        return;
+    }
+    if(!enabled && currentRecordIndex_==0 && dirty_ && !saveRecord()) throw linaccess::VbaRuntimeError(2501,"Addition policy save cancelled");
+    layout_.allowAdditions=enabled;
+    if(auto* model=qobject_cast<QStandardItemModel*>(recordSelector_->model());model && model->item(0)) model->item(0)->setEnabled(enabled);
+    if(currentRecordIndex_==0) loadRecord();
 }
 
 void AccessFormPreview::setOrderState(const QString& orderBy,bool enabled) {
@@ -1820,6 +1876,9 @@ bool AccessFormPreview::saveRecord() {
     QScopedValueRollback<bool> saving(saving_,true);
     if (!commitControls()) return false;
     if (!dirty_) return true;
+    if(layout_.dataEntry && layout_.allowAdditions && currentRecordIndex_==0 && dataEntryRows_.size()>=10000) {
+        status_->setText("Die native Eingabesitzung ist auf 10000 Datensätze begrenzt."); return false;
+    }
     const auto table = layout_.recordSource.trimmed();
     if (!dataSourceAvailable_ || !directTable_) return false;
     const auto before = formEvent("BeforeUpdate","Form_BeforeUpdate");
@@ -1870,6 +1929,10 @@ bool AccessFormPreview::saveRecord() {
     QVariantMap oldRecord;
     for (int column=0;column<dataColumns_.size();++column)
         oldRecord.insert(dataColumns_[column].toCaseFolded(),row>=0 && row<recordRows_.size() ? recordRows_[row][column] : QVariant{});
+    if(layout_.dataEntry) {
+        if(!updating && layout_.allowAdditions) dataEntryRows_.insert(savedId.toLongLong());
+        else if(updating && previousId!=savedId && dataEntryRows_.remove(previousId.toLongLong())) dataEntryRows_.insert(savedId.toLongLong());
+    }
     dirty_ = false;
     const auto snapshot=recordsetSnapshot_;
     QMap<qlonglong,qlonglong> identityChanges;

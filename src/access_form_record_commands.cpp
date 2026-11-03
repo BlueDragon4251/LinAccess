@@ -101,6 +101,7 @@ void AccessFormPreview::deleteCurrentRecord() {
     } else {
         if (!sql.exec("RELEASE "+savepoint)) throw VbaRuntimeError(3146,"Delete commit failed");
         released=true;
+        dataEntryRows_.remove(oldId.toLongLong());
         if (snapshot && !dataTruncated_) {
             linaccess::refreshDaoSnapshot(snapshot,dataColumns_,dataTypes_,recordRows_,rowIds_); recordsetSnapshot_=snapshot;
         }

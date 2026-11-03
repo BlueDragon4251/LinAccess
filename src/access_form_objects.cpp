@@ -721,8 +721,9 @@ public:
             if(preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Visible requires a native form");
             return linaccess::VbaValue::logical(!preview.isHidden());
         }
-        if (key=="allowdeletions" || key=="allowadditions" || key=="allowedits" || key=="selheight") {
+        if (key=="allowdeletions" || key=="allowadditions" || key=="allowedits" || key=="dataentry" || key=="selheight") {
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Record selection/deletion properties require a form");
+            if (key=="dataentry") return linaccess::VbaValue::logical(preview.layout_.dataEntry);
             if (key=="allowedits") return linaccess::VbaValue::logical(preview.layout_.allowEdits);
             if (key=="allowadditions") return linaccess::VbaValue::logical(preview.layout_.allowAdditions);
             return key=="allowdeletions" ? linaccess::VbaValue::logical(preview.layout_.allowDeletions) : linaccess::VbaValue::numeric(preview.recordSelected_ ? 1 : 0);
@@ -790,7 +791,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="openargs" || key=="modal" || key=="popup" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
+        if (!args.empty() || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="dataentry" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="openargs" || key=="modal" || key=="popup" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
@@ -823,14 +824,11 @@ public:
             const auto enabled=linaccess::coerceVbaModuleValue(scalar,"boolean").boolean;
             preview.layout_.allowEdits=enabled; preview.applyControlStates(); return;
         }
-        if (key=="allowadditions") {
-            if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"AllowAdditions requires a form");
-            if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null AllowAdditions");
-            if (preview.recordCommandRunning_) throw linaccess::VbaRuntimeError(3251,"Changing addition policy during record command unsupported");
-            if (!value.truthy() && preview.currentRecordIndex_==0 && preview.dirty_ && !preview.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Addition policy save cancelled");
-            preview.layout_.allowAdditions=value.truthy();
-            if (auto* model=qobject_cast<QStandardItemModel*>(preview.recordSelector_->model());model && model->item(0)) model->item(0)->setEnabled(preview.layout_.allowAdditions);
-            if (preview.currentRecordIndex_==0) preview.loadRecord();
+        if(key=="dataentry" || key=="allowadditions") {
+            const auto scalar=linaccess::scalarVbaValue(value);
+            if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null form entry policy");
+            const auto enabled=linaccess::coerceVbaModuleValue(scalar,"boolean").boolean;
+            if(key=="dataentry") preview.setDataEntryState(enabled); else preview.setAdditionPolicy(enabled);
             return;
         }
         if (key=="allowdeletions") {

@@ -99,6 +99,7 @@ struct AccessFormLayout {
     int cycle{};
     bool allowEdits{true};
     bool allowDeletions{true};
+    bool dataEntry{};
     bool allowAdditions{true};
     int height{5000};
     QVector<AccessVisualControl> controls;
