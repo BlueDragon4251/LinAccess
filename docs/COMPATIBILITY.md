@@ -2112,3 +2112,17 @@ OPEN_QUERY_RUNTIME.md defines the scope and remaining query UI limitations.
 Existing full desktop suite 48/48 (91.62 s), GUI-free core 1/1 (1.54 s), Debian
 package and all four original fixture SHA-256 checks pass. No new test targets.
 Theoretical checklist: 336 checked / 72 open scoped points, not total Access parity.
+
+## Native readonly query search (2026-11-03)
+
+Query Ctrl+F/Shift+F4, Find/FindNext and current-field DoCmd.FindRecord search real
+materialized result cells. Proven per-position physical/projection metadata
+supports checked text/number/Currency/Date/Boolean search without changing the
+existing DAO type-map contract or guessing unknown expressions. Null and search
+bounds retain checked behavior. Search-field edit commands share actual focused
+text handling. New query tabs select their first result cell synchronously,
+fixing immediate post-OpenQuery FindRecord without an event-loop delay.
+OPEN_QUERY_RUNTIME.md specifies scope and open search semantics. Full existing
+suite 48/48 (90.46 s), GUI-free core 1/1 (1.50 s), Debian package and all four
+original fixture hashes pass; no new targets. Checklist: 337 checked / 72 open
+scoped points, not an overall Access compatibility percentage.

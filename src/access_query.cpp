@@ -1498,7 +1498,7 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
         throw VbaRuntimeError(3146,"SQL operation failed");
 }
 namespace {
-struct PreparedAccessQuery { QSqlQuery query; bool hiddenRank; QVector<QString> types; };
+struct PreparedAccessQuery { QSqlQuery query; bool hiddenRank; QVector<QString> types; QVector<QString> columnTypes; };
 PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& untyped) {
     const auto plan=resolveCurrencyQuery(db,untyped);
     if (!plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
@@ -1509,7 +1509,8 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
     QSqlQuery query(db);
     if (!query.prepare(resolveQueryOrigins(db,source))) failAccessQuery(query);
     auto types=plan.resultTypes;
-    // Infer Date only from SQLite's physical column lineage, never cell text.
+    QVector<QString> columnTypes;
+    // Infer supported direct-column types from physical lineage, never cell text.
     const auto handle=query.result()->handle();
     if(handle.isValid() && QByteArray(handle.typeName())=="sqlite3_stmt*") {
         auto* statement=*static_cast<sqlite3_stmt* const*>(handle.constData());
@@ -1523,6 +1524,7 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
         if(statement && tableName && columnName && databaseName && !compound) {
             const auto count=sqlite3_column_count(statement)-(plan.hiddenRank && !topOne ? 1 : 0);
             if(types.size()!=count) types=QVector<QString>(count);
+            columnTypes.resize(count);
             QMap<QString,QMap<QString,QString>> tables;
             for(int index=0;index<count;++index) {
                 if(!types[index].isEmpty()) continue;
@@ -1532,10 +1534,12 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
                 if(!tables.contains(name)) tables.insert(name,sqliteColumnTypes(db,name));
                 const auto type=tables.value(name).value(QString::fromUtf8(column).toCaseFolded()).toUpper();
                 if(type=="DATE" || type=="DATETIME") types[index]=type;
+                if(type.contains("DATE") || type.contains("TEXT") || type.contains("CHAR") || type.contains("CLOB")
+                    || type.contains("INT") || type.contains("REAL") || type.contains("FLOA") || type.contains("DOUB") || type.contains("BOOL")) columnTypes[index]=type;
             }
         }
     }
-    return {std::move(query),plan.hiddenRank && !topOne,types};
+    return {std::move(query),plan.hiddenRank && !topOne,types,columnTypes};
 }
 }
 QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan) {
@@ -1572,6 +1576,8 @@ AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan&
     AccessQueryResult result;
     const int count = query.record().count() - (prepared.hiddenRank ? 1 : 0);
     for (int i = 0; i < count; ++i) result.columns.append(query.record().fieldName(i));
+    result.columnTypes=prepared.columnTypes; result.columnTypes.resize(count);
+    for(int i=0;i<count && i<prepared.types.size();++i) if(!prepared.types[i].isEmpty()) result.columnTypes[i]=prepared.types[i];
     if(prepared.types.size()==count) {
         QMap<QString,int> names;
         for(const auto& column:result.columns) ++names[column.toCaseFolded()];
@@ -1605,6 +1611,10 @@ QVariant AccessQueryModel::data(const QModelIndex& index, int role) const {
         catch(const VbaRuntimeError& error) { return QString("#Fehler (%1)").arg(error.number); }
     }
     return value;
+}
+QString AccessQueryModel::fieldSqlType(int column) const {
+    if(column<0 || column>=columnCount()) throw VbaRuntimeError(5,"Invalid query column");
+    return result_.columnTypes.value(column);
 }
 QString AccessQueryModel::clipboardText(const QModelIndex& index) const {
     if(!index.isValid() || index.model()!=this || index.row()<0 || index.row()>=rowCount() || index.column()<0 || index.column()>=columnCount())

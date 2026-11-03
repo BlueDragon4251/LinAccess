@@ -1010,3 +1010,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] SelectObject acQuery activates existing named native query tabs case-insensitively with document validation, independent caller identity and no silent reopen/requery.
 - [x] Query Copy/Ctrl+C/Ctrl+Insert uses real typed result cells and shared bounded TSV quoting; hidden/disjoint/binary/unrepresentable selections retain existing clipboard contents on failure.
 - [x] Native query SelectRecord/SelectAllRecords and scoped SendKeys address actual selected result cells and focused controls without falling back to the calling form.
+
+- [x] Native readonly query Find/FindNext/Ctrl+F/Shift+F4 and current-field FindRecord search real typed results, preserve unknown-type boundaries and focused search text commands, and support immediate VBA search after OpenQuery.

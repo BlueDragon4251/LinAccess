@@ -39,6 +39,7 @@ struct AccessQueryResult {
     QStringList columns;
     QVector<QVariantList> rows;
     QMap<QString,QString> types; // Only proven, unambiguous output-column types.
+    QVector<QString> columnTypes; // Per-position proven UI types; preserves the DAO type contract.
 };
 AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan& plan,
                                        const QMap<QString,QVariant>& bindings);
@@ -52,6 +53,7 @@ public:
     int columnCount(const QModelIndex& parent = {}) const override { return parent.isValid() ? 0 : result_.columns.size(); }
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QString clipboardText(const QModelIndex& index) const;
+    QString fieldSqlType(int column) const;
     QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
 private:
     AccessQueryResult result_;

@@ -1,5 +1,6 @@
 #include "mainwindow.hpp"
 #include "native_grid_clipboard.hpp"
+#include "native_query_view.hpp"
 #include "native_input_box.hpp"
 #include "native_edit_menu.hpp"
 #include <QCloseEvent>
@@ -95,6 +96,38 @@ QString quoteSql(QString name) {
 QVariantMap tableCommandFailure(int number,const QString& description) {
     return {{"handled",true},{"error",number},{"description",description}};
 }
+QVariantMap focusedDataTextCommand(QWidget* scope,int command) {
+    if(!scope || (command!=189 && command!=190 && command!=191 && command!=199 && command!=292)) return {};
+            QPointer<QLineEdit> editor=qobject_cast<QLineEdit*>(QApplication::focusWidget());
+            QWidget* parent=editor.data();
+            while(parent && parent!=scope) parent=parent->parentWidget();
+            if(editor && parent) {
+                if(!editor->isVisible() || !editor->isEnabled()) return tableCommandFailure(2046,"Kein verfügbares aktives Textfeld.");
+                if(command==199 || command==292) {
+                    if(editor->isReadOnly()) return tableCommandFailure(2448,"Das aktive Textfeld ist schreibgeschützt.");
+                    if(!(command==292 ? editor->isUndoAvailable() : editor->isRedoAvailable())) return tableCommandFailure(2046,"Kein entsprechender Textbearbeitungsschritt verfügbar.");
+                    if(command==292) editor->undo(); else editor->redo();
+                    return {{"handled",true},{"error",0}};
+                }
+                if(command==189 || command==190) {
+                    if(editor->echoMode()!=QLineEdit::Normal || !editor->hasSelectedText()) return tableCommandFailure(2046,"Kein kopierbarer Text ausgewählt.");
+                    if(command==189 && editor->isReadOnly()) return tableCommandFailure(2448,"Das aktive Textfeld ist schreibgeschützt.");
+                    const auto selected=editor->selectedText();
+                    if(selected.size()>4*1024*1024 || selected.contains(QChar(0))) return tableCommandFailure(3251,"Dieser Zwischenablageumfang wird noch nicht unterstützt.");
+                    if(command==189) editor->cut(); else editor->copy();
+                    return {{"handled",true},{"error",0}};
+                }
+                if(editor->isReadOnly()) return tableCommandFailure(2448,"Das aktive Textfeld ist schreibgeschützt.");
+                const auto* mime=QApplication::clipboard()->mimeData();
+                if(!mime || !mime->hasText()) return tableCommandFailure(2046,"Die Zwischenablage enthält keinen einfügbaren Text.");
+                const auto text=QApplication::clipboard()->text();
+                if(text.size()>4*1024*1024 || text.contains(QChar(0))) return tableCommandFailure(3251,"Dieser Zwischenablageumfang wird noch nicht unterstützt.");
+                editor->paste();
+                return {{"handled",true},{"error",0}};
+            }
+    return {};
+}
+
 QVariantMap tableModelFailure(linaccess::AccessTableModel* model,int fallback) {
     if(!model) return tableCommandFailure(2501,"Tabellendokument wurde während des Befehls geschlossen.");
     const auto problem=model->lastError();
@@ -474,12 +507,18 @@ QVariantMap MainWindow::loadQueryDocument(const QString& name,int view,int mode,
             if(!target) return tableCommandFailure(2501,"Abfrageansicht ist nicht mehr verfügbar.");
             const int column=qMax(0,target->currentIndex().column());
             const QPointer<QAbstractItemModel> previous=target->model();
+            const QPointer<linaccess::AccessQueryModel> replacement=model;
             model->setParent(refreshing); target->setModel(model);
             if(previous) previous->deleteLater();
+            if(!alive() || !refreshing || !target || !replacement || tabs_->indexOf(refreshing)<0)
+                return tableCommandFailure(2501,"Abfragedokument wurde beim Ergebnisaustausch geschlossen.");
             if(model->rowCount() && model->columnCount()) target->setCurrentIndex(model->index(0,qMin(column,model->columnCount()-1)));
+            if(!alive() || !refreshing || !target || !replacement || linaccess::vbaExecutionStopRequested())
+                return tableCommandFailure(2501,"Abfragedokument wurde während der Auswahl geschlossen.");
             return {{"handled",true},{"error",0}};
         }
-        auto* table=new QTableView(page.get()); table->setObjectName("native-query-view"); table->setModel(model); table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        auto* table=new linaccess::NativeQueryView(page.get()); table->setObjectName("native-query-view"); table->setModel(model); table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        if(model->rowCount() && model->columnCount()) table->setCurrentIndex(model->index(0,0));
         table->installEventFilter(this); layout->addWidget(table);
         auto* document=page.release(); document->setParent(tabs_);
         const QPointer<QWidget> registered=document;
@@ -492,6 +531,13 @@ QVariantMap MainWindow::loadQueryDocument(const QString& name,int view,int mode,
             auto* copy=new QShortcut(key,document); copy->setContext(Qt::WidgetWithChildrenShortcut);
             connect(copy,&QShortcut::activated,document,[this] {
                 const auto result=dispatchTableCommand(190);
+                if(result.value("error").toInt()) statusBar()->showMessage(result.value("description").toString(),10000);
+            });
+        }
+        for(const auto key:{QKeySequence(Qt::ControlModifier|Qt::Key_F),QKeySequence(Qt::ShiftModifier|Qt::Key_F4)}) {
+            auto* find=new QShortcut(key,document); find->setContext(Qt::WidgetWithChildrenShortcut);
+            connect(find,&QShortcut::activated,document,[this,key] {
+                const auto result=dispatchTableCommand(key==QKeySequence(Qt::ControlModifier|Qt::Key_F) ? 30 : 341);
                 if(result.value("error").toInt()) statusBar()->showMessage(result.value("description").toString(),10000);
             });
         }
@@ -531,6 +577,9 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
     const QPointer<QWidget> page=activeDataPage_;
     if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
     if(QApplication::activeModalWidget()) return tableCommandFailure(2046,"Tabellenbefehl ist durch ein modales Fenster blockiert.");
+    if(page->property("la_project_object_kind").toString()=="query") {
+        if(const auto focused=focusedDataTextCommand(page->findChild<QTableView*>("native-query-view"),command);focused.value("handled").toBool()) return focused;
+    }
     if(page->property("la_project_object_kind").toString()=="query" && (command==50 || command==109)) {
         auto* view=page->findChild<QTableView*>("native-query-view");
         if(!view || !view->model() || !view->selectionModel()) return tableCommandFailure(2046,"Kein natives Abfrageergebnis verfügbar.");
@@ -554,6 +603,14 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
             return {{"handled",true},{"error",0}};
         } catch(const linaccess::VbaRuntimeError& error) { return tableCommandFailure(error.number,"Die Abfrageauswahl kann nicht verlustfrei als Text kopiert werden."); }
     }
+    if(page->property("la_project_object_kind").toString()=="query" && (command==30 || command==341)) {
+        auto* view=dynamic_cast<linaccess::NativeQueryView*>(page->findChild<QTableView*>("native-query-view"));
+        if(!view) return tableCommandFailure(2046,"Keine native Abfrageansicht.");
+        try {
+            if(command==30 || !view->hasFindText()) view->openFindDialog(); else view->repeatFind();
+            return {{"handled",true},{"error",0}};
+        } catch(const linaccess::VbaRuntimeError& error) { return tableCommandFailure(error.number,QString::fromUtf8(error.what())); }
+    }
     if(command==97) return saveDataPage(page,false);
     if(command>=65 && command<=68) {
         const int actions[]{1,0,2,3};
@@ -564,35 +621,7 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
         if(!table || !model) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
-        if(command==189 || command==190 || command==191 || command==199 || command==292) {
-            QPointer<QLineEdit> editor=qobject_cast<QLineEdit*>(QApplication::focusWidget());
-            QWidget* parent=editor.data();
-            while(parent && parent!=table.data()) parent=parent->parentWidget();
-            if(editor && parent) {
-                if(!editor->isVisible() || !editor->isEnabled()) return tableCommandFailure(2046,"Kein verfügbares aktives Textfeld.");
-                if(command==199 || command==292) {
-                    if(editor->isReadOnly()) return tableCommandFailure(2448,"Das aktive Textfeld ist schreibgeschützt.");
-                    if(!(command==292 ? editor->isUndoAvailable() : editor->isRedoAvailable())) return tableCommandFailure(2046,"Kein entsprechender Textbearbeitungsschritt verfügbar.");
-                    if(command==292) editor->undo(); else editor->redo();
-                    return {{"handled",true},{"error",0}};
-                }
-                if(command==189 || command==190) {
-                    if(editor->echoMode()!=QLineEdit::Normal || !editor->hasSelectedText()) return tableCommandFailure(2046,"Kein kopierbarer Text ausgewählt.");
-                    if(command==189 && editor->isReadOnly()) return tableCommandFailure(2448,"Das aktive Textfeld ist schreibgeschützt.");
-                    const auto selected=editor->selectedText();
-                    if(selected.size()>4*1024*1024 || selected.contains(QChar(0))) return tableCommandFailure(3251,"Dieser Zwischenablageumfang wird noch nicht unterstützt.");
-                    if(command==189) editor->cut(); else editor->copy();
-                    return {{"handled",true},{"error",0}};
-                }
-                if(editor->isReadOnly()) return tableCommandFailure(2448,"Das aktive Textfeld ist schreibgeschützt.");
-                const auto* mime=QApplication::clipboard()->mimeData();
-                if(!mime || !mime->hasText()) return tableCommandFailure(2046,"Die Zwischenablage enthält keinen einfügbaren Text.");
-                const auto text=QApplication::clipboard()->text();
-                if(text.size()>4*1024*1024 || text.contains(QChar(0))) return tableCommandFailure(3251,"Dieser Zwischenablageumfang wird noch nicht unterstützt.");
-                editor->paste();
-                return {{"handled",true},{"error",0}};
-            }
-        }
+        if(const auto focused=focusedDataTextCommand(table,command);focused.value("handled").toBool()) return focused;
         if((command!=28 && command!=109 && command!=30 && command!=341) && !table->currentIndex().isValid()) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
         if(command==28) {
             const QPointer<MainWindow> self=this;
@@ -731,6 +760,18 @@ QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
         if(textValue && (text.isEmpty() || text.contains('*') || text.contains('?') || text.contains('#') || text.contains('[') || text.contains(']')))
             return tableCommandFailure(3251,"Leere und Wildcard-FindRecord-Suchen sind noch nicht implementiert.");
         if(!textValue && mode!=1) return tableCommandFailure(3251,"Typisierte FindRecord-Suche unterstützt nur ganze Feldwerte.");
+        if(page->property("la_project_object_kind").toString()=="query") {
+            auto* view=dynamic_cast<linaccess::NativeQueryView*>(page->findChild<QTableView*>("native-query-view"));
+            if(!view || !view->currentIndex().isValid()) return tableCommandFailure(2046,"Kein aktuelles Abfragefeld für FindRecord.");
+            const int column=view->currentIndex().column();
+            auto* result=dynamic_cast<linaccess::AccessQueryModel*>(view->model());
+            if(!result || view->isColumnHidden(column) || !linaccess::nativeFindSupports(sought,result->fieldSqlType(column)))
+                return tableCommandFailure(3251,"FindRecord-Suchwert und Abfragefeldtyp passen nicht zum unterstützten Teilumfang.");
+            linaccess::NativeTableFindArguments arguments{text,column,mode,sensitive,first ? 1 : 2,direction};
+            if(!textValue) arguments.value=sought;
+            view->findText(std::move(arguments));
+            return {{"handled",true},{"error",0}};
+        }
         QPointer<linaccess::AccessTableView> table;
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;

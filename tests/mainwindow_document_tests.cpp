@@ -181,6 +181,17 @@ Sub QueryCopyByKeys()
 DoCmd.SendKeys "^c",True
 Me.Tag="query-keys"
 End Sub
+Sub QueryFindNumber()
+DoCmd.FindRecord 1.25
+Me.Tag="query-found"
+End Sub
+Sub QueryFindText()
+DoCmd.FindRecord "needle",acStart
+Me.Tag="query-text-found"
+End Sub
+Sub QueryFindCurrency()
+DoCmd.FindRecord CCur("1.2346")
+End Sub
 Sub QueryFirstCommand()
 DoCmd.RunCommand acCmdRecordsGoToFirst
 End Sub
@@ -531,6 +542,25 @@ End Sub
 
 
     assert(window.navigateTableDocument({},2,1,true).value("error").toInt()==3251);
+    queryView->setCurrentIndex(queryView->model()->index(1,1));
+    assert(mixed->executeProcedure("QueryFindNumber",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->currentIndex().row()==0);
+    QApplication::setActiveWindow(&window); queryView->setFocus(); QApplication::processEvents();
+    QTest::keyClick(queryView,Qt::Key_F,Qt::ControlModifier); QApplication::processEvents();
+    QPointer<QDialog> queryFind=queryView->findChild<QDialog*>("native-table-find-dialog"); assert(queryFind && queryFind->isVisible());
+    auto* queryFindText=queryFind->findChild<QLineEdit*>("native-table-find-text"); assert(queryFindText);
+    queryFindText->setText("invalid-number"); QTest::mouseClick(queryFind->findChild<QPushButton*>("native-table-find-next"),Qt::LeftButton);
+    assert(queryView->currentIndex().row()==0 && queryFind->findChild<QLabel*>("native-table-find-result")->text().contains("13"));
+    queryFindText->setFocus(); queryFindText->selectAll();
+    assert(window.dispatchTableCommand(190).value("error").toInt()==0 && QApplication::clipboard()->text()=="invalid-number");
+    QApplication::clipboard()->setText("1.25"); assert(window.dispatchTableCommand(191).value("error").toInt()==0 && queryFindText->text()=="1.25");
+    assert(window.dispatchTableCommand(292).value("error").toInt()==0 && queryFindText->text()=="invalid-number");
+    assert(window.dispatchTableCommand(199).value("error").toInt()==0 && queryFindText->text()=="1.25");
+    QTest::mouseClick(queryFind->findChild<QPushButton*>("native-table-find-next"),Qt::LeftButton);
+    assert(queryView->currentIndex().row()==0 && queryFind->findChild<QLabel*>("native-table-find-result")->text().contains("Datensatz 1"));
+    queryFind->close(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!queryFind);
+    QApplication::setActiveWindow(&window); queryView->setFocus(); QApplication::processEvents(); QTest::keyClick(queryView,Qt::Key_F4,Qt::ShiftModifier);
+    assert(queryView->currentIndex().row()==0);
+
 
     auto queryDescriptor=makePreviewApplicationObject(*mixed)->member("CurrentData",{}).object->member("AllQueries",{}).object->member("Item",{linaccess::VbaValue::string("command_query_doc")}).object;
     assert(queryDescriptor->member("IsLoaded",{}).boolean);
@@ -548,6 +578,17 @@ End Sub
     assert(unchanged.exec(R"SQL(UPDATE _la_objects SET definition='{"sql":"SELECT id FROM command_readonly ORDER BY id DESC"}' WHERE kind='query' AND name='command_query_doc')SQL"));
     assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->model()->columnCount()==1 && queryView->model()->index(0,0).data().toInt()==2);
     assert(unchanged.exec(R"SQL(UPDATE _la_objects SET definition='{"sql":"SELECT id,value,flag FROM command_readonly ORDER BY id"}' WHERE kind='query' AND name='command_query_doc')SQL"));
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->model()->columnCount()==3);
+    assert(unchanged.exec("INSERT INTO command_edit VALUES(2,'needle-value')"));
+    assert(unchanged.exec(R"SQL(UPDATE _la_objects SET definition='{"sql":"SELECT value FROM command_edit ORDER BY id"}' WHERE kind='query' AND name='command_query_doc')SQL"));
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(mixed->executeProcedure("QueryFindText",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->currentIndex().row()==1 && queryView->currentIndex().data().toString()=="needle-value");
+    QApplication::setActiveWindow(&window); queryView->setFocus(); QApplication::processEvents(); QTest::keyClick(queryView,Qt::Key_F,Qt::ControlModifier); QApplication::processEvents();
+    QPointer<QDialog> refreshedFind=queryView->findChild<QDialog*>("native-table-find-dialog"); assert(refreshedFind && refreshedFind->isVisible());
+    refreshedFind->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);
+    assert(unchanged.exec("DELETE FROM command_edit WHERE id=2"));
+    assert(unchanged.exec(R"SQL(UPDATE _la_objects SET definition='{"sql":"SELECT id,value,flag FROM command_readonly ORDER BY id"}' WHERE kind='query' AND name='command_query_doc')SQL"));
+    QApplication::setActiveWindow(&window); queryView->setFocus(); QApplication::processEvents();
     assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->model()->columnCount()==3);
     // Execute against the actual driver connection; the callback closes the old
     // page while its replacement is being materialized, exercising Qt lifetime.
@@ -587,6 +628,8 @@ End Sub
     QTimer::singleShot(0,&window,[] { auto* dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog); dialog->setTextValue("1.23455"); dialog->accept(); });
     assert(mixed->executeProcedure("OpenParameterQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     auto* parameterView=documentTabs->currentWidget()->findChild<QTableView*>("native-query-view"); assert(parameterView && parameterView->model()->index(0,0).data().toString()=="1.2346");
+    const auto queryCurrencyFind=mixed->executeProcedure("QueryFindCurrency",selectArguments);
+    assert(queryCurrencyFind.status==linaccess::VbaExecutionStatus::Completed && parameterView->currentIndex().row()==0);
     QPointer<QAbstractItemModel> oldParameterResult=parameterView->model();
     QTimer::singleShot(0,&window,[] { auto* dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog); dialog->reject(); });
     assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).errorNumber==2501 && parameterView->model()==oldParameterResult && parameterView->model()->index(0,0).data().toString()=="1.2346");
