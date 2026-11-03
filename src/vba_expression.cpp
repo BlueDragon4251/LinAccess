@@ -1097,8 +1097,8 @@ private:
             if(word=="lbound" || word=="ubound") {
                 if(!host_) return {};
                 if(args.empty() || args.size()>2 || omitted[0]) throw error("Array bound requires one or two arguments",450);
-                if(args.size()==2 && !omitted[1] && coerceVbaModuleValue(scalarVbaValue(args[1]),"long").number!=1) throw error("Array dimension out of range",9);
-                return vbaArrayBound(args[0],word=="ubound");
+                const int dimension=args.size()==2 && !omitted[1] ? static_cast<int>(coerceVbaModuleValue(scalarVbaValue(args[1]),"long").number) : 1;
+                return vbaArrayBound(args[0],word=="ubound",dimension);
             }
             if (word=="isarray") {
                 if (!host_) return {};
@@ -1227,7 +1227,7 @@ private:
                 if(!host_) return {};
                 if(args.size()<2 || args.size()>4 || omitted[0] || omitted[1]) throw error("Filter requires two to four arguments",450);
                 if(args[0].kind==VbaValue::Kind::Null) throw error("Invalid Null Filter array",94);
-                if(args[0].kind!=VbaValue::Kind::Array) throw error("Filter requires a String or Variant array",13);
+                if(args[0].kind!=VbaValue::Kind::Array || vbaArrayRank(args[0])!=1) throw error("Filter requires a one-dimensional String or Variant array",13);
                 const auto match=scalarObjectValue(args[1]);
                 if(match.kind==VbaValue::Kind::Null) throw error("Invalid Null Filter match",94);
                 const auto needle=utf16String(match.asText());
@@ -1267,7 +1267,7 @@ private:
                 }
                 const auto delimiter=values.size()>1 && !omitted[1] ? values[1].asText() : " ";
                 if(!split) {
-                    if(values[0].kind!=VbaValue::Kind::Array) throw error("Join requires a one-dimensional Variant or String array",13);
+                    if(values[0].kind!=VbaValue::Kind::Array || vbaArrayRank(values[0])!=1) throw error("Join requires a one-dimensional Variant or String array",13);
                     (void)utf16String(delimiter);
                     std::string output; bool first=true;
                     for(const auto& item:vbaArrayValues(values[0])) {

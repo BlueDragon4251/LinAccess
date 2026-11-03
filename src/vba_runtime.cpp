@@ -774,9 +774,9 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
         } else if (const auto assignment=topLevelAssignment(source); assignment && memberSeparator(assignment->first)==std::string::npos && memberTarget(assignment->first) && memberTarget(assignment->first)->arguments) {
             const auto target=*memberTarget(assignment->first);
             const auto indices=splitArguments(*target.arguments);
-            if(indices.size()!=1 || !validExpression(indices[0]) || !validExpression(assignment->second))
+            if(indices.empty() || indices.size()>60 || !std::all_of(indices.begin(),indices.end(),[&](const auto& index) { return !trim(index).empty() && validExpression(index); }) || !validExpression(assignment->second))
                 return {VbaExecutionStatus::Unsupported,"Array assignment syntax unsupported",line};
-            statements.push_back({Statement::Type::IndexedAssign,target.name,assignment->second,line,indices[0]});
+            statements.push_back({Statement::Type::IndexedAssign,target.name,assignment->second,line,*target.arguments});
         } else if (lower(source).starts_with("redim ") || lower(source).starts_with("redim\t")) {
             auto declaration=trim(source.substr(5));
             bool preserve=false;
@@ -784,14 +784,17 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 preserve=true; declaration=trim(declaration.substr(8));
             }
             const auto target=memberTarget(declaration);
-            if(!target || !target->arguments || splitArguments(*target->arguments).size()!=1)
-                return {VbaExecutionStatus::Unsupported,"Only one-dimensional Variant ReDim is implemented",line};
-            const auto range=outsideKeyword(*target->arguments,"to");
-            const auto lowerBound=range==std::string::npos ? std::string{} : trim(target->arguments->substr(0,range));
-            const auto upperBound=range==std::string::npos ? *target->arguments : trim(target->arguments->substr(range+2));
-            if((!lowerBound.empty() && !validExpression(lowerBound)) || !validExpression(upperBound))
-                return {VbaExecutionStatus::Unsupported,"Invalid ReDim bounds",line};
-            statements.push_back({Statement::Type::ResizeArray,target->name,upperBound,line,lowerBound,preserve ? "preserve" : ""});
+            if(!target || !target->arguments) return {VbaExecutionStatus::Unsupported,"Invalid Variant ReDim target",line};
+            const auto dimensions=splitArguments(*target->arguments);
+            if(dimensions.empty() || dimensions.size()>60) return {VbaExecutionStatus::Unsupported,"Invalid ReDim dimension count",line};
+            for(const auto& dimension:dimensions) {
+                const auto range=outsideKeyword(dimension,"to");
+                const auto lowerBound=range==std::string::npos ? std::string{} : trim(dimension.substr(0,range));
+                const auto upperBound=range==std::string::npos ? dimension : trim(dimension.substr(range+2));
+                if((!lowerBound.empty() && !validExpression(lowerBound)) || !validExpression(upperBound))
+                    return {VbaExecutionStatus::Unsupported,"Invalid ReDim bounds",line};
+            }
+            statements.push_back({Statement::Type::ResizeArray,target->name,*target->arguments,line,{},preserve ? "preserve" : ""});
         } else if (lower(source).starts_with("erase ") || lower(source).starts_with("erase\t")) {
             const auto target=memberTarget(trim(source.substr(5)));
             if(!target || target->arguments) return {VbaExecutionStatus::Unsupported,"Only a single Variant array Erase is implemented",line};
@@ -1617,12 +1620,17 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     const auto name=lower(instruction.argument),type=variableType(name);
                     if(type=="paramarray") throw VbaRuntimeError(3251,"ParamArray resize is not implemented");
                     if(!type.empty() && type!="variant") throw VbaRuntimeError(13,"ReDim requires a Variant variable");
-                    const auto lowerBound=instruction.endExpression.empty() ? arrayBase : static_cast<int>(coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.endExpression)),"long").number);
-                    const auto upperBound=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.expression)),"long").number);
+                    std::vector<VbaArrayDimension> bounds;
+                    for(const auto& dimension:splitArguments(instruction.expression)) {
+                        const auto range=outsideKeyword(dimension,"to");
+                        const auto lowerBound=range==std::string::npos ? arrayBase : static_cast<int>(coerceVbaModuleValue(scalarVbaValue(evaluate(dimension.substr(0,range))),"long").number);
+                        const auto upperBound=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(evaluate(range==std::string::npos ? dimension : dimension.substr(range+2))),"long").number);
+                        bounds.push_back({lowerBound,upperBound});
+                    }
                     refreshAliases();
                     const auto found=locals.find(name);
                     const auto original=found==locals.end() ? VbaValue::empty() : found->second;
-                    assignVariable(name,resizeVbaArray(original,lowerBound,upperBound,instruction.stepExpression=="preserve"));
+                    assignVariable(name,resizeVbaArrayWithBounds(original,std::move(bounds),instruction.stepExpression=="preserve"));
                 }
                 break;
             case Statement::Type::EraseArray:
@@ -1637,12 +1645,13 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::IndexedAssign:
                 if(active) {
                     const auto name=lower(instruction.argument);
-                    const auto index=coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.endExpression)),"long");
+                    std::vector<VbaValue> indices;
+                    for(const auto& expression:splitArguments(instruction.endExpression)) indices.push_back(coerceVbaModuleValue(scalarVbaValue(evaluate(expression)),"long"));
                     const auto value=evaluate(instruction.expression);
                     refreshAliases();
                     const auto found=locals.find(name);
                     if(found==locals.end()) throw VbaRuntimeError(13,"Array variable required");
-                    assignVariable(name,withVbaArrayElement(found->second,{index},value),true);
+                    assignVariable(name,withVbaArrayElement(found->second,indices,value),true);
                 }
                 break;
             case Statement::Type::SetVar:
@@ -1669,10 +1678,9 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                         throw VbaRuntimeError(3251,"Array For Each requires a named variable or Array/VBA.Array/Split/Filter result");
                     }
                     loop.frameDepth=frames.size(); loop.withDepth=withFrames.size();
-                    const auto lowerBound=static_cast<std::int32_t>(vbaArrayBound(collection,false).number);
-                    if(vbaArrayBound(collection,true).number<lowerBound) ip=static_cast<std::size_t>(instruction.partner);
+                    if(vbaArraySize(collection)==0) ip=static_cast<std::size_t>(instruction.partner);
                     else {
-                        locals[name]=vbaArrayElement(collection,{VbaValue::longInteger(lowerBound)});
+                        locals[name]=vbaArrayLinearElement(collection,0);
                         loops.push_back(std::move(loop));
                     }
                     break;
@@ -1739,9 +1747,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                         const auto found=locals.find(loop.arrayRoot);
                         const auto& current=loop.arrayRoot.empty() ? loop.array : found==locals.end() ? VbaValue{} : found->second;
                         if(!sameVbaArrayAllocation(loop.array,current)) throw VbaRuntimeError(3251,"Array replacement or resizing during For Each is not implemented");
-                        const auto nextIndex=static_cast<std::int64_t>(vbaArrayBound(loop.array,false).number)+static_cast<std::int64_t>(++loop.itemIndex);
-                        if(nextIndex<=vbaArrayBound(loop.array,true).number) {
-                            locals[name]=vbaArrayElement(current,{VbaValue::longInteger(static_cast<std::int32_t>(nextIndex))});
+                        if(++loop.itemIndex<vbaArraySize(loop.array)) {
+                            locals[name]=vbaArrayLinearElement(current,loop.itemIndex);
                             ip=static_cast<std::size_t>(loop.forIndex);
                         } else loops.pop_back();
                         break;

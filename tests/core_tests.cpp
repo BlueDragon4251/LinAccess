@@ -4,6 +4,7 @@
 #include "vba_analyzer.hpp"
 #include "vba_runtime.hpp"
 #include "vba_expression.hpp"
+#include "vba_array.hpp"
 
 // Tests must stay active in Release builds (which normally define NDEBUG).
 #ifdef NDEBUG
@@ -2461,6 +2462,61 @@ End Sub
     substringError("Array(1)(Null)",94); substringError("LBound(7)",13);
     assert(evaluate("Array(Array(5,8))(0)(1)").asNumber()==8);
     assert(!evaluate("IsObject(Array(1))").truthy());
+    {
+        const auto previousBracketHost=host.bracketHost; host.bracketHost=true;
+        host.bracketFields["matrix"]=makeVbaArrayWithBounds({VbaValue::numeric(10),VbaValue::numeric(20),VbaValue::numeric(30),VbaValue::numeric(40)},{{1,2},{-1,0}});
+        const auto matrix=executeVbaProcedure(R"VBA(Option Base 1
+Sub UseMatrix()
+Dim a As Variant
+Dim b As Variant
+Dim item As Variant
+Dim output As String
+a=[matrix]
+b=a
+a(2,-1)=99
+Me!MatrixBounds=CStr(LBound(a,1)) & ":" & CStr(UBound(a,1)) & ":" & CStr(LBound(a,2)) & ":" & CStr(UBound(a,2))
+Me!MatrixCopies=CStr(a(2,-1)) & ":" & CStr(b(2,-1))
+For Each item In a
+output=output & CStr(item) & "|"
+Next
+Me!MatrixWalk=output
+On Error Resume Next
+output=Join(a)
+Me!MatrixJoinError=CStr(Err.Number)
+Err.Clear
+output=Filter(a,"x")
+Me!MatrixFilterError=CStr(Err.Number)
+Err.Clear
+output=CStr(a(1))
+Me!MatrixIndexError=CStr(Err.Number)
+Err.Clear
+ReDim Preserve a(1 To 3)
+Me!MatrixPreserveError=CStr(Err.Number)
+On Error GoTo 0
+Me!MatrixRetained=CStr(a(2,-1))
+ReDim Preserve a(1 To 2,-1 To 1)
+Me!MatrixGrown=CStr(UBound(a,2)) & ":" & CStr(a(1,0)) & ":" & CStr(a(2,0)) & ":" & TypeName(a(1,1))
+On Error Resume Next
+ReDim Preserve a(1 To 3,-1 To 1)
+Me!MatrixWrongResize=CStr(Err.Number)
+On Error GoTo 0
+ReDim Preserve a(1 To 2,-1 To -1)
+Me!MatrixShrunk=CStr(UBound(a,2)) & ":" & CStr(a(2,-1))
+ReDim a(0 To 1,1 To 2,4 To 5)
+a(1,2,5)=42
+Me!MatrixCube=CStr(LBound(a,3)) & ":" & CStr(UBound(a,3)) & ":" & CStr(a(1,2,5))
+ReDim a(2,3)
+a(2,3)=55
+Me!MatrixBase=CStr(LBound(a,1)) & ":" & CStr(LBound(a,2)) & ":" & CStr(a(2,3))
+End Sub
+)VBA","UseMatrix",host);
+        assert(matrix.status==VbaExecutionStatus::Completed);
+        assert(host.fields["MatrixBounds"]=="1:2:-1:0" && host.fields["MatrixCopies"]=="99:20" && host.fields["MatrixWalk"]=="10|99|30|40|");
+        assert(host.fields["MatrixJoinError"]=="13" && host.fields["MatrixFilterError"]=="13" && host.fields["MatrixIndexError"]=="9" && host.fields["MatrixPreserveError"]=="9" && host.fields["MatrixRetained"]=="99");
+        assert(host.fields["MatrixGrown"]=="1:30:40:Empty" && host.fields["MatrixWrongResize"]=="9" && host.fields["MatrixShrunk"]=="-1:99");
+        assert(host.fields["MatrixCube"]=="4:5:42" && host.fields["MatrixBase"]=="1:1:55");
+        host.bracketHost=previousBracketHost;
+    }
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub

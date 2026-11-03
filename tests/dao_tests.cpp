@@ -1,4 +1,5 @@
 #include "dao_database.hpp"
+#include "vba_array.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
 #include "sqlite_execution.hpp"
@@ -357,9 +358,67 @@ End Sub
     assert(sql.exec("SELECT value FROM text_lists") && sql.next() && sql.value(0).toString()=="alpha|alt|alps!");
     sql.finish(); db.close();
 }
+void testDaoGetRows() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-getrows"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE batch_records(id INTEGER PRIMARY KEY,label TEXT,price CURRENCY_REAL,stamp DATETIME,enabled BOOLEAN,raw BLOB)"));
+    assert(sql.exec("INSERT INTO batch_records VALUES(1,'first',0.1001,'2024-02-29 12:34:56',-1,X'00FF42'),(2,NULL,-0.0001,NULL,0,X''),(3,'last',NULL,NULL,NULL,NULL)"));
+    Host host(db);
+    const auto result=linaccess::executeVbaProcedure(R"VBA(Option Base 1
+Sub ReadBatches()
+Dim rows As DAO.Recordset
+Dim batch As Variant
+Set rows=CurrentDb.OpenRecordset("batch_records",4)
+batch=rows.GetRows(NumRows:=2)
+Me!BatchBounds=CStr(LBound(batch,1)) & ":" & CStr(UBound(batch,1)) & ":" & CStr(LBound(batch,2)) & ":" & CStr(UBound(batch,2))
+Me!BatchTypes=CStr(VarType(batch(2,0))) & ":" & CStr(VarType(batch(3,0))) & ":" & CStr(VarType(batch(4,0))) & ":" & CStr(VarType(batch(5,0)))
+Me!BatchMoney=CStr(batch(2,0)) & ":" & CStr(batch(2,1))
+Me!BatchNull=CStr(IsNull(batch(1,1)))
+Me!BatchBinary=CStr(batch(5,0)(0)) & ":" & CStr(batch(5,0)(1)) & ":" & CStr(batch(5,0)(2))
+Me!BatchEmptyBinary=CStr(UBound(batch(5,1)))
+Me!BatchPosition=CStr(rows.AbsolutePosition) & ":" & CStr(rows.EOF)
+batch(0,0)=77
+batch=rows.GetRows(99)
+Me!BatchTail=CStr(UBound(batch,2)) & ":" & CStr(batch(0,0)) & ":" & CStr(rows.EOF)
+On Error Resume Next
+batch=rows.GetRows(1)
+Me!BatchEofError=CStr(Err.Number)
+Err.Clear
+rows.MoveFirst
+batch=rows.GetRows(0)
+Me!BatchZeroError=CStr(Err.Number)
+Err.Clear
+batch=rows.GetRows(Null)
+Me!BatchNullError=CStr(Err.Number)
+Err.Clear
+batch=rows.GetRows()
+Me!BatchOmittedError=CStr(Err.Number)
+Me!BatchErrorPosition=CStr(rows.AbsolutePosition)
+rows.Close
+Err.Clear
+batch=rows.GetRows(1)
+Me!BatchClosedError=CStr(Err.Number)
+End Sub
+)VBA","ReadBatches",host);
+    if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Synthetic GetRows runtime error="<<result.errorNumber<<" line="<<result.line<<"\n";
+    assert(result.status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["BatchBounds"]=="0:5:0:1" && host.fields["BatchTypes"]=="6:7:11:8209");
+    assert(host.fields["BatchMoney"]=="0.1001:-0.0001" && host.fields["BatchNull"]=="True");
+    assert(host.fields["BatchBinary"]=="0:255:66" && host.fields["BatchEmptyBinary"]=="-1");
+    assert(host.fields["BatchPosition"]=="2:False" && host.fields["BatchTail"]=="0:3:True");
+    assert(host.fields["BatchEofError"]=="3021" && host.fields["BatchZeroError"]=="3251" && host.fields["BatchNullError"]=="94" && host.fields["BatchOmittedError"]=="3251" && host.fields["BatchClosedError"]=="3420" && host.fields["BatchErrorPosition"]=="0");
+    assert(sql.exec("SELECT count(*),sum(id) FROM batch_records") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==6); sql.finish();
+    assert(sql.exec("CREATE TABLE batch_large(value INTEGER)")); assert(sql.exec("INSERT INTO batch_large VALUES(1),(9007199254740993)"));
+    auto rows=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("batch_large"),VbaValue::numeric(4)}).object;
+    int error=0; try { rows->member("GetRows",{VbaValue::numeric(2)}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+    assert(error==6 && rows->member("AbsolutePosition",{}).number==0 && rows->item("value").number==1); rows->member("Close",{});
+    db.close();
+}
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     testVariantArraysDao();
+    testDaoGetRows();
     testDdlRecordsAffected();
     testTypedSqlTargets();
     testDeclaredParameterTypes();

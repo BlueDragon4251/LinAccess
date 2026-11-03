@@ -122,3 +122,12 @@ SQL savepoints and rollback/cursor-generation evidence are documented in
 DAO_TRANSACTIONS_RUNTIME.md. CurrentDb.Execute now uses the Database adapter
 including positional dbFailOnError; unsupported transaction combinations fail
 before pretending to provide complete Jet semantics.
+
+## Native matrix batches
+
+Recordset.GetRows with explicit positive NumRows now returns actual zero-based
+field/record Variant matrices, checked typed values and Byte-array BLOB cells.
+Normal VBA multidimensional indexing/bounds/ReDim and array-copy semantics apply.
+The optional default, nonpositive counts and concurrent/deleted-row partial
+batches remain explicit boundaries. Scope and execution evidence:
+[DAO_GETROWS_RUNTIME.md](DAO_GETROWS_RUNTIME.md).
