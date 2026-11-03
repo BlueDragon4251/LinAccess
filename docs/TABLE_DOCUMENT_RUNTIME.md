@@ -159,9 +159,9 @@ source-field/modal validation; Me remains the calling form.
 
 Last/GoTo fetch actual SQL rows past Qt's initial batch, bounded to one million
 rows. Checked invalid offsets/unavailable existing rows return 2105. Moving past
-the last existing record does not synthesize a new-record placeholder; new-record
-navigation remains unsupported (3251). These bounds do not claim complete Access
-navigation error precedence or addition-row behavior.
+the last existing record does not synthesize a new-record placeholder. Explicit
+acNewRec now uses the checked native record-creation path described below. These
+bounds do not claim complete Access error precedence or addition-row behavior.
 
 An existing current record update is transactionally saved before navigation
 only when it is the sole dirty record in the cache. The same checked SaveRecord
@@ -227,7 +227,7 @@ unchanged; readonly targets reject 2448. Existing drafts or an editor that
 produces a draft retain the 2501 boundary. Missing text MIME now sets a fresh
 2046 native error instead of leaving an unrelated previous model error visible.
 Successful paste changes only the manual-submit cache; normal Save reaches SQL.
-Record append, general paste-over-draft merging, editor-text RunCommand routing,
+Record append, general paste-over-draft merging, general multiline editor routing,
 binary MIME, locale masks and Access-wide Paste equivalence remain open.
 
 ## Active table Requery (2026-11-03)
@@ -282,3 +282,31 @@ A captured insert bookmark additionally requires SQLite changes()=1. A BEFORE
 trigger that uses RAISE(IGNORE) cannot reuse a previous row's last-insert ID.
 The existing native integration target exercises actual ignored INSERT and
 queries the retained SQL rows independently.
+
+## Explicit new-record navigation and complete source fetching (2026-11-03)
+
+Named/default table DoCmd.GoToRecord acNewRec now shares acCmdRecordsGoToNew's
+actual insert-draft path. A named target is activated and validated before
+mutation; caller Me and unrelated documents remain unchanged. Readonly targets
+reject 2448 and existing insert/unrelated drafts reject 3251. The actual first
+row in an empty table can be created and saved through this route.
+
+Native table insertion now fetches the remaining existing SQL rows before
+appending its draft, shared by the button, Ctrl+Plus and VBA routes. A partially
+loaded 300-row source gains its draft at row 301 while SQL still contains 300
+rows. Total native rows including the draft stay bounded to 1,000,000; a stalled
+fetch refuses 3251. The explicit creation route does not add implicit Next-past-
+last behavior or general navigation away from unsaved insert/delete drafts.
+
+## Focused native Paste (2026-11-03)
+
+acCmdPaste now checks actual QApplication focus before grid TSV paste. An owned
+QLineEdit in a table cell editor or its modeless Find dialog receives normal
+Qt paste at the real text selection/caret. Cell text remains an editor buffer
+until normal field validation; it does not become a grid range or write SQL.
+A Find query remains editable for a readonly data source. Disabled/readonly
+text targets refuse 2448, missing text MIME 2046, and the existing 4 MiB/NUL
+boundary remains explicit. Parent ownership is checked across Qt dialog windows;
+other forms, projects and external applications are not fallback targets.
+General multiline/rich editor command routing and full Access equivalence remain
+open; the grid's checked TSV and dirty-draft rules remain unchanged.

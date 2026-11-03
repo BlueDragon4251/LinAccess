@@ -158,8 +158,16 @@ public:
         QTableView::closeEditor(editor,QAbstractItemDelegate::NoHint); return true;
     }
     bool insertRecord() {
-        auto* typed=qobject_cast<AccessTableModel*>(model());
-        if(!typed || !finishEditing()) return false;
+        const QPointer<AccessTableView> self=this;
+        QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
+        if(!typed || !finishEditing() || !self || !typed) return false;
+        while(typed->canFetchMore()) {
+            if(typed->rowCount()>=1000000) return refuse(3251,"Die neue Zeile überschreitet die native Datensatzgrenze.");
+            const auto count=typed->rowCount(); typed->fetchMore();
+            if(!self || !typed) return false;
+            if(typed->rowCount()==count) return refuse(3251,"Die vorhandenen Datensätze konnten nicht vollständig geladen werden.");
+        }
+        if(typed->rowCount()>=1000000) return refuse(3251,"Die neue Zeile überschreitet die native Datensatzgrenze.");
         const auto row=typed->rowCount();
         if(!typed->insertRow(row)) return false;
         setCurrentIndex(typed->index(row,0)); scrollTo(currentIndex()); setFocus();

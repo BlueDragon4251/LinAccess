@@ -345,6 +345,15 @@ End Sub
 Sub AddTableRecord()
 DoCmd.RunCommand acCmdRecordsGoToNew
 End Sub
+Sub AddNamedTableRecord()
+DoCmd.GoToRecord ObjectType:=acTable,ObjectName:="command_record_edits",Record:=acNewRec
+End Sub
+Sub AddActiveTableRecord()
+DoCmd.GoToRecord , , acNewRec
+End Sub
+Sub AddNavigationTableRecord()
+DoCmd.GoToRecord acTable,"command_navigation",acNewRec
+End Sub
 Sub DeleteTableRecord()
 DoCmd.RunCommand acCmdDeleteRecord
 End Sub
@@ -425,12 +434,14 @@ End Sub
     assert(mixed->executeProcedure("AddTableRecord",selectArguments).errorNumber==2448 && !readonlyModel->isDirty());
     readonlyView->clearSelection();
     assert(mixed->executeProcedure("DeleteTableRecord",selectArguments).errorNumber==2448 && !readonlyModel->isDirty());
+    assert(mixed->executeProcedure("AddActiveTableRecord",selectArguments).errorNumber==2448 && !readonlyModel->isDirty());
     assert(mixed->executeProcedure("OpenRecordEditTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     auto* recordEditView=nativeTable(documentTabs->currentWidget());
     auto* recordEditModel=qobject_cast<linaccess::AccessTableModel*>(recordEditView->model()); assert(recordEditModel);
     recordEditView->sortByColumn(0,Qt::AscendingOrder);
     assert(mixed->executeProcedure("AddTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditModel->rowCount()==2);
     const int addedRow=recordEditView->currentIndex().row(); assert(addedRow==1);
+    assert(mixed->executeProcedure("AddActiveTableRecord",selectArguments).errorNumber==3251 && recordEditModel->rowCount()==2);
     assert(recordEditModel->setData(recordEditModel->index(addedRow,1),"new-record"));
     assert(mixed->executeProcedure("AddTableRecord",selectArguments).errorNumber==3251 && recordEditModel->rowCount()==2);
     assert(unchanged.exec("SELECT count(*) FROM command_record_edits") && unchanged.next() && unchanged.value(0).toInt()==1); unchanged.finish();
@@ -456,7 +467,8 @@ End Sub
     assert(unchanged.exec("SELECT count(*) FROM command_record_edits") && unchanged.next() && unchanged.value(0).toInt()==1); unchanged.finish();
     assert(unchanged.exec("DELETE FROM command_record_edits"));
     assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditModel->rowCount()==0);
-    assert(mixed->executeProcedure("AddTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditModel->rowCount()==1);
+    assert(window.activateOpenTable("command_readonly")==0);
+    assert(mixed->executeProcedure("AddNamedTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditModel->rowCount()==1);
     recordEditView->setCurrentIndex(recordEditModel->index(0,1));
     assert(recordEditModel->setData(recordEditModel->index(0,1),"first-record"));
     assert(mixed->executeProcedure("SaveActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditView->currentIndex()==recordEditModel->index(0,1));
@@ -601,6 +613,11 @@ End Sub
     QTest::keyClick(findSourceEditor,Qt::Key_F,Qt::ControlModifier); QApplication::processEvents();
     tableFind=navigationView->findChild<QDialog*>("native-table-find-dialog"); assert(tableFind && tableFind->isVisible() && navigationModel->isDirty());
     assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=280") && unchanged.next() && unchanged.value(0).toString()=="row-280"); unchanged.finish();
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationModel->canFetchMore());
+    assert(mixed->executeProcedure("AddNavigationTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(navigationModel->rowCount()==301 && navigationView->currentIndex().row()==300 && !navigationModel->canFetchMore());
+    assert(unchanged.exec("SELECT count(*) FROM command_navigation") && unchanged.next() && unchanged.value(0).toInt()==300); unchanged.finish();
+    navigationModel->revertAll();
     assert(mixed->executeProcedure("CloseNavigationTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!tableFind);
 
@@ -635,6 +652,10 @@ End Sub
     typedQuery->setText("not-a-date"); typedNext->click(); assert(typedView->currentIndex().row()==1 && typedModel->lastError().nativeErrorCode()=="13");
     typedScope->setCurrentIndex(typedScope->findData(4)); typedQuery->setText("False"); typedNext->click(); assert(typedView->currentIndex().row()==2);
     assert(mixed->executeProcedure("RepeatTableFind",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedView->currentIndex().row()==3);
+    QApplication::setActiveWindow(typedFind); typedQuery->setFocus(); assert(typedQuery->hasFocus());
+    typedQuery->selectAll(); QApplication::clipboard()->setText("True");
+    assert(mixed->executeProcedure("PasteTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(typedQuery->text()=="True" && !typedModel->isDirty());
     typedFind->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!typedFind);
     assert(!typedModel->isDirty());
     assert(unchanged.exec("SELECT value,typeof(money),stamp,flag,hex(payload) FROM command_typed_find WHERE id=2") && unchanged.next() && unchanged.value(0).toDouble()==1.2345678901234565 && unchanged.value(1).toString()=="real" && unchanged.value(2).toString()=="1899-12-30 06:00:00" && unchanged.value(3).isNull() && unchanged.value(4).toString()=="0102"); unchanged.finish();
@@ -665,6 +686,14 @@ End Sub
         editableView->setCurrentIndex(editableModel->index(0,1)); editableView->setFocus(); assert(editableView->hasFocus());
     };
     focusEditable();
+    editableView->edit(editableModel->index(0,1));
+    auto* pastedEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(pastedEditor);
+    pastedEditor->deselect(); pastedEditor->setCursorPosition(pastedEditor->text().size());
+    QApplication::clipboard()->setText("-pasted");
+    assert(mixed->executeProcedure("PasteTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(pastedEditor->text()=="initial-pasted" && editableModel->index(0,1).data(Qt::EditRole).toString()=="initial" && !editableModel->isDirty());
+    assert(editableView->finishEditing() && editableModel->index(0,1).data(Qt::EditRole).toString()=="initial-pasted" && editableModel->isDirty());
+    editableModel->revertAll(); focusEditable();
     const auto keyFindResult=mixed->executeProcedure("FindTableByKeys",selectArguments);
     assert(keyFindResult.status==linaccess::VbaExecutionStatus::Completed);
     QPointer<QDialog> keysFind=editableView->findChild<QDialog*>("native-table-find-dialog"); assert(keysFind && keysFind->isVisible());

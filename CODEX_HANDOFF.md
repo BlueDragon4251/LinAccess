@@ -593,3 +593,31 @@ inklusive Build-ID/SQLite 3.54.1 sowie vier Fixture-Hashes bestanden. Unterdrüc
 INSERT veröffentlicht keinen alten Schlüssel; erster Datensatz einer leeren
 Tabelle samt erzeugtem PK/Spaltenerhalt geprüft. Voriges Requery/Speichertasten-
 Inkrement eingeschlossen, keine neuen Testtargets.
+
+## Explizites Tabellen-acNewRec und vollständiges Nachladen (2026-11-03)
+
+Benanntes/aktives DoCmd.GoToRecord acNewRec nutzt den echten Einfügepfad mit
+Seitenaktivierung, leerer Tabelle, readonly 2448 und Insert-Entwurfsschutz 3251.
+Tabellen-Insert lädt vorhandene SQL-Batches begrenzt vollständig nach, dann
+kommt der neue Entwurf tatsächlich hinter alle vorhandenen Zeilen; Button/
+Strg+Plus teilen den Pfad. 300 teilweise geladene Zeilen -> Entwurfszeile 301,
+SQL weiterhin 300. Kein implizites Next-hinter-Ende oder volle Addition-Row-Parität.
+MainWindow 1/1 (3.53 s), keine neuen Targets. Kanonisch TABLE_DOCUMENT_RUNTIME.md.
+Letzte Vollsuite/Paket-Quelle lokal a93e2ed / privat cb6a3ea: 48/48 (91.07 s),
+GUI-freier Core 1/1 (2.38 s), Debian-Prüfung und vier Fixture-Hashes bestanden.
+
+## Fokussiertes Tabellen-Paste (2026-11-03)
+
+acCmdPaste prüft tatsächlichen QLineEdit-Fokus innerhalb der aktiven Tabelle
+oder ihres Find-Dialogs vor dem TSV-Gridpfad. Echte Textauswahl/Cursorposition,
+Textpuffer vor Modellvalidierung/SQL-Save; Find-Eingabe trotz readonly Quelle
+bearbeitbar. Andere Formulare/Projekte sind keine Ersatzempfänger. Vorhandene
+Zwischenablagegrenzen/Readonly-/kein-Text-Fehler bleiben; allgemeines Multiline-/
+Richtext-Routing offen. Kanonisch docs/TABLE_DOCUMENT_RUNTIME.md. MainWindow
+1/1 (3.17 s), keine neuen Targets; vorheriges NewRec/Fetch-Inkrement auch im
+MainWindow/Currency-Feld/Vorwert-Trio 3/3 (4.65 s) bestanden.
+
+Vollsuite 48/48 (91.66 s), GUI-freier Core 1/1 (1.96 s), Debian-Prüfung
+inklusive Build-ID/SQLite 3.54.1 und alle vier Originalfixture-Hashes bestanden.
+Benanntes/aktives acNewRec, vollständiges Nachladen und tatsächliches Zell-/
+Readonly-Find-Text-Paste eingeschlossen; keine neuen Testtargets.
