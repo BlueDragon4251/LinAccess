@@ -956,9 +956,14 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native table literal Find handles visible text-field scope, part/whole/start and case modes, real SQL fetching and retained dirty-cache boundaries.
 - [x] Ctrl+F, Shift+F4, native Edit menu and DoCmd/Application Find/FindNext share actual table search paths, including the cell-editor route.
 - [x] Modeless table Find reactivates its owning page safely and is disposed with its document; checked view errors propagate accurately to VBA.
-- [ ] General table numeric/date/formatted/wildcard/locale search, Replace and DoCmd.FindRecord equivalence.
+- [ ] General table formatted/wildcard/locale/all-field search, remaining typed coercion/partial matching, Replace and DoCmd.FindRecord equivalence.
 
 - [x] Bounded DoCmd.FindRecord searches actual current native table text fields with named/Missing/Empty argument binding, first/next origin and normal no-match completion.
 - [x] Native form FindRecord uses the actual active bound text field, readonly access and checked validation cancellation (2501), preserving caller Me and pending drafts.
 
 - [x] Native table/form Find dialogs and FindRecord support Up/Down without wrap, SearchAll with wrap, preserved FindNext direction and explicit first/next origins.
+
+- [x] Native table/form dialog and FindRecord exact numeric searches retain adjacent Double distinctions without display-string comparison.
+- [x] Native table/form Currency searches compare checked four-decimal units through a lossless typed invocation and real field conversion.
+- [x] Native table/form Date searches use checked second-resolution canonical Date values, including negative OLE aliases and explicit subsecond refusal.
+- [x] Native table/form Boolean search and FindNext skip SQL NULL; readonly typed dialogs and invalid-input retention use the real data path.

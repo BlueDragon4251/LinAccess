@@ -1872,3 +1872,15 @@ Existing trio 3/3 (16.70 s); full/package baseline a71acc9 / API f9367b0,
 48/48 (88.05 s). General formatted/numeric/all-field/wildcard/locale search and
 full error/selection equivalence remain open. See FIND_RECORD_RUNTIME.md.
 Theoretical checklist: 304 checked / 72 open scoped points.
+
+
+## Typed native table/form Find (2026-11-03)
+
+The real dialogs and FindRecord now share exact Number/Currency/Date/Boolean
+matching. Neighboring Double values, scaled Currency units, checked Date storage
+canonicalization and NULL-versus-False stay distinct. Individual typed fields use
+whole-value comparison and visible input hints; combined scope remains text-only.
+Incompatible subtypes, nontext partial matching, all-field API/formatted/locale/
+wildcard behavior remain open. Canonical details: TYPED_FIND_RUNTIME.md.
+Full desktop 48/48 (97.33 s), GUI-free core 1/1 (1.86 s), Debian checks and four
+fixture hashes pass. No new targets. Checklist: 308 checked / 72 open points.

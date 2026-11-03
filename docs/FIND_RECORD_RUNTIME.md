@@ -5,7 +5,7 @@ while Me remains bound to the calling form. It uses real SQL-backed record
 ordering, field validation, record saving and selection. No hidden surrogate
 form, fake search result or original MDB mutation is involved.
 
-The implemented subset searches the current visible declared text field using
+The implemented text subset searches the current visible declared text field using
 acSearchAll/acUp/acDown, literal nonempty text, part/whole/start matching,
 MatchCase and FindFirst. FindFirst=True starts at the first record; False starts
 after the current record in the requested direction. SearchAll wraps; Up/Down
@@ -22,10 +22,11 @@ Explicit Empty coerces normally: for example Match becomes acAnywhere(0), and
 FindFirst becomes False. It is not silently replaced by a default. Null arguments
 retain checked error 94; invalid option values are error 5.
 
-Numeric/date FindWhat, formatted search, all-field search (acAll=0),
-wildcard/empty search and general Jet/Windows comparison equivalence are
-explicit unsupported boundaries (3251). Current nontext fields and unsupported
-record sources are also bounded; full Access error precedence and data-selection
+Typed numeric/Currency/Date/Boolean FindWhat and native dialog matching are
+specified in [TYPED_FIND_RUNTIME.md](TYPED_FIND_RUNTIME.md). Formatted search,
+all-field search (acAll=0), wildcard/empty search and general Jet/Windows
+comparison equivalence remain explicit unsupported boundaries (3251).
+Unsupported record sources, full Access error precedence and data-selection
 appearance remain unverified. The existing native UI search stays explicitly
 literal and does not claim these broader APIs.
 

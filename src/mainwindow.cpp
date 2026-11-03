@@ -243,9 +243,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             for(auto* candidate:activeDataPage_->findChildren<QTableView*>()) if((view=dynamic_cast<linaccess::AccessTableView*>(candidate))) break;
         const auto* model=view ? qobject_cast<linaccess::AccessTableModel*>(view->model()) : nullptr;
         bool textColumn=false;
-        if(model) for(int column=0;column<model->columnCount();++column) if(!view->isColumnHidden(column) && model->isTextColumn(column)) { textColumn=true; break; }
+        if(model) for(int column=0;column<model->columnCount();++column) if(!view->isColumnHidden(column) && model->isSearchableColumn(column)) { textColumn=true; break; }
         findTable->setEnabled(textColumn && !QApplication::activeModalWidget());
-        findNext->setEnabled(textColumn && view->hasFindText() && !QApplication::activeModalWidget());
+        findNext->setEnabled(view && view->hasFindText() && !QApplication::activeModalWidget());
     });
     auto* objectMenu=menuBar()->addMenu("&Objekte");
     for (int i=5;i<9;++i) objectMenu->addAction(projectActions[i]);
@@ -444,21 +444,32 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
     return tableCommandFailure(3251,"Dieser native Tabellenbefehl ist noch nicht implementiert.");
 }
 
-QVariantMap MainWindow::findTableRecord(const QString& text,int mode,bool sensitive,bool first,int direction) {
+QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
     QPointer<QWidget> page=activeDataPage_;
     if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
     if(QApplication::activeModalWidget()) return tableCommandFailure(2046,"FindRecord ist durch ein modales Fenster blockiert.");
-    if(mode<0 || mode>2 || direction<0 || direction>2) return tableCommandFailure(5,"Ungültiger FindRecord-Vergleich oder Suchrichtung.");
-    if(text.isEmpty() || text.contains('*') || text.contains('?') || text.contains('#') || text.contains('[') || text.contains(']'))
-        return tableCommandFailure(3251,"Leere und Wildcard-FindRecord-Suchen sind noch nicht implementiert.");
-    QPointer<linaccess::AccessTableView> table;
-    for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
-    QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
-    if(!table || !model || !table->currentIndex().isValid()) return tableCommandFailure(2046,"Kein aktuelles Tabellenfeld für FindRecord.");
-    const int column=table->currentIndex().column();
-    if(table->isColumnHidden(column) || !model->isTextColumn(column)) return tableCommandFailure(3251,"FindRecord unterstützt hier nur das aktuelle sichtbare Textfeld.");
-    if(table->findText({text,column,mode,sensitive,first ? 1 : 2,direction})<0) return tableModelFailure(model,2501);
-    return {{"handled",true},{"error",0}};
+    try {
+        const auto sought=linaccess::nativeFindValueFromPayload(request);
+        const int mode=request.value("match").toInt(),direction=request.value("direction").toInt();
+        const bool sensitive=request.value("sensitive").toBool(),first=request.value("first").toBool();
+        if(mode<0 || mode>2 || direction<0 || direction>2) return tableCommandFailure(5,"Ungültiger FindRecord-Vergleich oder Suchrichtung.");
+        const bool textValue=sought.kind==linaccess::VbaValue::Kind::Text;
+        const auto text=linaccess::nativeFindValueText(sought);
+        if(textValue && (text.isEmpty() || text.contains('*') || text.contains('?') || text.contains('#') || text.contains('[') || text.contains(']')))
+            return tableCommandFailure(3251,"Leere und Wildcard-FindRecord-Suchen sind noch nicht implementiert.");
+        if(!textValue && mode!=1) return tableCommandFailure(3251,"Typisierte FindRecord-Suche unterstützt nur ganze Feldwerte.");
+        QPointer<linaccess::AccessTableView> table;
+        for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
+        QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
+        if(!table || !model || !table->currentIndex().isValid()) return tableCommandFailure(2046,"Kein aktuelles Tabellenfeld für FindRecord.");
+        const int column=table->currentIndex().column();
+        if(table->isColumnHidden(column) || !linaccess::nativeFindSupports(sought,model->fieldSqlType(column)))
+            return tableCommandFailure(3251,"FindRecord-Suchwert und aktueller Feldtyp passen nicht zum unterstützten Teilumfang.");
+        linaccess::NativeTableFindArguments arguments{text,column,mode,sensitive,first ? 1 : 2,direction};
+        if(!textValue) arguments.value=sought;
+        if(table->findText(std::move(arguments))<0) return tableModelFailure(model,2501);
+        return {{"handled",true},{"error",0}};
+    } catch(const linaccess::VbaRuntimeError& error) { return tableCommandFailure(error.number,QString::fromUtf8(error.what())); }
 }
 
 QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int offset,bool explicitTable) {

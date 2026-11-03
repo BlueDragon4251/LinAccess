@@ -7,8 +7,9 @@ and retains the field in the manual-submit cache without immediately writing SQL
 A dialog's search reactivates its owning page when necessary, using the existing
 source validation/modal guards. Me stays bound to the original caller form.
 
-The dialog searches visible declared TEXT/CHAR/CLOB columns, either one field or
-all available text fields. Matching is literal, with part/whole/start modes and
+The text scope searches visible declared TEXT/CHAR/CLOB columns, either one field
+or all available text fields. Individual typed numeric/Currency/Date/Boolean
+fields are specified in [TYPED_FIND_RUNTIME.md](TYPED_FIND_RUNTIME.md). Matching is literal, with part/whole/start modes and
 Qt case-sensitive or case-insensitive comparison. First search includes the
 current row; repeated searches advance through actual view order. SearchAll wraps;
 Up/Down stop at the record boundary.
@@ -17,9 +18,9 @@ FindNext without a prior nonempty search is 2046. Empty tables can open Find.
 
 The real model fetches rows past Qt's initial SQL batch. Search is bounded to one
 million text cells, with no partial-result success when the budget is exceeded.
-NULL/BLOB values and hidden rows/columns are skipped. Numeric/date/display-format,
-Jet wildcard/Windows collation and Replace are not
-implemented by this text-search increment. Bounded programmatic DoCmd.FindRecord
+NULL/BLOB values and hidden rows/columns are skipped. Display-format,
+Jet wildcard/Windows collation and Replace are not implemented by this text-search
+increment. Bounded programmatic DoCmd.FindRecord
 is specified separately in [FIND_RECORD_RUNTIME.md](FIND_RECORD_RUNTIME.md).
 
 Before scanning, the production controller saves a sole changed existing current

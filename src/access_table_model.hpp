@@ -19,6 +19,8 @@ public:
     bool canSubmitCurrentRecordAlone(int row) const;
     bool rejectEdit(int number,const QString& message);
     bool isTextColumn(int column) const;
+    bool isSearchableColumn(int column) const;
+    QString fieldSqlType(int column) const;
     bool setReadOnly(bool value);
     bool isReadOnly() const { return readOnly_; }
     void sort(int column,Qt::SortOrder order=Qt::AscendingOrder) override;

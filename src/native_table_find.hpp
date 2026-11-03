@@ -1,4 +1,5 @@
 #pragma once
+#include "native_find_value.hpp"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
@@ -19,14 +20,16 @@ struct NativeTableFindArguments {
     bool sensitive{};
     int origin{}; // 0: continue dialog search, 1: first record, 2: next record.
     int direction{2}; // AcSearchDirection: Up=0, Down=1, All=2.
+    std::optional<VbaValue> value;
 };
-inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString,int>>& columns,
+inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString,int>>& columns,const QMap<int,QString>& typedHints,
                                      NativeTableFindArguments initial,std::function<QString(NativeTableFindArguments)> search) {
     auto* dialog=new QDialog(owner);
     dialog->setObjectName("native-table-find-dialog"); dialog->setWindowTitle("Suchen"); dialog->setAttribute(Qt::WA_DeleteOnClose);
     auto* box=new QVBoxLayout(dialog); auto* fields=new QFormLayout;
     auto* text=new QLineEdit(dialog); text->setObjectName("native-table-find-text"); text->setMaxLength(std::numeric_limits<int>::max()); text->setText(initial.text);
-    auto* scope=new QComboBox(dialog); scope->setObjectName("native-table-find-field"); scope->addItem("Alle sichtbaren Textfelder",-1);
+    auto* scope=new QComboBox(dialog); scope->setObjectName("native-table-find-field");
+    if(typedHints.size()<columns.size()) scope->addItem("Alle sichtbaren Textfelder",-1);
     for(const auto& column:columns) scope->addItem(column.first,column.second);
     const int selected=scope->findData(initial.column); if(selected>=0) scope->setCurrentIndex(selected);
     auto* match=new QComboBox(dialog); match->setObjectName("native-table-find-match"); match->addItems({"Teil des Feldinhalts","Ganzes Feld","Feldanfang"}); match->setCurrentIndex(initial.mode);
@@ -35,7 +38,15 @@ inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString
     direction->addItem("Alle Datensätze",2); direction->addItem("Nach unten",1); direction->addItem("Nach oben",0); direction->setCurrentIndex(direction->findData(initial.direction));
     fields->addRow("Suchen nach:",text); fields->addRow("Suchen in:",scope); fields->addRow("Vergleichen:",match);
     fields->addRow("Suchrichtung:",direction);
-    box->addLayout(fields); box->addWidget(sensitive); box->addWidget(new QLabel("Text wird wörtlich gesucht.",dialog));
+    box->addLayout(fields); box->addWidget(sensitive);
+    auto* hint=new QLabel(dialog); hint->setObjectName("native-table-find-hint"); hint->setWordWrap(true); box->addWidget(hint);
+    const auto updateField=[scope,match,sensitive,hint,typedHints] {
+        const auto column=scope->currentData().toInt(); const bool exact=typedHints.contains(column);
+        if(exact) match->setCurrentIndex(1);
+        match->setEnabled(!exact); sensitive->setEnabled(!exact);
+        hint->setText(exact ? typedHints.value(column) : QStringLiteral("Text wird wörtlich gesucht."));
+    };
+    QObject::connect(scope,&QComboBox::currentIndexChanged,dialog,[updateField](int) { updateField(); }); updateField();
     auto* result=new QLabel(dialog); result->setObjectName("native-table-find-result"); result->setWordWrap(true); box->addWidget(result);
     auto* buttons=new QHBoxLayout; auto* next=new QPushButton("&Weitersuchen",dialog); next->setObjectName("native-table-find-next"); next->setDefault(true);
     auto* close=new QPushButton("&Schließen",dialog); close->setObjectName("native-table-find-close"); buttons->addWidget(next); buttons->addWidget(close); box->addLayout(buttons);
