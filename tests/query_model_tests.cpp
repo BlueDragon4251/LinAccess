@@ -40,6 +40,9 @@ int main(int argc, char** argv) {
         assert(reversed.data(reversed.index(0,3)).toDouble()==1 && reversed.data(reversed.index(0,4)).toDouble()==0);
         assert(!query.exec("SELECT linaccess_jet_log(0)"));
         assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==5); query.finish();
+        reversed.execute(db,"SELECT UCase(label),LCase(UCase(label)),UCase(Null) FROM samples WHERE id=1");
+        assert(reversed.data(reversed.index(0,0)).toString()=="ONE" && reversed.data(reversed.index(0,1)).toString()=="one");
+        assert(reversed.data(reversed.index(0,2)).isNull());
         reversed.execute(db,"SELECT Val(label),Val(' 1 2.5 tail'),Val('&HFFFF'),Val('1,5') FROM samples WHERE id=1");
         assert(reversed.data(reversed.index(0,0)).toDouble()==0 && reversed.data(reversed.index(0,1)).toDouble()==12.5);
         assert(reversed.data(reversed.index(0,2)).toInt()==-1 && reversed.data(reversed.index(0,3)).toDouble()==1);

@@ -285,6 +285,9 @@ void testCharacterFunctions() {
     using namespace linaccess;
     FakeForm host;
     const auto eval=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,{}); };
+    assert(eval("UCase$(String:=\"aBc 09!\")").asText()=="ABC 09!" && eval("LCase(\"ABC\")").asText()=="abc");
+    assert(eval("LCase(Null)").kind==VbaValue::Kind::Null && eval("UCase(Empty)").asText().empty());
+    assert(eval("Len(UCase(Chr(0) & \"ab\"))").asNumber()==3);
     assert(eval("Hex(Number:=459)").asText()=="1CB" && eval("Oct$(459)").asText()=="713");
     assert(eval("Hex$(-1)").asText()=="FFFFFFFF" && eval("Oct(-1)").asText()=="37777777777");
     assert(eval("Hex(Empty)").asText()=="0" && eval("Hex(10.5)").asText()=="A");
@@ -307,6 +310,7 @@ void testCharacterFunctions() {
     assert(evaluateVbaExpression("Asc(probe)",host,{{"probe",VbaValue::reference(probe)}}).number==65 && probe->reads==1);
     probe->value=VbaValue::numeric(937); assert(evaluateVbaExpression("ChrW(probe)",host,{{"probe",VbaValue::reference(probe)}}).asText()=="Ω" && probe->reads==2);
     for(const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
+        {"UCase$(Null)",94},{"LCase()",450},{"UCase(\"ö\")",3251},
         {"Space(Null)",94},{"Space$(Null)",94},{"Hex$(Null)",94},{"Oct(2147483648)",6},{"Hex(1,2)",450},
         {"Space(-1)",5},{"Space(1000001)",3251},{"String(2,\"\")",5},{"String$(2,Null)",94},
         {"String(2,128)",3251},{"String(2)",450},{"Space(2147483648)",6},

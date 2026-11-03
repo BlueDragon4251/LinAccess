@@ -3043,3 +3043,15 @@ Desktop affected targets build. No new target or full-suite/package repeat for
 this increment; grouped baseline remains f574057 (48/48 and checked package).
 Reference: Microsoft Learn Val function, including &HFFFF=-1, embedded spaces,
 period-only decimal recognition and 50.5% type mismatch.
+
+
+## Native bounded case conversion (2026-11-03)
+
+LCase/UCase now preserve Variant Null; their new dollar variants reject Null with
+94. Named String arguments, scalar/default-property conversion, checked arity,
+embedded NUL and native SQL registration are implemented. ASCII conversion uses
+explicit ranges rather than process-locale byte transforms. Valid non-ASCII text
+raises 3251 because Windows locale mapping is not implemented; malformed UTF-8
+raises 13. This replaces the former misleading unchanged/nonportable byte result,
+not a claim of full Unicode/collation parity. Existing core/DAO/query-model checks
+pass 3/3 (1.64 s). Desktop affected targets build; GUI-free build/test passes 1/1 (1.36 s). No new target/full-suite/package repeat.

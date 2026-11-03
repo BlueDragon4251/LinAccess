@@ -759,6 +759,8 @@ private:
                     {"inputbox$",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
                     {"sqr",{{"Number"},1}}, {"exp",{{"Number"},1}}, {"log",{{"Number"},1}},
                     {"sin",{{"Number"},1}}, {"cos",{{"Number"},1}}, {"tan",{{"Number"},1}}, {"atn",{{"Number"},1}},
+                    {"lcase",{{"String"},1}}, {"lcase$",{{"String"},1}},
+                    {"ucase",{{"String"},1}}, {"ucase$",{{"String"},1}},
                     {"val",{{"String"},1}},
                     {"hex",{{"Number"},1}}, {"hex$",{{"Number"},1}},
                     {"oct",{{"Number"},1}}, {"oct$",{{"Number"},1}},
@@ -1290,6 +1292,23 @@ private:
                 }
                 return result;
             }
+            if(word=="lcase" || word=="lcase$" || word=="ucase" || word=="ucase$") {
+                if(!host_) return {};
+                if(args.size()!=1 || omitted[0]) throw error("Case conversion requires one argument",450);
+                const auto value=scalarObjectValue(args[0]);
+                if(value.kind==VbaValue::Kind::Null) {
+                    if(word.back()=='$') throw error("Invalid Null case argument",94);
+                    return {};
+                }
+                auto text=value.asText(); (void)utf16String(text);
+                const bool upper=word.starts_with("ucase");
+                for(auto& ch:text) {
+                    if(static_cast<unsigned char>(ch)>127) throw error("Non-ASCII case conversion requires a Windows locale adapter",3251);
+                    if(upper && ch>='a' && ch<='z') ch-=('a'-'A');
+                    else if(!upper && ch>='A' && ch<='Z') ch+=('a'-'A');
+                }
+                return VbaValue::string(std::move(text));
+            }
             if(word=="val") {
                 if(!host_) return {};
                 if(args.size()!=1 || omitted[0]) throw error("Val requires one argument",450);
@@ -1351,8 +1370,6 @@ private:
                 return result;
             }
             if ((word == "isnull" || word == "isempty" || word == "len" || word == "cstr"
-                || word == "ucase"
-                || word == "lcase"
                 || word == "isnumeric") && one) {
                 if (!host_) return {};
                 const auto& value = args[0];
@@ -1371,11 +1388,6 @@ private:
                     try { (void)value.asNumber(); return VbaValue::logical(true); }
                     catch (...) { return VbaValue::logical(false); }
                 }
-                auto result = value.asText();
-                std::transform(result.begin(), result.end(), result.begin(), [&](unsigned char ch) {
-                    return word == "ucase" ? std::toupper(ch) : std::tolower(ch);
-                });
-                return VbaValue::string(result);
             }
             if (word == "nz" && (args.size() == 1 || args.size() == 2)) {
                 if (!host_) return {};
