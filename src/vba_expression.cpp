@@ -1190,6 +1190,7 @@ private:
                     : value.kind==VbaValue::Kind::Date ? 7 : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
                     : (value.kind==VbaValue::Kind::Error || value.kind==VbaValue::Kind::Missing) ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : value.kind==VbaValue::Kind::Array ? vbaArrayType(value) : 11;
                 if (word=="vartype") return VbaValue::integer(static_cast<std::int16_t>(type));
+                if(isVbaArray(value)) return VbaValue::string(vbaArrayTypeName(value));
                 if (type==9) {
                     if (!value.object) return VbaValue::string("Nothing");
                     if(!value.object->className().empty()) return VbaValue::string(std::string(value.object->className()));
@@ -1228,6 +1229,7 @@ private:
                 if(args.size()<2 || args.size()>4 || omitted[0] || omitted[1]) throw error("Filter requires two to four arguments",450);
                 if(args[0].kind==VbaValue::Kind::Null) throw error("Invalid Null Filter array",94);
                 if(args[0].kind!=VbaValue::Kind::Array || vbaArrayRank(args[0])!=1) throw error("Filter requires a one-dimensional String or Variant array",13);
+                if(vbaArrayType(args[0])!=8200 && vbaArrayType(args[0])!=8204) throw error("Filter typed array element type is not implemented",3251);
                 const auto match=scalarObjectValue(args[1]);
                 if(match.kind==VbaValue::Kind::Null) throw error("Invalid Null Filter match",94);
                 const auto needle=utf16String(match.asText());
@@ -1268,6 +1270,7 @@ private:
                 const auto delimiter=values.size()>1 && !omitted[1] ? values[1].asText() : " ";
                 if(!split) {
                     if(values[0].kind!=VbaValue::Kind::Array || vbaArrayRank(values[0])!=1) throw error("Join requires a one-dimensional Variant or String array",13);
+                    if(vbaArrayType(values[0])!=8200 && vbaArrayType(values[0])!=8204) throw error("Join typed array element type is not implemented",3251);
                     (void)utf16String(delimiter);
                     std::string output; bool first=true;
                     for(const auto& item:vbaArrayValues(values[0])) {

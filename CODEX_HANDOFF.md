@@ -795,3 +795,17 @@ DAO-Default nicht aus ADO ableiten. Keine MDB/OLE-Importbehauptung. Details:
 DAO_GETROWS_RUNTIME.md und VARIANT_ARRAY_RUNTIME.md. Gesamtsuite 48/48 (92,36 s),
 frisch GUI-frei 1/1 (1,50 s), Debian-Paket und vier Original-SHA-256 bestanden.
 343 erledigte / 72 offene erfasste Checklist-Punkte, keine Gesamtparitätsquote.
+
+## Typisiertes ReDim in Variant-Containern (2026-11-03)
+
+Vorhandene Variant-Variablen akzeptieren ReDim ... As Byte/Integer/Long/Single/
+Double/Currency/Date/Boolean/String/Variant mit echten typisierten Anfangswerten,
+geprüften Elementzuweisungen und passendem VarType/TypeName. Ohne As bleibt der
+Elementtyp erhalten; Non-Preserve initialisiert neu, Preserve erhält Werte/Typ
+und die bekannten Dimensionsgrenzen. Neuer typisierter Variablen-Declaration-
+Pfad bleibt 3251: feste/dynamische/typisierte Deklarationen nicht als erledigt
+behaupten. Object/UDT/feste Strings und vollständige Byte-Enumeration/Erase sind
+offen. Numerische typisierte Join/Filter-Pfade bleiben ausdrücklich 3251.
+VARIANT_ARRAY_RUNTIME.md ist der Umfang. Vollsuite 48/48 (89,81 s), frisch
+GUI-frei 1/1 (1,45 s), Debian-Paket und vier Original-SHA-256 bestanden;
+keine neuen Testziele. 344 erledigte / 72 offene erfasste Punkte, keine Gesamtquote.

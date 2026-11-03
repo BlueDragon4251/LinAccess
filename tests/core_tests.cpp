@@ -2517,6 +2517,55 @@ End Sub
         assert(host.fields["MatrixCube"]=="4:5:42" && host.fields["MatrixBase"]=="1:1:55");
         host.bracketHost=previousBracketHost;
     }
+    const auto typedMatrix=executeVbaProcedure(R"VBA(Sub TypedMatrices()
+Dim a As Variant
+Dim saved As Variant
+On Error Resume Next
+ReDim undeclaredTyped(0) As Long
+Me!TypedDeclarationError=CStr(Err.Number)
+On Error GoTo 0
+ReDim a(0 To 1,1 To 2) As Integer
+a(1,2)=2.5
+saved=a
+Me!TypedMatrix=TypeName(a) & ":" & CStr(VarType(a)) & ":" & CStr(VarType(a(0,1))) & ":" & CStr(a(0,1)) & ":" & CStr(a(1,2))
+On Error Resume Next
+a(1,2)=40000
+Me!TypedOverflow=CStr(Err.Number)
+Err.Clear
+ReDim Preserve a(0 To 1,1 To 3) As Long
+Me!TypedPreserveError=CStr(Err.Number)
+On Error GoTo 0
+ReDim Preserve a(0 To 1,1 To 3) As Integer
+Me!TypedPreserved=CStr(a(1,2)) & ":" & CStr(a(1,3)) & ":" & CStr(UBound(saved,2))
+ReDim a(0 To 1) As String
+a(0)=42
+ReDim Preserve a(0 To 2) As String
+Me!TypedText=TypeName(a) & ":" & Join(a,"|")
+ReDim a(0 To 1)
+Me!TypedReset=TypeName(a) & ":" & Join(a,"|")
+ReDim a(0 To 1) As Byte
+a(1)=255
+Me!TypedBytes=TypeName(a) & ":" & CStr(VarType(a)) & ":" & CStr(VarType(a(1))) & ":" & CStr(a(1))
+ReDim a(0) As Currency
+a(0)="1.23455"
+Me!TypedMoney=TypeName(a) & ":" & CStr(VarType(a(0))) & ":" & CStr(a(0))
+On Error Resume Next
+Me!TypedNumericJoin=Join(a)
+Me!TypedNumericJoinError=CStr(Err.Number)
+On Error GoTo 0
+ReDim a(0) As Date
+Me!TypedDate=TypeName(a) & ":" & CStr(VarType(a(0))) & ":" & CStr(CDbl(a(0)))
+ReDim a(0) As Boolean
+a(0)=1
+Me!TypedBoolean=TypeName(a) & ":" & CStr(VarType(a(0))) & ":" & CStr(a(0))
+End Sub
+)VBA","TypedMatrices",host);
+    assert(typedMatrix.status==VbaExecutionStatus::Completed);
+    assert(host.fields["TypedDeclarationError"]=="3251");
+    assert(host.fields["TypedMatrix"]=="Integer():8194:2:0:2" && host.fields["TypedOverflow"]=="6" && host.fields["TypedPreserveError"]=="13");
+    assert(host.fields["TypedPreserved"]=="2:0:2" && host.fields["TypedText"]=="String():42||" && host.fields["TypedReset"]=="String():|");
+    assert(host.fields["TypedBytes"]=="Byte():8209:17:255" && host.fields["TypedMoney"]=="Currency():6:1.2346" && host.fields["TypedDate"]=="Date():7:0" && host.fields["TypedBoolean"]=="Boolean():11:True");
+    assert(host.fields["TypedNumericJoinError"]=="3251" && !host.fields["TypedNumericJoin"]);
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub

@@ -2167,3 +2167,16 @@ DAO_GETROWS_RUNTIME.md and VARIANT_ARRAY_RUNTIME.md specify defaults/typed-array
 provider boundaries. Existing full suite 48/48 (92.36 s), rebuilt GUI-free core
 1/1 (1.50 s), Debian package and all four fixture hashes pass; no new targets.
 Checklist: 343 checked / 72 open scoped points, not overall Access parity.
+
+## Primitive typed ReDim in Variant containers (2026-11-03)
+
+Existing Variant variables support ReDim As Byte/Integer/Long/Single/Double/
+Currency/Date/Boolean/String/Variant with actual typed defaults, checked element
+coercion, VarType/TypeName and retained type on omitted As. Non-Preserve clears
+values; Preserve retains values/type and existing dimension restrictions.
+Fresh typed declaration through ReDim remains 3251 rather than pretending to
+implement typed variable declarations. Numeric typed Join/Filter stay outside
+the bounded String/Variant path. VARIANT_ARRAY_RUNTIME.md defines the scope.
+Full desktop 48/48 (89.81 s), freshly rebuilt GUI-free core 1/1 (1.45 s), Debian
+package and four original fixture hashes pass; no new targets. Checklist:
+344 checked / 72 open scoped points, not total Access parity.

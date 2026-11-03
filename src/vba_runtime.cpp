@@ -783,6 +783,13 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             if(lower(declaration).starts_with("preserve ") || lower(declaration).starts_with("preserve\t")) {
                 preserve=true; declaration=trim(declaration.substr(8));
             }
+            std::string elementType;
+            if(const auto as=outsideKeyword(declaration,"as");as!=std::string::npos) {
+                elementType=lower(trim(declaration.substr(as+2))); declaration=trim(declaration.substr(0,as));
+                if(elementType!="variant" && elementType!="byte" && elementType!="integer" && elementType!="long" && elementType!="single"
+                    && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string")
+                    return {VbaExecutionStatus::Unsupported,"ReDim element type unsupported",line};
+            }
             const auto target=memberTarget(declaration);
             if(!target || !target->arguments) return {VbaExecutionStatus::Unsupported,"Invalid Variant ReDim target",line};
             const auto dimensions=splitArguments(*target->arguments);
@@ -794,7 +801,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 if((!lowerBound.empty() && !validExpression(lowerBound)) || !validExpression(upperBound))
                     return {VbaExecutionStatus::Unsupported,"Invalid ReDim bounds",line};
             }
-            statements.push_back({Statement::Type::ResizeArray,target->name,*target->arguments,line,{},preserve ? "preserve" : ""});
+            statements.push_back({Statement::Type::ResizeArray,target->name,*target->arguments,line,elementType,preserve ? "preserve" : ""});
         } else if (lower(source).starts_with("erase ") || lower(source).starts_with("erase\t")) {
             const auto target=memberTarget(trim(source.substr(5)));
             if(!target || target->arguments) return {VbaExecutionStatus::Unsupported,"Only a single Variant array Erase is implemented",line};
@@ -1619,6 +1626,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if(active) {
                     const auto name=lower(instruction.argument),type=variableType(name);
                     if(type=="paramarray") throw VbaRuntimeError(3251,"ParamArray resize is not implemented");
+                    if(!instruction.endExpression.empty() && type.empty() && !locals.contains(name))
+                        throw VbaRuntimeError(3251,"Typed ReDim requires an existing Variant variable");
                     if(!type.empty() && type!="variant") throw VbaRuntimeError(13,"ReDim requires a Variant variable");
                     std::vector<VbaArrayDimension> bounds;
                     for(const auto& dimension:splitArguments(instruction.expression)) {
@@ -1630,7 +1639,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     refreshAliases();
                     const auto found=locals.find(name);
                     const auto original=found==locals.end() ? VbaValue::empty() : found->second;
-                    assignVariable(name,resizeVbaArrayWithBounds(original,std::move(bounds),instruction.stepExpression=="preserve"));
+                    assignVariable(name,resizeVbaArrayWithBounds(original,std::move(bounds),instruction.stepExpression=="preserve",instruction.endExpression));
                 }
                 break;
             case Statement::Type::EraseArray:
@@ -1665,7 +1674,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (!active) { ip = static_cast<std::size_t>(instruction.partner); break; }
                 const auto collection = evaluate(instruction.expression);
                 if(isVbaArray(collection)) {
-                    if(collection.kind!=VbaValue::Kind::Array) throw VbaRuntimeError(3251,"For Each Byte arrays is not implemented");
+                    if(collection.kind!=VbaValue::Kind::Array || vbaArrayType(collection)==8209) throw VbaRuntimeError(3251,"For Each Byte arrays is not implemented");
                     const auto name=lower(instruction.argument),type=variableType(name);
                     if(!type.empty() && type!="variant") throw VbaRuntimeError(13,"Array For Each control must be Variant");
                     LoopFrame loop{static_cast<int>(ip)};
