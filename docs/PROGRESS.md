@@ -3482,3 +3482,17 @@ checks pass; all four original fixture hashes pass. Existing 48 targets only;
 no Access/Windows clipboard or complete parity claim. CLI authentication is
 still unavailable; local checkpoints are secured while an authenticated private
 GitHub API transfer is investigated.
+
+
+## Private Git API checkpoint published (2026-11-03)
+
+The authenticated GitHub connector published d94ec0382b637dac6d306d5af87f02e8a8756c19
+on development/access-compatibility without force. It contains the exact tested
+source tree 9ab113b0ba92d0021944b5ef4b6a5b2e8a13fe33 of local b96e7a6: all 25
+changed blob hashes and the complete tree match. Remote head and private
+visibility were verified. This publishes the previously pending optional/nested
+Collection, LenB, editor/datasheet and joined-update diagnostic increments.
+48/48 CTests (87.26 s), GUI-free core, Debian checks and all four fixture hashes
+pass. Local individual commits are preserved; API and local metadata/history
+differ until normal Git synchronization becomes available. No credential values
+were inspected or changed. See CODEX_HANDOFF.md for safe continuation.
