@@ -1,5 +1,6 @@
 #pragma once
 #include "access_table_model.hpp"
+#include "native_grid_clipboard.hpp"
 #include "vba_runtime.hpp"
 #include "csv.hpp"
 #include "native_clock_keys.hpp"
@@ -187,33 +188,10 @@ public:
     bool copySelection() {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !selectionModel() || !finishEditing()) return false;
-        const auto selected=selectionModel()->selectedIndexes();
-        if(selected.isEmpty()) return false;
-        if(selected.size()>1000000) return refuse(3251,"Die Auswahl ist für die Textzwischenablage zu groß.");
-        int top=std::numeric_limits<int>::max(),left=top,bottom=-1,right=-1;
-        for(const auto& index:selected) {
-            if(isRowHidden(index.row()) || isColumnHidden(index.column())) return refuse(3251,"Ausgeblendete Zellen werden nicht in die Textzwischenablage übernommen.");
-            top=qMin(top,index.row()); bottom=qMax(bottom,index.row()); left=qMin(left,index.column()); right=qMax(right,index.column());
-        }
-        if(static_cast<qint64>(bottom-top+1)*(right-left+1)!=selected.size())
-            return refuse(3251,"Zum Kopieren einen zusammenhängenden rechteckigen Bereich auswählen.");
-        QString output;
         try {
-            for(int row=top;row<=bottom;++row) {
-                if(row>top) output+="\r\n";
-                for(int column=left;column<=right;++column) {
-                    if(column>left) output+='\t';
-                    auto text=typed->clipboardText(typed->index(row,column));
-                    if(text.contains(QChar(0))) return refuse(3251,"Nullzeichen werden in der Textzwischenablage noch nicht unterstützt.");
-                    if(text.contains('\t') || text.contains('\r') || text.contains('\n') || text.contains('"')) {
-                        text.replace("\"","\"\""); text='"'+text+'"';
-                    }
-                    if(output.size()+text.size()>4*1024*1024) return refuse(3251,"Der Text ist für die Zwischenablage zu groß.");
-                    output+=text;
-                }
-            }
-        } catch(const VbaRuntimeError& error) { return refuse(error.number,"Dieser Zellwert kann noch nicht verlustfrei als Text kopiert werden."); }
-        QApplication::clipboard()->setText(output);
+            const auto output=nativeGridClipboardText(*this,[typed](const QModelIndex& index) { return typed->clipboardText(index); });
+            QApplication::clipboard()->setText(output);
+        } catch(const VbaRuntimeError& error) { return refuse(error.number,"Die Auswahl kann nicht verlustfrei als Text kopiert werden."); }
         return true;
     }
     bool zoomCurrentCell() {

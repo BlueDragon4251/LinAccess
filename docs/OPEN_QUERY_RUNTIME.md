@@ -34,8 +34,8 @@ parameter cancel/checked Currency, rejects action queries without data changes,
 and verifies a query remains after its VBA opener closes itself. No new targets.
 
 This is a bounded readonly datasheet path. Default/acEdit updateability, other
-views, action-query UI/warnings, query record navigation/Save/Copy/Find,
-SelectObject query activation, linked/provider behavior and complete Access
+views, action-query UI/warnings, query Save/Find,
+linked/provider behavior and complete Access
 window/event/error-priority parity remain open. SQL compatibility remains the
 executor's measured subset; query presence is not execution compatibility.
 
@@ -58,3 +58,32 @@ The existing main-window target covers fresh SQL values/definitions, actual
 Shift+F9, parameter cancellation/conversion and an actual SQLite scalar callback
 that requests reentry/project close and destroys the original page mid-query.
 These are native lifetime guarantees, not an Access-wide reentrancy claim.
+
+## Navigation, activation and clipboard
+
+Default-target GoToRecord and the first/previous/next/last RunCommand commands
+navigate the actual materialized query result. Explicit acDataQuery with named
+or active query targets supports the same actions and acGoTo offsets. Field
+position is retained; unavailable records return 2105 without moving, acNewRec
+returns 2448 on readonly results. Explicit acDataTable never targets a query.
+DoCmd.SelectObject acQuery activates an existing named tab case-insensitively,
+validating the departing document and preserving caller Me. Missing open query
+selection currently refuses 3251; exact Access closed-query errors remain open.
+
+RunCommand SelectRecord/SelectAllRecords select actual rows/cells. Copy, Ctrl+C
+and Ctrl+Insert export the selected contiguous rectangle as quoted TSV through
+the same bounded formatter used by native tables. Query cell conversion uses
+actual SQL values and proven type metadata; Null is empty, doubles use roundtrip
+precision, binary/unrepresentable values fail before changing the clipboard.
+Hidden/disjoint selections, NUL, over one million cells and over four MiB UTF-16
+text refuse explicitly. This is text interchange, not Access record MIME parity.
+Native SendKeys uses actual focused query controls through the existing project
+scope/FIFO dispatcher; no global OS injection or inactive-caller fallback.
+
+The existing main-window target checks VBA navigation, boundaries/readonly
+rejection, named target activation across two query tabs, actual Ctrl+C/Ctrl+Insert,
+hidden-cell refusal, select-record/all and real SendKeys copy. No new test targets.
+Full desktop suite 48/48 (91.62 s), GUI-free core 1/1 (1.54 s), Debian package
+payload/permissions/Build-ID/pinned SQLite and all four original fixture SHA-256
+checks pass. Query editing, Find, native query sort/filter and full Access
+window/event/keyboard semantics remain open.

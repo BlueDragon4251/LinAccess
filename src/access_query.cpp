@@ -1606,6 +1606,16 @@ QVariant AccessQueryModel::data(const QModelIndex& index, int role) const {
     }
     return value;
 }
+QString AccessQueryModel::clipboardText(const QModelIndex& index) const {
+    if(!index.isValid() || index.model()!=this || index.row()<0 || index.row()>=rowCount() || index.column()<0 || index.column()>=columnCount())
+        throw VbaRuntimeError(5,"Invalid query clipboard cell");
+    const auto raw=result_.rows[index.row()][index.column()];
+    if(raw.isNull()) return {};
+    if(raw.metaType().id()==QMetaType::QByteArray) throw VbaRuntimeError(3251,"Binary query cells cannot be copied as text");
+    const auto value=qtFieldValue(raw,result_.types.value(result_.columns[index.column()].toCaseFolded()));
+    if(value.kind==VbaValue::Kind::Number) return QString::number(value.number,'g',std::numeric_limits<double>::max_digits10);
+    return QString::fromStdString(value.asText());
+}
 QVariant AccessQueryModel::headerData(int section, Qt::Orientation orientation, int role) const {
     if (role != Qt::DisplayRole || section < 0) return {};
     if (orientation == Qt::Vertical) return section < rowCount() ? QVariant(section+1) : QVariant{};

@@ -1005,3 +1005,8 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native query tabs outlive their opener, retain actual CurrentData IsLoaded/window focus, reuse existing documents and close by named/default DoCmd.Close or Ctrl+W/Ctrl+F4.
 
 - [x] Active readonly query Requery/Shift+F9 reload saved SQL and typed parameters, preserve old results on failure/cancel and prevent closed-document resurrection and same-query recursive execution.
+
+- [x] Readonly query documents support actual default/named acDataQuery record navigation, checked bounds/offsets, first/previous/next/last commands and readonly new-record rejection.
+- [x] SelectObject acQuery activates existing named native query tabs case-insensitively with document validation, independent caller identity and no silent reopen/requery.
+- [x] Query Copy/Ctrl+C/Ctrl+Insert uses real typed result cells and shared bounded TSV quoting; hidden/disjoint/binary/unrepresentable selections retain existing clipboard contents on failure.
+- [x] Native query SelectRecord/SelectAllRecords and scoped SendKeys address actual selected result cells and focused controls without falling back to the calling form.

@@ -724,3 +724,15 @@ Details/Grenzen: docs/OPEN_QUERY_RUNTIME.md. 332 geprüfte Checklist-Punkte,
 72 offene Punkte; keine Gesamtparitätsquote. Vollprüfung: Desktop 48/48
 (89,91 s), GUI-frei 1/1 (1,57 s), Debian-Paket und alle vier Original-SHA-256
 bestanden.
+
+## Native Abfrage-Navigation und Zwischenablage (2026-11-03)
+
+GoToRecord auf aktivem Abfrageergebnis und ausdrücklich acDataQuery (auch benannt),
+RunCommand erster/vorheriger/nächster/letzter Datensatz, SelectObject acQuery,
+SelectRecord/SelectAllRecords, Copy/Strg+C/Strg+Einfg und projektgebundene SendKeys
+arbeiten auf tatsächlichen Resultat-Tabs. Grenzen 2105, readonly-Neuanlage 2448;
+explizite Tabellenziele werden nicht auf Abfragen umgedeutet. TSV-Aufbereitung
+mit Tabellen geteilt, echte Typkonvertierung, kein Binär-/Hidden-/Disjoint-Export.
+Umfang/Grenzen: docs/OPEN_QUERY_RUNTIME.md. Vollprüfung 48/48 (91,62 s), GUI-frei
+1/1 (1,54 s), Debian-Paket und vier Original-SHA-256 bestanden; keine neuen
+Testziele. 336 erfasste erledigte / 72 offene Checklist-Punkte, keine Gesamtquote.

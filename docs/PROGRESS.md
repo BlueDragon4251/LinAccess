@@ -4055,3 +4055,17 @@ checked / 72 open scoped points, not a percentage of complete Access parity.
 Full desktop suite passes 48/48 (89.91 s), GUI-free core 1/1 (1.57 s),
 Debian payload/permissions/Build-ID/pinned SQLite and all four original fixture
 hashes pass. No new test targets.
+
+## Native query navigation, activation and clipboard (2026-11-03)
+
+Readonly saved-query result tabs now handle default and explicit acDataQuery
+GoToRecord, bounded record offsets, first/previous/next/last RunCommand and
+case-insensitive SelectObject acQuery activation without rerunning SQL. Actual
+record/all-cell selection, checked TSV Copy/Ctrl+C/Ctrl+Insert and scoped native
+SendKeys operate on the query document, preserving its VBA caller. Tables and
+queries share the bounded rectangle/quoting formatter. Unsupported binary,
+hidden/disjoint or unrepresentable clipboard values leave existing text intact.
+OPEN_QUERY_RUNTIME.md defines the scope and remaining query UI limitations.
+Existing full desktop suite 48/48 (91.62 s), GUI-free core 1/1 (1.54 s), Debian
+package and all four original fixture SHA-256 checks pass. No new test targets.
+Theoretical checklist: 336 checked / 72 open scoped points, not total Access parity.
