@@ -809,7 +809,9 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     };
     if(stopped()) return;
     if(windowMode<0 || windowMode>3) throw linaccess::VbaRuntimeError(3251,"Native window mode is not implemented");
-    if(dataMode!=-1 && dataMode!=1 && dataMode!=2) throw linaccess::VbaRuntimeError(3251,"Native data mode is not implemented");
+    if(dataMode<-1 || dataMode>2) throw linaccess::VbaRuntimeError(3251,"Native data mode is not implemented");
+    if(dataMode!=-1 && layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(3251,"DataMode requires a form");
+    if(dataMode==0) { layout_.dataEntry=true; layout_.allowAdditions=true; }
     if(dataMode==1 || dataMode==2) {
         if(layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(3251,"DataMode requires a form");
         if(dataMode==1) layout_.dataEntry=false;
@@ -2476,7 +2478,7 @@ void AccessFormPreview::openOtherForm(const QString& name,const QString& where,s
 
 void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where,std::optional<QString> openArgs,int windowMode,int dataMode) {
     if(windowMode<0 || windowMode>3) throw linaccess::VbaRuntimeError(3251,"Native window mode is not implemented");
-    if(dataMode!=-1 && dataMode!=1 && dataMode!=2) throw linaccess::VbaRuntimeError(3251,"Native data mode is not implemented");
+    if(dataMode<-1 || dataMode>2) throw linaccess::VbaRuntimeError(3251,"Native data mode is not implemented");
     const bool report=kind==linaccess::AccessDocumentKind::Report;
     if(report && dataMode!=-1) throw linaccess::VbaRuntimeError(3251,"DataMode requires a form");
     if (closing_ || closingProjects().contains(projectKey(db_))) throw linaccess::VbaRuntimeError(2501,"Project is closing");

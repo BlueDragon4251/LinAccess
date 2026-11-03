@@ -2821,3 +2821,17 @@ session versus physical counts, switches through VBA and toggles AllowAdditions.
 Desktop build and form_current_record pass (0.60 s). No new test target or
 full-suite/package repeat; previous grouped verification remains 992d082.
 See DATA_ENTRY_RUNTIME.md for external SQL/rollback/query/reference boundaries.
+
+## Native Add-mode opening (2026-11-03)
+
+OpenForm acFormAdd now creates the real direct-table DataEntry session and
+forces AllowAdditions before startup events, retaining imported edit/delete
+policies. The existing native GUI regression opens over pre-existing records,
+sees an empty entry recordset, enters/saves a real row and checks session versus
+physical table counts. The negative mode case now checks unsupported value 99.
+Core/GUI targets pass 2/2 (1.94 s), desktop build passes. After rebuilding the
+original-layout adapter, existing GUI/original-layout/real DAO targets pass 3/3
+(49.84 s). GUI-free build/test passes 1/1 (1.25 s). No new targets or full suite/
+package/distro repeat for this increment. Full Windows edit/delete override
+matrix, writable query entry and open-instance mode changes remain open; see
+FORM_DATA_MODE_RUNTIME.md. Last full 48/48/package evidence remains 992d082.

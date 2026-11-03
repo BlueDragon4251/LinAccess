@@ -129,6 +129,9 @@ End
         const QByteArray opener=R"VBA(Sub ReadOnlyOpen()
 DoCmd.OpenForm FormName:="read_only_form",DataMode:=acFormReadOnly
 End Sub
+Sub AddOpen()
+DoCmd.OpenForm FormName:="read_only_form",DataMode:=acFormAdd
+End Sub
 Sub EditableOpen()
 DoCmd.OpenForm FormName:="read_only_form",DataMode:=acFormEdit
 End Sub
@@ -173,6 +176,16 @@ End Sub
         assert(clone->item("id").asNumber()==101); clone->assign("Bookmark",oldBookmark); assert(clone->item("id").asNumber()==101);
         form->assign("Bookmark",oldBookmark); assert(form->item("id").asNumber()==101);
         assert(sql.exec("SELECT label FROM mode_records WHERE id=101") && sql.next() && sql.value(0).toString()=="edited"); sql.finish();
+        assert(caller.executeProcedure("ReadOnlyClose",args).status==linaccess::VbaExecutionStatus::Completed);
+        assert(caller.executeProcedure("AddOpen",args).status==linaccess::VbaExecutionStatus::Completed);
+        opened=nullptr;
+        for(auto* widget:QApplication::topLevelWidgets())
+            if(auto* candidate=dynamic_cast<AccessFormPreview*>(widget);candidate && candidate!=&caller && candidate->isVisible() && candidate->findChild<QLineEdit*>("access-control-label")) opened=candidate;
+        assert(opened); form=makePreviewFormObject(*opened);
+        assert(form->member("DataEntry",{}).truthy() && form->member("AllowAdditions",{}).truthy() && form->member("Recordset",{}).object->member("RecordCount",{}).asNumber()==0);
+        editor=opened->findChild<QLineEdit*>("access-control-label"); editor->setFocus(); QTest::keyClicks(editor,"added"); form->assign("Dirty",VbaValue::logical(false));
+        assert(form->item("label").asText()=="added" && form->member("Recordset",{}).object->member("RecordCount",{}).asNumber()==1);
+        assert(sql.exec("SELECT COUNT(*) FROM mode_records") && sql.next() && sql.value(0).toInt()==4); sql.finish();
         assert(caller.executeProcedure("ReadOnlyClose",args).status==linaccess::VbaExecutionStatus::Completed);
         assert(caller.close()); assert(sql.exec("DELETE FROM positions"));
     }

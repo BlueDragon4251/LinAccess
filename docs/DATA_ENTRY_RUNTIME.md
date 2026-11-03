@@ -13,7 +13,8 @@ the current record, removes active filter/sort state and restores all source
 rows; a new True transition starts a fresh entry session. Complex OR filters are
 grouped before combining the session predicate. VBA property routes preserve
 checked Boolean/Null handling; cancelled validation retains the previous mode.
-acFormEdit overrides imported DataEntry to False. acFormAdd remains unsupported.
+acFormEdit overrides imported DataEntry to False. Native acFormAdd now starts
+this direct-table entry session; see FORM_DATA_MODE_RUNTIME.md.
 
 Existing native GUI regression starts with pre-existing rows, performs real
 keyboard inserts and a primary-key update, checks the session recordset against
@@ -26,6 +27,7 @@ Writable query/join entry sources, arbitrary external SQL/rollback/rowid reuse,
 all requery/filter/event/window combinations and exact Access 2003 session
 reference behavior remain open. Unsupported active non-table sources fail
 explicitly before native opening. This is a UI/data-session policy, not database
-authorization. The last grouped 48/48/package evidence covers 992d082.
+authorization. The last grouped 48/48/package evidence covers 992d082; later original-fixture
+checks are recorded separately in PROGRESS.md.
 
 Reference: https://learn.microsoft.com/en-us/office/vba/api/access.form.dataentry

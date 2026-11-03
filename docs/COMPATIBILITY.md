@@ -975,7 +975,7 @@ mouse/accessibility/printing behavior are not claimed.
 
 OpenForm DataMode now supports native acFormEdit/acFormReadOnly policy overrides
 before startup events for newly opened forms; see FORM_DATA_MODE_RUNTIME.md.
-acFormAdd/DataEntry, changing mode on an already-open instance and full Windows
+Writable-query DataEntry, changing mode on an already-open instance and full Windows
 view/locking semantics remain open. Edit does not make read-only queries writable.
 
 Native CommandButton.Cancel now supports imported/template metadata, VBA
@@ -1001,5 +1001,6 @@ FORM_KEY_IDENTITY_RUNTIME.md.
 Native direct-table Form.DataEntry now imports/read/writes the actual entry
 session with bound SQL membership, real insert/key-change persistence and
 AllowAdditions dependency. DataEntry=False removes active filter/sort and restores
-all rows. Writable query entry sources and acFormAdd remain unsupported; see
+all rows. Writable query entry sources remain unsupported; native acFormAdd now starts
+this entry session with imported edit/delete policies retained. See
 DATA_ENTRY_RUNTIME.md for limits and verification.
