@@ -1442,7 +1442,9 @@ End Function
             {"long",VbaValue::string("bad"),13},{"integer",VbaValue::errorValue(11),13}}) {
             int actual=0; try { coerceVbaModuleValue(value,type); } catch(const VbaRuntimeError& failure) { actual=failure.number; } assert(actual==expected);
         }
-        int actual=0; try { createVbaModuleState("Public rows() As Long\n"); } catch(const VbaRuntimeError& failure) { actual=failure.number; } assert(actual==3251);
+        const auto dynamicState=createVbaModuleState("Public rows() As Long\n");
+        assert(dynamicState->types.at("rows")=="long()" && isVbaArray(dynamicState->values.at("rows")) && vbaArrayRank(dynamicState->values.at("rows"))==0);
+        int actual=0; try { createVbaModuleState("Public rows(10) As Long\n"); } catch(const VbaRuntimeError& failure) { actual=failure.number; } assert(actual==3251);
     }
 
     {
@@ -2566,6 +2568,142 @@ End Sub
     assert(host.fields["TypedPreserved"]=="2:0:2" && host.fields["TypedText"]=="String():42||" && host.fields["TypedReset"]=="String():|");
     assert(host.fields["TypedBytes"]=="Byte():8209:17:255" && host.fields["TypedMoney"]=="Currency():6:1.2346" && host.fields["TypedDate"]=="Date():7:0" && host.fields["TypedBoolean"]=="Boolean():11:True");
     assert(host.fields["TypedNumericJoinError"]=="3251" && !host.fields["TypedNumericJoin"]);
+    const auto declaredArrays=executeVbaProcedure(R"VBA(Option Base 1
+Sub RejectTypedReference(ByRef value As Variant)
+value=Empty
+End Sub
+Function ArrayUpper(ByVal value As Variant) As Long
+ArrayUpper=UBound(value)
+End Function
+Sub DeclaredArrays()
+Dim a() As Long, b() As Long, words() As String
+Dim bytes() As Byte, objects() As Object, values()
+Dim item As Variant, trail As String, inspection As Variant
+Me!DeclaredInitial=CStr(IsArray(a)) & ":" & TypeName(a) & ":" & CStr(VarType(a))
+On Error Resume Next
+Me!NoBound=LBound(a)
+Me!NoBoundError=CStr(Err.Number)
+On Error GoTo 0
+ReDim Preserve a(2)
+a(1)=7.5
+b=a
+a(1)=9
+inspection=a
+Me!DeclaredCopy=CStr(LBound(a)) & ":" & CStr(b(1)) & ":" & CStr(a(1)) & ":" & CStr(ArrayUpper(inspection))
+On Error Resume Next
+a="bad"
+Me!DeclaredScalarError=CStr(Err.Number)
+ReDim a(2) As String
+Me!DeclaredTypeError=CStr(Err.Number)
+Call RejectTypedReference(a)
+Me!DeclaredReferenceError=CStr(Err.Number)
+On Error GoTo 0
+Me!DeclaredRetained=CStr(a(1))
+Erase a
+Me!DeclaredErased=TypeName(a) & ":" & CStr(IsArray(a))
+On Error Resume Next
+Me!ErasedBound=UBound(a)
+Me!ErasedBoundError=CStr(Err.Number)
+On Error GoTo 0
+ReDim a(0 To 1,0 To 1)
+a(0,0)=1
+a(1,0)=2
+a(0,1)=3
+a(1,1)=4
+For Each item In a
+trail=trail & CStr(item)
+Next
+Me!DeclaredTraversal=trail
+ReDim words(0 To 1)
+words(0)=42
+Me!DeclaredStrings=Join(words,"|")
+ReDim bytes(0 To 1)
+bytes(1)=255
+Erase bytes
+Me!DeclaredByteErase=TypeName(bytes) & ":" & CStr(VarType(bytes))
+ReDim Preserve bytes(0 To 1)
+Me!DeclaredByteReset=CStr(bytes(1))
+ReDim objects(0 To 0)
+Set objects(0)=Nothing
+Me!DeclaredObjects=TypeName(objects) & ":" & CStr(VarType(objects(0)))
+ReDim values(0 To 0)
+values(0)=Null
+Me!DeclaredVariants=TypeName(values) & ":" & CStr(IsNull(values(0)))
+End Sub
+)VBA","DeclaredArrays",host);
+    if(declaredArrays.status!=VbaExecutionStatus::Completed) std::cerr<<"Declared array error="<<declaredArrays.errorNumber<<" line="<<declaredArrays.line<<"\n";
+    assert(declaredArrays.status==VbaExecutionStatus::Completed);
+    assert(host.fields["DeclaredInitial"]=="True:Long():8195" && host.fields["NoBoundError"]=="9");
+    assert(host.fields["DeclaredCopy"]=="1:8:9:2" && host.fields["DeclaredScalarError"]=="13" && host.fields["DeclaredTypeError"]=="13");
+    assert(host.fields["DeclaredReferenceError"]=="3251" && host.fields["DeclaredRetained"]=="9");
+    assert(host.fields["DeclaredErased"]=="Long():True" && host.fields["ErasedBoundError"]=="9" && host.fields["DeclaredTraversal"]=="1234");
+    assert(host.fields["DeclaredStrings"]=="42|" && host.fields["DeclaredByteErase"]=="Byte():8209" && host.fields["DeclaredByteReset"]=="0");
+    assert(host.fields["DeclaredObjects"]=="Object():9" && host.fields["DeclaredVariants"]=="Variant():True");
+    const auto arrayParameters=executeVbaProcedure(R"VBA(Sub FillDeclared(ByRef values() As Long)
+ReDim Preserve values(0 To 2)
+values(0)=11
+values(2)=33
+End Sub
+Sub ClearDeclared(values() As Long)
+Erase values
+End Sub
+Sub NeedsIntegers(values() As Integer)
+values(0)=999
+End Sub
+Function DeclaredTop(values() As Long) As Long
+DeclaredTop=UBound(values)
+End Function
+Function CopiedTop(ByVal value As Variant) As Long
+CopiedTop=UBound(value)
+End Function
+Sub ArrayParameters()
+Dim a() As Long, copy As Variant
+Call FillDeclared(a())
+Me!ArrayParameterValues=CStr(a(0)) & ":" & CStr(a(2)) & ":" & CStr(DeclaredTop(a()))
+copy=a()
+Me!ArrayParameterCopy=CStr(CopiedTop(copy))
+On Error Resume Next
+Call NeedsIntegers(a)
+Me!ArrayParameterMismatch=CStr(Err.Number)
+Me!DirectArrayValue=CopiedTop(a)
+Me!DirectArrayValueError=CStr(Err.Number)
+On Error GoTo 0
+Me!ArrayParameterRetained=CStr(a(0))
+Call ClearDeclared(a)
+On Error Resume Next
+Me!ArrayParameterBound=UBound(a)
+Me!ArrayParameterEraseError=CStr(Err.Number)
+On Error GoTo 0
+Me!ArrayParameterDetached=CStr(copy(2))
+End Sub
+)VBA","ArrayParameters",host);
+    if(arrayParameters.status!=VbaExecutionStatus::Completed) std::cerr<<"Array parameter error="<<arrayParameters.errorNumber<<" line="<<arrayParameters.line<<"\n";
+    assert(arrayParameters.status==VbaExecutionStatus::Completed && host.fields["ArrayParameterValues"]=="11:33:2" && host.fields["ArrayParameterCopy"]=="2");
+    assert(host.fields["ArrayParameterMismatch"]=="13" && host.fields["DirectArrayValueError"]=="3251" && host.fields["ArrayParameterRetained"]=="11");
+    assert(host.fields["ArrayParameterEraseError"]=="9" && host.fields["ArrayParameterDetached"]=="33");
+    const std::string declaredModuleArrays=R"VBA(Private retained() As Long
+Public visibleWords() As String
+Sub AllocateDeclaredModule()
+ReDim retained(2 To 3)
+retained(2)=41
+ReDim visibleWords(0 To 0)
+visibleWords(0)="retained"
+End Sub
+Sub ReadDeclaredModule()
+retained(2)=retained(2)+1
+Me!DeclaredModuleValue=CStr(retained(2)) & ":" & Join(visibleWords)
+End Sub
+Sub EraseDeclaredModule()
+Erase retained
+On Error Resume Next
+Me!ModuleBound=UBound(retained)
+Me!ModuleBoundError=CStr(Err.Number)
+End Sub
+)VBA";
+    assert(executeVbaProcedure(declaredModuleArrays,"AllocateDeclaredModule",host).status==VbaExecutionStatus::Completed);
+    assert(executeVbaProcedure(declaredModuleArrays,"ReadDeclaredModule",host).status==VbaExecutionStatus::Completed && host.fields["DeclaredModuleValue"]=="42:retained");
+    assert(executeVbaProcedure(declaredModuleArrays,"ReadDeclaredModule",host).status==VbaExecutionStatus::Completed && host.fields["DeclaredModuleValue"]=="43:retained");
+    assert(executeVbaProcedure(declaredModuleArrays,"EraseDeclaredModule",host).status==VbaExecutionStatus::Completed && host.fields["ModuleBoundError"]=="9");
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub

@@ -10,6 +10,7 @@ int vbaArrayType(const VbaValue& value);
 std::string vbaArrayTypeName(const VbaValue& value);
 std::vector<VbaValue> vbaArrayValues(const VbaValue& value);
 bool isVbaArray(const VbaValue& value);
+VbaValue makeUnallocatedVbaArray(std::string elementType="variant");
 VbaValue makeVbaArray(std::vector<VbaValue> values,int lowerBound=0);
 VbaValue makeVbaArrayWithBounds(std::vector<VbaValue> values,std::vector<VbaArrayDimension> bounds);
 std::size_t vbaArrayRank(const VbaValue& value);

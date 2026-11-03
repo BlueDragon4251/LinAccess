@@ -4178,3 +4178,19 @@ and DESC indexed keys refuse 3251. OPEN_QUERY_RUNTIME.md defines these bounds.
 Full suite 48/48 (89.83 s), freshly rebuilt GUI-free 1/1 (1.49 s), Debian payload/
 permissions/Build-ID/pinned SQLite and four original fixture hashes pass. No new
 targets. Scoped checklist 350 checked / 72 open, not total Access 2003 parity.
+
+
+## Declared dynamic arrays and real ByRef array parameters (2026-11-03)
+
+Local/module dynamic primitive/Object/Variant declarations retain type through
+unallocated state, checked bounds, Preserve and Erase. Module values persist
+across procedure calls. Required declared array parameters perform real matching-
+type caller writeback; a() denotes the whole array in VBA expression/call/copy
+paths. Current Microsoft VBA argument guidance informed the direct declared-
+array ByVal guard; explicit Variant copies remain detached. Fixed/class/Optional/
+COM and full enumeration/error precedence remain outside the bounded path.
+VARIANT_ARRAY_RUNTIME.md documents scope and primary references.
+Complete desktop 48/48 (93.65 s), fresh GUI-free core 1/1 (1.85 s), Debian payload/
+permissions/Build-ID/pinned SQLite and all four original fixture hashes pass.
+Existing core tests extended; no new CTest targets. Scoped checklist 354 checked /
+72 open, not total Access 2003 parity.
