@@ -1175,6 +1175,7 @@ public:
                 || !QMetaObject::invokeMethod(owner,"openTableDocument",Qt::DirectConnection,Q_RETURN_ARG(int,error),Q_ARG(QString,tableName),Q_ARG(int,view),Q_ARG(int,mode)))
                 throw linaccess::VbaRuntimeError(3251,"Native table opening is unavailable");
             if(error) throw linaccess::VbaRuntimeError(error,"Native table opening failed");
+            preview.setProperty("la_explicit_table_context",true);
             return {};
         }
         if (key=="gotocontrol") {

@@ -6,6 +6,7 @@
 #include <QSqlDatabase>
 #include <QStringList>
 #include <QPointer>
+#include <QVariantMap>
 
 class QTabWidget;
 class QTreeWidget;
@@ -22,6 +23,7 @@ public:
     Q_INVOKABLE void cycleDocument(bool backwards);
     Q_INVOKABLE int activateOpenTable(const QString& name);
     Q_INVOKABLE int openTableDocument(const QString& name,int view,int mode);
+    Q_INVOKABLE QVariantMap dispatchTableCommand(int command);
     Q_INVOKABLE int selectDatabaseObject(int objectType,const QString& name,bool activate);
 
 private:
@@ -37,6 +39,7 @@ private:
     bool finishActiveDataEditors();
     bool activateDataPage(QWidget* page);
     QWidget* findOpenTable(const QString& name) const;
+    QVariantMap saveDataPage(QWidget* page,bool interactive);
 
     bool canCloseDataPage(QWidget* page);
     bool hasProject();

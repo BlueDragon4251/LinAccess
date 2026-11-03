@@ -934,3 +934,7 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native DoCmd.OpenTable opens actual project datasheets in default/acEdit and acReadOnly modes, preserving explicit unsupported view/mode boundaries.
 - [x] Read-only table model guards block native writes/insert/delete/paste/submission and checkbox mutation; dirty policy changes preserve drafts.
 - [x] OpenTable native method binding supports named/omitted arguments and distinguishes Missing defaults from explicit Empty enum coercion.
+
+
+- [x] DoCmd/Application RunCommand SaveRecord commits the actual active native table through the shared UI transaction/selection helper, including specialized interpreter dispatch.
+- [x] A form initialization Save keeps its own context and leaves a dirty background table/SQL unchanged until an explicit native table switch/save.

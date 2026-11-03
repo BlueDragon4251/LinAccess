@@ -16,6 +16,7 @@
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
+#include "jet_sql_functions.hpp"
 #include "access_table_model.hpp"
 #include "access_table_delegate.hpp"
 #include "access_table_view.hpp"
@@ -78,6 +79,9 @@ namespace {
 QString quoteSql(QString name) {
     name.replace('"', "\"\"");
     return '"' + name + '"';
+}
+QVariantMap tableCommandFailure(int number,const QString& description) {
+    return {{"handled",true},{"error",number},{"description",description}};
 }
 void messageError(QWidget* parent, const QString& explanation) {
     QMessageBox::critical(parent, "LinAccess — Fehler", explanation);
@@ -298,6 +302,69 @@ bool MainWindow::finishActiveDataEditors() {
     for(auto* candidate:activeDataPage_->findChildren<QTableView*>())
         if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate);view && !view->finishEditing()) return false;
     return true;
+}
+
+QVariantMap MainWindow::saveDataPage(QWidget* page,bool interactive) {
+    QPointer<MainWindow> self=this;
+    QPointer<linaccess::AccessTableView> table;
+    if(page) for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
+    QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
+    if(!table || !model) return tableCommandFailure(2046,"Kein aktives natives Tabellendokument.");
+    if(model->isReadOnly()) return tableCommandFailure(2046,"Speichern ist in der schreibgeschützten Tabelle nicht verfügbar.");
+    const auto failure=[&](int fallback) {
+        if(!model) return tableCommandFailure(2501,"Tabellendokument wurde während des Befehls geschlossen.");
+        const auto problem=model->lastError();
+        bool valid=false; const int native=problem.nativeErrorCode().toInt(&valid);
+        int number=problem.driverText()=="LinAccess" && valid && native>0 ? native : fallback;
+        if(const auto function=linaccess::jetSqlFunctionErrorNumber(problem.text().toLower().toStdString())) number=*function;
+        return tableCommandFailure(number,problem.isValid() ? problem.text() : QStringLiteral("Tabellenbefehl abgebrochen."));
+    };
+    if(!table->finishEditing()) return failure(2501);
+    if(!self || !model || !table) return tableCommandFailure(2501,"Tabellendokument wurde während der Eingabevalidierung geschlossen.");
+    const auto selected=table->currentIndex();
+    const auto primary=model->primaryKey();
+    QMap<QString,QVariant> selectedKey;
+    if(selected.isValid() && primary.count()) {
+        const auto record=model->record(selected.row());
+        for(int i=0;i<primary.count();++i) {
+            const auto field=primary.fieldName(i); const auto value=record.value(field);
+            if(value.isNull()) { selectedKey.clear(); break; }
+            selectedKey.insert(field,value);
+        }
+    }
+    if(!model->submitTransactionally()) {
+        const auto result=failure(3146);
+        if(interactive && self) messageError(this,result.value("description").toString());
+        return result;
+    }
+    if(!self || !model || !table) return tableCommandFailure(2501,"Tabellendokument wurde beim Speichern geschlossen.");
+    // Model submission/reset invalidates Qt indexes. Restore the same keyed
+    // record rather than a row number that may now identify another row.
+    if(!selectedKey.isEmpty()) {
+        int row=0;
+        while(row<1000000) {
+            if(row>=model->rowCount()) {
+                if(!model->canFetchMore()) break;
+                const auto count=model->rowCount(); model->fetchMore();
+                if(model->rowCount()==count) break;
+            }
+            const auto record=model->record(row);
+            bool matches=true;
+            for(auto key=selectedKey.cbegin();key!=selectedKey.cend();++key)
+                if(record.value(key.key())!=key.value()) { matches=false; break; }
+            if(matches) { table->setCurrentIndex(model->index(row,selected.column())); table->scrollTo(table->currentIndex()); break; }
+            ++row;
+        }
+    }
+    return {{"handled",true},{"error",0}};
+}
+
+QVariantMap MainWindow::dispatchTableCommand(int command) {
+    const QPointer<QWidget> page=activeDataPage_;
+    if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
+    if(QApplication::activeModalWidget()) return tableCommandFailure(2046,"Tabellenbefehl ist durch ein modales Fenster blockiert.");
+    if(command==97) return saveDataPage(page,false);
+    return tableCommandFailure(3251,"Dieser native Tabellenbefehl ist noch nicht implementiert.");
 }
 
 QWidget* MainWindow::findOpenTable(const QString& name) const {
@@ -957,39 +1024,7 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive) {
     connect(add, &QPushButton::clicked, page, [table] { (void)table->insertRecord(); });
     connect(remove, &QPushButton::clicked, page, [table] { (void)table->deleteCurrentRecord(); });
     connect(discard, &QPushButton::clicked, page, [model] { model->revertAll(); });
-    connect(save, &QPushButton::clicked, page, [this, model, table] {
-        if(!table->finishEditing()) return;
-        const auto selected=table->currentIndex();
-        const auto primary=model->primaryKey();
-        QMap<QString,QVariant> selectedKey;
-        if(selected.isValid() && primary.count()) {
-            const auto record=model->record(selected.row());
-            for(int i=0;i<primary.count();++i) {
-                const auto field=primary.fieldName(i); const auto value=record.value(field);
-                if(value.isNull()) { selectedKey.clear(); break; }
-                selectedKey.insert(field,value);
-            }
-        }
-        if(!model->submitTransactionally()) { messageError(this,model->lastError().text()); return; }
-        // Model submission/reset invalidates Qt indexes. Restore the same keyed
-        // record rather than a row number that may now identify another row.
-        if(!selectedKey.isEmpty()) {
-            int row=0;
-            while(row<1000000) {
-                if(row>=model->rowCount()) {
-                    if(!model->canFetchMore()) break;
-                    const auto count=model->rowCount(); model->fetchMore();
-                    if(model->rowCount()==count) break;
-                }
-                const auto record=model->record(row);
-                bool matches=true;
-                for(auto key=selectedKey.cbegin();key!=selectedKey.cend();++key)
-                    if(record.value(key.key())!=key.value()) { matches=false; break; }
-                if(matches) { table->setCurrentIndex(model->index(row,selected.column())); table->scrollTo(table->currentIndex()); break; }
-                ++row;
-            }
-        }
-    });
+    connect(save, &QPushButton::clicked, page, [this,page] { (void)saveDataPage(page,true); });
     auto* saveShortcut=new QShortcut(QKeySequence::Save,page);
     saveShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(saveShortcut,&QShortcut::activated,save,&QPushButton::click);

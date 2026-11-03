@@ -139,6 +139,14 @@ Sub OpenEditableTable()
 DoCmd.OpenTable "command_edit"
 Me.Tag="edit-opened"
 End Sub
+Sub SaveActiveTable()
+DoCmd.RunCommand acCmdSaveRecord
+Me.Tag="table-saved"
+End Sub
+Sub SaveActiveTableViaApplication()
+Application.RunCommand Command:=acCmdSaveRecord
+Me.Tag="application-table-saved"
+End Sub
 Sub RejectAppendTable()
 DoCmd.OpenTable "command_edit",,acAdd
 Me.Tag="must-not-run"
@@ -175,20 +183,35 @@ End Sub
     assert(readonlyModel->rowCount()==2 && !readonlyModel->isDirty() && readonlyModel->index(readonlyRow,2).data(Qt::CheckStateRole).toInt()==Qt::Checked);
     for(auto* button:readonlyPage->findChildren<QPushButton*>()) if(button->text()=="Speichern" || button->text()=="Datensatz löschen") assert(!button->isEnabled());
     assert(window.openTableDocument("command_readonly",0,1)==3251 && readonlyModel->isReadOnly());
+    assert(mixed->executeProcedure("SaveActiveTable",selectArguments).errorNumber==2046 && !readonlyModel->isDirty());
+    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="readonly-opened");
     assert(unchanged.exec("SELECT value,flag FROM command_readonly WHERE id=1") && unchanged.next() && unchanged.value(0).toDouble()==1.25 && unchanged.value(1).toInt()==-1); unchanged.finish();
     assert(mixed->executeProcedure("OpenEditableTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     const QPointer<QWidget> editablePage=documentTabs->currentWidget(); auto* editableView=nativeTable(editablePage);
     auto* editableModel=qobject_cast<linaccess::AccessTableModel*>(editableView->model()); assert(editableModel && !editableModel->isReadOnly() && editableModel->setData(editableModel->index(0,1),"changed"));
     assert(!editableModel->setReadOnly(true) && !editableModel->isReadOnly() && editableModel->isDirty());
+    {
+        AccessFormPreview initializing("table-background-init","Begin Form\nRecordSource =\"sql_editor_audit\"\nOnCurrent =\"[Event Procedure]\"\nBegin Section\nBegin TextBox\nName =\"value\"\nControlSource =\"value\"\nEnd\nEnd\nEnd\n",
+            "Sub Form_Current()\nDoCmd.RunCommand acCmdSaveRecord\nMe.Tag=\"initialized\"\nEnd Sub\n",db,&window);
+        assert(makePreviewFormObject(initializing)->member("Tag",{}).asText()=="initialized" && editableModel->isDirty());
+        assert(unchanged.exec("SELECT value FROM command_edit") && unchanged.next() && unchanged.value(0).toString()=="initial"); unchanged.finish();
+        assert(initializing.close());
+    }
     QPushButton* commitButton=nullptr; for(auto* button:editablePage->findChildren<QPushButton*>()) if(button->text()=="Speichern") commitButton=button;
-    assert(commitButton && commitButton->isEnabled()); commitButton->click(); assert(!editableModel->isDirty());
+    assert(commitButton && commitButton->isEnabled());
+    const auto saveResult=mixed->executeProcedure("SaveActiveTable",selectArguments);
+    assert(saveResult.status==linaccess::VbaExecutionStatus::Completed && !editableModel->isDirty());
     assert(unchanged.exec("SELECT value FROM command_edit") && unchanged.next() && unchanged.value(0).toString()=="changed"); unchanged.finish();
+    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="table-saved");
+    assert(editableModel->setData(editableModel->index(0,1),"application-changed"));
+    assert(mixed->executeProcedure("SaveActiveTableViaApplication",selectArguments).status==linaccess::VbaExecutionStatus::Completed && !editableModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_edit") && unchanged.next() && unchanged.value(0).toString()=="application-changed"); unchanged.finish();
     QTest::keyClick(editableView,Qt::Key_W,Qt::ControlModifier); QApplication::processEvents();
     const auto beforeUnsupported=documentTabs->count();
     const auto rejectedAppend=mixed->executeProcedure("RejectAppendTable",selectArguments);
     assert(rejectedAppend.errorNumber==3251 && documentTabs->count()==beforeUnsupported);
     assert(mixed->executeProcedure("RejectEmptyMode",selectArguments).errorNumber==3251 && documentTabs->count()==beforeUnsupported);
-    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="edit-opened");
+    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="application-table-saved");
     assert(window.activateOpenTable("command_readonly")==0); QApplication::processEvents(); QTest::keyClick(readonlyView,Qt::Key_W,Qt::ControlModifier); QApplication::processEvents();
     assert(mixed->close()); QApplication::processEvents(); window.focusDatabaseWindow(); QApplication::processEvents();
     QTest::keyClick(explorer,Qt::Key_F6,Qt::ControlModifier|Qt::ShiftModifier); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && auditView->hasFocus());
