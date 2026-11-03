@@ -261,6 +261,11 @@ void testNativeMathFunctions() {
     using namespace linaccess;
     FakeForm host;
     const auto eval=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,{}); };
+    assert(eval("Val(String:=\"    1615 198th Street N.E.\")").asNumber()==1615198);
+    assert(eval("Val(\"&HFFFF\")").asNumber()==-1 && eval("Val(\"&HFFFF&\")").asNumber()==65535);
+    assert(eval("Val(\"&O177777\")").asNumber()==-1 && eval("Val(\"24 and 57\")").asNumber()==24);
+    assert(eval("Val(\"+1.25e2tail\")").asNumber()==125 && eval("Val(\"1,25\")").asNumber()==1);
+    assert(eval("Val(\"50%\")").asNumber()==50 && eval("Val(\"none\")").asNumber()==0);
     assert(eval("Sqr(Number:=81)").asNumber()==9 && eval("VarType(Sqr(81))=vbDouble").truthy());
     assert(std::abs(eval("Log(Exp(2))").asNumber()-2)<1e-12);
     assert(std::abs(eval("Sin(4*Atn(1)/2)").asNumber()-1)<1e-12);
@@ -268,6 +273,8 @@ void testNativeMathFunctions() {
     assert(std::abs(eval("Tan(Atn(1))").asNumber()-1)<1e-12);
     assert(eval("Exp(Empty)").asNumber()==1 && eval("Sqr(\"16\")").asNumber()==4);
     for(const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
+        {"Val(\"50.5%\")",13},{"Val(\"1e9999\")",6},{"Val(Null)",94},{"Val()",450},
+        {"Val(\"&HFFFF!\")",3251},{"Val(\"&H100000000\")",6},{"Val(\"&H10000%\")",6},
         {"Sqr(-1)",5},{"Log(0)",5},{"Log(-1)",5},{"Sin(Null)",94},
         {"Exp(1000)",6},{"Cos()",450},{"Atn(1,2)",450},{"Sqr(\"invalid\")",13}}) {
         int actual=0; try { (void)eval(expression); } catch(const VbaRuntimeError& error) { actual=error.number; } assert(actual==code);

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <charconv>
 #include <cmath>
 #include <cctype>
 #include <ctime>
@@ -758,6 +759,7 @@ private:
                     {"inputbox$",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
                     {"sqr",{{"Number"},1}}, {"exp",{{"Number"},1}}, {"log",{{"Number"},1}},
                     {"sin",{{"Number"},1}}, {"cos",{{"Number"},1}}, {"tan",{{"Number"},1}}, {"atn",{{"Number"},1}},
+                    {"val",{{"String"},1}},
                     {"hex",{{"Number"},1}}, {"hex$",{{"Number"},1}},
                     {"oct",{{"Number"},1}}, {"oct$",{{"Number"},1}},
                     {"space",{{"Number"},1}}, {"space$",{{"Number"},1}},
@@ -1288,10 +1290,70 @@ private:
                 }
                 return result;
             }
+            if(word=="val") {
+                if(!host_) return {};
+                if(args.size()!=1 || omitted[0]) throw error("Val requires one argument",450);
+                const auto value=scalarObjectValue(args[0]);
+                if(value.kind==VbaValue::Kind::Null) throw error("Invalid Null Val argument",94);
+                auto text=value.asText();
+                std::erase_if(text,[](char ch){ return ch==' ' || ch=='\t' || ch=='\n' || ch=='\r'; });
+                if(text.size()>=2 && text[0]=='&' && (text[1]=='H' || text[1]=='h' || text[1]=='O' || text[1]=='o')) {
+                    const unsigned base=(text[1]=='H' || text[1]=='h') ? 16 : 8;
+                    std::uint32_t bits=0; std::size_t end=2;
+                    for(;end<text.size();++end) {
+                        const auto ch=static_cast<unsigned char>(text[end]);
+                        const unsigned digit=ch>='0' && ch<='9' ? ch-'0' : ch>='a' && ch<='f' ? ch-'a'+10 : ch>='A' && ch<='F' ? ch-'A'+10 : 16;
+                        if(digit>=base) break;
+                        if(bits>(0xffffffffU-digit)/base) throw error("Val radix overflow",6);
+                        bits=bits*base+digit;
+                    }
+                    if(end==2) return VbaValue::numeric(0);
+                    if(end<text.size() && std::string_view("!@#$^").find(text[end])!=std::string_view::npos)
+                        throw error("Val radix suffix conversion is not implemented",3251);
+                    const bool longValue=end<text.size() && text[end]=='&';
+                    const bool integerValue=end<text.size() && text[end]=='%';
+                    if(integerValue && bits>0xffffU) throw error("Val Integer overflow",6);
+                    if(!longValue && bits<=0xffffU) return VbaValue::integer(static_cast<std::int16_t>(bits>=0x8000U ? static_cast<std::int64_t>(bits)-0x10000 : static_cast<std::int64_t>(bits)));
+                    return VbaValue::longInteger(static_cast<std::int32_t>(bits>=0x80000000U ? static_cast<std::int64_t>(bits)-0x100000000LL : bits));
+                }
+                std::size_t end=0;
+                if(end<text.size() && (text[end]=='+' || text[end]=='-')) ++end;
+                bool digits=false;
+                while(end<text.size() && text[end]>='0' && text[end]<='9') { digits=true; ++end; }
+                if(end<text.size() && text[end]=='.') {
+                    ++end; while(end<text.size() && text[end]>='0' && text[end]<='9') { digits=true; ++end; }
+                }
+                if(!digits) return VbaValue::numeric(0);
+                if(end<text.size() && (text[end]=='e' || text[end]=='E' || text[end]=='d' || text[end]=='D')) {
+                    auto exponent=end+1;
+                    if(exponent<text.size() && (text[exponent]=='+' || text[exponent]=='-')) ++exponent;
+                    const auto start=exponent;
+                    while(exponent<text.size() && text[exponent]>='0' && text[exponent]<='9') ++exponent;
+                    if(exponent>start) { text[end]='e'; end=exponent; }
+                }
+                const auto start=!text.empty() && text[0]=='+' ? 1U : 0U;
+                double number=0;
+                const auto parsed=std::from_chars(text.data()+start,text.data()+end,number);
+                if(parsed.ec==std::errc::result_out_of_range || !std::isfinite(number)) throw error("Val overflow",6);
+                if(parsed.ec!=std::errc{}) throw error("Invalid Val number",13);
+                const auto result=VbaValue::numeric(number);
+                if(end<text.size()) {
+                    const auto suffix=text[end];
+                    if(suffix=='%' || suffix=='&') {
+                        if(std::trunc(number)!=number) throw error("Val integral suffix mismatch",13);
+                        return coerceVbaModuleValue(result,suffix=='%' ? "integer" : "long");
+                    }
+                    if(suffix=='!') return coerceVbaModuleValue(result,"single");
+                    if(suffix=='@') return convertCurrency(result);
+                    if(suffix=='$') throw error("Val String suffix mismatch",13);
+                    if(suffix=='^') throw error("64-bit Val suffix is not implemented",3251);
+                }
+                return result;
+            }
             if ((word == "isnull" || word == "isempty" || word == "len" || word == "cstr"
                 || word == "ucase"
                 || word == "lcase"
-                || word == "isnumeric" || word == "val") && one) {
+                || word == "isnumeric") && one) {
                 if (!host_) return {};
                 const auto& value = args[0];
                 if (word == "isnull") return VbaValue::logical(value.kind == VbaValue::Kind::Null);
@@ -1308,12 +1370,6 @@ private:
                 if (word == "isnumeric") {
                     try { (void)value.asNumber(); return VbaValue::logical(true); }
                     catch (...) { return VbaValue::logical(false); }
-                }
-                if (word == "val") {
-                    const auto str = value.asText();
-                    std::size_t index = 0;
-                    try { return VbaValue::numeric(std::stod(str, &index)); }
-                    catch (...) { return VbaValue::numeric(0); }
                 }
                 auto result = value.asText();
                 std::transform(result.begin(), result.end(), result.begin(), [&](unsigned char ch) {

@@ -224,6 +224,7 @@ void mathSin(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
 void mathCos(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Cos",1,1); }
 void mathTan(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Tan",1,1); }
 void mathAtn(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Atn",1,1); }
+void stringVal(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Val",1,1); }
 void stringHex(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Hex",1,1); }
 void stringOct(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Oct",1,1); }
 void stringSpace(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Space",1,1); }
@@ -544,6 +545,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_cos",-1,&mathCos,nullptr,nullptr);
     ensure("linaccess_jet_tan",-1,&mathTan,nullptr,nullptr);
     ensure("linaccess_jet_atn",-1,&mathAtn,nullptr,nullptr);
+    ensure("linaccess_jet_val",-1,&stringVal,nullptr,nullptr);
     ensure("linaccess_jet_hex",-1,&stringHex,nullptr,nullptr);
     ensure("linaccess_jet_oct",-1,&stringOct,nullptr,nullptr);
     ensure("linaccess_jet_space",-1,&stringSpace,nullptr,nullptr);

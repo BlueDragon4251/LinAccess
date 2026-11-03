@@ -3026,3 +3026,20 @@ original SHA-256 checks pass. GUI-free runtime was checked at 3c4a93a (1/1,
 1.37 s); following changes are GUI/data-layer only. The catalog now explicitly
 records 243/312 bounded points; these unequal items are not measured overall
 Access parity. Complete SQL/Windows floating-point/Null/type metadata remains open.
+
+
+## Native Val parsing (2026-11-03)
+
+Val no longer delegates its whole behavior to std::stod. It strips documented
+ASCII spacing, parses a decimal prefix with a fixed period separator, recognizes
+hex/octal signed 16/32-bit patterns and checked decimal type suffixes, and reports
+Null/overflow/integral-suffix mismatch instead of silently returning zero.
+Named String arguments and the native SQL bridge are implemented. Non-integral
+radix suffix conversions and 64-bit suffixes remain explicit 3251 boundaries;
+full Access/locale/coercion/subtype edge parity is not claimed.
+Existing core/DAO checks pass 2/2 (2.03 s), GUI-free passes 1/1 (1.31 s), and
+SQL-model/DAO follow-up passes 2/2 (0.36 s) with real rows and fractional outputs.
+Desktop affected targets build. No new target or full-suite/package repeat for
+this increment; grouped baseline remains f574057 (48/48 and checked package).
+Reference: Microsoft Learn Val function, including &HFFFF=-1, embedded spaces,
+period-only decimal recognition and 50.5% type mismatch.
