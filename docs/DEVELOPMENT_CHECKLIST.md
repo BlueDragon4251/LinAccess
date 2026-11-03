@@ -882,3 +882,11 @@ of complete Access parity. Existing broader open items remain open.
 - [x] Native datasheet row/column/all keyboard selection and checked rectangular
   text copy, full bounded fetch, Currency/number precision, quote handling and
   rejection before clipboard replacement; typed MIME/range paste remain open.
+
+## Bounded datasheet range paste and retryable Save (2026-11-03)
+
+- [x] Strict quoted TSV into an existing clean manual-submit rectangle, with typed preflight, bounded fetching and no automatic SQL submission.
+- [x] Transactional native table Save retains every draft after a later SQL constraint failure; correction/retry includes updates, inserts and deletes.
+- [ ] Clipboard record append, paste over existing drafts, typed binary MIME, regional masks and complete Access range undo.
+
+See DATASHEET_CLIPBOARD_RUNTIME.md for implementation bounds and verification.

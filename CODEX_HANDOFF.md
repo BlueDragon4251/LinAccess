@@ -233,3 +233,16 @@ Die externe private Checkpoint-Metadatei liegt unter
 Zugangsdaten. Der aktuelle Runtime-Checkpoint bestand 48/48 CTests (87.26 s),
 GUI-freien Core (1.55 s), Debian-Paket und alle vier Originalfixture-Hashes.
 Vollständige Access-Parität ist weiterhin nicht erreicht.
+
+
+## Bereichseinfügen und wiederholbares Speichern (2026-11-03)
+
+Striktes TSV-Bereichseinfügen ist für bestehende Zellen eines sauberen
+Manual-Submit-Modells implementiert, inklusive vollständiger Typ-Vorprüfung.
+Native Tabellen speichern mit AccessTableModel::submitTransactionally: alle
+SQL-Arbeiten vor dem Commit, keine vorzeitige Qt-Cache-Submission. Bei späterem
+Constraint-Fehler bleiben Updates/Inserts/Deletes für Korrektur und Wiederholen
+erhalten. Geerbtes direktes Qt submitAll bietet diese Garantie nicht.
+Details und Grenzen in docs/DATASHEET_CLIPBOARD_RUNTIME.md.
+Vollsuite 48/48 (86.21 s), GUI-freier Core 1/1 (2.63 s), Debian-Prüfungen
+und vier Originalfixture-Hashes bestanden. Keine vollständige Access-Parität.

@@ -1,9 +1,12 @@
 #pragma once
 #include "access_table_model.hpp"
 #include "vba_runtime.hpp"
+#include "csv.hpp"
 #include "native_clock_keys.hpp"
 #include <QLineEdit>
 #include <QClipboard>
+#include <QMimeData>
+#include <new>
 #include <QItemSelectionModel>
 #include <limits>
 #include <QTableView>
@@ -89,6 +92,53 @@ public:
         QApplication::clipboard()->setText(output);
         return true;
     }
+    bool canPasteSelection() const {
+        auto* typed=qobject_cast<AccessTableModel*>(model());
+        return typed && typed->editStrategy()==QSqlTableModel::OnManualSubmit && !typed->isDirty()
+            && !hasPendingEditor() && currentIndex().isValid() && currentIndex().flags().testFlag(Qt::ItemIsEditable);
+    }
+    bool pasteSelection() {
+        auto* typed=qobject_cast<AccessTableModel*>(model());
+        if(!typed || !finishEditing()) return false;
+        if(typed->isDirty()) return refuse(2501,"Vor dem Einfügen eines Bereichs Änderungen speichern oder verwerfen.");
+        if(typed->editStrategy()!=QSqlTableModel::OnManualSubmit) return refuse(3251,"Bereichseinfügen ist in dieser Ansicht nicht verfügbar.");
+        const auto first=currentIndex();
+        if(!first.isValid()) return false;
+        if(!first.flags().testFlag(Qt::ItemIsEditable)) return refuse(2448,"Die Zielzelle ist schreibgeschützt.");
+        const auto* mime=QApplication::clipboard()->mimeData();
+        if(!mime || !mime->hasText()) return false;
+        const auto text=QApplication::clipboard()->text();
+        if(text.size()>4*1024*1024 || text.contains(QChar(0))) return refuse(3251,"Dieser Zwischenablageumfang wird noch nicht unterstützt.");
+        QVector<QVector<QString>> values;
+        try {
+            const auto utf8=text.toUtf8();
+            if(QString::fromUtf8(utf8)!=text) return refuse(13,"Der Zwischenablagetext enthält nicht unterstützte Unicode-Zeichen.");
+            const auto parsed=parseTsvDetailed(std::string_view(utf8.constData(),utf8.size()));
+            if(parsed.empty()) values={{QString{}}};
+            else {
+                const auto columns=parsed.front().size();
+                if(!columns) return refuse(5,"Die Zwischenablage enthält keinen rechteckigen Tabellenbereich.");
+                for(const auto& row:parsed) {
+                    if(row.size()!=columns) return refuse(5,"Die Zwischenablage enthält keinen rechteckigen Tabellenbereich.");
+                    QVector<QString> cells; cells.reserve(columns);
+                    for(const auto& cell:row) cells.push_back(QString::fromUtf8(cell.value.data(),cell.value.size()));
+                    values.push_back(std::move(cells));
+                }
+            }
+        } catch(const std::bad_alloc&) { return refuse(7,"Der Tabellenbereich konnte nicht im Speicher vorbereitet werden."); }
+          catch(const std::length_error&) { return refuse(3251,"Die Zwischenablage enthält zu viele Zellen."); }
+          catch(const std::exception&) { return refuse(5,"Die Zwischenablage enthält kein gültiges Tabellenformat."); }
+        const auto endRow=static_cast<qint64>(first.row())+values.size();
+        if(endRow>std::numeric_limits<int>::max() || static_cast<qint64>(first.column())+values.front().size()>typed->columnCount())
+            return refuse(5,"Der einzufügende Bereich passt nicht in die vorhandenen Spalten.");
+        while(typed->rowCount()<endRow && typed->canFetchMore()) {
+            const auto count=typed->rowCount(); typed->fetchMore(); if(typed->rowCount()==count) break;
+        }
+        if(typed->rowCount()<endRow) return refuse(3251,"Zum Einfügen sind noch nicht genügend vorhandene Datensätze verfügbar.");
+        if(!typed->setDataBlock(first,values)) return false;
+        if(selectionModel()) selectionModel()->select(QItemSelection(first,typed->index(endRow-1,first.column()+values.front().size()-1)),QItemSelectionModel::ClearAndSelect);
+        return true;
+    }
     void setModel(QAbstractItemModel* model) override {
         disconnect(restore_); QTableView::setModel(model);
         if(auto* typed=qobject_cast<AccessTableModel*>(model))
@@ -101,6 +151,9 @@ protected:
         const auto selectionModifiers=event->modifiers() & ~Qt::KeypadModifier;
         if(event->key()==Qt::Key_C && selectionModifiers==Qt::ControlModifier) {
             (void)copySelection(); event->accept(); return;
+        }
+        if(event->key()==Qt::Key_V && selectionModifiers==Qt::ControlModifier) {
+            (void)pasteSelection(); event->accept(); return;
         }
         if((event->key()==Qt::Key_Space && (selectionModifiers==Qt::ShiftModifier || selectionModifiers==Qt::ControlModifier))
             || (event->key()==Qt::Key_A && selectionModifiers==Qt::ControlModifier)) {

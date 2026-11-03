@@ -1579,3 +1579,21 @@ Collection, LenB, editor/datasheet and joined-update diagnostic increments.
 pass. Local individual commits are preserved; API and local metadata/history
 differ until normal Git synchronization becomes available. No credential values
 were inspected or changed. See CODEX_HANDOFF.md for safe continuation.
+
+
+## Checked range paste and retryable native table Save (2026-11-03)
+
+Native datasheets accept bounded strict quoted TSV into existing cells of a
+clean manual-submit model. Typed targets are preflighted as a complete rectangle;
+malformed/ragged/read-only/out-of-range input is refused before cache mutation.
+Paste does not submit SQL. Native table Save now retains all draft updates,
+inserts and deletes after a later constraint failure and database rollback.
+The previous Qt submitAll cache behavior could silently omit earlier rows on
+retry. Protected SQL workers now run before any cache submission; mixed draft
+and row-shift regressions prove correction and full retry, defaults/AutoNumber.
+See DATASHEET_CLIPBOARD_RUNTIME.md for scope and inherited submitAll limitations.
+Existing 48 targets only. Full build and suite pass 48/48 (86.21 s), GUI-free
+TSV/core passes 1/1 (2.63 s), Debian payload/permissions/Build-ID/pinned SQLite
+checks pass and all four original fixture hashes match. The theoretical
+checklist contains 270 checked and 70 open scoped points, not an Access parity
+percentage. Record append/range undo/typed clipboard and complete parity remain open.

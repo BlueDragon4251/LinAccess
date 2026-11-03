@@ -832,15 +832,7 @@ void MainWindow::showTable(const QString& name) {
                 selectedKey.insert(field,value);
             }
         }
-        if (!db_.transaction()) { messageError(this, db_.lastError().text()); return; }
-        if (!model->submitAll()) {
-            const auto problem = model->lastError().text();
-            db_.rollback();
-            messageError(this, problem);
-            return;
-        }
-        if (!db_.commit()) { messageError(this, db_.lastError().text()); return; }
-        if(!model->select()) { messageError(this,model->lastError().text()); return; }
+        if(!model->submitTransactionally()) { messageError(this,model->lastError().text()); return; }
         // Model submission/reset invalidates Qt indexes. Restore the same keyed
         // record rather than a row number that may now identify another row.
         if(!selectedKey.isEmpty()) {
