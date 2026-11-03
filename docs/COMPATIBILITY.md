@@ -1018,3 +1018,7 @@ ReDim Preserve now supports existing native String/Byte arrays held by Variant,
 retaining typed values and checked bounds with correct empty String/zero Byte
 new cells. Non-Preserve typed resize, typed declarations, Byte Erase and full
 array/COM semantics remain open; see VARIANT_ARRAY_RUNTIME.md.
+
+Optional Let now supports the existing native value-assignment forms, including
+array elements and object properties; invalid non-assignment Let forms fail
+before execution. Property Let declarations and full VBA grammar remain open.

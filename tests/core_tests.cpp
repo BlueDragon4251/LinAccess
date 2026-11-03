@@ -2565,5 +2565,18 @@ Me!LocalNamespaceError=Err.Number
 End Sub
 )VBA","LocalNamespace",host);
     assert(localNamespace.status==VbaExecutionStatus::Completed && host.fields["LocalNamespaceError"]=="91");
+    const auto letValues=executeVbaProcedure(R"VBA(Function LetValues() As Long
+Dim amount As Long
+Dim items As Variant
+Let amount=2
+items=Array(1)
+Let items(0)=amount+3
+Let Me!LetAssignment=items(0)
+Let LetValues=amount+items(0)
+End Function
+)VBA","LetValues",host);
+    assert(letValues.status==VbaExecutionStatus::Completed && letValues.returnValue=="7" && host.fields["LetAssignment"]=="5");
+    const auto invalidLet=executeVbaProcedure("Sub InvalidLet()\nLet MsgBox \"invalid assignment\"\nEnd Sub","InvalidLet",host);
+    assert(invalidLet.status==VbaExecutionStatus::Error);
     std::cout << "Core tests passed\n";
 }

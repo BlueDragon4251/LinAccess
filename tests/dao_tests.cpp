@@ -39,7 +39,7 @@ Dim database As DAO.Database
 Dim rows As DAO.Recordset
 Set database=CurrentDb
 Set rows=database.OpenRecordset(Type:=4, Name:="SELECT id,RGB(r,g,b) AS shade FROM color_rows ORDER BY id")
-rows.AbsolutePosition=0
+Let rows.AbsolutePosition=0
 Me!ShadeOrdinal=rows.Fields("shade").OrdinalPosition
 Me!FirstShade=rows!shade
 rows.FindFirst Criteria:="id=2"

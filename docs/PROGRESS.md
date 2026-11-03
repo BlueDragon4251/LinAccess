@@ -2887,3 +2887,15 @@ qualified Array and full reference/library binding remain explicit boundaries.
 Core regression checks base 1 versus 0, empty bounds, actual direct enumeration
 and local-root precedence. Desktop build/core target pass 1/1 (1.32 s); GUI-free
 build/test passes 1/1 (1.39 s). No new target/full-suite/package repeat.
+
+## Native optional Let assignments (2026-11-03)
+
+The optional Let keyword now routes existing local/function-result, form/control,
+array-element and object-property value assignments through their native
+instructions. Non-assignment Let forms are rejected before execution rather
+than becoming message/command calls. Existing core procedures verify actual
+assignment/return values and invalid Let rejection; DAO VBA uses Let on a real
+cursor property. Desktop build and core/DAO targets pass 2/2 (1.61 s), original
+VBA inventory passes (0.91 s), and GUI-free build/test passes 1/1 (1.30 s). No new
+target/full-suite/package repeat. Property Let declarations, unsupported lvalue
+forms and the complete lexer/AST remain open.

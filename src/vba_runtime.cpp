@@ -366,7 +366,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             ++line;
             raw += ' ' + trim(continuation);
         }
-        const auto source = withoutComment(raw);
+        auto source = withoutComment(raw);
         if (source.empty()) continue;
         std::smatch match;
         if (!within) {
@@ -489,6 +489,13 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 continue;
             }
         }
+        const bool explicitLet=source.size()>=3 && lower(source.substr(0,3))=="let"
+            && (source.size()==3 || std::isspace(static_cast<unsigned char>(source[3])));
+        if(explicitLet) {
+            source=trim(source.substr(3));
+            if(source.empty()) return {VbaExecutionStatus::Error,"Let requires a value assignment",line};
+        }
+        const auto statementBegin=statements.size();
         const auto relativeSource=(source.starts_with('.') || source.starts_with('!')) ? "__la_with"+source : std::string{};
         if (std::regex_match(source,match,selectStart)) {
             const auto expression=trim(match[1].str());
@@ -800,6 +807,13 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             statements.push_back({Statement::Type::Call, match[1].str(), args, line});
         } else {
             return {VbaExecutionStatus::Unsupported, "VBA-Anweisung noch nicht unterstützt: " + source, line};
+        }
+        if(explicitLet) {
+            if(statements.size()!=statementBegin+1) return {VbaExecutionStatus::Error,"Let requires one value assignment",line};
+            const auto type=statements.back().type;
+            if(type!=Statement::Type::SetField && type!=Statement::Type::SetVar
+                && type!=Statement::Type::IndexedAssign && type!=Statement::Type::ObjectAssign)
+                return {VbaExecutionStatus::Error,"Let requires a value assignment",line};
         }
     }
     return within ? VbaExecutionResult{VbaExecutionStatus::Error, "End Sub fehlt", line}
