@@ -2846,3 +2846,22 @@ empty source with additions disabled after real SQL deletion/requery. Desktop
 build and form_current_record pass (0.64 s). No new target/full-suite/package
 repeat; full Windows unbound/view/no-current edge cases remain open.
 Reference: https://learn.microsoft.com/en-us/office/vba/api/access.form.newrecord
+
+## Entry/NewRecord delivery verification (2026-11-03)
+
+Snapshot 1490e24 passed rebuilt original-layout/real DAO targets 2/2 (50.11 s),
+matching .deb Build-ID/pinned backend/contents/permissions and all four original
+fixture SHA-256 checks. GUI-free runtime remains the same source verified 1/1
+(1.25 s) in the Add-mode delivery. No full-suite/distro repeat. Last one-run full
+48/48 evidence is 992d082; no remote CI success claim.
+
+## Native DAO field ordinal metadata (2026-11-03)
+
+Recordset Field.OrdinalPosition now returns checked Integer metadata from the
+actual native field/projection order, with read-only and closed-owner guards.
+Existing native VBA reads a calculated SQL field's position; the existing cursor
+regression checks metadata writes and invalidation after Close. Desktop build
+and dao_execution pass (0.31 s). No new target/full-suite/package repeat for
+this increment. TableDef field reordering/persistent ordinal gaps and full DAO
+metadata remain open.
+Reference: https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-ordinalposition-property-dao

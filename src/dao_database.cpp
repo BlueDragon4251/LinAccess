@@ -393,6 +393,9 @@ public:
         if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         (void)column(name); return data_->types.value(name.toCaseFolded());
     }
+    VbaValue fieldOrdinal(const QString& name) const {
+        (void)fieldType(name); return integerCount(column(name));
+    }
     VbaValue value(const QString& name) const {
         checkTransaction();
         if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
@@ -600,6 +603,10 @@ VbaValue fieldCollection(std::shared_ptr<Recordset> owner) {
 }
 
 VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args) {
+    if(lower(name)=="ordinalposition") {
+        if(!args.empty()) throw VbaRuntimeError(450,"Field.OrdinalPosition requires no arguments");
+        return owner_->fieldOrdinal(name_);
+    }
     if(lower(name)=="type") {
         if(!args.empty()) throw VbaRuntimeError(450,"Field.Type requires no arguments");
         const auto type=owner_->fieldType(name_).toUpper();
@@ -613,6 +620,7 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
     throw std::runtime_error("DAO: Unknown Field member");
 }
 void Field::assign(std::string_view name, const VbaValue& value) {
+    if(lower(name)=="ordinalposition") { (void)owner_->fieldOrdinal(name_); throw VbaRuntimeError(383,"Recordset Field.OrdinalPosition is read-only"); }
     if(lower(name)=="type") { (void)owner_->fieldType(name_); throw VbaRuntimeError(383,"Field.Type is read-only"); }
     require(lower(name) == "value", "DAO: Field property is read-only");
     owner_->set(name_, value);

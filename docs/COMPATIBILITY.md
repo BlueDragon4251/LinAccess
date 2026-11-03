@@ -1009,3 +1009,7 @@ Native Form.NewRecord now returns read-only Integer -1/0 through qualified,
 unqualified and legacy field routes. True requires an actual native addable
 virtual row; an empty non-addable source no longer reports a new record. Full
 Windows no-current/unbound/view edge behavior remains outside the verified scope.
+
+Native Recordset Field.OrdinalPosition exposes checked Integer metadata in actual
+field/projection order, read-only with closed-owner protection. TableDef reorder
+writes/persistent ordinal gaps and full DAO metadata semantics remain open.

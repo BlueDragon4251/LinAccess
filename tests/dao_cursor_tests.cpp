@@ -22,6 +22,9 @@ void testDaoCursors() {
     assert(source->member("EditMode",{}).asNumber()==0 && source->member("Updatable",{}).truthy());
     expect(438,[&] { source->assign("EditMode",VbaValue::integer(1)); });
     expect(3021,[&] { (void)source->member("LastModified",{}); });
+    const auto identityField=source->member("Fields",{VbaValue::string("id")}).object;
+    assert(identityField->member("OrdinalPosition",{}).asNumber()==0);
+    expect(383,[&] { identityField->assign("OrdinalPosition",VbaValue::integer(1)); });
     auto clone=source->member("Clone",{}).object;
     assert(source->item("id").asNumber()==1 && clone->member("BOF",{}).truthy() && !clone->member("EOF",{}).truthy());
     assert(source->member("AbsolutePosition",{}).asNumber()==0 && clone->member("AbsolutePosition",{}).asNumber()==-1);
@@ -86,7 +89,7 @@ void testDaoCursors() {
     sibling->assignItem("label",VbaValue::string("updated")); sibling->member("Update",{});
     assert(sibling->member("EditMode",{}).asNumber()==0);
     assert(source->item("id").asNumber()==3 && source->item("label").asText()=="updated");
-    source->member("Close",{}); assert(sibling->item("id").asNumber()==3);
+    source->member("Close",{}); expect(3420,[&] { identityField->member("OrdinalPosition",{}); }); assert(sibling->item("id").asNumber()==3);
     sibling->member("Close",{}); find(clone,"FindFirst","id=1"); assert(clone->item("id").asNumber()==1);
     clone->member("Requery",{}); expect(3159,[&] { clone->assign("Bookmark",third); });
     find(clone,"FindFirst","id=4"); const auto removed=clone->member("Bookmark",{}); clone->member("Delete",{});
