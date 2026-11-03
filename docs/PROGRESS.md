@@ -2985,3 +2985,15 @@ checks pass 3/3 (1.67 s), including explicit Integer/Long conversions. Desktop
 all-target build passes. No new test target, full-suite or package repeat for
 this increment. Last grouped verification remains 68bdfd0: 48/48, GUI-free,
 Debian package and four fixture hashes.
+
+
+## Native VBA mathematical functions (2026-11-03)
+
+Sqr, Exp, Log, Sin, Cos, Tan and Atn now execute through the C++ evaluator with
+scalar/default-property conversion, named Number arguments and Double results.
+Trigonometry uses radians. Null raises 94, invalid square-root/log domains raise
+5, non-finite arguments/results raise 6, and wrong arity raises 450. Existing
+core tests exercise composed identities, argument conversion and runtime errors;
+core/DAO pass 2/2 (1.77 s), GUI-free passes 1/1 (1.37 s), desktop all-target build
+passes. No new test target/full-suite/package repeat. This increment does not
+add their Jet SQL registration or prove all Access/Windows floating-point edges.

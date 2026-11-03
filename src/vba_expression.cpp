@@ -756,6 +756,8 @@ private:
                     {"msgbox",{{"Prompt","Buttons","Title","HelpFile","Context"},1}},
                     {"inputbox",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
                     {"inputbox$",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
+                    {"sqr",{{"Number"},1}}, {"exp",{{"Number"},1}}, {"log",{{"Number"},1}},
+                    {"sin",{{"Number"},1}}, {"cos",{{"Number"},1}}, {"tan",{{"Number"},1}}, {"atn",{{"Number"},1}},
                     {"hex",{{"Number"},1}}, {"hex$",{{"Number"},1}},
                     {"oct",{{"Number"},1}}, {"oct$",{{"Number"},1}},
                     {"space",{{"Number"},1}}, {"space$",{{"Number"},1}},
@@ -1241,6 +1243,20 @@ private:
             if (word=="rgb" || word=="qbcolor") {
                 if (!host_) return {};
                 return word=="rgb" ? vbaRgb(args) : vbaQbColor(args);
+            }
+            if(word=="sqr" || word=="exp" || word=="log" || word=="sin" || word=="cos" || word=="tan" || word=="atn") {
+                if(!host_) return {};
+                if(args.size()!=1 || omitted[0]) throw error("Math function requires one argument",450);
+                const auto value=scalarObjectValue(args[0]);
+                if(value.kind==VbaValue::Kind::Null) throw error("Invalid Null math argument",94);
+                const auto number=coerceVbaModuleValue(value,"double").number;
+                if(!std::isfinite(number)) throw error("Non-finite math argument",6);
+                if((word=="sqr" && number<0) || (word=="log" && number<=0)) throw error("Invalid math domain",5);
+                const auto result=word=="sqr" ? std::sqrt(number) : word=="exp" ? std::exp(number)
+                    : word=="log" ? std::log(number) : word=="sin" ? std::sin(number)
+                    : word=="cos" ? std::cos(number) : word=="tan" ? std::tan(number) : std::atan(number);
+                if(!std::isfinite(result)) throw error("Math result overflow",6);
+                return VbaValue::numeric(result);
             }
             if (word=="abs" || word=="int" || word=="fix" || word=="sgn") {
                 if (!host_) return {};
