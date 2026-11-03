@@ -409,6 +409,56 @@ End Sub
     assert(host.fields["BatchPosition"]=="2:False" && host.fields["BatchTail"]=="0:3:True");
     assert(host.fields["BatchEofError"]=="3021" && host.fields["BatchZeroError"]=="3251" && host.fields["BatchNullError"]=="94" && host.fields["BatchOmittedError"]=="3251" && host.fields["BatchClosedError"]=="3420" && host.fields["BatchErrorPosition"]=="0");
     assert(sql.exec("SELECT count(*),sum(id) FROM batch_records") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==6); sql.finish();
+    const auto references=linaccess::executeVbaProcedure(R"VBA(Sub ObjectArrays()
+Dim refs As Variant
+Dim saved As Variant
+Dim database As DAO.Database
+Dim rows As DAO.Recordset
+ReDim refs(0 To 1,0 To 1)
+Set refs(0,0)=CurrentDb
+Set refs(1,0)=Nothing
+saved=refs
+Set refs(0,0)=Nothing
+Set database=saved(0,0)
+database.Execute "CREATE TABLE object_array_values(value INTEGER)"
+database.Execute "INSERT INTO object_array_values VALUES(7)"
+Set refs(0,1)=database
+Me!ObjectArrayIdentity=CStr(refs(0,1) Is saved(0,0))
+Set rows=database.OpenRecordset("object_array_values",4)
+Set refs(1,1)=rows
+refs(1,1).MoveNext
+Me!ObjectArrayEof=CStr(refs(1,1).EOF)
+refs(1,1).Close
+On Error Resume Next
+Set refs(0,1)=42
+Me!ObjectArrayScalarError=CStr(Err.Number)
+Err.Clear
+Set refs(2,0)=database
+Me!ObjectArrayIndexError=CStr(Err.Number)
+On Error GoTo 0
+Me!ObjectArrayNothing=CStr(refs(0,0) Is Nothing) & ":" & CStr(refs(1,0) Is Nothing)
+Erase refs
+Me!ObjectArrayErased=TypeName(refs)
+ReDim refs(0 To 1) As Object
+Me!ObjectTyped=TypeName(refs) & ":" & CStr(VarType(refs)) & ":" & CStr(refs(0) Is Nothing)
+Set refs(0)=database
+ReDim Preserve refs(0 To 2) As Object
+Me!ObjectTypedPreserved=CStr(refs(0) Is saved(0,0)) & ":" & CStr(refs(2) Is Nothing)
+On Error Resume Next
+refs(0)=7
+Me!ObjectTypedValueError=CStr(Err.Number)
+On Error GoTo 0
+Erase refs
+Set database=saved(0,0)
+database.Execute "UPDATE object_array_values SET value=9"
+End Sub
+)VBA","ObjectArrays",host);
+    if(references.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Synthetic object array error="<<references.errorNumber<<" line="<<references.line<<"\n";
+    assert(references.status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["ObjectArrayIdentity"]=="True" && host.fields["ObjectArrayEof"]=="True" && host.fields["ObjectArrayNothing"]=="True:True");
+    assert(host.fields["ObjectArrayScalarError"]=="13" && host.fields["ObjectArrayIndexError"]=="9" && host.fields["ObjectArrayErased"]=="Empty");
+    assert(host.fields["ObjectTyped"]=="Object():8201:True" && host.fields["ObjectTypedPreserved"]=="True:True" && host.fields["ObjectTypedValueError"]=="3251");
+    assert(sql.exec("SELECT value FROM object_array_values") && sql.next() && sql.value(0).toInt()==9); sql.finish();
     assert(sql.exec("CREATE TABLE batch_large(value INTEGER)")); assert(sql.exec("INSERT INTO batch_large VALUES(1),(9007199254740993)"));
     auto rows=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("batch_large"),VbaValue::numeric(4)}).object;
     int error=0; try { rows->member("GetRows",{VbaValue::numeric(2)}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }

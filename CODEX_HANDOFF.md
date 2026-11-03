@@ -809,3 +809,18 @@ offen. Numerische typisierte Join/Filter-Pfade bleiben ausdrücklich 3251.
 VARIANT_ARRAY_RUNTIME.md ist der Umfang. Vollsuite 48/48 (89,81 s), frisch
 GUI-frei 1/1 (1,45 s), Debian-Paket und vier Original-SHA-256 bestanden;
 keine neuen Testziele. 344 erledigte / 72 offene erfasste Punkte, keine Gesamtquote.
+
+## Objektverweise in Arrays und Byte-Erase (2026-11-03)
+
+Set array(indices)=object/Nothing speichert echte native Referenzen. Arraykopien
+haben unabhängige Einträge bei gemeinsam referenzierten Objektinstanzen; bestehende
+Variant-Variablen unterstützen jetzt ReDim As Object mit Nothing, VarType 8201,
+Object() und Preserve. Echte DAO-Objekte aus Arrays führen geprüfte SQL-/Cursor-
+Methoden aus. Skalare Set-Werte scheitern 13, mehrdeutige/ungültige Indizes bleiben
+geprüft; implizite Object-Array-Defaultmember-Schreibzugriffe bleiben 3251.
+Explizite Objektmember nutzen die vorhandene Bindung/Lebensdauer. Erase von
+Byte-Arrays in Variant-Variablen setzt Empty, inklusive unterstütztem ByRef und
+unabhängigen Wertkopien. Deklarations-/Class-Array-/COM-Grenzen bleiben offen.
+VARIANT_ARRAY_RUNTIME.md beschreibt den Umfang. Vollsuite 48/48 (92,45 s), frisch
+GUI-frei 1/1 (1,79 s), Debian-Paket und vier Original-SHA-256 bestanden.
+Keine neuen Testziele. 346 erledigte / 72 offene erfasste Punkte, keine Gesamtquote.

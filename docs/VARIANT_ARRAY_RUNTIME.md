@@ -27,8 +27,7 @@ copies retain their previous elements and bounds. `Erase a` releases this Varian
 array and restores Empty; a subsequent ReDim Preserve can allocate it again.
 
 This path targets variables declared As Variant (or implicit Variant variables).
-Typed array declarations, full Byte-array Erase
-and multiple declarations per statement remain unsupported. An explicit 1,000,000-element allocation limit
+Typed array declarations and multiple declarations per statement remain unsupported. An explicit 1,000,000-element allocation limit
 fails with 3251; this limit is a current implementation boundary, not Access parity.
 
 ## Remaining boundaries
@@ -92,8 +91,8 @@ Preserve changes execute in the existing core test target. No new targets.
 
 DAO GetRows constructs genuine zero-based field/record matrices from actual
 materialized SQL records; see [DAO_GETROWS_RUNTIME.md](DAO_GETROWS_RUNTIME.md).
-Typed/fixed/dynamic array declarations, Object/user-defined/fixed-length String
-arrays and full Byte enumeration/Erase remain open. This extends Variant values and ReDim, not the full declaration grammar
+Typed/fixed/dynamic array declarations, Class-specific/user-defined/fixed-length String
+arrays and full Byte enumeration remain open. This extends Variant values and ReDim, not the full declaration grammar
 or native Windows SAFEARRAY/COM interoperability. Existing one-million-cell
 runtime allocation bounds remain explicit.
 
@@ -103,7 +102,7 @@ payload/permissions/Build-ID/pinned SQLite and all four fixture hashes pass.
 ## Typed ReDim inside Variant variables (2026-11-03)
 
 Existing Variant variables accept ReDim bounds As Byte/Integer/Long/Single/
-Double/Currency/Date/Boolean/String/Variant. Storage retains the element type;
+Double/Currency/Date/Boolean/String/Variant (and now Object, below). Storage retains the element type;
 VarType includes the correct array flag/subtype and TypeName reports the actual
 array type. Element assignment applies existing checked scalar conversion.
 Default cells are typed zero, False, empty text or Date serial zero; Variant
@@ -117,7 +116,7 @@ retain compact byte storage and native byte interoperability.
 
 This does not implement declaring a new typed array variable: typed ReDim on a
 fresh undeclared name refuses 3251. Existing scalar variables cannot become
-arrays through this route. Object/user-defined/fixed-length String arrays and
+arrays through this route. Class-specific/user-defined/fixed-length String arrays and
 full typed declaration grammar remain open. Join/Filter retain their one-
 dimensional String/Variant scope; newly supported numeric typed array kinds
 refuse 3251 on those operations. Exact Access error precedence remains open.
@@ -126,3 +125,29 @@ Existing core tests execute typed integer matrices/defaults/coercion/overflow,
 Preserve/type guards, String reset, Byte/Currency/Date/Boolean values and metadata.
 Full desktop 48/48 (89.81 s), rebuilt GUI-free core 1/1 (1.45 s), Debian package
 and all four original fixture hashes pass. No new test targets.
+
+## Object references and Variant Byte-array Erase (2026-11-03)
+
+Set array(indices)=object/Nothing now assigns native references into Variant
+array cells. Whole-array value copies share the referenced objects while retaining
+independent array entries. Replacing one entry or erasing one container does not
+clear a different copy's entry. Subsequent member access uses the existing native
+object implementation and its normal connection/document lifetime checks.
+
+Existing Variant variables also accept ReDim As Object, including dimensions,
+Nothing defaults, VarType 8201/TypeName Object() and Preserve retaining reference
+identity. Set accepts object references; scalar Set rejects 13 without replacing
+the old entry. Plain value/default-member writes to an Object array remain 3251;
+explicit object members use the normal binding. Class-specific arrays, typed
+array declarations and general COM interoperability remain open.
+
+Erase of a Byte array held in a Variant now releases that container to Empty,
+including supported ByRef Variant writeback. Other value copies retain their
+bytes and bounds. This does not implement fixed/dynamic typed declaration Erase.
+
+The existing DAO target executes actual SQLite writes through Database objects
+retrieved from multidimensional array cells, moves an actual stored Recordset,
+checks copy/reference/Nothing/Preserve and failure behavior, and verifies SQL after
+container Erase. Core verifies ByRef Byte Erase and an independent byte copy.
+Full desktop suite 48/48 (92.45 s), rebuilt GUI-free core 1/1 (1.79 s), Debian
+package and all four original fixture SHA-256 checks pass. No new test targets.

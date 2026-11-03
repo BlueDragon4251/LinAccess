@@ -2913,6 +2913,16 @@ End Function
 )VBA","GrowBytes",host,byteArguments);
     assert(grownBytes.status==VbaExecutionStatus::Completed && grownBytes.typedReturnValue->bytes==std::vector<unsigned char>({0,128,255,0,254}));
     assert(byteArguments[0].bytes==std::vector<unsigned char>({0,128,255}));
+    std::vector<VbaValue> erasedBytes{VbaValue::byteArray({0,128,255})};
+    const auto erasedByteArray=executeVbaProcedureWithArguments(R"VBA(Sub EraseBytes(ByRef value As Variant)
+Dim before As Variant
+before=value
+Erase value
+Me!ByteErase=TypeName(value) & ":" & CStr(UBound(before)) & ":" & CStr(before(1))
+End Sub
+)VBA","EraseBytes",host,erasedBytes);
+    assert(erasedByteArray.status==VbaExecutionStatus::Completed && erasedBytes[0].kind==VbaValue::Kind::Empty && host.fields["ByteErase"]=="Empty:2:128");
+
     const auto shortenedBytes=executeVbaProcedureWithArguments(R"VBA(Sub ShortenBytes(ByRef value As Variant)
 ReDim Preserve value(0 To 1)
 On Error Resume Next

@@ -361,7 +361,9 @@ Unterstützung, Tests und offene Grenzen stehen unter [DAO-Laufzeit](docs/DAO_RU
 zweidimensionale Variant-Arrays mit typisierten Feldwerten; VBA-Indizierung,
 Dimensionsgrenzen und mehrdimensionales `ReDim Preserve` sind nativ angebunden.
 `ReDim ... As Typ` prüft außerdem primitive Elementtypen in vorhandenen
-Variant-Variablen; feste/typisierte Array-Deklarationen sind noch nicht vollständig.
+Variant-Variablen; `Set` erhält native Objektverweise in Array-Zellen, und
+`As Object` initialisiert sie mit `Nothing`. Feste/typisierte Array-Deklarationen
+sind noch nicht vollständig.
 Optionale Defaults und vollständige DAO-/Array-Parität bleiben offen;
 siehe [Datenübergabe](docs/DAO_GETROWS_RUNTIME.md).
 
