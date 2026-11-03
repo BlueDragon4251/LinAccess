@@ -422,12 +422,15 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                     const auto defaultExpression=trim(declared[5].str());
                     if((optionalSeen && !optional) || (!optional && !defaultExpression.empty()))
                         return {VbaExecutionStatus::Unsupported,"Optional parameters must follow required parameters",line};
-                    if(optional && !defaultExpression.empty() && (!std::regex_match(defaultExpression,defaultLiteral) || !validVbaExpression(defaultExpression)))
-                        return {VbaExecutionStatus::Unsupported,"Optional parameter defaults currently require scalar literals",line};
                     const auto type=lower(declared[4].str());
+                    const bool collectionDefault=type=="collection" && lower(defaultExpression)=="nothing";
+                    if(optional && !defaultExpression.empty() && !collectionDefault && (!std::regex_match(defaultExpression,defaultLiteral) || !validVbaExpression(defaultExpression)))
+                        return {VbaExecutionStatus::Unsupported,"Optional parameter default is not implemented",line};
+                    if(optional && type=="collection" && !defaultExpression.empty() && !collectionDefault)
+                        return {VbaExecutionStatus::Unsupported,"Optional Collection default must be Nothing",line};
                     if(optional && lower(defaultExpression)=="null" && !type.empty() && type!="variant")
                         return {VbaExecutionStatus::Unsupported,"Null defaults require a Variant parameter",line};
-                    if(optional && (type=="object" || type=="collection" || type.starts_with("dao.")))
+                    if(optional && (type=="object" || type.starts_with("dao.")))
                         return {VbaExecutionStatus::Unsupported,"Optional object parameters are not implemented",line};
                     optionalSeen=optionalSeen || optional;
                     if (parameters) parameters->push_back({declared[3].str(), lower(declared[2].str()) != "byval",type,optional,defaultExpression});

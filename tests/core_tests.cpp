@@ -531,12 +531,39 @@ Function MakeItems() As Collection
 Set MakeItems=New Collection
 MakeItems.Add CCur("1.25")
 End Function
+Function OptionalCount(Optional ByVal items As Collection=Nothing) As Long
+If IsMissing(items) Then Err.Raise 5
+If items Is Nothing Then
+OptionalCount=-1
+Else
+OptionalCount=items.Count
+End If
+End Function
+Sub OptionalReplace(Optional ByRef items As Collection)
+Set items=New Collection
+items.Add 9
+End Sub
+Sub OptionalFlow()
+Dim items As Collection
+Set items=New Collection
+items.Add 3
+Me!OptionalProvided=OptionalCount(Items:=items)
+Me!OptionalMissing=OptionalCount()
+OptionalReplace items
+Me!OptionalReplaced=items(1)
+OptionalReplace
+Me!OptionalAfterOmission=items(1)
+End Sub
 )VBA";
     assert(executeVbaProcedure(module,"InitializeItems",host).status==VbaExecutionStatus::Completed);
     assert(executeVbaProcedure(module,"MutateItems",host).status==VbaExecutionStatus::Completed);
     auto count=executeVbaProcedure(module,"CountItems",host); assert(count.status==VbaExecutionStatus::Completed && count.returnValue=="3");
     assert(executeVbaProcedure(module,"ReplaceItems",host).status==VbaExecutionStatus::Completed);
     count=executeVbaProcedure(module,"CountItems",host); assert(count.status==VbaExecutionStatus::Completed && count.returnValue=="1");
+    assert(executeVbaProcedure(module,"OptionalFlow",host).status==VbaExecutionStatus::Completed);
+    assert(host.fields["OptionalProvided"]=="1" && host.fields["OptionalMissing"]=="-1" && host.fields["OptionalReplaced"]=="9" && host.fields["OptionalAfterOmission"]=="9");
+    const auto badDefault=executeVbaProcedure("Sub BadDefault(Optional items As Collection=1)\nMe!BadCollectionDefault=1\nEnd Sub","BadDefault",host);
+    assert(badDefault.status==VbaExecutionStatus::Unsupported && !host.fields.contains("BadCollectionDefault"));
     const auto factory=executeVbaProcedure(module,"MakeItems",host);
     assert(factory.status==VbaExecutionStatus::Completed && factory.typedReturnValue && factory.typedReturnValue->kind==VbaValue::Kind::Object && factory.typedReturnValue->object->member("Item",{VbaValue::integer(1)}).currencyUnits==12500);
     const auto value=evaluateVbaObjectExpression("New Collection",host,{});
@@ -551,6 +578,34 @@ End Function
         int actual=0; try { (void)value.object->member(name,args); } catch(const VbaRuntimeError& error) { actual=error.number; }
         assert(actual==expected && value.object->member("Count",{}).number==before);
     }
+    const auto child=evaluateVbaObjectExpression("New Collection",host,{});
+    child.object->member("Add",{VbaValue::integer(7)});
+    value.object->member("Add",{child,VbaValue::string("child")});
+    value.object->member("Add",{evaluateVbaExpression("Array(v)",host,{{"v",child}})});
+    assert(value.object->member("Item",{VbaValue::string("child")}).object==child.object);
+    for(const auto& item:std::vector<VbaValue>{value,evaluateVbaExpression("Array(v)",host,{{"v",value}})}) {
+        int actual=0; try { child.object->member("Add",{item}); } catch(const VbaRuntimeError& error) { actual=error.number; }
+        assert(actual==3251 && child.object->member("Count",{}).number==1);
+    }
+    const auto nested=executeVbaProcedure(R"VBA(Function NestedFlow() As Long
+Dim groups As Collection
+Dim child As Collection
+Dim item As Variant
+Dim total As Long
+Set groups=New Collection
+Set child=New Collection
+child.Add 7
+groups.Add child
+For Each child In groups
+child.Add 8
+For Each item In child
+total=total+item
+Next
+Next
+NestedFlow=total
+End Function
+)VBA","NestedFlow",host);
+    assert(nested.status==VbaExecutionStatus::Completed && nested.returnValue=="15");
 }
 
 void testCalendarFunctions() {
@@ -2233,6 +2288,12 @@ End Function
     assert(evaluate(".5+2e1").asNumber()==20.5);
     assert(evaluate("1E-2").asNumber()==0.01);
     assert(evaluate("Len(\"Grüße😀\")").asNumber()==7);
+    assert(evaluate("VBA.LenB(\"Grüße😀\")").asNumber()==14 && evaluate("VarType(LenB(\"a\"))=vbLong").truthy());
+    assert(evaluate("LenB(Null)").kind==VbaValue::Kind::Null && evaluate("LenB(Empty)").asNumber()==0);
+    for(const auto& [source,expected]:std::vector<std::pair<std::string,int>>{{"LenB(1)",3251},{"LenB()",450},{"LenB(1,2)",450}}) {
+        int actual=0; try { (void)evaluate(source); } catch(const VbaRuntimeError& error) { actual=error.number; } assert(actual==expected);
+    }
+
     auto scalarProbe=std::make_shared<ScalarProbe>(); scalarProbe->value=VbaValue::string("ö😀");
     const VbaVariables scalarValues{{"probe",VbaValue::reference(scalarProbe)}};
     assert(evaluateVbaExpression("Len(probe)",host,scalarValues).asNumber()==3 && scalarProbe->reads==1);
@@ -2240,6 +2301,7 @@ End Function
     assert(evaluateVbaExpression("Len(probe)",host,scalarValues).kind==VbaValue::Kind::Null && scalarProbe->reads==2);
     const VbaVariables unicodeValues{{"embedded",VbaValue::string(std::string("A\0B",3))},{"invalid",VbaValue::string(std::string(1,static_cast<char>(0xff)))}};
     assert(evaluateVbaExpression("Len(embedded)",host,unicodeValues).asNumber()==3);
+    assert(evaluateVbaExpression("LenB(embedded)",host,unicodeValues).asNumber()==6);
     assert(evaluateVbaExpression("Mid(embedded,2,1)",host,unicodeValues).asText()==std::string(1,'\0'));
     int invalidUnicode=0; try { (void)evaluateVbaExpression("Len(invalid)",host,unicodeValues); } catch(const VbaRuntimeError& failure) { invalidUnicode=failure.number; } assert(invalidUnicode==13);
 

@@ -9,6 +9,7 @@
 #include "access_table_delegate.hpp"
 #include "access_table_view.hpp"
 #include <QHeaderView>
+#include <QClipboard>
 #include <QTableView>
 #include <QDateTime>
 #include <QApplication>
@@ -160,6 +161,9 @@ End Sub
     assert(grid.data(grid.index(0,1),Qt::EditRole).toString()=="549755813887.9999");
     linaccess::AccessTableView view; view.setModel(&grid); linaccess::AccessTableDelegate delegate; QStyleOptionViewItem option;
     view.setItemDelegate(&delegate); view.setSortingEnabled(true); view.show(); QApplication::setActiveWindow(&view); view.setFocus(); QApplication::processEvents();
+    view.setCurrentIndex(grid.index(0,1)); assert(view.copySelection() && QApplication::clipboard()->text()=="549755813887.9999");
+    assert(grid.clipboardText(grid.index(0,4))=="2024-02-29 12:34:56" && grid.clipboardText(grid.index(0,6))=="False");
+
     view.edit(grid.index(0,1)); QApplication::processEvents(); auto* live=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(live && view.isAncestorOf(live)); live->setText("1.23455");
     const auto priorSection=view.horizontalHeader()->sortIndicatorSection(); const auto priorOrder=view.horizontalHeader()->sortIndicatorOrder();
     view.horizontalHeader()->setSortIndicator(2,Qt::AscendingOrder);
@@ -174,6 +178,8 @@ End Sub
     view.setCurrentIndex(grid.index(0,1)); view.edit(grid.index(0,1)); QApplication::processEvents();
     auto* pending=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(pending); pending->setText("549755813888");
     assert(!view.finishEditing() && QApplication::focusWidget()==pending && pending->text()=="549755813888" && grid.data(grid.index(0,1)).toString()=="1.2346");
+    QApplication::clipboard()->setText("unchanged-invalid-editor");
+    assert(!view.copySelection() && QApplication::clipboard()->text()=="unchanged-invalid-editor" && QApplication::focusWidget()==pending);
     const auto guardedRows=grid.rowCount();
     assert(!view.insertRecord() && !view.deleteCurrentRecord() && grid.rowCount()==guardedRows && QApplication::focusWidget()==pending);
     pending->setText("1.23455"); assert(view.finishEditing() && grid.data(grid.index(0,1)).toString()=="1.2346");
@@ -229,5 +235,23 @@ End Function
     assert(dateObject->item("stamp").asText()=="2024-03-31 02:30:00");
     assert(sql.exec("SELECT stamp FROM grid WHERE id=1") && sql.next() && sql.value(0).toString()=="2024-03-31 02:30:00"); sql.finish();
     assert(dateForm.close());
+    {
+        assert(sql.exec("CREATE TABLE copy_cells(id INTEGER PRIMARY KEY,value TEXT)"));
+        assert(sql.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<300) INSERT INTO copy_cells SELECT i,'row-'||i FROM n"));
+        linaccess::AccessTableModel cells(nullptr,db); cells.setTable("copy_cells"); cells.setEditStrategy(QSqlTableModel::OnManualSubmit); assert(cells.select());
+        linaccess::AccessTableView sheet; sheet.setModel(&cells); sheet.show(); QApplication::setActiveWindow(&sheet); sheet.setFocus(); QApplication::processEvents();
+        QTest::keyClick(&sheet,Qt::Key_A,Qt::ControlModifier);
+        assert(cells.rowCount()==300 && sheet.selectionModel()->selectedIndexes().size()==600 && sheet.copySelection());
+        const auto all=QApplication::clipboard()->text(); assert(all.split("\r\n").size()==300 && all.startsWith("1\trow-1\r\n") && all.endsWith("300\trow-300") && !cells.isDirty());
+        assert(cells.setData(cells.index(0,1),"a\tb\"c\n")); sheet.setCurrentIndex(cells.index(0,1)); sheet.selectionModel()->select(cells.index(0,1),QItemSelectionModel::ClearAndSelect);
+        assert(sheet.copySelection() && QApplication::clipboard()->text()=="\"a\tb\"\"c\n\"");
+        const auto quoted=QApplication::clipboard()->text(); cells.revertAll();
+        sheet.selectionModel()->select(cells.index(0,0),QItemSelectionModel::ClearAndSelect);
+        sheet.selectionModel()->select(cells.index(1,1),QItemSelectionModel::Select);
+        assert(!sheet.copySelection() && QApplication::clipboard()->text()==quoted);
+        assert(sql.exec("ALTER TABLE copy_cells ADD COLUMN payload BLOB")); assert(sql.exec("UPDATE copy_cells SET payload=x'0102' WHERE id=1")); cells.setTable("copy_cells"); assert(cells.select());
+        sheet.setCurrentIndex(cells.index(0,2)); sheet.selectionModel()->select(cells.index(0,2),QItemSelectionModel::ClearAndSelect); assert(!sheet.copySelection() && QApplication::clipboard()->text()==quoted);
+        assert(sql.exec("SELECT value FROM copy_cells WHERE id=1") && sql.next() && sql.value(0).toString()=="row-1"); sql.finish();
+    }
 
 }

@@ -3,7 +3,10 @@
 `Set items = New Collection` and `New VBA.Collection` create a native C++ ordered
 collection. `Dim items As Collection` and Collection-typed module fields initialize to
 Nothing and reject other native classes with error 13. Typed Collection function
-results and required parameters are supported. ByVal shares the collection but
+results and required/Optional parameters are supported. Optional arguments use
+Nothing by default; IsMissing remains false for the typed reference. Explicit
+non-Nothing Collection defaults are rejected before procedure effects. ByVal
+shares the collection but
 keeps reference replacement local; ByRef can replace the caller reference.
 Module-held references persist across procedure calls. Existing Object
 and Variant references can share the same collection.
@@ -22,10 +25,12 @@ normal completion, Exit For and unwinding release the lease. This deliberately
 bounds the implementation until Access mutation-during-enumeration behavior is
 available. Existing DAO/Forms enumeration behavior is unchanged.
 
-Limits remain explicit: regional/non-ASCII keys, nested Collection items (also
-inside arrays), automatic As New, Optional Collection parameters and
-complete class/reference semantics are not implemented. Recursive collection
-ownership is rejected to prevent shared-reference cycles. Item traversal and
+Limits remain explicit: regional/non-ASCII keys, cyclic Collection/array ownership, automatic As New,
+generic Optional object parameters and
+complete class/reference semantics are not implemented. Nested collections and arrays can share acyclic references. Before Add mutates
+the collection, a bounded graph walk rejects a path back to its owner, including
+indirect paths through arrays. This prevents shared-reference cycles while
+preserving legitimate nested collections and nested For Each. Item traversal and
 allocation have bounded budgets. Unknown members and write attempts fail; this
 is not a full VBA Collection or COM compatibility claim.
 

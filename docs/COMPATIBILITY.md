@@ -1477,3 +1477,91 @@ SQL values, partial replacement and keyed restoration as sorting moves the same
 record twice. The shared-helper form layout target also passed in the preceding
 integration run. App builds; existing targets only. Last full suite/package/hash
 baseline remains 8dc6afa; no complete datasheet/regional-format parity claim.
+
+
+## Optional Collections and native editing menu (2026-11-03)
+
+Optional Collection parameters now bind an explicit/implicit Nothing default,
+with typed IsMissing=False, named supplied arguments and independent omitted
+ByRef storage. Non-Nothing defaults are rejected before effects. The main-window
+Bearbeiten menu routes real editor key events for undo/redo/clipboard/delete/
+selection, with live enabled states and read-only/password handling. It covers
+owned text editors; shared MDI menus/range clipboard/full command bars remain
+open. See COLLECTION_RUNTIME.md and EDIT_MENU_RUNTIME.md.
+Core/DAO targeted checks pass 2/2 (1.84 s); main-window target passes 1/1
+(1.90 s). Rebuilt complete desktop suite passes 48/48 in one run (88.53 s),
+including form/datasheet clock keys and primary-key-based cell restoration.
+GUI-free build/core passes 1/1 (1.76 s). Debian package contents/permissions/
+matching Build-ID/pinned SQLite backend checks pass; all four original hashes
+pass. Repository privacy is confirmed. Existing 48 targets only; no full Access
+2003/Windows interaction or new distro-matrix parity claim.
+
+
+## Acyclic nested Collection graphs (2026-11-03)
+
+Collection items can now retain other native Collections directly or through
+Variant arrays. Shared acyclic graphs preserve object identity; a bounded
+visited-node traversal rejects only cycles back to the receiving owner before
+mutation. Nested For Each retains independent enumeration leases, so editing a
+child before its own enumeration remains possible. Direct/indirect/array cycles
+still report 3251; complete cyclic/class lifetime semantics remain open.
+Core/DAO pass 2/2 (2.29 s); GUI-free core passes 1/1 (1.77 s). Existing targets
+only. Last full suite/package/hash baseline is local 4ba1819 (48/48, 88.53 s).
+That commit's CLI push was blocked by an invalid GH_TOKEN; the authenticated
+GitHub connector confirms private visibility and remote head 825047c. No raw
+credentials were inspected; local development continues pending renewed CLI
+authentication. No claim that these pending commits are already remote.
+
+
+## Native Unicode-string LenB (2026-11-03)
+
+VBA LenB/VBA.LenB and native SQL LenB count UTF-16 storage bytes for actual
+Unicode strings (without a terminator), including supplementary characters and
+embedded NUL. Results are checked Long values in VBA; Null propagates and Empty
+returns zero. Native scalar defaults use the existing object conversion path.
+SQL uses bound input values through the same native evaluator and participates
+in saved-query/alias validation. Non-string storage layout, UDT padding and
+named LenB binding remain explicitly unsupported; numeric inputs report 3251.
+Core/DAO/query checks pass 3/3 (2.34 s), including real SQL column/NUL input and
+projection alias arithmetic. GUI-free core passes 1/1 (1.55 s). Existing targets
+only. No full VBA storage-layout or new package/full-suite claim after 4ba1819.
+The CLI token remains invalid; these source commits are locally secured pending
+authentication renewal, rather than claimed as already pushed.
+
+
+## Precise joined UPDATE refusal diagnostics (2026-11-03)
+
+Conflicting joined source values now retain error 3251 with a dedicated, fixed
+explanation through both DAO and shared-query execution. Nullable-side outer-
+join writes also have a distinct refusal instead of a generic grammar failure.
+The private 100-query inventory records fixed reason codes, not raw SQL/values.
+Actual original boundaries are one joined_update_source_conflict and one
+joined_update_nullable_target. The executed count remains 77/100; no arbitrary
+source row is selected and no Access equivalence is invented. Original binding/
+dependency/source-column failures remain unresolved.
+DAO/query/join/inventory checks pass 4/4 (6.91 s); after the final nullable-side
+classification, join/inventory pass 2/2 (7.48 s). The ambiguity regression also
+checks the stable explanation and unchanged target rows. Existing targets only.
+Full suite/package baseline remains local 4ba1819, and CLI push authentication
+still requires renewal.
+
+
+## Native datasheet selection and checked text clipboard (2026-11-03)
+
+Shift+Space/Ctrl+Space/Ctrl+A select a row/column/all cells. Complete selection
+fetches remaining Qt batches within a bound; it does not silently stop at the
+initial page. Ctrl+C and Copy menu dispatch create rectangular quoted TSV with
+checked model values, exact supported Currency and round-trip numeric digits.
+Invalid editors, binary/NUL/hidden/disjoint/oversized cells preserve the old
+clipboard. Copy validates the active edit cache without submitting SQL changes.
+See DATASHEET_CLIPBOARD_RUNTIME.md for text-format/paste/locale limits.
+Main-window and Currency integration checks pass (including the final Currency
+run 1/1, 0.38 s): actual keys/menu, 300-row complete fetch, TSV quoting, rejected
+copy and real unchanged SQL storage. The rebuilt full desktop suite passes
+48/48 in one run (87.26 s), covering nested Collections, LenB and join diagnoses
+as well. Latest GUI-free core passes 1/1 (1.55 s); subsequent edits affect Qt
+data/GUI code only. Debian contents/permissions/Build-ID/pinned SQLite backend
+checks pass; all four original fixture hashes pass. Existing 48 targets only;
+no Access/Windows clipboard or complete parity claim. CLI authentication is
+still unavailable; local checkpoints are secured while an authenticated private
+GitHub API transfer is investigated.

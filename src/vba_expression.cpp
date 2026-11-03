@@ -57,14 +57,18 @@ class VbaCollection final : public VbaObject {
         }
         throw error("Invalid Collection index or key",5);
     }
-    static void checkItem(const VbaValue& value) {
+    void checkItem(const VbaValue& value) const {
         std::unordered_set<const VbaObject*> visited;
         std::size_t budget=1000000;
         const auto check=[&](auto&& self,const VbaValue& entry,int depth) -> void {
             if(!budget-- || depth>64) throw error("Collection item traversal limit",3251);
-            if(entry.kind==VbaValue::Kind::Object && dynamic_cast<VbaCollection*>(entry.object.get()))
-                throw error("Nested Collection lifetime is not implemented",3251);
-            if(entry.kind==VbaValue::Kind::Array && visited.insert(entry.object.get()).second)
+            if(entry.kind==VbaValue::Kind::Object) {
+                if(const auto* nested=dynamic_cast<const VbaCollection*>(entry.object.get())) {
+                    if(nested==this) throw error("Cyclic Collection lifetime is not implemented",3251);
+                    if(visited.insert(nested).second)
+                        for(const auto& child:nested->entries_) self(self,child.value,depth+1);
+                }
+            } else if(entry.kind==VbaValue::Kind::Array && visited.insert(entry.object.get()).second)
                 for(const auto& child:vbaArrayValues(entry)) self(self,child,depth+1);
         };
         check(check,value,0);
@@ -97,7 +101,7 @@ public:
         if(member=="add") {
             if(args.empty() || args.size()>4 || args[0].kind==VbaValue::Kind::Missing) throw error("Collection.Add arguments",450);
             requireMutable();
-            // Reject nested collections until cyclic object lifetime is implemented.
+            // Shared acyclic graphs are safe; reject a path back to this owner.
             checkItem(args[0]);
             const auto supplied=[&](std::size_t i) { return i<args.size() && args[i].kind!=VbaValue::Kind::Missing; };
             std::optional<std::string> itemKey;
@@ -734,7 +738,7 @@ private:
                 "array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
                 "doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
                 "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdate","cstr","str","str$","format","format$",
-                "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len",
+                "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
@@ -1571,6 +1575,17 @@ private:
                     if(suffix=='^') throw error("64-bit Val suffix is not implemented",3251);
                 }
                 return result;
+            }
+            if(word=="lenb") {
+                if(!host_) return {};
+                if(args.size()!=1 || omitted[0]) throw error("LenB requires one argument",450);
+                const auto scalar=scalarObjectValue(args[0]);
+                if(scalar.kind==VbaValue::Kind::Null) return {};
+                if(scalar.kind==VbaValue::Kind::Empty) return VbaValue::longInteger(0);
+                if(scalar.kind!=VbaValue::Kind::Text) throw error("LenB non-string storage layout is not implemented",3251);
+                const auto units=vbaStringCodeUnits(scalar.text);
+                if(units>static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()/2)) throw error("LenB result overflow",6);
+                return VbaValue::longInteger(static_cast<std::int32_t>(units*2));
             }
             if ((word == "isnull" || word == "isempty" || word == "len" || word == "cstr"
                 || word == "isnumeric") && one) {

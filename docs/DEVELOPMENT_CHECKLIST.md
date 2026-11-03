@@ -867,3 +867,18 @@ of complete Access parity. Existing broader open items remain open.
   replacing a live selection, with real Ctrl+S persistence; regional masks open.
 - [x] Existing keyed datasheet cell restored after save/model reset and sort
   movement, with composite-key comparison and bounded search; new/no-key open.
+
+- [x] Optional Collection Nothing defaults, typed IsMissing and supplied/named/
+  omitted ByRef arguments; generic Optional object binding remains open.
+- [x] Native main-window text editing menu with actual undo/redo/clipboard
+  commands and protected/password states; shared MDI/range operations open.
+
+- [x] Shared acyclic nested Collection/Variant-array graphs and nested For Each,
+  with indirect cycle refusal before mutation; cyclic object lifetime stays open.
+
+- [x] Native Unicode-string LenB UTF-16 byte counts, Null/Empty, qualified calls
+  and bound SQL/alias execution; numeric/UDT storage layout remains open.
+
+- [x] Native datasheet row/column/all keyboard selection and checked rectangular
+  text copy, full bounded fetch, Currency/number precision, quote handling and
+  rejection before clipboard replacement; typed MIME/range paste remain open.

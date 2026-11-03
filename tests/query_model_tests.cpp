@@ -111,6 +111,11 @@ int main(int argc, char** argv) {
         query.prepare("INSERT INTO unicode_lengths VALUES(?)"); query.addBindValue(QString::fromUtf8("A\0😀",6)); assert(query.exec()); query.finish();
         lengths.execute(db,"SELECT Len(value) AS units FROM unicode_lengths");
         assert(lengths.data(lengths.index(0,0)).toInt()==4);
+        lengths.execute(db,"SELECT LenB(value) AS bytes,LenB(Null) AS missing FROM unicode_lengths");
+        assert(lengths.data(lengths.index(0,0)).toInt()==8 && lengths.data(lengths.index(0,1)).isNull());
+        lengths.execute(db,"SELECT LenB('Grüße😀') AS bytes,bytes+1 AS following FROM samples WHERE id=1");
+        assert(lengths.data(lengths.index(0,0)).toInt()==14 && lengths.data(lengths.index(0,1)).toInt()==15);
+
         assert(query.exec("SELECT linaccess_jet_len(char(65279)||'A')") && query.next() && query.value(0).toInt()==2); query.finish();
         assert(!query.exec("SELECT linaccess_jet_len(CAST(x'ff' AS TEXT))"));
         assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==13); query.finish();
