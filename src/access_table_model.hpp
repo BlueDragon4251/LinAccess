@@ -16,6 +16,7 @@ public:
     bool insertRows(int row,int count,const QModelIndex& parent={}) override;
     bool removeRows(int row,int count,const QModelIndex& parent={}) override;
     bool submitTransactionally();
+    bool canSubmitCurrentRecordAlone(int row) const;
     bool setReadOnly(bool value);
     bool isReadOnly() const { return readOnly_; }
     void sort(int column,Qt::SortOrder order=Qt::AscendingOrder) override;

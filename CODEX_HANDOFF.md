@@ -433,3 +433,16 @@ Spalte; Qt verschob sie zuvor auf Spalte 0 (über Zoom reproduziert, korrigiert)
 Details docs/TABLE_DOCUMENT_RUNTIME.md. MainWindow/Currency 2/2 (2.47 s).
 Vollsuite/Paket weiterhin 2dd59b2 / privat 32cb556, 48/48 (91.15 s); dieses
 Qt-Inkrement gezielt geprüft, keine neuen Targets.
+
+
+## Native Tabellen-Datensatznavigation (2026-11-03)
+
+GoToRecord für benannte/aktive Tabellen und RunCommand First/Previous/Next/Last
+navigieren reale SQL-Zeilen in View-Reihenfolge; Last/GoTo lädt über Qt-Batches
+hinaus (1-Million-Grenze). Ein allein geänderter bestehender aktueller Datensatz
+mit Primärschlüssel wird vor dem Wechsel transaktional gespeichert. SQL-Fehler
+lassen Zeile/Cache zum Korrigieren/Retry bestehen. Fremde Entwürfe, Inserts/Deletes,
+fehlende sichere Identität und neue Platzhalterzeilen bleiben explizit begrenzt.
+Details docs/TABLE_DOCUMENT_RUNTIME.md. Trio 3/3 (16.79 s), Vollsuite 48/48
+(91.33 s), GUI-freier Core 1/1 (2.49 s), Debian-Paket und vier Fixture-Hashes
+bestanden. Keine neuen Testtargets; auch vorherige Tabellenbefehle voll mitgeprüft.

@@ -1817,3 +1817,14 @@ viewing. Cancel is normal completion. Whole-row selection preserves the active
 column for subsequent commands. Existing main-window/Currency 2/2 (2.47 s);
 full/package baseline remains 2dd59b2 / API 32cb556. TABLE_DOCUMENT_RUNTIME.md
 records scope and limitations. Theoretical checklist: 295 checked / 70 open.
+
+
+## Bounded native table record navigation (2026-11-03)
+
+Named/default GoToRecord and native First/Previous/Next/Last use actual view order
+and SQL fetches. A sole updated existing current record with primary key is saved
+transactionally before navigation; SQL errors retain it for retry. Other dirty
+rows, pending inserts/deletes and new-record placeholder behavior remain bounded
+unsupported paths. See TABLE_DOCUMENT_RUNTIME.md. Full desktop 48/48 (91.33 s),
+GUI-free 1/1 (2.49 s), Debian checks and four fixture hashes pass.
+Theoretical checklist: 297 checked / 71 open scoped points.

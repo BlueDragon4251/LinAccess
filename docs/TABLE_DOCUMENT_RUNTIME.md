@@ -147,3 +147,33 @@ This was reproduced by a subsequent Zoom and fixed in the same path.
 Existing main-window/Currency targets pass 2/2 (2.47 s), covering readonly Close,
 accepted text edits, Cancel retaining the prior draft and unchanged SQL. Last
 full suite/package remains 2dd59b2 / API 32cb556, 48/48 (91.15 s). No new targets.
+
+
+## Bounded native table record navigation (2026-11-03)
+
+DoCmd.GoToRecord can address an open named native table (acTable) or the active
+native table by default. First, Last, Previous, Next and positive one-based GoTo
+offsets use real view/model row ordering. Native RunCommand First/Previous/Next/
+Last uses this same route. Named targets activate their actual page with existing
+source-field/modal validation; Me remains the calling form.
+
+Last/GoTo fetch actual SQL rows past Qt's initial batch, bounded to one million
+rows. Checked invalid offsets/unavailable existing rows return 2105. Moving past
+the last existing record does not synthesize a new-record placeholder; new-record
+navigation remains unsupported (3251). These bounds do not claim complete Access
+navigation error precedence or addition-row behavior.
+
+An existing current record update is transactionally saved before navigation
+only when it is the sole dirty record in the cache. The same checked SaveRecord
+helper restores its primary-key position before calculating the relative target.
+SQL failure prevents navigation and preserves the draft for correction/retry.
+Unrelated dirty rows, pending inserts/deletes and unsafe current-record identity
+remain an explicit 3251 boundary; no unrelated draft is committed or discarded.
+Explicit SaveRecord then clean navigation remains available for multirow drafts.
+
+Full rebuilt desktop suite passes 48/48 (91.33 s), GUI-free core 1/1 (2.49 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. Existing focused trio passes 3/3 (16.79 s), exercising
+300 actual SQL rows, named/default/relative targets, sole-record SQL persistence,
+constraint failure/retry and untouched multirow drafts. Fixtures explicitly sort
+ascending; production navigation follows the current view order. No new targets.

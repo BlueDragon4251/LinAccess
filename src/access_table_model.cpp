@@ -3,6 +3,7 @@
 #include "vba_qt_value.hpp"
 #include <QSqlError>
 #include <QSqlRecord>
+#include <QSqlIndex>
 #include <limits>
 #include <QSignalBlocker>
 #include <QScopedValueRollback>
@@ -103,6 +104,16 @@ bool AccessTableModel::setReadOnly(bool value) {
     if(isDirty()) return reject(2501);
     readOnly_=value;
     if(rowCount()>0 && columnCount()>0) emit dataChanged(index(0,0),index(rowCount()-1,columnCount()-1));
+    return true;
+}
+bool AccessTableModel::canSubmitCurrentRecordAlone(int row) const {
+    if(row<0 || row>=rowCount() || primaryKey().isEmpty() || deletedRows_.contains(row) || !indexInQuery(index(row,0)).isValid()) return false;
+    bool currentDirty=false;
+    for(int column=0;column<columnCount();++column) currentDirty|=isDirty(index(row,column));
+    if(!currentDirty) return false;
+    auto candidates=dirtyRows_; candidates.unite(deletedRows_);
+    for(int candidate:candidates) if(candidate!=row && candidate>=0 && candidate<rowCount())
+        for(int column=0;column<columnCount();++column) if(isDirty(index(candidate,column))) return false;
     return true;
 }
 bool AccessTableModel::submitTransactionally() {

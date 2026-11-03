@@ -590,7 +590,24 @@ public:
     void maximizeForm() override { commandDocument().window()->showMaximized(); }
     void minimizeForm() { commandDocument().window()->showMinimized(); }
     void restoreForm() { auto* window=commandDocument().window(); window->showNormal(); window->activateWindow(); }
+    bool tableNavigation(int action,int offset,const QString& name,bool explicitTable) {
+        if(!explicitTable && !usesActiveTableContext()) return false;
+        QWidget* owner=nullptr;
+        for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+            if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+        if(!owner || owner->metaObject()->indexOfMethod("navigateTableDocument(QString,int,int,bool)")<0) return false;
+        QVariantMap result;
+        if(!QMetaObject::invokeMethod(owner,"navigateTableDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),
+            Q_ARG(QString,name),Q_ARG(int,action),Q_ARG(int,offset),Q_ARG(bool,explicitTable)))
+            throw linaccess::VbaRuntimeError(3251,"Native table navigation dispatch is unavailable");
+        if(!result.value("handled").toBool()) return false;
+        const int error=result.value("error").toInt();
+        if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
+        preview_.setProperty("la_explicit_table_context",true);
+        return true;
+    }
     void gotoRecord(int action,int offset=1,const QString& name={}) {
+        if(name.isEmpty() && tableNavigation(action,offset,name,false)) return;
         AccessFormPreview* selected=nullptr;
         if (name.isEmpty()) selected=&commandDocument();
         else {
@@ -826,10 +843,12 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         if (args.size()>4) throw VbaRuntimeError(450,"GoToRecord argument count invalid");
         const auto type=!args.empty() && args[0].kind!=VbaValue::Kind::Empty ? number(args[0]) : -1;
         const auto name=args.size()>1 && args[1].kind!=VbaValue::Kind::Empty ? QString::fromStdString(args[1].asText()) : QString{};
-        if ((type!=-1 && type!=2) || (!name.isEmpty() && type!=2)) throw VbaRuntimeError(3251,"GoToRecord object type unsupported");
+        if ((type!=-1 && type!=0 && type!=2) || (!name.isEmpty() && type!=0 && type!=2)) throw VbaRuntimeError(3251,"GoToRecord object type unsupported");
         const auto action=args.size()>2 && args[2].kind!=VbaValue::Kind::Empty ? number(args[2]) : 1;
         const auto offset=args.size()>3 && args[3].kind!=VbaValue::Kind::Empty ? number(args[3]) : 1;
-        host.gotoRecord(action,offset,name);
+        if(type==0) {
+            if(!host.tableNavigation(action,offset,name,true)) throw VbaRuntimeError(3251,"Native table navigation is unavailable");
+        } else host.gotoRecord(action,offset,name);
         return {};
     }
     throw VbaRuntimeError(438,"Document command unsupported");

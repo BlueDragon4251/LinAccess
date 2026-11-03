@@ -25,6 +25,7 @@ public:
     Q_INVOKABLE int openTableDocument(const QString& name,int view,int mode);
     Q_INVOKABLE QVariantMap dispatchTableCommand(int command);
     Q_INVOKABLE QVariantMap closeTableDocument(int type,const QString& name,int save);
+    Q_INVOKABLE QVariantMap navigateTableDocument(const QString& name,int action,int offset,bool explicitTable);
     Q_INVOKABLE int selectDatabaseObject(int objectType,const QString& name,bool activate);
 
 private:
