@@ -1185,9 +1185,9 @@ End Function
 
     {
         FakeForm host;
-        const std::string module="Function CurrentProject() As String\nCurrentProject=\"user-function\"\nEnd Function\nFunction ReadProject() As String\nReadProject=CurrentProject()\nEnd Function\n";
+        const std::string module="Function CurrentProject() As String\nCurrentProject=\"user-function\"\nEnd Function\nFunction CurrentData() As String\nCurrentData=\"user-data\"\nEnd Function\nFunction ReadProject() As String\nReadProject=CurrentProject() & \"|\" & CurrentData()\nEnd Function\n";
         const auto result=executeVbaProcedure(module,"ReadProject",host);
-        assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="user-function");
+        assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="user-function|user-data");
     }
 
     {

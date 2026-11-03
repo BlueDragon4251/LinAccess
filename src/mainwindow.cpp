@@ -995,6 +995,7 @@ void MainWindow::showAccessArtifact(int id) {
     dialog.resize(850, 680);
     auto* outer = new QVBoxLayout(&dialog);
     const auto kind = query.value(0).toString();
+    if(kind=="query") tagProjectObject(&dialog,this,db_,kind,artifactName);
     const auto status = query.value(2).toString();
     const auto format=query.value(3).toString();
     const auto detail=query.value(4).toString();
@@ -1292,6 +1293,8 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive) {
     }
     if(!finishActiveDataEditors() || !AccessFormPreview::activateProjectDocument(db_,this,nullptr)) return 2501;
     auto* page = new QWidget(tabs_);
+    tagProjectObject(page,this,db_,"table",name);
+    page->setProperty("la_project_object_scope","tab");
     auto* outer = new QVBoxLayout(page);
     outer->addWidget(new QLabel("Tabelle: " + name + (readOnly ? " — Schreibgeschützt" : " — Änderungen erst mit 'Speichern' festschreiben")));
     auto* actions = new QHBoxLayout();
@@ -1369,6 +1372,7 @@ void MainWindow::editQuery(const QString& existingName) {
     if (!hasProject()) return;
     QDialog dialog(this);
     dialog.setWindowTitle("SQL-Abfrage");
+    tagProjectObject(&dialog,this,db_,"query",existingName);
     dialog.resize(920, 700);
     auto* outer = new QVBoxLayout(&dialog);
     auto* name = new QLineEdit(existingName, &dialog);

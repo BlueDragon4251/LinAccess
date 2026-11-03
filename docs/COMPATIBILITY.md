@@ -2048,3 +2048,21 @@ Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. Includes saved-main-schema/temp-shadow isolation, genuine
 empty/no-catalog distinction, native catalog lifetimes and report Visible VBA/SQL.
 No additional test targets.
+
+## Native CurrentData table/query catalogs (2026-11-03)
+
+CurrentData/Application.CurrentData expose actual saved main-schema user tables
+and native/imported query definitions through checked Long Count, Item/named
+lookup, For Each and readonly Name/IsLoaded. Internal tables are excluded.
+IsLoaded tracks actual table tab membership, including readonly/background tabs
+and removed pages, plus real named SQL editor/source/result dialogs. Held
+references outlive requesters and invalidate with the existing project generation.
+User functions named CurrentData retain resolution. CURRENT_DATA_RUNTIME.md is
+the canonical scope; this is metadata, not a blanket query/COM compatibility
+claim. Existing core/main-window pair 2/2 (6.16 s), GUI-free core 1/1 (1.51 s);
+no new targets. Theoretical checklist: 329 checked / 72 open scoped points.
+
+Full rebuilt desktop suite passes 48/48 (101.66 s), GUI-free core 1/1 (1.51 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. Native CurrentData UI state and saved metadata included;
+no additional test targets.
