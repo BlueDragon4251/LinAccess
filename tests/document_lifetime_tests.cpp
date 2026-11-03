@@ -8,6 +8,7 @@
 #undef NDEBUG
 #endif
 #include <cassert>
+#include <cstdio>
 
 void testDocumentLifetimes() {
     using linaccess::VbaValue;
@@ -32,6 +33,17 @@ CurrentDb.Execute "INSERT INTO events VALUES('close')"
 End Sub
 Sub QuitNow()
 DoCmd.Quit
+CurrentDb.Execute "INSERT INTO events VALUES('unreachable')"
+End Sub
+Sub PumpEvents()
+Dim result As Integer
+result=VBA.DoEvents()
+If result<>0 Then Err.Raise 5
+DoEvents
+End Sub
+Sub PumpQuit()
+On Error Resume Next
+DoEvents
 CurrentDb.Execute "INSERT INTO events VALUES('unreachable')"
 End Sub
 Sub QuitObject()
@@ -59,8 +71,15 @@ End Sub
     AccessFormPreview peer("peer","Begin Report\nEnd\n",{},db); peer.show();
     auto peerObject=makePreviewFormObject(peer);
     object->assignItem("value",VbaValue::string("saved before cancelled unload"));
-    object->assign("Tag",VbaValue::string("block"));
     std::vector<VbaValue> none;
+    bool pumped=false;
+    QTimer::singleShot(0,target,[&] { pumped=true; assert(query.exec("INSERT INTO events VALUES('pumped')")); });
+    const auto pumpResult=target->executeProcedure("PumpEvents",none);
+    if(pumpResult.status!=linaccess::VbaExecutionStatus::Completed) std::fprintf(stderr,"DoEvents regression status=%d error=%d line=%zu\n",static_cast<int>(pumpResult.status),pumpResult.errorNumber,static_cast<std::size_t>(pumpResult.line));
+    assert(pumpResult.status==linaccess::VbaExecutionStatus::Completed && pumped);
+    assert(query.exec("SELECT COUNT(*) FROM events WHERE value='pumped'") && query.next() && query.value(0).toInt()==1); query.finish();
+    assert(query.exec("DELETE FROM events")); query.finish();
+    object->assign("Tag",VbaValue::string("block"));
     for (const auto* procedure : {"QuitNow","QuitObject"}) {
         const auto result=target->executeProcedure(procedure,none);
         assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==2501);
@@ -87,7 +106,8 @@ End Sub
     QTimer deadline; deadline.setSingleShot(true);
     QObject::connect(&deadline,&QTimer::timeout,[] { QApplication::exit(42); }); deadline.start(3000);
     QTimer::singleShot(0,&quitter,[&] {
-        quitCompleted=quitter.executeProcedure("QuitNow",none).status==linaccess::VbaExecutionStatus::Completed;
+        QTimer::singleShot(0,&quitter,[&] { assert(quitter.executeProcedure("QuitNow",none).status==linaccess::VbaExecutionStatus::Completed); });
+        quitCompleted=quitter.executeProcedure("PumpQuit",none).status==linaccess::VbaExecutionStatus::Completed;
     });
     assert(QApplication::exec()==0 && quitCompleted); deadline.stop();
     assert(!quitter.isVisible() && !foreign.isVisible());

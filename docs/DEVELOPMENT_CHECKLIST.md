@@ -843,3 +843,8 @@ of complete Access parity. Existing broader open items remain open.
   subsecond storage refusal without mutation; full Date coercion matrix open.
 - [x] Native unbound calendar Date values and original focused-target popup
   transfers, plus civil Date input across system DST gaps; full ActiveX open.
+
+- [x] Native procedure colon chains and qualified implemented VBA intrinsics,
+  preserving Date literals, named arguments and local VBA object precedence.
+- [x] Native DoEvents dispatch and Integer-zero result with retained document
+  lifetime and nested Quit noncontinuation; full Windows message ordering open.

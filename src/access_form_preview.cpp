@@ -549,6 +549,13 @@ public:
         if(selected->isMinimized()) selected->showNormal(); else selected->show();
         selected->raise(); selected->activateWindow(); selected->activateDocument();
     }
+    int doEvents() override {
+        ++nativeExecutionDepth();
+        const auto leave=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+        QCoreApplication::processEvents(QEventLoop::AllEvents);
+        if(linaccess::vbaExecutionStopRequested()) throw linaccess::VbaExecutionStopped{};
+        return 0;
+    }
     void quitApplication() override { AccessFormPreview::quitApplication(); }
     void maximizeForm() override { commandDocument().window()->showMaximized(); }
     void minimizeForm() { commandDocument().window()->showMinimized(); }

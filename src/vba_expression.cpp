@@ -630,7 +630,7 @@ private:
             consume(); word=lower(consume().value);
             static const std::unordered_set<std::string> intrinsics{
                 "array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
-                "msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
+                "doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
                 "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdate","cstr","str","str$","format","format$",
                 "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len",
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
@@ -760,6 +760,11 @@ private:
                 return host_->currentForm()->member("Controls",{VbaValue::string(field.value)});
             return item ? host_->controlValue(field.value) : host_->fieldValue(field.value);
         }
+        if(word=="doevents" && !nextSymbol("(")) {
+            if(!host_) return {};
+            if(accessExpression_) throw error("DoEvents is unavailable in calculated expressions",3251);
+            return VbaValue::integer(host_->doEvents());
+        }
         if ((word=="now" || word=="date" || word=="time") && !nextSymbol("("))
             return host_ ? clockValue(word) : VbaValue{};
         if (accessExpression_ && (word=="sum" || word=="count") && take("(")) {
@@ -875,6 +880,12 @@ private:
                 const auto size=word=="instr" ? ordered.size() : last+1;
                 ordered.resize(size); missing.resize(size); orderedRefs.resize(size);
                 args=std::move(ordered); omitted=std::move(missing); references=std::move(orderedRefs);
+            }
+            if(word=="doevents") {
+                if(!args.empty()) throw error("DoEvents takes no arguments",450);
+                if(!host_) return {};
+                if(accessExpression_) throw error("DoEvents is unavailable in calculated expressions",3251);
+                return VbaValue::integer(host_->doEvents());
             }
             const auto one = args.size() == 1;
             if(word=="cdate") {

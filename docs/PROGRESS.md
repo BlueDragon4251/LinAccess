@@ -3306,3 +3306,17 @@ Access-only functions and unknown qualified members are rejected explicitly;
 module-qualified paths such as VBA.Strings are outside this increment.
 Existing core/DAO checks pass 2/2 (1.68 s); GUI-free core passes 1/1 (1.58 s).
 No new CTest target or full-parity claim.
+
+
+## Native DoEvents and nested Quit (2026-11-03)
+
+Native imported form/report VBA now dispatches actual pending Qt events and
+returns Integer zero. Expression/qualified calls and bare statements are
+supported; direct-call preflight preserves user procedure resolution. Native
+document retention spans the pump; nested accepted Quit stops the suspended
+procedure even with Resume Next. Calculated expressions and hosts without an
+event loop reject the operation explicitly. See DOEVENTS_RUNTIME.md for limits.
+Core/layout checks pass 2/2 (16.05 s), including a queued SQL insertion and
+nested Quit. GUI-free build/core passed before the final direct-call preflight
+correction (1.40 s); its repeat follows with the next clock increment. Existing
+CTest targets only; no full Windows message/reentrancy parity claim.

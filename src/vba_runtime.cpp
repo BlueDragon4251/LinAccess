@@ -1038,6 +1038,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 const auto external = host.moduleForProcedure(instruction.argument);
                 if (external) declaration = validateVbaProcedure(*external, instruction.argument);
             }
+            if(declaration.status==VbaExecutionStatus::ProcedureMissing && lower(instruction.argument)=="doevents") continue;
             if (declaration.status != VbaExecutionStatus::Completed)
                 return {VbaExecutionStatus::Unsupported, "Aufgerufene Prozedur nicht verfügbar oder nicht unterstützt", instruction.line};
         }
@@ -1276,6 +1277,12 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 const auto external=host.moduleForProcedure(name);
                 if(external) nested=executeProcedure(*external,name,host,actuals,&bindings);
             }
+        }
+        if(nested.status==VbaExecutionStatus::ProcedureMissing && lower(std::string(name))=="doevents") {
+            if(!actuals.empty()) throw VbaRuntimeError(450,"DoEvents takes no arguments");
+            const auto result=VbaValue::integer(host.doEvents());
+            if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
+            return result;
         }
         if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
         for (std::size_t i = 0; i < names.size(); ++i) {
