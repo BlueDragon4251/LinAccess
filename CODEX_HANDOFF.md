@@ -736,3 +736,17 @@ mit Tabellen geteilt, echte Typkonvertierung, kein Binär-/Hidden-/Disjoint-Expo
 Umfang/Grenzen: docs/OPEN_QUERY_RUNTIME.md. Vollprüfung 48/48 (91,62 s), GUI-frei
 1/1 (1,54 s), Debian-Paket und vier Original-SHA-256 bestanden; keine neuen
 Testziele. 336 erfasste erledigte / 72 offene Checklist-Punkte, keine Gesamtquote.
+
+## Native Abfragesuche (2026-11-03)
+
+Abfragefenster: echter modelloser Suchdialog, Strg+F/Umschalt+F4, Find/FindNext
+und aktuelles Feld über DoCmd.FindRecord. Typisierte Vergleiche verwenden
+nachgewiesene Projektions-/physische Spaltentypen; separate positionsbezogene
+UI-Metadaten lassen den bisherigen DAO-Typvertrag bestehen. Unbekannte Ausdrücke
+werden nicht anhand angezeigter Werte typisiert. Suchtext-Bearbeitung nutzt
+geteilte echte QLineEdit-Befehle. Abfrageöffnung wählt erste Ergebniszelle sofort,
+damit direkt folgender Currency-FindRecord ohne Qt-Zwischenschritt funktioniert.
+Ergebnistausch prüft Lebensdauer nach Qt-Callbacks. Umfang/Grenzen stehen in
+OPEN_QUERY_RUNTIME.md. Desktop 48/48 (90,46 s), GUI-frei 1/1 (1,50 s), Debian-
+Paket und vier Original-SHA-256 bestanden. 337 erledigte / 72 offene erfasste
+Checklist-Punkte, kein Gesamtparitätsprozentsatz und keine neuen Testziele.

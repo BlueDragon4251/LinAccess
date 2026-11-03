@@ -34,7 +34,7 @@ parameter cancel/checked Currency, rejects action queries without data changes,
 and verifies a query remains after its VBA opener closes itself. No new targets.
 
 This is a bounded readonly datasheet path. Default/acEdit updateability, other
-views, action-query UI/warnings, query Save/Find,
+views, action-query UI/warnings, query Save,
 linked/provider behavior and complete Access
 window/event/error-priority parity remain open. SQL compatibility remains the
 executor's measured subset; query presence is not execution compatibility.
@@ -85,5 +85,35 @@ rejection, named target activation across two query tabs, actual Ctrl+C/Ctrl+Ins
 hidden-cell refusal, select-record/all and real SendKeys copy. No new test targets.
 Full desktop suite 48/48 (91.62 s), GUI-free core 1/1 (1.54 s), Debian package
 payload/permissions/Build-ID/pinned SQLite and all four original fixture SHA-256
-checks pass. Query editing, Find, native query sort/filter and full Access
+checks pass. Query editing, native query sort/filter and full Access
 window/event/keyboard semantics remain open.
+
+## Native result search
+
+Ctrl+F/RunCommand Find open a real modeless Qt search dialog on the query view;
+Shift+F4/FindNext repeat the actual previous search. Current-field DoCmd.FindRecord
+uses the same materialized result search. Literal text supports partial/whole/
+start and Qt case handling, Up/Down do not wrap and All wraps. Number, Currency,
+Date and Boolean use checked typed whole-field comparison; Null is skipped.
+Only proven types are searched: compiled projection metadata and direct physical
+column lineage supply per-position UI types. Unknown expressions/compound output
+and unsupported/binary columns are not guessed from displayed cell strings.
+The existing DAO result-type map retains its prior contract. Invalid search
+input leaves selection/history intact; one million searched cells is the bound.
+All-field/formatted/wildcard FindRecord, locale and full Access search parity
+remain open, as for the existing table path.
+
+Successful Requery closes the previous search dialog and resets search state;
+failed Requery retains the original result. New query tabs select their first
+real result cell synchronously, so immediate VBA FindRecord works without an
+extra Qt event-loop turn. Search-field Copy/Paste/Cut/Undo/Redo use actual focused
+QLineEdit text through the shared data-document command helper. Readonly result
+cells remain immutable. Model replacement checks document/view/model lifetime
+after Qt selection callbacks before publishing success.
+
+Existing main-window integration covers typed number/Currency and literal text
+search, Ctrl+F/Shift+F4, invalid dialog input, focused Copy/Paste/Undo/Redo and
+immediate post-OpenQuery Currency search. Currency SQL objects/schema/results and
+query model targets pass 5/5 (4.46 s) with the main-window target. Full suite
+48/48 (90.46 s), GUI-free core 1/1 (1.50 s), Debian package and all four original
+fixture hashes pass. No new test targets.
