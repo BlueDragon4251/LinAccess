@@ -2711,3 +2711,13 @@ and real Alt+I focus transfer. Desktop build and form_current_record pass
 (0.48 s). No new target. Detached-label heuristics, duplicate mnemonic cycling,
 label mouse-event rules and complete Windows accessibility/printing equivalence
 remain open. Grouped packaging/headless evidence above covers c63c584 only.
+
+## Native form Edit/ReadOnly opening modes (2026-11-03)
+
+OpenForm DataMode now reaches native construction before Open/Load and controls.
+ReadOnly disables all three edit/add/delete policies; Edit enables them despite
+imported disabled policies. Existing native read-only query restrictions remain.
+Existing core/GUI targets pass 2/2 (1.80 s), including Open-event policy reads,
+actual read-only editor state and real keyboard edit persisted to a test table.
+Desktop build passes. No new target. See FORM_DATA_MODE_RUNTIME.md for remaining
+DataEntry/reuse/locking/view/reference boundaries.

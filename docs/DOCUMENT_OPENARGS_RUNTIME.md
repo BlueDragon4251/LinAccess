@@ -16,7 +16,9 @@ assignment, exact Empty/Null reopening behavior and Windows property mutability
 remain open. The current property facade rejects assignment with 438.
 OpenForm accepts acFormPropertySettings with acWindowNormal or acHidden; see
 [hidden forms](HIDDEN_FORM_RUNTIME.md). Native icon/dialog modes are also implemented; see DIALOG_WINDOW_RUNTIME.md.
-Other data/view modes still fail 3251.
+Native acFormReadOnly/acFormEdit policy overrides are now supported for newly
+opened forms; see FORM_DATA_MODE_RUNTIME.md. acFormAdd and other view modes
+still fail 3251.
 This is not general mode parity.
 
 The existing native GUI target opens filtered children, reads values in Open and

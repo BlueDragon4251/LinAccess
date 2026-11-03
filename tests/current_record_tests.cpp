@@ -71,6 +71,60 @@ End Sub
         assert(sql.exec("SELECT COUNT(*) FROM positions WHERE position=101") && sql.next() && sql.value(0).toInt()==2); sql.finish();
         assert(defaults.close()); assert(sql.exec("DELETE FROM positions"));
     }
+    {
+        assert(sql.exec("CREATE TABLE mode_records AS SELECT * FROM records"));
+        const QByteArray readOnlyLayout=R"FORM(Begin Form
+RecordSource ="mode_records"
+AllowEdits =0
+AllowAdditions =0
+AllowDeletions =0
+OnOpen ="[Event Procedure]"
+Begin Section
+Begin TextBox
+Name ="label"
+ControlSource ="label"
+End
+End
+End
+)FORM";
+        sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','read_only_form',?)");
+        sql.addBindValue(readOnlyLayout); assert(sql.exec()); sql.finish();
+        sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba','Form_read_only_form',?)");
+        sql.addBindValue(QByteArray("Sub Form_Open(Cancel As Integer)\nCurrentDb.Execute \"INSERT INTO positions VALUES(201,\" & CLng(Me.AllowEdits Or Me.AllowAdditions Or Me.AllowDeletions) & \")\"\nEnd Sub\n"));
+        assert(sql.exec()); sql.finish();
+        const QByteArray opener=R"VBA(Sub ReadOnlyOpen()
+DoCmd.OpenForm FormName:="read_only_form",DataMode:=acFormReadOnly
+End Sub
+Sub EditableOpen()
+DoCmd.OpenForm FormName:="read_only_form",DataMode:=acFormEdit
+End Sub
+Sub ReadOnlyClose()
+DoCmd.Close ObjectType:=acForm,ObjectName:="read_only_form",Save:=acSaveNo
+End Sub
+)VBA";
+        AccessFormPreview caller("readonly_caller","Begin Form\nBegin Section\nEnd\nEnd\n",opener,db);
+        std::vector<VbaValue> args; assert(caller.executeProcedure("ReadOnlyOpen",args).status==linaccess::VbaExecutionStatus::Completed);
+        assert(sql.exec("SELECT type FROM positions WHERE position=201") && sql.next() && sql.value(0).toInt()==0); sql.finish();
+        AccessFormPreview* opened=nullptr;
+        for(auto* widget:QApplication::topLevelWidgets())
+            if(auto* candidate=dynamic_cast<AccessFormPreview*>(widget);candidate && candidate!=&caller && candidate->isVisible() && candidate->findChild<QLineEdit*>("access-control-label")) opened=candidate;
+        assert(opened && opened->findChild<QLineEdit*>("access-control-label")->isReadOnly());
+        auto form=makePreviewFormObject(*opened);
+        assert(!form->member("AllowEdits",{}).truthy() && !form->member("AllowAdditions",{}).truthy() && !form->member("AllowDeletions",{}).truthy());
+        assert(caller.executeProcedure("ReadOnlyClose",args).status==linaccess::VbaExecutionStatus::Completed);
+        assert(caller.executeProcedure("EditableOpen",args).status==linaccess::VbaExecutionStatus::Completed);
+        opened=nullptr;
+        for(auto* widget:QApplication::topLevelWidgets())
+            if(auto* candidate=dynamic_cast<AccessFormPreview*>(widget);candidate && candidate!=&caller && candidate->isVisible() && candidate->findChild<QLineEdit*>("access-control-label")) opened=candidate;
+        assert(opened); auto* editor=opened->findChild<QLineEdit*>("access-control-label"); assert(!editor->isReadOnly());
+        form=makePreviewFormObject(*opened);
+        assert(form->member("AllowEdits",{}).truthy() && form->member("AllowAdditions",{}).truthy() && form->member("AllowDeletions",{}).truthy());
+        editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"edited");
+        form->assign("Dirty",VbaValue::logical(false));
+        assert(sql.exec("SELECT label FROM mode_records WHERE id=10") && sql.next() && sql.value(0).toString()=="edited"); sql.finish();
+        assert(caller.executeProcedure("ReadOnlyClose",args).status==linaccess::VbaExecutionStatus::Completed);
+        assert(caller.close()); assert(sql.exec("DELETE FROM positions"));
+    }
     const QByteArray layout=R"FORM(Begin Form
 RecordSource ="records"
 OnCurrent ="[Event Procedure]"

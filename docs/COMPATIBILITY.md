@@ -972,3 +972,8 @@ Imported labels nested beneath supported TextBox/ComboBox/ListBox controls keep
 their attachment and use native Qt buddy mnemonics for Alt-letter editor focus.
 Detached-label heuristics, duplicate mnemonic cycling and full Windows label
 mouse/accessibility/printing behavior are not claimed.
+
+OpenForm DataMode now supports native acFormEdit/acFormReadOnly policy overrides
+before startup events for newly opened forms; see FORM_DATA_MODE_RUNTIME.md.
+acFormAdd/DataEntry, changing mode on an already-open instance and full Windows
+view/locking semantics remain open. Edit does not make read-only queries writable.

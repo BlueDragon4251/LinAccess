@@ -1195,7 +1195,7 @@ public:
         }
         if (key=="openform") {
             const auto request=linaccess::parseVbaOpenFormArguments(args);
-            preview.openOtherForm(text(request.name),text(request.where),request.openArgs ? std::optional<QString>(text(*request.openArgs)) : std::nullopt,request.windowMode); return {};
+            preview.openOtherForm(text(request.name),text(request.where),request.openArgs ? std::optional<QString>(text(*request.openArgs)) : std::nullopt,request.windowMode,request.dataMode); return {};
         }
         if (key!="close") throw linaccess::VbaRuntimeError(438,"DoCmd member unsupported");
         if (args.size()>3) throw linaccess::VbaRuntimeError(450,"Unexpected Close arguments");

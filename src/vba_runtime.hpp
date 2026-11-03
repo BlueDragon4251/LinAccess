@@ -38,7 +38,7 @@ class VbaObject;
 struct VbaValue;
 struct VbaModuleState;
 std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module);
-struct VbaOpenFormArguments { std::string name,where; std::optional<std::string> openArgs; int windowMode{}; };
+struct VbaOpenFormArguments { std::string name,where; std::optional<std::string> openArgs; int windowMode{}; int dataMode{-1}; };
 struct VbaInputBoxArguments {
     std::string prompt;
     std::optional<std::string> title;

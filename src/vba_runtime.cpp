@@ -912,7 +912,8 @@ VbaOpenFormArguments parseVbaOpenFormArguments(const std::vector<VbaValue>& args
     for(std::size_t index=4;index<std::min<std::size_t>(6,args.size());++index) {
         if(args[index].kind==VbaValue::Kind::Empty) continue;
         const auto mode=coerceVbaModuleValue(scalarVbaValue(args[index]),"long").number;
-        if(index==5 && (mode==1 || mode==2 || mode==3)) result.windowMode=static_cast<int>(mode);
+        if(index==4 && (mode==1 || mode==2)) result.dataMode=static_cast<int>(mode);
+        else if(index==5 && (mode==1 || mode==2 || mode==3)) result.windowMode=static_cast<int>(mode);
         else if(mode!=(index==4 ? -1 : 0)) throw VbaRuntimeError(3251,"OpenForm data/window mode is unsupported");
     }
     if(args.size()>6) {
@@ -926,6 +927,7 @@ VbaOpenFormArguments parseVbaOpenFormArguments(const std::vector<VbaValue>& args
 }
 void VbaHost::openFormArguments(const std::vector<VbaValue>& args) {
     const auto request=parseVbaOpenFormArguments(args);
+    if(request.dataMode!=-1) throw VbaRuntimeError(3251,"Host does not support OpenForm data modes");
     if(request.windowMode!=0) throw VbaRuntimeError(3251,"Host does not support OpenForm window modes");
     if(request.openArgs) throw VbaRuntimeError(3251,"Host does not support OpenArgs");
     if (!request.where.empty()) throw VbaRuntimeError(3251,"Host does not support a form WhereCondition");

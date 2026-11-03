@@ -686,7 +686,7 @@ public:
     }
     void openFormArguments(const std::vector<linaccess::VbaValue>& args) override {
         const auto request=linaccess::parseVbaOpenFormArguments(args);
-        preview_.openOtherForm(QString::fromStdString(request.name),QString::fromStdString(request.where),request.openArgs ? std::optional<QString>(QString::fromStdString(*request.openArgs)) : std::nullopt,request.windowMode);
+        preview_.openOtherForm(QString::fromStdString(request.name),QString::fromStdString(request.where),request.openArgs ? std::optional<QString>(QString::fromStdString(*request.openArgs)) : std::nullopt,request.windowMode,request.dataMode);
     }
     void openForm(std::string_view name) override {
         preview_.openOtherForm(QString::fromUtf8(name.data(), name.size()));
@@ -797,7 +797,7 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
 
 AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
                                      const QByteArray& vbaSource, QSqlDatabase database,
-                                     QWidget* parent,bool embedded,QString whereCondition,std::optional<QString> openArgs,int windowMode)
+                                     QWidget* parent,bool embedded,QString whereCondition,std::optional<QString> openArgs,int windowMode,int dataMode)
     : QDialog(parent), formName_(std::move(formName)),openArgs_(std::move(openArgs)),
       vba_(linaccess::decodeVbaSource(vbaSource)),
       layout_(linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(source))),
@@ -809,6 +809,11 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     };
     if(stopped()) return;
     if(windowMode<0 || windowMode>3) throw linaccess::VbaRuntimeError(3251,"Native window mode is not implemented");
+    if(dataMode!=-1 && dataMode!=1 && dataMode!=2) throw linaccess::VbaRuntimeError(3251,"Native data mode is not implemented");
+    if(dataMode==1 || dataMode==2) {
+        if(layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(3251,"DataMode requires a form");
+        layout_.allowEdits=dataMode==1; layout_.allowAdditions=dataMode==1; layout_.allowDeletions=dataMode==1;
+    }
     nativeDialog_=windowMode==3;
     if(nativeDialog_) { layout_.modal=true; layout_.popup=true; }
     static quint64 nextWindowSequence=0;
@@ -2381,13 +2386,15 @@ void AccessFormPreview::closeOtherDocument(int type,const std::optional<QString>
     if (target->closing_ || !target->close()) throw linaccess::VbaRuntimeError(2501,"Close action cancelled");
 }
 
-void AccessFormPreview::openOtherForm(const QString& name,const QString& where,std::optional<QString> openArgs,int windowMode) {
-    openOtherDocument(linaccess::AccessDocumentKind::Form,name,where,std::move(openArgs),windowMode);
+void AccessFormPreview::openOtherForm(const QString& name,const QString& where,std::optional<QString> openArgs,int windowMode,int dataMode) {
+    openOtherDocument(linaccess::AccessDocumentKind::Form,name,where,std::move(openArgs),windowMode,dataMode);
 }
 
-void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where,std::optional<QString> openArgs,int windowMode) {
+void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where,std::optional<QString> openArgs,int windowMode,int dataMode) {
     if(windowMode<0 || windowMode>3) throw linaccess::VbaRuntimeError(3251,"Native window mode is not implemented");
+    if(dataMode!=-1 && dataMode!=1 && dataMode!=2) throw linaccess::VbaRuntimeError(3251,"Native data mode is not implemented");
     const bool report=kind==linaccess::AccessDocumentKind::Report;
+    if(report && dataMode!=-1) throw linaccess::VbaRuntimeError(3251,"DataMode requires a form");
     if (closing_ || closingProjects().contains(projectKey(db_))) throw linaccess::VbaRuntimeError(2501,"Project is closing");
     AccessFormPreview* existing=nullptr;
     for (auto* widget:QApplication::topLevelWidgets()) {
@@ -2400,6 +2407,7 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
         existing=document;
     }
     if (existing) {
+        if(dataMode!=-1) throw linaccess::VbaRuntimeError(3251,"Changing data mode of an open document is not implemented");
         if(windowMode==3) throw linaccess::VbaRuntimeError(3251,"acDialog reuse of an open document is not implemented");
         if(openArgs && existing->openArgs_!=openArgs) throw linaccess::VbaRuntimeError(3251,"Changing OpenArgs of an open document is not implemented");
         if (!where.trimmed().isEmpty()) {
@@ -2433,7 +2441,7 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
     QWidget* projectOwner=nullptr;
     for (auto* ancestor=parentWidget();ancestor;ancestor=ancestor->parentWidget())
         if (qobject_cast<QMainWindow*>(ancestor)) { projectOwner=ancestor; break; }
-    auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,db_,projectOwner,false,where,std::move(openArgs),windowMode);
+    auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,db_,projectOwner,false,where,std::move(openArgs),windowMode,dataMode);
     const auto validate=[&] {
         for (const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent","OnNoData"})
             if (const auto outcome=nested->eventResult(event);outcome && failed(*outcome))
