@@ -2795,3 +2795,14 @@ Existing GUI regression uses a real primary-key editor/save and checks current
 record, old bookmark, clone identity and persisted SQL. Desktop build and existing
 GUI/DAO targets pass 2/2 (0.90 s). No new target/full-suite/package repeat. See
 FORM_KEY_IDENTITY_RUNTIME.md for external trigger/SQL/filter/concurrency limits.
+
+## Grouped native identity/keyboard verification (2026-11-03)
+
+Snapshot 992d082 passed the complete desktop/all-target build and all 48 existing
+CTest targets in one run (83.53 s). Matching .deb Build-ID, pinned SQLite backend
+smoke and package contents/permissions pass. All four original fixture SHA-256
+checks and repository privacy pass. The GUI-free runtime sources are unchanged
+since the prior successful 1/1 GUI-free check (1.37 s); no redundant repeat.
+No new CTest targets, distro matrix repeat or remote CI success claim. Remote CI
+remains blocked by the previously reported billing restriction. Complete Access
+2003 parity is still not established.
