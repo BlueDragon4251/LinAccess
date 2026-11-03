@@ -202,3 +202,22 @@ increment is focused-verified. The GUI-free rebuild/core passes 1/1 (1.53 s).
 After Application.RunCommand forwarding was added, the final existing layout
 target passes 1/1 (14.90 s), including actual interpreted named-argument
 Application execution and unavailable-control error propagation.
+
+
+## Native field navigation and retained invalid input (2026-11-03)
+
+Ctrl+End completes bounded query fetching before moving to the final field of
+the last record. It refuses the supported cell budget instead of silently
+selecting the end of Qt's initial fetch batch. Ctrl+Home retains normal native
+first-record/first-field navigation. Active edits are validated first.
+Tab, Backtab/Shift+Tab, Return and keypad Enter now validate into the field cache
+before Qt closes a native delegate editor. Rejected Currency/type input stays
+visible and focused. Valid input follows Qt field navigation while SQL remains
+unsubmitted. Shared native editor commit logic also serves explicit Finish/F2.
+Mouse/focus-out cancellation, all Access navigation policies and exact keyboard
+parity remain open; this increment does not claim to implement them.
+Existing main-window/Currency targets pass 2/2 (2.01 s): actual 300-row fetching,
+Ctrl+End/Home, rejected keys including both Shift+Tab encodings, valid Tab cache
+updates and unchanged SQL until explicit Save. No new targets. Full suite/package
+baseline remains local e15ff33 / API c381897, 48/48 (88.41 s); this increment is
+focused-verified. Theoretical checklist: 279 checked / 70 open scoped points.

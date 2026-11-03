@@ -913,3 +913,7 @@ See KEYBOARD_RUNTIME.md; complete Access keyboard/display parity remains open. N
 
 See DATASHEET_CLIPBOARD_RUNTIME.md; exact Decimal and complete Windows formatting
 remain open. Both data-loss paths were reproduced on synthetic working data.
+
+
+- [x] Native Ctrl+End fetches complete supported datasheets before last-record navigation; Ctrl+Home returns to the first field.
+- [x] Native Tab/Backtab/Shift+Tab/Return/Enter retain invalid input and validate successful edits into the cache without SQL autosubmit.

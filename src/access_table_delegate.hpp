@@ -18,6 +18,16 @@ public:
     bool eventFilter(QObject* watched,QEvent* event) override {
         if(event->type()==QEvent::KeyPress) {
             const auto* key=static_cast<QKeyEvent*>(event);
+            const auto modifiers=key->modifiers() & ~Qt::KeypadModifier;
+            const bool advance=(modifiers==Qt::NoModifier && (key->key()==Qt::Key_Return || key->key()==Qt::Key_Enter))
+                || ((key->key()==Qt::Key_Tab || key->key()==Qt::Key_Backtab) && (modifiers==Qt::NoModifier || modifiers==Qt::ShiftModifier));
+            if(advance) {
+                QPointer<QWidget> editor=qobject_cast<QWidget*>(watched);
+                const auto target=watched->property("la_cell_index").value<QPersistentModelIndex>();
+                if(editor && target.isValid() && qobject_cast<const AccessTableModel*>(target.model())) {
+                    if(!commitNativeCellEditor(editor,target) || !editor) return true;
+                }
+            }
             if(key->key()==Qt::Key_F2 && key->modifiers()==Qt::ShiftModifier) {
                 QPointer<QLineEdit> editor=qobject_cast<QLineEdit*>(watched);
                 const auto target=watched->property("la_cell_index").value<QPersistentModelIndex>();
@@ -30,13 +40,10 @@ public:
                 }
             }
             if(key->key()==Qt::Key_F2 && key->modifiers()==Qt::NoModifier) {
-                QPointer<QWidget> editor=qobject_cast<QLineEdit*>(watched);
+                QPointer<QWidget> editor=qobject_cast<QWidget*>(watched);
                 const auto target=watched->property("la_cell_index").value<QPersistentModelIndex>();
-                auto* typed=target.isValid() ? qobject_cast<AccessTableModel*>(const_cast<QAbstractItemModel*>(target.model())) : nullptr;
-                if(editor && typed) {
-                    const auto property=editor->metaObject()->userProperty();
-                    if(property.isValid() && (!nativeCellEditorChanged(editor,target) || typed->setData(target,property.read(editor),Qt::EditRole)))
-                        if(editor) emit closeEditor(editor,QAbstractItemDelegate::NoHint);
+                if(editor && target.isValid() && qobject_cast<const AccessTableModel*>(target.model())) {
+                    if(commitNativeCellEditor(editor,target) && editor) emit closeEditor(editor,QAbstractItemDelegate::NoHint);
                     return true;
                 }
             }

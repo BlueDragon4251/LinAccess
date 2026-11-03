@@ -181,6 +181,12 @@ End Sub
     assert(!view.finishEditing() && QApplication::focusWidget()==pending && pending->text()=="549755813888" && grid.data(grid.index(0,1)).toString()=="1.2346");
     QTest::keyClick(pending,Qt::Key_F2); QApplication::processEvents();
     assert(QApplication::focusWidget()==pending && pending->text()=="549755813888" && grid.data(grid.index(0,1)).toString()=="1.2346");
+    for(const auto key:{Qt::Key_Tab,Qt::Key_Backtab,Qt::Key_Return,Qt::Key_Enter}) {
+        QTest::keyClick(pending,key); QApplication::processEvents();
+        assert(QApplication::focusWidget()==pending && pending->text()=="549755813888" && grid.data(grid.index(0,1)).toString()=="1.2346");
+    }
+    QTest::keyClick(pending,Qt::Key_Tab,Qt::ShiftModifier); QApplication::processEvents();
+    assert(QApplication::focusWidget()==pending && pending->text()=="549755813888" && grid.data(grid.index(0,1)).toString()=="1.2346");
     QApplication::clipboard()->setText("unchanged-invalid-editor");
     assert(!view.copySelection() && QApplication::clipboard()->text()=="unchanged-invalid-editor" && QApplication::focusWidget()==pending);
     const auto guardedRows=grid.rowCount();
@@ -253,6 +259,9 @@ End Function
         assert(sql.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<300) INSERT INTO copy_cells SELECT i,'row-'||i FROM n"));
         linaccess::AccessTableModel cells(nullptr,db); cells.setTable("copy_cells"); cells.setEditStrategy(QSqlTableModel::OnManualSubmit); assert(cells.select());
         linaccess::AccessTableView sheet; sheet.setModel(&cells); sheet.show(); QApplication::setActiveWindow(&sheet); sheet.setFocus(); QApplication::processEvents();
+        QTest::keyClick(&sheet,Qt::Key_End,Qt::ControlModifier);
+        assert(cells.rowCount()==300 && sheet.currentIndex().row()==299 && sheet.currentIndex().column()==1);
+        QTest::keyClick(&sheet,Qt::Key_Home,Qt::ControlModifier); assert(sheet.currentIndex()==cells.index(0,0));
         QTest::keyClick(&sheet,Qt::Key_A,Qt::ControlModifier);
         assert(cells.rowCount()==300 && sheet.selectionModel()->selectedIndexes().size()==600 && sheet.copySelection());
         const auto all=QApplication::clipboard()->text(); assert(all.split("\r\n").size()==300 && all.startsWith("1\trow-1\r\n") && all.endsWith("300\trow-300") && !cells.isDirty());
@@ -356,7 +365,9 @@ End Function
         assert(sql.exec("SELECT value FROM floating_cells") && sql.next() && sql.value(0).toDouble()==original); sql.finish();
         sheet.setCurrentIndex(floating.index(0,1)); sheet.edit(sheet.currentIndex()); QApplication::processEvents();
         auto* editor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(editor && sheet.isAncestorOf(editor)); editor->setText("9.876543210987654");
-        assert(sheet.finishEditing() && floating.isDirty() && floating.submitTransactionally());
+        QTest::keyClick(editor,Qt::Key_Tab); QApplication::processEvents(); assert(floating.isDirty());
+        assert(sql.exec("SELECT value FROM floating_cells") && sql.next() && sql.value(0).toDouble()==original); sql.finish();
+        assert(floating.submitTransactionally());
         assert(sql.exec("SELECT value FROM floating_cells") && sql.next() && sql.value(0).toDouble()==9.876543210987654); sql.finish();
         for(int column=1;column<=3;++column) {
             sheet.setCurrentIndex(floating.index(1,column)); sheet.edit(sheet.currentIndex()); QApplication::processEvents();
