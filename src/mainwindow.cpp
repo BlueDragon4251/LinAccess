@@ -384,7 +384,7 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         const int actions[]{1,0,2,3};
         return navigateTableDocument({},actions[command-65],1,false);
     }
-    if(command==50 || command==109 || command==190 || command==179 || command==163 || command==164 || command==30 || command==341) {
+    if(command==50 || command==109 || command==190 || command==191 || command==179 || command==163 || command==164 || command==30 || command==341) {
         QPointer<linaccess::AccessTableView> table;
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
@@ -395,6 +395,8 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
             if(!table->selectAllRecords()) return tableModelFailure(model,2501);
         } else if(command==190) {
             if(!table->copySelection()) return tableModelFailure(model,2501);
+        } else if(command==191) {
+            if(!table->pasteSelection()) return tableModelFailure(model,2046);
         } else if(command==179) {
             if(!table->zoomCurrentCell()) return tableModelFailure(model,2046);
         } else if(command==163 || command==164) {

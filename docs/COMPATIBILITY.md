@@ -1909,3 +1909,19 @@ submission. Existing main-window target passes 1/1 (3.02 s), GUI-free core 1/1
 Last full suite/package source is local 934c26d / private API 914cc78:
 48/48 (93.79 s), Debian checks and all four fixture hashes passed.
 Theoretical checklist: 311 checked / 72 open scoped points.
+
+## Native table Paste command (2026-11-03)
+
+DoCmd/Application acCmdPaste (191) uses the actual bounded Ctrl+V TSV path with
+whole-block typed preflight, readonly protection and no implicit SQL submission.
+Missing text MIME raises a fresh 2046 instead of reusing an old model error.
+Invalid later-cell input retains the clean cache; valid two-row paste changes
+only drafts; another paste refuses 2501 and retains them. Existing main-window
+target 1/1 (3.12 s), GUI-free core 1/1 (1.63 s); no new targets. Canonical scope:
+TABLE_DOCUMENT_RUNTIME.md. Editor-text command routing, paste-over-draft merging,
+record append, binary/locale and full Access equivalence remain open.
+Theoretical checklist: 312 checked / 72 open scoped points.
+
+Full rebuilt desktop suite passes 48/48 (97.38 s), GUI-free core 1/1 (1.63 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. This includes the preceding SelectAllRecords increment.
