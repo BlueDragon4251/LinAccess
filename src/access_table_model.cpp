@@ -4,9 +4,19 @@
 #include <QSqlError>
 #include <QSqlRecord>
 #include <limits>
+#include <QSignalBlocker>
+#include <QScopedValueRollback>
+#include <QSqlQuery>
+#include <algorithm>
 namespace linaccess {
 namespace {
 bool checkedDisplay(const QString& type) { return type=="CURRENCY_REAL" || type=="INTEGER1" || type=="INTEGER2" || type=="INTEGER4"; }
+QVariant checkedInput(const QString& type,const QVariant& input) {
+    const bool emptyNumeric=input.metaType().id()==QMetaType::QString && input.toString().isEmpty()
+        && (type=="CURRENCY_REAL" || type.contains("INT",Qt::CaseInsensitive) || type.contains("REAL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive));
+    const auto scalar=emptyNumeric ? VbaValue{} : qtFieldValue(input,(type.contains("BOOL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive))?type:QString{});
+    return sqlFieldValue(scalar,type);
+}
 QString editMessage(int number) {
     if(number==6) return QStringLiteral("Zahlenwert außerhalb des zulässigen Bereichs.");
     if(number==13) return QStringLiteral("Der Wert passt nicht zum Spaltentyp.");
@@ -16,7 +26,11 @@ QString editMessage(int number) {
     return QStringLiteral("Der Wert kann nicht übernommen werden.");
 }
 }
-AccessTableModel::AccessTableModel(QObject* parent,QSqlDatabase database):QSqlTableModel(parent,database) {}
+AccessTableModel::AccessTableModel(QObject* parent,QSqlDatabase database):QSqlTableModel(parent,database) {
+    connect(this,&QAbstractItemModel::dataChanged,this,[this](const QModelIndex& first,const QModelIndex& last) {
+        if(editStrategy()==OnManualSubmit) for(int row=first.row();row<=last.row();++row) dirtyRows_.insert(row);
+    });
+}
 bool AccessTableModel::reject(int number) {
     const auto message=editMessage(number);
     setLastError(QSqlError("LinAccess",message,QSqlError::StatementError,QString::number(number)));
@@ -27,8 +41,94 @@ bool AccessTableModel::refreshTypes() {
     try { types_=sqliteColumnTypes(database(),tableName()); generated_=generatedAccessColumns(database(),tableName()); return true; }
     catch(const VbaRuntimeError& error) { metadataError_=error.number; return reject(error.number); }
 }
-void AccessTableModel::setTable(const QString& table) { QSqlTableModel::setTable(table); (void)refreshTypes(); }
-bool AccessTableModel::select() { return refreshTypes() && QSqlTableModel::select(); }
+void AccessTableModel::setTable(const QString& table) {
+    if(saving_) { (void)reject(2501); return; }
+    dirtyRows_.clear(); deletedRows_.clear(); QSqlTableModel::setTable(table); (void)refreshTypes();
+}
+bool AccessTableModel::select() {
+    if(saving_) return reject(2501);
+    const bool result=refreshTypes() && QSqlTableModel::select();
+    if(result) { dirtyRows_.clear(); deletedRows_.clear(); }
+    return result;
+}
+void AccessTableModel::clear() {
+    if(saving_) { (void)reject(2501); return; }
+    QSqlTableModel::clear(); dirtyRows_.clear(); deletedRows_.clear();
+}
+QVector<QPersistentModelIndex> AccessTableModel::rowAnchors(const QSet<int>& rows) const {
+    QVector<QPersistentModelIndex> result; result.reserve(rows.size());
+    for(int row:rows) if(row>=0 && row<rowCount()) result.push_back(index(row,0));
+    return result;
+}
+QSet<int> AccessTableModel::anchoredRows(const QVector<QPersistentModelIndex>& anchors) const {
+    QSet<int> result; for(const auto& anchor:anchors) if(anchor.isValid()) result.insert(anchor.row()); return result;
+}
+void AccessTableModel::revertRow(int row) {
+    if(saving_) { (void)reject(2501); return; }
+    const QScopedValueRollback<bool> changing(changing_,true);
+    auto dirty=dirtyRows_,deleted=deletedRows_; dirty.remove(row); deleted.remove(row);
+    const auto dirtyAnchors=rowAnchors(dirty),deleteAnchors=rowAnchors(deleted);
+    QSqlTableModel::revertRow(row);
+    dirtyRows_=anchoredRows(dirtyAnchors); deletedRows_=anchoredRows(deleteAnchors);
+}
+bool AccessTableModel::insertRows(int row,int count,const QModelIndex& parent) {
+    if(saving_ || changing_) return reject(2501);
+    const QScopedValueRollback<bool> changing(changing_,true);
+    const auto dirtyAnchors=rowAnchors(dirtyRows_),deleteAnchors=rowAnchors(deletedRows_);
+    const bool accepted=QSqlTableModel::insertRows(row,count,parent);
+    dirtyRows_=anchoredRows(dirtyAnchors); deletedRows_=anchoredRows(deleteAnchors);
+    if(accepted && editStrategy()==OnManualSubmit) for(int i=0;i<count;++i) dirtyRows_.insert(row+i);
+    return accepted;
+}
+bool AccessTableModel::removeRows(int row,int count,const QModelIndex& parent) {
+    if(saving_ || changing_) return reject(2501);
+    const QScopedValueRollback<bool> changing(changing_,true);
+    const auto dirtyAnchors=rowAnchors(dirtyRows_),deleteAnchors=rowAnchors(deletedRows_);
+    QVector<QPersistentModelIndex> removed;
+    if(!parent.isValid() && row>=0 && count>0 && static_cast<qint64>(row)+count<=rowCount())
+        for(int i=0;i<count;++i) if(indexInQuery(index(row+i,0)).isValid()) removed.push_back(index(row+i,0));
+    const bool accepted=QSqlTableModel::removeRows(row,count,parent);
+    dirtyRows_=anchoredRows(dirtyAnchors); deletedRows_=anchoredRows(deleteAnchors);
+    if(accepted && editStrategy()==OnManualSubmit) for(const auto& anchor:removed) if(anchor.isValid()) {
+        dirtyRows_.insert(anchor.row()); deletedRows_.insert(anchor.row());
+    }
+    return accepted;
+}
+bool AccessTableModel::submitTransactionally() {
+    if(saving_ || changing_) return reject(2501);
+    if(editStrategy()!=OnManualSubmit) return reject(3251);
+    if(!isDirty()) return select();
+    struct Pending { int row; enum Kind { Update,Insert,Delete } kind; QSqlRecord values; };
+    QVector<Pending> pending;
+    auto candidates=dirtyRows_; candidates.unite(deletedRows_);
+    auto rows=candidates.values(); std::sort(rows.begin(),rows.end());
+    for(int row:rows) {
+        if(row<0 || row>=rowCount()) continue;
+        bool dirty=false; for(int col=0;col<columnCount();++col) dirty|=isDirty(index(row,col));
+        if(!dirty) continue;
+        const auto kind=deletedRows_.contains(row) ? Pending::Delete : !indexInQuery(index(row,0)).isValid() ? Pending::Insert : Pending::Update;
+        auto values=record(row);
+        for(int col=0;col<values.count();++col) {
+            const bool generated=values.isGenerated(col);
+            values.setValue(col,QSqlTableModel::data(index(row,col),Qt::EditRole)); values.setGenerated(col,generated);
+        }
+        pending.push_back({row,kind,std::move(values)});
+    }
+    if(pending.isEmpty()) return reject(3251);
+    {
+        const QScopedValueRollback<bool> saving(saving_,true);
+        auto db=database();
+        if(!db.transaction()) { setLastError(db.lastError()); return false; }
+        for(const auto& item:pending) {
+            const bool accepted=item.kind==Pending::Insert ? insertRowIntoTable(item.values)
+                : item.kind==Pending::Delete ? deleteRowFromTable(item.row) : updateRowInTable(item.row,item.values);
+            if(!accepted) { const auto problem=lastError(); db.rollback(); setLastError(problem); return false; }
+        }
+        if(!db.commit()) { const auto problem=db.lastError(); db.rollback(); setLastError(problem); return false; }
+    }
+    // No Qt cache entry is marked submitted before the database commit succeeds.
+    return select();
+}
 void AccessTableModel::sort(int column,Qt::SortOrder order) {
     const bool protectedEditor=protectSort_; protectSort_=false;
     if(protectedEditor || isDirty()) {
@@ -79,10 +179,12 @@ Qt::ItemFlags AccessTableModel::flags(const QModelIndex& index) const {
     return result;
 }
 bool AccessTableModel::setData(const QModelIndex& index,const QVariant& value,int role) {
+    if(saving_ || changing_) return reject(2501);
     if(!index.isValid() || index.model()!=this) return false;
     const bool checkbox=role==Qt::CheckStateRole && columnType(index.column()).contains("BOOL",Qt::CaseInsensitive);
     if(role!=Qt::EditRole && !checkbox) return QSqlTableModel::setData(index,value,role);
     if(!(flags(index)&Qt::ItemIsEditable)) return reject(2448);
+    const QScopedValueRollback<bool> changing(changing_,true);
     try {
         const auto type=columnType(index.column());
         QVariant input=value;
@@ -91,14 +193,52 @@ bool AccessTableModel::setData(const QModelIndex& index,const QVariant& value,in
             if(!valid || state<Qt::Unchecked || state>Qt::Checked) return reject(5);
             input=state==Qt::PartiallyChecked ? QVariant{} : QVariant(state==Qt::Checked);
         }
-        const bool emptyNumeric=input.metaType().id()==QMetaType::QString && input.toString().isEmpty()
-            && (type=="CURRENCY_REAL" || type.contains("INT",Qt::CaseInsensitive) || type.contains("REAL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive));
-        const auto scalar=emptyNumeric ? VbaValue{} : qtFieldValue(input,(type.contains("BOOL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive))?type:QString{});
-        const auto converted=sqlFieldValue(scalar,type);
+        const auto converted=checkedInput(type,input);
         const bool accepted=QSqlTableModel::setData(index,converted,Qt::EditRole);
         if(accepted) { setLastError({}); if(checkbox) emit dataChanged(index,index,{Qt::CheckStateRole}); }
         return accepted;
     } catch(const VbaRuntimeError& error) { return reject(error.number); }
+}
+bool AccessTableModel::setDataBlock(const QModelIndex& first,const QVector<QVector<QString>>& values) {
+    if(saving_ || changing_) return reject(2501);
+    const QScopedValueRollback<bool> changing(changing_,true);
+    if(editStrategy()!=QSqlTableModel::OnManualSubmit) return reject(3251);
+    if(isDirty()) return reject(2501);
+    if(metadataError_) return reject(metadataError_);
+    if(!first.isValid() || first.model()!=this || values.isEmpty() || values.front().isEmpty()) return reject(5);
+    const auto columns=values.front().size();
+    if(values.size()>1000000/columns || static_cast<qint64>(first.row())+values.size()>rowCount()
+        || static_cast<qint64>(first.column())+columns>columnCount()) return reject(5);
+    struct Cell { QModelIndex index; QVariant value; };
+    QVector<Cell> checked;
+    try {
+        checked.reserve(values.size()*columns);
+        for(qsizetype row=0;row<values.size();++row) {
+            if(values[row].size()!=columns) return reject(5);
+            for(qsizetype column=0;column<columns;++column) {
+                const auto target=index(first.row()+row,first.column()+column);
+                if(!(flags(target)&Qt::ItemIsEditable)) return reject(2448);
+                checked.push_back({target,checkedInput(columnType(target.column()),values[row][column])});
+            }
+        }
+    } catch(const VbaRuntimeError& error) { return reject(error.number); }
+      catch(const std::bad_alloc&) { return reject(7); }
+    int failure=0;
+    {
+        const QSignalBlocker blocked(this);
+        try {
+            for(const auto& cell:checked) if(!QSqlTableModel::setData(cell.index,cell.value,Qt::EditRole)) { failure=3251; break; }
+        } catch(const std::bad_alloc&) { failure=7; }
+          catch(const std::exception&) { failure=3251; }
+        // The cache was clean on entry; only this block can need reverting.
+        if(failure) QSqlTableModel::revertAll();
+    }
+    const auto last=index(first.row()+values.size()-1,first.column()+columns-1);
+    if(!failure) setLastError({});
+    emit dataChanged(first,last,{Qt::DisplayRole,Qt::EditRole,Qt::CheckStateRole});
+    emit headerDataChanged(Qt::Vertical,first.row(),last.row());
+    if(failure) return reject(failure);
+    return true;
 }
 bool AccessTableModel::insertRowIntoTable(const QSqlRecord& row) {
     auto values=row;

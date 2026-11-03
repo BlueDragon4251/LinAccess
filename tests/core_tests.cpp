@@ -1752,6 +1752,12 @@ End Sub
     const auto multiline = parseCsv("x,y\n\"a\nb\",c\n");
     assert(multiline[1][0] == "a\nb");
     assert(parseCsv("").empty());
+    const auto tsv=parseTsvDetailed("1\t\"a\tb\"\"c\n\"\r\n2\t\r\n");
+    assert(tsv.size()==2 && tsv[0].size()==2 && tsv[0][1].quoted && tsv[0][1].value=="a\tb\"c\n" && tsv[1][1].value.empty());
+    for(const auto* invalid:{"\"unclosed","\"closed\"tail","unescaped\"quote"}) {
+        bool rejected=false; try { (void)parseTsvDetailed(invalid); } catch(const std::runtime_error&) { rejected=true; } assert(rejected);
+    }
+
     const auto detailed = parseCsvDetailed("value,other\n\"\\x\",\x1e\n\"\x1e\",\x1e\n");
     assert(detailed.size() == 3);
     assert(detailed[2][0].quoted && detailed[2][0].value == "\x1e");

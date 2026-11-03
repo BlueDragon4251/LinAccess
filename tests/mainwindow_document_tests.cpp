@@ -119,6 +119,14 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     assert(table->selectionModel()->selectedIndexes().size()==model->rowCount());
     refreshEdit(); assert(editAction("copy")->isEnabled()); editAction("copy")->trigger();
     assert(QApplication::clipboard()->text()=="m-middle\r\nsaved-through-shortcut" && !model->isDirty());
+    table->setCurrentIndex(model->index(0,1)); QApplication::clipboard()->setText("first-range\r\nsecond-range");
+    refreshEdit(); assert(editAction("paste")->isEnabled()); editAction("paste")->trigger();
+    assert(model->isDirty() && model->index(0,1).data().toString()=="first-range" && model->index(1,1).data().toString()=="second-range");
+    refreshEdit(); assert(!editAction("paste")->isEnabled());
+    query.prepare("SELECT value FROM shortcut_records WHERE id=?"); query.addBindValue(id); assert(query.exec() && query.next() && query.value(0).toString()=="saved-through-shortcut"); query.finish();
+    QTest::keyClick(table,Qt::Key_S,Qt::ControlModifier); QApplication::processEvents(); assert(!model->isDirty());
+    assert(query.exec("SELECT COUNT(*) FROM shortcut_records WHERE value IN ('first-range','second-range')") && query.next() && query.value(0).toInt()==2); query.finish();
+    assert(table->pasteSelection()); if(model->isDirty()) model->revertAll();
     QTest::keyClick(table,Qt::Key_A,Qt::ControlModifier); assert(table->selectionModel()->selectedIndexes().size()==model->rowCount()*model->columnCount());
     table->setCurrentIndex(model->index(clockRow,1));
     const auto beforeDate=QDate::currentDate(); QTest::keyClick(table,Qt::Key_Semicolon,Qt::ControlModifier);

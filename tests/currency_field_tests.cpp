@@ -235,6 +235,16 @@ End Function
     assert(dateObject->item("stamp").asText()=="2024-03-31 02:30:00");
     assert(sql.exec("SELECT stamp FROM grid WHERE id=1") && sql.next() && sql.value(0).toString()=="2024-03-31 02:30:00"); sql.finish();
     assert(dateForm.close());
+    assert(grid.select() && grid.rowCount()==2); view.setCurrentIndex(grid.index(0,1)); QApplication::setActiveWindow(&view); view.setFocus(); QApplication::processEvents();
+    const auto firstMoney=grid.clipboardText(grid.index(0,1)),secondMoney=grid.clipboardText(grid.index(1,1));
+    QApplication::clipboard()->setText("1.25\r\nbad"); assert(!view.pasteSelection() && !grid.isDirty());
+    assert(grid.clipboardText(grid.index(0,1))==firstMoney && grid.clipboardText(grid.index(1,1))==secondMoney);
+    QApplication::clipboard()->setText("1.25\r\n2.5"); QTest::keyClick(&view,Qt::Key_V,Qt::ControlModifier);
+    assert(grid.isDirty() && grid.clipboardText(grid.index(0,1))=="1.25" && grid.clipboardText(grid.index(1,1))=="2.5");
+    QApplication::clipboard()->setText("9"); assert(!view.pasteSelection() && grid.clipboardText(grid.index(0,1))=="1.25");
+    assert(db.transaction() && grid.submitAll() && db.commit());
+    assert(sql.exec("SELECT SUM(amount) FROM grid") && sql.next() && sql.value(0).toDouble()==3.75); sql.finish();
+
     {
         assert(sql.exec("CREATE TABLE copy_cells(id INTEGER PRIMARY KEY,value TEXT)"));
         assert(sql.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<300) INSERT INTO copy_cells SELECT i,'row-'||i FROM n"));
@@ -246,12 +256,43 @@ End Function
         assert(cells.setData(cells.index(0,1),"a\tb\"c\n")); sheet.setCurrentIndex(cells.index(0,1)); sheet.selectionModel()->select(cells.index(0,1),QItemSelectionModel::ClearAndSelect);
         assert(sheet.copySelection() && QApplication::clipboard()->text()=="\"a\tb\"\"c\n\"");
         const auto quoted=QApplication::clipboard()->text(); cells.revertAll();
+        sheet.setCurrentIndex(cells.index(0,1)); QTest::keyClick(&sheet,Qt::Key_V,Qt::ControlModifier);
+        assert(cells.data(cells.index(0,1),Qt::EditRole).toString()=="a\tb\"c\n" && cells.isDirty());
+        assert(sql.exec("SELECT value FROM copy_cells WHERE id=1") && sql.next() && sql.value(0).toString()=="row-1"); sql.finish();
+        assert(db.transaction() && cells.submitAll() && db.commit());
+
         sheet.selectionModel()->select(cells.index(0,0),QItemSelectionModel::ClearAndSelect);
         sheet.selectionModel()->select(cells.index(1,1),QItemSelectionModel::Select);
         assert(!sheet.copySelection() && QApplication::clipboard()->text()==quoted);
         assert(sql.exec("ALTER TABLE copy_cells ADD COLUMN payload BLOB")); assert(sql.exec("UPDATE copy_cells SET payload=x'0102' WHERE id=1")); cells.setTable("copy_cells"); assert(cells.select());
         sheet.setCurrentIndex(cells.index(0,2)); sheet.selectionModel()->select(cells.index(0,2),QItemSelectionModel::ClearAndSelect); assert(!sheet.copySelection() && QApplication::clipboard()->text()==quoted);
-        assert(sql.exec("SELECT value FROM copy_cells WHERE id=1") && sql.next() && sql.value(0).toString()=="row-1"); sql.finish();
+        assert(sql.exec("SELECT value FROM copy_cells WHERE id=1") && sql.next() && sql.value(0).toString()=="a\tb\"c\n"); sql.finish();
+    }
+    {
+        assert(sql.exec("CREATE TABLE paste_constraints(id INTEGER PRIMARY KEY,amount INTEGER UNIQUE)"));
+        assert(sql.exec("INSERT INTO paste_constraints VALUES(1,1),(2,2)"));
+        linaccess::AccessTableModel constrained(nullptr,db); constrained.setTable("paste_constraints"); constrained.setEditStrategy(QSqlTableModel::OnManualSubmit); assert(constrained.select());
+        assert(constrained.setDataBlock(constrained.index(0,1),{{"3"},{"3"}}));
+        assert(!constrained.submitTransactionally());
+        assert(sql.exec("SELECT SUM(amount) FROM paste_constraints") && sql.next() && sql.value(0).toInt()==3); sql.finish();
+        assert(constrained.isDirty(constrained.index(0,1)) && constrained.isDirty(constrained.index(1,1)));
+        assert(constrained.setData(constrained.index(1,1),4));
+        assert(constrained.submitTransactionally());
+        assert(sql.exec("SELECT SUM(amount) FROM paste_constraints") && sql.next() && sql.value(0).toInt()==7); sql.finish();
+    }
+    {
+        assert(sql.exec("CREATE TABLE draft_mix(id INTEGER PRIMARY KEY AUTOINCREMENT,label TEXT UNIQUE,note TEXT DEFAULT 'seed')"));
+        assert(sql.exec("INSERT INTO draft_mix(label) VALUES('old-a'),('old-b')"));
+        linaccess::AccessTableModel drafts(nullptr,db); drafts.setTable("draft_mix"); drafts.setEditStrategy(QSqlTableModel::OnManualSubmit); assert(drafts.select());
+        assert(drafts.setData(drafts.index(0,1),"updated") && drafts.insertRow(1));
+        assert(drafts.setData(drafts.index(1,1),"old-b") && drafts.removeRow(2));
+        assert(!drafts.submitTransactionally() && drafts.isDirty(drafts.index(0,1)) && drafts.isDirty(drafts.index(1,1)) && drafts.isDirty(drafts.index(2,1)));
+        assert(sql.exec("SELECT COUNT(*) FROM draft_mix WHERE label IN ('old-a','old-b')") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+        assert(drafts.setData(drafts.index(1,1),"new") && drafts.submitTransactionally());
+        assert(sql.exec("SELECT COUNT(*) FROM draft_mix WHERE label IN ('updated','new') AND note='seed'") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+        assert(drafts.insertRow(0) && drafts.setData(drafts.index(0,1),"temporary") && drafts.setData(drafts.index(1,1),"again") && drafts.removeRow(2));
+        drafts.revertRow(0); assert(drafts.submitTransactionally());
+        assert(sql.exec("SELECT COUNT(*),MIN(label) FROM draft_mix") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toString()=="again"); sql.finish();
     }
 
 }
