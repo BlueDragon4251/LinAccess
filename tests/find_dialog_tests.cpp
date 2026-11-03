@@ -23,6 +23,11 @@ int main(int argc,char** argv) {
     assert(sql.exec("INSERT INTO records VALUES(1,'Alpha','first'),(2,'NeedleÖ','other'),(3,'beta','Needle note'),(4,'prefix needleÖ suffix',NULL)"));
     const QString longPattern=QString(40000,'x')+"special";
     sql.prepare("INSERT INTO records VALUES(5,'long',?)"); sql.addBindValue(longPattern); assert(sql.exec()); sql.finish();
+    assert(sql.exec("ALTER TABLE records ADD COLUMN number_value REAL"));
+    assert(sql.exec("ALTER TABLE records ADD COLUMN amount CURRENCY_REAL"));
+    assert(sql.exec("ALTER TABLE records ADD COLUMN stamp DATETIME"));
+    assert(sql.exec("ALTER TABLE records ADD COLUMN flag BOOLEAN"));
+    assert(sql.exec("UPDATE records SET number_value=CASE id WHEN 1 THEN 1.2345678901234567 WHEN 2 THEN 1.2345678901234565 WHEN 3 THEN 42 WHEN 5 THEN 0 END,amount=CASE id WHEN 1 THEN 100000000.0001 WHEN 2 THEN 0.1001 WHEN 3 THEN -0.0001 WHEN 5 THEN 0.1 END,stamp=CASE id WHEN 1 THEN '2020-02-29 12:34:56' WHEN 2 THEN '1899-12-30 06:00:00' WHEN 3 THEN '2020-02-29 12:34:57' END,flag=CASE id WHEN 1 THEN -1 WHEN 3 THEN 0 WHEN 4 THEN -1 WHEN 5 THEN 0 END"));
     const QByteArray layout=R"FORM(Begin Form
 RecordSource ="records"
 OnUnload ="[Event Procedure]"
@@ -47,6 +52,34 @@ ControlSource ="id"
 Locked =-1
 TabStop =0
 Top =1000
+Width =1000
+Height =400
+End
+Begin TextBox
+Name ="number"
+ControlSource ="number_value"
+Top =1500
+Width =5000
+Height =400
+End
+Begin TextBox
+Name ="money"
+ControlSource ="amount"
+Top =2000
+Width =5000
+Height =400
+End
+Begin TextBox
+Name ="stamp"
+ControlSource ="stamp"
+Top =2500
+Width =5000
+Height =400
+End
+Begin CheckBox
+Name ="flag"
+ControlSource ="flag"
+Top =3000
 Width =1000
 Height =400
 End
@@ -86,6 +119,33 @@ DoCmd.RunCommand acCmdFindNext
 End Sub
 Sub RepeatViaSendKeys()
 SendKeys "+{F4}", True
+End Sub
+Sub FindExactNumber()
+DoCmd.FindRecord 1.2345678901234567
+End Sub
+Sub FindAdjacentNumber()
+DoCmd.FindRecord 1.2345678901234565
+End Sub
+Sub FindNumberAbsent()
+DoCmd.FindRecord 1.2345678901234563
+End Sub
+Sub FindExactMoney()
+DoCmd.FindRecord CCur("100000000.0001")
+End Sub
+Sub FindSmallMoney()
+DoCmd.FindRecord CCur("-0.0001")
+End Sub
+Sub FindLeapStamp()
+DoCmd.FindRecord #2020-02-29 12:34:56#
+End Sub
+Sub FindNegativeStamp()
+DoCmd.FindRecord CDate(-0.25)
+End Sub
+Sub FindFalseFlag()
+DoCmd.FindRecord False
+End Sub
+Sub FindTrueFlag()
+DoCmd.FindRecord True
 End Sub
 Sub FindBeta()
 DoCmd.FindRecord FindWhat:="BETA",MatchCase:=False
@@ -179,7 +239,34 @@ End Sub
     nameControl->assign("Locked",VbaValue::logical(true)); focus();
     assert(caller.executeProcedure("FindBeta",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==3 && stored(3)=="beta");
     nameControl->assign("Locked",VbaValue::logical(false));
+    const auto focusTyped=[&](const QString& name) {
+        auto* widget=form.findChild<QWidget*>("access-control-"+name); assert(widget); form.activateWindow(); widget->setFocus();
+        assert(QTest::qWaitFor([&] { return QApplication::focusWidget()==widget; },2000));
+    };
+    focusTyped("number"); assert(caller.executeProcedure("FindExactNumber",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==1);
+    assert(caller.executeProcedure("FindAdjacentNumber",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==2);
+    assert(caller.executeProcedure("FindNumberAbsent",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==2);
+    focusTyped("money"); assert(caller.executeProcedure("FindExactMoney",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==1);
+    assert(caller.executeProcedure("FindSmallMoney",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==3);
+    focusTyped("stamp"); assert(caller.executeProcedure("FindLeapStamp",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==1);
+    assert(caller.executeProcedure("FindNegativeStamp",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==2);
+    focusTyped("flag"); assert(caller.executeProcedure("FindFalseFlag",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==3);
+    assert(caller.executeProcedure("FindTrueFlag",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==1);
+    assert(caller.executeProcedure("FindNextActive",none).status==linaccess::VbaExecutionStatus::Completed && model->item("id").number==4);
+    assert(sql.exec("SELECT number_value,amount FROM records WHERE id=1") && sql.next() && sql.value(0).toDouble()==1.2345678901234567 && sql.value(1).toDouble()==100000000.0001); sql.finish();
+    assert(sql.exec("SELECT flag FROM records WHERE id=2") && sql.next() && sql.value(0).isNull()); sql.finish();
     focus(); QTest::keyClick(editor,Qt::Key_F,Qt::ControlModifier); dialog=form.findChild<QDialog*>("access-find-dialog"); assert(dialog && dialog->isVisible());
+    query=dialog->findChild<QLineEdit*>("access-find-text"); field=dialog->findChild<QComboBox*>("access-find-field"); match=dialog->findChild<QComboBox*>("access-find-match");
+    sensitive=dialog->findChild<QCheckBox*>("access-find-case"); next=dialog->findChild<QPushButton*>("access-find-next"); result=dialog->findChild<QLabel*>("access-find-result");
+    field->setCurrentIndex(field->findData("number_value")); assert(match->currentIndex()==1 && !match->isEnabled() && !sensitive->isEnabled());
+    query->setText("1.2345678901234565"); next->click(); assert(model->item("id").number==2);
+    field->setCurrentIndex(field->findData("amount")); query->setText("100000000.0001"); next->click(); assert(model->item("id").number==1);
+    field->setCurrentIndex(field->findData("stamp")); query->setText("1899-12-30 06:00:00"); next->click(); assert(model->item("id").number==2);
+    query->setText("not-a-date"); next->click(); assert(model->item("id").number==2 && !result->text().isEmpty());
+    field->setCurrentIndex(field->findData("flag")); query->setText("False"); next->click(); assert(model->item("id").number==3);
+    next->click(); assert(model->item("id").number==5);
+    assert(sql.exec("SELECT number_value,amount FROM records WHERE id=1") && sql.next() && sql.value(0).toDouble()==1.2345678901234567 && sql.value(1).toDouble()==100000000.0001); sql.finish();
+    assert(sql.exec("SELECT flag FROM records WHERE id=2") && sql.next() && sql.value(0).isNull()); sql.finish();
     assert(caller.close());
     model->assign("Tag",VbaValue::string("blockclose")); assert(!form.close() && dialog->isVisible());
     model->assign("Tag",VbaValue::string("")); const QPointer<QDialog> guarded(dialog); assert(form.close());

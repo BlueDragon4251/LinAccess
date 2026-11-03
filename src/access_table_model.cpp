@@ -1,6 +1,7 @@
 #include "access_table_model.hpp"
 #include "access_autonumber.hpp"
 #include "vba_qt_value.hpp"
+#include "native_find_value.hpp"
 #include <QSqlError>
 #include <QSqlRecord>
 #include <QSqlIndex>
@@ -164,6 +165,14 @@ void AccessTableModel::sort(int column,Qt::SortOrder order) {
         reject(2501); emit sortRestored(sortColumn_,sortOrder_); return;
     }
     sortColumn_=column; sortOrder_=order; QSqlTableModel::sort(column,order);
+}
+bool AccessTableModel::isSearchableColumn(int column) const {
+    return column>=0 && column<columnCount() && !metadataError_ && nativeFindFieldKind(columnType(column))!=NativeFindFieldKind::Unsupported;
+}
+QString AccessTableModel::fieldSqlType(int column) const {
+    if(column<0 || column>=columnCount()) throw VbaRuntimeError(5,"Invalid FindRecord column");
+    if(metadataError_) throw VbaRuntimeError(metadataError_,"FindRecord field metadata is unavailable");
+    return columnType(column);
 }
 bool AccessTableModel::isTextColumn(int column) const {
     if(column<0 || column>=columnCount() || metadataError_) return false;

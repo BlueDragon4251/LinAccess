@@ -3821,3 +3821,18 @@ named direction arguments. Last complete suite/package baseline is a71acc9 /
 private API f9367b0, 48/48 (88.05 s), GUI-free core 1/1 (1.99 s). This Qt-only
 extension is focused-verified; no extra targets.
 Theoretical checklist: 304 checked / 72 open scoped points.
+
+
+## Typed native search in dialogs and FindRecord (2026-11-03)
+
+Exact Number/Currency/Date/Boolean matching is shared by real table/form dialogs
+and interpreted FindRecord. Adjacent Doubles, four-decimal units, native Date
+canonicalization and NULL-versus-False remain distinct; readonly search and
+invalid query retention are checked against actual SQL values. Canonical details:
+TYPED_FIND_RUNTIME.md. Existing trio 3/3 (2.79 s); no new targets.
+Theoretical checklist: 308 checked / 72 open scoped points.
+
+Full rebuilt desktop suite passes 48/48 (97.33 s), GUI-free core 1/1 (1.86 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. No extra test targets. This also covers the preceding
+search-direction extension and the typed native invocation/state changes.

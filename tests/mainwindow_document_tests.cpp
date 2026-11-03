@@ -160,6 +160,45 @@ Sub SaveActiveTableViaApplication()
 Application.RunCommand Command:=acCmdSaveRecord
 Me.Tag="application-table-saved"
 End Sub
+Sub OpenTypedFindTable()
+DoCmd.OpenTable "command_typed_find",DataMode:=acReadOnly
+End Sub
+Sub CloseTypedFindTable()
+DoCmd.Close acTable,"command_typed_find"
+End Sub
+Sub FindTypedNumber()
+DoCmd.FindRecord 1.2345678901234567
+End Sub
+Sub FindTypedAdjacent()
+DoCmd.FindRecord 1.2345678901234565
+End Sub
+Sub FindTypedNumberAbsent()
+DoCmd.FindRecord 1.2345678901234563
+End Sub
+Sub FindTypedMoney()
+DoCmd.FindRecord CCur("0.1001")
+End Sub
+Sub FindTypedMoneySmall()
+DoCmd.FindRecord CCur("-0.0001")
+End Sub
+Sub FindTypedStamp()
+DoCmd.FindRecord #2020-02-29 12:34:56#
+End Sub
+Sub FindTypedNegativeStamp()
+DoCmd.FindRecord CDate(-0.25)
+End Sub
+Sub FindTypedFalse()
+DoCmd.FindRecord False
+End Sub
+Sub FindTypedTrue()
+DoCmd.FindRecord True
+End Sub
+Sub FindTypedPartial()
+DoCmd.FindRecord 42,acAnywhere
+End Sub
+Sub FindTypedSubsecond()
+DoCmd.FindRecord CDate(0.250001)
+End Sub
 Sub FindRecordDefault()
 DoCmd.FindRecord FindWhat:="ROW-250",MatchCase:=False
 Me.Tag="findrecord-default"
@@ -280,6 +319,8 @@ End Sub
     assert(unchanged.exec("INSERT INTO command_readonly VALUES(1,1.25,-1),(2,NULL,NULL)"));
     assert(unchanged.exec("CREATE TABLE command_edit(id INTEGER PRIMARY KEY AUTOINCREMENT,value TEXT CHECK(value!='blocked'))"));
     assert(unchanged.exec("INSERT INTO command_edit VALUES(1,'initial')"));
+    assert(unchanged.exec("CREATE TABLE command_typed_find(id INTEGER PRIMARY KEY,value REAL,money CURRENCY_REAL,stamp DATETIME,flag BOOLEAN,payload BLOB)"));
+    assert(unchanged.exec("INSERT INTO command_typed_find VALUES(1,1.2345678901234567,0.1001,'2020-02-29 12:34:56',-1,x'0102'),(2,1.2345678901234565,0.1,'1899-12-30 06:00:00',NULL,x'0102'),(3,42,-0.0001,'2020-02-29 12:34:57',0,x'0102'),(4,NULL,NULL,NULL,0,x'0102')"));
     assert(unchanged.exec("CREATE TABLE command_navigation(id INTEGER PRIMARY KEY,value TEXT CHECK(value!='blocked'),payload BLOB)"));
     assert(unchanged.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<300) INSERT INTO command_navigation SELECT x,'row-'||x,x'0102' FROM n"));
     action(window,"Aktualisieren")->trigger(); openArtifact(window,mixedId); QPointer<AccessFormPreview> mixed=document("tab_cycle_form"); assert(mixed);
@@ -440,6 +481,41 @@ End Sub
     assert(mixed->executeProcedure("CloseNavigationTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!tableFind);
 
+    assert(mixed->executeProcedure("OpenTypedFindTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
+    auto* typedView=nativeTable(documentTabs->currentWidget()); auto* typedModel=qobject_cast<linaccess::AccessTableModel*>(typedView->model()); assert(typedModel && typedModel->isReadOnly());
+    typedView->sortByColumn(0,Qt::AscendingOrder); typedView->setCurrentIndex(typedModel->index(3,1));
+    assert(mixed->executeProcedure("FindTypedNumber",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedView->currentIndex().row()==0);
+    assert(mixed->executeProcedure("FindTypedAdjacent",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedView->currentIndex().row()==1);
+    assert(mixed->executeProcedure("FindTypedNumberAbsent",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedView->currentIndex().row()==1);
+    assert(mixed->executeProcedure("FindTypedPartial",selectArguments).errorNumber==3251);
+    typedView->setCurrentIndex(typedModel->index(1,2));
+    assert(mixed->executeProcedure("FindTypedMoney",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedView->currentIndex().row()==0);
+    assert(mixed->executeProcedure("FindTypedMoneySmall",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedView->currentIndex().row()==2);
+    assert(mixed->executeProcedure("FindTypedNumber",selectArguments).errorNumber==3251 && typedView->currentIndex().row()==2);
+    typedView->setCurrentIndex(typedModel->index(2,3));
+    assert(mixed->executeProcedure("FindTypedStamp",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedView->currentIndex().row()==0);
+    assert(mixed->executeProcedure("FindTypedNegativeStamp",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedView->currentIndex().row()==1);
+    assert(mixed->executeProcedure("FindTypedSubsecond",selectArguments).errorNumber==3251 && typedView->currentIndex().row()==1);
+    typedView->setCurrentIndex(typedModel->index(1,4));
+    assert(mixed->executeProcedure("FindTypedFalse",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedView->currentIndex().row()==2);
+    QMetaObject::invokeMethod(findEditMenu,"aboutToShow",Qt::DirectConnection); assert(menuFindNext->isEnabled()); menuFindNext->trigger(); assert(typedView->currentIndex().row()==3);
+    assert(mixed->executeProcedure("FindTypedTrue",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedView->currentIndex().row()==0);
+    assert(mixed->executeProcedure("FindTableText",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    QPointer<QDialog> typedFind=typedView->findChild<QDialog*>("native-table-find-dialog"); assert(typedFind && typedFind->isVisible());
+    auto* typedQuery=typedFind->findChild<QLineEdit*>("native-table-find-text"); auto* typedScope=typedFind->findChild<QComboBox*>("native-table-find-field");
+    auto* typedMatch=typedFind->findChild<QComboBox*>("native-table-find-match"); auto* typedCase=typedFind->findChild<QCheckBox*>("native-table-find-case");
+    auto* typedNext=typedFind->findChild<QPushButton*>("native-table-find-next"); assert(typedQuery && typedScope && typedMatch && typedCase && typedNext);
+    assert(typedScope->findData(-1)<0 && typedScope->currentData().toInt()==4 && typedMatch->currentIndex()==1 && !typedMatch->isEnabled() && !typedCase->isEnabled());
+    typedScope->setCurrentIndex(typedScope->findData(1)); typedQuery->setText("1.2345678901234565"); typedNext->click(); assert(typedView->currentIndex().row()==1);
+    typedScope->setCurrentIndex(typedScope->findData(2)); typedQuery->setText("0.1001"); typedNext->click(); assert(typedView->currentIndex().row()==0);
+    typedScope->setCurrentIndex(typedScope->findData(3)); typedQuery->setText("1899-12-30 06:00:00"); typedNext->click(); assert(typedView->currentIndex().row()==1);
+    typedQuery->setText("not-a-date"); typedNext->click(); assert(typedView->currentIndex().row()==1 && typedModel->lastError().nativeErrorCode()=="13");
+    typedScope->setCurrentIndex(typedScope->findData(4)); typedQuery->setText("False"); typedNext->click(); assert(typedView->currentIndex().row()==2);
+    assert(mixed->executeProcedure("RepeatTableFind",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedView->currentIndex().row()==3);
+    typedFind->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!typedFind);
+    assert(!typedModel->isDirty());
+    assert(unchanged.exec("SELECT value,typeof(money),stamp,flag,hex(payload) FROM command_typed_find WHERE id=2") && unchanged.next() && unchanged.value(0).toDouble()==1.2345678901234565 && unchanged.value(1).toString()=="real" && unchanged.value(2).toString()=="1899-12-30 06:00:00" && unchanged.value(3).isNull() && unchanged.value(4).toString()=="0102"); unchanged.finish();
+    assert(mixed->executeProcedure("CloseTypedFindTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     assert(mixed->executeProcedure("OpenEditableTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     const QPointer<QWidget> editablePage=documentTabs->currentWidget(); auto* editableView=nativeTable(editablePage);
     auto* editableModel=qobject_cast<linaccess::AccessTableModel*>(editableView->model()); assert(editableModel && !editableModel->isReadOnly() && editableModel->setData(editableModel->index(0,1),"changed"));

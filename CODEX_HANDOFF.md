@@ -502,3 +502,19 @@ UI-Wechsel und benannte VBA-Richtungen geprüft. Trio 3/3 (16.70 s); Vollsuite/P
 zuletzt a71acc9 / privat f9367b0, 48/48 (88.05 s), GUI-freier Core 1/1 (1.99 s).
 Dieses Qt-Inkrement ist gezielt geprüft, keine neuen Targets. Kanonisch
 FIND_RECORD_RUNTIME.md und TABLE_FIND_RUNTIME.md; übrige Suchgrenzen bleiben offen.
+
+
+## Typisierte native Suche (2026-11-03)
+
+Tabellen-/Formulardialoge und FindRecord durchsuchen echte Felder als Number,
+Currency, Date und Boolean. Vergleich erhält benachbarte Double-Werte, exakte
+Currency-Einheiten, kanonische native Datumswerte und NULL-versus-False. Geprüfte
+QVariant-Weitergabe ohne Currency-Float-/JSON-Zwischenwert. Datums-Negativalias
+läuft durch die tatsächliche Date-Speicherpipeline; Subsekunden explizit begrenzt.
+Einzelne typisierte Felder erzwingen Ganzes Feld und zeigen Eingabehinweise;
+Text-Gesamtsuche bleibt Textscope. Typkonversionen zwischen inkompatiblen Feldern,
+Teiltreffer nichttextueller Werte, Allfelder-API/Format/Locale/Wildcards bleiben offen.
+Readonly-Suche, ungültige Datumseingabe, Caller-Me, FindNext und unveränderte
+SQL-Werte/NULLs/Binärdaten geprüft. Kanonisch docs/TYPED_FIND_RUNTIME.md.
+Trio 3/3 (2.79 s), Vollsuite 48/48 (97.33 s), GUI-freier Core 1/1 (1.86 s),
+Debian-Paket und vier Originalfixture-Hashes bestanden; keine neuen Testtargets.

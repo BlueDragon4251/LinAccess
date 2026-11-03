@@ -39,16 +39,27 @@ public:
         QPointer<AccessTableView> self=this;
         QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !finishEditing() || !self || !typed) return false;
-        QVector<QPair<QString,int>> columns;
-        for(int column=0;column<typed->columnCount();++column)
-            if(!isColumnHidden(column) && typed->isTextColumn(column)) columns.push_back({typed->headerData(column,Qt::Horizontal).toString(),column});
-        if(columns.isEmpty()) return refuse(3251,"Keine durchsuchbaren Textfelder vorhanden.");
+        QVector<QPair<QString,int>> columns; QMap<int,QString> typedHints;
+        for(int column=0;column<typed->columnCount();++column) if(!isColumnHidden(column) && typed->isSearchableColumn(column)) {
+            columns.push_back({typed->headerData(column,Qt::Horizontal).toString(),column});
+            if(!typed->isTextColumn(column)) typedHints.insert(column,nativeFindInputHint(typed->fieldSqlType(column)));
+        }
+        if(columns.isEmpty()) return refuse(3251,"Keine durchsuchbaren Felder vorhanden.");
         if(findDialog_ && findDialog_->isVisible()) { findDialog_->raise(); findDialog_->activateWindow(); return true; }
         auto initial=findArguments_;
-        if(initial.text.isEmpty() && currentIndex().isValid() && typed->isTextColumn(currentIndex().column())) initial.column=currentIndex().column();
-        QPointer<QDialog> dialog=nativeTableFindDialog(this,columns,initial,[self](NativeTableFindArguments arguments) {
+        if(initial.text.isEmpty() && currentIndex().isValid() && typed->isSearchableColumn(currentIndex().column())) initial.column=currentIndex().column();
+        QPointer<QDialog> dialog=nativeTableFindDialog(this,columns,typedHints,initial,[self](NativeTableFindArguments arguments) {
             if(!self) return QString{};
-            self->findText(std::move(arguments));
+            try {
+                auto* model=qobject_cast<AccessTableModel*>(self->model());
+                if(model && arguments.column>=0 && !model->isTextColumn(arguments.column)) {
+                    arguments.value=nativeFindInput(arguments.text,model->fieldSqlType(arguments.column));
+                    arguments.text=nativeFindValueText(*arguments.value); arguments.mode=1;
+                }
+                self->findText(std::move(arguments));
+            } catch(const VbaRuntimeError& error) {
+                if(self) { self->findMessage_=QString::fromUtf8(error.what()); (void)self->refuse(error.number,self->findMessage_); }
+            }
             return self ? self->findMessage_ : QString{};
         });
         if(!self) return false;
@@ -70,10 +81,15 @@ public:
             if(self) { findMessage_=message; (void)refuse(number,message); }
             return -1;
         };
+        try {
         if(!typed) return fail(2046,"Keine native Tabelle für die Suche.");
         if(finding_) return fail(3251,"Eine Suche wird bereits ausgeführt.");
         finding_=true; const auto searching=qScopeGuard([self] { if(self) self->finding_=false; });
-        if(arguments.text.isEmpty()) return fail(2046,"Keine vorherige Suche vorhanden.");
+        if(arguments.text.isEmpty() && !arguments.value) return fail(2046,"Keine vorherige Suche vorhanden.");
+        if(arguments.value) {
+            arguments.value=normalizeNativeFindValue(*arguments.value);
+            if(arguments.mode!=1) return fail(3251,"Typisierte Suche unterstützt derzeit nur ganze Feldwerte.");
+        }
         if(arguments.mode<0 || arguments.mode>2 || arguments.column< -1 || arguments.column>=typed->columnCount() || arguments.origin<0 || arguments.origin>2 || arguments.direction<0 || arguments.direction>2) return fail(5,"Ungültige Sucheinstellung.");
         if(!finishEditing()) { if(self && typed) findMessage_=typed->lastError().text(); return -1; }
         if(!self || !typed) return -1;
@@ -84,7 +100,7 @@ public:
         if(!self || !typed) return -1;
         QVector<int> columns;
         for(int column=0;column<typed->columnCount();++column)
-            if((arguments.column<0 || arguments.column==column) && !isColumnHidden(column) && typed->isTextColumn(column)) columns.push_back(column);
+            if((arguments.column<0 || arguments.column==column) && !isColumnHidden(column) && (arguments.value ? nativeFindSupports(*arguments.value,typed->fieldSqlType(column)) : typed->isTextColumn(column))) columns.push_back(column);
         if(columns.isEmpty()) return fail(3265,"Das Suchfeld ist nicht verfügbar.");
         constexpr qint64 cellLimit=1000000;
         while(typed->canFetchMore()) {
@@ -94,7 +110,7 @@ public:
             if(typed->rowCount()==before && typed->canFetchMore()) return fail(3251,"Suchdaten konnten nicht vollständig geladen werden.");
         }
         if(static_cast<qint64>(typed->rowCount())*columns.size()>cellLimit) return fail(3251,"Suchumfang überschreitet die native Grenze.");
-        if(findArguments_.text!=arguments.text || findArguments_.column!=arguments.column || findArguments_.mode!=arguments.mode || findArguments_.sensitive!=arguments.sensitive || findArguments_.direction!=arguments.direction) findAdvance_=false;
+        if(findArguments_.text!=arguments.text || findArguments_.column!=arguments.column || findArguments_.mode!=arguments.mode || findArguments_.sensitive!=arguments.sensitive || findArguments_.direction!=arguments.direction || !sameNativeFindValue(findArguments_.value,arguments.value)) findAdvance_=false;
         findArguments_=arguments; findArguments_.origin=0;
         const int count=typed->rowCount();
         if(!count) { findMessage_="Keine Datensätze vorhanden."; return 0; }
@@ -110,7 +126,8 @@ public:
                 const auto value=candidate.data(Qt::EditRole);
                 if(value.isNull() || value.metaType().id()==QMetaType::QByteArray) continue;
                 const auto text=value.toString();
-                const bool matches=arguments.mode==1 ? text.compare(arguments.text,cs)==0 : arguments.mode==2 ? text.startsWith(arguments.text,cs) : text.contains(arguments.text,cs);
+                const bool matches=arguments.value ? nativeFindEqual(qtFieldValue(value,typed->fieldSqlType(column)),*arguments.value)
+                    : arguments.mode==1 ? text.compare(arguments.text,cs)==0 : arguments.mode==2 ? text.startsWith(arguments.text,cs) : text.contains(arguments.text,cs);
                 if(matches) {
                     setCurrentIndex(candidate);
                     if(!self || !typed) return -1;
@@ -120,6 +137,8 @@ public:
             }
         }
         findMessage_="Keine Übereinstimmung gefunden."; return 0;
+        } catch(const VbaRuntimeError& error) { return fail(error.number,QString::fromUtf8(error.what())); }
+        catch(const std::exception& error) { return fail(3146,QString::fromUtf8(error.what())); }
     }
     bool hasPendingEditor() const {
         auto* editor=activeEditor(); if(!editor) return false;
