@@ -74,7 +74,7 @@ public:
         if(finding_) return fail(3251,"Eine Suche wird bereits ausgeführt.");
         finding_=true; const auto searching=qScopeGuard([self] { if(self) self->finding_=false; });
         if(arguments.text.isEmpty()) return fail(2046,"Keine vorherige Suche vorhanden.");
-        if(arguments.mode<0 || arguments.mode>2 || arguments.column< -1 || arguments.column>=typed->columnCount() || arguments.origin<0 || arguments.origin>2) return fail(5,"Ungültige Sucheinstellung.");
+        if(arguments.mode<0 || arguments.mode>2 || arguments.column< -1 || arguments.column>=typed->columnCount() || arguments.origin<0 || arguments.origin>2 || arguments.direction<0 || arguments.direction>2) return fail(5,"Ungültige Sucheinstellung.");
         if(!finishEditing()) { if(self && typed) findMessage_=typed->lastError().text(); return -1; }
         if(!self || !typed) return -1;
         if(recordNavigationGuard_) {
@@ -94,14 +94,17 @@ public:
             if(typed->rowCount()==before && typed->canFetchMore()) return fail(3251,"Suchdaten konnten nicht vollständig geladen werden.");
         }
         if(static_cast<qint64>(typed->rowCount())*columns.size()>cellLimit) return fail(3251,"Suchumfang überschreitet die native Grenze.");
-        if(findArguments_.text!=arguments.text || findArguments_.column!=arguments.column || findArguments_.mode!=arguments.mode || findArguments_.sensitive!=arguments.sensitive) findAdvance_=false;
+        if(findArguments_.text!=arguments.text || findArguments_.column!=arguments.column || findArguments_.mode!=arguments.mode || findArguments_.sensitive!=arguments.sensitive || findArguments_.direction!=arguments.direction) findAdvance_=false;
         findArguments_=arguments; findArguments_.origin=0;
         const int count=typed->rowCount();
         if(!count) { findMessage_="Keine Datensätze vorhanden."; return 0; }
-        const int start=arguments.origin==1 ? 0 : currentIndex().isValid() ? (currentIndex().row()+((arguments.origin==2 || findAdvance_) ? 1 : 0))%count : 0;
+        const int step=arguments.direction==0 ? -1 : 1;
+        const int start=arguments.origin==1 ? 0 : currentIndex().isValid() ? currentIndex().row()+((arguments.origin==2 || findAdvance_) ? step : 0) : 0;
         const auto cs=arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
         for(int offset=0;offset<count;++offset) {
-            const int row=(start+offset)%count; if(isRowHidden(row)) continue;
+            const qint64 candidateRow=static_cast<qint64>(start)+static_cast<qint64>(step)*offset;
+            if(arguments.direction!=2 && (candidateRow<0 || candidateRow>=count)) break;
+            const int row=static_cast<int>((candidateRow%count+count)%count); if(isRowHidden(row)) continue;
             for(int column:columns) {
                 const auto candidate=typed->index(row,column);
                 const auto value=candidate.data(Qt::EditRole);

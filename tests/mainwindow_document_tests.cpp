@@ -189,8 +189,17 @@ DoCmd.FindRecord "row-250",SearchAsFormatted:=True
 Me.Tag="must-not-run"
 End Sub
 Sub FindRecordUp()
-DoCmd.FindRecord "row-250",Search:=acUp
-Me.Tag="must-not-run"
+DoCmd.FindRecord "row-249",Search:=acUp,FindFirst:=False
+Me.Tag="findrecord-up"
+End Sub
+Sub FindRecordUpNoWrap()
+DoCmd.FindRecord "row-280",Search:=acUp,FindFirst:=False
+End Sub
+Sub FindRecordDown()
+DoCmd.FindRecord "row-280",Search:=acDown,FindFirst:=False
+End Sub
+Sub FindRecordDownNoWrap()
+DoCmd.FindRecord "row-249",Search:=acDown,FindFirst:=False
 End Sub
 Sub FindRecordInvalidDirection()
 DoCmd.FindRecord "row-250",Search:=7
@@ -372,6 +381,13 @@ End Sub
     auto* findResult=tableFind->findChild<QLabel*>("native-table-find-result"); assert(findText && findMatch && findCase && findNext && findResult);
     findText->setText("row-250"); findNext->click();
     assert(navigationView->currentIndex().row()==249 && navigationView->currentIndex().column()==1 && documentTabs->currentWidget()==navigationView->parentWidget());
+    auto* findDirection=tableFind->findChild<QComboBox*>("native-table-find-direction"); assert(findDirection);
+    findDirection->setCurrentIndex(findDirection->findData(0)); findMatch->setCurrentIndex(1); findText->setText("row-249"); findNext->click(); assert(navigationView->currentIndex().row()==248);
+    findText->setText("row-280"); findNext->click(); assert(navigationView->currentIndex().row()==248 && findResult->text()=="Keine Übereinstimmung gefunden.");
+    findDirection->setCurrentIndex(findDirection->findData(1)); findNext->click(); assert(navigationView->currentIndex().row()==279);
+    findText->setText("row-249"); findNext->click(); assert(navigationView->currentIndex().row()==279);
+    findDirection->setCurrentIndex(findDirection->findData(2)); findText->setText("row-250"); findNext->click(); assert(navigationView->currentIndex().row()==249);
+    findMatch->setCurrentIndex(0);
     findText->setText("row-2"); findNext->click();
     assert(mixed->executeProcedure("RepeatTableFind",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==250);
     QTest::keyClick(navigationView,Qt::Key_F4,Qt::ShiftModifier); assert(navigationView->currentIndex().row()==251);
@@ -395,11 +411,16 @@ End Sub
     tableFind->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QApplication::processEvents(); assert(!tableFind);
     assert(mixed->executeProcedure("FindRecordDefault",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==249);
     assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="findrecord-default");
+    assert(mixed->executeProcedure("FindRecordUp",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==248);
+    assert(mixed->executeProcedure("FindRecordUpNoWrap",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==248);
+    assert(mixed->executeProcedure("FindRecordDown",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==279);
+    assert(mixed->executeProcedure("FindRecordDownNoWrap",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==279);
+    assert(mixed->executeProcedure("FindRecordDefault",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==249);
     assert(mixed->executeProcedure("FindRecordNext",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==250);
     assert(mixed->executeProcedure("FindRecordEmptyFirst",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==251);
     assert(mixed->executeProcedure("FindRecordEmptyMatch",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==24);
     assert(mixed->executeProcedure("FindRecordNoMatch",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==24);
-    for(const char* procedure:{"FindRecordAllFields","FindRecordFormatted","FindRecordUp","FindRecordNumber","FindRecordWildcard"})
+    for(const char* procedure:{"FindRecordAllFields","FindRecordFormatted","FindRecordNumber","FindRecordWildcard"})
         assert(mixed->executeProcedure(procedure,selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==24);
     assert(mixed->executeProcedure("FindRecordInvalidDirection",selectArguments).errorNumber==5);
     assert(mixed->executeProcedure("FindRecordNull",selectArguments).errorNumber==94);

@@ -491,3 +491,14 @@ Allfelder/Zahlen/Datum/Format/Richtung/Wildcards/volle Access-Fehlerpriorität o
 Kanonisch docs/FIND_RECORD_RUNTIME.md mit geprüften Microsoft-Parameterreferenzen.
 Trio 3/3 (15.83 s), Vollsuite 48/48 (88.05 s), GUI-freier Core 1/1 (1.99 s),
 Debian-Paket und vier Originalfixture-Hashes bestanden. Keine neuen Testtargets.
+
+
+## Suchrichtungen auf echten Tabellen/Formularen (2026-11-03)
+
+Dialog und FindRecord unterstützen jetzt Up/Down ohne Umlauf sowie SearchAll mit
+Umlauf. FindNext erhält die Richtung; FindFirst beginnt beim ersten Datensatz,
+sonst nach dem aktuellen Datensatz in Suchrichtung. Gegenüberliegende Grenzen,
+UI-Wechsel und benannte VBA-Richtungen geprüft. Trio 3/3 (16.70 s); Vollsuite/Paket
+zuletzt a71acc9 / privat f9367b0, 48/48 (88.05 s), GUI-freier Core 1/1 (1.99 s).
+Dieses Qt-Inkrement ist gezielt geprüft, keine neuen Targets. Kanonisch
+FIND_RECORD_RUNTIME.md und TABLE_FIND_RUNTIME.md; übrige Suchgrenzen bleiben offen.

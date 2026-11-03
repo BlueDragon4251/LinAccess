@@ -10,14 +10,15 @@ source validation/modal guards. Me stays bound to the original caller form.
 The dialog searches visible declared TEXT/CHAR/CLOB columns, either one field or
 all available text fields. Matching is literal, with part/whole/start modes and
 Qt case-sensitive or case-insensitive comparison. First search includes the
-current row; repeated searches advance and wrap through the actual view order.
+current row; repeated searches advance through actual view order. SearchAll wraps;
+Up/Down stop at the record boundary.
 Matches select and scroll to the actual field. No match is normal completion;
 FindNext without a prior nonempty search is 2046. Empty tables can open Find.
 
 The real model fetches rows past Qt's initial SQL batch. Search is bounded to one
 million text cells, with no partial-result success when the budget is exceeded.
 NULL/BLOB values and hidden rows/columns are skipped. Numeric/date/display-format,
-Jet wildcard/Windows collation, reverse direction and Replace are not
+Jet wildcard/Windows collation and Replace are not
 implemented by this text-search increment. Bounded programmatic DoCmd.FindRecord
 is specified separately in [FIND_RECORD_RUNTIME.md](FIND_RECORD_RUNTIME.md).
 
@@ -42,3 +43,14 @@ Full rebuilt desktop suite passes 48/48 (92.69 s), GUI-free core 1/1 (2.45 s),
 Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. No additional test targets. This also covers the preceding
 native table sort commands and the final weak-owner reentrancy guard.
+
+## Native search direction extension (2026-11-03)
+
+Table/form dialogs and DoCmd.FindRecord now support Up/Down without wrap and
+SearchAll with wrap. FindNext retains the chosen direction. FindFirst starts at
+the first record; otherwise the API starts after the current record in that
+direction. Existing main-window/form-Find/layout trio passes 3/3 (16.70 s),
+covering real opposite-boundary refusal, reversed matching, UI and interpreted
+named direction arguments. Last complete suite/package baseline is a71acc9 /
+private API f9367b0, 48/48 (88.05 s), GUI-free core 1/1 (1.99 s). This Qt-only
+extension is focused-verified; no extra targets.

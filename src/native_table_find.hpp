@@ -18,6 +18,7 @@ struct NativeTableFindArguments {
     int column{-1},mode{};
     bool sensitive{};
     int origin{}; // 0: continue dialog search, 1: first record, 2: next record.
+    int direction{2}; // AcSearchDirection: Up=0, Down=1, All=2.
 };
 inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString,int>>& columns,
                                      NativeTableFindArguments initial,std::function<QString(NativeTableFindArguments)> search) {
@@ -30,7 +31,10 @@ inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString
     const int selected=scope->findData(initial.column); if(selected>=0) scope->setCurrentIndex(selected);
     auto* match=new QComboBox(dialog); match->setObjectName("native-table-find-match"); match->addItems({"Teil des Feldinhalts","Ganzes Feld","Feldanfang"}); match->setCurrentIndex(initial.mode);
     auto* sensitive=new QCheckBox("Groß-/Kleinschreibung beachten",dialog); sensitive->setObjectName("native-table-find-case"); sensitive->setChecked(initial.sensitive);
+    auto* direction=new QComboBox(dialog); direction->setObjectName("native-table-find-direction");
+    direction->addItem("Alle Datensätze",2); direction->addItem("Nach unten",1); direction->addItem("Nach oben",0); direction->setCurrentIndex(direction->findData(initial.direction));
     fields->addRow("Suchen nach:",text); fields->addRow("Suchen in:",scope); fields->addRow("Vergleichen:",match);
+    fields->addRow("Suchrichtung:",direction);
     box->addLayout(fields); box->addWidget(sensitive); box->addWidget(new QLabel("Text wird wörtlich gesucht.",dialog));
     auto* result=new QLabel(dialog); result->setObjectName("native-table-find-result"); result->setWordWrap(true); box->addWidget(result);
     auto* buttons=new QHBoxLayout; auto* next=new QPushButton("&Weitersuchen",dialog); next->setObjectName("native-table-find-next"); next->setDefault(true);
@@ -39,9 +43,9 @@ inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString
     QObject::connect(text,&QLineEdit::textChanged,next,[next](const QString& value) { next->setEnabled(!value.isEmpty()); });
     QObject::connect(close,&QPushButton::clicked,dialog,&QDialog::reject);
     const QPointer<QDialog> guarded=dialog;
-    QObject::connect(next,&QPushButton::clicked,dialog,[guarded,text,scope,match,sensitive,result,search] {
+    QObject::connect(next,&QPushButton::clicked,dialog,[guarded,text,scope,match,sensitive,direction,result,search] {
         try {
-            const auto message=search({text->text(),scope->currentData().toInt(),match->currentIndex(),sensitive->isChecked()});
+            const auto message=search({text->text(),scope->currentData().toInt(),match->currentIndex(),sensitive->isChecked(),0,direction->currentData().toInt()});
             if(guarded) result->setText(message);
         } catch(const std::exception& error) { if(guarded) result->setText(QString::fromUtf8(error.what())); }
     });

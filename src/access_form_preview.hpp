@@ -100,7 +100,7 @@ private:
     bool commitControls();
     bool zoomFocusedText();
     void openFindDialog();
-    QString findNextRecord(QString text,QString field,int mode,bool caseSensitive,int origin=0,bool requireValidation=false);
+    QString findNextRecord(QString text,QString field,int mode,bool caseSensitive,int origin=0,bool requireValidation=false,int direction=2);
     void repeatFind();
     void selectRecord(int target);
     bool prepareClose();
@@ -176,7 +176,7 @@ private:
     quint64 windowSequence_{};
     QComboBox* recordSelector_{};
     QPointer<QDialog> findDialog_;
-    struct FindState { QString text,field; int mode{-1}; bool sensitive{},advance{}; } findState_;
+    struct FindState { QString text,field; int mode{-1},direction{2}; bool sensitive{},advance{}; } findState_;
     QTimer* formTimer_{};
     bool timerDispatching_{};
     QLineEdit* filterEditor_{};

@@ -3809,3 +3809,15 @@ Full rebuilt desktop suite passes 48/48 (88.05 s). Debian payload/permissions/
 Build-ID/pinned SQLite checks and all four original fixture hashes pass. The
 GUI-free core baseline after binding/constant changes is 1/1 (1.99 s); subsequent
 form extensions are Qt-only. No additional test targets.
+
+## Native search direction extension (2026-11-03)
+
+Table/form dialogs and DoCmd.FindRecord now support Up/Down without wrap and
+SearchAll with wrap. FindNext retains the chosen direction. FindFirst starts at
+the first record; otherwise the API starts after the current record in that
+direction. Existing main-window/form-Find/layout trio passes 3/3 (16.70 s),
+covering real opposite-boundary refusal, reversed matching, UI and interpreted
+named direction arguments. Last complete suite/package baseline is a71acc9 /
+private API f9367b0, 48/48 (88.05 s), GUI-free core 1/1 (1.99 s). This Qt-only
+extension is focused-verified; no extra targets.
+Theoretical checklist: 304 checked / 72 open scoped points.
