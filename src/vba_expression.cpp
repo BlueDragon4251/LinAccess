@@ -789,6 +789,7 @@ private:
                     {"strcomp",{{"String1","String2","Compare"},2}},
                     {"rgb",{{"Red","Green","Blue"},3}}, {"qbcolor",{{"Color"},1}},
                     {"cdate",{{"Expression"},1}},
+                    {"dateadd",{{"Interval","Number","Date"},3}},
                     {"dateserial",{{"Year","Month","Day"},3}},
                     {"timeserial",{{"Hour","Minute","Second"},3}},
                     {"datepart",{{"Interval","Date","FirstDayOfWeek","FirstWeekOfYear"},2}},
@@ -834,10 +835,10 @@ private:
                 if(args.size()!=1 || omitted[0]) throw error("CDate requires one argument",450);
                 return vbaDateValue(args[0]);
             }
-            if(word=="dateserial" || word=="timeserial" || word=="datepart" || word=="datediff" || word=="year" || word=="month" || word=="day" || word=="hour" || word=="minute" || word=="second" || word=="weekday") {
+            if(word=="dateadd" || word=="dateserial" || word=="timeserial" || word=="datepart" || word=="datediff" || word=="year" || word=="month" || word=="day" || word=="hour" || word=="minute" || word=="second" || word=="weekday") {
                 if(!host_) return {};
                 for(std::size_t i=0;i<omitted.size();++i) if(omitted[i]) {
-                    if(i<(word=="datediff" || word=="dateserial" || word=="timeserial"?3u:word=="datepart"?2u:1u)) throw error("Required calendar argument omitted",450);
+                    if(i<(word=="dateadd" || word=="datediff" || word=="dateserial" || word=="timeserial"?3u:word=="datepart"?2u:1u)) throw error("Required calendar argument omitted",450);
                     args[i]=VbaValue::integer(1);
                 }
                 return vbaCalendarFunction(word,args);

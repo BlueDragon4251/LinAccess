@@ -47,6 +47,12 @@ int main(int argc, char** argv) {
         assert(arithmetic.types.value("following")=="DATETIME" && arithmetic.types.value("elapsed")=="DOUBLE");
         assert(arithmetic.rows[0][0].toString()=="2024-02-29 12:00:00" && arithmetic.rows[0][1].toDouble()==1);
         assert(arithmetic.rows[1][0].isNull() && arithmetic.rows[1][1].isNull());
+        const auto summed=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT SUM(stamp-CDate('2024-02-27 12:00:00')) AS elapsed FROM native_dates"),{});
+        assert(summed.rows[0][0].toDouble()==1 && summed.types.value("elapsed")=="DOUBLE");
+        reversed.execute(db,"SELECT DateAdd('m',1,'2024-01-31') AS shifted,DateAdd('d',1,Null) AS missing");
+        assert(reversed.data(reversed.index(0,0)).toString()=="2024-02-29 00:00:00" && reversed.data(reversed.index(0,1)).isNull());
+        assert(!query.exec("SELECT linaccess_jet_date_sum(stamp) FROM native_dates WHERE id<0"));
+        assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==3251); query.finish();
         reversed.execute(db,"SELECT Abs((stamp-CDate('2024-02-27 12:00:00'))+1),Year(stamp+1) FROM native_dates WHERE id=1");
         assert(reversed.data(reversed.index(0,0)).toDouble()==2 && reversed.data(reversed.index(0,1)).toInt()==2024);
         const auto clocks=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Date() AS d,Time() AS t,Now() AS n"),{});

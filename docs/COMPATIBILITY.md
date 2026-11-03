@@ -1279,3 +1279,22 @@ Native Date arithmetic in filters/actions/CASE/CAST/aggregates, additional Date
 operators, complete dynamic promotion/comparison and Windows/OLE edge rules remain
 open. Negative fractional arithmetic and unsupported typed operators remain
 explicit boundaries; no complete Jet Date expression compatibility is claimed.
+
+
+## Native DateAdd and numeric Date-difference SUM (2026-11-03)
+
+DateAdd returns real Date Variants for Gregorian year/quarter/month/day/week/
+hour/minute/second intervals, clamps month/year endpoints, rounds the interval
+count to Long and preserves the input time fraction. Civil-day normalization
+handles negative OLE fractions without treating them as ordinary signed days.
+The w interval adds every calendar day. Named Interval/Number/Date arguments,
+Null date propagation and typed range/argument errors are implemented in VBA;
+native SQL registration retains DATETIME metadata for direct projections.
+Numeric SUM expressions now preserve native Date-difference child rewrites and
+DOUBLE metadata. Date-valued SUM remains unsupported and raises 3251 even on an
+empty input, rather than letting SQLite sum year-shaped text. Complex source/
+aggregate typing, region/Hijri settings, storage subsecond precision and complete
+Windows/OLE coercion remain open.
+Core/DAO/query-model targets pass 3/3 (1.82 s); GUI-free build/test passes 1/1
+(1.43 s), affected desktop targets build. No new target/full-suite/package repeat
+for this increment; last grouped projection baseline remains a8d3061.

@@ -66,6 +66,37 @@ std::string vbaDateText(double serial) {
     return text.str();
 }
 VbaValue vbaCalendarFunction(std::string_view name,const std::vector<VbaValue>& arguments) {
+    if(name=="dateadd") {
+        if(arguments.size()!=3) throw VbaRuntimeError(450,"DateAdd requires three arguments");
+        std::vector<VbaValue> args; for(const auto& value:arguments) args.push_back(scalarVbaValue(value));
+        if(args[0].kind==VbaValue::Kind::Null || args[1].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null DateAdd argument");
+        if(args[2].kind==VbaValue::Kind::Null) return {};
+        auto interval=args[0].asText(); for(auto& ch:interval) if(ch>='A' && ch<='Z') ch+=('a'-'A');
+        const auto count=static_cast<std::int64_t>(coerceVbaModuleValue(args[1],"long").number);
+        const auto source=vbaDateValue(args[2]);
+        const auto whole=std::trunc(source.number),fraction=std::abs(source.number-whole);
+        double civil=whole+fraction;
+        if(interval=="yyyy" || interval=="q" || interval=="m") {
+            const auto parts=dateParts(source);
+            const auto months=static_cast<std::int64_t>(parts.year)*12+parts.month-1+count*(interval=="yyyy" ? 12 : interval=="q" ? 3 : 1);
+            auto year=months/12; if(months%12<0) --year;
+            if(year<100 || year>9999) throw VbaRuntimeError(5,"DateAdd result year out of range");
+            const auto ym=std::chrono::year(static_cast<int>(year))/std::chrono::month(static_cast<unsigned>(months-year*12+1));
+            const auto last=static_cast<int>(static_cast<unsigned>((ym/std::chrono::last).day()));
+            const auto day=parts.day<last ? parts.day : last;
+            const auto date=std::chrono::sys_days(ym/std::chrono::day(static_cast<unsigned>(day)));
+            const auto epoch=std::chrono::sys_days(std::chrono::year(1899)/12/30);
+            civil=(date-epoch).count()+fraction;
+        } else if(interval=="y" || interval=="d" || interval=="w") civil+=count;
+        else if(interval=="ww") civil+=count*7;
+        else if(interval=="h") civil+=count/24.0;
+        else if(interval=="n") civil+=count/1440.0;
+        else if(interval=="s") civil+=count/86400.0;
+        else throw VbaRuntimeError(5,"Invalid DateAdd interval");
+        if(civil< -657434.0 || civil>=2958466.0) throw VbaRuntimeError(5,"DateAdd result out of range");
+        const auto days=std::floor(civil),time=civil-days;
+        return VbaValue::dateSerial(days<0 ? days-time : days+time);
+    }
     if(name=="dateserial" || name=="timeserial") {
         if(arguments.size()!=3) throw VbaRuntimeError(450,"Date construction requires three arguments");
         int values[3];
