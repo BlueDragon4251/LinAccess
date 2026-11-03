@@ -1001,11 +1001,13 @@ int main(int argc,char** argv) {
         "Sub ReadProjectMetadata()\nMe.Tag=CurrentProject.FullName\nEnd Sub\n"
         "Sub ProjectIdentity()\nIf CurrentProject Is Application.CurrentProject Then Me.Tag=\"same-project\"\nEnd Sub\n"
         "Sub RenameProjectMetadata()\nCurrentProject.Name=\"renamed.linaccess\"\nMe.Tag=\"renamed\"\nEnd Sub\n"
-        "Sub ShadowProjectMetadata()\nDim CurrentProject As String\nCurrentProject=\"local-project-name\"\nMe.Tag=CurrentProject\nEnd Sub\n";
+        "Sub ShadowProjectMetadata()\nDim CurrentProject As String\nCurrentProject=\"local-project-name\"\nMe.Tag=CurrentProject\nEnd Sub\n"
+        "Sub ReadProjectCatalog()\nDim item As Object\nDim found As Boolean\nFor Each item In CurrentProject.AllForms\nIf item.Name=\"entry\" Then found=True\nNext item\nIf found And CurrentProject.AllForms.Item(Index:=\"entry\").IsLoaded And Not CurrentProject.AllReports(Index:=\"report\").IsLoaded Then Me.Tag=\"catalog-ready\"\nEnd Sub\n";
     const int formId=artifact(db,"form","entry",form); artifact(db,"vba","Form_entry",code);
     const int queryId=artifact(db,"query","source_query","SELECT value FROM records");
     auto report=form; report.replace("Begin Form","Begin Report"); report.replace("OnLoad =\"[Event Procedure]\"\n",""); report.replace("OnUnload =\"[Event Procedure]\"\n","");
     const int reportId=artifact(db,"report","report",report);
+    artifact(db,"vba","Report_report",QByteArray("Sub Report_Activate()\nCurrentDb.Execute \"INSERT INTO events(kind) VALUES('report-activate')\"\nEnd Sub\nSub Report_Deactivate()\nCurrentDb.Execute \"INSERT INTO events(kind) VALUES('report-deactivate')\"\nEnd Sub\nSub HideSelf()\nMe.Visible=False\nMe.Tag=\"hidden-report\"\nEnd Sub\nSub ShowSelf()\nMe.Visible=True\nMe.Tag=\"shown-report\"\nEnd Sub\n"));
     auto modal=form; modal.replace("Begin Form\n","Begin Form\nModal =NotDefault\n"); const int modalId=artifact(db,"form","modal",modal); artifact(db,"vba","Form_modal",code);
     auto cancel=form; cancel.replace("OnLoad =\"[Event Procedure]\"","OnOpen =\"[Event Procedure]\"");
     const int cancelId=artifact(db,"form","cancel",cancel); artifact(db,"vba","Form_cancel","Sub Form_Open(Cancel As Integer)\nCancel=True\nEnd Sub\n");
@@ -1027,6 +1029,30 @@ int main(int argc,char** argv) {
     assert(entry->executeProcedure("RenameProjectMetadata",arguments).errorNumber==438 && root->member("Tag",{}).asText()==first.toStdString() && QFileInfo::exists(first));
     assert(entry->executeProcedure("ProjectIdentity",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("Tag",{}).asText()=="same-project");
     assert(entry->executeProcedure("ShadowProjectMetadata",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("Tag",{}).asText()=="local-project-name");
+    auto allForms=projectMetadata->member("AllForms",{}).object;
+    auto allReports=projectMetadata->member("AllReports",{}).object;
+    auto catalogEntry=allForms->member("Item",{linaccess::VbaValue::string("ENTRY")}).object;
+    auto catalogReport=allReports->member("Item",{linaccess::VbaValue::string("report")}).object;
+    assert(catalogEntry->member("Name",{}).asText()=="entry" && catalogEntry->member("IsLoaded",{}).boolean && !catalogReport->member("IsLoaded",{}).boolean);
+    assert(allForms->member("Count",{}).asNumber()>0 && allReports->member("Count",{}).asNumber()>0);
+    assert(allForms->member("Item",{linaccess::VbaValue::string("entry")}).object==catalogEntry);
+    const auto catalogCount=allForms->member("Count",{}).asNumber();
+    assert(sql.exec("CREATE TEMP TABLE _la_objects(kind TEXT,name TEXT,definition TEXT)"));
+    assert(sql.exec("INSERT INTO temp._la_objects VALUES('form','temporary_shadow','{}')"));
+    assert(allForms->member("Count",{}).asNumber()==catalogCount);
+    int shadowItem=0; try { (void)allForms->member("Item",{linaccess::VbaValue::string("temporary_shadow")}); } catch(const linaccess::VbaRuntimeError& error) { shadowItem=error.number; } assert(shadowItem==3265);
+    assert(sql.exec("DROP TABLE temp._la_objects"));
+    assert(entry->executeProcedure("ReadProjectCatalog",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("Tag",{}).asText()=="catalog-ready");
+    artifact(db,"form","catalog_subform",QByteArray("Begin Form\nEnd\n"));
+    auto catalogChild=allForms->member("Item",{linaccess::VbaValue::string("catalog_subform")}).object;
+    {
+        AccessFormPreview parent("catalog_parent",QByteArray("Begin Form\nBegin Section\nBegin Subform\nName =\"child\"\nSourceObject =\"Form.catalog_subform\"\nEnd\nEnd\nEnd\n"),{},db,&window);
+        assert(catalogChild->member("IsLoaded",{}).boolean);
+        assert(parent.close() && !catalogChild->member("IsLoaded",{}).boolean);
+    }
+    for(const auto& invalid:std::vector<std::pair<linaccess::VbaValue,int>>{{{},94},{linaccess::VbaValue::longInteger(-1),3265},{linaccess::VbaValue::string("absent"),3265}}) {
+        int number=0; try { (void)allForms->member("Item",{invalid.first}); } catch(const linaccess::VbaRuntimeError& error) { number=error.number; } assert(number==invalid.second);
+    }
     {
         const auto foreignFile=temporary.filePath("foreign.linaccess");
         auto foreignDb=QSqlDatabase::addDatabase("QSQLITE","mainwindow-project-metadata-foreign"); foreignDb.setDatabaseName(foreignFile); assert(foreignDb.open());
@@ -1038,10 +1064,24 @@ int main(int argc,char** argv) {
             assert(makePreviewApplicationObject(*entry)->member("CurrentProject",{}).object==projectMetadata);
         }
         assert(foreignProject->member("FullName",{}).asText()==foreignFile.toStdString());
+        int noCatalog=0; try { (void)foreignProject->member("AllForms",{}).object->member("Count",{}); } catch(const linaccess::VbaRuntimeError& error) { noCatalog=error.number; } assert(noCatalog==3251);
         foreignDb.close(); bool closedProject=false;
         try { (void)foreignProject->member("Name",{}); } catch(const linaccess::VbaRuntimeError& error) { closedProject=error.number==3420; }
         assert(closedProject); foreignProject.reset(); foreignDb=QSqlDatabase{}; QSqlDatabase::removeDatabase("mainwindow-project-metadata-foreign");
     }
+    assert(sql.exec(R"SQL(INSERT INTO _la_objects(kind,name,definition) VALUES('form','catalog_native_form','{"table":"records","fields":["value"]}'))SQL"));
+    action(window,"Aktualisieren")->trigger();
+    auto nativeCatalog=allForms->member("Item",{linaccess::VbaValue::string("catalog_native_form")}).object;
+    QTreeWidgetItem* nativeFormItem=nullptr;
+    for(QTreeWidgetItemIterator it(window.findChild<QTreeWidget*>("database-explorer"));*it;++it)
+        if((*it)->data(0,Qt::UserRole).toString()=="form" && (*it)->text(0)=="catalog_native_form") nativeFormItem=*it;
+    assert(nativeFormItem && !nativeCatalog->member("IsLoaded",{}).boolean);
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->windowTitle()=="Formular: catalog_native_form");
+        assert(nativeCatalog->member("IsLoaded",{}).boolean); dialog->reject();
+    });
+    assert(QMetaObject::invokeMethod(window.findChild<QTreeWidget*>("database-explorer"),"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,nativeFormItem),Q_ARG(int,0)));
+    assert(!nativeCatalog->member("IsLoaded",{}).boolean);
     QApplication::setActiveWindow(entry); editor->setFocus(); root->assign("Tag",linaccess::VbaValue::string("block-project"));
     QTest::keyClick(editor,Qt::Key_O,Qt::ControlModifier); QTest::keyClick(editor,Qt::Key_N,Qt::ControlModifier);
     assert(editor->hasFocus() && !QApplication::activeModalWidget() && db.databaseName()==first);
@@ -1177,6 +1217,7 @@ int main(int argc,char** argv) {
     auto scalarName=std::make_shared<SelectionName>(); command->member("SelectObject",{VbaValue::numeric(0),VbaValue::reference(scalarName),VbaValue::logical(true)});
     assert(scalarName->reads==1 && explorer->currentItem()->data(0,Qt::UserRole+3).toString()=="records");
     assert(sql.exec("INSERT INTO _la_objects(kind,name,definition) VALUES('form','ENTRY','{}')")); action(window,"Aktualisieren")->trigger();
+    int ambiguousCatalog=0; try { (void)allForms->member("Count",{}); } catch(const linaccess::VbaRuntimeError& error) { ambiguousCatalog=error.number; } assert(ambiguousCatalog==5);
     badSelection({VbaValue::numeric(2),VbaValue::string("entry"),VbaValue::logical(true)},5);
     assert(sql.exec("DELETE FROM _la_objects WHERE kind='form' AND name='ENTRY'")); action(window,"Aktualisieren")->trigger();
     assert(entry->executeProcedure("SelectEntry",arguments).status==linaccess::VbaExecutionStatus::Completed);
@@ -1196,10 +1237,21 @@ int main(int argc,char** argv) {
     const auto closed=entry->executeProcedure("CloseSelf",arguments); assert(closed.status==linaccess::VbaExecutionStatus::Completed && retained);
     dispose(); assert(!entry);
     assert(projectMetadata->member("FullName",{}).asText()==first.toStdString());
+    assert(!catalogEntry->member("IsLoaded",{}).boolean);
     assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="second"); sql.finish();
     openArtifact(window,reportId); QPointer<AccessFormPreview> reportWindow=document("report"); assert(reportWindow && !reportWindow->isModal() && QApplication::activeModalWidget()==nullptr);
+    assert(catalogReport->member("IsLoaded",{}).boolean);
+    assert(reportWindow->executeProcedure("HideSelf",arguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(reportWindow->isHidden() && !makePreviewFormObject(*reportWindow)->member("Visible",{}).boolean && catalogReport->member("IsLoaded",{}).boolean);
+    assert(makePreviewFormObject(*reportWindow)->member("Tag",{}).asText()=="hidden-report");
+    assert(sql.exec("SELECT count(*) FROM events WHERE kind='report-deactivate'") && sql.next() && sql.value(0).toInt()>0); sql.finish();
+    assert(reportWindow->executeProcedure("ShowSelf",arguments).status==linaccess::VbaExecutionStatus::Completed);
+    QApplication::setActiveWindow(reportWindow); QApplication::processEvents();
+    assert(makePreviewFormObject(*reportWindow)->member("Visible",{}).boolean && makePreviewFormObject(*reportWindow)->member("Tag",{}).asText()=="shown-report");
+    assert(sql.exec("SELECT count(*) FROM events WHERE kind='report-activate'") && sql.next() && sql.value(0).toInt()>0); sql.finish();
     assert(reportWindow->findChild<QLineEdit*>("access-control-editor")->isReadOnly()); action(window,"Alle schließen")->trigger(); dispose(); assert(!reportWindow && window.findChild<QTabWidget*>()->count()==0);
     openArtifact(window,modalId); QPointer<AccessFormPreview> modalWindow=document("modal"); assert(modalWindow && modalWindow->isModal() && QApplication::activeModalWidget()==modalWindow);
+    assert(allForms->member("Item",{linaccess::VbaValue::string("modal")}).object->member("IsLoaded",{}).boolean);
     auto* modalEditor=modalWindow->findChild<QLineEdit*>("access-control-editor"); assert(modalEditor); modalEditor->setFocus(); QTest::keyClick(modalEditor,Qt::Key_F11);
     assert(QApplication::activeModalWidget()==modalWindow && !AccessFormPreview::databaseWindowActive());
     QTest::keyClick(modalEditor,Qt::Key_O,Qt::ControlModifier); QTest::keyClick(modalEditor,Qt::Key_N,Qt::ControlModifier); assert(QApplication::activeModalWidget()==modalWindow);
@@ -1212,6 +1264,7 @@ int main(int argc,char** argv) {
     bool staleProject=false;
     try { (void)projectMetadata->member("FullName",{}); } catch(const linaccess::VbaRuntimeError& error) { staleProject=error.number==3420; }
     assert(staleProject);
+    int staleCatalog=0; try { (void)catalogEntry->member("IsLoaded",{}); } catch(const linaccess::VbaRuntimeError& error) { staleCatalog=error.number; } assert(staleCatalog==3420);
     openArtifact(window,formId); auto* reopenedEntry=document("entry"); assert(reopenedEntry);
     auto reopenedProject=makePreviewApplicationObject(*reopenedEntry)->member("CurrentProject",{}).object;
     assert(reopenedProject!=projectMetadata && reopenedProject->member("FullName",{}).asText()==first.toStdString());
@@ -1224,6 +1277,11 @@ int main(int argc,char** argv) {
     QTimer::singleShot(0,&window,[&] { auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog); created=true; dialog->selectFile(third); static_cast<QDialog*>(dialog)->accept(); });
     QTest::keyClick(explorer,Qt::Key_N,Qt::ControlModifier);
     assert(created && QFileInfo::exists(third) && QSqlDatabase::database("linaccess-main").databaseName()==third);
+    {
+        AccessFormPreview probe("empty_catalog_probe",QByteArray("Begin Form\nEnd\n"),{},QSqlDatabase::database("linaccess-main"),&window);
+        auto emptyProject=makePreviewApplicationObject(probe)->member("CurrentProject",{}).object;
+        assert(emptyProject->member("AllForms",{}).object->member("Count",{}).asNumber()==0 && emptyProject->member("AllReports",{}).object->member("Count",{}).asNumber()==0);
+    }
     const auto hash=[&] { QFile input(first); assert(input.open(QIODevice::ReadOnly)); return QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256); };
     const auto beforeRefusal=hash(); bool refused=false;
     QTimer::singleShot(0,&window,[&] {

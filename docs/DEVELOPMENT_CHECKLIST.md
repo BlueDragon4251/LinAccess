@@ -993,3 +993,7 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native table grid Ctrl+Insert/Shift+Insert share checked readonly TSV copy and typed draft paste with Ctrl+C/Ctrl+V; text editors retain native Qt shortcuts.
 
 - [x] Native CurrentProject/Application.CurrentProject expose real readonly Name/Path/FullName, per-connection identity and independent caller lifetime with checked project-generation invalidation and preserved user-name lookup.
+
+- [x] CurrentProject.AllForms/AllReports query saved native/imported catalogs with checked Count/Item/named lookup/For Each, readonly descriptor names, live scope and explicit ambiguity/version rules.
+- [x] Project catalog IsLoaded tracks actual hidden/modal/embedded previews and visible native runners/designers, excludes closed owners, and invalidates independent item references on project replacement.
+- [x] Native report Visible getter/setter uses checked Qt document visibility, preserves loaded readonly reports and executes real activation/deactivation VBA/SQL with continued caller code.

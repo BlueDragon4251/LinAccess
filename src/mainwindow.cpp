@@ -78,6 +78,14 @@
 #include <stdexcept>
 
 namespace {
+void tagProjectObject(QWidget* widget,QObject* owner,const QSqlDatabase& database,const QString& kind,const QString& name) {
+    if(name.isEmpty()) return;
+    widget->setProperty("la_project_object_kind",kind);
+    widget->setProperty("la_project_object_name",name);
+    widget->setProperty("la_project_object_connection",database.connectionName());
+    widget->setProperty("la_project_object_database",database.databaseName());
+    widget->setProperty("la_project_object_generation",owner->property("la_project_generation"));
+}
 QString quoteSql(QString name) {
     name.replace('"', "\"\"");
     return '"' + name + '"';
@@ -1421,6 +1429,7 @@ void MainWindow::editForm(const QString& existingName) {
     const auto old = existingName.isEmpty() ? QJsonObject{} : objectDefinition("form", existingName);
     QDialog dialog(this);
     dialog.setWindowTitle("Formulardesigner — experimentelle VBA-Ereignislaufzeit");
+    tagProjectObject(&dialog,this,db_,"form",existingName);
     dialog.resize(820, 690);
     auto* outer = new QVBoxLayout(&dialog);
     auto* name = new QLineEdit(existingName, &dialog);
@@ -1557,6 +1566,7 @@ void MainWindow::runForm(const QString& name) {
     const QString keyExpr = hasId ? QStringLiteral("\"id\"") : QStringLiteral("rowid");
     QDialog dialog(this);
     dialog.setWindowTitle("Formular: " + name);
+    tagProjectObject(&dialog,this,db_,"form",name);
     dialog.resize(620, 510);
     auto* outer = new QVBoxLayout(&dialog);
     outer->addWidget(new QLabel("<b>VBA: experimenteller Teilinterpreter. "
@@ -1706,6 +1716,7 @@ void MainWindow::editReport(const QString& existingName) {
     const auto old = existingName.isEmpty() ? QJsonObject{} : objectDefinition("report", existingName);
     QDialog dialog(this);
     dialog.setWindowTitle("Berichtdesigner — einfache SQL-Tabellenberichte");
+    tagProjectObject(&dialog,this,db_,"report",existingName);
     dialog.resize(930, 720);
     auto* outer = new QVBoxLayout(&dialog);
     auto* name = new QLineEdit(existingName, &dialog);

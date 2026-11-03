@@ -33,7 +33,8 @@ file reopen and different-file replacement. Pure interpreter regression also
 checks a user function named CurrentProject. No new CTest targets were added.
 
 This supplies file metadata, not a complete Access CurrentProject/COM object.
-Connection, Properties, AllForms/AllReports/other catalog collections, IsTrusted,
+AllForms/AllReports now have the bounded implementation in
+PROJECT_CATALOG_RUNTIME.md. Connection, Properties, other catalog collections, IsTrusted,
 ProjectType, arbitrary project creation/closure and exact Access error priority
 remain unsupported. Standalone previews without a native MainWindow do not
 claim the window's cached identity or same-file generation tracking.
