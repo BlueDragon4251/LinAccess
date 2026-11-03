@@ -380,3 +380,20 @@ Tabellen-DoCmd-Befehle und volle Access-Fehler-/Fensterparität weiterhin offen.
 Kanonische Spezifikation: docs/TABLE_DOCUMENT_RUNTIME.md (inkl. Access-2003-Referenz).
 Vollsuite 48/48 (92.13 s), GUI-freier Core 1/1 (1.68 s), Debian-Prüfungen und
 vier Originalfixture-Hashes bestanden. Keine neuen Testtargets.
+
+
+## SaveRecord für aktive Tabellen (2026-11-03)
+
+DoCmd.RunCommand acCmdSaveRecord sowie Application.RunCommand nutzen jetzt den
+gemeinsamen nativen Tabellen-Speicherpfad (inkl. UI-Button, Transaktion und
+PK-Auswahlwiederherstellung). Der direkte Interpreter-Save-Pfad ist ebenfalls
+angebunden. Readonly-Save ergibt 2046, unbekannte neue Tabellen-Dispatcherbefehle
+3251; kein Rückfall auf das alte Aufruferformular. Programmpfad ohne zusätzliche
+SQL-Dialoge, native Fehlermeldungen werden zu VBA zurückgegeben.
+Nie aktivierte Formulare behalten ihren Initialisierungskontext, sofern sie
+nicht explizit eine Tabelle geöffnet/selektiert haben. Explizite Tabellenkontexte
+werden getrennt von echten Formular-Activate-Ereignissen markiert. Dirty-Hintergrund-
+tabelle blieb beim Konstruktor-Current-Save unverändert, Me bleibt der Aufrufer.
+Details docs/TABLE_DOCUMENT_RUNTIME.md. Trio 3/3 (16.13 s), letzter Initfall 1/1
+(1.93 s). Vollsuite/Paket zuletzt e054910 / privat 0328119, 48/48 (92.13 s).
+Dieses Qt-Controller-Inkrement ist gezielt geprüft, keine neuen Targets.

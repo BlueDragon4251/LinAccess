@@ -6,6 +6,7 @@
 #include "native_input_box.hpp"
 #include "native_clock_keys.hpp"
 #include "native_cell_zoom.hpp"
+#include <QVariantMap>
 
 #include "vba_runtime.hpp"
 #include "vba_module_context.hpp"
@@ -490,7 +491,23 @@ public:
         const auto leave=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
         return linaccess::VbaHost::eval(expression);
     }
+    bool usesActiveTableContext() const { return preview_.hasActivated_ || preview_.property("la_explicit_table_context").toBool(); }
+    bool tableCommand(int code) {
+        if(!usesActiveTableContext()) return false;
+        QWidget* owner=nullptr;
+        for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+            if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+        if(!owner || owner->metaObject()->indexOfMethod("dispatchTableCommand(int)")<0) return false;
+        QVariantMap result;
+        if(!QMetaObject::invokeMethod(owner,"dispatchTableCommand",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,code)))
+            throw linaccess::VbaRuntimeError(3251,"Native table command dispatch is unavailable");
+        if(!result.value("handled").toBool()) return false;
+        const int error=result.value("error").toInt();
+        if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
+        return true;
+    }
     void saveRecord() override {
+        if(tableCommand(97)) return;
         if (!commandDocument().saveRecord()) throw linaccess::VbaRuntimeError(2501,"Record save cancelled");
     }
     void selectCurrentRecord() { commandDocument().selectCurrentRecordForCommand(); }
@@ -537,6 +554,7 @@ public:
                     || !QMetaObject::invokeMethod(owner,"activateOpenTable",Qt::DirectConnection,Q_RETURN_ARG(int,error),Q_ARG(QString,name)))
                     throw linaccess::VbaRuntimeError(3251,"Native open-table selection is unavailable");
                 if(error) throw linaccess::VbaRuntimeError(error,"Open table selection failed");
+                preview_.setProperty("la_explicit_table_context",true);
                 return;
             }
             if(type!=2 && type!=3) throw linaccess::VbaRuntimeError(3251,"Open query window selection is not implemented");
@@ -691,7 +709,7 @@ public:
         }
     }
     void sendKeys(std::string_view keys,bool wait) override {
-        if (preview_.hasActivated_ && AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(3251,"Database-window SendKeys target is not implemented");
+        if (usesActiveTableContext() && AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(3251,"Database-window SendKeys target is not implemented");
         linaccess::sendNativeKeys(&preview_,QString::fromUtf8(keys.data(),keys.size()),wait,
             [preview=QPointer<AccessFormPreview>(&preview_)](int number) {
                 if (preview && preview->status_) preview->status_->setText("SendKeys: Fehler "+QString::number(number));
@@ -715,9 +733,9 @@ private:
     AccessFormPreview& commandDocument() {
         if (preview_.hasActivated_ && AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(2046,"Record command requires an active native document");
         auto* document=activePreviewDocument();
-        if (preview_.opened_ && document && !document->closed_ && !document->openCancelled_
+        if ((preview_.opened_ || usesActiveTableContext()) && document && !document->closed_ && !document->openCancelled_
             && document->db_.connectionName()==preview_.db_.connectionName() && document->db_.databaseName()==preview_.db_.databaseName()) return *document;
-        if(preview_.hasActivated_ && preview_.isHidden()) throw linaccess::VbaRuntimeError(2046,"Record command requires an active native document");
+        if(usesActiveTableContext() && preview_.isHidden()) throw linaccess::VbaRuntimeError(2046,"Record command requires an active native document");
         return preview_;
     }
     std::vector<bool> moduleScopes_;
@@ -776,6 +794,7 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
     if (command=="runcommand") {
         if (args.size()!=1) throw VbaRuntimeError(450,"RunCommand requires one command");
         const auto code=number(args[0]);
+        if(host.tableCommand(code)) return {};
         if (code==28) host.gotoRecord(5);
         else if (code==30) host.findRecords();
         else if (code==341) host.repeatFind();

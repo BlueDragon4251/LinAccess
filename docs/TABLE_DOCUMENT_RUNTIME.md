@@ -46,7 +46,7 @@ modal guards. A closed/missing table in SelectObject remains an explicit 3251
 boundary; exact closed-object errors are not inferred from OpenTable behavior.
 The caller's Me stays bound to its own live form, and closing that caller does
 not close the table page owned by MainWindow. Table activation clears the old
-active form context. General table DoCmd commands, Screen.ActiveDatasheet,
+active form context. Other table DoCmd commands, Screen.ActiveDatasheet,
 query/editor-window execution and full Access window/format/error parity remain
 open; commands must not silently operate on the old form caller.
 
@@ -60,3 +60,28 @@ GUI-free rebuild/core passes 1/1 (1.68 s). Explicit Empty DataMode is independen
 rather than treated as the editable default (main-window 1/1, 1.91 s).
 Full rebuilt desktop suite passes 48/48 (92.13 s). Debian payload/permissions/
 Build-ID/pinned SQLite checks and all four fixture hashes pass. No extra targets.
+
+
+## SaveRecord on the active table (2026-11-03)
+
+DoCmd.RunCommand acCmdSaveRecord and Application.RunCommand now submit the
+actual active native table's cache. The specialized interpreter Save statement
+and ordinary object-method dispatch share this route. The existing table Save
+button uses the same transactional helper, including field validation, rollback/
+retry behavior and primary-key selection restoration. Read-only Save is an
+unavailable command (2046); other unimplemented table dispatcher choices are
+3251 instead of acting on the old form caller. Native errors/descriptions return
+to VBA without adding an SQL consent/error dialog on the programmatic path.
+
+A never-activated form retains its initialization command context unless it
+explicitly opened/selected a table. That explicit switch is recorded separately
+from real form activation events. A constructor Current save was checked with a
+dirty background table: its cache and SQL stay unchanged. Me remains the caller
+while a subsequent explicit table Save commits the actual table.
+
+Existing main-window/Currency/layout targets pass 3/3 (16.13 s); final focused
+initialization check passes 1/1 (1.93 s). Actual DoCmd and named Application calls
+persist two different SQL values, readonly mutation is refused, and existing
+UI/save/selection cases still pass. Last complete suite/package baseline remains
+local e054910 / private API 0328119, 48/48 (92.13 s), GUI-free core 1/1 (1.68 s).
+This Qt controller increment is focused-verified, with no new test targets.

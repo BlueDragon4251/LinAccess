@@ -82,3 +82,9 @@ Validation: Release build and all 18 CTests passed (71.98 s), GUI-disabled core
 1/1 passed (2.85 s), fresh .deb payload/executable Build ID checks passed, and all
 four original fixture SHA-256 checks passed. Remote Debian/Ubuntu CI results
 remain unverified from this environment.
+
+
+Active native table SaveRecord is now routed through the same controller as the
+UI Save button, including the direct interpreter statement. Other generic table
+commands remain scoped/unsupported. See TABLE_DOCUMENT_RUNTIME.md for verified
+SQL behavior, readonly and initialization-context boundaries.

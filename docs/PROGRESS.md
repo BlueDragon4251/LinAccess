@@ -3691,3 +3691,16 @@ explicit 3251 boundaries. Details and references: TABLE_DOCUMENT_RUNTIME.md.
 Full build/suite 48/48 (92.13 s), GUI-free core 1/1 (1.68 s), Debian payload/
 permissions/Build-ID/pinned SQLite checks and four fixture hashes pass. Existing
 48 targets only. Theoretical checklist: 288 checked / 70 open scoped points.
+
+
+## Active native table SaveRecord (2026-11-03)
+
+DoCmd/Application RunCommand SaveRecord now uses the actual active table and the
+same transactional/selection-restoring helper as its native Save button. Both
+specialized interpreter and generic object-call paths are handled; readonly Save
+returns 2046, and no old caller form is silently saved. Initialization remains
+owned by a never-activated form unless it explicitly switches to a table.
+See TABLE_DOCUMENT_RUNTIME.md. Existing trio 3/3 (16.13 s), final initialization
+case 1/1 (1.93 s); real SQL persistence and unchanged background drafts verified.
+Full suite/package baseline remains e054910 / API 0328119, 48/48 (92.13 s).
+Theoretical checklist: 290 checked / 70 open scoped points.
