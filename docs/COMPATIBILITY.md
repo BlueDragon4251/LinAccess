@@ -1037,3 +1037,18 @@ Chr$/ChrW$ and named character arguments work in VBA. ANSI remains ASCII-only
 and isolated surrogate output is explicitly unsupported. InStrRev Null string
 arguments now return Null in VBA/SQL; StrReverse(Null) still raises 94. Full
 codepage/BSTR/result-metadata equivalence remains open.
+
+
+### Native repetition functions (2026-11-03)
+
+Space/Space$ and String/String$ execute in the C++ VBA evaluator; plain Space and
+String also use the registered native SQL scalar bridge. Named Number/Character
+arguments, checked Long counts, first UTF-16 text unit, ASCII numeric codes with
+modulo 256, embedded NUL and Variant Null versus dollar-variant error 94 are
+implemented. Negative counts raise 5, counts above 1,000,000 raise explicit 3251;
+ANSI bytes above 127 and isolated surrogates remain unsupported. Full Windows
+codepage and argument-evaluation edge parity is not claimed.
+Existing core/DAO/query-model targets pass 3/3 (1.77 s); desktop all-target build
+passes. Prior character SQL GUI-free follow-up passed 1/1 (1.37 s). GUI-free build/test passes 1/1 (1.45 s). The Debian package passes contents,
+permissions, Build-ID and pinned SQLite backend smoke checks; all four original
+fixture SHA-256 checks pass. Full desktop suite passes 48/48 in one run (85.23 s).

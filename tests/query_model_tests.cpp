@@ -32,6 +32,9 @@ int main(int argc, char** argv) {
         assert(reversed.data(reversed.index(0,0)).isNull() && reversed.data(reversed.index(0,1)).isNull());
         reversed.execute(db,"SELECT Count(InStrRev(label,'o')) FROM samples");
         assert(reversed.data(reversed.index(0,0)).toInt()==3);
+        reversed.execute(db,"SELECT Space(2),String(3,label),String(2,321),String(2,Null) FROM samples WHERE id=1");
+        assert(reversed.data(reversed.index(0,0)).toString()=="  " && reversed.data(reversed.index(0,1)).toString()=="ooo");
+        assert(reversed.data(reversed.index(0,2)).toString()=="AA" && reversed.data(reversed.index(0,3)).isNull());
         reversed.execute(db,"SELECT AscW('Ω') AS code,ChrW(937) AS glyph,Chr(34) AS quotation,Chr(Asc(label)) AS first FROM samples WHERE id=1");
         assert(reversed.data(reversed.index(0,0)).toInt()==937 && reversed.data(reversed.index(0,1)).toString()=="Ω");
         assert(reversed.data(reversed.index(0,2)).toString()=="\"" && reversed.data(reversed.index(0,3)).toString()=="o");

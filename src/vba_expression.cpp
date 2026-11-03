@@ -756,6 +756,8 @@ private:
                     {"msgbox",{{"Prompt","Buttons","Title","HelpFile","Context"},1}},
                     {"inputbox",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
                     {"inputbox$",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
+                    {"space",{{"Number"},1}}, {"space$",{{"Number"},1}},
+                    {"string",{{"Number","Character"},2}}, {"string$",{{"Number","Character"},2}},
                     {"asc",{{"String"},1}}, {"ascw",{{"String"},1}},
                     {"chr",{{"CharCode"},1}}, {"chr$",{{"CharCode"},1}},
                     {"chrw",{{"CharCode"},1}}, {"chrw$",{{"CharCode"},1}},
@@ -900,6 +902,36 @@ private:
                 if(!host_) return {};
                 if(args.empty() || omitted[0]) throw error("Round requires an expression",450);
                 return vbaRound(args);
+            }
+            if(word=="space" || word=="space$" || word=="string" || word=="string$") {
+                if(!host_) return {};
+                const bool spaces=word=="space" || word=="space$";
+                if(args.size()!=(spaces ? 1U : 2U) || std::any_of(omitted.begin(),omitted.end(),[](bool value){ return value; }))
+                    throw error("Repetition requires all arguments",450);
+                const auto number=scalarObjectValue(args[0]);
+                const auto character=spaces ? VbaValue::string(" ") : scalarObjectValue(args[1]);
+                if(number.kind==VbaValue::Kind::Null || character.kind==VbaValue::Kind::Null) {
+                    if(word.back()=='$') throw error("Invalid Null repetition argument",94);
+                    return {};
+                }
+                const auto count=static_cast<std::int32_t>(coerceVbaModuleValue(number,"long").number);
+                if(count<0) throw error("Invalid repetition count",5);
+                if(count>1000000) throw error("Native repetition size limit exceeded",3251);
+                std::string unit;
+                if(character.kind==VbaValue::Kind::Text) {
+                    const auto text=utf16String(character.asText());
+                    if(text.empty()) throw error("Empty repetition character",5);
+                    unit=utf8String(std::u16string(1,text.front()));
+                } else {
+                    const auto code=static_cast<std::int32_t>(coerceVbaModuleValue(character,"long").number);
+                    if(code<0) throw error("Invalid repetition character code",5);
+                    const auto byte=code%256;
+                    if(byte>127) throw error("ANSI character codepage conversion is not implemented",3251);
+                    unit.assign(1,static_cast<char>(byte));
+                }
+                std::string result; result.reserve(static_cast<std::size_t>(count)*unit.size());
+                for(std::int32_t index=0;index<count;++index) result+=unit;
+                return VbaValue::string(std::move(result));
             }
             if(word=="asc" || word=="ascw" || word=="chr" || word=="chr$" || word=="chrw" || word=="chrw$") {
                 if(!host_) return {};
