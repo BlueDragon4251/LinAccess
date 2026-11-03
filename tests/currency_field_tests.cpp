@@ -142,7 +142,7 @@ End Sub
     assert(model->item("amount").currencyUnits==5000 && model->item("incremented").currencyUnits==5001 && !form.hasUnsavedChanges());
     assert(form.executeProcedure("GoLast",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(editor->text()=="549755813887.9999" && model->item("amount").currencyUnits==5497558138879999LL && !form.hasUnsavedChanges());
-    assert(form.executeProcedure("NewRow",none).status==linaccess::VbaExecutionStatus::Completed && model->member("NewRecord",{}).boolean);
+    assert(form.executeProcedure("NewRow",none).status==linaccess::VbaExecutionStatus::Completed && model->member("NewRecord",{}).truthy());
     editor->setFocus(); assert(QTest::qWaitFor([&] { return QApplication::focusWidget()==editor; },2000));
     QTest::keyClick(editor,Qt::Key_Apostrophe,Qt::ControlModifier);
     assert(editor->text()=="549755813887.9999" && model->item("amount").kind==VbaValue::Kind::Null && form.hasUnsavedChanges());

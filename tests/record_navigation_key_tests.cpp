@@ -98,10 +98,10 @@ End Sub
     assert(form.executeProcedure("SendNext",none).status==linaccess::VbaExecutionStatus::Completed && editor->text()=="second");
     assert(form.executeProcedure("SendPrevious",none).status==linaccess::VbaExecutionStatus::Completed && editor->text()=="edited");
     key(true); key(true); assert(editor->text()=="third");
-    key(true); assert(model->member("NewRecord",{}).boolean && count()==3 && !form.hasUnsavedChanges());
-    key(false); assert(editor->text()=="third" && !model->member("NewRecord",{}).boolean);
+    key(true); assert(model->member("NewRecord",{}).truthy() && count()==3 && !form.hasUnsavedChanges());
+    key(false); assert(editor->text()=="third" && !model->member("NewRecord",{}).truthy());
     model->assign("AllowAdditions",VbaValue::logical(false)); key(true);
-    assert(editor->text()=="third" && count()==3 && !model->member("NewRecord",{}).boolean);
+    assert(editor->text()=="third" && count()==3 && !model->member("NewRecord",{}).truthy());
     int finished=0; QObject::connect(&form,&QDialog::finished,[&] { ++finished; });
     tag("closecurrent"); key(false); assert(form.isHidden() && finished==1 && count()==3 && stored()=="edited");
 }

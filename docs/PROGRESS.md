@@ -2910,3 +2910,18 @@ Core regression checks subtype, banker rounding and 32-bit overflow. Desktop
 build and core/DAO targets pass 2/2 (1.66 s). No new target/full-suite/package
 repeat. Complete Byte/mixed/Null promotion matrices and all Windows operator
 coercion behavior remain open.
+
+## Grouped native language verification (2026-11-03)
+
+Snapshot 32f548e passed the complete desktop/all-target build. Full suite:
+45/48 passed (89.16 s); the three failures directly read the obsolete Boolean
+storage of NewRecord after its documented Integer correction. Existing state
+assertions now use truthy() for both positive and negative checks; the dedicated
+native VBA test still verifies Integer subtype. The three affected GUI targets
+then passed 3/3 (1.48 s). All 48 existing targets are covered across full run and
+focused rerun, not one final 48/48 invocation. No new targets.
+
+GUI-free build/test passed 1/1 (1.44 s). Matching .deb Build-ID, pinned SQLite
+backend smoke, package contents/permissions, all four original fixture SHA-256
+checks and repository privacy passed. No distro matrix repeat; remote CI billing
+restriction unchanged. Last single-run 48/48 evidence remains 992d082.

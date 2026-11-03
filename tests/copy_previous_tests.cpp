@@ -115,18 +115,18 @@ End Sub
     assert(editor->text()==first && stored(2).toString()=="ok" && model->member("Dirty",{}).boolean);
     QTest::keyClick(editor,Qt::Key_Escape); assert(editor->text()=="ok" && !model->member("Dirty",{}).boolean);
     model->assign("Tag",VbaValue::string("blocknew")); QTest::keyClick(editor,Qt::Key_Plus,Qt::ControlModifier);
-    assert(!model->member("NewRecord",{}).boolean && !model->member("Dirty",{}).boolean);
+    assert(!model->member("NewRecord",{}).truthy() && !model->member("Dirty",{}).boolean);
     model->assign("Tag",VbaValue::string("")); model->assign("AllowAdditions",VbaValue::logical(false));
-    QTest::keyClick(editor,Qt::Key_Plus,Qt::ControlModifier); assert(!model->member("NewRecord",{}).boolean && stored(2).toString()=="ok");
+    QTest::keyClick(editor,Qt::Key_Plus,Qt::ControlModifier); assert(!model->member("NewRecord",{}).truthy() && stored(2).toString()=="ok");
     model->assign("AllowAdditions",VbaValue::logical(true));
     editor->selectAll(); QTest::keyClicks(editor,"pending");
     model->assign("AllowAdditions",VbaValue::logical(false)); QTest::keyClick(editor,Qt::Key_Plus,Qt::ControlModifier);
     assert(stored(2).toString()=="ok" && model->member("Dirty",{}).boolean && editor->text()=="pending");
     model->assign("AllowAdditions",VbaValue::logical(true)); model->assign("Tag",VbaValue::string("blockupdate"));
     QTest::keyClick(editor,Qt::Key_Plus,Qt::ControlModifier);
-    assert(!model->member("NewRecord",{}).boolean && model->member("Dirty",{}).boolean && editor->text()=="pending" && stored(2).toString()=="ok");
+    assert(!model->member("NewRecord",{}).truthy() && model->member("Dirty",{}).boolean && editor->text()=="pending" && stored(2).toString()=="ok");
     model->assign("Tag",VbaValue::string("")); assert(form.executeProcedure("NewViaSendKeys",none).status==linaccess::VbaExecutionStatus::Completed);
-    assert(model->member("NewRecord",{}).boolean && !model->member("Dirty",{}).boolean && stored(2).toString()=="pending");
+    assert(model->member("NewRecord",{}).truthy() && !model->member("Dirty",{}).boolean && stored(2).toString()=="pending");
     focus(); copy();
     assert(model->member("Dirty",{}).boolean);
     QTest::keyClick(editor,Qt::Key_Escape); assert(!model->member("Dirty",{}).boolean);
@@ -135,7 +135,7 @@ End Sub
     model->member("Requery",{}); navigate(2); copy();
     assert(editor->text()=="pending" && stored(2).toString()=="pending" && !model->member("Dirty",{}).boolean);
     QTest::keyClick(editor,Qt::Key_Equal,Qt::ControlModifier|Qt::ShiftModifier);
-    assert(model->member("NewRecord",{}).boolean && !model->member("Dirty",{}).boolean);
+    assert(model->member("NewRecord",{}).truthy() && !model->member("Dirty",{}).boolean);
     for(const auto& step:std::vector<std::pair<int,int>>{{67,1},{65,2},{68,5},{66,4}}) {
         std::vector<VbaValue> command{VbaValue::numeric(step.first)};
         assert(form.executeProcedure("RunNavigation",command).status==linaccess::VbaExecutionStatus::Completed);
@@ -148,7 +148,7 @@ End Sub
         assert(model->item("id").asNumber()==4 && !model->member("Dirty",{}).boolean);
     }
     assert(form.executeProcedure("NewViaCommand",none).status==linaccess::VbaExecutionStatus::Completed);
-    assert(model->member("NewRecord",{}).boolean && !model->member("Dirty",{}).boolean);
+    assert(model->member("NewRecord",{}).truthy() && !model->member("Dirty",{}).boolean);
     assert(sql.exec("SELECT COUNT(*) FROM entries") && sql.next() && sql.value(0).toInt()==5); sql.finish();
     assert(form.close());
 }
