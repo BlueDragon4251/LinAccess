@@ -4040,3 +4040,18 @@ Full rebuilt desktop suite passes 48/48 (90.08 s), GUI-free core 1/1 (1.58 s),
 Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. Actual parameterless Close targets the active readonly
 query document while preserving its calling form. No additional test targets.
+
+## Readonly query Requery (2026-11-03)
+
+Active readonly query Requery and Shift+F9 reread saved definitions and declared
+parameters, execute real SQL and replace results only after success. Errors and
+cancel retain the previous model. Closed pages are not resurrected; same-query
+recursive SQL refuses 3251 and project close is blocked during SQL execution.
+An actual SQLite callback closes/destroys the old page while its replacement is
+materialized. Existing main-window target passes 1/1 (3.44 s), no new targets.
+OPEN_QUERY_RUNTIME.md defines the bounded scope. Theoretical checklist: 332
+checked / 72 open scoped points, not a percentage of complete Access parity.
+
+Full desktop suite passes 48/48 (89.91 s), GUI-free core 1/1 (1.57 s),
+Debian payload/permissions/Build-ID/pinned SQLite and all four original fixture
+hashes pass. No new test targets.

@@ -712,3 +712,15 @@ MainWindow gezielt 1/1 (3.35 s), keine neuen Testtargets.
 Vollsuite 48/48 (90.08 s), GUI-freier Core 1/1 (1.58 s), Debian-Prüfung
 inklusive Build-ID/SQLite 3.54.1 und vier Originalfixture-Hashes bestanden.
 Parameterloses Close schließt aktive readonly Abfrage statt Aufrufer. Keine neuen Targets.
+
+## Schreibgeschützte Abfragen neu laden (2026-11-03)
+
+Aktive Abfrage-Requery und Shift+F9 laden Definition/Parameter neu und ersetzen
+das echte SQL-Ergebnis erst nach Erfolg. Fehler/Abbruch behalten das alte Modell.
+Ein echter SQLite-Callback prüft rekursive Ausführung (3251), Projektwechsel-
+Sperre und Zerstörung des alten Tabs während SQL, ohne Wiedereröffnung.
+Gezieltes bestehendes Mainwindow-Ziel 1/1 (3,44 s); kein neues Testziel.
+Details/Grenzen: docs/OPEN_QUERY_RUNTIME.md. 332 geprüfte Checklist-Punkte,
+72 offene Punkte; keine Gesamtparitätsquote. Vollprüfung: Desktop 48/48
+(89,91 s), GUI-frei 1/1 (1,57 s), Debian-Paket und alle vier Original-SHA-256
+bestanden.

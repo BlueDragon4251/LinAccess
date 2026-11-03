@@ -26,6 +26,8 @@
 #include <QMenu>
 #include <QPushButton>
 #include <QSqlQuery>
+#include <QSqlDriver>
+#include <QLibrary>
 #include <QSplitter>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -40,6 +42,10 @@
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
+
+struct sqlite3;
+struct sqlite3_context;
+struct sqlite3_value;
 
 namespace {
 QAction* action(MainWindow& window,const QString& text) {
@@ -462,6 +468,47 @@ End Sub
     auto queryDescriptor=makePreviewApplicationObject(*mixed)->member("CurrentData",{}).object->member("AllQueries",{}).object->member("Item",{linaccess::VbaValue::string("command_query_doc")}).object;
     assert(queryDescriptor->member("IsLoaded",{}).boolean);
     assert(mixed->executeProcedure("OpenReadQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->currentWidget()==queryPage && documentTabs->count()==beforeQueries+1);
+    assert(unchanged.exec("UPDATE command_readonly SET value=2.5 WHERE id=1"));
+    assert(queryView->model()->index(0,1).data().toDouble()==1.25);
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->model()->index(0,1).data().toDouble()==2.5);
+    assert(unchanged.exec("UPDATE command_readonly SET value=1.25 WHERE id=1"));
+    QApplication::setActiveWindow(&window); queryView->setFocus(); QApplication::processEvents(); QTest::keyClick(queryView,Qt::Key_F9,Qt::ShiftModifier);
+    assert(queryView->model()->index(0,1).data().toDouble()==1.25);
+    QPointer<QAbstractItemModel> oldQueryResult=queryView->model();
+    assert(unchanged.exec(R"SQL(UPDATE _la_objects SET definition='{"sql":"SELECT unavailable_column FROM command_readonly"}' WHERE kind='query' AND name='command_query_doc')SQL"));
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Error);
+    assert(queryView->model()==oldQueryResult && queryView->model()->index(0,1).data().toDouble()==1.25 && queryDescriptor->member("IsLoaded",{}).boolean);
+    assert(unchanged.exec(R"SQL(UPDATE _la_objects SET definition='{"sql":"SELECT id FROM command_readonly ORDER BY id DESC"}' WHERE kind='query' AND name='command_query_doc')SQL"));
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->model()->columnCount()==1 && queryView->model()->index(0,0).data().toInt()==2);
+    assert(unchanged.exec(R"SQL(UPDATE _la_objects SET definition='{"sql":"SELECT id,value,flag FROM command_readonly ORDER BY id"}' WHERE kind='query' AND name='command_query_doc')SQL"));
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->model()->columnCount()==3);
+    // Execute against the actual driver connection; the callback closes the old
+    // page while its replacement is being materialized, exercising Qt lifetime.
+    QLibrary sqliteLibrary("sqlite3",0); assert(sqliteLibrary.load());
+    using Scalar=void (*)(sqlite3_context*,int,sqlite3_value**);
+    using Create=int (*)(sqlite3*,const char*,int,int,void*,Scalar,Scalar,void (*)(sqlite3_context*),void (*)(void*));
+    const auto createScalar=reinterpret_cast<Create>(sqliteLibrary.resolve("sqlite3_create_function_v2"));
+    static auto callbackData=reinterpret_cast<void* (*)(sqlite3_context*)>(sqliteLibrary.resolve("sqlite3_user_data"));
+    static auto callbackResult=reinterpret_cast<void (*)(sqlite3_context*,int)>(sqliteLibrary.resolve("sqlite3_result_int"));
+    assert(createScalar && callbackData && callbackResult);
+    struct QueryCloseState { MainWindow* window; QString connection; bool called{}; } closeState{&window,db.connectionName()};
+    auto nativeHandle=db.driver()->handle(); assert(QByteArray(nativeHandle.typeName())=="sqlite3*");
+    auto* sqliteConnection=*static_cast<sqlite3**>(nativeHandle.data());
+    assert(createScalar(sqliteConnection,"la_test_close_query",0,1,&closeState,[](sqlite3_context* context,int,sqlite3_value**) {
+        auto& state=*static_cast<QueryCloseState*>(callbackData(context)); state.called=true;
+        assert(!state.window->allowProjectClose(state.connection));
+        assert(state.window->requeryTableDocument().value("error").toInt()==3251);
+        assert(state.window->closeQueryDocument(1,"command_query_doc",0).value("error").toInt()==0);
+        QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);
+        callbackResult(context,1);
+    },nullptr,nullptr,nullptr)==0);
+    assert(unchanged.exec(R"SQL(UPDATE _la_objects SET definition='{"sql":"SELECT la_test_close_query() AS result"}' WHERE kind='query' AND name='command_query_doc')SQL"));
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).errorNumber==2501);
+    assert(closeState.called && !queryPage && !queryDescriptor->member("IsLoaded",{}).boolean);
+    assert(createScalar(sqliteConnection,"la_test_close_query",0,1,nullptr,nullptr,nullptr,nullptr,nullptr)==0);
+    assert(unchanged.exec(R"SQL(UPDATE _la_objects SET definition='{"sql":"SELECT id,value,flag FROM command_readonly ORDER BY id"}' WHERE kind='query' AND name='command_query_doc')SQL"));
+    assert(mixed->executeProcedure("OpenReadQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    queryPage=documentTabs->currentWidget();
     assert(mixed->executeProcedure("UnsupportedQueryEdit",selectArguments).errorNumber==3251);
     assert(mixed->executeProcedure("MissingQuery",selectArguments).errorNumber==7874 && mixed->executeProcedure("NullQuery",selectArguments).errorNumber==94);
     assert(mixed->executeProcedure("OpenActionQuery",selectArguments).errorNumber==3251);
@@ -473,6 +520,11 @@ End Sub
     QTimer::singleShot(0,&window,[] { auto* dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog); dialog->setTextValue("1.23455"); dialog->accept(); });
     assert(mixed->executeProcedure("OpenParameterQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     auto* parameterView=documentTabs->currentWidget()->findChild<QTableView*>("native-query-view"); assert(parameterView && parameterView->model()->index(0,0).data().toString()=="1.2346");
+    QPointer<QAbstractItemModel> oldParameterResult=parameterView->model();
+    QTimer::singleShot(0,&window,[] { auto* dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog); dialog->reject(); });
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).errorNumber==2501 && parameterView->model()==oldParameterResult && parameterView->model()->index(0,0).data().toString()=="1.2346");
+    QTimer::singleShot(0,&window,[] { auto* dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog); dialog->setTextValue("2.5"); dialog->accept(); });
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && parameterView->model()->index(0,0).data().toDouble()==2.5);
     assert(mixed->executeProcedure("CloseParameterQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     openArtifact(window,queryCallerId); QPointer<AccessFormPreview> queryCaller=document("query_lifetime_caller"); assert(queryCaller);
     assert(queryCaller->executeProcedure("OpenAndClose",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
