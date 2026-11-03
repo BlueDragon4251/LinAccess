@@ -897,5 +897,10 @@ See DATASHEET_CLIPBOARD_RUNTIME.md for implementation bounds and verification.
 - [x] F2 switches native table cells between caret editing and field navigation, retaining invalid input until correction.
 - [x] Shift+F2 native multiline text Zoom for table cells and their text editors; Cancel, untouched NULL/line endings, readonly display and manual-submit drafts.
 
-See KEYBOARD_RUNTIME.md; native form Zoom and complete Access keyboard/display
-parity remain open. No complete product coverage follows from checklist counts.
+See KEYBOARD_RUNTIME.md; complete Access keyboard/display parity remains open. No complete product coverage follows from checklist counts.
+
+
+- [x] Native TextBox Zoom preserves form edit buffers, Change, readonly display and cancelled BeforeUpdate before actual SQL saving.
+- [x] DoCmd.RunCommand acCmdZoomBox=179 resolves the active native form control, with error 2046 when unavailable.
+
+- [x] Application.RunCommand forwards the existing implemented native command subset with named Command binding and original error propagation.

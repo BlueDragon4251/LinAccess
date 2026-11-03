@@ -5,6 +5,7 @@
 #include "native_send_keys.hpp"
 #include "native_input_box.hpp"
 #include "native_clock_keys.hpp"
+#include "native_cell_zoom.hpp"
 
 #include "vba_runtime.hpp"
 #include "vba_module_context.hpp"
@@ -496,6 +497,7 @@ public:
     void deleteCurrentRecord() { commandDocument().deleteCurrentRecord(); }
     void copyCurrentRecord() { commandDocument().copyCurrentRecord(); }
     void pasteAppendRecord() { commandDocument().pasteAppendRecord(); }
+    void zoomField() { if(!commandDocument().zoomFocusedText()) throw linaccess::VbaRuntimeError(2046,"Zoom is unavailable in the active control"); }
     void findRecords() { commandDocument().openFindDialog(); }
     void repeatFind() { commandDocument().repeatFind(); }
     void sortRecords(bool descending) {
@@ -768,6 +770,7 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         if (code==28) host.gotoRecord(5);
         else if (code==30) host.findRecords();
         else if (code==341) host.repeatFind();
+        else if (code==179) host.zoomField();
         else if(code==163 || code==164) host.sortRecords(code==164);
         else if (code>=65 && code<=68) { const int actions[]{1,0,2,3}; host.gotoRecord(actions[code-65]); }
         else if (code==97) host.saveRecord();
@@ -1351,7 +1354,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             connect(line,&QLineEdit::textEdited,this,[this,name,widget] {
                 if (!loading_) { bufferedTextControls_.insert(name); pendingControls_.insert(name); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text)); }
             });
-            connect(line,&QLineEdit::editingFinished,this,[this,name] { if (!loading_) (void)commitControl(name); });
+            connect(line,&QLineEdit::editingFinished,this,[this,name,line] { if (!loading_ && !line->property("la_native_zoom_open").toBool()) (void)commitControl(name); });
         } else if(auto* list=dynamic_cast<AccessListBox*>(widget)) {
             list->selectionEdited=[this,name,list] {
                 if(closed_ || openCancelled_ || loading_ || list->property("la_access_input_readonly").toBool()) return;
@@ -2756,6 +2759,37 @@ void AccessFormPreview::repeatFind() {
     if(status_) status_->setText(message);
     if(findDialog_) if(auto* result=findDialog_->findChild<QLabel*>("access-find-result")) result->setText(message);
 }
+bool AccessFormPreview::zoomFocusedText() {
+    ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+    QPointer<QLineEdit> line=qobject_cast<QLineEdit*>(QApplication::focusWidget());
+    const linaccess::AccessVisualControl* selected=nullptr;
+    for(const auto& control:layout_.controls)
+        if(line && controls_.value(control.name.toCaseFolded())==line) { selected=&control; break; }
+    if(!selected || selected->type!="TextBox" || !line->isEnabled()) return false;
+    if(auto* modal=QApplication::activeModalWidget(); modal && modal!=window() && !modal->isAncestorOf(line)) return false;
+    const auto name=selected->name,binding=selected->onChange;
+    const auto original=line->text(); const bool readOnly=line->isReadOnly();
+    const auto previousZoom=line->property("la_native_zoom_open"); line->setProperty("la_native_zoom_open",true);
+    const auto zoomScope=qScopeGuard([line,previousZoom] { if(line) line->setProperty("la_native_zoom_open",previousZoom); });
+    const auto result=linaccess::nativeCellZoom(line,original,readOnly);
+    if(!result || !line || closed_ || openCancelled_ || readOnly || line->isReadOnly() || !line->isEnabled()) return true;
+    if(result->text==original && !result->modified) return true;
+    ensureWritableControl(name.toStdString());
+    if(result->text.size()>line->maxLength()) throw linaccess::VbaRuntimeError(3251,"Zoom text exceeds the native editor capacity");
+    rememberControlEdit(line);
+    if(!editOriginals_.contains(name)) throw linaccess::VbaRuntimeError(3251,"Zoom text cannot be buffered safely");
+    clearDefaultError(line); bufferedTextControls_.insert(name); pendingControls_.insert(name);
+    {
+        QScopedValueRollback<bool> loading(loading_,true);
+        setText(line,result->text,false); line->setProperty("la_null",false);
+        line->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
+    }
+    markDirty(name,true);
+    if(closed_ || openCancelled_ || line->property("la_insert_rejected").toBool()) return true;
+    refreshCalculatedControls();
+    if(!binding.isEmpty()) (void)runControlBinding(name,"Change",binding);
+    return true;
+}
 bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
     if (closed_ || openCancelled_) return false;
     const auto modifiers=event->modifiers() & ~Qt::KeypadModifier;
@@ -2801,6 +2835,7 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
         if (event->key()==Qt::Key_Minus && modifiers==Qt::ControlModifier) {
             (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(223)}); return true;
         }
+        if(event->key()==Qt::Key_F2 && modifiers==Qt::ShiftModifier) return zoomFocusedText();
         if(const auto clockText=linaccess::nativeClockKeyText(*event)) {
             ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
             auto* line=qobject_cast<QLineEdit*>(QApplication::focusWidget());

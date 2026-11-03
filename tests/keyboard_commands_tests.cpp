@@ -13,6 +13,7 @@
 #include <QToolBar>
 #include <QTimer>
 #include <QMessageBox>
+#include <QPlainTextEdit>
 #include <QKeyEvent>
 #include <iostream>
 #include <QApplication>
@@ -130,7 +131,7 @@ End Sub
     assert(query.exec("CREATE TABLE clock_records(id INTEGER PRIMARY KEY,stamp DATETIME)"));
     assert(query.exec("INSERT INTO clock_records VALUES(1,NULL)"));
     const QByteArray clockLayout="Begin Form\nRecordSource =\"clock_records\"\nBegin Section\nBegin TextBox\nName =\"stamp\"\nControlSource =\"stamp\"\nOnChange =\"[Event Procedure]\"\nBeforeUpdate =\"[Event Procedure]\"\nEnd\nBegin TextBox\nName =\"edits\"\nTop =400\nEnd\nEnd\nEnd\n";
-    const QByteArray clockCode="Sub stamp_Change()\nMe!edits=Nz(Me!edits,0)+1\nEnd Sub\nSub stamp_BeforeUpdate(Cancel As Integer)\nIf Me.Tag=\"block\" Then Cancel=True\nEnd Sub\n";
+    const QByteArray clockCode="Sub stamp_Change()\nMe!edits=Nz(Me!edits,0)+1\nEnd Sub\nSub stamp_BeforeUpdate(Cancel As Integer)\nIf Me.Tag=\"block\" Then Cancel=True\nEnd Sub\nSub ZoomViaCommand()\nDoCmd.RunCommand acCmdZoomBox\nEnd Sub\nSub ZoomViaApplication()\nApplication.RunCommand Command:=acCmdZoomBox\nEnd Sub\n";
     AccessFormPreview clock("clock",clockLayout,clockCode,db); clock.show(); QApplication::setActiveWindow(&clock); QApplication::processEvents();
     auto* stamp=clock.findChild<QLineEdit*>("access-control-stamp"); assert(stamp); stamp->setFocus(); QApplication::processEvents();
     auto clockObject=makePreviewFormObject(clock);
@@ -145,6 +146,33 @@ End Sub
     const auto insertedTime=stamp->text(); assert(QTime::fromString(insertedTime,"HH:mm:ss").isValid()); QTest::keyClick(stamp,Qt::Key_Return,Qt::ShiftModifier); assert(!clock.hasUnsavedChanges());
     assert(query.exec("SELECT stamp FROM clock_records") && query.next() && query.value(0).toString()=="1899-12-30 "+insertedTime); query.finish();
     const auto savedClockText=stamp->text(); stamp->setReadOnly(true); QTest::keyClick(stamp,Qt::Key_Semicolon,Qt::ControlModifier); assert(stamp->text()==savedClockText && !clock.hasUnsavedChanges());
+    QTimer::singleShot(0,&clock,[&] {
+        auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom && zoom->objectName()=="native-cell-zoom");
+        auto* text=zoom->findChild<QPlainTextEdit*>("native-cell-zoom-text"); assert(text && text->isReadOnly()); zoom->reject();
+    });
+    QTest::keyClick(stamp,Qt::Key_F2,Qt::ShiftModifier); assert(stamp->text()==savedClockText && !clock.hasUnsavedChanges());
+    QApplication::setActiveWindow(&clock); stamp->setReadOnly(false); stamp->setFocus();
+    const auto beforeZoomChanges=clockObject->item("edits").asNumber();
+    QTimer::singleShot(0,&clock,[&] {
+        auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom);
+        zoom->findChild<QPlainTextEdit*>("native-cell-zoom-text")->setPlainText("2024-05-06 07:08:09"); zoom->accept();
+    });
+    QTest::keyClick(stamp,Qt::Key_F2,Qt::ShiftModifier);
+    assert(stamp->text()=="2024-05-06 07:08:09" && clock.hasUnsavedChanges() && clockObject->item("edits").asNumber()==beforeZoomChanges+1);
+    assert(query.exec("SELECT stamp FROM clock_records") && query.next() && query.value(0).toString()=="1899-12-30 "+insertedTime); query.finish();
+    QApplication::setActiveWindow(&clock); stamp->setFocus(); clockObject->assign("Tag",VbaValue::string("block"));
+    QTest::keyClick(stamp,Qt::Key_Return,Qt::ShiftModifier); assert(clock.hasUnsavedChanges());
+    clockObject->assign("Tag",VbaValue::string("")); QTest::keyClick(stamp,Qt::Key_Return,Qt::ShiftModifier); assert(!clock.hasUnsavedChanges());
+    assert(query.exec("SELECT stamp FROM clock_records") && query.next() && query.value(0).toString()=="2024-05-06 07:08:09"); query.finish();
+    QApplication::setActiveWindow(&clock); stamp->setFocus();
+    QTimer::singleShot(0,&clock,[&] { auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom && zoom->objectName()=="native-cell-zoom"); zoom->reject(); });
+    assert(clock.executeProcedure("ZoomViaCommand",none).status==linaccess::VbaExecutionStatus::Completed && !clock.hasUnsavedChanges());
+    QApplication::setActiveWindow(&clock); stamp->setFocus();
+    QTimer::singleShot(0,&clock,[&] { auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom && zoom->objectName()=="native-cell-zoom"); zoom->reject(); });
+    assert(clock.executeProcedure("ZoomViaApplication",none).status==linaccess::VbaExecutionStatus::Completed && !clock.hasUnsavedChanges());
+    QApplication::setActiveWindow(&clock); auto* zoomSelector=clock.findChild<QComboBox*>("access-record-selector"); assert(zoomSelector); zoomSelector->setFocus();
+    assert(clock.executeProcedure("ZoomViaCommand",none).errorNumber==2046);
+    assert(clock.executeProcedure("ZoomViaApplication",none).errorNumber==2046);
     assert(clock.close());
     testKeyboardEvents();
 }

@@ -166,10 +166,39 @@ Read-only view contexts display text without write controls; unsupported binary
 values are refused. An untouched dialog retains original line endings and NULL
 semantics. Editing in the multiline dialog uses Qt paragraph/line normalization.
 The dialog guards destroyed owners and invalidated model indexes across its
-nested event loop. Native form controls and all Access Zoom formatting options
-remain open. The final main-window Zoom integration passes 1/1 (1.56 s), exercising Cancel,
+nested event loop. Native form TextBox support was added in the following increment; all Access
+Zoom formatting options remain open. The final main-window Zoom integration passes 1/1 (1.56 s), exercising Cancel,
 multiline values, unchanged CRLF and view/editor mode transitions. Offscreen
 synthetic modal closure explicitly reactivates the main window in the test.
 The rebuilt complete desktop suite passes 48/48 (86.44 s), Debian contents/
 permissions/Build-ID/pinned SQLite checks pass and four original hashes match.
 GUI-free core remains checked at 1/1 (2.63 s); subsequent edits are Qt-only.
+
+
+## Native form TextBox Zoom and DoCmd.RunCommand (2026-11-03)
+
+Shift+F2 also opens the shared text Zoom dialog for a native form TextBox.
+The result uses the existing edit buffer, checked writable-control path, Change
+binding and deferred BeforeUpdate/save. Opening the child dialog suppresses only
+that field's automatic editingFinished commit while it owns the Zoom dialog;
+it does not set the form-wide loading flag across a nested event loop. Cancel
+and readonly display preserve the prior buffer; disabled/locked or unsupported
+contexts retain their guards. Changed control state is checked again on return.
+Native execution lifetime protects a form closed during the nested loop.
+
+DoCmd.RunCommand acCmdZoomBox uses the same native operation through the active
+document resolver. The [AcCommand enumeration](https://learn.microsoft.com/en-us/office/vba/api/access.accommand)
+defines acCmdZoomBox as 179. An unsuitable active control returns error 2046;
+this is not simulated SendKeys or a silent successful command. ComboBox/memo-specific Windows formatting and complete Zoom parity remain open.
+Application.RunCommand now forwards the same implemented command subset, with
+required/named Command argument binding. Unknown options remain error 3251;
+bare unqualified RunCommand and the complete AcCommand set remain open.
+
+The existing layout target passes 1/1 (14.08 s), including readonly Zoom, actual
+Change dispatch, cancelled BeforeUpdate, later SQL persistence, interpreted
+DoCmd execution and unavailable-control error 2046. Full suite/package baseline
+remains local 2fcaf98 / private API ab5e6cd (48/48, 86.44 s); this form/runtime
+increment is focused-verified. The GUI-free rebuild/core passes 1/1 (1.53 s).
+After Application.RunCommand forwarding was added, the final existing layout
+target passes 1/1 (14.90 s), including actual interpreted named-argument
+Application execution and unavailable-control error propagation.

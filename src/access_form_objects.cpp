@@ -1229,11 +1229,13 @@ public:
     explicit PreviewApplicationObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         if (text(name).compare("Quit",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Option"},0};
+        if (text(name).compare("RunCommand",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Command"},1};
         return {};
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
         if (key=="quit") return PreviewDoCmdObject(preview).member("Quit",args);
+        if (key=="runcommand") return dispatchPreviewDocumentCommand(preview,"runcommand",args);
         if (key=="eval") {
             if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"Eval requires one argument");
             if (args[0].kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Eval argument");

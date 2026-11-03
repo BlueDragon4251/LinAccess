@@ -3558,3 +3558,21 @@ Full build and existing suite pass 48/48 (86.44 s), Debian payload/permissions/
 Build-ID/pinned SQLite checks pass and all four fixture hashes match. GUI-free
 core remains 1/1 (2.63 s), with subsequent Qt-only changes. Theoretical checklist:
 272 checked / 70 open scoped points; this is not a complete Access parity metric.
+
+
+## Native form Zoom and Application/DoCmd commands (2026-11-03)
+
+Form TextBox Shift+F2 uses the native multiline Zoom with normal field buffers,
+Change, readonly display and cancellable BeforeUpdate. Opening the dialog
+suppresses only the originating field's automatic editingFinished commit.
+DoCmd.RunCommand acCmdZoomBox=179 targets the active native form control; an
+unsuitable focus reports 2046. Application.RunCommand forwards the existing
+implemented command subset, including named Command binding, rather than adding
+a separate simulated implementation. Unknown commands remain 3251.
+Final existing layout target passes 1/1 (14.90 s), GUI-free core 1/1 (1.53 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four fixture
+hashes pass. Last complete suite remains local 2fcaf98 / API ab5e6cd, 48/48
+(86.44 s). This increment is focused-verified; no new targets.
+See KEYBOARD_RUNTIME.md for remaining ComboBox/formatting/command-set limits.
+The theoretical checklist contains 275 checked / 70 open scoped points; complete
+Access 2003 functionality and appearance are still not established.
