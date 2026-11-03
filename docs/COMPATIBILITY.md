@@ -2194,3 +2194,14 @@ VARIANT_ARRAY_RUNTIME.md specifies remaining declaration/class/COM limits.
 Full desktop suite 48/48 (92.45 s), fresh GUI-free core 1/1 (1.79 s), Debian
 package and all four original fixture hashes pass; no new targets. Checklist:
 346 checked / 72 open scoped points, not overall parity.
+
+
+## Bounded editable query documents (2026-11-03)
+
+Default/acEdit OpenQuery now opens actual keyed single-table SELECT-star query
+datasheets, using the typed transactional table model with real SQL save,
+validated record close and unchanged-definition Requery. Query identity and
+independent lifetime are retained. Competing writable native source tabs and
+changed source structure are guarded; no general Jet concurrency claim.
+OPEN_QUERY_RUNTIME.md defines the exact restrictions. Filtered/projected/joined
+updateability, action-query UI and full Access query designer remain open.

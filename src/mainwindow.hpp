@@ -54,6 +54,8 @@ private:
     QWidget* findOpenQuery(const QString& name) const;
     QVariantMap loadQueryDocument(const QString& name,int view,int mode,QWidget* refresh);
     QVariantMap saveDataPage(QWidget* page,bool interactive);
+    QVariantMap closeTableDataPage(QWidget* page);
+    QVariantMap requeryTableDataPage(QWidget* page);
 
     bool canCloseDataPage(QWidget* page);
     bool hasProject();
@@ -69,7 +71,7 @@ private:
     QJsonObject objectDefinition(const QString& kind, const QString& name);
     bool saveObject(const QString& kind, const QString& name, const QJsonObject& definition);
     void newTable();
-    int showTable(const QString& name,bool readOnly=false,bool interactive=true);
+    int showTable(const QString& name,bool readOnly=false,bool interactive=true,const QString& queryName={},const QString& querySource={});
     void editQuery(const QString& name = {});
     void editForm(const QString& name = {});
     void runForm(const QString& name);

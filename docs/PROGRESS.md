@@ -4151,3 +4151,17 @@ VARIANT_ARRAY_RUNTIME.md specifies remaining declaration/class/COM limits.
 Full desktop suite 48/48 (92.45 s), fresh GUI-free core 1/1 (1.79 s), Debian
 package and all four original fixture hashes pass; no new targets. Checklist:
 346 checked / 72 open scoped points, not overall parity.
+
+
+## Editable keyed single-table query documents (2026-11-03)
+
+Default/acEdit OpenQuery uses the real typed SQL table model for the strict
+unparameterized SELECT-star/single-main-table/primary-key subset. Query identity,
+caller-independent lifetime, actual record Save, validated Close even acSaveNo,
+and unchanged-definition Requery are integrated. Invalid records keep the open
+cache; changed definitions and source metadata/shadows refuse without discarding
+drafts. A second editable source datasheet refuses before focus changes.
+OPEN_QUERY_RUNTIME.md documents projection/filter/join/provider/concurrency limits.
+Full desktop 48/48 (90.33 s), rebuilt GUI-free core 1/1 (1.48 s), Debian package
+and four original fixture hashes pass. No additional CTest targets. Scoped
+checklist: 348 checked / 72 open; this is not total Access 2003 parity.

@@ -96,6 +96,24 @@ QString quoteSql(QString name) {
 QVariantMap tableCommandFailure(int number,const QString& description) {
     return {{"handled",true},{"error",number},{"description",description}};
 }
+QString editableSourceSchema(QSqlDatabase db,const QString& table) {
+    QSqlQuery schema(db);
+    schema.prepare("SELECT sql FROM main.sqlite_schema WHERE type='table' AND name=? COLLATE NOCASE");
+    schema.addBindValue(table);
+    if(!schema.exec() || !schema.next()) throw linaccess::VbaRuntimeError(3251,"Die Quelltabelle ist nicht mehr verfügbar.");
+    return schema.value(0).toString();
+}
+QVariantMap validateEditableQuerySource(QWidget* page,linaccess::AccessTableModel* model) {
+    if(!page || !page->property("la_editable_query").toBool()) return {};
+    try {
+        const auto table=linaccess::editableAccessQueryTable(model->database(),page->property("la_editable_query_source").toString());
+        if(table!=model->tableName() || editableSourceSchema(model->database(),table)!=page->property("la_editable_query_schema").toString())
+            return tableCommandFailure(3251,"Die Quellstruktur wurde geändert. Abfrage schließen und erneut öffnen.");
+    } catch(const linaccess::VbaRuntimeError&) {
+        return tableCommandFailure(3251,"Die Quellstruktur wurde geändert. Abfrage schließen und erneut öffnen.");
+    }
+    return {};
+}
 QVariantMap focusedDataTextCommand(QWidget* scope,int command) {
     if(!scope || (command!=189 && command!=190 && command!=191 && command!=199 && command!=292)) return {};
     QPointer<QLineEdit> editor=qobject_cast<QLineEdit*>(QApplication::focusWidget());
@@ -382,6 +400,8 @@ QVariantMap MainWindow::saveDataPage(QWidget* page,bool interactive) {
     const auto failure=[&](int fallback) { return tableModelFailure(model,fallback); };
     if(!table->finishEditing()) return failure(2501);
     if(!self || !model || !table) return tableCommandFailure(2501,"Tabellendokument wurde während der Eingabevalidierung geschlossen.");
+    const auto sourceError=validateEditableQuerySource(page,model);
+    if(!sourceError.isEmpty()) return sourceError;
     const auto selected=table->currentIndex();
     const auto primary=model->primaryKey();
     QMap<QString,QVariant> selectedKey;
@@ -439,9 +459,10 @@ QVariantMap MainWindow::openQueryDocument(const QString& name,int view,int mode)
 
 QVariantMap MainWindow::loadQueryDocument(const QString& name,int view,int mode,QWidget* refresh) {
     if(!db_.isOpen() || QApplication::activeModalWidget()) return tableCommandFailure(2046,"Abfrage kann in diesem Kontext nicht geöffnet werden.");
-    if(view!=0 || mode!=2) return tableCommandFailure(3251,"Abfrage-Dokumente unterstützen bisher nur Normalansicht mit ausdrücklich acReadOnly.");
+    if(view!=0 || (mode!=1 && mode!=2)) return tableCommandFailure(3251,"Abfrage-Dokumente unterstützen bisher Normalansicht mit acEdit oder acReadOnly.");
     if(name.isEmpty()) return tableCommandFailure(7874,"Kein Abfragename angegeben.");
     if(auto* existing=findOpenQuery(name);existing && !refresh) {
+        if(existing->property("la_query_data_mode").toInt()!=mode) return tableCommandFailure(3251,"Die geöffnete Abfrage hat einen anderen Datenmodus.");
         if(!activateDataPage(existing)) return tableCommandFailure(2501,"Abfrageaktivierung wurde abgebrochen.");
         return {{"handled",true},{"error",0}};
     }
@@ -480,6 +501,19 @@ QVariantMap MainWindow::loadQueryDocument(const QString& name,int view,int mode,
         if(source.trimmed().isEmpty()) return tableCommandFailure(3251,"Gespeicherte Abfragedefinition ist nicht ausführbar.");
         const auto plan=linaccess::compileAccessQuery(source);
         if(!plan.makeTable.isEmpty() || !isSelect(plan.sql)) return tableCommandFailure(3251,"Nur schreibgeschützte SELECT-Abfragen werden als Dokument geöffnet.");
+        if(mode==1) {
+            const auto table=linaccess::editableAccessQueryTable(database,source);
+            if(refresh) {
+                if(!refreshing || !refreshing->property("la_editable_query").toBool() || refreshing->property("la_editable_query_source").toString()!=source)
+                    return tableCommandFailure(3251,"Geänderte Definitionen geöffneter bearbeitbarer Abfragen sind noch nicht implementiert.");
+                const auto key=canonical.toCaseFolded(); executingQueries_.insert(key); ++queryExecutionDepth_;
+                const auto finished=qScopeGuard([self,key] { if(self) { self->executingQueries_.remove(key); --self->queryExecutionDepth_; } });
+                return requeryTableDataPage(refreshing);
+            }
+            const int error=showTable(table,false,false,canonical,source);
+            if(error) return tableCommandFailure(error,"Bearbeitbare Abfrage konnte nicht geöffnet werden.");
+            return {{"handled",true},{"error",0}};
+        }
         if(!refreshing && (!finishActiveDataEditors() || !AccessFormPreview::activateProjectDocument(database,this,nullptr))) return tableCommandFailure(2501,"Dokumentwechsel wurde abgebrochen.");
         if(!alive()) return tableCommandFailure(2501,"Projekt wurde während des Dokumentwechsels geschlossen.");
         QMap<QString,QVariant> parameters;
@@ -523,6 +557,7 @@ QVariantMap MainWindow::loadQueryDocument(const QString& name,int view,int mode,
         auto* document=page.release(); document->setParent(tabs_);
         const QPointer<QWidget> registered=document;
         tagProjectObject(document,this,db_,"query",canonical); document->setProperty("la_project_object_scope","tab");
+        document->setProperty("la_query_data_mode",2);
         for(const auto key:{QKeySequence(Qt::ControlModifier|Qt::Key_W),QKeySequence(Qt::ControlModifier|Qt::Key_F4)}) {
             auto* close=new QShortcut(key,document); close->setContext(Qt::WidgetWithChildrenShortcut);
             connect(close,&QShortcut::activated,document,[this,document] { const int index=tabs_->indexOf(document); if(index>=0) emit tabs_->tabCloseRequested(index); });
@@ -574,6 +609,7 @@ QVariantMap MainWindow::closeQueryDocument(int type,const QString& name,int save
     if(!db_.isOpen() || QApplication::activeModalWidget()) return tableCommandFailure(2046,"Abfrage kann in diesem Kontext nicht geschlossen werden.");
     const QPointer<QWidget> page=name.isEmpty() ? (active ? activeDataPage_.data() : nullptr) : findOpenQuery(name);
     if(!page || tabs_->indexOf(page)<0) return tableCommandFailure(3251,"Die angeforderte offene Abfrage ist nicht verfügbar.");
+    if(page->property("la_editable_query").toBool()) return closeTableDataPage(page);
     tabs_->removeTab(tabs_->indexOf(page)); page->hide(); page->deleteLater();
     return {{"handled",true},{"error",0}};
 }
@@ -582,10 +618,10 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
     const QPointer<QWidget> page=activeDataPage_;
     if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
     if(QApplication::activeModalWidget()) return tableCommandFailure(2046,"Tabellenbefehl ist durch ein modales Fenster blockiert.");
-    if(page->property("la_project_object_kind").toString()=="query") {
+    if((page->property("la_project_object_kind").toString()=="query" && !page->property("la_editable_query").toBool())) {
         if(const auto focused=focusedDataTextCommand(page->findChild<QTableView*>("native-query-view"),command);focused.value("handled").toBool()) return focused;
     }
-    if(page->property("la_project_object_kind").toString()=="query" && (command==50 || command==109)) {
+    if((page->property("la_project_object_kind").toString()=="query" && !page->property("la_editable_query").toBool()) && (command==50 || command==109)) {
         auto* view=page->findChild<QTableView*>("native-query-view");
         if(!view || !view->model() || !view->selectionModel()) return tableCommandFailure(2046,"Kein natives Abfrageergebnis verfügbar.");
         if(command==50) {
@@ -598,7 +634,7 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         }
         view->setFocus(); return {{"handled",true},{"error",0}};
     }
-    if(page->property("la_project_object_kind").toString()=="query" && command==190) {
+    if((page->property("la_project_object_kind").toString()=="query" && !page->property("la_editable_query").toBool()) && command==190) {
         auto* view=dynamic_cast<linaccess::NativeQueryView*>(page->findChild<QTableView*>("native-query-view"));
         if(!view) return tableCommandFailure(2046,"Kein natives Abfrageergebnis verfügbar.");
         try {
@@ -606,7 +642,7 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
             return {{"handled",true},{"error",0}};
         } catch(const linaccess::VbaRuntimeError& error) { return tableCommandFailure(error.number,"Die Abfrageauswahl kann nicht verlustfrei als Text kopiert werden."); }
     }
-    if(page->property("la_project_object_kind").toString()=="query" && (command==30 || command==341)) {
+    if((page->property("la_project_object_kind").toString()=="query" && !page->property("la_editable_query").toBool()) && (command==30 || command==341)) {
         auto* view=dynamic_cast<linaccess::NativeQueryView*>(page->findChild<QTableView*>("native-query-view"));
         if(!view) return tableCommandFailure(2046,"Keine native Abfrageansicht.");
         try {
@@ -614,7 +650,7 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
             return {{"handled",true},{"error",0}};
         } catch(const linaccess::VbaRuntimeError& error) { return tableCommandFailure(error.number,QString::fromUtf8(error.what())); }
     }
-    if(page->property("la_project_object_kind").toString()=="query" && command==179) {
+    if((page->property("la_project_object_kind").toString()=="query" && !page->property("la_editable_query").toBool()) && command==179) {
         auto* view=dynamic_cast<linaccess::NativeQueryView*>(page->findChild<QTableView*>("native-query-view"));
         if(!view || (QApplication::focusWidget() && QApplication::focusWidget()->window()!=view->window()))
             return tableCommandFailure(2046,"Kein aktives Abfragefeld für Zoom.");
@@ -713,7 +749,12 @@ QVariantMap MainWindow::requeryTableDocument() {
     if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
     if(QApplication::activeModalWidget()) return tableCommandFailure(2046,"Neuabfrage ist durch ein modales Fenster blockiert.");
     if(page->property("la_project_object_kind").toString()=="query")
-        return loadQueryDocument(page->property("la_project_object_name").toString(),0,2,page);
+        return loadQueryDocument(page->property("la_project_object_name").toString(),0,page->property("la_editable_query").toBool() ? 1 : 2,page);
+    return requeryTableDataPage(page);
+}
+
+QVariantMap MainWindow::requeryTableDataPage(QWidget* rawPage) {
+    const QPointer<QWidget> page=rawPage;
     QPointer<linaccess::AccessTableView> table;
     for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
     QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
@@ -721,6 +762,8 @@ QVariantMap MainWindow::requeryTableDocument() {
     const QPointer<MainWindow> self=this;
     if(!table->finishEditing()) return tableModelFailure(model,2501);
     if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während der Validierung geschlossen.");
+    const auto sourceError=validateEditableQuerySource(page,model);
+    if(!sourceError.isEmpty()) return sourceError;
     const int column=qMax(0,table->currentIndex().column());
     if(model->isDirty()) {
         if(!model->canSubmitCurrentRecordAlone(table->currentIndex().row()))
@@ -770,7 +813,7 @@ QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
         if(textValue && (text.isEmpty() || text.contains('*') || text.contains('?') || text.contains('#') || text.contains('[') || text.contains(']')))
             return tableCommandFailure(3251,"Leere und Wildcard-FindRecord-Suchen sind noch nicht implementiert.");
         if(!textValue && mode!=1) return tableCommandFailure(3251,"Typisierte FindRecord-Suche unterstützt nur ganze Feldwerte.");
-        if(page->property("la_project_object_kind").toString()=="query") {
+        if(page->property("la_project_object_kind").toString()=="query" && !page->property("la_editable_query").toBool()) {
             auto* view=dynamic_cast<linaccess::NativeQueryView*>(page->findChild<QTableView*>("native-query-view"));
             if(!view || !view->currentIndex().isValid()) return tableCommandFailure(2046,"Kein aktuelles Abfragefeld für FindRecord.");
             const int column=view->currentIndex().column();
@@ -819,8 +862,8 @@ QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int
     if(!page) return tableCommandFailure(3251,"Die angeforderte offene Tabelle ist nicht verfügbar.");
     if((!active || page!=activeDataPage_) && !activateDataPage(page)) return tableCommandFailure(2501,"Tabellenaktivierung wurde abgebrochen.");
     if(!self || !page) return tableCommandFailure(2501,"Tabellendokument wurde während der Aktivierung geschlossen.");
-    if(page->property("la_project_object_kind").toString()=="query") {
-        if(explicitTable) return tableCommandFailure(3251,"Die aktive Abfrage ist keine Tabelle.");
+    if(page->property("la_project_object_kind").toString()=="query" && explicitTable) return tableCommandFailure(3251,"Die aktive Abfrage ist keine Tabelle.");
+    if(page->property("la_project_object_kind").toString()=="query" && !page->property("la_editable_query").toBool()) {
         const QPointer<QTableView> view=page->findChild<QTableView*>("native-query-view");
         auto* result=view ? dynamic_cast<linaccess::AccessQueryModel*>(view->model()) : nullptr;
         if(!result) return tableCommandFailure(2046,"Kein natives Abfrageergebnis verfügbar.");
@@ -883,11 +926,16 @@ QVariantMap MainWindow::closeTableDocument(int type,const QString& name,int save
     if(type!=0 && !(type==-1 && active)) return {};
     if(save<0 || save>2) return tableCommandFailure(5,"Ungültige Speicheroption für das Schließen.");
     if(!db_.isOpen() || QApplication::activeModalWidget()) return tableCommandFailure(2046,"Tabelle kann in diesem Kontext nicht geschlossen werden.");
-    QPointer<MainWindow> self=this;
     QPointer<QWidget> page;
     if(name.isEmpty()) { if(active) page=activeDataPage_; }
     else page=findOpenTable(name);
-    if(!page) return tableCommandFailure(3251,"Die angeforderte offene Tabelle ist nicht verfügbar.");
+    if(!page || page->property("la_project_object_kind").toString()!="table") return tableCommandFailure(3251,"Die angeforderte offene Tabelle ist nicht verfügbar.");
+    return closeTableDataPage(page);
+}
+
+QVariantMap MainWindow::closeTableDataPage(QWidget* rawPage) {
+    const QPointer<MainWindow> self=this;
+    const QPointer<QWidget> page=rawPage;
     QPointer<linaccess::AccessTableView> table;
     for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
     QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
@@ -912,6 +960,7 @@ QVariantMap MainWindow::closeTableDocument(int type,const QString& name,int save
 QWidget* MainWindow::findOpenTable(const QString& name) const {
     for(int index=0;index<tabs_->count();++index) {
         auto* page=tabs_->widget(index);
+        if(page->property("la_project_object_kind").toString()!="table") continue;
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) {
             const auto* model=qobject_cast<linaccess::AccessTableModel*>(view->model());
             if(model && model->tableName().compare(name,Qt::CaseInsensitive)==0) return page;
@@ -1536,21 +1585,44 @@ void MainWindow::newTable() {
     refreshExplorer();
 }
 
-int MainWindow::showTable(const QString& name,bool readOnly,bool interactive) {
+int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,const QString& queryName,const QString& querySource) {
     if(!db_.isOpen() || QApplication::activeModalWidget()) return 2046;
-    if(auto* existing=findOpenTable(name)) {
+    if(auto* existing=queryName.isEmpty() ? findOpenTable(name) : findOpenQuery(queryName)) {
         if(!interactive) for(auto* candidate:existing->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) {
             const auto* model=qobject_cast<linaccess::AccessTableModel*>(view->model());
             if(model && model->isReadOnly()!=readOnly) return 3251;
         }
         return activateDataPage(existing) ? 0 : 2501;
     }
-    if(!finishActiveDataEditors() || !AccessFormPreview::activateProjectDocument(db_,this,nullptr)) return 2501;
-    auto* page = new QWidget(tabs_);
-    tagProjectObject(page,this,db_,"table",name);
+    if(!readOnly) for(int i=0;i<tabs_->count();++i) {
+        for(auto* candidate:tabs_->widget(i)->findChildren<linaccess::AccessTableModel*>())
+            if(!candidate->isReadOnly() && candidate->tableName().compare(name,Qt::CaseInsensitive)==0) return 3251;
+    }
+    const QPointer<MainWindow> self=this;
+    const auto database=db_; const auto identity=db_.databaseName(); const auto generation=property("la_project_generation").toULongLong();
+    const auto alive=[self,identity,generation] { return self && self->db_.isOpen() && self->db_.databaseName()==identity && self->property("la_project_generation").toULongLong()==generation; };
+    if(!finishActiveDataEditors() || !alive() || !AccessFormPreview::activateProjectDocument(database,this,nullptr) || !alive()) return 2501;
+    if(!readOnly) for(int i=0;i<tabs_->count();++i) {
+        for(auto* candidate:tabs_->widget(i)->findChildren<linaccess::AccessTableModel*>())
+            if(!candidate->isReadOnly() && candidate->tableName().compare(name,Qt::CaseInsensitive)==0) return 3251;
+    }
+    QString sourceSchema;
+    if(!queryName.isEmpty()) {
+        try {
+            if(linaccess::editableAccessQueryTable(database,querySource)!=name) return 3251;
+            sourceSchema=editableSourceSchema(database,name);
+        } catch(const linaccess::VbaRuntimeError&) { return 3251; }
+    }
+    auto ownedPage=std::make_unique<QWidget>(); auto* page=ownedPage.get();
+    tagProjectObject(page,this,database,queryName.isEmpty() ? "table" : "query",queryName.isEmpty() ? name : queryName);
+    if(!queryName.isEmpty()) {
+        page->setProperty("la_editable_query",true); page->setProperty("la_query_data_mode",1);
+        page->setProperty("la_editable_query_source",querySource);
+        page->setProperty("la_editable_query_schema",sourceSchema);
+    }
     page->setProperty("la_project_object_scope","tab");
     auto* outer = new QVBoxLayout(page);
-    outer->addWidget(new QLabel("Tabelle: " + name + (readOnly ? " — Schreibgeschützt" : " — Änderungen erst mit 'Speichern' festschreiben")));
+    outer->addWidget(new QLabel((queryName.isEmpty() ? "Tabelle: " + name : "Abfrage: " + queryName) + (readOnly ? " — Schreibgeschützt" : " — Änderungen erst mit 'Speichern' festschreiben")));
     auto* actions = new QHBoxLayout();
     auto* add = addButton(actions, "+ Datensatz");
     auto* remove = addButton(actions, "Datensatz löschen");
@@ -1558,19 +1630,29 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive) {
     auto* discard = addButton(actions, "Verwerfen");
     for(auto* button:{add,remove,save,discard}) button->setEnabled(!readOnly);
     outer->addLayout(actions);
-    auto* model = new linaccess::AccessTableModel(page, db_);
-    connect(model,&linaccess::AccessTableModel::editRejected,page,[this](int number,const QString& message) { statusBar()->showMessage(message+" ("+QString::number(number)+")",10000); });
-    connect(model,&QAbstractItemModel::dataChanged,page,[this] { statusBar()->clearMessage(); });
+    auto* model = new linaccess::AccessTableModel(page, database);
+    connect(model,&linaccess::AccessTableModel::editRejected,page,[self](int number,const QString& message) { if(self) self->statusBar()->showMessage(message+" ("+QString::number(number)+")",10000); });
+    connect(model,&QAbstractItemModel::dataChanged,page,[self] { if(self) self->statusBar()->clearMessage(); });
     model->setTable(name);
     model->setEditStrategy(QSqlTableModel::OnManualSubmit);
     (void)model->setReadOnly(readOnly);
-    if(!model->select()) {
+    bool selected=false;
+    {
+        const auto key=queryName.toCaseFolded();
+        if(!key.isEmpty()) { if(executingQueries_.contains(key)) return 3251; executingQueries_.insert(key); }
+        ++queryExecutionDepth_;
+        const auto finished=qScopeGuard([self,key] { if(self) { if(!key.isEmpty()) self->executingQueries_.remove(key); --self->queryExecutionDepth_; } });
+        selected=model->select();
+    }
+    if(!alive()) return 2501;
+    if(!selected) {
         const auto problem=model->lastError();
         bool valid=false; const int code=problem.nativeErrorCode().toInt(&valid);
         if(interactive) messageError(this,problem.text());
-        delete page; return problem.driverText()=="LinAccess" && valid ? code : 3146;
+        return problem.driverText()=="LinAccess" && valid ? code : 3146;
     }
     auto* table = new linaccess::AccessTableView(page);
+    if(!queryName.isEmpty()) table->setObjectName("native-editable-query-view");
     table->installEventFilter(this);
     table->setModel(model);
     table->setItemDelegate(new linaccess::AccessTableDelegate(table));
@@ -1590,7 +1672,12 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive) {
         }
         return bool(self && page && table && model);
     });
-    table->setSortingEnabled(true);
+    {
+        const auto key=queryName.toCaseFolded(); if(!key.isEmpty()) executingQueries_.insert(key); ++queryExecutionDepth_;
+        const auto finished=qScopeGuard([self,key] { if(self) { if(!key.isEmpty()) self->executingQueries_.remove(key); --self->queryExecutionDepth_; } });
+        table->setSortingEnabled(true);
+    }
+    if(!alive()) return 2501;
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     outer->addWidget(table);
     connect(add, &QPushButton::clicked, page, [table] { (void)table->insertRecord(); });
@@ -1618,8 +1705,17 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive) {
             const auto index=tabs_->indexOf(page); if(index>=0) emit tabs_->tabCloseRequested(index);
         });
     }
-    tabs_->setCurrentIndex(tabs_->addTab(page, name));
-    return activateDataPage(page) ? 0 : 2501;
+    page=ownedPage.release(); page->setParent(tabs_);
+    const QPointer<QWidget> registered=page;
+    tabs_->setCurrentIndex(tabs_->addTab(page, queryName.isEmpty() ? name : "Abfrage: "+queryName));
+    const QPointer<linaccess::AccessTableModel> registeredModel=model;
+    const QPointer<linaccess::AccessTableView> registeredView=table;
+    if(!queryName.isEmpty() && registeredModel && registeredView && model->rowCount() && model->columnCount()) table->setCurrentIndex(model->index(0,0));
+    if(!alive() || !registered || !registeredModel || !registeredView) return 2501;
+    const bool activated=activateDataPage(page);
+    if(!alive() || !registered) return 2501;
+    if(!activated) { const int index=tabs_->indexOf(registered); if(index>=0) tabs_->removeTab(index); registered->deleteLater(); return 2501; }
+    return 0;
 }
 
 void MainWindow::editQuery(const QString& existingName) {

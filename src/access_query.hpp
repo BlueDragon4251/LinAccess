@@ -69,6 +69,8 @@ QString accessOrderByClause(const QString& orderBy,const QStringList& columns,co
 AccessQueryPlan sortAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& orderBy);
 int installAccessQueryViews(QSqlDatabase db, bool freshConnection = false);
 QString accessQuerySource(QSqlDatabase db, const QString& name);
+// Strict editable subset: an unparameterized SELECT * over one keyed main table.
+QString editableAccessQueryTable(QSqlDatabase db,const QString& source);
 QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan,
                                                 const QMap<QString,QVariant>& values);
 }

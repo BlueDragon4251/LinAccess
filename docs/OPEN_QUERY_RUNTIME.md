@@ -1,7 +1,8 @@
-# Native readonly query documents
+# Native query documents
 
 DoCmd.OpenQuery now opens saved SELECT queries as actual native document tabs
-when View is acViewNormal and DataMode explicitly acReadOnly. Native JSON query
+when View is acViewNormal and DataMode explicitly acReadOnly. A bounded
+editable single-table path also supports default/acEdit, described below. Native JSON query
 definitions and imported query artifacts use the real Access query compiler and
 AccessQueryModel executor, including checked declared parameters prompted through
 QInputDialog. Displayed rows are real materialized SQL results, with editing
@@ -10,8 +11,8 @@ without rerunning it. Native/imported name ambiguity refuses 5.
 
 Named/positional/omitted arguments bind with Missing distinct from explicit
 Empty. Access defaults are retained: omitted View is normal, omitted DataMode is
-acEdit; unsupported editable/default modes refuse 3251 rather than silently
-pretending to be editable. Null arguments are 94, missing required arguments
+acEdit; the bounded editable subset below is supported, and other editable
+queries refuse 3251. Null arguments are 94, missing required arguments
 450, absent saved names 7874. Other views, action queries and make-table queries
 refuse 3251 before execution. Parameter cancellation returns 2501 and creates no
 document; actual Currency parameter conversion is covered through SQL results.
@@ -33,8 +34,8 @@ reads actual result values/readonly flags, checks reuse, default/named close,
 parameter cancel/checked Currency, rejects action queries without data changes,
 and verifies a query remains after its VBA opener closes itself. No new targets.
 
-This is a bounded readonly datasheet path. Default/acEdit updateability, other
-views, action-query UI/warnings, query Save,
+This readonly path is complemented by the bounded editable path below. General
+updateability, other views, action-query UI/warnings, query design Save,
 linked/provider behavior and complete Access
 window/event/error-priority parity remain open. SQL compatibility remains the
 executor's measured subset; query presence is not execution compatibility.
@@ -85,7 +86,7 @@ rejection, named target activation across two query tabs, actual Ctrl+C/Ctrl+Ins
 hidden-cell refusal, select-record/all and real SendKeys copy. No new test targets.
 Full desktop suite 48/48 (91.62 s), GUI-free core 1/1 (1.54 s), Debian package
 payload/permissions/Build-ID/pinned SQLite and all four original fixture SHA-256
-checks pass. Query editing, native query sort/filter and full Access
+checks pass. General query editing, readonly query sort/filter and full Access
 window/event/keyboard semantics remain open.
 
 ## Native result search
@@ -139,3 +140,42 @@ menu Copy/Select All, disabled grid mutation actions, VBA Zoom and Shift+F2 with
 real readonly dialog content. Debian package payload/Build-ID/SQLite checks and
 four original SHA-256 checks pass. Previous full 48/48 baseline is the query-search
 checkpoint (90.46 s); this bounded GUI-only increment used the targeted pair.
+
+
+## Editable single-table query documents (2026-11-03)
+
+Default/acEdit OpenQuery supports an unparameterized `SELECT * FROM table` over
+one physical main-schema user table with a real primary key. The native
+AccessTableModel/View executes actual SQL and uses the existing typed manual
+submission, editor validation, record navigation/search, clipboard and record
+commands. The document remains an actual query for named Close, SelectObject,
+CurrentData.AllQueries.IsLoaded and explicit acDataQuery navigation; it does not
+mark the underlying table as an open table document. Its lifetime is independent
+of the calling form. First-cell selection is synchronous for immediate VBA.
+
+Save writes actual cached record changes. Close validates/submits records even
+with acSaveNo (that option concerns design), retaining the open dirty document
+on validation/SQL failure. Requery supports an unchanged captured definition,
+saving the current sole draft through the existing table path. A changed saved
+definition refuses 3251 without rebinding drafts. Opening the same query in a
+different data mode refuses 3251. A second editable native datasheet for the same
+physical table is refused before switching documents; readonly views may coexist.
+This is a bounded safeguard, not Jet record locking or concurrency parity.
+
+Projection/filtered/joined/parameterized queries, views, missing primary keys,
+temporary shadows and hidden/generated columns are outside this editable subset.
+Save/Requery verify the captured query still resolves to the same eligible main
+table and that its CREATE TABLE SQL matches the opening snapshot. Changed source
+structure refuses 3251 and retains drafts; unrelated schema changes do not
+invalidate the snapshot. This does not detect every drop/recreate or external
+row update, and does not promise general concurrent-update safety.
+
+Existing main-window/query-model targets cover actual default VBA OpenQuery,
+SQL save/requery, changed definition refusal, CHECK failure/retained dirty Close,
+record commit with acSaveNo, caller self-close, source metadata/temporary shadows,
+and refusal of a second writable source document without changing active focus.
+No new CTest targets were added.
+
+Full desktop 48/48 (90.33 s), fresh GUI-free core 1/1 (1.48 s), Debian package
+payload/permissions/Build-ID/pinned SQLite checks and four original fixture
+SHA-256 checks pass for this editable-query implementation.

@@ -48,6 +48,18 @@ int main(int argc, char** argv) {
         }
     }
     {
+        assert(query.exec("CREATE TABLE editable_source(id INTEGER PRIMARY KEY,value TEXT)"));
+        assert(linaccess::editableAccessQueryTable(db,"SELECT * FROM [editable_source]")=="editable_source");
+        assert(query.exec("CREATE TABLE editable_generated(id INTEGER PRIMARY KEY,value INTEGER,doubled INTEGER GENERATED ALWAYS AS(value*2))"));
+        for(const auto& source:{"SELECT id FROM editable_source","SELECT * FROM editable_source WHERE id=1","SELECT * FROM samples","PARAMETERS p Long; SELECT * FROM editable_source","SELECT * FROM origin_saved","SELECT * FROM editable_generated"}) {
+            int error=0; try { (void)linaccess::editableAccessQueryTable(db,source); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+            assert(error==3251);
+        }
+        assert(query.exec("CREATE TEMP VIEW editable_source AS SELECT * FROM samples"));
+        int error=0; try { (void)linaccess::editableAccessQueryTable(db,"SELECT * FROM editable_source"); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+        assert(error==3251); assert(query.exec("DROP VIEW temp.editable_source"));
+    }
+    {
         linaccess::AccessQueryModel reversed;
         reversed.execute(db,"SELECT InStrRev('abcabc','bc') AS pos,StrReverse('abö') AS backwards, InStrRev('A😀x😀','😀') AS units");
         assert(reversed.rowCount()==1 && reversed.data(reversed.index(0,0)).toInt()==5);
