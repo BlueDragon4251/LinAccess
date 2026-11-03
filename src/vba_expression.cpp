@@ -623,12 +623,23 @@ private:
         if (tok.type != Token::Type::Word)
             throw error("Ungültiger VBA-Ausdruck: " + tok.value);
         auto word = lower(tok.value);
-        bool qualifiedArray=false;
-        if(!accessExpression_ && word=="vba" && nextSymbol(".") && index_+2<tokens_.size()
-            && tokens_[index_+1].type==Token::Type::Word && lower(tokens_[index_+1].value)=="array" && tokens_[index_+2].value=="(") {
+        bool qualifiedArray=false,qualifiedIntrinsic=false;
+        if(!accessExpression_ && word=="vba" && nextSymbol(".") && index_+1<tokens_.size() && tokens_[index_+1].type==Token::Type::Word) {
             if(const auto local=locals_.find(word);local!=locals_.end()) return local->second;
             if(host_) if(auto resolved=host_->resolveIdentifier(tok.value,true)) return *resolved;
-            consume(); consume(); word="array"; qualifiedArray=true;
+            consume(); word=lower(consume().value);
+            static const std::unordered_set<std::string> intrinsics{
+                "array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
+                "msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
+                "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdate","cstr","str","str$","format","format$",
+                "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len",
+                "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
+                "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
+                "sqr","exp","log","sin","cos","tan","atn","date","time","now","dateadd","datediff","datepart",
+                "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
+                "choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor"};
+            if(!intrinsics.contains(word) && !word.starts_with("vb")) throw error("Qualified VBA member is not implemented",3251);
+            qualifiedIntrinsic=true; qualifiedArray=word=="array";
         }
         if (accessExpression_) {
             static const std::unordered_map<std::string,std::string> localized{{"summe","sum"},{"anzahl","count"},{"wenn","iif"},{"istnull","isnull"},{"istfehler","iserror"},{"datum","date"},{"jetzt","now"},{"zeit","time"},{"formulare","forms"},{"berichte","reports"}};
@@ -839,7 +850,7 @@ private:
                 };
                 const auto signature=signatures.find(word);
                 if(signature==signatures.end()) {
-                    if(!resolver_) throw error("Named builtin/procedure arguments are not implemented",3251);
+                    if(qualifiedIntrinsic || !resolver_) throw error("Named builtin/procedure arguments are not implemented",3251);
                     return resolver_(word,args,references);
                 }
                 std::vector<VbaValue> ordered(signature->second.names.size(),VbaValue::empty());
@@ -1490,10 +1501,12 @@ private:
                 return VbaValue::string(utf8String(std::u16string_view(input).substr(start,count)));
             }
             if (!host_) return {}; // syntactic function call; bind at execution
+            if(qualifiedIntrinsic) throw error("Invalid qualified VBA intrinsic arguments",450);
             if (resolver_) return resolver_(tok.value, args, references);
             throw error("Nicht unterstützte VBA-Funktion/Parameter: " + tok.value);
         }
         if (!host_) return {}; // Validate identifiers syntactically, resolve on execution.
+        if(qualifiedIntrinsic) throw error("Qualified VBA member requires supported arguments",3251);
         const auto variable = locals_.find(word);
         if (variable==locals_.end() && accessExpression_)
             return host_->expressionValue(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"));

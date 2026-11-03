@@ -3296,3 +3296,13 @@ was rebuilt against the changed runtime and its original syntax target passes
 1/1 (0.94 s). Affected app/core/DAO targets build. No new CTest target/full-suite/
 package repeat after the checked 63f55e4 language baseline. Complete module-header/
 property/class grammar and all comment/label edge cases remain open.
+
+
+## Qualified VBA standard-library calls (2026-11-03)
+
+Implemented intrinsic functions/constants can be addressed through VBA., including
+named arguments and Date values. Local/host objects named VBA retain precedence.
+Access-only functions and unknown qualified members are rejected explicitly;
+module-qualified paths such as VBA.Strings are outside this increment.
+Existing core/DAO checks pass 2/2 (1.68 s); GUI-free core passes 1/1 (1.58 s).
+No new CTest target or full-parity claim.

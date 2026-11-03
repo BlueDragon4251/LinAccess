@@ -2637,6 +2637,11 @@ Me!ByteLowerError=Err.Number
 End Sub
 )VBA","ShortenBytes",host,byteArguments);
     assert(shortenedBytes.status==VbaExecutionStatus::Completed && byteArguments[0].bytes==std::vector<unsigned char>({0,128}) && host.fields["ByteLowerError"]=="9");
+    assert(evaluate("VBA.UCase$(String:=\"ab\")").asText()=="AB");
+    assert(evaluate("VBA.VarType(VBA.DateSerial(2024,3,0))=VBA.vbDate").truthy());
+    assert(evaluate("VBA.TypeName(VBA.Date)").asText()=="Date" && evaluate("VBA.Len(\"ab\")").asNumber()==2);
+    int qualifiedError=0; try { (void)evaluate("VBA.CurrentDb()"); } catch(const VbaRuntimeError& error) { qualifiedError=error.number; } assert(qualifiedError==3251);
+    qualifiedError=0; try { (void)evaluate("VBA.Len(1,2)"); } catch(const VbaRuntimeError& error) { qualifiedError=error.number; } assert(qualifiedError==450);
     const auto qualifiedArrays=executeVbaProcedure(R"VBA(Option Base 1
 Sub QualifiedArrays()
 Dim ordinary As Variant
