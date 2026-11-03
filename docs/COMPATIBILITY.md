@@ -1446,3 +1446,16 @@ Core/DAO targeted checks pass 2/2 (1.88 s); rebuilt GUI-free core passes 1/1
 Debian package contents/permissions/Build-ID/pinned backend checks pass, all four
 original hashes pass, and the remote repository remains private. Existing test
 targets only; no complete Collection/Access or new distro-matrix claim.
+
+
+## Native form date/time insertion keys (2026-11-03)
+
+Ctrl+semicolon inserts the current local ISO date; Ctrl+Shift+semicolon/colon
+inserts the current local HH:mm:ss into the focused native form TextBox,
+replacing its selection or inserting at the caret. Existing control buffers,
+Change events, BeforeUpdate cancellation and record saving are retained.
+Read-only/disabled/calculated/unsupported bound contexts and capacity overflow
+refuse mutation. The existing layout target passes 1/1 (13.58 s), exercising
+actual keys, Change, cancelled save, SQL Date/time persistence and read-only
+refusal. App builds. Regional Access date masks and datasheet keys remain open
+in this increment; full-suite/package baseline remains 8dc6afa.

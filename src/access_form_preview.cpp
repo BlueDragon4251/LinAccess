@@ -2800,6 +2800,28 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
         if (event->key()==Qt::Key_Minus && modifiers==Qt::ControlModifier) {
             (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(223)}); return true;
         }
+        const bool insertDate=event->key()==Qt::Key_Semicolon && modifiers==Qt::ControlModifier;
+        const bool insertTime=(event->key()==Qt::Key_Semicolon || event->key()==Qt::Key_Colon)
+            && modifiers==(Qt::ControlModifier|Qt::ShiftModifier);
+        if(insertDate || insertTime) {
+            ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+            auto* line=qobject_cast<QLineEdit*>(QApplication::focusWidget());
+            const linaccess::AccessVisualControl* selected=nullptr;
+            for(const auto& control:layout_.controls)
+                if(line && controls_.value(control.name.toCaseFolded())==line) { selected=&control; break; }
+            if(!selected || selected->type!="TextBox" || layout_.kind!=linaccess::AccessDocumentKind::Form
+                || line->isReadOnly() || !line->isEnabled()) throw linaccess::VbaRuntimeError(2046,"Clock insertion is unavailable");
+            if(auto* modal=QApplication::activeModalWidget(); modal && modal!=window() && !modal->isAncestorOf(line)) return true;
+            ensureWritableControl(selected->name.toStdString());
+            const auto text=QDateTime::currentDateTime().toString(insertDate ? "yyyy-MM-dd" : "HH:mm:ss");
+            if(line->text().size()-line->selectedText().size()+text.size()>line->maxLength())
+                throw linaccess::VbaRuntimeError(3251,"Clock text exceeds the native editor capacity");
+            rememberControlEdit(line);
+            if(!editOriginals_.contains(selected->name)) throw linaccess::VbaRuntimeError(3251,"Clock insertion cannot be buffered safely");
+            bufferedTextControls_.insert(selected->name); pendingControls_.insert(selected->name);
+            line->insert(text);
+            return true;
+        }
         if (event->key()==Qt::Key_Apostrophe && modifiers==Qt::ControlModifier) {
             ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
             auto* line=qobject_cast<QLineEdit*>(QApplication::focusWidget());

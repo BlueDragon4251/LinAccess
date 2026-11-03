@@ -82,3 +82,16 @@ Validation: Release build, 18/18 CTests (49.12 s), GUI-disabled Release core 1/1
 (0.37 s), fresh .deb executable Build ID/payload/permissions, and four unchanged
 original fixture SHA-256 checks passed. Remote distribution CI and Access 2003
 reference behavior remain unverified.
+
+
+## Native form date/time insertion keys (2026-11-03)
+
+Ctrl+semicolon inserts the current local ISO date; Ctrl+Shift+semicolon/colon
+inserts the current local HH:mm:ss into the focused native form TextBox,
+replacing its selection or inserting at the caret. Existing control buffers,
+Change events, BeforeUpdate cancellation and record saving are retained.
+Read-only/disabled/calculated/unsupported bound contexts and capacity overflow
+refuse mutation. The existing layout target passes 1/1 (13.58 s), exercising
+actual keys, Change, cancelled save, SQL Date/time persistence and read-only
+refusal. App builds. Regional Access date masks and datasheet keys remain open
+in this increment; full-suite/package baseline remains 8dc6afa.

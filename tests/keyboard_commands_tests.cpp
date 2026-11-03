@@ -4,6 +4,7 @@
 #include "vba_source_codec.hpp"
 #include <QCryptographicHash>
 #include <QDir>
+#include <QDateTime>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -126,6 +127,25 @@ End Sub
     assert(number->property("la_null").toBool() && alias->property("la_null").toBool() && !numbers.hasUnsavedChanges());
     assert(query.exec("SELECT COUNT(*) FROM numbers") && query.next() && query.value(0).toInt()==1); query.finish();
     assert(numbers.close());
+    assert(query.exec("CREATE TABLE clock_records(id INTEGER PRIMARY KEY,stamp DATETIME)"));
+    assert(query.exec("INSERT INTO clock_records VALUES(1,NULL)"));
+    const QByteArray clockLayout="Begin Form\nRecordSource =\"clock_records\"\nBegin Section\nBegin TextBox\nName =\"stamp\"\nControlSource =\"stamp\"\nOnChange =\"[Event Procedure]\"\nBeforeUpdate =\"[Event Procedure]\"\nEnd\nBegin TextBox\nName =\"edits\"\nTop =400\nEnd\nEnd\nEnd\n";
+    const QByteArray clockCode="Sub stamp_Change()\nMe!edits=Nz(Me!edits,0)+1\nEnd Sub\nSub stamp_BeforeUpdate(Cancel As Integer)\nIf Me.Tag=\"block\" Then Cancel=True\nEnd Sub\n";
+    AccessFormPreview clock("clock",clockLayout,clockCode,db); clock.show(); QApplication::setActiveWindow(&clock); QApplication::processEvents();
+    auto* stamp=clock.findChild<QLineEdit*>("access-control-stamp"); assert(stamp); stamp->setFocus(); QApplication::processEvents();
+    auto clockObject=makePreviewFormObject(clock);
+    const auto beforeDate=QDate::currentDate(); QTest::keyClick(stamp,Qt::Key_Semicolon,Qt::ControlModifier);
+    const auto insertedDate=stamp->text(); assert(insertedDate==beforeDate.toString(Qt::ISODate) || insertedDate==QDate::currentDate().toString(Qt::ISODate));
+    assert(clock.hasUnsavedChanges() && clockObject->item("edits").asNumber()==1);
+    clockObject->assign("Tag",VbaValue::string("block")); QTest::keyClick(stamp,Qt::Key_Return,Qt::ShiftModifier); assert(clock.hasUnsavedChanges());
+    assert(query.exec("SELECT stamp FROM clock_records") && query.next() && query.value(0).isNull()); query.finish();
+    clockObject->assign("Tag",VbaValue::string("")); QTest::keyClick(stamp,Qt::Key_Return,Qt::ShiftModifier); assert(!clock.hasUnsavedChanges());
+    assert(query.exec("SELECT stamp FROM clock_records") && query.next() && query.value(0).toString()==insertedDate+" 00:00:00"); query.finish();
+    stamp->selectAll(); QTest::keyClick(stamp,Qt::Key_Colon,Qt::ControlModifier|Qt::ShiftModifier);
+    const auto insertedTime=stamp->text(); assert(QTime::fromString(insertedTime,"HH:mm:ss").isValid()); QTest::keyClick(stamp,Qt::Key_Return,Qt::ShiftModifier); assert(!clock.hasUnsavedChanges());
+    assert(query.exec("SELECT stamp FROM clock_records") && query.next() && query.value(0).toString()=="1899-12-30 "+insertedTime); query.finish();
+    const auto savedClockText=stamp->text(); stamp->setReadOnly(true); QTest::keyClick(stamp,Qt::Key_Semicolon,Qt::ControlModifier); assert(stamp->text()==savedClockText && !clock.hasUnsavedChanges());
+    assert(clock.close());
     testKeyboardEvents();
 }
 

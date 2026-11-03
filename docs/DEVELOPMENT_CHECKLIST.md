@@ -859,3 +859,6 @@ of complete Access parity. Existing broader open items remain open.
 - [x] Typed Collection module persistence, required ByVal/ByRef parameters and
   function results, shared mutation/local replacement and caller rebinding;
   Optional object parameters and complete class/reference semantics remain open.
+
+- [x] Native form Ctrl+semicolon / Ctrl+Shift+colon date/time insertion through
+  edit buffers, Change, validation and real Date persistence; regional masks open.
