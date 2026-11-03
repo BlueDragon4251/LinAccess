@@ -2899,6 +2899,17 @@ void AccessFormPreview::keyReleaseEvent(QKeyEvent* event) {
 bool AccessFormPreview::eventFilter(QObject* watched,QEvent* event) {
     if (auto* document=dynamic_cast<AccessFormPreview*>(watched); document && document!=this
         && (event->type()==QEvent::KeyPress || event->type()==QEvent::KeyRelease)) return QDialog::eventFilter(watched,event);
+    if (event->type()==QEvent::Shortcut) {
+        if(auto* label=qobject_cast<QLabel*>(watched);label && label->buddy()) {
+            ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+            try {
+                if(!commitControls() || closed_ || openCancelled_) { event->accept(); return true; }
+            } catch(const std::exception& error) {
+                if(status_) status_->setText(QString::fromUtf8(error.what()));
+                event->accept(); return true;
+            }
+        }
+    }
     if (event->type()==QEvent::FocusIn) {
         if (watched!=recordSelector_) clearRecordSelection();
         rememberControlEdit(watched);

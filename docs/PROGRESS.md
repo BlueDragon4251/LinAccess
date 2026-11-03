@@ -2747,3 +2747,15 @@ GUI regression now uses VBA to switch policies and real Escape/Enter/Alt events
 with persisted SQL effects. Desktop build and form_current_record pass (0.56 s).
 No new target/full-suite/package repeat for this increment. The grouped evidence
 above covers e5143eb; see COMMAND_BUTTON_KEYBOARD_RUNTIME.md for boundaries.
+
+## Guarded control and mnemonic focus (2026-11-03)
+
+Native Control.SetFocus now checks pending validation before moving focus,
+returning 2110 on cancellation and rejecting forms closed during validation.
+Attached-label shortcut dispatch also checks validation before native buddy
+focus and contains GUI-side exceptions with deferred document disposal.
+The existing GUI regression activates its actual window, checks cancelled
+BeforeUpdate through both VBA/Alt focus paths, accepts corrected text and
+persists it. Desktop build and form_current_record pass (0.54 s). No new target
+or full-suite/package repeat. Full mouse/cross-document/Form.SetFocus and exact
+Windows focus-event ordering remain open.

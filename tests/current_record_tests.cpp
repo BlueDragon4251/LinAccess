@@ -99,6 +99,16 @@ Begin Section
 Begin TextBox
 Name ="label"
 ControlSource ="label"
+BeforeUpdate ="[Event Procedure]"
+End
+Begin TextBox
+Name ="destination"
+Top =500
+Begin Label
+Name ="destination_label"
+Caption ="&Destination"
+Top =1000
+End
 End
 End
 End
@@ -106,7 +116,7 @@ End
         sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','read_only_form',?)");
         sql.addBindValue(readOnlyLayout); assert(sql.exec()); sql.finish();
         sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba','Form_read_only_form',?)");
-        sql.addBindValue(QByteArray("Sub Form_Open(Cancel As Integer)\nCurrentDb.Execute \"INSERT INTO positions VALUES(201,\" & CLng(Me.AllowEdits Or Me.AllowAdditions Or Me.AllowDeletions) & \")\"\nEnd Sub\n"));
+        sql.addBindValue(QByteArray("Sub Form_Open(Cancel As Integer)\nCurrentDb.Execute \"INSERT INTO positions VALUES(201,\" & CLng(Me.AllowEdits Or Me.AllowAdditions Or Me.AllowDeletions) & \")\"\nEnd Sub\nSub label_BeforeUpdate(Cancel As Integer)\nIf Me.label=\"blocked\" Then Cancel=True\nEnd Sub\nFunction TryFocus() As Long\nOn Error Resume Next\nMe.destination.SetFocus\nTryFocus=Err.Number\nEnd Function\n"));
         assert(sql.exec()); sql.finish();
         const QByteArray opener=R"VBA(Sub ReadOnlyOpen()
 DoCmd.OpenForm FormName:="read_only_form",DataMode:=acFormReadOnly
@@ -135,7 +145,16 @@ End Sub
         assert(opened); auto* editor=opened->findChild<QLineEdit*>("access-control-label"); assert(!editor->isReadOnly());
         form=makePreviewFormObject(*opened);
         assert(form->member("AllowEdits",{}).truthy() && form->member("AllowAdditions",{}).truthy() && form->member("AllowDeletions",{}).truthy());
-        editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"edited");
+        opened->activateWindow(); QApplication::processEvents();
+        editor->setFocus(); QApplication::processEvents(); assert(editor->hasFocus());
+        editor->selectAll(); QTest::keyClicks(editor,"blocked");
+        const auto prevented=opened->executeProcedure("TryFocus",args);
+        assert(prevented.status==linaccess::VbaExecutionStatus::Completed && prevented.typedReturnValue && prevented.typedReturnValue->asNumber()==2110 && editor->hasFocus());
+        QTest::keyClick(editor,Qt::Key_D,Qt::AltModifier); QApplication::processEvents(); assert(editor->hasFocus());
+        editor->selectAll(); QTest::keyClicks(editor,"edited");
+        const auto allowed=opened->executeProcedure("TryFocus",args);
+        assert(allowed.status==linaccess::VbaExecutionStatus::Completed && allowed.typedReturnValue && allowed.typedReturnValue->asNumber()==0);
+        assert(opened->findChild<QLineEdit*>("access-control-destination")->hasFocus());
         form->assign("Dirty",VbaValue::logical(false));
         assert(sql.exec("SELECT label FROM mode_records WHERE id=10") && sql.next() && sql.value(0).toString()=="edited"); sql.finish();
         assert(caller.executeProcedure("ReadOnlyClose",args).status==linaccess::VbaExecutionStatus::Completed);

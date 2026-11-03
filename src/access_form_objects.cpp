@@ -316,6 +316,12 @@ public:
         }
         if (key == "setfocus") {
             if (widget->isHidden() || !widget->isEnabled()) throw linaccess::VbaRuntimeError(2110,"Control cannot receive focus");
+            const auto* focus=QApplication::focusWidget();
+            if(focus!=widget && (!focus || !widget->isAncestorOf(focus))) {
+                const QPointer<QWidget> guarded=widget;
+                if(!preview.commitControls()) throw linaccess::VbaRuntimeError(2110,"Control validation prevents focus change");
+                if(!guarded || preview.closed_ || preview.openCancelled_) throw linaccess::VbaRuntimeError(2450,"Form closed during focus validation");
+            }
             widget->setFocus(); return {};
         }
         if (key == "requery") { preview.requeryControl(bytes(name_)); return {}; }

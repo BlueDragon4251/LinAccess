@@ -22,3 +22,11 @@ validation/Windows event order and Access 2003 rendering remain open.
 References:
 - https://learn.microsoft.com/en-us/office/vba/api/access.commandbutton.default
 - https://learn.microsoft.com/en-us/office/vba/api/access.commandbutton.cancel
+
+Native Control.SetFocus now validates pending controls before changing focus
+and reports 2110 on cancelled validation. Attached-label mnemonic shortcuts
+likewise validate before Qt buddy focus transfer, with guarded native lifetime
+and GUI-side exception containment. Existing native regression rejects both
+VBA and Alt mnemonic movement from a cancelled BeforeUpdate, then accepts the
+corrected input and persists it. This does not claim all mouse, cross-document,
+Form.SetFocus or Windows focus-event ordering paths.
