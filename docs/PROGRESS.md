@@ -2759,3 +2759,14 @@ BeforeUpdate through both VBA/Alt focus paths, accepts corrected text and
 persists it. Desktop build and form_current_record pass (0.54 s). No new target
 or full-suite/package repeat. Full mouse/cross-document/Form.SetFocus and exact
 Windows focus-event ordering remain open.
+
+## Native DAO absolute cursor positions (2026-11-03)
+
+Implemented Long Recordset.AbsolutePosition read/write using the actual
+materialized cursor position, -1 without a current row, independent clone
+navigation, checked bounds/conversion and pending-edit guards. Existing DAO
+regression checks cursor isolation, EOF and invalid/pending moves; native VBA
+reads/writes the property while consuming actual SQL results. Desktop build and
+dao_execution pass (0.33 s). No new target/full-suite/package repeat. Deleted-row,
+lazy cursor, external/forward-only and exact Windows error semantics remain open.
+Reference: https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/recordset-absoluteposition-property-dao

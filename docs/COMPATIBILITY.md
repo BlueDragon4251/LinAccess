@@ -982,3 +982,9 @@ Native CommandButton.Cancel now supports imported/template metadata, VBA
 read/write and real Escape-to-Click behavior with focused TextBox buffer undo;
 setting a new cancel/default button clears the corresponding previous policy.
 See COMMAND_BUTTON_KEYBOARD_RUNTIME.md for verified scope and remaining limits.
+
+Native DAO dynaset/snapshot adapters expose Long AbsolutePosition: zero-based
+read/write within populated rows, -1 when no current row, independent clone
+positions, checked Long conversion and pending-edit protection. Invalid positions
+currently raise native 3021. Full deleted-row, lazy-population, forward-only,
+ODBC and exact Access 2003 error/reference semantics remain open.

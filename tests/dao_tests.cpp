@@ -39,16 +39,18 @@ Dim database As DAO.Database
 Dim rows As DAO.Recordset
 Set database=CurrentDb
 Set rows=database.OpenRecordset(Type:=4, Name:="SELECT id,RGB(r,g,b) AS shade FROM color_rows ORDER BY id")
+rows.AbsolutePosition=0
 Me!FirstShade=rows!shade
 rows.FindFirst Criteria:="id=2"
 Me!SecondShade=rows!shade
+Me!Ordinal=rows.AbsolutePosition
 rows.Close
 database.Execute Options:=128, Query:="UPDATE color_rows SET packed=RGB(r,g,b)"
 Me!ColorAffected=database.RecordsAffected
 End Sub
 )VBA","PaintRows",host);
     assert(painted.status==linaccess::VbaExecutionStatus::Completed);
-    assert(host.fields["FirstShade"]=="255" && host.fields["SecondShade"]=="65280" && host.fields["ColorAffected"]=="2");
+    assert(host.fields["FirstShade"]=="255" && host.fields["SecondShade"]=="65280" && host.fields["ColorAffected"]=="2" && host.fields["Ordinal"]=="1");
     assert(sql.exec("SELECT packed FROM color_rows ORDER BY id") && sql.next() && sql.value(0).toInt()==255 && sql.next() && sql.value(0).toInt()==65280); sql.finish();
     assert(sql.exec("UPDATE color_rows SET packed=99")); assert(sql.exec("INSERT INTO color_rows VALUES(3,NULL,0,0,99)"));
     const auto rejected=linaccess::executeVbaProcedure(R"VBA(Sub InvalidColor()

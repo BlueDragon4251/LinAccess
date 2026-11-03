@@ -23,6 +23,7 @@ void testDaoCursors() {
     expect(438,[&] { source->assign("EditMode",VbaValue::integer(1)); });
     auto clone=source->member("Clone",{}).object;
     assert(source->item("id").asNumber()==1 && clone->member("BOF",{}).truthy() && !clone->member("EOF",{}).truthy());
+    assert(source->member("AbsolutePosition",{}).asNumber()==0 && clone->member("AbsolutePosition",{}).asNumber()==-1);
     expect(3021,[&] { (void)clone->item("id"); });
     const auto find=[](const std::shared_ptr<VbaObject>& rows,const char* method,const char* criteria) {
         rows->member(method,{VbaValue::string(criteria)});
@@ -35,10 +36,13 @@ void testDaoCursors() {
     expect(3021,[&] { (void)clone->member("Bookmark",{}); });
     clone->member("MoveFirst",{}); assert(!clone->member("NoMatch",{}).truthy());
     find(clone,"FindFirst","label Like 't*'"); assert(clone->item("id").asNumber()==2);
+    clone->assign("AbsolutePosition",VbaValue::longInteger(3)); assert(clone->item("id").asNumber()==4 && source->item("id").asNumber()==1);
+    expect(3021,[&] { clone->assign("AbsolutePosition",VbaValue::longInteger(4)); });
+    clone->assign("AbsolutePosition",VbaValue::longInteger(1));
     const auto second=clone->member("Bookmark",{}); assert(second.kind==VbaValue::Kind::ByteArray && !second.bytes.empty());
     clone->member("Move",{VbaValue::longInteger(2)}); assert(clone->item("id").asNumber()==4);
     clone->member("Move",{VbaValue::longInteger(-1),second}); assert(clone->item("id").asNumber()==1);
-    clone->member("Move",{VbaValue::longInteger(99)}); assert(clone->member("EOF",{}).truthy());
+    clone->member("Move",{VbaValue::longInteger(99)}); assert(clone->member("EOF",{}).truthy() && clone->member("AbsolutePosition",{}).asNumber()==-1);
     expect(3021,[&] { clone->member("Move",{VbaValue::longInteger(1)}); });
     clone->member("Move",{VbaValue::longInteger(-1)}); assert(clone->item("id").asNumber()==4);
     expect(3159,[&] { clone->member("Move",{VbaValue::longInteger(0),VbaValue::byteArray({})}); });
@@ -66,6 +70,7 @@ void testDaoCursors() {
     expect(3159,[&] { source->assign("Bookmark",second); });
     source->assign("Bookmark",third); sibling->member("Edit",{});
     assert(sibling->member("EditMode",{}).asNumber()==1 && source->member("EditMode",{}).asNumber()==0);
+    expect(3219,[&] { sibling->assign("AbsolutePosition",VbaValue::longInteger(0)); });
     expect(3219,[&] { sibling->member("Clone",{}); });
     expect(3219,[&] { find(sibling,"FindFirst","id=1"); });
     expect(3219,[&] { sibling->assign("Bookmark",third); });

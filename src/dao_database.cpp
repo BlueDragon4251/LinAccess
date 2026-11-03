@@ -312,6 +312,7 @@ public:
         if (key == "eof") return VbaValue::logical(data_->rows.empty() || position_ >= data_->rows.size());
         if (key == "bof") return VbaValue::logical(data_->rows.empty() || position_ < 0);
         if (key == "recordcount") return longCount(data_->rows.size());
+        if (key=="absoluteposition") return longCount(position_<0 || position_>=data_->rows.size() ? -1 : position_);
         if (key == "movefirst" || key == "movelast" || key == "movenext" || key == "moveprevious") {
             require(mode_ == Mode::Browse, "DAO: Update or CancelUpdate before navigation");
             if (key == "movefirst") position_ = 0;
@@ -351,6 +352,16 @@ public:
         return value(text(name)); // implicit default Fields(name).Value
     }
     void assign(std::string_view name, const VbaValue& value) override {
+        if(lower(name)=="absoluteposition") {
+            checkTransaction();
+            if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
+            if(mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
+            const auto scalar=scalarVbaValue(value);
+            if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null position");
+            const auto position=sqlFieldValue(scalar,"INTEGER4").toLongLong();
+            if(position<0 || position>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: Position outside populated recordset");
+            position_=static_cast<qsizetype>(position); noMatch_=false; return;
+        }
         if (lower(name)=="editmode" || lower(name)=="updatable")
             throw VbaRuntimeError(438,"DAO: Recordset metadata is read-only");
         if (lower(name)=="bookmark") {
