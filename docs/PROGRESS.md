@@ -2721,3 +2721,18 @@ Existing core/GUI targets pass 2/2 (1.80 s), including Open-event policy reads,
 actual read-only editor state and real keyboard edit persisted to a test table.
 Desktop build passes. No new target. See FORM_DATA_MODE_RUNTIME.md for remaining
 DataEntry/reuse/locking/view/reference boundaries.
+
+## Grouped native DAO/form verification (2026-11-03)
+
+The bdc5466 desktop/all-target build passed. Full existing suite: 46/48 passed
+(56.94 s); both failures shared an obsolete expectation that acFormEdit must
+fail. The negative case now checks still-unsupported acFormAdd; positive Edit
+behavior is covered by the native keyboard/persistence regression above.
+The two affected original-layout/DAO targets then passed 2/2 (47.20 s). All 48
+existing targets are thus covered across full run and focused rerun, not a
+single final 48/48 invocation. No new test targets.
+
+GUI-free build/test passed 1/1 (1.37 s). Matching .deb Build-ID, pinned SQLite
+backend smoke, package permissions/contents, all four original fixture SHA-256
+checks and repository privacy passed. No distro matrix repeat; remote CI remains
+blocked by the previously reported billing restriction.

@@ -171,8 +171,8 @@ End Sub
 Sub OpenNamed()
 DoCmd.OpenForm "target",,"named"
 End Sub
-Sub OpenOptions()
-DoCmd.OpenForm "target",,,,1
+Sub OpenAdd()
+DoCmd.OpenForm "target",,,,acFormAdd
 End Sub
 )VBA";
     AccessFormPreview owner("controller","Begin Form\nEnd\n",code,db);
@@ -204,7 +204,7 @@ End Sub
     makePreviewApplicationObject(owner)->member("DoCmd",{}).object->member("Close",{VbaValue::numeric(2),VbaValue::string("target")});
 
     std::vector<VbaValue> none;
-    for (const auto& [procedure,number]:std::vector<std::pair<QString,int>>{{"OpenMissing",2102},{"OpenDesign",3251},{"OpenNamed",3251},{"OpenOptions",3251}}) {
+    for (const auto& [procedure,number]:std::vector<std::pair<QString,int>>{{"OpenMissing",2102},{"OpenDesign",3251},{"OpenNamed",3251},{"OpenAdd",3251}}) {
         const auto result=owner.executeProcedure(procedure,none);
         assert(result.status==linaccess::VbaExecutionStatus::Error && result.errorNumber==number);
     }
