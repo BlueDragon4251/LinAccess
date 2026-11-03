@@ -3412,3 +3412,19 @@ GUI-free build/core passes 1/1 (1.76 s). Debian package contents/permissions/
 matching Build-ID/pinned SQLite backend checks pass; all four original hashes
 pass. Repository privacy is confirmed. Existing 48 targets only; no full Access
 2003/Windows interaction or new distro-matrix parity claim.
+
+
+## Acyclic nested Collection graphs (2026-11-03)
+
+Collection items can now retain other native Collections directly or through
+Variant arrays. Shared acyclic graphs preserve object identity; a bounded
+visited-node traversal rejects only cycles back to the receiving owner before
+mutation. Nested For Each retains independent enumeration leases, so editing a
+child before its own enumeration remains possible. Direct/indirect/array cycles
+still report 3251; complete cyclic/class lifetime semantics remain open.
+Core/DAO pass 2/2 (2.29 s); GUI-free core passes 1/1 (1.77 s). Existing targets
+only. Last full suite/package/hash baseline is local 4ba1819 (48/48, 88.53 s).
+That commit's CLI push was blocked by an invalid GH_TOKEN; the authenticated
+GitHub connector confirms private visibility and remote head 825047c. No raw
+credentials were inspected; local development continues pending renewed CLI
+authentication. No claim that these pending commits are already remote.

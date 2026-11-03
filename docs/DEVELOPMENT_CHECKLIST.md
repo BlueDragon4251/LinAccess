@@ -872,3 +872,6 @@ of complete Access parity. Existing broader open items remain open.
   omitted ByRef arguments; generic Optional object binding remains open.
 - [x] Native main-window text editing menu with actual undo/redo/clipboard
   commands and protected/password states; shared MDI/range operations open.
+
+- [x] Shared acyclic nested Collection/Variant-array graphs and nested For Each,
+  with indirect cycle refusal before mutation; cyclic object lifetime stays open.

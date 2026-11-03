@@ -578,6 +578,34 @@ End Sub
         int actual=0; try { (void)value.object->member(name,args); } catch(const VbaRuntimeError& error) { actual=error.number; }
         assert(actual==expected && value.object->member("Count",{}).number==before);
     }
+    const auto child=evaluateVbaObjectExpression("New Collection",host,{});
+    child.object->member("Add",{VbaValue::integer(7)});
+    value.object->member("Add",{child,VbaValue::string("child")});
+    value.object->member("Add",{evaluateVbaExpression("Array(v)",host,{{"v",child}})});
+    assert(value.object->member("Item",{VbaValue::string("child")}).object==child.object);
+    for(const auto& item:std::vector<VbaValue>{value,evaluateVbaExpression("Array(v)",host,{{"v",value}})}) {
+        int actual=0; try { child.object->member("Add",{item}); } catch(const VbaRuntimeError& error) { actual=error.number; }
+        assert(actual==3251 && child.object->member("Count",{}).number==1);
+    }
+    const auto nested=executeVbaProcedure(R"VBA(Function NestedFlow() As Long
+Dim groups As Collection
+Dim child As Collection
+Dim item As Variant
+Dim total As Long
+Set groups=New Collection
+Set child=New Collection
+child.Add 7
+groups.Add child
+For Each child In groups
+child.Add 8
+For Each item In child
+total=total+item
+Next
+Next
+NestedFlow=total
+End Function
+)VBA","NestedFlow",host);
+    assert(nested.status==VbaExecutionStatus::Completed && nested.returnValue=="15");
 }
 
 void testCalendarFunctions() {

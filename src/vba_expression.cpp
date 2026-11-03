@@ -57,14 +57,18 @@ class VbaCollection final : public VbaObject {
         }
         throw error("Invalid Collection index or key",5);
     }
-    static void checkItem(const VbaValue& value) {
+    void checkItem(const VbaValue& value) const {
         std::unordered_set<const VbaObject*> visited;
         std::size_t budget=1000000;
         const auto check=[&](auto&& self,const VbaValue& entry,int depth) -> void {
             if(!budget-- || depth>64) throw error("Collection item traversal limit",3251);
-            if(entry.kind==VbaValue::Kind::Object && dynamic_cast<VbaCollection*>(entry.object.get()))
-                throw error("Nested Collection lifetime is not implemented",3251);
-            if(entry.kind==VbaValue::Kind::Array && visited.insert(entry.object.get()).second)
+            if(entry.kind==VbaValue::Kind::Object) {
+                if(const auto* nested=dynamic_cast<const VbaCollection*>(entry.object.get())) {
+                    if(nested==this) throw error("Cyclic Collection lifetime is not implemented",3251);
+                    if(visited.insert(nested).second)
+                        for(const auto& child:nested->entries_) self(self,child.value,depth+1);
+                }
+            } else if(entry.kind==VbaValue::Kind::Array && visited.insert(entry.object.get()).second)
                 for(const auto& child:vbaArrayValues(entry)) self(self,child,depth+1);
         };
         check(check,value,0);
@@ -97,7 +101,7 @@ public:
         if(member=="add") {
             if(args.empty() || args.size()>4 || args[0].kind==VbaValue::Kind::Missing) throw error("Collection.Add arguments",450);
             requireMutable();
-            // Reject nested collections until cyclic object lifetime is implemented.
+            // Shared acyclic graphs are safe; reject a path back to this owner.
             checkItem(args[0]);
             const auto supplied=[&](std::size_t i) { return i<args.size() && args[i].kind!=VbaValue::Kind::Missing; };
             std::optional<std::string> itemKey;
