@@ -1000,3 +1000,6 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 
 - [x] CurrentData/Application.CurrentData expose real main-schema user tables and saved query catalogs through checked Count/Item/named lookup/For Each and readonly AccessObject metadata.
 - [x] CurrentData catalogs track background/readonly/closed native datasheet tabs and actual named query dialogs, retain independent held references and invalidate them on accepted project replacement.
+
+- [x] Explicit readonly normal-view DoCmd.OpenQuery opens real native/imported SELECT result tabs with checked named/Missing arguments, typed parameter prompts and no silent editable/action-query substitution.
+- [x] Native query tabs outlive their opener, retain actual CurrentData IsLoaded/window focus, reuse existing documents and close by named/default DoCmd.Close or Ctrl+W/Ctrl+F4.

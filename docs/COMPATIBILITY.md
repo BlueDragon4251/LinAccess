@@ -2066,3 +2066,20 @@ Full rebuilt desktop suite passes 48/48 (101.66 s), GUI-free core 1/1 (1.51 s),
 Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. Native CurrentData UI state and saved metadata included;
 no additional test targets.
+
+## Native readonly query documents (2026-11-03)
+
+DoCmd.OpenQuery with explicit acReadOnly/normal view opens actual materialized
+SELECT tabs from native/imported saved definitions. Real typed parameter prompts,
+Currency results, cancellation, document reuse and readonly flags are checked.
+Defaults retain acEdit and explicitly refuse unsupported editing; action/other
+views do not execute. Named/default query Close, Ctrl+F4 and actual CurrentData
+IsLoaded use independent root-owned tab lifetime after caller self-close.
+OPEN_QUERY_RUNTIME.md specifies the bounds; general query commands/updateability
+remain open. Targeted main-window 1/1 (3.35 s), no new targets.
+Theoretical checklist: 331 checked / 72 open scoped points.
+
+Full rebuilt desktop suite passes 48/48 (90.08 s), GUI-free core 1/1 (1.58 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. Actual parameterless Close targets the active readonly
+query document while preserving its calling form. No additional test targets.

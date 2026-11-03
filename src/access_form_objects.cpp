@@ -1140,6 +1140,7 @@ public:
         const auto key=text(name).toCaseFolded();
         using Signature=linaccess::VbaArgumentSignature;
         if(key=="opentable") return Signature{{"TableName","View","DataMode"},1};
+        if(key=="openquery") return Signature{{"QueryName","View","DataMode"},1};
         if(key=="openform") return Signature{{"FormName","View","FilterName","WhereCondition","DataMode","WindowMode","OpenArgs"},1};
         if(key=="openreport") return Signature{{"ReportName","View","FilterName","WhereCondition","WindowMode","OpenArgs"},1};
         if(key=="close") return Signature{{"ObjectType","ObjectName","Save"},0};
@@ -1159,6 +1160,30 @@ public:
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
         if (key=="domenuitem" || key=="runcommand" || key=="sendkeys" || key=="findrecord" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="minimize" || key=="restore" || key=="runsql" || key=="selectobject")
             return dispatchPreviewDocumentCommand(preview,key.toStdString(),args);
+        if(key=="openquery") {
+            if(args.empty() || args.size()>3 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"OpenQuery requires a query name and at most three arguments");
+            std::vector<linaccess::VbaValue> values;
+            for(const auto& argument:args) {
+                auto value=linaccess::scalarVbaValue(argument);
+                if(value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null OpenQuery argument");
+                values.push_back(std::move(value));
+            }
+            const auto optionalNumber=[&](std::size_t index,int fallback) {
+                return index>=values.size() || values[index].kind==linaccess::VbaValue::Kind::Missing ? fallback
+                    : static_cast<int>(linaccess::coerceVbaModuleValue(values[index],"long").number);
+            };
+            const auto queryName=text(values[0].asText()); const int view=optionalNumber(1,0),mode=optionalNumber(2,1);
+            QWidget* owner=nullptr;
+            for(auto* ancestor=preview.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+                if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+            QVariantMap result;
+            if(!owner || owner->metaObject()->indexOfMethod("openQueryDocument(QString,int,int)")<0
+                || !QMetaObject::invokeMethod(owner,"openQueryDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QString,queryName),Q_ARG(int,view),Q_ARG(int,mode)))
+                throw linaccess::VbaRuntimeError(3251,"Native query opening is unavailable");
+            if(linaccess::vbaExecutionStopRequested()) throw linaccess::VbaExecutionStopped{};
+            if(const int error=result.value("error").toInt()) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
+            preview.setProperty("la_explicit_table_context",true); return {};
+        }
         if(key=="opentable") {
             if(args.empty() || args.size()>3 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"OpenTable requires a table name and at most three arguments");
             std::vector<linaccess::VbaValue> values;
@@ -1252,14 +1277,14 @@ public:
         const int type=args.empty() || args[0].kind==linaccess::VbaValue::Kind::Empty ? -1 : number(args[0]);
         const auto objectName=args.size()>1 && args[1].kind!=linaccess::VbaValue::Kind::Empty ? std::optional<QString>(text(args[1].asText())) : std::nullopt;
         const int save=args.size()>2 ? number(args[2]) : 0;
-        if(type==0 || (type==-1 && (preview.hasActivated_ || preview.property("la_explicit_table_context").toBool()))) {
+        if(type==0 || type==1 || (type==-1 && (preview.hasActivated_ || preview.property("la_explicit_table_context").toBool()))) {
             QWidget* owner=nullptr;
             for(auto* ancestor=preview.parentWidget();ancestor;ancestor=ancestor->parentWidget())
                 if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
-            if(owner && owner->metaObject()->indexOfMethod("closeTableDocument(int,QString,int)")>=0) {
+            for(const auto* method:{"closeQueryDocument","closeTableDocument"}) if(owner && owner->metaObject()->indexOfMethod((QByteArray(method)+"(int,QString,int)").constData())>=0) {
                 QVariantMap result; const auto target=objectName.value_or(QString{});
-                if(!QMetaObject::invokeMethod(owner,"closeTableDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,type),Q_ARG(QString,target),Q_ARG(int,save)))
-                    throw linaccess::VbaRuntimeError(3251,"Native table close dispatch is unavailable");
+                if(!QMetaObject::invokeMethod(owner,method,Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,type),Q_ARG(QString,target),Q_ARG(int,save)))
+                    throw linaccess::VbaRuntimeError(3251,"Native data-document close dispatch is unavailable");
                 if(result.value("handled").toBool()) {
                     const int error=result.value("error").toInt();
                     if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
