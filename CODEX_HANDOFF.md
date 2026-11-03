@@ -557,3 +557,20 @@ Entwurfszusammenführung, Record-Append/Binär/Locale bleiben begrenzt/offen.
 Vollsuite 48/48 (97.38 s), GUI-freier Core 1/1 (1.63 s), Debian-Paketprüfung
 inklusive Build-ID/SQLite 3.54.1 sowie vier Originalfixture-Hashes bestanden.
 Dies schließt das vorherige SelectAllRecords-Inkrement ein.
+
+## Tabellen-Neuabfrage und Datensatz-Speichertasten (2026-11-03)
+
+DoCmd.Requery ohne ControlName und Umschalt+F9 laden echte SQL-Quelldaten aktiver
+Tabellen neu. Geprüfter aktueller Einzelentwurf wird vorher transaktional
+gespeichert, weitere/Insert-/Delete-Entwürfe bleiben mit 3251 geschützt. Danach
+erster Ergebnisdatensatz, bestehende Spalte/Sortierung bleiben; allgemeine
+Access-Positions-/Event-/Fehlerpriorität und benannte Controls offen. Umschalt+
+Return sowie Umschalt+Nummernblock-Enter nutzen echten Tabellen-Save auch aus
+dem Zell-Editor, inklusive Validierung und PK-/Spaltenerhalt. MainWindow 1/1
+(3.12 s), keine neuen Targets; GUI-freier Core unverändert 1/1 (1.63 s), nur Qt-
+Pfade geändert. Kanonisch docs/TABLE_DOCUMENT_RUNTIME.md / KEYBOARD_RUNTIME.md.
+Letzte Vollsuite/Paket-Quelle lokal 375bd82 / privat 89bbcb6: 48/48 (97.38 s),
+Debian-Paket und vier Originalfixture-Hashes bestanden.
+
+Bestehendes MainWindow/Layout-Paar 2/2 (17.72 s) bestanden, einschließlich
+gemeinsamem Formularhost-Requery und Tabellen-Speichertasten; keine neuen Targets.

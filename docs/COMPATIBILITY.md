@@ -1925,3 +1925,21 @@ Theoretical checklist: 312 checked / 72 open scoped points.
 Full rebuilt desktop suite passes 48/48 (97.38 s), GUI-free core 1/1 (1.63 s),
 Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. This includes the preceding SelectAllRecords increment.
+
+## Native table Requery and record Save keys (2026-11-03)
+
+Active-table DoCmd.Requery and Shift+F9 rerun actual SQL, including externally
+changed source rows. A sole current existing update uses checked Save first;
+unrelated drafts/insertions/deletions refuse 3251. The reloaded view starts at
+the first result row, retaining its field and sort. Named-control and general
+record-position/event/error-priority parity remain open. Shift+Return/keypad
+Enter now share native table Save, including active cell editors and actual
+SQL/primary-key/column restoration. Canonical scopes: TABLE_DOCUMENT_RUNTIME.md
+and KEYBOARD_RUNTIME.md. Existing main-window target passes 1/1 (3.12 s), no new
+targets. GUI-free core remains 1/1 (1.63 s); this increment changes only Qt paths.
+Last full suite/package source is local 375bd82 / private API 89bbcb6:
+48/48 (97.38 s), Debian checks and all four original fixture hashes passed.
+Theoretical checklist: 314 checked / 72 open scoped points.
+
+Existing main-window/layout pair passes 2/2 (17.72 s), covering the shared
+form-host Requery extension and table save shortcuts. No extra targets.

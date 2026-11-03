@@ -28,6 +28,7 @@ public:
     Q_INVOKABLE QVariantMap navigateTableDocument(const QString& name,int action,int offset,bool explicitTable);
     Q_INVOKABLE QVariantMap findTableRecord(const QVariantMap& request);
     Q_INVOKABLE QVariantMap tableKeyboardContext();
+    Q_INVOKABLE QVariantMap requeryTableDocument();
     Q_INVOKABLE int selectDatabaseObject(int objectType,const QString& name,bool activate);
 
 private:

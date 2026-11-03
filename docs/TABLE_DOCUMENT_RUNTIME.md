@@ -229,3 +229,21 @@ produces a draft retain the 2501 boundary. Missing text MIME now sets a fresh
 Successful paste changes only the manual-submit cache; normal Save reaches SQL.
 Record append, general paste-over-draft merging, editor-text RunCommand routing,
 binary MIME, locale masks and Access-wide Paste equivalence remain open.
+
+## Active table Requery (2026-11-03)
+
+DoCmd.Requery with no control name and Shift+F9 on an actual table page rerun
+the real SQL model query. Source changes and newly selected SQL rows are loaded
+again; the native view starts at its first result row and retains the active
+column. Readonly policy and existing sort remain attached to the same model.
+The active field is validated first. A sole changed existing current record
+with a primary key is saved through the transactional native Save path before
+reloading; unrelated drafts, insertions and deletions refuse 3251 without being
+discarded. Save failure retains its checked error and draft. Modal dialogs block
+2046. Caller Me stays with the originating form; initialization without an
+explicit table context keeps the existing form Requery path. Named-control
+requery on tables, general multirow draft handling and exact Access record/
+selection/error-priority equivalence remain open.
+
+Microsoft documents the no-name Requery/Shift+F9 relationship and source reload:
+https://learn.microsoft.com/en-us/office/vba/api/access.docmd.requery

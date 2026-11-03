@@ -690,7 +690,24 @@ public:
     void gotoLastRecord() override { gotoRecord(3); }
     void gotoNextRecord() override { gotoRecord(1); }
     void gotoNewRecord() override { gotoRecord(5); }
-    void requery() override { (void)makePreviewFormObject(commandDocument())->member("Requery",{}); }
+    void requery() override {
+        if(usesActiveTableContext()) {
+            QWidget* owner=nullptr;
+            for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+                if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+            if(owner && owner->metaObject()->indexOfMethod("requeryTableDocument()")>=0) {
+                QVariantMap result;
+                if(!QMetaObject::invokeMethod(owner,"requeryTableDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result)))
+                    throw linaccess::VbaRuntimeError(3251,"Native table Requery dispatch is unavailable");
+                if(result.value("handled").toBool()) {
+                    if(const int error=result.value("error").toInt())
+                        throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
+                    return;
+                }
+            }
+        }
+        (void)makePreviewFormObject(commandDocument())->member("Requery",{});
+    }
     void requeryNamedControl(std::string_view name) { commandDocument().requeryControl(name); }
     std::string memberControlName(std::string_view name) override {
         requireInstance();
