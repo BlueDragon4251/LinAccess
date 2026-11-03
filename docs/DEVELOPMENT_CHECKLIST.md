@@ -977,3 +977,7 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 
 - [x] Active-table DoCmd.Requery and Shift+F9 reload the actual SQL source, save a sole current update through checked transactions and protect unrelated drafts.
 - [x] Native table Shift+Return and Shift+keypad Enter save through active-editor validation and the transactional Save path without losing the current primary-key/field selection.
+
+- [x] Native table acCmdRecordsGoToNew creates a real insert draft after checked sole-current saving, including empty tables; existing insert/delete/unrelated drafts are protected.
+- [x] Native table acCmdDeleteRecord uses checked single-row deletion; shared button/Ctrl+Minus refuse multirow selections before mutation, with actual transactional DELETE on Save.
+- [x] Successful native INSERT captures actual generated SQLite primary keys inside the transaction and restores the saved keyed row/field after model reset without guessing IDs.

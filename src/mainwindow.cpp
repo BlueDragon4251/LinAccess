@@ -354,6 +354,10 @@ QVariantMap MainWindow::saveDataPage(QWidget* page,bool interactive) {
         return result;
     }
     if(!self || !model || !table) return tableCommandFailure(2501,"Tabellendokument wurde beim Speichern geschlossen.");
+    if(selected.isValid()) {
+        const auto insertedKey=model->submittedPrimaryKey(selected.row());
+        if(!insertedKey.isEmpty()) selectedKey=insertedKey;
+    }
     // Model submission/reset invalidates Qt indexes. Restore the same keyed
     // record rather than a row number that may now identify another row.
     if(!selectedKey.isEmpty()) {
@@ -384,12 +388,26 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         const int actions[]{1,0,2,3};
         return navigateTableDocument({},actions[command-65],1,false);
     }
-    if(command==50 || command==109 || command==190 || command==191 || command==179 || command==163 || command==164 || command==30 || command==341) {
+    if(command==28 || command==223 || command==50 || command==109 || command==190 || command==191 || command==179 || command==163 || command==164 || command==30 || command==341) {
         QPointer<linaccess::AccessTableView> table;
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
-        if(!table || !model || ((command!=30 && command!=341) && !table->currentIndex().isValid())) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
-        if(command==30 || command==341) {
+        if(!table || !model || ((command!=28 && command!=109 && command!=30 && command!=341) && !table->currentIndex().isValid())) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
+        if(command==28) {
+            const QPointer<MainWindow> self=this;
+            if(!table->finishEditing()) return tableModelFailure(model,2501);
+            if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während der Validierung geschlossen.");
+            if(model->isDirty()) {
+                if(!model->canSubmitCurrentRecordAlone(table->currentIndex().row()))
+                    return tableCommandFailure(3251,"Neuer Datensatz mit weiteren Tabellenentwürfen ist noch nicht implementiert.");
+                const auto saved=saveDataPage(page,false);
+                if(saved.value("error").toInt()) return saved;
+            }
+            if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während des Speicherns geschlossen.");
+            if(!table->insertRecord()) return tableModelFailure(model,2501);
+        } else if(command==223) {
+            if(!table->deleteCurrentRecord()) return tableModelFailure(model,2501);
+        } else if(command==30 || command==341) {
             if(!(command==30 ? table->openFindDialog() : table->repeatFind())) return tableModelFailure(model,2046);
         } else if(command==109) {
             if(!table->selectAllRecords()) return tableModelFailure(model,2501);

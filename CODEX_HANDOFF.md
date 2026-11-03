@@ -574,3 +574,22 @@ Debian-Paket und vier Originalfixture-Hashes bestanden.
 
 Bestehendes MainWindow/Layout-Paar 2/2 (17.72 s) bestanden, einschließlich
 gemeinsamem Formularhost-Requery und Tabellen-Speichertasten; keine neuen Targets.
+
+## Tabellen-Datensatzbefehle und echte Insert-Schlüssel (2026-11-03)
+
+RunCommand 28/223 verwendet echte Insert-/Delete-Entwürfe und transaktionales SQL
+beim Save. Mehrfach-Löschwahl vor Mutation abgelehnt, weitere Insert-Entwürfe
+geschützt, readonly 2448; SelectAllRecords benötigt nach Reset keine aktuelle
+Zelle mehr. SQLite-INSERT ermittelt innerhalb der Transaktion den tatsächlichen
+PK über unverdeckten Rowid-Alias/last_insert_rowid; erst nach Commit veröffentlicht,
+Save stellt echte Zeile/Spalte wieder her. Kein MAX/geschätzter Zähler.
+WITHOUT ROWID/alle Rowid-Aliase verdeckt: kein erfundenes Insert-Bookmark,
+SQL-Erfolg bleibt erhalten. Staged Tabellen-Delete ist keine Behauptung über
+sofortigen Access-Commit/Bestätigung/Events. Kanonisch TABLE_DOCUMENT_RUNTIME.md.
+Bestehendes MainWindow/Currency-Insert-Paar 2/2 (3.35 s), keine neuen Targets.
+
+Finale Vollsuite 48/48 (91.07 s), GUI-freier Core 1/1 (2.38 s), Debian-Prüfung
+inklusive Build-ID/SQLite 3.54.1 sowie vier Fixture-Hashes bestanden. Unterdrückter
+INSERT veröffentlicht keinen alten Schlüssel; erster Datensatz einer leeren
+Tabelle samt erzeugtem PK/Spaltenerhalt geprüft. Voriges Requery/Speichertasten-
+Inkrement eingeschlossen, keine neuen Testtargets.

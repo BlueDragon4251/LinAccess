@@ -339,6 +339,18 @@ End Sub
 Sub RequeryActiveTable()
 DoCmd.Requery
 End Sub
+Sub OpenRecordEditTable()
+DoCmd.OpenTable "command_record_edits"
+End Sub
+Sub AddTableRecord()
+DoCmd.RunCommand acCmdRecordsGoToNew
+End Sub
+Sub DeleteTableRecord()
+DoCmd.RunCommand acCmdDeleteRecord
+End Sub
+Sub CloseRecordEditTable()
+DoCmd.Close acTable,"command_record_edits"
+End Sub
 Sub CloseEditableTable()
 DoCmd.Close acTable,"command_edit",acSaveNo
 Me.Tag="table-closed"
@@ -362,6 +374,8 @@ End Sub
     assert(unchanged.exec("INSERT INTO command_edit VALUES(1,'initial')"));
     assert(unchanged.exec("CREATE TABLE command_typed_find(id INTEGER PRIMARY KEY,value REAL,money CURRENCY_REAL,stamp DATETIME,flag BOOLEAN,payload BLOB)"));
     assert(unchanged.exec("INSERT INTO command_typed_find VALUES(1,1.2345678901234567,0.1001,'2020-02-29 12:34:56',-1,x'0102'),(2,1.2345678901234565,0.1,'1899-12-30 06:00:00',NULL,x'0102'),(3,42,-0.0001,'2020-02-29 12:34:57',0,x'0102'),(4,NULL,NULL,NULL,0,x'0102')"));
+    assert(unchanged.exec("CREATE TABLE command_record_edits(id INTEGER PRIMARY KEY,value TEXT)"));
+    assert(unchanged.exec("INSERT INTO command_record_edits VALUES(1,'kept')"));
     assert(unchanged.exec("CREATE TABLE command_navigation(id INTEGER PRIMARY KEY,value TEXT CHECK(value!='blocked'),payload BLOB)"));
     assert(unchanged.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<300) INSERT INTO command_navigation SELECT x,'row-'||x,x'0102' FROM n"));
     action(window,"Aktualisieren")->trigger(); openArtifact(window,mixedId); QPointer<AccessFormPreview> mixed=document("tab_cycle_form"); assert(mixed);
@@ -408,6 +422,46 @@ End Sub
     assert(mixed->executeProcedure("SortTableDescending",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(readonlyModel->index(0,0).data().toInt()==2 && readonlyView->currentIndex().row()==1);
     assert(unchanged.exec("SELECT value,flag FROM command_readonly WHERE id=1") && unchanged.next() && unchanged.value(0).toDouble()==1.25 && unchanged.value(1).toInt()==-1); unchanged.finish();
+    assert(mixed->executeProcedure("AddTableRecord",selectArguments).errorNumber==2448 && !readonlyModel->isDirty());
+    readonlyView->clearSelection();
+    assert(mixed->executeProcedure("DeleteTableRecord",selectArguments).errorNumber==2448 && !readonlyModel->isDirty());
+    assert(mixed->executeProcedure("OpenRecordEditTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    auto* recordEditView=nativeTable(documentTabs->currentWidget());
+    auto* recordEditModel=qobject_cast<linaccess::AccessTableModel*>(recordEditView->model()); assert(recordEditModel);
+    recordEditView->sortByColumn(0,Qt::AscendingOrder);
+    assert(mixed->executeProcedure("AddTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditModel->rowCount()==2);
+    const int addedRow=recordEditView->currentIndex().row(); assert(addedRow==1);
+    assert(recordEditModel->setData(recordEditModel->index(addedRow,1),"new-record"));
+    assert(mixed->executeProcedure("AddTableRecord",selectArguments).errorNumber==3251 && recordEditModel->rowCount()==2);
+    assert(unchanged.exec("SELECT count(*) FROM command_record_edits") && unchanged.next() && unchanged.value(0).toInt()==1); unchanged.finish();
+    recordEditView->setCurrentIndex(recordEditModel->index(addedRow,1));
+    assert(mixed->executeProcedure("SaveActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(recordEditView->currentIndex().column()==1 && recordEditModel->index(recordEditView->currentIndex().row(),0).data().toInt()==2);
+    assert(unchanged.exec("SELECT id FROM command_record_edits WHERE value='new-record'") && unchanged.next() && unchanged.value(0).toInt()==2); unchanged.finish();
+    assert(mixed->executeProcedure("SelectAllTableRecords",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    recordEditView->selectionModel()->setCurrentIndex(recordEditModel->index(1,1),QItemSelectionModel::NoUpdate);
+    assert(mixed->executeProcedure("DeleteTableRecord",selectArguments).errorNumber==3251 && !recordEditModel->isDirty());
+    recordEditView->clearSelection();
+    recordEditView->setCurrentIndex(recordEditModel->index(1,1));
+    assert(mixed->executeProcedure("DeleteTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditModel->isDirty());
+    assert(unchanged.exec("SELECT count(*) FROM command_record_edits") && unchanged.next() && unchanged.value(0).toInt()==2); unchanged.finish();
+    assert(mixed->executeProcedure("SaveActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && !recordEditModel->isDirty());
+    assert(unchanged.exec("SELECT id,value FROM command_record_edits") && unchanged.next() && unchanged.value(0).toInt()==1 && unchanged.value(1).toString()=="kept" && !unchanged.next()); unchanged.finish();
+    assert(unchanged.exec("CREATE TRIGGER ignore_record_edit BEFORE INSERT ON command_record_edits WHEN NEW.value='ignored-insert' BEGIN SELECT RAISE(IGNORE); END"));
+    assert(mixed->executeProcedure("AddTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    const int ignoredRow=recordEditView->currentIndex().row();
+    assert(recordEditModel->setData(recordEditModel->index(ignoredRow,1),"ignored-insert"));
+    assert(mixed->executeProcedure("SaveActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(recordEditModel->submittedPrimaryKey(ignoredRow).isEmpty());
+    assert(unchanged.exec("SELECT count(*) FROM command_record_edits") && unchanged.next() && unchanged.value(0).toInt()==1); unchanged.finish();
+    assert(unchanged.exec("DELETE FROM command_record_edits"));
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditModel->rowCount()==0);
+    assert(mixed->executeProcedure("AddTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditModel->rowCount()==1);
+    recordEditView->setCurrentIndex(recordEditModel->index(0,1));
+    assert(recordEditModel->setData(recordEditModel->index(0,1),"first-record"));
+    assert(mixed->executeProcedure("SaveActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditView->currentIndex()==recordEditModel->index(0,1));
+    assert(unchanged.exec("SELECT value FROM command_record_edits") && unchanged.next() && unchanged.value(0).toString()=="first-record"); unchanged.finish();
+    assert(mixed->executeProcedure("CloseRecordEditTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(mixed->executeProcedure("OpenNavigationTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     auto* navigationView=nativeTable(documentTabs->currentWidget());
     auto* navigationModel=qobject_cast<linaccess::AccessTableModel*>(navigationView->model()); assert(navigationModel);
