@@ -265,3 +265,10 @@ key or Access event/error-priority equivalence.
 
 Table Shift+F9 now shares active-table DoCmd.Requery; see
 TABLE_DOCUMENT_RUNTIME.md for reload, draft and record-position boundaries.
+
+## Native datasheet clipboard key alternatives (2026-11-03)
+
+Ctrl+Insert shares the table grid's checked Ctrl+C TSV copy route, including
+readonly selection. Shift+Insert shares checked Ctrl+V rectangular paste, with
+typed preflight and no SQL submission. Actual QLineEdit cells keep Qt's native
+text shortcuts; no row/range Cut or full Access key equivalence is implied.

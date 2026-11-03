@@ -3945,3 +3945,22 @@ Full rebuilt desktop suite passes 48/48 (91.66 s), GUI-free core 1/1 (1.96 s),
 Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. This includes named/default acNewRec, complete source fetch
 and actual focused cell/readonly Find text paste. No additional test targets.
+
+## Focused editor commands and clipboard key alternatives (2026-11-03)
+
+Native table acCmdCopy/Cut (190/189) use actual owned QLineEdit selection,
+including Find queries on readonly sources. Selected invalid numeric text can
+be copied while SelectRecord/Save still reject its commit; missing selection
+returns 2046 without replacing the clipboard. acCmdUndo/Redo (292/199) use the
+real editor history, preserving buffered field validation/SQL boundaries.
+Masked/disabled/readonly text and missing history retain checked guards; grid
+Cut/Undo/Redo and general rich/multiline/form dispatch remain explicitly open.
+Ctrl+Insert/Shift+Insert now share checked grid Copy/Paste with Ctrl+C/Ctrl+V.
+Canonical scopes: TABLE_DOCUMENT_RUNTIME.md, KEYBOARD_RUNTIME.md. Existing
+main-window/Currency-field/previous-value trio passes 3/3 (4.25 s), GUI-free core
+1/1 (1.71 s), no new targets. Theoretical checklist: 323 checked / 72 open.
+
+Full rebuilt desktop suite passes 48/48 (93.40 s), GUI-free core 1/1 (1.71 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. No additional test targets; focused Copy/Cut/Undo/Redo and
+Ctrl+Insert/Shift+Insert retain the preceding real Qt/SQL regression boundaries.

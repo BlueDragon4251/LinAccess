@@ -986,3 +986,8 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native table insertion fetches all existing source batches within the explicit row limit before appending its draft; SQL remains unchanged until Save.
 
 - [x] Native table acCmdPaste resolves actual owned QLineEdit cell/Find focus, pastes into the real text buffer and preserves checked field/SQL boundaries, including readonly-source Find queries.
+
+- [x] Native acCmdCopy/acCmdCut use the actual owned cell/Find QLineEdit selection, preserve buffer/SQL boundaries and readonly-query editing, and protect missing selections/masked text/clipboard limits.
+- [x] Native table acCmdUndo/acCmdRedo share the focused QLineEdit history with actual shortcuts, preserving buffered field validation and explicit missing-history/readonly/grid boundaries.
+
+- [x] Native table grid Ctrl+Insert/Shift+Insert share checked readonly TSV copy and typed draft paste with Ctrl+C/Ctrl+V; text editors retain native Qt shortcuts.

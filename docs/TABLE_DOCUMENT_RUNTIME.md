@@ -310,3 +310,35 @@ boundary remains explicit. Parent ownership is checked across Qt dialog windows;
 other forms, projects and external applications are not fallback targets.
 General multiline/rich editor command routing and full Access equivalence remain
 open; the grid's checked TSV and dirty-draft rules remain unchanged.
+
+## Focused native Copy and Cut (2026-11-03)
+
+acCmdCopy/190 and acCmdCut/189 share actual owned QLineEdit focus resolution
+with Paste, including native cell editors and modeless Find. Copy transfers
+only selected text, Cut removes that selection from the editor buffer; normal
+field validation/Save still control model/SQL changes. A readonly data source
+does not make the independent Find query text readonly. No selection, hidden/
+disabled targets or masked echo modes refuse 2046; readonly text Cut refuses
+2448. Copy can read a selected readonly text field. The 4 MiB/NUL boundary is
+checked before replacing the clipboard or cutting text.
+
+Without a focused owned QLineEdit, Copy retains the checked grid TSV route;
+range Cut remains explicitly unsupported (3251) rather than deleting a row or
+clearing an arbitrary field. General multiline/rich/form command dispatch and
+Access-wide selection/clipboard/timing equivalence remain open.
+
+## Focused native text Undo/Redo (2026-11-03)
+
+acCmdUndo/292 and acCmdRedo/199 operate on the actual owned QLineEdit's native
+undo/redo stack, the same buffer used by Qt shortcuts. Missing history refuses
+2046, readonly text 2448; hidden/disabled targets are not receivers. Undo/Redo
+changes buffered text without prematurely validating the field or writing SQL.
+Grid-record/range undo and general rich/multiline/form dispatch remain explicit
+3251/open boundaries; no blanket Access undo semantics are claimed. The enum
+values are independently documented in Microsoft's AcCommand enumeration.
+
+Focused Copy likewise reads selected invalid numeric editor text without trying
+to commit it. SelectRecord/Save still reject that invalid field and retain it.
+Copy with no text selection raises 2046 and preserves the clipboard. The legacy
+validation regression now checks this distinction instead of requiring Copy
+itself to validate and close a text editor.

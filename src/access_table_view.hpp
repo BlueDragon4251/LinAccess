@@ -379,10 +379,11 @@ protected:
             }
             event->accept(); return;
         }
-        if(event->key()==Qt::Key_C && selectionModifiers==Qt::ControlModifier) {
+        if((event->key()==Qt::Key_C || event->key()==Qt::Key_Insert) && selectionModifiers==Qt::ControlModifier) {
             (void)copySelection(); event->accept(); return;
         }
-        if(event->key()==Qt::Key_V && selectionModifiers==Qt::ControlModifier) {
+        if((event->key()==Qt::Key_V && selectionModifiers==Qt::ControlModifier)
+            || (event->key()==Qt::Key_Insert && selectionModifiers==Qt::ShiftModifier)) {
             (void)pasteSelection(); event->accept(); return;
         }
         if((event->key()==Qt::Key_Space && (selectionModifiers==Qt::ShiftModifier || selectionModifiers==Qt::ControlModifier))

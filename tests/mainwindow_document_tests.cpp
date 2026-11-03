@@ -129,7 +129,11 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     assert(documentTabs->currentWidget()==secondPage && invalidDocumentEdit->hasFocus());
     firstEntry->trigger(); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && invalidDocumentEdit->hasFocus());
     QApplication::clipboard()->setText("invalid-editor-sentinel");
-    assert(window.dispatchTableCommand(190).value("error").toInt()==13);
+    invalidDocumentEdit->deselect();
+    assert(window.dispatchTableCommand(190).value("error").toInt()==2046 && QApplication::clipboard()->text()=="invalid-editor-sentinel");
+    invalidDocumentEdit->selectAll();
+    assert(window.dispatchTableCommand(190).value("error").toInt()==0 && QApplication::clipboard()->text()=="invalid number");
+    QApplication::clipboard()->setText("invalid-editor-sentinel");
     assert(window.dispatchTableCommand(50).value("error").toInt()==13);
     assert(QApplication::clipboard()->text()=="invalid-editor-sentinel" && invalidDocumentEdit->text()=="invalid number");
     const QPointer<QLineEdit> hiddenEditor=invalidDocumentEdit;
@@ -333,6 +337,15 @@ End Sub
 Sub CopyTableSelection()
 Application.RunCommand Command:=acCmdCopy
 End Sub
+Sub CutTableSelection()
+DoCmd.RunCommand acCmdCut
+End Sub
+Sub UndoTableText()
+DoCmd.RunCommand acCmdUndo
+End Sub
+Sub RedoTableText()
+Application.RunCommand acCmdRedo
+End Sub
 Sub PasteTableSelection()
 DoCmd.RunCommand acCmdPaste
 End Sub
@@ -417,6 +430,10 @@ End Sub
     assert(readonlyView->selectionModel()->selectedIndexes().size()==3 && readonlyView->currentIndex()==readonlyModel->index(readonlyRow,1));
     QApplication::clipboard()->setText("unchanged-sentinel");
     assert(mixed->executeProcedure("CopyTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(QApplication::clipboard()->text()=="1\t1.25\tTrue" && !readonlyModel->isDirty());
+    QApplication::setActiveWindow(&window); readonlyView->setFocus(); QApplication::processEvents();
+    QApplication::clipboard()->setText("insert-copy-sentinel");
+    QTest::keyClick(readonlyView,Qt::Key_Insert,Qt::ControlModifier);
     assert(QApplication::clipboard()->text()=="1\t1.25\tTrue" && !readonlyModel->isDirty());
     assert(mixed->executeProcedure("PasteTableSelection",selectArguments).errorNumber==2448 && !readonlyModel->isDirty());
     QTimer::singleShot(0,[] {
@@ -656,6 +673,10 @@ End Sub
     typedQuery->selectAll(); QApplication::clipboard()->setText("True");
     assert(mixed->executeProcedure("PasteTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(typedQuery->text()=="True" && !typedModel->isDirty());
+    typedQuery->selectAll();
+    assert(mixed->executeProcedure("CopyTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed && QApplication::clipboard()->text()=="True");
+    assert(mixed->executeProcedure("CutTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedQuery->text().isEmpty() && !typedModel->isDirty());
+
     typedFind->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!typedFind);
     assert(!typedModel->isDirty());
     assert(unchanged.exec("SELECT value,typeof(money),stamp,flag,hex(payload) FROM command_typed_find WHERE id=2") && unchanged.next() && unchanged.value(0).toDouble()==1.2345678901234565 && unchanged.value(1).toString()=="real" && unchanged.value(2).toString()=="1899-12-30 06:00:00" && unchanged.value(3).isNull() && unchanged.value(4).toString()=="0102"); unchanged.finish();
@@ -676,6 +697,10 @@ End Sub
     QApplication::clipboard()->setText("9");
     assert(mixed->executeProcedure("PasteTableSelection",selectArguments).errorNumber==2501 && typedModel->index(0,1).data(Qt::EditRole).toDouble()==2.5);
     typedModel->revertAll();
+    QApplication::setActiveWindow(&window); typedView->setCurrentIndex(typedModel->index(0,1)); typedView->setFocus(); QApplication::processEvents();
+    QApplication::clipboard()->setText("4.5\n6.75"); QTest::keyClick(typedView,Qt::Key_Insert,Qt::ShiftModifier);
+    assert(typedModel->isDirty() && typedModel->index(0,1).data(Qt::EditRole).toDouble()==4.5 && typedModel->index(1,1).data(Qt::EditRole).toDouble()==6.75);
+    typedModel->revertAll();
     assert(mixed->executeProcedure("CloseTypedFindTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     assert(mixed->executeProcedure("OpenEditableTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     const QPointer<QWidget> editablePage=documentTabs->currentWidget(); auto* editableView=nativeTable(editablePage);
@@ -692,6 +717,15 @@ End Sub
     QApplication::clipboard()->setText("-pasted");
     assert(mixed->executeProcedure("PasteTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(pastedEditor->text()=="initial-pasted" && editableModel->index(0,1).data(Qt::EditRole).toString()=="initial" && !editableModel->isDirty());
+    pastedEditor->setSelection(0,7);
+    assert(mixed->executeProcedure("CopyTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed && QApplication::clipboard()->text()=="initial" && pastedEditor->text()=="initial-pasted");
+    assert(mixed->executeProcedure("CutTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed && pastedEditor->text()=="-pasted" && !editableModel->isDirty());
+    assert(mixed->executeProcedure("PasteTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed && pastedEditor->text()=="initial-pasted");
+    assert(mixed->executeProcedure("UndoTableText",selectArguments).status==linaccess::VbaExecutionStatus::Completed && pastedEditor->text()=="-pasted" && !editableModel->isDirty());
+    assert(mixed->executeProcedure("RedoTableText",selectArguments).status==linaccess::VbaExecutionStatus::Completed && pastedEditor->text()=="initial-pasted" && !editableModel->isDirty());
+    QApplication::clipboard()->setText("no-selection-sentinel"); pastedEditor->deselect();
+    assert(mixed->executeProcedure("CopyTableSelection",selectArguments).errorNumber==2046 && QApplication::clipboard()->text()=="no-selection-sentinel");
+
     assert(editableView->finishEditing() && editableModel->index(0,1).data(Qt::EditRole).toString()=="initial-pasted" && editableModel->isDirty());
     editableModel->revertAll(); focusEditable();
     const auto keyFindResult=mixed->executeProcedure("FindTableByKeys",selectArguments);
