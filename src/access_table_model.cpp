@@ -199,6 +199,19 @@ bool AccessTableModel::setData(const QModelIndex& index,const QVariant& value,in
         return accepted;
     } catch(const VbaRuntimeError& error) { return reject(error.number); }
 }
+bool AccessTableModel::repeatPreviousValue(const QModelIndex& target) {
+    if(saving_ || changing_) return reject(2501);
+    if(editStrategy()!=OnManualSubmit) return reject(3251);
+    if(!target.isValid() || target.model()!=this || target.row()==0) return reject(5);
+    const auto source=index(target.row()-1,target.column());
+    if(!flags(target).testFlag(Qt::ItemIsEditable) || !flags(source).testFlag(Qt::ItemIsEditable)) return reject(2448);
+    try {
+        const auto raw=QSqlTableModel::data(source,Qt::EditRole);
+        // Checked textual conversion retains supported Currency precision and
+        // Date/Boolean types; preserve SQL NULL independently of empty text.
+        return setData(target,raw.isNull() ? QVariant{} : QVariant(clipboardText(source)),Qt::EditRole);
+    } catch(const VbaRuntimeError& error) { return reject(error.number); }
+}
 bool AccessTableModel::setDataBlock(const QModelIndex& first,const QVector<QVector<QString>>& values) {
     if(saving_ || changing_) return reject(2501);
     const QScopedValueRollback<bool> changing(changing_,true);

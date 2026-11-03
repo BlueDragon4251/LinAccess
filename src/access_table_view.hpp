@@ -149,6 +149,14 @@ public:
 protected:
     void keyPressEvent(QKeyEvent* event) override {
         const auto selectionModifiers=event->modifiers() & ~Qt::KeypadModifier;
+        if(event->key()==Qt::Key_Apostrophe && selectionModifiers==Qt::ControlModifier) {
+            if(auto* typed=qobject_cast<AccessTableModel*>(model());typed && finishEditing()) {
+                const auto target=currentIndex();
+                if(target.isValid() && target.row()>0 && !isRowHidden(target.row()-1) && !isColumnHidden(target.column()))
+                    (void)typed->repeatPreviousValue(target);
+            }
+            event->accept(); return;
+        }
         if(event->key()==Qt::Key_C && selectionModifiers==Qt::ControlModifier) {
             (void)copySelection(); event->accept(); return;
         }
