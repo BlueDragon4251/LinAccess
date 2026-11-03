@@ -390,17 +390,32 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         const int actions[]{1,0,2,3};
         return navigateTableDocument({},actions[command-65],1,false);
     }
-    if(command==28 || command==223 || command==50 || command==109 || command==190 || command==191 || command==179 || command==163 || command==164 || command==30 || command==341) {
+    if(command==28 || command==223 || command==50 || command==109 || command==189 || command==190 || command==191 || command==199 || command==292 || command==179 || command==163 || command==164 || command==30 || command==341) {
         QPointer<linaccess::AccessTableView> table;
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
         if(!table || !model) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
-        if(command==191) {
+        if(command==189 || command==190 || command==191 || command==199 || command==292) {
             QPointer<QLineEdit> editor=qobject_cast<QLineEdit*>(QApplication::focusWidget());
             QWidget* parent=editor.data();
             while(parent && parent!=table.data()) parent=parent->parentWidget();
             if(editor && parent) {
-                if(!editor->isEnabled() || editor->isReadOnly()) return tableCommandFailure(2448,"Das aktive Textfeld ist schreibgeschützt.");
+                if(!editor->isVisible() || !editor->isEnabled()) return tableCommandFailure(2046,"Kein verfügbares aktives Textfeld.");
+                if(command==199 || command==292) {
+                    if(editor->isReadOnly()) return tableCommandFailure(2448,"Das aktive Textfeld ist schreibgeschützt.");
+                    if(!(command==292 ? editor->isUndoAvailable() : editor->isRedoAvailable())) return tableCommandFailure(2046,"Kein entsprechender Textbearbeitungsschritt verfügbar.");
+                    if(command==292) editor->undo(); else editor->redo();
+                    return {{"handled",true},{"error",0}};
+                }
+                if(command==189 || command==190) {
+                    if(editor->echoMode()!=QLineEdit::Normal || !editor->hasSelectedText()) return tableCommandFailure(2046,"Kein kopierbarer Text ausgewählt.");
+                    if(command==189 && editor->isReadOnly()) return tableCommandFailure(2448,"Das aktive Textfeld ist schreibgeschützt.");
+                    const auto selected=editor->selectedText();
+                    if(selected.size()>4*1024*1024 || selected.contains(QChar(0))) return tableCommandFailure(3251,"Dieser Zwischenablageumfang wird noch nicht unterstützt.");
+                    if(command==189) editor->cut(); else editor->copy();
+                    return {{"handled",true},{"error",0}};
+                }
+                if(editor->isReadOnly()) return tableCommandFailure(2448,"Das aktive Textfeld ist schreibgeschützt.");
                 const auto* mime=QApplication::clipboard()->mimeData();
                 if(!mime || !mime->hasText()) return tableCommandFailure(2046,"Die Zwischenablage enthält keinen einfügbaren Text.");
                 const auto text=QApplication::clipboard()->text();
@@ -432,6 +447,8 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
             if(!table->copySelection()) return tableModelFailure(model,2501);
         } else if(command==191) {
             if(!table->pasteSelection()) return tableModelFailure(model,2046);
+        } else if(command==189 || command==199 || command==292) {
+            return tableCommandFailure(3251,"Dieser Bearbeitungsbefehl außerhalb eines aktiven Textfelds ist noch nicht implementiert.");
         } else if(command==179) {
             if(!table->zoomCurrentCell()) return tableModelFailure(model,2046);
         } else if(command==163 || command==164) {

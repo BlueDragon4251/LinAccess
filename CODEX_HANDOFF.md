@@ -621,3 +621,20 @@ Vollsuite 48/48 (91.66 s), GUI-freier Core 1/1 (1.96 s), Debian-Prüfung
 inklusive Build-ID/SQLite 3.54.1 und alle vier Originalfixture-Hashes bestanden.
 Benanntes/aktives acNewRec, vollständiges Nachladen und tatsächliches Zell-/
 Readonly-Find-Text-Paste eingeschlossen; keine neuen Testtargets.
+
+## Fokussierte Editorbefehle und Einfg-Tasten (2026-11-03)
+
+Tabellen-Copy/Cut 190/189 nutzen echte aktive QLineEdit-Auswahl, auch im Find-
+Dialog einer readonly Quelle. Ungültiger Zahlentext bleibt kopierbar, aber
+SelectRecord/Save lehnt seine Validierung weiter ab; fehlende Auswahl 2046 lässt
+Zwischenablage unverändert. Undo/Redo 292/199 verwenden den tatsächlichen
+Editorverlauf ohne vorzeitige Feld-/SQL-Übernahme. Maskierte/disabled/readonly
+Felder und fehlender Verlauf begrenzt; Grid-Cut/-Undo/-Redo sowie allgemeines
+Richtext/Multiline/Form-Routing bleiben offen. Strg+Einfg/Umschalt+Einfg teilen
+geprüftes Grid-Copy/Paste. Kanonisch TABLE_DOCUMENT_RUNTIME.md / KEYBOARD_RUNTIME.md.
+Bestehendes MainWindow/Currency-Feld/Vorwert-Trio 3/3 (4.25 s), GUI-freier Core
+1/1 (1.71 s), keine neuen Targets.
+
+Vollsuite 48/48 (93.40 s), GUI-freier Core 1/1 (1.71 s), Debian-Prüfung
+inklusive Build-ID/SQLite 3.54.1 und vier Originalfixture-Hashes bestanden.
+Fokussiertes Copy/Cut/Undo/Redo und Einfg-Aliase eingeschlossen, keine neuen Targets.
