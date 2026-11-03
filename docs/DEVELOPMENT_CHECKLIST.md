@@ -848,3 +848,6 @@ of complete Access parity. Existing broader open items remain open.
   preserving Date literals, named arguments and local VBA object precedence.
 - [x] Native DoEvents dispatch and Integer-zero result with retained document
   lifetime and nested Quit noncontinuation; full Windows message ordering open.
+
+- [x] Native VBA Timer wall-clock Single result, qualified/bare/parenthesized
+  calls and arity checks; Windows tick-resolution equivalence remains open.

@@ -16,6 +16,7 @@
 #include <optional>
 #include <limits>
 #include <cmath>
+#include <ctime>
 
 namespace {
 class TestSequence final : public linaccess::VbaObject {
@@ -465,6 +466,18 @@ void testRoundFunction() {
 void testCalendarFunctions() {
     using namespace linaccess; FakeForm host;
     const auto eval=[&](const std::string& source) { return evaluateVbaExpression(source,host,{}); };
+    const auto beforeClock=std::time(nullptr);
+    const auto timer=eval("VBA.Timer()");
+    const auto afterClock=std::time(nullptr);
+    assert(timer.kind==VbaValue::Kind::Number && timer.numericType==VbaValue::NumericType::Single && timer.number>=0 && timer.number<=86400);
+    const auto nearLocal=[&](std::time_t instant) {
+        std::tm local{}; assert(::localtime_r(&instant,&local));
+        const auto difference=std::abs(timer.number-(local.tm_hour*3600+local.tm_min*60+local.tm_sec));
+        return std::min(difference,std::abs(difference-86400))<2;
+    };
+    assert(nearLocal(beforeClock) || nearLocal(afterClock));
+    assert(eval("VarType(Timer)=vbSingle And VarType(Timer())=vbSingle").truthy());
+    int timerError=0; try { (void)eval("Timer(1)"); } catch(const VbaRuntimeError& error) { timerError=error.number; } assert(timerError==450);
     assert(eval("VarType(#2/29/2024#)=vbDate").truthy());
     assert(eval("CStr(#12/31/2003 12:34#)").asText()=="2003-12-31 12:34:00");
     assert(eval("DateDiff(\"d\",#2/28/2024#,#2024-03-01#)").asNumber()==2);

@@ -34,9 +34,15 @@ VbaValue stringLongResult(std::size_t value) {
     return VbaValue::longInteger(static_cast<std::int32_t>(value));
 }
 VbaValue clockValue(const std::string& word) {
-    const auto now=std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    const auto sampled=std::chrono::system_clock::now();
+    const auto seconds=std::chrono::floor<std::chrono::seconds>(sampled);
+    const auto now=std::chrono::system_clock::to_time_t(seconds);
     std::tm local{};
     if (!::localtime_r(&now,&local)) throw error("Systemdatum nicht verfügbar");
+    if(word=="timer") {
+        const auto fraction=std::chrono::duration<double>(sampled-seconds).count();
+        return VbaValue::single(static_cast<float>(local.tm_hour*3600+local.tm_min*60+local.tm_sec+fraction));
+    }
     std::ostringstream formatted;
     formatted.imbue(std::locale::classic());
     formatted<<std::put_time(&local,word=="now" ? "%Y-%m-%d %H:%M:%S" : word=="date" ? "%Y-%m-%d" : "%H:%M:%S");
@@ -635,7 +641,7 @@ private:
                 "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len",
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
-                "sqr","exp","log","sin","cos","tan","atn","date","time","now","dateadd","datediff","datepart",
+                "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
                 "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
                 "choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor"};
             if(!intrinsics.contains(word) && !word.starts_with("vb")) throw error("Qualified VBA member is not implemented",3251);
@@ -765,7 +771,7 @@ private:
             if(accessExpression_) throw error("DoEvents is unavailable in calculated expressions",3251);
             return VbaValue::integer(host_->doEvents());
         }
-        if ((word=="now" || word=="date" || word=="time") && !nextSymbol("("))
+        if ((word=="now" || word=="date" || word=="time" || word=="timer") && !nextSymbol("("))
             return host_ ? clockValue(word) : VbaValue{};
         if (accessExpression_ && (word=="sum" || word=="count") && take("(")) {
             const auto field=consume();
@@ -947,7 +953,7 @@ private:
                 return VbaValue::numeric(result);
             }
 
-            if (word == "now" || word == "date" || word == "time") {
+            if (word == "now" || word == "date" || word == "time" || word == "timer") {
                 if (!host_) return {};
                 if (!args.empty()) throw error("Clock function takes no arguments",450);
                 return clockValue(word);

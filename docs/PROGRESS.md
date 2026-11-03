@@ -3320,3 +3320,16 @@ Core/layout checks pass 2/2 (16.05 s), including a queued SQL insertion and
 nested Quit. GUI-free build/core passed before the final direct-call preflight
 correction (1.40 s); its repeat follows with the next clock increment. Existing
 CTest targets only; no full Windows message/reentrancy parity claim.
+
+
+## Native VBA Timer and grouped event/clock verification (2026-11-03)
+
+Timer/Timer()/VBA.Timer() now return actual local-midnight elapsed wall-clock
+seconds as Single, including fractions. Core compares the result with the actual
+local clock and checks type/arity. Windows tick-resolution and SQL Timer remain
+open; see DATE_RUNTIME.md.
+Rebuilt complete desktop suite passes 48/48 in one run (87.67 s), including the
+DoEvents preflight correction and nested Quit. GUI-free build/core passes 1/1
+(1.28 s). Debian package contents, permissions, matching Build-ID and pinned
+SQLite backend smoke checks pass. All four original SHA-256 checks pass.
+No new test target or new distribution-matrix/full Access parity claim.

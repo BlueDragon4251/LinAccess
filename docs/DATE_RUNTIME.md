@@ -65,3 +65,11 @@ Werte und SQL-Speicherung. Der letzte gemeinsame Stand a8d3061 bestand 48/48
 CTests, GUI-freien Build, Paket- und vier Originalfixture-Prüfungen. Nachfolgende
 Inkremente und ihre gezielten Ergebnisse stehen in PROGRESS.md. Es wurden keine
 zusätzlichen CTest-Ziele für diese Datumserweiterungen angelegt.
+
+
+VBA Timer, Timer() and VBA.Timer() read the actual Linux system clock and return
+Single seconds since local midnight, including a fractional second. The sample
+is shared for its whole/fractional components. Like a wall clock, it wraps at
+midnight and can change with system-clock adjustments; it is not a monotonic
+stopwatch. Windows tick-resolution equivalence and native SQL Timer translation
+are not claimed. Arguments are rejected with error 450.
