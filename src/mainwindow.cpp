@@ -812,7 +812,10 @@ void MainWindow::openDatabase(const QString& path) {
                            "Sie dürfen nicht als SQLite-Projekt geöffnet werden.");
         return;
     }
+    const auto projectPath=QFileInfo(path).absoluteFilePath();
     if (!AccessFormPreview::closeProjectDocuments(db_)) return;
+    setProperty("la_project_generation",QVariant::fromValue<qulonglong>(property("la_project_generation").toULongLong()+1));
+    setProperty("la_native_current_projects",QVariant{});
     while (tabs_->count()) {
         auto* widget = tabs_->widget(0);
         tabs_->removeTab(0);
@@ -820,7 +823,7 @@ void MainWindow::openDatabase(const QString& path) {
     }
     linaccess::resetVbaProjectState(db_);
     db_.close();
-    db_.setDatabaseName(path);
+    db_.setDatabaseName(projectPath);
     if (!db_.open()) {
         messageError(this, "SQLite: " + db_.lastError().text());
         return;
@@ -845,9 +848,9 @@ void MainWindow::openDatabase(const QString& path) {
         return;
     }
     linaccess::installAccessQueryViews(db_,true);
-    databasePath_ = path;
-    setWindowTitle("LinAccess — " + QFileInfo(path).fileName());
-    statusBar()->showMessage(path);
+    databasePath_ = projectPath;
+    setWindowTitle("LinAccess — " + QFileInfo(projectPath).fileName());
+    statusBar()->showMessage(projectPath);
     refreshExplorer();
     if(explorer_->hasFocus()) AccessFormPreview::activateDatabaseWindow(db_,this);
 }

@@ -991,3 +991,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native table acCmdUndo/acCmdRedo share the focused QLineEdit history with actual shortcuts, preserving buffered field validation and explicit missing-history/readonly/grid boundaries.
 
 - [x] Native table grid Ctrl+Insert/Shift+Insert share checked readonly TSV copy and typed draft paste with Ctrl+C/Ctrl+V; text editors retain native Qt shortcuts.
+
+- [x] Native CurrentProject/Application.CurrentProject expose real readonly Name/Path/FullName, per-connection identity and independent caller lifetime with checked project-generation invalidation and preserved user-name lookup.

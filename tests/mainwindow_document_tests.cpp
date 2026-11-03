@@ -997,7 +997,11 @@ int main(int argc,char** argv) {
         "Sub SelectQuery()\nDoCmd.SelectObject acQuery,\"source_query\",True\nEnd Sub\n"
         "Sub SelectEntry()\nDoCmd.SelectObject acForm,\"entry\",False\nEnd Sub\n"
         "Sub SelectReport()\nDoCmd.SelectObject acReport,\"report\",False\nEnd Sub\n"
-        "Sub ProjectKeysWhileRunning()\nSendKeys \"^o\",True\nMe.Tag=\"returned\"\nEnd Sub\n";
+        "Sub ProjectKeysWhileRunning()\nSendKeys \"^o\",True\nMe.Tag=\"returned\"\nEnd Sub\n"
+        "Sub ReadProjectMetadata()\nMe.Tag=CurrentProject.FullName\nEnd Sub\n"
+        "Sub ProjectIdentity()\nIf CurrentProject Is Application.CurrentProject Then Me.Tag=\"same-project\"\nEnd Sub\n"
+        "Sub RenameProjectMetadata()\nCurrentProject.Name=\"renamed.linaccess\"\nMe.Tag=\"renamed\"\nEnd Sub\n"
+        "Sub ShadowProjectMetadata()\nDim CurrentProject As String\nCurrentProject=\"local-project-name\"\nMe.Tag=CurrentProject\nEnd Sub\n";
     const int formId=artifact(db,"form","entry",form); artifact(db,"vba","Form_entry",code);
     const int queryId=artifact(db,"query","source_query","SELECT value FROM records");
     auto report=form; report.replace("Begin Form","Begin Report"); report.replace("OnLoad =\"[Event Procedure]\"\n",""); report.replace("OnUnload =\"[Event Procedure]\"\n","");
@@ -1017,6 +1021,27 @@ int main(int argc,char** argv) {
     QSqlQuery sql(db); assert(sql.exec("SELECT COUNT(*) FROM events WHERE kind='load'") && sql.next() && sql.value(0).toInt()==1); sql.finish();
     auto root=makePreviewFormObject(*entry); auto* editor=entry->findChild<QLineEdit*>("access-control-editor"); assert(editor);
     std::vector<linaccess::VbaValue> arguments;
+    auto projectMetadata=makePreviewApplicationObject(*entry)->member("CurrentProject",{}).object; assert(projectMetadata);
+    assert(projectMetadata->member("Name",{}).asText()=="first.linaccess" && projectMetadata->member("Path",{}).asText()==temporary.path().toStdString());
+    assert(entry->executeProcedure("ReadProjectMetadata",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("Tag",{}).asText()==first.toStdString());
+    assert(entry->executeProcedure("RenameProjectMetadata",arguments).errorNumber==438 && root->member("Tag",{}).asText()==first.toStdString() && QFileInfo::exists(first));
+    assert(entry->executeProcedure("ProjectIdentity",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("Tag",{}).asText()=="same-project");
+    assert(entry->executeProcedure("ShadowProjectMetadata",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("Tag",{}).asText()=="local-project-name");
+    {
+        const auto foreignFile=temporary.filePath("foreign.linaccess");
+        auto foreignDb=QSqlDatabase::addDatabase("QSQLITE","mainwindow-project-metadata-foreign"); foreignDb.setDatabaseName(foreignFile); assert(foreignDb.open());
+        std::shared_ptr<linaccess::VbaObject> foreignProject;
+        {
+            AccessFormPreview foreignPreview("foreign_metadata",QByteArray("Begin Form\nEnd\n"),{},foreignDb,&window);
+            foreignProject=makePreviewApplicationObject(foreignPreview)->member("CurrentProject",{}).object;
+            assert(foreignProject!=projectMetadata && foreignProject->member("FullName",{}).asText()==foreignFile.toStdString());
+            assert(makePreviewApplicationObject(*entry)->member("CurrentProject",{}).object==projectMetadata);
+        }
+        assert(foreignProject->member("FullName",{}).asText()==foreignFile.toStdString());
+        foreignDb.close(); bool closedProject=false;
+        try { (void)foreignProject->member("Name",{}); } catch(const linaccess::VbaRuntimeError& error) { closedProject=error.number==3420; }
+        assert(closedProject); foreignProject.reset(); foreignDb=QSqlDatabase{}; QSqlDatabase::removeDatabase("mainwindow-project-metadata-foreign");
+    }
     QApplication::setActiveWindow(entry); editor->setFocus(); root->assign("Tag",linaccess::VbaValue::string("block-project"));
     QTest::keyClick(editor,Qt::Key_O,Qt::ControlModifier); QTest::keyClick(editor,Qt::Key_N,Qt::ControlModifier);
     assert(editor->hasFocus() && !QApplication::activeModalWidget() && db.databaseName()==first);
@@ -1160,6 +1185,7 @@ int main(int argc,char** argv) {
     action(window,"Alle schließen")->trigger(); dispose(); assert(entry && entry->isVisible());
 
     QApplication::setActiveWindow(entry); editor->setFocus(); openProject(window,second,editor); assert(db.databaseName()==first && db.isOpen() && entry && entry->isVisible());
+    assert(projectMetadata->member("FullName",{}).asText()==first.toStdString());
     root->assign("Tag",linaccess::VbaValue::string(""));
     QApplication::setActiveWindow(entry); editor->setFocus(); QApplication::processEvents();
     bool retained=false;
@@ -1169,6 +1195,7 @@ int main(int argc,char** argv) {
     });
     const auto closed=entry->executeProcedure("CloseSelf",arguments); assert(closed.status==linaccess::VbaExecutionStatus::Completed && retained);
     dispose(); assert(!entry);
+    assert(projectMetadata->member("FullName",{}).asText()==first.toStdString());
     assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="second"); sql.finish();
     openArtifact(window,reportId); QPointer<AccessFormPreview> reportWindow=document("report"); assert(reportWindow && !reportWindow->isModal() && QApplication::activeModalWidget()==nullptr);
     assert(reportWindow->findChild<QLineEdit*>("access-control-editor")->isReadOnly()); action(window,"Alle schließen")->trigger(); dispose(); assert(!reportWindow && window.findChild<QTabWidget*>()->count()==0);
@@ -1181,7 +1208,18 @@ int main(int argc,char** argv) {
     selection=modalWindow->executeProcedure("SelectTable",arguments); assert(selection.status==linaccess::VbaExecutionStatus::Error && selection.errorNumber==2046 && QApplication::activeModalWidget()==modalWindow);
     assert(modalWindow->close()); dispose(); assert(!modalWindow && QApplication::activeModalWidget()==nullptr);
     openArtifact(window,cancelId); assert(!document("cancel") && QApplication::activeModalWidget()==nullptr);
+    openProject(window,first,explorer); // Same filename still starts a new project generation.
+    bool staleProject=false;
+    try { (void)projectMetadata->member("FullName",{}); } catch(const linaccess::VbaRuntimeError& error) { staleProject=error.number==3420; }
+    assert(staleProject);
+    openArtifact(window,formId); auto* reopenedEntry=document("entry"); assert(reopenedEntry);
+    auto reopenedProject=makePreviewApplicationObject(*reopenedEntry)->member("CurrentProject",{}).object;
+    assert(reopenedProject!=projectMetadata && reopenedProject->member("FullName",{}).asText()==first.toStdString());
+    assert(reopenedEntry->close()); dispose();
     openProject(window,second,explorer); assert(QSqlDatabase::database("linaccess-main").databaseName()==second);
+    staleProject=false;
+    try { (void)reopenedProject->member("FullName",{}); } catch(const linaccess::VbaRuntimeError& error) { staleProject=error.number==3420; }
+    assert(staleProject);
     const auto third=temporary.filePath("third.linaccess"); bool created=false;
     QTimer::singleShot(0,&window,[&] { auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog); created=true; dialog->selectFile(third); static_cast<QDialog*>(dialog)->accept(); });
     QTest::keyClick(explorer,Qt::Key_N,Qt::ControlModifier);

@@ -2011,3 +2011,21 @@ Full rebuilt desktop suite passes 48/48 (93.40 s), GUI-free core 1/1 (1.71 s),
 Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. No additional test targets; focused Copy/Cut/Undo/Redo and
 Ctrl+Insert/Shift+Insert retain the preceding real Qt/SQL regression boundaries.
+
+## Native CurrentProject file metadata (2026-11-03)
+
+CurrentProject/Application.CurrentProject read actual native filename, directory
+and full path with per-connection weak identity caching. Caller close preserves
+project references; closed connections and accepted replacement invalidate them,
+including same-file reopen, while cancelled Unload preserves them. Foreign
+preview connections remain separate. Readonly/unsupported properties, non-file
+metadata and user variable/function shadowing retain checked boundaries.
+CURRENT_PROJECT_RUNTIME.md specifies the native window scope; complete Access
+CurrentProject/COM/catalog APIs remain open. Existing core/main-window pair
+passes 2/2 (4.57 s), no new targets. Theoretical checklist: 324 checked / 72 open.
+
+Final rebuilt desktop suite passes 48/48 (92.20 s), GUI-free core 1/1 (1.56 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. The main window fixes the absolute project path before
+replacement; standalone relative filenames do not become guessed metadata.
+No additional test targets.

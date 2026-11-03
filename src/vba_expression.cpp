@@ -828,6 +828,12 @@ private:
         if (const auto constant=documentConstants.find(word);constant!=documentConstants.end()) return VbaValue::numeric(constant->second);
         if (word=="screen") return host_ ? host_->applicationObject()->member("Screen",{}) : VbaValue{};
         if (word=="docmd") return host_ ? host_->applicationObject()->member("DoCmd",{}) : VbaValue{};
+        if(word=="currentproject" && !nextSymbol("(")) {
+            if(const auto local=locals_.find(word);local!=locals_.end()) return local->second;
+            if(!host_) return {};
+            if(!accessExpression_) if(auto resolved=host_->resolveIdentifier(tok.value,true)) return *resolved;
+            return host_->applicationObject()->member("CurrentProject",{});
+        }
         if (word=="codecontextobject") return host_ ? VbaValue::reference(host_->currentForm()) : VbaValue{};
         if (word == "application") return host_ ? VbaValue::reference(host_->applicationObject()) : VbaValue{};
         if (word=="commandbars") {

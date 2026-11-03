@@ -25,6 +25,7 @@
 #include <QPointer>
 #include <QRegularExpression>
 #include <QWidget>
+#include <QFileInfo>
 #include <algorithm>
 #include <limits>
 
@@ -1267,6 +1268,39 @@ public:
         preview.closeOtherDocument(type,objectName,save); return {};
     }
 };
+class NativeCurrentProjectObject final : public linaccess::VbaObject {
+public:
+    NativeCurrentProjectObject(QSqlDatabase database,QObject* owner)
+        : database_(std::move(database)),identity_(database_.databaseName()),owner_(owner),hasOwner_(owner!=nullptr),
+          generation_(owner ? owner->property("la_project_generation").toULongLong() : 0) {}
+    std::string_view className() const override { return "CurrentProject"; }
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        check();
+        if(!args.empty()) throw linaccess::VbaRuntimeError(450,"CurrentProject property requires no arguments");
+        const auto key=text(name).toCaseFolded();
+        if(key!="name" && key!="path" && key!="fullname") throw linaccess::VbaRuntimeError(438,"CurrentProject member unsupported");
+        if(database_.driverName()!="QSQLITE" || identity_.isEmpty() || identity_==":memory:" || identity_.startsWith("file:",Qt::CaseInsensitive) || !QFileInfo(identity_).isAbsolute())
+            throw linaccess::VbaRuntimeError(3251,"CurrentProject file metadata requires a native file-backed project");
+        const QFileInfo file(identity_);
+        const auto result=key=="name" ? file.fileName() : key=="path" ? file.absolutePath() : file.absoluteFilePath();
+        return linaccess::VbaValue::string(result.toUtf8().toStdString());
+    }
+    void assign(std::string_view,const linaccess::VbaValue&) override {
+        check(); throw linaccess::VbaRuntimeError(438,"CurrentProject metadata is read-only");
+    }
+private:
+    void check() const {
+        if(!database_.isOpen() || database_.databaseName()!=identity_ || (hasOwner_ && (!owner_
+            || owner_->property("la_project_generation").toULongLong()!=generation_)))
+            throw linaccess::VbaRuntimeError(3420,"CurrentProject is closed or belongs to an earlier project generation");
+    }
+    QSqlDatabase database_;
+    QString identity_;
+    QPointer<QObject> owner_;
+    bool hasOwner_{};
+    qulonglong generation_{};
+};
+
 class PreviewApplicationObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewApplicationObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
@@ -1279,6 +1313,24 @@ public:
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
         if (key=="quit") return PreviewDoCmdObject(preview).member("Quit",args);
         if (key=="runcommand") return dispatchPreviewDocumentCommand(preview,"runcommand",args);
+        if(key=="currentproject") {
+            if(!args.empty()) throw linaccess::VbaRuntimeError(450,"CurrentProject requires no arguments");
+            QObject* owner=nullptr;
+            for(auto* ancestor=preview.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+                if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+            const auto connection=preview.db_.connectionName();
+            const auto identity=QString::number(static_cast<qlonglong>(connection.size()))+":"+connection+preview.db_.databaseName();
+            auto projects=owner ? owner->property("la_native_current_projects").toMap() : QVariantMap{};
+            auto project=projects.value(identity).value<std::weak_ptr<linaccess::VbaObject>>().lock();
+            if(!project) {
+                project=std::make_shared<NativeCurrentProjectObject>(preview.db_,owner);
+                if(owner) {
+                    projects.insert(identity,QVariant::fromValue(std::weak_ptr<linaccess::VbaObject>(project)));
+                    owner->setProperty("la_native_current_projects",projects);
+                }
+            }
+            return linaccess::VbaValue::reference(std::move(project));
+        }
         if (key=="eval") {
             if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"Eval requires one argument");
             if (args[0].kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Eval argument");

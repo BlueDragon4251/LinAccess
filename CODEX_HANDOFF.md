@@ -638,3 +638,22 @@ Bestehendes MainWindow/Currency-Feld/Vorwert-Trio 3/3 (4.25 s), GUI-freier Core
 Vollsuite 48/48 (93.40 s), GUI-freier Core 1/1 (1.71 s), Debian-Prüfung
 inklusive Build-ID/SQLite 3.54.1 und vier Originalfixture-Hashes bestanden.
 Fokussiertes Copy/Cut/Undo/Redo und Einfg-Aliase eingeschlossen, keine neuen Targets.
+
+## Native CurrentProject-Dateimetadaten (2026-11-03)
+
+CurrentProject und Application.CurrentProject liefern tatsächlichen nativen
+Dateinamen, absolutes Verzeichnis/Dateipfad als readonly Strings. Schwacher
+Identitätscache pro Verbindung/Datei und MainWindow-Generation; kein Halt des
+aufrufenden Formulars. Nach dessen Schließen bleibt Referenz gültig, geschlossene
+Verbindung/Owner oder Projektwechsel ergeben 3420, auch erneutes Öffnen derselben
+Datei. Abgebrochener Unload hält Generation/Referenz. Fremde Preview-Verbindungen
+unter gleichem Fenster werden getrennt. Memory/URI/andere Treiber keine erfundenen
+Dateipfade (3251), Schreiben/andere Member 438, Argumente 450. Benutzer-Lokalnamen
+und Funktionen namens CurrentProject bleiben auflösbar. Kanonisch
+docs/CURRENT_PROJECT_RUNTIME.md; komplette COM-/Katalog-APIs bleiben offen.
+Bestehendes Core/MainWindow-Paar 2/2 (4.57 s), keine neuen Testtargets.
+
+Finale Vollsuite 48/48 (92.20 s), GUI-freier Core 1/1 (1.56 s), Debian-Prüfung
+inklusive Build-ID/SQLite 3.54.1 und vier Originalfixture-Hashes bestanden.
+MainWindow hält absoluten Öffnungspfad fest; standalone relative Dateinamen
+ergeben keine geratenen Metadaten. Keine neuen Testtargets.
