@@ -3636,3 +3636,20 @@ real popup action dispatch into quoted TSV clipboard with dirty Paste disabled.
 Last full suite/package remains e15ff33 / API c381897, 48/48 (88.41 s). These
 Qt view increments are focused-verified, with the same existing 48 targets.
 Theoretical checklist: 281 checked / 70 open scoped points.
+
+
+## Real table documents in the native window ring (2026-11-03)
+
+Window menu and Ctrl+F6/Ctrl+Shift+F6 now include actual native table tabs between
+the database window and native forms/reports. Existing views are activated, with
+weak targets rechecked across native validation; source field errors block the
+switch, while valid row drafts remain unsubmitted. Mouse tab navigation is
+checked before hiding the old page; pure modifier keys do not close an editor.
+Native form/table mixed round trips, menu/table direction switches, unavailable
+field transitions and preceding numeric/NULL/clipboard behavior are covered in
+the existing targets. See WINDOW_CYCLE_RUNTIME.md for scope and remaining MDI/
+query/editor-window limitations.
+Full build and suite pass 48/48 (92.38 s), Debian payload/permissions/Build-ID/
+pinned SQLite checks and all four original fixture hashes pass. GUI-free core
+remains 1/1 (1.53 s), with subsequent Qt-only changes. Theoretical checklist:
+283 checked / 70 open scoped points, not complete Access 2003 parity.

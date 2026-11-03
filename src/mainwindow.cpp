@@ -55,6 +55,8 @@
 #include <QStatusBar>
 #include <QSplitter>
 #include <QTabWidget>
+#include <QTabBar>
+#include <QMouseEvent>
 #include <QTableView>
 #include <QTableWidget>
 #include <QTextBrowser>
@@ -162,7 +164,7 @@ private:
 };
 }
 
-MainWindow::~MainWindow() { linaccess::resetVbaProjectState(db_); }
+MainWindow::~MainWindow() { disconnect(tabs_,nullptr,this,nullptr); linaccess::resetVbaProjectState(db_); }
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("LinAccess — C++ / Qt 6");
@@ -177,6 +179,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     explorer_->setMinimumWidth(220);
     tabs_ = new QTabWidget(splitter);
     tabs_->setTabsClosable(true);
+    tabs_->installEventFilter(this); tabs_->tabBar()->installEventFilter(this);
+    connect(tabs_,&QTabWidget::currentChanged,this,[this] {
+        auto* focus=QApplication::focusWidget();
+        if(!tabs_->currentWidget()) activeDataPage_.clear();
+        else if(focus && (focus==tabs_ || tabs_->isAncestorOf(focus))) activeDataPage_=tabs_->currentWidget();
+    });
     splitter->addWidget(explorer_);
     splitter->addWidget(tabs_);
     splitter->setStretchFactor(1, 1);
@@ -237,15 +245,23 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(windowMenu,&QMenu::aboutToShow,this,[this,windowMenu] {
         for(auto* item:windowMenu->actions()) if(item->property("la_document_entry").toBool()) { windowMenu->removeAction(item); delete item; }
         const auto documents=AccessFormPreview::projectDocuments(db_);
-        if(documents.isEmpty()) return;
+        if(documents.isEmpty() && tabs_->count()==0) return;
         windowMenu->addSeparator()->setProperty("la_document_entry",true);
         int number=0;
+        for(int index=0;index<tabs_->count();++index) {
+            const QPointer<QWidget> page=tabs_->widget(index);
+            auto title=tabs_->tabText(index); title.replace('&',"&&"); ++number;
+            auto* item=windowMenu->addAction((number<10 ? "&" : "")+QString::number(number)+" "+title);
+            item->setProperty("la_document_entry",true); item->setProperty("la_tab_title",tabs_->tabText(index));
+            item->setCheckable(true); item->setChecked(!activePreviewDocument() && activeDataPage_==page);
+            connect(item,&QAction::triggered,this,[this,page] { if(page) (void)activateDataPage(page); });
+        }
         for(const auto& document:documents) {
             ++number;
             auto title=document->windowTitle(); title.replace('&',"&&");
             auto* item=windowMenu->addAction((number<10 ? "&" : "")+QString::number(number)+" "+title);
             item->setProperty("la_document_entry",true); item->setCheckable(true); item->setChecked(activePreviewDocument()==document);
-            connect(item,&QAction::triggered,this,[this,document] { if(document) (void)AccessFormPreview::activateProjectDocument(db_,this,document); });
+            connect(item,&QAction::triggered,this,[this,document] { if(document && finishActiveDataEditors()) (void)AccessFormPreview::activateProjectDocument(db_,this,document); });
         }
     });
     statusBar()->showMessage("Neue SQLite-Datenbank erstellen oder Access-Datei untersuchen");
@@ -277,10 +293,52 @@ int MainWindow::selectDatabaseObject(int objectType,const QString& name,bool act
     explorer_->setCurrentItem(target); explorer_->scrollToItem(target); return 0;
 }
 
-void MainWindow::focusDatabaseWindow() {
+bool MainWindow::finishActiveDataEditors() {
+    if(activePreviewDocument() || !activeDataPage_ || tabs_->indexOf(activeDataPage_)<0) return true;
+    for(auto* candidate:activeDataPage_->findChildren<QTableView*>())
+        if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate);view && !view->finishEditing()) return false;
+    return true;
+}
+
+bool MainWindow::activateDataPage(QWidget* page) {
+    const QPointer<QWidget> selected=page;
+    if(!db_.isOpen() || !selected || tabs_->indexOf(selected)<0 || QApplication::activeModalWidget() || !finishActiveDataEditors()) return false;
+    if(!AccessFormPreview::activateProjectDocument(db_,this,nullptr) || !selected || tabs_->indexOf(selected)<0) return false;
+    tabs_->setCurrentWidget(selected); activeDataPage_=selected;
+    if(isMinimized()) showNormal(); else show();
+    raise(); activateWindow();
+    for(auto* candidate:selected->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) {
+        view->setFocus(Qt::ShortcutFocusReason); return true;
+    }
+    selected->setFocus(Qt::ShortcutFocusReason); return true;
+}
+
+void MainWindow::cycleDocument(bool backwards) {
     if(!db_.isOpen() || QApplication::activeModalWidget()) return;
+    QVector<QPointer<QWidget>> pages;
+    for(int index=0;index<tabs_->count();++index) pages.append(tabs_->widget(index));
+    const auto documents=AccessFormPreview::projectDocuments(db_);
+    int current=0;
+    if(auto* native=activePreviewDocument()) {
+        const int index=documents.indexOf(native); if(index<0) return;
+        current=1+pages.size()+index;
+    } else if(activeDataPage_) {
+        const int index=pages.indexOf(activeDataPage_); if(index>=0) current=1+index;
+    }
+    const int count=1+pages.size()+documents.size();
+    const int target=(current+(backwards ? count-1 : 1))%count;
+    if(target>0 && target<=pages.size()) { if(pages[target-1]) (void)activateDataPage(pages[target-1]); return; }
+    if(!finishActiveDataEditors()) return;
+    if(target==0) { (void)AccessFormPreview::activateProjectDocument(db_,this,nullptr); return; }
+    const auto selected=documents[target-1-pages.size()];
+    if(selected) (void)AccessFormPreview::activateProjectDocument(db_,this,selected);
+}
+
+void MainWindow::focusDatabaseWindow() {
+    if(!db_.isOpen() || QApplication::activeModalWidget() || !finishActiveDataEditors()) return;
     AccessFormPreview::activateDatabaseWindow(db_,this);
     if(!AccessFormPreview::databaseWindowActive(this)) return; // A handler may activate another document.
+    activeDataPage_.clear();
     if(isMinimized()) showNormal(); else show();
     raise(); activateWindow(); explorer_->show();
     if(auto* splitter=qobject_cast<QSplitter*>(explorer_->parentWidget())) {
@@ -291,8 +349,42 @@ void MainWindow::focusDatabaseWindow() {
 }
 
 bool MainWindow::eventFilter(QObject* watched,QEvent* event) {
-    if(watched==explorer_ && event->type()==QEvent::FocusIn && db_.isOpen())
-        AccessFormPreview::activateDatabaseWindow(db_,this);
+    if(!tabs_) return QMainWindow::eventFilter(watched,event);
+    if(watched==tabs_->tabBar() && (event->type()==QEvent::MouseButtonPress || event->type()==QEvent::MouseButtonRelease)) {
+        const int index=tabs_->tabBar()->tabAt(static_cast<QMouseEvent*>(event)->position().toPoint());
+        if(index>=0) {
+            if(activePreviewDocument()) {
+                if(!AccessFormPreview::activateProjectDocument(db_,this,nullptr)) return true;
+            } else if(index!=tabs_->currentIndex() && !finishActiveDataEditors()) return true;
+        }
+    }
+    if((watched==tabs_ || watched==tabs_->tabBar()) && event->type()==QEvent::KeyPress) {
+        const auto* key=static_cast<QKeyEvent*>(event);
+        const auto modifiers=key->modifiers() & ~Qt::KeypadModifier;
+        const bool control=modifiers==Qt::ControlModifier || modifiers==(Qt::ControlModifier|Qt::ShiftModifier);
+        const bool changeTab=(control && (key->key()==Qt::Key_Tab || key->key()==Qt::Key_Backtab || key->key()==Qt::Key_PageUp || key->key()==Qt::Key_PageDown))
+            || (watched==tabs_->tabBar() && modifiers==Qt::NoModifier && (key->key()==Qt::Key_Left || key->key()==Qt::Key_Right || key->key()==Qt::Key_Home || key->key()==Qt::Key_End));
+        if(changeTab && !finishActiveDataEditors()) return true;
+    }
+    if(event->type()==QEvent::FocusIn && db_.isOpen()) {
+        const QPointer<MainWindow> self=this;
+        if(watched==explorer_) {
+            AccessFormPreview::activateDatabaseWindow(db_,this);
+            if(!self) return true;
+            if(AccessFormPreview::databaseWindowActive(this)) activeDataPage_.clear();
+        } else if(auto* widget=qobject_cast<QWidget*>(watched);widget && (dynamic_cast<linaccess::AccessTableView*>(widget)
+            || widget->property("la_cell_index").isValid() || widget==tabs_ || widget==tabs_->tabBar())) {
+            QPointer<QWidget> guarded=widget;
+            QPointer<QWidget> page=widget;
+            while(page && tabs_->indexOf(page)<0) page=page->parentWidget();
+            if(!page && (widget==tabs_ || widget==tabs_->tabBar())) page=tabs_->currentWidget();
+            if(page) {
+                AccessFormPreview::activateDatabaseWindow(db_,this);
+                if(!self || !guarded) return true;
+                if(page && tabs_->indexOf(page)>=0 && !activePreviewDocument()) activeDataPage_=page;
+            }
+        }
+    }
     return QMainWindow::eventFilter(watched,event);
 }
 
@@ -811,6 +903,7 @@ void MainWindow::showTable(const QString& name) {
     model->setEditStrategy(QSqlTableModel::OnManualSubmit);
     if(!model->select()) { messageError(this,model->lastError().text()); delete page; return; }
     auto* table = new linaccess::AccessTableView(page);
+    table->installEventFilter(this);
     table->setModel(model);
     table->setItemDelegate(new linaccess::AccessTableDelegate(table));
     table->setSortingEnabled(true);

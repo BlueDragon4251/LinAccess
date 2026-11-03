@@ -5,6 +5,7 @@
 #include <QMainWindow>
 #include <QSqlDatabase>
 #include <QStringList>
+#include <QPointer>
 
 class QTabWidget;
 class QTreeWidget;
@@ -18,6 +19,7 @@ public:
     ~MainWindow() override;
     bool allowProjectClose(const QString& connection) override;
     Q_INVOKABLE void focusDatabaseWindow();
+    Q_INVOKABLE void cycleDocument(bool backwards);
     Q_INVOKABLE int selectDatabaseObject(int objectType,const QString& name,bool activate);
 
 private:
@@ -28,6 +30,10 @@ private:
     QString databasePath_;
     QTreeWidget* explorer_{};
     QTabWidget* tabs_{};
+    QPointer<QWidget> activeDataPage_;
+
+    bool finishActiveDataEditors();
+    bool activateDataPage(QWidget* page);
 
     bool canCloseDataPage(QWidget* page);
     bool hasProject();

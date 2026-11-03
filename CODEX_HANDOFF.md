@@ -329,3 +329,21 @@ Fenster-/Fokuspolitik und externe Modell-Resets weiterhin offen.
 MainWindow-/Currency-Targets 2/2 (2.25 s), keine neuen Targets. Vollsuite/Paket
 zuletzt e15ff33 / privat c381897, 48/48 (88.41 s); diese View-Ergänzungen gezielt
 geprüft. Details docs/KEYBOARD_RUNTIME.md.
+
+
+## Echte Tabellen im Fenstermenü und Wechsel (2026-11-03)
+
+Fenstermenü und Strg+F6/Strg+Umschalt+F6 nutzen im Produktions-MainWindow eine
+Runde aus Datenbankfenster, offenen Tabellenseiten in Tab-Reihenfolge und
+sichtbaren nativen Formularen/Reports. Andere Hosts behalten den nativen Fallback.
+Tabellenfokus beendet den vorherigen aktiven Formular-Kontext; gültige Feldwerte
+gehen nur in den Manual-Submit-Cache, ungültige blockieren Menü-/Tasten-/Tabklick-
+Wechsel. Nur echte Tab-Navigationstasten werden vorab geprüft, keine reinen
+Modifier-Tasten (vorübergehender Editor-Absturz damit korrigiert).
+Native Form-/Modal-/BeforeUpdate-Pfade bleiben erhalten. Details und offene
+MDI-/Query-/Editor-/Windows-Politik in docs/WINDOW_CYCLE_RUNTIME.md.
+Gezielt 3/3 (16.31 s), Vollsuite 48/48 (92.38 s), Debian-Prüfungen und vier
+Originalfixture-Hashes bestanden. GUI-freier Core 1/1 (1.53 s), danach nur Qt.
+Vorherige Maus-/Kontextmenü-/Navigationsänderungen sind damit ebenfalls in
+der Vollsuite geprüft. Privates Stacktrace-Werkzeug liegt nur außerhalb des
+Repositories unter /workspace/linaccess-onboarding/private-backtrace.*.

@@ -1064,6 +1064,8 @@ void AccessFormPreview::cycleProjectDocuments(QSqlDatabase database,QWidget* pro
     const auto key=projectKey(database);
     if(closingProjects().contains(key)) return;
     if(current && (projectKey(current->db_)!=key || current->closed_ || current->closing_ || activeDocument()!=current)) return;
+    if(projectWindow->metaObject()->indexOfMethod("cycleDocument(bool)")>=0
+        && QMetaObject::invokeMethod(projectWindow,"cycleDocument",Qt::DirectConnection,Q_ARG(bool,backwards))) return;
     auto documents=projectDocuments(database);
     documents.prepend(nullptr); // Database window, then native documents in creation order.
     const int index=current ? documents.indexOf(current) : 0;

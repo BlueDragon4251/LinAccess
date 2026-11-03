@@ -921,3 +921,7 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 
 - [x] Rejected native table input survives normal editor-close/mouse field changes, restoring current cell and focus; Escape still discards explicitly.
 - [x] Native datasheet context menu dispatches checked Copy/Paste/Zoom and record/column/all selection with actual enabled-state guards.
+
+
+- [x] Native Window menu lists and activates the actual open table tabs alongside native Form/Report documents.
+- [x] Shared project Ctrl+F6/Shift+Ctrl+F6 ring includes real table pages, with source validation, modal guards, tab-click refusal and retained manual-submit drafts.

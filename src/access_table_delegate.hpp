@@ -5,6 +5,7 @@
 #include "native_cell_zoom.hpp"
 #include "access_table_model.hpp"
 #include <QTableView>
+#include <QMainWindow>
 #include <QPointer>
 #include <QLineEdit>
 #include <QPersistentModelIndex>
@@ -75,7 +76,11 @@ public:
     }
     QWidget* createEditor(QWidget* parent,const QStyleOptionViewItem& option,const QModelIndex& index) const override {
         auto* editor=QStyledItemDelegate::createEditor(parent,option,index);
-        if(editor) editor->setProperty("la_cell_index",QVariant::fromValue(QPersistentModelIndex(index)));
+        if(editor) {
+            editor->setProperty("la_cell_index",QVariant::fromValue(QPersistentModelIndex(index)));
+            for(auto* ancestor=parent;ancestor;ancestor=ancestor->parentWidget())
+                if(auto* owner=qobject_cast<QMainWindow*>(ancestor)) { editor->installEventFilter(owner); break; }
+        }
         if(auto* text=qobject_cast<QLineEdit*>(editor)) text->setMaxLength(std::numeric_limits<int>::max());
         return editor;
     }
