@@ -134,6 +134,36 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     assert(model->index(1,1).data().toString()==previous && model->isDirty());
     assert(query.exec("SELECT COUNT(DISTINCT value) FROM shortcut_records") && query.next() && query.value(0).toInt()==2); query.finish();
     model->revertAll(); table->setCurrentIndex(model->index(clockRow,1));
+    QTimer::singleShot(0,&window,[&] { auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom); zoom->accept(); });
+    const auto unchangedZoom=linaccess::nativeCellZoom(table,"line one\r\nline two",false);
+    assert(unchangedZoom && !unchangedZoom->modified && unchangedZoom->text=="line one\r\nline two");
+    QApplication::setActiveWindow(&window); table->setFocus();
+    const auto beforeZoom=model->index(clockRow,1).data().toString();
+    QTimer::singleShot(0,&window,[&] {
+        auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom && zoom->objectName()=="native-cell-zoom");
+        auto* text=zoom->findChild<QPlainTextEdit*>("native-cell-zoom-text"); assert(text && text->toPlainText()==beforeZoom); text->setPlainText("cancelled zoom"); zoom->reject();
+    });
+    QTest::keyClick(table,Qt::Key_F2,Qt::ShiftModifier); assert(!model->isDirty() && model->index(clockRow,1).data().toString()==beforeZoom);
+    QTimer::singleShot(0,&window,[&] {
+        auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom);
+        zoom->findChild<QPlainTextEdit*>("native-cell-zoom-text")->setPlainText("zoom line one\nzoom line two"); zoom->accept();
+    });
+    QTest::keyClick(table,Qt::Key_F2,Qt::ShiftModifier); assert(model->isDirty() && model->index(clockRow,1).data().toString()=="zoom line one\nzoom line two");
+    model->revertAll(); table->setCurrentIndex(model->index(clockRow,1)); QApplication::setActiveWindow(&window); table->setFocus();
+    QTest::keyClick(table,Qt::Key_F2); QApplication::processEvents();
+    auto* modeEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget());
+    assert(modeEditor && table->isAncestorOf(modeEditor));
+    assert(!modeEditor->hasSelectedText() && modeEditor->cursorPosition()==modeEditor->text().size());
+    QTimer::singleShot(0,&window,[&] {
+        auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom);
+        zoom->findChild<QPlainTextEdit*>("native-cell-zoom-text")->setPlainText("editor zoom"); zoom->accept();
+    });
+    QTest::keyClick(modeEditor,Qt::Key_F2,Qt::ShiftModifier); assert(modeEditor->text()=="editor zoom" && !model->isDirty());
+    QApplication::setActiveWindow(&window); modeEditor->setFocus();
+    QTest::keyClick(modeEditor,Qt::Key_F2); QApplication::processEvents(); assert(QApplication::focusWidget()==table && model->isDirty());
+    model->revertAll(); table->setCurrentIndex(model->index(clockRow,1));
+    QTest::keyClick(table,Qt::Key_Left); assert(table->currentIndex().column()==0);
+    table->setCurrentIndex(model->index(clockRow,1));
     const auto beforeDate=QDate::currentDate(); QTest::keyClick(table,Qt::Key_Semicolon,Qt::ControlModifier);
     auto* clockEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(clockEditor && table->isAncestorOf(clockEditor));
     const auto clockDate=clockEditor->text(); assert(clockDate==beforeDate.toString(Qt::ISODate) || clockDate==QDate::currentDate().toString(Qt::ISODate));

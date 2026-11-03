@@ -890,3 +890,12 @@ of complete Access parity. Existing broader open items remain open.
 - [ ] Clipboard record append, paste over existing drafts, typed binary MIME, regional masks and complete Access range undo.
 
 See DATASHEET_CLIPBOARD_RUNTIME.md for implementation bounds and verification.
+
+
+## Native datasheet field navigation and Zoom (2026-11-03)
+
+- [x] F2 switches native table cells between caret editing and field navigation, retaining invalid input until correction.
+- [x] Shift+F2 native multiline text Zoom for table cells and their text editors; Cancel, untouched NULL/line endings, readonly display and manual-submit drafts.
+
+See KEYBOARD_RUNTIME.md; native form Zoom and complete Access keyboard/display
+parity remain open. No complete product coverage follows from checklist counts.

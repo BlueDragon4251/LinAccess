@@ -178,6 +178,8 @@ End Sub
     view.setCurrentIndex(grid.index(0,1)); view.edit(grid.index(0,1)); QApplication::processEvents();
     auto* pending=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(pending); pending->setText("549755813888");
     assert(!view.finishEditing() && QApplication::focusWidget()==pending && pending->text()=="549755813888" && grid.data(grid.index(0,1)).toString()=="1.2346");
+    QTest::keyClick(pending,Qt::Key_F2); QApplication::processEvents();
+    assert(QApplication::focusWidget()==pending && pending->text()=="549755813888" && grid.data(grid.index(0,1)).toString()=="1.2346");
     QApplication::clipboard()->setText("unchanged-invalid-editor");
     assert(!view.copySelection() && QApplication::clipboard()->text()=="unchanged-invalid-editor" && QApplication::focusWidget()==pending);
     const auto guardedRows=grid.rowCount();

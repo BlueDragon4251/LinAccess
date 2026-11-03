@@ -2,6 +2,7 @@
 #include <QStyledItemDelegate>
 #include "native_clock_keys.hpp"
 #include "native_cell_editor.hpp"
+#include "native_cell_zoom.hpp"
 #include "access_table_model.hpp"
 #include <QTableView>
 #include <QPointer>
@@ -17,6 +18,28 @@ public:
     bool eventFilter(QObject* watched,QEvent* event) override {
         if(event->type()==QEvent::KeyPress) {
             const auto* key=static_cast<QKeyEvent*>(event);
+            if(key->key()==Qt::Key_F2 && key->modifiers()==Qt::ShiftModifier) {
+                QPointer<QLineEdit> editor=qobject_cast<QLineEdit*>(watched);
+                const auto target=watched->property("la_cell_index").value<QPersistentModelIndex>();
+                if(editor && target.isValid()) {
+                    const auto result=nativeCellZoom(editor,editor->text(),editor->isReadOnly() || !target.flags().testFlag(Qt::ItemIsEditable));
+                    if(editor && target.isValid() && result && (result->modified || result->text!=editor->text())) {
+                        editor->setText(result->text); editor->setModified(true);
+                    }
+                    return true;
+                }
+            }
+            if(key->key()==Qt::Key_F2 && key->modifiers()==Qt::NoModifier) {
+                QPointer<QWidget> editor=qobject_cast<QLineEdit*>(watched);
+                const auto target=watched->property("la_cell_index").value<QPersistentModelIndex>();
+                auto* typed=target.isValid() ? qobject_cast<AccessTableModel*>(const_cast<QAbstractItemModel*>(target.model())) : nullptr;
+                if(editor && typed) {
+                    const auto property=editor->metaObject()->userProperty();
+                    if(property.isValid() && (!nativeCellEditorChanged(editor,target) || typed->setData(target,property.read(editor),Qt::EditRole)))
+                        if(editor) emit closeEditor(editor,QAbstractItemDelegate::NoHint);
+                    return true;
+                }
+            }
             if(key->key()==Qt::Key_Apostrophe && (key->modifiers() & ~Qt::KeypadModifier)==Qt::ControlModifier) {
                 QPointer<QWidget> editor=qobject_cast<QLineEdit*>(watched);
                 const auto target=watched->property("la_cell_index").value<QPersistentModelIndex>();
