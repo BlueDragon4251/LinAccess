@@ -41,6 +41,18 @@ int main(int argc, char** argv) {
         assert(reversed.data(reversed.index(0,3)).toDouble()==1 && reversed.data(reversed.index(0,4)).toDouble()==0);
         assert(!query.exec("SELECT linaccess_jet_log(0)"));
         assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==5); query.finish();
+        assert(query.exec("CREATE TABLE native_dates(id INTEGER,stamp DATETIME)"));
+        assert(query.exec("INSERT INTO native_dates VALUES(1,'2024-02-28 12:00:00'),(2,NULL)"));
+        const auto arithmetic=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT stamp+1 AS following,stamp-CDate('2024-02-27 12:00:00') AS elapsed FROM native_dates ORDER BY id"),{});
+        assert(arithmetic.types.value("following")=="DATETIME" && arithmetic.types.value("elapsed")=="DOUBLE");
+        assert(arithmetic.rows[0][0].toString()=="2024-02-29 12:00:00" && arithmetic.rows[0][1].toDouble()==1);
+        assert(arithmetic.rows[1][0].isNull() && arithmetic.rows[1][1].isNull());
+        reversed.execute(db,"SELECT Abs((stamp-CDate('2024-02-27 12:00:00'))+1),Year(stamp+1) FROM native_dates WHERE id=1");
+        assert(reversed.data(reversed.index(0,0)).toDouble()==2 && reversed.data(reversed.index(0,1)).toInt()==2024);
+        const auto clocks=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT Date() AS d,Time() AS t,Now() AS n"),{});
+        assert(clocks.types.value("d")=="DATETIME" && clocks.types.value("t")=="DATETIME" && clocks.types.value("n")=="DATETIME");
+        reversed.execute(db,"SELECT 1+DateSerial(2024,2,28) AS following");
+        assert(reversed.data(reversed.index(0,0)).toString()=="2024-02-29 00:00:00");
         const auto datePlan=linaccess::compileAccessQuery("SELECT DateSerial(2024,3,0) AS d,TimeSerial(6,-15,0) AS t,CDate(2.5) AS converted");
         const auto dates=linaccess::executeAccessQueryPlan(db,datePlan,{});
         assert(dates.rows.size()==1 && dates.types.value("d")=="DATETIME" && dates.types.value("t")=="DATETIME");

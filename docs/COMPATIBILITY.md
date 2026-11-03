@@ -1259,3 +1259,23 @@ locale/Hijri or Windows edge parity is claimed.
 Core passes 1/1 (1.40 s); GUI-free build/test passes 1/1 (1.36 s); query-model/DAO
 pass 2/2 (0.34 s), affected desktop targets build. Existing targets only; no
 full-suite/package repeat after the prior grouped Date integration checks.
+
+
+## Typed Date SQL projection arithmetic (2026-11-03)
+
+Supported SELECT projections now route Date+number, number+Date, Date+Date and
+subtraction through registered native operators with bound scalar arguments.
+Date differences return DOUBLE metadata; supported Date results retain DATETIME.
+Simple physical-source fields and declared Date parameters participate in typing.
+Ordinary function arguments and parenthesized numeric expressions retain native
+Date child rewrites; Date()/Time()/Now() projections retain Date metadata too.
+Focused SQL/DAO tests cover leap-day progression on actual Date rows, differences,
+Null propagation, nesting and numeric-left addition: 2/2 (0.39 s).
+Rebuilt desktop suite passes 48/48 in one run (93.31 s). Debian package contents,
+permissions, Build-ID and pinned backend checks pass; all four original hashes
+pass and the repository is private. GUI-free runtime remains the checked
+constructor build (1/1, 1.36 s); this increment changes GUI/data-layer code only.
+Native Date arithmetic in filters/actions/CASE/CAST/aggregates, additional Date
+operators, complete dynamic promotion/comparison and Windows/OLE edge rules remain
+open. Negative fractional arithmetic and unsupported typed operators remain
+explicit boundaries; no complete Jet Date expression compatibility is claimed.

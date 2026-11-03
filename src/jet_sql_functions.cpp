@@ -185,12 +185,12 @@ public:
     void message(std::string_view) override { throw VbaRuntimeError(3251,"SQL scalar has no UI context"); }
     void saveRecord() override { throw VbaRuntimeError(3251,"SQL scalar cannot save forms"); }
 };
-void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view name,int minimum,int maximum) noexcept {
+void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view name,int minimum,int maximum,unsigned dateArguments=0) noexcept {
     auto& native=api();
     try {
         if(count<minimum || count>maximum) throw VbaRuntimeError(450,"Invalid scalar SQL arity");
         VbaVariables values;
-        std::string expression=std::string(name)+"(";
+        std::string expression=dateArguments ? std::string{} : std::string(name)+"(";
         for(int index=0;index<count;++index) {
             const auto name="_la_arg"+std::to_string(index);
             VbaValue value;
@@ -202,11 +202,13 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
                 if(!bytes && size) throw VbaRuntimeError(13,"SQL text conversion failed");
                 value=VbaValue::string(bytes ? std::string(reinterpret_cast<const char*>(bytes),size) : std::string{});
             } else if(type!=5) throw VbaRuntimeError(13,"Binary scalar string input is unsupported");
+            if(dateArguments && (dateArguments & (1U<<index)) && value.kind!=VbaValue::Kind::Null) value=vbaDateValue(value);
             values.emplace(name,std::move(value));
             if(index) expression+=',';
             expression+=name;
         }
-        expression+=')';
+        if(dateArguments) expression="_la_arg0"+std::string(name)+"_la_arg1";
+        else expression+=')';
         ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
         if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
@@ -238,6 +240,10 @@ void mathTan(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
 void mathAtn(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Atn",1,1); }
 void stringLCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"LCase",1,1); }
 void stringUCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"UCase",1,1); }
+template<unsigned mask,bool subtract>
+void calendarDateArithmetic(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    scalarBuiltinFunction(context,count,args,subtract ? "-" : "+",2,2,mask);
+}
 void calendarDateSerial(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"DateSerial",3,3); }
 void calendarTimeSerial(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"TimeSerial",3,3); }
 void calendarCDate(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"CDate",1,1); }
@@ -567,6 +573,12 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_atn",-1,&mathAtn,nullptr,nullptr);
     ensure("linaccess_jet_lcase",-1,&stringLCase,nullptr,nullptr);
     ensure("linaccess_jet_ucase",-1,&stringUCase,nullptr,nullptr);
+    ensure("linaccess_jet_date_add_1",-1,&calendarDateArithmetic<1,false>,nullptr,nullptr);
+    ensure("linaccess_jet_date_add_2",-1,&calendarDateArithmetic<2,false>,nullptr,nullptr);
+    ensure("linaccess_jet_date_add_3",-1,&calendarDateArithmetic<3,false>,nullptr,nullptr);
+    ensure("linaccess_jet_date_subtract_1",-1,&calendarDateArithmetic<1,true>,nullptr,nullptr);
+    ensure("linaccess_jet_date_subtract_2",-1,&calendarDateArithmetic<2,true>,nullptr,nullptr);
+    ensure("linaccess_jet_date_subtract_3",-1,&calendarDateArithmetic<3,true>,nullptr,nullptr);
     ensure("linaccess_jet_dateserial",-1,&calendarDateSerial,nullptr,nullptr);
     ensure("linaccess_jet_timeserial",-1,&calendarTimeSerial,nullptr,nullptr);
     ensure("linaccess_jet_cdate",-1,&calendarCDate,nullptr,nullptr);
