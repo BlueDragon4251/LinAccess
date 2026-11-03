@@ -324,6 +324,9 @@ End Sub
 Sub SelectTableRecord()
 DoCmd.RunCommand acCmdSelectRecord
 End Sub
+Sub SelectAllTableRecords()
+Application.RunCommand Command:=acCmdSelectAllRecords
+End Sub
 Sub CopyTableSelection()
 Application.RunCommand Command:=acCmdCopy
 End Sub
@@ -400,6 +403,11 @@ End Sub
     auto* navigationModel=qobject_cast<linaccess::AccessTableModel*>(navigationView->model()); assert(navigationModel);
     navigationView->sortByColumn(0,Qt::AscendingOrder);
     navigationView->setCurrentIndex(navigationModel->index(0,1));
+    assert(navigationModel->rowCount()<300); // Native SQL model still has another fetch batch.
+    assert(mixed->executeProcedure("SelectAllTableRecords",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(navigationModel->rowCount()==300 && navigationView->selectionModel()->selectedIndexes().size()==300*navigationModel->columnCount());
+    assert(navigationView->currentIndex()==navigationModel->index(0,1) && !navigationModel->isDirty());
+    navigationView->clearSelection();
     assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(navigationView->currentIndex().row()==299 && navigationView->currentIndex().column()==1 && navigationModel->rowCount()==300);
     assert(mixed->executeProcedure("PreviousTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==298);

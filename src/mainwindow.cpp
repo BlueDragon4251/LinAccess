@@ -384,13 +384,15 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         const int actions[]{1,0,2,3};
         return navigateTableDocument({},actions[command-65],1,false);
     }
-    if(command==50 || command==190 || command==179 || command==163 || command==164 || command==30 || command==341) {
+    if(command==50 || command==109 || command==190 || command==179 || command==163 || command==164 || command==30 || command==341) {
         QPointer<linaccess::AccessTableView> table;
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
         if(!table || !model || ((command!=30 && command!=341) && !table->currentIndex().isValid())) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
         if(command==30 || command==341) {
             if(!(command==30 ? table->openFindDialog() : table->repeatFind())) return tableModelFailure(model,2046);
+        } else if(command==109) {
+            if(!table->selectAllRecords()) return tableModelFailure(model,2501);
         } else if(command==190) {
             if(!table->copySelection()) return tableModelFailure(model,2501);
         } else if(command==179) {

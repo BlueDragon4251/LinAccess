@@ -3852,3 +3852,13 @@ Theoretical checklist: 310 checked / 72 open scoped points.
 Full rebuilt desktop suite passes 48/48 (93.79 s), GUI-free core 1/1 (2.27 s),
 Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. No additional test targets.
+
+## Native SelectAllRecords (2026-11-03)
+
+DoCmd/Application acCmdSelectAllRecords (109) shares checked Ctrl+A table selection,
+including full bounded SQL fetching and current-cell preservation without SQL
+submission. Existing main-window target passes 1/1 (3.02 s), GUI-free core 1/1
+(1.68 s); no new targets. Canonical scope: TABLE_DOCUMENT_RUNTIME.md.
+Last full suite/package source is local 934c26d / private API 914cc78:
+48/48 (93.79 s), Debian checks and all four fixture hashes passed.
+Theoretical checklist: 311 checked / 72 open scoped points.

@@ -533,3 +533,12 @@ originaler Kassen-Ereignislauf 1/1 (38.68 s), keine neuen Testtargets.
 
 Vollsuite 48/48 (93.79 s), GUI-freier Core 1/1 (2.27 s), Debian-Paketprüfung
 inklusive Build-ID/SQLite 3.54.1 sowie alle vier Originalfixture-Hashes bestanden.
+
+## Native SelectAllRecords (2026-11-03)
+
+DoCmd/Application acCmdSelectAllRecords (109) und Strg+A verwenden denselben
+geprüften Tabellenpfad mit vollständigem begrenztem SQL-Nachladen, Feldvalidierung
+und Erhalt der aktuellen Zelle ohne SQL-Speichern. Bestehender MainWindow-Test
+1/1 (3.02 s), GUI-freier Core 1/1 (1.68 s); keine neuen Targets. Kanonisch
+docs/TABLE_DOCUMENT_RUNTIME.md. Letzte Vollsuite/Paket-Quelle: lokal 934c26d /
+privat 914cc78, 48/48 (93.79 s), Paket und vier Fixture-Hashes bestanden.
