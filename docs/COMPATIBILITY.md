@@ -1943,3 +1943,22 @@ Theoretical checklist: 314 checked / 72 open scoped points.
 
 Existing main-window/layout pair passes 2/2 (17.72 s), covering the shared
 form-host Requery extension and table save shortcuts. No extra targets.
+
+## Native record commands and generated-key selection (2026-11-03)
+
+Table acCmdRecordsGoToNew/28 and acCmdDeleteRecord/223 use actual model insert/
+delete drafts with checked Save reaching transactional SQL. Multiple selected
+rows refuse before mutation; existing insertion drafts protect against another
+new-record command. Readonly mutation stays 2448. SelectAllRecords also works
+without a current cell after a model reset. Native SQLite INSERT captures actual
+primary keys inside the transaction and restores the saved row/field; unsupported
+rowid bookmark cases remain explicit. Staged table deletion is not an immediate
+Access commit/confirmation/event claim. Canonical scope: TABLE_DOCUMENT_RUNTIME.md.
+Existing main-window/Currency insert pair 2/2 (3.35 s), no new targets.
+Theoretical checklist: 317 checked / 72 open scoped points.
+
+Final rebuilt desktop suite passes 48/48 (91.07 s), GUI-free core 1/1 (2.38 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. Actual ignored INSERT publishes no stale key; first-row
+insertion into an empty table and retained generated-key/field selection pass.
+No additional test targets. This includes the preceding Requery/Save-key increment.

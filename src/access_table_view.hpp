@@ -167,7 +167,10 @@ public:
     }
     bool deleteCurrentRecord() {
         auto* typed=qobject_cast<AccessTableModel*>(model());
-        if(!typed || !currentIndex().isValid() || !finishEditing()) return false;
+        if(!typed || !currentIndex().isValid()) return false;
+        if(selectionModel()) for(const auto& selected:selectionModel()->selectedIndexes())
+            if(selected.row()!=currentIndex().row()) return refuse(3251,"Mehrere Datensätze gemeinsam zu löschen ist noch nicht implementiert.");
+        if(!finishEditing()) return false;
         const auto row=currentIndex().row(),column=currentIndex().column();
         if(!typed->removeRow(row)) return false;
         if(typed->rowCount()) setCurrentIndex(typed->index(qMin(row,typed->rowCount()-1),column));

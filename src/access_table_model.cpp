@@ -9,6 +9,7 @@
 #include <QSignalBlocker>
 #include <QScopedValueRollback>
 #include <QSqlQuery>
+#include <QSqlDriver>
 #include <algorithm>
 namespace linaccess {
 namespace {
@@ -46,7 +47,7 @@ bool AccessTableModel::refreshTypes() {
 }
 void AccessTableModel::setTable(const QString& table) {
     if(saving_) { (void)reject(2501); return; }
-    dirtyRows_.clear(); deletedRows_.clear(); QSqlTableModel::setTable(table); (void)refreshTypes();
+    dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear(); QSqlTableModel::setTable(table); (void)refreshTypes();
 }
 bool AccessTableModel::select() {
     if(saving_) return reject(2501);
@@ -56,7 +57,7 @@ bool AccessTableModel::select() {
 }
 void AccessTableModel::clear() {
     if(saving_) { (void)reject(2501); return; }
-    QSqlTableModel::clear(); dirtyRows_.clear(); deletedRows_.clear();
+    QSqlTableModel::clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
 }
 QVector<QPersistentModelIndex> AccessTableModel::rowAnchors(const QSet<int>& rows) const {
     QVector<QPersistentModelIndex> result; result.reserve(rows.size());
@@ -118,6 +119,7 @@ bool AccessTableModel::canSubmitCurrentRecordAlone(int row) const {
     return true;
 }
 bool AccessTableModel::submitTransactionally() {
+    submittedKeys_.clear();
     if(saving_ || changing_) return reject(2501);
     if(readOnly_) return reject(2448);
     if(editStrategy()!=OnManualSubmit) return reject(3251);
@@ -139,6 +141,7 @@ bool AccessTableModel::submitTransactionally() {
         pending.push_back({row,kind,std::move(values)});
     }
     if(pending.isEmpty()) return reject(3251);
+    QMap<int,QMap<QString,QVariant>> committedKeys;
     {
         const QScopedValueRollback<bool> saving(saving_,true);
         auto db=database();
@@ -147,9 +150,11 @@ bool AccessTableModel::submitTransactionally() {
             const bool accepted=item.kind==Pending::Insert ? insertRowIntoTable(item.values)
                 : item.kind==Pending::Delete ? deleteRowFromTable(item.row) : updateRowInTable(item.row,item.values);
             if(!accepted) { const auto problem=lastError(); db.rollback(); setLastError(problem); return false; }
+            if(item.kind==Pending::Insert && !insertedKey_.isEmpty()) committedKeys.insert(item.row,insertedKey_);
         }
         if(!db.commit()) { const auto problem=db.lastError(); db.rollback(); setLastError(problem); return false; }
     }
+    submittedKeys_=std::move(committedKeys);
     // No Qt cache entry is marked submitted before the database commit succeeds.
     // Once committed, retire the drafts even if metadata/query refresh fails:
     // otherwise retrying Save can execute an already committed INSERT again.
@@ -310,8 +315,34 @@ bool AccessTableModel::setDataBlock(const QModelIndex& first,const QVector<QVect
     return true;
 }
 bool AccessTableModel::insertRowIntoTable(const QSqlRecord& row) {
+    insertedKey_.clear();
     auto values=row;
     for(int i=0;i<values.count();++i) if(generated_.contains(values.fieldName(i).toCaseFolded())) values.setGenerated(i,false);
-    return QSqlTableModel::insertRowIntoTable(values);
+    if(!QSqlTableModel::insertRowIntoTable(values)) return false;
+    // Capture actual generated keys on this connection inside the transaction.
+    // SQLite restores last_insert_rowid after triggers; another connection
+    // cannot change it. Never infer a key from MAX(), row order or draft text.
+    const auto db=database(); const auto primary=primaryKey();
+    if(db.driverName()!=QStringLiteral("QSQLITE") || primary.isEmpty()) return true;
+    QString rowid;
+    for(const auto& candidate:{QStringLiteral("_rowid_"),QStringLiteral("rowid"),QStringLiteral("oid")}) {
+        bool shadowed=false;
+        for(int field=0;field<values.count();++field) if(values.fieldName(field).compare(candidate,Qt::CaseInsensitive)==0) { shadowed=true; break; }
+        if(!shadowed) { rowid=candidate; break; }
+    }
+    if(rowid.isEmpty()) return true;
+    QStringList fields;
+    for(int field=0;field<primary.count();++field) fields.push_back(db.driver()->escapeIdentifier(primary.fieldName(field),QSqlDriver::FieldName));
+    QSqlQuery inserted(db);
+    // Ignored inserts, WITHOUT ROWID tables and trigger-deleted rows yield no
+    // bookmark; successful writes must not become failures of optional UI state.
+    if(!inserted.exec("SELECT "+fields.join(',')+" FROM "+db.driver()->escapeIdentifier(tableName(),QSqlDriver::TableName)
+        +" WHERE "+db.driver()->escapeIdentifier(rowid,QSqlDriver::FieldName)+"=last_insert_rowid() AND changes()=1") || !inserted.next()) return true;
+    for(int field=0;field<primary.count();++field) {
+        const auto value=inserted.value(field);
+        if(value.isNull()) { insertedKey_.clear(); break; }
+        insertedKey_.insert(primary.fieldName(field),value);
+    }
+    return true;
 }
 }

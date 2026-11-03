@@ -247,3 +247,38 @@ selection/error-priority equivalence remain open.
 
 Microsoft documents the no-name Requery/Shift+F9 relationship and source reload:
 https://learn.microsoft.com/en-us/office/vba/api/access.docmd.requery
+
+## Native new/delete record commands (2026-11-03)
+
+DoCmd/Application.RunCommand acCmdRecordsGoToNew (28) creates a real model
+insert draft in the active native table. An active field is validated first;
+a sole dirty existing current record is saved through the checked transaction
+path before insertion. Existing insert/delete/unrelated drafts refuse 3251.
+An empty table can receive its first draft without a current cell.
+
+acCmdDeleteRecord (223) uses the native table's checked single-record deletion.
+Selections spanning more than the current row now refuse 3251 before validation
+or mutation, shared with the delete button and Ctrl+Minus. Readonly mutation
+retains 2448. Both native operations use the manual-submit cache: subsequent
+Save performs actual transactional INSERT/DELETE. This staged table behavior
+is explicit; immediate Access commit, confirmation/SetWarnings, deletion events,
+general multirecord deletion, addition-row UI and complete error/timing parity
+remain open. Source enum values are documented in Microsoft's AcCommand table.
+
+## Generated primary-key selection after Save (2026-11-03)
+
+Transactional native INSERT captures the actual persisted primary key from the
+inserted SQLite row on the same connection before commit, using an unshadowed
+rowid alias and last_insert_rowid(). Captured keys are published only after a
+successful commit, by original draft row. Save then restores the actual keyed
+record and its current column after Qt model reset, including generated keys.
+No MAX(), guessed row number or fabricated counter value is used. Failed writes
+publish no keys; existing rollback/retry and postcommit-refresh protections stay.
+WITHOUT ROWID tables or tables shadowing all rowid aliases have no captured
+insert bookmark; successful SQL is retained without inventing a selection key.
+This is native SQLite view-state handling, not general Jet bookmark parity.
+
+A captured insert bookmark additionally requires SQLite changes()=1. A BEFORE
+trigger that uses RAISE(IGNORE) cannot reuse a previous row's last-insert ID.
+The existing native integration target exercises actual ignored INSERT and
+queries the retained SQL rows independently.

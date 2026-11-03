@@ -16,6 +16,7 @@ public:
     bool insertRows(int row,int count,const QModelIndex& parent={}) override;
     bool removeRows(int row,int count,const QModelIndex& parent={}) override;
     bool submitTransactionally();
+    QMap<QString,QVariant> submittedPrimaryKey(int originalRow) const { return submittedKeys_.value(originalRow); }
     bool canSubmitCurrentRecordAlone(int row) const;
     bool rejectEdit(int number,const QString& message);
     bool isTextColumn(int column) const;
@@ -49,6 +50,8 @@ private:
     Qt::SortOrder sortOrder_{Qt::AscendingOrder};
     bool protectSort_{};
     QSet<int> dirtyRows_,deletedRows_;
+    QMap<QString,QVariant> insertedKey_;
+    QMap<int,QMap<QString,QVariant>> submittedKeys_;
     bool changing_{},saving_{},readOnly_{};
 };
 }
