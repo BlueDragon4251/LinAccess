@@ -2509,5 +2509,34 @@ End Sub
     const auto byteReturn=executeVbaProcedureWithArguments("Function Echo(ByVal value As Variant) As Variant\nEcho=value\nEnd Function","Echo",host,byteArguments);
     assert(byteReturn.status==VbaExecutionStatus::Completed && byteReturn.typedReturnValue->kind==VbaValue::Kind::ByteArray);
     assert(byteReturn.typedReturnValue->bytes==byteArguments[0].bytes && !byteReturn.returnValue);
+    const auto typedPreserve=executeVbaProcedure(R"VBA(Function PreserveStrings() As String
+Dim words As Variant
+Dim before As Variant
+words=Split("a b")
+before=words
+ReDim Preserve words(0 To 3)
+words(3)=23
+PreserveStrings=TypeName(words) & ":" & CStr(VarType(words)) & ":" & TypeName(words(2)) & ":" & Join(words,"|") & ":" & Join(before,"|")
+ReDim Preserve words(0 To 0)
+PreserveStrings=PreserveStrings & ":" & Join(words,"|")
+End Function
+)VBA","PreserveStrings",host);
+    assert(typedPreserve.status==VbaExecutionStatus::Completed && typedPreserve.returnValue=="String():8200:String:a|b||23:a|b:a");
+    const auto grownBytes=executeVbaProcedureWithArguments(R"VBA(Function GrowBytes(ByVal value As Variant) As Variant
+ReDim Preserve value(0 To 4)
+value(4)=254
+GrowBytes=value
+End Function
+)VBA","GrowBytes",host,byteArguments);
+    assert(grownBytes.status==VbaExecutionStatus::Completed && grownBytes.typedReturnValue->bytes==std::vector<unsigned char>({0,128,255,0,254}));
+    assert(byteArguments[0].bytes==std::vector<unsigned char>({0,128,255}));
+    const auto shortenedBytes=executeVbaProcedureWithArguments(R"VBA(Sub ShortenBytes(ByRef value As Variant)
+ReDim Preserve value(0 To 1)
+On Error Resume Next
+ReDim Preserve value(1 To 3)
+Me!ByteLowerError=Err.Number
+End Sub
+)VBA","ShortenBytes",host,byteArguments);
+    assert(shortenedBytes.status==VbaExecutionStatus::Completed && byteArguments[0].bytes==std::vector<unsigned char>({0,128}) && host.fields["ByteLowerError"]=="9");
     std::cout << "Core tests passed\n";
 }

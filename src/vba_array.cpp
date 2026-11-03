@@ -49,20 +49,30 @@ int vbaArrayType(const VbaValue& value) {
 }
 std::vector<VbaValue> vbaArrayValues(const VbaValue& value) { return storage(value).values; }
 VbaValue resizeVbaArray(const VbaValue& value,int lowerBound,int upperBound,bool preserve) {
-    if(value.kind==VbaValue::Kind::ByteArray) throw VbaRuntimeError(3251,"ReDim of Byte arrays is not implemented");
-    if(value.kind==VbaValue::Kind::Array && storage(value).strings) throw VbaRuntimeError(3251,"ReDim of String arrays is not implemented");
+    const bool bytes=value.kind==VbaValue::Kind::ByteArray;
+    const bool strings=value.kind==VbaValue::Kind::Array && storage(value).strings;
+    if((bytes || strings) && !preserve) throw VbaRuntimeError(3251,"Non-Preserve typed array resize is not implemented");
+    if(bytes && lowerBound!=0) throw VbaRuntimeError(9,"Preserve cannot change the Byte array lower bound");
     const auto count=static_cast<std::int64_t>(upperBound)-lowerBound+1;
     if(count<=0) throw VbaRuntimeError(9,"Invalid array bounds");
     // Bound native allocation until interpreter-wide memory accounting exists.
     if(count>1000000) throw VbaRuntimeError(3251,"Array allocation exceeds the supported runtime limit");
+    if(bytes) {
+        auto result=value.bytes; result.resize(static_cast<std::size_t>(count),0);
+        return VbaValue::byteArray(std::move(result));
+    }
     if(preserve && value.kind!=VbaValue::Kind::Empty && value.kind!=VbaValue::Kind::Array)
         throw VbaRuntimeError(13,"Preserve requires an array or uninitialized Variant");
     if(preserve && value.kind==VbaValue::Kind::Array && storage(value).lower!=lowerBound)
         throw VbaRuntimeError(9,"Preserve cannot change the lower bound");
-    std::vector<VbaValue> values(static_cast<std::size_t>(count),VbaValue::empty());
+    std::vector<VbaValue> values(static_cast<std::size_t>(count),strings ? VbaValue::string("") : VbaValue::empty());
     if(preserve && value.kind==VbaValue::Kind::Array) {
         const auto& previous=storage(value).values;
         std::copy_n(previous.begin(),std::min(previous.size(),values.size()),values.begin());
+    }
+    if(strings) {
+        VbaValue result; result.kind=VbaValue::Kind::Array;
+        result.object=std::make_shared<ArrayStorage>(std::move(values),lowerBound,true); return result;
     }
     return makeVbaArray(std::move(values),lowerBound);
 }

@@ -2865,3 +2865,15 @@ and dao_execution pass (0.31 s). No new target/full-suite/package repeat for
 this increment. TableDef field reordering/persistent ordinal gaps and full DAO
 metadata remain open.
 Reference: https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-ordinalposition-property-dao
+
+## Preserve existing native String/Byte arrays (2026-11-03)
+
+ReDim Preserve now grows/shrinks existing typed String/Byte arrays held by Variant
+variables, retaining subtype/prefix and filling new cells with empty String or
+zero Byte. Lower-bound checks, copy/ByVal independence, supported ByRef writeback,
+iterator protection and the one-million-element limit remain explicit. Non-
+Preserve typed resizing, typed array declarations, Byte Erase and multidimensional
+arrays remain open. Existing core procedures verify native typed return data,
+copy isolation, growth/shrink/defaults and a rejected Byte lower-bound change.
+Desktop build/core test pass 1/1 (1.60 s), existing DAO target passes (0.45 s),
+and GUI-free build/test passes 1/1 (1.33 s). No new target/full-suite/package repeat.

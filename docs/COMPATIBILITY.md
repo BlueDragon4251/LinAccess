@@ -1013,3 +1013,8 @@ Windows no-current/unbound/view edge behavior remains outside the verified scope
 Native Recordset Field.OrdinalPosition exposes checked Integer metadata in actual
 field/projection order, read-only with closed-owner protection. TableDef reorder
 writes/persistent ordinal gaps and full DAO metadata semantics remain open.
+
+ReDim Preserve now supports existing native String/Byte arrays held by Variant,
+retaining typed values and checked bounds with correct empty String/zero Byte
+new cells. Non-Preserve typed resize, typed declarations, Byte Erase and full
+array/COM semantics remain open; see VARIANT_ARRAY_RUNTIME.md.

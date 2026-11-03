@@ -26,8 +26,8 @@ copies retain their previous elements and bounds. `Erase a` releases this Varian
 array and restores Empty; a subsequent ReDim Preserve can allocate it again.
 
 This path targets variables declared As Variant (or implicit Variant variables).
-Typed array declarations, Byte-array resize/erase and multiple declarations per
-statement remain unsupported. An explicit 1,000,000-element allocation limit
+Typed array declarations, non-Preserve String/Byte resizing, Byte-array Erase
+and multiple declarations per statement remain unsupported. An explicit 1,000,000-element allocation limit
 fails with 3251; this limit is a current implementation boundary, not Access parity.
 
 ## Remaining boundaries
@@ -48,7 +48,11 @@ one-dimensional String/Variant arrays and validates UTF-8; Null elements fail 94
 `Filter` selects/excludes text elements and returns a zero-based String array.
 Non-text Filter elements currently fail explicitly with 3251. String element
 replacement applies checked string conversion and retains array type/value-copy
-semantics. String-array ReDim remains explicitly unsupported (3251).
+semantics. ReDim Preserve now resizes existing String/Byte arrays held by Variant
+variables, retaining type and prefix, defaulting new String cells to empty text
+and Byte cells to zero. Lower bounds cannot change (Byte remains zero-based).
+Value copies/ByVal inputs remain independent, while supported ByRef Variant
+writeback receives the resized value. Non-Preserve typed resizing remains 3251.
 
 Array For Each supports named local/module variables and direct Array/Split/Filter
 results, with a Variant control variable. Named sources expose later element
