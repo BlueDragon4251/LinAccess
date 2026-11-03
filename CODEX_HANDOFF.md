@@ -364,3 +364,19 @@ Formular nach Tabellenaktivierung behaupten.
 MainWindow/Layout 2/2 (15.56 s), keine neuen Targets. Vollsuite/Paket zuletzt
 671d997 / privat fea77b0, 48/48 (92.38 s). Diese UI/Runtime-Ergänzung gezielt
 geprüft. Details docs/DATABASE_WINDOW_RUNTIME.md und WINDOW_CYCLE_RUNTIME.md.
+
+
+## Natives OpenTable / schreibgeschützte Tabellen (2026-11-03)
+
+DoCmd.OpenTable öffnet echte Projekttabellen als normales Datenblatt mit
+Standard/acEdit oder acReadOnly. Modellseitige Sperren verhindern Zell-, Checkbox-,
+Insert-/Delete-/Paste-/Submit-Schreibzugriffe im Readonly-View. Vorhandene dirty
+Entwürfe können nicht durch einen Policywechsel verworfen werden. Native
+Objektargumente unterstützen benannte/ausgelassene Positionen; Missing ist ein
+Default, explizites Empty wird für Enums zu 0 und nicht zum Edit-Default.
+Design/Preview/acAdd und widersprechender Modus eines bereits offenen Views
+bleiben 3251. Readonly ist View-Politik, keine globale DAO-/Dateisperre. Allgemeine
+Tabellen-DoCmd-Befehle und volle Access-Fehler-/Fensterparität weiterhin offen.
+Kanonische Spezifikation: docs/TABLE_DOCUMENT_RUNTIME.md (inkl. Access-2003-Referenz).
+Vollsuite 48/48 (92.13 s), GUI-freier Core 1/1 (1.68 s), Debian-Prüfungen und
+vier Originalfixture-Hashes bestanden. Keine neuen Testtargets.

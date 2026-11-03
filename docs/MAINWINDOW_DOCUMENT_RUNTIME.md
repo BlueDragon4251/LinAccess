@@ -89,3 +89,8 @@ still refers to the caller and closing that caller preserves the table page.
 Existing main-window/layout targets pass 2/2 (15.56 s). Last full suite/package
 remains 671d997 / private API fea77b0, 48/48 (92.38 s); this UI/runtime increment
 is focused-verified. Theoretical checklist: 285 checked / 70 open scoped points.
+
+
+Native OpenTable ordinary/read-only datasheets are now implemented with checked
+argument binding and model mutation guards. See TABLE_DOCUMENT_RUNTIME.md for
+verification and the remaining append/design/preview/general-command limits.

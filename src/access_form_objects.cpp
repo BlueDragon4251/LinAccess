@@ -4,6 +4,7 @@
 #include "dao_database.hpp"
 #include <QThread>
 #include "access_form_preview.hpp"
+#include <QMainWindow>
 #include "vba_qt_value.hpp"
 #include <QApplication>
 #include <QAbstractButton>
@@ -1135,6 +1136,7 @@ public:
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=text(name).toCaseFolded();
         using Signature=linaccess::VbaArgumentSignature;
+        if(key=="opentable") return Signature{{"TableName","View","DataMode"},1};
         if(key=="openform") return Signature{{"FormName","View","FilterName","WhereCondition","DataMode","WindowMode","OpenArgs"},1};
         if(key=="openreport") return Signature{{"ReportName","View","FilterName","WhereCondition","WindowMode","OpenArgs"},1};
         if(key=="close") return Signature{{"ObjectType","ObjectName","Save"},0};
@@ -1152,6 +1154,29 @@ public:
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
         if (key=="domenuitem" || key=="runcommand" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="minimize" || key=="restore" || key=="runsql" || key=="selectobject")
             return dispatchPreviewDocumentCommand(preview,key.toStdString(),args);
+        if(key=="opentable") {
+            if(args.empty() || args.size()>3 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"OpenTable requires a table name and at most three arguments");
+            std::vector<linaccess::VbaValue> values;
+            for(const auto& argument:args) {
+                auto value=linaccess::scalarVbaValue(argument);
+                if(value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null OpenTable argument");
+                values.push_back(std::move(value));
+            }
+            const auto optionalNumber=[&](std::size_t index,int fallback) {
+                if(index>=values.size() || values[index].kind==linaccess::VbaValue::Kind::Missing) return fallback;
+                return static_cast<int>(linaccess::coerceVbaModuleValue(values[index],"long").number);
+            };
+            const auto tableName=text(values[0].asText()); const int view=optionalNumber(1,0),mode=optionalNumber(2,1);
+            QWidget* owner=nullptr;
+            for(auto* ancestor=preview.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+                if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+            int error=0;
+            if(!owner || owner->metaObject()->indexOfMethod("openTableDocument(QString,int,int)")<0
+                || !QMetaObject::invokeMethod(owner,"openTableDocument",Qt::DirectConnection,Q_RETURN_ARG(int,error),Q_ARG(QString,tableName),Q_ARG(int,view),Q_ARG(int,mode)))
+                throw linaccess::VbaRuntimeError(3251,"Native table opening is unavailable");
+            if(error) throw linaccess::VbaRuntimeError(error,"Native table opening failed");
+            return {};
+        }
         if (key=="gotocontrol") {
             if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"GoToControl requires a control name");
             if(preview.hasActivated_ && AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(2046,"GoToControl requires an active native document");

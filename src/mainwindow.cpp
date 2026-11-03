@@ -311,6 +311,16 @@ QWidget* MainWindow::findOpenTable(const QString& name) const {
     return nullptr;
 }
 
+int MainWindow::openTableDocument(const QString& name,int view,int mode) {
+    if(!db_.isOpen() || QApplication::activeModalWidget()) return 2046;
+    if(name.isEmpty() || name.contains(QChar(0))) return 5;
+    if(view!=0 || (mode!=1 && mode!=2)) return 3251;
+    QString canonical;
+    for(const auto& candidate:tableNames()) if(candidate.compare(name,Qt::CaseInsensitive)==0) { canonical=candidate; break; }
+    if(canonical.isEmpty()) return 7874;
+    return showTable(canonical,mode==2,false);
+}
+
 int MainWindow::activateOpenTable(const QString& name) {
     if(!db_.isOpen() || QApplication::activeModalWidget()) return 2046;
     if(name.isEmpty()) return 450;
@@ -905,25 +915,38 @@ void MainWindow::newTable() {
     refreshExplorer();
 }
 
-void MainWindow::showTable(const QString& name) {
-    if(!db_.isOpen() || QApplication::activeModalWidget()) return;
-    if(auto* existing=findOpenTable(name)) { (void)activateDataPage(existing); return; }
-    if(!finishActiveDataEditors() || !AccessFormPreview::activateProjectDocument(db_,this,nullptr)) return;
+int MainWindow::showTable(const QString& name,bool readOnly,bool interactive) {
+    if(!db_.isOpen() || QApplication::activeModalWidget()) return 2046;
+    if(auto* existing=findOpenTable(name)) {
+        if(!interactive) for(auto* candidate:existing->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) {
+            const auto* model=qobject_cast<linaccess::AccessTableModel*>(view->model());
+            if(model && model->isReadOnly()!=readOnly) return 3251;
+        }
+        return activateDataPage(existing) ? 0 : 2501;
+    }
+    if(!finishActiveDataEditors() || !AccessFormPreview::activateProjectDocument(db_,this,nullptr)) return 2501;
     auto* page = new QWidget(tabs_);
     auto* outer = new QVBoxLayout(page);
-    outer->addWidget(new QLabel("Tabelle: " + name + " — Änderungen erst mit 'Speichern' festschreiben"));
+    outer->addWidget(new QLabel("Tabelle: " + name + (readOnly ? " — Schreibgeschützt" : " — Änderungen erst mit 'Speichern' festschreiben")));
     auto* actions = new QHBoxLayout();
     auto* add = addButton(actions, "+ Datensatz");
     auto* remove = addButton(actions, "Datensatz löschen");
     auto* save = addButton(actions, "Speichern");
     auto* discard = addButton(actions, "Verwerfen");
+    for(auto* button:{add,remove,save,discard}) button->setEnabled(!readOnly);
     outer->addLayout(actions);
     auto* model = new linaccess::AccessTableModel(page, db_);
     connect(model,&linaccess::AccessTableModel::editRejected,page,[this](int number,const QString& message) { statusBar()->showMessage(message+" ("+QString::number(number)+")",10000); });
     connect(model,&QAbstractItemModel::dataChanged,page,[this] { statusBar()->clearMessage(); });
     model->setTable(name);
     model->setEditStrategy(QSqlTableModel::OnManualSubmit);
-    if(!model->select()) { messageError(this,model->lastError().text()); delete page; return; }
+    (void)model->setReadOnly(readOnly);
+    if(!model->select()) {
+        const auto problem=model->lastError();
+        bool valid=false; const int code=problem.nativeErrorCode().toInt(&valid);
+        if(interactive) messageError(this,problem.text());
+        delete page; return problem.driverText()=="LinAccess" && valid ? code : 3146;
+    }
     auto* table = new linaccess::AccessTableView(page);
     table->installEventFilter(this);
     table->setModel(model);
@@ -977,7 +1000,7 @@ void MainWindow::showTable(const QString& name) {
         });
     }
     tabs_->setCurrentIndex(tabs_->addTab(page, name));
-    (void)activateDataPage(page);
+    return activateDataPage(page) ? 0 : 2501;
 }
 
 void MainWindow::editQuery(const QString& existingName) {

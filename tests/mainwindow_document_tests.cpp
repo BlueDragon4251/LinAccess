@@ -127,7 +127,31 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     firstEntry->trigger(); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && invalidDocumentEdit->hasFocus());
     QTest::keyClick(invalidDocumentEdit,Qt::Key_Escape); QApplication::processEvents();
     const auto mixedId=artifact(db,"form","tab_cycle_form","Begin Form\nBegin Section\nBegin TextBox\nName =\"focus\"\nEnd\nEnd\nEnd\n");
-    artifact(db,"vba","Form_tab_cycle_form","Sub SelectOpenTable()\nDoCmd.SelectObject acTable,\"SHORTCUT_RECORDS\",False\nMe.Tag=\"table-selected\"\nEnd Sub\n");
+    artifact(db,"vba","Form_tab_cycle_form",R"VBA(Sub SelectOpenTable()
+DoCmd.SelectObject acTable,"SHORTCUT_RECORDS",False
+Me.Tag="table-selected"
+End Sub
+Sub OpenReadonlyTable()
+DoCmd.OpenTable TableName:="command_readonly",DataMode:=acReadOnly
+Me.Tag="readonly-opened"
+End Sub
+Sub OpenEditableTable()
+DoCmd.OpenTable "command_edit"
+Me.Tag="edit-opened"
+End Sub
+Sub RejectAppendTable()
+DoCmd.OpenTable "command_edit",,acAdd
+Me.Tag="must-not-run"
+End Sub
+Sub RejectEmptyMode()
+DoCmd.OpenTable TableName:="command_edit",DataMode:=Empty
+Me.Tag="must-not-run"
+End Sub
+)VBA");
+    assert(unchanged.exec("CREATE TABLE command_readonly(id INTEGER PRIMARY KEY AUTOINCREMENT,value REAL,flag BOOLEAN)"));
+    assert(unchanged.exec("INSERT INTO command_readonly VALUES(1,1.25,-1),(2,NULL,NULL)"));
+    assert(unchanged.exec("CREATE TABLE command_edit(id INTEGER PRIMARY KEY AUTOINCREMENT,value TEXT)"));
+    assert(unchanged.exec("INSERT INTO command_edit VALUES(1,'initial')"));
     action(window,"Aktualisieren")->trigger(); openArtifact(window,mixedId); QPointer<AccessFormPreview> mixed=document("tab_cycle_form"); assert(mixed);
     auto* mixedEditor=mixed->findChild<QLineEdit*>("access-control-focus"); assert(mixedEditor); QApplication::setActiveWindow(mixed); mixedEditor->setFocus(); QApplication::processEvents();
     QTest::keyClick(mixedEditor,Qt::Key_F6,Qt::ControlModifier); QApplication::processEvents(); assert(explorer->hasFocus());
@@ -136,6 +160,36 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     assert(mixed->executeProcedure("SelectOpenTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     QApplication::processEvents(); assert(documentTabs->currentWidget()==firstPage && table->hasFocus() && !activePreviewDocument() && mixed->isVisible());
     assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="table-selected");
+    const auto nativeTable=[&](QWidget* page) {
+        linaccess::AccessTableView* result=nullptr;
+        for(auto* candidate:page->findChildren<QTableView*>()) if(auto* typed=dynamic_cast<linaccess::AccessTableView*>(candidate)) result=typed;
+        assert(result); return result;
+    };
+    assert(mixed->executeProcedure("OpenReadonlyTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
+    const QPointer<QWidget> readonlyPage=documentTabs->currentWidget(); auto* readonlyView=nativeTable(readonlyPage);
+    auto* readonlyModel=qobject_cast<linaccess::AccessTableModel*>(readonlyView->model()); assert(readonlyModel && readonlyModel->isReadOnly() && readonlyModel->rowCount()==2);
+    const int readonlyRow=readonlyModel->index(0,0).data().toInt()==1 ? 0 : 1;
+    assert(!readonlyModel->flags(readonlyModel->index(readonlyRow,1)).testFlag(Qt::ItemIsEditable) && !readonlyModel->flags(readonlyModel->index(readonlyRow,2)).testFlag(Qt::ItemIsUserCheckable));
+    assert(!readonlyModel->setData(readonlyModel->index(readonlyRow,1),9) && !readonlyModel->insertRow(2) && !readonlyModel->removeRow(0) && !readonlyModel->isDirty());
+    readonlyView->setCurrentIndex(readonlyModel->index(readonlyRow,2)); QTest::keyClick(readonlyView,Qt::Key_Space); QTest::keyClick(readonlyView,Qt::Key_Minus,Qt::ControlModifier);
+    assert(readonlyModel->rowCount()==2 && !readonlyModel->isDirty() && readonlyModel->index(readonlyRow,2).data(Qt::CheckStateRole).toInt()==Qt::Checked);
+    for(auto* button:readonlyPage->findChildren<QPushButton*>()) if(button->text()=="Speichern" || button->text()=="Datensatz löschen") assert(!button->isEnabled());
+    assert(window.openTableDocument("command_readonly",0,1)==3251 && readonlyModel->isReadOnly());
+    assert(unchanged.exec("SELECT value,flag FROM command_readonly WHERE id=1") && unchanged.next() && unchanged.value(0).toDouble()==1.25 && unchanged.value(1).toInt()==-1); unchanged.finish();
+    assert(mixed->executeProcedure("OpenEditableTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
+    const QPointer<QWidget> editablePage=documentTabs->currentWidget(); auto* editableView=nativeTable(editablePage);
+    auto* editableModel=qobject_cast<linaccess::AccessTableModel*>(editableView->model()); assert(editableModel && !editableModel->isReadOnly() && editableModel->setData(editableModel->index(0,1),"changed"));
+    assert(!editableModel->setReadOnly(true) && !editableModel->isReadOnly() && editableModel->isDirty());
+    QPushButton* commitButton=nullptr; for(auto* button:editablePage->findChildren<QPushButton*>()) if(button->text()=="Speichern") commitButton=button;
+    assert(commitButton && commitButton->isEnabled()); commitButton->click(); assert(!editableModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_edit") && unchanged.next() && unchanged.value(0).toString()=="changed"); unchanged.finish();
+    QTest::keyClick(editableView,Qt::Key_W,Qt::ControlModifier); QApplication::processEvents();
+    const auto beforeUnsupported=documentTabs->count();
+    const auto rejectedAppend=mixed->executeProcedure("RejectAppendTable",selectArguments);
+    assert(rejectedAppend.errorNumber==3251 && documentTabs->count()==beforeUnsupported);
+    assert(mixed->executeProcedure("RejectEmptyMode",selectArguments).errorNumber==3251 && documentTabs->count()==beforeUnsupported);
+    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="edit-opened");
+    assert(window.activateOpenTable("command_readonly")==0); QApplication::processEvents(); QTest::keyClick(readonlyView,Qt::Key_W,Qt::ControlModifier); QApplication::processEvents();
     assert(mixed->close()); QApplication::processEvents(); window.focusDatabaseWindow(); QApplication::processEvents();
     QTest::keyClick(explorer,Qt::Key_F6,Qt::ControlModifier|Qt::ShiftModifier); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && auditView->hasFocus());
     QTest::keyClick(auditView,Qt::Key_W,Qt::ControlModifier); QApplication::processEvents(); assert(documentTabs->count()==1 && documentTabs->currentWidget()==firstPage);
