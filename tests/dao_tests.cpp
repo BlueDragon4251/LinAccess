@@ -734,6 +734,7 @@ For Each fld In rs.Fields
 fld.Value = fld.Value * 2
 Next
 rs.Update
+rs.Bookmark=rs.LastModified
 visits = 0
 For Each fld In rs.Fields
 If fld.Name = "a" Then

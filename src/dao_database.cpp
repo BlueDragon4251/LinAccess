@@ -305,6 +305,11 @@ public:
         }
         require(args.empty(), "DAO: Unexpected Recordset arguments");
         if (key=="bookmark") return bookmarkAt(position_);
+        if (key=="lastmodified") {
+            if(readOnly_) throw VbaRuntimeError(3251,"DAO: LastModified requires an editable recordset");
+            if(!lastModified_) throw VbaRuntimeError(3021,"DAO: No record modified by this cursor");
+            (void)bookmarkPosition(*lastModified_); return *lastModified_;
+        }
         if (key=="bookmarkable") return VbaValue::logical(true);
         if (key=="updatable") return VbaValue::logical(!readOnly_);
         if (key=="editmode") return VbaValue::integer(mode_==Mode::Browse ? 0 : mode_==Mode::Edit ? 1 : 2);
@@ -362,7 +367,7 @@ public:
             if(position<0 || position>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: Position outside populated recordset");
             position_=static_cast<qsizetype>(position); noMatch_=false; return;
         }
-        if (lower(name)=="editmode" || lower(name)=="updatable")
+        if (lower(name)=="editmode" || lower(name)=="updatable" || lower(name)=="lastmodified")
             throw VbaRuntimeError(438,"DAO: Recordset metadata is read-only");
         if (lower(name)=="bookmark") {
             if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
@@ -528,22 +533,31 @@ private:
         else if (!columns.empty()) {
             require(query.prepare(adding ? "INSERT INTO " + quote(source_) + " (" + columns.join(',')
                         + ") VALUES (" + values.join(',') + ")"
-                    : "UPDATE " + quote(source_) + " SET " + assignments.join(',') + " WHERE rowid=?"),
+                    : "UPDATE " + quote(source_) + " SET " + assignments.join(',') + " WHERE rowid=? RETURNING rowid"),
                     "DAO: Update prepare failed");
             for (const int i : indices) query.addBindValue(pending_[i]);
             if (!adding) query.addBindValue(id);
             if (!query.exec()) queryFailure(query);
-            require(query.numRowsAffected() == 1, "DAO: Update failed or record changed");
+            if(adding) require(query.numRowsAffected() == 1, "DAO: Insert failed or record changed");
+            else {
+                require(query.next(),"DAO: Update failed or record changed");
+                id=query.value(0);
+                require(!query.next(),"DAO: Update returned multiple identities");
+                if(query.lastError().isValid()) queryFailure(query);
+            }
         }
         if (adding) id = query.lastInsertId();
+        if(!adding && position_>=0 && position_<data_->ids.size()) data_->ids[position_]=id;
         mode_ = Mode::Browse; pending_.clear(); changed_.clear();
         reload(false); position_ = data_->ids.indexOf(id);
+        if(position_>=0) lastModified_=bookmarkAt(position_); else lastModified_.reset();
     }
     std::shared_ptr<RecordsetData> data_{std::make_shared<RecordsetData>()};
     QSqlDatabase db_;
     QString source_;
     QMap<QString,QVariant> bindings_;
     bool table_{}, readOnly_{}, closed_{}, frozen_{},noMatch_{},cloneCounted_{};
+    std::optional<VbaValue> lastModified_;
     QVariantList pending_;
     QSet<int> changed_;
     qsizetype position_{};

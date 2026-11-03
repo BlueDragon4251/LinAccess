@@ -21,6 +21,7 @@ void testDaoCursors() {
     auto source=database->member("OpenRecordset",{VbaValue::string("cursor_values")}).object;
     assert(source->member("EditMode",{}).asNumber()==0 && source->member("Updatable",{}).truthy());
     expect(438,[&] { source->assign("EditMode",VbaValue::integer(1)); });
+    expect(3021,[&] { (void)source->member("LastModified",{}); });
     auto clone=source->member("Clone",{}).object;
     assert(source->item("id").asNumber()==1 && clone->member("BOF",{}).truthy() && !clone->member("EOF",{}).truthy());
     assert(source->member("AbsolutePosition",{}).asNumber()==0 && clone->member("AbsolutePosition",{}).asNumber()==-1);
@@ -49,6 +50,14 @@ void testDaoCursors() {
     expect(6,[&] { clone->member("Move",{VbaValue::numeric(2147483648.0)}); });
     clone->member("Move",{VbaValue::longInteger(0),second});
     source->assign("Bookmark",second); assert(source->item("id").asNumber()==2);
+    source->member("Edit",{}); source->assignItem("id",VbaValue::longInteger(22)); source->member("Update",{});
+    assert(source->item("id").asNumber()==22 && clone->item("id").asNumber()==22);
+    source->assign("Bookmark",second); assert(source->item("id").asNumber()==22);
+    const auto modified=source->member("LastModified",{});
+    source->member("MoveFirst",{}); source->assign("Bookmark",modified); assert(source->item("id").asNumber()==22);
+    expect(3021,[&] { (void)clone->member("LastModified",{}); });
+    source->member("Edit",{}); source->assignItem("id",VbaValue::longInteger(2)); source->member("Update",{});
+    assert(source->item("id").asNumber()==2 && clone->item("id").asNumber()==2);
     const bool legacyDqs=query.exec("SELECT \"legacy_string\""); query.finish();
     expect(3070,[&] { find(clone,"FindFirst","[missing_field]=1"); });
     assert(clone->item("id").asNumber()==2 && !clone->member("NoMatch",{}).truthy());
@@ -84,6 +93,7 @@ void testDaoCursors() {
     clone->member("AddNew",{}); assert(clone->member("EditMode",{}).asNumber()==2); clone->assignItem("id",VbaValue::numeric(4)); clone->assignItem("label",VbaValue::string("replacement"));
     clone->member("Update",{}); assert(clone->item("id").asNumber()==4);
     expect(3159,[&] { clone->assign("Bookmark",removed); });
+    const auto added=clone->member("LastModified",{}); clone->member("MoveFirst",{}); clone->assign("Bookmark",added); assert(clone->item("id").asNumber()==4);
     auto ordered=database->member("OpenRecordset",{VbaValue::string("SELECT id,label FROM cursor_values ORDER BY id DESC"),VbaValue::numeric(4)}).object;
     assert(!ordered->member("Updatable",{}).truthy());
     auto orderedClone=ordered->member("Clone",{}).object;

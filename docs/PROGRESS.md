@@ -2770,3 +2770,17 @@ reads/writes the property while consuming actual SQL results. Desktop build and
 dao_execution pass (0.33 s). No new target/full-suite/package repeat. Deleted-row,
 lazy cursor, external/forward-only and exact Windows error semantics remain open.
 Reference: https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/recordset-absoluteposition-property-dao
+
+## Native DAO LastModified and key-change identity (2026-11-03)
+
+Added cursor-local read-only LastModified bookmark after successful Update/AddNew,
+with native token validation and explicit snapshot/unmodified/stale boundaries.
+DAO Update consumes SQLite RETURNING rowid and remaps the shared cached identity
+before refresh so active clones and existing bookmarks follow the same record
+when its Integer primary key changes. Existing cursor regression changes/restores
+a real primary key, follows both cursors/bookmarks, checks per-cursor ownership
+and add/update recovery. Existing native VBA assigns Bookmark=LastModified.
+Desktop build and dao_execution pass (0.30 s); no new target/full-suite/package
+repeat. External SQL/triggers, form-save identity and exact Windows edge/error
+semantics remain open.
+Reference: https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/recordset-lastmodified-property-dao

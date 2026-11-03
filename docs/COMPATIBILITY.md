@@ -988,3 +988,11 @@ read/write within populated rows, -1 when no current row, independent clone
 positions, checked Long conversion and pending-edit protection. Invalid positions
 currently raise native 3021. Full deleted-row, lazy-population, forward-only,
 ODBC and exact Access 2003 error/reference semantics remain open.
+
+Native editable DAO recordsets expose read-only LastModified as their own last
+successful Update/AddNew bookmark, validated against the current native token
+family. Snapshot/never-modified/stale cases raise explicit errors. Native DAO
+Update now uses SQLite RETURNING rowid and preserves shared bookmark identity
+when an Integer primary-key edit changes rowid. Direct external SQL/trigger-driven
+identity replacement and exact Windows LastModified edge/error semantics remain
+open; this does not change the separate form-save adapter yet.
