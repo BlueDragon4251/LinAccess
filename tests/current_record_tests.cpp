@@ -37,6 +37,7 @@ Top =500
 End
 Begin CommandButton
 Name ="other"
+Cancel =-1
 Caption ="Other"
 OnClick ="[Event Procedure]"
 Top =1000
@@ -50,6 +51,12 @@ End Sub
 Sub other_Click()
 CurrentDb.Execute "INSERT INTO positions VALUES(102,0)"
 End Sub
+Sub SwitchDefault()
+Me.other.Default=True
+End Sub
+Sub SwitchCancel()
+Me.accept.Cancel=True
+End Sub
 )VBA";
         AccessFormPreview defaults("default_buttons",buttons,handlers,db); defaults.show(); QApplication::processEvents();
         auto* input=defaults.findChild<QLineEdit*>("access-control-input");
@@ -60,15 +67,24 @@ End Sub
         defaults.activateWindow(); other->setFocus(); QApplication::processEvents();
         QTest::keyClick(other,Qt::Key_I,Qt::AltModifier); QApplication::processEvents();
         assert(input->hasFocus());
+        QTest::keyClicks(input,"discard"); QTest::keyClick(input,Qt::Key_Escape);
+        assert(input->text().isEmpty() && defaults.isVisible());
+        assert(sql.exec("SELECT COUNT(*) FROM positions WHERE position=102") && sql.next() && sql.value(0).toInt()==1); sql.finish();
         input->setFocus(); QTest::keyClick(input,Qt::Key_Return);
         assert(sql.exec("SELECT COUNT(*) FROM positions WHERE position=101") && sql.next() && sql.value(0).toInt()==1); sql.finish();
         auto controls=makePreviewFormObject(defaults)->member("Controls",{}).object;
         auto second=controls->member("Item",{VbaValue::string("other")}).object;
-        second->assign("Default",VbaValue::logical(true)); assert(!accept->isDefault() && other->isDefault());
+        std::vector<VbaValue> buttonArgs;
+        assert(defaults.executeProcedure("SwitchDefault",buttonArgs).status==linaccess::VbaExecutionStatus::Completed);
+        assert(!accept->isDefault() && other->isDefault());
         input->setFocus(); QTest::keyClick(input,Qt::Key_Return);
-        assert(sql.exec("SELECT COUNT(*) FROM positions WHERE position=102") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+        assert(sql.exec("SELECT COUNT(*) FROM positions WHERE position=102") && sql.next() && sql.value(0).toInt()==2); sql.finish();
         accept->setFocus(); QTest::keyClick(accept,Qt::Key_Return);
         assert(sql.exec("SELECT COUNT(*) FROM positions WHERE position=101") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+        assert(defaults.executeProcedure("SwitchCancel",buttonArgs).status==linaccess::VbaExecutionStatus::Completed);
+        assert(!second->member("Cancel",{}).truthy());
+        other->setFocus(); QTest::keyClick(other,Qt::Key_Escape);
+        assert(sql.exec("SELECT COUNT(*) FROM positions WHERE position=101") && sql.next() && sql.value(0).toInt()==3); sql.finish();
         assert(defaults.close()); assert(sql.exec("DELETE FROM positions"));
     }
     {

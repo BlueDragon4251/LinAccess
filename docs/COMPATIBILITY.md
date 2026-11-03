@@ -977,3 +977,8 @@ OpenForm DataMode now supports native acFormEdit/acFormReadOnly policy overrides
 before startup events for newly opened forms; see FORM_DATA_MODE_RUNTIME.md.
 acFormAdd/DataEntry, changing mode on an already-open instance and full Windows
 view/locking semantics remain open. Edit does not make read-only queries writable.
+
+Native CommandButton.Cancel now supports imported/template metadata, VBA
+read/write and real Escape-to-Click behavior with focused TextBox buffer undo;
+setting a new cancel/default button clears the corresponding previous policy.
+See COMMAND_BUTTON_KEYBOARD_RUNTIME.md for verified scope and remaining limits.

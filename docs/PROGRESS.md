@@ -2736,3 +2736,14 @@ GUI-free build/test passed 1/1 (1.37 s). Matching .deb Build-ID, pinned SQLite
 backend smoke, package permissions/contents, all four original fixture SHA-256
 checks and repository privacy passed. No distro matrix repeat; remote CI remains
 blocked by the previously reported billing restriction.
+
+## Native Cancel/Escape button policy (2026-11-03)
+
+Implemented imported/template Cancel, unique live VBA Default/Cancel switching,
+checked Boolean policy conversion and real Escape Click dispatch after focused
+TextBox undo. No implicit close replaces a missing handler. Also guarded native
+Default reads when a control is rendered as an unsupported placeholder. Existing
+GUI regression now uses VBA to switch policies and real Escape/Enter/Alt events
+with persisted SQL effects. Desktop build and form_current_record pass (0.56 s).
+No new target/full-suite/package repeat for this increment. The grouped evidence
+above covers e5143eb; see COMMAND_BUTTON_KEYBOARD_RUNTIME.md for boundaries.

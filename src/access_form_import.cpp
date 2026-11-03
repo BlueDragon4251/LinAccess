@@ -128,6 +128,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
     QHash<QString,bool> templateColumnHeads;
     QHash<QString,int> templateListRows;
     QHash<QString,bool> templateDefaultButtons;
+    QHash<QString,bool> templateCancelButtons;
     static const QRegularExpression begin(R"(^\s*Begin(?:\s+(\w+))?\s*$)",
         QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression property(R"(^\s*([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$)");
@@ -151,6 +152,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 AccessVisualControl item;
                 item.type = type;
                 item.defaultButton=templateDefaultButtons.value(type,false);
+                item.cancelButton=templateCancelButtons.value(type,false);
                 item.font = templateFonts.value(type);
                 item.defaultValue = templateDefaults.value(type);
                 item.textAlign = templateAlignments.value(type);
@@ -189,6 +191,12 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             continue;
         }
         const auto integer = [&] { bool ok = false; const int result = value.toInt(&ok); return ok ? result : 0; };
+        if(key=="Cancel" && (current.controlTemplate || current.control>=0)) {
+            const auto setting=accessBoolean(value,false);
+            if(current.controlTemplate) templateCancelButtons[current.type]=setting;
+            else form.controls[current.control].cancelButton=setting;
+            continue;
+        }
         if(key=="Default" && (current.controlTemplate || current.control>=0)) {
             const auto setting=accessBoolean(value,false);
             if(current.controlTemplate) templateDefaultButtons[current.type]=setting;

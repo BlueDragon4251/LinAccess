@@ -282,11 +282,14 @@ public:
                 return key=="tabstop" ? linaccess::VbaValue::logical(definition.tabStop) : linaccess::VbaValue::numeric(definition.tabIndex);
             }
         }
-        if (key=="default") {
+        if (key=="default" || key=="cancel") {
             for (const auto& definition:preview.layout_.controls)
-                if (definition.name.compare(name_,Qt::CaseInsensitive)==0 && definition.type=="CommandButton")
-                    return linaccess::VbaValue::logical(qobject_cast<QPushButton*>(widget)->isDefault());
-            throw linaccess::VbaRuntimeError(438,"Default requires a command button");
+                if (definition.name.compare(name_,Qt::CaseInsensitive)==0 && definition.type=="CommandButton") {
+                    auto* button=qobject_cast<QPushButton*>(widget);
+                    if(!button) throw linaccess::VbaRuntimeError(3251,"Native command button unavailable");
+                    return linaccess::VbaValue::logical(key=="default" ? button->isDefault() : button->property("la_access_cancel").toBool());
+                }
+            throw linaccess::VbaRuntimeError(438,"Default/Cancel requires a command button");
         }
         if (key == "visible") return linaccess::VbaValue::logical(!widget->isHidden());
         if (key == "enabled") return linaccess::VbaValue::logical(widget->isEnabled());
@@ -327,20 +330,24 @@ public:
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); auto* widget = control();
         const auto key = text(name).toCaseFolded();
-        if (key=="default") {
+        if (key=="default" || key=="cancel") {
             auto* button=qobject_cast<QPushButton*>(widget);
             bool command=false;
             for(const auto& definition:preview.layout_.controls)
                 if(definition.name.compare(name_,Qt::CaseInsensitive)==0) command=definition.type=="CommandButton";
-            if(!button || !command) throw linaccess::VbaRuntimeError(438,"Default requires a command button");
+            if(!button || !command) throw linaccess::VbaRuntimeError(438,"Default/Cancel requires a command button");
             const auto scalar=linaccess::scalarVbaValue(value);
-            if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Default");
-            const bool enabled=scalar.truthy();
+            if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null button policy");
+            const bool enabled=linaccess::sqlFieldValue(scalar,"BOOL").toBool();
             for(auto& definition:preview.layout_.controls) {
-                if(definition.name.compare(name_,Qt::CaseInsensitive)==0) definition.defaultButton=enabled;
-                else if(enabled && definition.type=="CommandButton") definition.defaultButton=false;
+                auto& flag=key=="default" ? definition.defaultButton : definition.cancelButton;
+                if(definition.name.compare(name_,Qt::CaseInsensitive)==0) flag=enabled;
+                else if(enabled && definition.type=="CommandButton") flag=false;
+                if(key=="cancel" && definition.type=="CommandButton")
+                    if(auto* other=preview.controls_.value(definition.name.toCaseFolded()).data()) other->setProperty("la_access_cancel",flag);
             }
-            button->setDefault(enabled); return;
+            if(key=="default") button->setDefault(enabled);
+            return;
         }
         if(key=="listrows") {
             auto* combo=listCombo();

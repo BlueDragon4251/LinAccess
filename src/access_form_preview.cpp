@@ -1378,7 +1378,17 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         }
         ++renderedControls_;
     }
+    QPointer<QPushButton> cancelButton;
     for (const auto& control:layout_.controls) {
+        if(control.type=="CommandButton") {
+            if(auto* button=qobject_cast<QPushButton*>(controls_.value(control.name.toCaseFolded()).data())) {
+                button->setProperty("la_access_cancel",control.cancelButton);
+                if(control.cancelButton) {
+                    if(cancelButton) cancelButton->setProperty("la_access_cancel",false);
+                    cancelButton=button;
+                }
+            }
+        }
         if (control.type!="Label" || control.attachedControlIndex<0 || control.attachedControlIndex>=layout_.controls.size()) continue;
         const auto& target=layout_.controls[control.attachedControlIndex];
         if (target.type!="TextBox" && target.type!="ComboBox" && target.type!="ListBox") continue;
@@ -2727,7 +2737,18 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
             (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::numeric(223)}); return true;
         }
         if (event->key()==Qt::Key_Escape && modifiers==Qt::NoModifier) {
-            if (layout_.kind==linaccess::AccessDocumentKind::Report) (void)close(); else undoKeyboardEdit();
+            if (layout_.kind==linaccess::AccessDocumentKind::Report) { (void)close(); return true; }
+            for (const auto& definition:layout_.controls) {
+                auto* button=qobject_cast<QPushButton*>(controls_.value(definition.name.toCaseFolded()).data());
+                if(definition.type!="CommandButton" || !button || !button->property("la_access_cancel").toBool() || !button->isVisible() || !button->isEnabled()) continue;
+                const QPointer<QPushButton> guarded=button;
+                auto* focus=QApplication::focusWidget();
+                for(const auto& control:layout_.controls)
+                    if(control.type=="TextBox" && controls_.value(control.name.toCaseFolded()).data()==focus) { (void)undoControlEdit(control.name); break; }
+                if(guarded && !closed_ && !openCancelled_) guarded->click();
+                return true;
+            }
+            undoKeyboardEdit();
             return true;
         }
         if ((event->key()==Qt::Key_Return || event->key()==Qt::Key_Enter) && modifiers==Qt::ShiftModifier) {
