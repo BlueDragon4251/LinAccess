@@ -22,6 +22,32 @@ int main(int argc, char** argv) {
     assert(query.exec("CREATE TABLE samples(id INTEGER, score INTEGER, label TEXT)"));
     assert(query.exec("INSERT INTO samples VALUES(1,10,'one'),(2,20,'two'),(3,20,NULL),(4,30,'four')"));
     {
+        assert(query.exec("CREATE TABLE origin_left(id INTEGER,key INTEGER)"));
+        assert(query.exec("CREATE TABLE origin_right(id INTEGER,key INTEGER)"));
+        assert(query.exec("INSERT INTO origin_left VALUES(11,7)")); assert(query.exec("INSERT INTO origin_right VALUES(22,7)"));
+        assert(query.exec("CREATE VIEW origin_saved AS SELECT origin_left.id AS id,origin_right.id AS id FROM origin_left INNER JOIN origin_right ON origin_left.key=origin_right.key"));
+        linaccess::AccessQueryModel qualified;
+        qualified.execute(db,"SELECT origin_saved.origin_right.id AS chosen FROM origin_saved");
+        assert(qualified.rowCount()==1 && qualified.columnCount()==1 && qualified.data(qualified.index(0,0)).toInt()==22);
+        qualified.execute(db,"SELECT s.origin_left.id,s.origin_right.id FROM origin_saved AS s WHERE s.origin_right.id=22 ORDER BY s.origin_left.id");
+        assert(qualified.rowCount()==1 && qualified.columnCount()==2 && qualified.data(qualified.index(0,0)).toInt()==11 && qualified.data(qualified.index(0,1)).toInt()==22);
+        qualified.execute(db,"SELECT origin_saved.origin_left.id FROM origin_saved WHERE origin_saved.origin_right.id=23");
+        assert(qualified.rowCount()==0 && qualified.columnCount()==1);
+        assert(query.exec("CREATE TABLE origin_shared(id INTEGER,key INTEGER)")); assert(query.exec("INSERT INTO origin_shared VALUES(11,7),(22,7)"));
+        assert(query.exec("CREATE VIEW origin_before AS SELECT id,key FROM origin_shared WHERE id=11"));
+        assert(query.exec("CREATE VIEW origin_after AS SELECT id,key FROM origin_shared WHERE id=22"));
+        assert(query.exec("CREATE VIEW origin_rank_raw AS SELECT origin_before.id AS id,origin_after.id AS id,RANK() OVER(ORDER BY origin_before.id DESC,origin_after.id DESC) AS rank_value FROM origin_before INNER JOIN origin_after ON origin_before.key=origin_after.key"));
+        assert(query.exec("CREATE VIEW origin_ranked AS SELECT [id],[id:1] FROM origin_rank_raw WHERE rank_value<=1"));
+        qualified.execute(db,"SELECT origin_ranked.origin_before.id,origin_ranked.origin_after.id FROM origin_ranked WHERE origin_ranked.origin_after.id=22");
+        assert(qualified.rowCount()==1 && qualified.columnCount()==2 && qualified.data(qualified.index(0,0)).toInt()==11 && qualified.data(qualified.index(0,1)).toInt()==22);
+        assert(query.exec("CREATE VIEW origin_ambiguous AS SELECT id AS first_copy,id AS second_copy FROM origin_left"));
+        assert(query.exec("CREATE VIEW origin_union AS SELECT id FROM origin_left UNION ALL SELECT id FROM origin_right"));
+        for(const auto& source:{"SELECT origin_union.origin_left.id FROM origin_union","SELECT origin_ambiguous.origin_left.id FROM origin_ambiguous","SELECT origin_saved.absent_table.id FROM origin_saved","SELECT main.origin_saved.origin_right.id FROM origin_saved"}) {
+            int error=0; try { qualified.execute(db,source); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+            assert(error!=0 && qualified.rowCount()==0 && qualified.columnCount()==0);
+        }
+    }
+    {
         linaccess::AccessQueryModel reversed;
         reversed.execute(db,"SELECT InStrRev('abcabc','bc') AS pos,StrReverse('abö') AS backwards, InStrRev('A😀x😀','😀') AS units");
         assert(reversed.rowCount()==1 && reversed.data(reversed.index(0,0)).toInt()==5);

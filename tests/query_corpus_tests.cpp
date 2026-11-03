@@ -116,6 +116,11 @@ int main(int argc,char** argv) {
         "aee3c2eb8334d24f8268bda68943e5c59c5a993da65d96ea824174da55ed16bf",
         "c603f4a1eb63c4c0ad7a7427a87ae0978485d1bbea492b1caebedb387ad52c00",
         "e074e74467212cd73520402ffb4239aef220557883d048a2be672de10c3d48de"};
+    const QSet<QString> sourceColumnMismatchHashes{
+        "4a8db1b0b4f74446d4d95098591dbb4f36c871de05533f3c182b23bfa6127e6e",
+        "53bc42a528dfbb8ac1867eb721d30e8312c9d7fe5dab0f0ba8c292c3749bbf1e",
+        "bf9698243a44a3efc802a079b1525807da18f94b1d2108467858e4aa3c14b325"};
+    linaccess::AccessCatalog originalCatalog(QString::fromLocal8Bit(argv[2]));
     int valueDeclarations=0,executedDerivedQueries=0,sourceColumnMismatches=0,positiveConditionalQueries=0;
     for (const auto& object : definitions) {
         QString status,errorReason;
@@ -224,7 +229,7 @@ int main(int argc,char** argv) {
             status = error.number == 3085 ? "unsupported_function_or_compilation"
                 : error.number == 3078 ? "missing_query_dependency" : error.number == 3075 ? "unsupported_sql_grammar"
                 : error.number == 3035 ? "execution_budget_exceeded" : "unsupported_jet_or_binding";
-            if (object["sha256"].toString()=="4a8db1b0b4f74446d4d95098591dbb4f36c871de05533f3c182b23bfa6127e6e") {
+            if (sourceColumnMismatchHashes.contains(object["sha256"].toString())) {
                 assert(error.number==3146);
                 const auto plan=linaccess::compileAccessQuery(linaccess::accessQuerySource(db,object["name"].toString()));
                 QSqlQuery probe(db); assert(!probe.prepare(plan.sql));
@@ -232,8 +237,21 @@ int main(int argc,char** argv) {
                 const auto offset=message.indexOf("no such column:",0,Qt::CaseInsensitive); assert(offset>=0);
                 const auto missing=message.mid(offset+15).section(" Unable",0,0).trimmed();
                 assert(missing.count('.')==1);
-                const auto record=db.record(missing.section('.',0,0));
-                assert(record.count()==6 && record.indexOf(missing.section('.',-1))<0);
+                const auto owner=missing.section('.',0,0),field=missing.section('.',-1);
+                const auto record=db.record(owner); assert(record.count()>0 && record.indexOf(field)<0);
+                QSqlQuery catalog(db); assert(catalog.prepare("SELECT source_bytes FROM _la_access_artifacts WHERE kind='query' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1"));
+                catalog.addBindValue(owner); assert(catalog.exec());
+                if(catalog.next()) {
+                    const auto originalSource=linaccess::decodeVbaSource(catalog.value(0).toByteArray());
+                    const QRegularExpression reference("(?<![\\p{L}\\p{N}_])"+QRegularExpression::escape(field)+"(?![\\p{L}\\p{N}_])",QRegularExpression::CaseInsensitiveOption);
+                    assert(reference.isValid() && !reference.match(originalSource).hasMatch());
+                    errorReason="original_saved_query_omits_column";
+                } else {
+                    const auto schema=linaccess::parseMdbSchema(originalCatalog.tableSchema(owner));
+                    assert(!schema.columns.isEmpty() && schema.columns.size()==record.count());
+                    for(const auto& column:schema.columns) assert(column.name.compare(field,Qt::CaseInsensitive)!=0);
+                    errorReason="original_table_omits_column";
+                }
                 ++sourceColumnMismatches; status="unresolved_original_source_column";
             }
         }
@@ -241,6 +259,7 @@ int main(int argc,char** argv) {
             status = "sqlite_execution_failed";
         }
         assert(db.rollback());
+        if(object["sha256"].toString()=="32b25d06328e208b7d2e94ec33a17422fca977ef7b5988e6b040123562c890ec") assert(executed && errorNumber==0);
         if (executed && derivedQueryHashes.contains(object["sha256"].toString())) ++executedDerivedQueries;
         ++counts[status];
         report.append(QJsonObject{{"artifact_sha256",object["sha256"]},{"status",status},{"executed",executed},{"error_number",errorNumber},{"error_reason",errorReason}});
@@ -248,7 +267,7 @@ int main(int argc,char** argv) {
     assert(report.size() == 100);
     testPreparedOriginalJoinedUpdate(root,definitions,QString::fromLocal8Bit(argv[2]));
     assert(valueDeclarations==6 && positiveConditionalQueries==3);
-    assert(executedDerivedQueries==5 && sourceColumnMismatches==1);
+    assert(executedDerivedQueries==5 && sourceColumnMismatches==3);
     assert(counts["executed_no_access_reference_oracle"]>=72
         && counts["executed_with_test_parameters_no_access_reference_oracle"]>=5);
     QFile output(QString::fromLocal8Bit(argv[3])); assert(output.open(QIODevice::WriteOnly));

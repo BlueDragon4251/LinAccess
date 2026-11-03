@@ -426,7 +426,7 @@ QString renderJetTokens(const QVector<Token>& tokens) {
     }
     return text.join(' ');
 }
-struct ColumnOrigin { QString label,table,column; };
+struct ColumnOrigin { QString label,table,column; QVector<QPair<QString,QString>> logical; bool physicalProven{}; };
 // Inspect stored view text before asking SQLite to expand it. SQLite 3.45 can
 // crash while preparing nested outer joins with an unresolved dependency.
 // This check does not prepare a view or evaluate any user expression.
@@ -464,8 +464,9 @@ bool missingSqlDependency(QSqlDatabase db,const QString& sql,QSet<QString> visit
     }
     return false;
 }
-QVector<ColumnOrigin> columnOrigins(QSqlDatabase db,const QString& source) {
-    if (missingSourceDependency(db,source)) return {};
+QVector<ColumnOrigin> columnOrigins(QSqlDatabase db,const QString& source,QSet<QString> visiting={}) {
+    if(visiting.contains(source.toCaseFolded()) || visiting.size()>=16 || missingSourceDependency(db,source)) return {};
+    visiting.insert(source.toCaseFolded());
     static QLibrary library("sqlite3",0);
     library.setLoadHints(QLibrary::PreventUnloadHint);
     const auto prepare=reinterpret_cast<int (*)(sqlite3*,const char*,int,sqlite3_stmt**,const char**)>(library.resolve("sqlite3_prepare_v2"));
@@ -485,7 +486,78 @@ QVector<ColumnOrigin> columnOrigins(QSqlDatabase db,const QString& source) {
     if (result!=0 || !statement) return {};
     QVector<ColumnOrigin> origins;
     for (int i=0;i<count(statement);++i) origins.append({QString::fromUtf8(label(statement,i)),QString::fromUtf8(table(statement,i)),QString::fromUtf8(column(statement,i))});
+    // SQLite reports physical origins through views, losing intermediate query
+    // identities. Recover only direct projections from the actual stored view SQL.
     // No sqlite3_step: obtaining lineage must never evaluate user expressions.
+    QSqlQuery schema(db);
+    if(!schema.prepare("SELECT type,sql FROM temp.sqlite_schema WHERE name=? COLLATE NOCASE UNION ALL SELECT type,sql FROM main.sqlite_schema WHERE name=? COLLATE NOCASE LIMIT 1")) return origins;
+    schema.addBindValue(source); schema.addBindValue(source);
+    if(!schema.exec() || !schema.next()) return origins;
+    if(schema.value(0).toString()!="view") {
+        if(schema.value(0).toString()=="table") for(auto& origin:origins)
+            origin.physicalProven=!origin.column.isEmpty() && origin.table.compare(source,Qt::CaseInsensitive)==0;
+        return origins;
+    }
+    const auto definition=schema.value(1).toString(); schema.finish();
+    const auto tokens=tokenize(definition,true);
+    const auto word=[&](qsizetype i,const char* text) { return i>=0 && i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(text,Qt::CaseInsensitive)==0; };
+    const auto name=[](const Token& token) { return token.kind==Token::Word || token.kind==Token::Identifier; };
+    qsizetype select=-1,from=-1,end=tokens.size(); int depth=0;
+    for(qsizetype i=0;i<tokens.size();++i) {
+        if(word(i,"WITH")) return origins;
+        if(word(i,"SELECT")) { if(select>=0) return origins; select=i; }
+        if(select<0) continue;
+        if(symbol(tokens[i],"(")) ++depth;
+        else if(symbol(tokens[i],")")) --depth;
+        else if(depth==0 && word(i,"FROM") && from<0) from=i;
+        else if(from>=0 && depth==0 && (word(i,"WHERE") || word(i,"GROUP") || word(i,"HAVING") || word(i,"ORDER") || word(i,"LIMIT") || symbol(tokens[i],";")) && end==tokens.size()) end=i;
+        if(word(i,"UNION") || word(i,"INTERSECT") || word(i,"EXCEPT")) return origins;
+    }
+    if(select<0 || from<0) return origins;
+    QVector<QVector<Token>> projections;
+    qsizetype start=select+1;
+    if(word(start,"DISTINCT") || word(start,"ALL")) ++start;
+    depth=0;
+    for(qsizetype i=start;i<=from;++i) {
+        if(i<from && symbol(tokens[i],"(")) ++depth;
+        else if(i<from && symbol(tokens[i],")")) --depth;
+        if(i!=from && !(depth==0 && symbol(tokens[i],","))) continue;
+        auto projection=tokens.mid(start,i-start);
+        if(projection.size()>=3 && projection[projection.size()-2].kind==Token::Word
+            && projection[projection.size()-2].value.compare("AS",Qt::CaseInsensitive)==0 && name(projection.last())) projection.resize(projection.size()-2);
+        projections.append(projection); start=i+1;
+    }
+    if(projections.size()!=origins.size()) return origins; // Wildcards/unknown expansion are not inferred.
+    QMap<QString,QStringList> relations;
+    const QSet<QString> reserved{"inner","left","right","outer","full","cross","join","on","using"};
+    for(auto i=from+1;i<end;++i) {
+        if(i!=from+1 && !word(i-1,"JOIN")) continue;
+        while(i<end && symbol(tokens[i],"(")) ++i;
+        if(i>=end || !name(tokens[i]) || (i+1<end && symbol(tokens[i+1],"."))) return origins;
+        const auto relation=tokens[i].value; auto alias=relation;
+        if(i+2<end && word(i+1,"AS") && name(tokens[i+2])) alias=tokens[i+2].value;
+        else if(i+1<end && name(tokens[i+1]) && !reserved.contains(tokens[i+1].value.toCaseFolded())) alias=tokens[i+1].value;
+        relations[alias.toCaseFolded()].append(relation);
+    }
+    QMap<QString,QVector<ColumnOrigin>> inputs;
+    for(int i=0;i<projections.size();++i) {
+        const auto& projection=projections[i]; QString owner,field;
+        if(projection.size()==3 && name(projection[0]) && symbol(projection[1],".") && name(projection[2])) {
+            owner=projection[0].value; field=projection[2].value;
+        } else if(projection.size()==1 && name(projection[0]) && relations.size()==1) {
+            owner=relations.firstKey(); field=projection[0].value;
+        } else continue;
+        const auto candidates=relations.value(owner.toCaseFolded()); if(candidates.size()!=1) continue;
+        const auto relation=candidates.front(); const auto key=relation.toCaseFolded();
+        if(!inputs.contains(key)) inputs.insert(key,columnOrigins(db,relation,visiting));
+        const ColumnOrigin* selected=nullptr; int matches=0;
+        for(const auto& origin:inputs[key]) if(origin.label.compare(field,Qt::CaseInsensitive)==0) { selected=&origin; ++matches; }
+        if(matches!=1) continue;
+        origins[i].logical=selected->logical;
+        origins[i].physicalProven=selected->physicalProven && origins[i].table.compare(selected->table,Qt::CaseInsensitive)==0
+            && origins[i].column.compare(selected->column,Qt::CaseInsensitive)==0;
+        if(projection.size()==3) origins[i].logical.append({owner,field});
+    }
     return origins;
 }
 QString resolveQueryOrigins(QSqlDatabase db,const QString& sql) {
@@ -505,7 +577,7 @@ QString resolveQueryOrigins(QSqlDatabase db,const QString& sql) {
         if (word(i,"WHERE") || word(i,"GROUP") || word(i,"HAVING") || word(i,"ORDER") || word(i,"LIMIT") || symbol(tokens[i],";")) { end=i; break; }
     }
     for (auto i=from+1;i<end;++i) if (symbol(tokens[i],",")) return sql;
-    struct Source { QString name,alias; QVector<ColumnOrigin> origins; };
+    struct Source { QString name,alias; QVector<ColumnOrigin> origins; bool view{}; };
     QVector<Source> sources;
     const QSet<QString> reserved{"inner","left","right","outer","full","cross","join","on","using"};
     for (auto i=from+1;i<end;++i) {
@@ -517,6 +589,11 @@ QString resolveQueryOrigins(QSqlDatabase db,const QString& sql) {
         else if (i+1<end && name(tokens[i+1]) && !reserved.contains(tokens[i+1].value.toCaseFolded())) source.alias=tokens[i+1].value;
         source.origins=columnOrigins(db,source.name);
         if (source.origins.empty()) return sql;
+        QSqlQuery kind(db);
+        if(!kind.prepare("SELECT type FROM temp.sqlite_schema WHERE name=? COLLATE NOCASE UNION ALL SELECT type FROM main.sqlite_schema WHERE name=? COLLATE NOCASE LIMIT 1")) return sql;
+        kind.addBindValue(source.name); kind.addBindValue(source.name);
+        if(!kind.exec() || !kind.next()) return sql;
+        source.view=kind.value(0).toString()=="view";
         sources.append(source);
     }
     if (sources.empty()) return sql;
@@ -528,7 +605,28 @@ QString resolveQueryOrigins(QSqlDatabase db,const QString& sql) {
     bool changed=false;
     for (qsizetype i=1;i+2<tokens.size();++i) {
         if (!name(tokens[i]) || !symbol(tokens[i+1],".") || !name(tokens[i+2])) continue;
+        if(i>0 && symbol(tokens[i-1],".")) continue; // Never rewrite the tail of a longer qualified name.
         const auto owner=tokens[i].value;
+        if(i+4<tokens.size() && symbol(tokens[i+3],".") && name(tokens[i+4])) {
+            if(i+5<tokens.size() && symbol(tokens[i+5],".")) continue;
+            const Source* selected=nullptr; int owners=0;
+            for(const auto& source:sources) if(source.alias.compare(owner,Qt::CaseInsensitive)==0) { selected=&source; ++owners; }
+            if(owners!=1 || !selected->view) continue;
+            QVector<QString> matches;
+            for(const auto& origin:selected->origins) {
+                bool matchesOrigin=origin.physicalProven && !origin.table.isEmpty() && origin.table.compare(tokens[i+2].value,Qt::CaseInsensitive)==0
+                    && origin.column.compare(tokens[i+4].value,Qt::CaseInsensitive)==0;
+                for(const auto& logical:origin.logical) matchesOrigin|=logical.first.compare(tokens[i+2].value,Qt::CaseInsensitive)==0
+                    && logical.second.compare(tokens[i+4].value,Qt::CaseInsensitive)==0;
+                if(matchesOrigin) matches.append(origin.label);
+            }
+            if(matches.size()!=1) continue;
+            // Access can qualify a saved query's field by its source relation.
+            // Bind the exact SQLite output label, including duplicate-name suffixes.
+            tokens[i]={Token::Identifier,selected->alias}; tokens[i+2]={Token::Identifier,matches.front()};
+            tokens.remove(i+3,2); if(i<from) from-=2;
+            changed=true; i+=2; continue;
+        }
         if (visibleOwners.contains(owner.toCaseFolded())) continue;
         QVector<QPair<QString,QString>> matches;
         for (const auto& source : sources) for (const auto& origin : source.origins)

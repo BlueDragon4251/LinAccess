@@ -762,3 +762,19 @@ Gezielt Mainwindow/Layout 2/2 (17,70 s), Debian-Paket und vier Original-SHA-256
 bestanden. Keine neuen Testziele; letzte vollständige 48/48-Suite gehört zum
 Abfragesuche-Checkpoint (90,46 s). 339 erledigte / 72 offene erfasste Punkte,
 kein Gesamtprozentsatz. Grenzen: OPEN_QUERY_RUNTIME.md.
+
+## Dreiteilige Abfrageherkunft und Originalkorpus (2026-11-03)
+
+query.relation.field wird über nachgewiesene direkte Projektionen der echten
+Temp-/Main-View-Definitionen an eindeutige Ausgabespalten gebunden, auch durch
+TOP-Rang-Wrapper und bei zwei Eingangsviews derselben physischen Tabelle.
+Keine Wahl bei Mehrdeutigkeit; UNION-Physikmetadaten gelten nicht als vollständiger
+Herkunftsnachweis. Maximal 16 Ebenen, keine Auswertung von Werteausdrücken.
+QUERY_ORIGINS.md ist verbindlicher Umfang. Ein weiteres unverändertes Original
+läuft: jetzt 78/100 (73 ohne zusätzliche Parameter, fünf mit datengeprüften
+Testparametern), weiterhin kein Access-Ergebnisoracle. Verbleibend 9 fehlende
+Abhängigkeiten, 8 Bindungs-/Kontextfälle, 3 gegen Originalquellen/-schema geprüfte
+fehlende Spalten, 2 geschützte Joined-Aktionen. Keine Ersatzspalten erfinden.
+Vollsuite 48/48 (90,47 s), GUI-frei 1/1 (1,67 s), Debian-Paket und alle vier
+Original-SHA-256 bestanden; keine neuen Testziele. 340 erledigte / 72 offene
+erfasste Checklist-Punkte, keine Gesamtparitätsquote.
