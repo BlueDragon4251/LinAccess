@@ -205,3 +205,15 @@ Real table Find/Ctrl+F/FindNext, literal text modes, SQL fetch limits, cached
 record saving, owning-page activation and dialog lifetime are specified in
 [TABLE_FIND_RUNTIME.md](TABLE_FIND_RUNTIME.md). View refusals record the current
 native error for VBA; unsupported binary Copy retains the actual 3251 boundary.
+
+## Native SelectAllRecords (2026-11-03)
+
+DoCmd/Application.RunCommand acCmdSelectAllRecords (109) uses the same checked
+selection as Ctrl+A on the actual native table view. It validates an active cell
+editor, fetches remaining SQL batches within the existing 1,000,000-cell selection
+boundary and selects the rows without submitting SQL or changing the current
+field. Readonly access remains available; unrelated cached drafts are preserved.
+The constant is taken from Microsoft's AcCommand enumeration:
+https://learn.microsoft.com/en-us/office/vba/api/access.accommand
+General multi-record clipboard/deletion and form/report selection parity remain
+open. This native table command does not imply those operations are available.

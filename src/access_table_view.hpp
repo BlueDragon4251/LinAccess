@@ -221,6 +221,16 @@ public:
         if(result->text==text && !(target.data(Qt::EditRole).isNull() && result->modified)) return true;
         return typed->setData(target,result->text,Qt::EditRole);
     }
+    bool selectAllRecords() {
+        QPointer<AccessTableView> self=this;
+        if(!finishEditing() || !self) return false;
+        const QPersistentModelIndex current=currentIndex();
+        if(!fetchSelectionRows() || !self || !selectionModel()) return false;
+        selectAll();
+        if(self && current.isValid() && selectionModel())
+            selectionModel()->setCurrentIndex(current,QItemSelectionModel::NoUpdate);
+        return true;
+    }
     bool canPasteSelection() const {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         return typed && typed->editStrategy()==QSqlTableModel::OnManualSubmit && !typed->isDirty()
@@ -366,12 +376,12 @@ protected:
         }
         if((event->key()==Qt::Key_Space && (selectionModifiers==Qt::ShiftModifier || selectionModifiers==Qt::ControlModifier))
             || (event->key()==Qt::Key_A && selectionModifiers==Qt::ControlModifier)) {
+            if(event->key()==Qt::Key_A) { (void)selectAllRecords(); event->accept(); return; }
             if(finishEditing() && selectionModel() && model()) {
                 if(event->key()==Qt::Key_Space && selectionModifiers==Qt::ShiftModifier) {
                     if(currentIndex().isValid()) selectionModel()->select(currentIndex(),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);
                 } else if(fetchSelectionRows()) {
-                    if(event->key()==Qt::Key_A) selectAll();
-                    else if(currentIndex().isValid()) selectionModel()->select(currentIndex(),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Columns);
+                    if(currentIndex().isValid()) selectionModel()->select(currentIndex(),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Columns);
                 }
             }
             event->accept(); return;
