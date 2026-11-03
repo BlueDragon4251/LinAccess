@@ -465,6 +465,15 @@ void testRoundFunction() {
 void testCalendarFunctions() {
     using namespace linaccess; FakeForm host;
     const auto eval=[&](const std::string& source) { return evaluateVbaExpression(source,host,{}); };
+    assert(eval("VarType(#2/29/2024#)=vbDate").truthy());
+    assert(eval("CStr(#12/31/2003 12:34#)").asText()=="2003-12-31 12:34:00");
+    assert(eval("DateDiff(\"d\",#2/28/2024#,#2024-03-01#)").asNumber()==2);
+    const auto literalDefault=executeVbaProcedure("Function LiteralDate(Optional value As Date = #12/31/2003#) As Date\nLiteralDate=value\nEnd Function","LiteralDate",host);
+    assert(literalDefault.status==VbaExecutionStatus::Completed && literalDefault.typedReturnValue->kind==VbaValue::Kind::Date && literalDefault.typedReturnValue->asText()=="2003-12-31");
+    const auto literalBody=executeVbaProcedure("Sub LiteralBody()\nMe!LiteralStamp=#12/31/2003 12:34#\nIf True Then Me!LiteralClock=#14:24#: Me!LiteralNumber=1\nEnd Sub","LiteralBody",host);
+    assert(literalBody.status==VbaExecutionStatus::Completed && host.fields["LiteralStamp"]=="2003-12-31 12:34:00" && host.fields["LiteralClock"]=="14:24:00" && host.fields["LiteralNumber"]=="1");
+    const auto invalidLiteral=executeVbaProcedure("Sub InvalidDate()\nMe!LiteralEffect=1\nMe!Other=#2/30/2024#\nEnd Sub","InvalidDate",host);
+    assert(invalidLiteral.status==VbaExecutionStatus::Unsupported && !host.fields.contains("LiteralEffect"));
     assert(eval("CStr(DateValue(Date:=\"2024-02-29 12:34:56\"))").asText()=="2024-02-29");
     assert(eval("CStr(TimeValue(Time:=\"2024-02-29T12:34\"))").asText()=="12:34:00");
     assert(eval("CStr(TimeValue(CDate(-1.25)))").asText()=="06:00:00" && eval("TimeValue(Null)").kind==VbaValue::Kind::Null);

@@ -1347,3 +1347,19 @@ options retain their previously documented restrictions.
 Core/DAO/query-model checks pass 3/3 (1.82 s); GUI-free build/test passes 1/1
 (1.42 s), affected desktop targets build. Existing targets only; no additional
 full-suite/package repeat before the next grouped language check.
+
+
+## Native VBA Date literals and grouped language verification (2026-11-03)
+
+The lexer parses supported #...# literals as actual Date constants: four-digit
+ISO or numeric US month/day/year dates and unambiguous 24-hour times, including
+Date/time values and optional Date parameter defaults. Validation happens during
+syntax inspection, before procedure side effects. Inline-branch colon splitting
+preserves colons inside Date literals. Regional/month-name/two-digit forms and
+complete literal/numeric-suffix grammar remain open.
+Core checks pass 1/1 (1.41 s); rebuilt desktop suite passes 48/48 in one run
+(87.46 s); GUI-free build/test passes 1/1 (1.43 s). This grouped run also covers
+DateAdd, Date Variant promotion/storage boundaries, calendar/DST changes and
+DateValue/TimeValue. Debian package contents/permissions/Build-ID/pinned backend
+checks pass and all four original fixture hashes pass. Existing CTest targets
+only; no full Access, Windows or new distribution-matrix parity claim.

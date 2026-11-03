@@ -83,8 +83,36 @@ std::string utf8String(std::u16string_view input) {
     return output;
 }
 
+std::string dateLiteral(std::string text) {
+    const auto first=text.find_first_not_of(" \t\r\n"),last=text.find_last_not_of(" \t\r\n");
+    if(first==std::string::npos) throw error("Empty Date literal",5);
+    text=text.substr(first,last-first+1);
+    if(text.size()>=10 && text[4]=='-' && text[7]=='-') {
+        (void)vbaDateValue(VbaValue::string(text)); return text;
+    }
+    if(text.find('/')==std::string::npos && text.find(':')!=std::string::npos) {
+        (void)vbaDateValue(VbaValue::string(text)); return text;
+    }
+    const auto end=text.find_first_of(" \t");
+    const auto date=text.substr(0,end);
+    const auto slash=date.find('/'),second=slash==std::string::npos ? slash : date.find('/',slash+1);
+    if(slash==std::string::npos || second==std::string::npos || date.find('/',second+1)!=std::string::npos)
+        throw error("Date literal requires ISO or month/day/four-digit-year syntax",3251);
+    const auto month=date.substr(0,slash),day=date.substr(slash+1,second-slash-1),year=date.substr(second+1);
+    const auto digits=[](const std::string& part) { return !part.empty() && std::all_of(part.begin(),part.end(),[](unsigned char ch){ return ch>='0' && ch<='9'; }); };
+    if(month.size()>2 || day.size()>2 || year.size()!=4 || !digits(month) || !digits(day) || !digits(year))
+        throw error("Date literal requires numeric month/day and four-digit year",3251);
+    std::ostringstream iso; iso<<year<<'-'<<std::setfill('0')<<std::setw(2)<<std::stoi(month)<<'-'<<std::setw(2)<<std::stoi(day);
+    if(end!=std::string::npos) {
+        const auto time=text.find_first_not_of(" \t",end);
+        if(time==std::string::npos) throw error("Date literal time is missing",5);
+        iso<<' '<<text.substr(time);
+    }
+    const auto normalized=iso.str(); (void)vbaDateValue(VbaValue::string(normalized)); return normalized;
+}
+
 struct Token {
-    enum class Type { Word, Number, Text, Bracket, Symbol, End } type{Type::End};
+    enum class Type { Word, Number, Text, Date, Bracket, Symbol, End } type{Type::End};
     std::string value;
 };
 
@@ -119,6 +147,10 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
                 if(pos==exponent) throw error("Numeric exponent requires digits",5);
             }
             tokens.push_back({Token::Type::Number,std::string(input.substr(start,pos-start))});
+        } else if(ch=='#') {
+            const auto end=input.find('#',pos+1);
+            if(end==std::string_view::npos) throw error("Unterminated Date literal",5);
+            tokens.push_back({Token::Type::Date,dateLiteral(std::string(input.substr(pos+1,end-pos-1)))}); pos=end+1;
         } else if (ch == '"' || (accessExpression && ch=='\'')) {
             const auto delimiter=ch;
             ++pos;
@@ -560,6 +592,7 @@ private:
             const bool reference=objectContext || nextSymbol(".") || nextSymbol("!");
             return accessExpression_ ? host_->expressionValue(tok.value,reference) : host_->bracketValue(tok.value,reference);
         }
+        if(tok.type==Token::Type::Date) return host_ ? vbaDateValue(VbaValue::string(tok.value)) : VbaValue{};
         if (tok.type == Token::Type::Text) return VbaValue::string(tok.value);
         if (tok.type == Token::Type::Number) {
             if(tok.value.starts_with('&')) {

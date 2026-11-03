@@ -10,6 +10,11 @@ Date-Lokale, Modulfelder, Parameter und Funktionsrückgaben behalten ihren Typ.
 Date-Variant kann bei Addition/Subtraktion zu Double werden; eine anschließende
 Zuweisung an einen deklarierten Date-Wert bleibt bereichsgeprüft.
 
+VBA-Datumsliterale mit vierstelligen ISO-/US-Daten und eindeutigen 24-Stunden-
+Zeiten werden als Date-Konstanten gelesen, auch in optionalen Date-Vorgaben.
+Ungültige Literale scheitern vor Verfahrensausführung; weitere regionale und
+zweistellige Schreibweisen bleiben offen.
+
 `DateValue` und `TimeValue` trennen Datum und Uhrzeit für Date/ISO-Werte;
 TimeValue übernimmt Null, DateValue meldet dafür 94. Eindeutige 24-Stunden-
 Minutenangaben werden normalisiert. DateDiff mit `w` zählt ganze Wochenabstände
@@ -48,7 +53,7 @@ abgewiesen, auch bei leerer Eingabe. Fest als Date deklarierte SQL-Projektionen
 weisen einen Bereichsüberlauf ab.
 
 Offen bleiben unter anderem regionale Eingabe/Anzeige und Jahresfenster, Hijri,
-vollständige Date-Literale, regionale DateValue/TimeValue-Eingaben, sämtliche OLE-/Variant-Promotionen,
+weitere Date-Literal-Schreibweisen, regionale DateValue/TimeValue-Eingaben, sämtliche OLE-/Variant-Promotionen,
 Untersekundenspeicherung, der vollständige Kalender-Control-Adapter sowie alle
 SQL-Operatoren, Filter-/Aktions-/CASE-/CAST-/Aggregat- und komplexen Quelltypen.
 DatePart/DateDiff haben weiterhin die in COMPATIBILITY.md dokumentierten

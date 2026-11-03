@@ -278,12 +278,14 @@ std::size_t inlineElse(const std::string& source,std::size_t start) {
     return std::string::npos;
 }
 std::string inlineStatementLines(const std::string& source) {
-    std::string result=source; bool quoted=false,bracket=false; int depth=0;
+    std::string result=source; bool quoted=false,bracket=false,dated=false; int depth=0;
     for (std::size_t i=0;i<result.size();++i) {
         const char ch=result[i];
+        if(dated) { if(ch=='#') dated=false; continue; }
         if (quoted) { if (ch=='"') { if (i+1<result.size() && result[i+1]=='"') ++i; else quoted=false; } continue; }
         if (bracket) { if (ch==']') { if (i+1<result.size() && result[i+1]==']') ++i; else bracket=false; } continue; }
-        if (ch=='"') quoted=true; else if (ch=='[') bracket=true;
+        if(ch=='#') dated=true;
+        else if (ch=='"') quoted=true; else if (ch=='[') bracket=true;
         else if (ch=='(') ++depth; else if (ch==')') --depth;
         else if (ch==':' && depth==0 && (i+1>=result.size() || result[i+1]!='=')) result[i]='\n';
     }
@@ -377,7 +379,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 hasCancel = std::regex_match(params, cancelParam);
                 bool optionalSeen=false,paramArraySeen=false;
                 const std::regex paramArray(R"(^ParamArray\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+Variant)?$)",std::regex::icase);
-                const std::regex defaultLiteral(R"CONST(^(?:"(?:[^"]|"")*"|[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|[+-]?&H[0-9A-F]+[&%]?|[+-]?&O[0-7]+[&%]?|True|False|Empty|Null)$)CONST",std::regex::icase);
+                const std::regex defaultLiteral(R"CONST(^(?:"(?:[^"]|"")*"|[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|[+-]?&H[0-9A-F]+[&%]?|[+-]?&O[0-7]+[&%]?|#[^#]+#|True|False|Empty|Null)$)CONST",std::regex::icase);
                 for (const auto& declaration : splitArguments(params)) {
                     std::smatch declared;
                     if(paramArraySeen) return {VbaExecutionStatus::Unsupported,"ParamArray must be the last parameter",line};
