@@ -1167,6 +1167,22 @@ bool AccessFormPreview::event(QEvent* event) {
 
 bool AccessFormPreview::databaseWindowActive(QWidget* window) { return databaseWindowContext().window && (!window || databaseWindowContext().window==window); }
 
+bool AccessFormPreview::projectObjectLoaded(const QSqlDatabase& database,linaccess::AccessDocumentKind kind,const QString& name) {
+    if(!database.isOpen()) return false;
+    const auto key=projectKey(database);
+    for(auto* widget:QApplication::allWidgets()) {
+        auto* document=dynamic_cast<AccessFormPreview*>(widget);
+        if(document && document->opened_ && !document->closed_ && !document->openCancelled_
+            && document->layout_.kind==kind && document->formName_.compare(name,Qt::CaseInsensitive)==0 && projectKey(document->db_)==key) {
+            bool liveOwner=true;
+            for(auto* parent=document->parentWidget();parent;parent=parent->parentWidget())
+                if(auto* ancestor=dynamic_cast<AccessFormPreview*>(parent);ancestor && (ancestor->closed_ || ancestor->openCancelled_)) { liveOwner=false; break; }
+            if(liveOwner) return true;
+        }
+    }
+    return false;
+}
+
 QVector<QPointer<AccessFormPreview>> AccessFormPreview::projectDocuments(const QSqlDatabase& database) {
     QVector<QPointer<AccessFormPreview>> documents;
     if(!database.isOpen()) return documents;
@@ -2193,10 +2209,10 @@ void AccessFormPreview::setDocumentVisible(bool visible) {
     using linaccess::VbaRuntimeError;
     ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
     if(closed_ || openCancelled_) throw VbaRuntimeError(2450,"Form is closed");
-    if(layout_.kind!=linaccess::AccessDocumentKind::Form) throw VbaRuntimeError(438,"Visible requires a native form");
+    const bool report=layout_.kind==linaccess::AccessDocumentKind::Report;
     const bool firstShow=!hasActivated_ && isHidden() && visible;
-    if(!opened_ || (!hasActivated_ && !firstShow) || !initialCurrentDispatched_ || !isWindow() || closing_ || recordCommandRunning_ || saving_ || navigating_ || loading_ || visibilityChanging_)
-        throw VbaRuntimeError(3251,"Changing form visibility during this lifecycle phase is not implemented");
+    if(!opened_ || (!hasActivated_ && !firstShow) || (!report && !initialCurrentDispatched_) || !isWindow() || closing_ || recordCommandRunning_ || saving_ || navigating_ || loading_ || visibilityChanging_)
+        throw VbaRuntimeError(3251,"Changing document visibility during this lifecycle phase is not implemented");
     if(visible==!isHidden()) return;
     auto* modal=QApplication::activeModalWidget();
     if((isModal() && !nativeDialog_) || (modal && modal!=this)) throw VbaRuntimeError(3251,"Modal form visibility change is not implemented for this context");

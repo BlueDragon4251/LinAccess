@@ -17,7 +17,7 @@ visible keyboard focus (2110) without delivering to a hidden editor.
 Visibility changes during initialization, record/save/navigation/load/close or
 reentrant phases diagnose 3251. Modal changes and hiding pending/dirty edits are
 also explicitly unsupported until validation/save/focus semantics have a
-reference. Showing dirty hidden forms is supported. Embedded/report visibility,
+reference. Showing dirty hidden forms is supported. Embedded visibility,
 acHidden/open modes, complete Windows activation/MRU/MDI/error/event identities
 and unqualified implicit property binding remain open.
 
@@ -35,3 +35,17 @@ additional complete original business workflows.
 
 Reference:
 https://learn.microsoft.com/en-us/office/vba/api/access.form.visible
+
+## Native report Visible extension (2026-11-03)
+
+Reports now share the actual Visible getter/setter and checked top-level native
+window visibility pipeline. Readonly report data stays unchanged; hiding keeps
+the report loaded and allows VBA continuation. Showing the report preserves the
+same document; native activation/deactivation bindings still execute actual VBA
+and SQL. Report visibility does not require a form-only Current initialization
+state. Existing lifecycle, reentrancy, modal and pending-edit guards remain.
+
+Main-window integration executes report HideSelf/ShowSelf procedures using
+Me.Visible, checks real Qt hidden/visible state and CurrentProject.AllReports
+IsLoaded, and queries SQL audit rows from Report_Activate/Report_Deactivate.
+Complete report event/layout/modal timing equivalence remains open.

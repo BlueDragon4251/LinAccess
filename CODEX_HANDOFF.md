@@ -657,3 +657,21 @@ Finale Vollsuite 48/48 (92.20 s), GUI-freier Core 1/1 (1.56 s), Debian-Prüfung
 inklusive Build-ID/SQLite 3.54.1 und vier Originalfixture-Hashes bestanden.
 MainWindow hält absoluten Öffnungspfad fest; standalone relative Dateinamen
 ergeben keine geratenen Metadaten. Keine neuen Testtargets.
+
+## Projektkataloge und Report.Visible (2026-11-03)
+
+CurrentProject.AllForms/AllReports lesen gespeicherte native/importierte Objekte
+aus echtem SQL: Long Count, Name/Index/named Item, For Each und unabhängige
+readonly AccessObject-Deskriptoren. IsLoaded erkennt versteckte/modale/embedded
+Previews, geschlossene Eltern und tatsächliche native Runner/Designer-Dialoge.
+Mehrdeutige Namen 5 statt willkürlicher Wahl; Version/Sortierung/Snapshots und
+allgemeine COM-/Eventzeitpunkt-Grenzen dokumentiert. Report.Visible nutzt nun
+geprüfte echte Qt-Sichtbarkeit; Me.Visible aus HideSelf/ShowSelf setzt Code fort,
+IsLoaded bleibt beim Verbergen wahr, Report_Activate/Deactivate erzeugen echte
+SQL-Auditzeilen. Kanonisch PROJECT_CATALOG_RUNTIME.md / FORM_VISIBILITY_RUNTIME.md.
+Bestehendes MainWindow/Form-Visibility/Layout-Trio 3/3 (18.72 s), keine neuen Targets.
+
+Finale Vollsuite 48/48 (97.60 s), GUI-freier Core 1/1 (1.71 s), Debian-Prüfung
+inklusive Build-ID/SQLite 3.54.1 und vier Fixture-Hashes bestanden.
+Gespeichertes Hauptschema/Temp-Isolation, echtes leer/kein-Katalog, Katalogleben
+und Report.Visible mit VBA/SQL eingeschlossen. Keine neuen Testtargets.

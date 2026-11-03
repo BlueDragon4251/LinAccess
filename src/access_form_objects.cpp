@@ -26,6 +26,8 @@
 #include <QRegularExpression>
 #include <QWidget>
 #include <QFileInfo>
+#include <QSqlQuery>
+#include <QSqlError>
 #include <algorithm>
 #include <limits>
 
@@ -720,7 +722,6 @@ public:
         if (key == "tag") return linaccess::VbaValue::string(bytes(preview.property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(preview.layout_.caption));
         if(key=="visible") {
-            if(preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Visible requires a native form");
             return linaccess::VbaValue::logical(!preview.isHidden());
         }
         if (key=="allowdeletions" || key=="allowadditions" || key=="allowedits" || key=="dataentry" || key=="selheight") {
@@ -1268,16 +1269,29 @@ public:
         preview.closeOtherDocument(type,objectName,save); return {};
     }
 };
-class NativeCurrentProjectObject final : public linaccess::VbaObject {
+class NativeCurrentProjectObject;
+std::shared_ptr<linaccess::VbaObject> makeNativeProjectCatalog(std::shared_ptr<NativeCurrentProjectObject> project,const QString& kind);
+class NativeCurrentProjectObject final : public linaccess::VbaObject,public std::enable_shared_from_this<NativeCurrentProjectObject> {
 public:
     NativeCurrentProjectObject(QSqlDatabase database,QObject* owner)
         : database_(std::move(database)),identity_(database_.databaseName()),owner_(owner),hasOwner_(owner!=nullptr),
           generation_(owner ? owner->property("la_project_generation").toULongLong() : 0) {}
     std::string_view className() const override { return "CurrentProject"; }
+    std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        const auto key=text(name).toCaseFolded();
+        if(key=="allforms" || key=="allreports") return linaccess::VbaArgumentSignature{{"Index"},0};
+        return {};
+    }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         check();
-        if(!args.empty()) throw linaccess::VbaRuntimeError(450,"CurrentProject property requires no arguments");
         const auto key=text(name).toCaseFolded();
+        if(key=="allforms" || key=="allreports") {
+            auto& cache=key=="allforms" ? forms_ : reports_;
+            auto catalog=cache.lock();
+            if(!catalog) { catalog=makeNativeProjectCatalog(shared_from_this(),key=="allforms" ? "form" : "report"); cache=catalog; }
+            return args.empty() ? linaccess::VbaValue::reference(catalog) : catalog->member("Item",args);
+        }
+        if(!args.empty()) throw linaccess::VbaRuntimeError(450,"CurrentProject property requires no arguments");
         if(key!="name" && key!="path" && key!="fullname") throw linaccess::VbaRuntimeError(438,"CurrentProject member unsupported");
         if(database_.driverName()!="QSQLITE" || identity_.isEmpty() || identity_==":memory:" || identity_.startsWith("file:",Qt::CaseInsensitive) || !QFileInfo(identity_).isAbsolute())
             throw linaccess::VbaRuntimeError(3251,"CurrentProject file metadata requires a native file-backed project");
@@ -1288,18 +1302,135 @@ public:
     void assign(std::string_view,const linaccess::VbaValue&) override {
         check(); throw linaccess::VbaRuntimeError(438,"CurrentProject metadata is read-only");
     }
-private:
+    QStringList catalogNames(const QString& kind) const {
+        check(); QMap<QString,QString> names,imported;
+        if(database_.driverName()!="QSQLITE") throw linaccess::VbaRuntimeError(3251,"Native project catalogs require SQLite storage");
+        QSqlQuery schema(database_);
+        if(!schema.exec("SELECT name FROM main.sqlite_schema WHERE type='table' AND (name='_la_objects' COLLATE NOCASE OR name='_la_access_artifacts' COLLATE NOCASE)"))
+            throw linaccess::VbaRuntimeError(3146,"Project catalog schema query failed");
+        QStringList tables;
+        while(schema.next()) tables.push_back(schema.value(0).toString());
+        if(schema.lastError().isValid()) throw linaccess::VbaRuntimeError(3146,"Project catalog schema fetch failed");
+        if(tables.isEmpty()) throw linaccess::VbaRuntimeError(3251,"Database has no native project catalog");
+        qsizetype rows=0;
+        for(const auto& table:{QStringLiteral("_la_objects"),QStringLiteral("_la_access_artifacts")}) {
+            if(!tables.contains(table,Qt::CaseInsensitive)) continue;
+            const bool artifact=table=="_la_access_artifacts";
+            QSqlQuery query(database_);
+            if(!query.prepare("SELECT name FROM main."+table+" WHERE kind=?"+(artifact ? " ORDER BY id DESC" : "")))
+                throw linaccess::VbaRuntimeError(3146,"Project catalog prepare failed");
+            query.addBindValue(kind);
+            if(!query.exec()) throw linaccess::VbaRuntimeError(3146,"Project catalog query failed");
+            while(query.next()) {
+                if(++rows>1000000) throw linaccess::VbaRuntimeError(3251,"Native project catalog limit exceeded");
+                const auto name=query.value(0).toString(),key=name.toCaseFolded();
+                auto& target=artifact ? imported : names;
+                if(target.contains(key)) {
+                    if(artifact) continue; // Same imported logical name: latest stored version.
+                    throw linaccess::VbaRuntimeError(5,"Ambiguous project catalog name");
+                }
+                target.insert(key,name);
+            }
+            if(query.lastError().isValid()) throw linaccess::VbaRuntimeError(3146,"Project catalog fetch failed");
+        }
+        for(auto entry=imported.cbegin();entry!=imported.cend();++entry) {
+            if(names.contains(entry.key())) throw linaccess::VbaRuntimeError(5,"Ambiguous native/imported project catalog name");
+            names.insert(entry.key(),entry.value());
+        }
+        return names.values();
+    }
+    bool objectLoaded(const QString& kind,const QString& name) const {
+        check();
+        if(AccessFormPreview::projectObjectLoaded(database_,kind=="form" ? linaccess::AccessDocumentKind::Form : linaccess::AccessDocumentKind::Report,name)) return true;
+        for(auto* widget:QApplication::allWidgets()) {
+            if(widget->isVisible() && widget->property("la_project_object_kind").toString()==kind
+                && widget->property("la_project_object_name").toString().compare(name,Qt::CaseInsensitive)==0
+                && widget->property("la_project_object_connection").toString()==database_.connectionName()
+                && widget->property("la_project_object_database").toString()==identity_
+                && widget->property("la_project_object_generation").toULongLong()==generation_) return true;
+        }
+        return false;
+    }
     void check() const {
         if(!database_.isOpen() || database_.databaseName()!=identity_ || (hasOwner_ && (!owner_
             || owner_->property("la_project_generation").toULongLong()!=generation_)))
             throw linaccess::VbaRuntimeError(3420,"CurrentProject is closed or belongs to an earlier project generation");
     }
+private:
     QSqlDatabase database_;
     QString identity_;
     QPointer<QObject> owner_;
     bool hasOwner_{};
     qulonglong generation_{};
+    std::weak_ptr<linaccess::VbaObject> forms_,reports_;
 };
+
+class NativeProjectCatalogObject;
+class NativeProjectAccessObject final : public linaccess::VbaObject {
+public:
+    NativeProjectAccessObject(std::shared_ptr<NativeProjectCatalogObject> catalog,QString name):catalog_(std::move(catalog)),name_(std::move(name)) {}
+    std::string_view className() const override { return "AccessObject"; }
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override;
+    void assign(std::string_view,const linaccess::VbaValue&) override;
+private:
+    std::shared_ptr<NativeProjectCatalogObject> catalog_;
+    QString name_;
+};
+class NativeProjectCatalogObject final : public linaccess::VbaObject,public std::enable_shared_from_this<NativeProjectCatalogObject> {
+public:
+    NativeProjectCatalogObject(std::shared_ptr<NativeCurrentProjectObject> project,QString kind):project_(std::move(project)),kind_(std::move(kind)) {}
+    std::string_view className() const override { return kind_=="form" ? "AllForms" : "AllReports"; }
+    std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(text(name).compare("Item",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Index"},1};
+        return {};
+    }
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        check(); const auto key=text(name).toCaseFolded();
+        if(key!="count" && key!="item") throw linaccess::VbaRuntimeError(438,"Project catalog member unsupported");
+        if(key=="count" && !args.empty()) throw linaccess::VbaRuntimeError(450,"Count requires no arguments");
+        if(key=="item" && (args.size()!=1 || args[0].kind==linaccess::VbaValue::Kind::Missing)) throw linaccess::VbaRuntimeError(450,"Item requires one index");
+        const auto names=project_->catalogNames(kind_);
+        if(key=="count") return linaccess::VbaValue::longInteger(static_cast<std::int32_t>(names.size()));
+        const auto index=linaccess::scalarVbaValue(args[0]);
+        if(index.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null catalog index");
+        if(index.kind==linaccess::VbaValue::Kind::Text) {
+            for(const auto& candidate:names) if(candidate.compare(text(index.asText()),Qt::CaseInsensitive)==0) return entry(candidate);
+        } else {
+            const auto row=linaccess::coerceVbaModuleValue(index,"long").asNumber();
+            if(row>=0 && row<names.size()) return entry(names[static_cast<qsizetype>(row)]);
+        }
+        throw linaccess::VbaRuntimeError(3265,"Project catalog item not found");
+    }
+    std::vector<linaccess::VbaValue> enumerate() override {
+        const auto names=project_->catalogNames(kind_); std::vector<linaccess::VbaValue> result; result.reserve(names.size());
+        for(const auto& name:names) result.push_back(entry(name));
+        return result;
+    }
+    void assign(std::string_view,const linaccess::VbaValue&) override { check(); throw linaccess::VbaRuntimeError(438,"Project catalog is read-only"); }
+    void check() const { project_->check(); }
+    bool loaded(const QString& name) const { return project_->objectLoaded(kind_,name); }
+private:
+    linaccess::VbaValue entry(const QString& name) {
+        auto& cached=entries_[name.toCaseFolded()]; auto object=cached.lock();
+        if(!object) { object=std::make_shared<NativeProjectAccessObject>(shared_from_this(),name); cached=object; }
+        return linaccess::VbaValue::reference(object);
+    }
+    std::shared_ptr<NativeCurrentProjectObject> project_;
+    QString kind_;
+    QMap<QString,std::weak_ptr<linaccess::VbaObject>> entries_;
+};
+linaccess::VbaValue NativeProjectAccessObject::member(std::string_view name,const std::vector<linaccess::VbaValue>& args) {
+    catalog_->check();
+    if(!args.empty()) throw linaccess::VbaRuntimeError(450,"AccessObject property requires no arguments");
+    const auto key=text(name).toCaseFolded();
+    if(key=="name") return linaccess::VbaValue::string(name_.toUtf8().toStdString());
+    if(key=="isloaded") return linaccess::VbaValue::logical(catalog_->loaded(name_));
+    throw linaccess::VbaRuntimeError(438,"AccessObject member unsupported");
+}
+void NativeProjectAccessObject::assign(std::string_view,const linaccess::VbaValue&) { catalog_->check(); throw linaccess::VbaRuntimeError(438,"AccessObject metadata is read-only"); }
+std::shared_ptr<linaccess::VbaObject> makeNativeProjectCatalog(std::shared_ptr<NativeCurrentProjectObject> project,const QString& kind) {
+    return std::make_shared<NativeProjectCatalogObject>(std::move(project),kind);
+}
 
 class PreviewApplicationObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:

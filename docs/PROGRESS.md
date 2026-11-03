@@ -3982,3 +3982,26 @@ Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. The main window fixes the absolute project path before
 replacement; standalone relative filenames do not become guessed metadata.
 No additional test targets.
+
+## Native project catalogs and report visibility (2026-11-03)
+
+AllForms/AllReports query actual saved native/imported definitions with Long
+Count, named/indexed Item, For Each and independent readonly AccessObject
+descriptors. IsLoaded follows live hidden/modal/embedded preview state, closed
+owners and actual tagged native runner/designer dialogs. Name collisions refuse
+5; source versions, ordering and snapshot boundaries stay explicit. Report
+Visible now uses the real checked document pipeline; interpreted HideSelf/ShowSelf
+continue after visibility changes and activate/deactivate SQL audit rows are
+checked. Canonical scopes: PROJECT_CATALOG_RUNTIME.md, FORM_VISIBILITY_RUNTIME.md.
+Existing main-window/form-visibility/layout trio 3/3 (18.72 s), no new targets.
+Theoretical checklist: 327 checked / 72 open scoped points.
+
+Final main-window storage check passes 1/1 (3.81 s), including saved-main-schema
+lookup, temporary-shadow isolation, explicit no-catalog refusal and genuine
+empty-project counts. GUI-free core passes 1/1 (1.71 s).
+
+Final rebuilt desktop suite passes 48/48 (97.60 s), GUI-free core 1/1 (1.71 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. Includes saved-main-schema/temp-shadow isolation, genuine
+empty/no-catalog distinction, native catalog lifetimes and report Visible VBA/SQL.
+No additional test targets.
