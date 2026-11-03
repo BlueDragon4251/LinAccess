@@ -3,6 +3,7 @@
 #include "vba_runtime.hpp"
 #include "csv.hpp"
 #include "native_clock_keys.hpp"
+#include "native_cell_editor.hpp"
 #include <QLineEdit>
 #include <QClipboard>
 #include <QMimeData>
@@ -33,15 +34,15 @@ public:
         const auto stored=editor->property("la_cell_index").value<QPersistentModelIndex>();
         const QModelIndex target=stored.isValid() ? QModelIndex(stored) : currentIndex();
         if(!property.isValid() || target.model()!=model()) return true;
-        const auto value=property.read(editor),original=target.data(Qt::EditRole);
-        return value!=original && value.toString()!=original.toString();
+        return nativeCellEditorChanged(editor,target);
     }
     bool finishEditing() {
         auto* editor=activeEditor(); if(!editor) return true;
         const auto property=editor->metaObject()->userProperty(); if(!property.isValid() || !model()) return false;
         const auto stored=editor->property("la_cell_index").value<QPersistentModelIndex>();
         const QModelIndex target=stored.isValid() ? QModelIndex(stored) : currentIndex();
-        if(target.model()!=model() || !model()->setData(target,property.read(editor),Qt::EditRole)) return false;
+        if(target.model()!=model()) return false;
+        if(nativeCellEditorChanged(editor,target) && !model()->setData(target,property.read(editor),Qt::EditRole)) return false;
         QTableView::closeEditor(editor,QAbstractItemDelegate::NoHint); return true;
     }
     bool insertRecord() {

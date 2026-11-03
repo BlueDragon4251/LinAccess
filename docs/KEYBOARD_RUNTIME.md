@@ -131,3 +131,20 @@ AutoNumber/BLOB refusal and actual persistence. A focused two-target run passes
 Full suite/package baseline remains source 24854bf (48/48, 86.21 s), privately
 published as 33981e26e528c0d708ba2a2f3be265aedf3a01ea with identical source tree
 caca8e5ef7c1de87a10390a3b14d7272a700c895. This key increment is focused-verified.
+
+
+### Previous-record key inside a native text-cell editor
+
+The native QLineEdit delegate also accepts Ctrl+apostrophe: it replaces the
+current field buffer with the checked prior-row value and refreshes the editor.
+This command intentionally replaces an unfinished text entry. Read-only/binary/
+generated and hidden prior-row contexts retain their guards. The value remains
+in the model's manual-submit cache until explicit Save.
+
+Untouched editors now close without writing an empty string over SQL NULL,
+including normal Qt delegate submission and the explicit finishEditing path.
+Explicit user typing followed by deletion still requests empty text for a text
+field. A shared editor-change check distinguishes these cases. The existing
+Currency target proves editor key dispatch, NULL retention and explicit empty
+text through actual SQL persistence; main-window/Currency checks pass 2/2
+(2.22 s). Full suite/package baseline remains 24854bf, as above.
