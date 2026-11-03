@@ -206,3 +206,30 @@ Schlüssel, schlüssellose Tabellen und große Datenmengen bleiben begrenzt.
 Das Bearbeiten-Menü routet echte Qt-Tasten an den fokussierten Texteditor und
 registriert keine konkurrierenden globalen QAction-Tastenkürzel. Separate
 Form-/Reportfenster benötigen weiterhin vollständige MDI-/Menüintegration.
+
+
+## Fortsetzung nach abgelaufener CLI-Anmeldung (2026-11-03)
+
+Der GitHub-CLI-Token wurde während der Entwicklung ungültig. Der authentifizierte
+GitHub-Connector konnte den privaten Branch per Git-API dennoch aktualisieren:
+Runtime-Checkpoint d94ec0382b637dac6d306d5af87f02e8a8756c19 auf
+development/access-compatibility hat exakt denselben Git-Quellbaum
+9ab113b0ba92d0021944b5ef4b6a5b2e8a13fe33 wie der lokale Checkpoint
+b96e7a6817f7f1e084070065d62101d976daefa4. Alle 25 geänderten Blob-Hashes, der
+vollständige Tree und der tatsächliche Remote-Branch wurden abgeglichen. Der
+Remote wurde ohne Force vom bisherigen 825047c weitergeführt; privat bestätigt.
+Die einzelnen lokalen Entwicklungscommits bleiben erhalten, zusätzlich gesichert
+unter refs/linaccess/checkpoints/b96e7a6. Lokale und API-Commit-IDs unterscheiden
+sich wegen der Git-Metadaten; die geprüften Quellen sind identisch.
+
+Solange die CLI-Anmeldung ungültig ist, den tatsächlichen Remote-Stand mit dem
+GitHub-Connector lesen. Weitere Git-API-Checkpoints dürfen nur mit identischem
+geprüftem Source-Tree, privaten Repo-Metadaten und expected_sha-Schutz auf dem
+Arbeitsbranch angelegt werden. Lokale Historie nicht mit Force/Hard-Reset
+verwerfen. Nach erneuerter CLI-Anmeldung erst fetch und Status/Diff prüfen, dann
+die Quellbaum-identische API-Historie ohne Arbeitsverlust zusammenführen.
+Die externe private Checkpoint-Metadatei liegt unter
+/workspace/linaccess-onboarding/private-api-checkpoint.json; sie enthält keine
+Zugangsdaten. Der aktuelle Runtime-Checkpoint bestand 48/48 CTests (87.26 s),
+GUI-freien Core (1.55 s), Debian-Paket und alle vier Originalfixture-Hashes.
+Vollständige Access-Parität ist weiterhin nicht erreicht.
