@@ -212,7 +212,10 @@ End
 End
 End
 )FORM";
-        const QByteArray entryCode=R"VBA(Sub StoreEntry()
+        const QByteArray entryCode=R"VBA(Function NewState() As String
+NewState=TypeName(NewRecord) & ":" & CStr(Me.NewRecord)
+End Function
+Sub StoreEntry()
 If Not DataEntry Then Err.Raise 5
 DoCmd.RunCommand acCmdSaveRecord
 End Sub
@@ -228,9 +231,11 @@ End Sub
 )VBA";
         AccessFormPreview entries("entry_form",entryLayout,entryCode,db); entries.show(); entries.activateWindow(); QApplication::processEvents();
         auto form=makePreviewFormObject(entries); auto records=form->member("Recordset",{}).object;
+        std::vector<VbaValue> args;
+        const auto fresh=entries.executeProcedure("NewState",args); assert(fresh.returnValue=="Integer:-1");
         assert(form->member("DataEntry",{}).truthy() && form->member("NewRecord",{}).truthy() && records->member("RecordCount",{}).asNumber()==0);
         auto* label=entries.findChild<QLineEdit*>("access-control-label"); auto* key=entries.findChild<QLineEdit*>("access-control-id"); assert(label && key);
-        label->setFocus(); QTest::keyClicks(label,"fresh"); std::vector<VbaValue> args;
+        label->setFocus(); QTest::keyClicks(label,"fresh");
         assert(entries.executeProcedure("StoreEntry",args).status==linaccess::VbaExecutionStatus::Completed);
         assert(records->member("RecordCount",{}).asNumber()==1 && form->item("label").asText()=="fresh");
         assert(sql.exec("SELECT COUNT(*) FROM entry_records") && sql.next() && sql.value(0).toInt()==3); sql.finish();
@@ -250,6 +255,10 @@ End Sub
         assert(form->member("DataEntry",{}).truthy() && records->member("RecordCount",{}).asNumber()==4 && !form->member("NewRecord",{}).truthy());
         form->assign("AllowAdditions",VbaValue::logical(true));
         assert(records->member("RecordCount",{}).asNumber()==0 && form->member("NewRecord",{}).truthy());
+        form->assign("AllowAdditions",VbaValue::logical(false));
+        assert(sql.exec("DELETE FROM entry_records")); form->member("Requery",{});
+        assert(records->member("RecordCount",{}).asNumber()==0 && !form->member("NewRecord",{}).truthy());
+        const auto unavailable=entries.executeProcedure("NewState",args); assert(unavailable.returnValue=="Integer:0");
         assert(entries.close());
     }
     const QByteArray layout=R"FORM(Begin Form

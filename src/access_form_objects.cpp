@@ -762,7 +762,7 @@ public:
         if (preview.layout_.kind==linaccess::AccessDocumentKind::Report && (key=="dirty" || key=="newrecord"))
             throw linaccess::VbaRuntimeError(438,"Report member unsupported");
         if (key == "dirty") return linaccess::VbaValue::logical(preview.dirty_);
-        if (key == "newrecord") return linaccess::VbaValue::logical(preview.currentRecordIndex_==0);
+        if (key == "newrecord") return linaccess::VbaValue::integer(preview.currentRecordIndex_==0 && preview.directTable_ && preview.dataSourceAvailable_ && preview.layout_.allowAdditions ? -1 : 0);
         if (key == "requery") {
             if (!preview.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Requery cancelled");
             preview.loadRecords();

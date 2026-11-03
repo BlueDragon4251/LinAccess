@@ -2835,3 +2835,14 @@ original-layout adapter, existing GUI/original-layout/real DAO targets pass 3/3
 package/distro repeat for this increment. Full Windows edit/delete override
 matrix, writable query entry and open-instance mode changes remain open; see
 FORM_DATA_MODE_RUNTIME.md. Last full 48/48/package evidence remains 992d082.
+
+## Native NewRecord subtype and availability (2026-11-03)
+
+Corrected native Form.NewRecord from Boolean to its documented read-only Integer
+-1/0 subtype. Qualified/unqualified/legacy reads now share the same native getter;
+True requires an available direct-table new-row slot with additions enabled.
+The existing GUI regression checks TypeName/value through actual VBA and an
+empty source with additions disabled after real SQL deletion/requery. Desktop
+build and form_current_record pass (0.64 s). No new target/full-suite/package
+repeat; full Windows unbound/view/no-current edge cases remain open.
+Reference: https://learn.microsoft.com/en-us/office/vba/api/access.form.newrecord

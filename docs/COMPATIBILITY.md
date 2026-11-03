@@ -1004,3 +1004,8 @@ AllowAdditions dependency. DataEntry=False removes active filter/sort and restor
 all rows. Writable query entry sources remain unsupported; native acFormAdd now starts
 this entry session with imported edit/delete policies retained. See
 DATA_ENTRY_RUNTIME.md for limits and verification.
+
+Native Form.NewRecord now returns read-only Integer -1/0 through qualified,
+unqualified and legacy field routes. True requires an actual native addable
+virtual row; an empty non-addable source no longer reports a new record. Full
+Windows no-current/unbound/view edge behavior remains outside the verified scope.

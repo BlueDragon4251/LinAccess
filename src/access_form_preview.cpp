@@ -327,7 +327,7 @@ public:
     std::optional<std::string> field(std::string_view name) override {
         const auto key = QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if (key == "dirty") return preview_.dirty_ ? "-1" : "0";
-        if (key == "newrecord") return preview_.currentRecordIndex_ == 0 ? "-1" : "0";
+        if (key == "newrecord") return makePreviewFormObject(preview_)->member("NewRecord",{}).asField();
         if (key == "dataentry" || key == "modal" || key == "popup" || key == "openargs" || key == "currentrecord" || key=="orderby" || key=="orderbyon") return makePreviewFormObject(preview_)->member(name,{}).asField();
         return preview_.getField(name);
     }
@@ -441,7 +441,7 @@ public:
         if (key=="dataentry" || key=="modal" || key=="popup" || key=="openargs" || key=="orderby" || key=="orderbyon" || key=="currentrecord" || key=="visible" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="filter" || key=="filteron" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="bookmark" || key=="recordset") return makePreviewFormObject(preview_)->member(key.toStdString(),{});
         if (key == "recordsource") return linaccess::VbaValue::string(preview_.layout_.recordSource.toUtf8().toStdString());
         if (key == "dirty") return linaccess::VbaValue::logical(preview_.dirty_);
-        if (key == "newrecord") return linaccess::VbaValue::logical(preview_.currentRecordIndex_ == 0);
+        if (key == "newrecord") return makePreviewFormObject(preview_)->member("NewRecord",{});
         if (auto value=preview_.getModuleMember(name,false)) return *value;
         return preview_.getFieldValue(memberControlName(name));
     }
@@ -703,7 +703,7 @@ private:
     std::vector<bool> moduleScopes_;
     static bool recordProperty(std::string_view name) {
         const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
-        return key=="dataentry" || key=="modal" || key=="popup" || key=="openargs" || key=="currentrecord" || key=="orderby" || key=="orderbyon";
+        return key=="newrecord" || key=="dataentry" || key=="modal" || key=="popup" || key=="openargs" || key=="currentrecord" || key=="orderby" || key=="orderbyon";
     }
     bool instanceScope() const { return moduleScopes_.empty() || moduleScopes_.back(); }
     void requireInstance() const { if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Me is unavailable in a standard module"); }
