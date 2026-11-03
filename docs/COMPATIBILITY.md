@@ -995,4 +995,5 @@ family. Snapshot/never-modified/stale cases raise explicit errors. Native DAO
 Update now uses SQLite RETURNING rowid and preserves shared bookmark identity
 when an Integer primary-key edit changes rowid. Direct external SQL/trigger-driven
 identity replacement and exact Windows LastModified edge/error semantics remain
-open; this does not change the separate form-save adapter yet.
+open; native form saves now also preserve committed key-change identities; see
+FORM_KEY_IDENTITY_RUNTIME.md.

@@ -88,9 +88,12 @@ End Sub
         assert(defaults.close()); assert(sql.exec("DELETE FROM positions"));
     }
     {
-        assert(sql.exec("CREATE TABLE mode_records AS SELECT * FROM records"));
+        assert(sql.exec("CREATE TABLE mode_records(id INTEGER PRIMARY KEY,label TEXT)"));
+        assert(sql.exec("INSERT INTO mode_records SELECT * FROM records"));
         const QByteArray readOnlyLayout=R"FORM(Begin Form
 RecordSource ="mode_records"
+OrderBy ="id"
+OrderByOnLoad =-1
 AllowEdits =0
 AllowAdditions =0
 AllowDeletions =0
@@ -109,6 +112,11 @@ Name ="destination_label"
 Caption ="&Destination"
 Top =1000
 End
+End
+Begin TextBox
+Name ="id"
+ControlSource ="id"
+Top =1500
 End
 End
 End
@@ -157,6 +165,14 @@ End Sub
         assert(opened->findChild<QLineEdit*>("access-control-destination")->hasFocus());
         form->assign("Dirty",VbaValue::logical(false));
         assert(sql.exec("SELECT label FROM mode_records WHERE id=10") && sql.next() && sql.value(0).toString()=="edited"); sql.finish();
+        auto clone=form->member("Recordset",{}).object->member("Clone",{}).object; clone->member("MoveFirst",{});
+        const auto oldBookmark=form->member("Bookmark",{});
+        auto* key=opened->findChild<QLineEdit*>("access-control-id"); assert(key);
+        key->setFocus(); key->selectAll(); QTest::keyClicks(key,"101"); form->assign("Dirty",VbaValue::logical(false));
+        assert(form->item("id").asNumber()==101 && form->member("CurrentRecord",{}).asNumber()==3);
+        assert(clone->item("id").asNumber()==101); clone->assign("Bookmark",oldBookmark); assert(clone->item("id").asNumber()==101);
+        form->assign("Bookmark",oldBookmark); assert(form->item("id").asNumber()==101);
+        assert(sql.exec("SELECT label FROM mode_records WHERE id=101") && sql.next() && sql.value(0).toString()=="edited"); sql.finish();
         assert(caller.executeProcedure("ReadOnlyClose",args).status==linaccess::VbaExecutionStatus::Completed);
         assert(caller.close()); assert(sql.exec("DELETE FROM positions"));
     }

@@ -14,7 +14,8 @@ std::shared_ptr<VbaObject> makeDaoEngine(QSqlDatabase database);
 std::shared_ptr<VbaObject> makeDaoSnapshot(QSqlDatabase database,const QStringList& columns,
                                         const QMap<QString,QString>& types,const QVector<QVariantList>& rows,const QVector<QVariant>& ids={});
 void refreshDaoSnapshot(const std::shared_ptr<VbaObject>& recordset,const QStringList& columns,
-                        const QMap<QString,QString>& types,const QVector<QVariantList>& rows,const QVector<QVariant>& ids);
+                        const QMap<QString,QString>& types,const QVector<QVariantList>& rows,const QVector<QVariant>& ids,
+                        const QMap<qlonglong,qlonglong>& identityChanges={});
 VbaValue daoBookmarkAt(const std::shared_ptr<VbaObject>& recordset,qsizetype position);
 qsizetype daoBookmarkPosition(const std::shared_ptr<VbaObject>& recordset,const VbaValue& bookmark);
 }

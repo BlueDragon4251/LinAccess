@@ -1847,17 +1847,23 @@ bool AccessFormPreview::saveRecord() {
     if (columns.empty() && currentRecordIndex_>0) return false;
     QSqlQuery query(db_);
     const int row = currentRecordIndex_-1;
+    const bool updating=row>=0 && row<recordRows_.size();
+    const auto previousId=updating ? rowIds_[row] : QVariant{};
     QVariant savedId;
-    if (row >= 0 && row < recordRows_.size()) {
+    if (updating) {
         savedId = rowIds_[row]; QStringList assignments;
         for (const auto& column : columns) assignments << column + "=?";
-        query.prepare("UPDATE " + sqlIdentifier(table) + " SET " + assignments.join(',') + " WHERE rowid=?");
+        query.prepare("UPDATE " + sqlIdentifier(table) + " SET " + assignments.join(',') + " WHERE rowid=? RETURNING rowid");
         values << savedId;
     } else if (columns.empty()) query.prepare("INSERT INTO "+sqlIdentifier(table)+" DEFAULT VALUES");
     else query.prepare("INSERT INTO " + sqlIdentifier(table) + " (" + columns.join(',') + ") VALUES (" + placeholders.join(',') + ")");
     for (const auto& value : values) query.addBindValue(value);
     if (!query.exec()) { status_->setText("SQL: " + query.lastError().text()); return false; }
-    if (query.numRowsAffected() != 1) {
+    if(updating) {
+        if(!query.next()) { status_->setText("Der Datensatz wurde nicht gespeichert; die Zeile ist nicht verfügbar."); return false; }
+        savedId=query.value(0);
+        if(query.next() || query.lastError().isValid()) { status_->setText("Die gespeicherte Datensatzidentität ist nicht verfügbar."); return false; }
+    } else if (query.numRowsAffected() != 1) {
         status_->setText("Der Datensatz wurde nicht gespeichert; er wurde möglicherweise extern entfernt."); return false;
     }
     if (savedId.isNull()) savedId = query.lastInsertId();
@@ -1866,9 +1872,14 @@ bool AccessFormPreview::saveRecord() {
         oldRecord.insert(dataColumns_[column].toCaseFolded(),row>=0 && row<recordRows_.size() ? recordRows_[row][column] : QVariant{});
     dirty_ = false;
     const auto snapshot=recordsetSnapshot_;
+    QMap<qlonglong,qlonglong> identityChanges;
+    if(updating && previousId!=savedId) {
+        identityChanges.insert(previousId.toLongLong(),savedId.toLongLong());
+        rowIds_[row]=savedId;
+    }
     loadRecords();
     if (snapshot && directTable_ && dataSourceAvailable_ && !dataTruncated_) {
-        linaccess::refreshDaoSnapshot(snapshot,dataColumns_,dataTypes_,recordRows_,rowIds_);
+        linaccess::refreshDaoSnapshot(snapshot,dataColumns_,dataTypes_,recordRows_,rowIds_,identityChanges);
         recordsetSnapshot_=snapshot;
     }
     const int index = rowIds_.indexOf(savedId)+1;

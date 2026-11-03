@@ -211,16 +211,28 @@ public:
         if (data_->rollbackRevision!=data_->workspace->rollbackRevision) throw VbaRuntimeError(3420,"DAO: Recordset requires Requery after Rollback");
     }
     void refreshSnapshot(const QStringList& columns,const QMap<QString,QString>& types,
-                         const QVector<QVariantList>& rows,const QVector<QVariant>& ids) {
+                         const QVector<QVariantList>& rows,const QVector<QVariant>& ids,
+                         const QMap<qlonglong,qlonglong>& identityChanges) {
         data_->workspace->check();
         if (!frozen_ || columns!=data_->columns || ids.size()!=rows.size() || data_->ids.size()!=data_->rows.size())
             throw VbaRuntimeError(3251,"DAO: Incompatible form snapshot refresh");
+        QSet<qlonglong> changedTargets;
+        for(auto it=identityChanges.cbegin();it!=identityChanges.cend();++it) {
+            if(!data_->ids.contains(QVariant::fromValue(it.key())) || changedTargets.contains(it.value())
+                || (it.key()!=it.value() && data_->ids.contains(QVariant::fromValue(it.value())) && !identityChanges.contains(it.value())))
+                throw VbaRuntimeError(3251,"DAO: Ambiguous form snapshot identity change");
+            changedTargets.insert(it.value());
+        }
+        const auto refreshedId=[&](const QVariant& id) {
+            const auto found=identityChanges.constFind(id.toLongLong());
+            return found==identityChanges.cend() ? id : QVariant::fromValue(found.value());
+        };
         if (data_->rollbackRevision!=data_->workspace->rollbackRevision) { data_->family=QUuid::createUuid().toRfc4122(); data_->rollbackRevision=data_->workspace->rollbackRevision; }
         QMap<qlonglong,quint64> tokens;
         QMap<Recordset*,QVariant> positions;
-        for (qsizetype i=0;i<data_->ids.size();++i) tokens.insert(data_->ids[i].toLongLong(),data_->bookmarks[i]);
+        for (qsizetype i=0;i<data_->ids.size();++i) tokens.insert(refreshedId(data_->ids[i]).toLongLong(),data_->bookmarks[i]);
         for (auto* cursor:data_->cursors)
-            if (cursor->position_>=0 && cursor->position_<data_->ids.size()) positions.insert(cursor,data_->ids[cursor->position_]);
+            if (cursor->position_>=0 && cursor->position_<data_->ids.size()) positions.insert(cursor,refreshedId(data_->ids[cursor->position_]));
         QVector<quint64> bookmarks;
         for (const auto& id:ids) {
             const auto previous=tokens.value(id.toLongLong());
@@ -1005,10 +1017,11 @@ std::shared_ptr<VbaObject> makeDaoSnapshot(QSqlDatabase database,const QStringLi
     return std::make_shared<Recordset>(std::move(database),columns,types,rows,ids);
 }
 void refreshDaoSnapshot(const std::shared_ptr<VbaObject>& recordset,const QStringList& columns,
-                        const QMap<QString,QString>& types,const QVector<QVariantList>& rows,const QVector<QVariant>& ids) {
+                        const QMap<QString,QString>& types,const QVector<QVariantList>& rows,const QVector<QVariant>& ids,
+                        const QMap<qlonglong,qlonglong>& identityChanges) {
     const auto native=std::dynamic_pointer_cast<Recordset>(recordset);
     if (!native) throw VbaRuntimeError(13,"DAO: Native recordset required");
-    native->refreshSnapshot(columns,types,rows,ids);
+    native->refreshSnapshot(columns,types,rows,ids,identityChanges);
 }
 VbaValue daoBookmarkAt(const std::shared_ptr<VbaObject>& recordset,qsizetype position) {
     const auto native=std::dynamic_pointer_cast<Recordset>(recordset);

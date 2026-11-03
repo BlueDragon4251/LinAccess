@@ -2784,3 +2784,14 @@ Desktop build and dao_execution pass (0.30 s); no new target/full-suite/package
 repeat. External SQL/triggers, form-save identity and exact Windows edge/error
 semantics remain open.
 Reference: https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/recordset-lastmodified-property-dao
+
+## Native form key-change identity (2026-11-03)
+
+Native form update/save now consumes RETURNING rowid and follows the actual
+committed key. Snapshot refresh accepts checked identity mappings so existing
+Recordset.Clone cursors and old form byte-array bookmarks follow the same row
+through a changed sort position. Old field values remain captured before refresh.
+Existing GUI regression uses a real primary-key editor/save and checks current
+record, old bookmark, clone identity and persisted SQL. Desktop build and existing
+GUI/DAO targets pass 2/2 (0.90 s). No new target/full-suite/package repeat. See
+FORM_KEY_IDENTITY_RUNTIME.md for external trigger/SQL/filter/concurrency limits.
