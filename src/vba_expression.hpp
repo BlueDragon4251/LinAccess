@@ -53,6 +53,7 @@ struct VbaArgumentSignature { std::vector<std::string> names; std::size_t requir
 class VbaObject {
 public:
     virtual ~VbaObject() = default;
+    virtual std::string_view className() const { return {}; }
     virtual std::optional<VbaArgumentSignature> argumentSignature(std::string_view) const { return {}; }
     virtual VbaValue member(std::string_view name, const std::vector<VbaValue>& arguments) = 0;
     // Advertise a zero-argument scalar default explicitly; getter errors propagate.
@@ -66,6 +67,7 @@ public:
     virtual void assignIndexedMember(std::string_view,const std::vector<VbaValue>&,const VbaValue&) {
         throw VbaRuntimeError(438,"Indexed property assignment is not supported by this object");
     }
+    virtual std::shared_ptr<void> enumerationGuard() { return {}; }
     virtual std::vector<VbaValue> enumerate() {
         throw VbaRuntimeError(438,"Object does not support enumeration");
     }

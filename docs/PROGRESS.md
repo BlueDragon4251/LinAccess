@@ -3333,3 +3333,19 @@ DoEvents preflight correction and nested Quit. GUI-free build/core passes 1/1
 (1.28 s). Debian package contents, permissions, matching Build-ID and pinned
 SQLite backend smoke checks pass. All four original SHA-256 checks pass.
 No new test target or new distribution-matrix/full Access parity claim.
+
+
+## Native ordered VBA Collection (2026-11-03)
+
+New Collection/New VBA.Collection construct native ordered Variant collections
+with Add/Item/Remove/Count, default one-based/keyed access, named/omitted Add
+arguments, Before/After, shared aliases, class inspection and For Each. ASCII
+keys ignore case; duplicate/index errors preserve the collection. Native Date,
+Currency, Null and DAO object references retain their identity/type. A scoped
+enumeration lease rejects mutation before effects; nested collections (including
+inside arrays) are rejected until cyclic lifetime is supported. See
+COLLECTION_RUNTIME.md for regional/class/module/parameter limits.
+Core/DAO pass 2/2 (2.02 s); GUI-free core passes 1/1 (1.41 s). Rebuilt app and
+native layout/original DAO regression pass 2/2 (51.49 s). Existing test targets
+only. Last grouped full suite/package/hash baseline remains aafff2b; no full
+Collection/COM/Access parity claim.

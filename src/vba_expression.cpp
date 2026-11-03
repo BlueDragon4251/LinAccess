@@ -33,6 +33,102 @@ VbaValue stringLongResult(std::size_t value) {
     if(value>static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) throw error("String result exceeds VBA Long",6);
     return VbaValue::longInteger(static_cast<std::int32_t>(value));
 }
+// VBA Collection owns ordered Variant values and optional case-insensitive keys.
+class VbaCollection final : public VbaObject {
+    struct Entry { VbaValue value; std::optional<std::string> key; };
+    std::vector<Entry> entries_;
+    std::shared_ptr<int> enumerators_=std::make_shared<int>(0);
+    static std::string key(const VbaValue& value) {
+        const auto converted=coerceVbaModuleValue(scalarVbaValue(value),"string");
+        auto text=converted.asText();
+        for(auto& ch:text) {
+            if(static_cast<unsigned char>(ch)>=128) throw error("Regional Collection keys are not implemented",3251);
+            if(ch>='A' && ch<='Z') ch=static_cast<char>(ch-'A'+'a');
+        }
+        return text;
+    }
+    std::size_t index(const VbaValue& value) const {
+        if(value.kind==VbaValue::Kind::Text) {
+            const auto wanted=key(value);
+            for(std::size_t i=0;i<entries_.size();++i) if(entries_[i].key && *entries_[i].key==wanted) return i;
+        } else {
+            const auto ordinal=coerceVbaModuleValue(scalarVbaValue(value),"long").number;
+            if(ordinal>=1 && ordinal<=static_cast<double>(entries_.size())) return static_cast<std::size_t>(ordinal-1);
+        }
+        throw error("Invalid Collection index or key",5);
+    }
+    static void checkItem(const VbaValue& value) {
+        std::unordered_set<const VbaObject*> visited;
+        std::size_t budget=1000000;
+        const auto check=[&](auto&& self,const VbaValue& entry,int depth) -> void {
+            if(!budget-- || depth>64) throw error("Collection item traversal limit",3251);
+            if(entry.kind==VbaValue::Kind::Object && dynamic_cast<VbaCollection*>(entry.object.get()))
+                throw error("Nested Collection lifetime is not implemented",3251);
+            if(entry.kind==VbaValue::Kind::Array && visited.insert(entry.object.get()).second)
+                for(const auto& child:vbaArrayValues(entry)) self(self,child,depth+1);
+        };
+        check(check,value,0);
+    }
+    void requireMutable() const {
+        if(*enumerators_) throw error("Collection mutation during For Each is not implemented",3251);
+    }
+public:
+    std::string_view className() const override { return "Collection"; }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        const auto member=lower(std::string(name));
+        if(member=="add") return VbaArgumentSignature{{"Item","Key","Before","After"},1};
+        if(member=="item" || member=="remove") return VbaArgumentSignature{{"Index"},1};
+        return {};
+    }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        const auto member=lower(std::string(name));
+        if(member=="count") {
+            if(!args.empty()) throw error("Collection.Count takes no arguments",450);
+            return VbaValue::longInteger(static_cast<std::int32_t>(entries_.size()));
+        }
+        if(member=="item" || member=="remove") {
+            if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw error("Collection member requires an index",450);
+            if(member=="remove") requireMutable();
+            const auto position=index(args[0]);
+            if(member=="item") return entries_[position].value;
+            entries_.erase(entries_.begin()+static_cast<std::ptrdiff_t>(position));
+            return VbaValue::empty();
+        }
+        if(member=="add") {
+            if(args.empty() || args.size()>4 || args[0].kind==VbaValue::Kind::Missing) throw error("Collection.Add arguments",450);
+            requireMutable();
+            // Reject nested collections until cyclic object lifetime is implemented.
+            checkItem(args[0]);
+            const auto supplied=[&](std::size_t i) { return i<args.size() && args[i].kind!=VbaValue::Kind::Missing; };
+            std::optional<std::string> itemKey;
+            if(supplied(1)) {
+                itemKey=key(args[1]);
+                for(const auto& entry:entries_) if(entry.key==itemKey) throw error("Duplicate Collection key",457);
+            }
+            if(supplied(2) && supplied(3)) throw error("Collection.Add cannot use both Before and After",5);
+            const auto position=supplied(2) ? index(args[2]) : supplied(3) ? index(args[3])+1 : entries_.size();
+            if(entries_.size()>=1000000) throw error("Collection allocation limit",3251);
+            entries_.insert(entries_.begin()+static_cast<std::ptrdiff_t>(position),Entry{args[0],std::move(itemKey)});
+            return VbaValue::empty();
+        }
+        throw error("Unknown Collection member",438);
+    }
+    std::shared_ptr<void> enumerationGuard() override {
+        struct Lease {
+            std::shared_ptr<int> count;
+            explicit Lease(std::shared_ptr<int> value):count(std::move(value)) { ++*count; }
+            ~Lease() { --*count; }
+        };
+        return std::make_shared<Lease>(enumerators_);
+    }
+    std::vector<VbaValue> enumerate() override {
+        std::vector<VbaValue> values; values.reserve(entries_.size());
+        for(const auto& entry:entries_) values.push_back(entry.value);
+        return values;
+    }
+    void assign(std::string_view,const VbaValue&) override { throw error("Collection properties are read-only",438); }
+};
+
 VbaValue clockValue(const std::string& word) {
     const auto sampled=std::chrono::system_clock::now();
     const auto seconds=std::chrono::floor<std::chrono::seconds>(sampled);
@@ -517,8 +613,8 @@ private:
                         if(peek().type==Token::Type::Word && index_+1<tokens_.size() && tokens_[index_+1].value==":=") {
                             argumentName=lower(consume().value); consume();
                         }
-                        const bool omitted=(lower(member.value)=="openform" || lower(member.value)=="openreport" || lower(member.value)=="gotorecord" || lower(member.value)=="domenuitem" || lower(member.value)=="selectobject" || lower(member.value)=="close") && (nextSymbol(",") || nextSymbol(")"));
-                        args.push_back(omitted ? VbaValue::empty() : expression(1));
+                        const bool omitted=(lower(member.value)=="add" || lower(member.value)=="openform" || lower(member.value)=="openreport" || lower(member.value)=="gotorecord" || lower(member.value)=="domenuitem" || lower(member.value)=="selectobject" || lower(member.value)=="close") && (nextSymbol(",") || nextSymbol(")"));
+                        args.push_back(omitted ? lower(member.value)=="add" ? VbaValue::missing() : VbaValue::empty() : expression(1));
                         if(!argumentName.empty() && omitted) throw error("Named method argument requires a value",450);
                         argumentNames.push_back(std::move(argumentName)); omittedArguments.push_back(omitted);
                     } while (take(",") || (accessExpression_ && take(";")));
@@ -534,7 +630,7 @@ private:
                 if(std::any_of(argumentNames.begin(),argumentNames.end(),[](const std::string& name){ return !name.empty(); })) {
                     const auto signature=value.object->argumentSignature(member.value);
                     if(!signature) throw error("Named method arguments are not implemented for this member",3251);
-                    std::vector<VbaValue> ordered(signature->names.size(),VbaValue::empty());
+                    std::vector<VbaValue> ordered(signature->names.size(),lower(member.value)=="add" ? VbaValue::missing() : VbaValue::empty());
                     std::vector<bool> assigned(signature->names.size()),provided(signature->names.size());
                     bool namedSeen=false; std::size_t last=0;
                     for(std::size_t index=0;index<args.size();++index) {
@@ -650,6 +746,13 @@ private:
         if (accessExpression_) {
             static const std::unordered_map<std::string,std::string> localized{{"summe","sum"},{"anzahl","count"},{"wenn","iif"},{"istnull","isnull"},{"istfehler","iserror"},{"datum","date"},{"jetzt","now"},{"zeit","time"},{"formulare","forms"},{"berichte","reports"}};
             if (const auto found=localized.find(word);found!=localized.end()) word=found->second;
+        }
+        if(word=="new") {
+            if(accessExpression_) throw error("New is unavailable in calculated expressions",3251);
+            auto type=consume();
+            if(type.type==Token::Type::Word && lower(type.value)=="vba" && take(".")) type=consume();
+            if(type.type!=Token::Type::Word || lower(type.value)!="collection") throw error("Native class construction is not implemented",3251);
+            return host_ ? VbaValue::reference(std::make_shared<VbaCollection>()) : VbaValue{};
         }
         if (word == "null") return {};
         if (word == "empty") return VbaValue::empty();
@@ -1077,6 +1180,7 @@ private:
                 if (word=="vartype") return VbaValue::integer(static_cast<std::int16_t>(type));
                 if (type==9) {
                     if (!value.object) return VbaValue::string("Nothing");
+                    if(!value.object->className().empty()) return VbaValue::string(std::string(value.object->className()));
                     throw error("Native object class name unavailable",3251);
                 }
                 return VbaValue::string(type==0 ? "Empty" : type==1 ? "Null" : type==5 ? "Double"

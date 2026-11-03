@@ -802,7 +802,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 if (!std::regex_match(entry, declared, declaration))
                     return {VbaExecutionStatus::Unsupported, "Variablendeklaration", line};
                 const auto type = lower(declared[2].str());
-                if (!type.empty() && type != "variant" && type != "object" && type != "dao.database" && type != "dao.workspace" && type != "dao.workspaces" && type != "dao.dbengine"
+                if (!type.empty() && type != "variant" && type != "object" && type != "collection" && type != "dao.database" && type != "dao.workspace" && type != "dao.workspaces" && type != "dao.dbengine"
                     && type != "control" && type != "form" && type != "access.control" && type != "access.form"
                     && type != "dao.tabledef" && type != "dao.tabledefs" && type != "dao.recordset" && type != "dao.field" && type != "dao.fields" && type != "dao.querydef" && type != "dao.parameter" && type != "string" && type != "boolean"
                     && type != "integer" && type != "long" && type != "single" && type != "double" && type != "currency" && type != "date"
@@ -980,7 +980,7 @@ void VbaHost::openFormArguments(const std::vector<VbaValue>& args) {
 }
 namespace {
 VbaValue initialLocalValue(const std::string& type) {
-    if (type=="object" || type=="control" || type=="form" || type.starts_with("access.") || type.starts_with("dao.")) return VbaValue::reference(nullptr);
+    if (type=="object" || type=="collection" || type=="control" || type=="form" || type.starts_with("access.") || type.starts_with("dao.")) return VbaValue::reference(nullptr);
     if (type=="string") return VbaValue::string("");
     if (type=="boolean") return VbaValue::logical(false);
     if (type=="byte") return VbaValue::byte(0);
@@ -1060,6 +1060,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         std::size_t withDepth{};
         VbaValue array;
         std::string arrayRoot;
+        std::shared_ptr<void> enumerationLease;
     };
     std::vector<Frame> frames;
     std::vector<LoopFrame> loops;
@@ -1070,7 +1071,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     const auto integralType=[](std::string_view type) { return type=="integer" || type=="long"; };
     const auto checkedType=[&](std::string_view type) { return integralType(type) || type=="boolean" || type=="string" || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte"; };
     const auto scalarType=[&](std::string_view type) { return checkedType(type); };
-    const auto objectType=[](std::string_view type) { return type=="object" || type=="control" || type=="form" || type.starts_with("dao.") || type.starts_with("access."); };
+    const auto objectType=[](std::string_view type) { return type=="object" || type=="collection" || type=="control" || type=="form" || type.starts_with("dao.") || type.starts_with("access."); };
     auto errorState = std::make_shared<ErrorObject>();
     locals["err"] = VbaValue::reference(errorState);
     bool resumeNext = false;
@@ -1553,6 +1554,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (active) {
                     auto value = evaluateObject(instruction.expression);
                     if (value.kind != VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set benötigt ein Objekt");
+                    if(variableType(lower(instruction.argument))=="collection" && value.object && value.object->className()!="Collection")
+                        throw VbaRuntimeError(13,"Collection assignment requires a Collection object");
                     locals[lower(instruction.argument)] = std::move(value);
                 }
                 break;
@@ -1670,6 +1673,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     throw VbaRuntimeError(424,"For Each requires an object collection or supported array");
                 if (!collection.object) throw VbaRuntimeError(91,"For Each object is not set");
                 LoopFrame loop{static_cast<int>(ip)};
+                loop.enumerationLease=collection.object->enumerationGuard();
                 loop.items = collection.object->enumerate();
                 loop.frameDepth = frames.size(); loop.withDepth=withFrames.size();
                 if (loop.items.empty()) ip = static_cast<std::size_t>(instruction.partner);

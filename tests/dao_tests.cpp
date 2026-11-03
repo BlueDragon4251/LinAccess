@@ -33,6 +33,7 @@ void testSqlRgbDao() {
     auto db=QSqlDatabase::addDatabase("QSQLITE","sql-rgb-dao"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery sql(db); assert(sql.exec("CREATE TABLE color_rows(id INTEGER PRIMARY KEY,r REAL,g REAL,b REAL,packed INTEGER)"));
     assert(sql.exec("INSERT INTO color_rows VALUES(1,255,0,0,0),(2,0,255,0,0)"));
+    assert(sql.exec("CREATE TABLE color_values(value INTEGER)"));
     Host host(db);
     const auto painted=linaccess::executeVbaProcedure(R"VBA(Sub PaintRows()
 Dim database As DAO.Database
@@ -52,6 +53,33 @@ End Sub
     assert(painted.status==linaccess::VbaExecutionStatus::Completed);
     assert(host.fields["FirstShade"]=="255" && host.fields["SecondShade"]=="65280" && host.fields["ColorAffected"]=="2" && host.fields["Ordinal"]=="1" && host.fields["ShadeOrdinal"]=="1");
     assert(sql.exec("SELECT packed FROM color_rows ORDER BY id") && sql.next() && sql.value(0).toInt()==255 && sql.next() && sql.value(0).toInt()==65280); sql.finish();
+    const auto collected=linaccess::executeVbaProcedure(R"VBA(Sub CollectColors()
+Dim values As Collection
+Dim references As Collection
+Dim database As DAO.Database
+Dim rows As DAO.Recordset
+Dim value As Variant
+Set values=New Collection
+On Error Resume Next
+Set values=CurrentDb
+Me!CollectionClassError=Err.Number
+On Error GoTo 0
+Set references=New Collection
+references.Add CurrentDb,"db"
+Set database=references("DB")
+Set rows=CurrentDb.OpenRecordset("SELECT packed FROM color_rows ORDER BY id",4)
+Do While Not rows.EOF
+values.Add rows!packed
+rows.MoveNext
+Loop
+rows.Close
+For Each value In values
+database.Execute "INSERT INTO color_values(value) VALUES(" & CStr(value) & ")"
+Next
+End Sub
+)VBA","CollectColors",host);
+    assert(collected.status==linaccess::VbaExecutionStatus::Completed && host.fields["CollectionClassError"]=="13");
+    assert(sql.exec("SELECT COUNT(*),SUM(value) FROM color_values") && sql.next() && sql.value(0).toInt()==2 && sql.value(1).toInt()==65535); sql.finish();
     assert(sql.exec("UPDATE color_rows SET packed=99")); assert(sql.exec("INSERT INTO color_rows VALUES(3,NULL,0,0,99)"));
     const auto rejected=linaccess::executeVbaProcedure(R"VBA(Sub InvalidColor()
 Dim database As DAO.Database

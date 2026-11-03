@@ -463,6 +463,57 @@ void testRoundFunction() {
     }
 }
 
+void testNativeCollection() {
+    using namespace linaccess; FakeForm host;
+    const auto result=executeVbaProcedure(R"VBA(Function CollectionFlow() As Currency
+Dim values As Collection
+Dim alias As Object
+Dim entry As Variant
+Dim total As Currency
+Set values=New VBA.Collection
+values.Add Item:=CCur("1.25"), Key:="first"
+values.Add 3,"last"
+values.Add 2,,"last"
+values.Add Item:=CCur("1.5"), After:="FIRST"
+values.Remove "last"
+Me!CollectionOrder=CStr(values(1)) & ":" & CStr(values.Item("FIRST")) & ":" & CStr(values(2))
+For Each entry In values
+ total=total+entry
+Next
+Set alias=values
+On Error Resume Next
+values.Add 99,"FiRsT"
+Me!CollectionDuplicate=Err.Number
+Err.Clear
+For Each entry In values
+ values.Remove 1
+ Me!CollectionMutation=Err.Number
+ Exit For
+Next
+On Error GoTo 0
+alias.Remove 1
+Me!CollectionCount=values.Count
+Me!CollectionType=TypeName(values)
+CollectionFlow=total
+End Function
+)VBA","CollectionFlow",host);
+    if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Collection regression status="<<static_cast<int>(result.status)<<" error="<<result.errorNumber<<" line="<<result.line<<"\n";
+    assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Currency && result.typedReturnValue->currencyUnits==47500);
+    assert(host.fields["CollectionOrder"]=="1.25:1.25:1.5" && host.fields["CollectionDuplicate"]=="457" && host.fields["CollectionMutation"]=="3251" && host.fields["CollectionCount"]=="2" && host.fields["CollectionType"]=="Collection");
+    const auto value=evaluateVbaObjectExpression("New Collection",host,{});
+    value.object->member("Add",{VbaValue::dateSerial(2),VbaValue::string("date")});
+    value.object->member("Add",{VbaValue{}});
+    assert(value.object->member("Item",{VbaValue::string("DATE")}).kind==VbaValue::Kind::Date && value.object->member("Item",{VbaValue::integer(2)}).kind==VbaValue::Kind::Null);
+    const auto before=value.object->member("Count",{}).number;
+    for(const auto& [name,args,expected]:std::vector<std::tuple<std::string,std::vector<VbaValue>,int>>{
+        {"Item",{VbaValue::integer(0)},5},{"Remove",{VbaValue::string("missing")},5},
+        {"Add",{VbaValue::integer(1),VbaValue::missing(),VbaValue::integer(1),VbaValue::integer(2)},5},
+        {"Add",{VbaValue::integer(1),VbaValue::string("é")},3251},{"Add",{value},3251},{"Add",{evaluateVbaExpression("Array(v)",host,{{"v",value}})},3251}}) {
+        int actual=0; try { (void)value.object->member(name,args); } catch(const VbaRuntimeError& error) { actual=error.number; }
+        assert(actual==expected && value.object->member("Count",{}).number==before);
+    }
+}
+
 void testCalendarFunctions() {
     using namespace linaccess; FakeForm host;
     const auto eval=[&](const std::string& source) { return evaluateVbaExpression(source,host,{}); };
@@ -565,6 +616,7 @@ End Sub
 }
 
 int main() {
+    testNativeCollection();
     testCalendarFunctions();
     testCurrencyRealStorage();
     testIsObjectFunction();
