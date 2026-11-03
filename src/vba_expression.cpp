@@ -378,6 +378,8 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
             throw error("Negative fractional Date arithmetic is not validated",3251);
         if(op=="-" && left.kind==VbaValue::Kind::Date && right.kind==VbaValue::Kind::Date) return VbaValue::numeric(a-b);
         const auto result=op=="+" ? a+b : a-b;
+        if(!std::isfinite(result)) throw error("Date arithmetic overflow",6);
+        if(result<=-657435.0 || result>=2958466.0) return VbaValue::numeric(result);
         if(result<0 && result!=std::trunc(result)) throw error("Negative fractional Date arithmetic is not validated",3251);
         return VbaValue::dateSerial(result);
     }

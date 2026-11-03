@@ -161,3 +161,22 @@ der nächsten offenen Aufgabe fort, bis reale Kompatibilitätsgrenzen oder
 externe Blocker begründet dokumentiert sind. Liefere nach jeder größeren
 Etappe messbare Belege und verbleibende Fehler, keine unbelegten
 "alles fertig"-Meldungen.
+
+
+## Fortschrittsnachtrag: native Date-Werte (2026-11-03)
+
+Der Laufzeitkern besitzt jetzt `VbaValue::Kind::Date` mit Double-OLE-Serienwert;
+maßgebliche Dateien sind vba_expression.*, vba_calendar.*, vba_runtime.cpp und
+vba_qt_value.cpp. VarType 7 nicht mit DAO-Feldtyp 8 verwechseln. Now/Date/Time,
+CDate, DateSerial/TimeSerial und DateAdd sind begrenzt nativ angebunden. Qt-/DAO-
+Datumsfelder behalten Date; SQLite verwendet bisher ISO mit ganzen Sekunden.
+Keine Untersekunden still abschneiden und keine Gebietsschemaparität behaupten.
+SQL-Projektionen binden Date-Operatoren typisiert; keine vollständige SQL-AST-/
+Filter-/Aktions-/Aggregatparität daraus ableiten. QCalendarWidget ist noch nicht
+vollständig auf denselben Date-Vertrag umgestellt. Details und Grenzen:
+`docs/DATE_RUNTIME.md`, aktuelle Belege in `docs/PROGRESS.md`.
+
+Der vollständige gemeinsame Projektionsstand a8d3061 bestand 48/48 Tests,
+GUI-freien Build, Debian-Paketprüfung und vier Fixture-Hashes. Spätere Inkremente
+haben zunächst gezielte Prüfungen; ihren tatsächlichen Git-/Build-Stand prüfen.
+Das ist weiterhin keine vollständige Access-2003-Parität.

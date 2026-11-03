@@ -122,8 +122,12 @@ QVariant sqlFieldValue(const VbaValue& value,const QString& type) {
     if (value.kind == VbaValue::Kind::Null) return {};
     if(type=="CURRENCY_REAL") return currencyToRealStorage(value);
     if (type.contains("DATE",Qt::CaseInsensitive)) {
-        if(value.kind!=VbaValue::Kind::Text && value.kind!=VbaValue::Kind::Date) throw VbaRuntimeError(13,"Date field requires Date or ISO text");
-        return dateText(QString::fromStdString(value.asText()));
+        const auto converted=value.kind==VbaValue::Kind::Text ? value : vbaDateValue(value);
+        if(converted.kind==VbaValue::Kind::Date) {
+            const auto seconds=std::abs(converted.number-std::trunc(converted.number))*86400.0;
+            if(std::abs(seconds-std::round(seconds))>0.00005) throw VbaRuntimeError(3251,"Subsecond Date storage is not implemented");
+        }
+        return dateText(QString::fromStdString(converted.asText()));
     }
     if (type.contains("BOOL",Qt::CaseInsensitive)) {
         const auto converted = value.kind == VbaValue::Kind::Text ? QVariant(QString::fromStdString(value.text)) : QVariant(value.asNumber());

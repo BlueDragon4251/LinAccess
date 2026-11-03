@@ -211,6 +211,8 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
         else expression+=')';
         ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
+        if(dateArguments && (name=="+" || dateArguments!=3) && result.kind==VbaValue::Kind::Number)
+            throw VbaRuntimeError(6,"Date SQL projection exceeds its declared Date range");
         if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
         else if(result.kind==VbaValue::Kind::Empty) native.integerResult(context,0);
         else if(result.kind==VbaValue::Kind::Boolean) native.integerResult(context,result.boolean ? -1 : 0);

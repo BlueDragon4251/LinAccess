@@ -188,6 +188,10 @@ ctest --test-dir build-core --output-on-failure
   **SQL-Aktionen wirken direkt auf die geöffnete SQLite-Projektkopie**, auch
   bei `DELETE`, `UPDATE`, `DROP TABLE` und `INSERT`. Es erscheint keine
   LinAccess-spezifische Sicherheitsabfrage vor jeder VBA-Anweisung.
+- Begrenzte native Date-Variants mit typisierten VBA-/DAO-/Formularwerten,
+  CDate, DateSerial, TimeSerial und DateAdd sowie geprüften Datumsprojektionen
+  in SQL; regionale Formate und vollständige Datumsparität bleiben offen.
+  Siehe [Datumslaufzeit](docs/DATE_RUNTIME.md).
 - Importierte Access-Abfragen laufen im Navigator über einen begrenzten Jet-SQL-
   Adapter mit Parameterdialogen, DAO-QueryDefs, TOP-Sortiergleichständen, eager
   IIf und begrenzter nativer Datumsformatierung für SQL/VBA-Format$. Gespeicherte Abfragen können schreibgeschützte Formular-Datenquellen sein.

@@ -465,6 +465,7 @@ void testRoundFunction() {
 void testCalendarFunctions() {
     using namespace linaccess; FakeForm host;
     const auto eval=[&](const std::string& source) { return evaluateVbaExpression(source,host,{}); };
+    assert(eval("TypeName(CDate(2958465)-(-1))").asText()=="Double" && eval("CDate(2958465)-(-1)").asNumber()==2958466);
     assert(eval("CStr(DateAdd(Date:=\"2024-01-31\",Number:=1,Interval:=\"m\"))").asText()=="2024-02-29");
     assert(eval("CStr(DateAdd(\"yyyy\",1,\"2024-02-29\"))").asText()=="2025-02-28");
     assert(eval("CStr(DateAdd(\"w\",1,\"2024-03-01\"))").asText()=="2024-03-02");

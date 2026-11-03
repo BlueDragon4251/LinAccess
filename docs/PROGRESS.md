@@ -3215,3 +3215,19 @@ Windows/OLE coercion remain open.
 Core/DAO/query-model targets pass 3/3 (1.82 s); GUI-free build/test passes 1/1
 (1.43 s), affected desktop targets build. No new target/full-suite/package repeat
 for this increment; last grouped projection baseline remains a8d3061.
+
+
+## Date Variant promotion and lossless whole-second storage boundary (2026-11-03)
+
+Supported Date Variant addition/subtraction now promotes an out-of-Date-range
+finite result to Double, as documented for VBA subtraction. Declared Date
+assignment remains checked. Fixed-Date SQL projections reject this overflow
+instead of giving the numeric value Date metadata. Bound Date fields also accept
+numeric OLE series values and normalize their storage. Date values carrying a
+subsecond fraction are rejected with 3251 before field mutation, rather than
+silently truncating them; complete subsecond backing remains open.
+Existing core/Qt-field/query-model checks pass 3/3 (1.62 s); GUI-free build/test
+passes 1/1 (1.36 s), affected desktop targets build. Real GUI checks verify numeric
+Date storage and unchanged state after precision refusal. No new target/full-suite/
+package repeat. README and handoff link the consolidated DATE_RUNTIME.md limits;
+last grouped baseline remains a8d3061, with following focused increments recorded.
