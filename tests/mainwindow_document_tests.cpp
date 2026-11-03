@@ -559,6 +559,17 @@ End Sub
     assert(mixed->executeProcedure("CloseEditableQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && !editableDescriptor->member("IsLoaded",{}).boolean);
     QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!editableQueryPage && mixed->isVisible() && mixedEditor->text()==callerBeforeQueries);
     assert(unchanged.exec("SELECT value FROM command_edit WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="query-closed"); unchanged.finish();
+    assert(unchanged.exec("INSERT INTO command_edit VALUES(2,'filtered-out')"));
+    assert(unchanged.exec(R"SQL(INSERT INTO _la_objects(kind,name,definition) VALUES('query','command_filtered_query','{"sql":"SELECT * FROM command_edit WHERE value <> ''filtered-out''"}'))SQL"));
+    assert(window.openQueryDocument("command_filtered_query",0,1).value("error").toInt()==0);
+    auto* filteredView=documentTabs->currentWidget()->findChild<QTableView*>("native-editable-query-view"); assert(filteredView);
+    auto* filteredModel=qobject_cast<linaccess::AccessTableModel*>(filteredView->model()); assert(filteredModel && filteredModel->rowCount()==1 && filteredModel->index(0,0).data().toInt()==1);
+    assert(filteredModel->setData(filteredModel->index(0,filteredModel->fieldIndex("value")),"filtered-out"));
+    assert(mixed->executeProcedure("SaveActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && filteredModel->rowCount()==0 && !filteredModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_edit WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="filtered-out"); unchanged.finish();
+    assert(window.closeQueryDocument(1,"command_filtered_query",0).value("error").toInt()==0);
+    QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);
+    assert(unchanged.exec("DELETE FROM command_edit WHERE id=2"));
     assert(unchanged.exec("UPDATE command_edit SET value='initial' WHERE id=1"));
     assert(mixed->executeProcedure("OpenReadQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && documentTabs->count()==beforeQueries+1);
     QPointer<QWidget> queryPage=documentTabs->currentWidget();

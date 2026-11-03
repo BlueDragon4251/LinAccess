@@ -1693,15 +1693,30 @@ AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan&
     if (query.lastError().isValid()) failAccessQuery(query);
     return result;
 }
-QString editableAccessQueryTable(QSqlDatabase db,const QString& source) {
+QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* filter) {
     const auto plan=compileAccessQuery(source);
     auto tokens=tokenize(plan.sql,true);
     if(!tokens.isEmpty() && symbol(tokens.last(),";")) tokens.removeLast();
-    if(!plan.parameters.isEmpty() || !plan.makeTable.isEmpty() || plan.topLimit || plan.hiddenRank || tokens.size()!=4
+    if(!plan.parameters.isEmpty() || !plan.makeTable.isEmpty() || plan.topLimit || plan.hiddenRank || tokens.size()<4
         || tokens[0].kind!=Token::Word || tokens[0].value.compare("SELECT",Qt::CaseInsensitive)!=0 || !symbol(tokens[1],"*")
         || tokens[2].kind!=Token::Word || tokens[2].value.compare("FROM",Qt::CaseInsensitive)!=0
         || (tokens[3].kind!=Token::Word && tokens[3].kind!=Token::Identifier))
         throw VbaRuntimeError(3251,"Editable query currently requires SELECT * FROM one keyed table");
+    QString predicate;
+    if(tokens.size()>4) {
+        if(tokens.size()<6 || tokens[4].kind!=Token::Word || tokens[4].value.compare("WHERE",Qt::CaseInsensitive)!=0)
+            throw VbaRuntimeError(3251,"Editable query supports only a bounded WHERE clause after its table");
+        const QSet<QString> forbidden{"SELECT","FROM","JOIN","GROUP","HAVING","ORDER","LIMIT","OFFSET","UNION","INTERSECT","EXCEPT","WITH","RETURNING"};
+        for(qsizetype i=5;i<tokens.size();++i) {
+            const auto& token=tokens[i];
+            if(symbol(token,";") || (token.kind==Token::Word && forbidden.contains(token.value.toUpper())))
+                throw VbaRuntimeError(3251,"Editable query subqueries and additional clauses are not implemented");
+            if((token.kind==Token::Word || token.kind==Token::Identifier) && i+1<tokens.size() && symbol(tokens[i+1],"(")
+                && !(token.kind==Token::Word && QSet<QString>{"IN","NOT","AND","OR"}.contains(token.value.toUpper())))
+                throw VbaRuntimeError(3251,"Editable query predicate functions are not implemented");
+        }
+        predicate=renderJetTokens(tokens.mid(5));
+    }
     const auto requested=tokens[3].value;
     if(db.driverName()!="QSQLITE" || requested.startsWith("_la_",Qt::CaseInsensitive) || requested.startsWith("sqlite_",Qt::CaseInsensitive))
         throw VbaRuntimeError(3251,"Editable query target is not a supported user table");
@@ -1715,13 +1730,30 @@ QString editableAccessQueryTable(QSqlDatabase db,const QString& source) {
     const auto table=metadata.value(0).toString(); metadata.finish();
     if(db.primaryIndex(table).count()==0) throw VbaRuntimeError(3251,"Editable query requires a real primary key");
     if(!metadata.exec("PRAGMA main.table_xinfo("+identifier(table)+")")) throw VbaRuntimeError(3146,"Editable target columns unavailable");
-    int columns=0;
+    int columns=0,primaryColumns=0;
+    bool nullablePrimary=false,integerPrimary=false;
     while(metadata.next()) {
+        if(metadata.value(5).toInt()>0) {
+            ++primaryColumns;
+            nullablePrimary|=!metadata.value(3).toBool();
+            integerPrimary=metadata.value(2).toString().trimmed().compare("INTEGER",Qt::CaseInsensitive)==0;
+        }
         if(metadata.value(6).toInt()!=0) throw VbaRuntimeError(3251,"Editable queries over hidden/generated columns are not implemented");
         ++columns;
     }
     if(metadata.lastError().isValid()) throw VbaRuntimeError(3146,"Editable target columns could not be fully read");
     if(columns!=db.record(table).count()) throw VbaRuntimeError(3251,"Editable query projection does not match its table model");
+    if(nullablePrimary) {
+        // Ordinary SQLite PRIMARY KEY columns can contain duplicate NULLs.
+        // Only a genuine INTEGER rowid alias is implicitly non-null here;
+        // DESC/non-alias and composite keys have a separate primary-key index.
+        if(primaryColumns!=1 || !integerPrimary) throw VbaRuntimeError(3251,"Editable query requires a non-null primary key");
+        if(!metadata.exec("PRAGMA main.index_list("+identifier(table)+")")) throw VbaRuntimeError(3146,"Editable primary-key metadata unavailable");
+        while(metadata.next()) if(metadata.value(3).toString()=="pk") throw VbaRuntimeError(3251,"Nullable indexed primary keys are not editable query targets");
+        if(metadata.lastError().isValid()) throw VbaRuntimeError(3146,"Editable primary-key metadata could not be fully read");
+    }
+
+    if(filter) *filter=predicate;
     return table;
 }
 void AccessQueryModel::execute(QSqlDatabase db, const QString& source, const QMap<QString,QVariant>& parameters) {

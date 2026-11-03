@@ -1606,10 +1606,10 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
         for(auto* candidate:tabs_->widget(i)->findChildren<linaccess::AccessTableModel*>())
             if(!candidate->isReadOnly() && candidate->tableName().compare(name,Qt::CaseInsensitive)==0) return 3251;
     }
-    QString sourceSchema;
+    QString sourceSchema,sourceFilter;
     if(!queryName.isEmpty()) {
         try {
-            if(linaccess::editableAccessQueryTable(database,querySource)!=name) return 3251;
+            if(linaccess::editableAccessQueryTable(database,querySource,&sourceFilter)!=name) return 3251;
             sourceSchema=editableSourceSchema(database,name);
         } catch(const linaccess::VbaRuntimeError&) { return 3251; }
     }
@@ -1634,6 +1634,7 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     connect(model,&linaccess::AccessTableModel::editRejected,page,[self](int number,const QString& message) { if(self) self->statusBar()->showMessage(message+" ("+QString::number(number)+")",10000); });
     connect(model,&QAbstractItemModel::dataChanged,page,[self] { if(self) self->statusBar()->clearMessage(); });
     model->setTable(name);
+    if(!sourceFilter.isEmpty()) model->setFilter(sourceFilter);
     model->setEditStrategy(QSqlTableModel::OnManualSubmit);
     (void)model->setReadOnly(readOnly);
     bool selected=false;

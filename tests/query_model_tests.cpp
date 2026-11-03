@@ -50,8 +50,16 @@ int main(int argc, char** argv) {
     {
         assert(query.exec("CREATE TABLE editable_source(id INTEGER PRIMARY KEY,value TEXT)"));
         assert(linaccess::editableAccessQueryTable(db,"SELECT * FROM [editable_source]")=="editable_source");
+        QString editableFilter;
+        assert(linaccess::editableAccessQueryTable(db,"SELECT * FROM editable_source WHERE id=1 AND (value='a;b' OR value IS NULL)",&editableFilter)=="editable_source" && !editableFilter.isEmpty());
+        assert(query.exec("INSERT INTO editable_source VALUES(1,'a;b'),(2,'other')"));
+        assert(query.exec("SELECT * FROM editable_source WHERE "+editableFilter) && query.next() && query.value(0).toInt()==1 && !query.next()); query.finish();
+        assert(query.exec("CREATE TABLE editable_nullable(id TEXT PRIMARY KEY,value TEXT)"));
+        assert(query.exec("CREATE TABLE editable_desc(id INTEGER PRIMARY KEY DESC,value TEXT)"));
+        assert(query.exec("CREATE TABLE editable_nonnull(id TEXT NOT NULL PRIMARY KEY,value TEXT)"));
+        assert(linaccess::editableAccessQueryTable(db,"SELECT * FROM editable_nonnull")=="editable_nonnull");
         assert(query.exec("CREATE TABLE editable_generated(id INTEGER PRIMARY KEY,value INTEGER,doubled INTEGER GENERATED ALWAYS AS(value*2))"));
-        for(const auto& source:{"SELECT id FROM editable_source","SELECT * FROM editable_source WHERE id=1","SELECT * FROM samples","PARAMETERS p Long; SELECT * FROM editable_source","SELECT * FROM origin_saved","SELECT * FROM editable_generated"}) {
+        for(const auto& source:{"SELECT * FROM editable_nullable","SELECT * FROM editable_desc","SELECT id FROM editable_source","SELECT * FROM editable_source ORDER BY id","SELECT * FROM editable_source WHERE id IN(SELECT id FROM editable_source)","SELECT * FROM samples","PARAMETERS p Long; SELECT * FROM editable_source","SELECT * FROM origin_saved","SELECT * FROM editable_generated"}) {
             int error=0; try { (void)linaccess::editableAccessQueryTable(db,source); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
             assert(error==3251);
         }

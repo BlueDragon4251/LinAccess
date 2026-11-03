@@ -4165,3 +4165,16 @@ OPEN_QUERY_RUNTIME.md documents projection/filter/join/provider/concurrency limi
 Full desktop 48/48 (90.33 s), rebuilt GUI-free core 1/1 (1.48 s), Debian package
 and four original fixture hashes pass. No additional CTest targets. Scoped
 checklist: 348 checked / 72 open; this is not total Access 2003 parity.
+
+
+## Filtered editable queries and structural key identity (2026-11-03)
+
+Bounded compiled WHERE predicates feed the native SQL datasheet model. A real
+VBA save commits the keyed row and refreshes filtered membership; an excluded
+control row remains untouched. Subquery/function/extra-clause and broad
+projection/join/parameter boundaries remain explicit. Source primary keys must
+be structurally non-null, including actual INTEGER rowid alias proof; nullable
+and DESC indexed keys refuse 3251. OPEN_QUERY_RUNTIME.md defines these bounds.
+Full suite 48/48 (89.83 s), freshly rebuilt GUI-free 1/1 (1.49 s), Debian payload/
+permissions/Build-ID/pinned SQLite and four original fixture hashes pass. No new
+targets. Scoped checklist 350 checked / 72 open, not total Access 2003 parity.
