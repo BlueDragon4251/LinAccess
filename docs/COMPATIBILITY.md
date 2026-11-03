@@ -1184,3 +1184,17 @@ Unload refusal, dirty-table refusal and successful report/tab closing; passes
 1/1 (1.43 s), affected desktop targets build. No new target/full-suite/package
 repeat. Complete Access 2003 MDI, window lists/arrangement and pixel/menu/toolbar
 parity remain open. This increment does not affect the GUI-free runtime.
+
+
+## Direct native document selection (2026-11-03)
+
+The Window menu now rebuilds a numbered, checked list of visible project-owned
+nonmodal forms/reports. Entries activate the chosen real document through the
+same validation/lifetime guard as keyboard cycling; minimized windows restore.
+The database-window menu entry uses that guard too. Captured QPointers prevent
+stale entries from accessing disposed documents, and post-event checks respect
+closed targets or activation redirected by VBA. Existing main-window GUI checks
+menu selection/check state, database focus, stale disposed report entries and all
+prior cycling/cancellation cases; passes 1/1 (1.59 s), affected targets build.
+Full MDI/arrangement, hidden/modal/datasheet window-list and Access pixel/event
+oracle remain open. GUI-free runtime unchanged; no new target or full-suite repeat.

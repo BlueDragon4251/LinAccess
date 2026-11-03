@@ -1009,12 +1009,10 @@ bool AccessFormPreview::event(QEvent* event) {
 
 bool AccessFormPreview::databaseWindowActive(QWidget* window) { return databaseWindowContext().window && (!window || databaseWindowContext().window==window); }
 
-void AccessFormPreview::cycleProjectDocuments(QSqlDatabase database,QWidget* projectWindow,bool backwards,AccessFormPreview* current) {
-    if(!database.isOpen() || !projectWindow || QApplication::activeModalWidget()) return;
-    const auto key=projectKey(database);
-    if(closingProjects().contains(key)) return;
-    if(current && (projectKey(current->db_)!=key || current->closed_ || current->closing_ || activeDocument()!=current)) return;
+QVector<QPointer<AccessFormPreview>> AccessFormPreview::projectDocuments(const QSqlDatabase& database) {
     QVector<QPointer<AccessFormPreview>> documents;
+    if(!database.isOpen()) return documents;
+    const auto key=projectKey(database);
     for(auto* widget:QApplication::topLevelWidgets()) {
         auto* candidate=dynamic_cast<AccessFormPreview*>(widget);
         if(candidate && candidate->opened_ && !candidate->closed_ && !candidate->closing_ && !candidate->openCancelled_
@@ -1022,27 +1020,44 @@ void AccessFormPreview::cycleProjectDocuments(QSqlDatabase database,QWidget* pro
             documents.append(candidate);
     }
     std::sort(documents.begin(),documents.end(),[](const auto& left,const auto& right) { return left->windowSequence_<right->windowSequence_; });
+    return documents;
+}
+
+bool AccessFormPreview::activateProjectDocument(QSqlDatabase database,QWidget* projectWindow,AccessFormPreview* target) {
+    if(!database.isOpen() || !projectWindow || QApplication::activeModalWidget()) return false;
+    const auto key=projectKey(database);
+    if(closingProjects().contains(key)) return false;
+    const QPointer<AccessFormPreview> source=activeDocument(),selected=target;
+    const QPointer<QWidget> owner=projectWindow;
+    const bool databaseTarget=target==nullptr;
+    if(source && (projectKey(source->db_)!=key || source->closed_ || source->closing_)) return false;
+    if(selected && !projectDocuments(database).contains(selected)) return false;
+    ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+    if(source && (!source->commitControls() || source->closed_ || activeDocument()!=source)) return false;
+    if(!owner || !database.isOpen() || projectKey(database)!=key || closingProjects().contains(key) || QApplication::activeModalWidget()) return false;
+    if(databaseTarget) {
+        (void)QMetaObject::invokeMethod(owner,"focusDatabaseWindow",Qt::DirectConnection);
+        return databaseWindowActive(owner);
+    }
+    if(!selected || !projectDocuments(database).contains(selected)) return false;
+    if(selected->isMinimized()) selected->showNormal();
+    selected->raise(); selected->activateWindow(); selected->activateDocument();
+    if(!selected || activeDocument()!=selected || selected->closed_) return false;
+    if(auto* focus=selected->focusWidget(); focus && focus->isEnabled()) focus->setFocus(Qt::ShortcutFocusReason);
+    return true;
+}
+
+void AccessFormPreview::cycleProjectDocuments(QSqlDatabase database,QWidget* projectWindow,bool backwards,AccessFormPreview* current) {
+    if(!database.isOpen() || !projectWindow || QApplication::activeModalWidget()) return;
+    const auto key=projectKey(database);
+    if(closingProjects().contains(key)) return;
+    if(current && (projectKey(current->db_)!=key || current->closed_ || current->closing_ || activeDocument()!=current)) return;
+    auto documents=projectDocuments(database);
     documents.prepend(nullptr); // Database window, then native documents in creation order.
     const int index=current ? documents.indexOf(current) : 0;
     if(index<0) return;
     const auto targetIndex=(index+(backwards ? documents.size()-1 : 1))%documents.size();
-    const auto selected=documents[targetIndex];
-    const QPointer<AccessFormPreview> source=current;
-    const QPointer<QWidget> owner=projectWindow;
-    ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
-    if(source && (!source->commitControls() || source->closed_ || activeDocument()!=source)) return;
-    if(!owner || projectKey(database)!=key || !database.isOpen() || closingProjects().contains(key) || QApplication::activeModalWidget()) return;
-    if(!selected) {
-        // A null entry denotes the database window, not a document closed by validation.
-        if(targetIndex==0)
-            (void)QMetaObject::invokeMethod(owner,"focusDatabaseWindow",Qt::DirectConnection);
-        return;
-    }
-    if(selected->closed_ || selected->closing_ || !selected->isVisible()) return;
-    if(selected->isMinimized()) selected->showNormal();
-    selected->raise(); selected->activateWindow(); selected->activateDocument();
-    if(activeDocument()==selected && !selected->closed_)
-        if(auto* focus=selected->focusWidget(); focus && focus->isEnabled()) focus->setFocus(Qt::ShortcutFocusReason);
+    (void)activateProjectDocument(database,projectWindow,documents[targetIndex]);
 }
 
 void AccessFormPreview::activateDatabaseWindow(QSqlDatabase database,QWidget* window) {

@@ -17,6 +17,7 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QPointer>
+#include <QMenu>
 #include <QPushButton>
 #include <QSqlQuery>
 #include <QSplitter>
@@ -264,6 +265,18 @@ int main(int argc,char** argv) {
     assert(entry->executeProcedure("SelectEntry",arguments).status==linaccess::VbaExecutionStatus::Completed && activePreviewDocument()==entry);
     assert(entry->executeProcedure("SelectReport",arguments).status==linaccess::VbaExecutionStatus::Completed && activePreviewDocument()==selectedReport);
     assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="fresh" && entry->hasUnsavedChanges()); sql.finish();
+    auto* windowMenu=window.findChild<QMenu*>("window-menu"); assert(windowMenu);
+    assert(QMetaObject::invokeMethod(windowMenu,"aboutToShow",Qt::DirectConnection));
+    QAction* entryItem=nullptr; QAction* reportItem=nullptr;
+    for(auto* item:windowMenu->actions()) if(item->isCheckable() && item->property("la_document_entry").toBool()) {
+        if(item->text().contains(entry->windowTitle())) entryItem=item;
+        if(item->text().contains(selectedReport->windowTitle())) reportItem=item;
+    }
+    assert(entryItem && reportItem && reportItem->isChecked() && !entryItem->isChecked());
+    entryItem->trigger(); QApplication::processEvents(); assert(activePreviewDocument()==entry);
+    action(window,"Datenbankfenster\tF11")->trigger(); QApplication::processEvents();
+    assert(AccessFormPreview::databaseWindowActive(&window) && explorer->hasFocus());
+    reportItem->trigger(); QApplication::processEvents(); assert(activePreviewDocument()==selectedReport);
     const auto cycle=[&](QWidget* source,bool backwards,AccessFormPreview* expected) {
         QTest::keyClick(source,Qt::Key_F6,backwards ? Qt::ControlModifier|Qt::ShiftModifier : Qt::KeyboardModifiers(Qt::ControlModifier));
         assert(QTest::qWaitFor([&] { return expected ? activePreviewDocument()==expected && QApplication::activeWindow()==expected : AccessFormPreview::databaseWindowActive(&window) && explorer->hasFocus(); },3000));
@@ -295,6 +308,7 @@ int main(int argc,char** argv) {
     QApplication::setActiveWindow(entry); editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"temporary");
     root->assign("Tag",linaccess::VbaValue::string("close-cycle")); cycle(editor,false,entry);
     dispose(); assert(!selectedReport);
+    reportItem->trigger(); QApplication::processEvents(); assert(activePreviewDocument()==entry);
     root->assign("Tag",linaccess::VbaValue::string("")); editor->selectAll(); QTest::keyClicks(editor,"second");
     window.focusDatabaseWindow(); cycle(explorer,true,entry); cycle(editor,false,nullptr); cycle(explorer,false,entry);
     assert(entry->executeProcedure("SelectEntry",arguments).status==linaccess::VbaExecutionStatus::Completed);

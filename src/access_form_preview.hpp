@@ -9,6 +9,7 @@
 #include <QSet>
 #include <QSqlDatabase>
 #include <QVariant>
+#include <QVector>
 
 #include <optional>
 
@@ -50,6 +51,8 @@ public:
     static void quitApplication();
     static void activateDatabaseWindow(QSqlDatabase database,QWidget* window);
     static bool databaseWindowActive(QWidget* window=nullptr);
+    static QVector<QPointer<AccessFormPreview>> projectDocuments(const QSqlDatabase& database);
+    static bool activateProjectDocument(QSqlDatabase database,QWidget* projectWindow,AccessFormPreview* target);
     static void cycleProjectDocuments(QSqlDatabase database,QWidget* projectWindow,bool backwards,AccessFormPreview* current=nullptr);
     static AccessFormPreview* showDocument(linaccess::AccessDocumentKind kind,QString name,
         const QByteArray& source,const QByteArray& vba,QSqlDatabase database,QWidget* projectOwner=nullptr);

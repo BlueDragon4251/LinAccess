@@ -220,6 +220,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // The existing key handlers retain form KeyPreview/cancellation semantics.
     connect(nextWindow,&QAction::triggered,this,[this] { AccessFormPreview::cycleProjectDocuments(db_,this,false,activePreviewDocument()); });
     connect(previousWindow,&QAction::triggered,this,[this] { AccessFormPreview::cycleProjectDocuments(db_,this,true,activePreviewDocument()); });
+    auto* databaseWindow=windowMenu->addAction("Datenbankfenster\tF11");
+    connect(databaseWindow,&QAction::triggered,this,[this] { (void)AccessFormPreview::activateProjectDocument(db_,this,nullptr); });
     windowMenu->addSeparator();
     auto* closeAll=windowMenu->addAction("Alle schließen");
     connect(closeAll,&QAction::triggered,this,[this] {
@@ -227,6 +229,20 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         while(tabs_->count()) {
             const auto count=tabs_->count(); emit tabs_->tabCloseRequested(count-1);
             if(tabs_->count()==count) break;
+        }
+    });
+    connect(windowMenu,&QMenu::aboutToShow,this,[this,windowMenu] {
+        for(auto* item:windowMenu->actions()) if(item->property("la_document_entry").toBool()) { windowMenu->removeAction(item); delete item; }
+        const auto documents=AccessFormPreview::projectDocuments(db_);
+        if(documents.isEmpty()) return;
+        windowMenu->addSeparator()->setProperty("la_document_entry",true);
+        int number=0;
+        for(const auto& document:documents) {
+            ++number;
+            auto title=document->windowTitle(); title.replace('&',"&&");
+            auto* item=windowMenu->addAction((number<10 ? "&" : "")+QString::number(number)+" "+title);
+            item->setProperty("la_document_entry",true); item->setCheckable(true); item->setChecked(activePreviewDocument()==document);
+            connect(item,&QAction::triggered,this,[this,document] { if(document) (void)AccessFormPreview::activateProjectDocument(db_,this,document); });
         }
     });
     statusBar()->showMessage("Neue SQLite-Datenbank erstellen oder Access-Datei untersuchen");
