@@ -277,9 +277,22 @@ End Function
         assert(repeated.data(repeated.index(1,4),Qt::EditRole).isNull());
         assert(!repeated.repeatPreviousValue(repeated.index(0,1)) && !repeated.repeatPreviousValue(repeated.index(1,0)) && !repeated.repeatPreviousValue(repeated.index(1,5)));
         assert(sql.exec("SELECT amount,note FROM repeat_cells WHERE id=2") && sql.next() && sql.value(0).toDouble()==0 && sql.value(1).toString()=="old"); sql.finish();
+        linaccess::AccessTableView repeatedView; linaccess::AccessTableDelegate repeatedDelegate;
+        repeatedView.setModel(&repeated); repeatedView.setItemDelegate(&repeatedDelegate); repeatedView.show(); QApplication::setActiveWindow(&repeatedView);
+        repeatedView.setCurrentIndex(repeated.index(1,4)); repeatedView.edit(repeatedView.currentIndex()); QApplication::processEvents();
+        auto* nullEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(nullEditor && repeatedView.isAncestorOf(nullEditor));
+        assert(!repeatedView.hasPendingEditor() && repeatedView.finishEditing() && repeated.data(repeated.index(1,4),Qt::EditRole).isNull());
+        assert(repeated.setData(repeated.index(1,4),"replace")); repeatedView.edit(repeatedView.currentIndex()); QApplication::processEvents();
+        nullEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(nullEditor); QTest::keyClick(nullEditor,Qt::Key_Apostrophe,Qt::ControlModifier);
+        assert(nullEditor->text().isEmpty() && repeated.data(repeated.index(1,4),Qt::EditRole).isNull());
+        assert(repeatedView.finishEditing() && repeated.data(repeated.index(1,4),Qt::EditRole).isNull());
         assert(repeated.submitTransactionally());
         assert(sql.exec("SELECT amount,stamp,flag,note,payload FROM repeat_cells WHERE id=2") && sql.next());
         assert(linaccess::currencyFromRealStorage(sql.value(0).toDouble()).currencyUnits==5497558138879999LL && sql.value(1).toString()=="2024-02-29 12:34:56" && sql.value(2).toInt()==-1 && sql.value(3).isNull() && sql.value(4).isNull()); sql.finish();
+        repeatedView.setCurrentIndex(repeated.index(1,4)); repeatedView.edit(repeatedView.currentIndex()); QApplication::processEvents();
+        nullEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(nullEditor); QTest::keyClicks(nullEditor,"x"); QTest::keyClick(nullEditor,Qt::Key_Backspace);
+        assert(repeatedView.hasPendingEditor() && repeatedView.finishEditing() && !repeated.data(repeated.index(1,4),Qt::EditRole).isNull());
+        assert(repeated.submitTransactionally()); assert(sql.exec("SELECT note IS NULL,length(note) FROM repeat_cells WHERE id=2") && sql.next() && !sql.value(0).toBool() && sql.value(1).toInt()==0); sql.finish();
     }
     {
         assert(sql.exec("CREATE TABLE paste_constraints(id INTEGER PRIMARY KEY,amount INTEGER UNIQUE)"));

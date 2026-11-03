@@ -1615,3 +1615,14 @@ AutoNumber/BLOB refusal and actual persistence. A focused two-target run passes
 Full suite/package baseline remains source 24854bf (48/48, 86.21 s), privately
 published as 33981e26e528c0d708ba2a2f3be265aedf3a01ea with identical source tree
 caca8e5ef7c1de87a10390a3b14d7272a700c895. This key increment is focused-verified.
+
+
+## Native editor repeat key and NULL retention (2026-11-03)
+
+Ctrl+apostrophe also works in the native text-cell editor, using checked prior-row
+values and manual-submit drafts. A shared change check preserves SQL NULL when
+an untouched empty editor closes; explicit user typing/deletion can still save
+empty text. Existing main-window/Currency targets pass 2/2 (2.22 s), including
+actual editor dispatch and NULL versus empty SQL persistence. See
+KEYBOARD_RUNTIME.md. Full suite/package baseline remains 24854bf (48/48);
+this small editor increment is focused-verified, with no additional targets.
