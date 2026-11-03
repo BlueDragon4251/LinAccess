@@ -422,3 +422,14 @@ Zelleneingaben blockieren Auswahl/Kopie und erhalten die Zwischenablage.
 Details docs/TABLE_DOCUMENT_RUNTIME.md; MainWindow-Regression 1/1 (1.97 s).
 Letzte Vollsuite/Paket: lokal 2dd59b2 / privat 32cb556, 48/48 (91.15 s),
 GUI-freier Core 1/1 (2.01 s). Dieses Inkrement ist gezielt geprüft.
+
+
+## Nativer Tabellen-Zoombefehl (2026-11-03)
+
+acCmdZoomBox arbeitet auf der tatsächlichen aktiven Tabellenzelle, mit nativer
+Qt-Ansicht, typgeprüftem Cache und Readonly-Anzeige. Abbrechen/Readonly-Schließen
+sind erfolgreiche Befehlsrückkehr ohne Änderung. SelectRecord erhält die aktive
+Spalte; Qt verschob sie zuvor auf Spalte 0 (über Zoom reproduziert, korrigiert).
+Details docs/TABLE_DOCUMENT_RUNTIME.md. MainWindow/Currency 2/2 (2.47 s).
+Vollsuite/Paket weiterhin 2dd59b2 / privat 32cb556, 48/48 (91.15 s); dieses
+Qt-Inkrement gezielt geprüft, keine neuen Targets.

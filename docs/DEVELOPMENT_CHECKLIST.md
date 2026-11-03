@@ -944,3 +944,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 
 - [x] Native table acCmdSelectRecord validates the active field and selects the real row while preserving readonly access and caller Me.
 - [x] Native table DoCmd/Application acCmdCopy uses the actual checked TSV selection, including readonly and dirty cached rows without SQL submission.
+
+- [x] Native table acCmdZoomBox uses checked typed cached edits and readonly viewing; Cancel completes without mutation and SelectRecord preserves its active field.

@@ -365,17 +365,22 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
     if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
     if(QApplication::activeModalWidget()) return tableCommandFailure(2046,"Tabellenbefehl ist durch ein modales Fenster blockiert.");
     if(command==97) return saveDataPage(page,false);
-    if(command==50 || command==190) {
+    if(command==50 || command==190 || command==179) {
         QPointer<linaccess::AccessTableView> table;
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
         if(!table || !model || !table->currentIndex().isValid()) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
         if(command==190) {
             if(!table->copySelection()) return tableModelFailure(model,2501);
+        } else if(command==179) {
+            if(!table->zoomCurrentCell()) return tableModelFailure(model,2046);
         } else {
             if(!table->finishEditing()) return tableModelFailure(model,2501);
             if(!table || !model || !table->currentIndex().isValid()) return tableCommandFailure(2501,"Tabellenauswahl ist nicht mehr verfügbar.");
-            table->selectRow(table->currentIndex().row());
+            const QPersistentModelIndex current=table->currentIndex();
+            table->selectRow(current.row());
+            if(table && current.isValid() && table->selectionModel())
+                table->selectionModel()->setCurrentIndex(current,QItemSelectionModel::NoUpdate);
         }
         return {{"handled",true},{"error",0}};
     }

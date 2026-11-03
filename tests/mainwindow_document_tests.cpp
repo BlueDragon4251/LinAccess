@@ -158,6 +158,9 @@ Sub SaveActiveTableViaApplication()
 Application.RunCommand Command:=acCmdSaveRecord
 Me.Tag="application-table-saved"
 End Sub
+Sub ZoomTableCell()
+DoCmd.RunCommand acCmdZoomBox
+End Sub
 Sub SelectTableRecord()
 DoCmd.RunCommand acCmdSelectRecord
 End Sub
@@ -212,10 +215,16 @@ End Sub
     assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="readonly-opened");
     readonlyView->setCurrentIndex(readonlyModel->index(readonlyRow,1));
     assert(mixed->executeProcedure("SelectTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
-    assert(readonlyView->selectionModel()->selectedIndexes().size()==3);
+    assert(readonlyView->selectionModel()->selectedIndexes().size()==3 && readonlyView->currentIndex()==readonlyModel->index(readonlyRow,1));
     QApplication::clipboard()->setText("unchanged-sentinel");
     assert(mixed->executeProcedure("CopyTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(QApplication::clipboard()->text()=="1\t1.25\tTrue" && !readonlyModel->isDirty());
+    QTimer::singleShot(0,[] {
+        auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom && zoom->objectName()=="native-cell-zoom");
+        auto* editor=zoom->findChild<QPlainTextEdit*>("native-cell-zoom-text"); assert(editor && editor->isReadOnly() && editor->toPlainText()=="1.25"); zoom->reject();
+    });
+    assert(mixed->executeProcedure("ZoomTableCell",selectArguments).status==linaccess::VbaExecutionStatus::Completed && !readonlyModel->isDirty());
+    QApplication::setActiveWindow(&window); readonlyView->setFocus(); QApplication::processEvents();
     assert(unchanged.exec("SELECT value,flag FROM command_readonly WHERE id=1") && unchanged.next() && unchanged.value(0).toDouble()==1.25 && unchanged.value(1).toInt()==-1); unchanged.finish();
     assert(mixed->executeProcedure("OpenEditableTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     const QPointer<QWidget> editablePage=documentTabs->currentWidget(); auto* editableView=nativeTable(editablePage);
@@ -225,6 +234,21 @@ End Sub
     assert(mixed->executeProcedure("SelectTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(mixed->executeProcedure("CopyTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(QApplication::clipboard()->text()=="1\tchanged" && editableModel->isDirty());
+    QTimer::singleShot(0,[] {
+        auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom);
+        auto* editor=zoom->findChild<QPlainTextEdit*>("native-cell-zoom-text"); assert(editor && !editor->isReadOnly() && editor->toPlainText()=="changed"); editor->setPlainText("zoom-draft"); zoom->accept();
+    });
+    assert(mixed->executeProcedure("ZoomTableCell",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(editableModel->index(0,1).data(Qt::EditRole).toString()=="zoom-draft" && editableModel->isDirty());
+    QApplication::setActiveWindow(&window); editableView->setFocus(); QApplication::processEvents();
+    QTimer::singleShot(0,[] {
+        auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom);
+        zoom->findChild<QPlainTextEdit*>("native-cell-zoom-text")->setPlainText("discarded zoom"); zoom->reject();
+    });
+    assert(mixed->executeProcedure("ZoomTableCell",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(editableModel->index(0,1).data(Qt::EditRole).toString()=="zoom-draft");
+    QApplication::setActiveWindow(&window); editableView->setFocus(); QApplication::processEvents();
+    assert(editableModel->setData(editableModel->index(0,1),"changed"));
     assert(unchanged.exec("SELECT value FROM command_edit") && unchanged.next() && unchanged.value(0).toString()=="initial"); unchanged.finish();
     {
         AccessFormPreview initializing("table-background-init","Begin Form\nRecordSource =\"sql_editor_audit\"\nOnCurrent =\"[Event Procedure]\"\nBegin Section\nBegin TextBox\nName =\"value\"\nControlSource =\"value\"\nEnd\nEnd\nEnd\n",
