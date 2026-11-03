@@ -3915,3 +3915,33 @@ Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. Actual ignored INSERT publishes no stale key; first-row
 insertion into an empty table and retained generated-key/field selection pass.
 No additional test targets. This includes the preceding Requery/Save-key increment.
+
+## Explicit table acNewRec and full source fetch (2026-11-03)
+
+Named/default table GoToRecord acNewRec shares checked record creation, including
+activation from another table, empty-source creation, readonly 2448 and existing
+insert-draft 3251 protection. Native insertion fetches the remaining existing
+source rows before appending, shared with button/Ctrl+Plus; a 300-row partly
+loaded source receives draft row 301 without adding SQL rows. Explicit row limit
+and no implicit Next-past-last behavior remain. Canonical: TABLE_DOCUMENT_RUNTIME.md.
+Existing main-window target passes 1/1 (3.53 s); no new targets. Qt-only change;
+last GUI-free core remains 1/1 (2.38 s). Last complete suite/package source is
+local a93e2ed / private API cb6a3ea: 48/48 (91.07 s), Debian checks and four
+original fixture hashes passed. Theoretical checklist: 319 checked / 72 open.
+
+## Focused table Paste (2026-11-03)
+
+Native acCmdPaste resolves actual owned QLineEdit focus before grid TSV paste,
+including cell text buffers and modeless Find queries on readonly sources. Qt
+selection/caret insertion does not write the model until field validation or
+SQL until Save. Other forms/projects are not fallback receivers. Clipboard
+limits and checked readonly/no-text errors remain; multiline/rich command
+routing stays open. Canonical scope: TABLE_DOCUMENT_RUNTIME.md. Main-window
+target 1/1 (3.17 s), no new targets. The preceding new-record/fetch change also
+passes its existing main-window/Currency-field/previous-value trio 3/3 (4.65 s).
+Theoretical checklist: 320 checked / 72 open scoped points.
+
+Full rebuilt desktop suite passes 48/48 (91.66 s), GUI-free core 1/1 (1.96 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. This includes named/default acNewRec, complete source fetch
+and actual focused cell/readonly Find text paste. No additional test targets.

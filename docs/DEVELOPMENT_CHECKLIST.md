@@ -981,3 +981,8 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native table acCmdRecordsGoToNew creates a real insert draft after checked sole-current saving, including empty tables; existing insert/delete/unrelated drafts are protected.
 - [x] Native table acCmdDeleteRecord uses checked single-row deletion; shared button/Ctrl+Minus refuse multirow selections before mutation, with actual transactional DELETE on Save.
 - [x] Successful native INSERT captures actual generated SQLite primary keys inside the transaction and restores the saved keyed row/field after model reset without guessing IDs.
+
+- [x] Named/default native table GoToRecord acNewRec shares checked record insertion, including named-page activation, empty tables, readonly protection and existing-draft refusal.
+- [x] Native table insertion fetches all existing source batches within the explicit row limit before appending its draft; SQL remains unchanged until Save.
+
+- [x] Native table acCmdPaste resolves actual owned QLineEdit cell/Find focus, pastes into the real text buffer and preserves checked field/SQL boundaries, including readonly-source Find queries.

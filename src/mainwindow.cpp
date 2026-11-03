@@ -40,6 +40,8 @@
 #include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
+#include <QClipboard>
+#include <QMimeData>
 #include <QListWidget>
 #include <QMap>
 #include <QMessageBox>
@@ -392,7 +394,22 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         QPointer<linaccess::AccessTableView> table;
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
-        if(!table || !model || ((command!=28 && command!=109 && command!=30 && command!=341) && !table->currentIndex().isValid())) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
+        if(!table || !model) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
+        if(command==191) {
+            QPointer<QLineEdit> editor=qobject_cast<QLineEdit*>(QApplication::focusWidget());
+            QWidget* parent=editor.data();
+            while(parent && parent!=table.data()) parent=parent->parentWidget();
+            if(editor && parent) {
+                if(!editor->isEnabled() || editor->isReadOnly()) return tableCommandFailure(2448,"Das aktive Textfeld ist schreibgeschützt.");
+                const auto* mime=QApplication::clipboard()->mimeData();
+                if(!mime || !mime->hasText()) return tableCommandFailure(2046,"Die Zwischenablage enthält keinen einfügbaren Text.");
+                const auto text=QApplication::clipboard()->text();
+                if(text.size()>4*1024*1024 || text.contains(QChar(0))) return tableCommandFailure(3251,"Dieser Zwischenablageumfang wird noch nicht unterstützt.");
+                editor->paste();
+                return {{"handled",true},{"error",0}};
+            }
+        }
+        if((command!=28 && command!=109 && command!=30 && command!=341) && !table->currentIndex().isValid()) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
         if(command==28) {
             const QPointer<MainWindow> self=this;
             if(!table->finishEditing()) return tableModelFailure(model,2501);
@@ -542,7 +559,6 @@ QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int
     if(!explicitTable && !active) return {};
     if(action<0 || action>5) return tableCommandFailure(5,"Ungültige Datensatznavigation.");
     if((action==0 || action==1 || action==4) && offset<1) return tableCommandFailure(2105,"Ungültiger Datensatzabstand.");
-    if(action==5) return tableCommandFailure(3251,"Neue Tabellenzeilen über GoToRecord sind noch nicht implementiert.");
     if(!db_.isOpen() || QApplication::activeModalWidget()) return tableCommandFailure(2046,"Tabellennavigation ist in diesem Kontext nicht verfügbar.");
     QPointer<MainWindow> self=this;
     QPointer<QWidget> page=name.isEmpty() ? (active ? activeDataPage_.data() : nullptr) : findOpenTable(name);
@@ -553,6 +569,7 @@ QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int
     for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
     QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
     if(!table || !model) return tableCommandFailure(2046,"Kein natives Tabellendokument.");
+    if(action==5) return dispatchTableCommand(28);
     if(!table->finishEditing()) return tableModelFailure(model,2501);
     if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während der Validierung geschlossen.");
     // Only the current existing record may be saved here. A manual-submit cache
