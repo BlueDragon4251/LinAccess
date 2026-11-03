@@ -257,3 +257,16 @@ gleiches Feld, geprüfte Currency/Date/Boolean/Null-Übernahme nur in den Entwur
 Keine SQL-Autospeicherung, keine Binär-/AutoNumber-Übernahme. Bestehende
 MainWindow-/Currency-Targets gezielt bestanden; Details/Grenzen in
 docs/KEYBOARD_RUNTIME.md. Gesamtsuite/Paket für diese Ergänzung nicht neu behaupten.
+
+
+## Datenblatt-F2 und nativer Zoom (2026-11-03)
+
+F2 wechselt Tabellen zwischen Einfügemarke und Feldnavigation, validiert nur
+in den Entwurf und erhält ungültige Eingaben. Umschalt+F2 öffnet echten nativen
+mehrzeiligen Zoom aus Tabellen-View oder Zelleditor. Abbrechen/unverändertes OK
+erhalten Werte, Null und originale Zeilenenden; geänderte Texte bleiben im
+Manual-Submit-Entwurf. Besitzer-/Indexlebensdauer im Dialog wird bewacht.
+Formular-Zoom und vollständige Windows-Darstellung sind noch offen.
+Details docs/KEYBOARD_RUNTIME.md. Vollsuite 48/48 (86.44 s), Debian-Prüfungen
+und vier Originalfixture-Hashes bestanden; GUI-freier Core zuletzt 1/1 (2.63 s),
+danach ausschließlich Qt-Änderungen. Keine vollständige Access-Parität.

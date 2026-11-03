@@ -4,6 +4,7 @@
 #include "csv.hpp"
 #include "native_clock_keys.hpp"
 #include "native_cell_editor.hpp"
+#include "native_cell_zoom.hpp"
 #include <QLineEdit>
 #include <QClipboard>
 #include <QMimeData>
@@ -93,6 +94,21 @@ public:
         QApplication::clipboard()->setText(output);
         return true;
     }
+    bool zoomCurrentCell() {
+        QPointer<AccessTableView> self=this;
+        QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
+        if(!typed || !finishEditing()) return false;
+        const QPersistentModelIndex target=currentIndex();
+        if(!target.isValid()) return false;
+        QString text;
+        try { text=typed->clipboardText(target); }
+        catch(const VbaRuntimeError& error) { return refuse(error.number,"Dieser Zellwert kann noch nicht im Text-Zoom bearbeitet werden."); }
+        const bool writable=target.flags().testFlag(Qt::ItemIsEditable) && typed->editStrategy()==QSqlTableModel::OnManualSubmit;
+        const auto result=nativeCellZoom(this,text,!writable);
+        if(!self || !typed || !target.isValid() || !result) return false;
+        if(result->text==text && !(target.data(Qt::EditRole).isNull() && result->modified)) return true;
+        return typed->setData(target,result->text,Qt::EditRole);
+    }
     bool canPasteSelection() const {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         return typed && typed->editStrategy()==QSqlTableModel::OnManualSubmit && !typed->isDirty()
@@ -150,6 +166,17 @@ public:
 protected:
     void keyPressEvent(QKeyEvent* event) override {
         const auto selectionModifiers=event->modifiers() & ~Qt::KeypadModifier;
+        if(event->key()==Qt::Key_F2 && selectionModifiers==Qt::ShiftModifier) {
+            (void)zoomCurrentCell(); event->accept(); return;
+        }
+        if(event->key()==Qt::Key_F2 && selectionModifiers==Qt::NoModifier) {
+            if(activeEditor()) { if(finishEditing()) setFocus(); }
+            else if(currentIndex().isValid() && currentIndex().flags().testFlag(Qt::ItemIsEditable)) {
+                edit(currentIndex());
+                if(auto* line=qobject_cast<QLineEdit*>(activeEditor())) line->setCursorPosition(line->text().size());
+            }
+            event->accept(); return;
+        }
         if(event->key()==Qt::Key_Apostrophe && selectionModifiers==Qt::ControlModifier) {
             if(auto* typed=qobject_cast<AccessTableModel*>(model());typed && finishEditing()) {
                 const auto target=currentIndex();

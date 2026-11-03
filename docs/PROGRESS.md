@@ -3543,3 +3543,18 @@ empty text. Existing main-window/Currency targets pass 2/2 (2.22 s), including
 actual editor dispatch and NULL versus empty SQL persistence. See
 KEYBOARD_RUNTIME.md. Full suite/package baseline remains 24854bf (48/48);
 this small editor increment is focused-verified, with no additional targets.
+
+
+## Native table F2 navigation and multiline Zoom (2026-11-03)
+
+F2 switches editable table cells between caret input and field navigation;
+invalid values remain in the editor. Shift+F2 opens the actual native text Zoom
+dialog from a table cell or its active line editor. Cancel preserves values;
+unmodified OK preserves NULL and original CRLF. Edited values use manual-submit
+drafts. Owner destruction/index invalidation is guarded across the nested
+dialog loop. Native form Zoom and exact Windows formatting remain open.
+See KEYBOARD_RUNTIME.md for scope and the official shortcut reference.
+Full build and existing suite pass 48/48 (86.44 s), Debian payload/permissions/
+Build-ID/pinned SQLite checks pass and all four fixture hashes match. GUI-free
+core remains 1/1 (2.63 s), with subsequent Qt-only changes. Theoretical checklist:
+272 checked / 70 open scoped points; this is not a complete Access parity metric.

@@ -148,3 +148,28 @@ field. A shared editor-change check distinguishes these cases. The existing
 Currency target proves editor key dispatch, NULL retention and explicit empty
 text through actual SQL persistence; main-window/Currency checks pass 2/2
 (2.22 s). Full suite/package baseline remains 24854bf, as above.
+
+
+## Native datasheet F2 and Shift+F2 (2026-11-03)
+
+F2 opens an editable table cell with a caret at the end. Pressing F2 in the
+native line editor validates its field into the manual-submit cache and returns
+to table navigation; invalid input retains the editor and its text. No SQL is
+submitted. The focused F2 increment passed the existing main-window/Currency
+targets 2/2 (1.88 s), including actual arrow navigation and invalid Currency.
+Microsoft documents the [F2 editing/navigation distinction](https://support.microsoft.com/en-au/accessibility/access/keyboard-shortcuts-for-access);
+that documentation does not establish complete Access 2003 parity.
+
+Shift+F2 opens a real native text Zoom dialog for a supported table cell or its
+active text editor. OK returns a field draft, Cancel preserves the prior value.
+Read-only view contexts display text without write controls; unsupported binary
+values are refused. An untouched dialog retains original line endings and NULL
+semantics. Editing in the multiline dialog uses Qt paragraph/line normalization.
+The dialog guards destroyed owners and invalidated model indexes across its
+nested event loop. Native form controls and all Access Zoom formatting options
+remain open. The final main-window Zoom integration passes 1/1 (1.56 s), exercising Cancel,
+multiline values, unchanged CRLF and view/editor mode transitions. Offscreen
+synthetic modal closure explicitly reactivates the main window in the test.
+The rebuilt complete desktop suite passes 48/48 (86.44 s), Debian contents/
+permissions/Build-ID/pinned SQLite checks pass and four original hashes match.
+GUI-free core remains checked at 1/1 (2.63 s); subsequent edits are Qt-only.
