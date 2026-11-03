@@ -3088,3 +3088,16 @@ suite passes 48/48 in one run (84.92 s); GUI-free build/test passes 1/1 (1.42 s)
 The Debian package passes contents/permissions/Build-ID/pinned backend checks;
 all four original fixture SHA-256 checks pass. Catalog 247/316 bounded items;
 full Access parity remains open. No new CTest targets or public artifacts.
+
+
+## Native Window menu (2026-11-03)
+
+The main window now exposes a functional Window menu with next/previous native
+document and Close All actions. Cycling reuses guarded document activation;
+existing keyboard dispatch retains KeyPreview cancellation. Close All respects
+modal windows, pending datasheet edits and form Unload cancellation before
+removing clean tabs. Existing main-window GUI regression checks menu activation,
+Unload refusal, dirty-table refusal and successful report/tab closing; passes
+1/1 (1.43 s), affected desktop targets build. No new target/full-suite/package
+repeat. Complete Access 2003 MDI, window lists/arrangement and pixel/menu/toolbar
+parity remain open. This increment does not affect the GUI-free runtime.

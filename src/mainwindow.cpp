@@ -213,6 +213,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     for (int i=5;i<9;++i) objectMenu->addAction(projectActions[i]);
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
     viewMenu->addAction(projectActions.last());
+    auto* windowMenu=menuBar()->addMenu("&Fenster");
+    windowMenu->setObjectName("window-menu");
+    auto* nextWindow=windowMenu->addAction("Nächstes Fenster\tStrg+F6");
+    auto* previousWindow=windowMenu->addAction("Vorheriges Fenster\tStrg+Umschalt+F6");
+    // The existing key handlers retain form KeyPreview/cancellation semantics.
+    connect(nextWindow,&QAction::triggered,this,[this] { AccessFormPreview::cycleProjectDocuments(db_,this,false,activePreviewDocument()); });
+    connect(previousWindow,&QAction::triggered,this,[this] { AccessFormPreview::cycleProjectDocuments(db_,this,true,activePreviewDocument()); });
+    windowMenu->addSeparator();
+    auto* closeAll=windowMenu->addAction("Alle schließen");
+    connect(closeAll,&QAction::triggered,this,[this] {
+        if(QApplication::activeModalWidget() || !AccessFormPreview::closeProjectDocuments(db_)) return;
+        while(tabs_->count()) {
+            const auto count=tabs_->count(); emit tabs_->tabCloseRequested(count-1);
+            if(tabs_->count()==count) break;
+        }
+    });
     statusBar()->showMessage("Neue SQLite-Datenbank erstellen oder Access-Datei untersuchen");
 }
 

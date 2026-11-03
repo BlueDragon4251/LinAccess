@@ -118,6 +118,8 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     auto* preview=AccessFormPreview::showDocument(linaccess::AccessDocumentKind::Form,"pending_data_quit",layout,code,db,&window); assert(preview);
     std::vector<linaccess::VbaValue> arguments; const auto quit=preview->executeProcedure("RequestQuit",arguments);
     assert(quit.status==linaccess::VbaExecutionStatus::Error && quit.errorNumber==2501 && preview->isVisible() && model->isDirty()); assert(preview->close()); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QApplication::processEvents();
+    const auto guardedTabs=tabs->count(); action(window,"Alle schließen")->trigger();
+    assert(model->isDirty() && tabs->count()==guardedTabs);
     model->revertAll(); assert(!model->isDirty());
     QApplication::setActiveWindow(&window); table->setFocus(); QTest::keyPress(table,Qt::Key_F4,Qt::ControlModifier); QTest::keyRelease(&window,Qt::Key_F4,Qt::ControlModifier); QApplication::processEvents();
     assert(tabs->count()==count-1);
@@ -269,9 +271,13 @@ int main(int argc,char** argv) {
     auto* reportEditor=selectedReport->findChild<QLineEdit*>("access-control-editor"); assert(reportEditor);
     QApplication::setActiveWindow(selectedReport); reportEditor->setFocus(); QApplication::processEvents();
     cycle(reportEditor,false,nullptr);
-    cycle(explorer,false,entry); assert(editor->hasFocus());
+    action(window,"Nächstes Fenster\tStrg+F6")->trigger(); QApplication::processEvents();
+    assert(activePreviewDocument()==entry && editor->hasFocus());
+
     cycle(editor,false,selectedReport); assert(reportEditor->hasFocus());
-    cycle(reportEditor,true,entry);
+    action(window,"Vorheriges Fenster\tStrg+Umschalt+F6")->trigger(); QApplication::processEvents();
+    assert(activePreviewDocument()==entry && editor->hasFocus());
+
     cycle(editor,true,nullptr);
     cycle(explorer,true,selectedReport);
     {
@@ -318,6 +324,8 @@ int main(int argc,char** argv) {
     assert(entry->executeProcedure("SelectEntry",arguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(entry->executeProcedure("ExplicitSave",arguments).status==linaccess::VbaExecutionStatus::Completed);
     root->assign("Tag",linaccess::VbaValue::string("hold"));
+    action(window,"Alle schließen")->trigger(); dispose(); assert(entry && entry->isVisible());
+
     QApplication::setActiveWindow(entry); editor->setFocus(); openProject(window,second,editor); assert(db.databaseName()==first && db.isOpen() && entry && entry->isVisible());
     root->assign("Tag",linaccess::VbaValue::string(""));
     QApplication::setActiveWindow(entry); editor->setFocus(); QApplication::processEvents();
@@ -330,7 +338,7 @@ int main(int argc,char** argv) {
     dispose(); assert(!entry);
     assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="second"); sql.finish();
     openArtifact(window,reportId); QPointer<AccessFormPreview> reportWindow=document("report"); assert(reportWindow && !reportWindow->isModal() && QApplication::activeModalWidget()==nullptr);
-    assert(reportWindow->findChild<QLineEdit*>("access-control-editor")->isReadOnly()); assert(reportWindow->close()); dispose(); assert(!reportWindow);
+    assert(reportWindow->findChild<QLineEdit*>("access-control-editor")->isReadOnly()); action(window,"Alle schließen")->trigger(); dispose(); assert(!reportWindow && window.findChild<QTabWidget*>()->count()==0);
     openArtifact(window,modalId); QPointer<AccessFormPreview> modalWindow=document("modal"); assert(modalWindow && modalWindow->isModal() && QApplication::activeModalWidget()==modalWindow);
     auto* modalEditor=modalWindow->findChild<QLineEdit*>("access-control-editor"); assert(modalEditor); modalEditor->setFocus(); QTest::keyClick(modalEditor,Qt::Key_F11);
     assert(QApplication::activeModalWidget()==modalWindow && !AccessFormPreview::databaseWindowActive());
