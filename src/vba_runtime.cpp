@@ -5,6 +5,7 @@
 #include "vba_calendar.hpp"
 
 #include <algorithm>
+#include <deque>
 #include <cctype>
 #include <cmath>
 #include <regex>
@@ -278,16 +279,18 @@ std::size_t inlineElse(const std::string& source,std::size_t start) {
     return std::string::npos;
 }
 std::string inlineStatementLines(const std::string& source) {
-    std::string result=source; bool quoted=false,bracket=false,dated=false; int depth=0;
+    std::string result=source; bool quoted=false,bracket=false,dated=false,beginning=true; int depth=0;
     for (std::size_t i=0;i<result.size();++i) {
         const char ch=result[i];
         if(dated) { if(ch=='#') dated=false; continue; }
         if (quoted) { if (ch=='"') { if (i+1<result.size() && result[i+1]=='"') ++i; else quoted=false; } continue; }
         if (bracket) { if (ch==']') { if (i+1<result.size() && result[i+1]==']') ++i; else bracket=false; } continue; }
+        if(beginning && lower(result.substr(i,3))=="rem" && (i+3==result.size() || std::isspace(static_cast<unsigned char>(result[i+3])) || result[i+3]==':')) { result.resize(i); break; }
+        if(!std::isspace(static_cast<unsigned char>(ch))) beginning=false;
         if(ch=='#') dated=true;
         else if (ch=='"') quoted=true; else if (ch=='[') bracket=true;
         else if (ch=='(') ++depth; else if (ch==')') --depth;
-        else if (ch==':' && depth==0 && (i+1>=result.size() || result[i+1]!='=')) result[i]='\n';
+        else if (ch==':' && depth==0 && (i+1>=result.size() || result[i+1]!='=')) { result[i]='\n'; beginning=true; }
     }
     return result;
 }
@@ -354,8 +357,10 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     std::vector<int> whileStarts;
     bool within = false;
     std::unordered_map<std::string,int> labels;
-    while (std::getline(stream, raw)) {
-        ++line;
+    std::deque<std::string> pendingStatements;
+    while (!pendingStatements.empty() || std::getline(stream, raw)) {
+        if(pendingStatements.empty()) ++line;
+        else { raw=std::move(pendingStatements.front()); pendingStatements.pop_front(); }
         // VBA line continuations join a statement before it is parsed.
         // This is essential for long SQL strings in Access 2003 modules.
         while (true) {
@@ -371,6 +376,28 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
         }
         auto source = withoutComment(raw);
         if (source.empty()) continue;
+        if(within) {
+            const auto expanded=inlineStatementLines(source);
+            if(expanded.size()<source.size()) source=trim(source.substr(0,expanded.size()));
+            if(source.empty()) continue;
+            const auto folded=lower(source); const auto then=outsideKeyword(source,"then");
+            if((folded.starts_with("if ") || folded.starts_with("elseif ")) && then!=std::string::npos) {
+                const auto tail=trim(source.substr(then+4));
+                if(!tail.empty() && inlineStatementLines(tail).empty()) source=trim(source.substr(0,then+4));
+            }
+            const bool inlineBranch=(folded.starts_with("if ") || folded.starts_with("if(") || folded.starts_with("elseif "))
+                && then!=std::string::npos && !trim(source.substr(then+4)).empty();
+            const auto separator=inlineStatementLines(source).find('\n');
+            if(!inlineBranch && separator!=std::string::npos) {
+                const auto following=trim(source.substr(separator+1));
+                if(!following.empty()) pendingStatements.push_front(following);
+                source=trim(source.substr(0,separator));
+                if(source.empty()) continue;
+                static const std::regex identifier(R"(^[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*$)");
+                static const std::unordered_set<std::string> statements{"else","do","loop","wend","next","stop","return","end","exit"};
+                if(std::regex_match(source,identifier) && !statements.contains(lower(source))) source+=':';
+            }
+        }
         std::smatch match;
         if (!within) {
             if (std::regex_match(source, match, begin) &&

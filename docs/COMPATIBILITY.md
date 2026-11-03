@@ -1363,3 +1363,19 @@ DateAdd, Date Variant promotion/storage boundaries, calendar/DST changes and
 DateValue/TimeValue. Debian package contents/permissions/Build-ID/pinned backend
 checks pass and all four original fixture hashes pass. Existing CTest targets
 only; no full Access, Windows or new distribution-matrix parity claim.
+
+
+## General native VBA colon statement chains (2026-11-03)
+
+Procedure bodies now parse top-level colon-separated statements through the same
+lexical/block/label pipeline as separate lines. Chained declarations, For/Next,
+GoTo and inline labels retain their physical source line and control-flow state;
+inline If branches retain their own branch scope. Quoted/bracketed/Date-literal
+colons and named := arguments are preserved. Rem comments at statement boundaries
+and after Then cannot turn comment text into executable branches.
+Existing core/DAO tests execute chained flow, labels, Date/time literals and real
+DAO method calls. GUI-free build/test passes 1/1 (1.41 s). The corpus-audit binary
+was rebuilt against the changed runtime and its original syntax target passes
+1/1 (0.94 s). Affected app/core/DAO targets build. No new CTest target/full-suite/
+package repeat after the checked 63f55e4 language baseline. Complete module-header/
+property/class grammar and all comment/label edge cases remain open.

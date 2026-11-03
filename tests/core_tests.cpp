@@ -470,7 +470,9 @@ void testCalendarFunctions() {
     assert(eval("DateDiff(\"d\",#2/28/2024#,#2024-03-01#)").asNumber()==2);
     const auto literalDefault=executeVbaProcedure("Function LiteralDate(Optional value As Date = #12/31/2003#) As Date\nLiteralDate=value\nEnd Function","LiteralDate",host);
     assert(literalDefault.status==VbaExecutionStatus::Completed && literalDefault.typedReturnValue->kind==VbaValue::Kind::Date && literalDefault.typedReturnValue->asText()=="2003-12-31");
-    const auto literalBody=executeVbaProcedure("Sub LiteralBody()\nMe!LiteralStamp=#12/31/2003 12:34#\nIf True Then Me!LiteralClock=#14:24#: Me!LiteralNumber=1\nEnd Sub","LiteralBody",host);
+    const auto chained=executeVbaProcedure("Sub ColonFlow()\nDim total As Long: total=0\nFor i=1 To 3: total=total+i: Next i\nIf total=6 Then total=total+1: total=total+1 Else total=0\nGoTo done: total=99\ndone: Me!ColonTotal=total\nMe!ColonComment=1: Rem ignored: Me!ColonBad=99\nIf False Then Rem ignored Else Me!ColonBad=99\nEnd If\nEnd Sub","ColonFlow",host);
+    assert(chained.status==VbaExecutionStatus::Completed && host.fields["ColonTotal"]=="8" && host.fields["ColonComment"]=="1" && !host.fields.contains("ColonBad"));
+    const auto literalBody=executeVbaProcedure("Sub LiteralBody()\nMe!LiteralStamp=#12/31/2003 12:34#: Me!LiteralClock=#14:24#\nIf True Then Me!LiteralNumber=1\nEnd Sub","LiteralBody",host);
     assert(literalBody.status==VbaExecutionStatus::Completed && host.fields["LiteralStamp"]=="2003-12-31 12:34:00" && host.fields["LiteralClock"]=="14:24:00" && host.fields["LiteralNumber"]=="1");
     const auto invalidLiteral=executeVbaProcedure("Sub InvalidDate()\nMe!LiteralEffect=1\nMe!Other=#2/30/2024#\nEnd Sub","InvalidDate",host);
     assert(invalidLiteral.status==VbaExecutionStatus::Unsupported && !host.fields.contains("LiteralEffect"));
