@@ -1032,3 +1032,9 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 
 - [x] Editable single-table queries retain bounded compiled WHERE predicates in actual SQL refresh/save, including checked disappearance after a committed value leaves the filter.
 - [x] Editable query source keys require structural non-null identity, distinguishing real INTEGER rowid aliases from nullable or DESC indexed primary keys.
+
+- [x] Local declared dynamic VBA arrays retain primitive/Object/Variant type through unallocated state, checked ReDim/Preserve, compatible copies and Erase; ByRef/fixed/class boundaries remain explicit.
+- [x] Declared dynamic module arrays persist real typed values across procedure invocations and retain their declared type after deallocation.
+
+- [x] Required declared ByRef array parameters perform real matching-type caller writeback for element edits, Preserve resize and Erase, with checked mismatch refusal.
+- [x] Whole-array VBA a() expressions/calls preserve array reference metadata; direct declared-array ByVal arguments refuse while explicit Variant copies remain independent.

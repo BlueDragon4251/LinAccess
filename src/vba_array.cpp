@@ -68,6 +68,7 @@ std::size_t offset(const VbaValue& value,const std::vector<VbaValue>& indices) {
 }
 }
 bool isVbaArray(const VbaValue& value) { return value.kind==VbaValue::Kind::Array || value.kind==VbaValue::Kind::ByteArray; }
+VbaValue makeUnallocatedVbaArray(std::string elementType) { return array({}, {}, std::move(elementType)); }
 VbaValue makeVbaArray(std::vector<VbaValue> values,int lowerBound) {
     auto bounds=singleDimension(lowerBound,values.size()); return array(std::move(values),std::move(bounds));
 }
@@ -129,8 +130,8 @@ VbaValue resizeVbaArrayWithBounds(const VbaValue& value,std::vector<VbaArrayDime
     if(preserve && originalArray) {
         if(elementType!=previousType) throw VbaRuntimeError(13,"Preserve cannot change array element type");
         const auto previousBounds=value.kind==VbaValue::Kind::ByteArray ? singleDimension(0,value.bytes.size()) : storage(value).bounds;
-        if(previousBounds.size()!=bounds.size()) throw VbaRuntimeError(9,"Preserve cannot change array rank");
-        for(std::size_t dimension=0;dimension<bounds.size();++dimension)
+        if(!previousBounds.empty() && previousBounds.size()!=bounds.size()) throw VbaRuntimeError(9,"Preserve cannot change array rank");
+        for(std::size_t dimension=0;dimension<previousBounds.size();++dimension)
             if(bounds[dimension].lower!=previousBounds[dimension].lower || (dimension+1<bounds.size() && bounds[dimension].upper!=previousBounds[dimension].upper))
                 throw VbaRuntimeError(9,"Preserve can resize only the last upper bound");
     }

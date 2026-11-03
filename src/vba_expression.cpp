@@ -596,7 +596,7 @@ private:
                 }
                 if (host_) {
                     try {
-                        if(isVbaArray(value)) { value=vbaArrayElement(value,arguments); continue; }
+                        if(isVbaArray(value)) { if(!arguments.empty() || accessExpression_) value=vbaArrayElement(value,arguments); continue; }
                         if (value.kind!=VbaValue::Kind::Object || !value.object) throw error("Default member requires an object",91);
                         value=value.object->defaultMember(arguments,objectContext || nextSymbol(".") || nextSymbol("!") || nextSymbol("("));
                     } catch(const VbaRuntimeError& failure) { if (!accessExpression_) throw; value=VbaValue::errorValue(failure.number); }
@@ -917,6 +917,10 @@ private:
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
                         ? tokens_[start].value : "");
+                    if(host_ && index_==start+3 && tokens_[start].type==Token::Type::Word && tokens_[start+1].value=="(" && tokens_[start+2].value==")") {
+                        const auto variable=locals_.find(lower(tokens_[start].value));
+                        if(variable!=locals_.end() && isVbaArray(variable->second)) references.back()=tokens_[start].value;
+                    }
                     if(host_ && index_>start+3 && tokens_[start].type==Token::Type::Word && tokens_[start+1].value=="(" && tokens_[index_-1].value==")") {
                         const auto variable=locals_.find(lower(tokens_[start].value));
                         int depth=0; bool whole=true;

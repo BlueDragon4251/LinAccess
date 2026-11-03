@@ -406,6 +406,7 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 hasCancel = std::regex_match(params, cancelParam);
                 bool optionalSeen=false,paramArraySeen=false;
                 const std::regex paramArray(R"(^ParamArray\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+Variant)?$)",std::regex::icase);
+                const std::regex arrayParameter(R"(^(?:ByRef\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+(Byte|Integer|Long|Single|Double|Currency|Date|Boolean|String|Object|Variant))?$)",std::regex::icase);
                 const std::regex defaultLiteral(R"CONST(^(?:"(?:[^"]|"")*"|[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|[+-]?&H[0-9A-F]+[&%]?|[+-]?&O[0-7]+[&%]?|#[^#]+#|True|False|Empty|Null)$)CONST",std::regex::icase);
                 for (const auto& declaration : splitArguments(params)) {
                     std::smatch declared;
@@ -414,6 +415,12 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                         if(optionalSeen) return {VbaExecutionStatus::Unsupported,"Combined Optional and ParamArray declarations are not implemented",line};
                         paramArraySeen=true;
                         if(parameters) parameters->push_back({declared[1].str(),false,"paramarray",false,{},true});
+                        continue;
+                    }
+                    if(std::regex_match(declaration,declared,arrayParameter)) {
+                        if(optionalSeen) return {VbaExecutionStatus::Unsupported,"Required array parameter after Optional is not implemented",line};
+                        auto type=lower(declared[2].str()); if(type.empty()) type="variant";
+                        if(parameters) parameters->push_back({declared[1].str(),true,type+"()",false,{}});
                         continue;
                     }
                     if (!std::regex_match(declaration, declared, parameter))
@@ -813,11 +820,18 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
             if(!target || target->arguments) return {VbaExecutionStatus::Unsupported,"Only a single Variant array Erase is implemented",line};
             statements.push_back({Statement::Type::EraseArray,target->name,{},line});
         } else if (std::regex_match(source, match, dim)) {
-            std::istringstream declarations(match[1].str());
-            std::string entry;
-            while (std::getline(declarations, entry, ',')) {
+            const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+([A-Za-z]+))?$)",std::regex::icase);
+            for (auto entry:splitArguments(match[1].str())) {
                 std::smatch declared;
                 entry = trim(entry);
+                if(std::regex_match(entry,declared,dynamicArray)) {
+                    auto type=lower(declared[2].str()); if(type.empty()) type="variant";
+                    if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
+                        && type!="currency" && type!="date" && type!="boolean" && type!="string" && type!="object")
+                        return {VbaExecutionStatus::Unsupported,"Dynamic array element type unsupported",line};
+                    statements.push_back({Statement::Type::Dim,declared[1].str(),type+"()",line});
+                    continue;
+                }
                 if (!std::regex_match(entry, declared, declaration))
                     return {VbaExecutionStatus::Unsupported, "Variablendeklaration", line};
                 const auto type = lower(declared[2].str());
@@ -883,6 +897,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
     const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
     const std::regex declaration(R"(^\s*(Dim|Private|Public|Global)\s+(.+)$)",std::regex::icase);
     const std::regex variable(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?$)",std::regex::icase);
+    const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+([A-Za-z]+))?$)",std::regex::icase);
     std::istringstream stream{std::string(module)}; std::string line;
     while (std::getline(stream,line)) {
         line=withoutComment(line); if (std::regex_search(line,procedure)) break;
@@ -893,6 +908,16 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
         if (start.starts_with("declare ") || start.starts_with("type ") || start.starts_with("enum ")) continue;
         for (const auto& entry:splitArguments(declarations)) {
             std::smatch field;
+            if(std::regex_match(entry,field,dynamicArray)) {
+                const auto name=lower(field[1].str()); auto type=lower(field[2].str()); if(type.empty()) type="variant";
+                if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
+                    && type!="currency" && type!="date" && type!="boolean" && type!="string" && type!="object")
+                    throw VbaRuntimeError(3251,"Module dynamic array element type unsupported");
+                if(state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
+                state->values.emplace(name,makeUnallocatedVbaArray(type)); state->types.emplace(name,type+"()");
+                if(visibility=="public" || visibility=="global") state->publicVariables.insert(name);
+                continue;
+            }
             if (!std::regex_match(entry,field,variable)) throw VbaRuntimeError(3251,"Module declaration unsupported");
             const auto name=lower(field[1].str()),type=lower(field[2].str());
             if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency" && type!="date" && type!="byte" && type!="collection")
@@ -911,6 +936,10 @@ std::shared_ptr<VbaModuleState> VbaHost::moduleState(std::string_view module) {
     auto state=createVbaModuleState(module); moduleStates_.emplace(key,state); return state;
 }
 VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
+    if(type.ends_with("()")) {
+        if(!isVbaArray(value) || lower(vbaArrayTypeName(value))!=type) throw VbaRuntimeError(13,"Dynamic array element type mismatch");
+        return value;
+    }
     if (type.empty() || type=="variant") return value;
     if(type=="collection") {
         if(value.kind!=VbaValue::Kind::Object || (value.object && value.object->className()!="Collection"))
@@ -1004,6 +1033,7 @@ void VbaHost::openFormArguments(const std::vector<VbaValue>& args) {
 }
 namespace {
 VbaValue initialLocalValue(const std::string& type) {
+    if(type.ends_with("()")) return makeUnallocatedVbaArray(type.substr(0,type.size()-2));
     if (type=="object" || type=="collection" || type=="control" || type=="form" || type.starts_with("access.") || type.starts_with("dao.")) return VbaValue::reference(nullptr);
     if (type=="string") return VbaValue::string("");
     if (type=="boolean") return VbaValue::logical(false);
@@ -1093,8 +1123,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     VbaVariables locals;
     std::unordered_map<std::string,std::string> localTypes;
     const auto integralType=[](std::string_view type) { return type=="integer" || type=="long"; };
-    const auto checkedType=[&](std::string_view type) { return integralType(type) || type=="boolean" || type=="string" || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection"; };
-    const auto scalarType=[&](std::string_view type) { return checkedType(type) && type!="collection"; };
+    const auto checkedType=[&](std::string_view type) { return type.ends_with("()") || integralType(type) || type=="boolean" || type=="string" || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection"; };
+    const auto scalarType=[&](std::string_view type) { return checkedType(type) && type!="collection" && !type.ends_with("()"); };
     const auto objectType=[](std::string_view type) { return type=="object" || type=="collection" || type=="control" || type=="form" || type.starts_with("dao.") || type.starts_with("access."); };
     auto errorState = std::make_shared<ErrorObject>();
     locals["err"] = VbaValue::reference(errorState);
@@ -1137,9 +1167,12 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             const auto value=implicitCancel ? VbaValue::numeric(0) : !omitted ? arguments[i]
                 : !parameter.defaultExpression.empty() ? evaluateVbaExpression(parameter.defaultExpression,host,{})
                 : parameter.type.empty() || parameter.type=="variant" ? VbaValue::missing() : initialLocalValue(parameter.type);
+            if(!omitted && references && i<references->size() && !parameter.byReference && (*references)[i].type.ends_with("()"))
+                throw VbaRuntimeError(3251,"Declared array arguments require ByRef or an explicit Variant/value copy");
             const auto converted=checkedType(parameter.type) ? coerceVbaModuleValue(value,parameter.type) : value;
             if(!omitted && references && i<references->size() && !implicitCancel && parameter.byReference && (*references)[i].source) {
                 const auto& sourceType=(*references)[i].type;
+                if(sourceType.ends_with("()") && !parameter.type.ends_with("()")) throw VbaRuntimeError(3251,"Declared arrays require a matching array parameter or explicit Variant copy");
                 if((checkedType(parameter.type) || checkedType(sourceType)) && !sourceType.empty() && sourceType!="variant"
                     && !parameter.type.empty() && parameter.type!="variant" && sourceType!=parameter.type)
                     throw VbaRuntimeError(13,"Known ByRef argument types do not match");
@@ -1195,7 +1228,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     for(const auto& instruction:instructions) {
         const auto type=variableType(lower(instruction.argument));
         if(((instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet) && (scalarType(type) || type=="paramarray"))
-            || (instruction.type==Statement::Type::For && (type=="boolean" || type=="string" || type=="single" || type=="currency" || type=="date" || type=="byte" || objectType(type)))) {
+            || (instruction.type==Statement::Type::For && (type.ends_with("()") || type=="boolean" || type=="string" || type=="single" || type=="currency" || type=="date" || type=="byte" || objectType(type)))) {
             VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Declared variable type is unsupported for this loop/object target",instruction.line}; failure.errorNumber=3251; return failure;
         }
     }
@@ -1247,6 +1280,10 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if(separator==std::string::npos) throw VbaRuntimeError(450,"Invalid named argument binding");
                 argumentNames.push_back(reference.substr(7,separator-7)); argumentRefs.push_back(reference.substr(separator+1));
             } else { argumentNames.emplace_back(); argumentRefs.push_back(reference); }
+        }
+        for(auto& expression:argumentRefs) if(const auto target=memberTarget(expression);target && target->arguments && trim(*target->arguments).empty()) {
+            const auto variable=locals.find(lower(target->name));
+            if(variable!=locals.end() && isVbaArray(variable->second)) expression=target->name;
         }
         std::vector<ReferenceBinding> bindings;
         for (const auto& expression : argumentRefs) {
@@ -1576,6 +1613,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 break;
             case Statement::Type::ObjectSet:
                 if (active) {
+                    if(variableType(lower(instruction.argument)).ends_with("()")) throw VbaRuntimeError(13,"Set cannot replace an array variable");
                     auto value = evaluateObject(instruction.expression);
                     if (value.kind != VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set benötigt ein Objekt");
                     if(variableType(lower(instruction.argument))=="collection" && value.object && value.object->className()!="Collection")
@@ -1634,7 +1672,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     if(type=="paramarray") throw VbaRuntimeError(3251,"ParamArray resize is not implemented");
                     if(!instruction.endExpression.empty() && type.empty() && !locals.contains(name))
                         throw VbaRuntimeError(3251,"Typed ReDim requires an existing Variant variable");
-                    if(!type.empty() && type!="variant") throw VbaRuntimeError(13,"ReDim requires a Variant variable");
+                    const bool declaredArray=type.ends_with("()");
+                    const auto declaredElement=declaredArray ? type.substr(0,type.size()-2) : std::string{};
+                    if(!type.empty() && type!="variant" && !declaredArray) throw VbaRuntimeError(13,"ReDim requires an array or Variant variable");
+                    if(declaredArray && !instruction.endExpression.empty() && instruction.endExpression!=declaredElement)
+                        throw VbaRuntimeError(13,"ReDim cannot change a declared array element type");
                     std::vector<VbaArrayDimension> bounds;
                     for(const auto& dimension:splitArguments(instruction.expression)) {
                         const auto range=outsideKeyword(dimension,"to");
@@ -1645,7 +1687,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     refreshAliases();
                     const auto found=locals.find(name);
                     const auto original=found==locals.end() ? VbaValue::empty() : found->second;
-                    assignVariable(name,resizeVbaArrayWithBounds(original,std::move(bounds),instruction.stepExpression=="preserve",instruction.endExpression));
+                    assignVariable(name,resizeVbaArrayWithBounds(original,std::move(bounds),instruction.stepExpression=="preserve",declaredArray ? declaredElement : instruction.endExpression));
                 }
                 break;
             case Statement::Type::EraseArray:
@@ -1653,7 +1695,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     const auto name=lower(instruction.argument);
                     const auto found=locals.find(name);
                     if(found==locals.end() || !isVbaArray(found->second)) throw VbaRuntimeError(13,"Erase requires an array");
-                    assignVariable(name,VbaValue::empty());
+                    const auto type=variableType(name);
+                    assignVariable(name,type.ends_with("()") ? makeUnallocatedVbaArray(type.substr(0,type.size()-2)) : VbaValue::empty());
                 }
                 break;
             case Statement::Type::IndexedAssign:
@@ -1683,6 +1726,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (!active) { ip = static_cast<std::size_t>(instruction.partner); break; }
                 const auto collection = evaluate(instruction.expression);
                 if(isVbaArray(collection)) {
+                    if(vbaArrayRank(collection)==0) throw VbaRuntimeError(9,"For Each requires an allocated array");
                     if(collection.kind!=VbaValue::Kind::Array || vbaArrayType(collection)==8209) throw VbaRuntimeError(3251,"For Each Byte arrays is not implemented");
                     const auto name=lower(instruction.argument),type=variableType(name);
                     if(!type.empty() && type!="variant") throw VbaRuntimeError(13,"Array For Each control must be Variant");

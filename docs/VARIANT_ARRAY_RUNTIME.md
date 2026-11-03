@@ -27,13 +27,13 @@ copies retain their previous elements and bounds. `Erase a` releases this Varian
 array and restores Empty; a subsequent ReDim Preserve can allocate it again.
 
 This path targets variables declared As Variant (or implicit Variant variables).
-Typed array declarations and multiple declarations per statement remain unsupported. An explicit 1,000,000-element allocation limit
+Dynamic declarations are supported in the bounded path described below; fixed-size and class-specific declarations remain unsupported. An explicit 1,000,000-element allocation limit
 fails with 3251; this limit is a current implementation boundary, not Access parity.
 
 ## Remaining boundaries
 
-This is not complete VBA array parity. Typed/fixed/dynamic array declarations,
-full typed declaration/Erase semantics, full ParamArray semantics, full array For Each semantics,
+This is not complete VBA array parity. Fixed-size and class-specific array declarations,
+full fixed/class declaration and Erase semantics, full ParamArray semantics, full array For Each semantics,
 full library/reference binding and native COM arrays remain open. Individual array elements
 passed to a ByRef parameter fail explicitly with 3251 rather than silently losing
 writes. Nested indexed assignment is not implemented. No Windows Access result
@@ -91,7 +91,7 @@ Preserve changes execute in the existing core test target. No new targets.
 
 DAO GetRows constructs genuine zero-based field/record matrices from actual
 materialized SQL records; see [DAO_GETROWS_RUNTIME.md](DAO_GETROWS_RUNTIME.md).
-Typed/fixed/dynamic array declarations, Class-specific/user-defined/fixed-length String
+Fixed-size and class-specific array declarations, Class-specific/user-defined/fixed-length String
 arrays and full Byte enumeration remain open. This extends Variant values and ReDim, not the full declaration grammar
 or native Windows SAFEARRAY/COM interoperability. Existing one-million-cell
 runtime allocation bounds remain explicit.
@@ -143,7 +143,7 @@ array declarations and general COM interoperability remain open.
 
 Erase of a Byte array held in a Variant now releases that container to Empty,
 including supported ByRef Variant writeback. Other value copies retain their
-bytes and bounds. This does not implement fixed/dynamic typed declaration Erase.
+bytes and bounds. The later dynamic declaration path extends Erase while fixed-array reset semantics remain open.
 
 The existing DAO target executes actual SQLite writes through Database objects
 retrieved from multidimensional array cells, moves an actual stored Recordset,
@@ -151,3 +151,72 @@ checks copy/reference/Nothing/Preserve and failure behavior, and verifies SQL af
 container Erase. Core verifies ByRef Byte Erase and an independent byte copy.
 Full desktop suite 48/48 (92.45 s), rebuilt GUI-free core 1/1 (1.79 s), Debian
 package and all four original fixture SHA-256 checks pass. No new test targets.
+
+
+## Declared dynamic arrays (2026-11-03)
+
+Local and module declarations accept empty parentheses, for example
+`Dim values() As Long`, `Private rows() As Variant` and `Public labels() As String`.
+Omitted As means Variant elements. Byte, Integer, Long, Single, Double, Currency,
+Date, Boolean, String, Object and Variant elements use the existing checked typed
+storage. Multiple local/module declarations bind independently. Module arrays
+retain actual values through the host module state across procedure invocations.
+
+A newly declared or erased dynamic array remains an array of its declared type,
+with no allocated dimensions: IsArray/VarType/TypeName retain its type, while
+LBound/UBound/indexing refuse 9. ReDim and initial ReDim Preserve allocate its
+bounds (including Option Base). Later Preserve retains the existing shape/type
+rules. ReDim cannot change the declared element type, and scalar/incompatible
+array assignments refuse 13 while retaining the previous value. Whole-array
+assignment copies supported matching typed containers independently. Variant
+containers can still change their held element type through non-Preserve ReDim.
+
+Erase deallocates declared dynamic arrays and preserves their declaration/type;
+it still releases arrays held by an ordinary Variant to Empty. ByVal Variant
+procedures can inspect explicit detached Variant/value copies. Matching declared
+array parameters are supported below; ByRef to a plain Variant parameter remains
+3251 for a declared array. Optional/fixed-size array parameters, fixed-size
+arrays, class-specific arrays, fixed-length strings, full argument/COM/SAFEARRAY
+interop and full VBA error precedence remain open. Byte enumeration retains its
+prior explicit boundary. For Each on an unallocated array refuses 9.
+
+Existing core integration checks unallocated metadata/bounds, type guards,
+Option Base, matching-array copy isolation, multidimensional traversal, typed
+String/Byte/Object/Variant cells, ByVal inspection, checked ByRef refusal and
+Erase/reallocation. Module-array updates persist across repeated procedures and
+module Erase invalidates bounds. No new CTest target is introduced.
+
+
+## Declared ByRef array parameters and whole-array expressions (2026-11-03)
+
+Procedure parameters accept required ByRef (or default ByRef) array syntax, such
+as `Sub Fill(values() As Long)`. The supported element types match dynamic
+declarations. Actual matching typed arrays retain real reference writeback for
+element changes, ReDim Preserve and Erase; incompatible element types refuse 13
+before the callee body runs. Existing array allocation/enumeration and alias
+boundaries remain enforced; this does not claim full cross-module/COM aliasing.
+
+In VBA expressions, empty `a()` denotes the whole actual array, including in
+calls and Variant copies, while nonempty subscripts retain checked indexing.
+Reference metadata distinguishes whole arrays from indexed cells. Access
+expression evaluation retains its previous separate indexing boundary.
+
+Direct declared-array arguments to ByVal parameters refuse 3251. Passing a
+copied Variant permits detached inspection; explicit parenthesized expressions
+use the existing temporary-value path. Declared arrays passed ByRef to a plain
+Variant parameter remain outside the supported binding path. ByVal array
+parameter declarations, Optional array parameters, fixed/class-specific arrays,
+array-typed function result declarations and complete VBA argument/error
+precedence remain open. This is not a complete VBA/SAFEARRAY implementation.
+
+Existing core integration checks actual caller-visible resize/write/Erase,
+type-mismatch preservation, whole-array calls/copies, direct ByVal refusal and
+an independent Variant snapshot after caller deallocation. No new test target.
+
+Microsoft VBA references (current documentation, not an Access 2003 oracle):
+https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/array-argument-must-be-byref
+https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/function-statement
+
+Complete declaration/parameter implementation: desktop 48/48 (93.65 s), freshly
+rebuilt GUI-free core 1/1 (1.85 s), Debian package payload/permissions/Build-ID/
+pinned SQLite and all four original fixture SHA-256 checks pass.

@@ -2216,3 +2216,16 @@ parameters/projections/joins remain outside this path. Structurally nullable
 primary keys refuse; INTEGER rowid aliases are distinguished from DESC indexed
 keys. OPEN_QUERY_RUNTIME.md documents the measured native behavior and limits.
 Full 48/48 (89.83 s), GUI-free 1/1 (1.49 s), Debian package and four hashes pass.
+
+
+## Declared dynamic VBA arrays and parameters (2026-11-03)
+
+Local/module dynamic declarations support native typed unallocated state,
+checked ReDim/Preserve, copy isolation and Erase without losing declaration
+type. Module values persist across procedures. Required matching ByRef array
+parameters perform actual caller-visible resize/edit/Erase; whole-array a()
+expressions preserve reference identity. Direct declared-array ByVal and plain
+Variant ByRef bindings remain guarded; explicit Variant copies can be inspected.
+VARIANT_ARRAY_RUNTIME.md defines fixed/class/Optional/COM/enumeration boundaries.
+Full desktop 48/48 (93.65 s), rebuilt GUI-free 1/1 (1.85 s), Debian package and
+four original fixture hashes pass; no new test targets or full VBA claim.
