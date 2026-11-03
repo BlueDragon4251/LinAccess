@@ -15,6 +15,7 @@
 #include <QPlainTextEdit>
 #include <QTableView>
 #include <QTabWidget>
+#include <QTabBar>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QPointer>
@@ -91,6 +92,44 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     linaccess::AccessTableView* table=nullptr;
     for(auto* candidate:window.findChildren<QTableView*>()) if(auto* typed=dynamic_cast<linaccess::AccessTableView*>(candidate)) table=typed;
     assert(table && table->model()->rowCount()>0); const auto id=table->model()->index(0,0).data().toInt();
+    auto* documentTabs=window.findChild<QTabWidget*>(); assert(documentTabs && documentTabs->count()==1);
+    const QPointer<QWidget> firstPage=documentTabs->currentWidget();
+    QTreeWidgetItem* auditItem=nullptr;
+    for(QTreeWidgetItemIterator item(explorer);*item;++item) if((*item)->data(0,Qt::UserRole).toString()=="table" && (*item)->text(0)=="sql_editor_audit") { auditItem=*item; break; }
+    assert(auditItem && QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,auditItem),Q_ARG(int,0)));
+    const QPointer<QWidget> secondPage=documentTabs->currentWidget(); assert(secondPage && secondPage!=firstPage && documentTabs->count()==2);
+    linaccess::AccessTableView* auditView=nullptr;
+    for(auto* candidate:secondPage->findChildren<QTableView*>()) if(auto* typed=dynamic_cast<linaccess::AccessTableView*>(candidate)) auditView=typed;
+    assert(auditView); QApplication::setActiveWindow(&window); auditView->setFocus(); QApplication::processEvents();
+    auto* documentsMenu=window.findChild<QMenu*>("window-menu"); assert(documentsMenu && QMetaObject::invokeMethod(documentsMenu,"aboutToShow",Qt::DirectConnection));
+    QAction* firstEntry=nullptr; QAction* secondEntry=nullptr;
+    for(auto* item:documentsMenu->actions()) {
+        if(item->property("la_tab_title").toString()=="shortcut_records") firstEntry=item;
+        if(item->property("la_tab_title").toString()=="sql_editor_audit") secondEntry=item;
+    }
+    assert(firstEntry && secondEntry && secondEntry->isChecked() && !firstEntry->isChecked());
+    firstEntry->trigger(); QApplication::processEvents(); assert(documentTabs->currentWidget()==firstPage && table->hasFocus());
+    QTest::keyClick(table,Qt::Key_F6,Qt::ControlModifier); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && auditView->hasFocus());
+    QTest::keyClick(auditView,Qt::Key_F6,Qt::ControlModifier|Qt::ShiftModifier); QApplication::processEvents(); assert(documentTabs->currentWidget()==firstPage && table->hasFocus());
+    QTest::keyClick(table,Qt::Key_F6,Qt::ControlModifier|Qt::ShiftModifier); QApplication::processEvents(); assert(explorer->hasFocus());
+    QTest::keyClick(explorer,Qt::Key_F6,Qt::ControlModifier); QApplication::processEvents(); assert(documentTabs->currentWidget()==firstPage && table->hasFocus());
+    secondEntry->trigger(); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && auditView->hasFocus());
+    auditView->setCurrentIndex(auditView->model()->index(0,0)); auditView->edit(auditView->currentIndex()); QApplication::processEvents();
+    auto* invalidDocumentEdit=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(invalidDocumentEdit); invalidDocumentEdit->setText("invalid number");
+    QTest::keyClick(invalidDocumentEdit,Qt::Key_F6,Qt::ControlModifier); QApplication::processEvents();
+    assert(documentTabs->currentWidget()==secondPage && invalidDocumentEdit->hasFocus() && invalidDocumentEdit->text()=="invalid number");
+    QTest::mouseClick(documentTabs->tabBar(),Qt::LeftButton,Qt::NoModifier,documentTabs->tabBar()->tabRect(0).center()); QApplication::processEvents();
+    assert(documentTabs->currentWidget()==secondPage && invalidDocumentEdit->hasFocus());
+    firstEntry->trigger(); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && invalidDocumentEdit->hasFocus());
+    QTest::keyClick(invalidDocumentEdit,Qt::Key_Escape); QApplication::processEvents();
+    const auto mixedId=artifact(db,"form","tab_cycle_form","Begin Form\nBegin Section\nBegin TextBox\nName =\"focus\"\nEnd\nEnd\nEnd\n");
+    action(window,"Aktualisieren")->trigger(); openArtifact(window,mixedId); QPointer<AccessFormPreview> mixed=document("tab_cycle_form"); assert(mixed);
+    auto* mixedEditor=mixed->findChild<QLineEdit*>("access-control-focus"); assert(mixedEditor); QApplication::setActiveWindow(mixed); mixedEditor->setFocus(); QApplication::processEvents();
+    QTest::keyClick(mixedEditor,Qt::Key_F6,Qt::ControlModifier); QApplication::processEvents(); assert(explorer->hasFocus());
+    QTest::keyClick(explorer,Qt::Key_F6,Qt::ControlModifier|Qt::ShiftModifier); QApplication::processEvents(); assert(activePreviewDocument()==mixed);
+    assert(mixed->close()); QApplication::processEvents(); window.focusDatabaseWindow(); QApplication::processEvents();
+    QTest::keyClick(explorer,Qt::Key_F6,Qt::ControlModifier|Qt::ShiftModifier); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && auditView->hasFocus());
+    QTest::keyClick(auditView,Qt::Key_W,Qt::ControlModifier); QApplication::processEvents(); assert(documentTabs->count()==1 && documentTabs->currentWidget()==firstPage);
     table->setCurrentIndex(table->model()->index(0,1)); QApplication::setActiveWindow(&window); table->setFocus(); table->edit(table->currentIndex()); QApplication::processEvents();
     auto* editor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(editor && table->isAncestorOf(editor)); editor->setText("saved-through-shortcut");
     auto* editMenu=window.findChild<QMenu*>("native-edit-menu"); assert(editMenu);
