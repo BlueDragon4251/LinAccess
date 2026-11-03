@@ -972,3 +972,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] DoCmd.SendKeys shares global native delivery, named/omitted Wait binding, DoEvents queue draining and checked Text/Value/SQL edit boundaries.
 
 - [x] Native table DoCmd/Application acCmdSelectAllRecords shares bounded full-fetch Ctrl+A selection, validates the active editor and preserves the current field without submitting drafts.
+
+- [x] Native table acCmdPaste routes real clipboard TSV through atomic typed preflight/manual-submit cache; invalid later cells, readonly targets and existing drafts retain checked errors without SQL writes.

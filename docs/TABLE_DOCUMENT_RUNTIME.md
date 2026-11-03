@@ -217,3 +217,15 @@ The constant is taken from Microsoft's AcCommand enumeration:
 https://learn.microsoft.com/en-us/office/vba/api/access.accommand
 General multi-record clipboard/deletion and form/report selection parity remain
 open. This native table command does not imply those operations are available.
+
+## Native table Paste command (2026-11-03)
+
+DoCmd/Application.RunCommand acCmdPaste (191, Microsoft's AcCommand enumeration)
+uses the real table Ctrl+V rectangular TSV path. The full block is parsed and
+type-checked before cache mutation. An invalid later cell leaves earlier cells
+unchanged; readonly targets reject 2448. Existing drafts or an editor that
+produces a draft retain the 2501 boundary. Missing text MIME now sets a fresh
+2046 native error instead of leaving an unrelated previous model error visible.
+Successful paste changes only the manual-submit cache; normal Save reaches SQL.
+Record append, general paste-over-draft merging, editor-text RunCommand routing,
+binary MIME, locale masks and Access-wide Paste equivalence remain open.

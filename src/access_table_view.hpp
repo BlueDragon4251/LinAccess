@@ -245,7 +245,7 @@ public:
         if(!first.isValid()) return false;
         if(!first.flags().testFlag(Qt::ItemIsEditable)) return refuse(2448,"Die Zielzelle ist schreibgeschützt.");
         const auto* mime=QApplication::clipboard()->mimeData();
-        if(!mime || !mime->hasText()) return false;
+        if(!mime || !mime->hasText()) return refuse(2046,"Die Zwischenablage enthält keinen einfügbaren Text.");
         const auto text=QApplication::clipboard()->text();
         if(text.size()>4*1024*1024 || text.contains(QChar(0))) return refuse(3251,"Dieser Zwischenablageumfang wird noch nicht unterstützt.");
         QVector<QVector<QString>> values;

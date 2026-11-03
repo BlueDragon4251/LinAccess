@@ -542,3 +542,18 @@ und Erhalt der aktuellen Zelle ohne SQL-Speichern. Bestehender MainWindow-Test
 1/1 (3.02 s), GUI-freier Core 1/1 (1.68 s); keine neuen Targets. Kanonisch
 docs/TABLE_DOCUMENT_RUNTIME.md. Letzte Vollsuite/Paket-Quelle: lokal 934c26d /
 privat 914cc78, 48/48 (93.79 s), Paket und vier Fixture-Hashes bestanden.
+
+## Nativer Tabellen-Paste-Befehl (2026-11-03)
+
+DoCmd/Application acCmdPaste (191) läuft durch denselben echten TSV-Pfad wie
+Strg+V: vollständige Typvorprüfung vor Cachemutation, Schreibschutz 2448,
+vorhandene Entwürfe 2501, kein implizites SQL-Speichern. Fehlendes Text-MIME
+setzt jetzt frischen 2046 statt einen alten Modellfehler weiterzureichen.
+Ungültige Folgezelle atomar abgelehnt, echter Zweizeilenentwurf und unveränderte
+SQL-Werte geprüft. MainWindow 1/1 (3.12 s), GUI-freier Core 1/1 (1.63 s),
+keine neuen Targets. Kanonisch docs/TABLE_DOCUMENT_RUNTIME.md; Texteditor-Routing,
+Entwurfszusammenführung, Record-Append/Binär/Locale bleiben begrenzt/offen.
+
+Vollsuite 48/48 (97.38 s), GUI-freier Core 1/1 (1.63 s), Debian-Paketprüfung
+inklusive Build-ID/SQLite 3.54.1 sowie vier Originalfixture-Hashes bestanden.
+Dies schließt das vorherige SelectAllRecords-Inkrement ein.

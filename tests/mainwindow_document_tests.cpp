@@ -192,6 +192,9 @@ End Sub
 Sub OpenTypedFindTable()
 DoCmd.OpenTable "command_typed_find",DataMode:=acReadOnly
 End Sub
+Sub OpenTypedPasteTable()
+DoCmd.OpenTable "command_typed_find",DataMode:=acEdit
+End Sub
 Sub CloseTypedFindTable()
 DoCmd.Close acTable,"command_typed_find"
 End Sub
@@ -330,6 +333,9 @@ End Sub
 Sub CopyTableSelection()
 Application.RunCommand Command:=acCmdCopy
 End Sub
+Sub PasteTableSelection()
+DoCmd.RunCommand acCmdPaste
+End Sub
 Sub CloseEditableTable()
 DoCmd.Close acTable,"command_edit",acSaveNo
 Me.Tag="table-closed"
@@ -386,6 +392,7 @@ End Sub
     QApplication::clipboard()->setText("unchanged-sentinel");
     assert(mixed->executeProcedure("CopyTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(QApplication::clipboard()->text()=="1\t1.25\tTrue" && !readonlyModel->isDirty());
+    assert(mixed->executeProcedure("PasteTableSelection",selectArguments).errorNumber==2448 && !readonlyModel->isDirty());
     QTimer::singleShot(0,[] {
         auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom && zoom->objectName()=="native-cell-zoom");
         auto* editor=zoom->findChild<QPlainTextEdit*>("native-cell-zoom-text"); assert(editor && editor->isReadOnly() && editor->toPlainText()=="1.25"); zoom->reject();
@@ -552,6 +559,23 @@ End Sub
     typedFind->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!typedFind);
     assert(!typedModel->isDirty());
     assert(unchanged.exec("SELECT value,typeof(money),stamp,flag,hex(payload) FROM command_typed_find WHERE id=2") && unchanged.next() && unchanged.value(0).toDouble()==1.2345678901234565 && unchanged.value(1).toString()=="real" && unchanged.value(2).toString()=="1899-12-30 06:00:00" && unchanged.value(3).isNull() && unchanged.value(4).toString()=="0102"); unchanged.finish();
+    assert(mixed->executeProcedure("CloseTypedFindTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(mixed->executeProcedure("OpenTypedPasteTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    typedView=nativeTable(documentTabs->currentWidget());
+    typedModel=qobject_cast<linaccess::AccessTableModel*>(typedView->model()); assert(typedModel && !typedModel->isReadOnly());
+    typedView->setCurrentIndex(typedModel->index(0,1));
+    const auto originalFirstNumber=typedModel->index(0,1).data(Qt::EditRole).toString();
+    QApplication::clipboard()->setText("2.5\nnot-a-number");
+    const auto invalidPaste=mixed->executeProcedure("PasteTableSelection",selectArguments);
+    assert(invalidPaste.errorNumber==13 && !typedModel->isDirty());
+    assert(typedModel->index(0,1).data(Qt::EditRole).toString()==originalFirstNumber);
+    QApplication::clipboard()->setText("2.5\n3.75");
+    assert(mixed->executeProcedure("PasteTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedModel->isDirty());
+    assert(typedModel->index(0,1).data(Qt::EditRole).toDouble()==2.5 && typedModel->index(1,1).data(Qt::EditRole).toDouble()==3.75);
+    assert(unchanged.exec("SELECT value FROM command_typed_find WHERE id=2") && unchanged.next() && unchanged.value(0).toDouble()==1.2345678901234565); unchanged.finish();
+    QApplication::clipboard()->setText("9");
+    assert(mixed->executeProcedure("PasteTableSelection",selectArguments).errorNumber==2501 && typedModel->index(0,1).data(Qt::EditRole).toDouble()==2.5);
+    typedModel->revertAll();
     assert(mixed->executeProcedure("CloseTypedFindTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     assert(mixed->executeProcedure("OpenEditableTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     const QPointer<QWidget> editablePage=documentTabs->currentWidget(); auto* editableView=nativeTable(editablePage);
