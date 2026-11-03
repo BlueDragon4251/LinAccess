@@ -5,6 +5,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCryptographicHash>
+#include <QClipboard>
 #include <QDialog>
 #include <QFileDialog>
 #include <QFile>
@@ -92,6 +93,16 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     assert(table && table->model()->rowCount()>0); const auto id=table->model()->index(0,0).data().toInt();
     table->setCurrentIndex(table->model()->index(0,1)); QApplication::setActiveWindow(&window); table->setFocus(); table->edit(table->currentIndex()); QApplication::processEvents();
     auto* editor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(editor && table->isAncestorOf(editor)); editor->setText("saved-through-shortcut");
+    auto* editMenu=window.findChild<QMenu*>("native-edit-menu"); assert(editMenu);
+    const auto editAction=[&](const char* name) { auto* result=editMenu->findChild<QAction*>(QString("edit-")+name); assert(result); return result; };
+    const auto refreshEdit=[&] { assert(QMetaObject::invokeMethod(editMenu,"aboutToShow",Qt::DirectConnection)); };
+    editor->selectAll(); refreshEdit(); editAction("copy")->trigger(); assert(QApplication::clipboard()->text()=="saved-through-shortcut");
+    refreshEdit(); editAction("cut")->trigger(); assert(editor->text().isEmpty());
+    refreshEdit(); editAction("paste")->trigger(); assert(editor->text()=="saved-through-shortcut");
+    refreshEdit(); editAction("undo")->trigger(); assert(editor->text().isEmpty());
+    refreshEdit(); editAction("redo")->trigger(); assert(editor->text()=="saved-through-shortcut");
+    editor->selectAll(); editor->setReadOnly(true); refreshEdit(); assert(editAction("copy")->isEnabled() && !editAction("cut")->isEnabled() && !editAction("paste")->isEnabled()); editor->setReadOnly(false);
+    editor->setEchoMode(QLineEdit::Password); refreshEdit(); assert(!editAction("copy")->isEnabled() && !editAction("cut")->isEnabled()); editor->setEchoMode(QLineEdit::Normal);
     QTest::keyPress(editor,Qt::Key_S,Qt::ControlModifier); QTest::keyRelease(table,Qt::Key_S,Qt::ControlModifier); QApplication::processEvents();
     QSqlQuery query(db); query.prepare("SELECT value FROM shortcut_records WHERE id=?"); query.addBindValue(id); assert(query.exec() && query.next() && query.value(0).toString()=="saved-through-shortcut");
     auto* model=qobject_cast<linaccess::AccessTableModel*>(table->model()); assert(!model->isDirty());

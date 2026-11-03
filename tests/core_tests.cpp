@@ -531,12 +531,39 @@ Function MakeItems() As Collection
 Set MakeItems=New Collection
 MakeItems.Add CCur("1.25")
 End Function
+Function OptionalCount(Optional ByVal items As Collection=Nothing) As Long
+If IsMissing(items) Then Err.Raise 5
+If items Is Nothing Then
+OptionalCount=-1
+Else
+OptionalCount=items.Count
+End If
+End Function
+Sub OptionalReplace(Optional ByRef items As Collection)
+Set items=New Collection
+items.Add 9
+End Sub
+Sub OptionalFlow()
+Dim items As Collection
+Set items=New Collection
+items.Add 3
+Me!OptionalProvided=OptionalCount(Items:=items)
+Me!OptionalMissing=OptionalCount()
+OptionalReplace items
+Me!OptionalReplaced=items(1)
+OptionalReplace
+Me!OptionalAfterOmission=items(1)
+End Sub
 )VBA";
     assert(executeVbaProcedure(module,"InitializeItems",host).status==VbaExecutionStatus::Completed);
     assert(executeVbaProcedure(module,"MutateItems",host).status==VbaExecutionStatus::Completed);
     auto count=executeVbaProcedure(module,"CountItems",host); assert(count.status==VbaExecutionStatus::Completed && count.returnValue=="3");
     assert(executeVbaProcedure(module,"ReplaceItems",host).status==VbaExecutionStatus::Completed);
     count=executeVbaProcedure(module,"CountItems",host); assert(count.status==VbaExecutionStatus::Completed && count.returnValue=="1");
+    assert(executeVbaProcedure(module,"OptionalFlow",host).status==VbaExecutionStatus::Completed);
+    assert(host.fields["OptionalProvided"]=="1" && host.fields["OptionalMissing"]=="-1" && host.fields["OptionalReplaced"]=="9" && host.fields["OptionalAfterOmission"]=="9");
+    const auto badDefault=executeVbaProcedure("Sub BadDefault(Optional items As Collection=1)\nMe!BadCollectionDefault=1\nEnd Sub","BadDefault",host);
+    assert(badDefault.status==VbaExecutionStatus::Unsupported && !host.fields.contains("BadCollectionDefault"));
     const auto factory=executeVbaProcedure(module,"MakeItems",host);
     assert(factory.status==VbaExecutionStatus::Completed && factory.typedReturnValue && factory.typedReturnValue->kind==VbaValue::Kind::Object && factory.typedReturnValue->object->member("Item",{VbaValue::integer(1)}).currencyUnits==12500);
     const auto value=evaluateVbaObjectExpression("New Collection",host,{});

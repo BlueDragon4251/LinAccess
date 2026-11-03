@@ -1,5 +1,6 @@
 #include "mainwindow.hpp"
 #include "native_input_box.hpp"
+#include "native_edit_menu.hpp"
 #include <QCloseEvent>
 #include <QKeyEvent>
 #include <QShortcut>
@@ -210,6 +211,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     for (int i=0;i<4;++i) fileMenu->addAction(projectActions[i]);
     fileMenu->addSeparator();
     fileMenu->addAction("Beenden",this,[this] { close(); });
+    linaccess::addNativeEditMenu(menuBar(),this);
     auto* objectMenu=menuBar()->addMenu("&Objekte");
     for (int i=5;i<9;++i) objectMenu->addAction(projectActions[i]);
     auto* viewMenu=menuBar()->addMenu("&Ansicht");

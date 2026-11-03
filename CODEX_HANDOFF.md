@@ -180,3 +180,29 @@ Der vollständige gemeinsame Projektionsstand a8d3061 bestand 48/48 Tests,
 GUI-freien Build, Debian-Paketprüfung und vier Fixture-Hashes. Spätere Inkremente
 haben zunächst gezielte Prüfungen; ihren tatsächlichen Git-/Build-Stand prüfen.
 Das ist weiterhin keine vollständige Access-2003-Parität.
+
+
+## Technische Fortschreibung: native Collections und Bearbeitung (2026-11-03)
+
+VbaObject hat jetzt optionale className-/enumerationGuard-Hooks. Standardwerte
+sind leer; unbekannte Objektklassen bekommen keinen erfundenen TypeName. Die
+native Collection erhält Variant-/Objektreferenzen und bindet typisierte
+Modulfelder/Parameter/Rückgaben einschließlich optionalem Nothing. ByVal teilt
+das Objekt, nicht die Ersetzung der Referenz; ByRef kann die Referenz ersetzen.
+Eine Enumeration-Lease verhindert Bestandsänderungen während For Each vor der
+Mutation. Regionale Schlüssel, zyklische Lebensdauer und vollständige Klassen-/
+COM-Semantik bleiben offen; Details in docs/COLLECTION_RUNTIME.md.
+
+DoEvents pumpt echte Qt-Ereignisse im nativen Dokumenthost. Akzeptiertes Quit
+muss auch die suspendierten VBA-Frames beenden, selbst mit Resume Next.
+Native Ausführungstiefe und verzögerte Dokumententsorgung beibehalten.
+Timer liefert echte lokale Sekunden seit Mitternacht als Single.
+
+native_clock_keys.hpp enthält die gemeinsame Datums-/Uhrzeit-Tastenzuordnung
+für Formulare und editierbare Tabellen-Textzellen. ISO-/Sekundenformat bleibt
+beschränkt. Nach Tabellenspeicherung wird ein bestehender Datensatz anhand
+seines vollständigen Primärschlüssels wieder aktiviert; NULL/neue generierte
+Schlüssel, schlüssellose Tabellen und große Datenmengen bleiben begrenzt.
+Das Bearbeiten-Menü routet echte Qt-Tasten an den fokussierten Texteditor und
+registriert keine konkurrierenden globalen QAction-Tastenkürzel. Separate
+Form-/Reportfenster benötigen weiterhin vollständige MDI-/Menüintegration.

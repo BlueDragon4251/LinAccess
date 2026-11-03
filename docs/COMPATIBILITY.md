@@ -1477,3 +1477,21 @@ SQL values, partial replacement and keyed restoration as sorting moves the same
 record twice. The shared-helper form layout target also passed in the preceding
 integration run. App builds; existing targets only. Last full suite/package/hash
 baseline remains 8dc6afa; no complete datasheet/regional-format parity claim.
+
+
+## Optional Collections and native editing menu (2026-11-03)
+
+Optional Collection parameters now bind an explicit/implicit Nothing default,
+with typed IsMissing=False, named supplied arguments and independent omitted
+ByRef storage. Non-Nothing defaults are rejected before effects. The main-window
+Bearbeiten menu routes real editor key events for undo/redo/clipboard/delete/
+selection, with live enabled states and read-only/password handling. It covers
+owned text editors; shared MDI menus/range clipboard/full command bars remain
+open. See COLLECTION_RUNTIME.md and EDIT_MENU_RUNTIME.md.
+Core/DAO targeted checks pass 2/2 (1.84 s); main-window target passes 1/1
+(1.90 s). Rebuilt complete desktop suite passes 48/48 in one run (88.53 s),
+including form/datasheet clock keys and primary-key-based cell restoration.
+GUI-free build/core passes 1/1 (1.76 s). Debian package contents/permissions/
+matching Build-ID/pinned SQLite backend checks pass; all four original hashes
+pass. Repository privacy is confirmed. Existing 48 targets only; no full Access
+2003/Windows interaction or new distro-matrix parity claim.
