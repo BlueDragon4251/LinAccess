@@ -94,6 +94,10 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     assert(table && table->model()->rowCount()>0); const auto id=table->model()->index(0,0).data().toInt();
     auto* documentTabs=window.findChild<QTabWidget*>(); assert(documentTabs && documentTabs->count()==1);
     const QPointer<QWidget> firstPage=documentTabs->currentWidget();
+    auto* initialModel=qobject_cast<linaccess::AccessTableModel*>(table->model()); assert(initialModel && initialModel->setData(initialModel->index(0,1),"preserved draft"));
+    assert(QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,selected),Q_ARG(int,0)));
+    assert(documentTabs->count()==1 && documentTabs->currentWidget()==firstPage && table->model()==initialModel && initialModel->index(0,1).data().toString()=="preserved draft");
+    QSqlQuery unchanged(db); assert(unchanged.exec("SELECT value FROM shortcut_records WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="before"); unchanged.finish(); initialModel->revertAll();
     QTreeWidgetItem* auditItem=nullptr;
     for(QTreeWidgetItemIterator item(explorer);*item;++item) if((*item)->data(0,Qt::UserRole).toString()=="table" && (*item)->text(0)=="sql_editor_audit") { auditItem=*item; break; }
     assert(auditItem && QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,auditItem),Q_ARG(int,0)));
@@ -123,10 +127,15 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     firstEntry->trigger(); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && invalidDocumentEdit->hasFocus());
     QTest::keyClick(invalidDocumentEdit,Qt::Key_Escape); QApplication::processEvents();
     const auto mixedId=artifact(db,"form","tab_cycle_form","Begin Form\nBegin Section\nBegin TextBox\nName =\"focus\"\nEnd\nEnd\nEnd\n");
+    artifact(db,"vba","Form_tab_cycle_form","Sub SelectOpenTable()\nDoCmd.SelectObject acTable,\"SHORTCUT_RECORDS\",False\nMe.Tag=\"table-selected\"\nEnd Sub\n");
     action(window,"Aktualisieren")->trigger(); openArtifact(window,mixedId); QPointer<AccessFormPreview> mixed=document("tab_cycle_form"); assert(mixed);
     auto* mixedEditor=mixed->findChild<QLineEdit*>("access-control-focus"); assert(mixedEditor); QApplication::setActiveWindow(mixed); mixedEditor->setFocus(); QApplication::processEvents();
     QTest::keyClick(mixedEditor,Qt::Key_F6,Qt::ControlModifier); QApplication::processEvents(); assert(explorer->hasFocus());
     QTest::keyClick(explorer,Qt::Key_F6,Qt::ControlModifier|Qt::ShiftModifier); QApplication::processEvents(); assert(activePreviewDocument()==mixed);
+    std::vector<linaccess::VbaValue> selectArguments;
+    assert(mixed->executeProcedure("SelectOpenTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    QApplication::processEvents(); assert(documentTabs->currentWidget()==firstPage && table->hasFocus() && !activePreviewDocument() && mixed->isVisible());
+    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="table-selected");
     assert(mixed->close()); QApplication::processEvents(); window.focusDatabaseWindow(); QApplication::processEvents();
     QTest::keyClick(explorer,Qt::Key_F6,Qt::ControlModifier|Qt::ShiftModifier); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && auditView->hasFocus());
     QTest::keyClick(auditView,Qt::Key_W,Qt::ControlModifier); QApplication::processEvents(); assert(documentTabs->count()==1 && documentTabs->currentWidget()==firstPage);

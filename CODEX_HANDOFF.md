@@ -347,3 +347,20 @@ Originalfixture-Hashes bestanden. GUI-freier Core 1/1 (1.53 s), danach nur Qt.
 Vorherige Maus-/Kontextmenü-/Navigationsänderungen sind damit ebenfalls in
 der Vollsuite geprüft. Privates Stacktrace-Werkzeug liegt nur außerhalb des
 Repositories unter /workspace/linaccess-onboarding/private-backtrace.*.
+
+
+## Bestehende Tabelle wiederverwenden / SelectObject (2026-11-03)
+
+Erneutes Tabellenöffnen aktiviert dieselbe Seite/dasselbe Modell, erhält den
+Entwurf und speichert SQL nicht automatisch. DoCmd.SelectObject acTable,Name,False
+aktiviert tatsächlich geöffnete native Tabellen über den Produktions-MainWindow.
+Quellvalidierung und Modalität bleiben wirksam; Me bezieht sich weiterhin auf
+den lebenden Aufrufer, dessen Schließen die Tabelle nicht schließt. Lookup über
+existierende Tabellenmetadaten, Groß-/Kleinschreibung gezielt geprüft.
+Geschlossene Tabellen/fehlender UI-Host weiterhin explizit 3251; exakte Access-
+Closed-Object-Fehler, OpenTable, Queryfenster und allgemeine Tabellen-DoCmd-
+Befehle sind damit NICHT implementiert. Keine stillen Aktionen auf dem alten
+Formular nach Tabellenaktivierung behaupten.
+MainWindow/Layout 2/2 (15.56 s), keine neuen Targets. Vollsuite/Paket zuletzt
+671d997 / privat fea77b0, 48/48 (92.38 s). Diese UI/Runtime-Ergänzung gezielt
+geprüft. Details docs/DATABASE_WINDOW_RUNTIME.md und WINDOW_CYCLE_RUNTIME.md.

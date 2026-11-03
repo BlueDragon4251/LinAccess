@@ -300,6 +300,25 @@ bool MainWindow::finishActiveDataEditors() {
     return true;
 }
 
+QWidget* MainWindow::findOpenTable(const QString& name) const {
+    for(int index=0;index<tabs_->count();++index) {
+        auto* page=tabs_->widget(index);
+        for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) {
+            const auto* model=qobject_cast<linaccess::AccessTableModel*>(view->model());
+            if(model && model->tableName().compare(name,Qt::CaseInsensitive)==0) return page;
+        }
+    }
+    return nullptr;
+}
+
+int MainWindow::activateOpenTable(const QString& name) {
+    if(!db_.isOpen() || QApplication::activeModalWidget()) return 2046;
+    if(name.isEmpty()) return 450;
+    auto* page=findOpenTable(name);
+    if(!page) return 3251; // Closed-table selection/error equivalence remains unsupported.
+    return activateDataPage(page) ? 0 : 2501;
+}
+
 bool MainWindow::activateDataPage(QWidget* page) {
     const QPointer<QWidget> selected=page;
     if(!db_.isOpen() || !selected || tabs_->indexOf(selected)<0 || QApplication::activeModalWidget() || !finishActiveDataEditors()) return false;
@@ -887,6 +906,9 @@ void MainWindow::newTable() {
 }
 
 void MainWindow::showTable(const QString& name) {
+    if(!db_.isOpen() || QApplication::activeModalWidget()) return;
+    if(auto* existing=findOpenTable(name)) { (void)activateDataPage(existing); return; }
+    if(!finishActiveDataEditors() || !AccessFormPreview::activateProjectDocument(db_,this,nullptr)) return;
     auto* page = new QWidget(tabs_);
     auto* outer = new QVBoxLayout(page);
     outer->addWidget(new QLabel("Tabelle: " + name + " — Änderungen erst mit 'Speichern' festschreiben"));
@@ -955,6 +977,7 @@ void MainWindow::showTable(const QString& name) {
         });
     }
     tabs_->setCurrentIndex(tabs_->addTab(page, name));
+    (void)activateDataPage(page);
 }
 
 void MainWindow::editQuery(const QString& existingName) {

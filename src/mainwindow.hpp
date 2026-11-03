@@ -20,6 +20,7 @@ public:
     bool allowProjectClose(const QString& connection) override;
     Q_INVOKABLE void focusDatabaseWindow();
     Q_INVOKABLE void cycleDocument(bool backwards);
+    Q_INVOKABLE int activateOpenTable(const QString& name);
     Q_INVOKABLE int selectDatabaseObject(int objectType,const QString& name,bool activate);
 
 private:
@@ -34,6 +35,7 @@ private:
 
     bool finishActiveDataEditors();
     bool activateDataPage(QWidget* page);
+    QWidget* findOpenTable(const QString& name) const;
 
     bool canCloseDataPage(QWidget* page);
     bool hasProject();

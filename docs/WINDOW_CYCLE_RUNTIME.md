@@ -60,3 +60,28 @@ and all four original hashes pass. Latest GUI-free core is 1/1 (1.53 s), with
 subsequent Qt-only edits. This includes the preceding native mouse/context-menu
 increments. Windows MDI stacking, exact creation/activation policy, all queries/
 editors and complete Access window/focus semantics remain open.
+
+
+## Existing table reuse and native SelectObject (2026-11-03)
+
+Opening the same table again activates its existing native page/model instead
+of creating a duplicate. Pending row drafts remain intact; the existing model
+is not replaced, refreshed or silently submitted. Initial table opening and
+activation use the same source validation/modal guards as document switching.
+DoCmd.SelectObject acTable,name,False now resolves an actually open table through
+the owning production MainWindow and activates its real view. Lookup uses the
+existing table metadata with case-insensitive name comparison. The current
+source field is validated, activation can fail with 2501, and modal context
+returns 2046. A missing/closed table and unsupported owner remain explicit 3251;
+exact Access closed-object errors, OpenTable and query-window activation are
+not implemented by this increment. The database-window True route remains
+separate. Generic table DoCmd commands remain outside the native form/report
+command subset; selecting a table must not retarget subsequent commands to the
+old caller.
+The main-window regression reopens the same dirty table, proves model identity/
+one tab/draft retention and unchanged SQL, then runs interpreted SelectObject
+with an uppercase table name. Actual focus moves to the table, while Me.Tag
+still refers to the caller and closing that caller preserves the table page.
+Existing main-window/layout targets pass 2/2 (15.56 s). Last full suite/package
+remains 671d997 / private API fea77b0, 48/48 (92.38 s); this UI/runtime increment
+is focused-verified. Theoretical checklist: 285 checked / 70 open scoped points.

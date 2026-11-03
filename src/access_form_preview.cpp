@@ -519,7 +519,7 @@ public:
         if(type<0 || type>3) throw linaccess::VbaRuntimeError(3251,"SelectObject object type is not implemented");
         if(!inDatabase && name.isEmpty()) throw linaccess::VbaRuntimeError(450,"SelectObject requires an open object name");
         QWidget* owner=nullptr;
-        if(inDatabase) for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+        for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
             if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
         const auto selectDatabase=[&](bool activate) {
             int error=0;
@@ -530,7 +530,16 @@ public:
         QPointer<AccessFormPreview> selected;
         if(inDatabase) selectDatabase(false);
         else {
-            if(type!=2 && type!=3) throw linaccess::VbaRuntimeError(3251,"Open table/query window selection is not implemented");
+            if(type==0) {
+                if(QApplication::activeModalWidget()) throw linaccess::VbaRuntimeError(2046,"SelectObject is blocked by a modal window");
+                int error=0;
+                if(!owner || owner->metaObject()->indexOfMethod("activateOpenTable(QString)")<0
+                    || !QMetaObject::invokeMethod(owner,"activateOpenTable",Qt::DirectConnection,Q_RETURN_ARG(int,error),Q_ARG(QString,name)))
+                    throw linaccess::VbaRuntimeError(3251,"Native open-table selection is unavailable");
+                if(error) throw linaccess::VbaRuntimeError(error,"Open table selection failed");
+                return;
+            }
+            if(type!=2 && type!=3) throw linaccess::VbaRuntimeError(3251,"Open query window selection is not implemented");
             for(auto* widget:QApplication::topLevelWidgets()) {
                 auto* candidate=dynamic_cast<AccessFormPreview*>(widget);
                 if(!candidate || !candidate->isWindow() || !candidate->opened_ || candidate->closed_ || candidate->openCancelled_

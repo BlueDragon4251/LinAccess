@@ -925,3 +925,7 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 
 - [x] Native Window menu lists and activates the actual open table tabs alongside native Form/Report documents.
 - [x] Shared project Ctrl+F6/Shift+Ctrl+F6 ring includes real table pages, with source validation, modal guards, tab-click refusal and retained manual-submit drafts.
+
+
+- [x] Reopening a native table reuses the existing page/model and preserves pending drafts without SQL submission.
+- [x] DoCmd.SelectObject acTable/name/False activates an actually open native table while retaining the caller's Me and independent lifetime; unsupported closed/query contexts stay explicit.
