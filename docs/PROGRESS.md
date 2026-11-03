@@ -3461,3 +3461,24 @@ classification, join/inventory pass 2/2 (7.48 s). The ambiguity regression also
 checks the stable explanation and unchanged target rows. Existing targets only.
 Full suite/package baseline remains local 4ba1819, and CLI push authentication
 still requires renewal.
+
+
+## Native datasheet selection and checked text clipboard (2026-11-03)
+
+Shift+Space/Ctrl+Space/Ctrl+A select a row/column/all cells. Complete selection
+fetches remaining Qt batches within a bound; it does not silently stop at the
+initial page. Ctrl+C and Copy menu dispatch create rectangular quoted TSV with
+checked model values, exact supported Currency and round-trip numeric digits.
+Invalid editors, binary/NUL/hidden/disjoint/oversized cells preserve the old
+clipboard. Copy validates the active edit cache without submitting SQL changes.
+See DATASHEET_CLIPBOARD_RUNTIME.md for text-format/paste/locale limits.
+Main-window and Currency integration checks pass (including the final Currency
+run 1/1, 0.38 s): actual keys/menu, 300-row complete fetch, TSV quoting, rejected
+copy and real unchanged SQL storage. The rebuilt full desktop suite passes
+48/48 in one run (87.26 s), covering nested Collections, LenB and join diagnoses
+as well. Latest GUI-free core passes 1/1 (1.55 s); subsequent edits affect Qt
+data/GUI code only. Debian contents/permissions/Build-ID/pinned SQLite backend
+checks pass; all four original fixture hashes pass. Existing 48 targets only;
+no Access/Windows clipboard or complete parity claim. CLI authentication is
+still unavailable; local checkpoints are secured while an authenticated private
+GitHub API transfer is investigated.

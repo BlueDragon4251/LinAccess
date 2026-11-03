@@ -3,6 +3,7 @@
 #include "vba_qt_value.hpp"
 #include <QSqlError>
 #include <QSqlRecord>
+#include <limits>
 namespace linaccess {
 namespace {
 bool checkedDisplay(const QString& type) { return type=="CURRENCY_REAL" || type=="INTEGER1" || type=="INTEGER2" || type=="INTEGER4"; }
@@ -53,6 +54,18 @@ QVariant AccessTableModel::data(const QModelIndex& index,int role) const {
     if(!checkedDisplay(type) || raw.isNull() || (role==Qt::EditRole && type!="CURRENCY_REAL")) return raw;
     try { return QString::fromStdString(qtFieldValue(raw,type).asText()); }
     catch(const VbaRuntimeError& error) { return QStringLiteral("#Fehler (%1)").arg(error.number); }
+}
+QString AccessTableModel::clipboardText(const QModelIndex& index) const {
+    if(!index.isValid() || index.model()!=this) throw VbaRuntimeError(5,"Clipboard cell index is invalid");
+    if(metadataError_) throw VbaRuntimeError(metadataError_,"Clipboard column metadata is unavailable");
+    const auto raw=QSqlTableModel::data(index,Qt::EditRole);
+    if(raw.isNull()) return {};
+    const auto type=columnType(index.column());
+    if(raw.metaType().id()==QMetaType::QByteArray || type.contains("BLOB",Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Binary cells cannot be copied as text");
+    const auto value=qtFieldValue(raw,type);
+    if(value.kind==VbaValue::Kind::Number)
+        return QString::number(value.number,'g',std::numeric_limits<double>::max_digits10);
+    return QString::fromStdString(value.asText());
 }
 Qt::ItemFlags AccessTableModel::flags(const QModelIndex& index) const {
     auto result=QSqlTableModel::flags(index); if(!index.isValid()) return result;

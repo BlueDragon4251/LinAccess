@@ -14,6 +14,7 @@ public:
     QVariant data(const QModelIndex& index,int role=Qt::DisplayRole) const override;
     Qt::ItemFlags flags(const QModelIndex& index) const override;
     bool setData(const QModelIndex& index,const QVariant& value,int role=Qt::EditRole) override;
+    QString clipboardText(const QModelIndex& index) const;
 signals:
     void editRejected(int number,const QString& message);
     void sortRestored(int column,Qt::SortOrder order);

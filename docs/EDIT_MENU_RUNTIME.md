@@ -12,8 +12,8 @@ QPointer protects a target closed by a dispatched event. Unsupported focus
 contexts disable the commands.
 
 This increment covers text editors belonging to the main window, including
-live datasheet cell editors and SQL/source text areas. Whole-datasheet range
-clipboard operations, a shared MDI menu for independent form/report windows,
+live datasheet cell editors and SQL/source text areas. Native datasheet selections
+also enable Copy and Select All; see DATASHEET_CLIPBOARD_RUNTIME.md. Typed/range paste, exact Access clipboard formatting, a shared MDI menu for independent form/report windows,
 Access command-bar customization and exact Access 2003 appearance remain open.
 The existing main-window regression exercises the actual QAction commands,
 clipboard text, editor undo/redo and read-only/password enabled states.

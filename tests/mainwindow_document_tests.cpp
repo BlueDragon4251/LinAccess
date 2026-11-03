@@ -112,6 +112,15 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     int clockRow=-1; for(int row=0;row<model->rowCount();++row) if(model->index(row,0).data().toInt()==id) clockRow=row;
     assert(clockRow==1); table->setCurrentIndex(model->index(clockRow,1));
     QApplication::setActiveWindow(&window); table->setFocus();
+    QTest::keyClick(table,Qt::Key_Space,Qt::ShiftModifier);
+    assert(table->selectionModel()->selectedIndexes().size()==model->columnCount());
+    QTest::keyClick(table,Qt::Key_C,Qt::ControlModifier); assert(QApplication::clipboard()->text()==QString::number(id)+"\tsaved-through-shortcut");
+    QTest::keyClick(table,Qt::Key_Space,Qt::ControlModifier);
+    assert(table->selectionModel()->selectedIndexes().size()==model->rowCount());
+    refreshEdit(); assert(editAction("copy")->isEnabled()); editAction("copy")->trigger();
+    assert(QApplication::clipboard()->text()=="m-middle\r\nsaved-through-shortcut" && !model->isDirty());
+    QTest::keyClick(table,Qt::Key_A,Qt::ControlModifier); assert(table->selectionModel()->selectedIndexes().size()==model->rowCount()*model->columnCount());
+    table->setCurrentIndex(model->index(clockRow,1));
     const auto beforeDate=QDate::currentDate(); QTest::keyClick(table,Qt::Key_Semicolon,Qt::ControlModifier);
     auto* clockEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(clockEditor && table->isAncestorOf(clockEditor));
     const auto clockDate=clockEditor->text(); assert(clockDate==beforeDate.toString(Qt::ISODate) || clockDate==QDate::currentDate().toString(Qt::ISODate));

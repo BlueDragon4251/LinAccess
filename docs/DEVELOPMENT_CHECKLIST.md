@@ -878,3 +878,7 @@ of complete Access parity. Existing broader open items remain open.
 
 - [x] Native Unicode-string LenB UTF-16 byte counts, Null/Empty, qualified calls
   and bound SQL/alias execution; numeric/UDT storage layout remains open.
+
+- [x] Native datasheet row/column/all keyboard selection and checked rectangular
+  text copy, full bounded fetch, Currency/number precision, quote handling and
+  rejection before clipboard replacement; typed MIME/range paste remain open.
