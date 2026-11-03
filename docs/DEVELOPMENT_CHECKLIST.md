@@ -941,3 +941,6 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 
 - [x] Explicit/default native table DoCmd.Close validates fields and transactionally saves record drafts, including acSaveNo; failures retain the real page/editor/cache.
 - [x] Parent-hidden active table editors remain checked, and reentrant table Close terminates its owning native context menu safely.
+
+- [x] Native table acCmdSelectRecord validates the active field and selects the real row while preserving readonly access and caller Me.
+- [x] Native table DoCmd/Application acCmdCopy uses the actual checked TSV selection, including readonly and dirty cached rows without SQL submission.

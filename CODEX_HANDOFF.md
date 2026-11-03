@@ -411,3 +411,14 @@ Core 1/1 (2.01 s), Debian-Paketprüfung und alle vier Fixture-Hashes bestanden.
 Damit ist auch der vorherige SaveRecord-Controller vollständig mitgeprüft.
 Keine neuen Testtargets. Privater API-Push mit Baumidentität und Ref-Lease;
 lokale/API-Metadatenhistorien getrennt erhalten, kein Force-Push.
+
+
+## Tabellen-Auswahl und Kopieren (2026-11-03)
+
+acCmdSelectRecord und acCmdCopy adressieren die echte aktive Tabellenansicht
+über den nativen Dispatcher (DoCmd/Application). Schreibgeschützte Zeilen sind
+kopierbar; schmutzige Cachewerte werden kopiert, ohne SQL zu speichern. Ungültige
+Zelleneingaben blockieren Auswahl/Kopie und erhalten die Zwischenablage.
+Details docs/TABLE_DOCUMENT_RUNTIME.md; MainWindow-Regression 1/1 (1.97 s).
+Letzte Vollsuite/Paket: lokal 2dd59b2 / privat 32cb556, 48/48 (91.15 s),
+GUI-freier Core 1/1 (2.01 s). Dieses Inkrement ist gezielt geprüft.

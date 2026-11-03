@@ -1798,3 +1798,13 @@ semantics and complete Access error precedence remain open. Canonical details:
 TABLE_DOCUMENT_RUNTIME.md. Full desktop 48/48 (91.15 s), GUI-free 1/1 (2.01 s),
 Debian checks and four fixture hashes pass. No new test targets.
 Theoretical checklist: 292 checked / 70 open scoped points.
+
+
+## Native table SelectRecord/Copy commands (2026-11-03)
+
+Interpreted DoCmd/Application table commands now select actual rows and copy the
+real selection through checked TSV. Readonly access, retained dirty SQL drafts,
+and invalid-field refusal with unchanged clipboard are verified. See
+TABLE_DOCUMENT_RUNTIME.md. Existing main-window regression 1/1 (1.97 s);
+full desktop/package baseline remains 2dd59b2 / API 32cb556, 48/48 (91.15 s).
+Theoretical checklist: 294 checked / 70 open scoped points.
