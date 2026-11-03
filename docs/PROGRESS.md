@@ -3717,3 +3717,17 @@ Existing targeted trio passes 3/3 (15.85 s). Full desktop suite passes 48/48
 pinned SQLite checks and four original fixture hashes pass.
 No new test targets or full Access parity claim.
 Theoretical checklist: 292 checked / 70 open scoped points.
+
+
+## Native table SelectRecord and Copy (2026-11-03)
+
+The actual table dispatcher now handles row selection and checked clipboard Copy
+from interpreted DoCmd/Application calls. Readonly rows copy, dirty drafts copy
+without writing SQL, and invalid active fields refuse either command without
+replacing clipboard text. Canonical details: TABLE_DOCUMENT_RUNTIME.md.
+Theoretical checklist: 294 checked / 70 open scoped points.
+
+Existing main-window regression passes 1/1 (1.97 s), including invalid numeric
+field refusal with unchanged clipboard. Last full desktop/package baseline is
+local 2dd59b2 / private API 32cb556, 48/48 (91.15 s), GUI-free core 1/1 (2.01 s).
+This controller increment is focused-verified; no new targets.

@@ -111,3 +111,19 @@ with acSaveNo, and default Close from a live popup are covered without new targe
 Full rebuilt desktop suite passes 48/48 (91.15 s), GUI-free core 1/1 (2.01 s),
 Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
 fixture hashes pass. This also covers the preceding SaveRecord increment.
+
+
+## Native table selection and Copy commands (2026-11-03)
+
+DoCmd.RunCommand acCmdSelectRecord selects the current native datasheet row.
+DoCmd/Application RunCommand acCmdCopy routes the actual table selection to the
+existing checked rectangular TSV clipboard path. Both use field validation;
+read-only views retain selection/copy access. Copy keeps dirty manual-submit
+record drafts and does not write SQL. Caller Me remains bound to the form.
+Clipboard text format remains the documented LinAccess TSV contract; no claim of
+all Access clipboard formats, OLE or external application parity is made.
+
+Existing main-window regression passes 1/1 (1.97 s), including invalid numeric
+field refusal with unchanged clipboard. Last full desktop/package baseline is
+local 2dd59b2 / private API 32cb556, 48/48 (91.15 s), GUI-free core 1/1 (2.01 s).
+This controller increment is focused-verified; no new targets.

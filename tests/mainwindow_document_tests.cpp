@@ -126,6 +126,10 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     QTest::mouseClick(documentTabs->tabBar(),Qt::LeftButton,Qt::NoModifier,documentTabs->tabBar()->tabRect(0).center()); QApplication::processEvents();
     assert(documentTabs->currentWidget()==secondPage && invalidDocumentEdit->hasFocus());
     firstEntry->trigger(); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && invalidDocumentEdit->hasFocus());
+    QApplication::clipboard()->setText("invalid-editor-sentinel");
+    assert(window.dispatchTableCommand(190).value("error").toInt()==13);
+    assert(window.dispatchTableCommand(50).value("error").toInt()==13);
+    assert(QApplication::clipboard()->text()=="invalid-editor-sentinel" && invalidDocumentEdit->text()=="invalid number");
     const QPointer<QLineEdit> hiddenEditor=invalidDocumentEdit;
     documentTabs->setCurrentWidget(firstPage); QApplication::processEvents();
     assert(hiddenEditor && auditView->hasPendingEditor() && hiddenEditor->text()=="invalid number");
@@ -153,6 +157,12 @@ End Sub
 Sub SaveActiveTableViaApplication()
 Application.RunCommand Command:=acCmdSaveRecord
 Me.Tag="application-table-saved"
+End Sub
+Sub SelectTableRecord()
+DoCmd.RunCommand acCmdSelectRecord
+End Sub
+Sub CopyTableSelection()
+Application.RunCommand Command:=acCmdCopy
 End Sub
 Sub CloseEditableTable()
 DoCmd.Close acTable,"command_edit",acSaveNo
@@ -200,11 +210,22 @@ End Sub
     assert(window.openTableDocument("command_readonly",0,1)==3251 && readonlyModel->isReadOnly());
     assert(mixed->executeProcedure("SaveActiveTable",selectArguments).errorNumber==2046 && !readonlyModel->isDirty());
     assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="readonly-opened");
+    readonlyView->setCurrentIndex(readonlyModel->index(readonlyRow,1));
+    assert(mixed->executeProcedure("SelectTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(readonlyView->selectionModel()->selectedIndexes().size()==3);
+    QApplication::clipboard()->setText("unchanged-sentinel");
+    assert(mixed->executeProcedure("CopyTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(QApplication::clipboard()->text()=="1\t1.25\tTrue" && !readonlyModel->isDirty());
     assert(unchanged.exec("SELECT value,flag FROM command_readonly WHERE id=1") && unchanged.next() && unchanged.value(0).toDouble()==1.25 && unchanged.value(1).toInt()==-1); unchanged.finish();
     assert(mixed->executeProcedure("OpenEditableTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     const QPointer<QWidget> editablePage=documentTabs->currentWidget(); auto* editableView=nativeTable(editablePage);
     auto* editableModel=qobject_cast<linaccess::AccessTableModel*>(editableView->model()); assert(editableModel && !editableModel->isReadOnly() && editableModel->setData(editableModel->index(0,1),"changed"));
     assert(!editableModel->setReadOnly(true) && !editableModel->isReadOnly() && editableModel->isDirty());
+    editableView->setCurrentIndex(editableModel->index(0,1));
+    assert(mixed->executeProcedure("SelectTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(mixed->executeProcedure("CopyTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(QApplication::clipboard()->text()=="1\tchanged" && editableModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_edit") && unchanged.next() && unchanged.value(0).toString()=="initial"); unchanged.finish();
     {
         AccessFormPreview initializing("table-background-init","Begin Form\nRecordSource =\"sql_editor_audit\"\nOnCurrent =\"[Event Procedure]\"\nBegin Section\nBegin TextBox\nName =\"value\"\nControlSource =\"value\"\nEnd\nEnd\nEnd\n",
             "Sub Form_Current()\nDoCmd.RunCommand acCmdSaveRecord\nMe.Tag=\"initialized\"\nEnd Sub\n",db,&window);
