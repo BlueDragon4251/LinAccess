@@ -1659,3 +1659,22 @@ hashes pass. Last complete suite remains local 2fcaf98 / API ab5e6cd, 48/48
 See KEYBOARD_RUNTIME.md for remaining ComboBox/formatting/command-set limits.
 The theoretical checklist contains 275 checked / 70 open scoped points; complete
 Access 2003 functionality and appearance are still not established.
+
+
+## Committed-save retry and lossless native numeric editing (2026-11-03)
+
+Two data-loss paths were reproduced on synthetic working data and corrected.
+After SQL commits, Save now retires drafts before metadata/query refresh, so a
+refresh failure cannot duplicate an insertion on Save retry. The failure message
+explicitly distinguishes committed data from the view-refresh failure. Actual
+pre-commit failures still roll back and preserve all drafts for correction.
+REAL/FLOAT/DOUBLE-backed cells use checked max_digits10 text editing instead of
+Qt's default two-decimal spin editor. Merely opening/closing/saving retains the
+actual SQL value. Typed-null text EditRole prevents native spin/date defaults
+from replacing untouched NULL fields; REAL/Currency/Date NULL cases persist.
+See DATASHEET_CLIPBOARD_RUNTIME.md for exact Decimal/formatting/refresh limits.
+Full build and existing suite pass 48/48 (88.41 s), Debian payload/permissions/
+Build-ID/pinned SQLite checks and all four original fixture hashes pass.
+GUI-free core remains 1/1 (1.53 s); subsequent changes are Qt-only. Existing 48
+targets only. Theoretical checklist: 277 checked / 70 open scoped points, not
+complete Access 2003 parity.
