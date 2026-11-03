@@ -1,3 +1,4 @@
+#include <cmath>
 #include "access_query.hpp"
 #include "vba_runtime.hpp"
 #include "sqlite_execution.hpp"
@@ -32,6 +33,13 @@ int main(int argc, char** argv) {
         assert(reversed.data(reversed.index(0,0)).isNull() && reversed.data(reversed.index(0,1)).isNull());
         reversed.execute(db,"SELECT Count(InStrRev(label,'o')) FROM samples");
         assert(reversed.data(reversed.index(0,0)).toInt()==3);
+        reversed.execute(db,"SELECT Sqr(score),Exp(Log(score)),Sin(Atn(1)),Cos(0),Tan(0) FROM samples WHERE id=1");
+        assert(std::abs(reversed.data(reversed.index(0,0)).toDouble()-std::sqrt(10.0))<1e-12);
+        assert(std::abs(reversed.data(reversed.index(0,1)).toDouble()-10.0)<1e-12);
+        assert(std::abs(reversed.data(reversed.index(0,2)).toDouble()-std::sqrt(0.5))<1e-12);
+        assert(reversed.data(reversed.index(0,3)).toDouble()==1 && reversed.data(reversed.index(0,4)).toDouble()==0);
+        assert(!query.exec("SELECT linaccess_jet_log(0)"));
+        assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==5); query.finish();
         reversed.execute(db,"SELECT Hex(score),Oct(score),Hex(Null) FROM samples WHERE id=1");
         assert(reversed.data(reversed.index(0,0)).toString()=="A" && reversed.data(reversed.index(0,1)).toString()=="12");
         assert(reversed.data(reversed.index(0,2)).isNull());

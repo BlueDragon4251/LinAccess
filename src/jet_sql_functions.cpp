@@ -180,10 +180,10 @@ public:
     void message(std::string_view) override { throw VbaRuntimeError(3251,"SQL scalar has no UI context"); }
     void saveRecord() override { throw VbaRuntimeError(3251,"SQL scalar cannot save forms"); }
 };
-void scalarStringFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view name,int minimum,int maximum) noexcept {
+void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view name,int minimum,int maximum) noexcept {
     auto& native=api();
     try {
-        if(count<minimum || count>maximum) throw VbaRuntimeError(450,"Invalid scalar string SQL arity");
+        if(count<minimum || count>maximum) throw VbaRuntimeError(450,"Invalid scalar SQL arity");
         VbaVariables values;
         std::string expression=std::string(name)+"(";
         for(int index=0;index<count;++index) {
@@ -206,21 +206,32 @@ void scalarStringFunction(sqlite3_context* context,int count,sqlite3_value** arg
         const auto result=evaluateVbaExpression(expression,host,values);
         if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
         else if(result.kind==VbaValue::Kind::Text) native.textResult(context,result.text.data(),static_cast<int>(result.text.size()),reinterpret_cast<void (*)(void*)>(-1));
-        else if(result.kind==VbaValue::Kind::Number) native.integerResult(context,static_cast<qlonglong>(result.number));
-        else throw VbaRuntimeError(13,"Unsupported scalar string SQL result");
+        else if(result.kind==VbaValue::Kind::Number) {
+            if(result.numericType==VbaValue::NumericType::Double || result.numericType==VbaValue::NumericType::Single)
+                native.numberResult(context,result.number);
+            else native.integerResult(context,static_cast<qlonglong>(result.number));
+        }
+        else throw VbaRuntimeError(13,"Unsupported scalar SQL result");
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
-      catch(...) { native.error(context,"SQL scalar string evaluation failed",-1); }
+      catch(...) { native.error(context,"SQL scalar evaluation failed",-1); }
 }
-void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"StrReverse",1,1); }
-void stringInStrRev(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"InStrRev",2,4); }
-void stringHex(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"Hex",1,1); }
-void stringOct(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"Oct",1,1); }
-void stringSpace(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"Space",1,1); }
-void stringRepeat(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"String",2,2); }
-void stringAsc(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"Asc",1,1); }
-void stringAscW(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"AscW",1,1); }
-void stringChr(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"Chr",1,1); }
-void stringChrW(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarStringFunction(context,count,args,"ChrW",1,1); }
+void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"StrReverse",1,1); }
+void stringInStrRev(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"InStrRev",2,4); }
+void mathSqr(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Sqr",1,1); }
+void mathExp(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Exp",1,1); }
+void mathLog(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Log",1,1); }
+void mathSin(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Sin",1,1); }
+void mathCos(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Cos",1,1); }
+void mathTan(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Tan",1,1); }
+void mathAtn(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Atn",1,1); }
+void stringHex(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Hex",1,1); }
+void stringOct(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Oct",1,1); }
+void stringSpace(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Space",1,1); }
+void stringRepeat(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"String",2,2); }
+void stringAsc(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Asc",1,1); }
+void stringAscW(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"AscW",1,1); }
+void stringChr(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Chr",1,1); }
+void stringChrW(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"ChrW",1,1); }
 void calendarFunction(sqlite3_context* context,int count,sqlite3_value** args,std::string_view name) noexcept {
     auto& native=api();
     try {
@@ -526,6 +537,13 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_asc",-1,&stringAsc,nullptr,nullptr);
     ensure("linaccess_jet_ascw",-1,&stringAscW,nullptr,nullptr);
     ensure("linaccess_jet_chr",-1,&stringChr,nullptr,nullptr);
+    ensure("linaccess_jet_sqr",-1,&mathSqr,nullptr,nullptr);
+    ensure("linaccess_jet_exp",-1,&mathExp,nullptr,nullptr);
+    ensure("linaccess_jet_log",-1,&mathLog,nullptr,nullptr);
+    ensure("linaccess_jet_sin",-1,&mathSin,nullptr,nullptr);
+    ensure("linaccess_jet_cos",-1,&mathCos,nullptr,nullptr);
+    ensure("linaccess_jet_tan",-1,&mathTan,nullptr,nullptr);
+    ensure("linaccess_jet_atn",-1,&mathAtn,nullptr,nullptr);
     ensure("linaccess_jet_hex",-1,&stringHex,nullptr,nullptr);
     ensure("linaccess_jet_oct",-1,&stringOct,nullptr,nullptr);
     ensure("linaccess_jet_space",-1,&stringSpace,nullptr,nullptr);

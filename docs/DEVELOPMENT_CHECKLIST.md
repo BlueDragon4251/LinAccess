@@ -785,3 +785,34 @@ Full targets remain open:
 - [x] Converted-form opener in mainwindow uses independent native nonmodal opening,
   retaining source Modal input blocking without wrongly pausing normal VBA calls;
   complete standard-module application/DoCmd object coverage remains open.
+
+
+## Additional bounded native runtime increments (2026-11-03)
+
+These entries record specific implemented/tested subsets, not equal-sized parts
+of complete Access parity. Existing broader open items remain open.
+
+- [x] Named arguments for implemented DAO Database/QueryDef/TableDef/Find methods;
+  unsupported parameter families remain explicit.
+- [x] Native Recordset.Move, AbsolutePosition, EditMode and Updatable on supported
+  cursors, with checked position/change-state behavior and real DAO regressions.
+- [x] Cursor-owned LastModified and Integer primary-key rekey propagation through
+  supported DAO/form snapshots and bookmarks; external/trigger edges remain open.
+- [x] Read-only DAO result Field.OrdinalPosition with actual projection order;
+  full persistent catalog mutation remains open.
+- [x] Direct-table DataEntry sessions and fresh acFormAdd/acFormEdit/acFormReadOnly
+  opening policies, real inserts and NewRecord Integer semantics; queries open.
+- [x] Native command-button Default/Cancel keyboard dispatch, focused editor undo
+  and runtime uniqueness; full Access keyboard/event oracle remains open.
+- [x] Imported attached-label mnemonics and guarded control SetFocus validation;
+  broader mouse/accessibility/focus transition parity remains open.
+- [x] Preserving existing String/Byte arrays in Variants, zero-based VBA.Array
+  and optional Let assignment; full typed/multidimensional arrays remain open.
+- [x] Bounded hexadecimal/octal literals and checked 32-bit numeric And/Or;
+  full decimal/subtype/Null operator matrix remains open.
+- [x] Native character/reverse-search SQL bridge, corrected InStrRev string Null,
+  and bounded Space/String/Hex/Oct VBA/SQL functions; ANSI/full BSTR remain open.
+- [x] Native VBA Sqr/Exp/Log/Sin/Cos/Tan/Atn with Double results and runtime errors;
+  full Windows floating-point oracle remains open.
+- [x] Native datasheet Ctrl+Plus/Ctrl+Minus through validated model operations,
+  real-key SQL persistence and invalid-editor guards; auto-save semantics open.

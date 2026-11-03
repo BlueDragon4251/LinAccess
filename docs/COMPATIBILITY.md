@@ -1094,3 +1094,18 @@ invalid-editor guard check passes 1/1 (0.26 s). Desktop affected targets build.
 This retains explicit Save semantics; Access automatic record save, complete
 selection/deletion confirmation behavior and the full datasheet keyboard oracle
 remain open. No new test target or unrelated full-suite/package repeat.
+
+
+## Mathematical SQL bridge and grouped verification (2026-11-03)
+
+Sqr/Exp/Log/Sin/Cos/Tan/Atn are registered native SQL functions using the same
+bounded evaluator and scalar binding as VBA. The shared scalar result emitter
+preserves Double/Single values instead of truncating them to integers. Existing
+query-model regression checks fractional square root, composed log/exponential,
+trigonometry on actual row inputs and typed domain errors. DAO/query-model checks
+pass 2/2 (0.33 s). Rebuilt desktop full suite passes 48/48 in one run (84.72 s).
+The Debian package passes contents/permissions/Build-ID/backend checks; all four
+original SHA-256 checks pass. GUI-free runtime was checked at 3c4a93a (1/1,
+1.37 s); following changes are GUI/data-layer only. The catalog now explicitly
+records 243/312 bounded points; these unequal items are not measured overall
+Access parity. Complete SQL/Windows floating-point/Null/type metadata remains open.
