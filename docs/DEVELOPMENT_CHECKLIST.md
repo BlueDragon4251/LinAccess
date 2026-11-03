@@ -816,3 +816,12 @@ of complete Access parity. Existing broader open items remain open.
   full Windows floating-point oracle remains open.
 - [x] Native datasheet Ctrl+Plus/Ctrl+Minus through validated model operations,
   real-key SQL persistence and invalid-editor guards; auto-save semantics open.
+
+- [x] Native Val decimal prefixes, stripped ASCII spaces, signed hexadecimal/octal
+  patterns and checked suffixes in VBA/SQL; full suffix/locale matrix remains open.
+- [x] Bounded LCase/UCase and dollar variants with correct Null, scalar and SQL
+  behavior; non-ASCII Windows locale conversion remains explicitly unsupported.
+- [x] Gregorian ISO DatePart intervals, explicit weekdays and Jan-1 week numbering
+  in VBA/SQL; Date Variants, locale/Hijri and other week rules remain open.
+- [x] Eager native Switch/Choose selection, typed VBA result preservation, Null,
+  rounded indexes and SQL scalar execution; full object/coercion edges remain open.

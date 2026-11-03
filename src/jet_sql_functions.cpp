@@ -205,6 +205,9 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
         ScalarStringHost host;
         const auto result=evaluateVbaExpression(expression,host,values);
         if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
+        else if(result.kind==VbaValue::Kind::Empty) native.integerResult(context,0);
+        else if(result.kind==VbaValue::Kind::Boolean) native.integerResult(context,result.boolean ? -1 : 0);
+        else if(result.kind==VbaValue::Kind::Currency) native.numberResult(context,currencyToRealStorage(result));
         else if(result.kind==VbaValue::Kind::Text) native.textResult(context,result.text.data(),static_cast<int>(result.text.size()),reinterpret_cast<void (*)(void*)>(-1));
         else if(result.kind==VbaValue::Kind::Number) {
             if(result.numericType==VbaValue::NumericType::Double || result.numericType==VbaValue::NumericType::Single)
@@ -227,6 +230,8 @@ void mathAtn(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
 void stringLCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"LCase",1,1); }
 void stringUCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"UCase",1,1); }
 void calendarDatePart(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"DatePart",2,4); }
+void scalarChoose(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Choose",2,1000); }
+void scalarSwitch(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Switch",2,1000); }
 void stringVal(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Val",1,1); }
 void stringHex(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Hex",1,1); }
 void stringOct(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Oct",1,1); }
@@ -551,6 +556,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_lcase",-1,&stringLCase,nullptr,nullptr);
     ensure("linaccess_jet_ucase",-1,&stringUCase,nullptr,nullptr);
     ensure("linaccess_jet_datepart",-1,&calendarDatePart,nullptr,nullptr);
+    ensure("linaccess_jet_choose",-1,&scalarChoose,nullptr,nullptr);
+    ensure("linaccess_jet_switch",-1,&scalarSwitch,nullptr,nullptr);
     ensure("linaccess_jet_val",-1,&stringVal,nullptr,nullptr);
     ensure("linaccess_jet_hex",-1,&stringHex,nullptr,nullptr);
     ensure("linaccess_jet_oct",-1,&stringOct,nullptr,nullptr);

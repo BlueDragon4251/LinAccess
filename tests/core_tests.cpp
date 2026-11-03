@@ -261,6 +261,10 @@ void testNativeMathFunctions() {
     using namespace linaccess;
     FakeForm host;
     const auto eval=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,{}); };
+    assert(eval("Choose(2.5,10,20,30)").asNumber()==20 && eval("Choose(0,10)").kind==VbaValue::Kind::Null);
+    assert(eval("Choose(2,10,Null)").kind==VbaValue::Kind::Null);
+    assert(eval("Switch(False,10,True,CCur(\"1.25\"),True,30)").kind==VbaValue::Kind::Currency);
+    assert(eval("Switch(Null,10,False,20)").kind==VbaValue::Kind::Null);
     assert(eval("Val(String:=\"    1615 198th Street N.E.\")").asNumber()==1615198);
     assert(eval("Val(\"&HFFFF\")").asNumber()==-1 && eval("Val(\"&HFFFF&\")").asNumber()==65535);
     assert(eval("Val(\"&O177777\")").asNumber()==-1 && eval("Val(\"24 and 57\")").asNumber()==24);
@@ -273,7 +277,8 @@ void testNativeMathFunctions() {
     assert(std::abs(eval("Tan(Atn(1))").asNumber()-1)<1e-12);
     assert(eval("Exp(Empty)").asNumber()==1 && eval("Sqr(\"16\")").asNumber()==4);
     for(const auto& [expression,code]:std::vector<std::pair<std::string,int>>{
-        {"Val(\"50.5%\")",13},{"Val(\"1e9999\")",6},{"Val(Null)",94},{"Val()",450},
+        {"Choose(1,10,1/0)",11},{"Switch(True,10,False,1/0)",11},{"Switch(True,1,False)",450},
+        {"Choose(Null,1)",94},{"Val(\"50.5%\")",13},{"Val(\"1e9999\")",6},{"Val(Null)",94},{"Val()",450},
         {"Val(\"&HFFFF!\")",3251},{"Val(\"&H100000000\")",6},{"Val(\"&H10000%\")",6},
         {"Sqr(-1)",5},{"Log(0)",5},{"Log(-1)",5},{"Sin(Null)",94},
         {"Exp(1000)",6},{"Cos()",450},{"Atn(1,2)",450},{"Sqr(\"invalid\")",13}}) {

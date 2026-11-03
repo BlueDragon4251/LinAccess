@@ -1152,3 +1152,22 @@ uses the shared evaluator. Core/DAO/query-model checks pass 3/3 (1.68 s),
 GUI-free build/test passes 1/1 (1.29 s), desktop affected targets build.
 No new target/full-suite/package repeat. Numeric Date coercion, actual Date
 Variants, localized input, Hijri and full Access week-number oracle remain open.
+
+
+## Native Switch/Choose (2026-11-03)
+
+Switch returns the first true condition's Variant value or Null; Choose selects
+by a checked rounded Long index or returns Null outside the available choices.
+All argument expressions are evaluated, including unselected division-by-zero
+errors. Native VBA preserves selected scalar types (including Currency); the SQL
+bridge binds inputs and preserves supported scalar result kinds. Existing
+core/DAO/query-model checks pass 3/3 (1.64 s), desktop affected targets build.
+Object/default-property, all coercion/subtype and Windows edge behavior remain
+open. No new CTest target. Grouped verification follows after these increments.
+
+
+Grouped verification after native Val/case/DatePart/Switch/Choose: rebuilt desktop
+suite passes 48/48 in one run (84.92 s); GUI-free build/test passes 1/1 (1.42 s).
+The Debian package passes contents/permissions/Build-ID/pinned backend checks;
+all four original fixture SHA-256 checks pass. Catalog 247/316 bounded items;
+full Access parity remains open. No new CTest targets or public artifacts.

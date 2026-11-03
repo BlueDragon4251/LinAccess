@@ -1293,6 +1293,21 @@ private:
                 }
                 return result;
             }
+            if(word=="choose" || word=="switch") {
+                if(!host_) return {};
+                if(args.size()<2 || (word=="switch" && args.size()%2) || std::any_of(omitted.begin(),omitted.end(),[](bool missing){ return missing; }))
+                    throw error("Invalid selection function arguments",450);
+                if(word=="choose") {
+                    const auto index=coerceVbaModuleValue(scalarObjectValue(args[0]),"long").number;
+                    if(index<1 || index>=args.size()) return {};
+                    return args[static_cast<std::size_t>(index)];
+                }
+                for(std::size_t index=0;index<args.size();index+=2) {
+                    const auto condition=scalarObjectValue(args[index]);
+                    if(condition.kind!=VbaValue::Kind::Null && coerceVbaModuleValue(condition,"boolean").boolean) return args[index+1];
+                }
+                return {};
+            }
             if(word=="lcase" || word=="lcase$" || word=="ucase" || word=="ucase$") {
                 if(!host_) return {};
                 if(args.size()!=1 || omitted[0]) throw error("Case conversion requires one argument",450);
