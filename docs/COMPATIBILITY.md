@@ -2205,3 +2205,14 @@ independent lifetime are retained. Competing writable native source tabs and
 changed source structure are guarded; no general Jet concurrency claim.
 OPEN_QUERY_RUNTIME.md defines the exact restrictions. Filtered/projected/joined
 updateability, action-query UI and full Access query designer remain open.
+
+
+## Filtered editable query subset (2026-11-03)
+
+Single-table SELECT-star editing additionally accepts bounded compiled WHERE
+predicates through the real SQL table model. Actual saves refresh membership;
+excluded rows are not edited accidentally. Subqueries/functions/other clauses,
+parameters/projections/joins remain outside this path. Structurally nullable
+primary keys refuse; INTEGER rowid aliases are distinguished from DESC indexed
+keys. OPEN_QUERY_RUNTIME.md documents the measured native behavior and limits.
+Full 48/48 (89.83 s), GUI-free 1/1 (1.49 s), Debian package and four hashes pass.

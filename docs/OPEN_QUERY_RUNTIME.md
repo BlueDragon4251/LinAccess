@@ -162,7 +162,7 @@ different data mode refuses 3251. A second editable native datasheet for the sam
 physical table is refused before switching documents; readonly views may coexist.
 This is a bounded safeguard, not Jet record locking or concurrency parity.
 
-Projection/filtered/joined/parameterized queries, views, missing primary keys,
+Projection/joined/parameterized queries, views, missing primary keys,
 temporary shadows and hidden/generated columns are outside this editable subset.
 Save/Requery verify the captured query still resolves to the same eligible main
 table and that its CREATE TABLE SQL matches the opening snapshot. Changed source
@@ -179,3 +179,28 @@ No new CTest targets were added.
 Full desktop 48/48 (90.33 s), fresh GUI-free core 1/1 (1.48 s), Debian package
 payload/permissions/Build-ID/pinned SQLite checks and four original fixture
 SHA-256 checks pass for this editable-query implementation.
+
+
+## Filtered single-table editing and key proof (2026-11-03)
+
+The editable subset now accepts a bounded WHERE predicate after its single main
+table, retaining the compiler-translated condition in the real SQL table model.
+Comparisons, boolean combinations, parentheses, literal IN lists and NULL checks
+use that compiled SQL predicate. Subqueries, extra clauses, predicate function
+calls, parameters, projections and joins remain excluded. This is not arbitrary
+Jet predicate/type/collation parity. Save/requery continue using the captured
+filter; a saved value that no longer satisfies it disappears on the model's
+post-commit SQL refresh. The underlying keyed row is still actually updated.
+The existing GUI regression verifies this against real SQL, with an excluded
+control row and no new test target.
+
+Editable source keys must be structurally non-null: declared NOT NULL primary
+keys or a proven single INTEGER rowid alias. Nullable TEXT/composite keys and
+INTEGER PRIMARY KEY DESC aliases with a separate primary-key index refuse 3251.
+SQLite's allowance for duplicate NULL primary-key values is not treated as a
+safe record identifier. This remains a native datasheet safeguard, not full
+Jet locking, concurrent update or Access refresh behavior parity.
+
+Full desktop 48/48 (89.83 s), fresh GUI-free core 1/1 (1.49 s), Debian package
+payload/permissions/Build-ID/pinned SQLite and all four original fixture SHA-256
+checks pass; no new CTest targets.
