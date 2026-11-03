@@ -4083,3 +4083,15 @@ OPEN_QUERY_RUNTIME.md specifies scope and open search semantics. Full existing
 suite 48/48 (90.46 s), GUI-free core 1/1 (1.50 s), Debian package and all four
 original fixture hashes pass; no new targets. Checklist: 337 checked / 72 open
 scoped points, not an overall Access compatibility percentage.
+
+## Query Edit menu and readonly Zoom (2026-11-03)
+
+Query views now participate in actual Edit-menu Copy/Select All, with readonly
+grid Cut/Paste disabled and direct forwarded Copy events using the existing
+checked formatter. Selection limits are checked before per-cell index allocation.
+VBA acCmdZoomBox and Shift+F2 open real readonly Qt cell Zoom; Close preserves
+SQL/model values. Existing main-window/layout pair passes 2/2 (17.70 s), Debian
+package and four original fixture SHA-256 checks pass. No new test targets;
+previous full suite remains the query-search 48/48 baseline (90.46 s).
+OPEN_QUERY_RUNTIME.md states limits. Checklist: 339 checked / 72 open scoped
+points, not an overall parity percentage.

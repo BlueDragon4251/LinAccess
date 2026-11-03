@@ -10,6 +10,12 @@ namespace linaccess {
 template<class CellText>
 QString nativeGridClipboardText(const QTableView& view,CellText cellText) {
     if(!view.selectionModel()) throw VbaRuntimeError(2046,"No grid selection");
+    qint64 cells=0;
+    for(const auto& range:view.selectionModel()->selection()) {
+        const qint64 count=static_cast<qint64>(range.height())*range.width();
+        if(count>1000000-cells) throw VbaRuntimeError(3251,"Clipboard selection exceeds the cell limit");
+        cells+=count;
+    }
     const auto selected=view.selectionModel()->selectedIndexes();
     if(selected.isEmpty()) throw VbaRuntimeError(2046,"No selected cells");
     if(selected.size()>1000000) throw VbaRuntimeError(3251,"Clipboard selection exceeds the cell limit");

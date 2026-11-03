@@ -1,6 +1,7 @@
 #pragma once
 #include <QAction>
 #include "access_table_view.hpp"
+#include "native_query_view.hpp"
 #include <QApplication>
 #include <QClipboard>
 #include <QKeyEvent>
@@ -62,6 +63,10 @@ inline QMenu* addNativeEditMenu(QMenuBar* bar,QWidget* owner) {
             readable=true; selection=table->selectionModel() && table->selectionModel()->hasSelection();
             content=table->model()->rowCount()>0 && table->model()->columnCount()>0;
             tablePaste=table->canPasteSelection();
+        }
+        if(auto* query=dynamic_cast<NativeQueryView*>(widget);query && query->model()) {
+            readable=true; selection=query->selectionModel() && query->selectionModel()->hasSelection();
+            content=query->model()->rowCount()>0 && query->model()->columnCount()>0;
         }
         const auto* clipboard=QApplication::clipboard()->mimeData();
         for(auto* action:menu->actions()) {

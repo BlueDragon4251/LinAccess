@@ -117,3 +117,25 @@ immediate post-OpenQuery Currency search. Currency SQL objects/schema/results an
 query model targets pass 5/5 (4.46 s) with the main-window target. Full suite
 48/48 (90.46 s), GUI-free core 1/1 (1.50 s), Debian package and all four original
 fixture hashes pass. No new test targets.
+
+## Edit menu and readonly zoom
+
+The native Edit menu recognizes query views: Copy and Select All forward real
+key events to the view, while grid Cut/Paste stay disabled for readonly results.
+The query view handles forwarded Copy directly as well as Ctrl+C/Ctrl+Insert;
+all paths use the same checked formatter. Selection ranges are checked before
+allocating their individual indexes; query Select All also enforces the existing
+one-million-cell bound. No hidden/binary/size guard is bypassed by menu routing.
+
+RunCommand acCmdZoomBox and Shift+F2 open the actual existing native Qt zoom
+dialog with a readonly QPlainTextEdit holding the checked current cell text.
+Close leaves SQL and model data unchanged; destroyed query/model targets return
+2501. A focused modeless search dialog is not treated as the underlying grid's
+active Zoom field. Original binary/OLE rendering and full Access Zoom/edit-menu
+semantics remain open.
+
+Targeted existing main-window/layout pair passes 2/2 (17.70 s), including actual
+menu Copy/Select All, disabled grid mutation actions, VBA Zoom and Shift+F2 with
+real readonly dialog content. Debian package payload/Build-ID/SQLite checks and
+four original SHA-256 checks pass. Previous full 48/48 baseline is the query-search
+checkpoint (90.46 s); this bounded GUI-only increment used the targeted pair.

@@ -1012,3 +1012,6 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native query SelectRecord/SelectAllRecords and scoped SendKeys address actual selected result cells and focused controls without falling back to the calling form.
 
 - [x] Native readonly query Find/FindNext/Ctrl+F/Shift+F4 and current-field FindRecord search real typed results, preserve unknown-type boundaries and focused search text commands, and support immediate VBA search after OpenQuery.
+
+- [x] Native query Edit-menu Copy/Select All forwards actual view commands with readonly Cut/Paste disabled, shared checked formatting and selection limits before per-cell allocation.
+- [x] Query acCmdZoomBox/Shift+F2 opens an actual readonly Qt cell Zoom dialog with checked text, no SQL/model mutation and guarded target lifetime.

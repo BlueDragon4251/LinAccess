@@ -750,3 +750,15 @@ Ergebnistausch prüft Lebensdauer nach Qt-Callbacks. Umfang/Grenzen stehen in
 OPEN_QUERY_RUNTIME.md. Desktop 48/48 (90,46 s), GUI-frei 1/1 (1,50 s), Debian-
 Paket und vier Original-SHA-256 bestanden. 337 erledigte / 72 offene erfasste
 Checklist-Punkte, kein Gesamtparitätsprozentsatz und keine neuen Testziele.
+
+## Abfrage-Bearbeiten-Menü und Zoom (2026-11-03)
+
+Bearbeiten erkennt echte Abfrageansichten: Kopieren/Alles markieren leiten
+Tastenereignisse an die View; schreibende Grid-Aktionen bleiben deaktiviert.
+Copy wird direkt verarbeitet, gleiche geprüfte Formatierung; Zellgrenze wird
+vor der Index-Allokation geprüft. acCmdZoomBox/Umschalt+F2 öffnen den echten
+schreibgeschützten Qt-Zoom mit unveränderten SQL-/Modellwerten nach Schließen.
+Gezielt Mainwindow/Layout 2/2 (17,70 s), Debian-Paket und vier Original-SHA-256
+bestanden. Keine neuen Testziele; letzte vollständige 48/48-Suite gehört zum
+Abfragesuche-Checkpoint (90,46 s). 339 erledigte / 72 offene erfasste Punkte,
+kein Gesamtprozentsatz. Grenzen: OPEN_QUERY_RUNTIME.md.
