@@ -1761,3 +1761,16 @@ still refers to the caller and closing that caller preserves the table page.
 Existing main-window/layout targets pass 2/2 (15.56 s). Last full suite/package
 remains 671d997 / private API fea77b0, 48/48 (92.38 s); this UI/runtime increment
 is focused-verified. Theoretical checklist: 285 checked / 70 open scoped points.
+
+
+## Native OpenTable and read-only table mode (2026-11-03)
+
+DoCmd.OpenTable now opens real project datasheets in default/acEdit or acReadOnly
+mode, with named/omitted argument binding and a model-level read-only mutation
+guard. Valid editable changes persist to SQL; read-only cell/checkbox/insert/
+delete attempts leave SQL unchanged. Missing differs from explicit Empty.
+Design/preview/append-only and conflicting existing-mode transitions remain
+explicit 3251 boundaries. Details and references: TABLE_DOCUMENT_RUNTIME.md.
+Full build/suite 48/48 (92.13 s), GUI-free core 1/1 (1.68 s), Debian payload/
+permissions/Build-ID/pinned SQLite checks and four fixture hashes pass. Existing
+48 targets only. Theoretical checklist: 288 checked / 70 open scoped points.

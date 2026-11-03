@@ -74,6 +74,7 @@ void AccessTableModel::revertRow(int row) {
 }
 bool AccessTableModel::insertRows(int row,int count,const QModelIndex& parent) {
     if(saving_ || changing_) return reject(2501);
+    if(readOnly_) return reject(2448);
     const QScopedValueRollback<bool> changing(changing_,true);
     const auto dirtyAnchors=rowAnchors(dirtyRows_),deleteAnchors=rowAnchors(deletedRows_);
     const bool accepted=QSqlTableModel::insertRows(row,count,parent);
@@ -83,6 +84,7 @@ bool AccessTableModel::insertRows(int row,int count,const QModelIndex& parent) {
 }
 bool AccessTableModel::removeRows(int row,int count,const QModelIndex& parent) {
     if(saving_ || changing_) return reject(2501);
+    if(readOnly_) return reject(2448);
     const QScopedValueRollback<bool> changing(changing_,true);
     const auto dirtyAnchors=rowAnchors(dirtyRows_),deleteAnchors=rowAnchors(deletedRows_);
     QVector<QPersistentModelIndex> removed;
@@ -95,8 +97,17 @@ bool AccessTableModel::removeRows(int row,int count,const QModelIndex& parent) {
     }
     return accepted;
 }
+bool AccessTableModel::setReadOnly(bool value) {
+    if(saving_ || changing_) return reject(2501);
+    if(readOnly_==value) return true;
+    if(isDirty()) return reject(2501);
+    readOnly_=value;
+    if(rowCount()>0 && columnCount()>0) emit dataChanged(index(0,0),index(rowCount()-1,columnCount()-1));
+    return true;
+}
 bool AccessTableModel::submitTransactionally() {
     if(saving_ || changing_) return reject(2501);
+    if(readOnly_) return reject(2448);
     if(editStrategy()!=OnManualSubmit) return reject(3251);
     if(!isDirty()) return select();
     struct Pending { int row; enum Kind { Update,Insert,Delete } kind; QSqlRecord values; };
@@ -185,6 +196,7 @@ QString AccessTableModel::clipboardText(const QModelIndex& index) const {
 }
 Qt::ItemFlags AccessTableModel::flags(const QModelIndex& index) const {
     auto result=QSqlTableModel::flags(index); if(!index.isValid()) return result;
+    if(readOnly_) return result & ~(Qt::ItemIsEditable|Qt::ItemIsUserCheckable);
     const auto type=columnType(index.column());
     if(metadataError_ || generated_.contains(record().fieldName(index.column()).toCaseFolded()) || type.contains("BLOB",Qt::CaseInsensitive)) return result & ~Qt::ItemIsEditable;
     if(type.contains("BOOL",Qt::CaseInsensitive)) result |= Qt::ItemIsUserCheckable;
@@ -196,6 +208,7 @@ Qt::ItemFlags AccessTableModel::flags(const QModelIndex& index) const {
 }
 bool AccessTableModel::setData(const QModelIndex& index,const QVariant& value,int role) {
     if(saving_ || changing_) return reject(2501);
+    if(readOnly_) return reject(2448);
     if(!index.isValid() || index.model()!=this) return false;
     const bool checkbox=role==Qt::CheckStateRole && columnType(index.column()).contains("BOOL",Qt::CaseInsensitive);
     if(role!=Qt::EditRole && !checkbox) return QSqlTableModel::setData(index,value,role);
@@ -217,6 +230,7 @@ bool AccessTableModel::setData(const QModelIndex& index,const QVariant& value,in
 }
 bool AccessTableModel::repeatPreviousValue(const QModelIndex& target) {
     if(saving_ || changing_) return reject(2501);
+    if(readOnly_) return reject(2448);
     if(editStrategy()!=OnManualSubmit) return reject(3251);
     if(!target.isValid() || target.model()!=this || target.row()==0) return reject(5);
     const auto source=index(target.row()-1,target.column());
@@ -230,6 +244,7 @@ bool AccessTableModel::repeatPreviousValue(const QModelIndex& target) {
 }
 bool AccessTableModel::setDataBlock(const QModelIndex& first,const QVector<QVector<QString>>& values) {
     if(saving_ || changing_) return reject(2501);
+    if(readOnly_) return reject(2448);
     const QScopedValueRollback<bool> changing(changing_,true);
     if(editStrategy()!=QSqlTableModel::OnManualSubmit) return reject(3251);
     if(isDirty()) return reject(2501);

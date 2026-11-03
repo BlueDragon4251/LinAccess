@@ -21,6 +21,7 @@ public:
     Q_INVOKABLE void focusDatabaseWindow();
     Q_INVOKABLE void cycleDocument(bool backwards);
     Q_INVOKABLE int activateOpenTable(const QString& name);
+    Q_INVOKABLE int openTableDocument(const QString& name,int view,int mode);
     Q_INVOKABLE int selectDatabaseObject(int objectType,const QString& name,bool activate);
 
 private:
@@ -51,7 +52,7 @@ private:
     QJsonObject objectDefinition(const QString& kind, const QString& name);
     bool saveObject(const QString& kind, const QString& name, const QJsonObject& definition);
     void newTable();
-    void showTable(const QString& name);
+    int showTable(const QString& name,bool readOnly=false,bool interactive=true);
     void editQuery(const QString& name = {});
     void editForm(const QString& name = {});
     void runForm(const QString& name);

@@ -16,6 +16,8 @@ public:
     bool insertRows(int row,int count,const QModelIndex& parent={}) override;
     bool removeRows(int row,int count,const QModelIndex& parent={}) override;
     bool submitTransactionally();
+    bool setReadOnly(bool value);
+    bool isReadOnly() const { return readOnly_; }
     void sort(int column,Qt::SortOrder order=Qt::AscendingOrder) override;
     void protectNextSort() { protectSort_=true; }
     QVariant data(const QModelIndex& index,int role=Qt::DisplayRole) const override;
@@ -42,6 +44,6 @@ private:
     Qt::SortOrder sortOrder_{Qt::AscendingOrder};
     bool protectSort_{};
     QSet<int> dirtyRows_,deletedRows_;
-    bool changing_{},saving_{};
+    bool changing_{},saving_{},readOnly_{};
 };
 }

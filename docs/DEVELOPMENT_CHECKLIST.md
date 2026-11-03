@@ -929,3 +929,8 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 
 - [x] Reopening a native table reuses the existing page/model and preserves pending drafts without SQL submission.
 - [x] DoCmd.SelectObject acTable/name/False activates an actually open native table while retaining the caller's Me and independent lifetime; unsupported closed/query contexts stay explicit.
+
+
+- [x] Native DoCmd.OpenTable opens actual project datasheets in default/acEdit and acReadOnly modes, preserving explicit unsupported view/mode boundaries.
+- [x] Read-only table model guards block native writes/insert/delete/paste/submission and checkbox mutation; dirty policy changes preserve drafts.
+- [x] OpenTable native method binding supports named/omitted arguments and distinguishes Missing defaults from explicit Empty enum coercion.
