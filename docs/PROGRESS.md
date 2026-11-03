@@ -3731,3 +3731,14 @@ Existing main-window regression passes 1/1 (1.97 s), including invalid numeric
 field refusal with unchanged clipboard. Last full desktop/package baseline is
 local 2dd59b2 / private API 32cb556, 48/48 (91.15 s), GUI-free core 1/1 (2.01 s).
 This controller increment is focused-verified; no new targets.
+
+
+## Table command Zoom and active-column retention (2026-11-03)
+
+acCmdZoomBox now opens the actual native table cell, with checked typed cache
+updates and normal Cancel/readonly Close completion. SelectRecord retains the
+active column: an actual Qt first-column jump was reproduced through Zoom and
+fixed without losing whole-row selection. See TABLE_DOCUMENT_RUNTIME.md.
+Existing main-window/Currency targets 2/2 (2.47 s); full/package baseline remains
+2dd59b2 / API 32cb556, 48/48 (91.15 s). No new targets.
+Theoretical checklist: 295 checked / 70 open scoped points.

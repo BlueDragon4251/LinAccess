@@ -1808,3 +1808,12 @@ and invalid-field refusal with unchanged clipboard are verified. See
 TABLE_DOCUMENT_RUNTIME.md. Existing main-window regression 1/1 (1.97 s);
 full desktop/package baseline remains 2dd59b2 / API 32cb556, 48/48 (91.15 s).
 Theoretical checklist: 294 checked / 70 open scoped points.
+
+
+## Native table command Zoom (2026-11-03)
+
+acCmdZoomBox uses the actual cell's Qt Zoom, checked cached edits and readonly
+viewing. Cancel is normal completion. Whole-row selection preserves the active
+column for subsequent commands. Existing main-window/Currency 2/2 (2.47 s);
+full/package baseline remains 2dd59b2 / API 32cb556. TABLE_DOCUMENT_RUNTIME.md
+records scope and limitations. Theoretical checklist: 295 checked / 70 open.

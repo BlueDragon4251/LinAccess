@@ -107,7 +107,8 @@ public:
         catch(const VbaRuntimeError& error) { return refuse(error.number,"Dieser Zellwert kann noch nicht im Text-Zoom bearbeitet werden."); }
         const bool writable=target.flags().testFlag(Qt::ItemIsEditable) && typed->editStrategy()==QSqlTableModel::OnManualSubmit;
         const auto result=nativeCellZoom(this,text,!writable);
-        if(!self || !typed || !target.isValid() || !result) return false;
+        if(!self || !typed || !target.isValid()) return false;
+        if(!result) return true; // Cancel/readonly Close completes the command without mutation.
         if(result->text==text && !(target.data(Qt::EditRole).isNull() && result->modified)) return true;
         return typed->setData(target,result->text,Qt::EditRole);
     }

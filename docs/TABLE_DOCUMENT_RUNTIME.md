@@ -127,3 +127,23 @@ Existing main-window regression passes 1/1 (1.97 s), including invalid numeric
 field refusal with unchanged clipboard. Last full desktop/package baseline is
 local 2dd59b2 / private API 32cb556, 48/48 (91.15 s), GUI-free core 1/1 (2.01 s).
 This controller increment is focused-verified; no new targets.
+
+
+## ZoomBox on the active native table (2026-11-03)
+
+DoCmd/Application RunCommand acCmdZoomBox uses the actual current table cell and
+the shared native Qt Zoom dialog. Typed clipboard-text conversion feeds the
+editor; accepted edits use checked model conversion and remain cached until a
+normal Save. Read-only cells display in the same dialog with a Close button.
+Cancel and readonly Close are normal completed commands with no mutation.
+Invalid typed input still returns the model error; unsupported binary values
+remain explicitly refused. Dialog-owner/model/index lifetime is checked before
+applying any result. This does not add Screen.ActiveDatasheet or Access OLE Zoom.
+
+SelectRecord preserves the previously active column while selecting the whole
+row. Qt's ordinary selectRow moves the current cell to column zero; the native
+command restores the persistent current cell without replacing row selection.
+This was reproduced by a subsequent Zoom and fixed in the same path.
+Existing main-window/Currency targets pass 2/2 (2.47 s), covering readonly Close,
+accepted text edits, Cancel retaining the prior draft and unchanged SQL. Last
+full suite/package remains 2dd59b2 / API 32cb556, 48/48 (91.15 s). No new targets.
