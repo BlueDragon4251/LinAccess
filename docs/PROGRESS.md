@@ -2877,3 +2877,13 @@ arrays remain open. Existing core procedures verify native typed return data,
 copy isolation, growth/shrink/defaults and a rejected Byte lower-bound change.
 Desktop build/core test pass 1/1 (1.60 s), existing DAO target passes (0.45 s),
 and GUI-free build/test passes 1/1 (1.33 s). No new target/full-suite/package repeat.
+
+## Native qualified VBA.Array (2026-11-03)
+
+Qualified VBA.Array now uses the native intrinsic with base zero regardless of
+Option Base; ordinary Array retains the module setting. Direct For Each supports
+the qualified result. Existing local/host VBA roots retain normal lookup; named
+qualified Array and full reference/library binding remain explicit boundaries.
+Core regression checks base 1 versus 0, empty bounds, actual direct enumeration
+and local-root precedence. Desktop build/core target pass 1/1 (1.32 s); GUI-free
+build/test passes 1/1 (1.39 s). No new target/full-suite/package repeat.

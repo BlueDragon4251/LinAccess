@@ -1601,8 +1601,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     if(const auto variable=locals.find(source); variable!=locals.end()) {
                         if(source==name) throw VbaRuntimeError(3251,"Array source and For Each control must be distinct");
                         loop.arrayRoot=source;
-                    } else if(!std::regex_search(source,std::regex(R"(^(array|split|filter)\s*\()"))) {
-                        throw VbaRuntimeError(3251,"Array For Each requires a named variable or Array/Split/Filter result");
+                    } else if(!std::regex_search(source,std::regex(R"(^(array|vba\s*\.\s*array|split|filter)\s*\()"))) {
+                        throw VbaRuntimeError(3251,"Array For Each requires a named variable or Array/VBA.Array/Split/Filter result");
                     }
                     loop.frameDepth=frames.size(); loop.withDepth=withFrames.size();
                     const auto lowerBound=static_cast<std::int32_t>(vbaArrayBound(collection,false).number);

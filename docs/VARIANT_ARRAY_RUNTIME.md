@@ -34,7 +34,7 @@ fails with 3251; this limit is a current implementation boundary, not Access par
 
 This is not complete VBA array parity. Typed/fixed/dynamic array declarations,
 full typed ReDim/Preserve/Erase semantics, multidimensional arrays, full ParamArray semantics, full array For Each semantics,
-qualified VBA.Array and native COM arrays remain open. Individual array elements
+full library/reference binding and native COM arrays remain open. Individual array elements
 passed to a ByRef parameter fail explicitly with 3251 rather than silently losing
 writes. Nested indexed assignment is not implemented. No Windows Access result
 oracle was available for this segment.
@@ -67,3 +67,12 @@ claim Windows Access enumeration parity for those boundaries.
 Variant and Byte arrays can also be returned by native VBA functions without
 legacy scalar-text materialization; typed results retain their array values.
 Arbitrary function results in For Each still have the documented source bounds.
+
+## Qualified intrinsic array construction
+
+VBA.Array now invokes the native intrinsic with lower bound zero independent of
+Option Base; unqualified Array retains the module base. Direct For Each accepts
+VBA.Array results. Existing local/host roots named VBA retain normal member lookup
+priority. Named qualified Array arguments and complete VBA namespace/reference
+binding remain unsupported. Existing core checks compare module base 1 versus
+qualified base 0, empty bounds, direct enumeration and local-root lookup.

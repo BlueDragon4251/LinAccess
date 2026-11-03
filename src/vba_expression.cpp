@@ -549,6 +549,13 @@ private:
         if (tok.type != Token::Type::Word)
             throw error("Ungültiger VBA-Ausdruck: " + tok.value);
         auto word = lower(tok.value);
+        bool qualifiedArray=false;
+        if(!accessExpression_ && word=="vba" && nextSymbol(".") && index_+2<tokens_.size()
+            && tokens_[index_+1].type==Token::Type::Word && lower(tokens_[index_+1].value)=="array" && tokens_[index_+2].value=="(") {
+            if(const auto local=locals_.find(word);local!=locals_.end()) return local->second;
+            if(host_) if(auto resolved=host_->resolveIdentifier(tok.value,true)) return *resolved;
+            consume(); consume(); word="array"; qualifiedArray=true;
+        }
         if (accessExpression_) {
             static const std::unordered_map<std::string,std::string> localized{{"summe","sum"},{"anzahl","count"},{"wenn","iif"},{"istnull","isnull"},{"istfehler","iserror"},{"datum","date"},{"jetzt","now"},{"zeit","time"},{"formulare","forms"},{"berichte","reports"}};
             if (const auto found=localized.find(word);found!=localized.end()) word=found->second;
@@ -715,6 +722,7 @@ private:
             const bool named=std::any_of(references.begin(),references.end(),[](const std::string& reference){ return reference.starts_with("@named:"); });
             if(named) {
                 if(!host_) return {};
+                if(qualifiedArray) throw error("Named qualified Array arguments are not implemented",3251);
                 if(accessExpression_) throw error("Named arguments are not implemented in Access expression context",3251);
                 static const std::unordered_map<std::string,VbaArgumentSignature> signatures{
                     {"msgbox",{{"Prompt","Buttons","Title","HelpFile","Context"},1}},
@@ -844,7 +852,7 @@ private:
             if(word=="array") {
                 if(!host_) return {};
                 if(std::find(omitted.begin(),omitted.end(),true)!=omitted.end()) throw error("Array elements cannot be omitted",450);
-                return makeVbaArray(std::move(args),arrayBase_);
+                return makeVbaArray(std::move(args),qualifiedArray ? 0 : arrayBase_);
             }
             if(word=="lbound" || word=="ubound") {
                 if(!host_) return {};

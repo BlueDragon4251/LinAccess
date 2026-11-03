@@ -2538,5 +2538,32 @@ Me!ByteLowerError=Err.Number
 End Sub
 )VBA","ShortenBytes",host,byteArguments);
     assert(shortenedBytes.status==VbaExecutionStatus::Completed && byteArguments[0].bytes==std::vector<unsigned char>({0,128}) && host.fields["ByteLowerError"]=="9");
+    const auto qualifiedArrays=executeVbaProcedure(R"VBA(Option Base 1
+Sub QualifiedArrays()
+Dim ordinary As Variant
+Dim qualified As Variant
+Dim item As Variant
+Dim joined As String
+ordinary=Array(5)
+qualified=VBA.Array(6,7)
+Me!QualifiedBounds=CStr(LBound(ordinary)) & ":" & CStr(LBound(qualified)) & ":" & CStr(UBound(qualified)) & ":" & CStr(qualified(0))
+Me!QualifiedEmpty=CStr(UBound(VBA.Array()))
+For Each item In VBA.Array("x","y")
+joined=joined & item
+Next
+Me!QualifiedLoop=joined
+End Sub
+)VBA","QualifiedArrays",host);
+    assert(qualifiedArrays.status==VbaExecutionStatus::Completed && host.fields["QualifiedBounds"]=="1:0:1:6" && host.fields["QualifiedEmpty"]=="-1" && host.fields["QualifiedLoop"]=="xy");
+    const auto localNamespace=executeVbaProcedure(R"VBA(Sub LocalNamespace()
+Dim VBA As Variant
+Dim result As Variant
+VBA=123
+On Error Resume Next
+result=VBA.Array(9)
+Me!LocalNamespaceError=Err.Number
+End Sub
+)VBA","LocalNamespace",host);
+    assert(localNamespace.status==VbaExecutionStatus::Completed && host.fields["LocalNamespaceError"]=="91");
     std::cout << "Core tests passed\n";
 }
