@@ -1,6 +1,13 @@
 #pragma once
 #include "access_query.hpp"
 #include "native_table_find.hpp"
+#include "native_cell_zoom.hpp"
+#include "native_grid_clipboard.hpp"
+#include <QApplication>
+#include <QClipboard>
+#include <QKeyEvent>
+#include <QStatusTipEvent>
+#include <QPersistentModelIndex>
 #include <QTableView>
 #include <QScopeGuard>
 
@@ -15,6 +22,27 @@ public:
         if(!self) return;
         findArguments_={}; findAdvance_=false; findMessage_.clear();
         QTableView::setModel(model);
+    }
+    void selectAll() override {
+        if(model() && static_cast<qint64>(model()->rowCount())*model()->columnCount()>1000000) {
+            QStatusTipEvent message("Abfrageauswahl überschreitet die native Zellgrenze. (3251)"); QApplication::sendEvent(window(),&message); return;
+        }
+        QTableView::selectAll();
+    }
+    void copySelection() {
+        auto* result=dynamic_cast<AccessQueryModel*>(model());
+        if(!result || !isVisible() || !isEnabled()) throw VbaRuntimeError(2046,"Kein verfügbares Abfrageergebnis.");
+        const auto text=nativeGridClipboardText(*this,[result](const QModelIndex& index) { return result->clipboardText(index); });
+        QApplication::clipboard()->setText(text);
+    }
+    void zoomField() {
+        const QPointer<NativeQueryView> self=this;
+        const QPointer<AccessQueryModel> result=dynamic_cast<AccessQueryModel*>(model());
+        const QPersistentModelIndex target=currentIndex();
+        if(!result || !target.isValid()) throw VbaRuntimeError(2046,"Kein aktuelles Abfragefeld für Zoom.");
+        const auto text=result->clipboardText(target);
+        (void)nativeCellZoom(this,text,true);
+        if(!self || !result || !target.isValid()) throw VbaRuntimeError(2501,"Abfragefeld wurde während Zoom geschlossen.");
     }
     bool hasFindText() const { return !findArguments_.text.isEmpty(); }
     QString findMessage() const { return findMessage_; }
@@ -103,6 +131,19 @@ public:
             }
         }
         findMessage_="Keine Übereinstimmung gefunden."; return 0;
+    }
+protected:
+    void keyPressEvent(QKeyEvent* event) override {
+        const auto modifiers=event->modifiers() & ~Qt::KeypadModifier;
+        if(modifiers==Qt::ControlModifier && (event->key()==Qt::Key_C || event->key()==Qt::Key_Insert)) {
+            const QPointer<NativeQueryView> self=this;
+            try { copySelection(); }
+            catch(const VbaRuntimeError& error) {
+                if(self) { QStatusTipEvent message(QString::fromUtf8(error.what())+" ("+QString::number(error.number)+")"); QApplication::sendEvent(window(),&message); }
+            }
+            event->accept(); return;
+        }
+        QTableView::keyPressEvent(event);
     }
 private:
     QPointer<QDialog> findDialog_;

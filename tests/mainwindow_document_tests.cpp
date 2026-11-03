@@ -181,6 +181,10 @@ Sub QueryCopyByKeys()
 DoCmd.SendKeys "^c",True
 Me.Tag="query-keys"
 End Sub
+Sub QueryZoom()
+DoCmd.RunCommand acCmdZoomBox
+Me.Tag="query-zoomed"
+End Sub
 Sub QueryFindNumber()
 DoCmd.FindRecord 1.25
 Me.Tag="query-found"
@@ -542,6 +546,27 @@ End Sub
 
 
     assert(window.navigateTableDocument({},2,1,true).value("error").toInt()==3251);
+    queryView->selectionModel()->select(queryView->currentIndex(),QItemSelectionModel::ClearAndSelect);
+    auto* queryEditMenu=window.findChild<QMenu*>("native-edit-menu"); assert(queryEditMenu);
+    assert(QMetaObject::invokeMethod(queryEditMenu,"aboutToShow",Qt::DirectConnection));
+    auto* queryMenuCopy=queryEditMenu->findChild<QAction*>("edit-copy"); auto* queryMenuAll=queryEditMenu->findChild<QAction*>("edit-select-all");
+    assert(queryMenuCopy && queryMenuCopy->isEnabled() && queryMenuAll && queryMenuAll->isEnabled());
+    assert(!queryEditMenu->findChild<QAction*>("edit-paste")->isEnabled() && !queryEditMenu->findChild<QAction*>("edit-cut")->isEnabled());
+    QApplication::clipboard()->setText("query-menu-sentinel"); queryMenuCopy->trigger(); assert(QApplication::clipboard()->text()=="1.25");
+    queryMenuAll->trigger(); assert(queryView->selectionModel()->selectedIndexes().size()==6);
+    queryView->setCurrentIndex(queryView->model()->index(0,1));
+    bool queryZoomSeen=false;
+    const auto closeQueryZoom=[&] {
+        auto* zoom=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(zoom && zoom->objectName()=="native-cell-zoom");
+        auto* text=zoom->findChild<QPlainTextEdit*>("native-cell-zoom-text"); assert(text && text->isReadOnly() && text->toPlainText()=="1.25");
+        queryZoomSeen=true; zoom->reject();
+    };
+    QTimer::singleShot(0,&window,closeQueryZoom);
+    assert(mixed->executeProcedure("QueryZoom",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryZoomSeen);
+    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="query-zoomed" && queryView->currentIndex().data().toDouble()==1.25);
+    queryZoomSeen=false; QApplication::setActiveWindow(&window); queryView->setFocus(); QApplication::processEvents();
+    QTimer::singleShot(0,&window,closeQueryZoom); QTest::keyClick(queryView,Qt::Key_F2,Qt::ShiftModifier); assert(queryZoomSeen && queryView->currentIndex().data().toDouble()==1.25);
+
     queryView->setCurrentIndex(queryView->model()->index(1,1));
     assert(mixed->executeProcedure("QueryFindNumber",selectArguments).status==linaccess::VbaExecutionStatus::Completed && queryView->currentIndex().row()==0);
     QApplication::setActiveWindow(&window); queryView->setFocus(); QApplication::processEvents();
