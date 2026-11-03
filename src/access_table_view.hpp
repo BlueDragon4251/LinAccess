@@ -43,7 +43,7 @@ public:
         const auto stored=editor->property("la_cell_index").value<QPersistentModelIndex>();
         const QModelIndex target=stored.isValid() ? QModelIndex(stored) : currentIndex();
         if(target.model()!=model()) return false;
-        if(nativeCellEditorChanged(editor,target) && !model()->setData(target,property.read(editor),Qt::EditRole)) return false;
+        if(!commitNativeCellEditor(editor,target)) return false;
         QTableView::closeEditor(editor,QAbstractItemDelegate::NoHint); return true;
     }
     bool insertRecord() {
@@ -166,6 +166,10 @@ public:
 protected:
     void keyPressEvent(QKeyEvent* event) override {
         const auto selectionModifiers=event->modifiers() & ~Qt::KeypadModifier;
+        if(event->key()==Qt::Key_End && selectionModifiers==Qt::ControlModifier) {
+            if(finishEditing() && fetchSelectionRows()) QTableView::keyPressEvent(event);
+            event->accept(); return;
+        }
         if(event->key()==Qt::Key_F2 && selectionModifiers==Qt::ShiftModifier) {
             (void)zoomCurrentCell(); event->accept(); return;
         }

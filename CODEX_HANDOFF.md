@@ -301,3 +301,16 @@ Currency und Date durch tatsächliches SQL-Speichern geprüft. Grenzen in
 docs/DATASHEET_CLIPBOARD_RUNTIME.md, exaktes Decimal/Windows-Format weiterhin offen.
 Vollsuite 48/48 (88.41 s), Debian-Prüfungen und vier Originalfixture-Hashes
 bestanden. GUI-freier Core 1/1 (1.53 s), danach nur Qt-Änderungen.
+
+
+## Datenblattnavigation und Eingabeschutz (2026-11-03)
+
+Strg+Ende lädt den unterstützten Tabellenumfang vollständig nach, statt am
+Ende der ersten Qt-Ladeportion zu bleiben. Strg+Pos1 kehrt zum Anfang zurück.
+Tab/Backtab/Umschalt+Tab/Return/Enter validieren native Editoren vor dem Schließen;
+ungültige Werte bleiben sichtbar/fokussiert, gültige gehen nur in den Entwurf.
+Gemeinsamer Commit-Helfer auch für Finish/F2. Maus-/FocusOut-Verhalten und volle
+Access-Navigation weiterhin offen. Bestehende MainWindow-/Currency-Targets
+2/2 (2.01 s), einschließlich 300 Datensätzen und unverändertem SQL bis Save.
+Vollsuite/Paket zuletzt e15ff33 / privat c381897, 48/48 (88.41 s); diese kleine
+Ergänzung ist gezielt geprüft. Details docs/KEYBOARD_RUNTIME.md.
