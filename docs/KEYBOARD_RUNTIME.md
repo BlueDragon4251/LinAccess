@@ -252,3 +252,16 @@ or the native cell editor. Shift+F4 repeats its prior search and wraps in view
 order. The root Edit menu and native DoCmd/Application Find/FindNext use the same
 paths. Field validation, checked record saving, readonly access, fetch budgets
 and lifetime limits are documented in TABLE_FIND_RUNTIME.md.
+
+## Native table record Save keys (2026-11-03)
+
+Shift+Return and Shift+keypad Enter now invoke the real table Save button path
+from the view and its child cell editors, alongside Ctrl+S. Active editor
+validation precedes transactional submission; invalid drafts remain protected.
+Current primary-key/column restoration uses the existing native Save helper.
+Readonly pages retain their disabled Save policy. This extends the existing
+form shortcut to native table pages; it does not establish complete datasheet
+key or Access event/error-priority equivalence.
+
+Table Shift+F9 now shares active-table DoCmd.Requery; see
+TABLE_DOCUMENT_RUNTIME.md for reload, draft and record-position boundaries.

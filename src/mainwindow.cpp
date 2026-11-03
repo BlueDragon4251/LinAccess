@@ -448,6 +448,31 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
     return tableCommandFailure(3251,"Dieser native Tabellenbefehl ist noch nicht implementiert.");
 }
 
+QVariantMap MainWindow::requeryTableDocument() {
+    const QPointer<QWidget> page=activeDataPage_;
+    if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
+    if(QApplication::activeModalWidget()) return tableCommandFailure(2046,"Neuabfrage ist durch ein modales Fenster blockiert.");
+    QPointer<linaccess::AccessTableView> table;
+    for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
+    QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
+    if(!table || !model) return {};
+    const QPointer<MainWindow> self=this;
+    if(!table->finishEditing()) return tableModelFailure(model,2501);
+    if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während der Validierung geschlossen.");
+    const int column=qMax(0,table->currentIndex().column());
+    if(model->isDirty()) {
+        if(!model->canSubmitCurrentRecordAlone(table->currentIndex().row()))
+            return tableCommandFailure(3251,"Neuabfrage mit weiteren Tabellenentwürfen ist noch nicht implementiert.");
+        const auto saved=saveDataPage(page,false);
+        if(saved.value("error").toInt()) return saved;
+    }
+    if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während des Speicherns geschlossen.");
+    if(!model->select()) return tableModelFailure(model,3146);
+    if(table && model && model->rowCount() && model->columnCount())
+        table->setCurrentIndex(model->index(0,qMin(column,model->columnCount()-1)));
+    return {{"handled",true},{"error",0}};
+}
+
 QVariantMap MainWindow::tableKeyboardContext() {
     const QPointer<QWidget> page=activeDataPage_;
     if(!db_.isOpen() || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this) || !page || tabs_->indexOf(page)<0 || tabs_->currentWidget()!=page) return {};
@@ -1255,6 +1280,18 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive) {
     auto* saveShortcut=new QShortcut(QKeySequence::Save,page);
     saveShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(saveShortcut,&QShortcut::activated,save,&QPushButton::click);
+    for(const auto key:{Qt::Key_Return,Qt::Key_Enter}) {
+        auto* recordSaveShortcut=new QShortcut(QKeySequence(Qt::ShiftModifier|key),page);
+        recordSaveShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(recordSaveShortcut,&QShortcut::activated,save,&QPushButton::click);
+    }
+    auto* requeryShortcut=new QShortcut(QKeySequence(Qt::ShiftModifier|Qt::Key_F9),page);
+    requeryShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(requeryShortcut,&QShortcut::activated,page,[this] {
+        const auto result=requeryTableDocument();
+        if(const int error=result.value("error").toInt())
+            statusBar()->showMessage(result.value("description").toString()+" ("+QString::number(error)+")",10000);
+    });
     for(const auto key:{QKeySequence(Qt::ControlModifier|Qt::Key_W),QKeySequence(Qt::ControlModifier|Qt::Key_F4)}) {
         auto* closeShortcut=new QShortcut(key,page); closeShortcut->setContext(Qt::WidgetWithChildrenShortcut);
         connect(closeShortcut,&QShortcut::activated,page,[this,page] {

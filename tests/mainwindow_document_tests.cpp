@@ -336,6 +336,9 @@ End Sub
 Sub PasteTableSelection()
 DoCmd.RunCommand acCmdPaste
 End Sub
+Sub RequeryActiveTable()
+DoCmd.Requery
+End Sub
 Sub CloseEditableTable()
 DoCmd.Close acTable,"command_edit",acSaveNo
 Me.Tag="table-closed"
@@ -417,6 +420,16 @@ End Sub
     navigationView->clearSelection();
     assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(navigationView->currentIndex().row()==299 && navigationView->currentIndex().column()==1 && navigationModel->rowCount()==300);
+    assert(unchanged.exec("UPDATE command_navigation SET value='requeried' WHERE id=300"));
+    assert(navigationModel->index(299,1).data().toString()=="row-300");
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(!navigationModel->isDirty() && navigationView->currentIndex()==navigationModel->index(0,1));
+    assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationModel->index(299,1).data().toString()=="requeried");
+    assert(unchanged.exec("UPDATE command_navigation SET value='row-300' WHERE id=300"));
+    QApplication::setActiveWindow(&window); navigationView->setFocus(); QApplication::processEvents();
+    QTest::keyClick(navigationView,Qt::Key_F9,Qt::ShiftModifier); QApplication::processEvents();
+    assert(navigationView->currentIndex()==navigationModel->index(0,1));
+    assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationModel->index(299,1).data().toString()=="row-300");
     assert(mixed->executeProcedure("PreviousTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==298);
     assert(mixed->executeProcedure("NextTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==299);
     assert(mixed->executeProcedure("NextTableRecord",selectArguments).errorNumber==2105 && navigationView->currentIndex().row()==299);
@@ -429,6 +442,7 @@ End Sub
     assert(navigationModel->setData(navigationModel->index(1,1),"other-draft"));
     assert(mixed->executeProcedure("LastTableRecord",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==0 && navigationModel->isDirty());
     assert(mixed->executeProcedure("SortTableDescending",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==0 && navigationModel->isDirty());
+    assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==0 && navigationModel->isDirty());
     assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="row-1"); unchanged.finish();
     assert(mixed->executeProcedure("SaveActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==299);
@@ -440,6 +454,17 @@ End Sub
     assert(navigationView->currentIndex().row()==299 && navigationModel->index(299,0).data().toInt()==300 && !navigationModel->isDirty());
     assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=300") && unchanged.next() && unchanged.value(0).toString()=="sort-saved"); unchanged.finish();
     navigationView->setCurrentIndex(navigationModel->index(299,1));
+    assert(navigationModel->setData(navigationModel->index(299,1),"shift-enter-saved"));
+    QApplication::setActiveWindow(&window); navigationView->setFocus(); QApplication::processEvents();
+    QTest::keyClick(navigationView,Qt::Key_Return,Qt::ShiftModifier);
+    assert(!navigationModel->isDirty() && navigationView->currentIndex()==navigationModel->index(299,1));
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=300") && unchanged.next() && unchanged.value(0).toString()=="shift-enter-saved"); unchanged.finish();
+    navigationView->edit(navigationModel->index(299,1));
+    auto* saveEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(saveEditor);
+    saveEditor->setText("keypad-enter-saved");
+    QTest::keyClick(saveEditor,Qt::Key_Enter,Qt::ShiftModifier|Qt::KeypadModifier);
+    assert(!navigationModel->isDirty() && navigationView->currentIndex()==navigationModel->index(299,1));
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=300") && unchanged.next() && unchanged.value(0).toString()=="keypad-enter-saved"); unchanged.finish();
     assert(navigationModel->setData(navigationModel->index(299,1),"automatic-navigation-save"));
     assert(mixed->executeProcedure("PreviousTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(navigationView->currentIndex().row()==298 && !navigationModel->isDirty());
