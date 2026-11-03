@@ -10,7 +10,8 @@
 #include <algorithm>
 namespace linaccess {
 namespace {
-bool checkedDisplay(const QString& type) { return type=="CURRENCY_REAL" || type=="INTEGER1" || type=="INTEGER2" || type=="INTEGER4"; }
+bool floatingDisplay(const QString& type) { return type!="CURRENCY_REAL" && (type.contains("REAL",Qt::CaseInsensitive) || type.contains("FLOA",Qt::CaseInsensitive) || type.contains("DOUB",Qt::CaseInsensitive)); }
+bool checkedDisplay(const QString& type) { return type=="CURRENCY_REAL" || type=="INTEGER1" || type=="INTEGER2" || type=="INTEGER4" || floatingDisplay(type); }
 QVariant checkedInput(const QString& type,const QVariant& input) {
     const bool emptyNumeric=input.metaType().id()==QMetaType::QString && input.toString().isEmpty()
         && (type=="CURRENCY_REAL" || type.contains("INT",Qt::CaseInsensitive) || type.contains("REAL",Qt::CaseInsensitive) || type.contains("DATE",Qt::CaseInsensitive));
@@ -127,7 +128,13 @@ bool AccessTableModel::submitTransactionally() {
         if(!db.commit()) { const auto problem=db.lastError(); db.rollback(); setLastError(problem); return false; }
     }
     // No Qt cache entry is marked submitted before the database commit succeeds.
-    return select();
+    // Once committed, retire the drafts even if metadata/query refresh fails:
+    // otherwise retrying Save can execute an already committed INSERT again.
+    QSqlTableModel::revertAll(); dirtyRows_.clear(); deletedRows_.clear();
+    if(select()) return true;
+    const auto problem=lastError();
+    setLastError(QSqlError("LinAccess",QStringLiteral("Änderungen gespeichert; die Ansicht konnte nicht aktualisiert werden. ")+problem.text(),problem.type(),problem.nativeErrorCode()));
+    return false;
 }
 void AccessTableModel::sort(int column,Qt::SortOrder order) {
     const bool protectedEditor=protectSort_; protectSort_=false;
@@ -151,8 +158,17 @@ QVariant AccessTableModel::data(const QModelIndex& index,int role) const {
     if(!index.isValid() || (role!=Qt::DisplayRole && role!=Qt::EditRole)) return raw;
     const auto name=record().fieldName(index.column()).toCaseFolded(),type=types_.value(name);
     if(generated_.contains(name) && (raw.isNull() || raw.metaType().id()==QMetaType::QString) && role==Qt::DisplayRole) return QStringLiteral("(AutoWert)");
-    if(!checkedDisplay(type) || raw.isNull() || (role==Qt::EditRole && type!="CURRENCY_REAL")) return raw;
-    try { return QString::fromStdString(qtFieldValue(raw,type).asText()); }
+    // Typed null spin/date editors otherwise materialize their own defaults.
+    // A null QString selects the text editor without losing SQL NULL identity.
+    if(role==Qt::EditRole && raw.isNull() && !type.contains("BOOL",Qt::CaseInsensitive) && !type.contains("BLOB",Qt::CaseInsensitive))
+        return QVariant(QMetaType::fromType<QString>());
+    if(!checkedDisplay(type) || raw.isNull() || (role==Qt::EditRole && type!="CURRENCY_REAL" && !floatingDisplay(type))) return raw;
+    try {
+        const auto value=qtFieldValue(raw,type);
+        if(floatingDisplay(type) && value.kind==VbaValue::Kind::Number)
+            return QString::number(value.number,'g',std::numeric_limits<double>::max_digits10);
+        return QString::fromStdString(value.asText());
+    }
     catch(const VbaRuntimeError& error) { return QStringLiteral("#Fehler (%1)").arg(error.number); }
 }
 QString AccessTableModel::clipboardText(const QModelIndex& index) const {

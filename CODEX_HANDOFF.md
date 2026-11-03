@@ -286,3 +286,18 @@ weiterhin 3251. Bare RunCommand, alle AcCommand-Optionen und volle Zoom-Parität
 Bestehender Layout-Target 1/1 (14.90 s), GUI-freier Core 1/1 (1.53 s).
 Letzte Vollsuite lokal 2fcaf98 / privater API-Stand ab5e6cd: 48/48 (86.44 s).
 Für dieses Inkrement keine erneute Vollsuite behaupten. Details KEYBOARD_RUNTIME.md.
+
+
+## SQL-Commit und verlustfreier Zahleneditor (2026-11-03)
+
+Zwei echte Datenverlustpfade auf synthetischen Daten reproduziert und korrigiert:
+Nach erfolgreichem Commit werden Entwürfe vor dem Neuladen entfernt; dessen
+Fehlschlag kann beim erneuten Speichern keinen INSERT duplizieren. Fehlermeldung
+nennt explizit den erfolgten Commit und den Ansichtsfehler. Vor-Commit-Fehler
+erhalten weiterhin alle Entwürfe nach Rollback. Native REAL/FLOAT/DOUBLE-Zellen
+verwenden max_digits10-Texte statt Qt-Spinbox mit zwei Dezimalstellen.
+Unveränderte NULL-Felder erzeugen keine Spin-/Datums-Standardwerte; REAL,
+Currency und Date durch tatsächliches SQL-Speichern geprüft. Grenzen in
+docs/DATASHEET_CLIPBOARD_RUNTIME.md, exaktes Decimal/Windows-Format weiterhin offen.
+Vollsuite 48/48 (88.41 s), Debian-Prüfungen und vier Originalfixture-Hashes
+bestanden. GUI-freier Core 1/1 (1.53 s), danach nur Qt-Änderungen.

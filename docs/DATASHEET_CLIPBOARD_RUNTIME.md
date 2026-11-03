@@ -75,3 +75,38 @@ pass 2/2 (2.10 s). The shared TSV scanner also passed the GUI-free core check
 (1/1, 2.63 s). The rebuilt full desktop suite passes 48/48 (86.21 s). Debian payload,
 permissions, matching Build-ID and pinned SQLite checks pass; all four original
 fixture hashes match.
+
+
+## Commit succeeded but refresh failed (2026-11-03)
+
+After a successful database commit, native table Save retires the submitted
+drafts before reloading metadata/query rows. A refresh failure therefore cannot
+re-execute an already committed insertion on the next Save. The first failure
+message explicitly states that the changes were saved but the view could not
+be refreshed. Before-commit failures still roll back and retain the entire
+draft batch for correction/retry. A failed refresh can leave the old query view
+unavailable or stale; correcting the metadata and refreshing restores the data.
+
+A synthetic metadata mismatch introduced during beforeInsert reproduces the
+previous duplicate-insertion bug. The regression commits one row, refuses the
+refresh, retries Save without a second insert, repairs metadata and reloads the
+one persisted row. No original data or fixtures are changed.
+
+## Checked floating-point editors and nullable fields (2026-11-03)
+
+REAL/FLOAT/DOUBLE-backed cells now expose checked round-trip decimal text to
+the native editor, using Double max_digits10. Qt's default two-decimal spin
+editor previously changed an SQL value just by opening, closing and saving
+the cell; this was reproduced before the fix. Untouched and explicitly edited
+finite values now retain the actual supported Double precision. Unsupported
+numeric storage refuses editing instead of fabricating a checked value.
+
+Non-Boolean/non-BLOB NULL fields expose a typed-null text EditRole. Native
+editors can therefore open and close without materializing a spin/date widget's
+default value. REAL, Currency and Date NULL cells remain NULL after Save. This
+uses the existing shared editor-change check; explicit user edits remain typed
+and validated. Exact Decimal, Windows regional masks and complete Access field
+formatting remain open. Main-window/Currency checks pass 2/2 (2.60 s); the rebuilt
+complete suite passes 48/48 (88.41 s). Debian payload/permissions/Build-ID/pinned
+SQLite checks and all four original fixture hashes pass. GUI-free core remains
+checked 1/1 (1.53 s), with subsequent Qt-only changes.

@@ -904,3 +904,12 @@ See KEYBOARD_RUNTIME.md; complete Access keyboard/display parity remains open. N
 - [x] DoCmd.RunCommand acCmdZoomBox=179 resolves the active native form control, with error 2046 when unavailable.
 
 - [x] Application.RunCommand forwards the existing implemented native command subset with named Command binding and original error propagation.
+
+
+## Native table data integrity (2026-11-03)
+
+- [x] A successful commit followed by metadata/query refresh failure retires drafts, reports committed status and never repeats an already persisted insert on Save retry.
+- [x] REAL/FLOAT/DOUBLE text editors preserve supported Double precision; untouched nullable REAL/Currency/Date cells remain SQL NULL.
+
+See DATASHEET_CLIPBOARD_RUNTIME.md; exact Decimal and complete Windows formatting
+remain open. Both data-loss paths were reproduced on synthetic working data.

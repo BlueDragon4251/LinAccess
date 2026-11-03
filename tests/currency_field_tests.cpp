@@ -15,6 +15,7 @@
 #include <QApplication>
 #include <QLineEdit>
 #include <QSqlQuery>
+#include <QSqlError>
 #include <QTest>
 #ifdef NDEBUG
 #undef NDEBUG
@@ -321,6 +322,48 @@ End Function
         assert(drafts.insertRow(0) && drafts.setData(drafts.index(0,1),"temporary") && drafts.setData(drafts.index(1,1),"again") && drafts.removeRow(2));
         drafts.revertRow(0); assert(drafts.submitTransactionally());
         assert(sql.exec("SELECT COUNT(*),MIN(label) FROM draft_mix") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toString()=="again"); sql.finish();
+    }
+
+    {
+        assert(sql.exec("CREATE TABLE refresh_commit(id INTEGER PRIMARY KEY AUTOINCREMENT,label TEXT)"));
+        assert(sql.exec("INSERT INTO _la_table_schema(table_name,definition) VALUES('refresh_commit','[]')"));
+        linaccess::AccessTableModel committed(nullptr,db); committed.setTable("refresh_commit"); committed.setEditStrategy(QSqlTableModel::OnManualSubmit); assert(committed.select());
+        assert(committed.insertRow(0) && committed.setData(committed.index(0,1),"committed-once"));
+        QObject::connect(&committed,&QSqlTableModel::beforeInsert,[&](QSqlRecord&) {
+            QSqlQuery metadata(db); metadata.prepare("UPDATE _la_table_schema SET definition=? WHERE table_name='refresh_commit'");
+            metadata.addBindValue("[{\"name\":\"label\",\"source_type\":\"CURRENCY\"}]"); assert(metadata.exec());
+        });
+        assert(!committed.submitTransactionally()); // SQL commits; the metadata refresh is refused.
+        assert(committed.lastError().databaseText().startsWith("Änderungen gespeichert"));
+        assert(sql.exec("SELECT COUNT(*) FROM refresh_commit") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+        assert(!committed.submitTransactionally());
+        assert(sql.exec("SELECT COUNT(*) FROM refresh_commit") && sql.next() && sql.value(0).toInt()==1); sql.finish();
+        assert(!committed.isDirty());
+        assert(sql.exec("UPDATE _la_table_schema SET definition='[]' WHERE table_name='refresh_commit'"));
+        assert(committed.submitTransactionally() && !committed.isDirty());
+        assert(sql.exec("SELECT COUNT(*),MIN(label) FROM refresh_commit") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toString()=="committed-once"); sql.finish();
+    }
+
+    {
+        assert(sql.exec("CREATE TABLE floating_cells(id INTEGER PRIMARY KEY,value REAL,money CURRENCY_REAL,stamp DATETIME)"));
+        assert(sql.exec("INSERT INTO floating_cells VALUES(1,1.2345678901234567,NULL,NULL),(2,NULL,NULL,NULL)"));
+        assert(sql.exec("SELECT value FROM floating_cells") && sql.next()); const auto original=sql.value(0).toDouble(); sql.finish();
+        linaccess::AccessTableModel floating(nullptr,db); floating.setTable("floating_cells"); floating.setEditStrategy(QSqlTableModel::OnManualSubmit); assert(floating.select());
+        linaccess::AccessTableView sheet; linaccess::AccessTableDelegate floatDelegate;
+        sheet.setModel(&floating); sheet.setItemDelegate(&floatDelegate); sheet.show(); QApplication::setActiveWindow(&sheet);
+        sheet.setCurrentIndex(floating.index(0,1)); sheet.edit(sheet.currentIndex()); QApplication::processEvents();
+        assert(sheet.finishEditing() && floating.submitTransactionally());
+        assert(sql.exec("SELECT value FROM floating_cells") && sql.next() && sql.value(0).toDouble()==original); sql.finish();
+        sheet.setCurrentIndex(floating.index(0,1)); sheet.edit(sheet.currentIndex()); QApplication::processEvents();
+        auto* editor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(editor && sheet.isAncestorOf(editor)); editor->setText("9.876543210987654");
+        assert(sheet.finishEditing() && floating.isDirty() && floating.submitTransactionally());
+        assert(sql.exec("SELECT value FROM floating_cells") && sql.next() && sql.value(0).toDouble()==9.876543210987654); sql.finish();
+        for(int column=1;column<=3;++column) {
+            sheet.setCurrentIndex(floating.index(1,column)); sheet.edit(sheet.currentIndex()); QApplication::processEvents();
+            assert(sheet.finishEditing() && !floating.isDirty());
+        }
+        assert(floating.submitTransactionally());
+        assert(sql.exec("SELECT value IS NULL,money IS NULL,stamp IS NULL FROM floating_cells WHERE id=2") && sql.next() && sql.value(0).toBool() && sql.value(1).toBool() && sql.value(2).toBool()); sql.finish();
     }
 
 }
