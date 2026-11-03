@@ -1838,3 +1838,15 @@ refused. Jet/Windows collation parity remains open. TABLE_DOCUMENT_RUNTIME.md
 records the scope. Existing main-window 1/1 (2.08 s); last full/package baseline
 e4e0900 / API 714a96e, 48/48 (91.33 s).
 Theoretical checklist: 298 checked / 71 open scoped points.
+
+
+## Native table Find UI and commands (2026-11-03)
+
+Actual modeless literal-text Find supports field scope, match/case modes,
+Ctrl+F/Shift+F4, Edit menu and DoCmd/Application Find/FindNext. Checked SQL fetches,
+sole-record save, protected unrelated drafts and owning-page/dialog lifetime are
+covered. View errors reach VBA accurately; binary Copy keeps 3251 and leaves
+clipboard/payload untouched. Numeric/date/formatted/wildcard/locale/Replace and
+DoCmd.FindRecord remain open. Canonical details: TABLE_FIND_RUNTIME.md.
+Full desktop 48/48 (92.69 s), GUI-free 1/1 (2.45 s), Debian checks and four fixture
+hashes pass; no new targets. Theoretical checklist: 301 checked / 72 open points.

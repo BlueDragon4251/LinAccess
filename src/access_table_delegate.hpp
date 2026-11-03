@@ -4,6 +4,7 @@
 #include "native_cell_editor.hpp"
 #include "native_cell_zoom.hpp"
 #include "access_table_model.hpp"
+#include "access_table_view.hpp"
 #include <QTableView>
 #include <QMainWindow>
 #include <QPointer>
@@ -20,6 +21,14 @@ public:
         if(event->type()==QEvent::KeyPress) {
             const auto* key=static_cast<QKeyEvent*>(event);
             const auto modifiers=key->modifiers() & ~Qt::KeypadModifier;
+            if(key->key()==Qt::Key_F && modifiers==Qt::ControlModifier) {
+                for(auto* parent=qobject_cast<QWidget*>(watched);parent;parent=parent->parentWidget())
+                    if(auto* view=dynamic_cast<AccessTableView*>(parent)) { (void)view->openFindDialog(); return true; }
+            }
+            if(key->key()==Qt::Key_F4 && modifiers==Qt::ShiftModifier) {
+                for(auto* parent=qobject_cast<QWidget*>(watched);parent;parent=parent->parentWidget())
+                    if(auto* view=dynamic_cast<AccessTableView*>(parent)) { (void)view->repeatFind(); return true; }
+            }
             const bool advance=(modifiers==Qt::NoModifier && (key->key()==Qt::Key_Return || key->key()==Qt::Key_Enter))
                 || ((key->key()==Qt::Key_Tab || key->key()==Qt::Key_Backtab) && (modifiers==Qt::NoModifier || modifiers==Qt::ShiftModifier));
             if(advance) {

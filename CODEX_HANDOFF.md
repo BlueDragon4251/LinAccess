@@ -457,3 +457,20 @@ aktuellen Datensatzes funktionieren; fremde Entwürfe bleiben geschützt.
 Details docs/TABLE_DOCUMENT_RUNTIME.md, MainWindow 1/1 (2.08 s). Vollsuite/Paket
 zuletzt e4e0900 / privat 714a96e, 48/48 (91.33 s), GUI-frei 1/1 (2.49 s).
 Dieses Controller-Inkrement ist gezielt geprüft; keine neuen Testtargets.
+
+
+## Native Tabellen-Textsuche (2026-11-03)
+
+Echter modeless Qt-Suchdialog, Strg+F (auch Zell-Editor), Umschalt+F4, Bearbeiten-
+Menü und DoCmd/Application Find/FindNext sind an reale Tabellen angeschlossen.
+Wörtliche sichtbare Textfelder mit Teil/Ganz/Anfang und Groß-/Kleinschreibung;
+Nachladen bis 1 Mio Textzellen, Umlauf in tatsächlicher View-Reihenfolge.
+Geprüftes Speichern eines allein geänderten aktuellen bestehenden Datensatzes;
+weitere Entwürfe bleiben geschützt. Dialog aktiviert seine Tabelle bei Bedarf
+und wird mit ihr entsorgt. Reentranz/Lebensdauer mit schwachen Besitzern gesichert.
+Ansichtsfehler setzen jetzt den tatsächlichen nativen Modellfehler für VBA;
+Binär-Copy bleibt 3251, Zwischenablage und Payload bleiben unverändert.
+Kanonisch docs/TABLE_FIND_RUNTIME.md; Zahlen/Datum/Format/Wildcards/Locale/Replace
+und DoCmd.FindRecord nicht von diesem Inkrement abgedeckt.
+Vollsuite 48/48 (92.69 s), GUI-freier Core 1/1 (2.45 s), Debian-Paket und vier
+Fixture-Hashes bestanden, keine neuen Testtargets. Enthält auch Sortierbefehle.

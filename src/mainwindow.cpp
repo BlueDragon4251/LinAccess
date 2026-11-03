@@ -231,7 +231,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     for (int i=0;i<4;++i) fileMenu->addAction(projectActions[i]);
     fileMenu->addSeparator();
     fileMenu->addAction("Beenden",this,[this] { close(); });
-    linaccess::addNativeEditMenu(menuBar(),this);
+    auto* editMenu=linaccess::addNativeEditMenu(menuBar(),this);
+    editMenu->addSeparator();
+    auto* findTable=editMenu->addAction("&Suchen...\tStrg+F"); findTable->setObjectName("table-find"); findTable->setEnabled(false);
+    auto* findNext=editMenu->addAction("&Weitersuchen\tUmschalt+F4"); findNext->setObjectName("table-find-next"); findNext->setEnabled(false);
+    connect(findTable,&QAction::triggered,this,[this] { (void)dispatchTableCommand(30); });
+    connect(findNext,&QAction::triggered,this,[this] { (void)dispatchTableCommand(341); });
+    connect(editMenu,&QMenu::aboutToShow,this,[this,findTable,findNext] {
+        linaccess::AccessTableView* view=nullptr;
+        if(!activePreviewDocument() && AccessFormPreview::databaseWindowActive(this) && activeDataPage_ && tabs_->currentWidget()==activeDataPage_)
+            for(auto* candidate:activeDataPage_->findChildren<QTableView*>()) if((view=dynamic_cast<linaccess::AccessTableView*>(candidate))) break;
+        const auto* model=view ? qobject_cast<linaccess::AccessTableModel*>(view->model()) : nullptr;
+        bool textColumn=false;
+        if(model) for(int column=0;column<model->columnCount();++column) if(!view->isColumnHidden(column) && model->isTextColumn(column)) { textColumn=true; break; }
+        findTable->setEnabled(textColumn && !QApplication::activeModalWidget());
+        findNext->setEnabled(textColumn && view->hasFindText() && !QApplication::activeModalWidget());
+    });
     auto* objectMenu=menuBar()->addMenu("&Objekte");
     for (int i=5;i<9;++i) objectMenu->addAction(projectActions[i]);
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
@@ -369,12 +384,14 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         const int actions[]{1,0,2,3};
         return navigateTableDocument({},actions[command-65],1,false);
     }
-    if(command==50 || command==190 || command==179 || command==163 || command==164) {
+    if(command==50 || command==190 || command==179 || command==163 || command==164 || command==30 || command==341) {
         QPointer<linaccess::AccessTableView> table;
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
-        if(!table || !model || !table->currentIndex().isValid()) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
-        if(command==190) {
+        if(!table || !model || ((command!=30 && command!=341) && !table->currentIndex().isValid())) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
+        if(command==30 || command==341) {
+            if(!(command==30 ? table->openFindDialog() : table->repeatFind())) return tableModelFailure(model,2046);
+        } else if(command==190) {
             if(!table->copySelection()) return tableModelFailure(model,2501);
         } else if(command==179) {
             if(!table->zoomCurrentCell()) return tableModelFailure(model,2046);
@@ -1163,6 +1180,22 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive) {
     table->installEventFilter(this);
     table->setModel(model);
     table->setItemDelegate(new linaccess::AccessTableDelegate(table));
+    table->setRecordNavigationGuard([self=QPointer<MainWindow>(this),page=QPointer<QWidget>(page),table=QPointer<linaccess::AccessTableView>(table),model=QPointer<linaccess::AccessTableModel>(model)] {
+        if(!self || !page || !table || !model) return false;
+        if(QApplication::activeModalWidget()) return model->rejectEdit(2046,"Suche ist durch ein modales Fenster blockiert.");
+        if(self->tabs_->indexOf(page)<0) return model->rejectEdit(2501,"Tabellendokument ist nicht mehr geöffnet.");
+        if((self->tabs_->currentWidget()!=page || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(self)) && !self->activateDataPage(page))
+            return model ? model->rejectEdit(2501,"Tabellenaktivierung wurde vor der Suche abgebrochen.") : false;
+        if(!self || !page || !table || !model) return false;
+        if(!model->isDirty()) return true;
+        if(!model->canSubmitCurrentRecordAlone(table->currentIndex().row())) return model->rejectEdit(3251,"Suche mit weiteren Tabellenentwürfen ist noch nicht implementiert.");
+        const auto saved=self->saveDataPage(page,false);
+        if(const int error=saved.value("error").toInt()) {
+            if(model) return model->rejectEdit(error,saved.value("description").toString());
+            return false;
+        }
+        return bool(self && page && table && model);
+    });
     table->setSortingEnabled(true);
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     outer->addWidget(table);

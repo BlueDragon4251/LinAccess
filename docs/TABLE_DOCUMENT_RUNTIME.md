@@ -197,3 +197,11 @@ initial batch, checked sole-record persistence and refusal of unrelated drafts.
 Last complete suite/package baseline remains e4e0900 / private API 714a96e,
 48/48 (91.33 s), GUI-free core 1/1 (2.49 s). This controller change is
 focused-verified, without adding test targets.
+
+
+## Native table Find and checked view errors (2026-11-03)
+
+Real table Find/Ctrl+F/FindNext, literal text modes, SQL fetch limits, cached
+record saving, owning-page activation and dialog lifetime are specified in
+[TABLE_FIND_RUNTIME.md](TABLE_FIND_RUNTIME.md). View refusals record the current
+native error for VBA; unsupported binary Copy retains the actual 3251 boundary.
