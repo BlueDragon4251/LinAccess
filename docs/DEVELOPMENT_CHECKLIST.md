@@ -938,3 +938,6 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 
 - [x] DoCmd/Application RunCommand SaveRecord commits the actual active native table through the shared UI transaction/selection helper, including specialized interpreter dispatch.
 - [x] A form initialization Save keeps its own context and leaves a dirty background table/SQL unchanged until an explicit native table switch/save.
+
+- [x] Explicit/default native table DoCmd.Close validates fields and transactionally saves record drafts, including acSaveNo; failures retain the real page/editor/cache.
+- [x] Parent-hidden active table editors remain checked, and reentrant table Close terminates its owning native context menu safely.

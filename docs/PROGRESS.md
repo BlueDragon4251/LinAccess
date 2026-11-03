@@ -3704,3 +3704,16 @@ See TABLE_DOCUMENT_RUNTIME.md. Existing trio 3/3 (16.13 s), final initialization
 case 1/1 (1.93 s); real SQL persistence and unchanged background drafts verified.
 Full suite/package baseline remains e054910 / API 0328119, 48/48 (92.13 s).
 Theoretical checklist: 290 checked / 70 open scoped points.
+
+
+## Native table Close and hidden editor lifetime (2026-11-03)
+
+Explicit and default interpreted DoCmd.Close now close actual table pages after
+checked field validation and transactional record submission. Failure retains
+page/editor/drafts. Hidden pending editors and a reentrant live table popup are
+protected against data loss and dangling lifetime. See TABLE_DOCUMENT_RUNTIME.md.
+Existing targeted trio passes 3/3 (15.85 s). Full desktop suite passes 48/48
+(91.15 s), GUI-free core 1/1 (2.01 s); Debian payload/permissions/Build-ID/
+pinned SQLite checks and four original fixture hashes pass.
+No new test targets or full Access parity claim.
+Theoretical checklist: 292 checked / 70 open scoped points.

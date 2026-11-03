@@ -46,7 +46,7 @@ modal guards. A closed/missing table in SelectObject remains an explicit 3251
 boundary; exact closed-object errors are not inferred from OpenTable behavior.
 The caller's Me stays bound to its own live form, and closing that caller does
 not close the table page owned by MainWindow. Table activation clears the old
-active form context. Other table DoCmd commands, Screen.ActiveDatasheet,
+active form context. Other unimplemented table DoCmd commands, Screen.ActiveDatasheet,
 query/editor-window execution and full Access window/format/error parity remain
 open; commands must not silently operate on the old form caller.
 
@@ -85,3 +85,29 @@ persist two different SQL values, readonly mutation is refused, and existing
 UI/save/selection cases still pass. Last complete suite/package baseline remains
 local e054910 / private API 0328119, 48/48 (92.13 s), GUI-free core 1/1 (1.68 s).
 This Qt controller increment is focused-verified, with no new test targets.
+
+
+## Close on native table documents (2026-11-03)
+
+DoCmd.Close acTable,name,Save and default DoCmd.Close resolve real table pages
+through MainWindow, preserving the calling form's Me context. Default Close
+requires the active table context; forms/reports retain their existing route.
+Save values 0..2 are validated. acSaveNo does not discard record data: the Save
+argument concerns object design. Pending fields are validated and dirty table
+records use the same transactional submission as SaveRecord before page removal.
+Field and SQL failures return to VBA with the editor/cache and table retained;
+programmatic SQL failure does not open an error dialog. Missing/closed named
+tables remain 3251, pending unavailable/modal contexts 2046. Table design-save
+prompts and exact Access error precedence remain unverified.
+
+A parent-hidden active cell editor remains discoverable and checked before
+closing its table. This prevents hidden invalid input from being silently lost.
+A table's open native context menu exits when its owning view is destroyed,
+including reentrant interpreted default Close during its nested event loop.
+Existing main-window/Currency/layout targets pass 3/3 (15.85 s): rejected numeric
+input, SQL CHECK rollback/draft retention, successful corrected SQL persistence
+with acSaveNo, and default Close from a live popup are covered without new targets.
+
+Full rebuilt desktop suite passes 48/48 (91.15 s), GUI-free core 1/1 (2.01 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. This also covers the preceding SaveRecord increment.

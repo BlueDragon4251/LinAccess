@@ -397,3 +397,17 @@ tabelle blieb beim Konstruktor-Current-Save unverändert, Me bleibt der Aufrufer
 Details docs/TABLE_DOCUMENT_RUNTIME.md. Trio 3/3 (16.13 s), letzter Initfall 1/1
 (1.93 s). Vollsuite/Paket zuletzt e054910 / privat 0328119, 48/48 (92.13 s).
 Dieses Qt-Controller-Inkrement ist gezielt geprüft, keine neuen Targets.
+
+
+## Native Tabellen schließen (2026-11-03)
+
+Explizites/default DoCmd.Close schließt echte Tabellen nach Feldvalidierung und
+transaktionalem Datensatzspeichern. Auch acSaveNo verwirft keine Datensatzdaten;
+Designspeichern und vollständige Access-Fehlerpriorität bleiben offen. Fehler
+lassen Seite, Editor und Cache bestehen. Verdeckte aktive Zellpuffer bleiben
+prüfbar; reentrantes Schließen beendet das zugehörige native Kontextmenü sicher.
+Details docs/TABLE_DOCUMENT_RUNTIME.md. Vollsuite 48/48 (91.15 s), GUI-freier
+Core 1/1 (2.01 s), Debian-Paketprüfung und alle vier Fixture-Hashes bestanden.
+Damit ist auch der vorherige SaveRecord-Controller vollständig mitgeprüft.
+Keine neuen Testtargets. Privater API-Push mit Baumidentität und Ref-Lease;
+lokale/API-Metadatenhistorien getrennt erhalten, kein Force-Push.

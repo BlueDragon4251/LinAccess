@@ -83,6 +83,14 @@ QString quoteSql(QString name) {
 QVariantMap tableCommandFailure(int number,const QString& description) {
     return {{"handled",true},{"error",number},{"description",description}};
 }
+QVariantMap tableModelFailure(linaccess::AccessTableModel* model,int fallback) {
+    if(!model) return tableCommandFailure(2501,"Tabellendokument wurde während des Befehls geschlossen.");
+    const auto problem=model->lastError();
+    bool valid=false; const int native=problem.nativeErrorCode().toInt(&valid);
+    int number=problem.driverText()=="LinAccess" && valid && native>0 ? native : fallback;
+    if(const auto function=linaccess::jetSqlFunctionErrorNumber(problem.text().toLower().toStdString())) number=*function;
+    return tableCommandFailure(number,problem.isValid() ? problem.text() : QStringLiteral("Tabellenbefehl abgebrochen."));
+}
 void messageError(QWidget* parent, const QString& explanation) {
     QMessageBox::critical(parent, "LinAccess — Fehler", explanation);
 }
@@ -311,14 +319,7 @@ QVariantMap MainWindow::saveDataPage(QWidget* page,bool interactive) {
     QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
     if(!table || !model) return tableCommandFailure(2046,"Kein aktives natives Tabellendokument.");
     if(model->isReadOnly()) return tableCommandFailure(2046,"Speichern ist in der schreibgeschützten Tabelle nicht verfügbar.");
-    const auto failure=[&](int fallback) {
-        if(!model) return tableCommandFailure(2501,"Tabellendokument wurde während des Befehls geschlossen.");
-        const auto problem=model->lastError();
-        bool valid=false; const int native=problem.nativeErrorCode().toInt(&valid);
-        int number=problem.driverText()=="LinAccess" && valid && native>0 ? native : fallback;
-        if(const auto function=linaccess::jetSqlFunctionErrorNumber(problem.text().toLower().toStdString())) number=*function;
-        return tableCommandFailure(number,problem.isValid() ? problem.text() : QStringLiteral("Tabellenbefehl abgebrochen."));
-    };
+    const auto failure=[&](int fallback) { return tableModelFailure(model,fallback); };
     if(!table->finishEditing()) return failure(2501);
     if(!self || !model || !table) return tableCommandFailure(2501,"Tabellendokument wurde während der Eingabevalidierung geschlossen.");
     const auto selected=table->currentIndex();
@@ -365,6 +366,38 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
     if(QApplication::activeModalWidget()) return tableCommandFailure(2046,"Tabellenbefehl ist durch ein modales Fenster blockiert.");
     if(command==97) return saveDataPage(page,false);
     return tableCommandFailure(3251,"Dieser native Tabellenbefehl ist noch nicht implementiert.");
+}
+
+QVariantMap MainWindow::closeTableDocument(int type,const QString& name,int save) {
+    const bool active= !activePreviewDocument() && AccessFormPreview::databaseWindowActive(this) && activeDataPage_
+        && tabs_->indexOf(activeDataPage_)>=0 && tabs_->currentWidget()==activeDataPage_;
+    if(type!=0 && !(type==-1 && active)) return {};
+    if(save<0 || save>2) return tableCommandFailure(5,"Ungültige Speicheroption für das Schließen.");
+    if(!db_.isOpen() || QApplication::activeModalWidget()) return tableCommandFailure(2046,"Tabelle kann in diesem Kontext nicht geschlossen werden.");
+    QPointer<MainWindow> self=this;
+    QPointer<QWidget> page;
+    if(name.isEmpty()) { if(active) page=activeDataPage_; }
+    else page=findOpenTable(name);
+    if(!page) return tableCommandFailure(3251,"Die angeforderte offene Tabelle ist nicht verfügbar.");
+    QPointer<linaccess::AccessTableView> table;
+    for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
+    QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
+    if(!table || !model) return tableCommandFailure(2046,"Kein natives Tabellendokument.");
+    if(!table->finishEditing()) return tableModelFailure(model,2501);
+    if(!self || !page || !model || !table) return tableCommandFailure(2501,"Tabellendokument wurde während der Validierung geschlossen.");
+    // Save options concern object design. Pending record data is validated and
+    // committed independently, including acSaveNo, before disposing its view.
+    if(model->isDirty()) {
+        const auto result=saveDataPage(page,false);
+        if(result.value("error").toInt()) return result;
+    }
+    if(!self || !page || !model || !table || tabs_->indexOf(page)<0) return tableCommandFailure(2501,"Tabellendokument ist nicht mehr verfügbar.");
+    if(QApplication::activeModalWidget()) return tableCommandFailure(2046,"Schließen ist durch ein modales Fenster blockiert.");
+    if(!canCloseDataPage(page)) return tableCommandFailure(2501,"Tabellenänderungen konnten nicht abgeschlossen werden.");
+    tabs_->removeTab(tabs_->indexOf(page)); page->hide();
+    for(auto* pending:page->findChildren<QSqlTableModel*>()) pending->clear();
+    page->deleteLater();
+    return {{"handled",true},{"error",0}};
 }
 
 QWidget* MainWindow::findOpenTable(const QString& name) const {

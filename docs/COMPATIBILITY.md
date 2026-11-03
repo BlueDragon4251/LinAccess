@@ -1787,3 +1787,14 @@ See TABLE_DOCUMENT_RUNTIME.md. Existing trio 3/3 (16.13 s), final initialization
 case 1/1 (1.93 s); real SQL persistence and unchanged background drafts verified.
 Full suite/package baseline remains e054910 / API 0328119, 48/48 (92.13 s).
 Theoretical checklist: 290 checked / 70 open scoped points.
+
+
+## Native table Close (2026-11-03)
+
+Explicit/default DoCmd.Close handles actual table pages with field validation,
+transactional record saving and retained drafts on failure. Hidden active editor
+buffers and reentrant context-menu closure are covered. Object design-save
+semantics and complete Access error precedence remain open. Canonical details:
+TABLE_DOCUMENT_RUNTIME.md. Full desktop 48/48 (91.15 s), GUI-free 1/1 (2.01 s),
+Debian checks and four fixture hashes pass. No new test targets.
+Theoretical checklist: 292 checked / 70 open scoped points.
