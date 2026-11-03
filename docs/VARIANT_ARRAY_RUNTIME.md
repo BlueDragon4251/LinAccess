@@ -1,8 +1,8 @@
-# Native one-dimensional Variant arrays
+# Native Variant arrays and multidimensional values
 
 `Array(...)` now creates a native immutable-backed Variant array. `Option Base`
 0/1 determines its lower bound in the calling module. `LBound` and `UBound`
-return Long values; dimension 1 is supported. Empty arrays have upper bound
+return Long values with a checked dimension argument. Empty arrays have upper bound
 one less than their lower bound. Indexed reads and variable element assignments
 check bounds (error 9), and Null indices fail with error 94.
 
@@ -18,10 +18,11 @@ persistence from a VBA loop on a synthetic in-memory database.
 
 ## Resizing Variant arrays
 
-One-dimensional `ReDim a(upper)` and `ReDim a(lower To upper)` allocate Empty
-Variant elements. Omitted lower bounds follow Option Base; explicit lower bounds
+`ReDim a(upper)` and `ReDim a(lower To upper, ...)` allocate Empty
+Variant elements with up to 60 dimensions. Omitted lower bounds follow Option Base; explicit lower bounds
 may be negative. `ReDim Preserve` retains the overlapping prefix, initializes
-new elements to Empty and rejects lower-bound changes with error 9. Other value
+new elements to Empty. Only the last upper bound can change; rank, lower bounds
+and all earlier dimensions must remain unchanged (error 9 on rejected Preserve). Other value
 copies retain their previous elements and bounds. `Erase a` releases this Variant
 array and restores Empty; a subsequent ReDim Preserve can allocate it again.
 
@@ -33,7 +34,7 @@ fails with 3251; this limit is a current implementation boundary, not Access par
 ## Remaining boundaries
 
 This is not complete VBA array parity. Typed/fixed/dynamic array declarations,
-full typed ReDim/Preserve/Erase semantics, multidimensional arrays, full ParamArray semantics, full array For Each semantics,
+full typed ReDim/Preserve/Erase semantics, full ParamArray semantics, full array For Each semantics,
 full library/reference binding and native COM arrays remain open. Individual array elements
 passed to a ByRef parameter fail explicitly with 3251 rather than silently losing
 writes. Nested indexed assignment is not implemented. No Windows Access result
@@ -76,3 +77,24 @@ VBA.Array results. Existing local/host roots named VBA retain normal member look
 priority. Named qualified Array arguments and complete VBA namespace/reference
 binding remain unsupported. Existing core checks compare module base 1 versus
 qualified base 0, empty bounds, direct enumeration and local-root lookup.
+
+## Multidimensional Variant storage and DAO batches
+
+Variant arrays now retain independent bounds for each dimension. Indexed reads
+and assignments require the actual rank and check every subscript. Immutable
+storage preserves whole-array copies and supported Variant ByVal/ByRef behavior.
+For Each traverses every cell with the first dimension varying fastest; existing
+replacement/resize guards apply. Join/Filter explicitly require rank one.
+Dimension bounds, negative lower bounds, two-/three-dimensional assignment,
+Option Base per omitted lower bound, last-dimension grow/shrink and rejected
+Preserve changes execute in the existing core test target. No new targets.
+
+DAO GetRows constructs genuine zero-based field/record matrices from actual
+materialized SQL records; see [DAO_GETROWS_RUNTIME.md](DAO_GETROWS_RUNTIME.md).
+Typed/fixed/dynamic array declarations and multidimensional typed arrays remain
+open. This extends Variant values and ReDim, not the full declaration grammar
+or native Windows SAFEARRAY/COM interoperability. Existing one-million-cell
+runtime allocation bounds remain explicit.
+
+Full desktop suite 48/48 (92.36 s), rebuilt GUI-free core 1/1 (1.50 s), Debian
+payload/permissions/Build-ID/pinned SQLite and all four fixture hashes pass.

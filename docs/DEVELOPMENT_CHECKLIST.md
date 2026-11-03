@@ -1017,3 +1017,7 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Query acCmdZoomBox/Shift+F2 opens an actual readonly Qt cell Zoom dialog with checked text, no SQL/model mutation and guarded target lifetime.
 
 - [x] Three-part saved-query/relation/field references bind through proven direct view projections and ranked wrappers to exact output labels, distinguishing same-table input views and refusing ambiguous/compound/overqualified origins.
+
+- [x] Native multidimensional Variant values support checked indexing/assignment, dimension-aware Long bounds, value copies and first-dimension-fastest For Each without flattening Join/Filter inputs.
+- [x] Variant ReDim supports up to 60 dimensions with Option Base per omitted bound; Preserve grows/shrinks only the last upper bound and retains existing values/copy isolation.
+- [x] Explicit-positive-NumRows DAO GetRows returns real zero-based typed field/record matrices, including native binary cells, with next-unread cursor advance and conversion-failure position preservation.

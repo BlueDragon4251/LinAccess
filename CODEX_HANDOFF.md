@@ -778,3 +778,20 @@ fehlende Spalten, 2 geschützte Joined-Aktionen. Keine Ersatzspalten erfinden.
 Vollsuite 48/48 (90,47 s), GUI-frei 1/1 (1,67 s), Debian-Paket und alle vier
 Original-SHA-256 bestanden; keine neuen Testziele. 340 erledigte / 72 offene
 erfasste Checklist-Punkte, keine Gesamtparitätsquote.
+
+## Mehrdimensionale Variants und DAO GetRows (2026-11-03)
+
+Native Variant-Arrays speichern Rang/Dimensionsgrenzen und unterstützen echte
+mehrdimensionale Lese-/Schreibindizes, Long-LBound/UBound mit Dimension,
+Wertkopien und For Each (erste Dimension läuft am schnellsten). ReDim bis 60
+Variant-Dimensionen; Preserve darf nur letzte obere Grenze ändern. Join/Filter
+bleiben ausdrücklich eindimensional; typisierte/feste/dynamische Array-
+Deklarationen und vollständige COM-/SAFEARRAY-Parität sind weiterhin offen.
+DAO GetRows mit explizit positiver NumRows liefert echte nullbasierte Feld-/
+Datensatzmatrizen aus SQL-Daten, typisierte Currency/Date/Boolean/Null-Werte und
+Byte-Array-Zellen für native SQLite-BLOBs. Konvertierung ist vor Cursorfortschritt
+abgeschlossen. Omitted/Missing/nichtpositive NumRows bleiben 3251: den optionalen
+DAO-Default nicht aus ADO ableiten. Keine MDB/OLE-Importbehauptung. Details:
+DAO_GETROWS_RUNTIME.md und VARIANT_ARRAY_RUNTIME.md. Gesamtsuite 48/48 (92,36 s),
+frisch GUI-frei 1/1 (1,50 s), Debian-Paket und vier Original-SHA-256 bestanden.
+343 erledigte / 72 offene erfasste Checklist-Punkte, keine Gesamtparitätsquote.

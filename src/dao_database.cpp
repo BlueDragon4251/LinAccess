@@ -1,4 +1,5 @@
 #include "dao_database.hpp"
+#include "vba_array.hpp"
 #include "access_autonumber.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
@@ -189,6 +190,7 @@ public:
         if (key=="findfirst" || key=="findlast" || key=="findnext" || key=="findprevious")
             return VbaArgumentSignature{{"Criteria"},1};
         if (key=="move") return VbaArgumentSignature{{"Rows","Start"},1};
+        if (key=="getrows") return VbaArgumentSignature{{"NumRows"},0};
         return {};
     }
     Recordset(QSqlDatabase db, QString source, bool snapshot, QMap<QString,QVariant> bindings = {},AccessQueryPlan plan={})
@@ -279,6 +281,25 @@ public:
         const auto key = lower(name);
         if (key!="close" && key!="requery") checkTransaction();
         if (key=="transactions" && args.empty()) return VbaValue::logical(true);
+        if(key=="getrows") {
+            if(args.size()>1) throw VbaRuntimeError(450,"DAO: GetRows accepts one row count");
+            if(args.empty() || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(3251,"DAO: GetRows currently requires explicit positive NumRows");
+            const auto requested=static_cast<qsizetype>(coerceVbaModuleValue(scalarVbaValue(args[0]),"long").number);
+            if(requested<=0) throw VbaRuntimeError(3251,"DAO: GetRows currently requires positive NumRows");
+            if(mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
+            current();
+            const auto count=std::min(requested,data_->rows.size()-position_); const auto fields=data_->columns.size();
+            if(fields<=0 || count>1000000/fields) throw VbaRuntimeError(3251,"DAO: GetRows exceeds the supported cell limit");
+            std::vector<VbaValue> cells; cells.reserve(static_cast<std::size_t>(count*fields));
+            for(qsizetype row=position_;row<position_+count;++row) for(qsizetype field=0;field<fields;++field) {
+                const auto raw=data_->rows[row][field];
+                if(!raw.isNull() && raw.metaType().id()==QMetaType::QByteArray) {
+                    const auto bytes=raw.toByteArray(); cells.push_back(VbaValue::byteArray(std::vector<unsigned char>(bytes.begin(),bytes.end())));
+                } else cells.push_back(qtFieldValue(raw,data_->types.value(data_->columns[field].toCaseFolded())));
+            }
+            auto result=makeVbaArrayWithBounds(std::move(cells),{{0,static_cast<int>(fields-1)},{0,static_cast<int>(count-1)}});
+            position_+=count; noMatch_=false; return result;
+        }
         if (key=="findfirst" || key=="findlast" || key=="findnext" || key=="findprevious") {
             if (args.size()!=1) throw VbaRuntimeError(450,"DAO: Find requires one criterion");
             if (args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null criterion");

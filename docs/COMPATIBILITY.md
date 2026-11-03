@@ -2153,3 +2153,17 @@ dependencies, eight binding/context failures, two guarded joined actions.
 QUERY_ORIGINS.md is the canonical scope. Full desktop 48/48 (90.47 s), GUI-free
 core 1/1 (1.67 s), Debian package and four fixture SHA-256 checks pass. No new
 test targets. Checklist: 340 checked / 72 open scoped points, not total parity.
+
+## Multidimensional Variants and DAO GetRows (2026-11-03)
+
+Variant arrays retain checked per-dimension bounds, multidimensional reads/writes,
+value-copy semantics and first-dimension-fastest For Each. ReDim supports up to
+60 Variant dimensions and Preserve changes only the last upper bound, with
+Option Base applied to omitted lower bounds. Join/Filter remain rank one.
+Explicit-positive-NumRows DAO GetRows returns real zero-based field/record
+matrices, preserves typed Currency/Date/Boolean/Null and native SQLite binary
+cells, and advances to the next unread record only after successful conversion.
+DAO_GETROWS_RUNTIME.md and VARIANT_ARRAY_RUNTIME.md specify defaults/typed-array/
+provider boundaries. Existing full suite 48/48 (92.36 s), rebuilt GUI-free core
+1/1 (1.50 s), Debian package and all four fixture hashes pass; no new targets.
+Checklist: 343 checked / 72 open scoped points, not overall Access parity.
