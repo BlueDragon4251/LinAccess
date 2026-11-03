@@ -5,7 +5,10 @@
 #include "native_clock_keys.hpp"
 #include "native_cell_editor.hpp"
 #include "native_cell_zoom.hpp"
+#include "native_table_find.hpp"
 #include <QLineEdit>
+#include <QSqlError>
+#include <QScopeGuard>
 #include <QClipboard>
 #include <QMimeData>
 #include <new>
@@ -30,6 +33,90 @@ public:
             auto* typed=qobject_cast<AccessTableModel*>(model()); if(!typed) return;
             if(activeEditor()) typed->protectNextSort();
         });
+    }
+    void setRecordNavigationGuard(std::function<bool()> guard) { recordNavigationGuard_=std::move(guard); }
+    bool openFindDialog() {
+        QPointer<AccessTableView> self=this;
+        QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
+        if(!typed || !finishEditing() || !self || !typed) return false;
+        QVector<QPair<QString,int>> columns;
+        for(int column=0;column<typed->columnCount();++column)
+            if(!isColumnHidden(column) && typed->isTextColumn(column)) columns.push_back({typed->headerData(column,Qt::Horizontal).toString(),column});
+        if(columns.isEmpty()) return refuse(3251,"Keine durchsuchbaren Textfelder vorhanden.");
+        if(findDialog_ && findDialog_->isVisible()) { findDialog_->raise(); findDialog_->activateWindow(); return true; }
+        auto initial=findArguments_;
+        if(initial.text.isEmpty() && currentIndex().isValid() && typed->isTextColumn(currentIndex().column())) initial.column=currentIndex().column();
+        QPointer<QDialog> dialog=nativeTableFindDialog(this,columns,initial,[self](NativeTableFindArguments arguments) {
+            if(!self) return QString{};
+            self->findText(std::move(arguments));
+            return self ? self->findMessage_ : QString{};
+        });
+        if(!self) return false;
+        findDialog_=dialog;
+        return bool(dialog);
+    }
+    bool hasFindText() const { return !findArguments_.text.isEmpty(); }
+    bool repeatFind() {
+        const QPointer<AccessTableView> self=this;
+        const bool completed=findText(findArguments_)>=0;
+        if(!self) return false;
+        if(findDialog_) if(auto* label=findDialog_->findChild<QLabel*>("native-table-find-result")) label->setText(findMessage_);
+        return completed;
+    }
+    int findText(NativeTableFindArguments arguments) {
+        QPointer<AccessTableView> self=this;
+        QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
+        const auto fail=[&](int number,const QString& message) {
+            if(self) { findMessage_=message; (void)refuse(number,message); }
+            return -1;
+        };
+        if(!typed) return fail(2046,"Keine native Tabelle für die Suche.");
+        if(finding_) return fail(3251,"Eine Suche wird bereits ausgeführt.");
+        finding_=true; const auto searching=qScopeGuard([self] { if(self) self->finding_=false; });
+        if(arguments.text.isEmpty()) return fail(2046,"Keine vorherige Suche vorhanden.");
+        if(arguments.mode<0 || arguments.mode>2 || arguments.column< -1 || arguments.column>=typed->columnCount()) return fail(5,"Ungültige Sucheinstellung.");
+        if(!finishEditing()) { if(self && typed) findMessage_=typed->lastError().text(); return -1; }
+        if(!self || !typed) return -1;
+        if(recordNavigationGuard_) {
+            const auto guard=recordNavigationGuard_;
+            if(!guard()) { if(self && typed) findMessage_=typed->lastError().text(); return -1; }
+        } else if(typed->isDirty()) return fail(3251,"Zuerst Tabellenentwürfe vor der Suche speichern.");
+        if(!self || !typed) return -1;
+        QVector<int> columns;
+        for(int column=0;column<typed->columnCount();++column)
+            if((arguments.column<0 || arguments.column==column) && !isColumnHidden(column) && typed->isTextColumn(column)) columns.push_back(column);
+        if(columns.isEmpty()) return fail(3265,"Das Suchfeld ist nicht verfügbar.");
+        constexpr qint64 cellLimit=1000000;
+        while(typed->canFetchMore()) {
+            if(static_cast<qint64>(typed->rowCount())*columns.size()>=cellLimit) return fail(3251,"Suchumfang überschreitet die native Grenze.");
+            const int before=typed->rowCount(); typed->fetchMore();
+            if(!self || !typed) return -1;
+            if(typed->rowCount()==before && typed->canFetchMore()) return fail(3251,"Suchdaten konnten nicht vollständig geladen werden.");
+        }
+        if(static_cast<qint64>(typed->rowCount())*columns.size()>cellLimit) return fail(3251,"Suchumfang überschreitet die native Grenze.");
+        if(findArguments_.text!=arguments.text || findArguments_.column!=arguments.column || findArguments_.mode!=arguments.mode || findArguments_.sensitive!=arguments.sensitive) findAdvance_=false;
+        findArguments_=arguments;
+        const int count=typed->rowCount();
+        if(!count) { findMessage_="Keine Datensätze vorhanden."; return 0; }
+        const int start=currentIndex().isValid() ? (currentIndex().row()+(findAdvance_ ? 1 : 0))%count : 0;
+        const auto cs=arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
+        for(int offset=0;offset<count;++offset) {
+            const int row=(start+offset)%count; if(isRowHidden(row)) continue;
+            for(int column:columns) {
+                const auto candidate=typed->index(row,column);
+                const auto value=candidate.data(Qt::EditRole);
+                if(value.isNull() || value.metaType().id()==QMetaType::QByteArray) continue;
+                const auto text=value.toString();
+                const bool matches=arguments.mode==1 ? text.compare(arguments.text,cs)==0 : arguments.mode==2 ? text.startsWith(arguments.text,cs) : text.contains(arguments.text,cs);
+                if(matches) {
+                    setCurrentIndex(candidate);
+                    if(!self || !typed) return -1;
+                    scrollTo(candidate); findAdvance_=true;
+                    findMessage_=QString("Übereinstimmung in Datensatz %1.").arg(row+1); return 1;
+                }
+            }
+        }
+        findMessage_="Keine Übereinstimmung gefunden."; return 0;
     }
     bool hasPendingEditor() const {
         auto* editor=activeEditor(); if(!editor) return false;
@@ -286,11 +373,13 @@ protected:
         if(modifiers==Qt::ControlModifier && event->key()==Qt::Key_Minus) {
             (void)deleteCurrentRecord(); event->accept(); return;
         }
+        if(event->key()==Qt::Key_F && modifiers==Qt::ControlModifier) { (void)openFindDialog(); event->accept(); return; }
+        if(event->key()==Qt::Key_F4 && modifiers==Qt::ShiftModifier) { (void)repeatFind(); event->accept(); return; }
         QTableView::keyPressEvent(event);
     }
 private:
     bool refuse(int number,const QString& message) const {
-        if(auto* typed=qobject_cast<AccessTableModel*>(model())) emit typed->editRejected(number,message);
+        if(auto* typed=qobject_cast<AccessTableModel*>(model())) return typed->rejectEdit(number,message);
         return false;
     }
     bool fetchSelectionRows() {
@@ -313,6 +402,11 @@ private:
             if(!candidate->isHidden() && candidate->property("la_cell_index").value<QPersistentModelIndex>().isValid()) return candidate;
         return nullptr;
     }
+    std::function<bool()> recordNavigationGuard_;
+    QPointer<QDialog> findDialog_;
+    NativeTableFindArguments findArguments_;
+    QString findMessage_;
+    bool findAdvance_{},finding_{};
     QMetaObject::Connection restore_;
 };
 }

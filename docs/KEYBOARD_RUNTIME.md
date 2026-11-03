@@ -243,3 +243,12 @@ real popup action dispatch into quoted TSV clipboard with dirty Paste disabled.
 Last full suite/package remains e15ff33 / API c381897, 48/48 (88.41 s). These
 Qt view increments are focused-verified, with the same existing 48 targets.
 Theoretical checklist: 281 checked / 70 open scoped points.
+
+
+## Native table Find keyboard routes (2026-11-03)
+
+Ctrl+F opens the actual table's modeless literal-text Find dialog from navigation
+or the native cell editor. Shift+F4 repeats its prior search and wraps in view
+order. The root Edit menu and native DoCmd/Application Find/FindNext use the same
+paths. Field validation, checked record saving, readonly access, fetch budgets
+and lifetime limits are documented in TABLE_FIND_RUNTIME.md.

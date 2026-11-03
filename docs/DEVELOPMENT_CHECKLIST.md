@@ -952,3 +952,8 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [ ] General table navigation with unrelated multirow drafts, inserted/deleted current records, and Access addition-row/error equivalence.
 
 - [x] Native table RunCommand SortAscending/SortDescending sorts the actual field, preserves primary-key/current-column identity and readonly access, saves a sole current update and protects unrelated drafts.
+
+- [x] Native table literal Find handles visible text-field scope, part/whole/start and case modes, real SQL fetching and retained dirty-cache boundaries.
+- [x] Ctrl+F, Shift+F4, native Edit menu and DoCmd/Application Find/FindNext share actual table search paths, including the cell-editor route.
+- [x] Modeless table Find reactivates its owning page safely and is disposed with its document; checked view errors propagate accurately to VBA.
+- [ ] General table numeric/date/formatted/wildcard/locale search, reverse search, Replace and DoCmd.FindRecord equivalence.

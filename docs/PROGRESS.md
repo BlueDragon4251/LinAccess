@@ -3776,3 +3776,19 @@ Last complete suite/package baseline remains e4e0900 / private API 714a96e,
 48/48 (91.33 s), GUI-free core 1/1 (2.49 s). This controller change is
 focused-verified, without adding test targets.
 Theoretical checklist: 298 checked / 71 open scoped points.
+
+
+## Native table Find UI, commands and lifetime (2026-11-03)
+
+Actual modeless Find supports literal text scope/modes/case, Ctrl+F/Shift+F4,
+native Edit menu and DoCmd/Application Find/FindNext. It fetches actual SQL rows,
+reactivates its owning page, saves a sole current update through checked native
+transactions, protects unrelated drafts and is disposed with its table. View
+refusals return their actual native error to VBA; binary Copy remains 3251 with
+unchanged clipboard/payload. Canonical scope: TABLE_FIND_RUNTIME.md.
+Theoretical checklist: 301 checked / 72 open scoped points.
+
+Full rebuilt desktop suite passes 48/48 (92.69 s), GUI-free core 1/1 (2.45 s),
+Debian payload/permissions/Build-ID/pinned SQLite checks and all four original
+fixture hashes pass. No additional test targets. This also covers the preceding
+native table sort commands and the final weak-owner reentrancy guard.

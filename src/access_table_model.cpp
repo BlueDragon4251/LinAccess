@@ -33,11 +33,11 @@ AccessTableModel::AccessTableModel(QObject* parent,QSqlDatabase database):QSqlTa
         if(editStrategy()==OnManualSubmit) for(int row=first.row();row<=last.row();++row) dirtyRows_.insert(row);
     });
 }
-bool AccessTableModel::reject(int number) {
-    const auto message=editMessage(number);
+bool AccessTableModel::rejectEdit(int number,const QString& message) {
     setLastError(QSqlError("LinAccess",message,QSqlError::StatementError,QString::number(number)));
     emit editRejected(number,message); return false;
 }
+bool AccessTableModel::reject(int number) { return rejectEdit(number,editMessage(number)); }
 bool AccessTableModel::refreshTypes() {
     types_.clear(); generated_.clear(); metadataError_=0;
     try { types_=sqliteColumnTypes(database(),tableName()); generated_=generatedAccessColumns(database(),tableName()); return true; }
@@ -164,6 +164,11 @@ void AccessTableModel::sort(int column,Qt::SortOrder order) {
         reject(2501); emit sortRestored(sortColumn_,sortOrder_); return;
     }
     sortColumn_=column; sortOrder_=order; QSqlTableModel::sort(column,order);
+}
+bool AccessTableModel::isTextColumn(int column) const {
+    if(column<0 || column>=columnCount() || metadataError_) return false;
+    const auto type=columnType(column);
+    return type.contains("TEXT",Qt::CaseInsensitive) || type.contains("CHAR",Qt::CaseInsensitive) || type.contains("CLOB",Qt::CaseInsensitive);
 }
 QString AccessTableModel::columnType(int column) const { return types_.value(record().fieldName(column).toCaseFolded()); }
 QVariant AccessTableModel::data(const QModelIndex& index,int role) const {

@@ -6,6 +6,8 @@
 #include <QApplication>
 #include <QCryptographicHash>
 #include <QClipboard>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QDialog>
 #include <QFileDialog>
 #include <QFile>
@@ -158,6 +160,12 @@ Sub SaveActiveTableViaApplication()
 Application.RunCommand Command:=acCmdSaveRecord
 Me.Tag="application-table-saved"
 End Sub
+Sub FindTableText()
+DoCmd.RunCommand acCmdFind
+End Sub
+Sub RepeatTableFind()
+Application.RunCommand Command:=acCmdFindNext
+End Sub
 Sub SortTableAscending()
 DoCmd.RunCommand acCmdSortAscending
 End Sub
@@ -215,8 +223,8 @@ End Sub
     assert(unchanged.exec("INSERT INTO command_readonly VALUES(1,1.25,-1),(2,NULL,NULL)"));
     assert(unchanged.exec("CREATE TABLE command_edit(id INTEGER PRIMARY KEY AUTOINCREMENT,value TEXT CHECK(value!='blocked'))"));
     assert(unchanged.exec("INSERT INTO command_edit VALUES(1,'initial')"));
-    assert(unchanged.exec("CREATE TABLE command_navigation(id INTEGER PRIMARY KEY,value TEXT CHECK(value!='blocked'))"));
-    assert(unchanged.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<300) INSERT INTO command_navigation SELECT x,'row-'||x FROM n"));
+    assert(unchanged.exec("CREATE TABLE command_navigation(id INTEGER PRIMARY KEY,value TEXT CHECK(value!='blocked'),payload BLOB)"));
+    assert(unchanged.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<300) INSERT INTO command_navigation SELECT x,'row-'||x,x'0102' FROM n"));
     action(window,"Aktualisieren")->trigger(); openArtifact(window,mixedId); QPointer<AccessFormPreview> mixed=document("tab_cycle_form"); assert(mixed);
     auto* mixedEditor=mixed->findChild<QLineEdit*>("access-control-focus"); assert(mixedEditor); QApplication::setActiveWindow(mixed); mixedEditor->setFocus(); QApplication::processEvents();
     QTest::keyClick(mixedEditor,Qt::Key_F6,Qt::ControlModifier); QApplication::processEvents(); assert(explorer->hasFocus());
@@ -300,7 +308,54 @@ End Sub
     assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=299") && unchanged.next() && unchanged.value(0).toString()=="row-299"); unchanged.finish();
     assert(navigationModel->setData(navigationModel->index(298,1),"navigation-retry"));
     assert(mixed->executeProcedure("NextTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==299 && !navigationModel->isDirty());
+    navigationView->setCurrentIndex(navigationModel->index(299,2));
+    QApplication::clipboard()->setText("binary-copy-sentinel");
+    assert(mixed->executeProcedure("CopyTableSelection",selectArguments).errorNumber==3251);
+    assert(QApplication::clipboard()->text()=="binary-copy-sentinel" && !navigationModel->isDirty());
+    assert(unchanged.exec("SELECT hex(payload) FROM command_navigation WHERE id=300") && unchanged.next() && unchanged.value(0).toString()=="0102"); unchanged.finish();
+    assert(mixed->executeProcedure("RepeatTableFind",selectArguments).errorNumber==2046);
+    assert(mixed->executeProcedure("FindTableText",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(window.activateOpenTable("command_readonly")==0);
+    QPointer<QDialog> tableFind=navigationView->findChild<QDialog*>("native-table-find-dialog"); assert(tableFind && tableFind->isVisible() && !tableFind->isModal());
+    auto* findText=tableFind->findChild<QLineEdit*>("native-table-find-text");
+    auto* findMatch=tableFind->findChild<QComboBox*>("native-table-find-match");
+    auto* findCase=tableFind->findChild<QCheckBox*>("native-table-find-case");
+    auto* findNext=tableFind->findChild<QPushButton*>("native-table-find-next");
+    auto* findResult=tableFind->findChild<QLabel*>("native-table-find-result"); assert(findText && findMatch && findCase && findNext && findResult);
+    findText->setText("row-250"); findNext->click();
+    assert(navigationView->currentIndex().row()==249 && navigationView->currentIndex().column()==1 && documentTabs->currentWidget()==navigationView->parentWidget());
+    findText->setText("row-2"); findNext->click();
+    assert(mixed->executeProcedure("RepeatTableFind",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==250);
+    QTest::keyClick(navigationView,Qt::Key_F4,Qt::ShiftModifier); assert(navigationView->currentIndex().row()==251);
+    auto* findEditMenu=window.findChild<QMenu*>("native-edit-menu"); auto* menuFindNext=window.findChild<QAction*>("table-find-next"); assert(findEditMenu && menuFindNext);
+    QMetaObject::invokeMethod(findEditMenu,"aboutToShow",Qt::DirectConnection); assert(menuFindNext->isEnabled()); menuFindNext->trigger(); assert(navigationView->currentIndex().row()==252);
+    findMatch->setCurrentIndex(1); findText->setText("ROW-250"); findNext->click(); assert(navigationView->currentIndex().row()==249);
+    findCase->setChecked(true); findNext->click(); assert(navigationView->currentIndex().row()==249 && findResult->text()=="Keine Übereinstimmung gefunden.");
+    findCase->setChecked(false); findMatch->setCurrentIndex(2); findText->setText("row-29"); findNext->click(); assert(navigationView->currentIndex().row()==289);
+    assert(navigationModel->setData(navigationModel->index(289,1),"find-saved"));
+    findText->setText("row-280"); findNext->click();
+    assert(navigationView->currentIndex().row()==279 && !navigationModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=290") && unchanged.next() && unchanged.value(0).toString()=="find-saved"); unchanged.finish();
+    assert(navigationModel->setData(navigationModel->index(279,1),"pending-current") && navigationModel->setData(navigationModel->index(278,1),"pending-other"));
+    findText->setText("row-270"); findNext->click();
+    assert(navigationView->currentIndex().row()==279 && navigationModel->isDirty() && navigationModel->lastError().nativeErrorCode()=="3251");
+    assert(mixed->executeProcedure("RepeatTableFind",selectArguments).errorNumber==3251);
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=280") && unchanged.next() && unchanged.value(0).toString()=="row-280"); unchanged.finish();
+    navigationModel->revertAll(); assert(navigationModel->setReadOnly(true));
+    findText->setText("row-280"); findNext->click(); assert(navigationView->currentIndex().row()==279 && navigationModel->isReadOnly() && !navigationModel->isDirty());
+    assert(navigationModel->setReadOnly(false));
+    tableFind->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QApplication::processEvents(); assert(!tableFind);
+    window.activateWindow(); QApplication::processEvents(); QApplication::setActiveWindow(&window);
+    navigationView->setCurrentIndex(navigationModel->index(279,1)); navigationView->setFocus();
+    assert(navigationView->hasFocus());
+    QTest::keyClick(navigationView,Qt::Key_F2);
+    auto* findSourceEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(findSourceEditor); findSourceEditor->setText("keyboard-find-saved");
+    QTest::keyClick(findSourceEditor,Qt::Key_F,Qt::ControlModifier); QApplication::processEvents();
+    tableFind=navigationView->findChild<QDialog*>("native-table-find-dialog"); assert(tableFind && tableFind->isVisible() && navigationModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=280") && unchanged.next() && unchanged.value(0).toString()=="row-280"); unchanged.finish();
     assert(mixed->executeProcedure("CloseNavigationTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
+    QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); assert(!tableFind);
+
     assert(mixed->executeProcedure("OpenEditableTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     const QPointer<QWidget> editablePage=documentTabs->currentWidget(); auto* editableView=nativeTable(editablePage);
     auto* editableModel=qobject_cast<linaccess::AccessTableModel*>(editableView->model()); assert(editableModel && !editableModel->isReadOnly() && editableModel->setData(editableModel->index(0,1),"changed"));
