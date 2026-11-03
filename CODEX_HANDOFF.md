@@ -675,3 +675,21 @@ Finale Vollsuite 48/48 (97.60 s), GUI-freier Core 1/1 (1.71 s), Debian-Prüfung
 inklusive Build-ID/SQLite 3.54.1 und vier Fixture-Hashes bestanden.
 Gespeichertes Hauptschema/Temp-Isolation, echtes leer/kein-Katalog, Katalogleben
 und Report.Visible mit VBA/SQL eingeschlossen. Keine neuen Testtargets.
+
+## Native CurrentData-Tabellen-/Abfragekataloge (2026-11-03)
+
+CurrentData/Application.CurrentData liefern tatsächliche Hauptschema-Nutzertabellen
+und gespeicherte native/importierte Abfragedefinitionen über Long Count,
+Name/Index/named Item, For Each und readonly Name/IsLoaded. Interne Tabellen
+ausgeschlossen; physische Views nicht als Tabellen und erzeugte Query-Views
+nicht als zusätzliche gespeicherte Abfragen ausgegeben. Echte Tab-Mitgliedschaft
+hält Hintergrund-/readonly-Datenblätter geladen, entfernte Seiten sind geschlossen.
+Benannte Query-Editor-/Quell-/Ergebnisdialoge werden tatsächlich verfolgt.
+Referenzen überleben Aufrufer, Projektgeneration invalidiert sie. Benutzerfunktion
+CurrentData bleibt auflösbar. Kanonisch docs/CURRENT_DATA_RUNTIME.md; keine
+pauschale Query-/COM-Parität. Core/MainWindow-Paar 2/2 (6.16 s), GUI-freier
+Core 1/1 (1.51 s), keine neuen Targets.
+
+Vollsuite 48/48 (101.66 s), GUI-freier Core 1/1 (1.51 s), Debian-Prüfung
+inklusive Build-ID/SQLite 3.54.1 und vier Originalfixture-Hashes bestanden.
+CurrentData-Metadaten/echter UI-Zustand eingeschlossen; keine neuen Testtargets.

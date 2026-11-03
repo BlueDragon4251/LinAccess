@@ -417,6 +417,9 @@ End Sub
     const QPointer<QWidget> readonlyPage=documentTabs->currentWidget(); auto* readonlyView=nativeTable(readonlyPage);
     auto* readonlyModel=qobject_cast<linaccess::AccessTableModel*>(readonlyView->model()); assert(readonlyModel && readonlyModel->isReadOnly() && readonlyModel->rowCount()==2);
     const int readonlyRow=readonlyModel->index(0,0).data().toInt()==1 ? 0 : 1;
+    auto nativeData=makePreviewApplicationObject(*mixed)->member("CurrentData",{}).object;
+    auto readonlyDescriptor=nativeData->member("AllTables",{}).object->member("Item",{linaccess::VbaValue::string("command_readonly")}).object;
+    assert(readonlyDescriptor->member("IsLoaded",{}).boolean);
     assert(!readonlyModel->flags(readonlyModel->index(readonlyRow,1)).testFlag(Qt::ItemIsEditable) && !readonlyModel->flags(readonlyModel->index(readonlyRow,2)).testFlag(Qt::ItemIsUserCheckable));
     assert(!readonlyModel->setData(readonlyModel->index(readonlyRow,1),9) && !readonlyModel->insertRow(2) && !readonlyModel->removeRow(0) && !readonlyModel->isDirty());
     readonlyView->setCurrentIndex(readonlyModel->index(readonlyRow,2)); QTest::keyClick(readonlyView,Qt::Key_Space); QTest::keyClick(readonlyView,Qt::Key_Minus,Qt::ControlModifier);
@@ -493,6 +496,7 @@ End Sub
     assert(mixed->executeProcedure("CloseRecordEditTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(mixed->executeProcedure("OpenNavigationTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
     auto* navigationView=nativeTable(documentTabs->currentWidget());
+    assert(!readonlyPage->isVisible() && readonlyDescriptor->member("IsLoaded",{}).boolean);
     auto* navigationModel=qobject_cast<linaccess::AccessTableModel*>(navigationView->model()); assert(navigationModel);
     navigationView->sortByColumn(0,Qt::AscendingOrder);
     navigationView->setCurrentIndex(navigationModel->index(0,1));
@@ -823,6 +827,7 @@ End Sub
     QContextMenuEvent closeContext(QContextMenuEvent::Mouse,popupPoint,readonlyView->viewport()->mapToGlobal(popupPoint));
     QApplication::sendEvent(readonlyView->viewport(),&closeContext); QApplication::processEvents();
     assert(!readonlyPage && documentTabs->count()==2 && makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="active-table-closed");
+    assert(!readonlyDescriptor->member("IsLoaded",{}).boolean);
     assert(mixed->close()); QApplication::processEvents(); window.focusDatabaseWindow(); QApplication::processEvents();
     QTest::keyClick(explorer,Qt::Key_F6,Qt::ControlModifier|Qt::ShiftModifier); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && auditView->hasFocus());
     QTest::keyClick(auditView,Qt::Key_W,Qt::ControlModifier); QApplication::processEvents(); assert(documentTabs->count()==1 && documentTabs->currentWidget()==firstPage);
@@ -1002,7 +1007,8 @@ int main(int argc,char** argv) {
         "Sub ProjectIdentity()\nIf CurrentProject Is Application.CurrentProject Then Me.Tag=\"same-project\"\nEnd Sub\n"
         "Sub RenameProjectMetadata()\nCurrentProject.Name=\"renamed.linaccess\"\nMe.Tag=\"renamed\"\nEnd Sub\n"
         "Sub ShadowProjectMetadata()\nDim CurrentProject As String\nCurrentProject=\"local-project-name\"\nMe.Tag=CurrentProject\nEnd Sub\n"
-        "Sub ReadProjectCatalog()\nDim item As Object\nDim found As Boolean\nFor Each item In CurrentProject.AllForms\nIf item.Name=\"entry\" Then found=True\nNext item\nIf found And CurrentProject.AllForms.Item(Index:=\"entry\").IsLoaded And Not CurrentProject.AllReports(Index:=\"report\").IsLoaded Then Me.Tag=\"catalog-ready\"\nEnd Sub\n";
+        "Sub ReadProjectCatalog()\nDim item As Object\nDim found As Boolean\nFor Each item In CurrentProject.AllForms\nIf item.Name=\"entry\" Then found=True\nNext item\nIf found And CurrentProject.AllForms.Item(Index:=\"entry\").IsLoaded And Not CurrentProject.AllReports(Index:=\"report\").IsLoaded Then Me.Tag=\"catalog-ready\"\nEnd Sub\n"
+        "Sub ReadDataCatalog()\nDim item As Object\nDim found As Boolean\nFor Each item In CurrentData.AllTables\nIf item.Name=\"records\" Then found=True\nNext item\nIf found And Application.CurrentData.AllQueries(Index:=\"source_query\").Name=\"source_query\" Then Me.Tag=\"data-catalog-ready\"\nEnd Sub\n";
     const int formId=artifact(db,"form","entry",form); artifact(db,"vba","Form_entry",code);
     const int queryId=artifact(db,"query","source_query","SELECT value FROM records");
     auto report=form; report.replace("Begin Form","Begin Report"); report.replace("OnLoad =\"[Event Procedure]\"\n",""); report.replace("OnUnload =\"[Event Procedure]\"\n","");
@@ -1031,6 +1037,24 @@ int main(int argc,char** argv) {
     assert(entry->executeProcedure("ShadowProjectMetadata",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("Tag",{}).asText()=="local-project-name");
     auto allForms=projectMetadata->member("AllForms",{}).object;
     auto allReports=projectMetadata->member("AllReports",{}).object;
+    auto dataMetadata=makePreviewApplicationObject(*entry)->member("CurrentData",{}).object;
+    auto allTables=dataMetadata->member("AllTables",{}).object;
+    auto allQueries=dataMetadata->member("AllQueries",{}).object;
+    auto catalogTable=allTables->member("Item",{linaccess::VbaValue::string("RECORDS")}).object;
+    auto catalogQuery=allQueries->member("Item",{linaccess::VbaValue::string("source_query")}).object;
+    assert(catalogTable->member("Name",{}).asText()=="records" && !catalogTable->member("IsLoaded",{}).boolean && !catalogQuery->member("IsLoaded",{}).boolean);
+    assert(dataMetadata==makePreviewApplicationObject(*entry)->member("CurrentData",{}).object);
+    assert(entry->executeProcedure("ReadDataCatalog",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("Tag",{}).asText()=="data-catalog-ready");
+    int internalTable=0; try { (void)allTables->member("Item",{linaccess::VbaValue::string("_la_objects")}); } catch(const linaccess::VbaRuntimeError& error) { internalTable=error.number; } assert(internalTable==3265);
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="access-artifact-details");
+        assert(catalogQuery->member("IsLoaded",{}).boolean); dialog->reject();
+    });
+    auto* catalogExplorer=window.findChild<QTreeWidget*>("database-explorer"); QTreeWidgetItem* catalogQueryItem=nullptr;
+    for(QTreeWidgetItemIterator it(catalogExplorer);*it;++it)
+        if((*it)->data(0,Qt::UserRole).toString()=="access_artifact" && (*it)->data(0,Qt::UserRole+1).toInt()==queryId) catalogQueryItem=*it;
+    assert(catalogQueryItem && QMetaObject::invokeMethod(catalogExplorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,catalogQueryItem),Q_ARG(int,0)));
+    assert(!catalogQuery->member("IsLoaded",{}).boolean);
     auto catalogEntry=allForms->member("Item",{linaccess::VbaValue::string("ENTRY")}).object;
     auto catalogReport=allReports->member("Item",{linaccess::VbaValue::string("report")}).object;
     assert(catalogEntry->member("Name",{}).asText()=="entry" && catalogEntry->member("IsLoaded",{}).boolean && !catalogReport->member("IsLoaded",{}).boolean);
@@ -1238,6 +1262,7 @@ int main(int argc,char** argv) {
     dispose(); assert(!entry);
     assert(projectMetadata->member("FullName",{}).asText()==first.toStdString());
     assert(!catalogEntry->member("IsLoaded",{}).boolean);
+    assert(catalogTable->member("Name",{}).asText()=="records" && !catalogTable->member("IsLoaded",{}).boolean);
     assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="second"); sql.finish();
     openArtifact(window,reportId); QPointer<AccessFormPreview> reportWindow=document("report"); assert(reportWindow && !reportWindow->isModal() && QApplication::activeModalWidget()==nullptr);
     assert(catalogReport->member("IsLoaded",{}).boolean);
@@ -1264,6 +1289,7 @@ int main(int argc,char** argv) {
     bool staleProject=false;
     try { (void)projectMetadata->member("FullName",{}); } catch(const linaccess::VbaRuntimeError& error) { staleProject=error.number==3420; }
     assert(staleProject);
+    int staleData=0; try { (void)allTables->member("Count",{}); } catch(const linaccess::VbaRuntimeError& error) { staleData=error.number; } assert(staleData==3420);
     int staleCatalog=0; try { (void)catalogEntry->member("IsLoaded",{}); } catch(const linaccess::VbaRuntimeError& error) { staleCatalog=error.number; } assert(staleCatalog==3420);
     openArtifact(window,formId); auto* reopenedEntry=document("entry"); assert(reopenedEntry);
     auto reopenedProject=makePreviewApplicationObject(*reopenedEntry)->member("CurrentProject",{}).object;
@@ -1281,6 +1307,8 @@ int main(int argc,char** argv) {
         AccessFormPreview probe("empty_catalog_probe",QByteArray("Begin Form\nEnd\n"),{},QSqlDatabase::database("linaccess-main"),&window);
         auto emptyProject=makePreviewApplicationObject(probe)->member("CurrentProject",{}).object;
         assert(emptyProject->member("AllForms",{}).object->member("Count",{}).asNumber()==0 && emptyProject->member("AllReports",{}).object->member("Count",{}).asNumber()==0);
+        auto emptyData=makePreviewApplicationObject(probe)->member("CurrentData",{}).object;
+        assert(emptyData->member("AllTables",{}).object->member("Count",{}).asNumber()==0 && emptyData->member("AllQueries",{}).object->member("Count",{}).asNumber()==0);
     }
     const auto hash=[&] { QFile input(first); assert(input.open(QIODevice::ReadOnly)); return QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256); };
     const auto beforeRefusal=hash(); bool refused=false;
