@@ -3159,3 +3159,20 @@ are covered by that run and follow-up, not a final single 48/48 run. GUI-free
 build/test passes 1/1 (1.29 s). Debian package contents/permissions/Build-ID/backend checks pass, as do all four
 original fixture SHA-256 checks. Catalog now 251/320 bounded items, not measured
 overall Access parity.
+
+
+## Native DateSerial/TimeSerial and SQL Date construction (2026-11-03)
+
+DateSerial and TimeSerial construct real Date Variants with checked Integer
+arguments and relative month/day/time normalization. Named Year/Month/Day and
+Hour/Minute/Second arguments are supported. DateSerial uses Gregorian four-digit
+years; two-digit regional windows raise 3251. Null/arity/range errors stay typed.
+DateSerial/TimeSerial/CDate execute through the native SQL scalar bridge, which
+normalizes Date storage and retains DATETIME metadata for direct constructor
+projections. The projection typer now covers Currency rewriting and supported
+Date functions. Date SQL arithmetic still requires a typed operator rather than
+SQLite's implicit string-to-number conversion; no complete expression/UNION/
+locale/Hijri or Windows edge parity is claimed.
+Core passes 1/1 (1.40 s); GUI-free build/test passes 1/1 (1.36 s); query-model/DAO
+pass 2/2 (0.34 s), affected desktop targets build. Existing targets only; no
+full-suite/package repeat after the prior grouped Date integration checks.

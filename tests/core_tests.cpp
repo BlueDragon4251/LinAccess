@@ -465,6 +465,11 @@ void testRoundFunction() {
 void testCalendarFunctions() {
     using namespace linaccess; FakeForm host;
     const auto eval=[&](const std::string& source) { return evaluateVbaExpression(source,host,{}); };
+    assert(eval("CStr(DateSerial(Day:=0,Year:=2024,Month:=3))").asText()=="2024-02-29");
+    assert(eval("CStr(DateSerial(2024,14,1))").asText()=="2025-02-01");
+    assert(eval("CStr(TimeSerial(12-6,-15,0))").asText()=="05:45:00");
+    assert(eval("CStr(TimeSerial(0,0,-1))").asText()=="1899-12-29 23:59:59");
+    assert(eval("CDbl(TimeSerial(24,0,0))").asNumber()==1 && eval("VarType(DateSerial(2024,1,1))=vbDate").truthy());
     assert(eval("VarType(CDate(2.5))=vbDate").truthy() && eval("TypeName(CDate(2.5))").asText()=="Date");
     assert(eval("VarType(Now)=vbDate And VarType(Date())=vbDate And VarType(Time)=vbDate").truthy());
     assert(eval("CStr(CDate(0))").asText()=="00:00:00");
@@ -501,7 +506,8 @@ void testCalendarFunctions() {
     assert(eval("Year(Null)").kind==VbaValue::Kind::Null && eval("Weekday(Null)").kind==VbaValue::Kind::Null);
     for(const auto& [source,wanted]:std::vector<std::pair<std::string,int>>{
         {R"(Year("2023-02-29"))",13},{R"(Hour("24:00:00"))",13},{"Year(1)",3251},{"Year()",450},
-        {"CDate(Null)",94},{"CDate(2958466)",6},{"CDate(-657435)",6},{"CDate(-1.25)+1",3251},
+        {"DateSerial(24,1,1)",3251},{"DateSerial(100,1,0)",5},{"TimeSerial(32768,0,0)",6},
+        {"DateSerial(2024,Null,1)",94},{"TimeSerial(1,2)",450},{"CDate(Null)",94},{"CDate(2958466)",6},{"CDate(-657435)",6},{"CDate(-1.25)+1",3251},
         {R"(DatePart("ww","2024-01-01",,vbFirstFourDays))",3251},{R"(DatePart("bad","2024-01-01"))",5},
         {R"(DateDiff("invalid","2024-01-01","2024-01-02"))",5},{R"(DateDiff("d",Null,"2024-01-02"))",94},
         {R"(DateDiff("s","0100-01-01","9999-12-31"))",6},{R"(Weekday("2024-01-01",8))",5},

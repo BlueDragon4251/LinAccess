@@ -66,6 +66,28 @@ std::string vbaDateText(double serial) {
     return text.str();
 }
 VbaValue vbaCalendarFunction(std::string_view name,const std::vector<VbaValue>& arguments) {
+    if(name=="dateserial" || name=="timeserial") {
+        if(arguments.size()!=3) throw VbaRuntimeError(450,"Date construction requires three arguments");
+        int values[3];
+        for(int index=0;index<3;++index) values[index]=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(arguments[index]),"integer").number);
+        if(name=="timeserial") {
+            const auto total=static_cast<std::int64_t>(values[0])*3600+values[1]*60+values[2];
+            auto days=total/86400,seconds=total%86400;
+            if(seconds<0) { --days; seconds+=86400; }
+            const auto fraction=seconds/86400.0;
+            return VbaValue::dateSerial(days<0 ? days-fraction : days+fraction);
+        }
+        if(values[0]<0 || values[0]>9999) throw VbaRuntimeError(5,"DateSerial year out of range");
+        if(values[0]<100) throw VbaRuntimeError(3251,"Two-digit DateSerial years require a regional year window");
+        const int offset=values[1]-1;
+        auto years=offset/12; if(offset%12<0) --years;
+        const auto month=static_cast<unsigned>(offset-years*12+1);
+        const auto date=std::chrono::sys_days(std::chrono::year(values[0]+years)/std::chrono::month(month)/1)+std::chrono::days(values[2]-1);
+        const auto year=static_cast<int>(std::chrono::year_month_day(date).year());
+        if(year<100 || year>9999) throw VbaRuntimeError(5,"DateSerial result out of range");
+        const auto epoch=std::chrono::sys_days(std::chrono::year(1899)/12/30);
+        return VbaValue::dateSerial(static_cast<double>((date-epoch).count()));
+    }
     if(name=="datepart") {
         if(arguments.size()<2 || arguments.size()>4) throw VbaRuntimeError(450,"DatePart requires two to four arguments");
         std::vector<VbaValue> args; for(const auto& value:arguments) args.push_back(scalarVbaValue(value));

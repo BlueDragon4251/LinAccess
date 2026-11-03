@@ -212,6 +212,10 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
         if(result.kind==VbaValue::Kind::Null) native.nullResult(context);
         else if(result.kind==VbaValue::Kind::Empty) native.integerResult(context,0);
         else if(result.kind==VbaValue::Kind::Boolean) native.integerResult(context,result.boolean ? -1 : 0);
+        else if(result.kind==VbaValue::Kind::Date) {
+            const auto text=sqlFieldValue(result,"DATETIME").toString().toUtf8();
+            native.textResult(context,text.data(),static_cast<int>(text.size()),reinterpret_cast<void (*)(void*)>(-1));
+        }
         else if(result.kind==VbaValue::Kind::Currency) native.numberResult(context,currencyToRealStorage(result));
         else if(result.kind==VbaValue::Kind::Text) native.textResult(context,result.text.data(),static_cast<int>(result.text.size()),reinterpret_cast<void (*)(void*)>(-1));
         else if(result.kind==VbaValue::Kind::Number) {
@@ -234,6 +238,9 @@ void mathTan(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
 void mathAtn(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Atn",1,1); }
 void stringLCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"LCase",1,1); }
 void stringUCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"UCase",1,1); }
+void calendarDateSerial(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"DateSerial",3,3); }
+void calendarTimeSerial(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"TimeSerial",3,3); }
+void calendarCDate(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"CDate",1,1); }
 void calendarDatePart(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"DatePart",2,4); }
 void scalarChoose(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Choose",2,1000); }
 void scalarSwitch(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Switch",2,1000); }
@@ -560,6 +567,9 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_atn",-1,&mathAtn,nullptr,nullptr);
     ensure("linaccess_jet_lcase",-1,&stringLCase,nullptr,nullptr);
     ensure("linaccess_jet_ucase",-1,&stringUCase,nullptr,nullptr);
+    ensure("linaccess_jet_dateserial",-1,&calendarDateSerial,nullptr,nullptr);
+    ensure("linaccess_jet_timeserial",-1,&calendarTimeSerial,nullptr,nullptr);
+    ensure("linaccess_jet_cdate",-1,&calendarCDate,nullptr,nullptr);
     ensure("linaccess_jet_datepart",-1,&calendarDatePart,nullptr,nullptr);
     ensure("linaccess_jet_choose",-1,&scalarChoose,nullptr,nullptr);
     ensure("linaccess_jet_switch",-1,&scalarSwitch,nullptr,nullptr);

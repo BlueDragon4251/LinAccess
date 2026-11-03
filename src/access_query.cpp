@@ -231,7 +231,7 @@ void adaptObjectReferences(QVector<Token>& tokens,qsizetype start) {
         i+=replacement.size()-1;
     }
 }
-QVector<QString> currencyProjectionTypes(QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters,const QMap<QString,QString>& fields) {
+QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters,const QMap<QString,QString>& fields) {
     const auto word=[&](qsizetype i,const char* text) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(text,Qt::CaseInsensitive)==0; };
     if(!word(start,"SELECT")) return {};
     int depth=0;
@@ -286,6 +286,8 @@ QVector<QString> currencyProjectionTypes(QVector<Token>& tokens,qsizetype start,
         if(operation>=0) {
             auto left=parse(expression.mid(0,operation),recursion+1),right=parse(expression.mid(operation+1),recursion+1);
             const auto op=expression[operation].value;
+            if((left.type=="DATETIME" || right.type=="DATETIME") && QSet<QString>{"+","-","*","/","\\","%","mod","^"}.contains(op.toCaseFolded()))
+                throw VbaRuntimeError(3251,"Date SQL arithmetic requires a native typed operator");
             if(left.type!="CURRENCY_REAL" || right.type!="CURRENCY_REAL" || (op!="+" && op!="-" && op!="*")) return unknown;
             return {"CURRENCY_REAL",call(op=="+" ? "linaccess_jet_currency_add" : op=="-" ? "linaccess_jet_currency_subtract" : "linaccess_jet_currency_multiply",left.code,right.code)};
         }
@@ -299,6 +301,16 @@ QVector<QString> currencyProjectionTypes(QVector<Token>& tokens,qsizetype start,
         }
         if(expression.size()==3 && name(expression.front()) && symbol(expression[1],".") && name(expression.back()) && fields.value((expression.front().value+'.'+expression.back().value).toCaseFolded())=="CURRENCY_REAL") return {"CURRENCY_REAL",expression};
         if(expression.size()<4 || expression.front().kind!=Token::Word || !symbol(expression[1],"(") || !symbol(expression.back(),")")) return unknown;
+        const QSet<QString> dates{"dateserial","timeserial","cdate","linaccess_jet_dateserial","linaccess_jet_timeserial","linaccess_jet_cdate"};
+        if(dates.contains(expression.front().value.toCaseFolded())) {
+            int depth=0;
+            for(qsizetype index=1;index<expression.size();++index) {
+                if(symbol(expression[index],"(")) ++depth;
+                else if(symbol(expression[index],")")) { if(--depth==0 && index!=expression.size()-1) return unknown; }
+            }
+            if(depth==0) return {"DATETIME",expression};
+            return unknown;
+        }
         const bool currency=expression.front().value.compare("CCur",Qt::CaseInsensitive)==0,sum=expression.front().value.compare("Sum",Qt::CaseInsensitive)==0;
         if(!currency && !sum) return unknown;
         nesting=0;
@@ -509,7 +521,7 @@ QString resolveQueryOrigins(QSqlDatabase db,const QString& sql) {
         }
         if (expanded.size()>4096 || output.size()+expanded.size()>16384) return sql;
         bool pure=true;
-        static const QSet<QString> functions{"linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","abs","round","linaccess_jet_round","ccur","linaccess_jet_ccur","linaccess_jet_currency_add","linaccess_jet_currency_subtract","linaccess_jet_currency_multiply","sqr","linaccess_jet_sqr","exp","linaccess_jet_exp","log","linaccess_jet_log","sin","linaccess_jet_sin","cos","linaccess_jet_cos","tan","linaccess_jet_tan","atn","linaccess_jet_atn","lcase","linaccess_jet_lcase","ucase","linaccess_jet_ucase","datepart","linaccess_jet_datepart","choose","linaccess_jet_choose","switch","linaccess_jet_switch","val","linaccess_jet_val","hex","linaccess_jet_hex","oct","linaccess_jet_oct","space","linaccess_jet_space","string","linaccess_jet_string","asc","linaccess_jet_asc","ascw","linaccess_jet_ascw","chr","linaccess_jet_chr","chrw","linaccess_jet_chrw","instrrev","linaccess_jet_instrrev","strreverse","linaccess_jet_strreverse","datediff","linaccess_jet_datediff","year","linaccess_jet_year","month","linaccess_jet_month","day","linaccess_jet_day","hour","linaccess_jet_hour","minute","linaccess_jet_minute","second","linaccess_jet_second","weekday","linaccess_jet_weekday","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","coalesce"};
+        static const QSet<QString> functions{"linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","abs","round","linaccess_jet_round","ccur","linaccess_jet_ccur","linaccess_jet_currency_add","linaccess_jet_currency_subtract","linaccess_jet_currency_multiply","sqr","linaccess_jet_sqr","exp","linaccess_jet_exp","log","linaccess_jet_log","sin","linaccess_jet_sin","cos","linaccess_jet_cos","tan","linaccess_jet_tan","atn","linaccess_jet_atn","lcase","linaccess_jet_lcase","ucase","linaccess_jet_ucase","dateserial","linaccess_jet_dateserial","timeserial","linaccess_jet_timeserial","cdate","linaccess_jet_cdate","datepart","linaccess_jet_datepart","choose","linaccess_jet_choose","switch","linaccess_jet_switch","val","linaccess_jet_val","hex","linaccess_jet_hex","oct","linaccess_jet_oct","space","linaccess_jet_space","string","linaccess_jet_string","asc","linaccess_jet_asc","ascw","linaccess_jet_ascw","chr","linaccess_jet_chr","chrw","linaccess_jet_chrw","instrrev","linaccess_jet_instrrev","strreverse","linaccess_jet_strreverse","datediff","linaccess_jet_datediff","year","linaccess_jet_year","month","linaccess_jet_month","day","linaccess_jet_day","hour","linaccess_jet_hour","minute","linaccess_jet_minute","second","linaccess_jet_second","weekday","linaccess_jet_weekday","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","coalesce"};
         for (qsizetype j=0;j+1<expanded.size();++j)
             if (name(expanded[j]) && symbol(expanded[j+1],"(") && !functions.contains(expanded[j].value.toCaseFolded())) pure=false;
         if (explicitAlias && pure) aliases.insert(projection.last().value.toCaseFolded(),expanded);
@@ -527,7 +539,7 @@ RightJoinCandidate simpleRightJoin(const QVector<Token>& tokens,qsizetype start)
     const auto name=[](const Token& token) { return token.kind==Token::Word || token.kind==Token::Identifier; };
     const auto word=[&](qsizetype i,const char* value) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0; };
     if (!word(start,"SELECT")) return {};
-    const QSet<QString> scalar{"iif","format","format$","abs","round","linaccess_jet_round","ccur","linaccess_jet_ccur","linaccess_jet_currency_add","linaccess_jet_currency_subtract","linaccess_jet_currency_multiply","coalesce","ifnull","nullif","sqr","linaccess_jet_sqr","exp","linaccess_jet_exp","log","linaccess_jet_log","sin","linaccess_jet_sin","cos","linaccess_jet_cos","tan","linaccess_jet_tan","atn","linaccess_jet_atn","lcase","linaccess_jet_lcase","ucase","linaccess_jet_ucase","datepart","linaccess_jet_datepart","choose","linaccess_jet_choose","switch","linaccess_jet_switch","val","linaccess_jet_val","hex","linaccess_jet_hex","oct","linaccess_jet_oct","space","linaccess_jet_space","string","linaccess_jet_string","asc","linaccess_jet_asc","ascw","linaccess_jet_ascw","chr","linaccess_jet_chr","chrw","linaccess_jet_chrw","instrrev","linaccess_jet_instrrev","strreverse","linaccess_jet_strreverse","datediff","linaccess_jet_datediff","year","linaccess_jet_year","month","linaccess_jet_month","day","linaccess_jet_day","hour","linaccess_jet_hour","minute","linaccess_jet_minute","second","linaccess_jet_second","weekday","linaccess_jet_weekday","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","trim","ltrim","rtrim","replace","linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat"};
+    const QSet<QString> scalar{"iif","format","format$","abs","round","linaccess_jet_round","ccur","linaccess_jet_ccur","linaccess_jet_currency_add","linaccess_jet_currency_subtract","linaccess_jet_currency_multiply","coalesce","ifnull","nullif","sqr","linaccess_jet_sqr","exp","linaccess_jet_exp","log","linaccess_jet_log","sin","linaccess_jet_sin","cos","linaccess_jet_cos","tan","linaccess_jet_tan","atn","linaccess_jet_atn","lcase","linaccess_jet_lcase","ucase","linaccess_jet_ucase","dateserial","linaccess_jet_dateserial","timeserial","linaccess_jet_timeserial","cdate","linaccess_jet_cdate","datepart","linaccess_jet_datepart","choose","linaccess_jet_choose","switch","linaccess_jet_switch","val","linaccess_jet_val","hex","linaccess_jet_hex","oct","linaccess_jet_oct","space","linaccess_jet_space","string","linaccess_jet_string","asc","linaccess_jet_asc","ascw","linaccess_jet_ascw","chr","linaccess_jet_chr","chrw","linaccess_jet_chrw","instrrev","linaccess_jet_instrrev","strreverse","linaccess_jet_strreverse","datediff","linaccess_jet_datediff","year","linaccess_jet_year","month","linaccess_jet_month","day","linaccess_jet_day","hour","linaccess_jet_hour","minute","linaccess_jet_minute","second","linaccess_jet_second","weekday","linaccess_jet_weekday","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","trim","ltrim","rtrim","replace","linaccess_jet_iif","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat"};
     const QSet<QString> syntax{"where","on","and","or","not","in","is","by"};
     qsizetype from=-1,right=-1,join=-1,on=-1,end=-1; int selects=0,joins=0,depth=0;
     for (qsizetype i=start;i<tokens.size();++i) {
@@ -580,7 +592,7 @@ bool stableTopSource(QSqlDatabase db,const QString& source,QSet<QString> visitin
     if (type=="table") return !sql.trimmed().startsWith("CREATE VIRTUAL",Qt::CaseInsensitive);
     if (type!="view") return false;
     const auto tokens=tokenize(sql);
-    const QSet<QString> pure{"abs","coalesce","ifnull","nullif","iif","sum","linaccess_jet_currency_sum","total","count","min","max","avg","round","linaccess_jet_round","ccur","linaccess_jet_ccur","linaccess_jet_currency_add","linaccess_jet_currency_subtract","linaccess_jet_currency_multiply","sqr","linaccess_jet_sqr","exp","linaccess_jet_exp","log","linaccess_jet_log","sin","linaccess_jet_sin","cos","linaccess_jet_cos","tan","linaccess_jet_tan","atn","linaccess_jet_atn","lcase","linaccess_jet_lcase","ucase","linaccess_jet_ucase","datepart","linaccess_jet_datepart","choose","linaccess_jet_choose","switch","linaccess_jet_switch","val","linaccess_jet_val","hex","linaccess_jet_hex","oct","linaccess_jet_oct","space","linaccess_jet_space","string","linaccess_jet_string","asc","linaccess_jet_asc","ascw","linaccess_jet_ascw","chr","linaccess_jet_chr","chrw","linaccess_jet_chrw","instrrev","linaccess_jet_instrrev","strreverse","linaccess_jet_strreverse","datediff","linaccess_jet_datediff","year","linaccess_jet_year","month","linaccess_jet_month","day","linaccess_jet_day","hour","linaccess_jet_hour","minute","linaccess_jet_minute","second","linaccess_jet_second","weekday","linaccess_jet_weekday","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","substring","trim","ltrim","rtrim","replace","cast","typeof","rank",
+    const QSet<QString> pure{"abs","coalesce","ifnull","nullif","iif","sum","linaccess_jet_currency_sum","total","count","min","max","avg","round","linaccess_jet_round","ccur","linaccess_jet_ccur","linaccess_jet_currency_add","linaccess_jet_currency_subtract","linaccess_jet_currency_multiply","sqr","linaccess_jet_sqr","exp","linaccess_jet_exp","log","linaccess_jet_log","sin","linaccess_jet_sin","cos","linaccess_jet_cos","tan","linaccess_jet_tan","atn","linaccess_jet_atn","lcase","linaccess_jet_lcase","ucase","linaccess_jet_ucase","dateserial","linaccess_jet_dateserial","timeserial","linaccess_jet_timeserial","cdate","linaccess_jet_cdate","datepart","linaccess_jet_datepart","choose","linaccess_jet_choose","switch","linaccess_jet_switch","val","linaccess_jet_val","hex","linaccess_jet_hex","oct","linaccess_jet_oct","space","linaccess_jet_space","string","linaccess_jet_string","asc","linaccess_jet_asc","ascw","linaccess_jet_ascw","chr","linaccess_jet_chr","chrw","linaccess_jet_chrw","instrrev","linaccess_jet_instrrev","strreverse","linaccess_jet_strreverse","datediff","linaccess_jet_datediff","year","linaccess_jet_year","month","linaccess_jet_month","day","linaccess_jet_day","hour","linaccess_jet_hour","minute","linaccess_jet_minute","second","linaccess_jet_second","weekday","linaccess_jet_weekday","len","linaccess_jet_len","rgb","linaccess_jet_rgb","qbcolor","linaccess_jet_qbcolor","length","lower","upper","substr","substring","trim","ltrim","rtrim","replace","cast","typeof","rank",
         "linaccess_jet_iif","linaccess_jet_first","linaccess_jet_last","linaccess_jet_format","linaccess_jet_format_string","linaccess_jet_concat","linaccess_jet_like_pattern"};
     const QSet<QString> syntax{"from","join","as","in","not","exists","over","by","and","or","on","where","having","is","when","then","else","case"};
     QSet<QString> dependencies; int selects=0; bool inFrom=false;
@@ -798,7 +810,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         }
     }
     require(pos < tokens.size(), "Jet SQL: query body required");
-    plan.resultTypes=currencyProjectionTypes(tokens,pos,plan.parameters,fields);
+    plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields);
     if (tokens[pos].kind==Token::Word && tokens[pos].value.compare("UPDATE",Qt::CaseInsensitive)==0) {
         for (auto i=pos+1;i<tokens.size();++i) {
             if (tokens[i].kind==Token::Word && tokens[i].value.compare("SET",Qt::CaseInsensitive)==0) break;
@@ -945,7 +957,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
                  && (token.value.compare("Format$",Qt::CaseInsensitive)==0 || token.value.compare("Format",Qt::CaseInsensitive)==0))
             output << (token.value.endsWith('$') ? "linaccess_jet_format_string" : "linaccess_jet_format");
         else if(token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="("
-                && QSet<QString>{"sqr","exp","log","sin","cos","tan","atn","lcase","ucase","datepart","choose","switch","val","hex","oct","space","string","asc","ascw","chr","chrw","instrrev","strreverse","datediff","year","month","day","hour","minute","second","weekday"}.contains(token.value.toCaseFolded()))
+                && QSet<QString>{"sqr","exp","log","sin","cos","tan","atn","lcase","ucase","dateserial","timeserial","cdate","datepart","choose","switch","val","hex","oct","space","string","asc","ascw","chr","chrw","instrrev","strreverse","datediff","year","month","day","hour","minute","second","weekday"}.contains(token.value.toCaseFolded()))
             output << "linaccess_jet_"+token.value.toCaseFolded();
         else if (token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="(" && token.value.compare("Len",Qt::CaseInsensitive)==0)
             output << "linaccess_jet_len";

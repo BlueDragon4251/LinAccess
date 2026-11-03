@@ -1,5 +1,6 @@
 #include <cmath>
 #include "access_query.hpp"
+#include "vba_qt_value.hpp"
 #include "vba_runtime.hpp"
 #include "sqlite_execution.hpp"
 #include "jet_sql_functions.hpp"
@@ -40,6 +41,12 @@ int main(int argc, char** argv) {
         assert(reversed.data(reversed.index(0,3)).toDouble()==1 && reversed.data(reversed.index(0,4)).toDouble()==0);
         assert(!query.exec("SELECT linaccess_jet_log(0)"));
         assert(linaccess::jetSqlFunctionErrorNumber(query.lastError().text().toCaseFolded().toStdString())==5); query.finish();
+        const auto datePlan=linaccess::compileAccessQuery("SELECT DateSerial(2024,3,0) AS d,TimeSerial(6,-15,0) AS t,CDate(2.5) AS converted");
+        const auto dates=linaccess::executeAccessQueryPlan(db,datePlan,{});
+        assert(dates.rows.size()==1 && dates.types.value("d")=="DATETIME" && dates.types.value("t")=="DATETIME");
+        assert(linaccess::qtFieldValue(dates.rows[0][0],dates.types.value("d")).asText()=="2024-02-29");
+        assert(linaccess::qtFieldValue(dates.rows[0][1],dates.types.value("t")).asText()=="05:45:00");
+        assert(linaccess::qtFieldValue(dates.rows[0][2],dates.types.value("converted")).asNumber()==2.5);
         reversed.execute(db,"SELECT Choose(2,label,'chosen'),Switch(score=10,'ten',True,'other'),Switch(False,1) FROM samples WHERE id=1");
         assert(reversed.data(reversed.index(0,0)).toString()=="chosen" && reversed.data(reversed.index(0,1)).toString()=="ten");
         assert(reversed.data(reversed.index(0,2)).isNull());
