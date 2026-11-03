@@ -174,6 +174,7 @@ protected:
         }
         QPointer<AccessTableView> self=this;
         QMenu menu; menu.setObjectName("native-datasheet-context-menu");
+        connect(this,&QObject::destroyed,&menu,&QMenu::close);
         const auto add=[&](const char* name,const QString& label,bool enabled) {
             auto* action=menu.addAction(label); action->setObjectName(QString("datasheet-")+name); action->setEnabled(enabled); return action;
         };
@@ -203,7 +204,7 @@ protected:
         QPointer<AccessTableView> self=this;
         QPointer<QWidget> editor=widget;
         const auto target=widget ? widget->property("la_cell_index").value<QPersistentModelIndex>() : QPersistentModelIndex{};
-        if(hint!=QAbstractItemDelegate::RevertModelCache && editor && editor->isVisible() && target.isValid() && target.model()==model()) {
+        if(hint!=QAbstractItemDelegate::RevertModelCache && editor && state()==QAbstractItemView::EditingState && target.isValid() && target.model()==model()) {
             if(!commitNativeCellEditor(editor,target)) {
                 if(!self || !editor) return;
                 if(selectionModel() && target.isValid()) {
@@ -303,11 +304,12 @@ private:
         return model()!=nullptr;
     }
     QWidget* activeEditor() const {
+        if(state()!=QAbstractItemView::EditingState) return nullptr;
         auto* editor=QApplication::focusWidget();
         while(editor && editor->parentWidget()!=viewport()) editor=editor->parentWidget();
-        if(editor && editor->isVisible()) return editor;
+        if(editor && !editor->isHidden()) return editor;
         for(auto* candidate:viewport()->findChildren<QWidget*>(QString{},Qt::FindDirectChildrenOnly))
-            if(candidate->isVisible() && candidate->property("la_cell_index").value<QPersistentModelIndex>().isValid()) return candidate;
+            if(!candidate->isHidden() && candidate->property("la_cell_index").value<QPersistentModelIndex>().isValid()) return candidate;
         return nullptr;
     }
     QMetaObject::Connection restore_;

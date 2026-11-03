@@ -16,6 +16,7 @@
 #include <QTableView>
 #include <QTabWidget>
 #include <QTabBar>
+#include <QContextMenuEvent>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QPointer>
@@ -125,6 +126,12 @@ void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     QTest::mouseClick(documentTabs->tabBar(),Qt::LeftButton,Qt::NoModifier,documentTabs->tabBar()->tabRect(0).center()); QApplication::processEvents();
     assert(documentTabs->currentWidget()==secondPage && invalidDocumentEdit->hasFocus());
     firstEntry->trigger(); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && invalidDocumentEdit->hasFocus());
+    const QPointer<QLineEdit> hiddenEditor=invalidDocumentEdit;
+    documentTabs->setCurrentWidget(firstPage); QApplication::processEvents();
+    assert(hiddenEditor && auditView->hasPendingEditor() && hiddenEditor->text()=="invalid number");
+    const auto hiddenClose=window.closeTableDocument(0,"sql_editor_audit",2);
+    assert(hiddenClose.value("error").toInt()==13 && documentTabs->count()==2 && auditView->hasPendingEditor());
+    documentTabs->setCurrentWidget(secondPage); QApplication::setActiveWindow(&window); hiddenEditor->setFocus(); QApplication::processEvents();
     QTest::keyClick(invalidDocumentEdit,Qt::Key_Escape); QApplication::processEvents();
     const auto mixedId=artifact(db,"form","tab_cycle_form","Begin Form\nBegin Section\nBegin TextBox\nName =\"focus\"\nEnd\nEnd\nEnd\n");
     artifact(db,"vba","Form_tab_cycle_form",R"VBA(Sub SelectOpenTable()
@@ -147,6 +154,14 @@ Sub SaveActiveTableViaApplication()
 Application.RunCommand Command:=acCmdSaveRecord
 Me.Tag="application-table-saved"
 End Sub
+Sub CloseEditableTable()
+DoCmd.Close acTable,"command_edit",acSaveNo
+Me.Tag="table-closed"
+End Sub
+Sub CloseActiveTable()
+DoCmd.Close
+Me.Tag="active-table-closed"
+End Sub
 Sub RejectAppendTable()
 DoCmd.OpenTable "command_edit",,acAdd
 Me.Tag="must-not-run"
@@ -158,7 +173,7 @@ End Sub
 )VBA");
     assert(unchanged.exec("CREATE TABLE command_readonly(id INTEGER PRIMARY KEY AUTOINCREMENT,value REAL,flag BOOLEAN)"));
     assert(unchanged.exec("INSERT INTO command_readonly VALUES(1,1.25,-1),(2,NULL,NULL)"));
-    assert(unchanged.exec("CREATE TABLE command_edit(id INTEGER PRIMARY KEY AUTOINCREMENT,value TEXT)"));
+    assert(unchanged.exec("CREATE TABLE command_edit(id INTEGER PRIMARY KEY AUTOINCREMENT,value TEXT CHECK(value!='blocked'))"));
     assert(unchanged.exec("INSERT INTO command_edit VALUES(1,'initial')"));
     action(window,"Aktualisieren")->trigger(); openArtifact(window,mixedId); QPointer<AccessFormPreview> mixed=document("tab_cycle_form"); assert(mixed);
     auto* mixedEditor=mixed->findChild<QLineEdit*>("access-control-focus"); assert(mixedEditor); QApplication::setActiveWindow(mixed); mixedEditor->setFocus(); QApplication::processEvents();
@@ -206,13 +221,28 @@ End Sub
     assert(editableModel->setData(editableModel->index(0,1),"application-changed"));
     assert(mixed->executeProcedure("SaveActiveTableViaApplication",selectArguments).status==linaccess::VbaExecutionStatus::Completed && !editableModel->isDirty());
     assert(unchanged.exec("SELECT value FROM command_edit") && unchanged.next() && unchanged.value(0).toString()=="application-changed"); unchanged.finish();
-    QTest::keyClick(editableView,Qt::Key_W,Qt::ControlModifier); QApplication::processEvents();
+    assert(editableModel->setData(editableModel->index(0,1),"blocked"));
+    const auto beforeCloseFailure=documentTabs->count();
+    assert(mixed->executeProcedure("CloseEditableTable",selectArguments).errorNumber==3146 && documentTabs->count()==beforeCloseFailure && editableModel->isDirty());
+    assert(unchanged.exec("SELECT value FROM command_edit") && unchanged.next() && unchanged.value(0).toString()=="application-changed"); unchanged.finish();
+    assert(editableModel->setData(editableModel->index(0,1),"closed-by-native"));
+    assert(mixed->executeProcedure("CloseEditableTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed); QApplication::processEvents();
+    assert(documentTabs->count()==beforeCloseFailure-1);
+    assert(unchanged.exec("SELECT value FROM command_edit") && unchanged.next() && unchanged.value(0).toString()=="closed-by-native"); unchanged.finish();
     const auto beforeUnsupported=documentTabs->count();
     const auto rejectedAppend=mixed->executeProcedure("RejectAppendTable",selectArguments);
     assert(rejectedAppend.errorNumber==3251 && documentTabs->count()==beforeUnsupported);
     assert(mixed->executeProcedure("RejectEmptyMode",selectArguments).errorNumber==3251 && documentTabs->count()==beforeUnsupported);
-    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="application-table-saved");
-    assert(window.activateOpenTable("command_readonly")==0); QApplication::processEvents(); QTest::keyClick(readonlyView,Qt::Key_W,Qt::ControlModifier); QApplication::processEvents();
+    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="table-closed");
+    assert(window.activateOpenTable("command_readonly")==0); QApplication::processEvents();
+    QTimer::singleShot(0,&window,[&] {
+        auto* popup=qobject_cast<QMenu*>(QApplication::activePopupWidget()); assert(popup && popup->objectName()=="native-datasheet-context-menu");
+        assert(mixed->executeProcedure("CloseActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed && mixed->isVisible());
+    });
+    const auto popupPoint=readonlyView->visualRect(readonlyView->currentIndex()).center();
+    QContextMenuEvent closeContext(QContextMenuEvent::Mouse,popupPoint,readonlyView->viewport()->mapToGlobal(popupPoint));
+    QApplication::sendEvent(readonlyView->viewport(),&closeContext); QApplication::processEvents();
+    assert(!readonlyPage && documentTabs->count()==2 && makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="active-table-closed");
     assert(mixed->close()); QApplication::processEvents(); window.focusDatabaseWindow(); QApplication::processEvents();
     QTest::keyClick(explorer,Qt::Key_F6,Qt::ControlModifier|Qt::ShiftModifier); QApplication::processEvents(); assert(documentTabs->currentWidget()==secondPage && auditView->hasFocus());
     QTest::keyClick(auditView,Qt::Key_W,Qt::ControlModifier); QApplication::processEvents(); assert(documentTabs->count()==1 && documentTabs->currentWidget()==firstPage);

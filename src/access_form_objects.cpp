@@ -1247,6 +1247,21 @@ public:
         const int type=args.empty() || args[0].kind==linaccess::VbaValue::Kind::Empty ? -1 : number(args[0]);
         const auto objectName=args.size()>1 && args[1].kind!=linaccess::VbaValue::Kind::Empty ? std::optional<QString>(text(args[1].asText())) : std::nullopt;
         const int save=args.size()>2 ? number(args[2]) : 0;
+        if(type==0 || (type==-1 && (preview.hasActivated_ || preview.property("la_explicit_table_context").toBool()))) {
+            QWidget* owner=nullptr;
+            for(auto* ancestor=preview.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+                if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
+            if(owner && owner->metaObject()->indexOfMethod("closeTableDocument(int,QString,int)")>=0) {
+                QVariantMap result; const auto target=objectName.value_or(QString{});
+                if(!QMetaObject::invokeMethod(owner,"closeTableDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,type),Q_ARG(QString,target),Q_ARG(int,save)))
+                    throw linaccess::VbaRuntimeError(3251,"Native table close dispatch is unavailable");
+                if(result.value("handled").toBool()) {
+                    const int error=result.value("error").toInt();
+                    if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
+                    return {};
+                }
+            }
+        }
         preview.closeOtherDocument(type,objectName,save); return {};
     }
 };
