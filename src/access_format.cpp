@@ -13,7 +13,7 @@ VbaValue formatAccessValue(const VbaValue& value,std::string_view mask,bool stri
         throw VbaRuntimeError(5,"Access date format mask unsupported");
     if (value.kind==VbaValue::Kind::Null) return {};
     QDate date;
-    if (value.kind==VbaValue::Kind::Number || value.kind==VbaValue::Kind::Empty) {
+    if (value.kind==VbaValue::Kind::Number || value.kind==VbaValue::Kind::Date || value.kind==VbaValue::Kind::Empty) {
         const auto number=value.kind==VbaValue::Kind::Empty ? 0 : value.number;
         const QDate epoch(1899,12,30);
         const auto days=std::trunc(number); // negative OA fractions remain on the integral day

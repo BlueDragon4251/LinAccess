@@ -1,5 +1,6 @@
 #include "vba_qt_value.hpp"
 #include "vba_currency.hpp"
+#include "vba_calendar.hpp"
 #include <QJsonArray>
 #include <QDateTime>
 #include <QJsonDocument>
@@ -83,7 +84,7 @@ VbaValue qtFieldValue(const QVariant& value,const QString& type) {
         if(!valid) throw VbaRuntimeError(13,"Currency field type mismatch");
         return currencyFromRealStorage(number);
     }
-    if (type.contains("DATE",Qt::CaseInsensitive)) return VbaValue::string(dateText(value).toUtf8().toStdString());
+    if (type.contains("DATE",Qt::CaseInsensitive)) return vbaDateValue(VbaValue::string(dateText(value).toUtf8().toStdString()));
     if (type.contains("BOOL",Qt::CaseInsensitive) || value.metaType().id() == QMetaType::Bool)
         return VbaValue::logical(boolean(value));
     if(const auto subtype=integerSubtype(type); !subtype.empty()) {
@@ -121,8 +122,8 @@ QVariant sqlFieldValue(const VbaValue& value,const QString& type) {
     if (value.kind == VbaValue::Kind::Null) return {};
     if(type=="CURRENCY_REAL") return currencyToRealStorage(value);
     if (type.contains("DATE",Qt::CaseInsensitive)) {
-        if (value.kind != VbaValue::Kind::Text) throw VbaRuntimeError(13,"Date serial Variant conversion not implemented");
-        return dateText(QString::fromUtf8(value.text));
+        if(value.kind!=VbaValue::Kind::Text && value.kind!=VbaValue::Kind::Date) throw VbaRuntimeError(13,"Date field requires Date or ISO text");
+        return dateText(QString::fromStdString(value.asText()));
     }
     if (type.contains("BOOL",Qt::CaseInsensitive)) {
         const auto converted = value.kind == VbaValue::Kind::Text ? QVariant(QString::fromStdString(value.text)) : QVariant(value.asNumber());
@@ -152,6 +153,7 @@ QVariant sqlFieldValue(const VbaValue& value,const QString& type) {
     switch (value.kind) {
     case VbaValue::Kind::Empty: return QString{};
     case VbaValue::Kind::Text: return QString::fromUtf8(value.text);
+    case VbaValue::Kind::Date: return QString::fromStdString(value.asText());
     case VbaValue::Kind::Currency: return QString::fromStdString(value.asText());
     case VbaValue::Kind::Number: return value.number;
     case VbaValue::Kind::Boolean: return value.boolean ? -1 : 0;

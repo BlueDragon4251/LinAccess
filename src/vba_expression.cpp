@@ -40,7 +40,7 @@ VbaValue clockValue(const std::string& word) {
     std::ostringstream formatted;
     formatted.imbue(std::locale::classic());
     formatted<<std::put_time(&local,word=="now" ? "%Y-%m-%d %H:%M:%S" : word=="date" ? "%Y-%m-%d" : "%H:%M:%S");
-    return VbaValue::string(formatted.str());
+    return vbaDateValue(VbaValue::string(formatted.str()));
 }
 
 // Runtime strings use UTF-8 at the API boundary; VBA substring positions use

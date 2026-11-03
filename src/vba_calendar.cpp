@@ -54,12 +54,12 @@ VbaValue vbaDateValue(const VbaValue& input) {
 std::string vbaDateText(double serial) {
     (void)VbaValue::dateSerial(serial); // Check before integral conversion.
     const auto days=static_cast<int>(std::trunc(serial));
-    auto seconds=static_cast<int>(std::floor(std::abs(serial-days)*86400.0+0.000001));
+    auto seconds=static_cast<int>(std::floor(std::abs(serial-days)*86400.0+0.00005));
     if(seconds==86400) seconds=86399; // Keep whole-second display within the represented day.
     const auto date=std::chrono::year_month_day(std::chrono::sys_days(std::chrono::year(1899)/12/30)+std::chrono::days(days));
     std::ostringstream text; text.imbue(std::locale::classic()); text<<std::setfill('0');
-    if(days!=0 || seconds==0) text<<std::setw(4)<<int(date.year())<<'-'<<std::setw(2)<<unsigned(date.month())<<'-'<<std::setw(2)<<unsigned(date.day());
-    if(seconds) {
+    if(days!=0) text<<std::setw(4)<<int(date.year())<<'-'<<std::setw(2)<<unsigned(date.month())<<'-'<<std::setw(2)<<unsigned(date.day());
+    if(seconds || days==0) {
         if(days!=0) text<<' ';
         text<<std::setw(2)<<seconds/3600<<':'<<std::setw(2)<<(seconds/60)%60<<':'<<std::setw(2)<<seconds%60;
     }

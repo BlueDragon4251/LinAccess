@@ -93,6 +93,7 @@ QVariant toSql(const VbaValue& value) {
     case VbaValue::Kind::Null: return {};
     case VbaValue::Kind::Empty: return QString{};
     case VbaValue::Kind::Number: return value.number;
+    case VbaValue::Kind::Date: return sqlFieldValue(value,"DATETIME");
     case VbaValue::Kind::Currency: return text(value.asText());
     case VbaValue::Kind::Boolean: return value.boolean ? -1 : 0;
     case VbaValue::Kind::Text: return text(value.text);
@@ -680,9 +681,10 @@ public:
     VbaValue parameter(const QString& name) const {
         checkParameter(name);
         const auto stored=values_.value(name.toCaseFolded());
-        for(const auto& parameter:plan_.parameters)
-            if(parameter.type=="currency" && parameter.name.compare(name,Qt::CaseInsensitive)==0)
-                return qtFieldValue(stored,"CURRENCY_REAL");
+        for(const auto& parameter:plan_.parameters) if(parameter.name.compare(name,Qt::CaseInsensitive)==0) {
+            if(parameter.type=="currency") return qtFieldValue(stored,"CURRENCY_REAL");
+            if(parameter.type=="date" || parameter.type=="datetime") return qtFieldValue(stored,"DATETIME");
+        }
         return fromSql(stored);
     }
     void setParameter(const QString& name, const VbaValue& value) {

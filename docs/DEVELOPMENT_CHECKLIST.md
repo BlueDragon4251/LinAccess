@@ -825,3 +825,12 @@ of complete Access parity. Existing broader open items remain open.
   in VBA/SQL; Date Variants, locale/Hijri and other week rules remain open.
 - [x] Eager native Switch/Choose selection, typed VBA result preservation, Null,
   rounded indexes and SQL scalar execution; full object/coercion edges remain open.
+
+- [x] Bounded native Date Variant, CDate, Date locals/module fields/parameters/
+  results, type inspection and Gregorian calendar integration; full locale/OLE open.
+- [x] Native Date clocks and supported bound-field/DAO Date parameter roundtrip,
+  with physical-column Date lineage in query results; full expression typing open.
+- [x] Calculated Date display and typed unbound Date storage; original calculation
+  regression retained, complete formatting/precision/edit-event oracle remains open.
+- [x] Guarded Window menu next/previous/database/Close All and numbered visible
+  form/report list with stale-entry protection; full MDI/datasheet list remains open.

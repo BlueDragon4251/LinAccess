@@ -193,4 +193,33 @@ End Sub
     assert(sql.exec("SELECT flag FROM grid WHERE id=1") && sql.next() && sql.value(0).toInt()==0); sql.finish();
     assert(db.transaction() && grid.submitAll() && db.commit()); assert(sql.exec("SELECT flag FROM grid WHERE id=1") && sql.next() && sql.value(0).toInt()==-1); sql.finish();
 
+    AccessFormPreview dateForm("date-values","Begin Form\nRecordSource =\"grid\"\nBegin Section\nBegin TextBox\nName =\"stamp\"\nControlSource =\"stamp\"\nEnd\nEnd\nEnd\n",R"VBA(Function ShiftStamp() As Date
+If VarType(Me!stamp)<>vbDate Then Err.Raise 5
+Me!stamp=Me!stamp+1
+Me.Dirty=False
+ShiftStamp=Me!stamp
+End Function
+Function ParameterStamp() As Date
+Dim definition As DAO.QueryDef
+Dim rows As DAO.Recordset
+Set definition=CurrentDb.CreateQueryDef("","PARAMETERS p DateTime; UPDATE grid SET stamp=[p] WHERE id=1")
+definition.Parameters("p").Value=Me!stamp+1
+If VarType(definition.Parameters("p").Value)<>vbDate Then Err.Raise 5
+definition.Execute
+Me.Requery
+Set rows=CurrentDb.OpenRecordset("SELECT stamp FROM grid WHERE id=1")
+If VarType(rows!stamp)<>vbDate Then Err.Raise 5
+ParameterStamp=rows!stamp
+rows.Close
+End Function
+)VBA",db);
+    auto dateObject=makePreviewFormObject(dateForm); assert(dateObject->member("CurrentRecord",{}).asNumber()==1);
+    std::vector<linaccess::VbaValue> dateArguments;
+    auto shifted=dateForm.executeProcedure("ShiftStamp",dateArguments);
+    assert(shifted.status==linaccess::VbaExecutionStatus::Completed && shifted.typedReturnValue->kind==linaccess::VbaValue::Kind::Date && shifted.typedReturnValue->asText()=="2024-03-02 01:02:03");
+    shifted=dateForm.executeProcedure("ParameterStamp",dateArguments);
+    assert(shifted.status==linaccess::VbaExecutionStatus::Completed && shifted.typedReturnValue->asText()=="2024-03-03 01:02:03");
+    assert(sql.exec("SELECT stamp FROM grid WHERE id=1") && sql.next() && sql.value(0).toString()=="2024-03-03 01:02:03"); sql.finish();
+    assert(dateForm.close());
+
 }

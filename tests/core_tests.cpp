@@ -466,6 +466,8 @@ void testCalendarFunctions() {
     using namespace linaccess; FakeForm host;
     const auto eval=[&](const std::string& source) { return evaluateVbaExpression(source,host,{}); };
     assert(eval("VarType(CDate(2.5))=vbDate").truthy() && eval("TypeName(CDate(2.5))").asText()=="Date");
+    assert(eval("VarType(Now)=vbDate And VarType(Date())=vbDate And VarType(Time)=vbDate").truthy());
+    assert(eval("CStr(CDate(0))").asText()=="00:00:00");
     assert(!eval("IsNumeric(CDate(2.5))").truthy() && eval("Len(CDate(2.5))").asNumber()==8);
     assert(eval("CDbl(CDate(2.5))").asNumber()==2.5);
     assert(eval(R"(CDbl(CDate("1899-12-29 06:00:00")))").asNumber()==-1.25);
@@ -1776,7 +1778,7 @@ End Sub
     assert(builtins.status == VbaExecutionStatus::Completed);
     assert(host.fields["Name"] == "Keksotcd");
     assert(host.fields["Nachname"] == "3");
-    assert(host.messages.back().size() == 19);
+    assert(host.messages.back().size()==19 || host.messages.back().size()==10);
     const auto bareClocks=executeVbaProcedure(R"VBA(
 Sub Clocks()
 Me!Name = Date
@@ -1787,7 +1789,7 @@ End Sub
     assert(bareClocks.status==VbaExecutionStatus::Completed);
     assert(host.fields["Name"]->size()==10 && host.fields["Name"]->at(4)=='-' && host.fields["Name"]->at(7)=='-');
     assert(host.fields["Nachname"]->size()==8 && host.fields["Nachname"]->at(2)==':' && host.fields["Nachname"]->at(5)==':');
-    assert(host.messages.back().size()==19 && host.messages.back()[10]==' ');
+    assert((host.messages.back().size()==19 && host.messages.back()[10]==' ') || host.messages.back().size()==10);
     const auto badClock=executeVbaProcedure(R"VBA(
 Sub ClockError()
 On Error Resume Next

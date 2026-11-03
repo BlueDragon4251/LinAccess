@@ -1457,7 +1457,34 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
     if (missingSqlDependency(db,source)) throw VbaRuntimeError(3078,"SQL dependency unavailable");
     QSqlQuery query(db);
     if (!query.prepare(resolveQueryOrigins(db,source))) failAccessQuery(query);
-    return {std::move(query),plan.hiddenRank && !topOne,plan.resultTypes};
+    auto types=plan.resultTypes;
+    // Infer Date only from SQLite's physical column lineage, never cell text.
+    const auto handle=query.result()->handle();
+    if(handle.isValid() && QByteArray(handle.typeName())=="sqlite3_stmt*") {
+        auto* statement=*static_cast<sqlite3_stmt* const*>(handle.constData());
+        static QLibrary metadata("sqlite3",0);
+        metadata.setLoadHints(QLibrary::PreventUnloadHint);
+        const auto tableName=reinterpret_cast<const char* (*)(sqlite3_stmt*,int)>(metadata.resolve("sqlite3_column_table_name"));
+        const auto columnName=reinterpret_cast<const char* (*)(sqlite3_stmt*,int)>(metadata.resolve("sqlite3_column_origin_name"));
+        const auto databaseName=reinterpret_cast<const char* (*)(sqlite3_stmt*,int)>(metadata.resolve("sqlite3_column_database_name"));
+        bool compound=false;
+        for(const auto& token:tokenize(source,true)) if(token.kind==Token::Word && QSet<QString>{"union","intersect","except"}.contains(token.value.toCaseFolded())) compound=true;
+        if(statement && tableName && columnName && databaseName && !compound) {
+            const auto count=sqlite3_column_count(statement)-(plan.hiddenRank && !topOne ? 1 : 0);
+            if(types.size()!=count) types=QVector<QString>(count);
+            QMap<QString,QMap<QString,QString>> tables;
+            for(int index=0;index<count;++index) {
+                if(!types[index].isEmpty()) continue;
+                const auto* database=databaseName(statement,index); const auto* table=tableName(statement,index); const auto* column=columnName(statement,index);
+                if(!database || QByteArray(database)!="main" || !table || !column) continue;
+                const auto name=QString::fromUtf8(table);
+                if(!tables.contains(name)) tables.insert(name,sqliteColumnTypes(db,name));
+                const auto type=tables.value(name).value(QString::fromUtf8(column).toCaseFolded()).toUpper();
+                if(type=="DATE" || type=="DATETIME") types[index]=type;
+            }
+        }
+    }
+    return {std::move(query),plan.hiddenRank && !topOne,types};
 }
 }
 QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan) {

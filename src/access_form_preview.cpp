@@ -2120,6 +2120,7 @@ void AccessFormPreview::setField(std::string_view name, std::optional<std::strin
         QScopedValueRollback<bool> loading(loading_,true);
         setText(widget,value ? QString::fromUtf8(value->data(),value->size()) : QString{},!value);
         widget->setProperty("la_null",!value.has_value());
+        widget->setProperty("la_vba_kind",static_cast<int>(value ? linaccess::VbaValue::Kind::Text : linaccess::VbaValue::Kind::Null));
     }
     const auto assignedName=QString::fromUtf8(name.data(),name.size());
     bufferedTextControls_.remove(assignedName); pendingControls_.remove(assignedName); editOriginals_.remove(assignedName);
@@ -2170,6 +2171,7 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
     if (type.isEmpty()) {
         const auto kind = static_cast<linaccess::VbaValue::Kind>(widget->property("la_vba_kind").toInt());
         if (kind == linaccess::VbaValue::Kind::Empty) return linaccess::VbaValue::empty();
+        if (kind == linaccess::VbaValue::Kind::Date) return linaccess::VbaValue::dateSerial(widget->property("la_vba_date_serial").toDouble());
         if (kind == linaccess::VbaValue::Kind::Currency) return linaccess::convertCurrency(linaccess::VbaValue::string(textOf(widget).toStdString()));
         if (kind == linaccess::VbaValue::Kind::Number) type = "REAL";
         if (kind == linaccess::VbaValue::Kind::Boolean || qobject_cast<QCheckBox*>(widget)) type = "BOOLEAN";
@@ -2293,6 +2295,7 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
         QScopedValueRollback<bool> loading(loading_,true);
         setText(widget,qobject_cast<QLineEdit*>(widget) ? linaccess::qtFieldText(converted,type) : converted.toString(),converted.isNull()); widget->setProperty("la_null",converted.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
+        if(value.kind==linaccess::VbaValue::Kind::Date) widget->setProperty("la_vba_date_serial",value.number);
     }
     if(initializingDefault) { refreshTextAlignments(); return; }
     const auto assignedName=QString::fromUtf8(name.data(),name.size());

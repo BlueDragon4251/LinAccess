@@ -3135,3 +3135,27 @@ subsecond/OLE edge rules remain open. Rebuilt desktop suite passes 48/48 in one 
 Window-menu/list paths; GUI-free build/test passes 1/1 (1.39 s). Debian package
 contents/permissions/Build-ID/backend checks and four fixture SHA-256 checks pass.
 No new test target. These checks verify the bounded foundation, not full Date parity.
+
+
+## Date clocks, Qt/DAO integration and physical query lineage (2026-11-03)
+
+Now/Date/Time now return Date Variants. Declared Date fields read/write typed
+values while SQLite retains normalized ISO civil timestamps. DAO Date parameters
+retain their native type when read; direct projected Date columns inherit verified
+main-database physical lineage from SQLite metadata, not guesses from cell text.
+Compound queries, attached sources and nonphysical Date expression inference stay
+outside this inference. Format's existing bounded masks accept Date serials;
+native SQL object values bind normalized timestamps. Calculated controls display
+Date values and retain their typed cache; unbound assignments preserve the serial.
+The ISO General-Date presentation treats epoch/midnight as time/date as applicable;
+regional CDate/CStr, actual Access formatting and subsecond/OLE edges remain open.
+
+Core/DAO initially passed; new GUI regression independently verifies bound-field
+arithmetic/save, declared Date parameter update and DAO query Date readback against
+actual SQL. DAO/query-model/GUI pass 3/3 (0.67 s). Desktop full run passed 47/48
+(65.35 s), exposing a missing generic calculated-Date display adapter; after its
+fix affected GUI plus both original targets pass 3/3 (52.73 s). All 48 targets
+are covered by that run and follow-up, not a final single 48/48 run. GUI-free
+build/test passes 1/1 (1.29 s). Debian package contents/permissions/Build-ID/backend checks pass, as do all four
+original fixture SHA-256 checks. Catalog now 251/320 bounded items, not measured
+overall Access parity.
