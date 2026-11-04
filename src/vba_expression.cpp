@@ -1,3 +1,4 @@
+#include "native_object_types.hpp"
 #include "vba_array.hpp"
 #include "vba_calendar.hpp"
 #include "vba_expression.hpp"
@@ -907,29 +908,13 @@ private:
                 token=consume(); if(token.type!=Token::Type::Word) throw error("TypeOf class qualifier is incomplete",3251);
                 type+="."+lower(token.value);
             }
-            static const std::unordered_map<std::string,std::string> aliases{
-                {"collection","vba.collection"},{"errobject","vba.errobject"},
-                {"form","access.form"},{"report","access.report"},{"control","access.control"},
-                {"application","access.application"},{"forms","access.forms"},{"reports","access.reports"},{"controls","access.controls"},
-                {"textbox","access.textbox"},{"combobox","access.combobox"},{"listbox","access.listbox"},
-                {"checkbox","access.checkbox"},{"optionbutton","access.optionbutton"},{"togglebutton","access.togglebutton"},
-                {"commandbutton","access.commandbutton"},{"label","access.label"},{"rectangle","access.rectangle"},
-                {"line","access.line"},{"subform","access.subform"},{"optiongroup","access.optiongroup"},
-                {"tabcontrol","access.tabcontrol"},{"page","access.page"}};
-            if(const auto found=aliases.find(type);found!=aliases.end()) type=found->second;
-            static const std::unordered_set<std::string> nativeTypes{
-                "object","vba.collection","vba.errobject","scripting.dictionary",
-                "dao.database","dao.databases","dao.workspace","dao.workspaces","dao.dbengine","dao.recordset",
-                "dao.field","dao.fields","dao.querydef","dao.parameter","dao.parameters","dao.tabledef","dao.tabledefs",
-                "access.form","access.report","access.control","access.application","access.forms","access.reports","access.controls",
-                "access.textbox","access.combobox","access.listbox","access.checkbox","access.optionbutton","access.togglebutton",
-                "access.commandbutton","access.label","access.rectangle","access.line","access.subform","access.optiongroup","access.tabcontrol","access.page"};
-            if(!nativeTypes.contains(type)) throw error("TypeOf class binding is not implemented",3251);
+            const auto nativeType=nativeObjectType(type);
+            if(nativeType.empty()) throw error("TypeOf class binding is not implemented",3251);
             if(referenceCapture_) referenceCapture_->element.reset();
             if(!host_) return {};
             if(object.kind!=VbaValue::Kind::Object) return VbaValue::logical(false);
             if(!object.object) throw error("TypeOf object variable is not set",91);
-            return VbaValue::logical(type=="object" || object.object->isNativeType(type));
+            return VbaValue::logical(nativeType=="object" || object.object->isNativeType(nativeType));
         }
         if (take("(")) {
             const auto value = expression(1,objectContext);

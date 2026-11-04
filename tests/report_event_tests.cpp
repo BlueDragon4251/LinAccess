@@ -57,7 +57,11 @@ End
 End
 )REPORT";
     const QByteArray code = R"VBA(
+Private retainedReport As Report
 Sub Report_Open(Cancel As Integer)
+Dim typedReport As Access.Report
+Set typedReport=Me
+Set retainedReport=typedReport
 If Not TypeOf Me Is Access.Report Then Err.Raise 5
 If TypeOf Me Is Access.Form Then Err.Raise 5
 If Not TypeOf Reports Is Access.Reports Then Err.Raise 5
