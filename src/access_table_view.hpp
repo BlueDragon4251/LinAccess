@@ -9,6 +9,8 @@
 #include "native_table_find.hpp"
 #include <QLineEdit>
 #include <QSqlError>
+#include <QSqlIndex>
+#include <QSqlRecord>
 #include <QScopeGuard>
 #include <QClipboard>
 #include <QMimeData>
@@ -24,31 +26,44 @@
 #include <QMetaProperty>
 #include <QPersistentModelIndex>
 #include <QKeyEvent>
+#include <QShortcut>
 namespace linaccess {
 class AccessTableView final : public QTableView {
 public:
     explicit AccessTableView(QWidget* parent=nullptr):QTableView(parent) {
         // Connect before enabling Qt's header sorting: an editor may contain
         // text that has not reached the model's manual-submit cache yet.
+        auto* replace=new QShortcut(QKeySequence(Qt::CTRL|Qt::Key_H),this);
+        replace->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(replace,&QShortcut::activated,this,[this] { (void)openReplaceDialog(); });
         connect(horizontalHeader(),&QHeaderView::sortIndicatorChanged,this,[this] {
             auto* typed=qobject_cast<AccessTableModel*>(model()); if(!typed) return;
             if(activeEditor()) typed->protectNextSort();
         });
     }
     void setRecordNavigationGuard(std::function<bool()> guard) { recordNavigationGuard_=std::move(guard); }
-    bool openFindDialog() {
+    bool openReplaceDialog() { return openFindDialog(true); }
+    bool openFindDialog(bool replace=false) {
         QPointer<AccessTableView> self=this;
         QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !finishEditing() || !self || !typed) return false;
+        if(replace && typed->isReadOnly()) return refuse(2046,"Das Datenblatt ist schreibgeschützt.");
         QVector<QPair<QString,int>> columns; QMap<int,QString> typedHints;
-        for(int column=0;column<typed->columnCount();++column) if(!isColumnHidden(column) && typed->isSearchableColumn(column)) {
+        for(int column=0;column<typed->columnCount();++column) if(!isColumnHidden(column) && (replace ? typed->isTextColumn(column) : typed->isSearchableColumn(column))) {
             columns.push_back({typed->headerData(column,Qt::Horizontal).toString(),column});
             if(!typed->isTextColumn(column)) typedHints.insert(column,nativeFindInputHint(typed->fieldSqlType(column)));
         }
         if(columns.isEmpty()) return refuse(3251,"Keine durchsuchbaren Felder vorhanden.");
-        if(findDialog_ && findDialog_->isVisible()) { findDialog_->raise(); findDialog_->activateWindow(); return true; }
+        auto existing=replace ? replaceDialog_ : findDialog_;
+        if(existing && existing->isVisible()) { existing->raise(); existing->activateWindow(); return true; }
         auto initial=findArguments_;
         if(initial.text.isEmpty() && currentIndex().isValid() && typed->isSearchableColumn(currentIndex().column())) initial.column=currentIndex().column();
+        if(replace) { initial.mode=1; initial.value.reset(); }
+        std::function<QString(NativeTableFindArguments,QString)> replaceAction;
+        if(replace) replaceAction=[self](NativeTableFindArguments arguments,QString value) {
+            if(self) self->replaceCurrentText(std::move(arguments),std::move(value));
+            return self ? self->findMessage_ : QString{};
+        };
         QPointer<QDialog> dialog=nativeTableFindDialog(this,columns,typedHints,initial,[self](NativeTableFindArguments arguments) {
             if(!self) return QString{};
             try {
@@ -62,10 +77,58 @@ public:
                 if(self) { self->findMessage_=QString::fromUtf8(error.what()); (void)self->refuse(error.number,self->findMessage_); }
             }
             return self ? self->findMessage_ : QString{};
-        });
+        },std::move(replaceAction));
         if(!self) return false;
-        findDialog_=dialog;
+        if(replace) replaceDialog_=dialog; else findDialog_=dialog;
         return bool(dialog);
+    }
+    bool replaceCurrentText(NativeTableFindArguments arguments,QString replacement) {
+        const QPointer<AccessTableView> self=this;
+        QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
+        const auto fail=[&](int number,const QString& message) { if(self) { findMessage_=message; (void)refuse(number,message); } return false; };
+        if(!typed) return fail(2046,"Kein natives Datenblatt zum Ersetzen.");
+        if(replacing_ || finding_) return fail(3251,"Eine Such- oder Ersetzungsaktion läuft bereits.");
+        replacing_=true; const auto finished=qScopeGuard([self] { if(self) self->replacing_=false; });
+        if(typed->isReadOnly()) return fail(2046,"Das Datenblatt ist schreibgeschützt.");
+        if(arguments.value || arguments.mode!=1 || arguments.column<0 || arguments.column>=typed->columnCount()
+            || isColumnHidden(arguments.column) || !typed->isTextColumn(arguments.column))
+            return fail(3251,"Ersetzen erfordert ein ausgewähltes Textfeld und einen ganzen Feldwert.");
+        if(arguments.text.isEmpty()) return fail(5,"Der Suchwert darf nicht leer sein.");
+        if(arguments.text.size()>1000000 || replacement.size()>1000000) return fail(3251,"Der Text überschreitet den unterstützten Umfang.");
+        if(!finishEditing() || !self || !typed) return false;
+        if(!currentIndex().isValid()) return fail(2046,"Kein aktueller Datensatz.");
+        const auto primary=typed->primaryKey();
+        if(primary.isEmpty()) return fail(3251,"Ersetzen erfordert einen gespeicherten Datensatz mit Primärschlüssel.");
+        const auto before=typed->record(currentIndex().row());
+        QMap<QString,QVariant> expectedKey;
+        for(int field=0;field<primary.count();++field) {
+            const auto name=primary.fieldName(field); const auto value=before.value(name);
+            if(!value.isValid() || value.isNull()) return fail(3251,"Den neuen Datensatz zuerst speichern.");
+            expectedKey.insert(name,value);
+        }
+        const auto tableName=typed->tableName(),fieldName=before.fieldName(arguments.column);
+        if(recordNavigationGuard_) {
+            const auto guard=recordNavigationGuard_; if(!guard()) { if(self && typed) findMessage_=typed->lastError().text(); return false; }
+        } else if(typed->isDirty()) return fail(3251,"Zuerst bestehende Änderungen speichern.");
+        if(!self || !typed) return false;
+        if(model()!=typed || typed->isReadOnly() || !currentIndex().isValid() || isColumnHidden(arguments.column) || !typed->isTextColumn(arguments.column)) return fail(2046,"Kein bearbeitbares aktuelles Feld.");
+        const auto after=typed->record(currentIndex().row());
+        if(typed->tableName()!=tableName || after.fieldName(arguments.column)!=fieldName)
+            return fail(2501,"Die Datenquelle wurde während der Validierung geändert.");
+        for(auto field=expectedKey.cbegin();field!=expectedKey.cend();++field)
+            if(after.value(field.key())!=field.value()) return fail(2501,"Der aktuelle Datensatz wurde während der Validierung geändert.");
+        const QPersistentModelIndex target=typed->index(currentIndex().row(),arguments.column);
+        if(!target.isValid() || !(typed->flags(target)&Qt::ItemIsEditable)) return fail(2046,"Das Feld kann nicht bearbeitet werden.");
+        const auto current=target.data(Qt::EditRole);
+        if(current.isNull() || current.toString().compare(arguments.text,arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive)!=0) {
+            findMessage_="Der aktuelle Feldwert stimmt nicht mit dem Suchwert überein."; return false;
+        }
+        const bool changed=typed->setData(target,replacement,Qt::EditRole);
+        if(!self || !typed) return false;
+        if(!changed) { findMessage_=typed->lastError().text(); return false; }
+        findArguments_=std::move(arguments); findArguments_.origin=0; findAdvance_=true;
+        findMessage_="Feldwert ersetzt.";
+        return true;
     }
     bool hasFindText() const { return !findArguments_.text.isEmpty(); }
     bool repeatFind() {
@@ -84,7 +147,7 @@ public:
         };
         try {
         if(!typed) return fail(2046,"Keine native Tabelle für die Suche.");
-        if(finding_) return fail(3251,"Eine Suche wird bereits ausgeführt.");
+        if(finding_ || replacing_) return fail(3251,"Eine Such- oder Ersetzungsaktion läuft bereits.");
         finding_=true; const auto searching=qScopeGuard([self] { if(self) self->finding_=false; });
         if(arguments.text.isEmpty() && !arguments.value) return fail(2046,"Keine vorherige Suche vorhanden.");
         if(arguments.value) {
@@ -425,10 +488,10 @@ private:
         return nullptr;
     }
     std::function<bool()> recordNavigationGuard_;
-    QPointer<QDialog> findDialog_;
+    QPointer<QDialog> findDialog_,replaceDialog_;
     NativeTableFindArguments findArguments_;
     QString findMessage_;
-    bool findAdvance_{},finding_{};
+    bool findAdvance_{},finding_{},replacing_{};
     QMetaObject::Connection restore_;
 };
 }

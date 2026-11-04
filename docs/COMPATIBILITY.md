@@ -2368,3 +2368,17 @@ locals. Full desktop 48/48 (79.78 s), freshly rebuilt GUI-free 1/1 (1.45 s),
 targeted core 1/1 (1.26 s), Debian payload/permissions/Build-ID/pinned SQLite and
 all four original hashes pass. No new CTest target. Scoped checklist 372 checked
 / 72 open, not complete Access 2003 parity.
+
+
+## Native whole-text-field datasheet replacement (2026-11-04)
+
+Ctrl+H, native edit menu and acCmdReplace/29 route to an actual modeless
+whole-field text replacement path. It edits the real manual-submit model,
+uses keyed transactional Save and retains drafts on SQL failure. Captured
+primary-key/source/field checks cancel reentrant record changes before mutation.
+TABLE_REPLACE_RUNTIME.md defines search/text/readonly/new-record limits and
+remaining partial/bulk/form/undo/oracle work. Existing main-window target only.
+Full desktop 48/48 (77.04 s), rebuilt GUI-free 1/1 (1.36 s), targeted GUI/SQL
+1/1 (2.15 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original fixture hashes pass. Scoped checklist 373 checked / 72 open, not
+complete Access 2003 parity.
