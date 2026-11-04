@@ -7,6 +7,8 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPrintDialog>
+#include "native_report_page_setup.hpp"
+#include <QPageLayout>
 #include <QPrinter>
 #include <QPrintPreviewDialog>
 #include <QSaveFile>
@@ -72,6 +74,17 @@ public:
         connect(refresh,&QPushButton::clicked,this,[refreshRequested] { refreshRequested(); });
     }
     ~NativeReportPageView() override { delete pages_; } // printer outlives its preview.
+    QPageLayout pageLayout() const { return printer_.pageLayout(); }
+    bool setupPage() {
+        const auto previous=printer_.pageLayout();
+        NativeReportPageSetupDialog dialog(previous,this);
+        if(dialog.exec()!=QDialog::Accepted) return false;
+        if(!printer_.setPageLayout(dialog.pageLayout())) {
+            printer_.setPageLayout(previous);
+            QMessageBox::warning(this,"Seite einrichten","Der Drucker kann diese Seiteneinrichtung nicht übernehmen."); return false;
+        }
+        refreshPages(); return true;
+    }
     bool refreshPages() {
         setProperty("la_report_pages_valid",false);
         pages_->updatePreview();
@@ -81,6 +94,10 @@ private:
     QPrinter printer_;
     QPrintPreviewWidget* pages_{};
 };
+bool applyReportPageLayout(QWidget* view,QPrinter& printer) {
+    const auto* pages=dynamic_cast<NativeReportPageView*>(view);
+    return !pages || printer.setPageLayout(pages->pageLayout());
+}
 void synchronizeReportView(QWidget* document,NativeReportPageView* pages) {
     auto* tabs=document->findChild<QTabWidget*>("access-report-view-tabs");
     auto* notice=document->findChild<QLabel*>("access-report-view-notice");
@@ -117,6 +134,11 @@ void AccessFormPreview::buildReportPageView(QVBoxLayout* layout,QWidget* layoutV
     printKey->setContext(Qt::WidgetWithChildrenShortcut);
     connect(printKey,&QShortcut::activated,this,[this] {
         if(auto* action=findChild<QAction*>("access-report-print");action && action->isVisible() && action->isEnabled()) action->trigger();
+    });
+    auto* setupKey=new QShortcut(QKeySequence(Qt::Key_S),pages);
+    setupKey->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(setupKey,&QShortcut::activated,this,[this] {
+        if(auto* action=findChild<QAction*>("access-report-page-setup");action && action->isVisible() && action->isEnabled()) action->trigger();
     });
     auto* closeKey=new QShortcut(QKeySequence(Qt::Key_C),pages);
     closeKey->setContext(Qt::WidgetWithChildrenShortcut);
@@ -160,10 +182,20 @@ void AccessFormPreview::buildPrintToolbar(QVBoxLayout* layout) {
         if (!path.isEmpty() && !exportLayoutPdf(path))
             QMessageBox::warning(this,"PDF","Das aktuelle Layout konnte nicht gespeichert werden.");
     });
+    auto* setup=printToolbar_->addAction("Seite einrichten …");
+    setup->setObjectName("access-report-page-setup");
+    connect(setup,&QAction::triggered,this,[this] {
+        if(reportAggregateCaching_) return;
+        auto* pages=dynamic_cast<NativeReportPageView*>(reportPageView_.data());
+        if(pages && pages->setupPage()) { synchronizeReportView(this,pages); refreshCalculatedControls(); }
+    });
     auto* reportPreview=printToolbar_->addAction("Berichtsvorschau …");
     reportPreview->setObjectName("access-report-preview");
     connect(reportPreview,&QAction::triggered,this,[this] {
         QPrinter printer(QPrinter::HighResolution);
+        if(!applyReportPageLayout(reportPageView_.data(),printer)) {
+            QMessageBox::warning(this,"Berichtsvorschau","Die Seiteneinrichtung kann für diese Ausgabe nicht verwendet werden."); return;
+        }
         QPrintPreviewDialog dialog(&printer,this);
         dialog.setWindowTitle("Berichtsvorschau");
         bool failed=false;
@@ -183,6 +215,9 @@ void AccessFormPreview::buildPrintToolbar(QVBoxLayout* layout) {
     reportPrint->setShortcutContext(Qt::WindowShortcut);
     connect(reportPrint,&QAction::triggered,this,[this] {
         QPrinter printer(QPrinter::HighResolution);
+        if(!applyReportPageLayout(reportPageView_.data(),printer)) {
+            QMessageBox::warning(this,"Bericht drucken","Die Seiteneinrichtung kann für diese Ausgabe nicht verwendet werden."); return;
+        }
         QPrintDialog dialog(&printer,this);
         dialog.setOption(QAbstractPrintDialog::PrintPageRange,false);
         dialog.setOption(QAbstractPrintDialog::PrintSelection,false);
@@ -481,6 +516,7 @@ bool AccessFormPreview::writePdf(const QString& path,bool report) {
         QPrinter printer(QPrinter::HighResolution);
         printer.setOutputFormat(QPrinter::PdfFormat);
         printer.setOutputFileName(generated);
+        if(report && !applyReportPageLayout(reportPageView_.data(),printer)) return false;
         if (!(report ? renderReport(printer) : renderLayout(printer))) return false;
     }
     QFile source(generated);
