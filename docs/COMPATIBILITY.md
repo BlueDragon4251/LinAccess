@@ -2275,3 +2275,16 @@ are available. VBA_CONSTANTS_RUNTIME.md specifies scalar/type/linking/class/
 conditional/default-value boundaries; full compiler parity is not claimed.
 Full desktop 48/48 (95.27 s), rebuilt GUI-free 1/1 (2.11 s), Debian package and
 four original fixture hashes pass; no new CTest targets.
+
+
+## Folded optional defaults (2026-11-04)
+
+Optional scalar defaults accept pure expressions and prior same-module constants,
+retained as immutable parameter values. Omitted calls copy/coerce defaults;
+explicit Empty, named overrides, Missing/Null and Collection Nothing retain
+separate meanings. Independent ByRef defaults do not leak state between calls.
+OPTIONAL_ARGUMENT_RUNTIME.md and VBA_CONSTANTS_RUNTIME.md define linking/object/
+type/error boundaries. Full desktop 48/48 (92.51 s), rebuilt GUI-free 1/1 (1.84 s),
+Debian package and four original hashes pass. Final test-only UTC construction
+uses Qt-6.4-compatible API and the query-model target passes separately (0.04 s)
+on the existing Qt 6.8.2 environment; no actual Qt 6.4 matrix is claimed.

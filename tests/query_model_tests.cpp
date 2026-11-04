@@ -26,7 +26,7 @@ int main(int argc, char** argv) {
     assert(query.exec("INSERT INTO samples VALUES(1,10,'one'),(2,20,'two'),(3,20,NULL),(4,30,'four')"));
     {
         QTemporaryFile file("/tmp/linaccess-sql-file-ä-XXXXXX"); assert(file.open() && file.write("abc",3)==3 && file.flush());
-        const auto modified=QDateTime(QDate(2024,2,29),QTime(12,34,56),QTimeZone::utc());
+        const auto modified=QDateTime(QDate(2024,2,29),QTime(12,34,56),QTimeZone(0));
         assert(file.setFileTime(modified,QFileDevice::FileModificationTime));
         const QString source="PARAMETERS path Text; SELECT FileLen([path]) AS bytes,FileDateTime([path]) AS stamp";
         const QMap<QString,QVariant> parameters{{"path",file.fileName()}};

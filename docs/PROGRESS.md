@@ -4253,3 +4253,18 @@ Full desktop 48/48 (95.27 s), freshly rebuilt GUI-free 1/1 (2.11 s), Debian payl
 permissions/Build-ID/pinned SQLite and four original fixture hashes pass. Existing
 core target extended only. Scoped checklist 363 checked / 72 open, not total
 Access 2003 parity.
+
+
+## Immutable optional constant defaults (2026-11-04)
+
+Optional parameter defaults fold pure expressions and prior same-module constants
+without runtime host evaluation. Native values are copied/coerced per omitted
+call; named overrides, explicit Empty, Null/Missing and Collection Nothing keep
+prior meanings. Repeated ByRef default calls are independent. Runtime-dependent
+expressions and bare clocks are refused. OPTIONAL_ARGUMENT_RUNTIME.md and
+VBA_CONSTANTS_RUNTIME.md define remaining linking/object/compiler boundaries.
+Full desktop 48/48 (92.51 s), rebuilt GUI-free 1/1 (1.84 s), Debian payload/
+permissions/Build-ID/pinned SQLite and four original hashes pass. A final test-only
+UTC constructor adjustment uses Qt-6.4-compatible API; query-model 1/1 (0.04 s)
+passes on the existing Qt 6.8.2 environment, not a separate minimum-Qt matrix.
+No new CTest targets. Scoped checklist 364 checked / 72 open, not overall parity.
