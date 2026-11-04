@@ -63,6 +63,7 @@ int main(int argc, char** argv) {
     int longColumns=0,typedLongValues=0;
     int currencyColumns=0,doubleColumns=0,typedCurrencyValues=0,currencySums=0,unsupportedCurrencySums=0;
     int formattedDates = 0;
+    int sourceTextSizes=0,sourceMemos=0;
     int counters=0,nativeCounters=0,counterProbes=0,managedProbes=0;
     QStringList failures;
     for (const auto& table : tables) {
@@ -78,6 +79,19 @@ int main(int argc, char** argv) {
                 if(column.sourceType=="DOUBLE") ++doubleColumns;
             }
             linaccess::importAccessTable(db, source, table, schema, rows);
+            {
+                const auto fields=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string(table.toStdString())}).object->member("Fields",{}).object;
+                for(const auto& column:schema.columns) {
+                    if(column.sourceOrigin=="MDBTOOLS_MYSQL" && column.sourceType=="VARCHAR" && column.sourceSize>0) {
+                        const auto field=fields->member("Item",{linaccess::VbaValue::string(column.name.toStdString())}).object;
+                        assert(field->member("Type",{}).number==10 && field->member("Size",{}).number==column.sourceSize); ++sourceTextSizes;
+                    }
+                    if(column.sourceOrigin=="MDBTOOLS_MYSQL" && column.sourceType=="TEXT") {
+                        const auto field=fields->member("Item",{linaccess::VbaValue::string(column.name.toStdString())}).object;
+                        assert(field->member("Type",{}).number==12 && field->member("Size",{}).number==0); ++sourceMemos;
+                    }
+                }
+            }
             {
                 std::vector<int> indices;
                 for(int i=0;i<schema.columns.size();++i) if(schema.columns[i].sourceType=="CURRENCY") indices.push_back(i);
@@ -305,6 +319,8 @@ End Function
     std::cout << "Original date columns formatted through native SQL: " << formattedDates << '\n';
     assert(tables.size() == 29);
     assert(imported == 29 && failures.empty());
+    assert(sourceTextSizes>0);
+    std::cout<<"Verified source text capacities: "<<sourceTextSizes<<", confirmed Memo declarations: "<<sourceMemos<<'\n';
     assert(currencyColumns==43 && doubleColumns==57 && typedCurrencyValues>0);
     assert(currencySums+unsupportedCurrencySums==43);
     std::cout<<"Original Currency sums: "<<currencySums<<", outside supported backing: "<<unsupportedCurrencySums<<'\n';

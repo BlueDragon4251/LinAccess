@@ -174,6 +174,13 @@ QString AccessCatalog::tableSchema(const QString& name) const {
                 if(field.captured(2).compare("FLOAT",Qt::CaseInsensitive)==0) floatingColumns.insert(columnName);
                 const auto nameBytes = columnName.toUtf8().toHex();
                 schema += "\n-- LINACCESS_SOURCE_TYPE " + QString::fromLatin1(nameBytes) + ' ' + field.captured(2).toUpper();
+                schema += "\n-- LINACCESS_SOURCE_ORIGIN " + QString::fromLatin1(nameBytes) + " MDBTOOLS_MYSQL";
+                if(field.captured(2).compare("VARCHAR",Qt::CaseInsensitive)==0) {
+                    const auto length=QRegularExpression(R"(^\s*\(\s*([0-9]+)\s*\))").match(field.captured(3));
+                    bool valid=false; const auto size=length.captured(1).toInt(&valid);
+                    if(length.hasMatch() && valid && size>=1 && size<=255)
+                        schema += "\n-- LINACCESS_SOURCE_SIZE " + QString::fromLatin1(nameBytes) + ' ' + QString::number(size);
+                }
                 auto modifiers=field.captured(3);
                 modifiers.remove(QRegularExpression(R"sql('(?:''|[^'])*'|"(?:""|[^"])*")sql"));
                 if (QRegularExpression("\\bauto_increment\\b",QRegularExpression::CaseInsensitiveOption).match(modifiers).hasMatch())
@@ -189,6 +196,7 @@ QString AccessCatalog::tableSchema(const QString& name) const {
         for(auto it=exactTypes.cbegin();it!=exactTypes.cend();++it) {
             if(!knownColumns.contains(it.key())) throw std::runtime_error("Access floating-type column metadata mismatch");
             schema += "\n-- LINACCESS_SOURCE_TYPE " + QString::fromLatin1(it.key().toUtf8().toHex()) + ' ' + it.value();
+            schema += "\n-- LINACCESS_SOURCE_ORIGIN " + QString::fromLatin1(it.key().toUtf8().toHex()) + " MDBTOOLS_ACCESS";
             floatingColumns.remove(it.key());
         }
         if(!floatingColumns.isEmpty()) throw std::runtime_error("Access floating source metadata is unavailable");

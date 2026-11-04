@@ -2883,3 +2883,8 @@ Optionen und Windows-Pixelgleichheit bleiben offen.
 TableDef.Fields liest echte Main-Schema-Feldmetadaten ohne Nutzdatenzeilen:
 [Umfang und Grenzen](DAO_TABLEDEF_FIELDS.md). Vollständiges DAO-Katalogmodell,
 alle Feldtypen/-eigenschaften und Access-Lebensdauer-/Refresh-Gleichheit sind offen.
+
+Neue Importe erhalten bestätigte Textlängen und Memo-Herkunft und erzwingen
+Textgrenzen bei tatsächlichen SQL-/DAO-Schreibzugriffen:
+[Umfang und Grenzen](SOURCE_TEXT_CAPACITY.md). Alte Projekte werden nicht
+stillschweigend umgeschrieben; vollständige Jet-/UI-Textgleichheit bleibt offen.

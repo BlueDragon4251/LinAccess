@@ -1327,3 +1327,15 @@ docs/DAO_TABLEDEF_FIELDS.md und DAO_BINARY_FIELDS.md aktualisiert.
 Gezielt DAO1/1 (0.59 s), Paket/Build-ID/SQLite und vier Originalfixture-Hashes
 bestanden; letzter Vollstand davor48/48 (84.55 s), Core unverändert1/1 (1.66 s).
 F121 und vollständige Typ-/Speicher-/Access-Gleichheit offen; weiterhin456/384/72.
+
+Neue MDB-Importe erhalten nun Typ-Herkunft und bestätigte VARCHAR-Längen1..255
+in main._la_table_schema. Bestätigtes MySQL-TEXT wird dadurch als Memo erkennbar;
+TableDef.Field.Size liefert erhaltene Textlängen als Long. Alte Projekte werden
+nicht geraten/migriert. Frisch importierte Textspalten erzwingen ihre Grenzen
+über eine tatsächliche native SQLite-CHECK-Funktion mit UTF-16-/NUL-Zählung;
+Überlänge3163 propagiert in SQL/DAO. Null/Required bleiben getrennt.
+57 originale Textlängen und3 Memo-Deklarationen auf Arbeitskopie geprüft;
+Unicode-/NUL-Grenzen, fehlgeschlagene SQL-/DAO-Schreibzugriffe ohne neue Zeilen.
+docs/SOURCE_TEXT_CAPACITY.md; vollständige Jet-/UI-/Migrations-/Formatgleichheit offen.
+Aktueller Vollstand48/48 (85.63 s), Paket/Build-ID/SQLite und vier Originalfixture-
+Hashes bestanden; GUI-freier Core unverändert1/1 (1.66 s). Weiterhin456/384/72.

@@ -48,8 +48,8 @@ identity is carried by its projection.
 
 Field.Size returns a Long for proven fixed types: Byte/Boolean1, Integer2,
 Long/Single4, Currency/Double/Date8, GUID16, and LongBinary/Memo0. The last two
-are their defined metadata sizes, not the length of a record's data. Text maximum
-length is not preserved by the current import catalog and therefore remains3251.
+are their defined metadata sizes, not the length of a record's data. Legacy text maximum lengths remain3251 when unavailable. Fresh imports now
+retain proven capacities and expose them as Size; see SOURCE_TEXT_CAPACITY.md.
 Recordset.Field.Size shares the same fixed-size helper for its proven native
 field types, including BLOB0 even with an empty recordset. Writes raise383.
 Existing FieldSize remains the current stored non-NULL binary observation length.

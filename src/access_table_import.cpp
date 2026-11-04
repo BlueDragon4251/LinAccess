@@ -44,13 +44,26 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
     };
     AccessTableSchema result;
     QStringList keys;
-    QMap<QString,QString> sourceTypes;
+    QMap<QString,QString> sourceTypes,sourceOrigins;
+    QMap<QString,int> sourceSizes;
     QMap<QString,bool> counters;
     bool inTable = false;
     for (const auto& raw : schema.split('\n')) {
         const auto text = raw.trimmed();
         static const QRegularExpression sourceType(R"(^-- LINACCESS_SOURCE_TYPE ([0-9a-fA-F]+) ([A-Z][A-Z0-9_]*)$)");
         const auto source = sourceType.match(text);
+        const auto origin=QRegularExpression(R"(^-- LINACCESS_SOURCE_ORIGIN ([0-9a-fA-F]+) (MDBTOOLS_MYSQL|MDBTOOLS_ACCESS)$)").match(text);
+        if(origin.hasMatch()) {
+            sourceOrigins.insert(QString::fromUtf8(QByteArray::fromHex(origin.captured(1).toLatin1())),origin.captured(2)); continue;
+        }
+        if(text.startsWith("-- LINACCESS_SOURCE_SIZE ")) {
+            const auto length=QRegularExpression(R"(^-- LINACCESS_SOURCE_SIZE ([0-9a-fA-F]+) ([0-9]+)$)").match(text);
+            bool valid=false; const auto size=length.captured(2).toInt(&valid);
+            if(!length.hasMatch() || !valid || size<1 || size>255) return {};
+            const auto name=QString::fromUtf8(QByteArray::fromHex(length.captured(1).toLatin1()));
+            if(sourceSizes.contains(name) && sourceSizes.value(name)!=size) return {};
+            sourceSizes.insert(name,size); continue;
+        }
         static const QRegularExpression autoNumber(R"(^-- LINACCESS_AUTO_NUMBER ([0-9a-fA-F]+)$)");
         const auto counter=autoNumber.match(text);
         if (counter.hasMatch()) {
@@ -110,6 +123,12 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
     }
     for (auto& column : result.columns) {
         if (sourceTypes.contains(column.name)) column.sourceType = sourceTypes.value(column.name);
+        column.sourceOrigin=sourceOrigins.take(column.name);
+        if(!column.sourceOrigin.isEmpty() && !sourceTypes.contains(column.name)) return {};
+        if(sourceSizes.contains(column.name)) {
+            if(column.sourceType!="VARCHAR" || column.sourceOrigin!="MDBTOOLS_MYSQL") return {};
+            column.sourceSize=sourceSizes.take(column.name);
+        }
         if (counters.remove(column.name)) {
             if (column.sqliteType!="INTEGER") return {};
             column.autoNumber=true;
@@ -117,6 +136,7 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
         if (column.autoNumber) column.required=true;
     }
     if (!counters.isEmpty()) return {};
+    if(!sourceOrigins.isEmpty() || !sourceSizes.isEmpty()) return {};
     return result;
 }
 
@@ -146,12 +166,15 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             || rows[0][i].value != column.name.toUtf8().toStdString()
             || (column.sqliteType != "TEXT" && column.sqliteType != "INTEGER"
                 && column.sqliteType != "REAL" && column.sqliteType != "BLOB")
-            || (column.autoNumber && column.sqliteType!="INTEGER"))
+            || (column.autoNumber && column.sqliteType!="INTEGER")
+            || column.sourceSize<0 || column.sourceSize>255
+            || (column.sourceSize>0 && (column.sourceType!="VARCHAR" || column.sourceOrigin!="MDBTOOLS_MYSQL")))
             throw fail("Spaltenname/-typ stimmt nicht mit MDBTools überein");
         seen.insert(column.name.toCaseFolded());
         definitions << sqlQuote(column.name) + ' ' + column.sqliteType
             + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : column.autoNumber ? " DEFAULT ("+accessCounterDefault(tableName,column.name)+")" : QString{})
-            + (column.required || column.primaryKeyOrder || column.autoNumber ? " NOT NULL" : "");
+            + (column.required || column.primaryKeyOrder || column.autoNumber ? " NOT NULL" : "")
+            + (column.sourceSize>0 ? " CHECK (linaccess_jet_text_capacity("+sqlQuote(column.name)+","+QString::number(column.sourceSize)+"))" : QString{});
     }
 
     QStringList primary;
@@ -240,7 +263,8 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             for (const auto& col : columns) metadata.append(QJsonObject{
                 {"name", col.name}, {"source_type", col.sourceType}, {"sqlite_type", col.sqliteType},
                 {"required", col.required}, {"primary_key_order", col.primaryKeyOrder},
-                {"auto_number", col.autoNumber}, {"auto_number_native", col.autoNumber}});
+                {"auto_number", col.autoNumber}, {"auto_number_native", col.autoNumber},
+                {"source_origin", col.sourceOrigin}, {"source_size", col.sourceSize}});
             query.prepare("INSERT INTO _la_table_schema VALUES (?,?)");
             query.addBindValue(tableName);
             query.addBindValue(QString::fromUtf8(QJsonDocument(metadata).toJson(QJsonDocument::Compact)));
