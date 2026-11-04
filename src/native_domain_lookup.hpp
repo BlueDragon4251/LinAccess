@@ -41,7 +41,7 @@ inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaVal
     if(function=="dsum" || function=="dcount") return nativeSqlDomainAggregate(database,function,args);
     const bool lookup=function=="dlookup" || function=="dfirst";
     const bool selector=lookup || function=="dlast";
-    if(!selector && function!="dmin" && function!="dmax" && function!="davg")
+    if(!selector && function!="dmin" && function!="dmax" && function!="davg" && function!="dvar" && function!="dstdev")
         throw VbaRuntimeError(3251,"Domain function unsupported");
     if(args.size()<2 || args.size()>3) throw VbaRuntimeError(450,"Domain function requires two or three arguments");
     if(args[0].kind==VbaValue::Kind::Null || args[1].kind==VbaValue::Kind::Null)
@@ -97,14 +97,14 @@ inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaVal
         const auto selected=accessQueryColumns(database,plan,&types);
         const auto type=types.value(0).toUpper();
         const bool numeric=type.contains("INT") || type.contains("REAL") || type.contains("FLOA") || type.contains("DOUB");
-        const bool typedExtremum=function!="davg" && (type=="CURRENCY_REAL" || type.contains("DATE"));
+        const bool typedExtremum=(function=="dmin" || function=="dmax") && (type=="CURRENCY_REAL" || type.contains("DATE"));
         if(selected.size()!=1 || type.contains("BOOL") || (!numeric && !typedExtremum)
-            || (function=="davg" && type=="CURRENCY_REAL"))
+            || ((function=="davg" || function=="dvar" || function=="dstdev") && type=="CURRENCY_REAL"))
             throw VbaRuntimeError(3251,"Domain aggregate field type unsupported or unproven");
         const auto result=executeAccessQueryPlan(database,plan,bindAccessQueryParameters(plan,{}));
         if(result.columns.size()!=1 || result.columnTypes.value(0).toUpper()!=type)
             throw VbaRuntimeError(3146,"Domain aggregate result type changed");
-        NativeReportAggregate aggregate(function=="davg" ? "avg" : function=="dmin" ? "min" : "max");
+        NativeReportAggregate aggregate(function.substr(1));
         for(const auto& row:result.rows) {
             if(row.size()!=1) throw VbaRuntimeError(3146,"Domain aggregate result shape invalid");
             aggregate.add(qtFieldValue(row.front(),type));

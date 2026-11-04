@@ -75,6 +75,10 @@ If DFirst(Expr:="qty",Domain:="Lookup Ordered",Criteria:="qty Is Not Null")<>10.
 If Not IsNull(DFirst("id","Lookup Ordered","id=99")) Then Err.Raise 5
 If Not IsNull(DLast("id","Lookup Ordered","id=99")) Then Err.Raise 5
 If TypeName(DLast("cash","Lookup Ordered","id=1"))<>"Currency" Then Err.Raise 5
+If DVar("qty","lookup_values")<>24.5 Then Err.Raise 5
+If Abs(Application.DStDev(Domain:="lookup_values",Expr:="qty")-Sqr(24.5))>0.000000001 Then Err.Raise 5
+If Not IsNull(DVar("qty","lookup_values","id=1")) Then Err.Raise 5
+If Not IsNull(DStDev("qty","lookup_values","id=99")) Then Err.Raise 5
 If Not IsNull(DLookup("label","lookup_values","id=99")) Then Err.Raise 5
 If Not IsNull(DLookup("label","lookup_values","id=4")) Then Err.Raise 5
 If IsNull(DLookup("label","lookup_values","id=3")) Then Err.Raise 5

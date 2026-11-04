@@ -16,6 +16,7 @@
 #include <QMenuBar>
 #include <QMenu>
 #include <iostream>
+#include <cmath>
 #include <QToolBar>
 #include <QComboBox>
 #include <QSqlQuery>
@@ -307,8 +308,8 @@ Height =1500)BANDS");
         assert(query.exec("INSERT INTO native_report_stats VALUES(1,10,'A'),(2,20,'B'),(3,NULL,NULL),(4,30,'C')")); query.finish();
         QStringList statsLines{"Begin Report","Width =9000","RecordSource =\"SELECT * FROM native_report_stats ORDER BY id\"",
             "Begin Section","Height =450","Begin TextBox","Name =\"RowId\"","ControlSource =\"id\"","Width =900","Height =300","End","End",
-            "Begin FormFooter","Height =3000"};
-        const QStringList functions{"avg","min","max","sum","count","compound","first","last","firstcompound","lastcompound"};
+            "Begin FormFooter","Height =3600"};
+        const QStringList functions{"avg","min","max","sum","count","compound","first","last","firstcompound","lastcompound","var","stdev"};
         for(int index=0;index<functions.size();++index) {
             const auto& function=functions[index]; const auto top=QString::number(index*300);
             const auto expression=function=="compound" ? QString("Avg(IIf([value]>10,[value]*2,Null))")
@@ -332,6 +333,11 @@ Height =1500)BANDS");
                 assert(reference.exec("SELECT label FROM native_report_stats ORDER BY id "+QString(function=="last" ? "DESC" : "ASC")+" LIMIT 1") && reference.next());
                 assert(stats.findChild<QLineEdit*>("access-control-Stat_"+function)->text()==reference.value(0).toString()); reference.finish();
             }
+            assert(reference.exec("SELECT COUNT(value),SUM(value),SUM(value*value) FROM native_report_stats") && reference.next());
+            const double count=reference.value(0).toDouble(),sum=reference.value(1).toDouble();
+            const double variance=(reference.value(2).toDouble()-sum*sum/count)/(count-1);
+            assert(qAbs(stats.findChild<QLineEdit*>("access-control-Stat_var")->text().toDouble()-variance)<1e-8);
+            assert(qAbs(stats.findChild<QLineEdit*>("access-control-Stat_stdev")->text().toDouble()-std::sqrt(variance))<1e-8);
             assert(stats.findChild<QLineEdit*>("access-control-Stat_firstcompound")->text().isEmpty());
         };
         checkStats(); const auto statsPdf=output.filePath("stats.pdf"); assert(stats.exportReportPdf(statsPdf));
@@ -419,6 +425,12 @@ End
         assert(exactFile.open(QIODevice::ReadOnly) && exactFile.readAll()==exactBytes); exactFile.close();
         assert(currencyStats.close());
         assert(query.exec("DROP TABLE native_currency_sums")); query.finish();
+        assert(query.exec("UPDATE native_report_stats SET value=CASE WHEN id=1 THEN 10 ELSE NULL END")); query.finish();
+        (void)statsObject->member("Requery",{});
+        for(const auto& name:{"Stat_var","Stat_stdev"}) {
+            const auto control=makePreviewControlsObject(stats)->member("Item",{linaccess::VbaValue::string(name)});
+            assert(control.object->member("Value",{}).kind==linaccess::VbaValue::Kind::Null);
+        }
         assert(query.exec("UPDATE native_report_stats SET value=NULL")); query.finish();
         (void)statsObject->member("Requery",{});
         for(const auto& function:functions) {

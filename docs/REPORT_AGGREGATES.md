@@ -72,3 +72,21 @@ Sum(CCur([amount])) and checks the native control Value equals the maximum signe
 Currency units. Adding 0.0001 through the database and Requery then raises error 6;
 failed PDF output preserves the previous successful PDF. No Windows result oracle
 or complete aggregate coercion/group equivalence is claimed.
+
+## Sample Var/StDev
+
+Report Var/StDev support the existing direct-field and row-scoped expression
+paths for finite Number observations. They skip NULL, return NULL for fewer than
+two observations and compute sample variance using n-1. Welford updates retain a
+long-double mean and second central moment; the result (or its square root) is
+converted to Double with overflow checks. No naive subtraction of squared totals
+is used by the runtime. Currency/Date/text/Boolean coercions, population functions,
+full Access grouping/event semantics and exact Windows rounding remain open.
+
+Actual SQL rows supply independent COUNT/SUM/squared-value references for native
+control results, including insertion/Requery. One-observation and all-NULL values
+are checked through real control Value access; report PDF generation still uses
+the shared aggregate validator. No new CTest target or catalog item.
+References: Microsoft Access
+[Var/VarP](https://support.microsoft.com/en-us/access/functions/var-varp-functions)
+and [StDev/StDevP](https://support.microsoft.com/en-us/access/functions/stdev-stdevp-functions).
