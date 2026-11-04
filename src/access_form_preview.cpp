@@ -1164,9 +1164,12 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     auto* canvas = new AccessSectionCanvas(pixels(layout_.width),std::move(sectionBackgrounds),scroll);
     canvas->setObjectName("access-form-canvas");
     canvas->setAutoFillBackground(true);
-    auto canvasPalette=canvas->palette();
-    canvasPalette.setColor(QPalette::Window,layout_.kind==linaccess::AccessDocumentKind::Report ? QColor(Qt::white) : QColor(240,240,240));
-    canvas->setPalette(canvasPalette);
+    canvas->setBackgroundRole(QPalette::Window);
+    if (layout_.kind==linaccess::AccessDocumentKind::Report) {
+        auto canvasPalette=canvas->palette();
+        canvasPalette.setColor(QPalette::Window,Qt::white);
+        canvas->setPalette(canvasPalette);
+    }
     canvas->setFixedSize(qBound(400, pixels(layout_.width) + 70, 3500),
                          qBound(250, pixels(layout_.height) + 90, 3500));
     buildControls(canvas);

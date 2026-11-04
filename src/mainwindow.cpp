@@ -3,6 +3,7 @@
 #include "native_query_view.hpp"
 #include "native_input_box.hpp"
 #include "native_edit_menu.hpp"
+#include "native_classic_style.hpp"
 #include <QCloseEvent>
 #include <QKeyEvent>
 #include <QShortcut>
@@ -179,7 +180,7 @@ bool isSelect(const QString& sql) {
 MainWindow::~MainWindow() { disconnect(tabs_,nullptr,this,nullptr); linaccess::resetVbaProjectState(db_); }
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
-    setWindowTitle("LinAccess — C++ / Qt 6");
+    setWindowTitle("LinAccess");
     resize(1260, 790);
     db_ = QSqlDatabase::addDatabase("QSQLITE", "linaccess-main");
 
@@ -264,6 +265,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
     viewMenu->addAction(projectActions.last());
+    viewMenu->addSeparator();
+    auto* classicStyle=viewMenu->addAction("&Klassische Oberfläche");
+    classicStyle->setObjectName("classic-interface"); classicStyle->setCheckable(true);
+    classicStyle->setChecked(qApp->property("la_classic_style").toBool());
+    classicStyle->setEnabled(linaccess::classicStyleAvailable());
+    connect(classicStyle,&QAction::toggled,this,[classicStyle](bool enabled) {
+        if (linaccess::setClassicStyle(enabled)) QSettings().setValue("ui/classicStyle",enabled);
+        else {
+            const QSignalBlocker blocked(classicStyle);
+            classicStyle->setChecked(qApp->property("la_classic_style").toBool());
+        }
+    });
     auto* windowMenu=menuBar()->addMenu("&Fenster");
     windowMenu->setObjectName("window-menu");
     auto* nextWindow=windowMenu->addAction("Nächstes Fenster\tStrg+F6");

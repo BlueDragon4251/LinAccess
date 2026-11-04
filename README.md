@@ -124,6 +124,10 @@ ctest --test-dir build-core --output-on-failure
 
 ## Funktionen in dieser Entwicklungsstufe
 
+Die native klassische Oberfläche ist unter **Ansicht → Klassische Oberfläche**
+umschaltbar; die Auswahl wird gespeichert. Sie bildet eine klassische Qt-Grundlage,
+keine nachgewiesene pixelgenaue Access-2003-Oberfläche. Details: [Darstellung](docs/CLASSIC_INTERFACE.md).
+
 - Neue `.linaccess`-Datei als SQLite-Projekt, oder bestehendes SQLite-Projekt öffnen
 - Tabellen mit einfachen Datentypen erstellen, Datenansicht mit manueller Speicherung
 - Gespeicherte SQL-SELECT-Abfragen

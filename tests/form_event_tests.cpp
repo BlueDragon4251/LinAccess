@@ -2461,7 +2461,7 @@ End
     assert(greenPixels>0);
     auto* canvas=form.findChild<QWidget*>("access-form-canvas"); assert(canvas);
     const auto background=canvas->grab().toImage();
-    assert(background.pixelColor(background.width()-1,background.height()-1)==QColor(240,240,240));
+    assert(background.pixelColor(background.width()-1,background.height()-1)==QApplication::palette().color(QPalette::Window));
     std::vector<VbaValue> noColorArguments;
     assert(form.executeProcedure("LegacyColor",noColorArguments).status==linaccess::VbaExecutionStatus::Completed && color(editor)==QColor(255,0,0));
     object("editor")->assign("ForeColor",makePreviewApplicationObject(form)->member("Eval",{VbaValue::string("QBColor(9)")}));
@@ -2579,18 +2579,18 @@ End
     assert(editor && sibling && label && opaque && black && button && canvas && selector);
     const auto sample=[&](QWidget* widget) { const auto image=canvas->grab().toImage(); const auto point=widget->mapTo(canvas,QPoint(widget->width()-10,widget->height()/2)); return image.pixelColor(qRound(point.x()*image.devicePixelRatio()),qRound(point.y()*image.devicePixelRatio())); };
     assert(sample(editor)==QColor(0,255,0) && sample(sibling)==QColor(255,255,0));
-    assert(sample(label)==QColor(240,240,240) && sample(opaque)==QColor(255,0,0) && sample(black)==QColor(0,0,0));
+    assert(sample(label)==QApplication::palette().color(QPalette::Window) && sample(opaque)==QColor(255,0,0) && sample(black)==QColor(0,0,0));
     assert(!label->autoFillBackground() && opaque->autoFillBackground());
     const auto font=editor->font(); const auto foreground=editor->palette().color(QPalette::Active,QPalette::Text);
     editor->setFocus(); editor->selectAll(); QTest::keyClicks(editor,"fresh"); editor->setSelection(1,3);
     button->click(); const auto click=form.eventResult("control:paint:Click"); assert(click && click->status==linaccess::VbaExecutionStatus::Completed);
-    assert(sample(editor)==QColor(240,240,240) && sample(label)==QColor(0,0,255));
+    assert(sample(editor)==QApplication::palette().color(QPalette::Window) && sample(label)==QColor(0,0,255));
     assert(object("editor")->member("BackStyle",{}).asNumber()==0 && object("editor")->member("BackColor",{}).asNumber()==65280);
     assert(editor->hasFocus() && editor->selectionStart()==1 && editor->selectedText()=="res" && editor->displayText()=="*****");
     assert(editor->font()==font && editor->palette().color(QPalette::Active,QPalette::Text)==foreground && form.hasUnsavedChanges());
     assert(object("editor")->member("Value",{}).asText()=="one" && object("editor")->member("Text",{}).asText()=="fresh");
     assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="one"); sql.finish();
-    object("editor")->assign("BackColor",VbaValue::numeric(255)); assert(sample(editor)==QColor(240,240,240));
+    object("editor")->assign("BackColor",VbaValue::numeric(255)); assert(sample(editor)==QApplication::palette().color(QPalette::Window));
     object("editor")->assign("BackStyle",VbaValue::numeric(1)); assert(sample(editor)==QColor(255,0,0));
     for(const auto& item:std::vector<std::pair<VbaValue,int>>{{VbaValue{},94},{VbaValue::string("bad"),13},{VbaValue::numeric(-1),6},{VbaValue::numeric(256),6},{VbaValue::numeric(2),5}}) {
         int error=0; try { object("editor")->assign("BackStyle",item.first); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
@@ -2609,14 +2609,14 @@ End
         VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw linaccess::VbaRuntimeError(438,"No members"); }
     };
     auto scalar=std::make_shared<BackgroundScalar>(); object("editor")->assign("BackStyle",VbaValue::reference(scalar));
-    assert(scalar->reads==1 && object("editor")->member("BackStyle",{}).asNumber()==0 && sample(editor)==QColor(240,240,240));
+    assert(scalar->reads==1 && object("editor")->member("BackStyle",{}).asNumber()==0 && sample(editor)==QApplication::palette().color(QPalette::Window));
     object("editor")->assign("BackStyle",VbaValue::numeric(1));
     int error=0; try { object("paint")->assign("BackColor",VbaValue::numeric(255)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==438);
     error=0; try { object("editor")->member("BackStyle",{VbaValue::numeric(1)}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==450);
     root->assign("Dirty",VbaValue::logical(false));
     assert(sql.exec("SELECT value FROM records WHERE id=1") && sql.next() && sql.value(0).toString()=="fresh"); sql.finish();
     selector->setCurrentIndex(2); assert(editor->text()=="two" && sample(editor)==QApplication::palette().color(QPalette::Active,QPalette::Button));
-    object("editor")->assign("BackStyle",VbaValue::numeric(0)); root->member("Requery",{}); assert(sample(editor)==QColor(240,240,240));
+    object("editor")->assign("BackStyle",VbaValue::numeric(0)); root->member("Requery",{}); assert(sample(editor)==QApplication::palette().color(QPalette::Window));
     assert(!form.hasUnsavedChanges() && form.close());
     AccessFormPreview fresh("fresh backgrounds",source,{},db); auto freshRoot=makePreviewFormObject(fresh);
     assert(freshRoot->objectMember("editor",{}).object->member("BackStyle",{}).asNumber()==1 && freshRoot->objectMember("editor",{}).object->member("BackColor",{}).asNumber()==65280); assert(fresh.close());
