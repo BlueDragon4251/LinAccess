@@ -2197,6 +2197,67 @@ End Sub
     assert(host.fields["StatementError"]=="-2147220990:ErrObject" && host.fields["StatementDivision"]=="11");
     for(const auto expression:{"-Null","+Null","-(Null+1)","+(Null+1)"})
         assert(evaluateVbaExpression(expression,host,{}).kind==VbaValue::Kind::Null);
+    const auto computedBranches=executeVbaProcedure(R"VBA(Private picks As Long
+Function PickBranch() As Double
+picks=picks+1
+PickBranch=1.5
+End Function
+Sub ComputedBranches()
+Dim items As Collection, item As Variant, total As Long, selector As Variant, repaired As Long
+Set items=New Collection
+items.Add 1
+items.Add 2
+For Each item In items
+On PickBranch() GoSub Wrong, 0200
+Next
+selector="bad"
+On Error GoTo Repair
+On selector GoSub Wrong
+On Error GoTo 0
+On 0.5 GoTo Wrong
+On 3 GoSub Wrong, Wrong
+On Error Resume Next
+On -1 GoTo Wrong
+Me!ComputedErrors=CStr(Err.Number)
+Err.Clear
+On 256 GoSub Wrong
+Me!ComputedErrors=Me!ComputedErrors & ":" & CStr(Err.Number)
+Err.Clear
+On 32768 GoTo Wrong
+Me!ComputedErrors=Me!ComputedErrors & ":" & CStr(Err.Number)
+Err.Clear
+On Null GoTo Wrong
+Me!ComputedErrors=Me!ComputedErrors & ":" & CStr(Err.Number)
+On Error GoTo 0
+For Each item In items
+With items
+If item=1 Then On 1 GoTo Released
+End With
+Next
+Released:
+items.Add 3
+Me!ComputedBranches=CStr(total) & ":" & CStr(picks) & ":" & CStr(items.Count) & ":" & CStr(repaired)
+Exit Sub
+Wrong:
+Err.Raise 5
+Exit Sub
+200 total=total+item
+If total=1 Then On 1 GoSub Ten, Wrong
+Return
+Ten:
+total=total+10
+Return
+Repair:
+selector=0
+repaired=repaired+1
+Resume
+End Sub
+)VBA","ComputedBranches",host);
+    if(computedBranches.status!=VbaExecutionStatus::Completed) std::cerr<<"Computed branch error="<<computedBranches.errorNumber<<" line="<<computedBranches.line<<" explanation="<<computedBranches.explanation<<"\n";
+    assert(computedBranches.status==VbaExecutionStatus::Completed && host.fields["ComputedBranches"]=="13:2:3:1" && host.fields["ComputedErrors"]=="5:5:6:94");
+    const auto missingComputed=executeVbaProcedure("Sub MissingComputed()\nMe!NeverComputed=1\nOn 0 GoTo Missing\nEnd Sub","MissingComputed",host);
+    assert(missingComputed.status==VbaExecutionStatus::Error && !host.fields.contains("NeverComputed"));
+    assert(validateVbaProcedure("Sub InboundComputed()\nOn 0 GoTo Inner\nFor i=1 To 2\nInner: Exit For\nNext\nEnd Sub","InboundComputed").status==VbaExecutionStatus::Unsupported);
     const auto goSubResult=executeVbaProcedure(R"VBA(Sub GoSubScopes()
 Dim items As Collection, item As Variant, total As Long, held As Long, i As Long
 Set items=New Collection

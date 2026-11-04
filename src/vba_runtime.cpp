@@ -36,11 +36,16 @@ struct AliasRefreshScope {
 // This interpreter deliberately reports unsupported VBA instead of silently
 // treating Access/DAO/COM calls as successful no-ops.
 struct ArrayResizeTarget { std::string name,bounds,elementType; };
+struct BranchDestination {
+    std::string label;
+    int partner{-1};
+    int conditionalUnwind{},withUnwind{},forUnwind{};
+};
 struct Statement {
     enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
-                      Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, RaiseError, ErrorResumeNext, ErrorDisable, Label, Jump, GoSub, ReturnSubroutine, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
+                      Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, RaiseError, ErrorResumeNext, ErrorDisable, Label, Jump, GoSub, ComputedJump, ComputedGoSub, ReturnSubroutine, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
     std::string argument;
     std::string expression;
     int line{};
@@ -53,6 +58,7 @@ struct Statement {
     bool persistent{};
     std::vector<ArrayResizeTarget> resizeTargets;
     int sourceStatementEnd{-1};
+    std::vector<BranchDestination> destinations;
 };
 
 std::string trim(std::string text) {
@@ -589,6 +595,8 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     const std::regex goSub(R"(^GoSub\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)", std::regex::icase);
     const std::regex jump(R"(^GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)", std::regex::icase);
     const std::regex errorHandler(R"(^On\s+Error\s+GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)", std::regex::icase);
+    const std::regex computedBranch(R"(^On\s+(.+)\s+(GoTo|GoSub)\s+(.+)$)",std::regex::icase);
+    const std::regex destinationName(R"(^(?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)");
     const std::regex resumeZero(R"(^Resume\s+0+$)",std::regex::icase);
     const std::regex resumeLabel(R"(^Resume\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)", std::regex::icase);
     const std::regex whileStart(R"(^(Do\s+(While|Until)|While)\s+(.+)$)", std::regex::icase);
@@ -779,28 +787,38 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     if(item.type==Statement::Type::Label && !labels.emplace(lower(item.argument),index).second)
                         return {VbaExecutionStatus::Error,"Duplicate line label",item.line};
                 }
-                for(int index=0;index<static_cast<int>(statements.size());++index) {
-                    auto& instruction=statements[index];
-                    if (instruction.type != Statement::Type::Jump && instruction.type != Statement::Type::GoSub && instruction.type != Statement::Type::ErrorHandler
-                        && instruction.type != Statement::Type::ResumeLabel) continue;
-                    const auto target = labels.find(lower(instruction.argument));
-                    if (target == labels.end()) return {VbaExecutionStatus::Error, "Sprungmarke fehlt", instruction.line};
-                    instruction.partner = target->second;
+                const auto bindDestination=[&](BranchDestination& destination,bool jump,int index,int line) -> std::optional<VbaExecutionResult> {
+                    const auto target=labels.find(lower(destination.label));
+                    if(target==labels.end()) return VbaExecutionResult{VbaExecutionStatus::Error,"Sprungmarke fehlt",line};
+                    destination.partner=target->second;
                     const int destinationScope=statementScopes[target->second];
-                    if(instruction.type!=Statement::Type::Jump) {
-                        if(destinationScope>=0) return {VbaExecutionStatus::Unsupported,"GoSub/error/Resume targets inside blocks are not implemented",instruction.line};
-                        continue;
+                    if(!jump) {
+                        if(destinationScope>=0) return VbaExecutionResult{VbaExecutionStatus::Unsupported,"GoSub/error/Resume targets inside blocks are not implemented",line};
+                        return {};
                     }
                     int scope=statementScopes[index];
                     while(scope>=0 && scope!=destinationScope) {
                         const auto type=statements[scope].type;
-                        if(type==Statement::Type::If || type==Statement::Type::Select) ++instruction.conditionalUnwind;
-                        else if(type==Statement::Type::With) ++instruction.withUnwind;
-                        else if(type==Statement::Type::For || type==Statement::Type::ForEach) ++instruction.forUnwind;
+                        if(type==Statement::Type::If || type==Statement::Type::Select) ++destination.conditionalUnwind;
+                        else if(type==Statement::Type::With) ++destination.withUnwind;
+                        else if(type==Statement::Type::For || type==Statement::Type::ForEach) ++destination.forUnwind;
                         scope=statementScopes[scope];
                     }
-                    if(scope!=destinationScope)
-                        return {VbaExecutionStatus::Unsupported,"GoTo cannot enter an inactive or sibling block",instruction.line};
+                    if(scope!=destinationScope) return VbaExecutionResult{VbaExecutionStatus::Unsupported,"GoTo cannot enter an inactive or sibling block",line};
+                    return {};
+                };
+                for(int index=0;index<static_cast<int>(statements.size());++index) {
+                    auto& instruction=statements[index];
+                    if(instruction.type==Statement::Type::ComputedJump || instruction.type==Statement::Type::ComputedGoSub) {
+                        for(auto& destination:instruction.destinations)
+                            if(const auto failure=bindDestination(destination,instruction.type==Statement::Type::ComputedJump,index,instruction.line)) return *failure;
+                    } else if(instruction.type==Statement::Type::Jump || instruction.type==Statement::Type::GoSub
+                        || instruction.type==Statement::Type::ErrorHandler || instruction.type==Statement::Type::ResumeLabel) {
+                        BranchDestination destination{instruction.argument};
+                        if(const auto failure=bindDestination(destination,instruction.type==Statement::Type::Jump,index,instruction.line)) return *failure;
+                        instruction.partner=destination.partner; instruction.conditionalUnwind=destination.conditionalUnwind;
+                        instruction.withUnwind=destination.withUnwind; instruction.forUnwind=destination.forUnwind;
+                    }
                 }
             }
             return {VbaExecutionStatus::Completed, {}, line};
@@ -919,6 +937,18 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             const auto name=canonicalLineLabel(match[1].str());
             if(!name) return {VbaExecutionStatus::Unsupported,"Line number exceeds 65529",line};
             statements.push_back({*name=="0" ? Statement::Type::ErrorDisable : Statement::Type::ErrorHandler,*name,{},line});
+        } else if (std::regex_match(source,match,computedBranch)) {
+            const auto expression=trim(match[1].str());
+            if(!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Computed branch selector is unsupported",line};
+            Statement branch{lower(match[2].str())=="goto" ? Statement::Type::ComputedJump : Statement::Type::ComputedGoSub,{},expression,line};
+            for(const auto& value:splitArguments(match[3].str())) {
+                if(!std::regex_match(value,destinationName)) return {VbaExecutionStatus::Error,"Computed branch requires local line labels",line};
+                const auto name=canonicalLineLabel(value);
+                if(!name) return {VbaExecutionStatus::Unsupported,"Line number exceeds 65529",line};
+                branch.destinations.push_back({*name});
+            }
+            if(branch.destinations.empty()) return {VbaExecutionStatus::Error,"Computed branch requires destinations",line};
+            statements.push_back(std::move(branch));
         } else if (lower(source) == "resume next") {
             statements.push_back({Statement::Type::ResumeNext, {}, {}, line});
         } else if (lower(source) == "resume" || std::regex_match(source,resumeZero)) {
@@ -1291,6 +1321,8 @@ VbaExecutionResult parseProcedure(std::string_view module,std::string_view name,
     for(const auto& instruction:statements) {
         add(instruction.argument.capacity()+instruction.expression.capacity()+instruction.endExpression.capacity()+instruction.stepExpression.capacity());
         add(instruction.fixedBounds.capacity()*sizeof(VbaArrayDimension)); scalar(instruction.constantValue);
+        add(instruction.destinations.capacity()*sizeof(BranchDestination));
+        for(const auto& destination:instruction.destinations) add(destination.label.capacity());
         add(instruction.resizeTargets.capacity()*sizeof(ArrayResizeTarget));
         for(const auto& target:instruction.resizeTargets) add(target.name.capacity()+target.bounds.capacity()+target.elementType.capacity());
     }
@@ -1980,6 +2012,12 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     const auto evaluateObject = [&](std::string_view expression) {
         return evaluateVbaObjectExpression(expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase);
     };
+    const auto selectedBranch=[&](const Statement& instruction) -> const BranchDestination* {
+        const auto selector=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.expression)),"integer").number);
+        if(selector<0 || selector>255) throw VbaRuntimeError(5,"Computed branch selector is outside 0-255");
+        if(selector==0 || static_cast<std::size_t>(selector)>instruction.destinations.size()) return nullptr;
+        return &instruction.destinations[static_cast<std::size_t>(selector-1)];
+    };
     const auto leaveFailedNextGroup=[&](std::size_t first) {
         const int end=instructions[first].sourceStatementEnd;
         if(end<0) return;
@@ -2035,24 +2073,31 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::Label:
                 break;
             case Statement::Type::Jump:
+            case Statement::Type::ComputedJump:
                 if (active) {
+                    const BranchDestination direct{{},instruction.partner,instruction.conditionalUnwind,instruction.withUnwind,instruction.forUnwind};
+                    const auto* destination=instruction.type==Statement::Type::ComputedJump ? selectedBranch(instruction) : &direct;
+                    if(!destination) break;
                     const auto frameDepth=subroutines.empty() ? 0 : subroutines.back().frameDepth;
                     const auto loopDepth=subroutines.empty() ? 0 : subroutines.back().loopDepth;
                     const auto withDepth=subroutines.empty() ? 0 : subroutines.back().withDepth;
-                    const auto unwindFrames=static_cast<std::size_t>(instruction.conditionalUnwind);
-                    const auto unwindLoops=static_cast<std::size_t>(instruction.forUnwind);
-                    const auto unwindWith=static_cast<std::size_t>(instruction.withUnwind);
+                    const auto unwindFrames=static_cast<std::size_t>(destination->conditionalUnwind);
+                    const auto unwindLoops=static_cast<std::size_t>(destination->forUnwind);
+                    const auto unwindWith=static_cast<std::size_t>(destination->withUnwind);
                     if(frames.size()<frameDepth+unwindFrames || loops.size()<loopDepth+unwindLoops || withFrames.size()<withDepth+unwindWith)
                         throw VbaRuntimeError(5,"Invalid GoTo scope");
                     frames.resize(frames.size()-unwindFrames); loops.resize(loops.size()-unwindLoops); withFrames.resize(withFrames.size()-unwindWith);
-                    active=true; ip=static_cast<std::size_t>(instruction.partner);
+                    active=true; ip=static_cast<std::size_t>(destination->partner);
                 }
                 break;
             case Statement::Type::GoSub:
+            case Statement::Type::ComputedGoSub:
                 if(active) {
+                    const auto* destination=instruction.type==Statement::Type::ComputedGoSub ? selectedBranch(instruction) : nullptr;
+                    if(instruction.type==Statement::Type::ComputedGoSub && !destination) break;
                     if(subroutines.size()>=48) throw VbaRuntimeError(28,"GoSub return stack exhausted");
                     subroutines.push_back({ip,frames.size(),loops.size(),withFrames.size(),active});
-                    active=true; ip=static_cast<std::size_t>(instruction.partner);
+                    active=true; ip=static_cast<std::size_t>(destination ? destination->partner : instruction.partner);
                 }
                 break;
             case Statement::Type::ReturnSubroutine:
