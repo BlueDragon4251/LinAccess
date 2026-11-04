@@ -824,3 +824,20 @@ unabhängigen Wertkopien. Deklarations-/Class-Array-/COM-Grenzen bleiben offen.
 VARIANT_ARRAY_RUNTIME.md beschreibt den Umfang. Vollsuite 48/48 (92,45 s), frisch
 GUI-frei 1/1 (1,79 s), Debian-Paket und vier Original-SHA-256 bestanden.
 Keine neuen Testziele. 346 erledigte / 72 offene erfasste Punkte, keine Gesamtquote.
+
+
+## Native Objektbindung und explizites Static (2026-11-04)
+
+Native Scripting.Dictionary mit geprueften Schluesseln, Snapshots und
+Enumerationslebensdauer ist implementiert; Standard-Indexschreiben auf Objekte
+und DAO-Felder fuehrt echte gepufferte Feld-/SQL-Aenderungen aus. Scalar
+Object-Modulfelder und begrenzte qualifizierte DAO-Felder/Parameter/Rueckgaben
+halten echte Referenzen/Nothing und pruefen Typen. Explizite Static-Deklarationen
+in Prozeduren behalten Werte/Objekte/Arrays je Host, Prozedur und Quelltext.
+Die groesseren Static-Sub/Function-Regeln bleiben ausdruecklich Unsupported.
+Details und Grenzen: SCRIPTING_DICTIONARY_RUNTIME.md, DAO_OBJECT_BINDINGS.md,
+OPTIONAL_ARGUMENT_RUNTIME.md, STATIC_LOCAL_RUNTIME.md (alle unter docs/).
+Dieser Stand: 48/48 Desktop, frisch GUI-frei 1/1, Debian-Paket und vier Original-
+Fixture-Hashes bestanden. 372 erledigte / 72 offene erfasste Checklistenpunkte;
+keine vollstaendige Access-Paritaet. Originalabfragen-/Login-Grenzen und fehlende
+Access-2003-Ergebnisreferenz bleiben bestehen.

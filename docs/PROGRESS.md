@@ -4340,3 +4340,16 @@ Full desktop 48/48 (77.79 s), freshly rebuilt GUI-free core 1/1 (1.23 s),
 targeted core/DAO 2/2 (1.59 s), Debian payload/permissions/Build-ID/pinned SQLite
 and all four original fixture hashes pass. No extra CTest target. Scoped
 checklist 371 checked / 72 open, not complete Access 2003 parity.
+
+
+## Explicit persistent procedure-local Static declarations (2026-11-04)
+
+STATIC_LOCAL_RUNTIME.md specifies actual per-host/procedure/source static
+scalar/object/array state, nested-call alias refresh and current initialization
+limits. Existing core cases cover persistence, native Dictionary/fixed/dynamic
+arrays, independent scopes and recursion. Static procedure modifiers now refuse
+incomplete implicit-local behavior instead of silently executing transient
+locals. Full desktop 48/48 (79.78 s), freshly rebuilt GUI-free 1/1 (1.45 s),
+targeted core 1/1 (1.26 s), Debian payload/permissions/Build-ID/pinned SQLite and
+all four original hashes pass. No new CTest target. Scoped checklist 372 checked
+/ 72 open, not complete Access 2003 parity.
