@@ -3454,6 +3454,48 @@ End Sub
     const auto byteReturn=executeVbaProcedureWithArguments("Function Echo(ByVal value As Variant) As Variant\nEcho=value\nEnd Function","Echo",host,byteArguments);
     assert(byteReturn.status==VbaExecutionStatus::Completed && byteReturn.typedReturnValue->kind==VbaValue::Kind::ByteArray);
     assert(byteReturn.typedReturnValue->bytes==byteArguments[0].bytes && !byteReturn.returnValue);
+    const std::string byteEnumeration=R"VBA(Sub ChangeByte(ByRef source As Variant)
+source(1)=200
+End Sub
+Sub PackedBytes(ByVal source As Variant)
+Dim item As Variant, count As Long, total As Long
+For Each item In source
+total=total+item
+count=count+1
+If count=1 Then ChangeByte source
+Me!ByteControlType=TypeName(item)
+Next item
+Me!ByteEnumeration=CStr(total) & ":" & CStr(count) & ":" & CStr(IsObject(source))
+End Sub
+Sub TypedBytes()
+Dim source(-1 To 0,2 To 3) As Byte
+Dim item As Variant, values As String
+source(-1,2)=0
+source(0,2)=1
+source(-1,3)=128
+source(0,3)=255
+For Each item In source
+values=values & CStr(item) & ":"
+Next item
+Me!TypedByteEnumeration=values & TypeName(item)
+End Sub
+Sub ReplaceBytes(ByVal source As Variant)
+Dim item As Variant
+On Error Resume Next
+For Each item In source
+ReDim source(0 To 2) As Byte
+Me!ByteReplacement=CStr(Err.Number)
+Exit For
+Next item
+End Sub
+)VBA";
+    const auto packedEnumeration=executeVbaProcedureWithArguments(byteEnumeration,"PackedBytes",host,byteArguments);
+    assert(packedEnumeration.status==VbaExecutionStatus::Completed && host.fields["ByteEnumeration"]=="455:3:False" && host.fields["ByteControlType"]=="Byte");
+    assert(byteArguments[0].bytes==std::vector<unsigned char>({0,128,255}));
+    assert(executeVbaProcedure(byteEnumeration,"TypedBytes",host).status==VbaExecutionStatus::Completed && host.fields["TypedByteEnumeration"]=="0:1:128:255:Byte");
+    std::vector<VbaValue> emptyEnumeration{VbaValue::byteArray({})};
+    assert(executeVbaProcedureWithArguments(byteEnumeration,"PackedBytes",host,emptyEnumeration).status==VbaExecutionStatus::Completed && host.fields["ByteEnumeration"]=="0:0:False");
+    assert(executeVbaProcedureWithArguments(byteEnumeration,"ReplaceBytes",host,byteArguments).status==VbaExecutionStatus::Completed && host.fields["ByteReplacement"]=="3251");
     const auto typedPreserve=executeVbaProcedure(R"VBA(Function PreserveStrings() As String
 Dim words As Variant
 Dim before As Variant

@@ -32,6 +32,13 @@ std::string lower(std::string s) {
     return s;
 }
 VbaRuntimeError error(const std::string& reason, int code = 5) { return VbaRuntimeError(code, reason); }
+// Opaque allocation identity for packed Byte() values; never an Object Variant.
+class ByteArrayAllocation final : public VbaObject {
+public:
+    VbaValue member(std::string_view,const std::vector<VbaValue>&) override {
+        throw VbaRuntimeError(3251,"Internal Byte array metadata is not a callable object");
+    }
+};
 VbaValue stringLongResult(std::size_t value) {
     if(value>static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) throw error("String result exceeds VBA Long",6);
     return VbaValue::longInteger(static_cast<std::int32_t>(value));
@@ -1922,7 +1929,7 @@ VbaValue VbaValue::single(float value) { auto v=numeric(value); v.numericType=Nu
 VbaValue VbaValue::integer(std::int16_t value) { auto v=numeric(value); v.numericType=NumericType::Integer; return v; }
 VbaValue VbaValue::longInteger(std::int32_t value) { auto v=numeric(value); v.numericType=NumericType::Long; return v; }
 VbaValue VbaValue::string(std::string value) { VbaValue v; v.kind = Kind::Text; v.text = std::move(value); return v; }
-VbaValue VbaValue::byteArray(std::vector<unsigned char> value) { VbaValue v; v.kind=Kind::ByteArray; v.bytes=std::move(value); return v; }
+VbaValue VbaValue::byteArray(std::vector<unsigned char> value) { VbaValue v; v.kind=Kind::ByteArray; v.bytes=std::move(value); v.object=std::make_shared<ByteArrayAllocation>(); return v; }
 VbaValue VbaValue::currency(std::int64_t units) { VbaValue v; v.kind=Kind::Currency; v.currencyUnits=units; return v; }
 VbaValue VbaValue::logical(bool value) { VbaValue v; v.kind = Kind::Boolean; v.boolean = value; return v; }
 namespace {

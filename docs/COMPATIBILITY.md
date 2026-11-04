@@ -2421,3 +2421,16 @@ Variant/coercion/oracle boundaries. Full desktop 48/48 (79.37 s), freshly rebuil
 GUI-free core 1/1 (1.49 s), targeted core/DAO/forms 3/3 (10.76 s), Debian payload/
 permissions/Build-ID/pinned SQLite and four original fixture hashes pass. No new
 CTest target. Scoped checklist 376 checked / 72 open, not complete Access parity.
+
+
+## Actual Byte Variant For Each execution (2026-11-04)
+
+Packed and multidimensional Byte arrays enumerate true Byte Variants in native
+linear order. Opaque allocation identity preserves value copies/live supported
+ByRef element updates and detects source replacement without reporting Byte()
+as Object. VARIANT_ARRAY_RUNTIME.md documents ownership, source and alias
+boundaries. Existing core target checks 0/128/255, empty arrays, typed order,
+copy isolation and ReDim refusal. Full desktop 48/48 (78.05 s), freshly rebuilt
+GUI-free 1/1 (1.26 s), targeted core 1/1 (1.22 s), Debian payload/permissions/
+Build-ID/pinned SQLite and all four original fixture hashes pass. No new CTest
+target. Scoped checklist 377 checked / 72 open, not complete Access parity.

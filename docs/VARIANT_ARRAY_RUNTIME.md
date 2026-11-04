@@ -61,7 +61,7 @@ changes during iteration, including element updates through a ByRef helper,
 while independent copies remain independent. Empty
 arrays skip the body. Direct source replacement, ReDim and Erase are rejected
 while traversing the source. Allocation replacement detected at Next also fails
-3251. Arbitrary function/property array sources, Byte array enumeration, full
+3251. Arbitrary function/property array sources, full
 cross-module alias/rebinding and mutation semantics remain open. This does not
 claim Windows Access enumeration parity for those boundaries.
 
@@ -92,7 +92,7 @@ Preserve changes execute in the existing core test target. No new targets.
 DAO GetRows constructs genuine zero-based field/record matrices from actual
 materialized SQL records; see [DAO_GETROWS_RUNTIME.md](DAO_GETROWS_RUNTIME.md).
 General constant-bound and class-specific array declarations, Class-specific/user-defined/fixed-length String
-arrays and full Byte enumeration remain open. This extends Variant values and ReDim, not the full declaration grammar
+arrays and general alias/oracle coverage remain open. This extends Variant values and ReDim, not the full declaration grammar
 or native Windows SAFEARRAY/COM interoperability. Existing one-million-cell
 runtime allocation bounds remain explicit.
 
@@ -177,8 +177,7 @@ procedures can inspect explicit detached Variant/value copies. Matching declared
 array parameters are supported below; ByRef to a plain Variant parameter remains
 3251 for a declared array. Optional/fixed-size array parameters, fixed-size
 arrays, class-specific arrays, fixed-length strings, full argument/COM/SAFEARRAY
-interop and full VBA error precedence remain open. Byte enumeration retains its
-prior explicit boundary. For Each on an unallocated array refuses 9.
+interop and full VBA error precedence remain open. Byte enumeration is described in the later increment below. For Each on an unallocated array refuses 9.
 
 Existing core integration checks unallocated metadata/bounds, type guards,
 Option Base, matching-array copy isolation, multidimensional traversal, typed
@@ -275,3 +274,40 @@ metadata permits direct transient-array For Each without reevaluating getters;
 named arrays retain existing live-source/shape guards. Other arbitrary property/
 function array sources remain outside this path. SCRIPTING_DICTIONARY_RUNTIME.md
 documents snapshot ownership and dictionary/object/DAO indexed writes.
+
+
+## Native Byte-array For Each (2026-11-04)
+
+Named packed Byte arrays and existing multidimensional/nonzero-bound Byte
+ArrayStorage values now enumerate actual Byte Variants through the common
+array loop path. Linear order remains first-dimension-fast. Variant loop controls
+are required; empty allocated arrays skip the body and unallocated arrays
+retain error 9. General direct function/property array sources remain bounded
+by the existing named/owned-source rules.
+
+Packed Byte values carry opaque allocation identity metadata while retaining
+Kind::ByteArray and their actual byte vector. IsObject remains false. Value
+copies retain logical identity; indexed edits preserve that token and value
+isolation. ReDim creates a new token. Common array checks can therefore detect
+whole-array replacement/resizing instead of weakening loop guards for Byte().
+Supported native ByRef element edits remain visible to subsequent iterations.
+This is not a general memory pin/alias implementation or a promise of atomic
+rollback for unsupported nested replacement.
+
+The existing core target checks 0/128/255, Byte subtype, live ByRef element
+change, caller value isolation, empty arrays, multidimensional order and direct
+ReDim refusal while enumerating. No extra CTest target. Full Access alias/error/
+COM/binary-field-write and general source-expression parity remain open.
+
+
+## Actual Byte Variant For Each execution (2026-11-04)
+
+Packed and multidimensional Byte arrays enumerate true Byte Variants in native
+linear order. Opaque allocation identity preserves value copies/live supported
+ByRef element updates and detects source replacement without reporting Byte()
+as Object. VARIANT_ARRAY_RUNTIME.md documents ownership, source and alias
+boundaries. Existing core target checks 0/128/255, empty arrays, typed order,
+copy isolation and ReDim refusal. Full desktop 48/48 (78.05 s), freshly rebuilt
+GUI-free 1/1 (1.26 s), targeted core 1/1 (1.22 s), Debian payload/permissions/
+Build-ID/pinned SQLite and all four original fixture hashes pass. No new CTest
+target. Scoped checklist 377 checked / 72 open, not complete Access parity.

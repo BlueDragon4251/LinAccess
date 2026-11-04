@@ -88,6 +88,8 @@ VbaValue makeVbaStringArray(std::vector<std::string> values) {
     auto bounds=singleDimension(0,elements.size()); return array(std::move(elements),std::move(bounds),"string");
 }
 bool sameVbaArrayAllocation(const VbaValue& left,const VbaValue& right) {
+    if(left.kind==VbaValue::Kind::ByteArray && right.kind==VbaValue::Kind::ByteArray)
+        return left.object && left.object==right.object;
     return left.kind==VbaValue::Kind::Array && right.kind==VbaValue::Kind::Array && storage(left).allocation==storage(right).allocation;
 }
 int vbaArrayType(const VbaValue& value) {
@@ -165,8 +167,8 @@ VbaValue vbaArrayElement(const VbaValue& value,const std::vector<VbaValue>& indi
 VbaValue withVbaArrayElement(const VbaValue& value,const std::vector<VbaValue>& indices,const VbaValue& element) {
     const auto index=offset(value,indices);
     if(value.kind==VbaValue::Kind::ByteArray) {
-        auto bytes=value.bytes; bytes[index]=static_cast<unsigned char>(coerceVbaModuleValue(element,"byte").number);
-        return VbaValue::byteArray(std::move(bytes));
+        auto result=value; result.bytes[index]=static_cast<unsigned char>(coerceVbaModuleValue(element,"byte").number);
+        return result;
     }
     const auto& original=storage(value); auto values=original.values;
     if(original.elementType=="object" && element.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Object array requires object references");

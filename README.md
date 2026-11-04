@@ -546,3 +546,21 @@ geprüfte Access-Feldtypen, vierstellige Currency-Konvertierung und vollständig
 lange Memo-Texte. Der SQL-Editor führt Access-Abfragen mit Parametern und
 DAO-Aktionsabfragen aus. Vollständige Datenblatt-, Designer- und Jet-Parität
 bleibt offen.
+
+
+## Weitere native Laufzeit- und Datenblattfunktionen (2026-11-04)
+
+- [Native Dictionary-Objekte und typisierte Bindungen](docs/SCRIPTING_DICTIONARY_RUNTIME.md),
+  [qualifizierte DAO-Bindungen](docs/DAO_OBJECT_BINDINGS.md), explizite
+  [Static-Variablen](docs/STATIC_LOCAL_RUNTIME.md) und
+  [Standardwert-Zuweisungen mit Let](docs/OBJECT_DEFAULT_ASSIGNMENT_RUNTIME.md)
+  nutzen echte native Werte und Referenzen.
+- [Strg+H: ganze Textfeldwerte ersetzen](docs/TABLE_REPLACE_RUNTIME.md) nutzt
+  den vorhandenen Entwurf-/Save-/SQL-Pfad.
+- [Esc: aktuelle Datensatzänderungen verwerfen](docs/TABLE_RECORD_UNDO_RUNTIME.md)
+  erhält andere Entwürfe und macht gespeicherte SQL-Daten nicht rückgängig.
+- [For Each über Byte-Arrays](docs/VARIANT_ARRAY_RUNTIME.md) liefert echte
+  Byte-Werte, auch bei mehrdimensionalen Arrays.
+
+Die verlinkten Dokumente nennen die jeweiligen Grenzen. Diese Ergänzungen
+belegen weiterhin keine vollständige Access-2003-Kompatibilität.
