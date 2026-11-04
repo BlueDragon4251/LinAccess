@@ -1979,8 +1979,13 @@ void MainWindow::editReport(const QString& existingName) {
     sql->setFont(codeFont); vba->setFont(codeFont);
     auto* row=new QHBoxLayout; auto* preview=addButton(row,"Vorschau"); preview->setObjectName("native-report-preview");
     auto* pdf=addButton(row,"PDF exportieren"); auto* save=addButton(row,"Speichern"); save->setObjectName("native-report-save"); outer->addLayout(row);
-    const auto definition=[old,title,sql,vba,canGrow,pageBreak,headerBreak] {
-        auto content=old; content.insert("title",title->text()); content.insert("sql",sql->toPlainText());
+    const auto definition=[this,existingName,old,title,sql,vba,canGrow,pageBreak,headerBreak] {
+        auto content=old;
+        if(!existingName.isEmpty()) {
+            const auto latest=objectDefinition("report",existingName);
+            if(!latest.isEmpty()) content=latest;
+        }
+        content.insert("title",title->text()); content.insert("sql",sql->toPlainText());
         content.insert("vba",vba->toPlainText()); content.insert("can_grow",canGrow->isChecked());
         content.insert("detail_force_new_page",pageBreak->currentIndex());
         content.insert("header_force_new_page",headerBreak->currentIndex());

@@ -19,8 +19,20 @@ printer or dummy print job. It works with the actual PDF backend. Physical print
 capabilities/output remain unvalidated; the print dialog remains the user's job
 selection and confirmation path.
 
-These settings belong to the open report session. Full Access page/printer object
-properties, original PrtMip/PrtDevMode/PrtDevNames decoding, persisted design setup,
+By default settings belong to the open report session. For an existing owned
+native report, **Im Berichtsentwurf speichern** explicitly stores versioned mm
+geometry in its main._la_objects definition. SQL, VBA, archived original-code
+fields and other keys are preserved. A conditional single-row update rejects a
+concurrently changed definition and does not commit a caller's transaction.
+Main-qualified queries reject TEMP catalog shadows and ambiguous report names.
+The report editor reloads current stored extra properties before saving, so a
+page-setup save made during nested preview is not overwritten by its older draft.
+
+Reopening loads and validates stored geometry before rendering. Invalid settings
+block report output with an explicit layout fallback; page setup can repair/save
+them. A failed saved-setting load is never reported as successful default output.
+Imported/unsaved reports retain session-only setup. Full Access printer properties,
+original PrtMip/PrtDevMode/PrtDevNames decoding, imported design round trips,
 column layouts and Windows print equivalence remain open. No source MDB is edited.
 
 The existing report case opens setup via an actual S key event, accepts landscape
@@ -28,3 +40,9 @@ and a 25-mm left margin through real controls, and independently checks PDF
 MediaBox orientation and extracted glyph x-position. Reopening exposes the saved
 session values; changing orientation then cancelling retains landscape in another
 actual PDF. No additional CTest target or catalog point.
+
+The mainwindow case explicitly saves/reopens native setup, verifies unchanged
+SQL/VBA and TEMP-shadow immunity, changes it in nested designer preview, and
+checks a later editor save retains the newer geometry. A malformed orientation
+disables report output without replacing an existing PDF, then actual dialog
+repair restores it. Five balanced Open/Close effects cover these document cycles.

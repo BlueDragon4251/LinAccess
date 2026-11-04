@@ -38,7 +38,7 @@ shadow cannot supply or overwrite report definitions. The existing main-window
 case creates a report through the actual designer, checks exact multiline SQL/VBA,
 executes TOP 2 over three SQL rows, checks code/typed controls/state/PDF, opens a
 normal SELECT report with WhereCondition through actual VBA, closes its caller,
-then edits/previews the report with four balanced Open/Close effects. No new
+then edits/previews the report with balanced Open/Close effects. No new
 CTest target or work-catalog ID was added.
 
 
@@ -48,3 +48,7 @@ see [CanGrow](REPORT_CANGROW.md). This does not add a complete visual property g
 
 The header and detail page-break selectors persist all four ForceNewPage choices and uses
 the actual page plan: [supported scope](REPORT_DETAIL_BREAKS.md).
+
+Owned report page geometry can now be explicitly saved and loaded with the design.
+The native editor preserves current stored extras when saving a draft after
+nested preview changes: [geometry persistence](REPORT_PAGE_SETUP.md).
