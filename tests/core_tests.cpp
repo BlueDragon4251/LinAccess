@@ -3097,6 +3097,37 @@ End Function
     const auto staticProcedure=executeVbaProcedure("Static Sub UnsupportedStatic()\nMe!UnexpectedStatic=1\nEnd Sub","UnsupportedStatic",staticHost);
     assert(staticProcedure.status==VbaExecutionStatus::Unsupported && !staticHost.fields.contains("UnexpectedStatic"));
 
+    const std::string typedDictionary=R"VBA(Private retained As Scripting.Dictionary
+Function GetDictionary() As Scripting.Dictionary
+If retained Is Nothing Then Set retained=New Scripting.Dictionary
+Set GetDictionary=retained
+End Function
+Sub UpdateDictionary(ByRef value As Scripting.Dictionary)
+If Not value.Exists("calls") Then value.Add "calls",0
+value("calls")=value("calls")+1
+End Sub
+Function OptionalDictionary(Optional ByVal value As Scripting.Dictionary=Nothing) As Boolean
+OptionalDictionary=value Is Nothing
+End Function
+Sub TypedDictionary()
+Dim value As Scripting.Dictionary
+Set value=GetDictionary()
+UpdateDictionary value
+Me!TypedDictionaryCalls=CStr(value("calls"))
+Me!TypedDictionaryOptional=CStr(OptionalDictionary()) & ":" & CStr(OptionalDictionary(value))
+On Error Resume Next
+Set value=New Collection
+Me!TypedDictionaryError=CStr(Err.Number)
+Me!TypedDictionaryIdentity=CStr(value Is retained)
+End Sub
+)VBA";
+    FakeForm typedDictionaryHost;
+    for(int call=1;call<=2;++call) {
+        const auto result=executeVbaProcedure(typedDictionary,"TypedDictionary",typedDictionaryHost);
+        assert(result.status==VbaExecutionStatus::Completed && typedDictionaryHost.fields["TypedDictionaryCalls"]==std::to_string(call));
+        assert(typedDictionaryHost.fields["TypedDictionaryOptional"]=="True:False" && typedDictionaryHost.fields["TypedDictionaryError"]=="13" && typedDictionaryHost.fields["TypedDictionaryIdentity"]=="True");
+    }
+
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub

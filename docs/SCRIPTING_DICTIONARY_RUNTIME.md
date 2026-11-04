@@ -4,10 +4,14 @@ CreateObject("Scripting.Dictionary") and New Scripting.Dictionary create actual
 independent C++ dictionaries. CreateObject supports the local known class only;
 unknown classes/remote activation refuse 3251. This is a native compatibility
 object, not general COM/ActiveX or reference-library activation. Use local Object
-variables and scalar Private/Public/Global module Object fields. Module fields
+variables, qualified Scripting.Dictionary declarations and scalar
+Private/Public/Global module Object/Dictionary fields. Module fields
 start as Nothing, retain actual native object identity across calls within their
 host and release references on Set ... = Nothing. Separate hosts own separate
-module state. Typed Scripting declarations/reference management remain open.
+module state. Qualified native Dictionary locals/module fields/parameters/
+function results bind matching references or Nothing; wrong object classes
+refuse 13 before replacement. Optional Dictionary parameters support omitted or
+explicit Nothing defaults. Generic reference management remains open.
 
 Add/Exists/Item/Count/Keys/Items/Remove/RemoveAll, distinct-key renaming and
 CompareMode operate on real ordered hash storage. Item reads of absent keys
@@ -66,10 +70,36 @@ Private/Public/Global scalar Object fields initialize to Nothing and retain real
 native references in per-host module state. Repeated Dictionary calls share
 actual storage; separate hosts remain independent; clearing both aliases with
 Set ... = Nothing releases bindings. Non-object native binding refuses 13.
-Early-bound Scripting/external declarations and automatic New remain open;
+Unsupported external declarations and automatic As New remain open;
 bounded native DAO declarations are described in DAO_OBJECT_BINDINGS.md.
 Existing core target covers repeated calls, identity, visibility, clear/recreate
 and host isolation. Full desktop 48/48 (78.39 s), freshly rebuilt GUI-free 1/1
 (1.09 s), targeted core 1/1 (1.05 s), Debian payload/permissions/Build-ID/pinned
 SQLite and all four original fixture hashes pass. Scoped checklist 369 checked
 / 72 open; not total Access 2003 parity.
+
+
+## Qualified native Dictionary declarations (2026-11-04)
+
+Scripting.Dictionary is a recognized native qualified type. Local, explicit
+Static and module declarations use native Nothing defaults and checked binding;
+required/optional parameters and function results use the existing actual
+reference/ByRef/ByVal paths. Existing core checks retained state across calls,
+a qualified return, typed ByRef mutation, optional Nothing/matching references
+and a wrong Collection Set leaving the original Dictionary identity intact.
+This does not load Scripting type libraries or enable unqualified class lookup,
+automatic As New, typed Dictionary arrays or general COM activation. Existing
+Dictionary key/comparison/default-member boundaries remain unchanged.
+
+
+## Qualified native Scripting.Dictionary bindings (2026-11-04)
+
+Native Dictionary local/module/parameter/function-result declarations initialize
+to Nothing and preserve checked actual references. Typed ByRef mutation,
+qualified returns, optional Nothing slots and wrong Collection replacement
+refusal execute in the existing core target. Generic type-library/COM loading,
+unqualified type lookup, As New and typed Dictionary arrays remain open.
+SCRIPTING_DICTIONARY_RUNTIME.md specifies the bounded native path. Full desktop
+48/48 (77.95 s), freshly rebuilt GUI-free 1/1 (1.26 s), targeted core 1/1
+(1.20 s), Debian payload/permissions/Build-ID/pinned SQLite and all four original
+hashes pass. Scoped checklist 375 checked / 72 open, not complete Access parity.
