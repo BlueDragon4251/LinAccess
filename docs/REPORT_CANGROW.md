@@ -17,9 +17,13 @@ and aggregate cache are restored on success and failure.
 
 The subset refuses partially staggered/overlapping vertical growth groups, overlapping controls,
 calculated-source growers, growing page/report headers/footers, contradictory
-explicit section settings and details too tall for one printable page. CanShrink,
-full multi-control flow, group/layout scheduling and long-control page splitting
-remain open. A read-only getter plus bounded flow is not full Access report or
+explicit section settings and details beyond the existing 3500-pixel canvas bound.
+Details fitting a printable page stay whole. Taller details are divided between
+actual native glyph/decorative-line bounds, repeating page headers/footers and
+retaining the row context. Fixed controls remain indivisible. If columns/control
+spans leave no safe boundary, output is refused. This is bounded long-detail
+splitting, not full KeepTogether/group scheduling or arbitrary-height streaming.
+CanShrink and full multi-control flow remain open. A read-only getter plus bounded flow is not full Access report or
 Windows font/geometry equivalence. No original CanGrow result oracle was run.
 
 Qt's normal single-line display string replaces paragraph characters. Unmasked
@@ -33,8 +37,13 @@ The existing report case uses real SQL multiline rows that occupy one page with
 fixed fields and two pages with growth. Additional parallel/stacked cases extract
 both complete fields on the expected pages, checking max-versus-sum flow. PDF extraction independently checks both
 final text markers and the calculated values below them. It checks restored
-geometry/value/canvas and refusal of an oversized detail without replacing an
-existing PDF. The existing mainwindow case persists the design setting and reads
+geometry/value/canvas and refusal beyond the canvas bound without replacing an
+existing PDF. A single SQL row with 125 numbered paragraphs, then the same data
+as automatically wrapped underlined text, spans pages; all tokens occur exactly
+once in order and Page/Pages contains the real total. The painter emits only
+lines with visible ink in the slice: clipping a full QTextDocument alone left
+invisible duplicate text commands in PDF extraction. Fragment clipping and
+line selection are scoped to recording and cleared before restoring the view. The existing mainwindow case persists the design setting and reads
 it through actual Report VBA. No new CTest target or catalog ID.
 
 Reference: [Microsoft TextBox.CanGrow](https://learn.microsoft.com/en-us/office/vba/api/Access.TextBox.CanGrow)

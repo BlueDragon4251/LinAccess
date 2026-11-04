@@ -1,5 +1,11 @@
 #include "native_stored_form.hpp"
 #include "native_stored_report.hpp"
+#include "native_report_text_layout.hpp"
+#include <QTextBlock>
+#include <QTextLayout>
+#include <QGlyphRun>
+#include <QRawFont>
+#include <QFontMetricsF>
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
 #include "native_project_close_guard.hpp"
@@ -190,9 +196,26 @@ protected:
 private:
     bool pressed_{};
 };
-class AccessReportTextBox final : public AccessTextBox {
+class AccessReportTextBox final : public AccessTextBox, public NativeReportTextLayout {
 public:
     using AccessTextBox::AccessTextBox;
+    void setReportTextClip(std::optional<QRect> clip) override { reportClip_=clip; }
+    QVector<QRectF> reportTextLines() const override {
+        QStyleOptionFrame frame; const auto area=textArea(frame);
+        if(area.width()<=0) return {};
+        QTextDocument text; prepareText(text,area.width());
+        (void)text.size(); // Force layout before visiting QTextLayout lines.
+        QVector<QRectF> result;
+        for(auto block=text.begin();block.isValid();block=block.next()) {
+            const auto* layout=block.layout();
+            for(int index=0;index<layout->lineCount();++index) {
+                const auto line=layout->lineAt(index);
+                const auto ink=lineInk(line);
+                if(!ink.isEmpty()) result.append(ink.translated(QPointF(area.topLeft())+layout->position()));
+            }
+        }
+        return result;
+    }
     QSize sizeHint() const override {
         auto result=QLineEdit::sizeHint(); QStyleOptionFrame frame;
         const auto area=textArea(frame); if(area.width()<=0) return result;
@@ -205,14 +228,52 @@ public:
 protected:
     void paintEvent(QPaintEvent*) override {
         QStyleOptionFrame frame; const auto area=textArea(frame);
-        QStylePainter painter(this); painter.drawPrimitive(QStyle::PE_PanelLineEdit,frame);
+        QStylePainter painter(this);
+        if(reportClip_) painter.setClipRect(*reportClip_);
+        painter.drawPrimitive(QStyle::PE_PanelLineEdit,frame);
         if(area.isEmpty()) return;
         QTextDocument text; prepareText(text,area.width());
-        painter.setClipRect(area); painter.translate(area.topLeft());
-        QAbstractTextDocumentLayout::PaintContext context; context.palette=frame.palette;
-        text.documentLayout()->draw(&painter,context);
+        painter.setClipRect(reportClip_ ? area.intersected(*reportClip_) : area);
+        painter.translate(area.topLeft());
+        if(reportClip_) {
+            (void)text.size();
+            const auto fragment=QRectF(area.intersected(*reportClip_)).translated(-area.topLeft());
+            painter.setPen(frame.palette.color(QPalette::Text));
+            for(auto block=text.begin();block.isValid();block=block.next()) {
+                const auto* layout=block.layout();
+                for(int index=0;index<layout->lineCount();++index) {
+                    const auto line=layout->lineAt(index);
+                    if(lineInk(line).translated(layout->position()).intersects(fragment))
+                        line.draw(&painter,layout->position());
+                }
+            }
+        } else {
+            QAbstractTextDocumentLayout::PaintContext context; context.palette=frame.palette;
+            text.documentLayout()->draw(&painter,context);
+        }
     }
 private:
+    std::optional<QRect> reportClip_;
+    QRectF lineInk(const QTextLine& line) const {
+        QRectF ink;
+        for(const auto& run:line.glyphRuns()) {
+            const auto glyphs=run.glyphIndexes(); const auto positions=run.positions();
+            for(qsizetype glyph=0;glyph<glyphs.size();++glyph) {
+                const auto box=run.rawFont().boundingRect(glyphs[glyph]).translated(positions[glyph]);
+                if(!box.isEmpty()) ink=ink.isEmpty() ? box : ink.united(box);
+            }
+        }
+        const QFontMetricsF metrics(font());
+        const auto decoration=[&](double displacement) {
+            const QRectF box(line.x(),line.y()+line.ascent()+displacement,
+                             line.naturalTextWidth(),qMax(1.0,metrics.lineWidth()));
+            if(!box.isEmpty()) ink=ink.isEmpty() ? box : ink.united(box);
+        };
+        if(font().underline()) decoration(metrics.underlinePos());
+        if(font().strikeOut()) decoration(-metrics.strikeOutPos());
+        if(font().overline()) decoration(-metrics.overlinePos());
+        return ink;
+    }
     QRect textArea(QStyleOptionFrame& frame) const {
         initStyleOption(&frame);
         auto area=style()->subElementRect(QStyle::SE_LineEditContents,&frame,this);

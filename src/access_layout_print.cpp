@@ -1,4 +1,5 @@
 #include "access_form_preview.hpp"
+#include "native_report_text_layout.hpp"
 #include <QAction>
 #include <QFileDialog>
 #include <QFile>
@@ -248,7 +249,7 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     const auto page=printer.pageRect(QPrinter::DevicePixel);
     const int pageHeight=qFloor(page.height()/scaleY);
     if (layout_.width/15.0>page.width()/scaleX || pageHeight<=header+footer
-        || (!recordRows_.isEmpty() && (detail<=0 || detail>pageHeight-header-footer))
+        || (!recordRows_.isEmpty() && (detail<=0 || detail>3500))
         || height("FormHeader")>pageHeight-header-footer
         || height("FormFooter")>pageHeight-header-footer) return false;
     if (!growers.isEmpty() && layout_.sectionCanGrow.contains("Section") && !layout_.sectionCanGrow.value("Section")) return false;
@@ -290,7 +291,7 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
                 const int wanted=state.widget->sizeHint().height();
                 const int delta=qMax(0,wanted-state.geometry.height());
                 if (!delta) continue;
-                if (delta>pageHeight-header-footer-detail) return false;
+                if (delta>3500-detail) return false;
                 for (const auto& other:layout_.controls) {
                     const auto key=other.name.toCaseFolded(); const auto peer=saved.value(key);
                     if(other.section=="Section" && key!=name && !peer.hidden && peer.geometry.intersects(state.geometry)) return false;
@@ -309,19 +310,32 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
             }
             int extra=0;
             for (const auto& group:growthGroups[row]) {
-                if(group.delta>pageHeight-header-footer-detail-extra) return false;
+                if(group.delta>3500-detail-extra) return false;
                 extra+=group.delta;
             }
             detailHeights[row]=detail+extra;
         }
     }
-    struct Band { QString section; int y,record,page,height; QPicture commands; };
+    const auto applyGrowth=[&](int row) {
+        for(const auto& control:layout_.controls) {
+            if(control.section!="Section") continue;
+            const auto key=control.name.toCaseFolded(); const auto state=saved.value(key);
+            auto rectangle=state.geometry; int shift=0;
+            for(const auto& group:growthGroups[row])
+                if(state.geometry.top()>group.bottom) shift+=group.delta;
+            rectangle.translate(0,shift);
+            for(const auto& change:growth[row])
+                if(change.name==key) rectangle.setHeight(rectangle.height()+change.delta);
+            state.widget->setGeometry(rectangle);
+        }
+    };
+    struct Band { QString section; int y,record,page,height,slice; QPicture commands; };
     QVector<Band> bands;
     int pageNumber=1;
     int record=recordRows_.isEmpty() ? 0 : 1;
     const auto append=[&](const QString& section,int y,int row) {
         const int size=section=="Section" && row>0 ? detailHeights[row-1] : height(section);
-        if (size) bands.append({section,y,row,pageNumber,size,{}});
+        if (size) bands.append({section,y,row,pageNumber,size,0,{}});
     };
     append("FormHeader",0,record);
     append("PageHeader",height("FormHeader"),record);
@@ -332,8 +346,47 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     };
     for (int row=0;row<recordRows_.size();++row) {
         const int size=detailHeights[row];
-        if (y+size>pageHeight-footer) { finishPage(); startPage(row+1); }
-        record=row+1; append("Section",y,record); y+=size;
+        if (size<=pageHeight-header-footer && y+size>pageHeight-footer) { finishPage(); startPage(row+1); }
+        record=row+1;
+        if(size<=pageHeight-header-footer) { append("Section",y,record); y+=size; continue; }
+        resetControls(); applyGrowth(row); currentRecordIndex_=record; loadRecord();
+        QVector<QPair<int,int>> forbidden;
+        const int origin=qRound(layout_.sectionOffsets.value("Section")/15.0);
+        for(const auto& control:layout_.controls) {
+            if(control.section!="Section") continue;
+            const auto state=saved.value(control.name.toCaseFolded());
+            if(state.hidden) continue;
+            if(const auto* text=control.canGrow ? dynamic_cast<const NativeReportTextLayout*>(state.widget.data()) : nullptr) {
+                for(const auto& line:text->reportTextLines()) {
+                    const int top=qFloor(state.widget->y()-origin+line.top());
+                    const int bottom=qCeil(state.widget->y()-origin+line.bottom());
+                    // Fixed-height text remains clipped as designed.
+                    const int limit=state.widget->geometry().bottom()+1-origin;
+                    if(top<limit) forbidden.append({top,qMin(bottom,limit)});
+                }
+            } else forbidden.append({state.widget->y()-origin,state.widget->geometry().bottom()+1-origin});
+        }
+        int slice=0;
+        while(slice<size) {
+            const int available=pageHeight-footer-y;
+            int end=qMin(size,slice+available);
+            // Moving a cut upward can enter another column's line. Iterate
+            // until the boundary lies outside every native text line/control.
+            bool moved=true;
+            while(moved) {
+                moved=false;
+                for(const auto& span:forbidden) if(end>span.first && end<span.second) {
+                    end=span.first; moved=true;
+                }
+            }
+            if(end<=slice) {
+                if(y>header) { finishPage(); startPage(record); continue; }
+                return false;
+            }
+            bands.append({"Section",y,record,pageNumber,end-slice,slice,{}});
+            y+=end-slice; slice=end;
+            if(slice<size) { finishPage(); startPage(record); }
+        }
     }
     if (y+height("FormFooter")>pageHeight-footer) { finishPage(); startPage(record); }
     append("FormFooter",y,record); finishPage();
@@ -341,35 +394,31 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     reportPrintPages_=pageNumber;
     for (auto& band:bands) {
         resetControls();
-        if(band.section=="Section" && band.record>0 && !growth[band.record-1].isEmpty()) {
-            for (const auto& control:layout_.controls) {
-                if(control.section!="Section") continue;
-                const auto key=control.name.toCaseFolded(); const auto state=saved.value(key);
-                auto rectangle=state.geometry; int shift=0;
-                for(const auto& group:growthGroups[band.record-1])
-                    if(state.geometry.top()>group.bottom) shift+=group.delta;
-                rectangle.translate(0,shift);
-                for(const auto& change:growth[band.record-1])
-                    if(change.name==key) rectangle.setHeight(rectangle.height()+change.delta);
-                state.widget->setGeometry(rectangle);
-            }
-        }
+        if(band.section=="Section" && band.record>0) applyGrowth(band.record-1);
         currentRecordIndex_=band.record; reportPrintPage_=band.page; loadRecord();
         for (const auto& name:calculated.value(band.section)) {
             const auto* widget=controls_.value(name.toCaseFolded()).data();
             if (!widget || widget->property("la_calculation_error").toInt()!=0) return false;
         }
+        const int offset=qRound(layout_.sectionOffsets.value(band.section)/15.0)+band.slice;
+        const QRect fragment(0,offset,canvas->width(),band.height);
+        QVector<NativeReportTextLayout*> clipped;
+        const auto clearClips=qScopeGuard([&] { for(auto* text:clipped) text->setReportTextClip({}); });
         for (const auto& control:layout_.controls) {
             const auto state=saved.value(control.name.toCaseFolded());
-            state.widget->setVisible(!state.hidden && control.section==band.section);
+            const bool visible=!state.hidden && control.section==band.section && state.widget->geometry().intersects(fragment);
+            state.widget->setVisible(visible);
+            if(visible) if(auto* text=dynamic_cast<NativeReportTextLayout*>(state.widget.data())) {
+                text->setReportTextClip(fragment.translated(-state.widget->pos())); clipped.append(text);
+            }
         }
-        const int offset=qRound(layout_.sectionOffsets.value(band.section)/15.0);
         if(offset+band.height>3500) return false;
         canvas->setFixedHeight(qMax(canvasSize.height(),offset+band.height));
         canvas->setProperty("la_print_band_rect",QRect(0,offset,qRound(layout_.width/15.0),band.height));
         canvas->setProperty("la_print_band_color",layout_.sectionBackColors.contains(band.section)
             ? resolveOleColor(layout_.sectionBackColors.value(band.section)) : QColor(Qt::white));
         QPainter recording(&band.commands);
+        recording.setClipRect(QRect(0,0,canvas->width(),band.height));
         canvas->render(&recording,QPoint(),QRegion(0,offset,canvas->width(),band.height));
         if (!recording.end()) return false;
     }
