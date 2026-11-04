@@ -81,16 +81,22 @@ int main(int argc, char** argv) {
             linaccess::importAccessTable(db, source, table, schema, rows);
             {
                 const auto fields=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string(table.toStdString())}).object->member("Fields",{}).object;
+                const auto records=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{linaccess::VbaValue::string(table.toStdString()),linaccess::VbaValue::integer(4)}).object;
                 for(const auto& column:schema.columns) {
                     if(column.sourceOrigin=="MDBTOOLS_MYSQL" && column.sourceType=="VARCHAR" && column.sourceSize>0) {
                         const auto field=fields->member("Item",{linaccess::VbaValue::string(column.name.toStdString())}).object;
                         assert(field->member("Type",{}).number==10 && field->member("Size",{}).number==column.sourceSize); ++sourceTextSizes;
+                        const auto actual=records->member("Fields",{linaccess::VbaValue::string(column.name.toStdString())}).object;
+                        assert(actual->member("Type",{}).number==10 && actual->member("Size",{}).number==column.sourceSize);
                     }
                     if(column.sourceOrigin=="MDBTOOLS_MYSQL" && column.sourceType=="TEXT") {
                         const auto field=fields->member("Item",{linaccess::VbaValue::string(column.name.toStdString())}).object;
                         assert(field->member("Type",{}).number==12 && field->member("Size",{}).number==0); ++sourceMemos;
+                        const auto actual=records->member("Fields",{linaccess::VbaValue::string(column.name.toStdString())}).object;
+                        assert(actual->member("Type",{}).number==12 && actual->member("Size",{}).number==0);
                     }
                 }
+                records->member("Close",{});
             }
             {
                 std::vector<int> indices;

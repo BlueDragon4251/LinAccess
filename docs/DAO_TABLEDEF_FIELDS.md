@@ -43,8 +43,8 @@ or ambiguous source kinds (including undifferentiated TEXT/FLOAT) remain3251;
 no source distinction is inferred from row values. Invalid/duplicate/foreign
 field metadata refuses explicitly. These are read-only declaration identities,
 not proof of full underlying Jet storage/coercion or original-format round trips.
-The existing Recordset.Field.Type subset remains narrower where no such source
-identity is carried by its projection.
+Direct main-table Recordset fields now share proven source identity. Query and
+frozen projections remain narrower where no source identity is carried.
 
 Field.Size returns a Long for proven fixed types: Byte/Boolean1, Integer2,
 Long/Single4, Currency/Double/Date8, GUID16, and LongBinary/Memo0. The last two
@@ -63,3 +63,24 @@ Last fresh GUI-free core1/1 (1.66 s) is unchanged. Catalog456/384/72, F121 open.
 Reference: [DAO Field.Size](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-size-property-dao),
 [DAO Field.Type](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-type-property-dao).
 No Windows Access2003 execution oracle is claimed.
+
+## Physical Recordset field metadata
+
+Direct main-table recordsets now read the same checked source metadata as
+TableDef.Fields and keep immutable scalar DAO type/size maps with the loaded
+rowset data. Field.Type/Size therefore expose confirmed source Text/Memo/Double/
+Boolean and text capacities without reinterpreting row values. Clone shares the
+same data-family metadata. Requery refreshes it, and failed reload restores the
+prior maps with the existing rowset rollback guard. No native document, host,
+VBA object or live SQL cursor is stored in the maps. Closed/rollback/thread/
+connection guards apply before any field metadata read. Temporary-only sources
+keep the previous native declaration fallback; main-table TEMP shadow refusal
+is explicit. Query/frozen projections without proof keep their previous subset.
+
+This preserves source declaration identity, not complete Variant subtype/storage
+semantics (notably Single and all query lineage) or full DAO schema lifetime.
+The existing import test checks actual data, source type/size, Clone and closed
+field refusal. The original-copy test verifies57 text capacities and3 Memo
+identities on real physical recordsets as well as the table catalog.
+Final full desktop48/48 (84.98 s), package/build ID/SQLite/four original hashes
+passed; fresh headless runtime1/1 (1.66 s) is unchanged. Catalog456/384/72.

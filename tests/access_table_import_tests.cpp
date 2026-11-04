@@ -93,6 +93,19 @@ CREATE INDEX `label` ON `source` (`a``b`);
     assert(label->member("Type",{}).number==10 && label->member("Size",{}).number==20);
     const auto note=textFields->member("Item",{VbaValue::string("note")}).object;
     assert(note->member("Type",{}).number==12 && note->member("Size",{}).number==0);
+    {
+        const auto records=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("text_metadata")}).object;
+        const auto field=records->member("Fields",{VbaValue::string("label")}).object;
+        assert(field->member("Type",{}).number==10 && field->member("Size",{}).number==20);
+        assert(field->member("Value",{}).asText()=="short");
+        const auto memo=records->member("Fields",{VbaValue::string("note")}).object;
+        assert(memo->member("Type",{}).number==12 && memo->member("Size",{}).number==0);
+        const auto clone=records->member("Clone",{}).object;
+        const auto cloned=clone->member("Fields",{VbaValue::string("label")}).object;
+        assert(cloned->member("Type",{}).number==10 && cloned->member("Size",{}).number==20);
+        clone->member("Close",{}); records->member("Close",{});
+        bool closed=false; try { field->member("Size",{}); } catch(const VbaRuntimeError& error) { closed=error.number==3420; } assert(closed);
+    }
     const auto dragon=QString::fromUtf8("🐉");
     query.prepare("INSERT INTO text_metadata(label) VALUES(?)"); query.addBindValue(QString(18,'x')+dragon); assert(query.exec()); query.finish();
     query.prepare("INSERT INTO text_metadata(label) VALUES(?)"); query.addBindValue(QString(19,'x')+dragon); assert(!query.exec());

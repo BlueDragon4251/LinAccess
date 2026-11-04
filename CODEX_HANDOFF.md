@@ -1339,3 +1339,15 @@ Unicode-/NUL-Grenzen, fehlgeschlagene SQL-/DAO-Schreibzugriffe ohne neue Zeilen.
 docs/SOURCE_TEXT_CAPACITY.md; vollständige Jet-/UI-/Migrations-/Formatgleichheit offen.
 Aktueller Vollstand48/48 (85.63 s), Paket/Build-ID/SQLite und vier Originalfixture-
 Hashes bestanden; GUI-freier Core unverändert1/1 (1.66 s). Weiterhin456/384/72.
+
+Direkte physische Recordset.Field.Type/Size nutzen jetzt denselben geprüften
+Main-Schema-Metadatenleser wie TableDef.Fields. Wertkarten liegen bei der geladenen
+Datensatzfamilie, werden mit Clone geteilt und bei Requery erneuert; bestehender
+Reload-Rollback-Guard stellt sie bei Fehler atomar mit den Datensätzen wieder her.
+Keine UI-/Host-/VBA-Objekte oder SQL-Cursor im Metadatencache. Geschlossen-/Rollback-
+Thread-/Verbindungsprüfungen bleiben. Reine TEMP-Quellen nutzen alten Fallback,
+Main-TEMP-Schatten werden explizit abgewiesen. Query-/Frozen-Lineage und vollständige
+Variant-/Single-Speichergleichheit bleiben offen. docs/DAO_TABLEDEF_FIELDS.md.
+57 Textlängen/3 Memo-Typen auf echten Original-Arbeitskopie-Recordsets verifiziert.
+Aktueller Vollstand48/48 (84.98 s), Paket/Build-ID/SQLite/vier Originalfixture-Hashes
+bestanden; Core unverändert1/1 (1.66 s). Fester Katalog weiterhin456/384/72.
