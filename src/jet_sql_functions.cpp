@@ -231,6 +231,8 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL scalar evaluation failed",-1); }
 }
+void financialFv(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"FV",3,5); }
+void financialPmt(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Pmt",3,5); }
 void partitionRange(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Partition",4,4); }
 void stringLenB(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"LenB",1,1); }
 void stringReverse(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"StrReverse",1,1); }
@@ -577,6 +579,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_rgb",-1,&rgbColor,nullptr,nullptr);
     ensure("linaccess_jet_qbcolor",-1,&qbColor,nullptr,nullptr);
     ensure("linaccess_jet_partition",-1,&partitionRange,nullptr,nullptr);
+    ensure("linaccess_jet_fv",-1,&financialFv,nullptr,nullptr);
+    ensure("linaccess_jet_pmt",-1,&financialPmt,nullptr,nullptr);
     ensure("linaccess_jet_round",-1,&roundNumber,nullptr,nullptr);
     ensure("linaccess_jet_asc",-1,&stringAsc,nullptr,nullptr);
     ensure("linaccess_jet_ascw",-1,&stringAscW,nullptr,nullptr);

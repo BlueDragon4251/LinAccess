@@ -1278,3 +1278,12 @@ vollständige Datei-I/O und Windows-Oracle bleiben offen.
 docs/NATIVE_DIRECTORY_STATEMENTS.md; F040 bleibt offen, keine neue ID.
 Aktuell48/48 (82.86 s), frischer GUI-freier Core1/1 (1.76 s), Paket/Build-ID/SQLite
 und vier Originalfixture-Hashes bestanden; fester Katalog weiterhin456/384/72.
+
+FV/Pmt führen im begrenzten nativen VBA-/SQL-Pfad echte Finanzberechnungen aus;
+benannte Argumente nutzen VBA-Type, optionale Werte0, Double-Ergebnis,
+log1p/expm1 gegen Nullzins-Auslöschung und echte SQL-Zeilen. Ganze Perioden0..32767,
+Rate>-1, Type0/1; andere Randbereiche3251, Pmt mit0Perioden5.
+docs/NATIVE_FINANCIAL_FUNCTIONS.md; weitere Finanzfunktionen/Access-Oracle offen.
+Gezielt3/3 (2.38 s), frischer GUI-freier Core1/1 (1.54 s), Paket/Build-ID/SQLite und
+vier Originalfixture-Hashes bestanden. Letzter Vollstand davor48/48 (82.86 s),
+kein neuer Vollsuite-Nachweis behauptet; Katalog unverändert456/384/72, F068 offen.

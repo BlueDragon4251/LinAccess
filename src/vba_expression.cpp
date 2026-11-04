@@ -699,7 +699,7 @@ bool vbaIntrinsicName(const std::string& name) {
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
                 "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
-                "filelen","filedatetime","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition"};
+                "filelen","filedatetime","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt"};
     return intrinsics.contains(name);
 }
 
@@ -1254,6 +1254,8 @@ private:
                     {"strreverse",{{"Expression"},1}},
                     {"instr",{{"Start","String1","String2","Compare"},0}},
                     {"strcomp",{{"String1","String2","Compare"},2}},
+                    {"fv",{{"Rate","NPer","Pmt","Pv","Type"},3}},
+                    {"pmt",{{"Rate","NPer","Pv","Fv","Type"},3}},
                     {"partition",{{"Number","Start","Stop","Interval"},4}},
                     {"rgb",{{"Red","Green","Blue"},3}}, {"qbcolor",{{"Color"},1}},
                     {"cdate",{{"Expression"},1}},
@@ -1758,6 +1760,34 @@ private:
                 if (word!="rtrim" && word!="rtrim$") while(first<last && text[first]==' ') ++first;
                 if (word!="ltrim" && word!="ltrim$") while(last>first && text[last-1]==' ') --last;
                 return VbaValue::string(text.substr(first,last-first));
+            }
+            if (word=="fv" || word=="pmt") {
+                if (!host_) return {};
+                if (args.size()<3 || args.size()>5 || omitted[0] || omitted[1] || omitted[2])
+                    throw error("Financial function requires three to five arguments",450);
+                long double values[5]{};
+                for (std::size_t i=0;i<args.size();++i) {
+                    if (omitted[i]) continue;
+                    const auto value=scalarObjectValue(args[i]);
+                    if (value.kind==VbaValue::Kind::Null) throw error("Invalid Null financial argument",94);
+                    values[i]=coerceVbaModuleValue(value,"double").number;
+                    if (!std::isfinite(values[i])) throw error("Financial argument overflow",6);
+                }
+                const auto rate=values[0],periods=values[1],timing=values[4];
+                if (periods<0 || periods>32767 || std::floor(periods)!=periods)
+                    throw error("Financial period range requires an unavailable compatibility oracle",3251);
+                if (rate<=-1 || (timing!=0 && timing!=1))
+                    throw error("Financial rate or payment timing outside supported range",3251);
+                if (word=="pmt" && periods==0) throw error("Pmt requires nonzero periods",5);
+                const auto exponent=periods*std::log1p(rate);
+                const auto growth=std::exp(exponent);
+                const auto annuity=rate==0 ? periods : std::expm1(exponent)/rate;
+                const auto factor=annuity*(1+rate*timing);
+                const auto result=word=="fv" ? -(values[3]*growth+values[2]*factor)
+                    : -(values[2]*growth+values[3])/factor;
+                const auto converted=static_cast<double>(result);
+                if (!std::isfinite(converted)) throw error("Financial result overflow",6);
+                return VbaValue::numeric(converted);
             }
             if (word=="partition") {
                 if (!host_) return {};

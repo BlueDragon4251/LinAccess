@@ -717,6 +717,25 @@ End Sub
 int main() {
     {
         FakeForm host;
+        const auto eval=[&](const std::string& expression) { return linaccess::evaluateVbaExpression(expression,host,{}); };
+        double savings=0;
+        for (int month=0;month<12;++month) savings=savings*1.01+100;
+        const auto future=eval("FV(0.01,12,-100)");
+        assert(future.numericType==linaccess::VbaValue::NumericType::Double && std::abs(future.number-savings)<1e-9);
+        assert(std::abs(eval("FV(Type:=1,Pmt:=-100,NPer:=12,Rate:=0.01)").number-savings*1.01)<1e-9);
+        assert(eval("FV(0,12,-100,,1)").number==1200);
+        assert(std::abs(eval("FV(0.000000000000001,12,-100)").number-1200)<1e-9);
+        const auto payment=eval("Pmt(Pv:=1000,Rate:=0.01,NPer:=12,Fv:=100)").number;
+        double loan=1000;
+        for (int month=0;month<12;++month) loan=loan*1.01+payment;
+        assert(std::abs(loan+100)<1e-9);
+        assert(eval("Pmt(0,12,1000,200)").number==-100);
+        bool invalid=false;
+        try { eval("Pmt(0,0,1000)"); } catch(const linaccess::VbaRuntimeError& e) { invalid=e.number==5; }
+        assert(invalid);
+    }
+    {
+        FakeForm host;
         const auto eval=[&](const std::string& source) { return linaccess::evaluateVbaExpression(source,host,{}); };
         assert(eval("Partition(0,0,99,5)").asText()=="  0:  4");
         assert(eval("Partition(Interval:=20,Stop:=1010,Start:=100,Number:=1001)").asText()=="1000:1010");
