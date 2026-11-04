@@ -578,7 +578,7 @@ public:
         }
     }
     linaccess::VbaValue domainAggregate(std::string_view function,const std::vector<linaccess::VbaValue>& args) override {
-        if(function=="dlookup") return linaccess::nativeDomainLookup(preview_.db_,args);
+        if(function=="dlookup" || function=="dmin" || function=="dmax" || function=="davg") return linaccess::nativeDomainValue(preview_.db_,args,function);
         if (args.size()<2 || args.size()>3) throw linaccess::VbaRuntimeError(450,"Invalid domain aggregate arguments");
         if (args[0].kind==linaccess::VbaValue::Kind::Null || args[1].kind==linaccess::VbaValue::Kind::Null)
             throw linaccess::VbaRuntimeError(94,"Invalid Null domain aggregate argument");

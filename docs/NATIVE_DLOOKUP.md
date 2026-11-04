@@ -33,3 +33,29 @@ Reference: [Access 2003 DLookup](https://documentation.help/MS-Office-Access-200
 describes table/non-parameter query domains, no-match NULL, arbitrary selection
 without unique criteria, and exclusion of unsaved records. This is a bounded
 field implementation, not complete expression/domain compatibility.
+
+## Native field DMin/DMax/DAvg
+
+Global and Application DMin/DMax/DAvg use the same field/domain/criteria binding
+and named-argument rules. Schema preparation can expose proven result-position
+types without stepping records or evaluating user expressions. Unsupported or
+unproven aggregate types are refused before loading the field values.
+
+DMin/DMax select homogeneous Number, Date or Currency values through the shared
+native report accumulator. Currency uses scaled integer comparison; the selected
+subtype survives. DAvg accepts Number fields and returns the existing online-mean
+Double result. Currency/Date averages, text collation, Boolean coercion, computed
+Expr and full Access result/error/precision equivalence remain open.
+
+Actual matching field rows are read through the bounded Access query executor;
+NULL values are omitted and no non-NULL observations yield NULL. The existing
+100,000-row and execution-budget guards fail explicitly rather than returning a
+partial aggregate. There is no persistent result cache. Original MDB files are
+not modified. Existing actual VBA cases check positional/named/Application calls,
+criteria, no-match/all-NULL results and Date/Currency identities and values.
+No additional CTest target or catalog item is introduced.
+
+References: Microsoft Access
+[DMin/DMax](https://support.microsoft.com/en-us/access/functions/dmin-dmax-functions)
+and [DAvg](https://support.microsoft.com/en-us/access/functions/davg-function).
+No Windows/original-output oracle is claimed.

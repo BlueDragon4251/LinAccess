@@ -1264,7 +1264,7 @@ private:
                     {"right",{{"String","Length"},2}}, {"right$",{{"String","Length"},2}},
                     {"mid",{{"String","Start","Length"},2}}, {"mid$",{{"String","Start","Length"},2}},
                     {"nz",{{"Value","ValueIfNull"},1}}, {"ismissing",{{"ArgName"},1}},
-                    {"dsum",{{"Expr","Domain","Criteria"},2}}, {"dcount",{{"Expr","Domain","Criteria"},2}}, {"dlookup",{{"Expr","Domain","Criteria"},2}}
+                    {"dsum",{{"Expr","Domain","Criteria"},2}}, {"dcount",{{"Expr","Domain","Criteria"},2}}, {"dlookup",{{"Expr","Domain","Criteria"},2}}, {"dmin",{{"Expr","Domain","Criteria"},2}}, {"dmax",{{"Expr","Domain","Criteria"},2}}, {"davg",{{"Expr","Domain","Criteria"},2}}
                 };
                 const auto signature=signatures.find(word);
                 if(signature==signatures.end()) {
@@ -1507,7 +1507,7 @@ private:
                 return VbaValue::string(type==0 ? "Empty" : type==1 ? "Null" : type==5 ? "Double"
                     : type==17 ? "Byte" : type==2 ? "Integer" : type==3 ? "Long" : type==4 ? "Single" : type==6 ? "Currency" : type==7 ? "Date" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : type==8209 ? "Byte()" : type==8204 ? "Variant()" : type==8200 ? "String()" : "Boolean");
             }
-            if (word=="dsum" || word=="dcount" || word=="dlookup") {
+            if (word=="dsum" || word=="dcount" || word=="dlookup" || word=="dmin" || word=="dmax" || word=="davg") {
                 if (!host_) return {};
                 if (args.size()<2 || args.size()>3) throw error("Domain aggregate requires two or three arguments",450);
                 return host_->domainAggregate(word,args);

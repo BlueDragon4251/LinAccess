@@ -46,6 +46,18 @@ If TypeName(DLookup("flag","lookup_values","id=1"))<>"Boolean" Then Err.Raise 5
 If DLookup("flag","lookup_values","id=1")<>True Then Err.Raise 5
 If TypeName(DLookup("cash","lookup_values","id=1"))<>"Currency" Then Err.Raise 5
 If DLookup("cash","lookup_values","id=1")<>CCur("12.3456") Then Err.Raise 5
+If DMin("qty","lookup_values")<>3.5 Then Err.Raise 5
+If Application.DMax(Domain:="lookup_values",Expr:="qty")<>10.5 Then Err.Raise 5
+If DAvg(Expr:="qty",Domain:="lookup_values")<>7 Then Err.Raise 5
+If DAvg("qty","lookup_values","id=1")<>10.5 Then Err.Raise 5
+If Not IsNull(DMin("qty","lookup_values","id=99")) Then Err.Raise 5
+If Not IsNull(DMax("qty","lookup_values","id=3")) Then Err.Raise 5
+If Not IsNull(DAvg("qty","lookup_values","id=99")) Then Err.Raise 5
+If TypeName(DMin("moment","lookup_values"))<>"Date" Then Err.Raise 5
+If DMax("moment","lookup_values")<>DateSerial(2026,11,4) Then Err.Raise 5
+If TypeName(Application.DMax("cash","lookup_values"))<>"Currency" Then Err.Raise 5
+If DMax("cash","lookup_values")<>CCur("12.3456") Then Err.Raise 5
+If DMin("cash","lookup_values")<>CCur(0) Then Err.Raise 5
 If Not IsNull(DLookup("label","lookup_values","id=99")) Then Err.Raise 5
 If Not IsNull(DLookup("label","lookup_values","id=4")) Then Err.Raise 5
 If IsNull(DLookup("label","lookup_values","id=3")) Then Err.Raise 5
