@@ -2342,3 +2342,16 @@ extended only. Full desktop 48/48 (77.73 s), freshly rebuilt GUI-free 1/1
 (1.24 s), targeted core 1/1 (1.23 s), Debian payload/permissions/Build-ID/pinned
 SQLite and all four original hashes pass. Scoped checklist 370 checked / 72
 open; not complete Access 2003 parity.
+
+
+## Native DAO identity and qualified object bindings (2026-11-04)
+
+DAO_OBJECT_BINDINGS.md defines actual native DAO identities, qualified scalar
+module/local/parameter/result binding and independently omitted Nothing
+defaults. Actual SQL cursor state persists across procedure calls; wrong Set
+leaves the original typed Recordset intact. Existing owner/connection/clone/
+transaction boundaries and the bounded form Recordset adapter remain active.
+Full desktop 48/48 (77.79 s), freshly rebuilt GUI-free core 1/1 (1.23 s),
+targeted core/DAO 2/2 (1.59 s), Debian payload/permissions/Build-ID/pinned SQLite
+and all four original fixture hashes pass. No extra CTest target. Scoped
+checklist 371 checked / 72 open, not complete Access 2003 parity.

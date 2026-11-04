@@ -37,6 +37,49 @@ void testSqlRgbDao() {
     assert(sql.exec("INSERT INTO color_rows VALUES(1,255,0,0,0),(2,0,255,0,0)"));
     assert(sql.exec("CREATE TABLE color_values(value INTEGER)"));
     Host host(db);
+    const std::string retainedDao=R"VBA(Private database As DAO.Database
+Public rows As DAO.Recordset
+Sub InitializeDao()
+Set database=CurrentDb
+Set rows=database.OpenRecordset("SELECT id FROM color_rows ORDER BY id")
+Me!DaoTypes=TypeName(database) & ":" & TypeName(rows) & ":" & TypeName(rows.Fields)
+End Sub
+Sub AdvanceDao()
+rows.MoveNext
+Me!DaoRetained=CStr(rows!id)
+End Sub
+Function ReturnDatabase() As DAO.Database
+Set ReturnDatabase=database
+End Function
+Function OptionalDatabase(Optional ByVal value As DAO.Database=Nothing) As Boolean
+OptionalDatabase=value Is Nothing
+End Function
+Sub CheckDao()
+Dim returned As DAO.Database
+Set returned=ReturnDatabase()
+Me!DaoReturned=CStr(returned Is database)
+Me!DaoOptional=CStr(OptionalDatabase()) & ":" & CStr(OptionalDatabase(database))
+On Error Resume Next
+Set rows=database
+Me!DaoWrongType=CStr(Err.Number)
+Me!DaoUnchanged=TypeName(rows) & ":" & CStr(rows!id)
+End Sub
+Sub ReleaseDao()
+rows.Close
+Set rows=Nothing
+Set database=Nothing
+End Sub
+)VBA";
+    assert(linaccess::executeVbaProcedure(retainedDao,"InitializeDao",host).status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["DaoTypes"]=="Database:Recordset:Fields");
+    assert(linaccess::executeVbaProcedure(retainedDao,"AdvanceDao",host).status==linaccess::VbaExecutionStatus::Completed && host.fields["DaoRetained"]=="2");
+    const auto checkedDao=linaccess::executeVbaProcedure(retainedDao,"CheckDao",host);
+    if(checkedDao.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Typed DAO error="<<checkedDao.errorNumber<<" line="<<checkedDao.line<<"\n";
+    assert(checkedDao.status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["DaoReturned"]=="True" && host.fields["DaoOptional"]=="True:False");
+    assert(host.fields["DaoWrongType"]=="13" && host.fields["DaoUnchanged"]=="Recordset:2");
+    assert(linaccess::executeVbaProcedure(retainedDao,"ReleaseDao",host).status==linaccess::VbaExecutionStatus::Completed);
+
     assert(sql.exec("CREATE TABLE native_indexed_fields(id INTEGER PRIMARY KEY,value TEXT)"));
     assert(sql.exec("INSERT INTO native_indexed_fields VALUES(1,'before')"));
     const auto indexedFields=linaccess::executeVbaProcedure(R"VBA(Sub IndexedFields()
