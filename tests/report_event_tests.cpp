@@ -22,6 +22,10 @@
 #include <QTemporaryDir>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QPrintPreviewDialog>
+#include <QPrintPreviewWidget>
+#include <QTimer>
+#include <QAction>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -157,6 +161,18 @@ Height =1500)BANDS");
         }
 
         assert(paged.findChild<QLineEdit*>("access-control-Name")->text()=="first");
+        auto* previewAction=paged.findChild<QAction*>("access-report-preview");
+        assert(previewAction && paged.findChild<QAction*>("access-report-print"));
+        bool previewChecked=false;
+        QTimer::singleShot(0,[&] {
+            auto* dialog=qobject_cast<QPrintPreviewDialog*>(QApplication::activeModalWidget());
+            assert(dialog);
+            auto* pages=dialog->findChild<QPrintPreviewWidget*>();
+            assert(pages && pages->pageCount()==2);
+            previewChecked=true; dialog->reject();
+        });
+        previewAction->trigger();
+        assert(previewChecked && paged.findChild<QLineEdit*>("access-control-Name")->text()=="first");
         assert(paged.close());
         auto growingSource=pagedSource; growingSource.replace("Name =\"Name\"","Name =\"Name\"\nCanGrow =-1");
         AccessFormPreview growing("growing report",growingSource,{},db);

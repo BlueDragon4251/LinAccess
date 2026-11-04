@@ -4987,3 +4987,21 @@ Validation: access_2003_layouts 1/1 (9.73 s); full desktop 48/48 (81.28 s);
 GUI-free core 1/1 (2.23 s); Debian payload/permissions/Build-ID/pinned SQLite;
 all four original fixture SHA-256 checks pass. Catalog stays 456/384/72 and the
 broader full Access-2003 parity requirement stays open.
+
+
+## Native paginated report preview and print dialog (2026-11-04)
+
+Separate Berichtsvorschau and Bericht drucken actions now invoke the fixed-band
+multi-record renderer through actual QPrintPreviewDialog/QPrinter/QPrintDialog.
+Unsupported preview rendering closes the dialog and reports the failure rather
+than leaving an apparently complete blank preview. The direct print dialog
+explicitly disables selection/page-range options; it emits the complete report.
+Existing current-layout actions and DoCmd direct-print-view limitations remain.
+
+The existing report-event case opens the modal native preview and independently
+checks QPrintPreviewWidget.pageCount()==2, then closes it and checks restored SQL
+field contents. access_2003_layouts 1/1 (9.29 s) passes; desktop build, Debian
+payload/permissions/Build-ID/pinned SQLite and all four fixture hashes pass after
+the final dialog-option adjustment. No new target, no repeated full suite for
+this toolbar-only change: preceding renderer full48/core1 validation is recorded
+above. Physical printer output remains unvalidated. Fixed 456/384/72 unchanged.

@@ -63,14 +63,19 @@ calculated control sources, overflowing controls/bands, groups, declared growing
 shrinking/repeated sections, running sums, hidden duplicates, multiple columns,
 forced page breaks and section/page print events are rejected. It does not
 implement Access page setup, grouping, expression pagination, CanGrow, subreports,
-Format/Print/Page scheduling, or DoCmd's direct-print view. Preview/print toolbar
-commands still show the current layout, not this separate paginated PDF path.
+Format/Print/Page scheduling, or DoCmd's direct-print view. The current-layout toolbar
+commands retain their one-page behavior. Separate Berichtsvorschau and Bericht
+drucken actions use the same paginated renderer. The direct print dialog offers
+the complete report; selection/page-range options are disabled there. Physical
+printer output has not been validated in this environment.
 
 The existing report-event target creates two pages from two real SQL rows and
 checks that the displayed record is restored. Where `pdftotext` is installed,
 it also verifies both values occur exactly once in order (Unicode ligatures are
-normalized). It checks that overflowing and CanGrow sources cannot replace a
-previously generated PDF. No additional CTest target or catalog item was added.
+normalized). It opens the real QPrintPreviewDialog and checks that its preview widget holds
+two generated pages, then closes it and verifies the original displayed record.
+It checks that overflowing and CanGrow sources cannot replace a previously
+generated PDF. No additional CTest target or catalog item was added.
 
 ## Original source execution evidence
 
