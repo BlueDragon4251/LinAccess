@@ -19,6 +19,9 @@
 #include <QToolBar>
 #include <QComboBox>
 #include <QSqlQuery>
+#include <QTemporaryDir>
+#include <QProcess>
+#include <QStandardPaths>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -125,6 +128,41 @@ Height =1500)BANDS");
         assert(field("Name")->text()=="first" && field("Name")->isReadOnly());
         assert(field("PageTitle")->y()==30 && field("Name")->y()==60);
         assert(field("ReportSummary")->y()==170 && field("PageNumber")->y()==190);
+        QTemporaryDir output; assert(output.isValid());
+        const auto single=output.filePath("single.pdf");
+        // The summary extends outside its short section: do not silently clip it.
+        assert(!banded.exportReportPdf(single));
+        assert(field("Name")->text()=="first");
+        auto pagedSource=bandedSource;
+        pagedSource.replace("RecordSource =\"ranked\"","RecordSource =\"records\"");
+        pagedSource.replace("Height =1500","Height =9000");
+        pagedSource.replace("Height =300","Height =600");
+        AccessFormPreview paged("paged report",pagedSource,{},db);
+        const auto document=output.filePath("records.pdf");
+        assert(paged.exportReportPdf(document));
+        QFile pdf(document); assert(pdf.open(QIODevice::ReadOnly));
+        const auto bytes=pdf.readAll();
+        const QRegularExpression pagePattern("/Type\\s*/Page(?:\\s|/|>)");
+        auto pages=pagePattern.globalMatch(QString::fromLatin1(bytes));
+        int pageCount=0; while(pages.hasNext()) { pages.next(); ++pageCount; }
+        assert(pageCount==2);
+        const auto reader=QStandardPaths::findExecutable("pdftotext");
+        if (!reader.isEmpty()) {
+            QProcess textReader; textReader.start(reader,{"-layout",document,"-"});
+            assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);
+            const auto text=QString::fromUtf8(textReader.readAllStandardOutput())
+                .normalized(QString::NormalizationForm_KC);
+            assert(text.count("first")==1 && text.count("second")==1);
+            assert(text.indexOf("first")<text.indexOf("second"));
+        }
+
+        assert(paged.findChild<QLineEdit*>("access-control-Name")->text()=="first");
+        assert(paged.close());
+        auto growingSource=pagedSource; growingSource.replace("Name =\"Name\"","Name =\"Name\"\nCanGrow =-1");
+        AccessFormPreview growing("growing report",growingSource,{},db);
+        assert(!growing.exportReportPdf(document));
+        QFile unchanged(document); assert(unchanged.open(QIODevice::ReadOnly) && unchanged.readAll()==bytes);
+        assert(growing.close());
         assert(banded.close());
     }
     AccessFormPreview report("report",source,code,db);

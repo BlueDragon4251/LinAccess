@@ -38,6 +38,7 @@ public:
 
     linaccess::VbaExecutionResult executeProcedure(const QString& name,std::vector<linaccess::VbaValue>& arguments);
     bool exportLayoutPdf(const QString& path);
+    bool exportReportPdf(const QString& path);
     std::optional<linaccess::VbaExecutionResult> eventResult(const QString& property) const {
         const auto found = eventResults_.constFind(property.toCaseFolded());
         return found==eventResults_.cend() ? std::nullopt : std::optional<linaccess::VbaExecutionResult>(*found);
@@ -171,6 +172,8 @@ private:
     QToolBar* printToolbar_{};
     void buildPrintToolbar(QVBoxLayout* layout);
     bool renderLayout(QPrinter& printer);
+    bool renderReport(QPrinter& printer);
+    bool writePdf(const QString& path,bool report);
     QMap<QString,linaccess::VbaExecutionResult> eventResults_;
     QString formName_;
     std::optional<QString> openArgs_;

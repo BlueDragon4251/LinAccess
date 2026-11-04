@@ -139,6 +139,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
         if (start.hasMatch()) {
             const auto type = start.captured(1);
             if (stack.isEmpty() && type.compare("Report",Qt::CaseInsensitive)==0) form.kind = AccessDocumentKind::Report;
+            if (form.kind==AccessDocumentKind::Report && type=="GroupLevel")
+                form.reportPrintLimitations.append("GroupLevel");
             QString section;
             for (auto it = stack.crbegin(); it != stack.crend(); ++it)
                 if (!it->section.isEmpty()) { section = it->section; break; }
@@ -182,6 +184,15 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
         const auto key = assignment.captured(1);
         const auto value = propertyValue(assignment.captured(2));
         const auto current = stack.back();
+        if (form.kind==AccessDocumentKind::Report) {
+            if (((key=="CanGrow" || key=="CanShrink" || key=="RepeatSection"
+                  || key=="HideDuplicates" || key=="Vertical") && accessBoolean(value,false))
+                || ((key=="ForceNewPage" || key=="RunningSum") && value!="0")
+                || ((key=="OnFormat" || key=="OnPrint" || key=="OnPage") && !value.isEmpty())
+                || (key=="Columns" && value!="1"))
+                form.reportPrintLimitations.append(key);
+        }
+
         // GUID/NameMap/embedded-image values use `Property = Begin` followed
         // by hex bytes and `End`. That End is *not* the enclosing control End.
         static const QRegularExpression binaryBegin(R"(^(?:\{[0-9, \t-]+\}\s*)?Begin$)",
