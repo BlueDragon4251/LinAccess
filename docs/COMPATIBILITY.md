@@ -2643,3 +2643,13 @@ Completion of owned subforms and field geometry: full desktop 48/48 (78.56 s),
 Debian package payload/permissions/Build-ID/pinned SQLite and all four original
 fixture hashes pass. The GUI-free build/core last passed before these GUI-only
 changes (1.52 s). Fixed 456 IDs, 384 confirmed scoped entries and 72 open remain.
+
+
+Native form TextBoxes execute Click and retained OnMouseDown/OnMouseUp with
+real typed button/modifier/Twip arguments. Existing GUI covers event order and
+VBA cursor changes without implicit SQL saves. Full mouse/focus/scale/oracle
+parity remains open; see KEYBOARD_RUNTIME.md. Fixed 456 remains unchanged.
+
+Completion: desktop 48/48 (79.27 s), freshly rebuilt GUI-free core 1/1
+(1.56 s), Debian package payload/permissions/Build-ID/pinned SQLite and all four
+original fixture hashes pass. Fixed 456 entries and 48 CTest targets unchanged.

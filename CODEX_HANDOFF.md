@@ -1042,3 +1042,20 @@ Keine Behauptung eines vollständigen visuellen Access-Designers.
 Abschluss eigene Unterformulare/Feldgeometrie: Desktop 48/48 (78,56 s),
 Debian-Paket und vier Originalfixture-Hashes bestanden. GUI-freier Build/Kern
 zuletzt vor diesen GUI-Änderungen 1/1 (1,52 s). Feste 456 bleiben unverändert.
+
+
+Aktueller Mausabschnitt F058/F148: Native TextBox statt nackter QLineEdit führt
+Click nach Editor-Release aus; Cursoränderungen durch VBA bleiben wirksam,
+kein implizites Commit durch Klick. OnMouseDown/OnMouseUp im Layout erhalten,
+Integer Button/Shift und Single X/Y in nativen 96-dpi-Twips übergeben. Fremde
+Zusatzbuttons 3251, Ereignisfunktionen über vorhandene Laufzeit. Fehler stoppen
+restlichen Click, Close/Disposal während Handler geschützt. Bestehender GUI-Fall
+prüft Reihenfolge, Koordinaten/Modifier, SelStart, unveränderten Dirty-Zustand,
+Rechtsklick und DblClick-Cancel. Gezielt GUI/Layout 2/2 (11,43 s) vor finalem
+Zusatzbutton-Guard bestanden. Gesamtprüfung folgt. Details KEYBOARD_RUNTIME.md;
+MouseMove/andere Steuerelemente/Form-/vollständige Fokus-/Skalen-/Windows-Orakel
+bleiben offen. Keine neuen Targets/IDs; 456 fest.
+
+Abschluss TextBox-Mausereignisse: Desktop 48/48 (79,27 s), frisch gebauter
+GUI-freier Kern 1/1 (1,56 s), Debian-Paket und vier Originalfixture-Hashes
+bestanden. Gezielt GUI/Layout 2/2 (11,43 s). Feste 456 und 48 Targets bleiben.

@@ -90,7 +90,7 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
         lines<<"        Begin TextBox"<<"            Name = "+quoted(field)<<"            ControlSource = "+quoted(field)
              <<"            EventProcPrefix = "+quoted(eventPrefix)<<"            Left = "+QString::number(rectangle[0])<<"            Top = "+QString::number(top)
              <<"            Width = "+QString::number(rectangle[2])<<"            Height = "+QString::number(rectangle[3])<<"            TabIndex = "+QString::number(index);
-        for(const auto* event:{"OnChange","BeforeUpdate","AfterUpdate","OnDblClick","OnKeyDown","OnKeyPress","OnKeyUp"}) {
+        for(const auto* event:{"OnClick","OnChange","BeforeUpdate","AfterUpdate","OnDblClick","OnKeyDown","OnKeyPress","OnKeyUp","OnMouseDown","OnMouseUp"}) {
             const QString property=QString::fromLatin1(event);
             const auto procedure=property.startsWith("On") ? property.mid(2) : property;
             if(procedures.contains((eventPrefix+"_"+procedure).toCaseFolded())) lines<<"            "+property+" = \"[Event Procedure]\"";
