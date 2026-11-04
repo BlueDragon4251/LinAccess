@@ -97,6 +97,11 @@ protected:
         }
         for (const auto& band:backgrounds_)
             painter.fillRect(QRect(0,band.first.y(),contentWidth_,band.first.height()),band.second);
+        const auto overrides=property("la_section_runtime_backgrounds").toMap();
+        for(const auto& value:overrides) {
+            const auto background=value.toMap();
+            painter.fillRect(background.value("rect").toRect(),background.value("color").value<QColor>());
+        }
     }
 private:
     int contentWidth_;

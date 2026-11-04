@@ -185,8 +185,7 @@ void AccessFormPreview::buildPrintToolbar(QVBoxLayout* layout) {
         if (!path.isEmpty() && !exportReportPdf(path))
             QMessageBox::warning(this,"Bericht als PDF",
                 "Dieser Bericht konnte nicht vollständig ausgegeben werden. "
-                "Unterstützt werden feste Kopf-, Detail- und Fußbereiche mit direkten Datenfeldern. "
-                "Gruppierung, wachsende Bereiche und Seitenereignisse sind noch nicht unterstützt.");
+                "Prüfen Sie die Druckregeln und die Datenquelle.");
     });
     auto* close = printToolbar_->addAction("&Schließen");
     connect(close,&QAction::triggered,this,&AccessFormPreview::reject);

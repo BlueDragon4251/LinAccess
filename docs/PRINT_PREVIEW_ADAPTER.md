@@ -66,8 +66,9 @@ Imported section BackColor values are retained as signed OLE color Longs and
 painted by the native canvas across the report's content width. The same QWidget
 painting is captured in layout output and prepared print bands. Reports use a
 white paper base; forms retain their existing gray base. Explicit section colors
-use the existing RGB/system-color adapter. This is import-time section color
-support, not a complete writable Section object or Windows color-profile oracle.
+use the existing RGB/system-color adapter. [Native Section.BackColor](NATIVE_SECTION_OBJECT.md) now adds bounded runtime
+reads/writes and updates actual canvas/report pages. This is not a complete
+writable Section object or Windows color-profile oracle.
 The existing report-event case checks actual green/blue/red canvas pixels and
 an unset white detail area.
 
