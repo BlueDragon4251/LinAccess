@@ -4367,3 +4367,16 @@ Full desktop 48/48 (77.04 s), rebuilt GUI-free 1/1 (1.36 s), targeted GUI/SQL
 1/1 (2.15 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
 original fixture hashes pass. Scoped checklist 373 checked / 72 open, not
 complete Access 2003 parity.
+
+
+## Current-record pending-edit discard with Esc (2026-11-04)
+
+Native datasheet Esc/context action uses actual per-row manual-submit revert
+without saving or discarding other drafts. First Esc inside the cell editor
+retains prior cached drafts; subsequent record Esc discards that row, including
+a pending insertion. Committed SQL remains unchanged. TABLE_RECORD_UNDO_RUNTIME.md
+defines remaining history/deletion/form/oracle boundaries. Existing main-window
+regression only. Full desktop 48/48 (79.77 s), GUI-free build confirmed and core
+1/1 (1.74 s), targeted GUI/SQL 1/1 (2.10 s), Debian payload/permissions/Build-ID/
+pinned SQLite and all four original fixture hashes pass. Scoped checklist
+374 checked / 72 open; not complete Access 2003 parity.

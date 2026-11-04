@@ -248,6 +248,19 @@ public:
         if(typed->rowCount()) setCurrentIndex(typed->index(qMin(row,typed->rowCount()-1),column));
         return true;
     }
+    bool undoCurrentRecord() {
+        const QPointer<AccessTableView> self=this;
+        QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
+        if(!typed || !currentIndex().isValid()) return refuse(2046,"Kein aktueller Datensatz.");
+        if(activeEditor()) return refuse(2501,"Zuerst die aktuelle Zelleingabe mit Esc abbrechen.");
+        const int row=currentIndex().row(),column=currentIndex().column();
+        const QPersistentModelIndex original=currentIndex();
+        if(!typed->undoPendingRecord(row) || !self || !typed) return false;
+        if(model()!=typed) return false;
+        if(original.isValid()) setCurrentIndex(original);
+        else if(typed->rowCount() && typed->columnCount()) setCurrentIndex(typed->index(qMin(row,typed->rowCount()-1),qMin(column,typed->columnCount()-1)));
+        return true;
+    }
     bool copySelection() {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !selectionModel() || !finishEditing()) return false;
@@ -350,12 +363,13 @@ protected:
         const auto add=[&](const char* name,const QString& label,bool enabled) {
             auto* action=menu.addAction(label); action->setObjectName(QString("datasheet-")+name); action->setEnabled(enabled); return action;
         };
-        const bool native=qobject_cast<AccessTableModel*>(model())!=nullptr;
+        auto* native=qobject_cast<AccessTableModel*>(model());
         auto* copy=add("copy","&Kopieren\tStrg+C",native && selectionModel()->hasSelection());
         const auto* clipboard=QApplication::clipboard()->mimeData();
         auto* paste=add("paste","&Einfügen\tStrg+V",canPasteSelection() && clipboard && clipboard->hasText());
         menu.addSeparator();
         auto* zoom=add("zoom","&Zoom...\tUmschalt+F2",native && currentIndex().isValid());
+        auto* undoRecord=add("undo-record","Datensatzänderungen &verwerfen\tEsc",native && currentIndex().isValid() && !activeEditor() && native->hasPendingRecord(currentIndex().row()));
         menu.addSeparator();
         auto* row=add("select-row","&Datensatz markieren\tUmschalt+Leertaste",currentIndex().isValid());
         auto* column=add("select-column","&Spalte markieren\tStrg+Leertaste",currentIndex().isValid());
@@ -367,6 +381,7 @@ protected:
         if(chosen==copy) (void)copySelection();
         else if(chosen==paste) (void)pasteSelection();
         else if(chosen==zoom) (void)zoomCurrentCell();
+        else if(chosen==undoRecord) (void)undoCurrentRecord();
         else if(chosen==row && currentIndex().isValid()) selectionModel()->select(currentIndex(),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);
         else if(chosen==column && currentIndex().isValid() && fetchSelectionRows()) selectionModel()->select(currentIndex(),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Columns);
         else if(chosen==all && fetchSelectionRows()) selectAll();
@@ -397,6 +412,12 @@ protected:
     }
     void keyPressEvent(QKeyEvent* event) override {
         const auto selectionModifiers=event->modifiers() & ~Qt::KeypadModifier;
+        if(event->key()==Qt::Key_Escape && selectionModifiers==Qt::NoModifier && !activeEditor()) {
+            auto* typed=qobject_cast<AccessTableModel*>(model());
+            if(typed && currentIndex().isValid() && typed->hasPendingRecord(currentIndex().row())) {
+                (void)undoCurrentRecord(); event->accept(); return;
+            }
+        }
         if(event->key()==Qt::Key_End && selectionModifiers==Qt::ControlModifier) {
             if(finishEditing() && fetchSelectionRows()) QTableView::keyPressEvent(event);
             event->accept(); return;
