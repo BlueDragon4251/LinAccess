@@ -2288,3 +2288,14 @@ type/error boundaries. Full desktop 48/48 (92.51 s), rebuilt GUI-free 1/1 (1.84 
 Debian package and four original hashes pass. Final test-only UTC construction
 uses Qt-6.4-compatible API and the query-model target passes separately (0.04 s)
 on the existing Qt 6.8.2 environment; no actual Qt 6.4 matrix is claimed.
+
+
+## Source-only native VBA translation cache (2026-11-04)
+
+Successful native procedure plans reuse exact-source/name/parser-context keys
+within a bounded per-thread LRU. Mutable module/host/argument/DAO/widget state
+binds per call and is not cached. Source edits get different plans; oversized
+plans run uncached. VBA_PROCEDURE_CACHE.md documents budgets, retained metadata
+and the limited synthetic performance comparison. This is not a complete VBA
+compiler or execution-result cache. Full desktop 48/48 (81.60 s), rebuilt GUI-free
+1/1 (1.18 s), Debian package and four original fixture hashes pass.

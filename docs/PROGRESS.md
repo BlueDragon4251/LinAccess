@@ -4268,3 +4268,19 @@ permissions/Build-ID/pinned SQLite and four original hashes pass. A final test-o
 UTC constructor adjustment uses Qt-6.4-compatible API; query-model 1/1 (0.04 s)
 passes on the existing Qt 6.8.2 environment, not a separate minimum-Qt matrix.
 No new CTest targets. Scoped checklist 364 checked / 72 open, not overall parity.
+
+
+## Bounded context-free native procedure plan reuse (2026-11-04)
+
+Native translation plans cache successful exact-source/name/parser-context
+results, including readonly scalar/default/fixed-bound metadata. Execution keeps
+fresh host/module/argument binding; mutable objects/DAO/widgets/results are not
+cached. LRU limits are 128 entries / 16 MiB accounted data per thread, with large
+plans left uncached and optional admission failure preserving translated code.
+Existing core checks source changes, case-normalized calls and independent hosts.
+An external synthetic private-counter probe produced 200/200 calls correctly
+before/after, measuring 784.665/37.9019 ms on this environment; no app-wide speed
+claim. VBA_PROCEDURE_CACHE.md specifies scope and memory/performance boundaries.
+Full desktop 48/48 (81.60 s), freshly rebuilt GUI-free core 1/1 (1.18 s), Debian
+payload/permissions/Build-ID/pinned SQLite and four original hashes pass. No new
+CTest targets. Scoped checklist 365 checked / 72 open, not overall Access parity.

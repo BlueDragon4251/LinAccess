@@ -2868,6 +2868,26 @@ End Sub
 End Sub
 )VBA","BadDefault");
     assert(badDefault.status==VbaExecutionStatus::Unsupported && badDefault.errorNumber==3251);
+    {
+        const std::string cachedSource=R"VBA(Private Const BASE As Long=2
+Private calls As Long
+Function Cached(Optional ByVal value As Long=BASE) As Long
+calls=calls+1
+Cached=value*10+calls
+End Function
+)VBA";
+        FakeForm firstCacheHost,secondCacheHost;
+        assert(validateVbaProcedure(cachedSource,"Cached").status==VbaExecutionStatus::Completed);
+        const auto first=executeVbaProcedure(cachedSource,"Cached",firstCacheHost);
+        assert(first.status==VbaExecutionStatus::Completed && first.typedReturnValue->number==21);
+        const auto again=executeVbaProcedure(cachedSource,"cached",firstCacheHost);
+        const auto separate=executeVbaProcedure(cachedSource,"Cached",secondCacheHost);
+        assert(again.status==VbaExecutionStatus::Completed && again.typedReturnValue->number==22);
+        assert(separate.status==VbaExecutionStatus::Completed && separate.typedReturnValue->number==21);
+        auto edited=cachedSource; edited.replace(edited.find("BASE As Long=2"),std::string("BASE As Long=2").size(),"BASE As Long=3");
+        const auto changed=executeVbaProcedure(edited,"Cached",firstCacheHost);
+        assert(changed.status==VbaExecutionStatus::Completed && changed.typedReturnValue->number==31);
+    }
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub

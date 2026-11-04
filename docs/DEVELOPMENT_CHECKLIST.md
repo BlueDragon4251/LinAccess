@@ -1053,3 +1053,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native VBA character constants include Windows-target vbNewLine/CRLF and checked empty/NUL/control-character String values without claiming null-BSTR interoperability.
 
 - [x] Optional scalar parameter defaults fold pure expressions and prior same-module constants into immutable metadata, preserving named overrides, explicit Empty/Null/Missing distinctions and independent ByRef default values.
+
+- [x] A bounded per-thread native VBA translation LRU reuses source-only plans with exact-source/context keys, preserves fresh host/module/argument binding and leaves large plans uncached.
