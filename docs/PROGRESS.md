@@ -4237,3 +4237,19 @@ Full desktop 48/48 (91.05 s), freshly rebuilt GUI-free 1/1 (1.76 s), Debian payl
 permissions/Build-ID/pinned SQLite and four original fixture hashes pass. Existing
 core target extended only. Scoped checklist 360 checked / 72 open, not total
 Access 2003 parity.
+
+
+## Pure scalar Const bindings and folded fixed-array bounds (2026-11-04)
+
+Local/private/public module constants retain actual immutable checked values.
+Pure expression folding uses literals, previous constants and native operators
+without app/database/filesystem context. Fixed dimensions accept the resulting
+integral expressions; ByRef scalar constant arguments use caller-independent
+temporaries. Direct writes refuse before body execution. Additional native VBA
+character constants and Access-2003-target CRLF vbNewLine values are implemented.
+VBA_CONSTANTS_RUNTIME.md documents inference/linking/class/conditional/default
+and compiler diagnostic limits and current primary references.
+Full desktop 48/48 (95.27 s), freshly rebuilt GUI-free 1/1 (2.11 s), Debian payload/
+permissions/Build-ID/pinned SQLite and four original fixture hashes pass. Existing
+core target extended only. Scoped checklist 363 checked / 72 open, not total
+Access 2003 parity.

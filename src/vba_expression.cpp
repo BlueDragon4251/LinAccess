@@ -845,8 +845,15 @@ private:
             {"vbok",1},{"vbcancel",2},{"vbabort",3},{"vbretry",4},{"vbignore",5},{"vbyes",6},{"vbno",7}};
         if (const auto constant=messageConstants.find(word);constant!=messageConstants.end()) return VbaValue::numeric(constant->second);
         if (word == "vbcrlf") return VbaValue::string("\r\n");
-        if (word == "vbnewline") return VbaValue::string("\n");
+        if (word == "vbnewline") return VbaValue::string("\r\n");
         if (word == "vbtab") return VbaValue::string("\t");
+        if (word == "vbcr") return VbaValue::string("\r");
+        if (word == "vblf") return VbaValue::string("\n");
+        if (word == "vbback") return VbaValue::string("\b");
+        if (word == "vbformfeed") return VbaValue::string("\f");
+        if (word == "vbverticaltab") return VbaValue::string("\v");
+        if (word == "vbnullchar") return VbaValue::string(std::string(1,'\0'));
+        if (word == "vbnullstring") return VbaValue::string("");
         static const std::unordered_map<std::string,int> keyConstants{{"vbkeyback",8},{"vbkeytab",9},{"vbkeyclear",12},
             {"vbkeyreturn",13},{"vbkeyshift",16},{"vbkeycontrol",17},{"vbkeymenu",18},{"vbkeypause",19},
             {"vbkeycapital",20},{"vbkeyescape",27},{"vbkeyspace",32},{"vbkeypageup",33},{"vbkeypagedown",34},

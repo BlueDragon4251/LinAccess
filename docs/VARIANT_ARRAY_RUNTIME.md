@@ -256,3 +256,13 @@ No new CTest target is added.
 Fixed-array checkpoint: full desktop 48/48 (91.05 s), freshly rebuilt GUI-free
 core 1/1 (1.76 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
 original fixture SHA-256 checks pass.
+
+
+## Constant-expression fixed bounds (2026-11-04)
+
+The later constant-binding stage accepts integral native constant expressions
+and previously declared module/local Const values in fixed dimensions. Folded
+bounds are retained in statements before allocation. Runtime variables/function
+calls do not become fixed bounds. VBA_CONSTANTS_RUNTIME.md specifies expression,
+linking/type/class/conditional compilation boundaries; the fixed binding and
+Erase semantics above are unchanged.

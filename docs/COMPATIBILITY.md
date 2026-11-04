@@ -2263,3 +2263,15 @@ assignment remains an explicit 3251 boundary. VARIANT_ARRAY_RUNTIME.md specifies
 constant/class/Static/alias/enumeration/error-precedence limits. Full desktop
 48/48 (91.05 s), rebuilt GUI-free 1/1 (1.76 s), Debian package and four original
 fixture hashes pass; no new test targets or complete VBA declaration claim.
+
+
+## Native scalar constants and constant dimensions (2026-11-04)
+
+Local/module Const declarations bind immutable checked scalar values, compose
+pure native expressions and supply real folded fixed-array dimensions. Supported
+ByRef calls receive temporary constant values, and direct writes are rejected
+before the procedure body. Windows-target newline/control-character constants
+are available. VBA_CONSTANTS_RUNTIME.md specifies scalar/type/linking/class/
+conditional/default-value boundaries; full compiler parity is not claimed.
+Full desktop 48/48 (95.27 s), rebuilt GUI-free 1/1 (2.11 s), Debian package and
+four original fixture hashes pass; no new CTest targets.

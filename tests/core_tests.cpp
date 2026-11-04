@@ -2800,6 +2800,52 @@ End Sub
     assert(executeVbaProcedure(fixedModuleArrays,"BumpFixedModule",host).status==VbaExecutionStatus::Completed && host.fields["FixedModuleValue"]=="1");
     assert(executeVbaProcedure(fixedModuleArrays,"BumpFixedModule",host).status==VbaExecutionStatus::Completed && host.fields["FixedModuleValue"]=="2");
     assert(executeVbaProcedure(fixedModuleArrays,"ResetFixedModule",host).status==VbaExecutionStatus::Completed && host.fields["FixedModuleReset"]=="0:1:2");
+    const std::string constantsModule=R"VBA(Option Compare Text
+Private Const BASE_LO As Long = -1
+Public Const BASE_HI As Long = 2+1, HEADER As String = "a,b"
+Private Const MASK As Long = vbYesNo Or vbQuestion
+Private fixedBuffer(BASE_LO To BASE_HI+1) As Long
+Sub ChangeConstantCopy(ByRef value As Long)
+value=99
+End Sub
+Sub UseConstants()
+Const COUNT As Long = BASE_HI+1
+Const TEXT As String = HEADER & ":" & "tail"
+Const STAMP As Date = #2024-02-29#
+Const MONEY As Currency = 1.25
+Const SAME As Boolean = "a"="A"
+Dim localArray(BASE_LO To (COUNT-1)) As Long
+localArray(BASE_LO)=7
+fixedBuffer(BASE_LO)=fixedBuffer(BASE_LO)+1
+Call ChangeConstantCopy(COUNT)
+Me!ConstantValue=CStr(COUNT) & ":" & TEXT & ":" & CStr(MASK) & ":" & CStr(SAME)
+Me!ConstantBounds=CStr(LBound(localArray)) & ":" & CStr(UBound(localArray)) & ":" & CStr(localArray(-1))
+Me!ConstantModuleBounds=CStr(LBound(fixedBuffer)) & ":" & CStr(UBound(fixedBuffer)) & ":" & CStr(fixedBuffer(-1))
+Me!ConstantTypes=CStr(VarType(STAMP)) & ":" & CStr(VarType(MONEY)) & ":" & CStr(MONEY)
+End Sub
+Sub RejectConstantWrite()
+Const IMMUTABLE As Long = 5
+Me!BeforeConstantWrite="must-not-run"
+IMMUTABLE=9
+End Sub
+)VBA";
+    const auto constantState=createVbaModuleState(constantsModule);
+    assert(constantState->constants.contains("base_hi") && constantState->publicVariables.contains("base_hi") && !constantState->publicVariables.contains("base_lo"));
+    const auto constantsResult=executeVbaProcedure(constantsModule,"UseConstants",host);
+    if(constantsResult.status!=VbaExecutionStatus::Completed) std::cerr<<"Constant error="<<constantsResult.errorNumber<<" line="<<constantsResult.line<<"\n";
+    assert(constantsResult.status==VbaExecutionStatus::Completed);
+    assert(host.fields["ConstantValue"]=="4:a,b:tail:36:True" && host.fields["ConstantBounds"]=="-1:3:7");
+    assert(host.fields["ConstantModuleBounds"]=="-1:4:1" && host.fields["ConstantTypes"]=="7:6:1.25");
+    assert(executeVbaProcedure(constantsModule,"UseConstants",host).status==VbaExecutionStatus::Completed && host.fields["ConstantModuleBounds"]=="-1:4:2");
+    const auto constantWrite=executeVbaProcedure(constantsModule,"RejectConstantWrite",host);
+    assert(constantWrite.status==VbaExecutionStatus::Unsupported && constantWrite.errorNumber==3251 && !host.fields["BeforeConstantWrite"]);
+    const auto badConstant=validateVbaProcedure(R"VBA(Sub BadConstant()
+Const size As Long=FileLen("missing.dat")
+End Sub
+)VBA","BadConstant");
+    assert(badConstant.status==VbaExecutionStatus::Unsupported && badConstant.errorNumber==3251);
+    assert(evaluate("vbNewLine").asText()=="\r\n" && evaluate("vbCr & vbLf").asText()=="\r\n");
+    assert(evaluate("Len(vbNullChar)").asNumber()==1 && evaluate("vbNullString").asText().empty());
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub
