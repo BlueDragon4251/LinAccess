@@ -2041,7 +2041,6 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 const auto collection = evaluate(instruction.expression);
                 if(isVbaArray(collection)) {
                     if(vbaArrayRank(collection)==0) throw VbaRuntimeError(9,"For Each requires an allocated array");
-                    if(collection.kind!=VbaValue::Kind::Array || vbaArrayType(collection)==8209) throw VbaRuntimeError(3251,"For Each Byte arrays is not implemented");
                     const auto name=lower(instruction.argument),type=variableType(name);
                     if(!type.empty() && type!="variant") throw VbaRuntimeError(13,"Array For Each control must be Variant");
                     LoopFrame loop{static_cast<int>(ip)};
@@ -2120,7 +2119,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 const auto name = lower(start.argument);
                 if (start.type == Statement::Type::ForEach) {
                     auto& loop = loops.back();
-                    if(loop.array.kind==VbaValue::Kind::Array) {
+                    if(isVbaArray(loop.array)) {
                         const auto found=locals.find(loop.arrayRoot);
                         const auto& current=loop.arrayRoot.empty() ? loop.array : found==locals.end() ? VbaValue{} : found->second;
                         if(!sameVbaArrayAllocation(loop.array,current)) throw VbaRuntimeError(3251,"Array replacement or resizing during For Each is not implemented");
