@@ -130,6 +130,36 @@ End Sub
 )VBA","DictionarySql",host);
     if(dictionarySql.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Dictionary SQL error="<<dictionarySql.errorNumber<<" line="<<dictionarySql.line<<"\n";
     assert(dictionarySql.status==linaccess::VbaExecutionStatus::Completed && host.fields["DictionarySqlValue"]=="native");
+    const auto resumedWith=linaccess::executeVbaProcedure(R"VBA(Sub ResumedWith()
+Dim source As DAO.Recordset,columnName As String,handled As Long
+Set source=CurrentDb.OpenRecordset("native_indexed_fields")
+columnName="missing"
+On Error GoTo caught
+With source.Clone
+.MoveFirst
+Me!ResumedCloneValue=.Fields(columnName).Value
+On Error Resume Next
+DBEngine.BeginTrans
+Me!ResumedCloneLive=CStr(Err.Number)
+On Error GoTo caught
+End With
+DBEngine.BeginTrans
+DBEngine.Rollback
+Me!ResumedCloneReleased="yes"
+Me!ResumedCloneHandled=CStr(handled)
+source.Close
+Exit Sub
+caught:
+handled=handled+1
+If handled>1 Then Err.Raise Err.Number
+columnName="value"
+Resume
+End Sub
+)VBA","ResumedWith",host);
+    if(resumedWith.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Resumed clone error="<<resumedWith.errorNumber<<" line="<<resumedWith.line<<"\n";
+    assert(resumedWith.status==linaccess::VbaExecutionStatus::Completed && host.fields["ResumedCloneValue"]=="final" && host.fields["ResumedCloneHandled"]=="1");
+    assert(host.fields["ResumedCloneLive"]=="3251" && host.fields["ResumedCloneReleased"]=="yes");
+
     const auto dictionaryLifetime=linaccess::executeVbaProcedure(R"VBA(Sub DictionaryLifetime()
 Dim d As Object, key As Variant
 Dim rows As DAO.Recordset, copyRows As DAO.Recordset

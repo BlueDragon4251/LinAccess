@@ -4514,3 +4514,21 @@ resumption and retained invalid-order/blocked-label diagnostics. Full desktop
 (1.31 s), Debian payload/permissions/Build-ID/pinned SQLite and all four original
 fixture hashes pass. Scoped checklist 384 checked / 72 open; no extra CTest
 target or complete Access 2003 parity claim.
+
+
+## Error-resume resource ownership (2026-11-04)
+
+Explicit Resume variants now release obsolete error snapshots; restored live
+Loop/With frames retain resources until their real scope ends. Single Next also
+uses source-boundary cleanup when skipped after a failure. Existing core and DAO
+cases verify collection mutation guards/release and a real SQL clone transaction
+guard/release after retried With access. The clone case explicitly positions its
+cursor with MoveFirst. No guard was relaxed and no CTest target was added.
+Targeted existing cases 2/2 (1.67 s), full desktop 48/48 (81.49 s), freshly rebuilt
+GUI-free core 1/1 (1.62 s), Debian payload/permissions/Build-ID/pinned SQLite and
+all four original fixture hashes pass.
+
+Progress reporting: the growing count of finely split checklist entries is no
+longer used as overall progress. Historical counts describe only their then
+scoped inventory. The checklist is not a fixed Access 2003 feature denominator;
+complete parity remains open and no total percentage is asserted.

@@ -9,15 +9,15 @@ outer continuation without treating every counter as the innermost loop.
 
 On Error Resume Next and an explicit handler's Resume Next skip the remaining
 steps of the same source Next list after failure. Group loop state is released
-when abandoning those terminators. Error snapshots are released after resuming
-a grouped Next, so stale snapshot references do not retain the abandoned
-collection enumeration lock. Resume targets retain the existing bounded runtime
+when abandoning those terminators. Error snapshots are released after every explicit Resume, Resume Next or
+Resume label. Restored live scopes retain their actual ownership, while stale
+snapshots no longer retain collection enumeration locks or DAO clones after
+the live scope ends. Single Next failures also release abandoned iteration state. Resume targets retain the existing bounded runtime
 rules; full Access error/retry/alias precedence is not claimed.
 
 Inline If wrapper merging relocates both loop partners and shared statement
 boundaries. Native procedure-plan cache entries contain these source-only integer
-metadata fields; storage accounting already includes Statement size. Existing
-single-Next instructions retain their previous path. Labels inside blocks remain
+metadata fields; storage accounting already includes Statement size. Single Next instructions use the same source-boundary cleanup metadata. Labels inside blocks remain
 explicitly unsupported; this increment does not enable arbitrary jumps into loops.
 
 Existing core execution covers ordered counters/final values, empty inner/outer
@@ -41,3 +41,13 @@ resumption and retained invalid-order/blocked-label diagnostics. Full desktop
 (1.31 s), Debian payload/permissions/Build-ID/pinned SQLite and all four original
 fixture hashes pass. Scoped checklist 384 checked / 72 open; no extra CTest
 target or complete Access 2003 parity claim.
+
+## Error-resume resource ownership
+
+Existing core cases exercise a retried loop-body conversion, mutation refusal
+while enumeration is live, mutation after termination, Resume label cleanup and
+a failed single For Each terminator. Existing DAO execution uses a real SQL
+recordset clone in With: after retrying a field read, transactions remain refused
+inside With and succeed after End With. Clone position is explicitly set with
+MoveFirst; no clone/transaction safety guard is weakened. No new CTest target
+is introduced. General Access error-handler equivalence remains open.

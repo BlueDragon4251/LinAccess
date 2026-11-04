@@ -3255,6 +3255,65 @@ End Sub
     const auto uninitializedNext=executeVbaProcedure("Sub UninitializedNext()\nDim i As Long,j As Long\nMe!ForbiddenUninitializedNext=1\nGoTo finish\nFor i=1 To 2\nFor j=1 To 2\nfinish:\nNext j,i\nEnd Sub","UninitializedNext",host);
     assert(uninitializedNext.status==VbaExecutionStatus::Unsupported && !host.fields.contains("ForbiddenUninitializedNext"));
 
+    const std::string resumeScopes=R"VBA(Sub ResumeBody()
+Dim values As Collection,item As Variant,text As String,total As Long,handled As Long
+Set values=New Collection
+values.Add 1
+values.Add 2
+text="bad"
+On Error GoTo caught
+For Each item In values
+total=total+CLng(text)
+On Error Resume Next
+values.Add 9
+Me!ResumeLiveMutation=CStr(Err.Number)
+On Error GoTo caught
+Next
+values.Add 3
+Me!ResumeBodyResult=CStr(total) & ":" & CStr(values.Count) & ":" & CStr(handled)
+Exit Sub
+caught:
+handled=handled+1
+If handled>1 Then Err.Raise 777
+text="1"
+Resume
+End Sub
+Sub ResumeLabelBody()
+Dim values As Collection,item As Variant,handled As Long
+Set values=New Collection
+values.Add 1
+values.Add 2
+On Error GoTo caught
+For Each item In values
+Err.Raise 13
+Next
+Exit Sub
+afterloop:
+values.Add 3
+Me!ResumeLabelResult=CStr(values.Count) & ":" & CStr(handled)
+Exit Sub
+caught:
+handled=handled+1
+If handled>1 Then Err.Raise 777
+Resume afterloop
+End Sub
+Sub SingleNextFault()
+Dim values As Collection,item As Object
+Set values=New Collection
+values.Add New Scripting.Dictionary
+values.Add 3
+On Error Resume Next
+For Each item In values
+Next
+Me!SingleNextFault=CStr(Err.Number)
+values.Add 4
+Me!SingleNextCount=CStr(values.Count)
+End Sub
+)VBA";
+    assert(executeVbaProcedure(resumeScopes,"ResumeBody",host).status==VbaExecutionStatus::Completed && host.fields["ResumeBodyResult"]=="2:3:1" && host.fields["ResumeLiveMutation"]=="3251");
+    assert(executeVbaProcedure(resumeScopes,"ResumeLabelBody",host).status==VbaExecutionStatus::Completed && host.fields["ResumeLabelResult"]=="3:1");
+    assert(executeVbaProcedure(resumeScopes,"SingleNextFault",host).status==VbaExecutionStatus::Completed && host.fields["SingleNextFault"]=="13" && host.fields["SingleNextCount"]=="3");
+
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub
