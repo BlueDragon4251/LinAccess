@@ -730,6 +730,16 @@ int main() {
         for (int month=0;month<12;++month) loan=loan*1.01+payment;
         assert(std::abs(loan+100)<1e-9);
         assert(eval("Pmt(0,12,1000,200)").number==-100);
+        double discounted=0,discountFactor=1;
+        for(int month=0;month<12;++month) { discountFactor*=1.01; discounted+=100/discountFactor; }
+        assert(std::abs(eval("PV(Type:=0,Pmt:=-100,NPer:=12,Rate:=0.01)").number-discounted)<1e-9);
+        assert(eval("PV(0,12,-100)").number==1200);
+        assert(eval("SLN(Life:=5,Salvage:=1000,Cost:=10000)").number==1800);
+        double depreciation=0;
+        for(int year=1;year<=5;++year) depreciation+=eval("SYD(10000,1000,5,"+std::to_string(year)+")").number;
+        assert(depreciation==9000);
+        assert(eval("SYD(Period:=1,Life:=5,Salvage:=1000,Cost:=10000)").number==3000);
+
         bool invalid=false;
         try { eval("Pmt(0,0,1000)"); } catch(const linaccess::VbaRuntimeError& e) { invalid=e.number==5; }
         assert(invalid);

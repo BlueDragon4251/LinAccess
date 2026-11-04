@@ -41,19 +41,38 @@ void testSqlRgbDao() {
     assert(sql.exec("CREATE TABLE color_values(value INTEGER)"));
     Host host(db);
     {
+        assert(sql.exec("CREATE TABLE depreciation_rows(period INTEGER,cost REAL,salvage REAL,life REAL)"));
+        assert(sql.exec("INSERT INTO depreciation_rows VALUES(1,10000,1000,5),(2,10000,1000,5),(3,10000,1000,5),(4,10000,1000,5),(5,10000,1000,5)"));
+        const auto definition=host.currentDatabase()->member("CreateQueryDef",{
+            linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT SLN(cost,salvage,life) AS straight,SYD(cost,salvage,life,period) AS accelerated FROM depreciation_rows ORDER BY period")}).object;
+        const auto rows=definition->member("OpenRecordset",{}).object;
+        const auto fields=rows->member("Fields",{}).object;
+        double total=0;
+        for(int i=0;i<5;++i) {
+            assert(fields->member("Item",{linaccess::VbaValue::string("straight")}).object->member("Value",{}).asNumber()==1800);
+            const auto depreciation=fields->member("Item",{linaccess::VbaValue::string("accelerated")}).object->member("Value",{}).asNumber();
+            assert(depreciation==3000-i*600); total+=depreciation;
+            rows->member("MoveNext",{});
+        }
+        assert(total==9000 && rows->member("EOF",{}).truthy()); rows->member("Close",{});
+    }
+    {
         assert(sql.exec("CREATE TABLE financial_rows(id INTEGER PRIMARY KEY,rate REAL,periods INTEGER,payment REAL,principal REAL)"));
         assert(sql.exec("INSERT INTO financial_rows VALUES(1,0.01,12,-100,1000),(2,0,12,-100,1200)"));
         const auto definition=host.currentDatabase()->member("CreateQueryDef",{
-            linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT FV(rate,periods,payment) AS future,Pmt(rate,periods,principal) AS due FROM financial_rows ORDER BY id")}).object;
+            linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT FV(rate,periods,payment) AS future,Pmt(rate,periods,principal) AS due,PV(rate,periods,payment) AS present FROM financial_rows ORDER BY id")}).object;
         const auto rows=definition->member("OpenRecordset",{}).object;
         const auto fields=rows->member("Fields",{}).object;
         const auto value=[&](const char* name) { return fields->member("Item",{linaccess::VbaValue::string(name)}).object->member("Value",{}).asNumber(); };
         double expected=0; for(int i=0;i<12;++i) expected=expected*1.01+100;
         assert(std::abs(value("future")-expected)<1e-9);
+        double discounted=0,discountFactor=1; for(int i=0;i<12;++i) { discountFactor*=1.01; discounted+=100/discountFactor; }
+        assert(std::abs(value("present")-discounted)<1e-9);
         double loan=1000; const auto due=value("due"); for(int i=0;i<12;++i) loan=loan*1.01+due;
         assert(std::abs(loan)<1e-9);
         rows->member("MoveNext",{});
         assert(value("future")==1200 && value("due")==-100);
+        assert(value("present")==1200);
         rows->member("Close",{});
     }
     {

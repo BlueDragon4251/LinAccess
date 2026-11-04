@@ -699,7 +699,7 @@ bool vbaIntrinsicName(const std::string& name) {
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
                 "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
-                "filelen","filedatetime","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt"};
+                "filelen","filedatetime","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt","pv","sln","syd"};
     return intrinsics.contains(name);
 }
 
@@ -1254,6 +1254,9 @@ private:
                     {"strreverse",{{"Expression"},1}},
                     {"instr",{{"Start","String1","String2","Compare"},0}},
                     {"strcomp",{{"String1","String2","Compare"},2}},
+                    {"pv",{{"Rate","NPer","Pmt","Fv","Type"},3}},
+                    {"sln",{{"Cost","Salvage","Life"},3}},
+                    {"syd",{{"Cost","Salvage","Life","Period"},4}},
                     {"fv",{{"Rate","NPer","Pmt","Pv","Type"},3}},
                     {"pmt",{{"Rate","NPer","Pv","Fv","Type"},3}},
                     {"partition",{{"Number","Start","Stop","Interval"},4}},
@@ -1761,7 +1764,28 @@ private:
                 if (word!="ltrim" && word!="ltrim$") while(last>first && text[last-1]==' ') --last;
                 return VbaValue::string(text.substr(first,last-first));
             }
-            if (word=="fv" || word=="pmt") {
+            if (word=="sln" || word=="syd") {
+                if (!host_) return {};
+                const std::size_t count=word=="sln" ? 3 : 4;
+                if(args.size()!=count || std::any_of(omitted.begin(),omitted.end(),[](bool value){return value;}))
+                    throw error("Depreciation arguments are required",450);
+                long double values[4]{};
+                for(std::size_t i=0;i<count;++i) {
+                    const auto value=scalarObjectValue(args[i]);
+                    if(value.kind==VbaValue::Kind::Null) throw error("Invalid Null depreciation argument",94);
+                    values[i]=coerceVbaModuleValue(value,"double").number;
+                    if(!std::isfinite(values[i])) throw error("Depreciation argument overflow",6);
+                }
+                const auto cost=values[0],salvage=values[1],life=values[2],period=values[3];
+                if(cost<0 || salvage<0) throw error("Negative asset values outside supported scope",3251);
+                if(life<=0 || (word=="syd" && (period<=0 || period>life))) throw error("Invalid depreciation lifetime or period",5);
+                const auto result=word=="sln" ? (cost-salvage)/life
+                    : (cost-salvage)*(life-period+1)*2/(life*(life+1));
+                const auto converted=static_cast<double>(result);
+                if(!std::isfinite(converted)) throw error("Depreciation result overflow",6);
+                return VbaValue::numeric(converted);
+            }
+            if (word=="fv" || word=="pmt" || word=="pv") {
                 if (!host_) return {};
                 if (args.size()<3 || args.size()>5 || omitted[0] || omitted[1] || omitted[2])
                     throw error("Financial function requires three to five arguments",450);
@@ -1784,6 +1808,7 @@ private:
                 const auto annuity=rate==0 ? periods : std::expm1(exponent)/rate;
                 const auto factor=annuity*(1+rate*timing);
                 const auto result=word=="fv" ? -(values[3]*growth+values[2]*factor)
+                    : word=="pv" ? -(values[3]+values[2]*factor)/growth
                     : -(values[2]*growth+values[3])/factor;
                 const auto converted=static_cast<double>(result);
                 if (!std::isfinite(converted)) throw error("Financial result overflow",6);
