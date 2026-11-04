@@ -25,7 +25,7 @@ inline QStringList nativeFormSourceColumns(QSqlDatabase database,const QString& 
         for(int index=0;index<record.count();++index) columns.append(record.fieldName(index));
         return columns;
     }
-    (void)installAccessQueryViews(database);
+    if(installAccessQueryViews(database)<0) throw VbaRuntimeError(3251,"Native form query views are busy");
     QString query=source;
     if(database.tables(QSql::Views).contains(source,Qt::CaseInsensitive)) {
         auto name=source; name.replace(']',"]]"); query="SELECT * FROM ["+name+"]";
