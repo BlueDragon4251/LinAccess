@@ -8,7 +8,7 @@ namespace linaccess {
 // interfaces require a real binder, not a guessed match against TypeName.
 inline std::string_view nativeAccessObjectType(std::string_view type) {
     static constexpr std::pair<std::string_view,std::string_view> types[]{
-        {"form","access.form"},{"report","access.report"},{"control","access.control"},
+        {"form","access.form"},{"report","access.report"},{"control","access.control"},{"section","access.section"},
         {"application","access.application"},{"forms","access.forms"},{"reports","access.reports"},{"controls","access.controls"},
         {"textbox","access.textbox"},{"combobox","access.combobox"},{"listbox","access.listbox"},
         {"checkbox","access.checkbox"},{"optionbutton","access.optionbutton"},{"togglebutton","access.togglebutton"},

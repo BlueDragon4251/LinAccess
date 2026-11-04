@@ -295,6 +295,42 @@ Height =1500)BANDS");
             query.prepare("UPDATE records SET name=? WHERE id=?");
             query.addBindValue((id==1 ? alphaLines : omegaLines).join('\n')); query.addBindValue(id); assert(query.exec()); query.finish();
         }
+        auto sectionSource=pagedSource;
+        sectionSource.replace("Height =9000","Height =900\nName =\"DetailFixture\"");
+        const QByteArray sectionCode=R"VBA(Private retainedSection As Access.Section
+Sub Report_Open(Cancel As Integer)
+Set retainedSection=Me.Section(acDetail)
+If Not TypeOf retainedSection Is Section Then Err.Raise 5
+If retainedSection.Height<>900 Then Err.Raise 5
+If retainedSection.Name<>"DetailFixture" Then Err.Raise 5
+retainedSection.ForceNewPage=3
+End Sub
+Sub ResetSections()
+retainedSection.ForceNewPage=0
+End Sub
+)VBA";
+        AccessFormPreview sectionReport("native sections",sectionSource,sectionCode,db);
+        if(const auto result=sectionReport.eventResult("OnOpen"); result && result->status!=linaccess::VbaExecutionStatus::Completed)
+            std::cerr<<"Synthetic Section Open: error="<<result->errorNumber<<", line="<<result->line<<", "<<result->explanation<<'\n';
+        assert(sectionReport.eventResult("OnOpen") && sectionReport.eventResult("OnOpen")->status==linaccess::VbaExecutionStatus::Completed);
+        auto sectionForm=makePreviewFormObject(sectionReport);
+        auto section=sectionForm->member("Section",{linaccess::VbaValue::integer(0)}).object;
+        assert(section==sectionForm->member("Section",{linaccess::VbaValue::string("detailfixture")}).object);
+        assert(section->member("Parent",{}).object==sectionForm && section->member("ForceNewPage",{}).asNumber()==3);
+        assert(sectionReport.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==4);
+        std::vector<linaccess::VbaValue> sectionArgs;
+        assert(sectionReport.executeProcedure("ResetSections",sectionArgs).status==linaccess::VbaExecutionStatus::Completed);
+        assert(section->member("ForceNewPage",{}).asNumber()==0);
+        assert(sectionReport.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==1);
+        bool invalidSectionSetting=false;
+        try { section->assign("ForceNewPage",linaccess::VbaValue::integer(4)); }
+        catch(const linaccess::VbaRuntimeError& error) { invalidSectionSetting=error.number==5; }
+        assert(invalidSectionSetting && section->member("ForceNewPage",{}).asNumber()==0);
+        assert(sectionReport.close());
+        bool closedSection=false;
+        try { (void)section->member("Height",{}); }
+        catch(const linaccess::VbaRuntimeError& error) { closedSection=error.number==2450; }
+        assert(closedSection);
         auto shortSource=pagedSource; shortSource.replace("Height =9000","Height =900");
         AccessFormPreview fixedGrowth("fixed growth baseline",shortSource,{},db);
         const auto originalName=fixedGrowth.findChild<QLineEdit*>("access-control-Name")->geometry();

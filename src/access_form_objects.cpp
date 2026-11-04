@@ -724,6 +724,59 @@ public:
         (void)checked(); throw linaccess::VbaRuntimeError(3251,"Direct form recordset mutation unsupported");
     }
 };
+class PreviewSectionObject final : public linaccess::VbaObject, private PreviewObjectBase {
+public:
+    PreviewSectionObject(AccessFormPreview& preview,QString section)
+        : PreviewObjectBase(preview),section_(std::move(section)) {}
+    std::string_view className() const override { return "Section"; }
+    bool isNativeType(std::string_view type) const override { return type=="access.section"; }
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        auto& preview=checked(); const auto key=text(name).toCaseFolded();
+        if(!args.empty()) throw linaccess::VbaRuntimeError(450,"Section property takes no arguments");
+        if(key=="parent") return linaccess::VbaValue::reference(makePreviewFormObject(preview));
+        if(key=="name") {
+            if(!preview.layout_.sectionNames.contains(section_)) throw linaccess::VbaRuntimeError(3251,"Section name metadata unavailable");
+            return linaccess::VbaValue::string(bytes(preview.layout_.sectionNames.value(section_)));
+        }
+        if(key=="height") {
+            const int height=preview.layout_.sectionHeights.value(section_);
+            if(height>32767) throw linaccess::VbaRuntimeError(6,"Section Height Integer overflow");
+            return linaccess::VbaValue::integer(height);
+        }
+        if(key=="cangrow") {
+            bool enabled=preview.layout_.sectionCanGrow.value(section_);
+            if(!preview.layout_.sectionCanGrow.contains(section_))
+                for(const auto& control:preview.layout_.controls) if(control.section==section_ && control.canGrow) enabled=true;
+            return linaccess::VbaValue::logical(enabled);
+        }
+        if(key=="forcenewpage") {
+            requireDetail(preview);
+            return linaccess::VbaValue::byte(preview.layout_.detailForceNewPage);
+        }
+        throw linaccess::VbaRuntimeError(438,"Section property unsupported");
+    }
+    void assign(std::string_view name,const linaccess::VbaValue& value) override {
+        auto& preview=checked();
+        if(text(name).compare("ForceNewPage",Qt::CaseInsensitive)!=0)
+            throw linaccess::VbaRuntimeError(3251,"Section mutation unsupported");
+        requireDetail(preview);
+        if(preview.reportAggregateCaching_) throw linaccess::VbaRuntimeError(3251,"Section mutation during rendering unsupported");
+        const auto scalar=linaccess::scalarVbaValue(value);
+        if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null ForceNewPage");
+        const int setting=linaccess::sqlFieldValue(scalar,"INTEGER1").toInt();
+        if(setting>3) throw linaccess::VbaRuntimeError(5,"ForceNewPage setting out of range");
+        if(preview.layout_.detailForceNewPage==setting) return;
+        preview.layout_.detailForceNewPage=setting;
+        if(preview.reportPageView_) preview.reportPageView_->setProperty("la_report_pages_valid",false);
+        preview.refreshReportPageView();
+    }
+private:
+    void requireDetail(const AccessFormPreview& preview) const {
+        if(preview.layout_.kind!=linaccess::AccessDocumentKind::Report || section_!="Section")
+            throw linaccess::VbaRuntimeError(3251,"ForceNewPage currently requires a report detail section");
+    }
+    QString section_;
+};
 class PreviewFormObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewFormObject(AccessFormPreview& preview) : PreviewObjectBase(preview),report_(preview.layout_.kind==linaccess::AccessDocumentKind::Report) {}
@@ -735,6 +788,28 @@ public:
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if(key=="section") {
+            if(args.size()!=1) throw linaccess::VbaRuntimeError(450,"Section requires one index or imported name");
+            const auto scalar=linaccess::scalarVbaValue(args[0]); QString section;
+            if(scalar.kind==linaccess::VbaValue::Kind::Text) {
+                for(auto it=preview.layout_.sectionNames.cbegin();it!=preview.layout_.sectionNames.cend();++it)
+                    if(it.value().compare(text(scalar.asText()),Qt::CaseInsensitive)==0) {
+                        if(!section.isEmpty()) throw linaccess::VbaRuntimeError(5,"Section name ambiguous");
+                        section=it.key();
+                    }
+            } else {
+                if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null section index");
+                const auto index=linaccess::sqlFieldValue(scalar,"INTEGER4").toLongLong();
+                static const QStringList sections{"Section","FormHeader","FormFooter","PageHeader","PageFooter"};
+                if(index<0 || index>=sections.size()) throw linaccess::VbaRuntimeError(3251,"Section index unavailable; group sections unsupported");
+                section=sections[index];
+            }
+            if(section.isEmpty() || !preview.layout_.sectionHeights.contains(section))
+                throw linaccess::VbaRuntimeError(5,"Section unavailable");
+            auto& weak=preview.sectionObjects_[section]; auto object=weak.lock();
+            if(!object) { object=std::make_shared<PreviewSectionObject>(preview,section); weak=object; }
+            return linaccess::VbaValue::reference(object);
+        }
         if (key == "controls") {
             auto controls = makePreviewControlsObject(preview);
             if (args.empty()) return linaccess::VbaValue::reference(controls);

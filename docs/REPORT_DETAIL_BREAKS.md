@@ -11,9 +11,9 @@ already fresh detail page does not gain a redundant empty page.
 Owned report design provides all four choices and persists detail_force_new_page.
 The adapter validates its integral 0–3 value and emits actual section metadata;
 opening and PDF use the same native renderer. Missing values retain legacy none.
-This is detail-only: report/group header/footer ForceNewPage, page setup, section
-VBA objects, runtime changes and the complete formatting/event schedule remain
-open. Nonzero unsupported-section settings still refuse rendering. No Windows
+This is detail-only: report/group header/footer ForceNewPage, page setup and the complete formatting/event schedule remain
+open. Bounded Section VBA reads and detail writes are now available through
+[the native Section object](NATIVE_SECTION_OBJECT.md). Nonzero unsupported-section settings still refuse rendering. No Windows
 Access output oracle or universal trailing-page equivalence is claimed.
 
 The existing report case verifies all three nonzero settings with real SQL rows,

@@ -5277,3 +5277,26 @@ or point. F085 remains open. See REPORT_DETAIL_BREAKS.md.
 
 Detail-break checkpoint: Debian payload/Build-ID/pinned SQLite and all four
 original fixture SHA-256 checks also pass.
+
+
+## Native Section identities and runtime detail page breaks (2026-11-04)
+
+Form/Report.Section resolves existing indices 0–4 or retained imported names.
+Weakly cached non-owning wrappers preserve name/index/Parent identity and guard
+closed documents. Section/Access.Section participate in native typed slots and
+TypeOf; the five standard section constants are available. Name, source Height,
+CanGrow and detail ForceNewPage reads are bounded; Byte-validated detail writes
+rebuild an existing real report preview. Other mutations and group/event/layout
+scheduling remain unsupported. See NATIVE_SECTION_OBJECT.md for exact bounds.
+
+The actual Report_Open procedure holds a typed Section and sets ForceNewPage;
+the native preview has four pages. A later retained-object write resets it to one
+page. Existing cases check metadata, identity, failed-write state preservation
+and closed guards. The first run exposed Me.Section being routed as a control
+lookup (2465); the parser now dispatches this indexed property explicitly without
+changing Me! control lookup. The same actual VBA regression then passed.
+
+Validation: final mainwindow/layout2/2 (12.41 s), full desktop48/48 under Windows
+style (84.06 s), freshly rebuilt GUI-free core1/1 (1.76 s), Debian payload/Build-ID/
+pinned SQLite and four original hashes pass. No new CTest target or catalog ID;
+fixed 456/384/72 retained. Full F050/F085 remain open.

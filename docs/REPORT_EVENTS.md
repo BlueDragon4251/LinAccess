@@ -55,3 +55,8 @@ Synthetic tests cover stored ranked TOP sources, direct-table read-only mode,
 Forms/Reports separation, typed cross-object lookup, Open/NoData cancellation,
 missing-source versus empty-source behavior, actual SQL event writes and guarded
 bound-control assignment. Full report pagination and formatting remain open.
+
+Supported section metadata and detail page-break writes now use an actual weakly
+cached [Section object](NATIVE_SECTION_OBJECT.md), including typed Report_Open
+execution and rebuilding an existing native preview. This does not add section
+Format/Print/Page callbacks or complete report event ordering.
