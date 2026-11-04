@@ -2879,3 +2879,7 @@ alle numerischen Randfälle und Windows-Oracle bleiben offen.
 Extras/Optionen bietet echte gespeicherte UI-Schrift-/Stileinstellungen;
 [Umfang und Grenzen](NATIVE_APPLICATION_OPTIONS.md). Vollständige Access-Menüs,
 Optionen und Windows-Pixelgleichheit bleiben offen.
+
+TableDef.Fields liest echte Main-Schema-Feldmetadaten ohne Nutzdatenzeilen:
+[Umfang und Grenzen](DAO_TABLEDEF_FIELDS.md). Vollständiges DAO-Katalogmodell,
+alle Feldtypen/-eigenschaften und Access-Lebensdauer-/Refresh-Gleichheit sind offen.

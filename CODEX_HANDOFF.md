@@ -1305,3 +1305,14 @@ bestehenden Core/DAO-Ziel unabhängig geprüft. Native_Financial-Dokument erweit
 docs/NATIVE_FINANCIAL_FUNCTIONS.md. Keine vollständige Finanzbibliothek behauptet.
 Gezielt3/3 (2.36 s), frischer Core1/1 (1.66 s), Paket/Build-ID/SQLite und vier
 Originalfixture-Hashes bestanden. Letzter Vollstand48/48 (82.86 s); 456/384/72.
+
+TableDef.Fields liefert nun echte sichtbare Main-Schema-Spalten ohne Nutzdaten-
+Zeilenlesung: Count/Item/Default/Refresh/For Each und typisierte DAO.Fields/Field,
+Name/OrdinalPosition sowie bereits bewiesene Type-Zuordnungen. Unbewiesene
+Feldeigenschaften/Typen3251, Schemaänderung und nativer Rollback invalidieren
+gehaltene Metadaten3420; TableDef.Fields neu abfragen. TEMP-Schatten von Tabelle
+oder Schemakatalog3251. TableDef prüft ursprüngliche Workspace-Verbindung.
+docs/DAO_TABLEDEF_FIELDS.md; vollständiges DAO-Metadaten-/Refresh-/Identitätsmodell
+bleibt F121 offen. Gebündelter aktueller Vollstand48/48 (84.55 s), Paket/Build-ID/
+SQLite und vier Originalfixture-Hashes bestanden; Core unverändert1/1 (1.66 s).
+Katalog weiterhin456/384/72. Keine neuen CTest-Ziele.

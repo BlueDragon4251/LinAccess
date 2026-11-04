@@ -1030,17 +1030,88 @@ private:
     QMap<QString,std::weak_ptr<QueryDefinition>> objects_;
 };
 
-class TableDefinition final : public VbaObject {
+struct TableSchemaColumn { QString name,type; };
+using TableSchemaReader=std::function<QVector<TableSchemaColumn>()>;
+class TableSchemaField final : public VbaObject {
+public:
+    TableSchemaField(TableSchemaReader reader,QString name) : reader_(std::move(reader)),name_(std::move(name)) {}
+    std::string_view className() const override { return "Field"; }
+    bool isNativeType(std::string_view type) const override { return type=="dao.field"; }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        if(!args.empty()) throw VbaRuntimeError(450,"DAO schema field properties take no arguments");
+        const auto columns=reader_();
+        int position=-1;
+        for(int i=0;i<columns.size();++i) if(columns[i].name.compare(name_,Qt::CaseInsensitive)==0) {
+            if(position>=0) throw VbaRuntimeError(5,"DAO schema field name ambiguous"); position=i;
+        }
+        if(position<0) throw VbaRuntimeError(3420,"DAO schema field unavailable");
+        const auto key=lower(name);
+        if(key=="name") return VbaValue::string(columns[position].name.toStdString());
+        if(key=="ordinalposition") return integerCount(position);
+        if(key=="type") {
+            const auto type=columns[position].type.toUpper();
+            const int code=type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : type=="CURRENCY_REAL" ? 5 : (type=="DATE" || type=="DATETIME") ? 8 : type=="BLOB" ? 11 : 0;
+            if(!code) throw VbaRuntimeError(3251,"DAO schema field type is not proven");
+            return VbaValue::integer(static_cast<std::int16_t>(code));
+        }
+        throw VbaRuntimeError(3251,"DAO schema field property is unsupported");
+    }
+    void assign(std::string_view,const VbaValue&) override { (void)reader_(); throw VbaRuntimeError(383,"DAO schema fields are read-only"); }
+private: TableSchemaReader reader_; QString name_;
+};
+class TableSchemaFields final : public VbaObject {
+public:
+    explicit TableSchemaFields(TableSchemaReader reader) : reader_(std::move(reader)) {}
+    std::string_view className() const override { return "Fields"; }
+    bool isNativeType(std::string_view type) const override { return type=="dao.fields"; }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(lower(name)=="item") return VbaArgumentSignature{{"Index"},1}; return {};
+    }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        const auto columns=reader_(); const auto key=lower(name);
+        if(key=="count" && args.empty()) return integerCount(columns.size());
+        if(key=="refresh" && args.empty()) return {};
+        if(key!="item") throw VbaRuntimeError(438,"DAO schema Fields member unsupported");
+        if(args.size()!=1) throw VbaRuntimeError(450,"DAO schema Fields requires one index");
+        const auto value=scalarVbaValue(args[0]);
+        if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null schema field index");
+        int position=-1;
+        if(value.kind==VbaValue::Kind::Text) {
+            const auto requested=text(value.asText());
+            for(int i=0;i<columns.size();++i) if(columns[i].name.compare(requested,Qt::CaseInsensitive)==0) {
+                if(position>=0) throw VbaRuntimeError(5,"DAO schema field name ambiguous"); position=i;
+            }
+        } else {
+            const auto index=coerceVbaModuleValue(value,"long").number;
+            if(index>=0 && index<columns.size()) position=static_cast<int>(index);
+        }
+        if(position<0) throw VbaRuntimeError(3265,"DAO schema field index not found");
+        const auto column=columns[position].name;
+        auto& cached=fields_[column.toCaseFolded()]; auto field=cached.lock();
+        if(!field) { field=std::make_shared<TableSchemaField>(reader_,column); cached=field; }
+        return VbaValue::reference(field);
+    }
+    VbaValue item(std::string_view name) override { return member("Item",{VbaValue::string(std::string(name))}); }
+    std::vector<VbaValue> enumerate() override {
+        const auto columns=reader_(); std::vector<VbaValue> result;
+        for(const auto& column:columns) result.push_back(member("Item",{VbaValue::string(column.name.toStdString())}));
+        return result;
+    }
+private: TableSchemaReader reader_; QMap<QString,std::weak_ptr<TableSchemaField>> fields_;
+};
+class TableDefinition final : public VbaObject, public std::enable_shared_from_this<TableDefinition> {
 public:
     std::string_view className() const override { return "TableDef"; }
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=lower(name);
+        if (key=="fields") return VbaArgumentSignature{{"Index"},0};
         if (key=="openrecordset") return VbaArgumentSignature{{"Type"},0};
         return {};
     }
-    TableDefinition(QSqlDatabase db,QString name) : db_(std::move(db)),name_(std::move(name)) {}
+    TableDefinition(QSqlDatabase db,QString name) : db_(std::move(db)),name_(std::move(name)),workspace_(workspaceState(db_)) {}
     bool valid() {
+        workspace_->check();
         if (invalidated_ || !db_.isOpen() || !nativeTableNames(db_).contains(name_,Qt::CaseInsensitive)) invalidated_=true;
         return !invalidated_;
     }
@@ -1050,6 +1121,37 @@ public:
         if (key=="name") {
             if (!args.empty()) throw VbaRuntimeError(450,"DAO: Name takes no arguments");
             return VbaValue::string(name_.toStdString());
+        }
+        if(key=="fields") {
+            if(args.size()>1) throw VbaRuntimeError(450,"DAO TableDef.Fields takes at most one index");
+            const auto version=schemaVersion(),rollback=workspace_->rollbackRevision;
+            auto fields=fields_.lock();
+            if(!fields || version!=fieldsVersion_ || rollback!=fieldsRollback_) {
+                const auto self=shared_from_this();
+                fields=std::make_shared<TableSchemaFields>([self,version,rollback] {
+                    if(!self->valid() || self->schemaVersion()!=version || self->workspace_->rollbackRevision!=rollback)
+                        throw VbaRuntimeError(3420,"DAO schema metadata invalidated; reacquire TableDef.Fields");
+                    QSqlQuery shadow(self->db_);
+                    shadow.prepare("SELECT 1 FROM temp.sqlite_schema WHERE type IN ('table','view') AND (name=? COLLATE NOCASE OR name='_la_table_schema' COLLATE NOCASE)");
+                    shadow.addBindValue(self->name_);
+                    if(!shadow.exec()) queryFailure(shadow);
+                    if(shadow.next()) throw VbaRuntimeError(3251,"DAO schema metadata has a TEMP shadow");
+                    shadow.finish();
+                    const auto types=sqliteColumnTypes(self->db_,self->name_);
+                    QSqlQuery query(self->db_);
+                    if(!query.exec("PRAGMA main.table_info("+quote(self->name_)+")")) queryFailure(query);
+                    QVector<TableSchemaColumn> columns;
+                    while(query.next()) {
+                        const auto name=query.value(1).toString();
+                        columns.push_back({name,types.value(name.toCaseFolded())});
+                    }
+                    if(query.lastError().isValid()) queryFailure(query);
+                    if(columns.isEmpty()) throw VbaRuntimeError(3420,"DAO main-schema table unavailable");
+                    return columns;
+                });
+                fields_=fields; fieldsVersion_=version; fieldsRollback_=rollback;
+            }
+            return args.empty() || args[0].kind==VbaValue::Kind::Missing ? VbaValue::reference(fields) : fields->member("Item",args);
         }
         if (key=="openrecordset") {
             if (args.size()>1) throw VbaRuntimeError(450,"DAO: TableDef OpenRecordset arguments unsupported");
@@ -1061,8 +1163,16 @@ public:
         throw VbaRuntimeError(438,"DAO: TableDef member unsupported");
     }
 private:
+    quint64 schemaVersion() const {
+        workspace_->check(); QSqlQuery query(db_);
+        if(!query.exec("PRAGMA main.schema_version") || !query.next()) queryFailure(query);
+        return query.value(0).toULongLong();
+    }
     QSqlDatabase db_;
     QString name_;
+    std::shared_ptr<WorkspaceState> workspace_;
+    std::weak_ptr<TableSchemaFields> fields_;
+    quint64 fieldsVersion_{},fieldsRollback_{};
     bool invalidated_{};
 };
 class TableDefinitions final : public VbaObject {

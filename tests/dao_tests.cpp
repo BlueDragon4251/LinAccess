@@ -34,6 +34,46 @@ private:
 };
 void testDaoCursors();
 void testDaoTransactions();
+void testTableDefSchemaFields() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","tabledef-schema-fields"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE schema_rows(id INTEGER4,amount CURRENCY_REAL,payload BLOB)"));
+    Host host(db);
+    const auto result=linaccess::executeVbaProcedure(R"VBA(Sub InspectSchema()
+Dim table As DAO.TableDef, fields As DAO.Fields, field As DAO.Field, count As Long, positions As Long
+Set table=CurrentDb.TableDefs("schema_rows")
+Set fields=table.Fields
+If Not TypeOf fields Is DAO.Fields Then Err.Raise 5
+If fields.Count<>3 Then Err.Raise 5
+Set field=fields.Item(Index:="amount")
+If Not TypeOf field Is DAO.Field Then Err.Raise 5
+If field.Type<>5 Or field.OrdinalPosition<>1 Then Err.Raise 5
+If table.Fields(0).Name<>"id" Then Err.Raise 5
+For Each field In fields
+count=count+1
+positions=positions+field.OrdinalPosition
+Next
+If count<>3 Or positions<>3 Then Err.Raise 5
+fields.Refresh
+Me!SchemaFields="checked"
+End Sub
+)VBA","InspectSchema",host);
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && host.fields["SchemaFields"]=="checked");
+    auto table=host.currentDatabase()->member("TableDefs",{linaccess::VbaValue::string("schema_rows")}).object;
+    auto fields=table->member("Fields",{}).object;
+    auto field=fields->member("Item",{linaccess::VbaValue::string("id")}).object;
+    assert(field->member("Type",{}).number==4);
+    assert(sql.exec("ALTER TABLE schema_rows ADD COLUMN note TEXT"));
+    bool stale=false;
+    try { fields->member("Count",{}); } catch(const linaccess::VbaRuntimeError& error) { stale=error.number==3420; }
+    assert(stale);
+    stale=false; try { field->member("Name",{}); } catch(const linaccess::VbaRuntimeError& error) { stale=error.number==3420; } assert(stale);
+    auto fresh=table->member("Fields",{}).object; assert(fresh->member("Count",{}).number==4);
+    assert(sql.exec("CREATE TEMP VIEW _la_table_schema AS SELECT 'schema_rows' AS table_name,'[]' AS definition"));
+    bool shadowed=false; try { fresh->member("Count",{}); } catch(const linaccess::VbaRuntimeError& error) { shadowed=error.number==3251; } assert(shadowed);
+    assert(sql.exec("DROP VIEW temp._la_table_schema")); assert(fresh->member("Count",{}).number==4);
+
+    db.close(); stale=false; try { fresh->member("Count",{}); } catch(const linaccess::VbaRuntimeError& error) { stale=error.number==3420; } assert(stale);
+}
 void testSqlRgbDao() {
     auto db=QSqlDatabase::addDatabase("QSQLITE","sql-rgb-dao"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery sql(db); assert(sql.exec("CREATE TABLE color_rows(id INTEGER PRIMARY KEY,r REAL,g REAL,b REAL,packed INTEGER)"));
@@ -932,6 +972,7 @@ int main(int argc, char** argv) {
     testBooleanQueryParameters();
     testDaoCursors();
     testDaoTransactions();
+    testTableDefSchemaFields();
     testSqlRgbDao();
     auto db = QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery q(db);
