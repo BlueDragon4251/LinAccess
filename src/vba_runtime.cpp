@@ -239,6 +239,7 @@ class ErrorObject final : public VbaObject {
 public:
     int number{}, helpContext{};
     std::string_view className() const override { return "ErrObject"; }
+    bool isNativeType(std::string_view type) const override { return type=="vba.errobject"; }
     std::string description, source, helpFile;
     void clear() { number=0; helpContext=0; description.clear(); source.clear(); helpFile.clear(); }
     bool hasScalarDefault() const override { return true; }

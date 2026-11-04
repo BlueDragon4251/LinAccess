@@ -1097,3 +1097,30 @@ gebauter GUI-freier Kern 1/1 (1,65 s), Debian-Paket und vier Originalfixture-
 Hashes bestanden. Vorhandener DAO-With/Clone-Fall verlässt Scope via On 1 GoTo
 und startet danach echte Transaktion erfolgreich. Die Vollsuite deckt auch den
 vorherigen Button-Maus-Folgeabschnitt ab. Feste 456 und 48 Targets unverändert.
+
+
+Aktueller TypeOf-Abschnitt F042/F043/F122: VbaObject::isNativeType als explizite
+native Klassen-/Interface-Identität; nicht aus TypeName raten und keine skalaren
+Standardwerte lesen. Collection/Dictionary/Err/DAO sowie native Access Form,
+Report, Controls/Control-Typen, Application/Forms/Reports markiert. Control-/
+Dokument-Metadaten unabhängig von Feldwert/weak Lebensdauer gespeichert.
+TypeOf-Operand bleibt Referenz, Nichtobjekt-Variant False, Nothing Fehler 91
+(MS-VBAL 5.6.7). Unbekannte Klassen/Referenzen, Value/Literal-Operandformen und
+Calculated-Ausdrücke explizit 3251; volle statische Deklarationsprüfung, UDTs,
+Klassenhierarchien/Referenzordnung/COM/Windows-Orakel bleiben offen.
+Gezielt Kern/DAO/GUI/Layout 4/4 (13,14 s) bestanden. Anschließend echten
+DAO-Clone-TypeOf mit sofortiger Transaktion ergänzt (Temp-Clone-Freigabe);
+diese Ergänzung/Gesamtsuite/GUI-freier Build/Paket noch prüfen. 456/48 unverändert.
+Details VARIANT_ARRAY_RUNTIME.md, öffentliche MS-VBAL-Referenz. Public PDF
+nur außerhalb Repositorys unter linaccess-onboarding/ms-vbal-public.* gelesen.
+
+TypeOf-Abschluss: Gesamtlauf 47/48 (79,35 s). Neuer DAO-Probe-Clone war bereits
+freigegeben, BeginTrans erfolgreich; nach Rollback wurde allerdings der nach
+bestehendem Vertrag invalidierte Cursor weiterverwendet (3420). Probe korrigiert
+auf Commit der reinen Lesetransaktion, DAO gezielt 1/1 (0,44 s) bestanden.
+Laufzeitcode nach Gesamtlauf unverändert: alle 48 vorhandenen Targets damit über
+diese Läufe geprüft, übrige 47 nicht wiederholt. Frischer GUI-freier Build/Kern
+1/1 (1,69 s), Debian-Paket und vier Originalfixture-Hashes bestanden. Letzter
+sauberer einzelner Vollsuite-Lauf 48/48 war vorheriger Verzweigungscommit
+(81,46 s). TypeOf jetzt geprüft inkl. Temp-Clone-Freigabe ohne Guards zu lockern.
+Feste 456/48 unverändert; vollständige statische Typbindung/Klassen/COM offen.
