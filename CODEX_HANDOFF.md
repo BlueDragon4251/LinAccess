@@ -1190,3 +1190,36 @@ GUI-freier Build/Kern 1/1 (2,34 s), Debian-Paket und vier Originalfixture-Hashes
 bestanden. Kurzzeitiger Exec-Transportausfall: Workspace/laufende Prüfungen
 blieben erhalten, danach Prozesse/Status geprüft, keine Sourceänderung während
 Prüfungen. Feste 456/48 unverändert. Nächster Fokus: echte Berichtsdarstellung.
+
+## Aktuelle Fortsetzung: native Domänen, Berichte, Abfragen und Dateiauswahl (2026-11-04)
+
+Der feste Katalog bleibt456 IDs, 14 Unterkategorien, 384 bestätigte Teilumfänge und
+72 breite offene Punkte. Kein gewichteter oder nachgewiesener Paritätsprozentsatz.
+Neue Details innerhalb vorhandener IDs bearbeiten; keine neuen IDs/Testtargets.
+
+Seit dem früheren Berichtspfad sind folgende begrenzte native Ausführungen
+implementiert und privat gesichert beziehungsweise Bestandteil dieses Stands:
+- Feldbasierte DLookup/DMin/DMax/DAvg/DFirst/DLast/DVar/DStDev sowie gemeinsame
+  globale/Application DSum/DCount mit bewiesenen SQL-Rückgabetypen:
+  docs/NATIVE_DLOOKUP.md. Keine vollständige Expr-/Jet-/Oracle-Behauptung.
+- Bericht First/Last, typisierte Date/Currency-Min/Max, exakte Currency-Summen und
+  Stichproben Var/StDev: docs/REPORT_AGGREGATES.md. Populations-/Gruppen-/vollständige
+  Typ-/Rundungsparität bleibt offen.
+- Eigener gespeicherter berechneter Berichtsfuß mit Abschnittsseitenwechsel:
+  docs/NATIVE_REPORT_FOOTER_DESIGN.md; fester einzelner Fuß, kein Voll-Designer.
+- Schreibgeschützte eigene Abfrage-/SELECT-Formulare, Auflösung eigener gespeicherter
+  SQL-Definitionen, eigene SELECT-Abhängigkeitsansichten und Revision vor Requery:
+  docs/NATIVE_QUERY_FORM_DESIGN.md. Parameter/allgemeine Abfrage-Schreibbarkeit offen.
+- Native DAO Byte()-Feldwerte mit Edit/Update/Cancel und begrenztem gespeichertem
+  BLOB-FieldSize: docs/DAO_BINARY_FIELDS.md. OLE-Extraktion/-Darstellung, Chunks,
+  binäre QueryDef-Parameter und Originalformat-Roundtrip bleiben offen.
+- Application.FileDialog FilePicker/FolderPicker mit echten Qt-Dialogen:
+  docs/NATIVE_FILE_DIALOG.md. Explizit22 Access- und4 Office-Klassen im geschlossenen
+  nativen Typvokabular; kein COM-/TypeName-Raten. Der Office-Adapter ist kontextgebunden,
+  keine vollständige Office-Lebensdauer-/Windows-/CWD-Kompatibilitätsbehauptung.
+
+Letzter vollständiger Lauf dieses Abschnitts: Desktop48/48 (91.42 s), frischer
+GUI-freier Core1/1 (1.50 s), Debian Nutzlast/Build-ID/SQLite und vier originale
+Fixture-SHA-256-Prüfungen bestanden. Keine vollständige Access2003-Parität.
+Programmierfortschritt priorisieren, nach Risiko bestehende gezielte Prüfungen
+nutzen und erst bei neuen gemeinsamen Laufzeit-/Persistenzrisiken verbreitern.
