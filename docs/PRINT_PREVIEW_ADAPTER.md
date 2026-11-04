@@ -51,6 +51,14 @@ necessary). The renderer uses physical TWIP-derived dimensions on QPrinter's
 printable page, keeps detail bands whole, and restores the previously displayed
 record after output. The current-layout actions retain their one-page behavior.
 
+Calculated fields use the existing native Access expression engine, including
+simple Sum(field)/Count(field or *) over the actual loaded record source. Every
+row is checked before opening the output device, so a calculation error refuses
+the output instead of silently printing error placeholders. Compound aggregate
+arguments, group scope, running totals and exact full Access aggregate typing
+remain outside this path. Existing row expressions and the report-wide sum are
+checked in the PDF as well as on restored native controls.
+
 Native Qt controls are recorded per section with QPicture and replayed as vector
 commands. Recording only that section prevents duplicate controls; compensating
 QPicture's device-DPI conversion avoids applying the print scale twice. Output
@@ -58,8 +66,8 @@ uses the existing temporary-file/QSaveFile path and does not overwrite the
 destination after an unsupported or failed rendering attempt.
 
 This is a fixed-band subset: Label, TextBox, Rectangle and Line, with direct field
-bindings or unbound values. Truncated row sets, missing fields, other controls,
-calculated control sources, overflowing controls/bands, groups, declared growing/
+bindings, supported calculated expressions, or unbound values. Truncated row sets, missing fields, other controls,
+failed calculated expressions, overflowing controls/bands, groups, declared growing/
 shrinking/repeated sections, running sums, hidden duplicates, multiple columns,
 forced page breaks and section/page print events are rejected. It does not
 implement Access page setup, grouping, expression pagination, CanGrow, subreports,
