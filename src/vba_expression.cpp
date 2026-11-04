@@ -813,11 +813,17 @@ private:
     VbaValue atom(bool objectContext,int minPrecedence) {
         if (take("-")) {
             const auto arg = expression(std::max(12,minPrecedence));
-            return host_ ? arg.kind==VbaValue::Kind::Currency ? negateCurrency(arg) : VbaValue::numeric(-arg.asNumber()) : VbaValue{};
+            if(!host_) return {};
+            const auto value=scalarObjectValue(arg);
+            if(value.kind==VbaValue::Kind::Null) return {};
+            return value.kind==VbaValue::Kind::Currency ? negateCurrency(value) : VbaValue::numeric(-value.asNumber());
         }
         if (take("+")) {
             const auto arg = expression(std::max(12,minPrecedence));
-            return host_ ? arg.kind==VbaValue::Kind::Currency ? arg : VbaValue::numeric(arg.asNumber()) : VbaValue{};
+            if(!host_) return {};
+            const auto value=scalarObjectValue(arg);
+            if(value.kind==VbaValue::Kind::Null) return {};
+            return value.kind==VbaValue::Kind::Currency ? value : VbaValue::numeric(value.asNumber());
         }
         if (take("not")) {
             const auto arg = expression(std::max(6,minPrecedence)); // comparisons bind before Not in VBA
@@ -880,6 +886,13 @@ private:
         if (tok.type != Token::Type::Word)
             throw error("Ungültiger VBA-Ausdruck: " + tok.value);
         auto word = lower(tok.value);
+        if(!accessExpression_ && nextSymbol(".") && index_+1<tokens_.size() && tokens_[index_+1].type==Token::Type::Word
+            && !locals_.contains(word) && (!host_ || !host_->hasInstanceIdentifier(word))) {
+            const auto qualified=word+"."+lower(tokens_[index_+1].value);
+            if(const auto found=locals_.find(qualified);found!=locals_.end()) {
+                consume(); consume(); return found->second;
+            }
+        }
         bool qualifiedArray=false,qualifiedIntrinsic=false;
         if(!accessExpression_ && word=="vba" && nextSymbol(".") && index_+1<tokens_.size() && tokens_[index_+1].type==Token::Type::Word) {
             if(const auto local=locals_.find(word);local!=locals_.end()) return local->second;

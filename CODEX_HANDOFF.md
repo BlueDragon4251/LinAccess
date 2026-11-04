@@ -908,3 +908,27 @@ Abschluss Err-Metadaten/fester Katalog: Desktop 48/48 (77,97 s), frisch gebauter
 GUI-freier Kern 1/1 (1,39 s), Debian-Paket und vier Originalfixture-Hashes
 bestanden. Gezielt Kern 1/1 (1,25 s). F051 bleibt als breite Vollanforderung
 offen; 456 feste IDs, unverändert 384 bestätigte Teilumfänge / 72 offen.
+
+Aktueller Codeabschnitt unter F041/F042/F051 (noch Gesamtprüfung offen):
+Error expression ist eine eigene native, quellzeilenbezogene Anweisung und
+hängt nicht von einer lokalen Variablen namens Err ab. Unary +/- propagiert
+Null nach tatsächlicher Skalarauflösung. Enum-Mitglieder sind echte immutable
+Long-Konstanten mit automatischer Nummerierung, expliziten ganzzahligen
+Konstanten, Aliasen, negativen Werten und Überlaufprüfung. Dieselben geordneten
+Deklarationen dienen Übersetzung und Modulzustand; unqualifizierte und
+Enum.Member-Namen samt Public/Private sind unterstützt. Lokale/Instanz-Wurzeln
+behalten Vorrang vor Enum-Namensräumen. Kein Laufzeit-Enum-Objekt erfinden.
+As-Enum-Variablen/Arrays/Parameter, Typbibliotheken und vollständige
+Klassen-/Modulsichtbarkeit bleiben offen. Details: docs/DAO_RUNTIME.md.
+Keine neuen Katalog-IDs/Checkbox-Punkte oder CTest-Ziele.
+
+Gezielte Prüfung des kombinierten Error-/Null-/Enum-Abschnitts: Kern/DAO 2/2
+(1,64 s), frisch gebauter GUI-freier Kern 1/1 (1,31 s). Qualifizierte Enum-
+Konstanten arbeiten auch in Aliaswerten, Modul-Arraygrenzen und Optional-
+Defaults; ein echter lokaler Collection-Wurzelname hat weiter Vorrang.
+Gesamtsuite/Paket dieser Kombination laufen als nächstes.
+
+Abschluss Error-/Null-/Enum-Konstanten: Desktop 48/48 (82,80 s), frisch gebauter
+GUI-freier Kern 1/1 (1,31 s), gezielt Kern/DAO 2/2 (1,64 s), Debian-Paket und
+vier Originalfixture-Hashes bestanden. Gesamtzahl unverändert 456; breite
+F041/F042/F051 bleiben offen.

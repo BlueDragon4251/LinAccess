@@ -4556,3 +4556,21 @@ debugger equivalence and Windows Help remain open.
 Targeted core 1/1 (1.25 s), full desktop 48/48 (77.97 s), freshly rebuilt
 GUI-free core 1/1 (1.39 s), Debian payload/permissions/Build-ID/pinned SQLite and
 all four original fixture hashes pass.
+
+
+## Native Enum constants, Error statement and unary Null (2026-11-04)
+
+Existing F042 now includes real module Enum Long constants: automatic/explicit
+integral numbering, aliases, negatives, overflow checks, Public/Private and
+qualified/unqualified names. Ordered declarations feed both pure compile-time
+defaults/bounds and actual native module state. A local Collection root retains
+lookup priority; qualified constant writes are refused before body effects.
+Enum-typed variables/arrays/parameters and complete module/class/type-library
+rules remain open. Under F051, Error expression uses a native source-mapped
+instruction independent of a shadowing Err local; native ErrObject identity is
+exposed. Under F041, unary signs resolve scalar defaults and propagate Null.
+No new checklist IDs or CTest targets; the catalog remains fixed at 456.
+
+Existing targeted core/DAO 2/2 (1.64 s), freshly rebuilt GUI-free core 1/1
+(1.31 s), full desktop 48/48 (82.80 s), Debian payload/permissions/Build-ID/
+pinned SQLite and all four original fixture hashes pass.
