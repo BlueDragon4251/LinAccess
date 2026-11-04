@@ -30,6 +30,7 @@
 namespace linaccess {
 class AccessTableView final : public QTableView {
 public:
+    enum class RecordMove { Previous,Next,First,Last };
     explicit AccessTableView(QWidget* parent=nullptr):QTableView(parent) {
         // Connect before enabling Qt's header sorting: an editor may contain
         // text that has not reached the model's manual-submit cache yet.
@@ -42,7 +43,7 @@ public:
         });
     }
     void setRecordNavigationGuard(std::function<bool()> guard) { recordNavigationGuard_=std::move(guard); }
-    void setRecordNavigationHandler(std::function<bool(int)> handler) { recordNavigationHandler_=std::move(handler); }
+    void setRecordNavigationHandler(std::function<bool(RecordMove)> handler) { recordNavigationHandler_=std::move(handler); }
     bool openReplaceDialog() { return openFindDialog(true); }
     bool openFindDialog(bool replace=false) {
         QPointer<AccessTableView> self=this;
@@ -262,6 +263,30 @@ public:
         else if(typed->rowCount() && typed->columnCount()) setCurrentIndex(typed->index(qMin(row,typed->rowCount()-1),qMin(column,typed->columnCount()-1)));
         return true;
     }
+    bool moveToRecordBoundary(bool last) {
+        const QPointer<AccessTableView> self=this;
+        QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
+        if(!typed || !recordNavigationHandler_ || !finishEditing() || !self || !typed) return false;
+        const bool sameRecord=currentIndex().isValid() && (last
+            ? currentIndex().row()==typed->rowCount()-1 && !typed->canFetchMore()
+            : currentIndex().row()==0);
+        if(!sameRecord) {
+            const auto navigate=recordNavigationHandler_;
+            if(!navigate(last ? RecordMove::Last : RecordMove::First) || !self || !typed) return false;
+        }
+        if(model()!=typed || !currentIndex().isValid()) return false;
+        auto* header=horizontalHeader(); int column=-1;
+        for(int offset=0;offset<header->count();++offset) {
+            const int visual=last ? header->count()-1-offset : offset;
+            const int logical=header->logicalIndex(visual);
+            if(logical>=0 && !isColumnHidden(logical)) { column=logical; break; }
+        }
+        if(column<0) return refuse(3265,"Kein sichtbares Feld verfügbar.");
+        setCurrentIndex(typed->index(currentIndex().row(),column));
+        if(!self || !typed || model()!=typed) return false;
+        scrollTo(currentIndex()); setFocus();
+        return true;
+    }
     bool copySelection() {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !selectionModel() || !finishEditing()) return false;
@@ -426,7 +451,7 @@ protected:
         if(!typed) return candidate;
         movingRecord_=true; const auto finished=qScopeGuard([self] { if(self) self->movingRecord_=false; });
         const auto navigate=recordNavigationHandler_;
-        const bool moved=navigate(step);
+        const bool moved=navigate(step<0 ? RecordMove::Previous : RecordMove::Next);
         if(!self || !typed || model()!=typed) return {};
         if(moved && currentIndex().isValid() && column>=0 && column<typed->columnCount())
             return typed->index(currentIndex().row(),column);
@@ -445,8 +470,11 @@ protected:
             const int row=currentIndex().row(); const bool up=event->key()==Qt::Key_Up;
             if(up ? row>0 : row+1<model()->rowCount() || model()->canFetchMore({})) {
                 const auto navigate=recordNavigationHandler_;
-                (void)navigate(up ? -1 : 1); event->accept(); return;
+                (void)navigate(up ? RecordMove::Previous : RecordMove::Next); event->accept(); return;
             }
+        }
+        if((event->key()==Qt::Key_Home || event->key()==Qt::Key_End) && selectionModifiers==Qt::ControlModifier && recordNavigationHandler_) {
+            (void)moveToRecordBoundary(event->key()==Qt::Key_End); event->accept(); return;
         }
         if(event->key()==Qt::Key_End && selectionModifiers==Qt::ControlModifier) {
             if(finishEditing() && fetchSelectionRows()) QTableView::keyPressEvent(event);
@@ -539,7 +567,7 @@ private:
         return nullptr;
     }
     std::function<bool()> recordNavigationGuard_;
-    std::function<bool(int)> recordNavigationHandler_;
+    std::function<bool(RecordMove)> recordNavigationHandler_;
     QPointer<QDialog> findDialog_,replaceDialog_;
     NativeTableFindArguments findArguments_;
     QString findMessage_;

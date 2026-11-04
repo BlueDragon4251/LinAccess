@@ -841,3 +841,34 @@ Dieser Stand: 48/48 Desktop, frisch GUI-frei 1/1, Debian-Paket und vier Original
 Fixture-Hashes bestanden. 372 erledigte / 72 offene erfasste Checklistenpunkte;
 keine vollstaendige Access-Paritaet. Originalabfragen-/Login-Grenzen und fehlende
 Access-2003-Ergebnisreferenz bleiben bestehen.
+
+
+## Native Arrays und weitere Datenblatt-Tasten (2026-11-04)
+
+Gepackte Byte-Arrays tragen jetzt in VbaValue.object eine opake interne
+Allokationskennung; Kind bleibt ByteArray und IsObject bleibt False.
+withVbaArrayElement erhält die Kennung bei Wertkopien/Elementänderungen, ReDim
+erzeugt eine neue. For Each nutzt dieselben Quell-/Allokationsprüfungen wie
+andere native Arrays und liefert echte Byte-Varianten. Nicht als COM-Objekt
+behandeln oder diese Kennung als vermeintlich ungenutztes Feld entfernen.
+
+Erase-Listen und ReDim-/Preserve-Listen bleiben je eine Anweisung/Quellzeile.
+ReDim hat quelltextreine Ziel-/Dimensions-/Typdeskriptoren im begrenzten
+Übersetzungscache. Erfolgreiche Ziele müssen den Modul-/ByRef-Zustand vor
+späteren Dimensionsausdrücken veröffentlichen; der Alias-Abgleich zwischen den
+Zielen ist notwendig. Konstantenziele werden vor dem Prozedurrumpf abgewiesen.
+
+Datenblätter unterstützen echte ganze Textfeld-Ersetzung über Strg+H/Menü/
+acCmdReplace und aktuelles Datensatz-Verwerfen über Esc/Kontextmenü. Pfeil
+hoch/runter, benachbarte Tab-Zeilenwechsel samt Editorabschluss sowie
+Strg+Pos1/Strg+Ende nutzen begrenzte native Prüf-/Save-/Navigationspfade.
+Vorhandene Entwürfe bleiben bei SQL-Fehlern erhalten. Keine komplette Undo-,
+Tastatur-, Ereignis-, Query-Updateability- oder Access-2003-Parität behaupten.
+Details: docs/VARIANT_ARRAY_RUNTIME.md, docs/OBJECT_DEFAULT_ASSIGNMENT_RUNTIME.md,
+docs/TABLE_REPLACE_RUNTIME.md, docs/TABLE_RECORD_UNDO_RUNTIME.md und
+docs/TABLE_KEYBOARD_RUNTIME.md.
+
+Dieser Stand: 48/48 Desktop, GUI-freier Build/Kern 1/1, Debian-Paket und vier
+Originalfixture-Hashes bestanden. 382 erledigte / 72 offene erfasste Punkte;
+keine globale Prozent- oder Vollständigkeitsbehauptung. Originalabfragen/Login
+und Access-Ergebnisreferenz-Grenzen bleiben bestehen.

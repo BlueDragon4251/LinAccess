@@ -1085,3 +1085,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Bare Up/Down in native datasheets use the existing validated current-record Save/navigation path, preserve columns and retain current drafts/selection after actual SQL failure.
 
 - [x] Tab/Backtab to adjacent existing datasheet rows, including delegate editor completion, use checked record Save/navigation and retain field destinations or pending drafts after SQL failure.
+
+- [x] Native Ctrl+Home/Ctrl+End use checked boundary record navigation and visible-field order, preserving pending edits for same-known-record field movement and retaining failed SQL drafts.

@@ -1665,13 +1665,13 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     table->installEventFilter(this);
     table->setModel(model);
     table->setItemDelegate(new linaccess::AccessTableDelegate(table));
-    table->setRecordNavigationHandler([self=QPointer<MainWindow>(this),page=QPointer<QWidget>(page),table=QPointer<linaccess::AccessTableView>(table),model=QPointer<linaccess::AccessTableModel>(model)](int direction) {
+    table->setRecordNavigationHandler([self=QPointer<MainWindow>(this),page=QPointer<QWidget>(page),table=QPointer<linaccess::AccessTableView>(table),model=QPointer<linaccess::AccessTableModel>(model)](linaccess::AccessTableView::RecordMove action) {
         if(!self || !page || !table || !model) return false;
         if(self->tabs_->indexOf(page)<0) return model->rejectEdit(2501,"Das Datenblatt ist nicht mehr geöffnet.");
         if(!table->finishEditing() || !self || !page || !table || !model) return false;
         if(!self->activateDataPage(page)) return model ? model->rejectEdit(2501,"Datensatzwechsel wurde bei der Aktivierung abgebrochen.") : false;
         if(!self || !page || !table || !model) return false;
-        const auto result=self->navigateTableDocument({},direction<0 ? 0 : 1,1,false);
+        const auto result=self->navigateTableDocument({},static_cast<int>(action),1,false);
         if(!self || !page || !table || !model) return false;
         if(!result.value("handled").toBool()) return model->rejectEdit(2046,"Datensatzwechsel ist nicht verfügbar.");
         if(const int error=result.value("error").toInt()) return model->rejectEdit(error,result.value("description").toString());

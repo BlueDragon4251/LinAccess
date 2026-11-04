@@ -564,3 +564,8 @@ bleibt offen.
 
 Die verlinkten Dokumente nennen die jeweiligen Grenzen. Diese Ergänzungen
 belegen weiterhin keine vollständige Access-2003-Kompatibilität.
+
+[Geprüfte Datenblatt-Navigation](docs/TABLE_KEYBOARD_RUNTIME.md) umfasst außerdem
+begrenzte tatsächliche Speicher-/Navigationspfade für Pfeil hoch/runter,
+Tab/Umschalt+Tab zwischen Nachbarzeilen und Strg+Pos1/Strg+Ende. Die jeweiligen
+Kontext-, Zeilen-, Editor- und Tastaturgrenzen bleiben ausdrücklich dokumentiert.

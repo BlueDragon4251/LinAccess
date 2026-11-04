@@ -194,6 +194,21 @@ void exerciseRecordEscape(MainWindow& window,QSqlDatabase db) {
     assert(sql.exec("SELECT value FROM command_record_undo WHERE id=1") && sql.next() && sql.value(0).toString()=="saved-by-editor-tab"); sql.finish();
     if(auto* live=qobject_cast<QLineEdit*>(QApplication::focusWidget());live && view->isAncestorOf(live)) QTest::keyClick(live,Qt::Key_Escape);
     view->setFocus(); QTest::keyClick(view,Qt::Key_Escape); assert(!model->isDirty());
+    assert(model->setData(model->index(0,1),"saved-by-ctrl-end"));
+    QTest::keyClick(view,Qt::Key_End,Qt::ControlModifier);
+    assert(view->currentIndex().row()==1 && view->currentIndex().column()==1 && !model->isDirty());
+    assert(sql.exec("SELECT value FROM command_record_undo WHERE id=1") && sql.next() && sql.value(0).toString()=="saved-by-ctrl-end"); sql.finish();
+    assert(model->setData(model->index(1,1),"saved-by-ctrl-home"));
+    QTest::keyClick(view,Qt::Key_Home,Qt::ControlModifier);
+    assert(view->currentIndex().row()==0 && view->currentIndex().column()==0 && !model->isDirty());
+    assert(sql.exec("SELECT value FROM command_record_undo WHERE id=2") && sql.next() && sql.value(0).toString()=="saved-by-ctrl-home"); sql.finish();
+    assert(model->setData(model->index(0,1),"same-record-draft"));
+    QTest::keyClick(view,Qt::Key_Home,Qt::ControlModifier); assert(model->isDirty() && view->currentIndex().row()==0);
+    assert(sql.exec("SELECT value FROM command_record_undo WHERE id=1") && sql.next() && sql.value(0).toString()=="saved-by-ctrl-end"); sql.finish();
+    QTest::keyClick(view,Qt::Key_Escape); QTest::keyClick(view,Qt::Key_End,Qt::ControlModifier);
+    assert(model->setData(model->index(1,1),"saved-by-ctrl-end")); QTest::keyClick(view,Qt::Key_Home,Qt::ControlModifier);
+    assert(view->currentIndex().row()==1 && model->isDirty() && model->lastError().nativeErrorCode()=="3146");
+    QTest::keyClick(view,Qt::Key_Escape); assert(!model->isDirty());
     assert(window.closeTableDocument(0,"command_record_undo",2).value("error").toInt()==0); dispose();
 }
 void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
