@@ -1046,7 +1046,7 @@ private:
     QMap<QString,std::weak_ptr<QueryDefinition>> objects_;
 };
 
-struct TableSchemaColumn { QString name,type; int sourceType{}; };
+struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; };
 using TableSchemaReader=std::function<QVector<TableSchemaColumn>()>;
 class TableSchemaField final : public VbaObject {
 public:
@@ -1068,6 +1068,7 @@ public:
             const auto& column=columns[position];
             const int code=column.sourceType ? column.sourceType : provenDaoFieldType(column.type);
             if(code<=0) throw VbaRuntimeError(3251,"DAO schema field type is not proven");
+            if(key=="size" && code==10 && column.sourceSize>0) return VbaValue::longInteger(column.sourceSize);
             return key=="size" ? fixedDaoFieldSize(code) : VbaValue::integer(static_cast<std::int16_t>(code));
         }
         throw VbaRuntimeError(3251,"DAO schema field property is unsupported");
@@ -1180,11 +1181,16 @@ public:
                                 const auto name=object.value("name").toString().toCaseFolded();
                                 if(seen.contains(name)) throw VbaRuntimeError(5,"DAO source field metadata ambiguous"); seen.insert(name);
                                 const auto source=object.value("source_type").toString().toUpper();
+                                const auto origin=object.value("source_origin").toString();
+                                const auto size=object.value("source_size").toDouble();
+                                if(object.contains("source_size") && (!object.value("source_size").isDouble() || size<0 || size>255 || std::floor(size)!=size))
+                                    throw VbaRuntimeError(3251,"DAO source field capacity invalid");
                                 const int code=(source=="BOOLEAN" || source=="BIT") ? 1 : source=="TINYINT" ? 2 : source=="SMALLINT" ? 3 : source=="INT" ? 4
                                     : source=="CURRENCY" ? 5 : source=="SINGLE" ? 6 : source=="DOUBLE" ? 7 : (source=="DATE" || source=="DATETIME") ? 8
-                                    : source=="VARCHAR" ? 10 : source=="BLOB" ? 11 : source=="MEMO" ? 12 : source=="GUID" ? 15 : -1;
+                                    : source=="VARCHAR" ? 10 : source=="BLOB" ? 11 : (source=="MEMO" || (source=="TEXT" && origin=="MDBTOOLS_MYSQL")) ? 12 : source=="GUID" ? 15 : -1;
                                 bool found=false;
-                                for(auto& column:columns) if(column.name.toCaseFolded()==name) { column.sourceType=code; found=true; break; }
+                                if(size>0 && (code!=10 || origin!="MDBTOOLS_MYSQL")) throw VbaRuntimeError(3251,"DAO source field capacity provenance unavailable");
+                                for(auto& column:columns) if(column.name.toCaseFolded()==name) { column.sourceType=code; column.sourceSize=static_cast<int>(size); found=true; break; }
                                 if(!found) throw VbaRuntimeError(3251,"DAO source schema field unavailable");
                             }
                         }

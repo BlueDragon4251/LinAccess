@@ -419,6 +419,23 @@ void roundNumber(sqlite3_context* context,int count,sqlite3_value** args) noexce
       catch(...) { native.error(context,"SQL rounding failed",-1); }
 }
 
+void textCapacity(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+    auto& native=api();
+    try {
+        if(native.type(args[1])!=SQLITE_INTEGER) throw VbaRuntimeError(5,"Invalid source text capacity");
+        const auto maximum=native.integer(args[1]);
+        if(maximum<1 || maximum>255) throw VbaRuntimeError(5,"Invalid source text capacity");
+        if(native.type(args[0])==SQLITE_NULL) { native.integerResult(context,1); return; }
+        if(native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(13,"Source text field requires text");
+        const auto* bytes=native.text(args[0]); const auto size=native.bytes(args[0]);
+        if(!bytes) throw VbaRuntimeError(7,"SQL string unavailable");
+        if(vbaStringCodeUnits(std::string_view(reinterpret_cast<const char*>(bytes),size))>maximum)
+            throw VbaRuntimeError(3163,"Text exceeds the preserved source field capacity");
+        native.integerResult(context,1);
+    } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
+      catch(...) { native.error(context,"Source text capacity validation failed",-1); }
+}
+
 void textLength(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native=api();
     try {
@@ -542,10 +559,11 @@ std::optional<int> jetSqlFunctionErrorNumber(std::string_view foldedMessage) {
     int number=0;
     const auto parsed=std::from_chars(code.data(),code.data()+code.size(),number);
     if (parsed.ec!=std::errc{}) return {};
-    if (number==5 || number==6 || number==7 || number==13 || number==52 || number==53 || number==70 || number==75 || number==76 || number==94 || number==438 || number==450 || number==3035 || number==3146 || number==3061 || number==2450 || number==2451 || number==2455 || number==2465 || number==3251 || number==3085) return number;
+    if (number==5 || number==6 || number==7 || number==13 || number==52 || number==53 || number==70 || number==75 || number==76 || number==94 || number==438 || number==450 || number==3035 || number==3146 || number==3163 || number==3061 || number==2450 || number==2451 || number==2455 || number==2465 || number==3251 || number==3085) return number;
     return {};
 }
 std::string jetSqlFunctionErrorExplanation(std::string_view foldedMessage) {
+    if(foldedMessage.find("linaccess sql function error 3163:")!=std::string_view::npos) return "Text is too long for this field";
     if(foldedMessage.find("linaccess sql function error 3251: ambiguous joined update")!=std::string_view::npos)
         return "Joined UPDATE has conflicting source values for one target";
     return "Jet SQL function argument invalid";
@@ -568,13 +586,13 @@ void installJetSqlFunctions(QSqlDatabase db) {
     // Probe the live connection, rather than caching a native pointer that could
     // be reused after close/open. Preparing this call does not execute arguments.
     auto* objects=objectContext(db);
-    const auto ensure = [&](const char* name,int count,Api::Callback scalar,Api::Callback step,void (*final)(sqlite3_context*)) {
+    const auto ensure = [&](const char* name,int count,Api::Callback scalar,Api::Callback step,void (*final)(sqlite3_context*),int flags=SQLITE_UTF8) {
         QSqlQuery probe(db);
         QStringList args;
         for (int i = 0; i < count; ++i) args.append("NULL");
         if (probe.prepare("SELECT " + QString::fromLatin1(name) + "(" + args.join(',') + ")")) return;
         probe.clear();
-        if (native.create(connection,name,count,1,objects,scalar,step,final,nullptr) != 0)
+        if (native.create(connection,name,count,flags,objects,scalar,step,final,nullptr) != 0)
             throw VbaRuntimeError(3251,"Jet SQL function registration failed");
     };
     ensure("linaccess_next_counter",2,&nextAccessCounter,nullptr,nullptr);
@@ -648,6 +666,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_format",2,&formatVariant,nullptr,nullptr);
     ensure("linaccess_jet_concat",2,&concatenate,nullptr,nullptr);
     ensure("linaccess_jet_len",1,&textLength,nullptr,nullptr);
+    ensure("linaccess_jet_text_capacity",2,&textCapacity,nullptr,nullptr,SQLITE_UTF8|SQLITE_DETERMINISTIC|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_lenb",-1,&stringLenB,nullptr,nullptr);
     ensure("linaccess_jet_like_pattern",1,&likePattern,nullptr,nullptr);
     ensure("linaccess_jet_object_value",3,&objectValue,nullptr,nullptr);

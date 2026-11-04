@@ -76,6 +76,35 @@ CREATE INDEX `label` ON `source` (`a``b`);
     const auto floatingMetadata=QJsonDocument::fromJson(query.value(0).toByteArray()).array(); query.finish();
     assert(floatingMetadata.size()==2 && floatingMetadata[0].toObject()["source_type"].toString()=="CURRENCY" && floatingMetadata[1].toObject()["source_type"].toString()=="SINGLE");
 
+    const QString textDefinition="CREATE TABLE `source`\n(\n`label` TEXT,\n`note` TEXT\n);\n"
+        "-- LINACCESS_SOURCE_TYPE 6c6162656c VARCHAR\n-- LINACCESS_SOURCE_ORIGIN 6c6162656c MDBTOOLS_MYSQL\n-- LINACCESS_SOURCE_SIZE 6c6162656c 20\n"
+        "-- LINACCESS_SOURCE_TYPE 6e6f7465 TEXT\n-- LINACCESS_SOURCE_ORIGIN 6e6f7465 MDBTOOLS_MYSQL\n";
+    const auto textSchema=parseMdbSchema(textDefinition);
+    assert(textSchema.columns.size()==2 && textSchema.columns[0].sourceSize==20 && textSchema.columns[1].sourceSize==0);
+    assert(textSchema.columns[0].sourceOrigin=="MDBTOOLS_MYSQL");
+    assert(parseMdbSchema(textDefinition+"-- LINACCESS_SOURCE_SIZE 6c6162656c 256\n").columns.isEmpty());
+    assert(parseMdbSchema(textDefinition+"-- LINACCESS_SOURCE_SIZE 6c6162656c 19\n").columns.isEmpty());
+    importAccessTable(db,"synthetic-source-widths","text_metadata",textSchema,parseCsvDetailed("label,note\nshort,longer text\n"));
+    assert(query.exec("SELECT definition FROM _la_table_schema WHERE table_name='text_metadata'") && query.next());
+    const auto textMetadata=QJsonDocument::fromJson(query.value(0).toByteArray()).array(); query.finish();
+    assert(textMetadata[0].toObject()["source_size"].toInt()==20 && textMetadata[1].toObject()["source_origin"].toString()=="MDBTOOLS_MYSQL");
+    const auto textFields=makeDaoDatabase(db)->member("TableDefs",{VbaValue::string("text_metadata")}).object->member("Fields",{}).object;
+    const auto label=textFields->member("Item",{VbaValue::string("label")}).object;
+    assert(label->member("Type",{}).number==10 && label->member("Size",{}).number==20);
+    const auto note=textFields->member("Item",{VbaValue::string("note")}).object;
+    assert(note->member("Type",{}).number==12 && note->member("Size",{}).number==0);
+    const auto dragon=QString::fromUtf8("🐉");
+    query.prepare("INSERT INTO text_metadata(label) VALUES(?)"); query.addBindValue(QString(18,'x')+dragon); assert(query.exec()); query.finish();
+    query.prepare("INSERT INTO text_metadata(label) VALUES(?)"); query.addBindValue(QString(19,'x')+dragon); assert(!query.exec());
+    assert(jetSqlFunctionErrorNumber(query.lastError().text().toLower().toStdString())==3163); query.finish();
+    query.prepare("INSERT INTO text_metadata(label) VALUES(?)"); query.addBindValue(QString(19,'x')+QChar(0)+'x'); assert(!query.exec());
+    assert(jetSqlFunctionErrorNumber(query.lastError().text().toLower().toStdString())==3163); query.finish();
+    bool overlong=false;
+    try { makeDaoDatabase(db)->member("Execute",{VbaValue::string("INSERT INTO text_metadata(label) VALUES('123456789012345678901')")}); }
+    catch(const VbaRuntimeError& error) { overlong=error.number==3163; } assert(overlong);
+    assert(query.exec("SELECT COUNT(*) FROM text_metadata") && query.next() && query.value(0).toInt()==2); query.finish();
+
+
     const auto counter=parseMdbSchema("CREATE TABLE `x`\n(\n`id` int NOT NULL auto_increment,\n`label` varchar\n);\nALTER TABLE `x` ADD PRIMARY KEY (`id`);\n");
     assert(counter.columns.size()==2 && counter.columns[0].autoNumber && !counter.columns[1].autoNumber);
     assert(counter.columns[0].primaryKeyOrder==1);
