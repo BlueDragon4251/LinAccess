@@ -39,8 +39,9 @@ inline VbaValue nativeSqlDomainAggregate(QSqlDatabase database,std::string_view 
 // Field-only typed lookup/extrema/mean. Further expression binding is refused.
 inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaValue>& args,std::string_view function="dlookup") {
     if(function=="dsum" || function=="dcount") return nativeSqlDomainAggregate(database,function,args);
-    const bool lookup=function=="dlookup";
-    if(!lookup && function!="dmin" && function!="dmax" && function!="davg")
+    const bool lookup=function=="dlookup" || function=="dfirst";
+    const bool selector=lookup || function=="dlast";
+    if(!selector && function!="dmin" && function!="dmax" && function!="davg")
         throw VbaRuntimeError(3251,"Domain function unsupported");
     if(args.size()<2 || args.size()>3) throw VbaRuntimeError(450,"Domain function requires two or three arguments");
     if(args[0].kind==VbaValue::Kind::Null || args[1].kind==VbaValue::Kind::Null)
@@ -91,7 +92,7 @@ inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaVal
     const auto plan=compileAccessQuery(source);
     if(!plan.makeTable.isEmpty() || plan.hiddenRank || !plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
         throw VbaRuntimeError(3251,"Domain function requires a bounded read-only field selection");
-    if(!lookup) {
+    if(!selector) {
         QVector<QString> types;
         const auto selected=accessQueryColumns(database,plan,&types);
         const auto type=types.value(0).toUpper();
@@ -111,11 +112,14 @@ inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaVal
         return aggregate.result();
     }
     const auto result=executeAccessQueryPlan(database,plan,bindAccessQueryParameters(plan,{}));
-    if(result.columns.size()!=1 || result.rows.size()>1 || (!result.rows.isEmpty() && result.rows.front().size()!=1))
+    if(result.columns.size()!=1 || (lookup && result.rows.size()>1)
+        || (!result.rows.isEmpty() && (function=="dlast" ? result.rows.back() : result.rows.front()).size()!=1))
         throw VbaRuntimeError(3146,"Domain function result shape invalid");
-    if(result.rows.isEmpty() || result.rows.front().front().isNull()) return {};
+    if(result.rows.isEmpty()) return {};
+    const auto& selected=function=="dlast" ? result.rows.back() : result.rows.front();
+    if(selected.front().isNull()) return {};
     const auto type=result.columnTypes.value(0);
     if(type.isEmpty()) throw VbaRuntimeError(3251,"Domain function field type is not proven");
-    return qtFieldValue(result.rows.front().front(),type);
+    return qtFieldValue(selected.front(),type);
 }
 }

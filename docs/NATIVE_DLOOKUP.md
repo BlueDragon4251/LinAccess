@@ -74,3 +74,20 @@ Full Access coercion/error/reference parity remains open.
 Actual VBA checks global/Application Currency identity, a calculated CCur sum over
 explicit non-NULL input rows, Count(*) versus Count(nullable field), named calls,
 criteria and an all-NULL sum. CCur(NULL) correctly remains runtime error 94.
+
+## Native field DFirst/DLast
+
+Global and Application DFirst/DLast use the field/domain/criteria binder, named
+arguments and proven native result converter. They select the first/last row of
+the actual executed field query, including a NULL endpoint. DFirst uses bounded
+TOP1; DLast reads the complete bounded field result and refuses a row/budget-limit
+failure instead of selecting a partial endpoint. No matches yield NULL. Text,
+Date, Boolean and Currency keep the same supported converter semantics as DLookup.
+Calculated Expr and full Access binding/type/error equivalence remain open.
+
+The existing VBA case uses an explicitly ordered saved query to check endpoints,
+NULL last values, filtered endpoints, named/Application calls, empty selections
+and Currency identity. No Jet/Access physical scan-order equivalence is claimed.
+Without a defined source order, no stable arbitrary selection promise is made.
+Reference: Microsoft Access
+[DFirst/DLast](https://support.microsoft.com/en-us/access/functions/dfirst-dlast-functions).
