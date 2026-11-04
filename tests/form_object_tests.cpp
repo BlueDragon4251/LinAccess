@@ -37,6 +37,21 @@ picker.AllowMultiSelect=False
 picker.InitialFileName=Me.Tag
 Set filters=picker.Filters
 filters.Clear
+filters.Add "Second","*.csv"
+filters.Add "First","*.txt",Position:=1
+count=0
+For Each entry In filters
+count=count+1
+If Not TypeOf entry Is Office.FileDialogFilter Then Err.Raise 5
+If count=1 And entry.Description<>"First" Then Err.Raise 5
+If count=2 And entry.Description<>"Second" Then Err.Raise 5
+Next
+If count<>2 Then Err.Raise 5
+filters.Clear
+count=0
+For Each entry In filters
+Err.Raise 5
+Next
 filters.Add Description:="Text files",Extensions:="*.txt"
 If filters.Count<>1 Then Err.Raise 5
 Set entry=filters.Item(1)

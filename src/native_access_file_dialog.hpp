@@ -81,6 +81,13 @@ public:
         }
         throw VbaRuntimeError(438,"FileDialogFilters member or arguments unsupported");
     }
+    std::vector<VbaValue> enumerate() override {
+        state_->guard();
+        std::vector<VbaValue> result; result.reserve(state_->filters.size());
+        for (const auto& filter:state_->filters)
+            result.push_back(VbaValue::reference(std::make_shared<FilterObject>(state_,filter)));
+        return result;
+    }
     void assign(std::string_view,const VbaValue&) override { state_->guard(); throw VbaRuntimeError(383,"Filters properties are read-only"); }
 private: std::shared_ptr<State> state_;
 };
