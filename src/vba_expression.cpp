@@ -699,7 +699,7 @@ bool vbaIntrinsicName(const std::string& name) {
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
                 "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
-                "filelen","filedatetime","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor"};
+                "filelen","filedatetime","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition"};
     return intrinsics.contains(name);
 }
 
@@ -1254,6 +1254,7 @@ private:
                     {"strreverse",{{"Expression"},1}},
                     {"instr",{{"Start","String1","String2","Compare"},0}},
                     {"strcomp",{{"String1","String2","Compare"},2}},
+                    {"partition",{{"Number","Start","Stop","Interval"},4}},
                     {"rgb",{{"Red","Green","Blue"},3}}, {"qbcolor",{{"Color"},1}},
                     {"cdate",{{"Expression"},1}},
                     {"datevalue",{{"Date"},1}}, {"timevalue",{{"Time"},1}},
@@ -1757,6 +1758,29 @@ private:
                 if (word!="rtrim" && word!="rtrim$") while(first<last && text[first]==' ') ++first;
                 if (word!="ltrim" && word!="ltrim$") while(last>first && text[last-1]==' ') --last;
                 return VbaValue::string(text.substr(first,last-first));
+            }
+            if (word=="partition") {
+                if (!host_) return {};
+                if (args.size()!=4 || std::any_of(omitted.begin(),omitted.end(),[](bool value){return value;}))
+                    throw error("Partition requires four arguments",450);
+                std::vector<VbaValue> values;
+                for (const auto& argument : args) values.push_back(scalarObjectValue(argument));
+                for (const auto& value : values) if (value.kind==VbaValue::Kind::Null) return {};
+                std::int64_t numbers[4];
+                for (int i=0;i<4;++i) numbers[i]=static_cast<std::int64_t>(coerceVbaModuleValue(values[i],"long").number);
+                const auto number=numbers[0],start=numbers[1],stop=numbers[2],interval=numbers[3];
+                if (start<0 || stop<=start || interval<1) throw error("Invalid Partition range",5);
+                // Keep boundary arithmetic inside the supported VBA Long domain.
+                if (stop==2147483647) throw error("Partition boundary exceeds supported Long range",3251);
+                const auto width=std::max(std::to_string(stop+1).size(),std::to_string(start-1).size());
+                const auto padded=[&](std::int64_t value) {
+                    const auto text=std::to_string(value);
+                    return std::string(width>text.size() ? width-text.size() : 0,' ')+text;
+                };
+                if (number<start) return VbaValue::string(std::string(width,' ')+":"+padded(start-1));
+                if (number>stop) return VbaValue::string(padded(stop+1)+":"+std::string(width,' '));
+                const auto lower=((number-start)/interval)*interval+start;
+                return VbaValue::string(padded(lower)+":"+padded(std::min(lower+interval-1,stop)));
             }
             if (word=="rgb" || word=="qbcolor") {
                 if (!host_) return {};

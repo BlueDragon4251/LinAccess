@@ -5769,3 +5769,8 @@ Scope: DESIGNER_SAVE_KEYS.md.
 Designer keyboard/menu milestone: Debian payload/Build-ID/pinned SQLite and four
 original fixture hashes pass. Final UI1/1 (2.63 s); last full catalog48/48 (83.20 s)
 and GUI-free core1/1 (1.66 s) remain the broader runtime baseline.
+
+Begrenztes natives VBA-/SQL-Partition mit benannten Argumenten und tatsächlicher
+SQL-Gruppierung ist implementiert: [Umfang und Grenzen](NATIVE_PARTITION.md).
+Vollstand danach48/48 (84.06 s), GUI-freier Core1/1, Paket und vier Originalfixture-
+Hashes bestanden; fester Arbeitskatalog unverändert456/384/72.

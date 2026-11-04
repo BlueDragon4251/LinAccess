@@ -2862,3 +2862,8 @@ Completion: full desktop 48/48 (88.44 s), freshly rebuilt GUI-free core 1/1
 original fixture hashes pass. A transient execution transport disconnect left
 the workspace and running checks intact; no source was edited during checks.
 Fixed 456 work entries and 48 CTest targets remain unchanged.
+
+Begrenztes natives VBA-/SQL-Partition mit benannten Argumenten und tatsächlicher
+SQL-Gruppierung ist implementiert: [Umfang und Grenzen](NATIVE_PARTITION.md).
+Vollstand danach48/48 (84.06 s), GUI-freier Core1/1, Paket und vier Originalfixture-
+Hashes bestanden; fester Arbeitskatalog unverändert456/384/72.

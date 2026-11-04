@@ -409,7 +409,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F272** — Native table Ctrl+S completes/validates a live cell before transactional manual save, retaining invalid editor text; full per-record/undo/key parity open.
 - [x] **F274** — Native datasheet Ctrl+W/Ctrl+F4 guarded close, page-wide Ctrl+S and deferred shortcut-sender deletion with actual key regression; full window/key parity open.
 - [x] **F306** — Native command-button Default/Cancel keyboard dispatch, focused editor undo and runtime uniqueness; full Access keyboard/event oracle remains open.
-- [x] **F310** — Native character/reverse-search SQL bridge, corrected InStrRev string Null, and bounded Space/String/Hex/Oct VBA/SQL functions; ANSI/full BSTR remain open.
+- [x] **F310** — Native character/reverse-search SQL bridge, corrected InStrRev string Null, and bounded Space/String/Hex/Oct/Partition VBA/SQL functions (NATIVE_PARTITION.md); ANSI/full BSTR remain open.
 - [x] **F312** — Native datasheet Ctrl+Plus/Ctrl+Minus through validated model operations, real-key SQL persistence and invalid-editor guards; auto-save semantics open.
 - [x] **F331** — Native editable datasheet text-cell date/time shortcuts, starting edit or replacing a live selection, with real Ctrl+S persistence; regional masks open.
 - [x] **F332** — Existing keyed datasheet cell restored after save/model reset and sort movement, with composite-key comparison and bounded search; new/no-key open.

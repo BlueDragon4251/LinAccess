@@ -39,6 +39,24 @@ void testSqlRgbDao() {
     assert(sql.exec("INSERT INTO color_rows VALUES(1,255,0,0,0),(2,0,255,0,0)"));
     assert(sql.exec("CREATE TABLE color_values(value INTEGER)"));
     Host host(db);
+    {
+        assert(sql.exec("CREATE TABLE partition_rows(value INTEGER)"));
+        assert(sql.exec("INSERT INTO partition_rows VALUES(-1),(0),(4),(5),(99),(100),(NULL)"));
+        const auto definition=host.currentDatabase()->member("CreateQueryDef",{
+            linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT Partition(value,0,99,5) AS bucket,Count(*) AS n FROM partition_rows GROUP BY Partition(value,0,99,5) ORDER BY bucket")}).object;
+        const auto rows=definition->member("OpenRecordset",{}).object;
+        const std::vector<std::string> expected{"","   : -1","  0:  4","  5:  9"," 95: 99","100:   "};
+        for (std::size_t i=0;i<expected.size();++i) {
+            assert(!rows->member("EOF",{}).truthy());
+            const auto fields=rows->member("Fields",{}).object;
+            const auto bucket=fields->member("Item",{linaccess::VbaValue::string("bucket")}).object->member("Value",{});
+            assert(i==0 ? bucket.kind==linaccess::VbaValue::Kind::Null : bucket.asText()==expected[i]);
+            assert(fields->member("Item",{linaccess::VbaValue::string("n")}).object->member("Value",{}).asNumber()==(i==2 ? 2 : 1));
+            rows->member("MoveNext",{});
+        }
+        assert(rows->member("EOF",{}).truthy());
+        rows->member("Close",{});
+    }
     const std::string retainedDao=R"VBA(Private database As DAO.Database
 Public rows As DAO.Recordset
 Sub ReadFieldArgument(ByVal value As DAO.Field)
