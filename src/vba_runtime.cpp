@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <deque>
+#include <list>
+#include <new>
 #include <cctype>
 #include <cmath>
 #include <regex>
@@ -413,6 +415,9 @@ std::optional<std::vector<VbaArrayDimension>> literalArrayBounds(const std::stri
     return result;
 }
 VbaExecutionResult parseProcedure(std::string_view module, std::string_view name,
+                                  std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
+                                  std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr,bool inheritedWith=false);
+VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_view name,
                                   std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
                                   std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr,bool inheritedWith=false) {
     VbaVariables declarationConstants; const auto constantMode=moduleCompareMode(module);
@@ -1019,6 +1024,68 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
     }
     return within ? VbaExecutionResult{VbaExecutionStatus::Error, "End Sub fehlt", line}
                   : VbaExecutionResult{VbaExecutionStatus::ProcedureMissing, {}, 0};
+}
+// Cache source-only translation plans, never host/module/DAO/document state.
+struct ProcedurePlan {
+    std::string module,name,resultType;
+    std::size_t moduleHash{},cost{};
+    bool resolveLabels{},inheritedWith{},function{},cancel{};
+    std::vector<Statement> statements;
+    std::vector<Parameter> parameters;
+    VbaExecutionResult result;
+};
+VbaExecutionResult parseProcedure(std::string_view module,std::string_view name,
+                                 std::vector<Statement>& statements,bool& function,bool& cancel,
+                                 std::vector<Parameter>* parameters,bool resolveLabels,std::string* resultType,bool inheritedWith) {
+    if(!statements.empty()) return parseProcedureUncached(module,name,statements,function,cancel,parameters,resolveLabels,resultType,inheritedWith);
+    constexpr std::size_t budget=16*1024*1024,entryLimit=128;
+    static thread_local std::list<ProcedurePlan> plans;
+    static thread_local std::size_t accounted=0;
+    const auto normalized=lower(std::string(name)); const auto hash=std::hash<std::string_view>{}(module);
+    const auto copy=[&](const ProcedurePlan& plan) {
+        statements=plan.statements; function=plan.function; cancel=plan.cancel;
+        if(parameters) *parameters=plan.parameters;
+        if(resultType) *resultType=plan.resultType;
+    };
+    const auto found=std::find_if(plans.begin(),plans.end(),[&](const ProcedurePlan& plan) {
+        return plan.moduleHash==hash && plan.name==normalized && plan.resolveLabels==resolveLabels
+            && plan.inheritedWith==inheritedWith && plan.module==module;
+    });
+    if(found!=plans.end()) {
+        copy(*found); const auto result=found->result; plans.splice(plans.begin(),plans,found); return result;
+    }
+    std::vector<Parameter> inferredParameters; std::string inferredType;
+    auto* parsedParameters=parameters ? parameters : &inferredParameters;
+    auto* parsedType=resultType ? resultType : &inferredType;
+    const auto result=parseProcedureUncached(module,name,statements,function,cancel,parsedParameters,resolveLabels,parsedType,inheritedWith);
+    if(result.status!=VbaExecutionStatus::Completed || result.typedReturnValue || result.returnValue) return result;
+    ProcedurePlan plan; plan.result=result; plan.function=function; plan.cancel=cancel;
+    plan.moduleHash=hash; plan.resolveLabels=resolveLabels; plan.inheritedWith=inheritedWith;
+    const auto add=[&](std::size_t amount) {
+        if(plan.cost>budget || amount>budget-plan.cost) plan.cost=budget+1; else plan.cost+=amount;
+    };
+    const auto scalar=[&](const std::shared_ptr<const VbaValue>& value) {
+        if(!value) return;
+        if(value->object || isVbaArray(*value)) { plan.cost=budget+1; return; }
+        add(sizeof(VbaValue)+64+value->text.capacity()+value->bytes.capacity());
+    };
+    add(sizeof(ProcedurePlan)+2*sizeof(void*)+module.size()+normalized.size()+parsedType->size()+result.explanation.capacity());
+    add(statements.capacity()*sizeof(Statement)); add(parsedParameters->capacity()*sizeof(Parameter));
+    for(const auto& instruction:statements) {
+        add(instruction.argument.capacity()+instruction.expression.capacity()+instruction.endExpression.capacity()+instruction.stepExpression.capacity());
+        add(instruction.fixedBounds.capacity()*sizeof(VbaArrayDimension)); scalar(instruction.constantValue);
+    }
+    for(const auto& parameter:*parsedParameters) {
+        add(parameter.name.capacity()+parameter.type.capacity()+parameter.defaultExpression.capacity()); scalar(parameter.defaultValue);
+    }
+    if(plan.cost>budget) return result;
+    try {
+        plan.module=std::string(module); plan.name=normalized; plan.resultType=*parsedType;
+        plan.statements=statements; plan.parameters=*parsedParameters;
+        while(!plans.empty() && (plans.size()>=entryLimit || accounted>budget-plan.cost)) { accounted-=plans.back().cost; plans.pop_back(); }
+        plans.push_front(std::move(plan)); accounted+=plans.front().cost;
+    } catch(const std::bad_alloc&) { /* The optional cache must not reject a translated procedure. */ }
+    return result;
 }
 }
 
