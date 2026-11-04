@@ -1001,3 +1001,22 @@ Abschluss ByRef-Zellen/Alias-Lebensdauer: Desktop 48/48 (76,34 s), frisch
 gebauter GUI-freier Kern 1/1 (2,05 s), gezielt Kern/DAO 2/2 (2,21 s),
 Debian-Paket und vier Originalfixture-Hashes bestanden. F043 bleibt breit
 offen; feste 456 IDs/Punkte unverändert.
+
+
+Aktueller Formularabschnitt unter F080: Eigene _la_objects-Formulare laufen
+jetzt über AccessFormPreview statt alten modalen QDialog/manuelle SQL-Schritte.
+Adapter native_stored_form.hpp erzeugt echte Layout-/Ereignisbindung, ergänzt
+Default-Neu/Speichern nur zur Laufzeit, erhält gespeichertes VBA/Originalbytes.
+DoCmd.OpenForm löst eigene Formulare auf, native/importierte Namenskollisionen
+bleiben Fehler. Feldreihenfolge/Beschriftungen im bestehenden Editor gespeichert;
+Entwurf schließt geladenes Zielformular unter Beachtung von Unload-Abbruch.
+Bestehender GUI-Target 1/1 (2,24 s): echter Designer, SQL-Save, VBA-Instanz,
+Kind öffnen/Aufrufer schließen, IsLoaded und erneuter Entwurf bestanden.
+Gesamtsuite/GUI-freier Build/Paket/Hashes noch zu prüfen. Keine neuen IDs/Targets;
+456 fest, breite F080-Vollanforderung bleibt offen. Native eigene Unterformulare
+und freier visueller Entwurf sind damit nicht implementiert.
+
+Abschluss eigene Formular-Dokumentlaufzeit: Desktop 48/48 (82,61 s),
+GUI-freier Build und Kern 1/1 (1,52 s), Debian-Paket und alle vier
+Originalfixture-Hashes bestanden. Gezielt GUI 1/1 (2,24 s). Feste 456,
+384 bestätigte Teilumfänge und 72 offene Vollanforderungen unverändert.

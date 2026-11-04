@@ -14,6 +14,10 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLineEdit>
+#include <QListWidget>
+#include <QToolBar>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QTableView>
@@ -140,6 +144,85 @@ void exerciseTableReplace(MainWindow& window,QSqlDatabase db) {
     assert(!model->isDirty() && model->lastError().nativeErrorCode()=="2501" && model->index(1,1).data().toString()=="beta");
     assert(window.closeTableDocument(0,"command_replace",2).value("error").toInt()==0); dispose(); assert(!dialog);
 }
+void exerciseStoredForm(MainWindow& window,QSqlDatabase db) {
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE native_designed_records(id INTEGER PRIMARY KEY,first TEXT,\"second value\" TEXT)"));
+    assert(sql.exec("INSERT INTO native_designed_records VALUES(1,'before','initial')"));
+    const QString module=R"VBA(Private state As Long
+Private Sub Form_Load()
+state=1
+End Sub
+Private Sub btnAktion_Click()
+state=state+1
+Me![second value]=CStr(state)
+DoCmd.RunCommand acCmdSaveRecord
+End Sub
+Sub OpenOwnedChild()
+DoCmd.OpenForm "Owned Child"
+DoCmd.Close acForm,"Owned Native Form"
+End Sub
+)VBA";
+    auto* toolbar=window.findChild<QToolBar*>(); assert(toolbar);
+    QAction* create=nullptr; for(auto* action:toolbar->actions()) if(action->text()=="+ Formular") create=action;
+    assert(create);
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-form-designer");
+        dialog->findChild<QLineEdit*>("native-form-name")->setText("Owned Native Form");
+        dialog->findChild<QLineEdit*>("native-form-caption")->setText("Owned form caption");
+        dialog->findChild<QComboBox*>("native-form-source")->setCurrentText("native_designed_records");
+        auto* fields=dialog->findChild<QListWidget*>("native-form-fields"); assert(fields && fields->count()==2);
+        auto* moved=fields->takeItem(1); assert(moved->data(Qt::UserRole).toString()=="second value");
+        moved->setText("Second \"caption\""); fields->insertItem(0,moved);
+        dialog->findChild<QPlainTextEdit*>("native-form-vba")->setPlainText(module);
+        dialog->findChild<QPushButton*>("native-form-save")->click();
+    });
+    create->trigger(); QApplication::processEvents();
+    assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='form' AND name='Owned Native Form'") && sql.next());
+    const auto saved=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
+    assert(saved.value("fields").toArray().first().toString()=="second value" && saved.value("vba").toString()==module);
+    auto child=saved; child.insert("vba",""); child.insert("caption","Owned child caption");
+    sql.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES('form','Owned Child',?)");
+    sql.addBindValue(QString::fromUtf8(QJsonDocument(child).toJson(QJsonDocument::Compact))); assert(sql.exec()); sql.finish();
+    auto* explorer=window.findChild<QTreeWidget*>(); assert(explorer);
+    for(auto* action:toolbar->actions()) if(action->text()=="Aktualisieren") action->trigger();
+    QTreeWidgetItem* selected=nullptr;
+    for(QTreeWidgetItemIterator item(explorer);*item;++item)
+        if((*item)->data(0,Qt::UserRole).toString()=="form" && (*item)->text(0)=="Owned Native Form") selected=*item;
+    assert(selected); explorer->setCurrentItem(selected);
+    const auto open=[&] { assert(QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,selected),Q_ARG(int,0))); QApplication::processEvents(); };
+    const auto locate=[&](const QString& name) {
+        QPointer<AccessFormPreview> result;
+        for(const auto& document:AccessFormPreview::projectDocuments(db)) if(document && document->documentName()==name) result=document;
+        return result;
+    };
+    open(); auto form=locate("Owned Native Form"); assert(form && form->hasDataSource() && form->windowTitle().contains("Owned form caption"));
+    auto* first=form->findChild<QLineEdit*>("access-control-first"); auto* second=form->findChild<QLineEdit*>("access-control-second value");
+    assert(first && second && second->y()<first->y() && first->text()=="before");
+    bool caption=false; for(auto* label:form->findChildren<QLabel*>()) if(label->text()=="Second \"caption\"") caption=true;
+    assert(caption && AccessFormPreview::projectObjectLoaded(db,linaccess::AccessDocumentKind::Form,"Owned Native Form"));
+    first->setFocus(); first->selectAll(); QTest::keyClicks(first,"native save");
+    auto* save=form->findChild<QPushButton*>("access-control-btnSpeichern"); auto* action=form->findChild<QPushButton*>("access-control-btnAktion"); assert(save && action);
+    QTest::mouseClick(save,Qt::LeftButton); QApplication::processEvents();
+    assert(sql.exec("SELECT first FROM native_designed_records WHERE id=1") && sql.next() && sql.value(0).toString()=="native save"); sql.finish();
+    QTest::mouseClick(action,Qt::LeftButton); QTest::mouseClick(action,Qt::LeftButton); QApplication::processEvents();
+    assert(sql.exec("SELECT \"second value\" FROM native_designed_records WHERE id=1") && sql.next() && sql.value(0).toString()=="3"); sql.finish();
+    std::vector<linaccess::VbaValue> arguments;
+    assert(form->executeProcedure("OpenOwnedChild",arguments).status==linaccess::VbaExecutionStatus::Completed); dispose();
+    auto ownedChild=locate("Owned Child"); assert(ownedChild && ownedChild->isVisible() && !AccessFormPreview::projectObjectLoaded(db,linaccess::AccessDocumentKind::Form,"Owned Native Form"));
+    assert(ownedChild->close()); dispose();
+    open(); form=locate("Owned Native Form"); assert(form);
+    auto* edit=window.findChild<QAction*>("native-form-edit"); assert(edit);
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-form-designer");
+        assert(!AccessFormPreview::projectObjectLoaded(db,linaccess::AccessDocumentKind::Form,"Owned Native Form"));
+        const auto* fields=dialog->findChild<QListWidget*>("native-form-fields");
+        assert(fields->item(0)->data(Qt::UserRole).toString()=="second value" && fields->item(0)->text()=="Second \"caption\"");
+        assert(dialog->findChild<QPlainTextEdit*>("native-form-vba")->toPlainText()==module);
+        dialog->reject();
+    });
+    edit->trigger(); dispose();
+}
+
 void exerciseRecordEscape(MainWindow& window,QSqlDatabase db) {
     QSqlQuery sql(db);
     assert(sql.exec("CREATE TABLE command_record_undo(id INTEGER PRIMARY KEY AUTOINCREMENT,value TEXT UNIQUE)"));
@@ -1574,11 +1657,13 @@ int main(int argc,char** argv) {
     for(QTreeWidgetItemIterator it(window.findChild<QTreeWidget*>("database-explorer"));*it;++it)
         if((*it)->data(0,Qt::UserRole).toString()=="form" && (*it)->text(0)=="catalog_native_form") nativeFormItem=*it;
     assert(nativeFormItem && !nativeCatalog->member("IsLoaded",{}).boolean);
-    QTimer::singleShot(0,&window,[&] {
-        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->windowTitle()=="Formular: catalog_native_form");
-        assert(nativeCatalog->member("IsLoaded",{}).boolean); dialog->reject();
-    });
     assert(QMetaObject::invokeMethod(window.findChild<QTreeWidget*>("database-explorer"),"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,nativeFormItem),Q_ARG(int,0)));
+    assert(nativeCatalog->member("IsLoaded",{}).boolean && !QApplication::activeModalWidget());
+    QPointer<AccessFormPreview> nativeDocument;
+    for(const auto& document:AccessFormPreview::projectDocuments(db))
+        if(document && document->documentName()=="catalog_native_form") nativeDocument=document;
+    assert(nativeDocument && nativeDocument->hasDataSource() && nativeDocument->close());
+    dispose();
     assert(!nativeCatalog->member("IsLoaded",{}).boolean);
     QApplication::setActiveWindow(entry); editor->setFocus(); root->assign("Tag",linaccess::VbaValue::string("block-project"));
     QTest::keyClick(editor,Qt::Key_O,Qt::ControlModifier); QTest::keyClick(editor,Qt::Key_N,Qt::ControlModifier);
@@ -1799,6 +1884,7 @@ int main(int argc,char** argv) {
     exerciseTableReplace(window,db);
     exerciseRecordEscape(window,db);
     exercisePageNavigation(window,db);
+    exerciseStoredForm(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }
