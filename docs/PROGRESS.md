@@ -4487,3 +4487,16 @@ insert/delete/oracle limits. Full desktop 48/48 (80.50 s), GUI-free build
 confirmed and core 1/1 (2.31 s), targeted GUI/SQL 1/1 (2.12 s), Debian payload/
 permissions/Build-ID/pinned SQLite and four original hashes pass. Scoped checklist
 382 checked / 72 open; no extra CTest target or complete Access parity claim.
+
+
+## Validated loaded-page record navigation (2026-11-04)
+
+PageUp/PageDown pass actual loaded-viewport record distances to checked native
+Save/navigation. Existing 60-row GUI/SQL execution verifies a multi-record step,
+Save, UNIQUE failure retaining current row/cache/SQL, Esc/retry and a zero-step
+first-page draft without Save. TABLE_KEYBOARD_RUNTIME.md records lazy-page,
+context/editor/selection/geometry and Access oracle limits. Full desktop 48/48
+(78.15 s), GUI-free build confirmed and core 1/1 (1.94 s), targeted GUI/SQL
+1/1 (2.30 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original fixture hashes pass. Scoped checklist 383 checked / 72 open, no extra
+CTest target or complete Access 2003 parity claim.
