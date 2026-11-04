@@ -140,6 +140,35 @@ void exerciseTableReplace(MainWindow& window,QSqlDatabase db) {
     assert(!model->isDirty() && model->lastError().nativeErrorCode()=="2501" && model->index(1,1).data().toString()=="beta");
     assert(window.closeTableDocument(0,"command_replace",2).value("error").toInt()==0); dispose(); assert(!dialog);
 }
+void exerciseRecordEscape(MainWindow& window,QSqlDatabase db) {
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE command_record_undo(id INTEGER PRIMARY KEY AUTOINCREMENT,value TEXT UNIQUE)"));
+    assert(sql.exec("INSERT INTO command_record_undo(value) VALUES('alpha'),('beta')"));
+    assert(window.openTableDocument("command_record_undo",0,1)==0);
+    auto* tabs=window.findChild<QTabWidget*>(); assert(tabs && tabs->currentWidget());
+    linaccess::AccessTableView* view=nullptr;
+    for(auto* candidate:tabs->currentWidget()->findChildren<QTableView*>()) if(auto* typed=dynamic_cast<linaccess::AccessTableView*>(candidate)) view=typed;
+    assert(view); auto* model=qobject_cast<linaccess::AccessTableModel*>(view->model()); assert(model);
+    view->sortByColumn(0,Qt::AscendingOrder); view->setCurrentIndex(model->index(0,1));
+    assert(model->setData(model->index(0,1),"first-draft") && model->setData(model->index(1,1),"other-draft"));
+    QApplication::setActiveWindow(&window); view->setFocus(); view->edit(view->currentIndex()); QApplication::processEvents();
+    auto* editor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(editor); editor->setText("uncommitted-editor");
+    QTest::keyClick(editor,Qt::Key_Escape); QApplication::processEvents();
+    assert(model->index(0,1).data().toString()=="first-draft" && model->index(1,1).data().toString()=="other-draft");
+    view->setFocus(); QTest::keyClick(view,Qt::Key_Escape);
+    assert(model->index(0,1).data().toString()=="alpha" && model->index(1,1).data().toString()=="other-draft" && model->isDirty());
+    assert(!model->hasPendingRecord(0) && model->hasPendingRecord(1));
+    assert(sql.exec("SELECT value FROM command_record_undo WHERE id=2") && sql.next() && sql.value(0).toString()=="beta"); sql.finish();
+    assert(view->insertRecord() && model->rowCount()==3 && model->setData(model->index(2,1),"new-draft"));
+    view->setFocus(); QTest::keyClick(view,Qt::Key_Escape);
+    assert(model->rowCount()==2 && model->index(1,1).data().toString()=="other-draft" && model->hasPendingRecord(1));
+    view->setCurrentIndex(model->index(1,1)); QTest::keyClick(view,Qt::Key_Escape); assert(!model->isDirty());
+    view->setCurrentIndex(model->index(0,1)); assert(model->setData(model->index(0,1),"saved"));
+    assert(window.dispatchTableCommand(97).value("error").toInt()==0 && !model->isDirty());
+    view->setFocus(); QTest::keyClick(view,Qt::Key_Escape);
+    assert(sql.exec("SELECT value FROM command_record_undo WHERE id=1") && sql.next() && sql.value(0).toString()=="saved"); sql.finish();
+    assert(window.closeTableDocument(0,"command_record_undo",2).value("error").toInt()==0); dispose();
+}
 void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     auto* explorer=window.findChild<QTreeWidget*>("database-explorer"); assert(explorer); QTreeWidgetItem* selected=nullptr;
     for(QTreeWidgetItemIterator item(explorer);*item;++item) if((*item)->data(0,Qt::UserRole).toString()=="table" && (*item)->text(0)=="shortcut_records") { selected=*item; break; }
@@ -1698,6 +1727,7 @@ int main(int argc,char** argv) {
     exerciseQueryEditor(window,db);
     exerciseTableSave(window,db);
     exerciseTableReplace(window,db);
+    exerciseRecordEscape(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

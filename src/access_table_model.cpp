@@ -75,6 +75,19 @@ void AccessTableModel::revertRow(int row) {
     QSqlTableModel::revertRow(row);
     dirtyRows_=anchoredRows(dirtyAnchors); deletedRows_=anchoredRows(deleteAnchors);
 }
+bool AccessTableModel::hasPendingRecord(int row) const {
+    if(editStrategy()!=OnManualSubmit || row<0 || row>=rowCount()) return false;
+    if(deletedRows_.contains(row)) return true;
+    for(int column=0;column<columnCount();++column) if(isDirty(index(row,column))) return true;
+    return false;
+}
+bool AccessTableModel::undoPendingRecord(int row) {
+    if(saving_ || changing_) return reject(2501);
+    if(!hasPendingRecord(row)) return rejectEdit(2046,"Keine ungespeicherten Änderungen im aktuellen Datensatz.");
+    revertRow(row);
+    setLastError({});
+    return true;
+}
 bool AccessTableModel::insertRows(int row,int count,const QModelIndex& parent) {
     if(saving_ || changing_) return reject(2501);
     if(readOnly_) return reject(2448);
