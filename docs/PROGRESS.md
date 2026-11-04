@@ -5362,3 +5362,24 @@ target or catalog ID. F050/F085 remain open.
 
 Report body-break checkpoint: Debian payload/Build-ID/pinned SQLite and all four
 original fixture SHA-256 checks pass.
+
+
+## Native report paper/orientation/margins and S (2026-11-04)
+
+A functional native Qt dialog edits actual QPageLayout geometry for the open
+report. Qt standard/custom paper, orientation and validated mm margins feed
+existing pagination; preview/PDF/print copy the same layout. Cancel preserves it.
+The initial QPageSetupDialog path failed on the PDF printer with no installed
+physical printer. It was replaced by native controls backed by real page geometry,
+not a fake printer. Original Access setup decoding/persistence and physical output
+remain open; exact bounds are in REPORT_PAGE_SETUP.md.
+
+Existing actual S/dialog cases accept landscape and a 25-mm left margin. PDF
+MediaBox and independent text bounding coordinates verify physical output; a
+cancelled orientation change preserves landscape in another PDF. Validation:
+desktop build and final mainwindow/layout/original DAO3/3 (47.29 s). Runtime core
+unchanged from earlier full48 (84.06 s) / GUI-free core1 (1.76 s). Fixed 456/384/72;
+no new CTest target or catalog ID. Full report/page setup parity remains open.
+
+Page-setup checkpoint: Debian payload/Build-ID/pinned SQLite and all four original
+fixture SHA-256 checks pass.

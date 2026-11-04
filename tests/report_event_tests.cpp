@@ -24,6 +24,9 @@
 #include <QStandardPaths>
 #include <QPrintPreviewDialog>
 #include <QPrintDialog>
+#include <QPageLayout>
+#include <QDialogButtonBox>
+#include <QPrinter>
 #include <QGraphicsView>
 #include <QTest>
 #include <QPrintPreviewWidget>
@@ -31,6 +34,7 @@
 #include <QAction>
 #include <QTabWidget>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -215,6 +219,49 @@ Height =1500)BANDS");
             QTest::keyClick(surface,Qt::Key_P,modifiers);
             assert(printChecked && paged.findChild<QLineEdit*>("access-control-Name")->text()=="first");
         }
+        auto* setupAction=paged.findChild<QAction*>("access-report-page-setup"); assert(setupAction);
+        QApplication::setActiveWindow(&paged);
+        auto* setupSurface=reportPages->findChild<QGraphicsView*>(); assert(setupSurface);
+        setupSurface->setFocus(); QApplication::processEvents();
+        bool pageSetupChecked=false;
+        QTimer::singleShot(0,&paged,[&] {
+            auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            assert(dialog && dialog->objectName()=="access-report-page-setup-dialog");
+            dialog->findChild<QComboBox*>("report-page-orientation")->setCurrentIndex(1);
+            dialog->findChild<QDoubleSpinBox*>("report-page-left")->setValue(25);
+            pageSetupChecked=true;
+            dialog->findChild<QDialogButtonBox*>("report-page-buttons")->button(QDialogButtonBox::Ok)->click();
+        });
+        QTest::keyClick(setupSurface,Qt::Key_S); assert(pageSetupChecked);
+        const auto landscapePdf=output.filePath("landscape.pdf"); assert(paged.exportReportPdf(landscapePdf));
+        QFile landscapeFile(landscapePdf); assert(landscapeFile.open(QIODevice::ReadOnly));
+        const auto landscapeBytes=QString::fromLatin1(landscapeFile.readAll());
+        const QRegularExpression mediaBox(R"(/MediaBox\s*\[\s*0\s+0\s+([0-9.]+)\s+([0-9.]+)\s*\])");
+        const auto box=mediaBox.match(landscapeBytes); assert(box.hasMatch() && box.captured(1).toDouble()>box.captured(2).toDouble());
+        if(!reader.isEmpty()) {
+            QProcess textReader; textReader.start(reader,{"-bbox",landscapePdf,"-"});
+            assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);
+            const auto text=QString::fromUtf8(textReader.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);
+            const QRegularExpression firstPosition(R"PDF(<word xMin="([0-9.]+)"[^>]*>first</word>)PDF");
+            const auto position=firstPosition.match(text);
+            assert(position.hasMatch() && position.captured(1).toDouble()>70 && position.captured(1).toDouble()<85);
+        }
+        bool cancelledSetup=false;
+        QTimer::singleShot(0,&paged,[&] {
+            auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            assert(dialog && dialog->objectName()=="access-report-page-setup-dialog");
+            auto* orientation=dialog->findChild<QComboBox*>("report-page-orientation"); assert(orientation->currentIndex()==1);
+            assert(dialog->findChild<QDoubleSpinBox*>("report-page-left")->value()==25);
+            orientation->setCurrentIndex(0);
+            cancelledSetup=true;
+            dialog->findChild<QDialogButtonBox*>("report-page-buttons")->button(QDialogButtonBox::Cancel)->click();
+        });
+        setupAction->trigger(); assert(cancelledSetup);
+        assert(paged.exportReportPdf(output.filePath("landscape-after-cancel.pdf")));
+        QFile cancelledFile(output.filePath("landscape-after-cancel.pdf")); assert(cancelledFile.open(QIODevice::ReadOnly));
+        const auto cancelledBox=mediaBox.match(QString::fromLatin1(cancelledFile.readAll()));
+        assert(cancelledBox.hasMatch() && cancelledBox.captured(1).toDouble()>cancelledBox.captured(2).toDouble());
+        assert(paged.findChild<QLineEdit*>("access-control-Name")->text()=="first");
         paged.hide();
         assert(paged.findChild<QLineEdit*>("access-control-Info")->text()=="10");
         assert(paged.findChild<QLineEdit*>("access-control-ReportSummary")->text()=="3");

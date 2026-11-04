@@ -213,3 +213,10 @@ No printer-output or complete Access keyboard parity is claimed.
 
 Reference: [Access 2003 keyboard documentation](https://documentation.help/MS-Office-Access-2003/AccessKeyboardShortcuts.htm)
 records P/Ctrl+P for the print dialog and C/Escape for leaving preview.
+
+## Native page geometry
+
+[Report page setup](REPORT_PAGE_SETUP.md) edits actual paper/orientation/margins
+for the current native report session; preview, PDF and print share that layout.
+S invokes it only inside the preview/navigation pane. This does not complete
+original Access printer setup decoding or persisted report design properties.
