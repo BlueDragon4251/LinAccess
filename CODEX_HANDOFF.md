@@ -1269,3 +1269,12 @@ Leere/Clear-Sammlung liefert keine Elemente. Bestehende echte VBA-/Qt-Dateiauswa
 prüft Reihenfolge, Typen und leere Enumeration, danach tatsächliche Textdateiauswahl.
 Layout-Ziel1/1 (10.56 s), Paket/Build-ID/SQLite und vier Originalfixture-Hashes
 bestanden. Letzter Vollstand48/48 (84.06 s), Core1/1; weiterhin456/384/72.
+
+Native MkDir-/RmDir-Anweisungen kompilieren und führen tatsächliche
+Linux-Verzeichnisoperationen aus. RmDir nutzt den Betriebssystemaufruf nur für
+leere Verzeichnisse und entfernt keine normale Datei. Unicode-/Fehler-/Inhalterhalt-
+Regression im bestehenden Core-Ziel. Windows-Pfade/Symlink-Entfernung3251;
+vollständige Datei-I/O und Windows-Oracle bleiben offen.
+docs/NATIVE_DIRECTORY_STATEMENTS.md; F040 bleibt offen, keine neue ID.
+Aktuell48/48 (82.86 s), frischer GUI-freier Core1/1 (1.76 s), Paket/Build-ID/SQLite
+und vier Originalfixture-Hashes bestanden; fester Katalog weiterhin456/384/72.

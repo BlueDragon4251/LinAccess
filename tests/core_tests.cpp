@@ -2707,6 +2707,24 @@ End Sub
         char directoryPattern[]="/tmp/linaccess-file-facts-XXXXXX";
         const auto* directoryName=::mkdtemp(directoryPattern); assert(directoryName);
         const fs::path directory(directoryName), file=directory/fs::path("native-ä.dat");
+        const auto child=directory/"created-ä";
+        host.fields["NativeDirectory"]=child.string();
+        const auto directoryRun=[&](const std::string& body) {
+            return executeVbaProcedure("Sub NativeDirectoryOperations()\n"+body+"\nEnd Sub", "NativeDirectoryOperations",host);
+        };
+        assert(directoryRun("MkDir Me!NativeDirectory").status==VbaExecutionStatus::Completed && fs::is_directory(child));
+        assert(directoryRun("MkDir Me!NativeDirectory").errorNumber==75);
+        { std::ofstream output(child/"retained.txt"); output<<"synthetic"; }
+        assert(directoryRun("RmDir Me!NativeDirectory").errorNumber==75 && fs::exists(child/"retained.txt"));
+        host.fields["NativeDirectory"]=(child/"retained.txt").string();
+        assert(directoryRun("RmDir Me!NativeDirectory").errorNumber==75 && fs::exists(child/"retained.txt"));
+        host.fields["NativeDirectory"]=child.string();
+        fs::remove(child/"retained.txt");
+        assert(directoryRun("RmDir Me!NativeDirectory").status==VbaExecutionStatus::Completed && !fs::exists(child));
+        assert(directoryRun("RmDir Me!NativeDirectory").errorNumber==76);
+        assert(directoryRun("MkDir Null").errorNumber==94);
+        assert(directoryRun("MkDir \"\"").errorNumber==52);
+
         { std::ofstream output(file,std::ios::binary); output.write("A\0B",3); assert(output.good()); }
         VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
         const auto fileEvaluate=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,paths); };
