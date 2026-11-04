@@ -209,24 +209,49 @@ std::string withoutComment(const std::string& line) {
 
 class ErrorObject final : public VbaObject {
 public:
-    int number{};
-    std::string description;
+    int number{}, helpContext{};
+    std::string description, source, helpFile;
+    void clear() { number=0; helpContext=0; description.clear(); source.clear(); helpFile.clear(); }
     bool hasScalarDefault() const override { return true; }
     VbaValue scalarValue() override { return VbaValue::longInteger(number); }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(lower(std::string(name))=="raise") return VbaArgumentSignature{{"Number","Source","Description","HelpFile","HelpContext"},1};
+        return {};
+    }
+    void assign(std::string_view name,const VbaValue& value) override {
+        const auto key=lower(std::string(name));
+        if(key=="number" || key=="helpcontext") {
+            const auto converted=coerceVbaModuleValue(scalarVbaValue(value),"long");
+            (key=="number" ? number : helpContext)=static_cast<int>(converted.asNumber());
+        } else if(key=="description" || key=="source" || key=="helpfile") {
+            const auto converted=coerceVbaModuleValue(scalarVbaValue(value),"string").asText();
+            (key=="description" ? description : key=="source" ? source : helpFile)=converted;
+        } else throw VbaRuntimeError(438,"Err property assignment unsupported");
+    }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         const auto key = lower(std::string(name));
         if (key == "raise") {
-            if (args.size() != 1) throw VbaRuntimeError(5, "Err.Raise benötigt eine Fehlernummer");
-            const auto code = args[0].asNumber();
-            if (code <= 0 || code > 65535 || std::floor(code) != code)
-                throw VbaRuntimeError(5, "Ungültige Fehlernummer");
-            throw VbaRuntimeError(static_cast<int>(code), "VBA: explizit ausgelöster Fehler");
+            if(args.empty() || args.size()>5 || args[0].kind==VbaValue::Kind::Missing)
+                throw VbaRuntimeError(450,"Err.Raise requires Number and up to four optional arguments");
+            const auto code=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(args[0]),"long").asNumber());
+            if(code==0) throw VbaRuntimeError(5,"Invalid error number");
+            const auto textArgument=[&](std::size_t index,const std::string& fallback) {
+                return index<args.size() && args[index].kind!=VbaValue::Kind::Missing
+                    ? coerceVbaModuleValue(scalarVbaValue(args[index]),"string").asText() : fallback;
+            };
+            const auto context=args.size()>4 && args[4].kind!=VbaValue::Kind::Missing
+                ? static_cast<int>(coerceVbaModuleValue(scalarVbaValue(args[4]),"long").asNumber()) : helpContext;
+            throw VbaRuntimeError(code,textArgument(2,description.empty() ? "VBA: explicit error" : description),
+                textArgument(1,source),textArgument(3,helpFile),context);
         }
-        if (!args.empty()) throw VbaRuntimeError(5, "Unerwartete Err-Argumente");
+        if (!args.empty()) throw VbaRuntimeError(450, "Unexpected Err arguments");
         if (key == "number") return VbaValue::longInteger(number);
         if (key == "description") return VbaValue::string(description);
-        if (key == "clear") { number = 0; description.clear(); return {}; }
-        throw VbaRuntimeError(438, "Err-Mitglied nicht unterstützt");
+        if (key == "source") return VbaValue::string(source);
+        if (key == "helpfile") return VbaValue::string(helpFile);
+        if (key == "helpcontext") return VbaValue::longInteger(helpContext);
+        if (key == "clear") { clear(); return {}; }
+        throw VbaRuntimeError(438, "Err member unsupported");
     }
 };
 
@@ -1689,7 +1714,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         storeAliases();
         if (nested.status != VbaExecutionStatus::Completed)
             throw VbaRuntimeError(nested.errorNumber ? nested.errorNumber : 5,
-                nested.status == VbaExecutionStatus::ProcedureMissing ? "Prozedur nicht gefunden" : nested.explanation);
+                nested.status == VbaExecutionStatus::ProcedureMissing ? "Prozedur nicht gefunden" : nested.explanation,
+                nested.errorSource,nested.errorHelpFile,nested.errorHelpContext);
         if (needsValue && !nested.typedReturnValue) throw VbaRuntimeError(5, "Sub hat keinen Rückgabewert");
         return nested.typedReturnValue ? *nested.typedReturnValue : VbaValue::empty();
     };
@@ -1778,7 +1804,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (active) {
                     if (!handlingError) throw VbaRuntimeError(20, "Resume ohne aktiven Fehler");
                     handlingError = false;
-                    errorState->number = 0; errorState->description.clear();
+                    errorState->clear();
                     const int groupEnd=instructions[faultInstruction].sourceStatementEnd;
                     if (instruction.type == Statement::Type::ResumeLabel) {
                         frames.clear(); loops.clear(); withFrames.clear(); active = true;
@@ -2209,6 +2235,9 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 const auto* typed = dynamic_cast<const VbaRuntimeError*>(&exception);
                 errorState->number = typed ? typed->number : 5;
                 errorState->description = exception.what();
+                errorState->source=typed ? typed->source : std::string{};
+                errorState->helpFile=typed ? typed->helpFile : std::string{};
+                errorState->helpContext=typed ? typed->helpContext : 0;
                 if (!resumeNext) {
                     handlingError = true; faultInstruction = instruction.sourceStatementEnd>=0 ? executingIp : ip;
                     faultFrames = frames; faultLoops = loops; faultWithFrames=withFrames; faultActive = active;
@@ -2229,6 +2258,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         VbaExecutionResult failure{VbaExecutionStatus::Error, exc.what(), currentLine};
         const auto* typed = dynamic_cast<const VbaRuntimeError*>(&exc);
         failure.errorNumber = typed ? typed->number : 5;
+        if(typed) { failure.errorSource=typed->source; failure.errorHelpFile=typed->helpFile; failure.errorHelpContext=typed->helpContext; }
         return failure;
     }
     return completed(0, false);
@@ -2259,7 +2289,8 @@ VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string
             if(vbaExecutionStopRequested() || epoch!=vbaExecutionEpoch()) throw VbaExecutionStopped{};
             line=outcome.line;
             if (outcome.status!=VbaExecutionStatus::Completed || !outcome.typedReturnValue)
-                throw VbaRuntimeError(outcome.errorNumber ? outcome.errorNumber : 5,outcome.explanation.empty() ? "Event function execution failed" : outcome.explanation);
+                throw VbaRuntimeError(outcome.errorNumber ? outcome.errorNumber : 5,outcome.explanation.empty() ? "Event function execution failed" : outcome.explanation,
+                    outcome.errorSource,outcome.errorHelpFile,outcome.errorHelpContext);
             return *outcome.typedReturnValue;
         };
         const auto value=evaluateVbaExpression(source,host,{},resolver);
@@ -2270,7 +2301,7 @@ VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string
     } catch (const VbaExecutionStopped&) {
         return {VbaExecutionStatus::Completed,{},line,true};
     } catch (const VbaRuntimeError& error) {
-        VbaExecutionResult result{VbaExecutionStatus::Error,error.what(),line}; result.errorNumber=error.number; return result;
+        VbaExecutionResult result{VbaExecutionStatus::Error,error.what(),line}; result.errorNumber=error.number; result.errorSource=error.source; result.errorHelpFile=error.helpFile; result.errorHelpContext=error.helpContext; return result;
     } catch (const std::exception&) {
         VbaExecutionResult result{VbaExecutionStatus::Error,"Event expression execution failed",line}; result.errorNumber=5; return result;
     }

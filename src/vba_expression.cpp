@@ -757,7 +757,7 @@ private:
             if (member.type != Token::Type::Word && member.type != Token::Type::Bracket)
                 throw error("Objektmitglied erwartet");
             const auto memberKey=lower(member.value);
-            const bool missingDefaults=memberKey=="add" || memberKey=="opentable" || memberKey=="openquery" || memberKey=="findrecord";
+            const bool missingDefaults=memberKey=="add" || memberKey=="opentable" || memberKey=="openquery" || memberKey=="findrecord" || memberKey=="raise";
             std::vector<VbaValue> args;
             std::vector<std::string> argumentNames;
             std::vector<bool> omittedArguments;
@@ -984,6 +984,7 @@ private:
                 if (number>=1 && number<=24) return VbaValue::numeric(111+number);
             }
         }
+        if(word=="vbobjecterror") return VbaValue::longInteger(-2147221504);
         static const std::unordered_map<std::string,int> documentConstants{{"vbusecompareoption",-1},{"vbbinarycompare",0},{"vbtextcompare",1},{"vbdatabasecompare",2},{"accopy",2},{"accmdcut",189},{"accmdundo",292},{"accmdredo",199},{"accmdcopy",190},{"accmdpaste",191},{"accmdpasteappend",38},{"acformbar",0},{"aceditmenu",1},{"acmenuver70",70},{"acmenuver20",20},{"acmenuver1x",11},{"acselectrecord",8},{"acdelete",6},{"accmdselectrecord",50},{"accmdselectallrecords",109},{"accmddeleterecord",223},{"acdataerrcontinue",0},{"acdataerrdisplay",1},{"acdeleteok",0},{"acdeletecancel",1},{"acdeleteusercancel",2},{"accmdsortascending",163},{"accmdsortdescending",164},{"accmdsaverecord",97},{"accmdzoombox",179},{"accmdreplace",29},{"accmdfind",30},{"accmdfindnext",341},{"acanywhere",0},{"acentire",1},{"acstart",2},{"acsearchall",2},{"acdown",1},{"acup",0},{"acall",0},{"accurrent",-1},{"accmdrecordsgotofirst",67},{"accmdrecordsgotoprevious",66},{"accmdrecordsgotonext",65},{"accmdrecordsgotolast",68},{"accmdrecordsgotonew",28},{"acdataform",2},{"acdatatable",0},{"acdataquery",1},{"acdatareport",3},{"acactivedataobject",-1},{"acprevious",0},{"acfirst",2},{"acgoto",4},{"acnext",1},{"aclast",3},{"acnewrec",5},{"acviewnormal",0},{"acviewpreview",2},{"acviewdesign",1},{"acwindownormal",0},{"acdialog",3},{"achidden",1},{"acicon",2},{"acedit",1},{"acreadonly",2},{"acadd",0},{"acformpropertysettings",-1},{"acformadd",0},{"acformedit",1},{"acformreadonly",2},{"acnormal",0},{"acdesign",1},{"acpreview",2},{"acformds",3},{"accustomcontrol",119},{"acshiftmask",1},{"acctrlmask",2},{"acaltmask",4},{"acdefault",-1},{"actable",0},{"acquery",1},{"acform",2},{"acreport",3},{"acmacro",4},{"acmodule",5},{"acsaveprompt",0},{"acsaveyes",1},{"acsaveno",2}};
         if (const auto constant=documentConstants.find(word);constant!=documentConstants.end()) return VbaValue::numeric(constant->second);
         if (word=="screen") return host_ ? host_->applicationObject()->member("Screen",{}) : VbaValue{};

@@ -10,6 +10,10 @@ Datenbankdesigner. **Kein Python-Runtimebedarf.**
 > kein Ersatz für Microsoft Access in der Produktion. Lies vor einem Import
 > [COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
+Der [feste Arbeitskatalog mit 456 Punkten](docs/FIXED_WORK_CATALOG.md) ordnet
+die Entwicklung in fünf Kategorien und 14 Unterkategorien. IDs und Gesamtzahl
+bleiben fest; bestätigte Teilumfänge sind keine Access-2003-Paritätsquote.
+
 ## Build unter Ubuntu / Debian
 
 Dieses Repository enthält zwei Access-2003-Testdatenbanken samt originalen

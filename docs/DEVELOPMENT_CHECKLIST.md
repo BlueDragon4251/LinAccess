@@ -2,8 +2,10 @@
 
 This tracks CODEX_HANDOFF.md and the development request. A checked item is scoped
 exactly as described; it is not approval of complete Access compatibility.
-Entry counts are an evolving scoped inventory, not a total-progress metric or
-an Access 2003 feature denominator. Do not present their ratio as overall parity.
+The 456 existing entries are frozen and indexed as F001–F456 in
+[the fixed work catalog](FIXED_WORK_CATALOG.md). Add implementation details to
+existing requirements; do not append more checkbox entries. The ratio of scoped
+checks is not overall Access 2003 parity.
 Keep the repository private. Never attach original fixtures, VBA literals, database
 rows, credentials, or raw tool logs to issues, PRs, releases or build artifacts.
 

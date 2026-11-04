@@ -4532,3 +4532,27 @@ Progress reporting: the growing count of finely split checklist entries is no
 longer used as overall progress. Historical counts describe only their then
 scoped inventory. The checklist is not a fixed Access 2003 feature denominator;
 complete parity remains open and no total percentage is asserted.
+
+
+## Fixed 456-point work catalog and structured native errors (2026-11-04)
+
+FIXED_WORK_CATALOG.md freezes all existing requirements as F001–F456 in five
+categories and 14 subject subcategories. New details map to existing IDs and
+never increase the denominator. 384 scoped checks / 72 open requirements are
+not an overall Access parity percentage; broad full-compatibility targets stay
+open. README, checklist and binding handoff record this reporting rule.
+
+Under existing F051, native Err.Raise accepts signed Long codes and five
+positional/named arguments, including omitted optionals. Writable Number,
+Source, Description, HelpFile and HelpContext use checked native coercion.
+Structured exceptions/results preserve the actual supplied metadata through
+nested calls and native event functions; Clear and explicit Resume reset it.
+vbObjectError is a native Long constant. Existing core execution covers actual
+custom-error propagation, handler/resume reset, event failure, assigned metadata
+and omitted-source Raise behavior. No new CTest target or checklist ID.
+Localized standard descriptions, default project source, full HRESULT/handler/
+debugger equivalence and Windows Help remain open.
+
+Targeted core 1/1 (1.25 s), full desktop 48/48 (77.97 s), freshly rebuilt
+GUI-free core 1/1 (1.39 s), Debian payload/permissions/Build-ID/pinned SQLite and
+all four original fixture hashes pass.
