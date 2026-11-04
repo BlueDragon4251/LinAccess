@@ -541,3 +541,38 @@ Completion: full desktop 48/48 (85.57 s), freshly rebuilt GUI-free core 1/1
 original fixture hashes pass. Existing live ByRef array cells and DAO clone/
 transaction lifetime cases pass with optional call-context metadata. Fixed
 456 work entries and 48 CTest targets remain unchanged.
+
+
+## Same-module function precedence (2026-11-04)
+
+Under existing F042/F118, parenthesized function expressions bind declared
+same-module procedures before native library functions. Explicit VBA-qualified
+calls keep their existing native library path. Procedure metadata records function
+classification and result type; using a Sub as a value is explicitly unsupported
+before its body executes. Private calls retain their own optional/named argument
+handling, so a user Round helper receives Missing rather than builtin Empty holes.
+Typed object argument context also follows the chosen private function.
+
+A source-only procedure-name inventory lives with module state, avoiding repeated
+whole-module searches for ordinary intrinsic calls. Custom module-state providers
+without an inventory use a per-frame source-name fallback. Declared routines with
+unsupported bodies/signatures do not quietly fall through to a library function.
+MS-VBAL's two-argument Left exception is implemented for a zero-parameter scalar
+function; its normal zero-argument call remains the user's function.
+
+Existing core verifies user Len/Round, qualified VBA.Len, optional/named arguments,
+Missing holes, counted bodies, scalar Left fallback and refusal to execute a Sub
+as a value. Existing GUI passes a real Control to a private Len and executes a
+function-bound Len click with actual Qt/SQL effects. Core/DAO/mainwindow/layout
+4/4 (14.05 s) pass. Full validation follows. This does not complete bare-name
+calls, scalar/indexed-variable and property/default-member binding, external/
+project/reference precedence or full class scope. Fixed 456/48 remain unchanged.
+
+Reference: Microsoft MS-VBAL, simple-name default binding namespace tiers and
+its Left exception; [specification](https://learn.microsoft.com/en-us/openspecs/microsoft_general_purpose_programming_languages/ms-vbal/).
+
+Completion: full desktop 48/48 (88.44 s), freshly rebuilt GUI-free core 1/1
+(2.34 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original fixture hashes pass. A transient execution transport disconnect left
+the workspace and running checks intact; no source was edited during checks.
+Fixed 456 work entries and 48 CTest targets remain unchanged.

@@ -2197,6 +2197,27 @@ End Sub
     assert(host.fields["StatementError"]=="-2147220990:ErrObject" && host.fields["StatementDivision"]=="11");
     for(const auto expression:{"-Null","+Null","-(Null+1)","+(Null+1)"})
         assert(evaluateVbaExpression(expression,host,{}).kind==VbaValue::Kind::Null);
+    const auto shadowedFunctions=executeVbaProcedure(R"VBA(Private calls As Long
+Function Len(Optional ByVal value As String="fallback") As Long
+calls=calls+1
+Len=VBA.Len(value)+10
+End Function
+Function Round(Optional ByVal first As Variant, Optional ByVal second As Variant) As String
+calls=calls+1
+Round=CStr(IsMissing(first)) & ":" & CStr(IsMissing(second))
+End Function
+Function Left() As Long
+calls=calls+1
+Left=7
+End Function
+Sub ShadowedFunctions()
+Me!ShadowedFunctions=CStr(Len()) & ":" & CStr(Len(value:="abc")) & ":" & CStr(VBA.Len("abc")) & ":" & Round(,2) & ":" & Left("xyz",1) & ":" & CStr(Left()) & ":" & CStr(calls)
+End Sub
+)VBA","ShadowedFunctions",host);
+    if(shadowedFunctions.status!=VbaExecutionStatus::Completed) std::cerr<<"Function shadow error="<<shadowedFunctions.errorNumber<<" line="<<shadowedFunctions.line<<" explanation="<<shadowedFunctions.explanation<<"\n";
+    assert(shadowedFunctions.status==VbaExecutionStatus::Completed && host.fields["ShadowedFunctions"]=="18:13:3:True:False:x:7:4");
+    const auto subAsValue=executeVbaProcedure("Sub ValueSub()\nMe!NeverValueSub=1\nEnd Sub\nSub CheckSubValue()\nOn Error Resume Next\nMe!IgnoredSubValue=ValueSub()\nMe!SubValueError=CStr(Err.Number)\nEnd Sub","CheckSubValue",host);
+    assert(subAsValue.status==VbaExecutionStatus::Completed && !host.fields.contains("NeverValueSub") && host.fields["SubValueError"]=="3251");
     const auto nativeTypeChecks=executeVbaProcedure(R"VBA(Private inspected As Long
 Private owned As VBA.Collection
 Function RetainedObject() As Object

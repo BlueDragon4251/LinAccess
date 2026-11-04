@@ -165,6 +165,9 @@ End Sub
 Function IsFirstControl(ByVal unused As Long, ByVal value As Control) As Boolean
 IsFirstControl=value.Name="first"
 End Function
+Function Len(ByVal value As Control) As Long
+Len=VBA.Len(value.Name)
+End Function
 Function EmptyControl(Optional ByVal value As Control=Nothing) As Boolean
 EmptyControl=value Is Nothing
 End Function
@@ -181,6 +184,7 @@ Set heldOwner=owner
 Set field=Me!first
 Set heldControl=field
 MarkControl Me!first
+If Len(Me!first)<>5 Then Err.Raise 5
 If Not IsFirstControl(value:=Me!first,unused:=1) Then Err.Raise 5
 ClearForm owner
 If Not owner Is Nothing Then Err.Raise 5

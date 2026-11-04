@@ -1351,10 +1351,19 @@ VbaExecutionResult parseProcedure(std::string_view module,std::string_view name,
     } catch(const std::bad_alloc&) { /* The optional cache must not reject a translated procedure. */ }
     return result;
 }
+std::unordered_set<std::string> moduleProcedureNames(std::string_view module) {
+    static const std::regex declaration(R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function|Property\s+(?:Get|Let|Set))\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))",std::regex::icase);
+    std::unordered_set<std::string> names; std::istringstream source{std::string(module)}; std::string line;
+    while(std::getline(source,line)) {
+        line=withoutComment(line); std::smatch match;
+        if(std::regex_search(line,match,declaration)) names.insert(lower(match[1].str()));
+    }
+    return names;
+}
 std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view module,std::string_view name) {
-    std::vector<Statement> statements; std::vector<Parameter> parameters; bool function=false,cancel=false;
-    if(parseProcedure(module,name,statements,function,cancel,&parameters).status!=VbaExecutionStatus::Completed) return {};
-    VbaArgumentSignature signature;
+    std::vector<Statement> statements; std::vector<Parameter> parameters; bool function=false,cancel=false; std::string resultType;
+    if(parseProcedure(module,name,statements,function,cancel,&parameters,true,&resultType).status!=VbaExecutionStatus::Completed) return {};
+    VbaArgumentSignature signature; signature.localProcedure=true; signature.function=function; signature.resultType=std::move(resultType);
     for(const auto& parameter:parameters) {
         signature.names.push_back(lower(parameter.name));
         signature.required+=!parameter.optional && !parameter.paramArray;
@@ -1377,6 +1386,7 @@ VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_vie
 
 std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
     auto state=std::make_shared<VbaModuleState>();
+    state->procedures=moduleProcedureNames(module); state->procedureInventoryComplete=true;
     const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
     const std::regex declaration(R"(^\s*(Dim|Private|Public|Global)\s+(.+)$)",std::regex::icase);
     const std::regex variable(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?))?$)",std::regex::icase);
@@ -2027,11 +2037,18 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                                             const VbaArgumentReferences& refs) {
         return invoke(name, args, refs, true);
     };
-    resolver.argumentSignature=[&](std::string_view name) {
+    std::optional<std::unordered_set<std::string>> fallbackProcedures;
+    resolver.argumentSignature=[&](std::string_view name) -> std::optional<VbaArgumentSignature> {
         const auto key=lower(std::string(name));
+        const auto& state=stateOwners.front();
+        if(!state->procedureInventoryComplete && !fallbackProcedures) fallbackProcedures=moduleProcedureNames(module);
+        const auto& names=state->procedureInventoryComplete ? state->procedures : *fallbackProcedures;
+        if(!names.contains(key)) return {};
         const auto found=signatureCache.find(key);
         if(found!=signatureCache.end()) return found->second;
-        return signatureCache.emplace(key,localProcedureSignature(module,name)).first->second;
+        auto signature=localProcedureSignature(module,name);
+        if(!signature) throw VbaRuntimeError(3251,"Declared local procedure binding is unsupported");
+        return signatureCache.emplace(key,std::move(signature)).first->second;
     };
     auto compareMode=VbaCompareMode::Binary;
     {
@@ -2657,7 +2674,13 @@ VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string
                     outcome.errorSource,outcome.errorHelpFile,outcome.errorHelpContext);
             return *outcome.typedReturnValue;
         };
-        resolver.argumentSignature=[&](std::string_view name) { return localProcedureSignature(module,name); };
+        const auto declared=moduleProcedureNames(module);
+        resolver.argumentSignature=[&](std::string_view name) -> std::optional<VbaArgumentSignature> {
+            if(!declared.contains(lower(std::string(name)))) return {};
+            auto signature=localProcedureSignature(module,name);
+            if(!signature) throw VbaRuntimeError(3251,"Declared event function binding is unsupported");
+            return signature;
+        };
         const auto value=evaluateVbaExpression(source,host,{},resolver);
         VbaExecutionResult result{VbaExecutionStatus::Completed,{},line};
         result.typedReturnValue=std::make_shared<VbaValue>(value);
