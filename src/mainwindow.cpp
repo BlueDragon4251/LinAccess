@@ -1762,10 +1762,6 @@ void MainWindow::editQuery(const QString& existingName) {
 
 void MainWindow::editForm(const QString& existingName) {
     if (!hasProject()) return;
-    if (tableNames().isEmpty()) {
-        QMessageBox::information(this, "Formular", "Zuerst eine Tabelle erstellen.");
-        return;
-    }
     const auto old = existingName.isEmpty() ? QJsonObject{} : objectDefinition("form", existingName);
     if(!existingName.isEmpty()) for(const auto& document:AccessFormPreview::projectDocuments(db_))
         if(document && document->documentKind()==linaccess::AccessDocumentKind::Form && document->documentName().compare(existingName,Qt::CaseInsensitive)==0)
@@ -1783,9 +1779,13 @@ void MainWindow::editForm(const QString& existingName) {
     caption->setObjectName("native-form-caption"); caption->setPlaceholderText("Formularüberschrift");
     outer->addWidget(caption);
     auto* source = new QComboBox(&dialog); source->setObjectName("native-form-source");
-    source->addItems(tableNames());
-    outer->addWidget(new QLabel("Datenquelle"));
+    source->setEditable(true);
+    auto sourceNames=tableNames(); sourceNames.append(objectNames("query")); sourceNames.removeDuplicates();
+    source->addItems(sourceNames);
+    outer->addWidget(new QLabel("Datenquelle: Tabelle, Abfrage oder einzeiliges SELECT"));
     outer->addWidget(source);
+    auto* sourceStatus=new QLabel(&dialog); sourceStatus->setObjectName("native-form-source-status");
+    sourceStatus->setWordWrap(true); outer->addWidget(sourceStatus);
     auto* fields = new QListWidget(&dialog); fields->setObjectName("native-form-fields");
     fields->setDragDropMode(QAbstractItemView::InternalMove); fields->setDefaultDropAction(Qt::MoveAction);
     fields->setMaximumHeight(170);
@@ -1823,10 +1823,17 @@ void MainWindow::editForm(const QString& existingName) {
     connect(fields,&QListWidget::currentItemChanged,&dialog,updateGeometry);
     connect(fields,&QListWidget::itemChanged,&dialog,updateGeometry);
     connect(fields->model(),&QAbstractItemModel::rowsMoved,&dialog,updateGeometry);
-    auto populate = [this, fields, source, old] {
-        fields->clear(); const auto table=source->currentText(); if(table.isEmpty()) return;
-        QSqlQuery query(db_); if(!query.exec("PRAGMA table_info("+quoteSql(table)+")")) return;
-        QStringList available; while(query.next()) if(query.value(1).toString()!="id") available.push_back(query.value(1).toString());
+    auto populate = [this, fields, source, old,sourceStatus] {
+        fields->clear(); sourceStatus->clear(); const auto table=source->currentText(); if(table.isEmpty()) return;
+        QStringList available;
+        try {
+            const bool physical=db_.tables(QSql::Tables).contains(table,Qt::CaseInsensitive);
+            for(const auto& column:linaccess::nativeFormSourceColumns(db_,table))
+                if(!physical || column!="id") available.append(column);
+            if(!physical) sourceStatus->setText("Abfrageformular: schreibgeschützt; keine Parameterbindung.");
+        } catch(const linaccess::VbaRuntimeError& error) {
+            sourceStatus->setText("Datenquelle nicht verfügbar (Fehler "+QString::number(error.number)+")."); return;
+        } catch(...) { sourceStatus->setText("Datenquelle nicht verfügbar."); return; }
         const auto previous=old.value("fields").toArray(); const bool sameSource=old.value("table").toString()==table;
         const auto captions=sameSource ? old.value("field_captions").toObject() : QJsonObject{};
         QStringList ordered;

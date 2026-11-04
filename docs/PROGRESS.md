@@ -5608,3 +5608,26 @@ no new target/ID. Scope: NATIVE_REPORT_FOOTER_DESIGN.md.
 Owned footer milestone: Debian payload/Build-ID/pinned SQLite and four original
 fixture hashes also pass. Last full current suite remains statistics48/48 (86.40 s),
 GUI-free1/1 (1.79 s); localized designer/generator change used mainwindow/layout2/2.
+
+## Owned form query/SELECT data sources (2026-11-04)
+
+The form editor accepts saved query names and one-line non-parameter SELECTs,
+preparing actual field metadata without record evaluation. Query forms emit
+read-only flags and omit automatic New/Save buttons; physical-table behavior is
+unchanged. The common query-source reader now resolves current owned definitions
+in main._la_objects as well as imported QueryDefs, with ambiguity/conflict/invalid
+metadata guards. Saved query names remain RecordSource and Requery reads current
+SQL. General query updateability/parameters/dependency-view installation and full
+Access/original-layout parity remain open.
+Existing actual UI checks SELECT metadata, saving/opening an owned COUNT-query
+form, read-only value, source-table change plus Requery and reopening persisted
+source/fields. Initial integration exposed the missing owned-query lookup; this
+was implemented in the common reader. Desktop build and existing mainwindow/DAO/
+query-model/layout4/4 pass (14.48 s). Full suite/package follow for the shared
+query-source change. Fixed456/384/72, no new target/ID. Scope: NATIVE_QUERY_FORM_DESIGN.md.
+README's obsolete single-page-only report sentence now reflects bounded native
+multirow output and links the current report limitations.
+Query-form milestone: full current desktop48/48 passes (88.67 s), Debian payload/
+Build-ID/pinned SQLite and all four original fixture hashes pass. GUI-free core
+last passed1/1 (1.79 s); this change affects the Qt data/GUI layer, not that runtime.
+No added target or fixed-catalog ID.

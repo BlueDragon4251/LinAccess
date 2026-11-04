@@ -342,6 +342,44 @@ End Sub
         dialog->reject();
     });
     edit->trigger(); dispose();
+    const QString totalsSql="SELECT COUNT(*) AS total FROM native_designed_records";
+    sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('query','Owned Form Totals',?)");
+    sql.addBindValue(QString::fromUtf8(QJsonDocument(QJsonObject{{"sql",totalsSql}}).toJson(QJsonDocument::Compact)));
+    assert(sql.exec()); sql.finish();
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        dialog->findChild<QLineEdit*>("native-form-name")->setText("Owned Query Form");
+        auto* source=dialog->findChild<QComboBox*>("native-form-source"); assert(source->isEditable());
+        source->setCurrentText("SELECT 42 AS probe");
+        auto* fields=dialog->findChild<QListWidget*>("native-form-fields");
+        assert(fields->count()==1 && fields->item(0)->data(Qt::UserRole).toString()=="probe");
+        source->setCurrentText("Owned Form Totals");
+        assert(fields->count()==1 && fields->item(0)->data(Qt::UserRole).toString()=="total");
+        dialog->findChild<QPushButton*>("native-form-save")->click();
+    });
+    create->trigger(); QApplication::processEvents();
+    selected=nullptr;
+    for(QTreeWidgetItemIterator item(explorer);*item;++item)
+        if((*item)->data(0,Qt::UserRole).toString()=="form" && (*item)->text(0)=="Owned Query Form") selected=*item;
+    assert(selected); explorer->setCurrentItem(selected); open();
+    auto queryForm=locate("Owned Query Form"); assert(queryForm && queryForm->hasDataSource());
+    auto* total=queryForm->findChild<QLineEdit*>("access-control-total"); assert(total && total->isReadOnly());
+    assert(sql.exec(totalsSql) && sql.next()); const int beforeCount=sql.value(0).toInt(); sql.finish();
+    assert(total->text().toInt()==beforeCount);
+    assert(!makePreviewFormObject(*queryForm)->member("AllowAdditions",{}).boolean);
+    assert(!queryForm->findChild<QPushButton*>("access-control-btnNeu"));
+    assert(!queryForm->findChild<QPushButton*>("access-control-btnSpeichern"));
+    assert(sql.exec("INSERT INTO native_designed_records(first) VALUES('query change')")); sql.finish();
+    (void)makePreviewFormObject(*queryForm)->member("Requery",{});
+    assert(total->text().toInt()==beforeCount+1);
+    assert(queryForm->close()); dispose();
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        assert(dialog->findChild<QComboBox*>("native-form-source")->currentText()=="Owned Form Totals");
+        assert(dialog->findChild<QListWidget*>("native-form-fields")->count()==1);
+        dialog->reject();
+    });
+    explorer->setCurrentItem(selected); edit->trigger(); dispose();
 }
 
 void exerciseStoredReport(MainWindow& window,QSqlDatabase db) {
