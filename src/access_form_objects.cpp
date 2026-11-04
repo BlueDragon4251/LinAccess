@@ -688,6 +688,7 @@ private:
 };
 class PreviewRecordsetObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
+    std::string_view className() const override { return "Recordset"; }
     explicit PreviewRecordsetObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& arguments) override {
         auto& preview=checked(); const auto key=text(name).toCaseFolded();

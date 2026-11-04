@@ -66,7 +66,8 @@ Private/Public/Global scalar Object fields initialize to Nothing and retain real
 native references in per-host module state. Repeated Dictionary calls share
 actual storage; separate hosts remain independent; clearing both aliases with
 Set ... = Nothing releases bindings. Non-object native binding refuses 13.
-Early-bound Scripting/DAO module declarations and automatic New remain open.
+Early-bound Scripting/external declarations and automatic New remain open;
+bounded native DAO declarations are described in DAO_OBJECT_BINDINGS.md.
 Existing core target covers repeated calls, identity, visibility, clear/recreate
 and host isolation. Full desktop 48/48 (78.39 s), freshly rebuilt GUI-free 1/1
 (1.09 s), targeted core 1/1 (1.05 s), Debian payload/permissions/Build-ID/pinned

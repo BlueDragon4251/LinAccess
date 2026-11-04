@@ -21,7 +21,7 @@ or a distinct Missing Variant. IsMissing distinguishes that marker from Empty,
 Null and CVErr; VarType/TypeName/IsError expose its Error subtype. Function and
 Sub calls support argument holes and forwarded Missing values without aliasing
 defaults back to omitted caller slots. Scalar Missing coercion, exact SCODE/BSTR
-semantics, qualified/cross-module constant linking, non-Nothing Object defaults, early-bound DAO optional declarations and full declaration/
+semantics, qualified/cross-module constant linking, non-Nothing Object defaults, unsupported external object declarations and full declaration/
 compile-time coercion remain open. Named calls are documented in NAMED_ARGUMENT_RUNTIME.md. Bounded
 ParamArray evaluation is documented separately in [PARAMARRAY_RUNTIME.md](PARAMARRAY_RUNTIME.md).
 This segment does not claim complete VBA argument binding or a Windows oracle.
@@ -46,7 +46,8 @@ local; ByRef replacement writes back through supported caller bindings.
 Optional As Object with an omitted default or explicit Nothing binds a fresh
 Nothing slot for each call, without aliasing omitted arguments. IsMissing
 remains false for these typed slots. Non-Nothing object defaults and optional
-early-bound DAO types remain unsupported.
+external types remain unsupported. Supported native DAO Nothing bindings
+are described in DAO_OBJECT_BINDINGS.md.
 
 Set targets use checked binding. Object-collection For Each control assignments
 use the same checked path, refusing scalar values for As Object controls.
