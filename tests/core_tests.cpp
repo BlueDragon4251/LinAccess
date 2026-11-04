@@ -1448,7 +1448,9 @@ End Function
         }
         const auto dynamicState=createVbaModuleState("Public rows() As Long\n");
         assert(dynamicState->types.at("rows")=="long()" && isVbaArray(dynamicState->values.at("rows")) && vbaArrayRank(dynamicState->values.at("rows"))==0);
-        int actual=0; try { createVbaModuleState("Public rows(10) As Long\n"); } catch(const VbaRuntimeError& failure) { actual=failure.number; } assert(actual==3251);
+        const auto fixedState=createVbaModuleState("Public rows(10) As Long\n");
+        assert(fixedState->fixedArrays.contains("rows") && vbaArrayBounds(fixedState->values.at("rows"))==std::vector<VbaArrayDimension>({{0,10}}));
+        int actual=0; try { createVbaModuleState("Public rows(SIZE) As Long\n"); } catch(const VbaRuntimeError& failure) { actual=failure.number; } assert(actual==3251);
     }
 
     {
@@ -2739,6 +2741,65 @@ End Sub
     assert(executeVbaProcedure(declaredModuleArrays,"ReadDeclaredModule",host).status==VbaExecutionStatus::Completed && host.fields["DeclaredModuleValue"]=="42:retained");
     assert(executeVbaProcedure(declaredModuleArrays,"ReadDeclaredModule",host).status==VbaExecutionStatus::Completed && host.fields["DeclaredModuleValue"]=="43:retained");
     assert(executeVbaProcedure(declaredModuleArrays,"EraseDeclaredModule",host).status==VbaExecutionStatus::Completed && host.fields["ModuleBoundError"]=="9");
+    const auto fixedArrays=executeVbaProcedure(R"VBA(Option Base 1
+Sub ResetFixed(values() As Long)
+Erase values
+On Error Resume Next
+ReDim values(9)
+Me!FixedHelperResizeError=CStr(Err.Number)
+On Error GoTo 0
+values(1,-1)=22
+End Sub
+Sub FixedArrays()
+Dim a(2,-1 To 0) As Long, words(0 To 1) As String
+Dim bytes(0 To 1) As Byte, refs(0 To 0) As Object, variants(0 To 0)
+Dim before As Variant
+a(1,-1)=9
+a(1,0)=7
+before=a()
+Erase a
+Me!FixedBounds=CStr(LBound(a)) & ":" & CStr(UBound(a)) & ":" & CStr(LBound(a,2)) & ":" & CStr(UBound(a,2)) & ":" & CStr(a(1,-1))
+Call ResetFixed(a())
+Me!FixedHelperValue=CStr(a(1,-1)) & ":" & CStr(before(1,-1))
+On Error Resume Next
+ReDim a(3)
+Me!FixedResizeError=CStr(Err.Number)
+a=Array(1)
+Me!FixedAssignmentError=CStr(Err.Number)
+On Error GoTo 0
+Me!FixedRetained=CStr(a(1,-1)) & ":" & CStr(UBound(a))
+words(0)="hello"
+Erase words
+Me!FixedWords=Join(words,"|") & ":" & CStr(UBound(words))
+bytes(1)=255
+Erase bytes
+Me!FixedBytes=CStr(bytes(1)) & ":" & CStr(UBound(bytes))
+Set refs(0)=Nothing
+Erase refs
+Me!FixedObjects=CStr(VarType(refs(0))) & ":" & CStr(UBound(refs))
+variants(0)=Null
+Erase variants
+Me!FixedVariants=CStr(IsEmpty(variants(0))) & ":" & CStr(UBound(variants))
+End Sub
+)VBA","FixedArrays",host);
+    if(fixedArrays.status!=VbaExecutionStatus::Completed) std::cerr<<"Fixed array error="<<fixedArrays.errorNumber<<" line="<<fixedArrays.line<<"\n";
+    assert(fixedArrays.status==VbaExecutionStatus::Completed);
+    assert(host.fields["FixedBounds"]=="1:2:-1:0:0" && host.fields["FixedHelperValue"]=="22:9");
+    assert(host.fields["FixedHelperResizeError"]=="3251" && host.fields["FixedResizeError"]=="3251" && host.fields["FixedAssignmentError"]=="3251" && host.fields["FixedRetained"]=="22:2");
+    assert(host.fields["FixedWords"]=="|:1" && host.fields["FixedBytes"]=="0:1" && host.fields["FixedObjects"]=="9:0" && host.fields["FixedVariants"]=="True:0");
+    const std::string fixedModuleArrays=R"VBA(Private counters(1 To 2) As Long
+Sub BumpFixedModule()
+counters(1)=counters(1)+1
+Me!FixedModuleValue=CStr(counters(1))
+End Sub
+Sub ResetFixedModule()
+Erase counters
+Me!FixedModuleReset=CStr(counters(1)) & ":" & CStr(LBound(counters)) & ":" & CStr(UBound(counters))
+End Sub
+)VBA";
+    assert(executeVbaProcedure(fixedModuleArrays,"BumpFixedModule",host).status==VbaExecutionStatus::Completed && host.fields["FixedModuleValue"]=="1");
+    assert(executeVbaProcedure(fixedModuleArrays,"BumpFixedModule",host).status==VbaExecutionStatus::Completed && host.fields["FixedModuleValue"]=="2");
+    assert(executeVbaProcedure(fixedModuleArrays,"ResetFixedModule",host).status==VbaExecutionStatus::Completed && host.fields["FixedModuleReset"]=="0:1:2");
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub

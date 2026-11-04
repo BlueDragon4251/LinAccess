@@ -4223,3 +4223,17 @@ Full desktop 48/48 (94.77 s), GUI-free recheck 1/1 (1.89 s; runtime unchanged),
 rebuilt Debian payload/permissions/Build-ID/pinned SQLite and four original
 fixture hashes pass. Existing query-model/DAO targets extended only. Scoped
 checklist 358 checked / 72 open, not total Access 2003 parity.
+
+
+## Real fixed array storage and retained ByRef binding (2026-11-04)
+
+Fixed local/module arrays accept multidimensional decimal literal bounds and
+Option Base. Typed Erase resets native values while preserving dimensions/type;
+independent Variant snapshots retain data. Matching ByRef helpers preserve fixed
+binding for actual element/reset writeback and guard ReDim/shape replacement.
+Module arrays persist across procedures. Constant-expression, class/Static and
+full alias/iteration/error behavior remain scoped in VARIANT_ARRAY_RUNTIME.md.
+Full desktop 48/48 (91.05 s), freshly rebuilt GUI-free 1/1 (1.76 s), Debian payload/
+permissions/Build-ID/pinned SQLite and four original fixture hashes pass. Existing
+core target extended only. Scoped checklist 360 checked / 72 open, not total
+Access 2003 parity.

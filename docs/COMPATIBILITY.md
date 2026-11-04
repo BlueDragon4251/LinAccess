@@ -2251,3 +2251,15 @@ errors propagate without private path text. FILE_METADATA_RUNTIME.md defines
 native path/handle/concurrency and unsupported rewrite boundaries.
 Full desktop 48/48 (94.77 s), GUI-free 1/1 (1.89 s; runtime unchanged), rebuilt
 Debian package and four original fixture hashes pass; no new test targets.
+
+
+## Literal-bound fixed VBA arrays (2026-11-04)
+
+Local/module fixed arrays allocate real typed dimensions from decimal literal
+bounds, respecting Option Base. Erase resets defaults without deallocation;
+Variant snapshots remain independent. Fixed binding survives matching ByRef
+array calls and protects against ReDim/shape replacement. Whole fixed-array
+assignment remains an explicit 3251 boundary. VARIANT_ARRAY_RUNTIME.md specifies
+constant/class/Static/alias/enumeration/error-precedence limits. Full desktop
+48/48 (91.05 s), rebuilt GUI-free 1/1 (1.76 s), Debian package and four original
+fixture hashes pass; no new test targets or complete VBA declaration claim.

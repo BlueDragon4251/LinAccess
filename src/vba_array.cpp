@@ -106,6 +106,7 @@ std::string vbaArrayTypeName(const VbaValue& value) {
     if(!type.empty()) type[0]=static_cast<char>(type[0]-'a'+'A');
     return type+"()";
 }
+std::vector<VbaArrayDimension> vbaArrayBounds(const VbaValue& value) { return value.kind==VbaValue::Kind::ByteArray ? singleDimension(0,value.bytes.size()) : storage(value).bounds; }
 std::size_t vbaArrayRank(const VbaValue& value) { return value.kind==VbaValue::Kind::ByteArray ? 1 : storage(value).bounds.size(); }
 std::size_t vbaArraySize(const VbaValue& value) { return value.kind==VbaValue::Kind::ByteArray ? value.bytes.size() : storage(value).values.size(); }
 std::vector<VbaValue> vbaArrayValues(const VbaValue& value) { return storage(value).values; }

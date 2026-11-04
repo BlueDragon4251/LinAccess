@@ -1044,3 +1044,6 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 
 - [x] FileLen/FileDateTime execute through real parameterized native SQL callbacks with volatile metadata refresh, canonical integer/date projection types and checked filesystem error propagation.
 - [x] DAO recordset Fields expose actual SQL file metadata as Long/Date values and dbLong/dbDate types; proven DATE/DATETIME Field.Type returns dbDate.
+
+- [x] Literal-bound local/module fixed VBA arrays allocate real typed dimensions with Option Base and retain bounds/type when Erase resets cells to native defaults.
+- [x] Fixed array binding survives whole-array ByRef argument forwarding, allowing element/reset writeback while guarding ReDim, incompatible shape and whole-array replacement.

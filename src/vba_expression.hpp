@@ -88,6 +88,7 @@ struct VbaModuleState {
     VbaVariables values;
     std::unordered_map<std::string,std::string> types;
     std::unordered_set<std::string> publicVariables;
+    std::unordered_set<std::string> fixedArrays;
 };
 VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type);
 

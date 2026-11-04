@@ -27,12 +27,12 @@ copies retain their previous elements and bounds. `Erase a` releases this Varian
 array and restores Empty; a subsequent ReDim Preserve can allocate it again.
 
 This path targets variables declared As Variant (or implicit Variant variables).
-Dynamic declarations are supported in the bounded path described below; fixed-size and class-specific declarations remain unsupported. An explicit 1,000,000-element allocation limit
+Dynamic and literal-bound fixed declarations are supported below; general constant-bound and class-specific declarations remain outside those paths. An explicit 1,000,000-element allocation limit
 fails with 3251; this limit is a current implementation boundary, not Access parity.
 
 ## Remaining boundaries
 
-This is not complete VBA array parity. Fixed-size and class-specific array declarations,
+This is not complete VBA array parity. General constant-bound and class-specific array declarations,
 full fixed/class declaration and Erase semantics, full ParamArray semantics, full array For Each semantics,
 full library/reference binding and native COM arrays remain open. Individual array elements
 passed to a ByRef parameter fail explicitly with 3251 rather than silently losing
@@ -91,7 +91,7 @@ Preserve changes execute in the existing core test target. No new targets.
 
 DAO GetRows constructs genuine zero-based field/record matrices from actual
 materialized SQL records; see [DAO_GETROWS_RUNTIME.md](DAO_GETROWS_RUNTIME.md).
-Fixed-size and class-specific array declarations, Class-specific/user-defined/fixed-length String
+General constant-bound and class-specific array declarations, Class-specific/user-defined/fixed-length String
 arrays and full Byte enumeration remain open. This extends Variant values and ReDim, not the full declaration grammar
 or native Windows SAFEARRAY/COM interoperability. Existing one-million-cell
 runtime allocation bounds remain explicit.
@@ -220,3 +220,39 @@ https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-h
 Complete declaration/parameter implementation: desktop 48/48 (93.65 s), freshly
 rebuilt GUI-free core 1/1 (1.85 s), Debian package payload/permissions/Build-ID/
 pinned SQLite and all four original fixture SHA-256 checks pass.
+
+
+## Fixed arrays with literal bounds (2026-11-04)
+
+Local and module declarations also support allocated fixed arrays with decimal
+literal bounds, for example `Dim values(1 To 3, -1 To 1) As Long`. Omitted lower
+bounds use Option Base; supported element types match dynamic declarations.
+Module fixed arrays retain values across procedure invocations. The same bounded
+storage/type conversion and one-million-cell allocation limit apply.
+
+Fixed binding is tracked separately from the copied array value. Erase resets
+all cells to their typed defaults while retaining the original dimensions and
+type. Byte/String/Variant/Object cells reset to zero/empty text/Empty/Nothing as
+appropriate. Detached Variant copies retain their previous data. Matching ByRef
+array parameters retain the caller's fixed binding: element updates and Erase
+write through, while ReDim refuses 3251 and preserves the fixed shape. Direct
+whole-fixed-array assignment also refuses 3251. This is an explicit implementation
+boundary, not a claim of exact VBA compile/runtime error precedence.
+
+Whole-array source argument normalization preserves fixed metadata through a()
+and forwarding. Caller writeback checks the original fixed dimensions. Direct
+Erase during that procedure's array For Each is guarded; general cross-routine
+mutation/enumeration and external alias semantics remain outside the measured
+subset. Full constant-expression/symbolic/hex bound grammar, local Static lifetime,
+class-specific/fixed-length String/UDT declarations, complete array assignment and
+COM/SAFEARRAY interoperability remain open. Unsupported declaration bounds refuse
+rather than inventing sizes.
+
+Existing core integration exercises multidimensional literal bounds/Option Base,
+copy isolation, typed Erase defaults, actual ByRef reset/writeback, retained shape
+under ReDim/whole-array assignment refusal, and module retention/reset across calls.
+No new CTest target is added.
+
+Fixed-array checkpoint: full desktop 48/48 (91.05 s), freshly rebuilt GUI-free
+core 1/1 (1.76 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original fixture SHA-256 checks pass.

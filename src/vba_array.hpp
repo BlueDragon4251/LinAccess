@@ -1,7 +1,7 @@
 #pragma once
 #include "vba_expression.hpp"
 namespace linaccess {
-struct VbaArrayDimension { int lower,upper; };
+struct VbaArrayDimension { int lower,upper; bool operator==(const VbaArrayDimension&) const = default; };
 VbaValue resizeVbaArray(const VbaValue& value,int lowerBound,int upperBound,bool preserve);
 VbaValue resizeVbaArrayWithBounds(const VbaValue& value,std::vector<VbaArrayDimension> bounds,bool preserve,std::string elementType={});
 VbaValue makeVbaStringArray(std::vector<std::string> values);
@@ -14,6 +14,7 @@ VbaValue makeUnallocatedVbaArray(std::string elementType="variant");
 VbaValue makeVbaArray(std::vector<VbaValue> values,int lowerBound=0);
 VbaValue makeVbaArrayWithBounds(std::vector<VbaValue> values,std::vector<VbaArrayDimension> bounds);
 std::size_t vbaArrayRank(const VbaValue& value);
+std::vector<VbaArrayDimension> vbaArrayBounds(const VbaValue& value);
 std::size_t vbaArraySize(const VbaValue& value);
 VbaValue vbaArrayLinearElement(const VbaValue& value,std::size_t index);
 VbaValue vbaArrayBound(const VbaValue& value,bool upper,int dimension=1);
