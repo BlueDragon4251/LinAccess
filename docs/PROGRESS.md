@@ -5723,3 +5723,27 @@ Exact scope: OWNED_QUERYDEF_SQL.md.
 Owned QueryDef persistence milestone: full current desktop48/48 passes (82.63 s),
 Debian payload/Build-ID/pinned SQLite and four original fixture hashes pass.
 GUI-free runtime unchanged, last core1/1 (1.50 s). No added target or catalog ID.
+
+## Native DAO QueryDefs catalog and owned lifecycle (2026-11-04)
+
+QueryDefs Count/Item/Refresh/For Each reads real owned/imported catalogs, exposes
+explicit DAO.QueryDefs identity and native zero-based case-folded name order (no
+Windows-order claim). CreateQueryDef supports real named creation, optional initial
+SQL and temporary empty-name instances. Own Delete/Create use unique savepoints
+and monotonic workspace namespace generations; old references cannot retarget after
+native deletion/recreation. Imported deletion/overlay, rename/append/attributes,
+external metadata identity and full Access oracle remain open.
+A real regression exposed stale managed views blocking same-name recreation.
+Creation now distinguishes proven managed temporary views from namespace collisions.
+Workspace transactions snapshot/restore query-view registry metadata with SQLite
+schema rollback, avoiding restored views retaining obsolete SQL. Actual VBA/SQL
+covers catalog count/name/index/enumeration/identity, named creation, duplicate3012,
+creation rollback, optional SQL execution, deletion/recreation3420 and a dependency
+view refreshed after delete/execute/rollback/edit. Final existing UI/DAO/layout3/3
+pass (13.78 s); fresh GUI-free core1/1 passed (1.66 s) for the new closed DAO type,
+which the subsequent Qt data lifecycle changes did not modify. Full suite/package
+follow for shared workspace/schema behavior. Fixed456/384/72; no new target/ID.
+Scope: DAO_QUERYDEFS_CATALOG.md and OWNED_QUERYDEF_SQL.md.
+DAO catalog milestone: full current desktop48/48 passes (83.20 s), fresh GUI-free
+runtime core1/1 (1.66 s), Debian payload/Build-ID/pinned SQLite and four original
+fixture hashes pass. No added target or fixed-catalog ID.
