@@ -26,3 +26,19 @@ MDB/ACCDB binary round trips, OLE rendering and full Access type/coercion/error
 parity remain open. The general Qt form/report scalar converter still refuses
 binary display; this change does not turn binary data into text or publish bytes.
 No new CTest target or fixed-catalog item.
+
+## Stored binary FieldSize
+
+Field.FieldSize now reports the current non-NULL stored binary observation's byte
+length as a Long while the cursor is in browse mode. It obtains the QByteArray size
+without first allocating a copied VBA Byte() value. Zero-length BLOB size is zero;
+read-only assignment fails with383. Current-record, closed and transaction guards
+apply. Non-binary/Memo encodings, NULL cardinality and pending Edit/AddNew size
+semantics are explicitly unsupported rather than substituted with memory/string
+length. Original Jet/OLE database storage measurement is not claimed.
+
+The existing actual VBA case checks three bytes, Long identity, read-only383 and
+an empty BLOB size0; independent SQL already verifies stored bytes/type/length.
+Reference: [DAO FieldSize](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-fieldsize-property-dao)
+distinguishes database byte count from Unicode string/memory length. No new target
+or catalog item.

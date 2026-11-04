@@ -669,6 +669,11 @@ Dim rows As DAO.Recordset, held As DAO.Field, payload() As Byte, emptyBytes() As
 Set rows=CurrentDb.OpenRecordset("batch_records")
 Set held=rows.Fields("raw")
 If held.Type<>11 Then Err.Raise 5
+If held.FieldSize<>3 Or VarType(held.FieldSize)<>3 Then Err.Raise 5
+On Error Resume Next
+held.FieldSize=1
+Me!BinarySizeWriteError=CStr(Err.Number)
+On Error GoTo 0
 payload=held.Value
 If VarType(payload)<>8209 Or UBound(payload)<>2 Then Err.Raise 5
 If payload(0)<>0 Or payload(1)<>255 Or payload(2)<>66 Then Err.Raise 5
@@ -680,6 +685,7 @@ If payload(1)<>7 Then Err.Raise 5
 rows.Update
 rows.MoveNext
 emptyBytes=held.Value
+If held.FieldSize<>0 Then Err.Raise 5
 If UBound(emptyBytes)<>-1 Then Err.Raise 5
 rows.Edit
 held.Value=emptyBytes
@@ -697,7 +703,7 @@ Me!BinaryClosedError=CStr(Err.Number)
 End Sub
 )VBA","BinaryFields",host);
     if(binaryFields.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Synthetic binary fields: "<<binaryFields.errorNumber<<" line "<<binaryFields.line<<" "<<binaryFields.explanation<<'\n';
-    assert(binaryFields.status==linaccess::VbaExecutionStatus::Completed && host.fields["BinaryClosedError"]=="3420");
+    assert(binaryFields.status==linaccess::VbaExecutionStatus::Completed && host.fields["BinaryClosedError"]=="3420" && host.fields["BinarySizeWriteError"]=="383");
     assert(sql.exec("SELECT hex(raw),typeof(raw),length(raw) FROM batch_records ORDER BY id") && sql.next());
     assert(sql.value(0).toString()=="000742" && sql.value(1).toString()=="blob" && sql.value(2).toInt()==3);
     assert(sql.next() && sql.value(1).toString()=="blob" && sql.value(2).toInt()==0);

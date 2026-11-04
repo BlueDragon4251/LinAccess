@@ -436,6 +436,17 @@ public:
     VbaValue fieldOrdinal(const QString& name) const {
         (void)fieldType(name); return integerCount(column(name));
     }
+    VbaValue fieldSize(const QString& name) const {
+        const auto type=fieldType(name);
+        if(!binaryFieldType(type) || mode_!=Mode::Browse)
+            throw VbaRuntimeError(3251,"FieldSize supports stored binary observations only");
+        current(); const auto& raw=data_->rows[position_][column(name)];
+        if(raw.isNull()) throw VbaRuntimeError(3251,"Null FieldSize requires reference validation");
+        if(raw.metaType().id()!=QMetaType::QByteArray) throw VbaRuntimeError(13,"Binary field requires BLOB storage");
+        const auto size=raw.toByteArray().size();
+        if(size>std::numeric_limits<std::int32_t>::max()) throw VbaRuntimeError(6,"FieldSize Long overflow");
+        return VbaValue::longInteger(static_cast<std::int32_t>(size));
+    }
     VbaValue value(const QString& name) const {
         checkTransaction();
         if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
@@ -670,6 +681,10 @@ VbaValue fieldCollection(std::shared_ptr<Recordset> owner) {
 }
 
 VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args) {
+    if(lower(name)=="fieldsize") {
+        if(!args.empty()) throw VbaRuntimeError(450,"Field.FieldSize requires no arguments");
+        return owner_->fieldSize(name_);
+    }
     if(lower(name)=="ordinalposition") {
         if(!args.empty()) throw VbaRuntimeError(450,"Field.OrdinalPosition requires no arguments");
         return owner_->fieldOrdinal(name_);
@@ -687,6 +702,7 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
     throw std::runtime_error("DAO: Unknown Field member");
 }
 void Field::assign(std::string_view name, const VbaValue& value) {
+    if(lower(name)=="fieldsize") { (void)owner_->fieldSize(name_); throw VbaRuntimeError(383,"FieldSize is read-only"); }
     if(lower(name)=="ordinalposition") { (void)owner_->fieldOrdinal(name_); throw VbaRuntimeError(383,"Recordset Field.OrdinalPosition is read-only"); }
     if(lower(name)=="type") { (void)owner_->fieldType(name_); throw VbaRuntimeError(383,"Field.Type is read-only"); }
     require(lower(name) == "value", "DAO: Field property is read-only");
