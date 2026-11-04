@@ -664,6 +664,44 @@ End Sub
     assert(host.fields["ObjectArrayScalarError"]=="13" && host.fields["ObjectArrayIndexError"]=="9" && host.fields["ObjectArrayErased"]=="Empty");
     assert(host.fields["ObjectTyped"]=="Object():8201:True" && host.fields["ObjectTypedPreserved"]=="True:True" && host.fields["ObjectTypedValueError"]=="3251");
     assert(sql.exec("SELECT value FROM object_array_values") && sql.next() && sql.value(0).toInt()==9); sql.finish();
+    const auto binaryFields=linaccess::executeVbaProcedure(R"VBA(Sub BinaryFields()
+Dim rows As DAO.Recordset, held As DAO.Field, payload() As Byte, emptyBytes() As Byte
+Set rows=CurrentDb.OpenRecordset("batch_records")
+Set held=rows.Fields("raw")
+If held.Type<>11 Then Err.Raise 5
+payload=held.Value
+If VarType(payload)<>8209 Or UBound(payload)<>2 Then Err.Raise 5
+If payload(0)<>0 Or payload(1)<>255 Or payload(2)<>66 Then Err.Raise 5
+payload(1)=7
+rows.Edit
+held.Value=payload
+payload=held.Value
+If payload(1)<>7 Then Err.Raise 5
+rows.Update
+rows.MoveNext
+emptyBytes=held.Value
+If UBound(emptyBytes)<>-1 Then Err.Raise 5
+rows.Edit
+held.Value=emptyBytes
+rows.Update
+rows.MoveNext
+If Not IsNull(held.Value) Then Err.Raise 5
+rows.Edit
+held.Value=payload
+rows.CancelUpdate
+If Not IsNull(held.Value) Then Err.Raise 5
+rows.Close
+On Error Resume Next
+payload=held.Value
+Me!BinaryClosedError=CStr(Err.Number)
+End Sub
+)VBA","BinaryFields",host);
+    if(binaryFields.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Synthetic binary fields: "<<binaryFields.errorNumber<<" line "<<binaryFields.line<<" "<<binaryFields.explanation<<'\n';
+    assert(binaryFields.status==linaccess::VbaExecutionStatus::Completed && host.fields["BinaryClosedError"]=="3420");
+    assert(sql.exec("SELECT hex(raw),typeof(raw),length(raw) FROM batch_records ORDER BY id") && sql.next());
+    assert(sql.value(0).toString()=="000742" && sql.value(1).toString()=="blob" && sql.value(2).toInt()==3);
+    assert(sql.next() && sql.value(1).toString()=="blob" && sql.value(2).toInt()==0);
+    assert(sql.next() && sql.value(1).toString()=="null"); sql.finish();
     assert(sql.exec("CREATE TABLE batch_large(value INTEGER)")); assert(sql.exec("INSERT INTO batch_large VALUES(1),(9007199254740993)"));
     auto rows=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("batch_large"),VbaValue::numeric(4)}).object;
     int error=0; try { rows->member("GetRows",{VbaValue::numeric(2)}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }

@@ -172,6 +172,10 @@ struct RecordsetData {
     QSet<Recordset*> cursors;
 };
 VbaValue fieldCollection(std::shared_ptr<Recordset> owner);
+bool binaryFieldType(const QString& type) {
+    const auto normalized=type.toUpper();
+    return normalized=="BLOB" || normalized=="BINARY" || normalized=="VARBINARY" || normalized=="LONGBINARY";
+}
 class Field final : public VbaObject {
 public:
     std::string_view className() const override { return "Field"; }
@@ -436,15 +440,35 @@ public:
         checkTransaction();
         if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         const int index = column(name);
-        if (mode_ != Mode::Browse) return qtFieldValue(pending_[index],data_->types.value(name.toCaseFolded()));
-        current(); return qtFieldValue(data_->rows[position_][index],data_->types.value(name.toCaseFolded()));
+        if(mode_==Mode::Browse) current();
+        const auto& raw=mode_!=Mode::Browse ? pending_[index] : data_->rows[position_][index];
+        const auto type=data_->types.value(name.toCaseFolded());
+        if(!raw.isNull() && raw.metaType().id()==QMetaType::QByteArray) {
+            if(!type.isEmpty() && !binaryFieldType(type)) throw VbaRuntimeError(13,"Binary storage does not match declared field type");
+            const auto bytes=raw.toByteArray();
+            return VbaValue::byteArray(std::vector<unsigned char>(bytes.begin(),bytes.end()));
+        }
+        if(!raw.isNull() && binaryFieldType(type)) throw VbaRuntimeError(13,"Binary field requires BLOB storage");
+        return qtFieldValue(raw,type);
     }
     void set(const QString& name, const VbaValue& value) {
         checkTransaction();
         if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         require(mode_ != Mode::Browse, "DAO: Edit or AddNew required");
         const auto index = column(name);
-        pending_[index] = sqlFieldValue(value,data_->types.value(name.toCaseFolded())); changed_.insert(index);
+        const auto type=data_->types.value(name.toCaseFolded());
+        if(value.kind==VbaValue::Kind::ByteArray) {
+            if(!binaryFieldType(type)) throw VbaRuntimeError(13,"Byte array requires a binary field");
+            if(value.bytes.size()>static_cast<std::size_t>(std::numeric_limits<qsizetype>::max()))
+                throw VbaRuntimeError(6,"Binary field length overflow");
+            pending_[index]=value.bytes.empty() ? QByteArray("",0)
+                : QByteArray(reinterpret_cast<const char*>(value.bytes.data()),static_cast<qsizetype>(value.bytes.size()));
+        } else {
+            if(binaryFieldType(type) && value.kind!=VbaValue::Kind::Null)
+                throw VbaRuntimeError(3251,"Binary field assignment requires Byte() or Null");
+            pending_[index]=sqlFieldValue(value,type);
+        }
+        changed_.insert(index);
     }
 private:
     struct CloneTag {};
@@ -653,7 +677,7 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
     if(lower(name)=="type") {
         if(!args.empty()) throw VbaRuntimeError(450,"Field.Type requires no arguments");
         const auto type=owner_->fieldType(name_).toUpper();
-        const int code=type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : type=="CURRENCY_REAL" ? 5 : (type=="DATE" || type=="DATETIME") ? 8 : 0;
+        const int code=type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : type=="CURRENCY_REAL" ? 5 : (type=="DATE" || type=="DATETIME") ? 8 : type=="BLOB" ? 11 : 0;
         if(!code) throw VbaRuntimeError(3251,"Field.Type is not available for this source type");
         return VbaValue::integer(static_cast<std::int16_t>(code));
     }
