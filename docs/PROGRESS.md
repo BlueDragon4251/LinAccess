@@ -4500,3 +4500,17 @@ context/editor/selection/geometry and Access oracle limits. Full desktop 48/48
 1/1 (2.30 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
 original fixture hashes pass. Scoped checklist 383 checked / 72 open, no extra
 CTest target or complete Access 2003 parity claim.
+
+
+## Native multi-counter Next source groups (2026-11-04)
+
+Next lists lower to matched native loop steps and one source-line/error group.
+Zero/Exit For, mixed For Each, Do and inline merging retain actual scope flow;
+Resume Next skips remaining terminators and abandoned iteration state is
+released. NEXT_LIST_RUNTIME.md records compiler/jump/error/oracle boundaries.
+Existing core cases cover values, counters, empty loops, mutation after error
+resumption and retained invalid-order/blocked-label diagnostics. Full desktop
+48/48 (78.61 s), freshly rebuilt GUI-free 1/1 (1.39 s), targeted core 1/1
+(1.31 s), Debian payload/permissions/Build-ID/pinned SQLite and all four original
+fixture hashes pass. Scoped checklist 384 checked / 72 open; no extra CTest
+target or complete Access 2003 parity claim.

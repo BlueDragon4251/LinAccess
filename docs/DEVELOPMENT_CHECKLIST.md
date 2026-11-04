@@ -1089,3 +1089,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native Ctrl+Home/Ctrl+End use checked boundary record navigation and visible-field order, preserving pending edits for same-known-record field movement and retaining failed SQL drafts.
 
 - [x] Native loaded-page PageUp/PageDown pass actual viewport record distances through checked Save/navigation, retain failed SQL drafts/current rows and avoid SQL Save on zero-distance page movement.
+
+- [x] Native Next counter lists preserve matched loop partners, zero/Exit For and mixed For Each execution, source-group Resume Next boundaries and released abandoned enumeration state.

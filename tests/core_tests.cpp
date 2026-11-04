@@ -3128,6 +3128,133 @@ End Sub
         assert(typedDictionaryHost.fields["TypedDictionaryOptional"]=="True:False" && typedDictionaryHost.fields["TypedDictionaryError"]=="13" && typedDictionaryHost.fields["TypedDictionaryIdentity"]=="True");
     }
 
+    const std::string nextLists=R"VBA(Sub NextLists()
+Dim i As Long,j As Long,total As Long
+Dim item As Variant, values As Collection
+Dim trace As String
+For i=1 To 2
+For j=1 To 2
+trace=trace & CStr(i) & CStr(j) & ","
+Next j,i
+Me!NextNumeric=trace & ":" & CStr(i) & ":" & CStr(j)
+total=0
+For i=1 To 3
+total=total+1
+For j=2 To 1
+Err.Raise 5
+Next j,i
+Me!NextEmptyInner=CStr(total) & ":" & CStr(i) & ":" & CStr(j)
+total=0
+For i=1 To 3
+For j=1 To 5
+total=total+i
+Exit For
+Next j,i
+Me!NextExit=CStr(total) & ":" & CStr(i) & ":" & CStr(j)
+j=0
+For i=2 To 1
+For j=1 To 2
+Err.Raise 5
+Next j,i
+Me!NextEmptyOuter=CStr(i) & ":" & CStr(j)
+Set values=New Collection
+For i=1 To 2
+For Each item In values
+Err.Raise 5
+Next item,i
+values.Add 1
+values.Add 2
+total=0
+For i=1 To 2
+For Each item In values
+total=total+i*item
+Next item,i
+values.Add 3
+Me!NextCollection=CStr(total) & ":" & CStr(values.Count)
+item=7
+For i=1 To 2
+For Each item In Array()
+Err.Raise 5
+Next item,i
+Me!NextEmptyArray=CStr(i) & ":" & CStr(item)
+total=0
+Do
+For i=1 To 1
+For j=1 To 1
+total=total+1
+Next j,i
+Exit Do
+Loop
+Me!NextDo=CStr(total)
+total=0
+If True Then For i=1 To 2:For j=1 To 2:total=total+1:Next j,i
+Me!NextInline=CStr(total)
+End Sub
+Sub NextFault()
+Dim i As Long,j As Integer
+On Error Resume Next
+For i=1 To 2
+For j=32767 To 32767
+Next j,i
+Me!NextFault=CStr(Err.Number) & ":" & CStr(i) & ":" & CStr(j)
+End Sub
+Sub NextInlineFault()
+Dim i As Long,j As Integer
+On Error Resume Next
+If True Then For i=1 To 2:For j=32767 To 32767:Next j,i
+Me!NextInlineFault=CStr(Err.Number) & ":" & CStr(i) & ":" & CStr(j)
+End Sub
+Sub NextLeaseFault()
+Dim i As Long,item As Object,values As Collection
+Set values=New Collection
+values.Add New Scripting.Dictionary
+values.Add 3
+On Error GoTo caught
+For i=1 To 2
+For Each item In values
+Next item,i
+values.Add 4
+Me!NextLeaseCount=CStr(values.Count)
+Exit Sub
+caught:
+Me!NextLeaseFault=CStr(Err.Number)
+Resume Next
+End Sub
+)VBA";
+    const std::string nextLeaseLabel=R"VBA(Sub NextLeaseLabel()
+Dim i As Long,item As Object,values As Collection
+Set values=New Collection
+values.Add New Scripting.Dictionary
+values.Add 3
+On Error GoTo caught
+For i=1 To 2
+For Each item In values
+Next item,i
+Exit Sub
+aftergroup:
+values.Add 4
+Me!NextLabelCount=CStr(values.Count)
+Exit Sub
+caught:
+Me!NextLabelFault=CStr(Err.Number)
+Resume aftergroup
+End Sub
+)VBA";
+    const auto nextListResult=executeVbaProcedure(nextLists,"NextLists",host);
+    if(nextListResult.status!=VbaExecutionStatus::Completed) std::cerr<<"Next-list error="<<nextListResult.errorNumber<<" line="<<nextListResult.line<<"\n";
+    assert(nextListResult.status==VbaExecutionStatus::Completed);
+    assert(host.fields["NextNumeric"]=="11,12,21,22,:3:3" && host.fields["NextEmptyInner"]=="3:4:2" && host.fields["NextExit"]=="6:4:1");
+    assert(host.fields["NextEmptyOuter"]=="2:0" && host.fields["NextCollection"]=="9:3" && host.fields["NextEmptyArray"]=="3:7");
+    assert(host.fields["NextDo"]=="1" && host.fields["NextInline"]=="4");
+    assert(executeVbaProcedure(nextLists,"NextFault",host).status==VbaExecutionStatus::Completed && host.fields["NextFault"]=="6:1:32767");
+    assert(executeVbaProcedure(nextLists,"NextInlineFault",host).status==VbaExecutionStatus::Completed && host.fields["NextInlineFault"]=="6:1:32767");
+    assert(executeVbaProcedure(nextLists,"NextLeaseFault",host).status==VbaExecutionStatus::Completed && host.fields["NextLeaseFault"]=="13" && host.fields["NextLeaseCount"]=="3");
+    assert(executeVbaProcedure(nextLeaseLabel,"NextLeaseLabel",host).status==VbaExecutionStatus::Completed && host.fields["NextLabelFault"]=="13" && host.fields["NextLabelCount"]=="3");
+    const auto invalidNext=executeVbaProcedure("Sub InvalidNext()\nDim i As Long,j As Long\nMe!ForbiddenNext=1\nFor i=1 To 2\nFor j=1 To 2\nNext i,j\nEnd Sub","InvalidNext",host);
+    assert(invalidNext.status==VbaExecutionStatus::Error && !host.fields.contains("ForbiddenNext"));
+    const auto uninitializedNext=executeVbaProcedure("Sub UninitializedNext()\nDim i As Long,j As Long\nMe!ForbiddenUninitializedNext=1\nGoTo finish\nFor i=1 To 2\nFor j=1 To 2\nfinish:\nNext j,i\nEnd Sub","UninitializedNext",host);
+    assert(uninitializedNext.status==VbaExecutionStatus::Unsupported && !host.fields.contains("ForbiddenUninitializedNext"));
+
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub
