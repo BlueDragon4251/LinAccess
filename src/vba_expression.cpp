@@ -696,7 +696,24 @@ public:
             throw error("Zusätzliche Zeichen im VBA-Ausdruck: " + peek().value);
         return value;
     }
+    VbaEvaluatedArgument parseArgument() {
+        auto result=argumentExpression(objectContext_);
+        if(host_ && (vbaExecutionStopRequested() || executionEpoch_!=vbaExecutionEpoch())) throw VbaExecutionStopped{};
+        if(peek().type!=Token::Type::End) throw error("Additional argument expression tokens");
+        return result;
+    }
 private:
+    struct ReferenceCapture { std::size_t start{},end{}; std::optional<VbaArrayElementReference> element; };
+    std::optional<ReferenceCapture> referenceCapture_;
+    VbaEvaluatedArgument argumentExpression(bool objectContext=false) {
+        auto previous=std::move(referenceCapture_);
+        referenceCapture_=ReferenceCapture{index_,index_,{}};
+        try {
+            VbaEvaluatedArgument result{expression(1,objectContext),{}};
+            if(referenceCapture_ && referenceCapture_->end==index_) result.arrayElement=std::move(referenceCapture_->element);
+            referenceCapture_=std::move(previous); return result;
+        } catch(...) { referenceCapture_=std::move(previous); throw; }
+    }
     const Token& peek() const { return tokens_[index_]; }
     Token consume() { return tokens_[index_++]; }
     bool nextSymbol(std::string_view symbol) const { return peek().type==Token::Type::Symbol && peek().value==symbol; }
@@ -715,6 +732,7 @@ private:
             const int prec = precedence(peek());
             if (prec < minPrecedence) break;
             const auto op = lower(consume().value);
+            if(referenceCapture_) referenceCapture_->element.reset();
             if (accessExpression_ && op=="is" && (lower(peek().value)=="null" || lower(peek().value)=="not")) {
                 const bool negate=take("not"); require("null");
                 if (host_ && lhs.kind!=VbaValue::Kind::Error) lhs=VbaValue::logical((lhs.kind==VbaValue::Kind::Null)!=negate);
@@ -729,6 +747,7 @@ private:
         return lhs;
     }
     VbaValue primary(bool objectContext,int minPrecedence) {
+        const auto primaryStart=index_;
         auto value = [&] {
             if (!nextSymbol(".") && !nextSymbol("!")) return atom(objectContext,minPrecedence);
             if (!host_ && allowWith_) return VbaValue{};
@@ -737,6 +756,12 @@ private:
         }();
         while (nextSymbol("(") || nextSymbol(".") || nextSymbol("!")) {
             if(host_ && (vbaExecutionStopRequested() || executionEpoch_!=vbaExecutionEpoch())) throw VbaExecutionStopped{};
+            std::string compoundArrayRoot;
+            if(referenceCapture_ && referenceCapture_->element && referenceCapture_->end==index_) {
+                if(nextSymbol("(") && isVbaArray(value)) compoundArrayRoot=referenceCapture_->element->root;
+                referenceCapture_->element.reset();
+            }
+            const auto suffixStart=index_;
             if (take("(")) {
                 std::vector<VbaValue> arguments;
                 if (!take(")")) {
@@ -745,7 +770,33 @@ private:
                 }
                 if (host_) {
                     try {
-                        if(isVbaArray(value)) { if(!arguments.empty() || accessExpression_) value=vbaArrayElement(value,arguments); continue; }
+                        if(isVbaArray(value)) {
+                            if(!arguments.empty() || accessExpression_) {
+                                const bool root=!accessExpression_ && suffixStart==primaryStart+1 && tokens_[primaryStart].type==Token::Type::Word;
+                                const auto source=root ? locals_.find(lower(tokens_[primaryStart].value)) : locals_.end();
+                                if(source!=locals_.end() && isVbaArray(source->second)) {
+                                    if(!sameVbaArrayAllocation(value,source->second)) throw error("Array source changed while evaluating subscripts",3251);
+                                    value=source->second;
+                                }
+                                const auto element=vbaArrayElementOffset(value,arguments);
+                                if(source!=locals_.end()) {
+                                    if(!isVbaArray(source->second) || !sameVbaArrayAllocation(value,source->second)) throw error("Array source changed while coercing subscripts",3251);
+                                    value=source->second;
+                                }
+                                if(referenceCapture_ && referenceCapture_->start==primaryStart && source!=locals_.end()) {
+                                    auto type=lower(vbaArrayTypeName(value)); type.resize(type.size()-2);
+                                    referenceCapture_->element=VbaArrayElementReference{source->first,std::move(type),element,vbaArrayAllocation(value)};
+                                    referenceCapture_->end=index_;
+                                }
+                                value=vbaArrayLinearElement(value,element);
+                            }
+                            if(referenceCapture_ && !compoundArrayRoot.empty()) {
+                                // A compound address is recognized but not bound as a temporary.
+                                referenceCapture_->element=VbaArrayElementReference{std::move(compoundArrayRoot),{},0,{}};
+                                referenceCapture_->end=index_;
+                            }
+                            continue;
+                        }
                         if (value.kind!=VbaValue::Kind::Object || !value.object) throw error("Default member requires an object",91);
                         value=value.object->defaultMember(arguments,objectContext || nextSymbol(".") || nextSymbol("!") || nextSymbol("("));
                     } catch(const VbaRuntimeError& failure) { if (!accessExpression_) throw; value=VbaValue::errorValue(failure.number); }
@@ -1076,6 +1127,7 @@ private:
         if (take("(")) {
             std::vector<VbaValue> args;
             std::vector<std::string> references;
+            std::vector<std::optional<VbaArrayElementReference>> arrayReferences;
             std::vector<bool> omitted;
             if (!take(")")) {
                 do {
@@ -1086,7 +1138,8 @@ private:
                     const auto start = index_;
                     const bool builtinDefaults=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="datepart" || word=="weekday");
                     const bool missing=nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";"));
-                    args.push_back(missing ? (builtinDefaults ? VbaValue::empty() : VbaValue::missing()) : expression(1,word=="isobject"));
+                    auto argument=missing ? VbaEvaluatedArgument{builtinDefaults ? VbaValue::empty() : VbaValue::missing(),{}} : argumentExpression(word=="isobject");
+                    args.push_back(std::move(argument.value)); arrayReferences.push_back(std::move(argument.arrayElement));
                     if(!argumentName.empty() && missing) throw error("Named argument requires a value",450);
                     omitted.push_back(missing);
                     references.push_back(!missing && index_ == start + 1 && tokens_[start].type == Token::Type::Word
@@ -1157,7 +1210,7 @@ private:
                 const auto signature=signatures.find(word);
                 if(signature==signatures.end()) {
                     if(qualifiedIntrinsic || !resolver_) throw error("Named builtin/procedure arguments are not implemented",3251);
-                    return resolver_(word,args,references);
+                    return resolver_(word,args,VbaArgumentReferences{std::move(references),std::move(arrayReferences)});
                 }
                 std::vector<VbaValue> ordered(signature->second.names.size(),VbaValue::empty());
                 std::vector<bool> assigned(ordered.size()),missing(ordered.size(),true);
@@ -1845,7 +1898,7 @@ private:
             }
             if (!host_) return {}; // syntactic function call; bind at execution
             if(qualifiedIntrinsic) throw error("Invalid qualified VBA intrinsic arguments",450);
-            if (resolver_) return resolver_(tok.value, args, references);
+            if (resolver_) return resolver_(tok.value,args,VbaArgumentReferences{std::move(references),std::move(arrayReferences)});
             throw error("Nicht unterstützte VBA-Funktion/Parameter: " + tok.value);
         }
         if (!host_) return {}; // Validate identifiers syntactically, resolve on execution.
@@ -2061,6 +2114,10 @@ bool validVbaExpression(std::string_view text,bool withContext) {
 VbaValue evaluateVbaExpression(std::string_view text, VbaHost& host,
                                const VbaVariables& vars, const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode,int arrayBase) {
     return ExpressionParser(text, &host, vars, resolver,false,false,withContext,false,compareMode,arrayBase).parse();
+}
+VbaEvaluatedArgument evaluateVbaArgumentExpression(std::string_view expression,VbaHost& host,
+    const VbaVariables& variables,const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode,int arrayBase) {
+    return ExpressionParser(expression,&host,variables,resolver,false,false,withContext,false,compareMode,arrayBase).parseArgument();
 }
 VbaValue evaluateVbaObjectExpression(std::string_view text,VbaHost& host,
                                     const VbaVariables& vars,const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode,int arrayBase) {

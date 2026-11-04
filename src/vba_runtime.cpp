@@ -21,6 +21,18 @@ namespace linaccess {
 namespace {
 thread_local std::uint64_t stopEpoch=0;
 thread_local std::vector<std::uint64_t> activeExecutionEpochs;
+thread_local std::vector<const VbaValue*> activeArrayElementRoots;
+struct ArrayElementRootScope {
+    std::size_t base=activeArrayElementRoots.size();
+    ~ArrayElementRootScope() { activeArrayElementRoots.resize(base); }
+};
+struct AliasRefreshScope;
+thread_local std::vector<AliasRefreshScope*> activeAliasFrames;
+struct AliasRefreshScope {
+    std::function<void()> refresh;
+    explicit AliasRefreshScope(std::function<void()> callback) : refresh(std::move(callback)) { activeAliasFrames.push_back(this); }
+    ~AliasRefreshScope() { activeAliasFrames.pop_back(); }
+};
 // This interpreter deliberately reports unsupported VBA instead of silently
 // treating Access/DAO/COM calls as successful no-ops.
 struct ArrayResizeTarget { std::string name,bounds,elementType; };
@@ -1498,7 +1510,13 @@ VbaValue initialLocalValue(const std::string& type) {
     if (!type.empty() && type!="variant") return VbaValue::numeric(0);
     return VbaValue::empty();
 }
-struct ReferenceBinding { VbaValue* source{}; std::string type; bool indexedArray{}; bool paramArray{}; bool fixedArray{}; };
+struct ReferenceBinding {
+    VbaValue* source{}; std::string type; bool indexedArray{}; bool paramArray{}; bool fixedArray{};
+    std::function<VbaValue()> read;
+    std::function<void(const VbaValue&)> write;
+    VbaValue* arrayRoot{};
+    bool temporaryCell{};
+};
 }
 
 VbaExecutionScope::VbaExecutionScope() { activeExecutionEpochs.push_back(activeExecutionEpochs.empty() ? stopEpoch : activeExecutionEpochs.back()); }
@@ -1512,6 +1530,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                                        VbaHost& host, std::vector<VbaValue>& arguments,
                                        const std::vector<ReferenceBinding>* references = nullptr) {
     VbaExecutionScope executionFrame;
+    ArrayElementRootScope arrayElementScope;
     if(vbaExecutionStopRequested()) return {VbaExecutionStatus::Completed,{},0,true};
     // Independent of host type, recursive VBA calls must not overflow the
     // native C++ stack. Access' own runtime also terminates stack overflow.
@@ -1622,7 +1641,12 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 throw VbaRuntimeError(3251,"ByRef ParamArray forwarding is not implemented");
             if(!omitted && references && i<references->size() && !implicitCancel && parameter.byReference && (*references)[i].indexedArray)
                 throw VbaRuntimeError(3251,"ByRef array element binding is not implemented");
-            const auto value=implicitCancel ? VbaValue::numeric(0) : !omitted ? arguments[i]
+            if(!omitted && references && i<references->size() && parameter.byReference && (*references)[i].arrayRoot)
+                activeArrayElementRoots.push_back((*references)[i].arrayRoot);
+            if(!omitted && references && i<references->size() && parameter.byReference && (*references)[i].read)
+                *(*references)[i].source=(*references)[i].read();
+            const auto value=implicitCancel ? VbaValue::numeric(0) : !omitted
+                ? parameter.byReference && references && i<references->size() && (*references)[i].source ? *(*references)[i].source : arguments[i]
                 : parameter.defaultValue ? *parameter.defaultValue
                 : parameter.type.empty() || parameter.type=="variant" ? VbaValue::missing() : initialLocalValue(parameter.type);
             if(!omitted && references && i<references->size() && !parameter.byReference && (*references)[i].type.ends_with("()"))
@@ -1666,12 +1690,29 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             VbaExecutionResult failure{VbaExecutionStatus::Error,"Array declaration failed",instruction.line}; failure.errorNumber=error.number; return failure;
         }
     }
-    struct Alias { std::string name; VbaValue* source; VbaValue before; std::string type; };
+    struct Alias {
+        std::string name; VbaValue* source; VbaValue before; std::string type;
+        std::function<VbaValue()> read;
+        std::function<void(const VbaValue&)> write;
+        VbaValue* arrayRoot{};
+    };
     std::vector<Alias> aliases;
     if (references && !implicitCancel)
         for (std::size_t i = 0; i < parameters.size() && i<references->size(); ++i)
             if (!omittedParameters[i] && parameters[i].byReference && (*references)[i].source)
-                aliases.push_back({lower(parameters[i].name), (*references)[i].source, *(*references)[i].source,(*references)[i].type});
+                aliases.push_back({lower(parameters[i].name), (*references)[i].source, *(*references)[i].source,(*references)[i].type,
+                    (*references)[i].read,(*references)[i].write,(*references)[i].arrayRoot});
+    // Locals/aliases now own the semantic arguments. Internal transport copies
+    // must not keep replaced objects alive; public API argument vectors remain.
+    if(references && !implicitCancel) {
+        std::unordered_set<VbaValue*> liveSources;
+        for(std::size_t i=0;i<parameters.size() && i<references->size();++i)
+            if(!omittedParameters[i] && parameters[i].byReference && !parameters[i].paramArray && (*references)[i].source)
+                liveSources.insert((*references)[i].source);
+        for(const auto& binding:*references)
+            if(binding.temporaryCell && binding.source && !liveSources.contains(binding.source)) *binding.source=VbaValue::empty();
+        for(auto& value:arguments) value=VbaValue::empty();
+    }
     std::vector<std::shared_ptr<VbaModuleState>> stateOwners;
     try {
         auto state=host.moduleState(module); stateOwners.push_back(state);
@@ -1738,6 +1779,12 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         }
     }
     const auto assignVariable=[&](const std::string& name,const VbaValue& value,bool arrayElement=false) {
+        if(!arrayElement) {
+            const auto local=locals.find(name); const VbaValue* source=local==locals.end() ? nullptr : &local->second;
+            for(const auto& alias:aliases) if(alias.name==name) { source=alias.source; break; }
+            if(source && std::find(activeArrayElementRoots.begin(),activeArrayElementRoots.end(),source)!=activeArrayElementRoots.end())
+                throw VbaRuntimeError(3251,"Array replacement while a ByRef element is active is not implemented");
+        }
         if(!arrayElement) for(const auto& loop:loops) if(!loop.arrayRoot.empty() && loop.arrayRoot==name)
             throw VbaRuntimeError(3251,"Array source replacement during For Each is not implemented");
         if(constantNames.contains(name)) throw VbaRuntimeError(3251,"Assignment to a constant is not permitted");
@@ -1751,16 +1798,27 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             && a.boolean == b.boolean && a.object == b.object && a.bytes == b.bytes && a.errorNumber==b.errorNumber;
     };
     const auto refreshAliases = [&] {
-        for (auto& alias : aliases) { locals[alias.name] = *alias.source; alias.before = *alias.source; }
+        for (auto& alias : aliases) {
+            if(alias.read) *alias.source=alias.read();
+            locals[alias.name] = *alias.source; alias.before = *alias.source;
+        }
     };
+    AliasRefreshScope* aliasFrame=nullptr;
     const auto storeAliases = [&] {
+        bool changed=false;
         for (auto& alias : aliases)
             if (!equalValue(locals[alias.name], alias.before)) {
-                try { *alias.source=coerceVbaModuleValue(locals[alias.name],alias.type); }
+                try {
+                    const auto value=coerceVbaModuleValue(locals[alias.name],alias.type);
+                    if(alias.write) alias.write(value);
+                    *alias.source=value; changed=true;
+                }
                 catch (...) { locals[alias.name]=*alias.source; alias.before=*alias.source; throw; }
             }
+        if(changed) for(auto* frame:activeAliasFrames) if(frame!=aliasFrame) frame->refresh();
         refreshAliases();
     };
+    AliasRefreshScope observingAliases(refreshAliases); aliasFrame=&observingAliases;
     const auto copyArguments = [&] {
         if (!implicitCancel)
             for (std::size_t i = 0; i < parameters.size() && i<arguments.size(); ++i)
@@ -1779,7 +1837,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         return outcome;
     };
     const auto invoke = [&](std::string_view name, std::vector<VbaValue>& actuals,
-                            const std::vector<std::string>& names, bool needsValue) -> VbaValue {
+                            const VbaArgumentReferences& referenceInfo, bool needsValue) -> VbaValue {
+        storeAliases();
+        const auto& names=referenceInfo.names;
+        struct ArrayCell { VbaValue* root; std::size_t offset; std::shared_ptr<const void> allocation; VbaValue value; };
+        std::vector<std::shared_ptr<ArrayCell>> cells;
         std::vector<std::string> argumentNames,argumentRefs;
         for(const auto& reference:names) {
             if(reference.starts_with("@named:")) {
@@ -1793,11 +1855,13 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             if(variable!=locals.end() && isVbaArray(variable->second)) expression=target->name;
         }
         std::vector<ReferenceBinding> bindings;
-        for (const auto& expression : argumentRefs) {
+        for (std::size_t argument=0;argument<argumentRefs.size();++argument) {
+            const auto& expression=argumentRefs[argument];
             auto found = locals.find(lower(expression));
             const auto type=variableType(lower(expression));
             ReferenceBinding binding{found==locals.end() ? nullptr : &found->second,checkedType(type) ? type : std::string{}};
-            for (const auto& alias:aliases) if (alias.name==lower(expression)) binding={alias.source,alias.type};
+            for (const auto& alias:aliases) if (alias.name==lower(expression))
+                binding={alias.source,alias.type,false,false,false,alias.read,alias.write,alias.arrayRoot};
             binding.paramArray=type=="paramarray";
             binding.fixedArray=fixedArrays.contains(lower(expression));
             if(constantNames.contains(lower(expression))) binding.source=nullptr;
@@ -1806,7 +1870,30 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 const auto array=locals.find(lower(target->name));
                 if(array!=locals.end() && isVbaArray(array->second)) binding.indexedArray=true;
             }
-            bindings.push_back(binding);
+            if(argument<referenceInfo.arrayElements.size() && referenceInfo.arrayElements[argument]) {
+                const auto& reference=*referenceInfo.arrayElements[argument];
+                binding.indexedArray=true;
+                const auto root=locals.find(reference.root); VbaValue* source=root==locals.end() ? nullptr : &root->second;
+                bool nested=false;
+                for(const auto& alias:aliases) if(alias.name==reference.root) { source=alias.source; nested=bool(alias.read) || bool(alias.write); break; }
+                if(source && reference.allocation && !nested && variableType(reference.root)!="paramarray" && !constantNames.contains(reference.root)) {
+                    std::shared_ptr<ArrayCell> cell;
+                    for(const auto& candidate:cells) if(candidate->root==source && candidate->offset==reference.offset && candidate->allocation==reference.allocation) { cell=candidate; break; }
+                    if(!cell) { cell=std::make_shared<ArrayCell>(ArrayCell{source,reference.offset,reference.allocation,actuals[argument]}); cells.push_back(cell); }
+                    const auto read=[cell]() {
+                        if(!isVbaArray(*cell->root) || vbaArrayAllocation(*cell->root)!=cell->allocation)
+                            throw VbaRuntimeError(3251,"ByRef array source allocation changed");
+                        return vbaArrayLinearElement(*cell->root,cell->offset);
+                    };
+                    const auto write=[cell,read](const VbaValue& value) {
+                        (void)read();
+                        *cell->root=withVbaArrayLinearElement(*cell->root,cell->offset,value);
+                    };
+                    binding={&cell->value,reference.elementType,false,false,false,read,write,source};
+                    binding.temporaryCell=true;
+                }
+            }
+            bindings.push_back(std::move(binding));
         }
         VbaExecutionResult nested;
         const bool named=std::any_of(argumentNames.begin(),argumentNames.end(),[](const std::string& value){ return !value.empty(); });
@@ -1838,7 +1925,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     if(target==parameters.size()) throw VbaRuntimeError(448,"Named argument not found");
                 } else if(namedSeen) throw VbaRuntimeError(450,"Positional arguments cannot follow named arguments");
                 if(target>=parameters.size() || assigned[target]) throw VbaRuntimeError(450,"Argument supplied more than once or too many arguments");
-                assigned[target]=true; ordered[target]=actuals[index]; orderedBindings[target]=bindings[index]; mapping.push_back(target);
+                assigned[target]=true; ordered[target]=std::move(actuals[index]); orderedBindings[target]=bindings[index]; mapping.push_back(target);
             }
             nested=executeProcedure(targetModule,name,host,ordered,&orderedBindings);
             for(std::size_t index=0;index<actuals.size();++index) actuals[index]=ordered[mapping[index]];
@@ -1856,25 +1943,14 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             return result;
         }
         if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
-        for (std::size_t i = 0; i < names.size(); ++i) {
-            auto found = locals.find(lower(argumentRefs[i]));
-            if (found != locals.end()) {
-                if(constantNames.contains(found->first)) continue;
-                if(variableType(found->first)=="paramarray") {
-                    if(actuals[i].kind!=VbaValue::Kind::Array || actuals[i].object!=found->second.object)
-                        throw VbaRuntimeError(3251,"ParamArray forwarding cannot replace argument slots");
-                    continue;
-                }
-                bool arrayUpdate=false;
-                if(fixedArrays.contains(found->first)) {
-                    if(!isVbaArray(actuals[i]) || vbaArrayBounds(actuals[i])!=vbaArrayBounds(found->second)) throw VbaRuntimeError(3251,"Fixed array argument bounds changed");
-                    arrayUpdate=true;
-                }
-                for(const auto& loop:loops) if(loop.arrayRoot==found->first && sameVbaArrayAllocation(loop.array,actuals[i])) arrayUpdate=true;
-                assignVariable(found->first,actuals[i],arrayUpdate);
-            }
+        for(std::size_t i=0;i<argumentRefs.size();++i) {
+            if(!bindings[i].source) continue;
+            for(const auto& loop:loops) if(loop.arrayRoot==lower(argumentRefs[i]) && !sameVbaArrayAllocation(loop.array,*bindings[i].source))
+                throw VbaRuntimeError(3251,"Array source replacement during For Each is not implemented");
         }
-        storeAliases();
+        // ByRef assignments already update their actual source through aliases.
+        // ByVal arguments must never copy an old value back over that source.
+        refreshAliases();
         if (nested.status != VbaExecutionStatus::Completed)
             throw VbaRuntimeError(nested.errorNumber ? nested.errorNumber : 5,
                 nested.status == VbaExecutionStatus::ProcedureMissing ? "Prozedur nicht gefunden" : nested.explanation,
@@ -1883,7 +1959,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         return nested.typedReturnValue ? *nested.typedReturnValue : VbaValue::empty();
     };
     const VbaFunctionResolver resolver = [&](std::string_view name, std::vector<VbaValue>& args,
-                                            const std::vector<std::string>& refs) {
+                                            const VbaArgumentReferences& refs) {
         return invoke(name, args, refs, true);
     };
     auto compareMode=VbaCompareMode::Binary;
@@ -2158,11 +2234,13 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (active) {
                     const auto expressions = splitArguments(instruction.expression);
                     std::vector<VbaValue> actuals;
-                    std::vector<std::string> references;
+                    VbaArgumentReferences references;
                     for(const auto& expression:expressions) {
                         const auto parsed=callArgument(expression);
-                        actuals.push_back(parsed.expression.empty() ? VbaValue::missing() : evaluate(parsed.expression));
-                        references.push_back(parsed.name.empty() ? parsed.expression : "@named:"+parsed.name+":"+parsed.expression);
+                        auto argument=parsed.expression.empty() ? VbaEvaluatedArgument{VbaValue::missing(),{}}
+                            : evaluateVbaArgumentExpression(parsed.expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase);
+                        actuals.push_back(std::move(argument.value)); references.arrayElements.push_back(std::move(argument.arrayElement));
+                        references.names.push_back(parsed.name.empty() ? parsed.expression : "@named:"+parsed.name+":"+parsed.expression);
                     }
                     (void)invoke(instruction.argument,actuals,references,false);
                 }
@@ -2453,7 +2531,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         return {VbaExecutionStatus::Completed,{},currentLine,true};
     } catch (const std::exception& exc) {
         if(vbaExecutionStopRequested()) return {VbaExecutionStatus::Completed,{},currentLine,true};
-        storeAliases();
+        try { storeAliases(); } catch(const std::exception&) { /* Preserve the original execution failure. */ }
         copyArguments();
         VbaExecutionResult failure{VbaExecutionStatus::Error, exc.what(), currentLine};
         const auto* typed = dynamic_cast<const VbaRuntimeError*>(&exc);

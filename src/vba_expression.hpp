@@ -97,9 +97,40 @@ struct VbaModuleState {
 };
 VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type);
 
+struct VbaArrayElementReference {
+    std::string root,elementType;
+    std::size_t offset{};
+    std::shared_ptr<const void> allocation;
+};
+struct VbaEvaluatedArgument {
+    VbaValue value;
+    std::optional<VbaArrayElementReference> arrayElement;
+};
+// Metadata belongs to this synchronous invocation; legacy callbacks can still
+// read the string references through the implicit vector view.
+struct VbaArgumentReferences {
+    std::vector<std::string> names;
+    std::vector<std::optional<VbaArrayElementReference>> arrayElements;
+    VbaArgumentReferences() = default;
+    VbaArgumentReferences(std::vector<std::string> values) : names(std::move(values)) {}
+    VbaArgumentReferences(std::vector<std::string> values,std::vector<std::optional<VbaArrayElementReference>> elements)
+        : names(std::move(values)),arrayElements(std::move(elements)) {}
+    operator const std::vector<std::string>&() const { return names; }
+    auto begin() const { return names.begin(); }
+    auto end() const { return names.end(); }
+    auto size() const { return names.size(); }
+    bool empty() const { return names.empty(); }
+    const auto& operator[](std::size_t index) const { return names[index]; }
+    const auto& at(std::size_t index) const { return names.at(index); }
+    const auto& front() const { return names.front(); }
+    const auto& back() const { return names.back(); }
+};
 // Native procedure calls encode named bindings as @named:parameter:reference.
 using VbaFunctionResolver = std::function<VbaValue(std::string_view, std::vector<VbaValue>&,
-                                                 const std::vector<std::string>&)>;
+                                                 const VbaArgumentReferences&)>;
+VbaEvaluatedArgument evaluateVbaArgumentExpression(std::string_view expression,VbaHost& host,
+    const VbaVariables& variables,const VbaFunctionResolver& resolver={},const VbaValue* withContext=nullptr,
+    VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0);
 bool validVbaExpression(std::string_view expression,bool withContext=false);
 VbaValue evaluateVbaExpression(std::string_view expression, VbaHost& host,
                                const VbaVariables& variables, const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0);

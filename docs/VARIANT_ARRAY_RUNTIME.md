@@ -34,9 +34,9 @@ fails with 3251; this limit is a current implementation boundary, not Access par
 
 This is not complete VBA array parity. General constant-bound and class-specific array declarations,
 full fixed/class declaration and Erase semantics, full ParamArray semantics, full array For Each semantics,
-full library/reference binding and native COM arrays remain open. Individual array elements
-passed to a ByRef parameter fail explicitly with 3251 rather than silently losing
-writes. Nested indexed assignment is not implemented. No Windows Access result
+full library/reference binding and native COM arrays remain open. Elements of named array roots now use the native ByRef binding described below.
+Compound index addresses, ParamArray cells and nested roots through an existing
+cell alias remain explicitly refused with 3251 for ByRef. Nested indexed assignment is not implemented. No Windows Access result
 oracle was available for this segment.
 
 ## String lists and array enumeration
@@ -389,3 +389,42 @@ remaining property/compiler/alias/oracle boundaries. Full desktop 48/48
 Debian payload/permissions/Build-ID/pinned SQLite and four original fixture
 hashes pass. No new CTest target. Scoped checklist 379 checked / 72 open, not
 complete Access 2003 parity.
+
+
+## Native ByRef array-element addresses (2026-11-04)
+
+Direct named local/module array roots support actual ByRef element binding in
+Sub calls and function expressions, including named arguments, multidimensional
+arrays and packed Byte arrays. Subscripts and their scalar conversions execute
+once; the checked linear offset and opaque allocation identity are captured at
+argument evaluation. The token owns no array contents or native DAO objects.
+Later arguments can change cell contents; ByRef reads the current bound cell,
+while ByVal retains the earlier evaluated value. Parenthesized/computed values
+remain temporaries.
+
+Same-cell aliases share one live slot and forwarded scalar references preserve
+its getter/setter. Writes reach the actual source immediately and retain typed
+coercion, copy isolation and bounds. Active native ByRef cells prevent whole
+source replacement/ReDim/Erase (3251). Source-allocation validation never
+re-evaluates the subscripts. Compound address paths and ParamArray cells are
+refused rather than receiving silent temporary writes; arbitrary property and
+returned-array addresses remain outside this path.
+
+Live aliases refresh other active native frames after publication, releasing
+stale module/static/object snapshots. The writer's own refresh waits until its
+changes have been published. Internal argument-value copies are released after binding: ByVal locals own
+their semantic copies and ByRef aliases own their live bindings. Unused fresh
+cell slots do not retain old objects. Public API argument vectors keep their
+existing contract; named ordering moves internal values instead of retaining
+an old copy. Direct sources receive writes through the aliases, and ByVal
+arguments do not copy their old values back over caller changes. These are
+execution-scoped bindings, not persistent cached host/array references.
+
+Existing core execution covers index side effects, later-argument mutation,
+same-cell aliases, forwarding and immediate module reads, named argument order,
+copy isolation, Byte writes, replacement refusal and guarded compound paths.
+Existing DAO execution clears a real clone through a forwarded module-array
+Object reference, releases a ByVal copy too and begins/rolls back a real
+transaction before returning.
+Full ByRef/COM/class/error-precedence and Access result-oracle equivalence remain
+open under existing F043; no new checklist ID or CTest target.

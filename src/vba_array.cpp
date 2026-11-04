@@ -92,6 +92,11 @@ bool sameVbaArrayAllocation(const VbaValue& left,const VbaValue& right) {
         return left.object && left.object==right.object;
     return left.kind==VbaValue::Kind::Array && right.kind==VbaValue::Kind::Array && storage(left).allocation==storage(right).allocation;
 }
+std::shared_ptr<const void> vbaArrayAllocation(const VbaValue& value) {
+    if(value.kind==VbaValue::Kind::ByteArray) return value.object;
+    return storage(value).allocation;
+}
+std::size_t vbaArrayElementOffset(const VbaValue& value,const std::vector<VbaValue>& indices) { return offset(value,indices); }
 int vbaArrayType(const VbaValue& value) {
     if(value.kind==VbaValue::Kind::ByteArray) return 8209;
     const auto& type=storage(value).elementType;
@@ -165,7 +170,10 @@ VbaValue vbaArrayBound(const VbaValue& value,bool upper,int dimension) {
 }
 VbaValue vbaArrayElement(const VbaValue& value,const std::vector<VbaValue>& indices) { return vbaArrayLinearElement(value,offset(value,indices)); }
 VbaValue withVbaArrayElement(const VbaValue& value,const std::vector<VbaValue>& indices,const VbaValue& element) {
-    const auto index=offset(value,indices);
+    return withVbaArrayLinearElement(value,offset(value,indices),element);
+}
+VbaValue withVbaArrayLinearElement(const VbaValue& value,std::size_t index,const VbaValue& element) {
+    if(index>=vbaArraySize(value)) throw VbaRuntimeError(9,"Subscript out of range");
     if(value.kind==VbaValue::Kind::ByteArray) {
         auto result=value; result.bytes[index]=static_cast<unsigned char>(coerceVbaModuleValue(element,"byte").number);
         return result;

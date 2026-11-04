@@ -162,6 +162,29 @@ End Sub
     assert(resumedWith.status==linaccess::VbaExecutionStatus::Completed && host.fields["ResumedCloneValue"]=="final" && host.fields["ResumedCloneHandled"]=="1");
     assert(host.fields["ResumedCloneLive"]=="3251" && host.fields["ResumedCloneReleased"]=="yes");
 
+    const auto arrayReferenceLifetime=linaccess::executeVbaProcedure(R"VBA(Private holder As Variant
+Sub ArrayReferenceLifetime()
+Dim rows As DAO.Recordset,copyRows As DAO.Recordset
+Set rows=CurrentDb.OpenRecordset("native_indexed_fields")
+Set copyRows=rows.Clone
+holder=Array(copyRows)
+Set copyRows=Nothing
+ForwardArrayClone holder(0)
+rows.Close
+End Sub
+Sub ForwardArrayClone(ByRef value As Object)
+ReleaseArrayClone value,value
+End Sub
+Sub ReleaseArrayClone(ByVal copied As Object,ByRef value As Object)
+Set copied=Nothing
+Set value=Nothing
+DBEngine.BeginTrans
+DBEngine.Rollback
+Me!ArrayCloneReleased="yes"
+End Sub
+)VBA","ArrayReferenceLifetime",host);
+    if(arrayReferenceLifetime.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Array clone error="<<arrayReferenceLifetime.errorNumber<<" line="<<arrayReferenceLifetime.line<<"\n";
+    assert(arrayReferenceLifetime.status==linaccess::VbaExecutionStatus::Completed && host.fields["ArrayCloneReleased"]=="yes");
     const auto dictionaryLifetime=linaccess::executeVbaProcedure(R"VBA(Sub DictionaryLifetime()
 Dim d As Object, key As Variant
 Dim rows As DAO.Recordset, copyRows As DAO.Recordset

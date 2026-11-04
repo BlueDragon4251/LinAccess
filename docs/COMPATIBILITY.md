@@ -2574,3 +2574,14 @@ Zielnamen unterscheiden sich nicht durch führende Nullen. On Error GoTo 0
 und Resume 0 behalten ihre Sonderbedeutung. Handler-/GoSub-/Resume-Labelziele
 müssen weiterhin außerhalb von Blöcken liegen; Erl-/Debugger-Gleichheit bleibt
 offen. Die feste Katalogzahl bleibt 456.
+
+
+Unter F043 binden native Aufrufe Arrayelemente benannter Wurzeln als echte
+ByRef-Adressen: Indexauswertung einmalig, typisierte sofortige Schreibwirkung,
+gleiche Elementaliase, Weiterleitung und benannte Argumente. ByVal behält den
+vor späteren Argumenten ausgewerteten Wert; alte Argumentkopien überschreiben
+keine lebenden Quellen. Aktive Bindungen sperren Quellersetzung/ReDim/Erase.
+Native Alias-Frames veröffentlichen Änderungen und lösen veraltete Objekt-
+Snapshots auf. Compound-/ParamArray-Adressen und verschachtelte Arraywurzeln
+über bestehende Zellaliase bleiben mit 3251 gesperrt. Vollständige COM-/Klassen-/
+ByRef-Fehlergleichheit bleibt offen. Details: VARIANT_ARRAY_RUNTIME.md.
