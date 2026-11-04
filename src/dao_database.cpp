@@ -7,6 +7,7 @@
 #include "sqlite_execution.hpp"
 #include <QSqlError>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QSqlQuery>
 #include <QSqlRecord>
@@ -34,6 +35,16 @@ VbaValue longCount(qlonglong value) {
 VbaValue integerCount(qlonglong value) {
     if(value<std::numeric_limits<std::int16_t>::min() || value>std::numeric_limits<std::int16_t>::max()) throw VbaRuntimeError(6,"DAO count exceeds Integer range");
     return VbaValue::integer(static_cast<std::int16_t>(value));
+}
+int provenDaoFieldType(const QString& declaration) {
+    const auto type=declaration.toUpper();
+    return type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : type=="CURRENCY_REAL" ? 5 : (type=="DATE" || type=="DATETIME") ? 8 : type=="BLOB" ? 11 : 0;
+}
+VbaValue fixedDaoFieldSize(int type) {
+    const int size=(type==1 || type==2) ? 1 : type==3 ? 2 : (type==4 || type==6) ? 4
+        : (type==5 || type==7 || type==8) ? 8 : (type==11 || type==12) ? 0 : type==15 ? 16 : -1;
+    if(size<0) throw VbaRuntimeError(3251,"DAO field size is not proven for this type");
+    return VbaValue::longInteger(size);
 }
 void require(bool valid, const char* message) { if (!valid) throw std::runtime_error(message); }
 void exec(QSqlQuery& query, const QString& sql) {
@@ -701,10 +712,14 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
         if(!args.empty()) throw VbaRuntimeError(450,"Field.OrdinalPosition requires no arguments");
         return owner_->fieldOrdinal(name_);
     }
+    if(lower(name)=="size") {
+        if(!args.empty()) throw VbaRuntimeError(450,"Field.Size requires no arguments");
+        return fixedDaoFieldSize(provenDaoFieldType(owner_->fieldType(name_)));
+    }
     if(lower(name)=="type") {
         if(!args.empty()) throw VbaRuntimeError(450,"Field.Type requires no arguments");
         const auto type=owner_->fieldType(name_).toUpper();
-        const int code=type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : type=="CURRENCY_REAL" ? 5 : (type=="DATE" || type=="DATETIME") ? 8 : type=="BLOB" ? 11 : 0;
+        const int code=provenDaoFieldType(type);
         if(!code) throw VbaRuntimeError(3251,"Field.Type is not available for this source type");
         return VbaValue::integer(static_cast<std::int16_t>(code));
     }
@@ -714,6 +729,7 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
     throw std::runtime_error("DAO: Unknown Field member");
 }
 void Field::assign(std::string_view name, const VbaValue& value) {
+    if(lower(name)=="size") { (void)owner_->fieldType(name_); throw VbaRuntimeError(383,"Field.Size is read-only"); }
     if(lower(name)=="fieldsize") { (void)owner_->fieldSize(name_); throw VbaRuntimeError(383,"FieldSize is read-only"); }
     if(lower(name)=="ordinalposition") { (void)owner_->fieldOrdinal(name_); throw VbaRuntimeError(383,"Recordset Field.OrdinalPosition is read-only"); }
     if(lower(name)=="type") { (void)owner_->fieldType(name_); throw VbaRuntimeError(383,"Field.Type is read-only"); }
@@ -1030,7 +1046,7 @@ private:
     QMap<QString,std::weak_ptr<QueryDefinition>> objects_;
 };
 
-struct TableSchemaColumn { QString name,type; };
+struct TableSchemaColumn { QString name,type; int sourceType{}; };
 using TableSchemaReader=std::function<QVector<TableSchemaColumn>()>;
 class TableSchemaField final : public VbaObject {
 public:
@@ -1048,11 +1064,11 @@ public:
         const auto key=lower(name);
         if(key=="name") return VbaValue::string(columns[position].name.toStdString());
         if(key=="ordinalposition") return integerCount(position);
-        if(key=="type") {
-            const auto type=columns[position].type.toUpper();
-            const int code=type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : type=="CURRENCY_REAL" ? 5 : (type=="DATE" || type=="DATETIME") ? 8 : type=="BLOB" ? 11 : 0;
-            if(!code) throw VbaRuntimeError(3251,"DAO schema field type is not proven");
-            return VbaValue::integer(static_cast<std::int16_t>(code));
+        if(key=="type" || key=="size") {
+            const auto& column=columns[position];
+            const int code=column.sourceType ? column.sourceType : provenDaoFieldType(column.type);
+            if(code<=0) throw VbaRuntimeError(3251,"DAO schema field type is not proven");
+            return key=="size" ? fixedDaoFieldSize(code) : VbaValue::integer(static_cast<std::int16_t>(code));
         }
         throw VbaRuntimeError(3251,"DAO schema field property is unsupported");
     }
@@ -1147,6 +1163,33 @@ public:
                     }
                     if(query.lastError().isValid()) queryFailure(query);
                     if(columns.isEmpty()) throw VbaRuntimeError(3420,"DAO main-schema table unavailable");
+                    query.finish();
+                    if(!query.exec("SELECT 1 FROM main.sqlite_schema WHERE type='table' AND name='_la_table_schema' COLLATE NOCASE")) queryFailure(query);
+                    const bool metadata=query.next(); query.finish();
+                    if(metadata) {
+                        query.prepare("SELECT definition FROM main._la_table_schema WHERE table_name=? COLLATE NOCASE"); query.addBindValue(self->name_);
+                        if(!query.exec()) queryFailure(query);
+                        if(query.next()) {
+                            const auto document=QJsonDocument::fromJson(query.value(0).toByteArray());
+                            if(!document.isArray()) throw VbaRuntimeError(3251,"DAO source schema metadata invalid");
+                            if(query.next()) throw VbaRuntimeError(5,"DAO source schema metadata ambiguous");
+                            QSet<QString> seen;
+                            for(const auto& entry:document.array()) {
+                                const auto object=entry.toObject();
+                                if(!object.value("name").isString() || !object.value("source_type").isString()) throw VbaRuntimeError(3251,"DAO source field metadata invalid");
+                                const auto name=object.value("name").toString().toCaseFolded();
+                                if(seen.contains(name)) throw VbaRuntimeError(5,"DAO source field metadata ambiguous"); seen.insert(name);
+                                const auto source=object.value("source_type").toString().toUpper();
+                                const int code=(source=="BOOLEAN" || source=="BIT") ? 1 : source=="TINYINT" ? 2 : source=="SMALLINT" ? 3 : source=="INT" ? 4
+                                    : source=="CURRENCY" ? 5 : source=="SINGLE" ? 6 : source=="DOUBLE" ? 7 : (source=="DATE" || source=="DATETIME") ? 8
+                                    : source=="VARCHAR" ? 10 : source=="BLOB" ? 11 : source=="MEMO" ? 12 : source=="GUID" ? 15 : -1;
+                                bool found=false;
+                                for(auto& column:columns) if(column.name.toCaseFolded()==name) { column.sourceType=code; found=true; break; }
+                                if(!found) throw VbaRuntimeError(3251,"DAO source schema field unavailable");
+                            }
+                        }
+                        if(query.lastError().isValid()) queryFailure(query);
+                    }
                     return columns;
                 });
                 fields_=fields; fieldsVersion_=version; fieldsRollback_=rollback;

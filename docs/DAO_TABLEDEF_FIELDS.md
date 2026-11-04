@@ -6,8 +6,8 @@ For Each expose the actual visible PRAGMA table_info columns without reading
 user rows. Held collection/item instances reuse live native objects. Explicit
 DAO.Fields/DAO.Field bindings and TypeOf use real native interface identities.
 
-Fields expose Name and OrdinalPosition. Type uses the same proven integer,
-Currency, Date and BLOB mappings as the existing Recordset.Field adapter; unknown
+Fields expose Name and OrdinalPosition. Type uses proven integer, Currency, Date and BLOB declarations and now also
+explicit source metadata from main._la_table_schema, as described below. Unknown
 source types explicitly raise3251. TableDef field Value and other unimplemented
 properties are3251; schema writes383. This is no full DAO.Field/property/size/
 constraint/Append/Delete contract. Existing immutable import metadata are read,
@@ -33,3 +33,33 @@ Validation: focused DAO/layout2/2 (11.08 s) before the final shadow-view guard;
 final full desktop48/48 (84.55 s) including that guard, package/build ID/SQLite
 and all four original fixture hashes passed. Last fresh headless core1/1 (1.66 s)
 is unchanged by this DAO-only change. Catalog456/384/72; F121 remains open.
+
+## Source type declarations and fixed Size
+
+A checked, unique main-schema source metadata array now classifies unambiguous
+BOOLEAN/BIT, TINYINT/SMALLINT/INT, CURRENCY, SINGLE/DOUBLE, DATE/DATETIME,
+VARCHAR, BLOB, MEMO and GUID declarations into their DAO enum values. Unknown
+or ambiguous source kinds (including undifferentiated TEXT/FLOAT) remain3251;
+no source distinction is inferred from row values. Invalid/duplicate/foreign
+field metadata refuses explicitly. These are read-only declaration identities,
+not proof of full underlying Jet storage/coercion or original-format round trips.
+The existing Recordset.Field.Type subset remains narrower where no such source
+identity is carried by its projection.
+
+Field.Size returns a Long for proven fixed types: Byte/Boolean1, Integer2,
+Long/Single4, Currency/Double/Date8, GUID16, and LongBinary/Memo0. The last two
+are their defined metadata sizes, not the length of a record's data. Text maximum
+length is not preserved by the current import catalog and therefore remains3251.
+Recordset.Field.Size shares the same fixed-size helper for its proven native
+field types, including BLOB0 even with an empty recordset. Writes raise383.
+Existing FieldSize remains the current stored non-NULL binary observation length.
+
+The existing DAO target checks actual source metadata for Text/Double/Memo/
+Boolean and the original native fields, Long size identity, BLOB metadata size0,
+unknown text capacity refusal and size reads from an actual empty recordset.
+Focused validation1/1 (0.59 s), package/build ID/SQLite/four fixture hashes passed;
+latest full baseline immediately before this extension48/48 (84.55 s), not rerun.
+Last fresh GUI-free core1/1 (1.66 s) is unchanged. Catalog456/384/72, F121 open.
+Reference: [DAO Field.Size](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-size-property-dao),
+[DAO Field.Type](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-type-property-dao).
+No Windows Access2003 execution oracle is claimed.

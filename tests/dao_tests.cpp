@@ -7,6 +7,7 @@
 #include <QCoreApplication>
 #include <QSqlQuery>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
@@ -37,6 +38,12 @@ void testDaoTransactions();
 void testTableDefSchemaFields() {
     auto db=QSqlDatabase::addDatabase("QSQLITE","tabledef-schema-fields"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery sql(db); assert(sql.exec("CREATE TABLE schema_rows(id INTEGER4,amount CURRENCY_REAL,payload BLOB)"));
+    assert(sql.exec("CREATE TABLE source_rows(label TEXT,amount REAL,memo TEXT,enabled INTEGER)"));
+    assert(sql.exec("CREATE TABLE _la_table_schema(table_name TEXT PRIMARY KEY,definition TEXT NOT NULL)"));
+    const QJsonArray sourceFields{
+        QJsonObject{{"name","label"},{"source_type","VARCHAR"}},QJsonObject{{"name","amount"},{"source_type","DOUBLE"}},
+        QJsonObject{{"name","memo"},{"source_type","MEMO"}},QJsonObject{{"name","enabled"},{"source_type","BOOLEAN"}}};
+    sql.prepare("INSERT INTO _la_table_schema VALUES('source_rows',?)"); sql.addBindValue(QJsonDocument(sourceFields).toJson(QJsonDocument::Compact)); assert(sql.exec()); sql.finish();
     Host host(db);
     const auto result=linaccess::executeVbaProcedure(R"VBA(Sub InspectSchema()
 Dim table As DAO.TableDef, fields As DAO.Fields, field As DAO.Field, count As Long, positions As Long
@@ -47,6 +54,9 @@ If fields.Count<>3 Then Err.Raise 5
 Set field=fields.Item(Index:="amount")
 If Not TypeOf field Is DAO.Field Then Err.Raise 5
 If field.Type<>5 Or field.OrdinalPosition<>1 Then Err.Raise 5
+If field.Size<>8 Or VarType(field.Size)<>vbLong Then Err.Raise 5
+If table.Fields("payload").Size<>0 Then Err.Raise 5
+If table.Fields("id").Size<>4 Then Err.Raise 5
 If table.Fields(0).Name<>"id" Then Err.Raise 5
 For Each field In fields
 count=count+1
@@ -58,6 +68,15 @@ Me!SchemaFields="checked"
 End Sub
 )VBA","InspectSchema",host);
     assert(result.status==linaccess::VbaExecutionStatus::Completed && host.fields["SchemaFields"]=="checked");
+    const auto origins=host.currentDatabase()->member("TableDefs",{linaccess::VbaValue::string("source_rows")}).object->member("Fields",{}).object;
+    const int expectedTypes[]{10,7,12,1};
+    for(int i=0;i<4;++i) assert(origins->member("Item",{linaccess::VbaValue::longInteger(i)}).object->member("Type",{}).number==expectedTypes[i]);
+    assert(origins->member("Item",{linaccess::VbaValue::longInteger(1)}).object->member("Size",{}).number==8);
+    assert(origins->member("Item",{linaccess::VbaValue::longInteger(2)}).object->member("Size",{}).number==0);
+    bool unknownSize=false; try { origins->member("Item",{linaccess::VbaValue::longInteger(0)}).object->member("Size",{}); } catch(const linaccess::VbaRuntimeError& error) { unknownSize=error.number==3251; } assert(unknownSize);
+    const auto emptyRows=host.currentDatabase()->member("OpenRecordset",{linaccess::VbaValue::string("schema_rows")}).object;
+    assert(emptyRows->member("Fields",{linaccess::VbaValue::string("payload")}).object->member("Size",{}).number==0);
+    assert(emptyRows->member("Fields",{linaccess::VbaValue::string("id")}).object->member("Size",{}).number==4); emptyRows->member("Close",{});
     auto table=host.currentDatabase()->member("TableDefs",{linaccess::VbaValue::string("schema_rows")}).object;
     auto fields=table->member("Fields",{}).object;
     auto field=fields->member("Item",{linaccess::VbaValue::string("id")}).object;
