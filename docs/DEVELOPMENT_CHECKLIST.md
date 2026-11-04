@@ -1087,3 +1087,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Tab/Backtab to adjacent existing datasheet rows, including delegate editor completion, use checked record Save/navigation and retain field destinations or pending drafts after SQL failure.
 
 - [x] Native Ctrl+Home/Ctrl+End use checked boundary record navigation and visible-field order, preserving pending edits for same-known-record field movement and retaining failed SQL drafts.
+
+- [x] Native loaded-page PageUp/PageDown pass actual viewport record distances through checked Save/navigation, retain failed SQL drafts/current rows and avoid SQL Save on zero-distance page movement.

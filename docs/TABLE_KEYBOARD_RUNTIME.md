@@ -141,3 +141,37 @@ insert/delete/oracle limits. Full desktop 48/48 (80.50 s), GUI-free build
 confirmed and core 1/1 (2.31 s), targeted GUI/SQL 1/1 (2.12 s), Debian payload/
 permissions/Build-ID/pinned SQLite and four original hashes pass. Scoped checklist
 382 checked / 72 open; no extra CTest target or complete Access parity claim.
+
+
+## Validated loaded-page Up/Down movement (2026-11-04)
+
+Unmodified PageUp/PageDown received by the native table view obtain a loaded
+viewport-based target from Qt and pass the actual record distance to the same
+checked previous/next dispatcher. Successful record changes Save pending input
+and retain the current column. Failed Save retains the current row/cache and
+restores its visibility. A zero-distance page action does not Save. A zero-step
+PageDown while the driver still reports fetchable data refuses 3251 rather than
+claiming a complete lazy-page implementation.
+
+Existing context, current-key, edit, unrelated-draft, insert/delete and fetch
+guards remain. Exact Access page geometry, all lazy boundaries, modified range
+selection, editor-consumed keys, filtered refresh and full focus/error precedence
+remain open. No complete Access PageUp/PageDown parity is claimed.
+
+The existing main-window case uses 60 actual SQL rows and verifies movement by
+more than one record, successful SQL Save, a real UNIQUE failure with unchanged
+SQL/current row/draft, Esc and retry, and a same-first-page draft that remains
+unsaved. No extra CTest target.
+
+
+## Validated loaded-page record navigation (2026-11-04)
+
+PageUp/PageDown pass actual loaded-viewport record distances to checked native
+Save/navigation. Existing 60-row GUI/SQL execution verifies a multi-record step,
+Save, UNIQUE failure retaining current row/cache/SQL, Esc/retry and a zero-step
+first-page draft without Save. TABLE_KEYBOARD_RUNTIME.md records lazy-page,
+context/editor/selection/geometry and Access oracle limits. Full desktop 48/48
+(78.15 s), GUI-free build confirmed and core 1/1 (1.94 s), targeted GUI/SQL
+1/1 (2.30 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original fixture hashes pass. Scoped checklist 383 checked / 72 open, no extra
+CTest target or complete Access 2003 parity claim.

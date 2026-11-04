@@ -43,7 +43,7 @@ public:
         });
     }
     void setRecordNavigationGuard(std::function<bool()> guard) { recordNavigationGuard_=std::move(guard); }
-    void setRecordNavigationHandler(std::function<bool(RecordMove)> handler) { recordNavigationHandler_=std::move(handler); }
+    void setRecordNavigationHandler(std::function<bool(RecordMove,int)> handler) { recordNavigationHandler_=std::move(handler); }
     bool openReplaceDialog() { return openFindDialog(true); }
     bool openFindDialog(bool replace=false) {
         QPointer<AccessTableView> self=this;
@@ -272,7 +272,7 @@ public:
             : currentIndex().row()==0);
         if(!sameRecord) {
             const auto navigate=recordNavigationHandler_;
-            if(!navigate(last ? RecordMove::Last : RecordMove::First) || !self || !typed) return false;
+            if(!navigate(last ? RecordMove::Last : RecordMove::First,1) || !self || !typed) return false;
         }
         if(model()!=typed || !currentIndex().isValid()) return false;
         auto* header=horizontalHeader(); int column=-1;
@@ -286,6 +286,26 @@ public:
         if(!self || !typed || model()!=typed) return false;
         scrollTo(currentIndex()); setFocus();
         return true;
+    }
+    bool moveByRecordPage(bool down) {
+        const QPointer<AccessTableView> self=this;
+        QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
+        if(!typed || !recordNavigationHandler_ || !finishEditing() || !self || !typed || !currentIndex().isValid()) return false;
+        const auto origin=currentIndex();
+        const auto candidate=QTableView::moveCursor(down ? MovePageDown : MovePageUp,Qt::NoModifier);
+        if(!self || !typed || model()!=typed) return false;
+        if(!candidate.isValid() || candidate.model()!=typed) return refuse(2105,"Keine verfügbare Datensatzseite.");
+        const int distance=down ? candidate.row()-origin.row() : origin.row()-candidate.row();
+        if(!distance) {
+            if(down && typed->canFetchMore()) return refuse(3251,"Seitenwechsel über den geladenen Bereich hinaus ist noch nicht implementiert.");
+            return true;
+        }
+        if(distance<0) return refuse(3251,"Die vorgeschlagene Seitenrichtung wird nicht unterstützt.");
+        const auto navigate=recordNavigationHandler_;
+        const bool moved=navigate(down ? RecordMove::Next : RecordMove::Previous,distance);
+        if(!self || !typed || model()!=typed) return false;
+        if(currentIndex().isValid()) scrollTo(currentIndex());
+        return moved;
     }
     bool copySelection() {
         auto* typed=qobject_cast<AccessTableModel*>(model());
@@ -451,7 +471,7 @@ protected:
         if(!typed) return candidate;
         movingRecord_=true; const auto finished=qScopeGuard([self] { if(self) self->movingRecord_=false; });
         const auto navigate=recordNavigationHandler_;
-        const bool moved=navigate(step<0 ? RecordMove::Previous : RecordMove::Next);
+        const bool moved=navigate(step<0 ? RecordMove::Previous : RecordMove::Next,1);
         if(!self || !typed || model()!=typed) return {};
         if(moved && currentIndex().isValid() && column>=0 && column<typed->columnCount())
             return typed->index(currentIndex().row(),column);
@@ -470,8 +490,11 @@ protected:
             const int row=currentIndex().row(); const bool up=event->key()==Qt::Key_Up;
             if(up ? row>0 : row+1<model()->rowCount() || model()->canFetchMore({})) {
                 const auto navigate=recordNavigationHandler_;
-                (void)navigate(up ? RecordMove::Previous : RecordMove::Next); event->accept(); return;
+                (void)navigate(up ? RecordMove::Previous : RecordMove::Next,1); event->accept(); return;
             }
+        }
+        if((event->key()==Qt::Key_PageUp || event->key()==Qt::Key_PageDown) && selectionModifiers==Qt::NoModifier && recordNavigationHandler_) {
+            (void)moveByRecordPage(event->key()==Qt::Key_PageDown); event->accept(); return;
         }
         if((event->key()==Qt::Key_Home || event->key()==Qt::Key_End) && selectionModifiers==Qt::ControlModifier && recordNavigationHandler_) {
             (void)moveToRecordBoundary(event->key()==Qt::Key_End); event->accept(); return;
@@ -567,7 +590,7 @@ private:
         return nullptr;
     }
     std::function<bool()> recordNavigationGuard_;
-    std::function<bool(RecordMove)> recordNavigationHandler_;
+    std::function<bool(RecordMove,int)> recordNavigationHandler_;
     QPointer<QDialog> findDialog_,replaceDialog_;
     NativeTableFindArguments findArguments_;
     QString findMessage_;

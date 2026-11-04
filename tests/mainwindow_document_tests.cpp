@@ -211,6 +211,34 @@ void exerciseRecordEscape(MainWindow& window,QSqlDatabase db) {
     QTest::keyClick(view,Qt::Key_Escape); assert(!model->isDirty());
     assert(window.closeTableDocument(0,"command_record_undo",2).value("error").toInt()==0); dispose();
 }
+void exercisePageNavigation(MainWindow& window,QSqlDatabase db) {
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE command_page_navigation(id INTEGER PRIMARY KEY,value TEXT UNIQUE)"));
+    for(int row=1;row<=60;++row) {
+        sql.prepare("INSERT INTO command_page_navigation VALUES(?,?)"); sql.addBindValue(row); sql.addBindValue(QString("page-row-%1").arg(row)); assert(sql.exec());
+    }
+    assert(window.openTableDocument("command_page_navigation",0,1)==0);
+    auto* tabs=window.findChild<QTabWidget*>(); assert(tabs && tabs->currentWidget());
+    linaccess::AccessTableView* view=nullptr;
+    for(auto* candidate:tabs->currentWidget()->findChildren<QTableView*>()) if(auto* typed=dynamic_cast<linaccess::AccessTableView*>(candidate)) view=typed;
+    assert(view); auto* model=qobject_cast<linaccess::AccessTableModel*>(view->model()); assert(model);
+    window.resize(1100,700); QApplication::setActiveWindow(&window); QApplication::processEvents();
+    view->sortByColumn(0,Qt::AscendingOrder); view->setCurrentIndex(model->index(0,1)); view->setFocus();
+    assert(model->setData(model->index(0,1),"saved-by-page-down")); QTest::keyClick(view,Qt::Key_PageDown);
+    const int destination=view->currentIndex().row(); assert(destination>1 && view->currentIndex().column()==1 && !model->isDirty());
+    assert(sql.exec("SELECT value FROM command_page_navigation WHERE id=1") && sql.next() && sql.value(0).toString()=="saved-by-page-down"); sql.finish();
+    const int destinationId=model->index(destination,0).data().toInt(); const auto original=model->index(destination,1).data().toString();
+    assert(model->setData(model->index(destination,1),"saved-by-page-down")); QTest::keyClick(view,Qt::Key_PageUp);
+    assert(view->currentIndex().row()==destination && model->isDirty() && model->lastError().nativeErrorCode()=="3146");
+    sql.prepare("SELECT value FROM command_page_navigation WHERE id=?"); sql.addBindValue(destinationId);
+    assert(sql.exec() && sql.next() && sql.value(0).toString()==original); sql.finish();
+    QTest::keyClick(view,Qt::Key_Escape); QTest::keyClick(view,Qt::Key_PageUp);
+    assert(!model->isDirty() && view->currentIndex().row()<destination && view->currentIndex().column()==1);
+    view->setCurrentIndex(model->index(0,1)); assert(model->setData(model->index(0,1),"same-page-draft")); QTest::keyClick(view,Qt::Key_PageUp);
+    assert(view->currentIndex().row()==0 && model->isDirty());
+    assert(sql.exec("SELECT value FROM command_page_navigation WHERE id=1") && sql.next() && sql.value(0).toString()=="saved-by-page-down"); sql.finish();
+    QTest::keyClick(view,Qt::Key_Escape); assert(!model->isDirty());
+    assert(window.closeTableDocument(0,"command_page_navigation",2).value("error").toInt()==0); dispose();
+}
 void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
     auto* explorer=window.findChild<QTreeWidget*>("database-explorer"); assert(explorer); QTreeWidgetItem* selected=nullptr;
     for(QTreeWidgetItemIterator item(explorer);*item;++item) if((*item)->data(0,Qt::UserRole).toString()=="table" && (*item)->text(0)=="shortcut_records") { selected=*item; break; }
@@ -1770,6 +1798,7 @@ int main(int argc,char** argv) {
     exerciseTableSave(window,db);
     exerciseTableReplace(window,db);
     exerciseRecordEscape(window,db);
+    exercisePageNavigation(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }
