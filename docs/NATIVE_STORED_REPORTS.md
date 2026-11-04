@@ -11,7 +11,7 @@ records, rejects action/make-table sources, empty/ambiguous columns and NUL SQL,
 and generates an automatic fixed-band layout for 1–32 columns. Wider layouts can
 exceed the selected printer page and are refused by the renderer rather than
 clipped. This is not a drag/drop Access report designer or complete field layout,
-grouping, CanGrow, subreport or print-event implementation.
+grouping, full CanGrow, subreport or print-event implementation.
 
 The original multiline SQL is passed separately into the native layout model;
 it is not flattened into SaveAsText string lines. The stored SQL and VBA remain
@@ -40,3 +40,8 @@ executes TOP 2 over three SQL rows, checks code/typed controls/state/PDF, opens 
 normal SELECT report with WhereCondition through actual VBA, closes its caller,
 then edits/previews the report with four balanced Open/Close effects. No new
 CTest target or work-catalog ID was added.
+
+
+The design now persists a CanGrow option for generated text fields. Its native
+flow remains bounded to one actually growing field per detail inside a page;
+see [CanGrow](REPORT_CANGROW.md). This does not add a complete visual property grid.

@@ -124,6 +124,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
     QHash<QString,qint32> templateForeColors;
     QHash<QString,qint32> templateBackColors;
     QHash<QString,int> templateBackStyles;
+    QHash<QString,bool> templateCanGrow;
     QHash<QString,int> templateMultiSelect;
     QHash<QString,bool> templateColumnHeads;
     QHash<QString,int> templateListRows;
@@ -164,6 +165,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 if (templateForeColors.contains(type)) item.foreColor=templateForeColors.value(type);
                 if (templateBackColors.contains(type)) item.backColor=templateBackColors.value(type);
                 item.backStyle=templateBackStyles.value(type,type=="OptionGroup" ? 0 : 1);
+                item.canGrow=templateCanGrow.value(type,false);
                 for (auto it=stack.crbegin();it!=stack.crend();++it)
                     if (it->type=="OptionGroup" && it->control>=0) { item.optionGroupIndex=it->control; break; }
                 if (type=="Label")
@@ -185,8 +187,10 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
         const auto value = propertyValue(assignment.captured(2));
         const auto current = stack.back();
         if (form.kind==AccessDocumentKind::Report) {
-            if (((key=="CanGrow" || key=="CanShrink" || key=="RepeatSection"
+            if (((key=="CanShrink" || key=="RepeatSection"
                   || key=="HideDuplicates" || key=="Vertical") && accessBoolean(value,false))
+                || (key=="CanGrow" && accessBoolean(value,false) && current.type!="Section"
+                    && !(current.type=="TextBox" && (current.controlTemplate || current.control>=0)))
                 || ((key=="ForceNewPage" || key=="RunningSum") && value!="0")
                 || ((key=="OnFormat" || key=="OnPrint" || key=="OnPage") && !value.isEmpty())
                 || (key=="Columns" && value!="1"))
@@ -202,6 +206,12 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             continue;
         }
         const auto integer = [&] { bool ok = false; const int result = value.toInt(&ok); return ok ? result : 0; };
+        if(key=="CanGrow" && (current.controlTemplate || current.control>=0)) {
+            const bool enabled=accessBoolean(value,false);
+            if(current.controlTemplate) templateCanGrow[current.type]=enabled;
+            else form.controls[current.control].canGrow=enabled;
+            continue;
+        }
         if(key=="Cancel" && (current.controlTemplate || current.control>=0)) {
             const auto setting=accessBoolean(value,false);
             if(current.controlTemplate) templateCancelButtons[current.type]=setting;
@@ -340,6 +350,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 if (!valid || height<0 || height>std::numeric_limits<int>::max())
                     throw std::runtime_error("Invalid imported section height");
                 sections[current.type]=static_cast<int>(height);
+            } else if (key=="CanGrow") {
+                form.sectionCanGrow.insert(current.type,accessBoolean(value,false));
             } else if (key=="BackColor") {
                 bool valid=false; const auto color=value.toLongLong(&valid);
                 if (!valid || color<std::numeric_limits<qint32>::min() || color>std::numeric_limits<qint32>::max())

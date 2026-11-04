@@ -213,9 +213,14 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     if (!canvas || layout_.width<=0 || layout_.height<=0
         || layout_.width/15.0>canvas->width() || layout_.height/15.0>canvas->height()) return false;
     QMap<QString,QStringList> calculated;
+    QStringList growers;
     for (const auto& control:layout_.controls) {
         if (control.type!="Label" && control.type!="TextBox" && control.type!="Rectangle"
             && control.type!="Line") return false;
+        if (control.canGrow) {
+            if(control.type!="TextBox" || control.section!="Section" || control.controlSource.trimmed().startsWith('=')) return false;
+            growers.append(control.name.toCaseFolded());
+        }
         if (control.controlSource.trimmed().startsWith('=')) {
             calculated[control.section].append(control.name);
         } else if (!control.controlSource.isEmpty()) {
@@ -246,12 +251,60 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         || (!recordRows_.isEmpty() && (detail<=0 || detail>pageHeight-header-footer))
         || height("FormHeader")>pageHeight-header-footer
         || height("FormFooter")>pageHeight-header-footer) return false;
-    struct Band { QString section; int y,record,page; QPicture commands; };
+    if (!growers.isEmpty() && layout_.sectionCanGrow.contains("Section") && !layout_.sectionCanGrow.value("Section")) return false;
+    struct SavedControl { QPointer<QWidget> widget; QRect geometry; bool hidden; };
+    QMap<QString,SavedControl> saved;
+    for (const auto& control:layout_.controls) {
+        auto* widget=controls_.value(control.name.toCaseFolded()).data();
+        saved.insert(control.name.toCaseFolded(),{widget,widget->geometry(),widget->isHidden()});
+    }
+    const auto resetControls=[&] {
+        for (const auto& state:saved) if(state.widget) {
+            state.widget->setGeometry(state.geometry); state.widget->setVisible(!state.hidden);
+        }
+    };
+    QScopedValueRollback<bool> caching(reportAggregateCaching_,true);
+    QScopedValueRollback<bool> loading(loading_,true);
+    reportAggregateValues_.clear();
+    const auto clearAggregates=qScopeGuard([&] { reportAggregateValues_.clear(); });
+    const int savedRecord=currentRecordIndex_,savedPage=reportPrintPage_,savedPages=reportPrintPages_;
+    const auto canvasSize=canvas->size();
+    const auto oldBand=canvas->property("la_print_band_rect"),oldColor=canvas->property("la_print_band_color");
+    const auto restore=qScopeGuard([&] {
+        resetControls(); canvas->setFixedSize(canvasSize);
+        canvas->setProperty("la_print_band_rect",oldBand); canvas->setProperty("la_print_band_color",oldColor);
+        currentRecordIndex_=savedRecord; reportPrintPage_=savedPage; reportPrintPages_=savedPages;
+        loadRecord();
+    });
+    QVector<int> detailHeights(recordRows_.size(),detail),deltas(recordRows_.size(),0);
+    QVector<QString> growingControls(recordRows_.size());
+    if (!growers.isEmpty()) {
+        reportPrintPage_=1; reportPrintPages_=1;
+        for (int row=0;row<recordRows_.size();++row) {
+            resetControls(); currentRecordIndex_=row+1; loadRecord();
+            for (const auto& name:growers) {
+                const auto state=saved.value(name); if(state.hidden) continue;
+                const int wanted=state.widget->sizeHint().height();
+                const int delta=qMax(0,wanted-state.geometry.height());
+                if (!delta) continue;
+                // One actually growing field per detail is a bounded first
+                // flow rule. Do not guess how multiple/overlapping fields flow.
+                if (!growingControls[row].isEmpty() || delta>pageHeight-header-footer-detail) return false;
+                for (const auto& other:layout_.controls) {
+                    const auto key=other.name.toCaseFolded(); const auto peer=saved.value(key);
+                    if(other.section=="Section" && key!=name && !peer.hidden && peer.geometry.intersects(state.geometry)) return false;
+                }
+                growingControls[row]=name; deltas[row]=delta; detailHeights[row]=detail+delta;
+            }
+        }
+    }
+    struct Band { QString section; int y,record,page,height; QPicture commands; };
     QVector<Band> bands;
     int pageNumber=1;
     int record=recordRows_.isEmpty() ? 0 : 1;
     const auto append=[&](const QString& section,int y,int row) {
-        if (height(section)) bands.append({section,y,row,pageNumber,{}});
+        const int size=section=="Section" && row>0 ? detailHeights[row-1] : height(section);
+        if (size) bands.append({section,y,row,pageNumber,size,{}});
     };
     append("FormHeader",0,record);
     append("PageHeader",height("FormHeader"),record);
@@ -261,40 +314,46 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         ++pageNumber; record=row; append("PageHeader",0,record); y=header;
     };
     for (int row=0;row<recordRows_.size();++row) {
-        if (y+detail>pageHeight-footer) { finishPage(); startPage(row+1); }
-        record=row+1; append("Section",y,record); y+=detail;
+        const int size=detailHeights[row];
+        if (y+size>pageHeight-footer) { finishPage(); startPage(row+1); }
+        record=row+1; append("Section",y,record); y+=size;
     }
     if (y+height("FormFooter")>pageHeight-footer) { finishPage(); startPage(record); }
     append("FormFooter",y,record); finishPage();
-    if (pageNumber>32767) return false; // Report.Pages is an Access Integer.
-
-    QScopedValueRollback<bool> caching(reportAggregateCaching_,true);
-    reportAggregateValues_.clear();
-    const auto clearAggregates=qScopeGuard([&] { reportAggregateValues_.clear(); });
-    const int savedRecord=currentRecordIndex_,savedPage=reportPrintPage_,savedPages=reportPrintPages_;
-    const auto restore=qScopeGuard([&] {
-        currentRecordIndex_=savedRecord; reportPrintPage_=savedPage; reportPrintPages_=savedPages;
-        loadRecord();
-    });
+    if (pageNumber>32767) return false;
     reportPrintPages_=pageNumber;
-    int loadedRecord=-1,loadedPage=-1;
-    // Freeze only the sections that will actually print, before opening the
-    // output device. Errors in a footer evaluated on an earlier detail row
-    // must not reject a valid final footer.
     for (auto& band:bands) {
-        if (loadedRecord!=band.record || loadedPage!=band.page) {
-            currentRecordIndex_=band.record; reportPrintPage_=band.page; loadRecord();
-            loadedRecord=band.record; loadedPage=band.page;
+        resetControls();
+        if(band.section=="Section" && band.record>0 && deltas[band.record-1]) {
+            const auto name=growingControls[band.record-1]; const auto grown=saved.value(name);
+            const int delta=deltas[band.record-1]; auto rectangle=grown.geometry; rectangle.setHeight(rectangle.height()+delta);
+            grown.widget->setGeometry(rectangle);
+            for (const auto& control:layout_.controls) {
+                const auto key=control.name.toCaseFolded(); const auto state=saved.value(key);
+                if(control.section=="Section" && key!=name && state.geometry.top()>grown.geometry.bottom())
+                    state.widget->setGeometry(state.geometry.translated(0,delta));
+            }
         }
+        currentRecordIndex_=band.record; reportPrintPage_=band.page; loadRecord();
         for (const auto& name:calculated.value(band.section)) {
             const auto* widget=controls_.value(name.toCaseFolded()).data();
             if (!widget || widget->property("la_calculation_error").toInt()!=0) return false;
         }
-        QPainter recording(&band.commands);
+        for (const auto& control:layout_.controls) {
+            const auto state=saved.value(control.name.toCaseFolded());
+            state.widget->setVisible(!state.hidden && control.section==band.section);
+        }
         const int offset=qRound(layout_.sectionOffsets.value(band.section)/15.0);
-        canvas->render(&recording,QPoint(),QRegion(0,offset,canvas->width(),height(band.section)));
+        if(offset+band.height>3500) return false;
+        canvas->setFixedHeight(qMax(canvasSize.height(),offset+band.height));
+        canvas->setProperty("la_print_band_rect",QRect(0,offset,qRound(layout_.width/15.0),band.height));
+        canvas->setProperty("la_print_band_color",layout_.sectionBackColors.contains(band.section)
+            ? resolveOleColor(layout_.sectionBackColors.value(band.section)) : QColor(Qt::white));
+        QPainter recording(&band.commands);
+        canvas->render(&recording,QPoint(),QRegion(0,offset,canvas->width(),band.height));
         if (!recording.end()) return false;
     }
+
     QPainter painter;
     if (!painter.begin(&printer)) return false;
     painter.scale(scaleX,scaleY);
@@ -305,7 +364,7 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
             ++outputPage;
         }
         painter.save(); painter.translate(0,band.y);
-        painter.setClipRect(QRect(0,0,canvas->width(),height(band.section)));
+        painter.setClipRect(QRect(0,0,canvas->width(),band.height));
         // QPicture playback also converts device DPI; the physical TWIP scale
         // is already active and must not be applied a second time.
         painter.scale(double(band.commands.logicalDpiX())/printer.logicalDpiX(),

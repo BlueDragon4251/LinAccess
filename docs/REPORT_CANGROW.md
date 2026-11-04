@@ -1,0 +1,40 @@
+# Bounded native CanGrow
+
+Imported TextBox CanGrow values and templates are retained. Section CanGrow
+metadata is retained too. The native getter returns the flag; assignment in a
+runtime view fails explicitly because the property is design-only there. Owned
+report design offers **Text vertikal erweitern (CanGrow)** and saves its setting.
+
+The renderer measures the actual plain/masked text with the same Qt layout used
+for painting. For one actually growing direct-field/unbound textbox per detail
+record, it increases field height, shifts controls below it by the height delta,
+and increases the detail section across its width. Variable detail heights feed
+the existing page plan. Other sections are hidden only for their captured band;
+a scoped background override prevents later section colors leaking into a grown
+detail. Control geometry/visibility, canvas size/background, record/page state
+and aggregate cache are restored on success and failure.
+
+The subset refuses multiple simultaneously growing fields, overlapping controls,
+calculated-source growers, growing page/report headers/footers, contradictory
+explicit section settings and details too tall for one printable page. CanShrink,
+full multi-control flow, group/layout scheduling and long-control page splitting
+remain open. A read-only getter plus bounded flow is not full Access report or
+Windows font/geometry equivalence. No original CanGrow result oracle was run.
+
+Qt's normal single-line display string replaces paragraph characters. Unmasked
+normal report fields therefore use their original text; password/other input-mask
+fields keep the authoritative display string. The native raw value is unchanged.
+An earlier multiline probe happened to wrap where its paragraph break was; the
+long-flow probe exposed and corrected this normalization issue. Masked-output
+checks remain active.
+
+The existing report case uses real SQL multiline rows that occupy one page with
+fixed fields and two pages with growth. PDF extraction independently checks both
+final text markers and the calculated values below them. It checks restored
+geometry/value/canvas and refusal of an oversized detail without replacing an
+existing PDF. The existing mainwindow case persists the design setting and reads
+it through actual Report VBA. No new CTest target or catalog ID.
+
+Reference: [Microsoft TextBox.CanGrow](https://learn.microsoft.com/en-us/office/vba/api/Access.TextBox.CanGrow)
+documents vertical growth, movement of lower controls, full-width section growth,
+overlap limits and design-view-only assignment.

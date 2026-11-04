@@ -238,6 +238,12 @@ public:
         }
         if (key == "name") return linaccess::VbaValue::string(bytes(name_));
         if (key == "eventprocprefix") return linaccess::VbaValue::string(bytes(preview.controlEventPrefix(name_)));
+        if (key=="cangrow") {
+            for (const auto& control:preview.layout_.controls)
+                if(control.name.compare(name_,Qt::CaseInsensitive)==0 && control.type=="TextBox")
+                    return linaccess::VbaValue::logical(control.canGrow);
+            throw linaccess::VbaRuntimeError(438,"CanGrow requires a textbox");
+        }
         if (key == "tag") return linaccess::VbaValue::string(bytes(widget->property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(caption()));
         if (key=="backcolor" || key=="backstyle") {
@@ -524,6 +530,7 @@ public:
                 return;
             }
         }
+        if (key=="cangrow") throw linaccess::VbaRuntimeError(3251,"CanGrow can only be changed in design view");
         if (key=="tag") {
             if (value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Tag");
             control()->setProperty("la_access_tag",text(value.asText())); return;
