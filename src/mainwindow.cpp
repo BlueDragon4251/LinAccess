@@ -1965,15 +1965,20 @@ void MainWindow::editReport(const QString& existingName) {
     auto* canGrow=new QCheckBox("Text vertikal erweitern (CanGrow)",&dialog); canGrow->setObjectName("native-report-cangrow");
     canGrow->setChecked(old.value("can_grow").toBool());
     canGrow->setToolTip("Ausgerichtete oder untereinanderliegende Textfelder mit begrenztem Seitenumbruch zwischen Textzeilen."); outer->addWidget(canGrow);
+    auto* pageBreak=new QComboBox(&dialog); pageBreak->setObjectName("native-report-page-break");
+    pageBreak->addItems({"Kein erzwungener Seitenwechsel","Vor jedem Detailbereich","Nach jedem Detailbereich","Vor und nach jedem Detailbereich"});
+    pageBreak->setCurrentIndex(qBound(0,old.value("detail_force_new_page").toInt(),3));
+    outer->addWidget(new QLabel("Seitenwechsel im Detailbereich",&dialog)); outer->addWidget(pageBreak);
     outer->addWidget(new QLabel("VBA-Ereignisse: Open, Load, NoData und Close. Druck-/Format-Ereignisse sind noch nicht unterstützt.",&dialog));
     auto* vba=new QPlainTextEdit(&dialog); vba->setObjectName("native-report-vba"); vba->setPlaceholderText("Private Sub Report_Load()\nEnd Sub"); vba->setPlainText(old.value("vba").toString()); outer->addWidget(vba,1);
     auto codeFont=QFontDatabase::systemFont(QFontDatabase::FixedFont); codeFont.setPointSize(10);
     sql->setFont(codeFont); vba->setFont(codeFont);
     auto* row=new QHBoxLayout; auto* preview=addButton(row,"Vorschau"); preview->setObjectName("native-report-preview");
     auto* pdf=addButton(row,"PDF exportieren"); auto* save=addButton(row,"Speichern"); save->setObjectName("native-report-save"); outer->addLayout(row);
-    const auto definition=[old,title,sql,vba,canGrow] {
+    const auto definition=[old,title,sql,vba,canGrow,pageBreak] {
         auto content=old; content.insert("title",title->text()); content.insert("sql",sql->toPlainText());
         content.insert("vba",vba->toPlainText()); content.insert("can_grow",canGrow->isChecked());
+        content.insert("detail_force_new_page",pageBreak->currentIndex());
         content.insert("language","vba_subset_experimental"); return content;
     };
     const auto packet=[this,name,definition] { return linaccess::nativeStoredReport(name->text().isEmpty() ? QString("Berichtsvorschau") : name->text(),definition(),db_); };
