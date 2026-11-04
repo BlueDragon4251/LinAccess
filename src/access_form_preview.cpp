@@ -2064,6 +2064,8 @@ void AccessFormPreview::loadRecords() {
         try {
             directTable_ = layout_.kind==linaccess::AccessDocumentKind::Form && db_.tables().contains(source,Qt::CaseInsensitive);
             if (!directTable_) {
+                if(linaccess::installAccessQueryViews(db_)<0)
+                    throw linaccess::VbaRuntimeError(3251,"Record source query views are busy");
                 linaccess::AccessQueryPlan plan;
                 if (db_.tables().contains(source,Qt::CaseInsensitive) || db_.tables(QSql::Views).contains(source,Qt::CaseInsensitive))
                     plan.sql = "SELECT * FROM " + sqlIdentifier(source);

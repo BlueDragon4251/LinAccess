@@ -1411,10 +1411,10 @@ int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
         driver->setProperty("la_query_revision",QString{});
     }
     QSqlQuery query(db);
-    if (!query.exec("SELECT name,source_bytes FROM _la_access_artifacts WHERE kind='query' ORDER BY id")) return 0;
     QMap<QString,QPair<QString,QString>> definitions;
     QCryptographicHash revision(QCryptographicHash::Sha256);
-    while (query.next()) {
+    const bool imported=query.exec("SELECT name,source_bytes FROM main._la_access_artifacts WHERE kind='query' ORDER BY id");
+    while (imported && query.next()) {
         const auto name = query.value(0).toString();
         const auto bytes = query.value(1).toByteArray();
         definitions.insert(name.toCaseFolded(),{name,decodeVbaSource(bytes)});
@@ -1423,6 +1423,25 @@ int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
         revision.addData(QByteArray::number(bytes.size()) + ':' + bytes);
     }
     query.finish();
+    QSet<QString> ownedNames,conflicts;
+    if(query.exec("SELECT name,definition FROM main._la_objects WHERE kind='query' ORDER BY name")) {
+        int rows=0;
+        while(query.next()) {
+            if(++rows>1000000) throw VbaRuntimeError(3251,"Owned query view catalog limit exceeded");
+            const auto name=query.value(0).toString(),folded=name.toCaseFolded();
+            const auto bytes=query.value(1).toByteArray(),encodedName=name.toUtf8();
+            revision.addData("owned:"+QByteArray::number(encodedName.size())+':'+encodedName);
+            revision.addData(QByteArray::number(bytes.size())+':'+bytes);
+            if(definitions.contains(folded) || ownedNames.contains(folded)) conflicts.insert(folded);
+            ownedNames.insert(folded);
+            const auto definition=QJsonDocument::fromJson(bytes);
+            definitions.insert(folded,{name,definition.object().value("sql").toString()});
+        }
+        if(query.lastError().isValid()) throw VbaRuntimeError(3146,"Owned query view catalog read failed");
+    }
+    query.finish();
+    // Ambiguous names receive no executable view; named lookup reports the conflict.
+    for(const auto& conflict:conflicts) definitions.remove(conflict);
     const auto key = db.databaseName() + ':' + QString::fromLatin1(revision.result().toHex());
     auto owned = driver->property("la_query_views").toStringList();
     auto internal = driver->property("la_query_internal_views").toStringList();

@@ -342,7 +342,10 @@ End Sub
         dialog->reject();
     });
     edit->trigger(); dispose();
-    const QString totalsSql="SELECT COUNT(*) AS total FROM native_designed_records";
+    const QString totalsSql="SELECT COUNT(*) AS total FROM [Owned Form ZBase]";
+    sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('query','Owned Form ZBase',?)");
+    sql.addBindValue(QString::fromUtf8(QJsonDocument(QJsonObject{{"sql","SELECT id FROM native_designed_records"}}).toJson(QJsonDocument::Compact)));
+    assert(sql.exec()); sql.finish();
     sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('query','Owned Form Totals',?)");
     sql.addBindValue(QString::fromUtf8(QJsonDocument(QJsonObject{{"sql",totalsSql}}).toJson(QJsonDocument::Compact)));
     assert(sql.exec()); sql.finish();
@@ -372,6 +375,12 @@ End Sub
     assert(sql.exec("INSERT INTO native_designed_records(first) VALUES('query change')")); sql.finish();
     (void)makePreviewFormObject(*queryForm)->member("Requery",{});
     assert(total->text().toInt()==beforeCount+1);
+    assert(makePreviewApplicationObject(*queryForm)->member("Eval",{linaccess::VbaValue::string(R"VBA(DLookup("id","Owned Form ZBase","id=1"))VBA")}).asNumber()==1);
+    sql.prepare("UPDATE main._la_objects SET definition=? WHERE kind='query' AND name='Owned Form ZBase'");
+    sql.addBindValue(QString::fromUtf8(QJsonDocument(QJsonObject{{"sql","SELECT id FROM native_designed_records WHERE id<0"}}).toJson(QJsonDocument::Compact)));
+    assert(sql.exec()); sql.finish();
+    (void)makePreviewFormObject(*queryForm)->member("Requery",{});
+    assert(total->text()=="0");
     assert(queryForm->close()); dispose();
     QTimer::singleShot(0,&window,[&] {
         auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);

@@ -5631,3 +5631,23 @@ Query-form milestone: full current desktop48/48 passes (88.67 s), Debian payload
 Build-ID/pinned SQLite and all four original fixture hashes pass. GUI-free core
 last passed1/1 (1.79 s); this change affects the Qt data/GUI layer, not that runtime.
 No added target or fixed-catalog ID.
+
+## Owned SELECT dependency views and live revision refresh (2026-11-04)
+
+The common query-view installer now includes owned main._la_objects definitions
+in its revision and ordinary/ranked dependency handling. Forward references use
+the existing resolver; parameter/action/unsupported SQL still do not become
+executable views. Ambiguous owned/imported names receive no view. Non-table
+form/report loads refresh the revision before reading, and a failed/busy refresh
+is an explicit source error. Designer field preparation also refuses a busy
+refresh instead of silently using old metadata.
+The existing actual UI query form now traverses two owned queries with reverse
+alphabetical dependency order. Application.Eval/DLookup reads the real base row;
+changing the base SQL while open and calling Requery updates the dependent count
+to zero. Desktop build and existing UI/DAO/model/layout/original-query5/5 pass
+(23.20 s). Full suite/package follow for shared view/record-source behavior.
+Fixed456/384/72; no new target/ID. Full Jet/parameters/original-order/result oracle
+remain open. Exact scope: NATIVE_QUERY_FORM_DESIGN.md.
+Owned dependency milestone: full current desktop48/48 passes (89.59 s), Debian
+payload/Build-ID/pinned SQLite and four original fixture hashes pass. GUI-free
+runtime unchanged, last core1/1 (1.79 s). No new target or fixed-catalog ID.
