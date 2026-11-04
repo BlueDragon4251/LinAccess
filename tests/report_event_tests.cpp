@@ -304,9 +304,11 @@ If Not TypeOf retainedSection Is Section Then Err.Raise 5
 If retainedSection.Height<>900 Then Err.Raise 5
 If retainedSection.Name<>"DetailFixture" Then Err.Raise 5
 retainedSection.ForceNewPage=3
+retainedSection.BackColor=255
 End Sub
 Sub ResetSections()
 retainedSection.ForceNewPage=0
+retainedSection.BackColor=65280
 End Sub
 )VBA";
         AccessFormPreview sectionReport("native sections",sectionSource,sectionCode,db);
@@ -318,10 +320,18 @@ End Sub
         assert(section==sectionForm->member("Section",{linaccess::VbaValue::string("detailfixture")}).object);
         assert(section->member("Parent",{}).object==sectionForm && section->member("ForceNewPage",{}).asNumber()==3);
         assert(sectionReport.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==4);
+        auto* sectionCanvas=sectionReport.findChild<QWidget*>("access-form-canvas");
+        const int sectionY=qRound(linaccess::parseAccessFormLayout(QString::fromUtf8(sectionSource)).sectionOffsets.value("Section")/15.0)+10;
+        assert(section->member("BackColor",{}).asNumber()==255 && sectionCanvas->grab().toImage().pixelColor(200,sectionY)==QColor(Qt::red));
         std::vector<linaccess::VbaValue> sectionArgs;
         assert(sectionReport.executeProcedure("ResetSections",sectionArgs).status==linaccess::VbaExecutionStatus::Completed);
         assert(section->member("ForceNewPage",{}).asNumber()==0);
         assert(sectionReport.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==1);
+        assert(section->member("BackColor",{}).asNumber()==65280 && sectionCanvas->grab().toImage().pixelColor(200,sectionY)==QColor(Qt::green));
+        bool invalidSectionColor=false;
+        try { section->assign("BackColor",linaccess::VbaValue::longInteger(-1)); }
+        catch(const linaccess::VbaRuntimeError& error) { invalidSectionColor=error.number==3251; }
+        assert(invalidSectionColor && section->member("BackColor",{}).asNumber()==65280);
         bool invalidSectionSetting=false;
         try { section->assign("ForceNewPage",linaccess::VbaValue::integer(4)); }
         catch(const linaccess::VbaRuntimeError& error) { invalidSectionSetting=error.number==5; }

@@ -5300,3 +5300,24 @@ Validation: final mainwindow/layout2/2 (12.41 s), full desktop48/48 under Window
 style (84.06 s), freshly rebuilt GUI-free core1/1 (1.76 s), Debian payload/Build-ID/
 pinned SQLite and four original hashes pass. No new CTest target or catalog ID;
 fixed 456/384/72 retained. Full F050/F085 remain open.
+
+
+## Live native Section.BackColor (2026-11-04)
+
+The weak native Section wrapper now reads/writes BackColor as an OLE Long.
+Supported encodings are validated before mutation; actual section painting and
+prepared print bands share the updated source value. Native canvas overrides
+paint the full content width and existing report pages refresh. Unset reads expose
+the actual native base RGB, not a guessed original system-color token. Full live
+palette/profile equivalence and other Section mutations remain open.
+
+The existing actual VBA Open/retained-procedure case now changes red to green,
+checks native canvas pixels and source values, and verifies unsupported encoding
+leaves the previous value intact. The PDF failure message also no longer claims
+all growing fields are unsupported. Validation: desktop build and final mainwindow/
+layout/original DAO3/3 (46.90 s). Core unchanged from preceding full48 (84.06 s)
+and fresh GUI-free core1 (1.76 s); no redundant full run for this color adapter.
+Fixed 456/384/72 retained; no new target or catalog ID.
+
+Section-color checkpoint: Debian payload/Build-ID/pinned SQLite and all four
+original fixture SHA-256 checks pass.

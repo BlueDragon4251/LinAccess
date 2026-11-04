@@ -738,6 +738,14 @@ public:
             if(!preview.layout_.sectionNames.contains(section_)) throw linaccess::VbaRuntimeError(3251,"Section name metadata unavailable");
             return linaccess::VbaValue::string(bytes(preview.layout_.sectionNames.value(section_)));
         }
+        if(key=="backcolor") {
+            if(preview.layout_.sectionBackColors.contains(section_))
+                return linaccess::VbaValue::longInteger(preview.layout_.sectionBackColors.value(section_));
+            const auto* canvas=preview.findChild<QWidget*>("access-form-canvas");
+            if(!canvas) throw linaccess::VbaRuntimeError(91,"Section canvas unavailable");
+            const auto color=canvas->palette().color(QPalette::Window);
+            return linaccess::VbaValue::longInteger(color.red() | (color.green()<<8) | (color.blue()<<16));
+        }
         if(key=="height") {
             const int height=preview.layout_.sectionHeights.value(section_);
             if(height>32767) throw linaccess::VbaRuntimeError(6,"Section Height Integer overflow");
@@ -757,20 +765,37 @@ public:
     }
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview=checked();
-        if(text(name).compare("ForceNewPage",Qt::CaseInsensitive)!=0)
-            throw linaccess::VbaRuntimeError(3251,"Section mutation unsupported");
-        requireDetail(preview);
+        const auto key=text(name).toCaseFolded();
+        if(key!="forcenewpage" && key!="backcolor") throw linaccess::VbaRuntimeError(3251,"Section mutation unsupported");
         if(preview.reportAggregateCaching_) throw linaccess::VbaRuntimeError(3251,"Section mutation during rendering unsupported");
         const auto scalar=linaccess::scalarVbaValue(value);
+        if(key=="backcolor") {
+            if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null BackColor");
+            const auto encoded=static_cast<qint32>(linaccess::sqlFieldValue(scalar,"INTEGER4").toLongLong());
+            const auto color=AccessFormPreview::resolveOleColor(encoded); // Validate before mutation.
+            auto* canvas=preview.findChild<QWidget*>("access-form-canvas");
+            if(!canvas) throw linaccess::VbaRuntimeError(91,"Section canvas unavailable");
+            const int top=qRound(preview.layout_.sectionOffsets.value(section_)/15.0);
+            const int bottom=qRound((preview.layout_.sectionOffsets.value(section_)+preview.layout_.sectionHeights.value(section_))/15.0);
+            auto overrides=canvas->property("la_section_runtime_backgrounds").toMap();
+            overrides.insert(section_,QVariantMap{{"rect",QRect(0,top,qRound(preview.layout_.width/15.0),bottom-top)},{"color",color}});
+            preview.layout_.sectionBackColors.insert(section_,encoded);
+            canvas->setProperty("la_section_runtime_backgrounds",overrides); canvas->update();
+            refresh(preview); return;
+        }
+        requireDetail(preview);
         if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null ForceNewPage");
         const int setting=linaccess::sqlFieldValue(scalar,"INTEGER1").toInt();
         if(setting>3) throw linaccess::VbaRuntimeError(5,"ForceNewPage setting out of range");
         if(preview.layout_.detailForceNewPage==setting) return;
         preview.layout_.detailForceNewPage=setting;
+        refresh(preview);
+    }
+private:
+    void refresh(AccessFormPreview& preview) {
         if(preview.reportPageView_) preview.reportPageView_->setProperty("la_report_pages_valid",false);
         preview.refreshReportPageView();
     }
-private:
     void requireDetail(const AccessFormPreview& preview) const {
         if(preview.layout_.kind!=linaccess::AccessDocumentKind::Report || section_!="Section")
             throw linaccess::VbaRuntimeError(3251,"ForceNewPage currently requires a report detail section");
