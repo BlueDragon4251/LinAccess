@@ -104,6 +104,8 @@ struct AccessFormLayout {
     bool dataEntry{};
     bool allowAdditions{true};
     int height{5000};
+    QMap<QString,int> sectionHeights;
+    QMap<QString,int> sectionOffsets;
     QVector<AccessVisualControl> controls;
     QMap<QString,QString> events;
 };

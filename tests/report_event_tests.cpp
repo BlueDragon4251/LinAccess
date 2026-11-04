@@ -83,6 +83,50 @@ End Sub
         query.finish(); return rows;
     };
     const auto clear = [&] { assert(query.exec("DELETE FROM events")); query.finish(); };
+    auto bandedSource=source;
+    bandedSource.replace("Begin Section\nHeight =1500",R"BANDS(Begin FormHeader
+Height =300
+End
+Begin PageHeader
+Height =600
+Begin TextBox
+Name ="PageTitle"
+Top =150
+End
+End
+Begin PageFooter
+Height =450
+Begin TextBox
+Name ="PageNumber"
+Top =150
+End
+End
+Begin FormFooter
+Height =300
+Begin TextBox
+Name ="ReportSummary"
+Top =150
+End
+End
+Begin Section
+Height =1500)BANDS");
+    const auto bandedLayout=linaccess::parseAccessFormLayout(QString::fromUtf8(bandedSource));
+    assert(bandedLayout.sectionHeights.value("PageHeader")==600);
+    assert(bandedLayout.sectionHeights.value("PageFooter")==450);
+    assert(bandedLayout.sectionOffsets.value("Section")==900);
+    assert(bandedLayout.sectionOffsets.value("FormFooter")==2400);
+    assert(bandedLayout.sectionOffsets.value("PageFooter")==2700 && bandedLayout.height==3150);
+    {
+        AccessFormPreview banded("banded report",bandedSource,{},db);
+        const auto field=[&](const char* name) {
+            auto* widget=banded.findChild<QLineEdit*>(QString("access-control-")+name);
+            assert(widget); return widget;
+        };
+        assert(field("Name")->text()=="first" && field("Name")->isReadOnly());
+        assert(field("PageTitle")->y()==30 && field("Name")->y()==60);
+        assert(field("ReportSummary")->y()==170 && field("PageNumber")->y()==190);
+        assert(banded.close());
+    }
     AccessFormPreview report("report",source,code,db);
     assert(!report.cancelledByOpen() && report.hasDataSource());
     assert(report.eventResult("OnOpen") && report.eventResult("OnOpen")->status==linaccess::VbaExecutionStatus::Completed);

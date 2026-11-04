@@ -25,6 +25,23 @@ and do not replace MDB/ZIP fixtures. The displayed canvas is scaled onto one pag
 The UI explicitly calls this the current layout. It does not run Access group
 formatting, multi-record pagination, subreports, aggregates or page events.
 
+## Imported section geometry
+
+The layout importer preserves section heights and offsets. Report layout previews
+stack FormHeader (report header), PageHeader, Section (detail), FormFooter (report
+footer), and PageFooter in that order. Page sections no longer overlap the detail
+because their heights were discarded. Forms keep their existing header/detail/
+footer arrangement. Negative heights and coordinate overflow are rejected.
+
+The existing report-event test checks the preserved heights, native Qt positions,
+and a detail textbox populated from a real SQL result. This fixes the displayed
+single-detail layout only. It does not implement repeated detail bands, page
+breaks, CanGrow, grouping, or Format/Print/Page event scheduling. The fixed work
+catalog remains 456 entries; the broader report tasks stay open.
+
+Report-footer placement follows the print-preview ordering described in
+[Microsoft's report guide](https://support.microsoft.com/en-gb/access/guide-to-designing-reports).
+
 ## Original source execution evidence
 
 Three hash-fixed original Kassa Report_Open procedures execute in full through

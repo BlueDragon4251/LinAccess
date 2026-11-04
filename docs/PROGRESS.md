@@ -4943,3 +4943,20 @@ Completion: full desktop 48/48 (88.44 s), freshly rebuilt GUI-free core 1/1
 original fixture hashes pass. A transient execution transport disconnect left
 the workspace and running checks intact; no source was edited during checks.
 Fixed 456 work entries and 48 CTest targets remain unchanged.
+
+
+## Report section offsets (2026-11-04)
+
+The layout importer now retains PageHeader/PageFooter heights, exposes section
+height/offset metadata, and positions report header, page header, detail, report
+footer and page footer without dropping the page bands. Form positioning retains
+its existing header/detail/footer order. Invalid heights and coordinate overflow
+are rejected. The existing report-event test checks native Qt positions and an
+actual SQL-bound detail value, including report-footer-before-page-footer order.
+
+Validation: existing access_2003_layouts 1/1 (9.74 s), full desktop 48/48
+(80.53 s), GUI-free core 1/1 (1.71 s), Debian payload/permissions/Build-ID/pinned
+SQLite and all four original fixture hashes pass. This remains a single-detail
+layout/PDF path: repeated detail bands, pagination, CanGrow, grouping and section
+Format/Print/Page scheduling remain open. Fixed catalog 456 (384 checked bounded
+entries), 48 CTest targets unchanged; no full Access parity percentage is claimed.
