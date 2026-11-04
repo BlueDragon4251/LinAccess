@@ -2,6 +2,8 @@
 
 This tracks CODEX_HANDOFF.md and the development request. A checked item is scoped
 exactly as described; it is not approval of complete Access compatibility.
+Entry counts are an evolving scoped inventory, not a total-progress metric or
+an Access 2003 feature denominator. Do not present their ratio as overall parity.
 Keep the repository private. Never attach original fixtures, VBA literals, database
 rows, credentials, or raw tool logs to issues, PRs, releases or build artifacts.
 
@@ -34,7 +36,7 @@ rows, credentials, or raw tool logs to issues, PRs, releases or build artifacts.
 Verified incremental work ([details and limits](DAO_RUNTIME.md)):
 
 - [x] Positional Sub/Function arguments, value-returning expression calls, ByVal/ByRef aliases.
-- [x] Top-level label handlers, Resume retry/next/label and nested error-number propagation.
+- [x] Top-level label handlers, Resume retry/next/label and nested error-number propagation; obsolete snapshots release collection leases and DAO clones after restored scopes end.
 - [x] Eleven original keypad button/helper executions and typed binary form-property parsing.
 - [x] Full 187-procedure, hash-verified syntax inventory, explicitly separate from execution coverage.
 - [x] Native object references, CurrentDb and table-backed DAO dynasets/snapshots.

@@ -872,3 +872,18 @@ Dieser Stand: 48/48 Desktop, GUI-freier Build/Kern 1/1, Debian-Paket und vier
 Originalfixture-Hashes bestanden. 382 erledigte / 72 offene erfasste Punkte;
 keine globale Prozent- oder Vollständigkeitsbehauptung. Originalabfragen/Login
 und Access-Ergebnisreferenz-Grenzen bleiben bestehen.
+
+
+Fehlerfortsetzung: Nach jedem expliziten Resume/Resume Next/Resume label müssen
+die Fehler-Snapshots freigegeben werden. Wiederhergestellte aktive Loop-/With-
+Frames halten ihre Ressourcen selbst weiter; veraltete Snapshots dürfen nach
+End With/Next keine DAO-Clones oder Collection-Leases festhalten. Auch einzelne
+Next-Anweisungen tragen sourceStatementEnd für das Aufräumen beim Überspringen.
+Gezielte bestehende Kern-/DAO-Tests bestanden (2/2, 1,67 s). Der DAO-Fall setzt
+den Clone explizit mit MoveFirst; die Transaktionssperre bei lebendem Clone
+bleibt bestehen. Keine neue CTest-Suite und keine zusätzliche Gesamtpunktzahl.
+
+Abschluss dieser Korrektur: Desktop 48/48 (81,49 s), frisch gebauter GUI-freier
+Kern 1/1 (1,62 s), Debian-Paket und vier Originalfixture-Hashes bestanden.
+Die wachsende Zahl feiner Checklisten-Unterpunkte nicht mehr als Gesamtstatus
+verwenden. Historische Zählungen sind keine Access-2003-Gesamtmetrik.

@@ -809,7 +809,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 statements[startIndex].partner=nextIndex;
                 statements.push_back({Statement::Type::Next,{},{},line}); statements.back().partner=startIndex;
             }
-            if(statements.size()>groupStart+1)
+            if(statements.size()>groupStart)
                 for(auto index=groupStart;index<statements.size();++index) statements[index].sourceStatementEnd=static_cast<int>(statements.size()-1);
         } else if (normalized=="do" || std::regex_match(source,match,whileStart)) {
             const auto expression=normalized=="do" ? std::string{} : trim(match[3].str());
@@ -1782,16 +1782,15 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     const int groupEnd=instructions[faultInstruction].sourceStatementEnd;
                     if (instruction.type == Statement::Type::ResumeLabel) {
                         frames.clear(); loops.clear(); withFrames.clear(); active = true;
-                        if(groupEnd>=0) { faultFrames.clear(); faultLoops.clear(); faultWithFrames.clear(); }
+                        faultFrames.clear(); faultLoops.clear(); faultWithFrames.clear();
                         ip = static_cast<std::size_t>(instruction.partner);
                     } else {
                         frames = faultFrames; loops = faultLoops; withFrames=faultWithFrames; active = faultActive;
+                        faultFrames.clear(); faultLoops.clear(); faultWithFrames.clear();
                         if(instruction.type==Statement::Type::Resume) {
-                            if(groupEnd>=0) { faultFrames.clear(); faultLoops.clear(); faultWithFrames.clear(); }
                             ip=faultInstruction-1;
                         } else if(groupEnd>=0) {
                             leaveFailedNextGroup(faultInstruction);
-                            faultFrames.clear(); faultLoops.clear(); faultWithFrames.clear();
                             ip=static_cast<std::size_t>(groupEnd);
                         } else ip=faultInstruction;
                     }
