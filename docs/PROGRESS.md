@@ -5383,3 +5383,20 @@ no new CTest target or catalog ID. Full report/page setup parity remains open.
 
 Page-setup checkpoint: Debian payload/Build-ID/pinned SQLite and all four original
 fixture SHA-256 checks pass.
+
+
+## Native report F5/Z and fit-page navigation (2026-11-04)
+
+F5 selects the real page-number editor and typed navigation waits for Enter.
+Z toggles FitInView/native100% zoom. PageDown/Down and PageUp/Up navigate actual
+pages only in FitInView, scoped to the graphics surface; other zoom modes retain
+native scrolling. Existing actual Qt-key cases verify focus, deferred commit,
+page changes and both zoom directions. Exact Windows zoom anchors and full
+keyboard/window parity remain open. No new CTest target or catalog ID.
+
+Validation: desktop build and mainwindow/layout2/2 (13.38 s). Fixed 456/384/72
+retained. The full current suite and package are checked for this report milestone.
+
+Navigation milestone: full current desktop48/48 under Windows style passes
+(88.77 s), Debian payload/Build-ID/pinned SQLite and all four original fixture
+SHA-256 checks pass. GUI-free runtime unchanged from fresh core1 (1.76 s).
