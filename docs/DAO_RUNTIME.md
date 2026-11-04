@@ -140,3 +140,29 @@ Normal VBA multidimensional indexing/bounds/ReDim and array-copy semantics apply
 The optional default, nonpositive counts and concurrent/deleted-row partial
 batches remain explicit boundaries. Scope and execution evidence:
 [DAO_GETROWS_RUNTIME.md](DAO_GETROWS_RUNTIME.md).
+
+
+Native `Error expression` validates one expression before procedure effects and
+uses the same actual Err propagation path and source line as Raise. Its native
+instruction does not depend on a local variable named Err. Err exposes
+its native ErrObject identity. Existing core cases cover handled signed custom
+codes, a parenthesized number and refusal of a comma-list Error statement.
+Unary plus/minus resolve supported scalar defaults and propagate Null instead
+of converting it into numeric zero; exact wider numeric promotion remains open.
+These changes refine existing F051/F041, without adding catalog points.
+
+
+Native module Enum members now bind as immutable Long constants, with zero-based
+automatic numbering, explicit supported integral constant expressions, aliases,
+negative values and checked 32-bit overflow. Private/Public visibility is stored
+in the actual native module state (omitted visibility currently uses Public).
+The same ordered declarations feed compile-time defaults/bounds and runtime
+module bindings; malformed/unclosed declarations and duplicate member names
+are refused before procedure effects. Existing scalar Const behavior remains.
+
+Unqualified and Enum-qualified constants resolve without a runtime Enum object;
+existing local/instance roots retain lookup precedence. Qualified writes are
+refused before body effects when they name a constant. Under F042, variables/
+arrays/parameters declared As an Enum type, imported type libraries, complete
+standard/class-module scope rules and Access validation remain open. Enum types
+are not fabricated as runtime objects. No new catalog ID or CTest target.

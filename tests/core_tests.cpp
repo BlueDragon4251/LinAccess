@@ -2181,6 +2181,22 @@ End Sub
     assert(executeVbaProcedure(detailedErrors,"AssignedError",host).status==VbaExecutionStatus::Completed);
     assert(host.fields["AssignedError"]=="1001:assigned:explicit:assigned.chm:7" && host.fields["AssignedClear"]=="0::::0");
     assert(evaluateVbaExpression("VarType(vbObjectError)",host,{}).asNumber()==3);
+    const auto errorStatement=executeVbaProcedure(R"VBA(Sub ErrorStatement()
+On Error Resume Next
+Error vbObjectError+514
+Me!StatementError=CStr(Err.Number) & ":" & TypeName(Err)
+Err.Clear
+Error (11)
+Me!StatementDivision=CStr(Err.Number)
+End Sub
+)VBA","ErrorStatement",host);
+    assert(errorStatement.status==VbaExecutionStatus::Completed);
+    const auto shadowedErr=executeVbaProcedure("Sub ShadowError()\nDim Err As Long\nError 11\nEnd Sub","ShadowError",host);
+    assert(shadowedErr.status==VbaExecutionStatus::Error && shadowedErr.errorNumber==11);
+    assert(validateVbaProcedure("Sub InvalidError()\nError 11,22\nEnd Sub","InvalidError").status==VbaExecutionStatus::Unsupported);
+    assert(host.fields["StatementError"]=="-2147220990:ErrObject" && host.fields["StatementDivision"]=="11");
+    for(const auto expression:{"-Null","+Null","-(Null+1)","+(Null+1)"})
+        assert(evaluateVbaExpression(expression,host,{}).kind==VbaValue::Kind::Null);
     const auto unhandled = executeVbaProcedure(
         "Sub Errors()\nOn Error Resume Next\nErr.Raise(5)\nOn Error GoTo 0\nErr.Raise(6)\nEnd Sub", "Errors", host);
     assert(unhandled.status == VbaExecutionStatus::Error);
@@ -2877,6 +2893,49 @@ End Sub
     assert(executeVbaProcedure(constantsModule,"UseConstants",host).status==VbaExecutionStatus::Completed && host.fields["ConstantModuleBounds"]=="-1:4:2");
     const auto constantWrite=executeVbaProcedure(constantsModule,"RejectConstantWrite",host);
     assert(constantWrite.status==VbaExecutionStatus::Unsupported && constantWrite.errorNumber==3251 && !host.fields["BeforeConstantWrite"]);
+    const std::string enumModule=R"VBA(Private Const ENUM_BASE As Long=4
+Public Enum NativeState
+FirstState
+NextState=ENUM_BASE
+FinalState
+AliasState=NativeState.NextState
+Count=8
+End Enum
+Private Enum NativeFailure
+FailureState=-2
+FollowingFailure
+End Enum
+Private enumBuffer(FirstState To NativeState.FinalState) As Long
+Function SelectState(Optional ByVal value As Long=NativeState.FinalState) As Long
+SelectState=value
+End Function
+Sub UseEnums()
+enumBuffer(FinalState)=SelectState()
+Me!EnumValues=CStr(FirstState) & ":" & CStr(NextState) & ":" & CStr(FinalState) & ":" & CStr(AliasState) & ":" & CStr(FailureState) & ":" & CStr(FollowingFailure) & ":" & CStr(VarType(FinalState))
+Me!EnumQualified=CStr(NativeState . NextState)
+Me!EnumBounds=CStr(LBound(enumBuffer)) & ":" & CStr(UBound(enumBuffer)) & ":" & CStr(enumBuffer(FinalState))
+End Sub
+Sub ShadowEnumNamespace()
+Dim NativeState As Collection
+Set NativeState=New Collection
+NativeState.Add "kept"
+Me!EnumRootShadow=CStr(NativeState.Count)
+End Sub
+Sub RejectEnumWrite()
+Me!BeforeEnumWrite="must-not-run"
+NativeState . NextState=99
+End Sub
+)VBA";
+    const auto enumResult=executeVbaProcedure(enumModule,"UseEnums",host);
+    if(enumResult.status!=VbaExecutionStatus::Completed) std::cerr<<"Enum error="<<enumResult.errorNumber<<" line="<<enumResult.line<<"\n";
+    assert(enumResult.status==VbaExecutionStatus::Completed && host.fields["EnumValues"]=="0:4:5:4:-2:-1:3" && host.fields["EnumBounds"]=="0:5:5" && host.fields["EnumQualified"]=="4");
+    assert(executeVbaProcedure(enumModule,"ShadowEnumNamespace",host).status==VbaExecutionStatus::Completed && host.fields["EnumRootShadow"]=="1");
+    const auto enumState=host.moduleState(enumModule);
+    assert(enumState->constants.contains("finalstate") && enumState->publicVariables.contains("finalstate") && !enumState->publicVariables.contains("failurestate"));
+    const auto enumWrite=executeVbaProcedure(enumModule,"RejectEnumWrite",host);
+    assert(enumWrite.status==VbaExecutionStatus::Unsupported && enumWrite.errorNumber==3251 && !host.fields["BeforeEnumWrite"]);
+    const auto enumOverflow=validateVbaProcedure("Enum Overflowing\nLastValue=2147483647\nOverflowValue\nEnd Enum\nSub CheckEnum()\nEnd Sub","CheckEnum");
+    assert(enumOverflow.status==VbaExecutionStatus::Unsupported && enumOverflow.errorNumber==6);
     const auto badConstant=validateVbaProcedure(R"VBA(Sub BadConstant()
 Const size As Long=FileLen("missing.dat")
 End Sub

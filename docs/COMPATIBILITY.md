@@ -2544,3 +2544,13 @@ Ereignisfunktionen. Benannte/ausgelassene optionale Argumente, beschreibbare
 Err-Felder sowie Clear/Resume arbeiten mit echtem Laufzeitzustand. Kein
 Windows-Hilfeaufruf und keine vollständige Access-Fehlertext-/HRESULT-/Debugger-
 Gleichheit werden behauptet. Details stehen in DAO_RUNTIME.md.
+
+
+Unter F042 sind Enum-Mitglieder als native unveränderliche Long-Konstanten
+angebunden: automatische/explizite Werte, Aliase, negative Werte, 32-Bit-Grenzen,
+Public/Private und Enum.Member-Zugriffe. Übersetzung und Modulzustand nutzen
+dieselben geordneten Deklarationen; lokale/Instanz-Wurzeln behalten Vorrang.
+Variablen/Arrays/Parameter As Enum und vollständige Typbibliotheks-/Klassensicht-
+barkeit bleiben offen. Unter F051 nutzt Error expression eine eigene native
+Anweisung; ein lokales Err ersetzt diesen Fehlerpfad nicht. Unary +/- erhält
+Null (F041). Diese Details gehören zu bestehenden IDs; Gesamtzahl bleibt 456.
