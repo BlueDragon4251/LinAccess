@@ -321,18 +321,37 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "FilterOnLoad") form.filterOnLoad = accessBoolean(value,false);
             else if (key == "Width") form.width = integer();
         } else if (current.type == "Section" || current.type == "FormHeader"
-                   || current.type == "FormFooter") {
-            if (key == "Height") sections[current.type] = integer();
+                   || current.type == "FormFooter" || current.type == "PageHeader"
+                   || current.type == "PageFooter") {
+            if (key == "Height") {
+                bool valid=false;
+                const auto height=value.toLongLong(&valid);
+                if (!valid || height<0 || height>std::numeric_limits<int>::max())
+                    throw std::runtime_error("Invalid imported section height");
+                sections[current.type]=static_cast<int>(height);
+            }
         }
     }
-    const int header = sections.value("FormHeader");
-    const int detail = sections.value("Section");
-    const int footer = sections.value("FormFooter");
-    for (auto& control : form.controls) {
-        if (control.section == "Section") control.top += header;
-        else if (control.section == "FormFooter") control.top += header + detail;
+    for (auto it=sections.cbegin();it!=sections.cend();++it)
+        form.sectionHeights.insert(it.key(),it.value());
+    // Reports place the report footer before the final page footer in preview.
+    const QStringList order=form.kind==AccessDocumentKind::Report
+        ? QStringList{"FormHeader","PageHeader","Section","FormFooter","PageFooter"}
+        : QStringList{"FormHeader","Section","FormFooter"};
+    qint64 total=0;
+    for (const auto& section:order) {
+        form.sectionOffsets.insert(section,static_cast<int>(total));
+        total+=sections.value(section);
+        if (total>std::numeric_limits<int>::max())
+            throw std::runtime_error("Imported section layout exceeds coordinate range");
     }
-    form.height = qMax(2000, header + detail + footer);
+    for (auto& control:form.controls) {
+        const qint64 top=static_cast<qint64>(control.top)+form.sectionOffsets.value(control.section);
+        if (top<std::numeric_limits<int>::min() || top>std::numeric_limits<int>::max())
+            throw std::runtime_error("Imported control exceeds coordinate range");
+        control.top=static_cast<int>(top);
+    }
+    form.height=qMax(2000,static_cast<int>(total));
     return form;
 }
 }
