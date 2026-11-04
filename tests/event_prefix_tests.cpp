@@ -53,10 +53,23 @@ EventProcPrefix ="Absent"
 OnClick ="[Event Procedure]"
 Top =1500
 End
+Begin CommandButton
+Name ="FunctionButton"
+OnClick ="=ControlArgument(Me![CurrentText])"
+Top =2000
+Width =2500
+Height =300
+End
 End
 End
 )FORM";
     const QByteArray code=R"VBA(
+Function ControlArgument(ByVal value As Control) As Long
+If value.Name<>"CurrentText" Then Err.Raise 5
+value.Tag="event-control"
+CurrentDb.Execute "INSERT INTO trace(event) VALUES('typed-expression')"
+ControlArgument=1
+End Function
 Sub OriginalButton_Click()
 CurrentDb.Execute "INSERT INTO trace(event) VALUES('click')"
 End Sub
@@ -95,7 +108,7 @@ Me.CurrentButton.EventProcPrefix = "Alternate"
 End Sub
 )VBA";
     const auto parsed=linaccess::parseAccessFormLayout(QString::fromUtf8(layout));
-    assert(parsed.controls.size()==4 && parsed.controls[0].eventProcPrefix=="OriginalText");
+    assert(parsed.controls.size()==5 && parsed.controls[0].eventProcPrefix=="OriginalText");
     AccessFormPreview form("prefix regression",layout,code,db); form.show(); form.activateWindow(); QApplication::processEvents();
     auto model=makePreviewFormObject(form);
     auto control=model->member("Controls",{VbaValue::string("CurrentButton")}).object;
@@ -138,6 +151,10 @@ End Sub
     try { control->assign("EventProcPrefix",VbaValue{}); }
     catch (const linaccess::VbaRuntimeError& error) { number=error.number; }
     assert(number==94 && control->member("EventProcPrefix",{}).asText()=="Alternate");
+    clear(); form.findChild<QPushButton*>("access-control-FunctionButton")->click();
+    const auto typedEvent=form.eventResult("control:FunctionButton:Click");
+    assert(typedEvent && typedEvent->status==linaccess::VbaExecutionStatus::Completed);
+    assert(trace()==QStringList({"typed-expression"}) && edit->property("la_access_tag").toString()=="event-control" && !form.hasUnsavedChanges());
     assert(form.close());
     auto defaultLayout=layout; defaultLayout.replace("EventProcPrefix =\"Absent\"","");
     AccessFormPreview defaults("default prefixes",defaultLayout,code,db);

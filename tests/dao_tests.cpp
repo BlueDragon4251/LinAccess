@@ -39,6 +39,12 @@ void testSqlRgbDao() {
     Host host(db);
     const std::string retainedDao=R"VBA(Private database As DAO.Database
 Public rows As DAO.Recordset
+Sub ReadFieldArgument(ByVal value As DAO.Field)
+Me!DaoObjectArgument=CStr(value.Value)
+End Sub
+Function ReadFieldFunction(ByVal value As DAO.Field) As Long
+ReadFieldFunction=value.Value
+End Function
 Sub InitializeDao()
 Set database=CurrentDb
 Set rows=database.OpenRecordset("SELECT id FROM color_rows ORDER BY id")
@@ -46,6 +52,8 @@ If Not TypeOf database Is DAO.Database Then Err.Raise 5
 If Not TypeOf rows Is DAO.Recordset Then Err.Raise 5
 If Not TypeOf rows.Fields Is DAO.Fields Then Err.Raise 5
 If Not TypeOf rows!id Is DAO.Field Then Err.Raise 5
+ReadFieldArgument rows!id
+Me!DaoObjectFunction=ReadFieldFunction(rows!id)
 If TypeOf rows!id Is DAO.Recordset Then Err.Raise 5
 If Not TypeOf rows.Clone Is DAO.Recordset Then Err.Raise 5
 DBEngine.BeginTrans
@@ -81,6 +89,7 @@ End Sub
     const auto initializedDao=linaccess::executeVbaProcedure(retainedDao,"InitializeDao",host);
     if(initializedDao.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"TypeOf DAO error="<<initializedDao.errorNumber<<" line="<<initializedDao.line<<" explanation="<<initializedDao.explanation<<"\n";
     assert(initializedDao.status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["DaoObjectArgument"]=="1" && host.fields["DaoObjectFunction"]=="1");
     assert(host.fields["DaoTypes"]=="Database:Recordset:Fields");
     assert(linaccess::executeVbaProcedure(retainedDao,"AdvanceDao",host).status==linaccess::VbaExecutionStatus::Completed && host.fields["DaoRetained"]=="2");
     const auto checkedDao=linaccess::executeVbaProcedure(retainedDao,"CheckDao",host);

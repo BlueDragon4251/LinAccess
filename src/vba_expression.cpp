@@ -686,6 +686,20 @@ public:
     }
 };
 
+bool vbaIntrinsicName(const std::string& name) {
+    static const std::unordered_set<std::string> intrinsics{
+                "array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
+                "createobject","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
+                "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdate","cstr","str","str$","format","format$",
+                "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
+                "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
+                "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
+                "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
+                "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
+                "filelen","filedatetime","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor"};
+    return intrinsics.contains(name);
+}
+
 class ExpressionParser {
 public:
     ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals,
@@ -817,13 +831,15 @@ private:
             std::vector<bool> omittedArguments;
             if (take("(")) {
                 if (!take(")")) {
+                    const auto signature=host_ && value.kind==VbaValue::Kind::Object && value.object ? value.object->argumentSignature(member.value) : std::nullopt;
                     do {
                         std::string argumentName;
                         if(peek().type==Token::Type::Word && index_+1<tokens_.size() && tokens_[index_+1].value==":=") {
                             argumentName=lower(consume().value); consume();
                         }
                         const bool omitted=(missingDefaults || memberKey=="sendkeys" || lower(member.value)=="openform" || lower(member.value)=="openreport" || lower(member.value)=="gotorecord" || lower(member.value)=="domenuitem" || lower(member.value)=="selectobject" || lower(member.value)=="close") && (nextSymbol(",") || nextSymbol(")"));
-                        args.push_back(omitted ? missingDefaults ? VbaValue::missing() : VbaValue::empty() : expression(1));
+                        args.push_back(omitted ? missingDefaults ? VbaValue::missing() : VbaValue::empty()
+                            : expression(1,signature && signature->objectArgument(args.size(),argumentName)));
                         if(!argumentName.empty() && omitted) throw error("Named method argument requires a value",450);
                         argumentNames.push_back(std::move(argumentName)); omittedArguments.push_back(omitted);
                     } while (take(",") || (accessExpression_ && take(";")));
@@ -975,17 +991,8 @@ private:
             if(const auto local=locals_.find(word);local!=locals_.end()) return local->second;
             if(host_) if(auto resolved=host_->resolveIdentifier(tok.value,true)) return *resolved;
             consume(); word=lower(consume().value);
-            static const std::unordered_set<std::string> intrinsics{
-                "array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
-                "createobject","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
-                "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdate","cstr","str","str$","format","format$",
-                "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
-                "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
-                "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
-                "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
-                "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
-                "filelen","filedatetime","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor"};
-            if(!intrinsics.contains(word) && !word.starts_with("vb")) throw error("Qualified VBA member is not implemented",3251);
+
+            if(!vbaIntrinsicName(word) && !word.starts_with("vb")) throw error("Qualified VBA member is not implemented",3251);
             qualifiedIntrinsic=true; qualifiedArray=word=="array";
         }
         if (accessExpression_) {
@@ -1151,6 +1158,9 @@ private:
             if (variable!=locals_.end() && (variable->second.kind==VbaValue::Kind::Object || isVbaArray(variable->second))) return variable->second;
         }
         if (take("(")) {
+            std::optional<VbaArgumentSignature> signature;
+            if(host_ && resolver_.argumentSignature && !accessExpression_ && !qualifiedIntrinsic && !vbaIntrinsicName(word)
+                && word!="eval" && word!="nz" && word!="dsum" && word!="dcount") signature=resolver_.argumentSignature(tok.value);
             std::vector<VbaValue> args;
             std::vector<std::string> references;
             std::vector<std::optional<VbaArrayElementReference>> arrayReferences;
@@ -1164,7 +1174,8 @@ private:
                     const auto start = index_;
                     const bool builtinDefaults=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="datepart" || word=="weekday");
                     const bool missing=nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";"));
-                    auto argument=missing ? VbaEvaluatedArgument{builtinDefaults ? VbaValue::empty() : VbaValue::missing(),{}} : argumentExpression(word=="isobject");
+                    auto argument=missing ? VbaEvaluatedArgument{builtinDefaults ? VbaValue::empty() : VbaValue::missing(),{}}
+                        : argumentExpression(word=="isobject" || (signature && signature->objectArgument(args.size(),argumentName)));
                     args.push_back(std::move(argument.value)); arrayReferences.push_back(std::move(argument.arrayElement));
                     if(!argumentName.empty() && missing) throw error("Named argument requires a value",450);
                     omitted.push_back(missing);
@@ -1953,6 +1964,14 @@ private:
 };
 } // namespace
 
+bool VbaArgumentSignature::objectArgument(std::size_t position,std::string_view name) const {
+    if(!name.empty()) {
+        const auto requested=lower(std::string(name)); position=names.size();
+        for(std::size_t index=0;index<names.size();++index) if(lower(names[index])==requested) { position=index; break; }
+    }
+    return position<objectArguments.size() && objectArguments[position];
+}
+
 VbaValue VbaHost::formatValue(const VbaValue&,std::string_view,bool) {
     throw VbaRuntimeError(438,"Format host adapter unavailable");
 }
@@ -2142,8 +2161,8 @@ VbaValue evaluateVbaExpression(std::string_view text, VbaHost& host,
     return ExpressionParser(text, &host, vars, resolver,false,false,withContext,false,compareMode,arrayBase).parse();
 }
 VbaEvaluatedArgument evaluateVbaArgumentExpression(std::string_view expression,VbaHost& host,
-    const VbaVariables& variables,const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode,int arrayBase) {
-    return ExpressionParser(expression,&host,variables,resolver,false,false,withContext,false,compareMode,arrayBase).parseArgument();
+    const VbaVariables& variables,const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode,int arrayBase,bool objectContext) {
+    return ExpressionParser(expression,&host,variables,resolver,objectContext,false,withContext,false,compareMode,arrayBase).parseArgument();
 }
 VbaValue evaluateVbaObjectExpression(std::string_view text,VbaHost& host,
                                     const VbaVariables& vars,const VbaFunctionResolver& resolver,const VbaValue* withContext,VbaCompareMode compareMode,int arrayBase) {

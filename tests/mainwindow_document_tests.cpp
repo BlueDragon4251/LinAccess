@@ -162,6 +162,9 @@ End Sub
 Sub MarkControl(ByVal value As Access.Control)
 value.Tag="typed-control"
 End Sub
+Function IsFirstControl(ByVal unused As Long, ByVal value As Control) As Boolean
+IsFirstControl=value.Name="first"
+End Function
 Function EmptyControl(Optional ByVal value As Control=Nothing) As Boolean
 EmptyControl=value Is Nothing
 End Function
@@ -177,7 +180,8 @@ Set owner=TypedSelf()
 Set heldOwner=owner
 Set field=Me!first
 Set heldControl=field
-MarkControl heldControl
+MarkControl Me!first
+If Not IsFirstControl(value:=Me!first,unused:=1) Then Err.Raise 5
 ClearForm owner
 If Not owner Is Nothing Then Err.Raise 5
 If Not EmptyControl() Then Err.Raise 5

@@ -1351,6 +1351,20 @@ VbaExecutionResult parseProcedure(std::string_view module,std::string_view name,
     } catch(const std::bad_alloc&) { /* The optional cache must not reject a translated procedure. */ }
     return result;
 }
+std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view module,std::string_view name) {
+    std::vector<Statement> statements; std::vector<Parameter> parameters; bool function=false,cancel=false;
+    if(parseProcedure(module,name,statements,function,cancel,&parameters).status!=VbaExecutionStatus::Completed) return {};
+    VbaArgumentSignature signature;
+    for(const auto& parameter:parameters) {
+        signature.names.push_back(lower(parameter.name));
+        signature.required+=!parameter.optional && !parameter.paramArray;
+        const auto& type=parameter.type;
+        signature.objectArguments.push_back(!parameter.paramArray && (type=="object" || type=="collection"
+            || type=="scripting.dictionary" || nativeDaoType(type) || !nativeAccessObjectType(type).empty()));
+    }
+    return signature;
+}
+
 }
 
 VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_view procedure) {
@@ -2008,9 +2022,16 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         if (needsValue && !nested.typedReturnValue) throw VbaRuntimeError(5, "Sub hat keinen Rückgabewert");
         return nested.typedReturnValue ? *nested.typedReturnValue : VbaValue::empty();
     };
-    const VbaFunctionResolver resolver = [&](std::string_view name, std::vector<VbaValue>& args,
+    std::unordered_map<std::string,std::optional<VbaArgumentSignature>> signatureCache;
+    VbaFunctionResolver resolver = [&](std::string_view name, std::vector<VbaValue>& args,
                                             const VbaArgumentReferences& refs) {
         return invoke(name, args, refs, true);
+    };
+    resolver.argumentSignature=[&](std::string_view name) {
+        const auto key=lower(std::string(name));
+        const auto found=signatureCache.find(key);
+        if(found!=signatureCache.end()) return found->second;
+        return signatureCache.emplace(key,localProcedureSignature(module,name)).first->second;
     };
     auto compareMode=VbaCompareMode::Binary;
     {
@@ -2298,10 +2319,12 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     const auto expressions = splitArguments(instruction.expression);
                     std::vector<VbaValue> actuals;
                     VbaArgumentReferences references;
+                    const auto signature=resolver.argumentSignature(instruction.argument);
                     for(const auto& expression:expressions) {
                         const auto parsed=callArgument(expression);
                         auto argument=parsed.expression.empty() ? VbaEvaluatedArgument{VbaValue::missing(),{}}
-                            : evaluateVbaArgumentExpression(parsed.expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase);
+                            : evaluateVbaArgumentExpression(parsed.expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase,
+                                signature && signature->objectArgument(actuals.size(),parsed.name));
                         actuals.push_back(std::move(argument.value)); references.arrayElements.push_back(std::move(argument.arrayElement));
                         references.names.push_back(parsed.name.empty() ? parsed.expression : "@named:"+parsed.name+":"+parsed.expression);
                     }
@@ -2621,7 +2644,7 @@ VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string
     if (!validVbaExpression(source)) return {VbaExecutionStatus::Unsupported,"Event expression syntax unsupported",0};
     int line=0;
     try {
-        const VbaFunctionResolver resolver=[&](std::string_view name,std::vector<VbaValue>& args,const std::vector<std::string>&) {
+        VbaFunctionResolver resolver=[&](std::string_view name,std::vector<VbaValue>& args,const std::vector<std::string>&) {
             const auto epoch=vbaExecutionEpoch();
             auto outcome=executeVbaProcedureWithArguments(module,name,host,args);
             if (outcome.status==VbaExecutionStatus::ProcedureMissing) {
@@ -2634,6 +2657,7 @@ VbaExecutionResult executeVbaEventExpression(std::string_view module,std::string
                     outcome.errorSource,outcome.errorHelpFile,outcome.errorHelpContext);
             return *outcome.typedReturnValue;
         };
+        resolver.argumentSignature=[&](std::string_view name) { return localProcedureSignature(module,name); };
         const auto value=evaluateVbaExpression(source,host,{},resolver);
         VbaExecutionResult result{VbaExecutionStatus::Completed,{},line};
         result.typedReturnValue=std::make_shared<VbaValue>(value);

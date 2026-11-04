@@ -508,3 +508,36 @@ original fixture hashes pass. This is a clean single complete suite run and
 also covers the preceding TypeOf/temporary-clone validation correction.
 Fixed 456 work entries, 384 confirmed scoped entries/72 open and 48 CTest
 targets remain unchanged. No full Access/interface-binding claim.
+
+
+## Object-reference actuals for native typed calls (2026-11-04)
+
+Under existing F043/F122, same-module procedure signatures now advertise which
+arguments require object-reference context. Sub calls, function expressions and
+positional event-function expressions preserve actual Me/control/DAO member
+references for Object/native class parameters, instead of prematurely reading
+scalar defaults. Named function/Sub actuals choose context by parameter name;
+ordinary scalar, array and intrinsic evaluation paths retain their behavior.
+Native object methods can advertise the same context in argument signatures.
+The callable resolver keeps legacy callback construction and argument-reference
+transport, with optional signature metadata. Same-module per-frame signature
+caches contain names/flags only, not host values, widgets, cursors or arrays.
+Intrinsic dispatch keeps its existing precedence and evaluation paths.
+
+Existing DAO passes actual recordset bang Fields directly to typed Sub/function
+parameters and reads their real SQL values. Existing GUI passes Me!first directly
+to a Control helper, including reversed named function actuals, and verifies
+successful Form_Load. Existing event-prefix GUI executes a function-bound click
+with an actual Control argument, changes its real Qt Tag and writes an SQL trace.
+Core/DAO/mainwindow/layout targeted 4/4 (13.58 s) pass. Full validation follows.
+
+This does not complete external-module/qualified-method binding, general property
+ByRef setters, full parentheses/coercion/static-class rules, Variant default-
+member context or named event-function argument ordering. Existing ByRef array
+cell/allocation and native declaration guards remain. Fixed 456/48 unchanged.
+
+Completion: full desktop 48/48 (85.57 s), freshly rebuilt GUI-free core 1/1
+(1.99 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original fixture hashes pass. Existing live ByRef array cells and DAO clone/
+transaction lifetime cases pass with optional call-context metadata. Fixed
+456 work entries and 48 CTest targets remain unchanged.
