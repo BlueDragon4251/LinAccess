@@ -18,6 +18,7 @@
 struct sqlite3;
 struct sqlite3_stmt;
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QCryptographicHash>
 #include <QSet>
 #include <QDateTime>
@@ -1510,11 +1511,31 @@ int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
     return owned.size();
 }
 QString accessQuerySource(QSqlDatabase db, const QString& name) {
-    QSqlQuery query(db);
-    query.prepare("SELECT source_bytes FROM _la_access_artifacts WHERE kind='query' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
+    QSqlQuery query(db); QString imported,owned; bool hasImported=false,hasOwned=false;
+    query.prepare("SELECT source_bytes FROM main._la_access_artifacts WHERE kind='query' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
     query.addBindValue(name);
-    if (!query.exec() || !query.next()) throw VbaRuntimeError(3265,"DAO: QueryDef not found");
-    return decodeVbaSource(query.value(0).toByteArray());
+    if(query.exec() && query.next()) { imported=decodeVbaSource(query.value(0).toByteArray()); hasImported=true; }
+    query.finish();
+    if(db.tables(QSql::Tables).contains("_la_objects",Qt::CaseInsensitive)) {
+        if(!query.exec("SELECT name,definition FROM main._la_objects WHERE kind='query'"))
+            throw VbaRuntimeError(3146,"Owned query catalog unavailable");
+        int rows=0;
+        while(query.next()) {
+            if(++rows>1000000) throw VbaRuntimeError(3251,"Owned query catalog limit exceeded");
+            if(query.value(0).toString().compare(name,Qt::CaseInsensitive)!=0) continue;
+            if(hasOwned) throw VbaRuntimeError(5,"Owned query name ambiguous");
+            QJsonParseError error; const auto definition=QJsonDocument::fromJson(query.value(1).toByteArray(),&error);
+            if(error.error!=QJsonParseError::NoError || !definition.isObject() || !definition.object().value("sql").isString()
+                || definition.object().value("sql").toString().trimmed().isEmpty())
+                throw VbaRuntimeError(3251,"Owned query definition invalid");
+            owned=definition.object().value("sql").toString(); hasOwned=true;
+        }
+        if(query.lastError().isValid()) throw VbaRuntimeError(3146,"Owned query catalog read failed");
+    }
+    if(hasOwned && hasImported) throw VbaRuntimeError(5,"Owned/imported query name conflict");
+    if(hasOwned) return owned;
+    if(hasImported) return imported;
+    throw VbaRuntimeError(3265,"DAO: QueryDef not found");
 }
 QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, const QMap<QString,QVariant>& values) {
     QMap<QString,QVariant> result;

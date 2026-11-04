@@ -211,9 +211,12 @@ keine nachgewiesene pixelgenaue Access-2003-Oberfläche. Details: [Darstellung](
   Datenparametern und geprüften positiven Ergebnissen), bisher ohne Access-Referenzergebnis;
   SQL-Verweise auf geöffnete Forms/Formulare und Reports/Berichte lesen echte
   Controlwerte, auch in gespeicherten Abfragen; [Umfang und Tests](docs/SQL_OBJECT_VALUES.md).
-  siehe [Abfrageadapter](docs/QUERY_ADAPTER.md). Importierte Berichte haben eine
-  grobe Layoutvorschau mit einseitigem Druck/PDF des aktuellen Layouts, noch keine
-  Access-Berichts-/Druckkompatibilität. Drei originale Open-/Close-Paare laufen
+  siehe [Abfrageadapter](docs/QUERY_ADAPTER.md). Der native Berichtspfad bietet
+  begrenzte Mehrdatensatz-Paginierung, PDF-Ausgabe, Abschnittsseitenwechsel und
+  Aggregate; vollständige Access-Berichts-/Druckkompatibilität fehlt weiterhin.
+  Grenzen: [Aggregate](docs/REPORT_AGGREGATES.md),
+  [Textwachstum](docs/REPORT_CANGROW.md) und [Fußbereichsentwurf](docs/NATIVE_REPORT_FOOTER_DESIGN.md).
+  Drei originale Open-/Close-Paare laufen
   automatisch. Sechs von neun Originalquellen binden 54 nicht-NULL-Textfelder;
   siehe [Berichtsereignisse](docs/REPORT_EVENTS.md). Der native CommandBars-
   Adapter ist in [Druckvorschau](docs/PRINT_PREVIEW_ADAPTER.md) beschrieben.
@@ -230,6 +233,9 @@ keine nachgewiesene pixelgenaue Access-2003-Oberfläche. Details: [Darstellung](
   Access-Layout; hierfür die neue gesonderte Access-Layoutansicht benutzen.
 - Native Formulare können auch auf importierten SQLite-Tabellen ohne `id`-Spalte
   arbeiten (SQLite-`rowid`-Fallback).
+  Der Formulardesigner unterstützt außerdem gespeicherte Abfragen und einzeilige,
+  parameterfreie SELECT-Datenquellen als schreibgeschützte Formulare; Feldlisten
+  stammen aus vorbereiteten Abfragen. [Umfang](docs/NATIVE_QUERY_FORM_DESIGN.md).
 
 **Nicht implementiert:** vollständige Original-VBA-Ausführung, wirklich
 pixelidentische Form-/Report-Rekonstruktion, eingebettete Access-Makros,

@@ -1,5 +1,6 @@
 #pragma once
 #include "vba_analyzer.hpp"
+#include "access_query.hpp"
 #include "vba_runtime.hpp"
 #include <QByteArray>
 #include <QJsonArray>
@@ -15,6 +16,27 @@
 namespace linaccess {
 struct NativeStoredForm { QString name; QByteArray layout,code; };
 
+// Prepare real field metadata only; SELECT expressions are never evaluated here.
+inline QStringList nativeFormSourceColumns(QSqlDatabase database,const QString& source) {
+    if(!database.isOpen() || source.isEmpty() || source.contains(QChar::Null))
+        throw VbaRuntimeError(3251,"Native form data source unavailable");
+    if(database.tables(QSql::Tables).contains(source,Qt::CaseInsensitive)) {
+        QStringList columns; const auto record=database.record(source);
+        for(int index=0;index<record.count();++index) columns.append(record.fieldName(index));
+        return columns;
+    }
+    (void)installAccessQueryViews(database);
+    QString query=source;
+    if(database.tables(QSql::Views).contains(source,Qt::CaseInsensitive)) {
+        auto name=source; name.replace(']',"]]"); query="SELECT * FROM ["+name+"]";
+    } else if(!source.trimmed().startsWith("SELECT",Qt::CaseInsensitive)
+        && !source.trimmed().startsWith("PARAMETERS",Qt::CaseInsensitive)) query=accessQuerySource(database,source);
+    const auto plan=compileAccessQuery(query);
+    if(!plan.makeTable.isEmpty() || !plan.parameters.isEmpty() || !plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
+        throw VbaRuntimeError(3251,"Native form requires a non-parameter read-only SELECT source");
+    return accessQueryColumns(database,plan);
+}
+
 // Runtime adapter for owned _la_objects definitions, not an Access export or
 // an alteration of imported SaveAsText/VBA bytes.
 inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definition,QSqlDatabase database) {
@@ -25,16 +47,18 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
     };
     const auto table=definition.value("table").toString();
     const auto fields=definition.value("fields").toArray();
-    if(!database.isOpen() || table.isEmpty() || fields.isEmpty() || fields.size()>255
-        || !database.tables().contains(table,Qt::CaseInsensitive))
-        throw VbaRuntimeError(3251,"Native stored form requires a table and 1-255 fields");
-    const auto schema=database.record(table);
+    if(fields.isEmpty() || fields.size()>255)
+        throw VbaRuntimeError(3251,"Native stored form requires 1-255 fields");
+    const auto schema=nativeFormSourceColumns(database,table);
+    const bool writableTable=database.tables(QSql::Tables).contains(table,Qt::CaseInsensitive);
     QStringList names; QSet<QString> used;
     for(const auto& field:fields) {
         if(!field.isString() || field.toString().isEmpty() || field.toString().startsWith('='))
             throw VbaRuntimeError(3251,"Native stored form field binding is unsupported");
         const auto column=field.toString(); bool found=false;
-        for(int index=0;index<schema.count();++index) if(schema.fieldName(index).compare(column,Qt::CaseInsensitive)==0) { found=true; break; }
+        int matches=0;
+        for(const auto& actual:schema) if(actual.compare(column,Qt::CaseInsensitive)==0) ++matches;
+        found=matches==1;
         if(!found || used.contains(column.toCaseFolded())) throw VbaRuntimeError(3251,"Native stored form field is missing or duplicated");
         (void)quoted(column); names.push_back(column); used.insert(column.toCaseFolded());
     }
@@ -74,6 +98,7 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
     }
     QStringList lines{"Begin Form","    Caption = "+quoted(definition.value("caption").toString(name)),
         "    RecordSource = "+quoted(table),"    Width = "+QString::number(formWidth)};
+    if(!writableTable) lines<<"    AllowAdditions =0"<<"    AllowEdits =0"<<"    AllowDeletions =0";
     for(const auto* event:{"OnOpen","OnLoad","OnCurrent","OnActivate","OnDeactivate","OnUnload","OnClose","BeforeInsert","AfterInsert","BeforeUpdate","AfterUpdate","OnDirty","OnError"}) {
         const QString property=QString::fromLatin1(event);
         auto procedure=property.startsWith("On") ? property.mid(2) : property;
@@ -111,8 +136,10 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
             if(procedures.contains((eventPrefix+"_"+event).toCaseFolded())) lines<<"            On"+QString::fromLatin1(event)+" = \"[Event Procedure]\"";
         lines<<"        End";
     };
-    button("btnNeu","Neu",240,"DoCmd.GoToRecord , , acNewRec");
-    button("btnSpeichern","Speichern",1940,"DoCmd.RunCommand acCmdSaveRecord");
+    if(writableTable) {
+        button("btnNeu","Neu",240,"DoCmd.GoToRecord , , acNewRec");
+        button("btnSpeichern","Speichern",1940,"DoCmd.RunCommand acCmdSaveRecord");
+    }
     button("btnAktion","Aktion",3640,{});
     lines<<"    End"<<"End";
     return {std::move(name),lines.join('\n').toUtf8(),code.toUtf8()};
