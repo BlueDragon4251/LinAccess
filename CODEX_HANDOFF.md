@@ -1244,3 +1244,13 @@ Drop/Recreate, Rename/Append/Attributes und Windows-Reihenfolge/Oracle sind nich
 vollständig. DAO.QueryDefs ist ein weiterer expliziter geschlossener nativer Typ.
 Vollstand danach48/48 (83.20 s), frischer GUI-freier Core1/1 (1.66 s), Paket und
 vier Originalfixture-Hashes bestanden; Katalog unverändert456/384/72.
+
+Eigene Abfrage-/Formular-/Berichtsentwürfe speichern per Strg+S tatsächlich und
+bleiben geöffnet; ausdrückliche Speichern-Schaltflächen schließen weiterhin nach
+Erfolg. Wiederholtes Speichern erhält andere aktuelle JSON-Metadaten; Berichte
+lesen nach der ersten Tastaturspeicherung auch frisch gespeicherte Seiteneinstellungen.
+Menüfolge Datei/Bearbeiten/Ansicht/Einfügen/Fenster mit tatsächlichen Objektaktionen;
+keine Attrappen für fehlende Access-Menüs. Dateikürzel sind window-scoped, bestehende
+modale/KeyPreview-Projektwechselregeln bleiben. docs/DESIGNER_SAVE_KEYS.md.
+Aktueller UI-Lauf1/1 (2.63 s), Paket und vier Originalfixture-Hashes bestanden;
+letzter breiter Stand48/48 (83.20 s), GUI-freier Runtime-Scope unverändert1/1 (1.66 s).
