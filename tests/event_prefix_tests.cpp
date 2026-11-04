@@ -55,7 +55,7 @@ Top =1500
 End
 Begin CommandButton
 Name ="FunctionButton"
-OnClick ="=ControlArgument(Me![CurrentText])"
+OnClick ="=Len(Me![CurrentText])"
 Top =2000
 Width =2500
 Height =300
@@ -64,11 +64,11 @@ End
 End
 )FORM";
     const QByteArray code=R"VBA(
-Function ControlArgument(ByVal value As Control) As Long
+Function Len(ByVal value As Control) As Long
 If value.Name<>"CurrentText" Then Err.Raise 5
 value.Tag="event-control"
 CurrentDb.Execute "INSERT INTO trace(event) VALUES('typed-expression')"
-ControlArgument=1
+Len=1
 End Function
 Sub OriginalButton_Click()
 CurrentDb.Execute "INSERT INTO trace(event) VALUES('click')"

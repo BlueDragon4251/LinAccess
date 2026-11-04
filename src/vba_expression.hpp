@@ -54,6 +54,9 @@ struct VbaArgumentSignature {
     std::vector<std::string> names;
     std::size_t required{};
     std::vector<bool> objectArguments{};
+    bool localProcedure{};
+    bool function{};
+    std::string resultType{};
     bool objectArgument(std::size_t position,std::string_view name={}) const;
 };
 
@@ -104,6 +107,8 @@ struct VbaModuleState {
     std::unordered_set<std::string> publicVariables;
     std::unordered_set<std::string> fixedArrays;
     std::unordered_set<std::string> constants;
+    std::unordered_set<std::string> procedures;
+    bool procedureInventoryComplete{};
 };
 VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type);
 

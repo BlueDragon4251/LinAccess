@@ -1159,8 +1159,9 @@ private:
         }
         if (take("(")) {
             std::optional<VbaArgumentSignature> signature;
-            if(host_ && resolver_.argumentSignature && !accessExpression_ && !qualifiedIntrinsic && !vbaIntrinsicName(word)
-                && word!="eval" && word!="nz" && word!="dsum" && word!="dcount") signature=resolver_.argumentSignature(tok.value);
+            if(host_ && resolver_.argumentSignature && !accessExpression_ && !qualifiedIntrinsic) signature=resolver_.argumentSignature(tok.value);
+            bool localProcedure=signature && signature->localProcedure;
+            if(localProcedure && !signature->function) throw error("A Sub cannot be used as a function expression",3251);
             std::vector<VbaValue> args;
             std::vector<std::string> references;
             std::vector<std::optional<VbaArrayElementReference>> arrayReferences;
@@ -1172,10 +1173,10 @@ private:
                         argumentName=lower(consume().value); consume();
                     }
                     const auto start = index_;
-                    const bool builtinDefaults=(word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="datepart" || word=="weekday");
+                    const bool builtinDefaults=!localProcedure && (word=="msgbox" || word=="inputbox" || word=="inputbox$" || word=="instr" || word=="instrrev" || word=="strcomp" || word=="round" || word=="replace" || word=="split" || word=="join" || word=="filter" || word=="datediff" || word=="datepart" || word=="weekday");
                     const bool missing=nextSymbol(",") || nextSymbol(")") || (accessExpression_ && nextSymbol(";"));
                     auto argument=missing ? VbaEvaluatedArgument{builtinDefaults ? VbaValue::empty() : VbaValue::missing(),{}}
-                        : argumentExpression(word=="isobject" || (signature && signature->objectArgument(args.size(),argumentName)));
+                        : argumentExpression((!localProcedure && word=="isobject") || (signature && signature->objectArgument(args.size(),argumentName)));
                     args.push_back(std::move(argument.value)); arrayReferences.push_back(std::move(argument.arrayElement));
                     if(!argumentName.empty() && missing) throw error("Named argument requires a value",450);
                     omitted.push_back(missing);
@@ -1198,6 +1199,11 @@ private:
                 } while (take(",") || (accessExpression_ && take(";")));
                 require(")");
             }
+            // MS-VBAL default binding has a narrow Left exception: a scalar
+            // zero-argument function does not hide the two-argument library call.
+            if(localProcedure && word=="left" && signature->names.empty() && args.size()==2
+                && !signature->resultType.empty() && signature->resultType!="variant" && nativeObjectType(signature->resultType).empty()) localProcedure=false;
+            if(localProcedure) return resolver_(tok.value,args,VbaArgumentReferences{std::move(references),std::move(arrayReferences)});
             const bool named=std::any_of(references.begin(),references.end(),[](const std::string& reference){ return reference.starts_with("@named:"); });
             if(named) {
                 if(!host_) return {};

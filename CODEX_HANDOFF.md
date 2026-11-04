@@ -1167,3 +1167,26 @@ Abschluss Objektargument-Kontext: Desktop 48/48 (85,57 s), frischer GUI-freier
 Build/Kern 1/1 (1,99 s), Debian-Paket und vier Originalfixture-Hashes bestanden.
 Vorhandene ByRef-Arrayzellen/DAO-Clone-/Transaktions-Lebensdauerprüfungen bleiben
 grün. Feste 456 Katalogpunkte und 48 CTest-Targets unverändert.
+
+
+Aktueller Funktionsbindungsabschnitt F042/F118: Parenthesierte gleiches-Modul-
+Prozeduren vor Bibliotheksfunktionen, VBA.qualifiziert weiterhin Bibliothek.
+Signaturmetadaten enthalten Function-/Ergebnistypklassifikation; Sub als Wert
+vor Körper explizit 3251. Eigene Optional-/Named-/Missing-Regeln vor Builtin-
+Argumentpfaden, Objektreferenz-Kontext folgt gewählter eigener Funktion.
+Modulzustand hält reine Prozedurnamen, somit keine ganzen Modulsuchen je
+Intrinsic-Aufruf; eigene Zustandsprovider ohne Inventar nutzen Frame-Fallback.
+Deklarierte ununterstützte Routinen fallen nicht still auf Bibliothek zurück.
+MS-VBAL-Left-Ausnahme für parameterlose skalare Funktion bei 2 Actuals vorhanden.
+Gezielt Kern/DAO/GUI/Layout 4/4 (14,05 s): eigene Len/Round, VBA.Len, Optional/
+Named/Missing, gezählte Körper, Left-Fallback, Sub-als-Wert-Sperre, echte
+Control-Argumente an eigene Len, function-bound Click mit Qt-/SQL-Effekten.
+Vollprüfung folgt. Bare names, skalare/indexierte Variablen-/Property-/Default-
+Member-Bindung und externe/Projekt-/Referenz-/vollständige Klassenscopes offen.
+456/48 unverändert. Details VARIANT_ARRAY_RUNTIME.md und öffentliche MS-VBAL.
+
+Abschluss lokale Funktionspriorität: Desktop 48/48 (88,44 s), frischer
+GUI-freier Build/Kern 1/1 (2,34 s), Debian-Paket und vier Originalfixture-Hashes
+bestanden. Kurzzeitiger Exec-Transportausfall: Workspace/laufende Prüfungen
+blieben erhalten, danach Prozesse/Status geprüft, keine Sourceänderung während
+Prüfungen. Feste 456/48 unverändert. Nächster Fokus: echte Berichtsdarstellung.
