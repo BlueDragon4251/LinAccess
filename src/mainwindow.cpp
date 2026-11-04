@@ -1964,7 +1964,7 @@ void MainWindow::editReport(const QString& existingName) {
     auto* sql=new QPlainTextEdit(&dialog); sql->setObjectName("native-report-sql"); sql->setPlaceholderText("SELECT * FROM kunden"); sql->setPlainText(old.value("sql").toString()); outer->addWidget(sql,1);
     auto* canGrow=new QCheckBox("Text vertikal erweitern (CanGrow)",&dialog); canGrow->setObjectName("native-report-cangrow");
     canGrow->setChecked(old.value("can_grow").toBool());
-    canGrow->setToolTip("Derzeit ein wachsendes Textfeld je Datensatz innerhalb einer Seite."); outer->addWidget(canGrow);
+    canGrow->setToolTip("Ausgerichtete oder untereinanderliegende Textfelder; der Detailbereich muss noch auf eine Seite passen."); outer->addWidget(canGrow);
     outer->addWidget(new QLabel("VBA-Ereignisse: Open, Load, NoData und Close. Druck-/Format-Ereignisse sind noch nicht unterstützt.",&dialog));
     auto* vba=new QPlainTextEdit(&dialog); vba->setObjectName("native-report-vba"); vba->setPlaceholderText("Private Sub Report_Load()\nEnd Sub"); vba->setPlainText(old.value("vba").toString()); outer->addWidget(vba,1);
     auto codeFont=QFontDatabase::systemFont(QFontDatabase::FixedFont); codeFont.setPointSize(10);

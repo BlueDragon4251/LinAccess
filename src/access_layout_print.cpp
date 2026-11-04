@@ -276,8 +276,11 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         currentRecordIndex_=savedRecord; reportPrintPage_=savedPage; reportPrintPages_=savedPages;
         loadRecord();
     });
-    QVector<int> detailHeights(recordRows_.size(),detail),deltas(recordRows_.size(),0);
-    QVector<QString> growingControls(recordRows_.size());
+    struct Growth { QString name; int delta; };
+    struct GrowthGroup { int top,bottom,delta; };
+    QVector<int> detailHeights(recordRows_.size(),detail);
+    QVector<QVector<Growth>> growth(recordRows_.size());
+    QVector<QVector<GrowthGroup>> growthGroups(recordRows_.size());
     if (!growers.isEmpty()) {
         reportPrintPage_=1; reportPrintPages_=1;
         for (int row=0;row<recordRows_.size();++row) {
@@ -287,15 +290,29 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
                 const int wanted=state.widget->sizeHint().height();
                 const int delta=qMax(0,wanted-state.geometry.height());
                 if (!delta) continue;
-                // One actually growing field per detail is a bounded first
-                // flow rule. Do not guess how multiple/overlapping fields flow.
-                if (!growingControls[row].isEmpty() || delta>pageHeight-header-footer-detail) return false;
+                if (delta>pageHeight-header-footer-detail) return false;
                 for (const auto& other:layout_.controls) {
                     const auto key=other.name.toCaseFolded(); const auto peer=saved.value(key);
                     if(other.section=="Section" && key!=name && !peer.hidden && peer.geometry.intersects(state.geometry)) return false;
                 }
-                growingControls[row]=name; deltas[row]=delta; detailHeights[row]=detail+delta;
+                bool grouped=false;
+                for (auto& group:growthGroups[row]) {
+                    if(group.top==state.geometry.top() && group.bottom==state.geometry.bottom()) {
+                        group.delta=qMax(group.delta,delta); grouped=true; break;
+                    }
+                    // Aligned parallel columns or disjoint vertical groups
+                    // have known flow rules; staggered spans remain explicit.
+                    if(state.geometry.top()<=group.bottom && state.geometry.bottom()>=group.top) return false;
+                }
+                if(!grouped) growthGroups[row].append({state.geometry.top(),state.geometry.bottom(),delta});
+                growth[row].append({name,delta});
             }
+            int extra=0;
+            for (const auto& group:growthGroups[row]) {
+                if(group.delta>pageHeight-header-footer-detail-extra) return false;
+                extra+=group.delta;
+            }
+            detailHeights[row]=detail+extra;
         }
     }
     struct Band { QString section; int y,record,page,height; QPicture commands; };
@@ -324,14 +341,17 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     reportPrintPages_=pageNumber;
     for (auto& band:bands) {
         resetControls();
-        if(band.section=="Section" && band.record>0 && deltas[band.record-1]) {
-            const auto name=growingControls[band.record-1]; const auto grown=saved.value(name);
-            const int delta=deltas[band.record-1]; auto rectangle=grown.geometry; rectangle.setHeight(rectangle.height()+delta);
-            grown.widget->setGeometry(rectangle);
+        if(band.section=="Section" && band.record>0 && !growth[band.record-1].isEmpty()) {
             for (const auto& control:layout_.controls) {
+                if(control.section!="Section") continue;
                 const auto key=control.name.toCaseFolded(); const auto state=saved.value(key);
-                if(control.section=="Section" && key!=name && state.geometry.top()>grown.geometry.bottom())
-                    state.widget->setGeometry(state.geometry.translated(0,delta));
+                auto rectangle=state.geometry; int shift=0;
+                for(const auto& group:growthGroups[band.record-1])
+                    if(state.geometry.top()>group.bottom) shift+=group.delta;
+                rectangle.translate(0,shift);
+                for(const auto& change:growth[band.record-1])
+                    if(change.name==key) rectangle.setHeight(rectangle.height()+change.delta);
+                state.widget->setGeometry(rectangle);
             }
         }
         currentRecordIndex_=band.record; reportPrintPage_=band.page; loadRecord();
