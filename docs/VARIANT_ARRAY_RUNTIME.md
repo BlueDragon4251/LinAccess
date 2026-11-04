@@ -311,3 +311,39 @@ copy isolation and ReDim refusal. Full desktop 48/48 (78.05 s), freshly rebuilt
 GUI-free 1/1 (1.26 s), targeted core 1/1 (1.22 s), Debian payload/permissions/
 Build-ID/pinned SQLite and all four original fixture hashes pass. No new CTest
 target. Scoped checklist 377 checked / 72 open, not complete Access parity.
+
+
+## Multi-target Erase as one statement (2026-11-04)
+
+Erase accepts a list of supported named arrays. The parser validates every
+target before executing the procedure; all known constant targets are rejected
+before the body. The list remains one native instruction and source line.
+Execution applies each existing reset/release operation in source order: dynamic
+declarations retain type but deallocate, fixed arrays retain shape/type and reset
+cells, and arrays held by an ordinary Variant release to Empty. Existing copy
+isolation, fixed/For Each/ByRef guards remain active.
+
+A runtime error stops the remaining targets in that instruction; On Error Resume
+Next continues at the following statement. Earlier completed resets remain
+visible. This is the bounded native execution contract, not a claim of complete
+Access 2003 error/alias precedence. Properties, arbitrary expressions and
+unsupported indexed targets remain excluded.
+
+Existing core cases cover a mixed Byte dynamic/Long fixed/Variant array list,
+retained copies and dimensions, an unallocated bound error, a middle-target
+runtime error leaving the final array intact and constant refusal before body
+side effects. No extra CTest target.
+
+
+## Source-mapped multi-target Erase (2026-11-04)
+
+Erase lists retain one native statement/source line while applying actual
+dynamic deallocation, fixed defaults and Variant release in order. Constant
+targets refuse before body execution; a runtime error stops the remaining
+targets and Resume Next proceeds to the next statement. Existing core target
+checks mixed array storage, dimensions/copies, middle-target failure and
+constant side-effect refusal. VARIANT_ARRAY_RUNTIME.md defines native bounds.
+Full desktop 48/48 (78.60 s), freshly rebuilt GUI-free 1/1 (1.25 s), targeted
+core 1/1 (1.27 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original fixture hashes pass. Scoped checklist 378 checked / 72 open; no new
+CTest target or claim of complete Access parity.

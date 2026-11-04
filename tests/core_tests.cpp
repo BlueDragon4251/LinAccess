@@ -3527,6 +3527,35 @@ End Sub
 )VBA","EraseBytes",host,erasedBytes);
     assert(erasedByteArray.status==VbaExecutionStatus::Completed && erasedBytes[0].kind==VbaValue::Kind::Empty && host.fields["ByteErase"]=="Empty:2:128");
 
+    const auto erasedSeveral=executeVbaProcedure(R"VBA(Sub EraseSeveral()
+Dim bytes() As Byte, fixed(1 To 2) As Long
+Dim values As Variant, before As Variant
+ReDim bytes(0 To 1)
+bytes(0)=255
+fixed(1)=7
+values=Array(1,2)
+before=values
+Erase bytes,fixed,values
+Me!MultiErase=TypeName(bytes) & ":" & CStr(fixed(1)) & ":" & CStr(UBound(fixed)) & ":" & TypeName(values) & ":" & CStr(before(1))
+On Error Resume Next
+Me!InvalidErasedBounds=UBound(bytes)
+Me!MultiEraseBoundsError=CStr(Err.Number)
+End Sub
+)VBA","EraseSeveral",host);
+    assert(erasedSeveral.status==VbaExecutionStatus::Completed && host.fields["MultiErase"]=="Byte():0:2:Empty:2" && host.fields["MultiEraseBoundsError"]=="9");
+    const auto partialErase=executeVbaProcedure(R"VBA(Sub PartialErase()
+Dim first As Variant, invalid As Variant, last As Variant
+first=Array(1)
+invalid=3
+last=Array(9)
+On Error Resume Next
+Erase first,invalid,last
+Me!PartialErase=CStr(Err.Number) & ":" & TypeName(first) & ":" & CStr(last(0))
+End Sub
+)VBA","PartialErase",host);
+    assert(partialErase.status==VbaExecutionStatus::Completed && host.fields["PartialErase"]=="13:Empty:9");
+    const auto constantErase=executeVbaProcedure("Sub ConstantErase()\nConst blocked=1\nDim value As Variant\nMe!ForbiddenConstantErase=1\nErase value,blocked\nEnd Sub","ConstantErase",host);
+    assert(constantErase.status==VbaExecutionStatus::Unsupported && constantErase.errorNumber==3251 && !host.fields.contains("ForbiddenConstantErase"));
     const auto shortenedBytes=executeVbaProcedureWithArguments(R"VBA(Sub ShortenBytes(ByRef value As Variant)
 ReDim Preserve value(0 To 1)
 On Error Resume Next
