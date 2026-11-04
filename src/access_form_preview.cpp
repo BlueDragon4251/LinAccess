@@ -1,3 +1,4 @@
+#include "native_stored_form.hpp"
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
 #include "native_project_close_guard.hpp"
@@ -2713,20 +2714,19 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
         else { existing->show(); existing->raise(); existing->activateWindow(); existing->activateDocument(); }
         return;
     }
-    QSqlQuery query(db_);
-    query.prepare("SELECT name,source_bytes FROM _la_access_artifacts "
-                  "WHERE kind=? AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
-    query.addBindValue(report ? "report" : "form"); query.addBindValue(name);
-    if (!query.exec() || !query.next()) {
-        throw linaccess::VbaRuntimeError(report ? 2103 : 2102,"Document target is not imported");
+    QString canonical; QByteArray form,code;
+    const auto stored=report ? std::optional<linaccess::NativeStoredForm>{} : linaccess::loadNativeStoredForm(db_,name);
+    if(stored) { canonical=stored->name; form=stored->layout; code=stored->code; }
+    else {
+        QSqlQuery query(db_);
+        query.prepare("SELECT name,source_bytes FROM _la_access_artifacts WHERE kind=? AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
+        query.addBindValue(report ? "report" : "form"); query.addBindValue(name);
+        if(!query.exec() || !query.next()) throw linaccess::VbaRuntimeError(report ? 2103 : 2102,"Document target is not imported or stored");
+        canonical=query.value(0).toString(); form=query.value(1).toByteArray(); query.finish();
+        query.prepare("SELECT source_bytes FROM _la_access_artifacts WHERE kind='vba' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
+        query.addBindValue((report ? "Report_" : "Form_")+canonical);
+        if(query.exec() && query.next()) code=query.value(0).toByteArray();
     }
-    const auto canonical=query.value(0).toString();
-    const auto form = query.value(1).toByteArray(); query.finish();
-    QSqlQuery vba(db_);
-    vba.prepare("SELECT source_bytes FROM _la_access_artifacts "
-                "WHERE kind='vba' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
-    vba.addBindValue((report ? "Report_" : "Form_") + canonical);
-    const auto code = vba.exec() && vba.next() ? vba.value(0).toByteArray() : QByteArray{}; vba.finish();
     if (linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(form)).kind!=kind)
         throw linaccess::VbaRuntimeError(report ? 2103 : 2102,"Document target kind mismatch");
     // Preserve the actual project UI without owning the new document through

@@ -11,6 +11,7 @@
 #include "access_inspector.hpp"
 #include "access_form_import.hpp"
 #include "access_form_preview.hpp"
+#include "native_stored_form.hpp"
 #include "vba_module_context.hpp"
 #include "access_form_objects.hpp"
 #include "bridge_importer.hpp"
@@ -170,73 +171,7 @@ bool isSelect(const QString& sql) {
         || sql.trimmed().startsWith("SELECT\n", Qt::CaseInsensitive);
 }
 
-class QtFormVbaHost final : public linaccess::VbaHost {
-public:
-    QtFormVbaHost(QWidget* parent,
-                  const std::vector<std::pair<QString, QLineEdit*>>& edits,
-                  std::function<bool()> persist, std::function<void()> gotoLast,
-                  QSqlDatabase database, std::function<void(QString)> openForm)
-        : parent_(parent), edits_(edits), persist_(std::move(persist)),
-          gotoLast_(std::move(gotoLast)), database_(std::move(database)),
-          openForm_(std::move(openForm)) {}
 
-    std::optional<std::string> field(std::string_view name) override {
-        auto* editor = lookup(name);
-        if (editor->text().isEmpty()) return std::nullopt;
-        return editor->text().toUtf8().toStdString();
-    }
-    void setField(std::string_view name, std::optional<std::string> value) override {
-        lookup(name)->setText(value ? QString::fromUtf8(value->data(),
-                                                       static_cast<qsizetype>(value->size())) : QString{});
-    }
-    linaccess::VbaValue fieldValue(std::string_view name) override {
-        auto* editor = lookup(name);
-        return linaccess::qtFieldValue(editor->property("la_null").toBool() ? QVariant{} : QVariant(editor->text()),
-                                      editor->property("la_sql_type").toString());
-    }
-    void setFieldValue(std::string_view name,const linaccess::VbaValue& value) override {
-        auto* editor = lookup(name);
-        const auto converted = linaccess::sqlFieldValue(value,editor->property("la_sql_type").toString());
-        editor->setText(converted.toString()); editor->setProperty("la_null",converted.isNull());
-    }
-    void message(std::string_view text) override {
-        QMessageBox::information(parent_, "VBA MsgBox",
-            QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size())));
-    }
-    std::string inputBox(const linaccess::VbaInputBoxArguments& arguments) override {
-        return linaccess::nativeInputBox(parent_,arguments);
-    }
-    void saveRecord() override {
-        if (!persist_()) throw std::runtime_error("DoCmd: Datensatz konnte nicht gespeichert werden");
-    }
-    void quitApplication() override { AccessFormPreview::quitApplication(); }
-    void maximizeForm() override { parent_->showMaximized(); }
-    void gotoLastRecord() override { gotoLast_(); }
-    linaccess::VbaValue formatValue(const linaccess::VbaValue& value,std::string_view mask,bool stringResult) override {
-        return linaccess::formatAccessValue(value,mask,stringResult);
-    }
-    std::shared_ptr<linaccess::VbaObject> currentDatabase() override { return linaccess::makeDaoDatabase(database_); }
-    void executeSql(std::string_view statement) override {
-        auto database = linaccess::makeDaoDatabase(database_);
-        (void)database->member("Execute",{linaccess::VbaValue::string(std::string(statement))});
-    }
-    void openForm(std::string_view name) override {
-        openForm_(QString::fromUtf8(name.data(), name.size()));
-    }
-private:
-    QLineEdit* lookup(std::string_view name) {
-        const auto target = QString::fromUtf8(name.data(), static_cast<qsizetype>(name.size()));
-        for (const auto& [fieldName, editor] : edits_)
-            if (fieldName.compare(target, Qt::CaseInsensitive) == 0) return editor;
-        throw std::runtime_error("Unbekanntes Me!-Formularfeld: " + std::string(name));
-    }
-    QWidget* parent_;
-    const std::vector<std::pair<QString, QLineEdit*>>& edits_;
-    std::function<bool()> persist_;
-    std::function<void()> gotoLast_;
-    QSqlDatabase database_;
-    std::function<void(QString)> openForm_;
-};
 }
 
 MainWindow::~MainWindow() { disconnect(tabs_,nullptr,this,nullptr); linaccess::resetVbaProjectState(db_); }
@@ -318,6 +253,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     auto* objectMenu=menuBar()->addMenu("&Objekte");
     for (int i=5;i<9;++i) objectMenu->addAction(projectActions[i]);
+    auto* editStoredForm=objectMenu->addAction("Formular&entwurf bearbeiten..."); editStoredForm->setObjectName("native-form-edit");
+    connect(editStoredForm,&QAction::triggered,this,[this] {
+        const auto* item=explorer_->currentItem(); if(item && item->data(0,Qt::UserRole).toString()=="form") editForm(item->text(0));
+    });
+    connect(objectMenu,&QMenu::aboutToShow,this,[this,editStoredForm] {
+        const auto* item=explorer_->currentItem(); editStoredForm->setEnabled(db_.isOpen() && item && item->data(0,Qt::UserRole).toString()=="form" && !QApplication::activeModalWidget());
+    });
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
     viewMenu->addAction(projectActions.last());
     auto* windowMenu=menuBar()->addMenu("&Fenster");
@@ -1802,37 +1744,44 @@ void MainWindow::editForm(const QString& existingName) {
         return;
     }
     const auto old = existingName.isEmpty() ? QJsonObject{} : objectDefinition("form", existingName);
+    if(!existingName.isEmpty()) for(const auto& document:AccessFormPreview::projectDocuments(db_))
+        if(document && document->documentKind()==linaccess::AccessDocumentKind::Form && document->documentName().compare(existingName,Qt::CaseInsensitive)==0)
+            if(!document->close()) return;
     QDialog dialog(this);
+    dialog.setObjectName("native-form-designer");
     dialog.setWindowTitle("Formulardesigner — experimentelle VBA-Ereignislaufzeit");
     tagProjectObject(&dialog,this,db_,"form",existingName);
     dialog.resize(820, 690);
     auto* outer = new QVBoxLayout(&dialog);
     auto* name = new QLineEdit(existingName, &dialog);
-    name->setPlaceholderText("Formularname");
+    name->setObjectName("native-form-name"); name->setPlaceholderText("Formularname");
     outer->addWidget(name);
-    auto* source = new QComboBox(&dialog);
+    auto* caption=new QLineEdit(old.value("caption").toString(existingName),&dialog);
+    caption->setObjectName("native-form-caption"); caption->setPlaceholderText("Formularüberschrift");
+    outer->addWidget(caption);
+    auto* source = new QComboBox(&dialog); source->setObjectName("native-form-source");
     source->addItems(tableNames());
     outer->addWidget(new QLabel("Datenquelle"));
     outer->addWidget(source);
-    auto* fields = new QListWidget(&dialog);
+    auto* fields = new QListWidget(&dialog); fields->setObjectName("native-form-fields");
+    fields->setDragDropMode(QAbstractItemView::InternalMove); fields->setDefaultDropAction(Qt::MoveAction);
     fields->setMaximumHeight(170);
-    outer->addWidget(new QLabel("Formularfelder"));
+    outer->addWidget(new QLabel("Formularfelder — ziehen für Reihenfolge, F2 für Beschriftung"));
     outer->addWidget(fields);
     auto populate = [this, fields, source, old] {
-        fields->clear();
-        const auto table = source->currentText();
-        if (table.isEmpty()) return;
-        QSqlQuery query(db_);
-        query.exec("PRAGMA table_info(" + quoteSql(table) + ")");
-        const auto previous = old.value("fields").toArray();
-        const bool sameSource = old.value("table").toString() == table;
-        while (query.next()) {
-            const auto field = query.value(1).toString();
-            if (field == "id") continue;
-            auto* item = new QListWidgetItem(field, fields);
-            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-            const bool checked = !sameSource || previous.isEmpty() || previous.contains(field);
-            item->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
+        fields->clear(); const auto table=source->currentText(); if(table.isEmpty()) return;
+        QSqlQuery query(db_); if(!query.exec("PRAGMA table_info("+quoteSql(table)+")")) return;
+        QStringList available; while(query.next()) if(query.value(1).toString()!="id") available.push_back(query.value(1).toString());
+        const auto previous=old.value("fields").toArray(); const bool sameSource=old.value("table").toString()==table;
+        const auto captions=sameSource ? old.value("field_captions").toObject() : QJsonObject{};
+        QStringList ordered;
+        if(sameSource) for(const auto& value:previous) if(available.contains(value.toString()) && !ordered.contains(value.toString())) ordered.push_back(value.toString());
+        for(const auto& field:available) if(!ordered.contains(field)) ordered.push_back(field);
+        for(const auto& field:ordered) {
+            auto* item=new QListWidgetItem(captions.value(field).toString(field),fields);
+            item->setData(Qt::UserRole,field); item->setToolTip("Gebundenes Feld: "+field);
+            item->setFlags(item->flags()|Qt::ItemIsUserCheckable|Qt::ItemIsEditable);
+            item->setCheckState(!sameSource || previous.isEmpty() || previous.contains(field) ? Qt::Checked : Qt::Unchecked);
         }
     };
     connect(source, &QComboBox::currentTextChanged, &dialog, populate);
@@ -1841,7 +1790,7 @@ void MainWindow::editForm(const QString& existingName) {
     outer->addWidget(new QLabel(
         "VBA-Modul — experimenteller Teilinterpreter für wenige Form-/Button-Ereignisse; "
         "keine vollständige Microsoft-VBA-Kompatibilität"));
-    auto* vba = new QPlainTextEdit(&dialog);
+    auto* vba = new QPlainTextEdit(&dialog); vba->setObjectName("native-form-vba");
     vba->setPlaceholderText("Private Sub Form_Load()\n    MsgBox \"Hallo\"\nEnd Sub");
     vba->setPlainText(old.value("vba").toString());
     auto importedBytes = std::make_shared<QByteArray>(QByteArray::fromBase64(
@@ -1851,7 +1800,7 @@ void MainWindow::editForm(const QString& existingName) {
     auto* importBas = addButton(row, ".bas/.cls laden");
     auto* importBridge = addButton(row, "VBA aus Bridge übernehmen");
     auto* analyze = addButton(row, "VBA analysieren");
-    auto* save = addButton(row, "Formular speichern");
+    auto* save = addButton(row, "Formular speichern"); save->setObjectName("native-form-save");
     outer->addLayout(row);
     auto* findings = new QTextBrowser(&dialog);
     findings->setMaximumHeight(105);
@@ -1909,181 +1858,29 @@ void MainWindow::editForm(const QString& existingName) {
             lines << "Noch nicht implementierte Abhängigkeit: " + QString::fromStdString(issue);
         findings->setPlainText(lines.join('\n'));
     });
-    connect(save, &QPushButton::clicked, &dialog, [this, &dialog, name, source, fields, vba, importedBytes] {
-        QJsonArray chosen;
-        for (int i = 0; i < fields->count(); ++i)
-            if (fields->item(i)->checkState() == Qt::Checked) chosen.append(fields->item(i)->text());
-        if (chosen.isEmpty()) { messageError(this, "Mindestens ein Feld auswählen."); return; }
-        const QJsonObject content = {{"table", source->currentText()},
-                                     {"fields", chosen}, {"vba", vba->toPlainText()},
-                                     {"original_vba_base64", QString::fromLatin1(importedBytes->toBase64())},
-                                     {"language", "vba_subset_experimental"}};
-        if (saveObject("form", name->text(), content)) dialog.accept();
+    connect(save, &QPushButton::clicked, &dialog, [this, &dialog, name, caption, source, fields, vba, importedBytes,old] {
+        QJsonArray chosen; QJsonObject captions;
+        for(int index=0;index<fields->count();++index) if(fields->item(index)->checkState()==Qt::Checked) {
+            const auto field=fields->item(index)->data(Qt::UserRole).toString(); chosen.append(field); captions.insert(field,fields->item(index)->text());
+        }
+        if(chosen.isEmpty()) { messageError(&dialog,"Mindestens ein Feld auswählen."); return; }
+        auto content=old; content.insert("table",source->currentText()); content.insert("fields",chosen);
+        content.insert("caption",caption->text()); content.insert("field_captions",captions); content.insert("vba",vba->toPlainText());
+        content.insert("original_vba_base64",QString::fromLatin1(importedBytes->toBase64())); content.insert("language","vba_subset_experimental");
+        try { (void)linaccess::nativeStoredForm(name->text(),content,db_); }
+        catch(const std::exception& error) { messageError(&dialog,QString::fromUtf8(error.what())); return; }
+        if(saveObject("form",name->text(),content)) dialog.accept();
     });
     dialog.exec();
 }
 
 void MainWindow::runForm(const QString& name) {
-    if (!hasProject()) return;
-    const auto definition = objectDefinition("form", name);
-    const auto tableName = definition.value("table").toString();
-    const auto fieldsJson = definition.value("fields").toArray();
-    if (tableName.isEmpty() || fieldsJson.isEmpty()) {
-        messageError(this, "Formulardefinition unvollständig.");
-        return;
-    }
-    QSqlQuery schema(db_);
-    schema.exec("PRAGMA table_info(" + quoteSql(tableName) + ")");
-    bool hasId = false;
-    while (schema.next()) if (schema.value(1).toString() == "id") hasId = true;
-    // Access-imported tables do not necessarily have a column literally named
-    // "id". They are ordinary SQLite rowid tables in this import version.
-    const QString keyExpr = hasId ? QStringLiteral("\"id\"") : QStringLiteral("rowid");
-    QDialog dialog(this);
-    dialog.setWindowTitle("Formular: " + name);
-    tagProjectObject(&dialog,this,db_,"form",name);
-    dialog.resize(620, 510);
-    auto* outer = new QVBoxLayout(&dialog);
-    outer->addWidget(new QLabel("<b>VBA: experimenteller Teilinterpreter. "
-                                "DAO unterstützt nur einfache Tabellenrecordsets; Windows-API und COM sind nicht implementiert.</b>"));
-    auto* records = new QComboBox(&dialog);
-    outer->addWidget(records);
-    auto* form = new QFormLayout();
-    std::vector<std::pair<QString, QLineEdit*>> entries;
-    const auto fieldTypes = linaccess::sqliteColumnTypes(db_,tableName);
-    for (const auto& field : fieldsJson) {
-        const auto column = field.toString();
-        auto* edit = new QLineEdit(&dialog);
-        edit->setProperty("la_sql_type",fieldTypes.value(column.toCaseFolded()));
-        edit->setProperty("la_null",true);
-        connect(edit,&QLineEdit::textEdited,edit,[edit] { edit->setProperty("la_null",false); });
-        entries.emplace_back(column, edit);
-        form->addRow(column, edit);
-    }
-    outer->addLayout(form);
-    auto reload = [this, tableName, keyExpr, records, entries](const QVariant& selected) {
-        records->blockSignals(true);
-        records->clear();
-        records->addItem("(Neuer Datensatz)", QVariant());
-        QSqlQuery query(db_);
-        if (query.exec("SELECT " + keyExpr + " FROM " + quoteSql(tableName) + " LIMIT 500")) {
-            while (query.next()) records->addItem("Datensatz #" + query.value(0).toString(), query.value(0));
-        }
-        if (!selected.isNull()) {
-            const auto idx = records->findData(selected);
-            if (idx >= 0) records->setCurrentIndex(idx);
-        }
-        records->blockSignals(false);
-        for (const auto& entry : entries) { entry.second->clear(); entry.second->setProperty("la_null",true); }
-        if (records->currentData().isNull()) return;
-        QSqlQuery row(db_);
-        row.prepare("SELECT * FROM " + quoteSql(tableName) + " WHERE " + keyExpr + "=?");
-        row.addBindValue(records->currentData());
-        if (row.exec() && row.next())
-            for (const auto& entry : entries)
-                {
-                    const auto value = row.value(row.record().indexOf(entry.first));
-                    entry.second->setText(asText(value)); entry.second->setProperty("la_null",value.isNull());
-                }
-    };
-    connect(records, &QComboBox::currentIndexChanged, &dialog, [this, tableName, keyExpr, records, entries] {
-        for (const auto& entry : entries) { entry.second->clear(); entry.second->setProperty("la_null",true); }
-        if (records->currentData().isNull()) return;
-        QSqlQuery row(db_);
-        row.prepare("SELECT * FROM " + quoteSql(tableName) + " WHERE " + keyExpr + "=?");
-        row.addBindValue(records->currentData());
-        if (row.exec() && row.next())
-            for (const auto& entry : entries)
-                {
-                    const auto value = row.value(row.record().indexOf(entry.first));
-                    entry.second->setText(asText(value)); entry.second->setProperty("la_null",value.isNull());
-                }
-    });
-    auto* buttons = new QHBoxLayout();
-    auto* create = addButton(buttons, "Neu");
-    auto* save = addButton(buttons, "Speichern");
-    auto* action = addButton(buttons, "Aktion (btnAktion_Click)");
-    auto* designer = addButton(buttons, "Entwurf bearbeiten");
-    outer->addLayout(buttons);
-    connect(create, &QPushButton::clicked, records, [records] { records->setCurrentIndex(0); });
-    const auto persist = [this, tableName, keyExpr, records, entries, reload]() -> bool {
-        QStringList columns, placeholders, assignments;
-        for (const auto& [column, _] : entries) {
-            columns << quoteSql(column);
-            placeholders << "?";
-            assignments << quoteSql(column) + "=?";
-        }
-        const auto id = records->currentData();
-        QSqlQuery query(db_);
-        if (id.isNull())
-            query.prepare("INSERT INTO " + quoteSql(tableName) + " (" + columns.join(",")
-                          + ") VALUES (" + placeholders.join(",") + ")");
-        else
-            query.prepare("UPDATE " + quoteSql(tableName) + " SET " + assignments.join(",")
-                          + " WHERE " + keyExpr + "=?");
-        try {
-            for (const auto& entry : entries) {
-                auto* editor = entry.second; const auto type = editor->property("la_sql_type").toString();
-                const auto value = linaccess::qtFieldValue(editor->property("la_null").toBool() ? QVariant{} : QVariant(editor->text()),type);
-                query.addBindValue(linaccess::sqlFieldValue(value,type));
-            }
-        } catch (const std::exception& error) { messageError(this,QString::fromUtf8(error.what())); return false; }
-        if (!id.isNull()) query.addBindValue(id);
-        if (!query.exec()) { messageError(this, query.lastError().text()); return false; }
-        reload(id.isNull() ? query.lastInsertId() : id);
-        return true;
-    };
-    const auto vba = definition.value("vba").toString().toUtf8().toStdString();
-    const bool enableVba = !vba.empty();
-    const auto gotoLast = [records] {
-        if (records->count() > 1) records->setCurrentIndex(records->count() - 1);
-    };
-    auto fire = [this, &dialog, entries, persist, gotoLast, enableVba, vba](std::string_view procedure) {
-        if (!enableVba) return linaccess::VbaExecutionResult{
-            linaccess::VbaExecutionStatus::ProcedureMissing, {}, 0};
-        QtFormVbaHost host(&dialog, entries, persist, gotoLast, db_,
-            [this](QString name) {
-                QSqlQuery query(db_);
-                query.prepare("SELECT source_bytes FROM _la_access_artifacts "
-                              "WHERE kind='form' AND name=? ORDER BY id DESC LIMIT 1");
-                query.addBindValue(name);
-                if (!query.exec() || !query.next())
-                    throw std::runtime_error("DoCmd.OpenForm: Formularquelle fehlt: " + name.toStdString());
-                const auto form = query.value(0).toByteArray();
-                query.finish();
-                QSqlQuery code(db_);
-                code.prepare("SELECT source_bytes FROM _la_access_artifacts "
-                             "WHERE kind='vba' AND name=? ORDER BY id DESC LIMIT 1");
-                code.addBindValue("Form_" + name);
-                const auto module = code.exec() && code.next() ? code.value(0).toByteArray() : QByteArray{};
-                code.finish();
-                (void)AccessFormPreview::showDocument(linaccess::AccessDocumentKind::Form,name,form,module,db_,this);
-            });
-        auto result = linaccess::executeVbaProcedure(vba, procedure, host);
-        if (result.status == linaccess::VbaExecutionStatus::Unsupported ||
-            result.status == linaccess::VbaExecutionStatus::Error) {
-            messageError(this, "VBA-Fehler in " + QString::fromUtf8(procedure.data(),
-                        static_cast<qsizetype>(procedure.size())) + ", Zeile "
-                        + QString::number(result.line) + ": "
-                        + QString::fromStdString(result.explanation));
-        }
-        return result;
-    };
-    connect(save, &QPushButton::clicked, &dialog, [persist, fire] {
-        const auto result = fire("btnSpeichern_Click");
-        if (result.status == linaccess::VbaExecutionStatus::ProcedureMissing) (void)persist();
-        // When a VBA handler exists, it controls saving through DoCmd.RunCommand.
-    });
-    connect(action, &QPushButton::clicked, &dialog, [fire, &dialog] {
-        if (fire("btnAktion_Click").status == linaccess::VbaExecutionStatus::ProcedureMissing)
-            QMessageBox::information(&dialog, "VBA", "Keine btnAktion_Click-Prozedur vorhanden oder freigegeben.");
-    });
-    connect(designer, &QPushButton::clicked, &dialog, [&dialog] { dialog.accept(); });
-    reload({});
-    if (fire("Form_Open").cancelled) return;
-    (void)fire("Form_Load");
-    const auto openDesigner = dialog.exec() == QDialog::Accepted;
-    if (openDesigner) editForm(name);
+    if (!hasProject() || !finishActiveDataEditors()) return;
+    try {
+        const auto form=linaccess::loadNativeStoredForm(db_,name);
+        if(!form) throw linaccess::VbaRuntimeError(2102,"Gespeichertes Formular ist nicht verfügbar.");
+        (void)AccessFormPreview::showDocument(linaccess::AccessDocumentKind::Form,form->name,form->layout,form->code,db_,this);
+    } catch(const std::exception& error) { messageError(this,QString::fromUtf8(error.what())); }
 }
 
 void MainWindow::editReport(const QString& existingName) {

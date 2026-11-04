@@ -4642,3 +4642,28 @@ Targeted core/DAO 2/2 (2.21 s), freshly rebuilt GUI-free core 1/1 (2.05 s), full
 desktop 48/48 (76.34 s), Debian payload/permissions/Build-ID/pinned SQLite and
 all four original fixture hashes pass. No new CTest targets or catalog IDs;
 fixed 456 remains, with full F043/Access parity still open.
+
+
+## Stored native forms use the document runtime (2026-11-04)
+
+Under existing F080, owned `_la_objects` form definitions now open through
+AccessFormPreview, sharing actual SQL binding, VBA instance state, document
+registration, DoCmd, saving and close/Unload/Quit handling with imported forms.
+The former modal dialog and separate manual INSERT/UPDATE path are removed.
+DoCmd.OpenForm resolves owned definitions and rejects ambiguous imported/native
+names. Generated default New/Save handlers call actual DoCmd commands; they are
+runtime additions and never replace the saved user VBA or original source bytes.
+The existing editor persists field order and editable captions, restores both,
+and closes a loaded matching document before editing, respecting close refusal.
+
+The existing GUI target exercises real designer persistence, rendered order and
+captions, actual SQL saves, persistent VBA state, opening a child then closing
+its caller, IsLoaded and reopening the designer without altering source.
+Targeted mainwindow_documents passes (2.24 s). Full validation follows.
+No new CTest targets or catalog IDs. Fixed 456 remains. This is a bounded native
+form editor, not full Access visual design, arbitrary layout editing, report
+parity or an original Access result oracle. Owned subform loading remains open.
+
+Completion: desktop 48/48 (82.61 s), GUI-free build and core 1/1 (1.52 s),
+Debian payload/permissions/Build-ID/pinned SQLite and four original fixture
+hashes pass. Fixed inventory remains 384/456 scoped entries, 72 open.
