@@ -113,7 +113,12 @@ public:
         if (!editor->hasFocus() && !duringUpdate) throw linaccess::VbaRuntimeError(2185,"Text selection requires control focus");
         return editor;
     }
-    PreviewControlObject(AccessFormPreview& preview,QString name) : PreviewObjectBase(preview),name_(std::move(name)) {}
+    PreviewControlObject(AccessFormPreview& preview,QString name) : PreviewObjectBase(preview),name_(std::move(name)) {
+        for(const auto& control:preview.layout_.controls) if(control.name.compare(name_,Qt::CaseInsensitive)==0) {
+            nativeType_="access."+(control.type=="Tab" ? QString("tabcontrol") : control.type.toCaseFolded()).toStdString(); break;
+        }
+    }
+    bool isNativeType(std::string_view type) const override { return type=="access.control" || type==nativeType_; }
     bool hasScalarDefault() const override { return true; }
     linaccess::VbaValue scalarValue() override { return member("Value",{}); }
     void assignDefaultMember(const std::vector<linaccess::VbaValue>& args,const linaccess::VbaValue& value) override {
@@ -657,10 +662,12 @@ private:
         return widget;
     }
     QString name_;
+    std::string nativeType_;
 };
 class PreviewControlsObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewControlsObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    bool isNativeType(std::string_view type) const override { return type=="access.controls"; }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto names = controlNames(); const auto key = text(name).toCaseFolded();
         if (key == "count" && args.empty()) return linaccess::VbaValue::numeric(names.size());
@@ -694,6 +701,7 @@ class PreviewRecordsetObject final : public linaccess::VbaObject, private Previe
 public:
     std::string_view className() const override { return "Recordset"; }
     explicit PreviewRecordsetObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    bool isNativeType(std::string_view type) const override { return type=="dao.recordset"; }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& arguments) override {
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
         auto snapshot=preview.recordsetSnapshot();
@@ -710,7 +718,8 @@ public:
 };
 class PreviewFormObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
-    explicit PreviewFormObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    explicit PreviewFormObject(AccessFormPreview& preview) : PreviewObjectBase(preview),report_(preview.layout_.kind==linaccess::AccessDocumentKind::Report) {}
+    bool isNativeType(std::string_view type) const override { return type==(report_ ? "access.report" : "access.form"); }
     linaccess::VbaValue defaultMember(const std::vector<linaccess::VbaValue>& args,bool reference) override {
         if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"Form default member requires one control");
         const auto control=makePreviewControlsObject(checked())->member("Item",args);
@@ -905,10 +914,13 @@ public:
         if (preview.setModuleMember(name,value,true)) return;
         PreviewControlObject(preview,preview.controlMemberName(text(name))).assign("Value",value);
     }
+private:
+    bool report_{};
 };
 class PreviewFormsObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewFormsObject(AccessFormPreview& preview,bool reports=false) : PreviewObjectBase(preview),reports_(reports) {}
+    bool isNativeType(std::string_view type) const override { return type==(reports_ ? "access.reports" : "access.forms"); }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto forms = openForms(); const auto key = text(name).toCaseFolded();
         if (key == "count" && args.empty()) return linaccess::VbaValue::numeric(forms.size());
@@ -1519,6 +1531,7 @@ std::shared_ptr<linaccess::VbaObject> makeNativeCurrentData(std::shared_ptr<Nati
 class PreviewApplicationObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewApplicationObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
+    bool isNativeType(std::string_view type) const override { return type=="access.application"; }
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         if (text(name).compare("Quit",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Option"},0};
         if (text(name).compare("RunCommand",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Command"},1};

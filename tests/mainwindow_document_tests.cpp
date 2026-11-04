@@ -153,6 +153,11 @@ void exerciseStoredForm(MainWindow& window,QSqlDatabase db) {
 Private mouseTrace As String
 Private Sub Form_Load()
 state=1
+If Not TypeOf Me Is Access.Form Then Err.Raise 5
+If Not TypeOf Me!first Is TextBox Then Err.Raise 5
+If Not TypeOf Me!btnSpeichern Is CommandButton Then Err.Raise 5
+If Not TypeOf Me.Controls Is Access.Controls Then Err.Raise 5
+If TypeOf Me Is Report Then Err.Raise 5
 End Sub
 Private Sub first_MouseDown(Button As Integer, Shift As Integer, X As Single, Y As Single)
 If Button=1 Then mouseTrace=CStr(Button) & ":" & CStr(Shift) & ":" & CStr(X) & ":" & CStr(Y)

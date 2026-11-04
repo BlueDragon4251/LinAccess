@@ -175,6 +175,7 @@ VbaValue fieldCollection(std::shared_ptr<Recordset> owner);
 class Field final : public VbaObject {
 public:
     std::string_view className() const override { return "Field"; }
+    bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     Field(std::shared_ptr<Recordset> owner, QString name) : owner_(std::move(owner)), name_(std::move(name)) {}
     bool hasScalarDefault() const override { return true; }
     VbaValue scalarValue() override { return member("Value",{}); }
@@ -191,6 +192,7 @@ private:
 class Recordset final : public VbaObject, public std::enable_shared_from_this<Recordset> {
 public:
     std::string_view className() const override { return "Recordset"; }
+    bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=lower(name);
         if (key=="findfirst" || key=="findlast" || key=="findnext" || key=="findprevious")
@@ -616,6 +618,7 @@ private:
 class Fields final : public VbaObject {
 public:
     std::string_view className() const override { return "Fields"; }
+    bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     explicit Fields(std::shared_ptr<Recordset> owner) : owner_(std::move(owner)) {}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto key = lower(name);
@@ -669,6 +672,7 @@ class QueryDefinition;
 class QueryParameter final : public VbaObject {
 public:
     std::string_view className() const override { return "Parameter"; }
+    bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     QueryParameter(std::shared_ptr<QueryDefinition> query, QString name,quint64 generation) : query_(std::move(query)), name_(std::move(name)),generation_(generation) {}
     bool hasScalarDefault() const override { return true; }
     VbaValue scalarValue() override { return member("Value",{}); }
@@ -687,6 +691,7 @@ class QueryParameters;
 class QueryDefinition final : public VbaObject, public std::enable_shared_from_this<QueryDefinition> {
 public:
     std::string_view className() const override { return "QueryDef"; }
+    bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=lower(name);
         if (key=="openrecordset") return VbaArgumentSignature{{"Type"},0};
@@ -767,6 +772,7 @@ private:
 class QueryParameters final : public VbaObject {
 public:
     std::string_view className() const override { return "Parameters"; }
+    bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     explicit QueryParameters(std::shared_ptr<QueryDefinition> query) : query_(std::move(query)) {}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         if (query_->closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
@@ -849,6 +855,7 @@ QStringList nativeTableNames(QSqlDatabase db) {
 class TableDefinition final : public VbaObject {
 public:
     std::string_view className() const override { return "TableDef"; }
+    bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=lower(name);
         if (key=="openrecordset") return VbaArgumentSignature{{"Type"},0};
@@ -883,6 +890,7 @@ private:
 class TableDefinitions final : public VbaObject {
 public:
     std::string_view className() const override { return "TableDefs"; }
+    bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     explicit TableDefinitions(QSqlDatabase db) : db_(std::move(db)) {}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto names=nativeTableNames(db_); const auto key=lower(name);
@@ -920,6 +928,7 @@ private:
 class Database final : public VbaObject {
 public:
     std::string_view className() const override { return "Database"; }
+    bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=lower(name);
         if (key=="openrecordset") return VbaArgumentSignature{{"Name","Type"},1};
@@ -978,6 +987,7 @@ class SingletonDaoCollection final : public VbaObject {
 public:
     SingletonDaoCollection(std::shared_ptr<VbaObject> object,QString name,std::string_view type):object_(std::move(object)),name_(std::move(name)),type_(type) {}
     std::string_view className() const override { return type_; }
+    bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto key=lower(name);
         if (key=="count" && args.empty()) { (void)object_->member("Name",{}); return VbaValue::numeric(1); }
@@ -1004,6 +1014,7 @@ private:
 class Workspace final : public VbaObject {
 public:
     std::string_view className() const override { return "Workspace"; }
+    bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     explicit Workspace(QSqlDatabase db):db_(std::move(db)),state_(workspaceState(db_)) {}
     VbaValue defaultMember(const std::vector<VbaValue>& args,bool) override { return databases()->defaultMember(args,true); }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
@@ -1043,6 +1054,7 @@ private:
 class Engine final : public VbaObject {
 public:
     std::string_view className() const override { return "DBEngine"; }
+    bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     explicit Engine(QSqlDatabase db):db_(std::move(db)),state_(workspaceState(db_)) {}
     VbaValue defaultMember(const std::vector<VbaValue>& args,bool) override { return workspaces()->defaultMember(args,true); }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {

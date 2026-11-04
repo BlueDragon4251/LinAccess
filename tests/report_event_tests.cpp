@@ -58,6 +58,9 @@ End
 )REPORT";
     const QByteArray code = R"VBA(
 Sub Report_Open(Cancel As Integer)
+If Not TypeOf Me Is Access.Report Then Err.Raise 5
+If TypeOf Me Is Access.Form Then Err.Raise 5
+If Not TypeOf Reports Is Access.Reports Then Err.Raise 5
 CurrentDb.Execute "INSERT INTO events(name) VALUES('open')"
 Me!Info = CStr(Reports.Count) & ":" & CStr(Forms.Count)
 End Sub

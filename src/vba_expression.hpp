@@ -54,6 +54,8 @@ class VbaObject {
 public:
     virtual ~VbaObject() = default;
     virtual std::string_view className() const { return {}; }
+    // Explicit native class/interface identity; never infer it from a scalar default.
+    virtual bool isNativeType(std::string_view) const { return false; }
     virtual std::optional<VbaArgumentSignature> argumentSignature(std::string_view) const { return {}; }
     virtual VbaValue member(std::string_view name, const std::vector<VbaValue>& arguments) = 0;
     // Advertise a zero-argument scalar default explicitly; getter errors propagate.

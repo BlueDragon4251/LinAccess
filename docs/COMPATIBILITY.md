@@ -2714,3 +2714,47 @@ original fixture hashes pass. The existing real DAO With/clone case now exits
 through a computed GoTo and successfully starts its real transaction afterward.
 This full run also covers the preceding native button mouse follow-up. Fixed
 456 work entries and 48 CTest targets remain unchanged.
+
+
+## Explicit native TypeOf class identity (2026-11-04)
+
+Under existing F042/F043/F122, TypeOf reference Is class now queries explicit
+native class/interface metadata, without retrieving scalar defaults or guessing
+identity from displayed TypeName strings. Native Collection, Dictionary, Err,
+DAO objects and supported Access form/report/control/application/collection
+wrappers expose bounded identity. Control and document type metadata is captured
+independently of mutable field values and weak document availability.
+
+The operator keeps its operand in object-reference context, supports existing
+property/function/index/bang/With reference paths, produces Boolean and handles
+Not/And through native expression precedence. A non-object Variant value compares
+False; a Nothing object reference raises VBA error 91. Unknown class/reference
+bindings, unsupported literal/value operand forms and calculated-expression
+TypeOf remain explicit 3251 rather than fabricated matches. Full declared-type/
+static expression classification, UDTs, user class inheritance, reference order,
+COM interfaces and Access oracle remain open.
+
+Existing core verifies real Collection/Dictionary references, indexed object
+items, a counted object-returning function, Variant scalar, Nothing/Err and
+unknown-class rejection before procedure effects. Existing DAO inspects actual
+Recordset/Fields/Field references without dereferencing scalar field defaults.
+Existing GUI inspects Form, TextBox, CommandButton, Controls and Report/Reports
+from real native event procedures. Targeted core/DAO/GUI/layout 4/4 (13.14 s)
+passed. The existing DAO case was then strengthened to inspect a temporary real
+clone and begin a transaction immediately afterward, checking clone release;
+this final addition and complete validation follow. Fixed 456/48 unchanged.
+
+Primary reference: Microsoft [MS-VBAL](https://learn.microsoft.com/en-us/openspecs/microsoft_general_purpose_programming_languages/ms-vbal/),
+section 5.6.7 (TypeOf...Is). This is native type identity, not a COM adapter.
+
+TypeOf validation completion: the complete desktop run passed 47/48 (79.35 s).
+The added DAO probe had already released its temporary clone and successfully
+begun a transaction, then reused a cursor invalidated by the existing Rollback
+contract (3420). Corrected that probe to commit its read-only transaction so
+subsequent existing cursor checks remain valid; the corrected DAO target passes
+1/1 (0.44 s). Runtime code did not change after the complete run: all 48 existing
+targets are therefore verified across those runs, without repeating the other 47.
+Fresh GUI-free build/core 1/1 (1.69 s), Debian payload/permissions/Build-ID/pinned
+SQLite and four original fixture hashes pass. Last single clean full 48/48 run
+was the preceding computed-branch commit (81.46 s). No new CTest target or fixed
+catalog ID. Full static/UDT/user-class/COM/Access type binding remains open.

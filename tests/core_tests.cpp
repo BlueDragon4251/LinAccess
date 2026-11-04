@@ -2197,6 +2197,36 @@ End Sub
     assert(host.fields["StatementError"]=="-2147220990:ErrObject" && host.fields["StatementDivision"]=="11");
     for(const auto expression:{"-Null","+Null","-(Null+1)","+(Null+1)"})
         assert(evaluateVbaExpression(expression,host,{}).kind==VbaValue::Kind::Null);
+    const auto nativeTypeChecks=executeVbaProcedure(R"VBA(Private inspected As Long
+Private owned As Collection
+Function RetainedObject() As Object
+inspected=inspected+1
+Set RetainedObject=owned
+End Function
+Sub NativeTypeChecks()
+Dim dictionary As Scripting.Dictionary, slot As Variant, absent As Object
+Set owned=New Collection
+Set dictionary=New Scripting.Dictionary
+dictionary.Add "items",owned
+Set slot=owned
+If Not TypeOf dictionary("items") Is VBA.Collection Then Err.Raise 5
+If Not TypeOf slot Is Collection Then Err.Raise 5
+If TypeOf dictionary Is Collection Then Err.Raise 5
+If Not TypeOf RetainedObject() Is Object Then Err.Raise 5
+slot=7
+If TypeOf slot Is Object Then Err.Raise 5
+If Not TypeOf Err Is VBA.ErrObject Then Err.Raise 5
+On Error Resume Next
+slot=TypeOf absent Is Object
+Me!NativeTypeNothing=CStr(Err.Number)
+On Error GoTo 0
+Me!NativeTypeChecks=CStr(TypeOf owned Is Collection) & ":" & CStr(TypeOf dictionary Is Scripting.Dictionary) & ":" & CStr(inspected)
+End Sub
+)VBA","NativeTypeChecks",host);
+    if(nativeTypeChecks.status!=VbaExecutionStatus::Completed) std::cerr<<"Native TypeOf error="<<nativeTypeChecks.errorNumber<<" line="<<nativeTypeChecks.line<<" explanation="<<nativeTypeChecks.explanation<<"\n";
+    assert(nativeTypeChecks.status==VbaExecutionStatus::Completed && host.fields["NativeTypeChecks"]=="True:True:1" && host.fields["NativeTypeNothing"]=="91");
+    const auto unknownType=executeVbaProcedure("Sub UnknownType()\nMe!NeverTypeOf=1\nDim obj As Object\nIf TypeOf obj Is UnregisteredClass Then Exit Sub\nEnd Sub","UnknownType",host);
+    assert(unknownType.status==VbaExecutionStatus::Unsupported && !host.fields.contains("NeverTypeOf"));
     const auto computedBranches=executeVbaProcedure(R"VBA(Private picks As Long
 Function PickBranch() As Double
 picks=picks+1

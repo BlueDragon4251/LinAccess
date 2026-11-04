@@ -128,6 +128,7 @@ class VbaCollection final : public VbaObject,public NativeVariantContainer {
     }
 public:
     std::string_view className() const override { return "Collection"; }
+    bool isNativeType(std::string_view type) const override { return type=="vba.collection"; }
     void visitOwnedValues(const std::function<void(const VbaValue&)>& visitor) const override { for(const auto& entry:entries_) visitor(entry.value); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto member=lower(std::string(name));
@@ -620,6 +621,7 @@ class VbaDictionary final : public VbaObject,public NativeVariantContainer {
     }
 public:
     std::string_view className() const override { return "Dictionary"; }
+    bool isNativeType(std::string_view type) const override { return type=="scripting.dictionary"; }
     void visitOwnedValues(const std::function<void(const VbaValue&)>& visitor) const override { for(const auto& entry:entries_) visitor(entry.value); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto member=lower(std::string(name));
@@ -889,6 +891,45 @@ private:
             if(value.kind==VbaValue::Kind::Number && value.numericType==VbaValue::NumericType::Integer)
                 return VbaValue::integer(static_cast<std::int16_t>(~number));
             return VbaValue::longInteger(~number);
+        }
+        if (take("typeof")) {
+            if(accessExpression_) throw error("TypeOf is unavailable in calculated expressions",3251);
+            const auto root=lower(peek().value);
+            const bool reference=peek().type==Token::Type::Word || peek().type==Token::Type::Bracket || nextSymbol(".") || nextSymbol("!");
+            if(!reference || root=="nothing" || root=="null" || root=="empty" || root=="true" || root=="false" || root=="new" || root=="typeof")
+                throw error("TypeOf requires a native reference expression",3251);
+            const auto object=primary(true,7);
+            require("is");
+            auto token=consume();
+            if(token.type!=Token::Type::Word) throw error("TypeOf requires a class name",3251);
+            auto type=lower(token.value);
+            while(take(".")) {
+                token=consume(); if(token.type!=Token::Type::Word) throw error("TypeOf class qualifier is incomplete",3251);
+                type+="."+lower(token.value);
+            }
+            static const std::unordered_map<std::string,std::string> aliases{
+                {"collection","vba.collection"},{"errobject","vba.errobject"},
+                {"form","access.form"},{"report","access.report"},{"control","access.control"},
+                {"application","access.application"},{"forms","access.forms"},{"reports","access.reports"},{"controls","access.controls"},
+                {"textbox","access.textbox"},{"combobox","access.combobox"},{"listbox","access.listbox"},
+                {"checkbox","access.checkbox"},{"optionbutton","access.optionbutton"},{"togglebutton","access.togglebutton"},
+                {"commandbutton","access.commandbutton"},{"label","access.label"},{"rectangle","access.rectangle"},
+                {"line","access.line"},{"subform","access.subform"},{"optiongroup","access.optiongroup"},
+                {"tabcontrol","access.tabcontrol"},{"page","access.page"}};
+            if(const auto found=aliases.find(type);found!=aliases.end()) type=found->second;
+            static const std::unordered_set<std::string> nativeTypes{
+                "object","vba.collection","vba.errobject","scripting.dictionary",
+                "dao.database","dao.databases","dao.workspace","dao.workspaces","dao.dbengine","dao.recordset",
+                "dao.field","dao.fields","dao.querydef","dao.parameter","dao.parameters","dao.tabledef","dao.tabledefs",
+                "access.form","access.report","access.control","access.application","access.forms","access.reports","access.controls",
+                "access.textbox","access.combobox","access.listbox","access.checkbox","access.optionbutton","access.togglebutton",
+                "access.commandbutton","access.label","access.rectangle","access.line","access.subform","access.optiongroup","access.tabcontrol","access.page"};
+            if(!nativeTypes.contains(type)) throw error("TypeOf class binding is not implemented",3251);
+            if(referenceCapture_) referenceCapture_->element.reset();
+            if(!host_) return {};
+            if(object.kind!=VbaValue::Kind::Object) return VbaValue::logical(false);
+            if(!object.object) throw error("TypeOf object variable is not set",91);
+            return VbaValue::logical(type=="object" || object.object->isNativeType(type));
         }
         if (take("(")) {
             const auto value = expression(1,objectContext);
