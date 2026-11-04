@@ -3054,6 +3054,49 @@ End Sub
     const auto invalidObjectDefault=executeVbaProcedure("Sub Invalid(Optional item As Object=1)\nEnd Sub","Invalid",host);
     assert(invalidObjectDefault.status==VbaExecutionStatus::Unsupported);
 
+    const std::string staticLocals=R"VBA(Function NextStatic() As Long
+Static counter As Long, bag As Object
+Static fixed(1 To 2) As Long, dynamic() As Long
+If bag Is Nothing Then Set bag=CreateObject("Scripting.Dictionary")
+counter=counter+1
+fixed(1)=fixed(1)+2
+If counter=1 Then ReDim dynamic(0 To 0) As Long
+dynamic(0)=dynamic(0)+3
+bag("calls")=counter
+Me!StaticState=CStr(fixed(1)) & ":" & CStr(dynamic(0)) & ":" & CStr(bag("calls"))
+NextStatic=counter
+End Function
+Function OtherStatic() As Long
+Static counter As Long
+counter=counter+10
+OtherStatic=counter
+End Function
+Function RecursiveStatic(ByVal depth As Long) As Long
+Static calls As Long
+Dim ignored As Long
+calls=calls+1
+If depth>0 Then ignored=RecursiveStatic(depth-1)
+RecursiveStatic=calls
+End Function
+)VBA";
+    FakeForm staticHost, independentStaticHost;
+    for(int call=1;call<=2;++call) {
+        const auto result=executeVbaProcedure(staticLocals,"NextStatic",staticHost);
+        assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asNumber()==call);
+    }
+    assert(staticHost.fields["StaticState"]=="4:6:2");
+    const auto otherStatic=executeVbaProcedure(staticLocals,"OtherStatic",staticHost);
+    assert(otherStatic.status==VbaExecutionStatus::Completed && otherStatic.typedReturnValue->asNumber()==10);
+    const auto separateStatic=executeVbaProcedure(staticLocals,"NextStatic",independentStaticHost);
+    assert(separateStatic.status==VbaExecutionStatus::Completed && separateStatic.typedReturnValue->asNumber()==1);
+    const auto editedStatic=executeVbaProcedure(staticLocals+"\n' independent edited source\n","NextStatic",staticHost);
+    assert(editedStatic.status==VbaExecutionStatus::Completed && editedStatic.typedReturnValue->asNumber()==1);
+    std::vector<VbaValue> staticDepth{VbaValue::longInteger(2)};
+    const auto recursiveStatic=executeVbaProcedureWithArguments(staticLocals,"RecursiveStatic",staticHost,staticDepth);
+    assert(recursiveStatic.status==VbaExecutionStatus::Completed && recursiveStatic.typedReturnValue->asNumber()==3);
+    const auto staticProcedure=executeVbaProcedure("Static Sub UnsupportedStatic()\nMe!UnexpectedStatic=1\nEnd Sub","UnsupportedStatic",staticHost);
+    assert(staticProcedure.status==VbaExecutionStatus::Unsupported && !staticHost.fields.contains("UnexpectedStatic"));
+
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub

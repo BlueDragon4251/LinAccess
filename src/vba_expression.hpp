@@ -89,6 +89,7 @@ VbaValue scalarVbaValue(VbaValue value);
 using VbaVariables = std::unordered_map<std::string, VbaValue>;
 struct VbaModuleState {
     VbaVariables values;
+    std::unordered_map<std::string,VbaVariables> procedureStatics;
     std::unordered_map<std::string,std::string> types;
     std::unordered_set<std::string> publicVariables;
     std::unordered_set<std::string> fixedArrays;

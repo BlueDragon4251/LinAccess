@@ -37,6 +37,7 @@ struct Statement {
     int conditionalUnwind{}, withUnwind{}, forUnwind{};
     std::shared_ptr<const VbaValue> constantValue;
     std::vector<VbaArrayDimension> fixedBounds;
+    bool persistent{};
 };
 
 std::string trim(std::string text) {
@@ -469,7 +470,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     const std::regex resumeLabel(R"(^Resume\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
     const std::regex whileStart(R"(^(Do\s+(While|Until)|While)\s+(.+)$)", std::regex::icase);
     const std::regex loopEnd(R"(^(Loop|Wend)(?:\s+(While|Until)\s+(.+))?$)",std::regex::icase);
-    const std::regex dim(R"(^Dim\s+(.+)$)", std::regex::icase);
+    const std::regex dim(R"(^(?:Dim|Static)\s+(.+)$)", std::regex::icase);
     const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*))?$)", std::regex::icase);
     const std::regex forStart(R"(^For\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+?)\s+To\s+(.+?)(?:\s+Step\s+(.+))?$)", std::regex::icase);
     const std::regex forEach(R"(^For\s+Each\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s+In\s+(.+)$)", std::regex::icase);
@@ -579,6 +580,8 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     }
                     if (parameters) parameters->push_back({declared[3].str(), lower(declared[2].str()) != "byval",type,optional,defaultExpression,false,std::move(defaultValue)});
                 }
+                if(lower(trim(source)).starts_with("static ") || lower(trim(source)).starts_with("static\t"))
+                    return {VbaExecutionStatus::Unsupported,"Static procedures require full implicit-local lifetime support; use explicit Static declarations",line};
                 within = true;
                 isFunction = lower(match[1].str()) == "function";
                 const auto declaredResult=lower(match[4].str());
@@ -965,6 +968,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 }
             } catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Const declaration unsupported",line}; result.errorNumber=error.number; return result; }
         } else if (std::regex_match(source, match, dim)) {
+            const bool persistent=lower(source.substr(0,6))=="static";
             const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z]+))?$)",std::regex::icase);
             for (auto entry:splitArguments(match[1].str())) {
                 std::smatch declared;
@@ -978,6 +982,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     const auto dimensions=bounds.empty() ? std::optional<std::vector<VbaArrayDimension>>{} : literalArrayBounds(bounds,moduleArrayBase(module),declarationConstants,constantMode);
                     if(!bounds.empty() && !dimensions) return {VbaExecutionStatus::Unsupported,"Fixed array bounds require supported constant expressions",line};
                     Statement declaration{Statement::Type::Dim,declared[1].str(),type+"()",line,bounds,bounds.empty() ? "" : "fixed"};
+                    declaration.persistent=persistent;
                     if(dimensions) declaration.fixedBounds=*dimensions; statements.push_back(std::move(declaration));
                     continue;
                 }
@@ -989,7 +994,8 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     && type != "string" && type != "boolean"
                     && type != "integer" && type != "long" && type != "single" && type != "double" && type != "currency" && type != "date"
                     && type != "byte") return {VbaExecutionStatus::Unsupported, "Variablentyp: " + type, line};
-                statements.push_back({Statement::Type::Dim, declared[1].str(), type, line});
+                Statement local{Statement::Type::Dim, declared[1].str(), type, line};
+                local.persistent=persistent; statements.push_back(std::move(local));
             }
         } else if (std::regex_match(source, match, variableAssignment)) {
             const auto expr = trim(match[2].str());
@@ -1434,7 +1440,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     for (const auto& instruction:instructions) if (instruction.type==Statement::Type::Dim) {
         const auto name=lower(instruction.argument);
         if(locals.contains(name)) {
-            if(instruction.constantValue || constantNames.contains(name)) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Duplicate constant binding",instruction.line}; result.errorNumber=3251; return result; }
+            if(instruction.persistent || instruction.constantValue || constantNames.contains(name)) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Duplicate persistent or constant binding",instruction.line}; result.errorNumber=3251; return result; }
             continue;
         }
         try {
@@ -1459,6 +1465,13 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     std::vector<std::shared_ptr<VbaModuleState>> stateOwners;
     try {
         auto state=host.moduleState(module); stateOwners.push_back(state);
+        for(const auto& instruction:instructions) if(instruction.type==Statement::Type::Dim && instruction.persistent) {
+            const auto name=lower(instruction.argument);
+            auto& saved=state->procedureStatics[lower(std::string(procedure))];
+            auto [slot,inserted]=saved.try_emplace(name,locals.at(name));
+            locals[name]=slot->second;
+            aliases.push_back({name,&slot->second,slot->second,instruction.expression});
+        }
         for (auto& [name,value]:state->values) if (!locals.contains(name)) {
             locals.emplace(name,value); aliases.push_back({name,&value,value,state->types.at(name)});
             if(state->fixedArrays.contains(name)) fixedArrays.insert(name);
