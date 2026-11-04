@@ -340,6 +340,11 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 if (!valid || height<0 || height>std::numeric_limits<int>::max())
                     throw std::runtime_error("Invalid imported section height");
                 sections[current.type]=static_cast<int>(height);
+            } else if (key=="BackColor") {
+                bool valid=false; const auto color=value.toLongLong(&valid);
+                if (!valid || color<std::numeric_limits<qint32>::min() || color>std::numeric_limits<qint32>::max())
+                    throw std::runtime_error("Invalid imported section color Long");
+                form.sectionBackColors.insert(current.type,static_cast<qint32>(color));
             }
         }
     }

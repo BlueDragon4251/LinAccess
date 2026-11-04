@@ -52,6 +52,7 @@
 #include <QLabel>
 #include <QColor>
 #include <QPalette>
+#include <QPainter>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
@@ -70,6 +71,21 @@
 #include <stdexcept>
 
 namespace {
+class AccessSectionCanvas final : public QWidget {
+public:
+    AccessSectionCanvas(int contentWidth,QVector<QPair<QRect,QColor>> backgrounds,QWidget* parent)
+        : QWidget(parent),contentWidth_(contentWidth),backgrounds_(std::move(backgrounds)) {}
+protected:
+    void paintEvent(QPaintEvent* event) override {
+        QWidget::paintEvent(event);
+        QPainter painter(this);
+        for (const auto& band:backgrounds_)
+            painter.fillRect(QRect(0,band.first.y(),contentWidth_,band.first.height()),band.second);
+    }
+private:
+    int contentWidth_;
+    QVector<QPair<QRect,QColor>> backgrounds_;
+};
 void waitForNativeDialog(QDialog* document) {
     if(!document || !document->isVisible()) return;
     QEventLoop loop;
@@ -1138,11 +1154,18 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
 
     auto* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(false);
-    auto* canvas = new QWidget(scroll);
+    QVector<QPair<QRect,QColor>> sectionBackgrounds;
+    for (auto it=layout_.sectionBackColors.cbegin();it!=layout_.sectionBackColors.cend();++it) {
+        if (!layout_.sectionOffsets.contains(it.key()) || layout_.sectionHeights.value(it.key())<=0) continue;
+        const int top=qRound(layout_.sectionOffsets.value(it.key())/15.0);
+        const int bottom=qRound((layout_.sectionOffsets.value(it.key())+layout_.sectionHeights.value(it.key()))/15.0);
+        sectionBackgrounds.append({QRect(0,top,0,bottom-top),resolveOleColor(it.value())});
+    }
+    auto* canvas = new AccessSectionCanvas(pixels(layout_.width),std::move(sectionBackgrounds),scroll);
     canvas->setObjectName("access-form-canvas");
     canvas->setAutoFillBackground(true);
     auto canvasPalette=canvas->palette();
-    canvasPalette.setColor(QPalette::Window,QColor(240,240,240));
+    canvasPalette.setColor(QPalette::Window,layout_.kind==linaccess::AccessDocumentKind::Report ? QColor(Qt::white) : QColor(240,240,240));
     canvas->setPalette(canvasPalette);
     canvas->setFixedSize(qBound(400, pixels(layout_.width) + 70, 3500),
                          qBound(250, pixels(layout_.height) + 90, 3500));
