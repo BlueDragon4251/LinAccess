@@ -42,6 +42,22 @@ catalog remains 456 entries; the broader report tasks stay open.
 Report-footer placement follows the print-preview ordering described in
 [Microsoft's report guide](https://support.microsoft.com/en-gb/access/guide-to-designing-reports).
 
+## Multiline fixed-height report textboxes
+
+Report textboxes retain their native QLineEdit-derived value/mask/object interface
+but paint plain text with Qt's text layout inside the actual styled content area.
+Paragraph breaks, word wrapping, horizontal alignment, font and palette therefore
+reach both canvas and vector PDF. The painter uses displayText(), so password and
+input-mask presentation cannot be bypassed by this print adaptation. Forms keep
+their existing editable textboxes. This is fixed-height rendering: CanGrow,
+CanShrink, section flow, splitting long controls across pages and full Windows
+text/selection metrics remain open.
+
+The existing report-event case reads a multiline SQL value, checks paragraphs and
+an automatic line break through independent PDF extraction, preserves the raw
+bound value, and verifies masked PDF output does not contain the synthetic clear
+text. It restores the test rows afterwards. No new CTest target was added.
+
 ## Section backgrounds
 
 Imported section BackColor values are retained as signed OLE color Longs and

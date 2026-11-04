@@ -5170,3 +5170,23 @@ Validation: final mainwindow/layout2/2 (11.99 s), full desktop48/48 under Window
 style (82.41 s), Debian payload/permissions/Build-ID/pinned SQLite and four original
 hashes pass. Headless runtime sources unchanged from preceding fresh core1.
 Fixed 456/384/72 retained; full report and Access parity remain open.
+
+
+## Native multiline report textboxes (2026-11-04)
+
+Report textboxes keep the QLineEdit-derived native value/mask/control interface
+but paint plain paragraphs and word wrapping with Qt text layout inside their
+styled content area. Font, palette and horizontal alignment feed the same canvas
+and vector PDF; displayText is authoritative, so this adaptation cannot paint raw
+password text. Form editing behavior is unchanged. This remains fixed-height:
+CanGrow/CanShrink, flowing controls, long-band page splits and Windows text/selection
+metrics remain open.
+
+The existing report case binds real multiline SQL data, preserves its raw value,
+independently extracts both paragraphs and an automatic line break from PDF,
+checks masked PDF lacks the synthetic clear text, then restores test data.
+Validation: layout1/1 (9.46 s), final mainwindow/layout/original-DAO3/3 (46.27 s),
+desktop build, Debian payload/permissions/Build-ID/pinned SQLite and four original
+hashes pass. Headless sources unchanged; preceding full48/core1 retained without
+another full run for this report-only painter. No new target or catalog item;
+fixed 456/384/72 unchanged.

@@ -54,6 +54,10 @@
 #include <QColor>
 #include <QPalette>
 #include <QPainter>
+#include <QStylePainter>
+#include <QStyleOptionFrame>
+#include <QTextDocument>
+#include <QAbstractTextDocumentLayout>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
@@ -154,7 +158,7 @@ void clearDefaultError(QWidget* widget) {
     }
 }
 using NativeMouseHandler=std::function<bool(QMouseEvent*,bool)>;
-class AccessTextBox final : public QLineEdit {
+class AccessTextBox : public QLineEdit {
 public:
     using QLineEdit::QLineEdit;
     std::function<void()> clicked;
@@ -180,6 +184,32 @@ protected:
     }
 private:
     bool pressed_{};
+};
+class AccessReportTextBox final : public AccessTextBox {
+public:
+    using AccessTextBox::AccessTextBox;
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QStyleOptionFrame frame; initStyleOption(&frame);
+        QStylePainter painter(this);
+        painter.drawPrimitive(QStyle::PE_PanelLineEdit,frame);
+        auto area=style()->subElementRect(QStyle::SE_LineEditContents,&frame,this);
+        const auto margins=textMargins();
+        area.adjust(margins.left()+2,margins.top(),-margins.right()-2,-margins.bottom());
+        if (area.isEmpty()) return;
+        QTextDocument text;
+        text.setDocumentMargin(0); text.setDefaultFont(font());
+        QTextOption options;
+        options.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+        options.setAlignment(alignment() & Qt::AlignHorizontal_Mask);
+        text.setDefaultTextOption(options);
+        // Echo/input-mask presentation is authoritative; never paint the raw
+        // password value while adapting the report's multiline display.
+        text.setPlainText(displayText()); text.setTextWidth(area.width());
+        painter.setClipRect(area); painter.translate(area.topLeft());
+        QAbstractTextDocumentLayout::PaintContext context; context.palette=frame.palette;
+        text.documentLayout()->draw(&painter,context);
+    }
 };
 class AccessComboBox final : public QComboBox {
 public:
@@ -1537,7 +1567,8 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
                 (void)runControlBinding(name,"Click",binding);
             });
         } else if (control.type == "TextBox") {
-            auto* edit = new AccessTextBox(canvas);
+            auto* edit = layout_.kind==linaccess::AccessDocumentKind::Report
+                ? static_cast<AccessTextBox*>(new AccessReportTextBox(canvas)) : new AccessTextBox(canvas);
             // QLineEdit defaults to 32767 UTF-16 units. A bound Memo may be
             // longer, and saving any field writes the bound control values.
             edit->setMaxLength(std::numeric_limits<int>::max());

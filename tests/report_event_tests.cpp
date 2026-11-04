@@ -232,6 +232,37 @@ Height =1500)BANDS");
         assert(!growing.exportReportPdf(document));
         QFile unchanged(document); assert(unchanged.open(QIODevice::ReadOnly) && unchanged.readAll()==bytes);
         assert(growing.close());
+        query.prepare("UPDATE records SET name=? WHERE id=1");
+        const QString paragraphs="ALPHA paragraph\nOMEGA paragraph with wrapped words";
+        query.addBindValue(paragraphs); assert(query.exec()); query.finish();
+        auto multilineSource=pagedSource;
+        multilineSource.replace("Name =\"Name\"\nControlSource", "Name =\"Name\"\nHeight =1800\nControlSource");
+        multilineSource.replace("Top =400","Top =2400");
+        AccessFormPreview multiline("multiline report",multilineSource,{},db);
+        assert(multiline.findChild<QLineEdit*>("access-control-Name")->text()==paragraphs);
+        const auto multilinePdf=output.filePath("multiline.pdf"); assert(multiline.exportReportPdf(multilinePdf));
+        if (!reader.isEmpty()) {
+            QProcess textReader; textReader.start(reader,{"-layout",multilinePdf,"-"});
+            assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);
+            const auto text=QString::fromUtf8(textReader.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);
+            assert(text.count("ALPHA paragraph")==1 && text.count("OMEGA paragraph")==1);
+            assert(text.indexOf("ALPHA paragraph")<text.indexOf("OMEGA paragraph"));
+            const auto omega=text.indexOf("OMEGA"),wrapped=text.indexOf("with",omega);
+            assert(wrapped>omega && text.mid(omega,wrapped-omega).contains('\n'));
+        }
+        assert(multiline.close());
+        auto maskedSource=multilineSource;
+        maskedSource.replace("Name =\"Name\"\nHeight", "Name =\"Name\"\nInputMask =\"Password\"\nHeight");
+        AccessFormPreview masked("masked multiline report",maskedSource,{},db);
+        const auto maskedPdf=output.filePath("masked-multiline.pdf"); assert(masked.exportReportPdf(maskedPdf));
+        if (!reader.isEmpty()) {
+            QProcess textReader; textReader.start(reader,{"-layout",maskedPdf,"-"});
+            assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);
+            const auto text=textReader.readAllStandardOutput();
+            assert(!text.contains("ALPHA") && !text.contains("OMEGA"));
+        }
+        assert(masked.close());
+        assert(query.exec("UPDATE records SET name='first' WHERE id=1")); query.finish();
         assert(banded.close());
     }
     AccessFormPreview report("report",source,code,db);
