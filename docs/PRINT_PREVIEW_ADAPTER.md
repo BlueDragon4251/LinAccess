@@ -49,8 +49,9 @@ but paint plain text with Qt's text layout inside the actual styled content area
 Paragraph breaks, word wrapping, horizontal alignment, font and palette therefore
 reach both canvas and vector PDF. Unmasked normal text retains paragraph characters; masked controls use
 displayText(), so this print adaptation preserves password/input-mask presentation. Forms keep
-their existing editable textboxes. This is fixed-height rendering: CanShrink, full section flow, splitting long controls across pages and full Windows
-text/selection metrics remain open.
+their existing editable textboxes. The basic layout view keeps fixed field geometry; the paginated renderer adds
+bounded CanGrow and long-detail splitting as documented below. CanShrink, full
+section flow and Windows text/selection metrics remain open.
 
 The existing report-event case reads a multiline SQL value, checks paragraphs and
 an automatic line break through independent PDF extraction, preserves the raw
@@ -90,7 +91,7 @@ runtime styling/data mutation remain open; users can explicitly refresh.
 
 The existing report-event test checks two native document pages, actual navigation
 and Page/Pages reads, three pages after SQL insertion/Requery, and explicit layout
-fallback for CanGrow. No extra CTest target or work-catalog point was introduced.
+fallback for unsupported CanShrink. No extra CTest target or work-catalog point was introduced.
 
 ## Fixed-band report PDF output
 
@@ -98,7 +99,7 @@ A separate **Bericht als PDF** action and `exportReportPdf` path now paginate th
 loaded SQL rows. Report header is emitted once, page header/footer on each page,
 detail once per row, and report footer after the last row (on another page when
 necessary). The renderer uses physical TWIP-derived dimensions on QPrinter's
-printable page, keeps detail bands whole, and restores the previously displayed
+printable page, keeps details that fit a page whole, splits supported taller details between text lines, and restores the previously displayed
 record after output. The current-layout actions retain their one-page behavior.
 
 Calculated fields use the existing native Access expression engine, including
@@ -157,7 +158,7 @@ checks that the displayed record is restored. Where `pdftotext` is installed,
 it also verifies both values occur exactly once in order (Unicode ligatures are
 normalized). It opens the real QPrintPreviewDialog and checks that its preview widget holds
 two generated pages, then closes it and verifies the original displayed record.
-It checks that overflowing and CanGrow sources cannot replace a previously
+It checks that overflowing and unsupported CanShrink sources cannot replace a previously
 generated PDF. No additional CTest target or catalog item was added.
 
 ## Original source execution evidence

@@ -5235,3 +5235,25 @@ Validation: desktop build, mainwindow/layout2/2 (11.71 s), final layout/original
 DAO2/2 (42.54 s), Debian payload/Build-ID/pinned SQLite and four original hashes
 pass. Core unchanged; preceding full48/core1 evidence retained. No new CTest
 target or catalog ID; fixed 456/384/72 retained, F085 remains open.
+
+
+## Native long-detail page splitting (2026-11-04)
+
+Supported tall detail bands now split between actual Qt glyph/decorative-line
+bounds, retaining their SQL row and repeating page headers/footers. Details
+fitting one page stay whole. Fixed controls remain indivisible; no safe boundary
+or the existing 3500-pixel canvas bound causes explicit refusal before output.
+This does not complete KeepTogether/group scheduling, CanShrink, growing other
+sections or a Windows print oracle. F085 remains open.
+
+The native plain-text painter shares its shaped line geometry with pagination.
+Each fragment emits only its visible lines and clips its native frame/text;
+merely clipping a full QTextDocument had retained invisible duplicate PDF text.
+Existing report cases now verify all 125 tokens exactly once in order for both
+paragraph and automatically wrapped underlined SQL text, multiple native pages,
+real Page/Pages, restored field geometry/canvas and preserved prior PDF on refusal.
+
+Validation: final targeted layout1/1 (9.73 s), full desktop48/48 under Windows
+style (79.54 s), freshly built GUI-free core1/1 (1.68 s), Debian payload/Build-ID/
+pinned SQLite and four original hashes pass. Original DAO case passes (33.64 s).
+No new CTest target or catalog point; fixed 456/384/72 retained.

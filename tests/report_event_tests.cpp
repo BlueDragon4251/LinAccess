@@ -334,6 +334,33 @@ Height =1500)BANDS");
         assert(stacked.findChild<QLineEdit*>("access-control-Name")->geometry()==originalName);
         assert(stacked.findChild<QLineEdit*>("access-control-Info")->geometry()==originalInfo);
         assert(stacked.close());
+        // One actual row spans multiple pages; every line must appear once.
+        QStringList splitLines;
+        for(int line=0;line<125;++line) splitLines.append("SPLIT_"+QString::number(line).rightJustified(3,'0'));
+        for(const auto separator:{QChar('\n'),QChar(' ')}) {
+            query.prepare("UPDATE records SET name=? WHERE id=1"); query.addBindValue(splitLines.join(separator)); assert(query.exec()); query.finish();
+            auto splitSource=shortSource;
+            splitSource.replace("RecordSource =\"records\"","RecordSource =\"SELECT * FROM records WHERE id=1\"");
+            if(separator==' ') splitSource.replace("Name =\"Name\"","Name =\"Name\"\nFontUnderline =-1");
+            AccessFormPreview splitReport("split detail report",splitSource,{},db);
+            auto* splitPages=splitReport.findChild<QPrintPreviewWidget*>("access-report-pages");
+            assert(splitPages->pageCount()>=2);
+            const auto splitPdf=output.filePath("split.pdf"); assert(splitReport.exportReportPdf(splitPdf));
+            if(!reader.isEmpty()) {
+                QProcess textReader; textReader.start(reader,{"-layout",splitPdf,"-"});
+                assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);
+                const auto text=QString::fromUtf8(textReader.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);
+                int last=-1;
+                for(const auto& line:splitLines) { assert(text.count(line)==1); const int at=text.indexOf(line); assert(at>last); last=at; }
+                const auto pages=text.split(QChar('\f'));
+                assert(pages[0].contains("SPLIT_000") && !pages[0].contains("SPLIT_124"));
+                assert(text.contains("1/"+QString::number(splitPages->pageCount())));
+            }
+            assert(splitReport.findChild<QLineEdit*>("access-control-Name")->geometry()==originalName);
+            assert(splitReport.findChild<QLineEdit*>("access-control-Info")->geometry()==originalInfo);
+            assert(splitReport.findChild<QWidget*>("access-form-canvas")->size()==originalCanvas);
+            assert(splitReport.close());
+        }
         QFile protectedFlow(flowPdf); assert(protectedFlow.open(QIODevice::ReadOnly)); const auto completeFlow=protectedFlow.readAll(); protectedFlow.close();
         query.prepare("UPDATE records SET name=? WHERE id=1"); query.addBindValue(QString("LONG\n").repeated(400)); assert(query.exec()); query.finish();
         AccessFormPreview tooLong("too long growing report",shortSource,{},db);

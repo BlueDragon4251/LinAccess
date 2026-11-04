@@ -43,5 +43,5 @@ CTest target or work-catalog ID was added.
 
 
 The design now persists a CanGrow option for generated text fields. Its native
-flow supports aligned parallel or vertically separated growth groups inside a page;
+flow supports aligned parallel or vertically separated growth groups and bounded long-detail page splitting;
 see [CanGrow](REPORT_CANGROW.md). This does not add a complete visual property grid.
