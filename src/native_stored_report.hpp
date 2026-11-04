@@ -42,6 +42,17 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     const int headerForce=headerForceValue.toInt(-1);
     if(!headerForceValue.isUndefined() && (!headerForceValue.isDouble() || headerForce<0 || headerForce>3 || headerForceValue.toDouble()!=headerForce))
         throw VbaRuntimeError(5,"Invalid native report header page break setting");
+    const auto footerValue=definition.value("footer_expression");
+    if(!footerValue.isUndefined() && !footerValue.isString()) throw VbaRuntimeError(5,"Invalid native report footer expression");
+    const auto footerExpression=footerValue.toString().trimmed();
+    if(!footerExpression.isEmpty() && (!footerExpression.startsWith('=') || footerExpression.size()>32768))
+        throw VbaRuntimeError(5,"Report footer calculation must start with equals");
+    (void)quoted(footerExpression);
+    const auto footerForceValue=definition.value("footer_force_new_page");
+    const int footerForce=footerForceValue.toInt(0);
+    if(!footerForceValue.isUndefined() && (!footerForceValue.isDouble() || footerForce<0 || footerForce>3 || footerForceValue.toDouble()!=footerForce))
+        throw VbaRuntimeError(5,"Invalid native report footer page break setting");
+    if(footerExpression.isEmpty() && footerForce) throw VbaRuntimeError(5,"Report footer page break requires a footer calculation");
     const auto code=definition.value("vba").toString();
     const auto bytes=code.toUtf8(); const auto analysis=analyzeVba(std::string_view(bytes.constData(),bytes.size()));
     QSet<QString> procedures;
@@ -65,7 +76,12 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
         if(definition.value("can_grow").toBool()) lines<<"CanGrow =-1";
         lines<<"Left ="+QString::number(i*width+30)<<"Top =30"<<"Width ="+QString::number(width-60)<<"Height =270"<<"End";
     }
-    lines<<"End"<<"Begin PageFooter"<<"Height =360"<<"Begin TextBox"<<"Name ="+quoted(unique("native_report_page"))
+    lines<<"End";
+    if(!footerExpression.isEmpty())
+        lines<<"Begin FormFooter"<<"Height =450"<<"ForceNewPage ="+QString::number(footerForce)
+            <<"Begin TextBox"<<"Name ="+quoted(unique("native_report_summary"))<<"ControlSource ="+quoted(footerExpression)
+            <<"Left =30"<<"Top =30"<<"Width ="+QString::number(reportWidth-60)<<"Height =300"<<"End"<<"End";
+    lines<<"Begin PageFooter"<<"Height =360"<<"Begin TextBox"<<"Name ="+quoted(unique("native_report_page"))
         <<"ControlSource =\"=CStr([Page]) & Chr(47) & CStr([Pages])\""<<"Top =30"<<"Width =900"<<"Height =270"<<"End"<<"End"<<"End";
     return {std::move(name),lines.join('\n').toUtf8(),bytes,source};
 }

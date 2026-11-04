@@ -509,6 +509,37 @@ End Sub
     assert(finalDesign.value("sql").toString()==source && finalDesign.value("vba").toString()==module);
     assert(sql.exec("SELECT COUNT(*) FROM native_report_events WHERE kind='open'") && sql.next() && sql.value(0).toInt()==5); sql.finish();
     assert(sql.exec("SELECT COUNT(*) FROM native_report_events WHERE kind='close'") && sql.next() && sql.value(0).toInt()==5); sql.finish();
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        dialog->findChild<QLineEdit*>("native-report-name")->setText("Owned Summary Report");
+        dialog->findChild<QPlainTextEdit*>("native-report-sql")->setPlainText("SELECT id FROM native_report_rows ORDER BY id");
+        dialog->findChild<QLineEdit*>("native-report-footer-expression")->setText("=Sum([id])");
+        dialog->findChild<QComboBox*>("native-report-footer-break")->setCurrentIndex(1);
+        dialog->findChild<QPushButton*>("native-report-save")->click();
+    });
+    create->trigger(); QApplication::processEvents();
+    assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='report' AND name='Owned Summary Report'") && sql.next());
+    const auto summaryDesign=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
+    assert(summaryDesign.value("footer_expression").toString()=="=Sum([id])" && summaryDesign.value("footer_force_new_page").toInt()==1);
+    selected=nullptr;
+    for(QTreeWidgetItemIterator item(explorer);*item;++item)
+        if((*item)->data(0,Qt::UserRole).toString()=="report" && (*item)->text(0)=="Owned Summary Report") selected=*item;
+    assert(selected); explorer->setCurrentItem(selected);
+    assert(QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,selected),Q_ARG(int,0)));
+    QApplication::processEvents();
+    auto summaryReport=locate("Owned Summary Report"); assert(summaryReport);
+    const auto total=makePreviewControlsObject(*summaryReport)->member("Item",{VbaValue::string("native_report_summary")}).object->member("Value",{});
+    assert(total.asNumber()==6);
+    assert(summaryReport->findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==2);
+    assert(summaryReport->exportReportPdf(output.filePath("owned-summary.pdf")));
+    assert(summaryReport->close()); dispose();
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        assert(dialog->findChild<QLineEdit*>("native-report-footer-expression")->text()=="=Sum([id])");
+        assert(dialog->findChild<QComboBox*>("native-report-footer-break")->currentIndex()==1);
+        dialog->reject();
+    });
+    explorer->setCurrentItem(selected); edit->trigger(); dispose();
 }
 
 void exerciseRecordEscape(MainWindow& window,QSqlDatabase db) {

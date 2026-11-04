@@ -1973,13 +1973,20 @@ void MainWindow::editReport(const QString& existingName) {
     pageBreak->addItems({"Kein erzwungener Seitenwechsel","Vor jedem Detailbereich","Nach jedem Detailbereich","Vor und nach jedem Detailbereich"});
     pageBreak->setCurrentIndex(qBound(0,old.value("detail_force_new_page").toInt(),3));
     outer->addWidget(new QLabel("Seitenwechsel im Detailbereich",&dialog)); outer->addWidget(pageBreak);
+    auto* footerExpression=new QLineEdit(old.value("footer_expression").toString(),&dialog);
+    footerExpression->setObjectName("native-report-footer-expression"); footerExpression->setPlaceholderText("=Sum([Betrag])");
+    outer->addWidget(new QLabel("Berechnung im Berichtsfuß (optional, mit = beginnen)",&dialog)); outer->addWidget(footerExpression);
+    auto* footerBreak=new QComboBox(&dialog); footerBreak->setObjectName("native-report-footer-break");
+    footerBreak->addItems({"Kein erzwungener Seitenwechsel","Vor dem Berichtsfuß","Nach dem Berichtsfuß","Vor und nach dem Berichtsfuß"});
+    footerBreak->setCurrentIndex(qBound(0,old.value("footer_force_new_page").toInt(),3));
+    outer->addWidget(new QLabel("Seitenwechsel im Berichtsfuß",&dialog)); outer->addWidget(footerBreak);
     outer->addWidget(new QLabel("VBA-Ereignisse: Open, Load, NoData und Close. Druck-/Format-Ereignisse sind noch nicht unterstützt.",&dialog));
     auto* vba=new QPlainTextEdit(&dialog); vba->setObjectName("native-report-vba"); vba->setPlaceholderText("Private Sub Report_Load()\nEnd Sub"); vba->setPlainText(old.value("vba").toString()); outer->addWidget(vba,1);
     auto codeFont=QFontDatabase::systemFont(QFontDatabase::FixedFont); codeFont.setPointSize(10);
     sql->setFont(codeFont); vba->setFont(codeFont);
     auto* row=new QHBoxLayout; auto* preview=addButton(row,"Vorschau"); preview->setObjectName("native-report-preview");
     auto* pdf=addButton(row,"PDF exportieren"); auto* save=addButton(row,"Speichern"); save->setObjectName("native-report-save"); outer->addLayout(row);
-    const auto definition=[this,existingName,old,title,sql,vba,canGrow,pageBreak,headerBreak] {
+    const auto definition=[this,existingName,old,title,sql,vba,canGrow,pageBreak,headerBreak,footerExpression,footerBreak] {
         auto content=old;
         if(!existingName.isEmpty()) {
             const auto latest=objectDefinition("report",existingName);
@@ -1989,6 +1996,8 @@ void MainWindow::editReport(const QString& existingName) {
         content.insert("vba",vba->toPlainText()); content.insert("can_grow",canGrow->isChecked());
         content.insert("detail_force_new_page",pageBreak->currentIndex());
         content.insert("header_force_new_page",headerBreak->currentIndex());
+        content.insert("footer_expression",footerExpression->text());
+        content.insert("footer_force_new_page",footerBreak->currentIndex());
         content.insert("language","vba_subset_experimental"); return content;
     };
     const auto packet=[this,name,definition] { return linaccess::nativeStoredReport(name->text().isEmpty() ? QString("Berichtsvorschau") : name->text(),definition(),db_); };

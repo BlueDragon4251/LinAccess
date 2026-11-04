@@ -5591,3 +5591,20 @@ NATIVE_DLOOKUP.md.
 Sample-statistics milestone: full current desktop48/48 passes (86.40 s), fresh
 GUI-free core1/1 (1.79 s), Debian payload/Build-ID/pinned SQLite and all four
 original fixture hashes pass. No added targets or fixed-catalog IDs.
+
+## Owned native report footer design (2026-11-04)
+
+The report editor now stores an optional calculated footer expression and footer
+ForceNewPage choice in the existing owned report definition. Native generation
+emits an actual FormFooter and collision-safe calculated textbox using the real
+report aggregate/pagination path. Metadata types, bounds and missing-footer breaks
+are validated; empty expression/break0 retains the old layout. Existing SQL/VBA/
+page geometry are preserved. This remains a fixed-height single calculated footer;
+full report design/grouping, footer growth and original MDB round trips are open.
+Existing actual main-window UI saves/opens a three-row Sum report, checks Value6,
+two real pages with a footer-before break, exports PDF and reopens saved properties.
+Desktop build and existing mainwindow/layout2/2 pass (12.93 s). Fixed456/384/72;
+no new target/ID. Scope: NATIVE_REPORT_FOOTER_DESIGN.md.
+Owned footer milestone: Debian payload/Build-ID/pinned SQLite and four original
+fixture hashes also pass. Last full current suite remains statistics48/48 (86.40 s),
+GUI-free1/1 (1.79 s); localized designer/generator change used mainwindow/layout2/2.
