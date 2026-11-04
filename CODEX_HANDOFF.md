@@ -1232,3 +1232,15 @@ DAO-SQL-Recordsets aktualisieren Abhängigkeitsansichten vor dem Laden; Workspac
 Lebensdauer gilt auch für QueryDefs/Parameter. Grenzen: docs/OWNED_QUERYDEF_SQL.md.
 Vollstand danach48/48 (82.63 s), Paket und vier Originalfixture-Hashes bestanden;
 GUI-freier Laufzeitscope unverändert, letzter frischer Core1/1 (1.50 s).
+
+DAO QueryDefs-Sammlung, benanntes/leeres CreateQueryDef und eigenes Delete sind
+jetzt im begrenzten nativen Katalog vorhanden: docs/DAO_QUERYDEFS_CATALOG.md.
+Count/Item/Refresh/For Each lesen tatsächliche Metadaten. Native Create/Delete-
+Generationen verhindern Umlenkung alter Objekte auf gleichnamige Neuerstellungen.
+Workspace-Rollback stellt auch die fünf Abfrageansichten-Registry-Eigenschaften
+passend zum zurückgerollten SQLite-Temp-Schema wieder her. Importierte Löschung
+und Formatänderung bleiben offen, Archivquellen bleiben erhalten. Externes manuelles
+Drop/Recreate, Rename/Append/Attributes und Windows-Reihenfolge/Oracle sind nicht
+vollständig. DAO.QueryDefs ist ein weiterer expliziter geschlossener nativer Typ.
+Vollstand danach48/48 (83.20 s), frischer GUI-freier Core1/1 (1.66 s), Paket und
+vier Originalfixture-Hashes bestanden; Katalog unverändert456/384/72.

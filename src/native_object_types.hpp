@@ -27,7 +27,7 @@ inline std::string_view nativeObjectType(std::string_view type) {
     if(type=="errobject" || type=="vba.errobject") return "vba.errobject";
     static constexpr std::string_view types[]{"object","scripting.dictionary",
         "dao.database","dao.databases","dao.workspace","dao.workspaces","dao.dbengine","dao.recordset",
-        "dao.field","dao.fields","dao.querydef","dao.parameter","dao.parameters","dao.tabledef","dao.tabledefs"};
+        "dao.field","dao.fields","dao.querydef","dao.querydefs","dao.parameter","dao.parameters","dao.tabledef","dao.tabledefs"};
     for(const auto name:types) if(type==name) return name;
     return {};
 }

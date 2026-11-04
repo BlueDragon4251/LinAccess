@@ -76,7 +76,7 @@ std::string nativeDeclaredType(std::string type) {
 bool nativeDaoType(std::string_view type) {
     return type=="dao.database" || type=="dao.databases" || type=="dao.workspace" || type=="dao.workspaces"
         || type=="dao.dbengine" || type=="dao.recordset" || type=="dao.field" || type=="dao.fields"
-        || type=="dao.querydef" || type=="dao.parameter" || type=="dao.parameters"
+        || type=="dao.querydef" || type=="dao.querydefs" || type=="dao.parameter" || type=="dao.parameters"
         || type=="dao.tabledef" || type=="dao.tabledefs";
 }
 std::size_t memberSeparator(const std::string& expression) {

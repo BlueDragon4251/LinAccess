@@ -108,6 +108,9 @@ struct WorkspaceState {
     sqlite3* connection{};
     bool alive{true};
     quint64 rollbackRevision{};
+    QMap<QString,quint64> queryGenerations;
+    QVariantMap queryViewSnapshot;
+    static constexpr const char* queryViewProperties[]{"la_query_database","la_query_views","la_query_internal_views","la_query_rank_pending","la_query_revision"};
     int clones{};
     QStringList savepoints;
     QString prefix=QString("la_dao_")+QUuid::createUuid().toString(QUuid::Id128);
@@ -130,17 +133,23 @@ struct WorkspaceState {
         if (clones) throw VbaRuntimeError(3251,"DAO: Transactions with recordset clones unsupported");
         if (savepoints.size()>=5) throw VbaRuntimeError(3003,"DAO: Too many nested transactions");
         const auto name=prefix+"_"+QString::number(savepoints.size());
-        sql("SAVEPOINT "+name); savepoints.append(name);
+        sql("SAVEPOINT "+name);
+        if(savepoints.isEmpty()) for(const auto property:queryViewProperties)
+            queryViewSnapshot.insert(QString::fromLatin1(property),driver->property(property));
+        savepoints.append(name);
     }
     void commit() {
         check(); if (savepoints.isEmpty()) throw VbaRuntimeError(3034,"DAO: BeginTrans required");
         sql("RELEASE "+savepoints.last()); savepoints.removeLast();
+        if(savepoints.isEmpty()) queryViewSnapshot.clear();
     }
     void rollback() {
         check(); if (savepoints.isEmpty()) throw VbaRuntimeError(3034,"DAO: BeginTrans required");
         if (savepoints.size()!=1) throw VbaRuntimeError(3251,"DAO: Nested rollback unsupported");
         sql("ROLLBACK TO "+savepoints.first()); ++rollbackRevision;
         sql("RELEASE "+savepoints.first()); savepoints.clear();
+        for(const auto property:queryViewProperties) driver->setProperty(property,queryViewSnapshot.value(QString::fromLatin1(property)));
+        queryViewSnapshot.clear();
     }
 };
 std::shared_ptr<WorkspaceState> workspaceState(QSqlDatabase db) {
@@ -742,7 +751,9 @@ public:
         return {};
     }
     QueryDefinition(QSqlDatabase db, QString source,QString name={},bool owned=false)
-        : db_(std::move(db)), source_(std::move(source)), plan_(compileAccessQuery(source_)),name_(std::move(name)),owned_(owned),workspace_(workspaceState(db_)) {}
+        : db_(std::move(db)), source_(std::move(source)), plan_(source_.trimmed().isEmpty() ? AccessQueryPlan{} : compileAccessQuery(source_)),name_(std::move(name)),owned_(owned),workspace_(workspaceState(db_)) {
+        if(owned_) namedGeneration_=workspace_->queryGenerations.value(name_.toCaseFolded());
+    }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         refresh();
         const auto key = lower(name);
@@ -751,11 +762,13 @@ public:
             return args.empty() ? VbaValue::reference(collection) : collection->member("Item",args);
         }
         if (key == "openrecordset") {
+            if(plan_.sql.isEmpty()) throw VbaRuntimeError(3251,"DAO: QueryDef SQL is not set");
             require(args.empty() || (args.size() == 1 && (args[0].asNumber() == 2 || args[0].asNumber() == 4)),"DAO: Recordset type unsupported");
             require(plan_.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT QueryDef required");
             return VbaValue::reference(std::make_shared<Recordset>(db_,plan_.sql,true,bindAccessQueryParameters(plan_,values_),plan_));
         }
         if (key == "execute") {
+            if(plan_.sql.isEmpty()) throw VbaRuntimeError(3251,"DAO: QueryDef SQL is not set");
             if(owned_ && installAccessQueryViews(db_)<0) throw VbaRuntimeError(3251,"DAO: Query views are busy");
             require(args.empty() || (args.size() == 1 && args[0].asNumber() == 128),"DAO: Execute options unsupported");
             affected_=executeAction(db_,plan_,bindAccessQueryParameters(plan_,values_)); return {};
@@ -771,8 +784,10 @@ public:
         refresh();
         if(lower(name)=="name") throw VbaRuntimeError(3251,"DAO: QueryDef renaming is unsupported");
         require(lower(name) == "sql","DAO: QueryDef property is not writable");
-        const auto source = text(value.asText());
-        const auto compiled = compileAccessQuery(source);
+        const auto scalar=scalarVbaValue(value);
+        if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null SQL");
+        const auto source=text(scalar.asText());
+        const auto compiled=source.trimmed().isEmpty() ? AccessQueryPlan{} : compileAccessQuery(source);
         if(owned_) {
             QSqlQuery query(db_); query.prepare("SELECT definition FROM main._la_objects WHERE kind='query' AND name=?"); query.addBindValue(name_);
             if(!query.exec() || !query.next()) throw VbaRuntimeError(3420,"DAO: Owned query was removed");
@@ -809,17 +824,21 @@ public:
 private:
     friend class QueryParameter;
     friend class QueryParameters;
+    friend class QueryDefinitions;
+    friend class Database;
     std::shared_ptr<VbaObject> parameters();
     void installSource(const QString& source,const AccessQueryPlan& plan) {
         source_=source; plan_=plan; values_.clear(); parameterObjects_.clear(); ++generation_;
     }
     void alive() const {
         workspace_->check(); if(closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
+        if(owned_ && namedGeneration_!=workspace_->queryGenerations.value(name_.toCaseFolded()))
+            throw VbaRuntimeError(3420,"DAO: QueryDef namespace was replaced");
     }
     QString ownedSource() const {
         alive(); bool owned=false;
         try {
-            const auto source=accessQuerySource(db_,name_,nullptr,&owned);
+            const auto source=accessQuerySource(db_,name_,nullptr,&owned,true);
             if(!owned) throw VbaRuntimeError(3420,"DAO: Owned query identity unavailable");
             return source;
         } catch(const VbaRuntimeError& failure) {
@@ -828,7 +847,7 @@ private:
     }
     void refresh() {
         alive();
-        if(owned_) { const auto source=ownedSource(); if(source!=source_) { const auto plan=compileAccessQuery(source); installSource(source,plan); } }
+        if(owned_) { const auto source=ownedSource(); if(source!=source_) { const auto plan=source.trimmed().isEmpty() ? AccessQueryPlan{} : compileAccessQuery(source); installSource(source,plan); } }
     }
     void parameterGeneration(quint64 generation) const {
         alive();
@@ -853,6 +872,7 @@ private:
     qlonglong affected_{};
     bool closed_{};
     QString name_; bool owned_{};
+    quint64 namedGeneration_{};
     std::shared_ptr<WorkspaceState> workspace_;
 };
 class QueryParameters final : public VbaObject {
@@ -938,6 +958,78 @@ QStringList nativeTableNames(QSqlDatabase db) {
     if (query.lastError().isValid()) queryFailure(query);
     return result;
 }
+class QueryDefinitions final : public VbaObject {
+public:
+    explicit QueryDefinitions(QSqlDatabase db) : db_(std::move(db)),workspace_(workspaceState(db_)) {}
+    std::string_view className() const override { return "QueryDefs"; }
+    bool isNativeType(std::string_view type) const override { return type=="dao.querydefs"; }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(lower(name)=="item") return VbaArgumentSignature{{"Index"},1};
+        if(lower(name)=="delete") return VbaArgumentSignature{{"Name"},1}; return {};
+    }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        workspace_->check(); const auto key=lower(name);
+        if(key=="delete") {
+            if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"DAO: QueryDefs.Delete requires a name");
+            const auto value=scalarVbaValue(args[0]);
+            if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null QueryDef name");
+            QSqlQuery query(db_); const auto savepoint="la_delete_query_"+QUuid::createUuid().toString(QUuid::Id128);
+            if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
+            bool completed=false;
+            const auto rollback=qScopeGuard([&] { if(!completed) { query.exec("ROLLBACK TO "+savepoint); query.exec("RELEASE "+savepoint); } });
+            QString canonical; bool owned=false; (void)accessQuerySource(db_,text(value.asText()),&canonical,&owned,true);
+            if(!owned) throw VbaRuntimeError(3251,"DAO: Imported query deletion requires an archive-preserving overlay");
+            auto& generation=workspace_->queryGenerations[canonical.toCaseFolded()];
+            query.prepare("DELETE FROM main._la_objects WHERE kind='query' AND name=?"); query.addBindValue(canonical);
+            if(!query.exec()) queryFailure(query);
+            if(query.numRowsAffected()!=1) throw VbaRuntimeError(3265,"DAO: QueryDef no longer exists"); query.finish();
+            if(!query.exec("RELEASE "+savepoint)) queryFailure(query);
+            ++generation; objects_.remove(canonical.toCaseFolded()); completed=true; return {};
+        }
+        if(key=="count" && args.empty()) return longCount(names().size());
+        if(key=="refresh" && args.empty()) { (void)names(); return {}; }
+        if(key!="item") throw VbaRuntimeError(438,"DAO: QueryDefs member unsupported");
+        if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"DAO: QueryDef name/index required");
+        const auto value=scalarVbaValue(args[0]); QString requested;
+        if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null QueryDef index");
+        if(value.kind==VbaValue::Kind::Number || value.kind==VbaValue::Kind::Currency || value.kind==VbaValue::Kind::Boolean || value.kind==VbaValue::Kind::Empty) {
+            const auto index=sqlFieldValue(value,"INTEGER4").toLongLong(); const auto entries=names();
+            if(index<0 || index>=entries.size()) throw VbaRuntimeError(3265,"DAO: QueryDef index not found");
+            requested=entries[index];
+        } else requested=text(value.asText());
+        QString canonical; bool owned=false; const auto source=accessQuerySource(db_,requested,&canonical,&owned,true);
+        auto& weak=objects_[canonical.toCaseFolded()]; auto object=weak.lock();
+        if(!object || object->closed_ || (object->owned_ && object->namedGeneration_!=workspace_->queryGenerations.value(canonical.toCaseFolded()))) { object=std::make_shared<QueryDefinition>(db_,source,canonical,owned); weak=object; }
+        return VbaValue::reference(object);
+    }
+    VbaValue item(std::string_view name) override { return member("Item",{VbaValue::string(std::string(name))}); }
+    std::vector<VbaValue> enumerate() override {
+        std::vector<VbaValue> values;
+        for(const auto& name:names()) values.push_back(member("Item",{VbaValue::string(name.toStdString())}));
+        return values;
+    }
+private:
+    QStringList names() const {
+        workspace_->check(); QSqlQuery query(db_); QMap<QString,QString> entries;
+        if(query.exec("SELECT name FROM main._la_access_artifacts WHERE kind='query' ORDER BY id"))
+            while(query.next()) { const auto name=query.value(0).toString(); entries.insert(name.toCaseFolded(),name); }
+        query.finish();
+        if(query.exec("SELECT name FROM main._la_objects WHERE kind='query'")) {
+            int rows=0;
+            while(query.next()) {
+                if(++rows>1000000) throw VbaRuntimeError(3251,"DAO: QueryDefs catalog limit exceeded");
+                const auto name=query.value(0).toString(),folded=name.toCaseFolded();
+                if(entries.contains(folded)) throw VbaRuntimeError(5,"DAO: QueryDef name ambiguous");
+                entries.insert(folded,name);
+            }
+            if(query.lastError().isValid()) throw VbaRuntimeError(3146,"DAO: QueryDefs catalog read failed");
+        }
+        return entries.values();
+    }
+    QSqlDatabase db_; std::shared_ptr<WorkspaceState> workspace_;
+    QMap<QString,std::weak_ptr<QueryDefinition>> objects_;
+};
+
 class TableDefinition final : public VbaObject {
 public:
     std::string_view className() const override { return "TableDef"; }
@@ -1019,7 +1111,8 @@ public:
         const auto key=lower(name);
         if (key=="openrecordset") return VbaArgumentSignature{{"Name","Type"},1};
         if (key=="execute") return VbaArgumentSignature{{"Query","Options"},1};
-        if (key=="createquerydef") return VbaArgumentSignature{{"Name","SQLText"},2};
+        if (key=="createquerydef") return VbaArgumentSignature{{"Name","SQLText"},1};
+        if (key=="querydefs") return VbaArgumentSignature{{"Index"},0};
         return {};
     }
     explicit Database(QSqlDatabase db) : db_(std::move(db)),workspace_(workspaceState(db_)) {}
@@ -1035,14 +1128,48 @@ public:
             return definitions->member("Item",args);
         }
         if (key == "querydefs") {
-            require(args.size() == 1,"DAO: QueryDef name required");
-            QString canonical; bool owned=false;
-            const auto source=accessQuerySource(db_,text(args[0].asText()),&canonical,&owned);
-            return VbaValue::reference(std::make_shared<QueryDefinition>(db_,source,canonical,owned));
+            if(!queryDefinitions_) queryDefinitions_=std::make_shared<QueryDefinitions>(db_);
+            return args.empty() || (args.size()==1 && args[0].kind==VbaValue::Kind::Missing)
+                ? VbaValue::reference(queryDefinitions_) : queryDefinitions_->member("Item",args);
         }
         if (key == "createquerydef") {
-            require(args.size() == 2 && args[0].asText().empty(),"DAO: Only temporary CreateQueryDef is currently supported");
-            return VbaValue::reference(std::make_shared<QueryDefinition>(db_,text(args[1].asText())));
+            if(args.empty() || args.size()>2) throw VbaRuntimeError(450,"DAO: CreateQueryDef requires Name and optional SQLText");
+            const auto nameValue=scalarVbaValue(args[0]);
+            const auto sqlValue=args.size()==2 && args[1].kind!=VbaValue::Kind::Missing ? scalarVbaValue(args[1]) : VbaValue::string("");
+            if(nameValue.kind==VbaValue::Kind::Null || sqlValue.kind==VbaValue::Kind::Null)
+                throw VbaRuntimeError(94,"DAO: Invalid Null CreateQueryDef argument");
+            const auto name=text(nameValue.asText()),source=text(sqlValue.asText());
+            if(name.isEmpty()) return VbaValue::reference(std::make_shared<QueryDefinition>(db_,source));
+            if(name.trimmed().isEmpty() || name.size()>64 || name.contains(QChar(0)) || name.contains('\n') || name.contains('\r'))
+                throw VbaRuntimeError(5,"DAO: Unsupported QueryDef name");
+            auto& generation=workspace_->queryGenerations[name.toCaseFolded()];
+            auto object=std::make_shared<QueryDefinition>(db_,source,name,true);
+            QSqlQuery query(db_); const auto savepoint="la_create_query_"+QUuid::createUuid().toString(QUuid::Id128);
+            if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
+            bool completed=false;
+            const auto rollback=qScopeGuard([&] { if(!completed) { query.exec("ROLLBACK TO "+savepoint); query.exec("RELEASE "+savepoint); } });
+            if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_objects(kind TEXT NOT NULL,name TEXT NOT NULL,definition TEXT NOT NULL,PRIMARY KEY(kind,name))")) queryFailure(query);
+            bool exists=false;
+            try { (void)accessQuerySource(db_,name,nullptr,nullptr,true); exists=true; }
+            catch(const VbaRuntimeError& failure) { if(failure.number!=3265) throw; }
+            bool mainView=false;
+            { QSqlQuery schema(db_);
+                if(!schema.exec("SELECT name FROM main.sqlite_schema WHERE type='view'")) queryFailure(schema);
+                while(schema.next()) if(schema.value(0).toString().compare(name,Qt::CaseInsensitive)==0) mainView=true;
+                if(schema.lastError().isValid()) queryFailure(schema);
+            }
+            const bool managedView=!mainView && !db_.tables(QSql::Tables).contains(name,Qt::CaseInsensitive)
+                && db_.tables(QSql::Views).contains(name,Qt::CaseInsensitive)
+                && db_.driver()->property("la_query_database").toString()==db_.databaseName()
+                && db_.driver()->property("la_query_views").toStringList().contains(name,Qt::CaseInsensitive);
+            if(exists || (db_.tables(QSql::AllTables).contains(name,Qt::CaseInsensitive) && !managedView))
+                throw VbaRuntimeError(3012,"DAO: QueryDef name already exists");
+            query.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('query',?,?)");
+            query.addBindValue(name); query.addBindValue(QString::fromUtf8(QJsonDocument(QJsonObject{{"sql",source}}).toJson(QJsonDocument::Compact)));
+            if(!query.exec()) queryFailure(query); query.finish();
+            if(!query.exec("RELEASE "+savepoint)) queryFailure(query);
+            ++generation; object->namedGeneration_=generation;
+            completed=true; return VbaValue::reference(std::move(object));
         }
         if (key == "openrecordset") {
             require(args.size() == 1 || args.size() == 2, "DAO: OpenRecordset arguments unsupported");
@@ -1068,6 +1195,7 @@ public:
 private:
     QSqlDatabase db_;
     std::weak_ptr<TableDefinitions> tableDefinitions_;
+    std::shared_ptr<VbaObject> queryDefinitions_;
     std::shared_ptr<WorkspaceState> workspace_;
     qlonglong affected_{};
 };

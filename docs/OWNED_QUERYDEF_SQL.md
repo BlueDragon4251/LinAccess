@@ -18,10 +18,11 @@ views after an SQL change. No cursor/host/document pointer is added to plan cach
 The existing imported-query behavior is preserved: imported named QueryDefs retain
 an instance SQL working copy, and temporary CreateQueryDef remains temporary.
 Imported SQL assignment does not overwrite archived source bytes or claim native
-original-format persistence. A full imported overlay/write adapter, QueryDefs
-collection/catalog editing, rename/append/delete, immutable identity across a
-same-name drop/recreate and complete Access concurrency/error/oracle parity remain
-open. This change does not claim those features are implemented.
+original-format persistence. The subsequent bounded QueryDefs collection, named
+creation and owned deletion are described in DAO_QUERYDEFS_CATALOG.md, including
+native namespace generations. Full imported overlays, rename/append/attributes,
+external same-name drop/recreate identity and complete Access concurrency/error/
+oracle parity remain open.
 
 An existing actual VBA/SQL DAO case reads the canonical Name, binds a real parameter,
 executes the query, changes/persists SQL, observes the new SQL from another instance

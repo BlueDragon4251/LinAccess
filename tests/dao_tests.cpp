@@ -624,6 +624,91 @@ End Sub
     if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Synthetic owned QueryDef: "<<result.errorNumber<<" line "<<result.line<<" "<<result.explanation<<'\n';
     assert(result.status==linaccess::VbaExecutionStatus::Completed);
     assert(host.fields["OwnedParameterError"]=="3420" && host.fields["OwnedClosedError"]=="3420");
+    const auto catalog=linaccess::executeVbaProcedure(R"VBA(Sub QueryCatalog()
+Dim database As DAO.Database, definitions As DAO.QueryDefs, query As DAO.QueryDef, held As DAO.QueryDef
+Dim temporary As DAO.QueryDef, rows As DAO.Recordset, workspace As DAO.Workspace
+Dim item As Variant, count As Long
+Set database=CurrentDb
+Set definitions=database.QueryDefs
+If Not TypeOf definitions Is DAO.QueryDefs Then Err.Raise 5
+If definitions.Count<>2 Then Err.Raise 5
+Set query=database.CreateQueryDef(Name:="Created From VBA",SQLText:="SELECT value FROM records")
+If query.Name<>"Created From VBA" Then Err.Raise 5
+If definitions.Count<>3 Then Err.Raise 5
+Set held=definitions.Item("Created From VBA")
+If Not (held Is definitions.Item("created from vba")) Then Err.Raise 5
+Set rows=held.OpenRecordset(dbOpenSnapshot)
+If rows.RecordCount<>3 Then Err.Raise 5
+rows.Close
+Set temporary=database.CreateQueryDef("","SELECT 1 AS value")
+If temporary.Name<>"" Or definitions.Count<>3 Then Err.Raise 5
+temporary.Close
+For Each item In definitions
+If Len(item.Name)=0 Then Err.Raise 5
+count=count+1
+Next
+If count<>3 Then Err.Raise 5
+definitions.Refresh
+If definitions.Item(0).Name<>"Created From VBA" Then Err.Raise 5
+On Error Resume Next
+Set query=database.CreateQueryDef("created from vba","SELECT 2 AS value")
+Me!CreatedDuplicateError=CStr(Err.Number)
+Err.Clear
+On Error GoTo 0
+If definitions.Count<>3 Then Err.Raise 5
+Set workspace=DBEngine.Workspaces(0)
+workspace.BeginTrans
+Set query=database.CreateQueryDef("Rolled Back Query","SELECT 99 AS value")
+If definitions.Count<>4 Then Err.Raise 5
+workspace.Rollback
+If definitions.Count<>3 Then Err.Raise 5
+On Error Resume Next
+Me!RolledQueryName=query.Name
+Me!RolledQueryError=CStr(Err.Number)
+Err.Clear
+On Error GoTo 0
+Set query=database.CreateQueryDef("Empty Created")
+If query.SQL<>"" Then Err.Raise 5
+query.SQL="SELECT 42 AS value"
+Set rows=query.OpenRecordset(dbOpenSnapshot)
+If rows!value<>42 Then Err.Raise 5
+rows.Close
+definitions.Delete "Empty Created"
+Set temporary=database.CreateQueryDef("Empty Created","SELECT 7 AS value")
+On Error Resume Next
+Me!DeletedOldQuery=query.Name
+Me!DeletedOldError=CStr(Err.Number)
+Err.Clear
+On Error GoTo 0
+definitions.Delete "Empty Created"
+If definitions.Count<>3 Then Err.Raise 5
+workspace.BeginTrans
+definitions.Delete "Created From VBA"
+If definitions.Count<>2 Then Err.Raise 5
+Set rows=definitions.Item("Owned Base").OpenRecordset(dbOpenSnapshot)
+rows.Close
+workspace.Rollback
+If definitions.Count<>3 Then Err.Raise 5
+On Error Resume Next
+Me!DeletedHeldName=held.Name
+Me!DeletedHeldError=CStr(Err.Number)
+Err.Clear
+On Error GoTo 0
+Set held=definitions.Item("Created From VBA")
+If held.Name<>"Created From VBA" Then Err.Raise 5
+held.SQL="SELECT value+10 AS value FROM records ORDER BY value"
+Set temporary=database.CreateQueryDef("","SELECT value FROM [Created From VBA] ORDER BY value")
+Set rows=temporary.OpenRecordset(dbOpenSnapshot)
+If rows!value<>11 Then Err.Raise 5
+rows.Close
+End Sub
+)VBA","QueryCatalog",host);
+    if(catalog.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Synthetic QueryDefs catalog: "<<catalog.errorNumber<<" line "<<catalog.line<<" "<<catalog.explanation<<'\n';
+    assert(catalog.status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["CreatedDuplicateError"]=="3012" && host.fields["RolledQueryError"]=="3420");
+    assert(host.fields["DeletedOldError"]=="3420" && host.fields["DeletedHeldError"]=="3420");
+    assert(sql.exec("SELECT COUNT(*) FROM _la_objects WHERE kind='query'") && sql.next() && sql.value(0).toInt()==3); sql.finish();
+
     assert(sql.exec("SELECT definition FROM _la_objects WHERE name='Owned Caller'") && sql.next());
     const auto definition=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
     assert(definition.value("archive").toString()=="preserve" && definition.value("sql").toString().startsWith("PARAMETERS q"));

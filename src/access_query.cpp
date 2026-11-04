@@ -1529,7 +1529,7 @@ int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
     driver->setProperty("la_query_revision",key);
     return owned.size();
 }
-QString accessQuerySource(QSqlDatabase db, const QString& name,QString* canonical,bool* isOwned) {
+QString accessQuerySource(QSqlDatabase db, const QString& name,QString* canonical,bool* isOwned,bool allowEmpty) {
     QSqlQuery query(db); QString imported,owned,importedName,ownedName; bool hasImported=false,hasOwned=false;
     query.prepare("SELECT name,source_bytes FROM main._la_access_artifacts WHERE kind='query' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
     query.addBindValue(name);
@@ -1545,7 +1545,7 @@ QString accessQuerySource(QSqlDatabase db, const QString& name,QString* canonica
             if(hasOwned) throw VbaRuntimeError(5,"Owned query name ambiguous");
             QJsonParseError error; const auto definition=QJsonDocument::fromJson(query.value(1).toByteArray(),&error);
             if(error.error!=QJsonParseError::NoError || !definition.isObject() || !definition.object().value("sql").isString()
-                || definition.object().value("sql").toString().trimmed().isEmpty())
+                || (!allowEmpty && definition.object().value("sql").toString().trimmed().isEmpty()))
                 throw VbaRuntimeError(3251,"Owned query definition invalid");
             owned=definition.object().value("sql").toString(); ownedName=query.value(0).toString(); hasOwned=true;
         }
