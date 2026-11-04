@@ -15,6 +15,7 @@
 #include <QFileInfo>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QSpinBox>
 #include <QToolBar>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -173,6 +174,9 @@ End Sub
         auto* fields=dialog->findChild<QListWidget*>("native-form-fields"); assert(fields && fields->count()==2);
         auto* moved=fields->takeItem(1); assert(moved->data(Qt::UserRole).toString()=="second value");
         moved->setText("Second \"caption\""); fields->insertItem(0,moved);
+        fields->setCurrentItem(moved);
+        dialog->findChild<QSpinBox*>("native-form-field-left")->setValue(2400);
+        dialog->findChild<QSpinBox*>("native-form-field-width")->setValue(2400);
         dialog->findChild<QPlainTextEdit*>("native-form-vba")->setPlainText(module);
         dialog->findChild<QPushButton*>("native-form-save")->click();
     });
@@ -180,6 +184,7 @@ End Sub
     assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='form' AND name='Owned Native Form'") && sql.next());
     const auto saved=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
     assert(saved.value("fields").toArray().first().toString()=="second value" && saved.value("vba").toString()==module);
+    assert(saved.value("field_layout").toObject().value("second value").toObject().value("width").toInt()==2400);
     auto child=saved; child.insert("vba",""); child.insert("caption","Owned child caption");
     sql.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES('form','Owned Child',?)");
     sql.addBindValue(QString::fromUtf8(QJsonDocument(child).toJson(QJsonDocument::Compact))); assert(sql.exec()); sql.finish();
@@ -195,9 +200,12 @@ End Sub
         for(const auto& document:AccessFormPreview::projectDocuments(db)) if(document && document->documentName()==name) result=document;
         return result;
     };
+    assert(sql.exec("CREATE TEMP TABLE _la_objects(kind TEXT,name TEXT,definition TEXT)"));
+    assert(sql.exec("INSERT INTO temp._la_objects VALUES('form','Owned Native Form','{}')"));
     open(); auto form=locate("Owned Native Form"); assert(form && form->hasDataSource() && form->windowTitle().contains("Owned form caption"));
+    assert(sql.exec("DROP TABLE temp._la_objects"));
     auto* first=form->findChild<QLineEdit*>("access-control-first"); auto* second=form->findChild<QLineEdit*>("access-control-second value");
-    assert(first && second && second->y()<first->y() && first->text()=="before");
+    assert(first && second && second->y()<first->y() && second->x()>first->x() && second->width()<first->width() && first->text()=="before");
     bool caption=false; for(auto* label:form->findChildren<QLabel*>()) if(label->text()=="Second \"caption\"") caption=true;
     assert(caption && AccessFormPreview::projectObjectLoaded(db,linaccess::AccessDocumentKind::Form,"Owned Native Form"));
     first->setFocus(); first->selectAll(); QTest::keyClicks(first,"native save");
@@ -210,6 +218,20 @@ End Sub
     assert(form->executeProcedure("OpenOwnedChild",arguments).status==linaccess::VbaExecutionStatus::Completed); dispose();
     auto ownedChild=locate("Owned Child"); assert(ownedChild && ownedChild->isVisible() && !AccessFormPreview::projectObjectLoaded(db,linaccess::AccessDocumentKind::Form,"Owned Native Form"));
     assert(ownedChild->close()); dispose();
+    {
+        const QByteArray layout="Begin Form\nBegin Section\nBegin Subform\nName =\"child\"\nSourceObject =\"Form.Owned Child\"\nWidth =6000\nHeight =3000\nEnd\nEnd\nEnd\n";
+        AccessFormPreview parent("Owned Parent",layout,{},db,&window);
+        AccessFormPreview* embedded=nullptr;
+        for(auto* dialog:parent.findChildren<QDialog*>()) if(auto* document=dynamic_cast<AccessFormPreview*>(dialog)) embedded=document;
+        assert(embedded && embedded->documentName()=="Owned Child" && !embedded->isWindow() && embedded->hasDataSource());
+        auto childObject=makePreviewFormObject(*embedded);
+        childObject->assign("first",linaccess::VbaValue::string("embedded save"));
+        assert(childObject->member("Dirty",{}).boolean);
+        childObject->assign("Dirty",linaccess::VbaValue::logical(false));
+        assert(sql.exec("SELECT first FROM native_designed_records WHERE id=1") && sql.next() && sql.value(0).toString()=="embedded save"); sql.finish();
+        assert(AccessFormPreview::projectObjectLoaded(db,linaccess::AccessDocumentKind::Form,"Owned Child"));
+        assert(parent.close() && !AccessFormPreview::projectObjectLoaded(db,linaccess::AccessDocumentKind::Form,"Owned Child"));
+    }
     open(); form=locate("Owned Native Form"); assert(form);
     auto* edit=window.findChild<QAction*>("native-form-edit"); assert(edit);
     QTimer::singleShot(0,&window,[&] {
@@ -217,6 +239,9 @@ End Sub
         assert(!AccessFormPreview::projectObjectLoaded(db,linaccess::AccessDocumentKind::Form,"Owned Native Form"));
         const auto* fields=dialog->findChild<QListWidget*>("native-form-fields");
         assert(fields->item(0)->data(Qt::UserRole).toString()=="second value" && fields->item(0)->text()=="Second \"caption\"");
+        dialog->findChild<QListWidget*>("native-form-fields")->setCurrentRow(0);
+        assert(dialog->findChild<QSpinBox*>("native-form-field-left")->value()==2400);
+        assert(dialog->findChild<QSpinBox*>("native-form-field-width")->value()==2400);
         assert(dialog->findChild<QPlainTextEdit*>("native-form-vba")->toPlainText()==module);
         dialog->reject();
     });

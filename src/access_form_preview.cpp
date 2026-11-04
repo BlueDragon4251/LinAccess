@@ -1446,16 +1446,21 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
                 auto name=control.sourceObject;
                 if (name.startsWith("Form.",Qt::CaseInsensitive)) name=name.mid(5);
                 if (name.isEmpty()) throw linaccess::VbaRuntimeError(2455,"Subform source unavailable");
-                QSqlQuery source(db_);
-                source.prepare("SELECT source_bytes FROM _la_access_artifacts WHERE kind='form' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
-                source.addBindValue(name);
-                if (!source.exec() || !source.next()) throw linaccess::VbaRuntimeError(2455,"Subform source unavailable");
-                const auto definition=source.value(0).toByteArray(); source.finish();
+                QByteArray definition,code;
+                if(const auto owned=linaccess::loadNativeStoredForm(db_,name)) {
+                    name=owned->name; definition=owned->layout; code=owned->code;
+                } else {
+                    QSqlQuery source(db_);
+                    source.prepare("SELECT source_bytes FROM main._la_access_artifacts WHERE kind='form' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
+                    source.addBindValue(name);
+                    if (!source.exec() || !source.next()) throw linaccess::VbaRuntimeError(2455,"Subform source unavailable");
+                    definition=source.value(0).toByteArray(); source.finish();
+                    source.prepare("SELECT source_bytes FROM main._la_access_artifacts WHERE kind='vba' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
+                    source.addBindValue("Form_"+name);
+                    if(source.exec() && source.next()) code=source.value(0).toByteArray();
+                }
                 if (linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(definition)).kind!=linaccess::AccessDocumentKind::Form)
                     throw linaccess::VbaRuntimeError(2455,"Subform source is not a form");
-                source.prepare("SELECT source_bytes FROM _la_access_artifacts WHERE kind='vba' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
-                source.addBindValue("Form_"+name);
-                const auto code=source.exec() && source.next() ? source.value(0).toByteArray() : QByteArray{}; source.finish();
                 auto* child=new AccessFormPreview(name,definition,code,db_,canvas,true);
                 if (child->cancelledByOpen()) { delete child; throw linaccess::VbaRuntimeError(2501,"Subform opening cancelled"); }
                 subforms_.insert(control.name.toCaseFolded(),child); widget=child;
