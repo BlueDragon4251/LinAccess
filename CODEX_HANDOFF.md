@@ -1077,3 +1077,23 @@ waren vor diesem GUI-Folgeabschnitt. Paketprüfung folgt. Keine neuen IDs/Target
 Button-Folgeabschnitt: Debian-Paket und vier Originalfixture-Hashes bestanden.
 Gezielt GUI/Layout 2/2 (11,23 s), Vollsuite zuletzt vor diesem GUI-Abschnitt
 48/48 (79,27 s). Keine Ausweitung der 48 Targets oder 456 Katalogpunkte.
+
+
+Aktueller VBA-Abschnitt F040/F045: On expression GoTo/GoSub mit einmaliger
+Selektorauswertung, Let-Integer-Koerzierung vor Bereich 0–255 (5), Index 0/über
+Listengröße fällt durch. Alle Ziele vor Ausführung binden, je GoTo-Ziel echte
+lexikalische Unwindzahlen; GoSub nutzt vorhandene Return-/Resume-/Scope-Frames.
+Inline-Ziele erst nach endgültigem Wrapper-Merge binden. Quellplan-Cachebudget
+zählt Zielvektoren/Labelbytes. Bestehende Sprünge-in-inaktive-Blöcke-/GoSub-/
+Handler-/Resume-Zielrestriktionen bleiben. Kern/DAO 2/2 (1,94 s) bestanden:
+gezählte/fraktionale Selektoren, verschachtelte inline-GoSubs, Resume nach
+Selektorfehler, 5/6/94, numerische Labels und Collection-Lease-Freigabe.
+Anschließend vorhandenen DAO-Clone-Ausgang zu On 1 GoTo umgestellt; dessen
+Ergebnis und Vollsuite/GUI-freier Build/Paket noch zu prüfen. 456/48 unverändert.
+Details DAO_RUNTIME.md, öffentliche MS-VBAL-/On-Verzweigungsreferenzen.
+
+Abschluss berechnete VBA-Verzweigungen: Desktop 48/48 (81,46 s), frisch
+gebauter GUI-freier Kern 1/1 (1,65 s), Debian-Paket und vier Originalfixture-
+Hashes bestanden. Vorhandener DAO-With/Clone-Fall verlässt Scope via On 1 GoTo
+und startet danach echte Transaktion erfolgreich. Die Vollsuite deckt auch den
+vorherigen Button-Maus-Folgeabschnitt ab. Feste 456 und 48 Targets unverändert.

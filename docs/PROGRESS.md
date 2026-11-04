@@ -4758,3 +4758,40 @@ Button follow-up packaging: Debian payload/permissions/Build-ID/pinned SQLite
 and all four original fixture hashes pass. Full desktop suite last passed on
 the preceding TextBox commit; final button changes passed targeted GUI/layout
 2/2 (11.23 s). The test target inventory remains 48, fixed work catalog 456.
+
+
+## Computed native On branches (2026-11-04)
+
+Under existing F040/F045, On expression GoTo and On expression GoSub now execute
+through native jump/return machinery. Selectors evaluate once and Let-coerce to
+Integer before range checks (banker rounding, Null/type/Integer-overflow errors).
+Zero or a selector beyond the destination list falls through; a coerced value
+outside 0-255 raises 5. All named/numeric destinations bind before execution,
+including unselected entries. Missing/invalid destinations cannot run prior body
+effects. Numeric labels retain canonical leading-zero handling.
+
+Computed GoTo carries per-destination lexical unwind counts; selected ancestor
+jumps release only exited condition/With/For scopes and real enumeration leases.
+Computed GoSub shares the bounded native return stack, caller scope floor,
+Return and handled Resume snapshots. Inline wrappers bind targets only after
+merging into the final procedure. Existing inactive/sibling inbound-jump and
+nested GoSub/error/Resume destination restrictions remain explicit. The source-
+only LRU plan cost now includes destination vectors and label storage.
+
+Existing core combines counted/fractional selectors, inline nested GoSubs,
+resume/retry after selector conversion, fall-through, 5/6/94 errors, numeric
+labels and real Collection lease release. Core/DAO 2/2 (1.94 s) passed before
+changing the existing DAO clone escape to a computed GoTo; that change and full
+validation follow. No new CTest target or fixed-catalog ID. Full parser/classes/
+control flow/Access oracle parity remains open.
+
+References: [On...GoSub/GoTo](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/ongosub-ongoto-statements)
+and Microsoft [MS-VBAL](https://learn.microsoft.com/en-us/openspecs/microsoft_general_purpose_programming_languages/ms-vbal/),
+computed branch runtime semantics (Integer Let coercion and range error 5).
+
+Completion: desktop 48/48 (81.46 s), freshly rebuilt GUI-free core 1/1
+(1.65 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original fixture hashes pass. The existing real DAO With/clone case now exits
+through a computed GoTo and successfully starts its real transaction afterward.
+This full run also covers the preceding native button mouse follow-up. Fixed
+456 work entries and 48 CTest targets remain unchanged.

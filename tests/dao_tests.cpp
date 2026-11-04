@@ -142,7 +142,7 @@ On Error Resume Next
 DBEngine.BeginTrans
 Me!ResumedCloneLive=CStr(Err.Number)
 On Error GoTo caught
-GoTo releasedClone
+On 1 GoTo releasedClone
 End With
 releasedClone:
 DBEngine.BeginTrans
