@@ -272,6 +272,12 @@ public:
         if (args.size()!=1) throw VbaRuntimeError(450,"DAO: Recordset default field requires one index");
         const auto field=member("Fields",args); return reference ? field : field.object->member("Value",{});
     }
+    void assignDefaultMember(const std::vector<VbaValue>& args,const VbaValue& value) override { assignIndexedMember("Fields",args,value); }
+    void assignIndexedMember(std::string_view name,const std::vector<VbaValue>& args,const VbaValue& value) override {
+        if(lower(name)!="fields") throw VbaRuntimeError(438,"DAO: Indexed Recordset property unsupported");
+        if(args.size()!=1) throw VbaRuntimeError(450,"DAO: Recordset field assignment requires one index");
+        member("Fields",args).object->assign("Value",value);
+    }
     VbaValue item(std::string_view name) override { return value(text(name)); }
     VbaValue objectItem(std::string_view name) override { return member("Fields",{VbaValue::string(std::string(name))}); }
     void assignItem(std::string_view name,const VbaValue& value) override { set(text(name),value); }
@@ -611,6 +617,11 @@ public:
         throw VbaRuntimeError(438,"DAO: Fields member unsupported");
     }
     VbaValue item(std::string_view name) override { return owner_->member("Fields",{VbaValue::string(std::string(name))}); }
+    void assignIndexedMember(std::string_view name,const std::vector<VbaValue>& args,const VbaValue& value) override {
+        if(lower(name)!="item") throw VbaRuntimeError(438,"DAO: Indexed Fields property unsupported");
+        if(args.size()!=1) throw VbaRuntimeError(450,"DAO: Fields assignment requires one index");
+        owner_->member("Fields",args).object->assign("Value",value);
+    }
     std::vector<VbaValue> enumerate() override {
         std::vector<VbaValue> values;
         for (const auto& name : owner_->fieldNames())

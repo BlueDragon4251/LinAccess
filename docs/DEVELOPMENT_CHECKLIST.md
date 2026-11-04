@@ -1055,3 +1055,7 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Optional scalar parameter defaults fold pure expressions and prior same-module constants into immutable metadata, preserving named overrides, explicit Empty/Null/Missing distinctions and independent ByRef default values.
 
 - [x] A bounded per-thread native VBA translation LRU reuses source-only plans with exact-source/context keys, preserves fresh host/module/argument binding and leaves large plans uncached.
+
+- [x] Native Scripting.Dictionary construction supports real ordered key/value operations, bounded comparison/key families and cross-container cycle guards without generic COM activation claims.
+- [x] Dictionary Keys/Items expose independent owned snapshots and object For Each retains its enumerated owner through source-variable clearing and loop exit.
+- [x] Indexed object default writes support Dictionary values/references and real DAO Recordset/Fields pending edits committed only through Update.

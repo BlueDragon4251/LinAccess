@@ -1338,6 +1338,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         VbaValue array;
         std::string arrayRoot;
         std::shared_ptr<void> enumerationLease;
+        std::shared_ptr<VbaObject> enumerationSource;
     };
     std::vector<Frame> frames;
     std::vector<LoopFrame> loops;
@@ -1893,6 +1894,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                         if(!inner.empty()) for(const auto& expression:splitArguments(inner)) indices.push_back(evaluate(expression));
                     }
                     const auto value = evaluate(instruction.expression);
+                    if(indexed && value.kind==VbaValue::Kind::Object) throw VbaRuntimeError(3251,"Indexed object property writes require supported Set syntax");
                     if(indexed) object.object->assignIndexedMember(name,indices,value);
                     else if (instruction.argument[pos] == '!') object.object->assignItem(name,value);
                     else object.object->assign(name,value);
@@ -1963,12 +1965,23 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::IndexedAssign:
                 if(active) {
                     const auto name=lower(instruction.argument);
+                    const auto initial=locals.find(name);
+                    const bool objectTarget=initial!=locals.end() && initial->second.kind==VbaValue::Kind::Object;
+                    const auto target=objectTarget ? initial->second.object : std::shared_ptr<VbaObject>{};
+                    if(objectTarget && !target) throw VbaRuntimeError(91,"Object variable is not set");
                     std::vector<VbaValue> indices;
-                    for(const auto& expression:splitArguments(instruction.endExpression)) indices.push_back(coerceVbaModuleValue(scalarVbaValue(evaluate(expression)),"long"));
+                    for(const auto& expression:splitArguments(instruction.endExpression)) {
+                        const auto value=evaluate(expression);
+                        indices.push_back(objectTarget ? value : coerceVbaModuleValue(scalarVbaValue(value),"long"));
+                    }
                     const bool object=instruction.stepExpression=="object";
                     const auto value=object ? evaluateObject(instruction.expression) : evaluate(instruction.expression);
                     if(object && value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set requires an object reference");
                     refreshAliases();
+                    if(objectTarget) {
+                        if(!object && value.kind==VbaValue::Kind::Object) throw VbaRuntimeError(3251,"Object default-member writes require Set or a scalar default");
+                        target->assignDefaultMember(indices,value); break;
+                    }
                     const auto found=locals.find(name);
                     if(found==locals.end()) throw VbaRuntimeError(13,"Array variable required");
                     if(object && (!isVbaArray(found->second) || (vbaArrayType(found->second)!=8204 && vbaArrayType(found->second)!=8201))) throw VbaRuntimeError(13,"Object references require a Variant or Object array");
@@ -1997,7 +2010,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     if(const auto variable=locals.find(source); variable!=locals.end()) {
                         if(source==name) throw VbaRuntimeError(3251,"Array source and For Each control must be distinct");
                         loop.arrayRoot=source;
-                    } else if(!std::regex_search(source,std::regex(R"(^(array|vba\s*\.\s*array|split|filter)\s*\()"))) {
+                    } else if(!isDetachedVbaArray(collection) && !std::regex_search(source,std::regex(R"(^(array|vba\s*\.\s*array|split|filter)\s*\()"))) {
                         throw VbaRuntimeError(3251,"Array For Each requires a named variable or Array/VBA.Array/Split/Filter result");
                     }
                     loop.frameDepth=frames.size(); loop.withDepth=withFrames.size();
@@ -2012,6 +2025,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     throw VbaRuntimeError(424,"For Each requires an object collection or supported array");
                 if (!collection.object) throw VbaRuntimeError(91,"For Each object is not set");
                 LoopFrame loop{static_cast<int>(ip)};
+                loop.enumerationSource=collection.object;
                 loop.enumerationLease=collection.object->enumerationGuard();
                 loop.items = collection.object->enumerate();
                 loop.frameDepth = frames.size(); loop.withDepth=withFrames.size();

@@ -266,3 +266,12 @@ bounds are retained in statements before allocation. Runtime variables/function
 calls do not become fixed bounds. VBA_CONSTANTS_RUNTIME.md specifies expression,
 linking/type/class/conditional compilation boundaries; the fixed binding and
 Erase semantics above are unchanged.
+
+
+## Owned Dictionary snapshots (2026-11-04)
+
+Native Dictionary Keys/Items return owned detached Variant snapshots. Their
+metadata permits direct transient-array For Each without reevaluating getters;
+named arrays retain existing live-source/shape guards. Other arbitrary property/
+function array sources remain outside this path. SCRIPTING_DICTIONARY_RUNTIME.md
+documents snapshot ownership and dictionary/object/DAO indexed writes.

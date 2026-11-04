@@ -2299,3 +2299,19 @@ plans run uncached. VBA_PROCEDURE_CACHE.md documents budgets, retained metadata
 and the limited synthetic performance comparison. This is not a complete VBA
 compiler or execution-result cache. Full desktop 48/48 (81.60 s), rebuilt GUI-free
 1/1 (1.18 s), Debian package and four original fixture hashes pass.
+
+
+## Native Dictionary and indexed object/DAO writes (2026-11-04)
+
+Local CreateObject/New Scripting.Dictionary uses actual ordered native storage,
+checked primitive keys, bounded comparison modes, real snapshots and guarded
+enumeration lifetime. Default indexed object writes retain object identity and
+array value isolation. DAO Recordset/Fields indexed writes use actual buffered
+Field.Value and keyed SQL Update. SCRIPTING_DICTIONARY_RUNTIME.md records
+unsupported key/coercion/COM/module-binding boundaries.
+
+
+Validation (2026-11-04): full desktop 48/48 (77.17 s), freshly rebuilt
+GUI-free core 1/1 (1.20 s), targeted core/DAO 2/2 (1.44 s), Debian
+payload/permissions/Build-ID/pinned SQLite and all four original fixture
+hashes pass. Scoped checklist: 368 checked / 72 open; not total Access parity.
