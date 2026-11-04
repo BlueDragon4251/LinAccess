@@ -3,8 +3,11 @@
 #include "vba_runtime.hpp"
 
 #include <optional>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <type_traits>
+#include <utility>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -47,7 +50,12 @@ struct VbaValue {
     std::optional<std::string> asField() const;
 };
 
-struct VbaArgumentSignature { std::vector<std::string> names; std::size_t required{}; };
+struct VbaArgumentSignature {
+    std::vector<std::string> names;
+    std::size_t required{};
+    std::vector<bool> objectArguments{};
+    bool objectArgument(std::size_t position,std::string_view name={}) const;
+};
 
 // Late-bound Access/DAO members. Unknown properties and methods must throw.
 class VbaObject {
@@ -128,11 +136,24 @@ struct VbaArgumentReferences {
     const auto& back() const { return names.back(); }
 };
 // Native procedure calls encode named bindings as @named:parameter:reference.
-using VbaFunctionResolver = std::function<VbaValue(std::string_view, std::vector<VbaValue>&,
-                                                 const VbaArgumentReferences&)>;
+class VbaFunctionResolver {
+    using Callback=std::function<VbaValue(std::string_view,std::vector<VbaValue>&,const VbaArgumentReferences&)>;
+    Callback callback_;
+public:
+    std::function<std::optional<VbaArgumentSignature>(std::string_view)> argumentSignature;
+    VbaFunctionResolver()=default;
+    VbaFunctionResolver(std::nullptr_t) {}
+    template<class Function> requires (!std::is_same_v<std::remove_cvref_t<Function>,VbaFunctionResolver>
+        && std::is_constructible_v<Callback,Function>)
+    VbaFunctionResolver(Function&& callback):callback_(std::forward<Function>(callback)) {}
+    explicit operator bool() const noexcept { return bool(callback_); }
+    VbaValue operator()(std::string_view name,std::vector<VbaValue>& arguments,const VbaArgumentReferences& references) const {
+        return callback_(name,arguments,references);
+    }
+};
 VbaEvaluatedArgument evaluateVbaArgumentExpression(std::string_view expression,VbaHost& host,
     const VbaVariables& variables,const VbaFunctionResolver& resolver={},const VbaValue* withContext=nullptr,
-    VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0);
+    VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0,bool objectContext=false);
 bool validVbaExpression(std::string_view expression,bool withContext=false);
 VbaValue evaluateVbaExpression(std::string_view expression, VbaHost& host,
                                const VbaVariables& variables, const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0);

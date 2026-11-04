@@ -1146,3 +1146,24 @@ Abschluss native Access-Typslots: Desktop sauberer Vollsuite-Lauf 48/48
 (85,72 s), frischer GUI-freier Build/Kern 1/1 (2,15 s), Debian-Paket und vier
 Originalfixture-Hashes bestanden. Deckt TypeOf/Temp-Clone-Korrektur mit ab.
 Feste 456, 384 bestätigte Teilumfänge/72 offen und 48 Targets unverändert.
+
+
+Aktueller Objektargument-Abschnitt F043/F122: VbaFunctionResolver ist weiterhin
+mit bisherigen Callbacks konstruierbarer Aufrufer plus optionale Signatur-
+Metadaten. VbaArgumentSignature enthält Object-Kontextflags je Parameter.
+Gleiches-Modul-Subs/Funktionen und positionale Ereignisfunktionen erhalten echte
+Me-/Control-/DAO-Referenzen für deklarierte Objektparameter. Named-Actuals in
+Sub/Funktionscode wählen Kontext nach Parametername, skalare/Array-/Intrinsic-
+Pfade bleiben erhalten. Native Objektmethoden können Flags ebenso angeben.
+Pro-Frame-Signaturcache hält nur Namen/Flags, keine Objekt-/Widget-/DAO-Werte.
+Gezielt Kern/DAO/GUI/Layout 4/4 (13,58 s): echte DAO-Bang-Field-Parameter,
+direkte Me!first-Control-Actuals, umgekehrt benannte Funktionsparameter sowie
+function-bound Click mit echtem Qt-Tag/SQL-Spur. Vollprüfung folgt.
+Externe/qualifizierte Modulbindung, generelle Property-ByRef-Setter, komplette
+Klammer-/Varianten-/statische Kontextregeln und Named-Ereignisargumentordnung
+bleiben offen. Feste 456/48 unverändert. Details VARIANT_ARRAY_RUNTIME.md.
+
+Abschluss Objektargument-Kontext: Desktop 48/48 (85,57 s), frischer GUI-freier
+Build/Kern 1/1 (1,99 s), Debian-Paket und vier Originalfixture-Hashes bestanden.
+Vorhandene ByRef-Arrayzellen/DAO-Clone-/Transaktions-Lebensdauerprüfungen bleiben
+grün. Feste 456 Katalogpunkte und 48 CTest-Targets unverändert.
