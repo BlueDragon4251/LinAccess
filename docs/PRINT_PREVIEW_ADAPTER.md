@@ -235,3 +235,6 @@ Existing actual-key cases verify focus, deferred page-number commit, both pairs
 of page keys and both zoom directions. Exact Windows zoom anchoring and all
 Access scroll/keyboard/window behavior remain open. The Access-2003 keyboard
 reference linked above distinguishes fit-page navigation from zoomed scrolling.
+
+Numeric [Avg/Min/Max](REPORT_AGGREGATES.md) now extend the native aggregate subset
+for complete loaded rows and supported row expressions, with explicit type guards.

@@ -303,6 +303,56 @@ Height =1500)BANDS");
         assert(compound.findChild<QLineEdit*>("access-control-ReportSummary")->text()=="52");
         assert(compound.close());
         assert(query.exec("DELETE FROM records WHERE id=3")); query.finish();
+        assert(query.exec("CREATE TABLE native_report_stats(id INTEGER PRIMARY KEY,value REAL,label TEXT)"));
+        assert(query.exec("INSERT INTO native_report_stats VALUES(1,10,'A'),(2,20,'B'),(3,NULL,NULL),(4,30,'C')")); query.finish();
+        QStringList statsLines{"Begin Report","Width =9000","RecordSource =\"native_report_stats\"",
+            "Begin Section","Height =450","Begin TextBox","Name =\"RowId\"","ControlSource =\"id\"","Width =900","Height =300","End","End",
+            "Begin FormFooter","Height =1800"};
+        const QStringList functions{"avg","min","max","sum","count","compound"};
+        for(int index=0;index<functions.size();++index) {
+            const auto& function=functions[index]; const auto top=QString::number(index*300);
+            const auto expression=function=="compound" ? QString("Avg(IIf([value]>10,[value]*2,Null))") : function+"([value])";
+            statsLines<<"Begin Label"<<"Name =\"Label_"+function+"\""<<"Caption =\"STAT_"+function+"\""<<"Top ="+top<<"Width =2800"<<"Height =270"<<"End"
+                <<"Begin TextBox"<<"Name =\"Stat_"+function+"\""<<"ControlSource =\"="+expression+"\""<<"Top ="+top<<"Left =3000"<<"Width =3000"<<"Height =270"<<"End";
+        }
+        statsLines<<"End"<<"End"; const auto statsSource=statsLines.join('\n').toUtf8();
+        AccessFormPreview stats("numeric report aggregates",statsSource,{},db);
+        const auto checkStats=[&] {
+            QSqlQuery reference(db);
+            assert(reference.exec("SELECT AVG(value),MIN(value),MAX(value),SUM(value),COUNT(value),AVG(CASE WHEN value>10 THEN value*2 END) FROM native_report_stats") && reference.next());
+            for(int index=0;index<functions.size();++index) {
+                bool valid=false; const auto actual=stats.findChild<QLineEdit*>("access-control-Stat_"+functions[index])->text().toDouble(&valid);
+                assert(valid && qAbs(actual-reference.value(index).toDouble())<1e-10);
+            }
+        };
+        checkStats(); const auto statsPdf=output.filePath("stats.pdf"); assert(stats.exportReportPdf(statsPdf));
+        if(!reader.isEmpty()) {
+            QProcess textReader; textReader.start(reader,{"-layout",statsPdf,"-"});
+            assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);
+            const auto text=QString::fromUtf8(textReader.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);
+            assert(QRegularExpression("STAT_avg\\s+20\\b").match(text).hasMatch());
+            assert(QRegularExpression("STAT_min\\s+10\\b").match(text).hasMatch());
+            assert(QRegularExpression("STAT_max\\s+30\\b").match(text).hasMatch());
+            assert(QRegularExpression("STAT_compound\\s+50\\b").match(text).hasMatch());
+        }
+        assert(query.exec("INSERT INTO native_report_stats VALUES(5,40,'D')")); query.finish();
+        auto statsObject=makePreviewFormObject(stats); (void)statsObject->member("Requery",{}); checkStats();
+        assert(stats.exportReportPdf(statsPdf));
+        assert(query.exec("UPDATE native_report_stats SET value=NULL")); query.finish();
+        (void)statsObject->member("Requery",{});
+        for(const auto& function:functions) {
+            const auto text=stats.findChild<QLineEdit*>("access-control-Stat_"+function)->text();
+            assert(function=="count" ? text=="0" : text.isEmpty());
+        }
+        assert(stats.exportReportPdf(output.filePath("null-stats.pdf")));
+        auto textStatsSource=statsSource; textStatsSource.replace("=min([value])","=min([label])");
+        AccessFormPreview textStats("unsupported text minimum",textStatsSource,{},db);
+        assert(textStats.findChild<QLineEdit*>("access-control-Stat_min")->property("la_calculation_error").toInt()==3251);
+        QFile protectedStats(statsPdf); assert(protectedStats.open(QIODevice::ReadOnly)); const auto numericPdf=protectedStats.readAll(); protectedStats.close();
+        assert(!textStats.exportReportPdf(statsPdf));
+        assert(protectedStats.open(QIODevice::ReadOnly) && protectedStats.readAll()==numericPdf);
+        assert(textStats.close() && stats.close());
+        assert(query.exec("DROP TABLE native_report_stats")); query.finish();
         assert(paged.close());
         auto invalidSource=pagedSource;
         invalidSource.replace("=[id] * 10","=[missing]");
