@@ -1665,7 +1665,7 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     table->installEventFilter(this);
     table->setModel(model);
     table->setItemDelegate(new linaccess::AccessTableDelegate(table));
-    table->setVerticalRecordNavigation([self=QPointer<MainWindow>(this),page=QPointer<QWidget>(page),table=QPointer<linaccess::AccessTableView>(table),model=QPointer<linaccess::AccessTableModel>(model)](int direction) {
+    table->setRecordNavigationHandler([self=QPointer<MainWindow>(this),page=QPointer<QWidget>(page),table=QPointer<linaccess::AccessTableView>(table),model=QPointer<linaccess::AccessTableModel>(model)](int direction) {
         if(!self || !page || !table || !model) return false;
         if(self->tabs_->indexOf(page)<0) return model->rejectEdit(2501,"Das Datenblatt ist nicht mehr geöffnet.");
         if(!table->finishEditing() || !self || !page || !table || !model) return false;

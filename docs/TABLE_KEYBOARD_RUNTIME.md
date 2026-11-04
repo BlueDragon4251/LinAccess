@@ -70,3 +70,39 @@ checks actual keys, saved SQL, UNIQUE failure, Esc and retry. Full desktop 48/48
 1/1 (2.30 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
 original hashes pass. Scoped checklist 380 checked / 72 open; no extra CTest
 target or complete Access 2003 parity claim.
+
+
+## Validated adjacent-row Tab/Backtab (2026-11-04)
+
+MoveNext/MovePrevious cursor requests that cross to an adjacent existing row
+now reuse the same checked record Save/navigation callback. This covers Tab and
+Backtab in the view and the native delegate's editor-completion path. The source
+record is saved before movement; the actual post-save row and Qt-proposed
+logical column form the destination, preserving visible-field wrapping. Failed
+Save returns the current index and retains the pending row. Reentrant cursor
+requests do not recursively run record navigation. Weak model/view ownership
+checks reject stale destinations after callbacks.
+
+Same-row field movement and existing endpoint behavior remain Qt's existing
+path. General wraparound/addition rows, arbitrary hidden-row skips, modified
+commands, mouse selection and full Access editor/focus/error equivalence remain
+open. This does not claim complete Tab/datasheet parity.
+
+Existing main-window cases verify real view Tab and Shift+Tab positions, actual
+SQL Save, editor text committed and saved before Tab movement, and a real UNIQUE
+failure that retains the original record/cache/SQL, followed by targeted Esc.
+Earlier vertical-key and SendKeys cases remain in the same target. No new CTest
+target.
+
+
+## Validated adjacent-row Tab/Backtab movement (2026-11-04)
+
+View/delegate cursor requests to adjacent existing rows reuse checked native
+Save/navigation, restore the proposed logical column after Save and preserve
+current drafts on failure. Existing GUI cases execute view Tab, Backtab, editor
+Tab, actual SQL persistence and UNIQUE failure/Esc recovery. Endpoint/addition/
+hidden-row/general movement and full Access oracle limits remain in
+TABLE_KEYBOARD_RUNTIME.md. Full desktop 48/48 (78.54 s), GUI-free build confirmed
+and core 1/1 (2.07 s), targeted GUI/SQL 1/1 (2.48 s), Debian payload/permissions/
+Build-ID/pinned SQLite and all four original hashes pass. Scoped checklist
+381 checked / 72 open, no extra CTest target or complete Access parity claim.

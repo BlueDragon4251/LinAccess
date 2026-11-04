@@ -1083,3 +1083,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Multi-target ReDim/Preserve uses one source-mapped native instruction, publishes successful module/ByRef bindings before dependent later bounds and retains checked type/copy/error/constant behavior.
 
 - [x] Bare Up/Down in native datasheets use the existing validated current-record Save/navigation path, preserve columns and retain current drafts/selection after actual SQL failure.
+
+- [x] Tab/Backtab to adjacent existing datasheet rows, including delegate editor completion, use checked record Save/navigation and retain field destinations or pending drafts after SQL failure.

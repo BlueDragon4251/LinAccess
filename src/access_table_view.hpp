@@ -42,7 +42,7 @@ public:
         });
     }
     void setRecordNavigationGuard(std::function<bool()> guard) { recordNavigationGuard_=std::move(guard); }
-    void setVerticalRecordNavigation(std::function<bool(int)> handler) { verticalRecordNavigation_=std::move(handler); }
+    void setRecordNavigationHandler(std::function<bool(int)> handler) { recordNavigationHandler_=std::move(handler); }
     bool openReplaceDialog() { return openFindDialog(true); }
     bool openFindDialog(bool replace=false) {
         QPointer<AccessTableView> self=this;
@@ -411,6 +411,27 @@ protected:
         }
         QTableView::closeEditor(widget,hint);
     }
+    QModelIndex moveCursor(CursorAction action,Qt::KeyboardModifiers modifiers) override {
+        const auto origin=currentIndex();
+        const auto candidate=QTableView::moveCursor(action,modifiers);
+        const auto keys=modifiers & ~Qt::KeypadModifier;
+        if(movingRecord_ || !recordNavigationHandler_ || (action!=MoveNext && action!=MovePrevious)
+            || (keys!=Qt::NoModifier && keys!=Qt::ShiftModifier) || !origin.isValid() || !candidate.isValid()
+            || origin.model()!=model() || candidate.model()!=model()) return candidate;
+        const int step=candidate.row()-origin.row();
+        if(step!=(action==MoveNext ? 1 : -1)) return candidate;
+        const int column=candidate.column();
+        const QPointer<AccessTableView> self=this;
+        QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
+        if(!typed) return candidate;
+        movingRecord_=true; const auto finished=qScopeGuard([self] { if(self) self->movingRecord_=false; });
+        const auto navigate=recordNavigationHandler_;
+        const bool moved=navigate(step);
+        if(!self || !typed || model()!=typed) return {};
+        if(moved && currentIndex().isValid() && column>=0 && column<typed->columnCount())
+            return typed->index(currentIndex().row(),column);
+        return currentIndex();
+    }
     void keyPressEvent(QKeyEvent* event) override {
         const auto selectionModifiers=event->modifiers() & ~Qt::KeypadModifier;
         if(event->key()==Qt::Key_Escape && selectionModifiers==Qt::NoModifier && !activeEditor()) {
@@ -420,10 +441,10 @@ protected:
             }
         }
         if((event->key()==Qt::Key_Up || event->key()==Qt::Key_Down) && selectionModifiers==Qt::NoModifier
-            && verticalRecordNavigation_ && model() && currentIndex().isValid()) {
+            && recordNavigationHandler_ && model() && currentIndex().isValid()) {
             const int row=currentIndex().row(); const bool up=event->key()==Qt::Key_Up;
             if(up ? row>0 : row+1<model()->rowCount() || model()->canFetchMore({})) {
-                const auto navigate=verticalRecordNavigation_;
+                const auto navigate=recordNavigationHandler_;
                 (void)navigate(up ? -1 : 1); event->accept(); return;
             }
         }
@@ -518,11 +539,11 @@ private:
         return nullptr;
     }
     std::function<bool()> recordNavigationGuard_;
-    std::function<bool(int)> verticalRecordNavigation_;
+    std::function<bool(int)> recordNavigationHandler_;
     QPointer<QDialog> findDialog_,replaceDialog_;
     NativeTableFindArguments findArguments_;
     QString findMessage_;
-    bool findAdvance_{},finding_{},replacing_{};
+    bool findAdvance_{},finding_{},replacing_{},movingRecord_{};
     QMetaObject::Connection restore_;
 };
 }

@@ -2476,3 +2476,16 @@ checks actual keys, saved SQL, UNIQUE failure, Esc and retry. Full desktop 48/48
 1/1 (2.30 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
 original hashes pass. Scoped checklist 380 checked / 72 open; no extra CTest
 target or complete Access 2003 parity claim.
+
+
+## Validated adjacent-row Tab/Backtab movement (2026-11-04)
+
+View/delegate cursor requests to adjacent existing rows reuse checked native
+Save/navigation, restore the proposed logical column after Save and preserve
+current drafts on failure. Existing GUI cases execute view Tab, Backtab, editor
+Tab, actual SQL persistence and UNIQUE failure/Esc recovery. Endpoint/addition/
+hidden-row/general movement and full Access oracle limits remain in
+TABLE_KEYBOARD_RUNTIME.md. Full desktop 48/48 (78.54 s), GUI-free build confirmed
+and core 1/1 (2.07 s), targeted GUI/SQL 1/1 (2.48 s), Debian payload/permissions/
+Build-ID/pinned SQLite and all four original hashes pass. Scoped checklist
+381 checked / 72 open, no extra CTest target or complete Access parity claim.

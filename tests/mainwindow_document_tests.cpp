@@ -177,6 +177,23 @@ void exerciseRecordEscape(MainWindow& window,QSqlDatabase db) {
     assert(sql.exec("SELECT value FROM command_record_undo WHERE id=2") && sql.next() && sql.value(0).toString()=="beta"); sql.finish();
     QTest::keyClick(view,Qt::Key_Escape); assert(!model->isDirty());
     QTest::keyClick(view,Qt::Key_Up); assert(view->currentIndex().row()==0 && view->currentIndex().column()==1);
+    assert(model->setData(model->index(0,1),"saved-by-tab"));
+    view->setFocus(); QTest::keyClick(view,Qt::Key_Tab);
+    assert(view->currentIndex().row()==1 && view->currentIndex().column()==0 && !model->isDirty());
+    assert(sql.exec("SELECT value FROM command_record_undo WHERE id=1") && sql.next() && sql.value(0).toString()=="saved-by-tab"); sql.finish();
+    QTest::keyClick(view,Qt::Key_Backtab,Qt::ShiftModifier);
+    assert(view->currentIndex().row()==0 && view->currentIndex().column()==1);
+    view->edit(view->currentIndex()); QApplication::processEvents();
+    editor=qobject_cast<QLineEdit*>(QApplication::focusWidget()); assert(editor); editor->setText("saved-by-editor-tab");
+    QTest::keyClick(editor,Qt::Key_Tab); QApplication::processEvents();
+    assert(view->currentIndex().row()==1 && view->currentIndex().column()==0 && !model->isDirty());
+    assert(sql.exec("SELECT value FROM command_record_undo WHERE id=1") && sql.next() && sql.value(0).toString()=="saved-by-editor-tab"); sql.finish();
+    view->setCurrentIndex(model->index(0,1)); assert(model->setData(model->index(0,1),"beta"));
+    view->setFocus(); QTest::keyClick(view,Qt::Key_Tab);
+    assert(view->currentIndex().row()==0 && view->currentIndex().column()==1 && model->isDirty() && model->lastError().nativeErrorCode()=="3146");
+    assert(sql.exec("SELECT value FROM command_record_undo WHERE id=1") && sql.next() && sql.value(0).toString()=="saved-by-editor-tab"); sql.finish();
+    if(auto* live=qobject_cast<QLineEdit*>(QApplication::focusWidget());live && view->isAncestorOf(live)) QTest::keyClick(live,Qt::Key_Escape);
+    view->setFocus(); QTest::keyClick(view,Qt::Key_Escape); assert(!model->isDirty());
     assert(window.closeTableDocument(0,"command_record_undo",2).value("error").toInt()==0); dispose();
 }
 void exerciseTableSave(MainWindow& window,QSqlDatabase db) {
