@@ -2977,6 +2977,38 @@ End Sub
     assert(host.fields["DictionarySelfError"]=="3251" && host.fields["DictionaryCycleError"]=="3251" && host.fields["CollectionDictionaryCycleError"]=="3251");
     assert(host.fields["DictionaryBinary"]=="2" && host.fields["DictionaryText"]=="True:1" && host.fields["DictionaryDuplicateError"]=="457" && host.fields["DictionaryCompareError"]=="5");
     assert(host.fields["DictionaryRegionalError"]=="3251" && host.fields["DictionaryClassError"]=="3251");
+    const std::string retainedObjects=R"VBA(Private bag As Object
+Public exposed As Object
+Sub Bump()
+If bag Is Nothing Then Set bag=CreateObject("Scripting.Dictionary")
+If Not bag.Exists("calls") Then bag.Add "calls",0
+bag("calls")=bag("calls")+1
+Set exposed=bag
+Me!RetainedCalls=CStr(bag("calls"))
+End Sub
+Sub Clear()
+Set bag=Nothing
+Set exposed=Nothing
+End Sub
+)VBA";
+    FakeForm independentObjects;
+    for(int call=1;call<=2;++call) {
+        const auto result=executeVbaProcedure(retainedObjects,"Bump",host);
+        assert(result.status==VbaExecutionStatus::Completed && host.fields["RetainedCalls"]==std::to_string(call));
+    }
+    const auto retainedState=host.moduleState(retainedObjects);
+    assert(retainedState->publicVariables.contains("exposed") && !retainedState->publicVariables.contains("bag"));
+    assert(retainedState->values.at("bag").object==retainedState->values.at("exposed").object);
+    assert(executeVbaProcedure(retainedObjects,"Bump",independentObjects).status==VbaExecutionStatus::Completed);
+    assert(independentObjects.fields["RetainedCalls"]=="1");
+    assert(executeVbaProcedure(retainedObjects,"Clear",host).status==VbaExecutionStatus::Completed);
+    assert(!retainedState->values.at("bag").object && !retainedState->values.at("exposed").object);
+    assert(executeVbaProcedure(retainedObjects,"Bump",host).status==VbaExecutionStatus::Completed && host.fields["RetainedCalls"]=="1");
+    bool rejectedScalarObject=false;
+    try { (void)coerceVbaModuleValue(VbaValue::longInteger(1),"object"); }
+    catch(const VbaRuntimeError& error) { rejectedScalarObject=error.number==13; }
+    assert(rejectedScalarObject);
+
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub

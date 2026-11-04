@@ -1059,3 +1059,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native Scripting.Dictionary construction supports real ordered key/value operations, bounded comparison/key families and cross-container cycle guards without generic COM activation claims.
 - [x] Dictionary Keys/Items expose independent owned snapshots and object For Each retains its enumerated owner through source-variable clearing and loop exit.
 - [x] Indexed object default writes support Dictionary values/references and real DAO Recordset/Fields pending edits committed only through Update.
+
+- [x] Scalar module Object fields initialize to Nothing and retain actual native object identity across calls, with checked reference binding, visibility metadata and independent host state.

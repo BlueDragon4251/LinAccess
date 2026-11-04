@@ -4,7 +4,10 @@ CreateObject("Scripting.Dictionary") and New Scripting.Dictionary create actual
 independent C++ dictionaries. CreateObject supports the local known class only;
 unknown classes/remote activation refuse 3251. This is a native compatibility
 object, not general COM/ActiveX or reference-library activation. Use local Object
-variables; module Object fields and typed Scripting declarations/reference management remain open.
+variables and scalar Private/Public/Global module Object fields. Module fields
+start as Nothing, retain actual native object identity across calls within their
+host and release references on Set ... = Nothing. Separate hosts own separate
+module state. Typed Scripting declarations/reference management remain open.
 
 Add/Exists/Item/Count/Keys/Items/Remove/RemoveAll, distinct-key renaming and
 CompareMode operate on real ordered hash storage. Item reads of absent keys
@@ -55,3 +58,17 @@ Validation (2026-11-04): full desktop 48/48 (77.17 s), freshly rebuilt
 GUI-free core 1/1 (1.20 s), targeted core/DAO 2/2 (1.44 s), Debian
 payload/permissions/Build-ID/pinned SQLite and all four original fixture
 hashes pass. Scoped checklist: 368 checked / 72 open; not total Access parity.
+
+
+## Persistent scalar module Object fields (2026-11-04)
+
+Private/Public/Global scalar Object fields initialize to Nothing and retain real
+native references in per-host module state. Repeated Dictionary calls share
+actual storage; separate hosts remain independent; clearing both aliases with
+Set ... = Nothing releases bindings. Non-object native binding refuses 13.
+Early-bound Scripting/DAO module declarations and automatic New remain open.
+Existing core target covers repeated calls, identity, visibility, clear/recreate
+and host isolation. Full desktop 48/48 (78.39 s), freshly rebuilt GUI-free 1/1
+(1.09 s), targeted core 1/1 (1.05 s), Debian payload/permissions/Build-ID/pinned
+SQLite and all four original fixture hashes pass. Scoped checklist 369 checked
+/ 72 open; not total Access 2003 parity.
