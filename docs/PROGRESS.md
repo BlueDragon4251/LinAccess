@@ -5257,3 +5257,23 @@ Validation: final targeted layout1/1 (9.73 s), full desktop48/48 under Windows
 style (79.54 s), freshly built GUI-free core1/1 (1.68 s), Debian payload/Build-ID/
 pinned SQLite and four original hashes pass. Original DAO case passes (33.64 s).
 No new CTest target or catalog point; fixed 456/384/72 retained.
+
+
+## Detail ForceNewPage and owned report design (2026-11-04)
+
+Native imported details retain and paginate all four ForceNewPage choices.
+Before/after boundaries preserve row context and repeated page sections; the
+report footer honors pending breaks without generating an empty trailing page.
+The owned report editor saves/restores the selection and emits validated actual
+metadata into the shared native runtime. Non-detail nonzero settings remain
+explicitly unsupported. Full section VBA APIs and Windows page parity stay open.
+
+Existing SQL/PDF cases check all three nonzero choices and row placement; actual
+mainwindow design/save/reopen/nested-preview checks the persisted choice.
+Validation: initial mainwindow/layout2/2 (12.78 s), final mainwindow/layout/original
+DAO3/3 (47.29 s), desktop build. Previous full48 (79.54 s) and fresh GUI-free core1
+(1.68 s) precede this isolated detail/layout change. Fixed 456/384/72; no new target
+or point. F085 remains open. See REPORT_DETAIL_BREAKS.md.
+
+Detail-break checkpoint: Debian payload/Build-ID/pinned SQLite and all four
+original fixture SHA-256 checks also pass.

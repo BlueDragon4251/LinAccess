@@ -191,7 +191,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                   || key=="HideDuplicates" || key=="Vertical") && accessBoolean(value,false))
                 || (key=="CanGrow" && accessBoolean(value,false) && current.type!="Section"
                     && !(current.type=="TextBox" && (current.controlTemplate || current.control>=0)))
-                || ((key=="ForceNewPage" || key=="RunningSum") && value!="0")
+                || ((key=="RunningSum" || (key=="ForceNewPage" && current.type!="Section")) && value!="0")
                 || ((key=="OnFormat" || key=="OnPrint" || key=="OnPage") && !value.isEmpty())
                 || (key=="Columns" && value!="1"))
                 form.reportPrintLimitations.append(key);
@@ -350,6 +350,10 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 if (!valid || height<0 || height>std::numeric_limits<int>::max())
                     throw std::runtime_error("Invalid imported section height");
                 sections[current.type]=static_cast<int>(height);
+            } else if(key=="ForceNewPage" && current.type=="Section") {
+                bool valid=false; const int setting=value.toInt(&valid);
+                if(!valid || setting<0 || setting>3) throw std::runtime_error("Invalid detail ForceNewPage");
+                form.detailForceNewPage=setting;
             } else if (key=="CanGrow") {
                 form.sectionCanGrow.insert(current.type,accessBoolean(value,false));
             } else if (key=="BackColor") {

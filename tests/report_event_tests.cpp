@@ -270,6 +270,31 @@ Height =1500)BANDS");
             query.prepare("UPDATE records SET name=? WHERE id=?");
             query.addBindValue((id==1 ? alphaLines : omegaLines).join('\n')); query.addBindValue(id); assert(query.exec()); query.finish();
         }
+        for(int setting=1;setting<=3;++setting) {
+            assert(query.exec("UPDATE records SET name=CASE id WHEN 1 THEN 'FIRST_BREAK' ELSE 'LAST_BREAK' END")); query.finish();
+            auto forcedSource=pagedSource;
+            forcedSource.replace("Height =9000","Height =900\nForceNewPage ="+QByteArray::number(setting));
+            const auto forcedLayout=linaccess::parseAccessFormLayout(QString::fromUtf8(forcedSource));
+            assert(forcedLayout.detailForceNewPage==setting && forcedLayout.reportPrintLimitations.isEmpty());
+            AccessFormPreview forced("forced detail pages",forcedSource,{},db);
+            const int expected=setting==3 ? 4 : 3;
+            assert(forced.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==expected);
+            const auto forcedPdf=output.filePath("forced.pdf"); assert(forced.exportReportPdf(forcedPdf));
+            if(!reader.isEmpty()) {
+                QProcess textReader; textReader.start(reader,{"-layout",forcedPdf,"-"});
+                assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);
+                const auto text=QString::fromUtf8(textReader.readAllStandardOutput());
+                const auto pages=text.split(QChar('\f'));
+                const int firstPage=setting==2 ? 0 : 1;
+                assert(pages[firstPage].count("FIRST_BREAK")==1 && pages[firstPage+1].count("LAST_BREAK")==1);
+                assert(text.count("FIRST_BREAK")==1 && text.count("LAST_BREAK")==1);
+            }
+            assert(forced.close());
+        }
+        for(int id=1;id<=2;++id) {
+            query.prepare("UPDATE records SET name=? WHERE id=?");
+            query.addBindValue((id==1 ? alphaLines : omegaLines).join('\n')); query.addBindValue(id); assert(query.exec()); query.finish();
+        }
         auto shortSource=pagedSource; shortSource.replace("Height =9000","Height =900");
         AccessFormPreview fixedGrowth("fixed growth baseline",shortSource,{},db);
         const auto originalName=fixedGrowth.findChild<QLineEdit*>("access-control-Name")->geometry();

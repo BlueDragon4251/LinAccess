@@ -145,7 +145,8 @@ This is a fixed-band subset: Label, TextBox, Rectangle and Line, with direct fie
 bindings, supported calculated expressions, or unbound values. Truncated row sets, missing fields, other controls,
 failed calculated expressions, overflowing controls/bands, groups, unsupported growing/
 shrinking/repeated sections, running sums, hidden duplicates, multiple columns,
-forced page breaks and section/page print events are rejected. It does not
+unsupported forced page breaks and section/page print events are rejected.
+[Detail ForceNewPage](REPORT_DETAIL_BREAKS.md) is supported separately. It does not
 implement Access page setup, grouping, full dynamic layout/CanGrow, subreports,
 Format/Print/Page scheduling, or DoCmd's direct-print view. The current-layout toolbar
 commands retain their one-page behavior. Separate Berichtsvorschau and Bericht

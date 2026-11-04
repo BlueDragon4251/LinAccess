@@ -34,6 +34,10 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
         while (used.contains(result.toCaseFolded())) result=base+QString::number(suffix++);
         used.insert(result.toCaseFolded()); return result;
     };
+    const auto forceValue=definition.value("detail_force_new_page");
+    const int force=forceValue.toInt(-1);
+    if(!forceValue.isUndefined() && (!forceValue.isDouble() || force<0 || force>3 || forceValue.toDouble()!=force))
+        throw VbaRuntimeError(5,"Invalid native report detail page break setting");
     const auto code=definition.value("vba").toString();
     const auto bytes=code.toUtf8(); const auto analysis=analyzeVba(std::string_view(bytes.constData(),bytes.size()));
     QSet<QString> procedures;
@@ -49,6 +53,7 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
         lines<<"Begin Label"<<"Name ="+quoted(unique("label_"+columns[i]))<<"Caption ="+quoted(columns[i])
             <<"Left ="+QString::number(i*width+30)<<"Width ="+QString::number(width-60)<<"Height =300"<<"End";
     lines<<"End"<<"Begin Section"<<"Height =360";
+    if(!forceValue.isUndefined()) lines<<"ForceNewPage ="+QString::number(force);
     for (int i=0;i<columns.size();++i) {
         lines<<"Begin TextBox"<<"Name ="+quoted(columns[i])<<"ControlSource ="+quoted("["+columns[i]+"]");
         if(definition.value("can_grow").toBool()) lines<<"CanGrow =-1";

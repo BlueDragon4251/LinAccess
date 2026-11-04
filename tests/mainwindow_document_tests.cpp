@@ -378,6 +378,7 @@ End Sub
         dialog->findChild<QPlainTextEdit*>("native-report-sql")->setPlainText(source);
         dialog->findChild<QPlainTextEdit*>("native-report-vba")->setPlainText(module);
         dialog->findChild<QCheckBox*>("native-report-cangrow")->setChecked(true);
+        dialog->findChild<QComboBox*>("native-report-page-break")->setCurrentIndex(3);
         dialog->findChild<QPushButton*>("native-report-save")->click();
     });
     create->trigger(); QApplication::processEvents();
@@ -385,6 +386,7 @@ End Sub
     const auto saved=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
     assert(saved.value("sql").toString()==source && saved.value("vba").toString()==module);
     assert(saved.value("can_grow").toBool());
+    assert(saved.value("detail_force_new_page").toInt()==3);
     assert(sql.exec("SELECT COUNT(*) FROM native_report_events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
     auto* explorer=window.findChild<QTreeWidget*>("database-explorer"); assert(explorer);
     QTreeWidgetItem* selected=nullptr;
@@ -407,7 +409,7 @@ End Sub
     assert(object->member("RecordSource",{}).asText()==source.toStdString() && object->member("Tag",{}).asText()=="1");
     auto* value=report->findChild<QLineEdit*>("access-control-Display value"); assert(value && value->isReadOnly() && value->text()=="first" && value->property("la_access_tag").toString()=="bound");
     assert(report->findChild<QComboBox*>("access-record-selector")->count()==3);
-    assert(report->findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==1);
+    assert(report->findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==3);
     std::vector<VbaValue> none;
     assert(report->executeProcedure("Increment",none).status==VbaExecutionStatus::Completed && object->member("Tag",{}).asText()=="2");
     QTemporaryDir output; assert(output.isValid() && report->exportReportPdf(output.filePath("owned.pdf")));
@@ -434,11 +436,12 @@ End Sub
         assert(!AccessFormPreview::projectObjectLoaded(db,AccessDocumentKind::Report,"Owned Native Report"));
         assert(dialog->findChild<QPlainTextEdit*>("native-report-sql")->toPlainText()==source);
         assert(dialog->findChild<QPlainTextEdit*>("native-report-vba")->toPlainText()==module);
+        assert(dialog->findChild<QComboBox*>("native-report-page-break")->currentIndex()==3);
         bool previewed=false;
         QTimer::singleShot(0,dialog,[&] {
             auto* preview=dynamic_cast<AccessFormPreview*>(QApplication::activeModalWidget());
             assert(preview && preview->documentKind()==AccessDocumentKind::Report && preview->hasDataSource());
-            assert(preview->findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==1);
+            assert(preview->findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==3);
             previewed=true; preview->reject();
         });
         dialog->findChild<QPushButton*>("native-report-preview")->click();

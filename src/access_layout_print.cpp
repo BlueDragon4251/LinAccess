@@ -344,11 +344,18 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     const auto startPage=[&](int row) {
         ++pageNumber; record=row; append("PageHeader",0,record); y=header;
     };
+    bool pendingDetailBreak=false;
     for (int row=0;row<recordRows_.size();++row) {
+        if((pendingDetailBreak || (layout_.detailForceNewPage&1)) && y>header) {
+            finishPage(); startPage(row+1);
+        }
         const int size=detailHeights[row];
         if (size<=pageHeight-header-footer && y+size>pageHeight-footer) { finishPage(); startPage(row+1); }
         record=row+1;
-        if(size<=pageHeight-header-footer) { append("Section",y,record); y+=size; continue; }
+        if(size<=pageHeight-header-footer) {
+            append("Section",y,record); y+=size;
+            pendingDetailBreak=(layout_.detailForceNewPage&2)!=0; continue;
+        }
         resetControls(); applyGrowth(row); currentRecordIndex_=record; loadRecord();
         QVector<QPair<int,int>> forbidden;
         const int origin=qRound(layout_.sectionOffsets.value("Section")/15.0);
@@ -387,7 +394,9 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
             y+=end-slice; slice=end;
             if(slice<size) { finishPage(); startPage(record); }
         }
+        pendingDetailBreak=(layout_.detailForceNewPage&2)!=0;
     }
+    if(pendingDetailBreak && height("FormFooter")>0 && y>header) { finishPage(); startPage(record); }
     if (y+height("FormFooter")>pageHeight-footer) { finishPage(); startPage(record); }
     append("FormFooter",y,record); finishPage();
     if (pageNumber>32767) return false;

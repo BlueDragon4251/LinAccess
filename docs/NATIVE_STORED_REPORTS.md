@@ -45,3 +45,6 @@ CTest target or work-catalog ID was added.
 The design now persists a CanGrow option for generated text fields. Its native
 flow supports aligned parallel or vertically separated growth groups and bounded long-detail page splitting;
 see [CanGrow](REPORT_CANGROW.md). This does not add a complete visual property grid.
+
+The detail page-break selector persists all four ForceNewPage choices and uses
+the actual page plan: [supported scope](REPORT_DETAIL_BREAKS.md).
