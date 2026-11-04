@@ -5005,3 +5005,24 @@ payload/permissions/Build-ID/pinned SQLite and all four fixture hashes pass afte
 the final dialog-option adjustment. No new target, no repeated full suite for
 this toolbar-only change: preceding renderer full48/core1 validation is recorded
 above. Physical printer output remains unvalidated. Fixed 456/384/72 unchanged.
+
+
+## Calculated fields in paginated reports (2026-11-04)
+
+The fixed-band renderer now accepts calculated controls supported by the existing
+native Access expression engine, including direct-field Sum/Count. It preflights
+all loaded rows before opening the output device and refuses calculation errors.
+The existing PDF/real-preview case checks per-row arithmetic (10/20), report-wide
+Sum(id)=3, restored controls and refusal of a missing-field expression without
+replacing the existing PDF. No new expression parser or aggregate type claim.
+
+Analysis used temporary copies of the original Bridge ZIPs: ten report layouts
+contain 124 calculated controls; 87 controls mention Sum. Across those controls,
+99 Sum calls have simple field arguments and six have compound expressions. No
+source expressions, original data or VBA were printed or published in artifacts.
+Compound aggregate arguments and complete typing/group scope remain open (F085).
+
+Validation: existing access_2003_layouts 1/1 (9.46 s), desktop build, Debian
+payload/permissions/Build-ID/pinned SQLite and four original hashes pass. This
+renderer-only integration reuses the preceding full48/core1 evidence; no repeated
+full suite or new CTest target. Fixed catalog stays 456/384/72.

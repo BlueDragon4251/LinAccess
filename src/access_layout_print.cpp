@@ -103,10 +103,13 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     auto* canvas=findChild<QWidget*>("access-form-canvas");
     if (!canvas || layout_.width<=0 || layout_.height<=0
         || layout_.width/15.0>canvas->width() || layout_.height/15.0>canvas->height()) return false;
+    QStringList calculated;
     for (const auto& control:layout_.controls) {
         if (control.type!="Label" && control.type!="TextBox" && control.type!="Rectangle"
             && control.type!="Line") return false;
-        if (!control.controlSource.isEmpty()) {
+        if (control.controlSource.trimmed().startsWith('=')) {
+            calculated.append(control.name);
+        } else if (!control.controlSource.isEmpty()) {
             auto field=control.controlSource.trimmed();
             if (field.startsWith('[') && field.endsWith(']')) field=field.mid(1,field.size()-2);
             bool found=false;
@@ -136,6 +139,18 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         || height("FormFooter")>pageHeight-header-footer) return false;
     const int savedRecord=currentRecordIndex_;
     const auto restore=qScopeGuard([&] { currentRecordIndex_=savedRecord; loadRecord(); });
+    // Validate every row before opening the output device: an unsupported
+    // calculated field must not produce an apparently complete partial report.
+    if (!calculated.isEmpty()) {
+        for (int row=0;row<qMax(1,int(recordRows_.size()));++row) {
+            currentRecordIndex_=recordRows_.isEmpty() ? 0 : row+1;
+            loadRecord();
+            for (const auto& name:calculated) {
+                const auto* widget=controls_.value(name.toCaseFolded()).data();
+                if (!widget || widget->property("la_calculation_error").toInt()!=0) return false;
+            }
+        }
+    }
     QPainter painter;
     if (!painter.begin(&printer)) return false;
     painter.scale(scaleX,scaleY);
