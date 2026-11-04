@@ -297,16 +297,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* editMenu=linaccess::addNativeEditMenu(menuBar(),this);
     editMenu->addSeparator();
     auto* findTable=editMenu->addAction("&Suchen...\tStrg+F"); findTable->setObjectName("table-find"); findTable->setEnabled(false);
+    auto* replaceTable=editMenu->addAction("&Ersetzen...\tStrg+H"); replaceTable->setObjectName("table-replace"); replaceTable->setEnabled(false);
+    connect(replaceTable,&QAction::triggered,this,[this] { (void)dispatchTableCommand(29); });
     auto* findNext=editMenu->addAction("&Weitersuchen\tUmschalt+F4"); findNext->setObjectName("table-find-next"); findNext->setEnabled(false);
     connect(findTable,&QAction::triggered,this,[this] { (void)dispatchTableCommand(30); });
     connect(findNext,&QAction::triggered,this,[this] { (void)dispatchTableCommand(341); });
-    connect(editMenu,&QMenu::aboutToShow,this,[this,findTable,findNext] {
+    connect(editMenu,&QMenu::aboutToShow,this,[this,findTable,findNext,replaceTable] {
         linaccess::AccessTableView* view=nullptr;
         if(!activePreviewDocument() && AccessFormPreview::databaseWindowActive(this) && activeDataPage_ && tabs_->currentWidget()==activeDataPage_)
             for(auto* candidate:activeDataPage_->findChildren<QTableView*>()) if((view=dynamic_cast<linaccess::AccessTableView*>(candidate))) break;
         const auto* model=view ? qobject_cast<linaccess::AccessTableModel*>(view->model()) : nullptr;
         bool textColumn=false;
         if(model) for(int column=0;column<model->columnCount();++column) if(!view->isColumnHidden(column) && model->isSearchableColumn(column)) { textColumn=true; break; }
+        bool replaceColumn=false;
+        if(model && !model->isReadOnly()) for(int column=0;column<model->columnCount();++column)
+            if(!view->isColumnHidden(column) && model->isTextColumn(column)) { replaceColumn=true; break; }
+        replaceTable->setEnabled(replaceColumn && !QApplication::activeModalWidget());
         findTable->setEnabled(textColumn && !QApplication::activeModalWidget());
         findNext->setEnabled(view && view->hasFindText() && !QApplication::activeModalWidget());
     });
@@ -662,13 +668,13 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         const int actions[]{1,0,2,3};
         return navigateTableDocument({},actions[command-65],1,false);
     }
-    if(command==28 || command==223 || command==50 || command==109 || command==189 || command==190 || command==191 || command==199 || command==292 || command==179 || command==163 || command==164 || command==30 || command==341) {
+    if(command==28 || command==223 || command==50 || command==109 || command==189 || command==190 || command==191 || command==199 || command==292 || command==179 || command==163 || command==164 || command==29 || command==30 || command==341) {
         QPointer<linaccess::AccessTableView> table;
         for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
         if(!table || !model) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
         if(const auto focused=focusedDataTextCommand(table,command);focused.value("handled").toBool()) return focused;
-        if((command!=28 && command!=109 && command!=30 && command!=341) && !table->currentIndex().isValid()) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
+        if((command!=28 && command!=109 && command!=29 && command!=30 && command!=341) && !table->currentIndex().isValid()) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
         if(command==28) {
             const QPointer<MainWindow> self=this;
             if(!table->finishEditing()) return tableModelFailure(model,2501);
@@ -683,6 +689,8 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
             if(!table->insertRecord()) return tableModelFailure(model,2501);
         } else if(command==223) {
             if(!table->deleteCurrentRecord()) return tableModelFailure(model,2501);
+        } else if(command==29) {
+            if(!table->openReplaceDialog()) return tableModelFailure(model,2046);
         } else if(command==30 || command==341) {
             if(!(command==30 ? table->openFindDialog() : table->repeatFind())) return tableModelFailure(model,2046);
         } else if(command==109) {

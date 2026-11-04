@@ -1067,3 +1067,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native DAO identities support checked qualified module/local/argument/result bindings and Nothing defaults, retaining actual SQL cursor/object state across calls and refusing mismatched replacements.
 
 - [x] Explicit procedure-local Static declarations retain native scalar/object/dynamic/fixed-array state by host/procedure/source through repeated and recursive calls; the broader Static-procedure modifier remains explicitly unsupported.
+
+- [x] Native datasheet Ctrl+H/menu/acCmdReplace opens real whole-text-field replacement; transactional Save/rollback drafts, readonly and primary-key/source/record validation guards apply.
