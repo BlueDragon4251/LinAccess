@@ -143,6 +143,7 @@ Height =1500)BANDS");
         pagedSource.replace("Height =300","Height =600");
         pagedSource.replace("Name =\"Info\"\nTop", "Name =\"Info\"\nControlSource =\"=[id] * 10\"\nTop");
         pagedSource.replace("Name =\"ReportSummary\"\nTop", "Name =\"ReportSummary\"\nControlSource =\"=Sum([id])\"\nTop");
+        pagedSource.replace("Name =\"PageNumber\"\nTop", "Name =\"PageNumber\"\nControlSource =\"=CStr([Page]) & Chr(47) & CStr([Pages])\"\nTop");
         AccessFormPreview paged("paged report",pagedSource,{},db);
         const auto document=output.filePath("records.pdf");
         assert(paged.exportReportPdf(document));
@@ -161,6 +162,7 @@ Height =1500)BANDS");
             assert(text.count("first")==1 && text.count("second")==1);
             assert(text.indexOf("first")<text.indexOf("second"));
             assert(text.contains("10") && text.contains("20") && text.contains("3"));
+            assert(text.count("1/2")==1 && text.count("2/2")==1);
         }
 
         assert(paged.findChild<QLineEdit*>("access-control-Name")->text()=="first");
@@ -178,6 +180,12 @@ Height =1500)BANDS");
         assert(previewChecked && paged.findChild<QLineEdit*>("access-control-Name")->text()=="first");
         assert(paged.findChild<QLineEdit*>("access-control-Info")->text()=="10");
         assert(paged.findChild<QLineEdit*>("access-control-ReportSummary")->text()=="3");
+        auto footerSource=pagedSource;
+        footerSource.replace("=Sum([id])","=1 / ([id]-1)");
+        AccessFormPreview finalFooter("final footer report",footerSource,{},db);
+        assert(finalFooter.exportReportPdf(output.filePath("final-footer.pdf")));
+        assert(finalFooter.findChild<QLineEdit*>("access-control-Name")->text()=="first");
+        assert(finalFooter.close());
         auto compoundSource=pagedSource;
         compoundSource.replace("=Sum([id])","=Sum(IIf([id]=1,10,20)) + Count(IIf([id]=1,Null,1)) + Count(Null)");
         AccessFormPreview compound("compound report",compoundSource,{},db);

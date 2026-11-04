@@ -5057,3 +5057,25 @@ CTest target or catalog ID. Fixed catalog 456/384/72; F085 remains open.
 Reference: Microsoft Sum documentation (linked in PRINT_PREVIEW_ADAPTER.md),
 including expression arguments and omission of NULL rows; native SQL is an
 independent calculation, not a complete Access output oracle.
+
+
+## Report page context and prepared print bands (2026-11-04)
+
+Fixed-band output now plans each section with its record, destination position
+and page, determines total pages, validates that section's own calculations and
+records all its native vector commands before opening the output device. A
+report-footer formula valid only on the final record is no longer refused due
+to an error on an earlier unprinted row. The saved record/page context is restored.
+
+Page/Pages expressions use planned page numbers; bounded native report getters
+return Long/Integer according to Microsoft documentation. Outside actual paginated
+rendering they fail explicitly. Setter semantics and Page-event execution remain
+unsupported. PDF checks independently read 1/2 and 2/2 exactly once, and the
+existing test exports a footer valid only on the second/final record. No complete
+Access page/formatting/property/event model or output oracle is claimed.
+
+Validation: desktop build and existing mainwindow/layout/original-DAO targets
+3/3 (50.31 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original hashes pass. This GUI-only report change does not alter the headless
+runtime; preceding full48/core1 validation remains recorded above rather than
+being repeated. Fixed 456/384/72 and 48 CTest targets unchanged (F085 remains open).

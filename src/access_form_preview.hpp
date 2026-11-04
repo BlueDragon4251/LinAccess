@@ -203,6 +203,7 @@ private:
     mutable QMap<QString,std::shared_ptr<linaccess::VbaValue>> calculatedValues_;
     QMap<QString,std::shared_ptr<linaccess::VbaValue>> reportAggregateValues_;
     bool reportAggregateCaching_{};
+    int reportPrintPage_{},reportPrintPages_{};
     int dataSourceErrorNumber_{};
     QStringList dataColumns_;
     QMap<QString,QString> dataTypes_;

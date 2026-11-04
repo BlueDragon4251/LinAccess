@@ -104,12 +104,12 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     auto* canvas=findChild<QWidget*>("access-form-canvas");
     if (!canvas || layout_.width<=0 || layout_.height<=0
         || layout_.width/15.0>canvas->width() || layout_.height/15.0>canvas->height()) return false;
-    QStringList calculated;
+    QMap<QString,QStringList> calculated;
     for (const auto& control:layout_.controls) {
         if (control.type!="Label" && control.type!="TextBox" && control.type!="Rectangle"
             && control.type!="Line") return false;
         if (control.controlSource.trimmed().startsWith('=')) {
-            calculated.append(control.name);
+            calculated[control.section].append(control.name);
         } else if (!control.controlSource.isEmpty()) {
             auto field=control.controlSource.trimmed();
             if (field.startsWith('[') && field.endsWith(']')) field=field.mid(1,field.size()-2);
@@ -138,70 +138,80 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         || (!recordRows_.isEmpty() && (detail<=0 || detail>pageHeight-header-footer))
         || height("FormHeader")>pageHeight-header-footer
         || height("FormFooter")>pageHeight-header-footer) return false;
+    struct Band { QString section; int y,record,page; QPicture commands; };
+    QVector<Band> bands;
+    int pageNumber=1;
+    int record=recordRows_.isEmpty() ? 0 : 1;
+    const auto append=[&](const QString& section,int y,int row) {
+        if (height(section)) bands.append({section,y,row,pageNumber,{}});
+    };
+    append("FormHeader",0,record);
+    append("PageHeader",height("FormHeader"),record);
+    int y=height("FormHeader")+header;
+    const auto finishPage=[&] { append("PageFooter",pageHeight-footer,record); };
+    const auto startPage=[&](int row) {
+        ++pageNumber; record=row; append("PageHeader",0,record); y=header;
+    };
+    for (int row=0;row<recordRows_.size();++row) {
+        if (y+detail>pageHeight-footer) { finishPage(); startPage(row+1); }
+        record=row+1; append("Section",y,record); y+=detail;
+    }
+    if (y+height("FormFooter")>pageHeight-footer) { finishPage(); startPage(record); }
+    append("FormFooter",y,record); finishPage();
+    if (pageNumber>32767) return false; // Report.Pages is an Access Integer.
+
     QScopedValueRollback<bool> caching(reportAggregateCaching_,true);
     reportAggregateValues_.clear();
     const auto clearAggregates=qScopeGuard([&] { reportAggregateValues_.clear(); });
-    const int savedRecord=currentRecordIndex_;
-    const auto restore=qScopeGuard([&] { currentRecordIndex_=savedRecord; loadRecord(); });
-    // Validate every row before opening the output device: an unsupported
-    // calculated field must not produce an apparently complete partial report.
-    if (!calculated.isEmpty()) {
-        for (int row=0;row<qMax(1,int(recordRows_.size()));++row) {
-            currentRecordIndex_=recordRows_.isEmpty() ? 0 : row+1;
-            loadRecord();
-            for (const auto& name:calculated) {
-                const auto* widget=controls_.value(name.toCaseFolded()).data();
-                if (!widget || widget->property("la_calculation_error").toInt()!=0) return false;
-            }
+    const int savedRecord=currentRecordIndex_,savedPage=reportPrintPage_,savedPages=reportPrintPages_;
+    const auto restore=qScopeGuard([&] {
+        currentRecordIndex_=savedRecord; reportPrintPage_=savedPage; reportPrintPages_=savedPages;
+        loadRecord();
+    });
+    reportPrintPages_=pageNumber;
+    int loadedRecord=-1,loadedPage=-1;
+    // Freeze only the sections that will actually print, before opening the
+    // output device. Errors in a footer evaluated on an earlier detail row
+    // must not reject a valid final footer.
+    for (auto& band:bands) {
+        if (loadedRecord!=band.record || loadedPage!=band.page) {
+            currentRecordIndex_=band.record; reportPrintPage_=band.page; loadRecord();
+            loadedRecord=band.record; loadedPage=band.page;
         }
+        for (const auto& name:calculated.value(band.section)) {
+            const auto* widget=controls_.value(name.toCaseFolded()).data();
+            if (!widget || widget->property("la_calculation_error").toInt()!=0) return false;
+        }
+        QPainter recording(&band.commands);
+        const int offset=qRound(layout_.sectionOffsets.value(band.section)/15.0);
+        canvas->render(&recording,QPoint(),QRegion(0,offset,canvas->width(),height(band.section)));
+        if (!recording.end()) return false;
     }
     QPainter painter;
     if (!painter.begin(&printer)) return false;
     painter.scale(scaleX,scaleY);
-    const auto band=[&](const QString& section,int y) {
-        const int size=height(section);
-        if (!size) return;
-        painter.save(); painter.translate(0,y);
-        painter.setClipRect(QRect(0,0,canvas->width(),size));
-        QPicture commands;
-        QPainter recording(&commands);
-        const int offset=qRound(layout_.sectionOffsets.value(section)/15.0);
-        canvas->render(&recording,QPoint(),QRegion(0,offset,canvas->width(),size));
-        recording.end();
-        // QPicture playback applies its own device-DPI ratio. Compensate it
-        // because the report's physical TWIP scale is already installed above.
-        painter.scale(double(commands.logicalDpiX())/printer.logicalDpiX(),
-                      double(commands.logicalDpiY())/printer.logicalDpiY());
-        commands.play(&painter);
-        painter.restore();
-    };
-    const auto pageStart=[&] { band("PageHeader",0); };
-    const auto pageEnd=[&] { band("PageFooter",pageHeight-footer); };
-    const auto nextPage=[&](int record) {
-        pageEnd();
-        if (!printer.newPage()) return false;
-        currentRecordIndex_=record; loadRecord();
-        pageStart(); return true;
-    };
-    if (!recordRows_.isEmpty()) { currentRecordIndex_=1; loadRecord(); }
-    band("FormHeader",0);
-    band("PageHeader",height("FormHeader"));
-    int y=height("FormHeader")+header;
-    for (int row=0;row<recordRows_.size();++row) {
-        if (y+detail>pageHeight-footer) {
-            if (!nextPage(row+1)) { painter.end(); return false; }
-            y=header;
+    int outputPage=1;
+    for (auto& band:bands) {
+        while (outputPage<band.page) {
+            if (!printer.newPage()) { painter.end(); return false; }
+            ++outputPage;
         }
-        currentRecordIndex_=row+1; loadRecord();
-        band("Section",y); y+=detail;
+        painter.save(); painter.translate(0,band.y);
+        painter.setClipRect(QRect(0,0,canvas->width(),height(band.section)));
+        // QPicture playback also converts device DPI; the physical TWIP scale
+        // is already active and must not be applied a second time.
+        painter.scale(double(band.commands.logicalDpiX())/printer.logicalDpiX(),
+                      double(band.commands.logicalDpiY())/printer.logicalDpiY());
+        if (!band.commands.play(&painter)) { painter.restore(); painter.end(); return false; }
+        painter.restore();
     }
-    if (y+height("FormFooter")>pageHeight-footer) {
-        if (!nextPage(currentRecordIndex_)) { painter.end(); return false; }
-        y=header;
+    while (outputPage<pageNumber) {
+        if (!printer.newPage()) { painter.end(); return false; }
+        ++outputPage;
     }
-    band("FormFooter",y); pageEnd();
     return painter.end();
 }
+
 bool AccessFormPreview::exportLayoutPdf(const QString& path) { return writePdf(path,false); }
 bool AccessFormPreview::exportReportPdf(const QString& path) { return writePdf(path,true); }
 bool AccessFormPreview::writePdf(const QString& path,bool report) {

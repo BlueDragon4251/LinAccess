@@ -733,6 +733,12 @@ public:
             return controls->member("Item",args);
         }
         if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected form arguments");
+        if (key=="page" || key=="pages") {
+            if (!report_) throw linaccess::VbaRuntimeError(438,"Page properties require a report");
+            if (preview.reportPrintPages_<=0) throw linaccess::VbaRuntimeError(3251,"Page properties require paginated output");
+            return key=="page" ? linaccess::VbaValue::longInteger(preview.reportPrintPage_)
+                : linaccess::VbaValue::integer(preview.reportPrintPages_);
+        }
         if (key == "name") return linaccess::VbaValue::string(bytes(preview.formName_));
         if (key == "tag") return linaccess::VbaValue::string(bytes(preview.property("la_access_tag").toString()));
         if (key == "caption") return linaccess::VbaValue::string(bytes(preview.layout_.caption));
@@ -809,7 +815,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="dataentry" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="openargs" || key=="modal" || key=="popup" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
+        if (!args.empty() || key=="page" || key=="pages" || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="dataentry" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="openargs" || key=="modal" || key=="popup" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
