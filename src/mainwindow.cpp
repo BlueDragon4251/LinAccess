@@ -13,6 +13,7 @@
 #include "access_form_import.hpp"
 #include "access_form_preview.hpp"
 #include "native_stored_form.hpp"
+#include "native_stored_report.hpp"
 #include "vba_module_context.hpp"
 #include "access_form_objects.hpp"
 #include "bridge_importer.hpp"
@@ -262,6 +263,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     connect(objectMenu,&QMenu::aboutToShow,this,[this,editStoredForm] {
         const auto* item=explorer_->currentItem(); editStoredForm->setEnabled(db_.isOpen() && item && item->data(0,Qt::UserRole).toString()=="form" && !QApplication::activeModalWidget());
+    });
+    auto* editStoredReport=objectMenu->addAction("Berichtsentwurf bearbeiten..."); editStoredReport->setObjectName("native-report-edit");
+    connect(editStoredReport,&QAction::triggered,this,[this] {
+        const auto* item=explorer_->currentItem(); if(item && item->data(0,Qt::UserRole).toString()=="report") editReport(item->text(0));
+    });
+    connect(objectMenu,&QMenu::aboutToShow,this,[this,editStoredReport] {
+        const auto* item=explorer_->currentItem(); editStoredReport->setEnabled(db_.isOpen() && item && item->data(0,Qt::UserRole).toString()=="report" && !QApplication::activeModalWidget());
     });
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
     viewMenu->addAction(projectActions.last());
@@ -1148,7 +1156,7 @@ QStringList MainWindow::tableNames() {
 QStringList MainWindow::objectNames(const QString& kind) {
     QStringList names;
     QSqlQuery query(db_);
-    query.prepare("SELECT name FROM _la_objects WHERE kind=? ORDER BY name COLLATE NOCASE");
+    query.prepare("SELECT name FROM main._la_objects WHERE kind=? ORDER BY name COLLATE NOCASE");
     query.addBindValue(kind);
     if (query.exec()) while (query.next()) names << query.value(0).toString();
     return names;
@@ -1156,7 +1164,7 @@ QStringList MainWindow::objectNames(const QString& kind) {
 
 QJsonObject MainWindow::objectDefinition(const QString& kind, const QString& name) {
     QSqlQuery query(db_);
-    query.prepare("SELECT definition FROM _la_objects WHERE kind=? AND name=?");
+    query.prepare("SELECT definition FROM main._la_objects WHERE kind=? AND name=?");
     query.addBindValue(kind);
     query.addBindValue(name);
     if (query.exec() && query.next())
@@ -1170,7 +1178,7 @@ bool MainWindow::saveObject(const QString& kind, const QString& name, const QJso
         return false;
     }
     QSqlQuery query(db_);
-    query.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES(?,?,?) "
+    query.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES(?,?,?) "
                   "ON CONFLICT(kind,name) DO UPDATE SET definition=excluded.definition");
     query.addBindValue(kind);
     query.addBindValue(name.trimmed());
@@ -1226,7 +1234,7 @@ void MainWindow::openExplorerItem(QTreeWidgetItem* item, int) {
     if (kind == "table") showTable(name);
     else if (kind == "query") editQuery(name);
     else if (kind == "form") runForm(name);
-    else if (kind == "report") editReport(name);
+    else if (kind == "report") runReport(name);
     else if (kind == "access_artifact") showAccessArtifact(
         item->data(0, Qt::UserRole + 1).toInt());
 }
@@ -1370,7 +1378,7 @@ void MainWindow::showAccessArtifact(int id) {
                 return;
             }
             QSqlQuery existing(db_);
-            existing.prepare("SELECT 1 FROM _la_objects WHERE kind='form' AND name=?");
+            existing.prepare("SELECT 1 FROM main._la_objects WHERE kind='form' AND name=?");
             existing.addBindValue(formName);
             if (!existing.exec()) { messageError(this, existing.lastError().text()); return; }
             if (existing.next()) {
@@ -1934,78 +1942,65 @@ void MainWindow::runForm(const QString& name) {
     } catch(const std::exception& error) { messageError(this,QString::fromUtf8(error.what())); }
 }
 
+void MainWindow::runReport(const QString& name) {
+    if (!hasProject() || !finishActiveDataEditors()) return;
+    try {
+        const auto report=linaccess::loadNativeStoredReport(db_,name);
+        if (!report) throw linaccess::VbaRuntimeError(2103,"Gespeicherter Bericht ist nicht verfügbar.");
+        (void)AccessFormPreview::showDocument(linaccess::AccessDocumentKind::Report,report->name,report->layout,report->code,db_,this,report->recordSource);
+    } catch(const std::exception& error) { messageError(this,QString::fromUtf8(error.what())); }
+}
 void MainWindow::editReport(const QString& existingName) {
     if (!hasProject()) return;
-    const auto old = existingName.isEmpty() ? QJsonObject{} : objectDefinition("report", existingName);
-    QDialog dialog(this);
-    dialog.setWindowTitle("Berichtdesigner — einfache SQL-Tabellenberichte");
-    tagProjectObject(&dialog,this,db_,"report",existingName);
-    dialog.resize(930, 720);
-    auto* outer = new QVBoxLayout(&dialog);
-    auto* name = new QLineEdit(existingName, &dialog);
-    name->setPlaceholderText("Berichtname");
-    outer->addWidget(name);
-    auto* title = new QLineEdit(old.value("title").toString(), &dialog);
-    title->setPlaceholderText("Überschrift");
-    outer->addWidget(title);
-    auto* sql = new QPlainTextEdit(&dialog);
-    sql->setMaximumHeight(150);
-    sql->setPlaceholderText("SELECT * FROM kunden");
-    sql->setPlainText(old.value("sql").toString());
-    outer->addWidget(sql);
-    auto* row = new QHBoxLayout();
-    auto* previewButton = addButton(row, "Vorschau");
-    auto* pdfButton = addButton(row, "PDF exportieren");
-    auto* saveButton = addButton(row, "Speichern");
-    outer->addLayout(row);
-    auto* preview = new QTextBrowser(&dialog);
-    outer->addWidget(preview);
-
-    auto makeHtml = [this, sql, title]() -> QString {
-        if (!isSelect(sql->toPlainText())) throw QString("Nur SELECT-Abfragen in Berichten.");
-        QSqlQuery query(db_);
-        if (!query.exec(sql->toPlainText())) throw query.lastError().text();
-        const auto record = query.record();
-        QString result = "<html><head><style>body{font-family:sans-serif}"
-                         "table{border-collapse:collapse;width:100%}"
-                         "th,td{padding:5px;border:1px solid gray}"
-                         "th{background:#ddd}</style></head><body><h1>"
-                         + title->text().toHtmlEscaped() + "</h1><table><tr>";
-        for (int i = 0; i < record.count(); ++i)
-            result += "<th>" + record.fieldName(i).toHtmlEscaped() + "</th>";
-        result += "</tr>";
-        int count = 0;
-        while (count < 1000 && query.next()) {
-            result += "<tr>";
-            for (int i = 0; i < record.count(); ++i)
-                result += "<td>" + asText(query.value(i)).toHtmlEscaped() + "</td>";
-            result += "</tr>";
-            ++count;
-        }
-        return result + "</table><p>" + QString::number(count)
-            + " Zeilen (max. 1000)</p></body></html>";
+    for (const auto& document:AccessFormPreview::projectDocuments(db_))
+        if (document && document->documentKind()==linaccess::AccessDocumentKind::Report && document->documentName().compare(existingName,Qt::CaseInsensitive)==0)
+            if (!document->close()) return;
+    const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("report",existingName);
+    QDialog dialog(this); dialog.setObjectName("native-report-designer");
+    dialog.setWindowTitle("Berichtsentwurf"); tagProjectObject(&dialog,this,db_,"report",existingName); dialog.resize(930,720);
+    auto* outer=new QVBoxLayout(&dialog);
+    auto* name=new QLineEdit(existingName,&dialog); name->setObjectName("native-report-name"); name->setPlaceholderText("Berichtname"); outer->addWidget(name);
+    auto* title=new QLineEdit(old.value("title").toString(),&dialog); title->setObjectName("native-report-title"); title->setPlaceholderText("Überschrift"); outer->addWidget(title);
+    auto* sql=new QPlainTextEdit(&dialog); sql->setObjectName("native-report-sql"); sql->setPlaceholderText("SELECT * FROM kunden"); sql->setPlainText(old.value("sql").toString()); outer->addWidget(sql,1);
+    outer->addWidget(new QLabel("VBA-Ereignisse: Open, Load, NoData und Close. Druck-/Format-Ereignisse sind noch nicht unterstützt.",&dialog));
+    auto* vba=new QPlainTextEdit(&dialog); vba->setObjectName("native-report-vba"); vba->setPlaceholderText("Private Sub Report_Load()\nEnd Sub"); vba->setPlainText(old.value("vba").toString()); outer->addWidget(vba,1);
+    auto codeFont=QFontDatabase::systemFont(QFontDatabase::FixedFont); codeFont.setPointSize(10);
+    sql->setFont(codeFont); vba->setFont(codeFont);
+    auto* row=new QHBoxLayout; auto* preview=addButton(row,"Vorschau"); preview->setObjectName("native-report-preview");
+    auto* pdf=addButton(row,"PDF exportieren"); auto* save=addButton(row,"Speichern"); save->setObjectName("native-report-save"); outer->addLayout(row);
+    const auto definition=[old,title,sql,vba] {
+        auto content=old; content.insert("title",title->text()); content.insert("sql",sql->toPlainText());
+        content.insert("vba",vba->toPlainText()); content.insert("language","vba_subset_experimental"); return content;
     };
-    connect(previewButton, &QPushButton::clicked, &dialog, [this, preview, makeHtml] {
-        try { preview->setHtml(makeHtml()); }
-        catch (const QString& problem) { messageError(this, problem); }
-    });
-    connect(pdfButton, &QPushButton::clicked, &dialog, [this, name, makeHtml] {
-        const auto path = QFileDialog::getSaveFileName(this, "PDF speichern", name->text() + ".pdf", "PDF (*.pdf)");
-        if (path.isEmpty()) return;
+    const auto packet=[this,name,definition] { return linaccess::nativeStoredReport(name->text().isEmpty() ? QString("Berichtsvorschau") : name->text(),definition(),db_); };
+    connect(preview,&QPushButton::clicked,&dialog,[this,&dialog,packet] {
         try {
-            QTextDocument document;
-            document.setHtml(makeHtml());
-            QPrinter printer(QPrinter::HighResolution);
-            printer.setOutputFormat(QPrinter::PdfFormat);
-            printer.setOutputFileName(path);
-            document.print(&printer);
-            QMessageBox::information(this, "Export", "PDF gespeichert: " + path);
-        } catch (const QString& problem) { messageError(this, problem); }
+            const auto report=packet();
+            for (const auto& document:AccessFormPreview::projectDocuments(db_))
+                if (document && document->documentKind()==linaccess::AccessDocumentKind::Report && document->documentName().compare(report.name,Qt::CaseInsensitive)==0)
+                    throw linaccess::VbaRuntimeError(5,"Ein Bericht mit diesem Namen ist bereits geöffnet.");
+            AccessFormPreview document(report.name,report.layout,report.code,db_,&dialog,false,{},std::nullopt,0,-1,report.recordSource);
+            if (!document.cancelledByOpen() && AccessFormPreview::projectObjectLoaded(db_,linaccess::AccessDocumentKind::Report,report.name))
+                document.exec();
+        } catch(const std::exception& error) { messageError(&dialog,QString::fromUtf8(error.what())); }
     });
-    connect(saveButton, &QPushButton::clicked, &dialog, [this, name, title, sql, &dialog] {
-        if (!isSelect(sql->toPlainText())) { messageError(this, "Nur SELECT-Abfragen speichern."); return; }
-        if (saveObject("report", name->text(), {{"title", title->text()}, {"sql", sql->toPlainText()}}))
-            dialog.accept();
+    connect(pdf,&QPushButton::clicked,&dialog,[this,&dialog,name,packet] {
+        const auto path=QFileDialog::getSaveFileName(&dialog,"PDF speichern",name->text()+".pdf","PDF (*.pdf)"); if(path.isEmpty()) return;
+        try {
+            const auto report=packet();
+            AccessFormPreview document(report.name,report.layout,report.code,db_,this,false,{},std::nullopt,0,-1,report.recordSource);
+            if(!document.exportReportPdf(path)) throw linaccess::VbaRuntimeError(3251,"Bericht konnte nicht vollständig ausgegeben werden.");
+            (void)document.close();
+        } catch(const std::exception& error) { messageError(this,QString::fromUtf8(error.what())); }
+    });
+    connect(save,&QPushButton::clicked,&dialog,[this,&dialog,name,definition,packet] {
+        try {
+            (void)packet();
+            for (const auto& document:AccessFormPreview::projectDocuments(db_))
+                if (document && document->documentKind()==linaccess::AccessDocumentKind::Report && document->documentName().compare(name->text(),Qt::CaseInsensitive)==0)
+                    if (!document->close()) return;
+            if (saveObject("report",name->text(),definition())) dialog.accept();
+        } catch(const std::exception& error) { messageError(this,QString::fromUtf8(error.what())); }
     });
     dialog.exec();
 }

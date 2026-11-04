@@ -34,7 +34,7 @@ class AccessFormPreview final : public QDialog {
 public:
     AccessFormPreview(QString formName, const QByteArray& source,
                       const QByteArray& vbaSource, QSqlDatabase database,
-                      QWidget* parent = nullptr,bool embedded=false,QString whereCondition={},std::optional<QString> openArgs={},int windowMode=0,int dataMode=-1);
+                      QWidget* parent = nullptr,bool embedded=false,QString whereCondition={},std::optional<QString> openArgs={},int windowMode=0,int dataMode=-1,std::optional<QString> recordSourceOverride={});
 
     linaccess::VbaExecutionResult executeProcedure(const QString& name,std::vector<linaccess::VbaValue>& arguments);
     bool exportLayoutPdf(const QString& path);
@@ -60,7 +60,8 @@ public:
     static bool activateProjectDocument(QSqlDatabase database,QWidget* projectWindow,AccessFormPreview* target);
     static void cycleProjectDocuments(QSqlDatabase database,QWidget* projectWindow,bool backwards,AccessFormPreview* current=nullptr);
     static AccessFormPreview* showDocument(linaccess::AccessDocumentKind kind,QString name,
-        const QByteArray& source,const QByteArray& vba,QSqlDatabase database,QWidget* projectOwner=nullptr);
+        const QByteArray& source,const QByteArray& vba,QSqlDatabase database,QWidget* projectOwner=nullptr,
+        std::optional<QString> recordSourceOverride={});
     void accept() override;
     void reject() override;
 

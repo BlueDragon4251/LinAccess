@@ -1,4 +1,5 @@
 #include "native_stored_form.hpp"
+#include "native_stored_report.hpp"
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
 #include "native_project_close_guard.hpp"
@@ -1088,12 +1089,13 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
 
 AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
                                      const QByteArray& vbaSource, QSqlDatabase database,
-                                     QWidget* parent,bool embedded,QString whereCondition,std::optional<QString> openArgs,int windowMode,int dataMode)
+                                     QWidget* parent,bool embedded,QString whereCondition,std::optional<QString> openArgs,int windowMode,int dataMode,std::optional<QString> recordSourceOverride)
     : QDialog(parent), formName_(std::move(formName)),openArgs_(std::move(openArgs)),
       vba_(linaccess::decodeVbaSource(vbaSource)),
       layout_(linaccess::parseAccessFormLayout(linaccess::decodeVbaSource(source))),
       db_(std::move(database)) {
     linaccess::VbaExecutionScope executionScope;
+    if (recordSourceOverride) layout_.recordSource=std::move(*recordSourceOverride);
     const auto stopped=[&] {
         if(!linaccess::vbaExecutionStopRequested()) return false;
         openCancelled_=true; return true;
@@ -1249,7 +1251,7 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
 }
 
 AccessFormPreview* AccessFormPreview::showDocument(linaccess::AccessDocumentKind kind,QString name,
-    const QByteArray& source,const QByteArray& vba,QSqlDatabase database,QWidget* projectOwner) {
+    const QByteArray& source,const QByteArray& vba,QSqlDatabase database,QWidget* projectOwner,std::optional<QString> recordSourceOverride) {
     if (closingProjects().contains(projectKey(database))) throw linaccess::VbaRuntimeError(2501,"Project is closing");
     ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
     QPointer<AccessFormPreview> existing;
@@ -1271,7 +1273,7 @@ AccessFormPreview* AccessFormPreview::showDocument(linaccess::AccessDocumentKind
     QWidget* owner=nullptr;
     for(auto* ancestor=projectOwner;ancestor;ancestor=ancestor->parentWidget())
         if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
-    auto document=std::make_unique<AccessFormPreview>(std::move(name),source,vba,std::move(database),owner);
+    auto document=std::make_unique<AccessFormPreview>(std::move(name),source,vba,std::move(database),owner,false,QString{},std::nullopt,0,-1,std::move(recordSourceOverride));
     if(document->openCancelled_ || document->closed_) return nullptr;
     document->show(); document->activateWindow(); document->activateDocument();
     if(document->openCancelled_ || document->closed_) return nullptr;
@@ -2892,7 +2894,10 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
     }
     QString canonical; QByteArray form,code;
     const auto stored=report ? std::optional<linaccess::NativeStoredForm>{} : linaccess::loadNativeStoredForm(db_,name);
-    if(stored) { canonical=stored->name; form=stored->layout; code=stored->code; }
+    const auto storedReport=report ? linaccess::loadNativeStoredReport(db_,name) : std::optional<linaccess::NativeStoredReport>{};
+    std::optional<QString> sourceOverride;
+    if(storedReport) { canonical=storedReport->name; form=storedReport->layout; code=storedReport->code; sourceOverride=storedReport->recordSource; }
+    else if(stored) { canonical=stored->name; form=stored->layout; code=stored->code; }
     else {
         QSqlQuery query(db_);
         query.prepare("SELECT name,source_bytes FROM _la_access_artifacts WHERE kind=? AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
@@ -2910,7 +2915,7 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
     QWidget* projectOwner=nullptr;
     for (auto* ancestor=parentWidget();ancestor;ancestor=ancestor->parentWidget())
         if (qobject_cast<QMainWindow*>(ancestor)) { projectOwner=ancestor; break; }
-    auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,db_,projectOwner,false,where,std::move(openArgs),windowMode,dataMode);
+    auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,db_,projectOwner,false,where,std::move(openArgs),windowMode,dataMode,std::move(sourceOverride));
     const auto validate=[&] {
         for (const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent","OnNoData"})
             if (const auto outcome=nested->eventResult(event);outcome && failed(*outcome))

@@ -5139,3 +5139,34 @@ under Windows style (81.16 s); actual application startup with isolated XDG
 configuration/data until timed shutdown; Debian payload/permissions/Build-ID/
 pinned SQLite and four original hashes pass. Headless sources unchanged from
 preceding fresh core1. No new CTest target; fixed 456/384/72 unchanged.
+
+
+## Owned reports use the native Report engine (2026-11-04)
+
+Owned report definitions now prepare SELECT columns without stepping records,
+generate a bounded automatic fixed-band layout, and open the existing native
+Report/CodeBehind/page/PDF runtime. Explorer double-click runs the report; the
+object menu edits SQL/title/VBA. Designer preview is a real nested native report
+window that returns to retained edits. The old SQL/HTML/QTextDocument path was
+removed. Raw multiline SQL is passed separately into the layout model, preserving
+RecordSource and stored SQL/code. Extra definition metadata is copied on save.
+
+Open/Load/NoData/Close procedures are auto-wired; unsupported initialization results
+refuse complete rendering. Stored report lookup and main-window object reads/writes
+use main._la_objects and reject imported-name ambiguity. DoCmd opens saved reports
+with independent project lifetime. Automatic layout is limited to 1-32 columns,
+may exceed paper width, and does not complete visual design, grouping, CanGrow or
+print events. Existing ranked-TOP filtering remains 3251: the initial combined
+TOP/Where test hit that known guard, so the evidence separates TOP execution from
+WhereCondition on an ordinary SELECT. The guard was not weakened.
+
+The existing mainwindow case creates the report through the actual editor, checks
+exact multiline SQL/code, native TOP2 over three rows, typed Report/controls/module
+state/PDF and TEMP-shadow immunity. Actual VBA opens an ordinary SELECT report
+with a filter, closes its caller without closing the report, then edits/previews
+with four balanced Open/Close SQL effects. No new CTest target or catalog point.
+
+Validation: final mainwindow/layout2/2 (11.99 s), full desktop48/48 under Windows
+style (82.41 s), Debian payload/permissions/Build-ID/pinned SQLite and four original
+hashes pass. Headless runtime sources unchanged from preceding fresh core1.
+Fixed 456/384/72 retained; full report and Access parity remain open.
