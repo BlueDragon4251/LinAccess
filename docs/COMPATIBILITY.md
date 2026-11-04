@@ -2448,3 +2448,18 @@ Full desktop 48/48 (78.60 s), freshly rebuilt GUI-free 1/1 (1.25 s), targeted
 core 1/1 (1.27 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
 original fixture hashes pass. Scoped checklist 378 checked / 72 open; no new
 CTest target or claim of complete Access parity.
+
+
+## Ordered multi-target ReDim/Preserve (2026-11-04)
+
+ReDim lists compile source-only per-target metadata into one native instruction.
+Successful module/ByRef binding is published before later dimensions, allowing
+an actual bounds function to observe the preceding allocation. Preserve/type/
+copy/default behavior uses the existing native arrays; runtime failure retains
+earlier completed operations and skips remaining targets under Resume Next.
+Cache memory accounting includes descriptors. VARIANT_ARRAY_RUNTIME.md specifies
+remaining property/compiler/alias/oracle boundaries. Full desktop 48/48
+(78.63 s), freshly rebuilt GUI-free 1/1 (1.47 s), targeted core 1/1 (1.31 s),
+Debian payload/permissions/Build-ID/pinned SQLite and four original fixture
+hashes pass. No new CTest target. Scoped checklist 379 checked / 72 open, not
+complete Access 2003 parity.

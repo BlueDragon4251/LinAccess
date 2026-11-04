@@ -347,3 +347,45 @@ Full desktop 48/48 (78.60 s), freshly rebuilt GUI-free 1/1 (1.25 s), targeted
 core 1/1 (1.27 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
 original fixture hashes pass. Scoped checklist 378 checked / 72 open; no new
 CTest target or claim of complete Access parity.
+
+
+## Multi-target ReDim and Preserve (2026-11-04)
+
+A ReDim/ReDim Preserve target list compiles into one source-mapped instruction
+with source-only name/bounds/type descriptors. Each target validates its
+existing declared-array/Variant, fixed/ParamArray, bounds/type and live-loop
+rules. The statement-wide Preserve flag applies to every target; explicit
+element types remain per target. All known constant targets refuse before
+body execution.
+
+Successful target binding is published through the existing module/ByRef alias
+path before evaluating later dimensions. A later bounds function therefore
+reads the newly allocated module array. A runtime failure retains earlier
+completed operations, skips remaining targets and resumes after this statement
+under On Error Resume Next. Allocation/copy/type/default behavior is the actual
+existing native array implementation, not placeholder metadata.
+
+Descriptor storage is included in native procedure-plan cache memory accounting;
+plans retain no module/host array state. Existing core cases check dependent
+module bounds through an actual VBA function call, mixed declared/Variant typed
+arrays, multi-target Preserve/copy isolation, a failing second target and
+constant preflight. No new CTest target.
+
+Arbitrary property/indexed ReDim targets, unsupported array types, complete
+compiler/alias/error-precedence rules and an Access 2003 execution oracle remain
+open. This is bounded native ReDim list execution.
+
+
+## Ordered multi-target ReDim/Preserve (2026-11-04)
+
+ReDim lists compile source-only per-target metadata into one native instruction.
+Successful module/ByRef binding is published before later dimensions, allowing
+an actual bounds function to observe the preceding allocation. Preserve/type/
+copy/default behavior uses the existing native arrays; runtime failure retains
+earlier completed operations and skips remaining targets under Resume Next.
+Cache memory accounting includes descriptors. VARIANT_ARRAY_RUNTIME.md specifies
+remaining property/compiler/alias/oracle boundaries. Full desktop 48/48
+(78.63 s), freshly rebuilt GUI-free 1/1 (1.47 s), targeted core 1/1 (1.31 s),
+Debian payload/permissions/Build-ID/pinned SQLite and four original fixture
+hashes pass. No new CTest target. Scoped checklist 379 checked / 72 open, not
+complete Access 2003 parity.

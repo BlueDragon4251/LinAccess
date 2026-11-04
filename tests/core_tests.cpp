@@ -3556,6 +3556,35 @@ End Sub
     assert(partialErase.status==VbaExecutionStatus::Completed && host.fields["PartialErase"]=="13:Empty:9");
     const auto constantErase=executeVbaProcedure("Sub ConstantErase()\nConst blocked=1\nDim value As Variant\nMe!ForbiddenConstantErase=1\nErase value,blocked\nEnd Sub","ConstantErase",host);
     assert(constantErase.status==VbaExecutionStatus::Unsupported && constantErase.errorNumber==3251 && !host.fields.contains("ForbiddenConstantErase"));
+    const std::string resizeSeveral=R"VBA(Private retained() As Long
+Function RetainedUpper() As Long
+RetainedUpper=UBound(retained)
+End Function
+Sub ResizeSeveral()
+Dim text As Variant, before As Variant
+ReDim retained(0 To 2),text(0 To RetainedUpper()) As String
+retained(2)=7
+text(2)="x"
+before=text
+ReDim Preserve retained(0 To 3),text(0 To 3)
+Me!MultiResize=CStr(UBound(retained)) & ":" & CStr(retained(2)) & ":" & CStr(retained(3)) & ":" & TypeName(text) & ":" & Join(text,"|") & ":" & CStr(UBound(before))
+End Sub
+Sub PartialResize()
+Dim first As Variant, second As Variant, last As Variant
+first=Array(9)
+second=Array(8)
+last=Array(7)
+On Error Resume Next
+ReDim Preserve first(0 To 2),second(1 To 3),last(0 To 5)
+Me!PartialResize=CStr(Err.Number) & ":" & CStr(UBound(first)) & ":" & CStr(UBound(second)) & ":" & CStr(UBound(last))
+End Sub
+)VBA";
+    const auto resizedSeveral=executeVbaProcedure(resizeSeveral,"ResizeSeveral",host);
+    assert(resizedSeveral.status==VbaExecutionStatus::Completed && host.fields["MultiResize"]=="3:7:0:String():||x|:2");
+    const auto partialResize=executeVbaProcedure(resizeSeveral,"PartialResize",host);
+    assert(partialResize.status==VbaExecutionStatus::Completed && host.fields["PartialResize"]=="9:2:0:0");
+    const auto constantResize=executeVbaProcedure("Sub ConstantResize()\nConst blocked=1\nDim value As Variant\nMe!ForbiddenConstantResize=1\nReDim value(1),blocked(1)\nEnd Sub","ConstantResize",host);
+    assert(constantResize.status==VbaExecutionStatus::Unsupported && constantResize.errorNumber==3251 && !host.fields.contains("ForbiddenConstantResize"));
     const auto shortenedBytes=executeVbaProcedureWithArguments(R"VBA(Sub ShortenBytes(ByRef value As Variant)
 ReDim Preserve value(0 To 1)
 On Error Resume Next
