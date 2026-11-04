@@ -1287,3 +1287,13 @@ docs/NATIVE_FINANCIAL_FUNCTIONS.md; weitere Finanzfunktionen/Access-Oracle offen
 Gezielt3/3 (2.38 s), frischer GUI-freier Core1/1 (1.54 s), Paket/Build-ID/SQLite und
 vier Originalfixture-Hashes bestanden. Letzter Vollstand davor48/48 (82.86 s),
 kein neuer Vollsuite-Nachweis behauptet; Katalog unverändert456/384/72, F068 offen.
+
+Extras/Optionen verändert tatsächlichen klassischen Stil und Anwendungsschrift
+(Familie/Punktgröße) über Übernehmen/OK/Abbrechen und persistente QSettings.
+Startup lädt gespeicherte Schrift auch ohne klassischen Stil; explizite
+Quell-Control-Schriften bleiben eigenständig. Menüfolge nun Datei/Bearbeiten/
+Ansicht/Einfügen/Extras/Fenster/?; ? öffnet tatsächliche LinAccess-Information.
+docs/NATIVE_APPLICATION_OPTIONS.md. Kein vollständiger Access-Options-/Pixel-Claim.
+Finale Mainwindow1/1 (2.71 s), Layout1/1 (10.70 s), Paket/Build-ID/SQLite und vier
+Originalfixture-Hashes bestanden; vorheriger Vollstand48/48 (82.86 s), GUI-freier
+Core unverändert1/1 (1.54 s). Katalog weiterhin456/384/72.
