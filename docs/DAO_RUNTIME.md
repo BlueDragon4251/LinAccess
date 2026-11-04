@@ -181,8 +181,36 @@ A handler can make its own GoSub calls; Resume/Resume 0 and Resume Next restore
 fault context, and Resume label abandons it. Obsolete snapshots are released.
 Direct Return from a handler into the suspended fault GoSub is explicitly refused
 with 3251 pending reference semantics; use Resume. On Error Resume Next remains
-available. Numeric labels and labels inside blocks retain existing unsupported
-boundaries. Existing core execution covers nested GoSub in a live Collection
+available. Scoped GoTo and numeric labels use the checked paths described below. Existing core execution covers nested GoSub in a live Collection
 loop, inline If, numeric loops, GoTo/Return, retry through a label handler's own
 GoSub, held mutation guards and actual lease release afterward.
 Reference: https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/gosubreturn-statement
+
+
+Native scoped GoTo retains active destination scopes and unwinds only exited
+If/Select, For/For Each and With state. Labels may be defined inside blocks;
+a destination must be in the same block or a lexical ancestor. Entering an
+inactive/sibling block is refused before body effects. Subroutine caller floors
+remain protected. GoSub/error/Resume targets remain top-level. Inline-wrapper labels are rebuilt from the merged plan, so
+partners, duplicate detection and source mapping refer to the real procedure.
+The transient scope-parent table uses one integer per instruction; cached plans
+retain only existing source-only integer unwind fields and actual label strings.
+
+Existing core execution verifies Continue-style For/For Each jumps, leaving
+With/If, inline label binding, leaving enumeration and real mutation afterward.
+The existing jump-into-uninitialized-nested-For rejection remains mandatory.
+This refines existing F040; no new checklist or CTest entry.
+
+
+Numeric line labels (0–65529), with or without a colon before a following
+statement, use canonical numeric keys and the same scope checks as named labels.
+GoTo, GoSub, label handlers and Resume targets accept them; leading zeroes do
+not create different labels. On Error GoTo 0 still disables the handler and
+Resume 0 still retries the failed instruction. Physical source diagnostics stay
+separate from numeric labels; Erl/debugger equivalence is not claimed. The range
+is documented in archived Microsoft KB Q111869 (Line Numbers Greater Than 65529
+Not Supported): https://www.betaarchive.com/wiki/index.php/Microsoft_KB_Archive/111869
+
+The existing real SQL clone/error-resume case also leaves With through GoTo:
+the live clone blocks transactions during With and is released by the checked
+branch unwind before the next transaction. Original data is not used.

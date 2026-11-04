@@ -188,6 +188,16 @@ std::string lower(std::string text) {
     });
     return text;
 }
+std::optional<std::string> canonicalLineLabel(std::string name) {
+    name=lower(trim(std::move(name)));
+    if(!name.empty() && std::all_of(name.begin(),name.end(),[](unsigned char ch) { return std::isdigit(ch); })) {
+        const auto first=name.find_first_not_of('0');
+        name=first==std::string::npos ? "0" : name.substr(first);
+        if(name.size()>5 || (name.size()==5 && name>"65529")) return {};
+    }
+    return name;
+}
+
 std::string withoutComment(const std::string& line) {
     std::string result;
     bool inString = false;
@@ -318,7 +328,8 @@ std::size_t inlineElse(const std::string& source,std::size_t start) {
     }
     return std::string::npos;
 }
-std::string inlineStatementLines(const std::string& source) {
+std::string inlineStatementLines(const std::string& source,bool preserveLabels=false) {
+    std::vector<std::size_t> labelColons; std::size_t statementStart=0;
     std::string result=source; bool quoted=false,bracket=false,dated=false,beginning=true; int depth=0;
     for (std::size_t i=0;i<result.size();++i) {
         const char ch=result[i];
@@ -330,8 +341,17 @@ std::string inlineStatementLines(const std::string& source) {
         if(ch=='#') dated=true;
         else if (ch=='"') quoted=true; else if (ch=='[') bracket=true;
         else if (ch=='(') ++depth; else if (ch==')') --depth;
-        else if (ch==':' && depth==0 && (i+1>=result.size() || result[i+1]!='=')) { result[i]='\n'; beginning=true; }
+        else if (ch==':' && depth==0 && (i+1>=result.size() || result[i+1]!='=')) {
+            if(preserveLabels) {
+                static const std::regex identifier(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)");
+                static const std::unordered_set<std::string> keywords{"else","do","loop","wend","next","stop","return","end","exit","error","gosub"};
+                const auto segment=trim(result.substr(statementStart,i-statementStart));
+                if(std::regex_match(segment,identifier) && !keywords.contains(lower(segment))) labelColons.push_back(i);
+            }
+            result[i]='\n'; beginning=true; statementStart=i+1;
+        }
     }
+    for(auto position=labelColons.rbegin();position!=labelColons.rend();++position) result.insert(*position,1,':');
     return result;
 }
 
@@ -553,12 +573,12 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     const std::regex parameter(R"(^(?:(Optional)\s+)?(?:(ByRef|ByVal)\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+(Byte|Integer|Long|String|Boolean|Double|Single|Currency|Date|Variant|Object|Collection|Scripting\.Dictionary|DAO\.Recordset|DAO\.Database|DAO\.Databases|DAO\.TableDef|DAO\.TableDefs|DAO\.Workspace|DAO\.Workspaces|DAO\.DBEngine|DAO\.Field|DAO\.Fields|DAO\.QueryDef|DAO\.Parameter|DAO\.Parameters))?(?:\s*=\s*(.+))?$)", std::regex::icase);
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
     const std::regex objectSet(R"(^Set\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
-    const std::regex label(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*):$)");
-    const std::regex goSub(R"(^GoSub\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
-    const std::regex jump(R"(^GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
-    const std::regex errorHandler(R"(^On\s+Error\s+GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
-    const std::regex resumeZero(R"(^Resume\s+0$)",std::regex::icase);
-    const std::regex resumeLabel(R"(^Resume\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
+    const std::regex label(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+):$)");
+    const std::regex goSub(R"(^GoSub\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)", std::regex::icase);
+    const std::regex jump(R"(^GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)", std::regex::icase);
+    const std::regex errorHandler(R"(^On\s+Error\s+GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)", std::regex::icase);
+    const std::regex resumeZero(R"(^Resume\s+0+$)",std::regex::icase);
+    const std::regex resumeLabel(R"(^Resume\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)", std::regex::icase);
     const std::regex whileStart(R"(^(Do\s+(While|Until)|While)\s+(.+)$)", std::regex::icase);
     const std::regex loopEnd(R"(^(Loop|Wend)(?:\s+(While|Until)\s+(.+))?$)",std::regex::icase);
     const std::regex dim(R"(^(?:Dim|Static)\s+(.+)$)", std::regex::icase);
@@ -583,7 +603,8 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     std::unordered_map<std::string,int> labels;
     std::deque<std::string> pendingStatements;
     while (!pendingStatements.empty() || std::getline(stream, raw)) {
-        if(pendingStatements.empty()) ++line;
+        const bool physicalLine=pendingStatements.empty();
+        if(physicalLine) ++line;
         else { raw=std::move(pendingStatements.front()); pendingStatements.pop_front(); }
         // VBA line continuations join a statement before it is parsed.
         // This is essential for long SQL strings in Access 2003 modules.
@@ -601,6 +622,17 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         auto source = withoutComment(raw);
         if (source.empty()) continue;
         if(within) {
+            if(physicalLine && std::isdigit(static_cast<unsigned char>(source.front()))) {
+                std::size_t digits=0; while(digits<source.size() && std::isdigit(static_cast<unsigned char>(source[digits]))) ++digits;
+                if(digits==source.size() || source[digits]==':' || std::isspace(static_cast<unsigned char>(source[digits]))) {
+                    const auto number=canonicalLineLabel(source.substr(0,digits));
+                    if(!number) return {VbaExecutionStatus::Unsupported,"Line number exceeds 65529",line};
+                    auto following=trim(source.substr(digits));
+                    if(following.starts_with(':')) following=trim(following.substr(1));
+                    if(!following.empty()) pendingStatements.push_front(following);
+                    source=*number+":";
+                }
+            }
             const auto expanded=inlineStatementLines(source);
             if(expanded.size()<source.size()) source=trim(source.substr(0,expanded.size()));
             if(source.empty()) continue;
@@ -617,7 +649,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 if(!following.empty()) pendingStatements.push_front(following);
                 source=trim(source.substr(0,separator));
                 if(source.empty()) continue;
-                static const std::regex identifier(R"(^[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*$)");
+                static const std::regex identifier(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)");
                 static const std::unordered_set<std::string> statements{"else","do","loop","wend","next","stop","return","end","exit","error","gosub"};
                 if(std::regex_match(source,identifier) && !statements.contains(lower(source))) source+=':';
             }
@@ -692,7 +724,9 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             if (!blocks.empty()) return {VbaExecutionStatus::Error, "End If oder Next fehlt", line};
             // Single-line branches are parsed in a temporary wrapper. An
             // Exit For there binds to the enclosing real procedure's loop.
+            std::vector<int> statementScopes;
             if (resolveLabels) {
+                statementScopes.resize(statements.size(),-1);
                 int forDepth=0;
                 for (const auto& instruction:statements) {
                     if (instruction.type==Statement::Type::For || instruction.type==Statement::Type::ForEach) ++forDepth;
@@ -705,6 +739,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 std::vector<int> lexical;
                 for (int i=0;i<static_cast<int>(statements.size());++i) {
                     auto& instruction=statements[i]; const auto type=instruction.type;
+                    statementScopes[i]=lexical.empty() ? -1 : lexical.back();
                     if (type==Statement::Type::If || type==Statement::Type::Select || type==Statement::Type::With
                         || type==Statement::Type::For || type==Statement::Type::ForEach || type==Statement::Type::While)
                         lexical.push_back(i);
@@ -724,12 +759,37 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     }
                 }
             }
-            if (resolveLabels) for (auto& instruction : statements) {
-                if (instruction.type != Statement::Type::Jump && instruction.type != Statement::Type::GoSub && instruction.type != Statement::Type::ErrorHandler
-                    && instruction.type != Statement::Type::ResumeLabel) continue;
-                const auto target = labels.find(lower(instruction.argument));
-                if (target == labels.end()) return {VbaExecutionStatus::Error, "Sprungmarke fehlt", instruction.line};
-                instruction.partner = target->second;
+            if (resolveLabels) {
+                // Inline wrappers carry label names into the merged real plan.
+                labels.clear();
+                for(int index=0;index<static_cast<int>(statements.size());++index) {
+                    const auto& item=statements[index];
+                    if(item.type==Statement::Type::Label && !labels.emplace(lower(item.argument),index).second)
+                        return {VbaExecutionStatus::Error,"Duplicate line label",item.line};
+                }
+                for(int index=0;index<static_cast<int>(statements.size());++index) {
+                    auto& instruction=statements[index];
+                    if (instruction.type != Statement::Type::Jump && instruction.type != Statement::Type::GoSub && instruction.type != Statement::Type::ErrorHandler
+                        && instruction.type != Statement::Type::ResumeLabel) continue;
+                    const auto target = labels.find(lower(instruction.argument));
+                    if (target == labels.end()) return {VbaExecutionStatus::Error, "Sprungmarke fehlt", instruction.line};
+                    instruction.partner = target->second;
+                    const int destinationScope=statementScopes[target->second];
+                    if(instruction.type!=Statement::Type::Jump) {
+                        if(destinationScope>=0) return {VbaExecutionStatus::Unsupported,"GoSub/error/Resume targets inside blocks are not implemented",instruction.line};
+                        continue;
+                    }
+                    int scope=statementScopes[index];
+                    while(scope>=0 && scope!=destinationScope) {
+                        const auto type=statements[scope].type;
+                        if(type==Statement::Type::If || type==Statement::Type::Select) ++instruction.conditionalUnwind;
+                        else if(type==Statement::Type::With) ++instruction.withUnwind;
+                        else if(type==Statement::Type::For || type==Statement::Type::ForEach) ++instruction.forUnwind;
+                        scope=statementScopes[scope];
+                    }
+                    if(scope!=destinationScope)
+                        return {VbaExecutionStatus::Unsupported,"GoTo cannot enter an inactive or sibling block",instruction.line};
+                }
             }
             return {VbaExecutionStatus::Completed, {}, line};
         }
@@ -750,8 +810,8 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 const auto yes=trim(source.substr(then+4,otherwise==std::string::npos ? std::string::npos : otherwise-then-4));
                 const auto no=otherwise==std::string::npos ? std::string{} : trim(source.substr(otherwise+4));
                 if (yes.empty() || (otherwise!=std::string::npos && no.empty())) return {VbaExecutionStatus::Unsupported,"Single-line If branch missing",line};
-                const auto wrapper="Sub __la_inline()\nIf "+condition+" Then\n"+inlineStatementLines(yes)
-                    +(otherwise==std::string::npos ? "" : "\nElse\n"+inlineStatementLines(no))+"\nEnd If\nEnd Sub\n";
+                const auto wrapper="Sub __la_inline()\nIf "+condition+" Then\n"+inlineStatementLines(yes,true)
+                    +(otherwise==std::string::npos ? "" : "\nElse\n"+inlineStatementLines(no,true))+"\nEnd If\nEnd Sub\n";
                 std::vector<Statement> body; bool function=false,cancel=false;
                 auto parsed=parseProcedure(wrapper,"__la_inline",body,function,cancel,nullptr,false,nullptr,withActive());
                 if (parsed.status!=VbaExecutionStatus::Completed) { parsed.line=line; return parsed; }
@@ -824,12 +884,15 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             for (const auto& arg:args) if (!arg.empty() && !validExpression(arg)) return {VbaExecutionStatus::Unsupported,"SendKeys expression unsupported",line};
             statements.push_back({Statement::Type::SendKeys,{},trim(source.substr(8)),line});
         } else if (std::regex_match(source, match, label)) {
-            if (!blocks.empty()) return {VbaExecutionStatus::Unsupported, "Sprungmarke innerhalb eines Blocks", line};
-            if (!labels.emplace(lower(match[1].str()), static_cast<int>(statements.size())).second)
+            const auto name=canonicalLineLabel(match[1].str());
+            if(!name) return {VbaExecutionStatus::Unsupported,"Line number exceeds 65529",line};
+            if (!labels.emplace(*name, static_cast<int>(statements.size())).second)
                 return {VbaExecutionStatus::Error, "Doppelte Sprungmarke", line};
-            statements.push_back({Statement::Type::Label, {}, {}, line});
+            statements.push_back({Statement::Type::Label,*name,{},line});
         } else if (std::regex_match(source, match, goSub)) {
-            statements.push_back({Statement::Type::GoSub,match[1].str(),{},line});
+            const auto name=canonicalLineLabel(match[1].str());
+            if(!name) return {VbaExecutionStatus::Unsupported,"Line number exceeds 65529",line};
+            statements.push_back({Statement::Type::GoSub,*name,{},line});
         } else if (normalized=="gosub") {
             return {VbaExecutionStatus::Unsupported,"GoSub requires a local line label",line};
         } else if (normalized=="return") {
@@ -837,15 +900,21 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         } else if (normalized.starts_with("return ") || normalized.starts_with("return\t")) {
             return {VbaExecutionStatus::Unsupported,"Return does not take an argument",line};
         } else if (std::regex_match(source, match, jump)) {
-            statements.push_back({Statement::Type::Jump, match[1].str(), {}, line});
+            const auto name=canonicalLineLabel(match[1].str());
+            if(!name) return {VbaExecutionStatus::Unsupported,"Line number exceeds 65529",line};
+            statements.push_back({Statement::Type::Jump,*name,{},line});
         } else if (std::regex_match(source, match, errorHandler)) {
-            statements.push_back({Statement::Type::ErrorHandler, match[1].str(), {}, line});
+            const auto name=canonicalLineLabel(match[1].str());
+            if(!name) return {VbaExecutionStatus::Unsupported,"Line number exceeds 65529",line};
+            statements.push_back({*name=="0" ? Statement::Type::ErrorDisable : Statement::Type::ErrorHandler,*name,{},line});
         } else if (lower(source) == "resume next") {
             statements.push_back({Statement::Type::ResumeNext, {}, {}, line});
         } else if (lower(source) == "resume" || std::regex_match(source,resumeZero)) {
             statements.push_back({Statement::Type::Resume, {}, {}, line});
         } else if (std::regex_match(source, match, resumeLabel)) {
-            statements.push_back({Statement::Type::ResumeLabel, match[1].str(), {}, line});
+            const auto name=canonicalLineLabel(match[1].str());
+            if(!name) return {VbaExecutionStatus::Unsupported,"Line number exceeds 65529",line};
+            statements.push_back({Statement::Type::ResumeLabel,*name,{},line});
         } else if (std::regex_match(source, match, ifThen)) {
             const auto expr = trim(match[1].str());
             if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported, "If-Bedingung: " + expr, line};
@@ -936,8 +1005,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             statements.back().partner=start;
         } else if (lower(source) == "on error resume next") {
             statements.push_back({Statement::Type::ErrorResumeNext, {}, {}, line});
-        } else if (lower(source) == "on error goto 0") {
-            statements.push_back({Statement::Type::ErrorDisable, {}, {}, line});
+
         } else if (const auto objectArrayAssignment=topLevelAssignment((lower(source).starts_with("set ") || lower(source).starts_with("set\t")) ? trim(source.substr(3)) : std::string{});
             objectArrayAssignment && memberSeparator(objectArrayAssignment->first)==std::string::npos && memberTarget(objectArrayAssignment->first) && memberTarget(objectArrayAssignment->first)->arguments) {
             const auto target=*memberTarget(objectArrayAssignment->first); const auto indices=splitArguments(*target.arguments);
@@ -1895,9 +1963,12 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     const auto frameDepth=subroutines.empty() ? 0 : subroutines.back().frameDepth;
                     const auto loopDepth=subroutines.empty() ? 0 : subroutines.back().loopDepth;
                     const auto withDepth=subroutines.empty() ? 0 : subroutines.back().withDepth;
-                    if(frames.size()<frameDepth || loops.size()<loopDepth || withFrames.size()<withDepth)
-                        throw VbaRuntimeError(5,"Invalid GoSub scope");
-                    frames.resize(frameDepth); loops.resize(loopDepth); withFrames.resize(withDepth);
+                    const auto unwindFrames=static_cast<std::size_t>(instruction.conditionalUnwind);
+                    const auto unwindLoops=static_cast<std::size_t>(instruction.forUnwind);
+                    const auto unwindWith=static_cast<std::size_t>(instruction.withUnwind);
+                    if(frames.size()<frameDepth+unwindFrames || loops.size()<loopDepth+unwindLoops || withFrames.size()<withDepth+unwindWith)
+                        throw VbaRuntimeError(5,"Invalid GoTo scope");
+                    frames.resize(frames.size()-unwindFrames); loops.resize(loops.size()-unwindLoops); withFrames.resize(withFrames.size()-unwindWith);
                     active=true; ip=static_cast<std::size_t>(instruction.partner);
                 }
                 break;

@@ -4593,3 +4593,25 @@ own lease-inspection GoSub. Targeted core/DAO 2/2 (1.80 s), freshly rebuilt
 GUI-free core 1/1 (1.29 s), full desktop 48/48 (80.12 s), Debian payload/
 permissions/Build-ID/pinned SQLite and four original fixture hashes pass.
 No new CTest targets or catalog IDs; the fixed 456-point denominator remains.
+
+
+## Scoped GoTo and numeric line labels (2026-11-04)
+
+Under existing F040, native GoTo preserves same/ancestor destination scopes and
+unwinds only exited conditional, enumeration/numeric-loop and With frames.
+Inactive/sibling entry is refused before body effects. Inline labels preserve
+their colon during wrapper expansion and are rebound/deduplicated in the merged
+procedure. The transient scope-parent table costs one integer per instruction;
+cached plans retain source-only label strings and existing integer unwind data.
+Subroutine caller floors stay protected; GoSub/error/Resume label destinations
+remain top-level. Numeric labels 0–65529 support colon/prefix forms, canonical
+leading zeroes, GoTo/GoSub/error/Resume targets and preserved zero special cases.
+Physical diagnostics remain separate; Erl/debugger equivalence is open.
+
+Existing core verifies Continue-style loops, exited With/If scopes, inline labels,
+released enumeration and refused uninitialized-loop entry. The existing real SQL
+clone case verifies a GoTo out of With releases its actual transaction guard
+after handled/retried field access. Targeted core/DAO 2/2 (1.98 s), additional
+DAO 1/1 (0.37 s), freshly rebuilt GUI-free core 1/1 (1.37 s), full desktop
+48/48 (76.53 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original fixture hashes pass. No new CTest targets or catalog IDs: fixed 456.
