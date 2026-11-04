@@ -4380,3 +4380,16 @@ regression only. Full desktop 48/48 (79.77 s), GUI-free build confirmed and core
 1/1 (1.74 s), targeted GUI/SQL 1/1 (2.10 s), Debian payload/permissions/Build-ID/
 pinned SQLite and all four original fixture hashes pass. Scoped checklist
 374 checked / 72 open; not complete Access 2003 parity.
+
+
+## Qualified native Scripting.Dictionary bindings (2026-11-04)
+
+Native Dictionary local/module/parameter/function-result declarations initialize
+to Nothing and preserve checked actual references. Typed ByRef mutation,
+qualified returns, optional Nothing slots and wrong Collection replacement
+refusal execute in the existing core target. Generic type-library/COM loading,
+unqualified type lookup, As New and typed Dictionary arrays remain open.
+SCRIPTING_DICTIONARY_RUNTIME.md specifies the bounded native path. Full desktop
+48/48 (77.95 s), freshly rebuilt GUI-free 1/1 (1.26 s), targeted core 1/1
+(1.20 s), Debian payload/permissions/Build-ID/pinned SQLite and all four original
+hashes pass. Scoped checklist 375 checked / 72 open, not complete Access parity.
