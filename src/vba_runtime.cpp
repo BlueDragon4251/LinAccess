@@ -956,9 +956,15 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             }
             statements.push_back({Statement::Type::ResizeArray,target->name,*target->arguments,line,elementType,preserve ? "preserve" : ""});
         } else if (lower(source).starts_with("erase ") || lower(source).starts_with("erase\t")) {
-            const auto target=memberTarget(trim(source.substr(5)));
-            if(!target || target->arguments) return {VbaExecutionStatus::Unsupported,"Only a single Variant array Erase is implemented",line};
-            statements.push_back({Statement::Type::EraseArray,target->name,{},line});
+            std::string names;
+            for(const auto& entry:splitArguments(trim(source.substr(5)))) {
+                const auto target=memberTarget(entry);
+                if(!target || target->arguments) return {VbaExecutionStatus::Unsupported,"Erase requires supported named array variables",line};
+                if(!names.empty()) names+=',';
+                names+=target->name;
+            }
+            if(names.empty()) return {VbaExecutionStatus::Error,"Erase requires an array",line};
+            statements.push_back({Statement::Type::EraseArray,std::move(names),{},line});
         } else if(lower(source).starts_with("const ") || lower(source).starts_with("const\t")) {
             try {
                 for(auto& constant:constantDeclarations(trim(source.substr(5)),declarationConstants,constantMode)) {
@@ -1506,7 +1512,10 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         return {};
     };
     for(const auto& instruction:instructions) {
-        if(constantNames.contains(lower(instruction.argument)) && (instruction.type==Statement::Type::SetVar || instruction.type==Statement::Type::ObjectSet
+        bool constantTarget=constantNames.contains(lower(instruction.argument));
+        if(instruction.type==Statement::Type::EraseArray)
+            for(const auto& target:splitArguments(instruction.argument)) if(constantNames.contains(lower(target))) constantTarget=true;
+        if(constantTarget && (instruction.type==Statement::Type::SetVar || instruction.type==Statement::Type::ObjectSet
             || instruction.type==Statement::Type::IndexedAssign || instruction.type==Statement::Type::ResizeArray || instruction.type==Statement::Type::EraseArray
             || instruction.type==Statement::Type::For || instruction.type==Statement::Type::ForEach)) {
             VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Assignment to a constant is not permitted",instruction.line}; result.errorNumber=3251; return result;
@@ -1982,8 +1991,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 }
                 break;
             case Statement::Type::EraseArray:
-                if(active) {
-                    const auto name=lower(instruction.argument);
+                if(active) for(const auto& target:splitArguments(instruction.argument)) {
+                    const auto name=lower(target);
                     const auto found=locals.find(name);
                     if(found==locals.end() || !isVbaArray(found->second)) throw VbaRuntimeError(13,"Erase requires an array");
                     const auto type=variableType(name);

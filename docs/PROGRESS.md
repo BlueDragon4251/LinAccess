@@ -4419,3 +4419,17 @@ copy isolation and ReDim refusal. Full desktop 48/48 (78.05 s), freshly rebuilt
 GUI-free 1/1 (1.26 s), targeted core 1/1 (1.22 s), Debian payload/permissions/
 Build-ID/pinned SQLite and all four original fixture hashes pass. No new CTest
 target. Scoped checklist 377 checked / 72 open, not complete Access parity.
+
+
+## Source-mapped multi-target Erase (2026-11-04)
+
+Erase lists retain one native statement/source line while applying actual
+dynamic deallocation, fixed defaults and Variant release in order. Constant
+targets refuse before body execution; a runtime error stops the remaining
+targets and Resume Next proceeds to the next statement. Existing core target
+checks mixed array storage, dimensions/copies, middle-target failure and
+constant side-effect refusal. VARIANT_ARRAY_RUNTIME.md defines native bounds.
+Full desktop 48/48 (78.60 s), freshly rebuilt GUI-free 1/1 (1.25 s), targeted
+core 1/1 (1.27 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original fixture hashes pass. Scoped checklist 378 checked / 72 open; no new
+CTest target or claim of complete Access parity.
