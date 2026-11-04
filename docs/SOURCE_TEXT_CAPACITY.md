@@ -41,3 +41,8 @@ This is bounded source-metadata retention and native constraint execution.
 Complete Jet text encoding/collation, UI editing/event timing, old-project
 migration, binary/Decimal/AutoNumber semantics, original-format writes and Windows
 Access2003 result/error oracle remain open. F014/F015/F121 are not closed.
+
+Direct physical Recordset.Field.Type/Size now share the same source declarations
+and capacities with TableDef.Fields, including Clone metadata. The final
+recordset-extension full suite passed48/48 (84.98 s), package and fixture checks.
+Query/frozen projection lineage and full Variant subtype semantics remain open.

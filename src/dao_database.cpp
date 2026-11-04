@@ -179,12 +179,65 @@ std::shared_ptr<WorkspaceState> workspaceState(QSqlDatabase db) {
         throw VbaRuntimeError(3146,"DAO: Workspace lifetime tracking unavailable");
     db.driver()->setProperty("la_dao_workspace_state",QVariant::fromValue(state)); return state;
 }
+struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; };
+QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString& tableName) {
+    QSqlQuery shadow(db);
+    shadow.prepare("SELECT 1 FROM temp.sqlite_schema WHERE type IN ('table','view') AND (name=? COLLATE NOCASE OR name='_la_table_schema' COLLATE NOCASE)");
+    shadow.addBindValue(tableName);
+    if(!shadow.exec()) queryFailure(shadow);
+    if(shadow.next()) throw VbaRuntimeError(3251,"DAO schema metadata has a TEMP shadow");
+    shadow.finish();
+    const auto types=sqliteColumnTypes(db,tableName);
+    QSqlQuery query(db);
+    if(!query.exec("PRAGMA main.table_info("+quote(tableName)+")")) queryFailure(query);
+    QVector<TableSchemaColumn> columns;
+    while(query.next()) {
+        const auto name=query.value(1).toString();
+        columns.push_back({name,types.value(name.toCaseFolded())});
+    }
+    if(query.lastError().isValid()) queryFailure(query);
+    if(columns.isEmpty()) throw VbaRuntimeError(3420,"DAO main-schema table unavailable");
+    query.finish();
+    if(!query.exec("SELECT 1 FROM main.sqlite_schema WHERE type='table' AND name='_la_table_schema' COLLATE NOCASE")) queryFailure(query);
+    const bool metadata=query.next(); query.finish();
+    if(metadata) {
+        query.prepare("SELECT definition FROM main._la_table_schema WHERE table_name=? COLLATE NOCASE"); query.addBindValue(tableName);
+        if(!query.exec()) queryFailure(query);
+        if(query.next()) {
+            const auto document=QJsonDocument::fromJson(query.value(0).toByteArray());
+            if(!document.isArray()) throw VbaRuntimeError(3251,"DAO source schema metadata invalid");
+            if(query.next()) throw VbaRuntimeError(5,"DAO source schema metadata ambiguous");
+            QSet<QString> seen;
+            for(const auto& entry:document.array()) {
+                const auto object=entry.toObject();
+                if(!object.value("name").isString() || !object.value("source_type").isString()) throw VbaRuntimeError(3251,"DAO source field metadata invalid");
+                const auto name=object.value("name").toString().toCaseFolded();
+                if(seen.contains(name)) throw VbaRuntimeError(5,"DAO source field metadata ambiguous"); seen.insert(name);
+                const auto source=object.value("source_type").toString().toUpper();
+                const auto origin=object.value("source_origin").toString();
+                const auto size=object.value("source_size").toDouble();
+                if(object.contains("source_size") && (!object.value("source_size").isDouble() || size<0 || size>255 || std::floor(size)!=size))
+                    throw VbaRuntimeError(3251,"DAO source field capacity invalid");
+                const int code=(source=="BOOLEAN" || source=="BIT") ? 1 : source=="TINYINT" ? 2 : source=="SMALLINT" ? 3 : source=="INT" ? 4
+                    : source=="CURRENCY" ? 5 : source=="SINGLE" ? 6 : source=="DOUBLE" ? 7 : (source=="DATE" || source=="DATETIME") ? 8
+                    : source=="VARCHAR" ? 10 : source=="BLOB" ? 11 : (source=="MEMO" || (source=="TEXT" && origin=="MDBTOOLS_MYSQL")) ? 12 : source=="GUID" ? 15 : -1;
+                bool found=false;
+                if(size>0 && (code!=10 || origin!="MDBTOOLS_MYSQL")) throw VbaRuntimeError(3251,"DAO source field capacity provenance unavailable");
+                for(auto& column:columns) if(column.name.toCaseFolded()==name) { column.sourceType=code; column.sourceSize=static_cast<int>(size); found=true; break; }
+                if(!found) throw VbaRuntimeError(3251,"DAO source schema field unavailable");
+            }
+        }
+        if(query.lastError().isValid()) queryFailure(query);
+    }
+    return columns;
+}
 class Recordset;
 struct RecordsetData {
     std::shared_ptr<WorkspaceState> workspace;
     quint64 rollbackRevision{};
     QStringList columns;
     QMap<QString,QString> types;
+    QMap<QString,int> daoTypes,definitionSizes;
     QVector<QVariantList> rows;
     QVector<QVariant> ids;
     QVector<quint64> bookmarks;
@@ -455,6 +508,21 @@ public:
         if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         (void)column(name); return data_->types.value(name.toCaseFolded());
     }
+    VbaValue declaredFieldType(const QString& name) const {
+        const auto declaration=fieldType(name),key=name.toCaseFolded();
+        const int code=data_->daoTypes.contains(key) ? data_->daoTypes.value(key) : provenDaoFieldType(declaration);
+        if(code<=0) throw VbaRuntimeError(3251,"Field.Type is not proven for this source");
+        return VbaValue::integer(static_cast<std::int16_t>(code));
+    }
+    VbaValue definitionFieldSize(const QString& name) const {
+        const auto declaration=fieldType(name),key=name.toCaseFolded();
+        if(data_->definitionSizes.contains(key)) {
+            const auto size=data_->definitionSizes.value(key);
+            if(size<0) throw VbaRuntimeError(3251,"Field.Size is not proven for this source");
+            return VbaValue::longInteger(size);
+        }
+        return fixedDaoFieldSize(provenDaoFieldType(declaration));
+    }
     VbaValue fieldOrdinal(const QString& name) const {
         (void)fieldType(name); return integerCount(column(name));
     }
@@ -598,7 +666,21 @@ private:
             ++data_->revision;
             completed=true;
         };
-        data_->types = table_ ? sqliteColumnTypes(db_,source_) : QMap<QString,QString>{};
+        data_->types.clear(); data_->daoTypes.clear(); data_->definitionSizes.clear();
+        if(table_) {
+            QSqlQuery origin(db_); origin.prepare("SELECT name FROM main.sqlite_schema WHERE type='table' AND name=? COLLATE NOCASE"); origin.addBindValue(source_);
+            if(!origin.exec()) queryFailure(origin);
+            const auto mainName=origin.next() ? origin.value(0).toString() : QString{}; origin.finish();
+            if(mainName.isEmpty()) data_->types=sqliteColumnTypes(db_,source_);
+            else for(const auto& field:readTableSchemaColumns(db_,mainName)) {
+                const auto key=field.name.toCaseFolded(); data_->types.insert(key,field.type);
+                const auto code=field.sourceType ? field.sourceType : provenDaoFieldType(field.type);
+                data_->daoTypes.insert(key,code);
+                const auto size=code<=0 ? -1 : code==10 ? (field.sourceSize>0 ? field.sourceSize : -1)
+                    : static_cast<int>(fixedDaoFieldSize(code).number);
+                data_->definitionSizes.insert(key,size);
+            }
+        }
         if (!table_) {
             if(installAccessQueryViews(db_)<0) throw VbaRuntimeError(3251,"DAO: Query views are busy");
             auto plan=queryPlan_;
@@ -714,14 +796,11 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
     }
     if(lower(name)=="size") {
         if(!args.empty()) throw VbaRuntimeError(450,"Field.Size requires no arguments");
-        return fixedDaoFieldSize(provenDaoFieldType(owner_->fieldType(name_)));
+        return owner_->definitionFieldSize(name_);
     }
     if(lower(name)=="type") {
         if(!args.empty()) throw VbaRuntimeError(450,"Field.Type requires no arguments");
-        const auto type=owner_->fieldType(name_).toUpper();
-        const int code=provenDaoFieldType(type);
-        if(!code) throw VbaRuntimeError(3251,"Field.Type is not available for this source type");
-        return VbaValue::integer(static_cast<std::int16_t>(code));
+        return owner_->declaredFieldType(name_);
     }
     require(args.empty(), "DAO: Unexpected field arguments");
     if (lower(name) == "value") return owner_->value(name_);
@@ -1046,7 +1125,6 @@ private:
     QMap<QString,std::weak_ptr<QueryDefinition>> objects_;
 };
 
-struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; };
 using TableSchemaReader=std::function<QVector<TableSchemaColumn>()>;
 class TableSchemaField final : public VbaObject {
 public:
@@ -1148,55 +1226,7 @@ public:
                 fields=std::make_shared<TableSchemaFields>([self,version,rollback] {
                     if(!self->valid() || self->schemaVersion()!=version || self->workspace_->rollbackRevision!=rollback)
                         throw VbaRuntimeError(3420,"DAO schema metadata invalidated; reacquire TableDef.Fields");
-                    QSqlQuery shadow(self->db_);
-                    shadow.prepare("SELECT 1 FROM temp.sqlite_schema WHERE type IN ('table','view') AND (name=? COLLATE NOCASE OR name='_la_table_schema' COLLATE NOCASE)");
-                    shadow.addBindValue(self->name_);
-                    if(!shadow.exec()) queryFailure(shadow);
-                    if(shadow.next()) throw VbaRuntimeError(3251,"DAO schema metadata has a TEMP shadow");
-                    shadow.finish();
-                    const auto types=sqliteColumnTypes(self->db_,self->name_);
-                    QSqlQuery query(self->db_);
-                    if(!query.exec("PRAGMA main.table_info("+quote(self->name_)+")")) queryFailure(query);
-                    QVector<TableSchemaColumn> columns;
-                    while(query.next()) {
-                        const auto name=query.value(1).toString();
-                        columns.push_back({name,types.value(name.toCaseFolded())});
-                    }
-                    if(query.lastError().isValid()) queryFailure(query);
-                    if(columns.isEmpty()) throw VbaRuntimeError(3420,"DAO main-schema table unavailable");
-                    query.finish();
-                    if(!query.exec("SELECT 1 FROM main.sqlite_schema WHERE type='table' AND name='_la_table_schema' COLLATE NOCASE")) queryFailure(query);
-                    const bool metadata=query.next(); query.finish();
-                    if(metadata) {
-                        query.prepare("SELECT definition FROM main._la_table_schema WHERE table_name=? COLLATE NOCASE"); query.addBindValue(self->name_);
-                        if(!query.exec()) queryFailure(query);
-                        if(query.next()) {
-                            const auto document=QJsonDocument::fromJson(query.value(0).toByteArray());
-                            if(!document.isArray()) throw VbaRuntimeError(3251,"DAO source schema metadata invalid");
-                            if(query.next()) throw VbaRuntimeError(5,"DAO source schema metadata ambiguous");
-                            QSet<QString> seen;
-                            for(const auto& entry:document.array()) {
-                                const auto object=entry.toObject();
-                                if(!object.value("name").isString() || !object.value("source_type").isString()) throw VbaRuntimeError(3251,"DAO source field metadata invalid");
-                                const auto name=object.value("name").toString().toCaseFolded();
-                                if(seen.contains(name)) throw VbaRuntimeError(5,"DAO source field metadata ambiguous"); seen.insert(name);
-                                const auto source=object.value("source_type").toString().toUpper();
-                                const auto origin=object.value("source_origin").toString();
-                                const auto size=object.value("source_size").toDouble();
-                                if(object.contains("source_size") && (!object.value("source_size").isDouble() || size<0 || size>255 || std::floor(size)!=size))
-                                    throw VbaRuntimeError(3251,"DAO source field capacity invalid");
-                                const int code=(source=="BOOLEAN" || source=="BIT") ? 1 : source=="TINYINT" ? 2 : source=="SMALLINT" ? 3 : source=="INT" ? 4
-                                    : source=="CURRENCY" ? 5 : source=="SINGLE" ? 6 : source=="DOUBLE" ? 7 : (source=="DATE" || source=="DATETIME") ? 8
-                                    : source=="VARCHAR" ? 10 : source=="BLOB" ? 11 : (source=="MEMO" || (source=="TEXT" && origin=="MDBTOOLS_MYSQL")) ? 12 : source=="GUID" ? 15 : -1;
-                                bool found=false;
-                                if(size>0 && (code!=10 || origin!="MDBTOOLS_MYSQL")) throw VbaRuntimeError(3251,"DAO source field capacity provenance unavailable");
-                                for(auto& column:columns) if(column.name.toCaseFolded()==name) { column.sourceType=code; column.sourceSize=static_cast<int>(size); found=true; break; }
-                                if(!found) throw VbaRuntimeError(3251,"DAO source schema field unavailable");
-                            }
-                        }
-                        if(query.lastError().isValid()) queryFailure(query);
-                    }
-                    return columns;
+                    return readTableSchemaColumns(self->db_,self->name_);
                 });
                 fields_=fields; fieldsVersion_=version; fieldsRollback_=rollback;
             }
