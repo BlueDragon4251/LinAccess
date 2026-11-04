@@ -7,6 +7,7 @@
 #include <QPrintPreviewWidget>
 #include <QMainWindow>
 #include "vba_qt_value.hpp"
+#include "native_domain_lookup.hpp"
 #include <QApplication>
 #include <QAbstractButton>
 #include <QPushButton>
@@ -1656,12 +1657,14 @@ public:
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         if (text(name).compare("Quit",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Option"},0};
         if (text(name).compare("RunCommand",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Command"},1};
+        if (text(name).compare("DLookup",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Expr","Domain","Criteria"},2};
         return {};
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
         if (key=="quit") return PreviewDoCmdObject(preview).member("Quit",args);
         if (key=="runcommand") return dispatchPreviewDocumentCommand(preview,"runcommand",args);
+        if (key=="dlookup") return linaccess::nativeDomainLookup(preview.db_,args);
         if(key=="currentproject" || key=="currentdata") {
             if(!args.empty()) throw linaccess::VbaRuntimeError(450,"Project/data context requires no arguments");
             QObject* owner=nullptr;

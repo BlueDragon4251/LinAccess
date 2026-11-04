@@ -3,11 +3,87 @@
 #include "access_query.hpp"
 #include <QSqlQuery>
 #include <QLineEdit>
+#include <iostream>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
 #include <cassert>
+namespace {
+void testNativeDomainLookup() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","native-domain-lookup"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery query(db);
+    assert(query.exec("CREATE TABLE lookup_values(id INTEGER PRIMARY KEY,label TEXT,qty REAL,moment DATETIME,flag BOOLEAN,cash REAL)"));
+    assert(query.exec("INSERT INTO lookup_values VALUES(1,'before',10.5,'2026-11-04 00:00:00',1,12.3456),(2,'O''Brien',3.5,NULL,0,0),(3,'',NULL,NULL,NULL,NULL),(4,NULL,NULL,NULL,NULL,NULL)"));
+    assert(query.exec("CREATE TABLE _la_table_schema(table_name TEXT PRIMARY KEY,definition TEXT)"));
+    query.prepare("INSERT INTO _la_table_schema VALUES('lookup_values',?)");
+    query.addBindValue(QString(R"JSON([{"name":"cash","source_type":"CURRENCY"}])JSON")); assert(query.exec()); query.finish();
+    assert(query.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    query.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('query','Lookup Alias',?)");
+    query.addBindValue(QByteArray("SELECT id,label AS [display name],qty,moment,flag,cash FROM lookup_values")); assert(query.exec()); query.finish();
+    const QByteArray source=R"FORM(Begin Form
+RecordSource ="lookup_values"
+Begin Section
+Height =1500
+Begin TextBox
+Name ="Edited"
+ControlSource ="label"
+End
+Begin TextBox
+Name ="LookedUp"
+ControlSource ="=DLookup(""label"",""lookup_values"",""id=1"")"
+Top =400
+End
+End
+End
+)FORM";
+    const QByteArray module=R"VBA(Sub Checks()
+If DLookup("label","lookup_values","id=1")<>"before" Then Err.Raise 5
+If DLookup(Expr:="[display name]",Domain:="lookup alias",Criteria:="id=2")<>"O'Brien" Then Err.Raise 5
+If Application.DLookup(Domain:="lookup_values",Expr:="qty",Criteria:="id=2")<>3.5 Then Err.Raise 5
+If TypeName(DLookup("moment","lookup_values","id=1"))<>"Date" Then Err.Raise 5
+If DLookup("moment","lookup_values","id=1")<>DateSerial(2026,11,4) Then Err.Raise 5
+If TypeName(DLookup("flag","lookup_values","id=1"))<>"Boolean" Then Err.Raise 5
+If DLookup("flag","lookup_values","id=1")<>True Then Err.Raise 5
+If TypeName(DLookup("cash","lookup_values","id=1"))<>"Currency" Then Err.Raise 5
+If DLookup("cash","lookup_values","id=1")<>CCur("12.3456") Then Err.Raise 5
+If Not IsNull(DLookup("label","lookup_values","id=99")) Then Err.Raise 5
+If Not IsNull(DLookup("label","lookup_values","id=4")) Then Err.Raise 5
+If IsNull(DLookup("label","lookup_values","id=3")) Then Err.Raise 5
+If Len(DLookup("label","lookup_values","id=3"))<>0 Then Err.Raise 5
+Dim arbitrary As Long
+arbitrary=DLookup("id","lookup_values")
+If arbitrary<1 Or arbitrary>4 Then Err.Raise 5
+Me!Edited="draft"
+If DLookup("label","lookup_values","id=1")<>"before" Then Err.Raise 5
+Me.Dirty=False
+If DLookup("label","lookup_values","id=1")<>"draft" Then Err.Raise 5
+Me.Tag="lookups checked"
+End Sub
+Sub MissingDomain()
+Dim value As Variant
+value=DLookup("label","missing_lookup_domain")
+End Sub
+Sub UnsupportedExpression()
+Dim value As Variant
+value=DLookup("qty*2","lookup_values")
+End Sub
+)VBA";
+    AccessFormPreview form("lookup test",source,module,db);
+    assert(form.findChild<QLineEdit*>("access-control-LookedUp")->text()=="before");
+    std::vector<linaccess::VbaValue> args;
+    const auto result=form.executeProcedure("Checks",args);
+    if(result.status!=linaccess::VbaExecutionStatus::Completed)
+        std::cerr<<"Synthetic DLookup: error="<<result.errorNumber<<", line="<<result.line<<", "<<result.explanation<<'\n';
+    assert(result.status==linaccess::VbaExecutionStatus::Completed);
+    assert(makePreviewFormObject(form)->member("Tag",{}).asText()=="lookups checked");
+    assert(query.exec("SELECT label FROM lookup_values WHERE id=1") && query.next() && query.value(0).toString()=="draft"); query.finish();
+    assert(form.executeProcedure("MissingDomain",args).errorNumber==3078);
+    assert(form.executeProcedure("UnsupportedExpression",args).errorNumber==3251);
+    assert(form.close());
+}
+}
 void testSubforms() {
+    testNativeDomainLookup();
     auto db=QSqlDatabase::addDatabase("QSQLITE","embedded-form-test"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
     assert(query.exec("CREATE TABLE items(id INTEGER PRIMARY KEY,name TEXT,amount REAL)"));
