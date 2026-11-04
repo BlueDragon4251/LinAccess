@@ -1223,3 +1223,12 @@ GUI-freier Core1/1 (1.50 s), Debian Nutzlast/Build-ID/SQLite und vier originale
 Fixture-SHA-256-Prüfungen bestanden. Keine vollständige Access2003-Parität.
 Programmierfortschritt priorisieren, nach Risiko bestehende gezielte Prüfungen
 nutzen und erst bei neuen gemeinsamen Laufzeit-/Persistenzrisiken verbreitern.
+
+Eigene benannte DAO QueryDefs: tatsächlicher Name/Ursprung, transaktionstreue
+bedingte SQL-Metadatenänderung mit Erhalt fremder JSON-Felder, frische SQL-Sicht
+anderer Instanzen und ungültige alte Parameterreferenzen. Importierte Instanz-SQL
+und temporäre QueryDefs bleiben getrennt; Originalquellen werden nicht ersetzt.
+DAO-SQL-Recordsets aktualisieren Abhängigkeitsansichten vor dem Laden; Workspace-
+Lebensdauer gilt auch für QueryDefs/Parameter. Grenzen: docs/OWNED_QUERYDEF_SQL.md.
+Vollstand danach48/48 (82.63 s), Paket und vier Originalfixture-Hashes bestanden;
+GUI-freier Laufzeitscope unverändert, letzter frischer Core1/1 (1.50 s).

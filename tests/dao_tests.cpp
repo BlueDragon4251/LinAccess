@@ -6,6 +6,8 @@
 #include "vba_runtime.hpp"
 #include <QCoreApplication>
 #include <QSqlQuery>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
 #ifdef NDEBUG
@@ -563,6 +565,71 @@ End Sub
     assert(sql.exec("SELECT value FROM text_lists") && sql.next() && sql.value(0).toString()=="alpha|alt|alps!");
     sql.finish(); db.close();
 }
+void testOwnedQueryDefs() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","owned-querydef-sql"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE records(value INTEGER)"));
+    assert(sql.exec("INSERT INTO records VALUES(1),(2),(3)"));
+    assert(sql.exec("CREATE TABLE _la_objects(kind TEXT,name TEXT,definition TEXT,PRIMARY KEY(kind,name))"));
+    const auto save=[&](const QString& name,const QString& source) {
+        sql.prepare("INSERT INTO _la_objects VALUES('query',?,?)"); sql.addBindValue(name);
+        sql.addBindValue(QString::fromUtf8(QJsonDocument(QJsonObject{{"sql",source},{"archive","preserve"}}).toJson(QJsonDocument::Compact)));
+        assert(sql.exec()); sql.finish();
+    };
+    save("Owned Base","SELECT value FROM records");
+    save("Owned Caller","PARAMETERS p Long; SELECT value FROM [Owned Base] WHERE value>=p");
+    Host host(db);
+    const auto result=linaccess::executeVbaProcedure(R"VBA(Sub OwnedDefinitions()
+Dim query As DAO.QueryDef, other As DAO.QueryDef, base As DAO.QueryDef, parameter As DAO.Parameter
+Dim rows As DAO.Recordset, workspace As DAO.Workspace
+Set query=CurrentDb.QueryDefs("owned caller")
+If query.Name<>"Owned Caller" Then Err.Raise 5
+Set parameter=query.Parameters("p")
+parameter.Value=2
+Set rows=query.OpenRecordset(dbOpenSnapshot)
+If rows.RecordCount<>2 Then Err.Raise 5
+rows.Close
+query.SQL="PARAMETERS p Long; SELECT value*10 AS value FROM [Owned Base] WHERE value>=p"
+On Error Resume Next
+parameter.Value=1
+Me!OwnedParameterError=CStr(Err.Number)
+Err.Clear
+On Error GoTo 0
+Set other=CurrentDb.QueryDefs("Owned Caller")
+If other.SQL<>query.SQL Then Err.Raise 5
+other.Parameters("p").Value=3
+Set rows=other.OpenRecordset(dbOpenSnapshot)
+If rows!value<>30 Then Err.Raise 5
+rows.Close
+other.SQL="PARAMETERS q Long; SELECT value FROM [Owned Base] WHERE value>=q"
+If query.SQL<>other.SQL Then Err.Raise 5
+If query.Parameters.Count<>1 Then Err.Raise 5
+Set base=CurrentDb.QueryDefs("Owned Base")
+base.SQL="SELECT value FROM records WHERE value=3"
+query.Parameters("q").Value=2
+Set rows=query.OpenRecordset(dbOpenSnapshot)
+If rows.RecordCount<>1 Or rows!value<>3 Then Err.Raise 5
+rows.Close
+Set workspace=DBEngine.Workspaces(0)
+workspace.BeginTrans
+query.SQL="SELECT 99 AS value"
+workspace.Rollback
+If InStr(query.SQL,"PARAMETERS q")<>1 Then Err.Raise 5
+query.Close
+On Error Resume Next
+Me!OwnedClosedSQL=query.SQL
+Me!OwnedClosedError=CStr(Err.Number)
+End Sub
+)VBA","OwnedDefinitions",host);
+    if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Synthetic owned QueryDef: "<<result.errorNumber<<" line "<<result.line<<" "<<result.explanation<<'\n';
+    assert(result.status==linaccess::VbaExecutionStatus::Completed);
+    assert(host.fields["OwnedParameterError"]=="3420" && host.fields["OwnedClosedError"]=="3420");
+    assert(sql.exec("SELECT definition FROM _la_objects WHERE name='Owned Caller'") && sql.next());
+    const auto definition=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
+    assert(definition.value("archive").toString()=="preserve" && definition.value("sql").toString().startsWith("PARAMETERS q"));
+    assert(sql.exec("SELECT COUNT(*) FROM records") && sql.next() && sql.value(0).toInt()==3); sql.finish();
+}
+
 void testDaoGetRows() {
     using linaccess::VbaValue;
     auto db=QSqlDatabase::addDatabase("QSQLITE","dao-getrows"); db.setDatabaseName(":memory:"); assert(db.open());
@@ -718,6 +785,7 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     testVariantArraysDao();
     testDaoGetRows();
+    testOwnedQueryDefs();
     testDdlRecordsAffected();
     testTypedSqlTargets();
     testDeclaredParameterTypes();

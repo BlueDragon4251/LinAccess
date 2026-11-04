@@ -6,6 +6,8 @@
 #include "jet_sql_functions.hpp"
 #include "sqlite_execution.hpp"
 #include <QSqlError>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSqlQuery>
 #include <QSqlRecord>
 #include <QSqlDriver>
@@ -578,6 +580,7 @@ private:
         };
         data_->types = table_ ? sqliteColumnTypes(db_,source_) : QMap<QString,QString>{};
         if (!table_) {
+            if(installAccessQueryViews(db_)<0) throw VbaRuntimeError(3251,"DAO: Query views are busy");
             auto plan=queryPlan_;
             if (plan.sql.isEmpty()) plan.sql=source_;
             const auto result = executeAccessQueryPlan(db_,plan,bindings_);
@@ -738,9 +741,10 @@ public:
         if (key=="execute") return VbaArgumentSignature{{"Options"},0};
         return {};
     }
-    QueryDefinition(QSqlDatabase db, QString source) : db_(std::move(db)), source_(std::move(source)), plan_(compileAccessQuery(source_)) {}
+    QueryDefinition(QSqlDatabase db, QString source,QString name={},bool owned=false)
+        : db_(std::move(db)), source_(std::move(source)), plan_(compileAccessQuery(source_)),name_(std::move(name)),owned_(owned),workspace_(workspaceState(db_)) {}
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
-        if (closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
+        refresh();
         const auto key = lower(name);
         if (key == "parameters") {
             auto collection=parameters();
@@ -752,21 +756,37 @@ public:
             return VbaValue::reference(std::make_shared<Recordset>(db_,plan_.sql,true,bindAccessQueryParameters(plan_,values_),plan_));
         }
         if (key == "execute") {
+            if(owned_ && installAccessQueryViews(db_)<0) throw VbaRuntimeError(3251,"DAO: Query views are busy");
             require(args.empty() || (args.size() == 1 && args[0].asNumber() == 128),"DAO: Execute options unsupported");
             affected_=executeAction(db_,plan_,bindAccessQueryParameters(plan_,values_)); return {};
         }
         require(args.empty(),"DAO: Unexpected QueryDef arguments");
         if (key == "sql") return VbaValue::string(source_.toUtf8().toStdString());
+        if (key == "name") return VbaValue::string(name_.toStdString());
         if (key == "recordsaffected") return longCount(affected_);
         if (key == "close") { closed_ = true; return {}; }
         throw VbaRuntimeError(438,"DAO: QueryDef member unsupported");
     }
     void assign(std::string_view name, const VbaValue& value) override {
-        if (closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
+        refresh();
+        if(lower(name)=="name") throw VbaRuntimeError(3251,"DAO: QueryDef renaming is unsupported");
         require(lower(name) == "sql","DAO: QueryDef property is not writable");
         const auto source = text(value.asText());
         const auto compiled = compileAccessQuery(source);
-        source_ = source; plan_ = compiled; values_.clear(); parameterObjects_.clear(); ++generation_;
+        if(owned_) {
+            QSqlQuery query(db_); query.prepare("SELECT definition FROM main._la_objects WHERE kind='query' AND name=?"); query.addBindValue(name_);
+            if(!query.exec() || !query.next()) throw VbaRuntimeError(3420,"DAO: Owned query was removed");
+            const auto previous=query.value(0); const auto document=QJsonDocument::fromJson(previous.toByteArray());
+            if(!document.isObject() || document.object().value("sql").toString()!=source_)
+                throw VbaRuntimeError(3197,"DAO: Owned query changed concurrently");
+            auto definition=document.object(); definition.insert("sql",source); query.finish();
+            query.prepare("UPDATE main._la_objects SET definition=? WHERE kind='query' AND name=? AND definition=?");
+            query.addBindValue(QString::fromUtf8(QJsonDocument(definition).toJson(QJsonDocument::Compact)));
+            query.addBindValue(name_); query.addBindValue(previous);
+            if(!query.exec()) queryFailure(query);
+            if(query.numRowsAffected()!=1) throw VbaRuntimeError(3197,"DAO: Owned query changed concurrently");
+        }
+        installSource(source,compiled);
     }
     VbaValue parameter(const QString& name) const {
         checkParameter(name);
@@ -790,10 +810,34 @@ private:
     friend class QueryParameter;
     friend class QueryParameters;
     std::shared_ptr<VbaObject> parameters();
+    void installSource(const QString& source,const AccessQueryPlan& plan) {
+        source_=source; plan_=plan; values_.clear(); parameterObjects_.clear(); ++generation_;
+    }
+    void alive() const {
+        workspace_->check(); if(closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
+    }
+    QString ownedSource() const {
+        alive(); bool owned=false;
+        try {
+            const auto source=accessQuerySource(db_,name_,nullptr,&owned);
+            if(!owned) throw VbaRuntimeError(3420,"DAO: Owned query identity unavailable");
+            return source;
+        } catch(const VbaRuntimeError& failure) {
+            if(failure.number==3265) throw VbaRuntimeError(3420,"DAO: Owned query was removed"); throw;
+        }
+    }
+    void refresh() {
+        alive();
+        if(owned_) { const auto source=ownedSource(); if(source!=source_) { const auto plan=compileAccessQuery(source); installSource(source,plan); } }
+    }
     void parameterGeneration(quint64 generation) const {
+        alive();
+        if(owned_ && ownedSource()!=source_) throw VbaRuntimeError(3420,"DAO: Parameter source changed");
         if (closed_ || generation!=generation_) throw VbaRuntimeError(3420,"DAO: Parameter is no longer valid");
     }
     void checkParameter(const QString& name) const {
+        alive();
+        if(owned_ && ownedSource()!=source_) throw VbaRuntimeError(3420,"DAO: Parameter source changed");
         if (closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
         for (const auto& parameter : plan_.parameters)
             if (parameter.name.compare(name,Qt::CaseInsensitive) == 0) return;
@@ -808,6 +852,8 @@ private:
     quint64 generation_{};
     qlonglong affected_{};
     bool closed_{};
+    QString name_; bool owned_{};
+    std::shared_ptr<WorkspaceState> workspace_;
 };
 class QueryParameters final : public VbaObject {
 public:
@@ -815,7 +861,7 @@ public:
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     explicit QueryParameters(std::shared_ptr<QueryDefinition> query) : query_(std::move(query)) {}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
-        if (query_->closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
+        query_->refresh();
         const auto key=lower(name);
         if (key=="count") {
             if (!args.empty()) throw VbaRuntimeError(450,"DAO: Count takes no arguments");
@@ -843,7 +889,7 @@ public:
     }
     VbaValue item(std::string_view name) override { return member("Item",{VbaValue::string(std::string(name))}); }
     std::vector<VbaValue> enumerate() override {
-        if (query_->closed_) throw VbaRuntimeError(3420,"DAO: QueryDef is closed");
+        query_->refresh();
         std::vector<VbaValue> result;
         for (int i=0;i<query_->plan_.parameters.size();++i) result.push_back(member("Item",{VbaValue::numeric(i)}));
         return result;
@@ -990,7 +1036,9 @@ public:
         }
         if (key == "querydefs") {
             require(args.size() == 1,"DAO: QueryDef name required");
-            return VbaValue::reference(std::make_shared<QueryDefinition>(db_,accessQuerySource(db_,text(args[0].asText()))));
+            QString canonical; bool owned=false;
+            const auto source=accessQuerySource(db_,text(args[0].asText()),&canonical,&owned);
+            return VbaValue::reference(std::make_shared<QueryDefinition>(db_,source,canonical,owned));
         }
         if (key == "createquerydef") {
             require(args.size() == 2 && args[0].asText().empty(),"DAO: Only temporary CreateQueryDef is currently supported");

@@ -1529,11 +1529,11 @@ int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
     driver->setProperty("la_query_revision",key);
     return owned.size();
 }
-QString accessQuerySource(QSqlDatabase db, const QString& name) {
-    QSqlQuery query(db); QString imported,owned; bool hasImported=false,hasOwned=false;
-    query.prepare("SELECT source_bytes FROM main._la_access_artifacts WHERE kind='query' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
+QString accessQuerySource(QSqlDatabase db, const QString& name,QString* canonical,bool* isOwned) {
+    QSqlQuery query(db); QString imported,owned,importedName,ownedName; bool hasImported=false,hasOwned=false;
+    query.prepare("SELECT name,source_bytes FROM main._la_access_artifacts WHERE kind='query' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
     query.addBindValue(name);
-    if(query.exec() && query.next()) { imported=decodeVbaSource(query.value(0).toByteArray()); hasImported=true; }
+    if(query.exec() && query.next()) { importedName=query.value(0).toString(); imported=decodeVbaSource(query.value(1).toByteArray()); hasImported=true; }
     query.finish();
     if(db.tables(QSql::Tables).contains("_la_objects",Qt::CaseInsensitive)) {
         if(!query.exec("SELECT name,definition FROM main._la_objects WHERE kind='query'"))
@@ -1547,13 +1547,13 @@ QString accessQuerySource(QSqlDatabase db, const QString& name) {
             if(error.error!=QJsonParseError::NoError || !definition.isObject() || !definition.object().value("sql").isString()
                 || definition.object().value("sql").toString().trimmed().isEmpty())
                 throw VbaRuntimeError(3251,"Owned query definition invalid");
-            owned=definition.object().value("sql").toString(); hasOwned=true;
+            owned=definition.object().value("sql").toString(); ownedName=query.value(0).toString(); hasOwned=true;
         }
         if(query.lastError().isValid()) throw VbaRuntimeError(3146,"Owned query catalog read failed");
     }
     if(hasOwned && hasImported) throw VbaRuntimeError(5,"Owned/imported query name conflict");
-    if(hasOwned) return owned;
-    if(hasImported) return imported;
+    if(hasOwned) { if(canonical) *canonical=ownedName; if(isOwned) *isOwned=true; return owned; }
+    if(hasImported) { if(canonical) *canonical=importedName; if(isOwned) *isOwned=false; return imported; }
     throw VbaRuntimeError(3265,"DAO: QueryDef not found");
 }
 QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, const QMap<QString,QVariant>& values) {

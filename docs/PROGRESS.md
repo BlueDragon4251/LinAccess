@@ -5702,3 +5702,24 @@ payload/Build-ID/pinned SQLite and all four original fixture hashes pass.
 No added target/ID; fixed456/384/72. Full Office/COM/Windows Access2003 singleton,
 default/case/error/CWD/namespace/lifetime parity remains open. Scope/references:
 NATIVE_FILE_DIALOG.md. This full run also includes native binary Value/FieldSize.
+
+## Owned named QueryDef SQL persistence (2026-11-04)
+
+Named QueryDefs retain canonical query name/origin. Own SQL changes compile before
+an atomic conditional main-catalog update, preserve other JSON metadata and respect
+user transactions. Fresh owned members see saved SQL; SQL changes invalidate held
+parameter generations. Existing imported per-instance SQL and temporary QueryDef
+behavior remain distinct and do not overwrite archived sources. Workspace guards
+now protect QueryDefs/parameters, and non-table DAO recordsets refresh dependency
+views before loading. Rename/full QueryDefs collection/imported overlay and same-
+name drop/recreate identity remain open.
+Actual VBA/SQL checks canonical Name, parameter execution, persistent SQL visible
+to another instance, stale parameter3420, external parameter-schema change, live
+base-query revision, real SQL-metadata rollback and closed getter3420. Independent
+SQL verifies unrelated JSON archive marker and unchanged source row count. Desktop
+build and existing UI/DAO/model/layout4/4 pass (13.38 s). Full suite/package follow
+for shared query-source/DAO workspace behavior. Fixed456/384/72; no new target/ID.
+Exact scope: OWNED_QUERYDEF_SQL.md.
+Owned QueryDef persistence milestone: full current desktop48/48 passes (82.63 s),
+Debian payload/Build-ID/pinned SQLite and four original fixture hashes pass.
+GUI-free runtime unchanged, last core1/1 (1.50 s). No added target or catalog ID.
