@@ -4734,3 +4734,27 @@ and [event ordering](https://support.microsoft.com/en-us/office/order-of-events-
 Completion: desktop 48/48 (79.27 s), freshly rebuilt GUI-free core 1/1
 (1.56 s), Debian package payload/permissions/Build-ID/pinned SQLite and all four
 original fixture hashes pass. Fixed 456 entries and 48 CTest targets unchanged.
+
+
+### Follow-up: native button mouse dispatch
+
+Command/Toggle buttons and standalone CheckBox/OptionButton controls now use the
+same typed MouseDown/MouseUp binding as TextBoxes. MouseUp runs before native
+button activation; handler failures clear the pressed state and stop that click.
+Native button double-click dispatch avoids a fabricated second MouseDown.
+Option-group member mouse dispatch is excluded pending complete group semantics.
+Owned native form action buttons retain declared MouseDown/MouseUp procedures
+alongside their actual generated or user Click procedure.
+
+The existing stored-form GUI case writes a field in MouseUp and verifies the
+subsequent real Save action persists that exact value. Existing AllowEdits GUI
+writes an actual SQL down/up/click trace while a read-only checkbox leaves its
+bound record unchanged. Final targeted GUI/layout 2/2 (11.23 s) pass, with no
+new CTest target or catalog ID. Last full desktop 48/48 (79.27 s) and fresh
+GUI-free core (1.56 s) precede this GUI-only follow-up. Full focus/group/move/
+scale/Windows event parity remains open. Fixed 456 entries remain unchanged.
+
+Button follow-up packaging: Debian payload/permissions/Build-ID/pinned SQLite
+and all four original fixture hashes pass. Full desktop suite last passed on
+the preceding TextBox commit; final button changes passed targeted GUI/layout
+2/2 (11.23 s). The test target inventory remains 48, fixed work catalog 456.

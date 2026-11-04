@@ -136,11 +136,12 @@ void clearDefaultError(QWidget* widget) {
         widget->setToolTip(widget->property("la_default_tooltip").toString()); widget->setProperty("la_default_tooltip",QVariant{});
     }
 }
+using NativeMouseHandler=std::function<bool(QMouseEvent*,bool)>;
 class AccessTextBox final : public QLineEdit {
 public:
     using QLineEdit::QLineEdit;
     std::function<void()> clicked;
-    std::function<bool(QMouseEvent*,bool)> mouse;
+    NativeMouseHandler mouse;
 protected:
     void mousePressEvent(QMouseEvent* event) override {
         pressed_=event->button()==Qt::LeftButton;
@@ -182,23 +183,41 @@ protected:
         QComboBox::keyPressEvent(event);
     }
 };
-class AccessPushButton final:public QPushButton {
+template<class Button> class AccessMouseButton : public Button {
 public:
-    using QPushButton::QPushButton;
+    using Button::Button;
+    NativeMouseHandler mouse;
 protected:
-    void nextCheckState() override { if (!property("la_access_input_readonly").toBool()) QPushButton::nextCheckState(); }
+    void nextCheckState() override { if (!this->property("la_access_input_readonly").toBool()) Button::nextCheckState(); }
+    void mousePressEvent(QMouseEvent* event) override {
+        const QPointer<Button> alive(this); const auto callback=mouse; const bool doublePress=doublePress_;
+        Button::mousePressEvent(event);
+        if(alive && !doublePress && callback && !callback(event,true) && alive) this->setDown(false);
+    }
+    void mouseReleaseEvent(QMouseEvent* event) override {
+        const QPointer<Button> alive(this); const auto callback=mouse;
+        if(callback && !callback(event,false)) { if(alive) this->setDown(false); return; }
+        if(alive) Button::mouseReleaseEvent(event);
+    }
+    void mouseDoubleClickEvent(QMouseEvent* event) override {
+        const QPointer<Button> alive(this);
+        doublePress_=true; Button::mouseDoubleClickEvent(event);
+        if(alive) doublePress_=false;
+    }
+private:
+    bool doublePress_{};
 };
-class AccessCheckBox final:public QCheckBox {
+class AccessPushButton final:public AccessMouseButton<QPushButton> {
 public:
-    using QCheckBox::QCheckBox;
-protected:
-    void nextCheckState() override { if (!property("la_access_input_readonly").toBool()) QCheckBox::nextCheckState(); }
+    using AccessMouseButton<QPushButton>::AccessMouseButton;
 };
-class AccessRadioButton final:public QRadioButton {
+class AccessCheckBox final:public AccessMouseButton<QCheckBox> {
 public:
-    using QRadioButton::QRadioButton;
-protected:
-    void nextCheckState() override { if (!property("la_access_input_readonly").toBool()) QRadioButton::nextCheckState(); }
+    using AccessMouseButton<QCheckBox>::AccessMouseButton;
+};
+class AccessRadioButton final:public AccessMouseButton<QRadioButton> {
+public:
+    using AccessMouseButton<QRadioButton>::AccessMouseButton;
 };
 class AccessMessageBox final : public QMessageBox {
 public:
@@ -1438,32 +1457,6 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
             // longer, and saving any field writes the bound control values.
             edit->setMaxLength(std::numeric_limits<int>::max());
             edit->setReadOnly(control.controlSource.startsWith('='));
-            if(!control.onMouseDown.isEmpty() || !control.onMouseUp.isEmpty())
-                edit->mouse=[this,name=control.name,down=control.onMouseDown,up=control.onMouseUp](QMouseEvent* event,bool pressed) {
-                    if(!opened_ || closed_ || openCancelled_ || loading_ || layout_.kind!=linaccess::AccessDocumentKind::Form) return false;
-                    const auto binding=pressed ? down : up;
-                    if(binding.isEmpty()) return true;
-                    ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
-                    const QString suffix=pressed ? "MouseDown" : "MouseUp";
-                    linaccess::VbaExecutionResult result;
-                    if(eventProcedure(binding)) {
-                        const auto button=event->button()==Qt::LeftButton ? 1 : event->button()==Qt::RightButton ? 2 : event->button()==Qt::MiddleButton ? 4 : 0;
-                        const int shift=(event->modifiers().testFlag(Qt::ShiftModifier) ? 1 : 0)
-                            | (event->modifiers().testFlag(Qt::ControlModifier) ? 2 : 0) | (event->modifiers().testFlag(Qt::AltModifier) ? 4 : 0);
-                        if(!button) {
-                            result.status=linaccess::VbaExecutionStatus::Unsupported; result.errorNumber=3251;
-                            result.explanation="Mouse button mapping is unsupported";
-                        } else {
-                            std::vector<linaccess::VbaValue> arguments{linaccess::VbaValue::integer(button),linaccess::VbaValue::integer(shift),
-                                linaccess::VbaValue::single(static_cast<float>(event->position().x()*15.0)),
-                                linaccess::VbaValue::single(static_cast<float>(event->position().y()*15.0))};
-                            result=executeProcedure(controlEventPrefix(name)+"_"+suffix,arguments);
-                        }
-                        eventResults_.insert(("control:"+name+":"+suffix).toCaseFolded(),result);
-                        if(failed(result) && status_) status_->setText("Mausereignisfehler "+QString::number(result.errorNumber)+" (Zeile "+QString::number(result.line)+")");
-                    } else result=runControlBinding(name,suffix,binding);
-                    return !failed(result) && !closed_ && !openCancelled_;
-                };
             if(!control.onClick.isEmpty()) edit->clicked=[this,name=control.name,binding=control.onClick] {
                 if(closed_ || openCancelled_ || loading_ || layout_.kind!=linaccess::AccessDocumentKind::Form) return;
                 ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
@@ -1542,6 +1535,39 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
         applyTextAlignment(widget,control);
         widget->setObjectName("access-control-" + control.name);
         widget->setProperty("la_access_tag",control.tag);
+        if(!control.onMouseDown.isEmpty() || !control.onMouseUp.isEmpty()) {
+            NativeMouseHandler handler=[this,name=control.name,down=control.onMouseDown,up=control.onMouseUp](QMouseEvent* event,bool pressed) {
+                    if(!opened_ || closed_ || openCancelled_ || loading_ || layout_.kind!=linaccess::AccessDocumentKind::Form) return false;
+                    const auto binding=pressed ? down : up;
+                    if(binding.isEmpty()) return true;
+                    ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+                    const QString suffix=pressed ? "MouseDown" : "MouseUp";
+                    linaccess::VbaExecutionResult result;
+                    if(eventProcedure(binding)) {
+                        const auto button=event->button()==Qt::LeftButton ? 1 : event->button()==Qt::RightButton ? 2 : event->button()==Qt::MiddleButton ? 4 : 0;
+                        const int shift=(event->modifiers().testFlag(Qt::ShiftModifier) ? 1 : 0)
+                            | (event->modifiers().testFlag(Qt::ControlModifier) ? 2 : 0) | (event->modifiers().testFlag(Qt::AltModifier) ? 4 : 0);
+                        if(!button) {
+                            result.status=linaccess::VbaExecutionStatus::Unsupported; result.errorNumber=3251;
+                            result.explanation="Mouse button mapping is unsupported";
+                        } else {
+                            std::vector<linaccess::VbaValue> arguments{linaccess::VbaValue::integer(button),linaccess::VbaValue::integer(shift),
+                                linaccess::VbaValue::single(static_cast<float>(event->position().x()*15.0)),
+                                linaccess::VbaValue::single(static_cast<float>(event->position().y()*15.0))};
+                            result=executeProcedure(controlEventPrefix(name)+"_"+suffix,arguments);
+                        }
+                        eventResults_.insert(("control:"+name+":"+suffix).toCaseFolded(),result);
+                        if(failed(result) && status_) status_->setText("Mausereignisfehler "+QString::number(result.errorNumber)+" (Zeile "+QString::number(result.line)+")");
+                    } else result=runControlBinding(name,suffix,binding);
+                    return !failed(result) && !closed_ && !openCancelled_;
+                };
+            if(auto* editor=dynamic_cast<AccessTextBox*>(widget)) editor->mouse=handler;
+            else if(control.optionGroupIndex<0) {
+                if(auto* button=dynamic_cast<AccessPushButton*>(widget)) button->mouse=std::move(handler);
+                else if(auto* checkbox=dynamic_cast<AccessCheckBox*>(widget)) checkbox->mouse=std::move(handler);
+                else if(auto* radio=dynamic_cast<AccessRadioButton*>(widget)) radio->mouse=std::move(handler);
+            }
+        }
         if (!dynamic_cast<AccessFormPreview*>(widget)) widget->installEventFilter(this);
         if (auto* combo=qobject_cast<QComboBox*>(widget); combo && combo->isEditable()) combo->lineEdit()->installEventFilter(this);
         if (auto* button=qobject_cast<QPushButton*>(widget)) { button->setAutoDefault(false); button->setDefault(control.type=="CommandButton" && control.defaultButton); }

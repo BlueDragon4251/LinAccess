@@ -1059,3 +1059,21 @@ bleiben offen. Keine neuen Targets/IDs; 456 fest.
 Abschluss TextBox-Mausereignisse: Desktop 48/48 (79,27 s), frisch gebauter
 GUI-freier Kern 1/1 (1,56 s), Debian-Paket und vier Originalfixture-Hashes
 bestanden. Gezielt GUI/Layout 2/2 (11,43 s). Feste 456 und 48 Targets bleiben.
+
+
+Folgeabschnitt F058/F148: Native Command-/Toggle-Buttons und eigenständige
+CheckBox/OptionButton nutzen gemeinsame typisierte MouseDown/MouseUp-Bindung.
+MouseUp läuft vor tatsächlicher Button-Aktivierung; Fehler lösen Druckzustand
+und stoppen Click. Doppelclick erzeugt keinen erfundenen zweiten MouseDown.
+OptionGroup-Mitglieder bleiben für Mausbindung ausgeschlossen. Eigene native
+Aktionsbuttons binden gespeicherte MouseDown/Up-Prozeduren. GUI-Fall beweist:
+MouseUp schreibt Feldwert, nachfolgender echter Save persistiert genau diesen.
+Vorhandener AllowEdits-Fall: SQL down/up/click-Spur trotz schreibgeschützter
+Checkbox, Datenwert bleibt unverändert. Gezielt GUI/Layout 2/2 (11,23 s).
+Letzte Vollsuite 48/48 (79,27 s) und frischer GUI-freier Kern 1/1 (1,56 s)
+waren vor diesem GUI-Folgeabschnitt. Paketprüfung folgt. Keine neuen IDs/Targets;
+456 fest. Gruppen-/Move-/vollständige Fokus-/Skalen-/Windows-Orakel weiter offen.
+
+Button-Folgeabschnitt: Debian-Paket und vier Originalfixture-Hashes bestanden.
+Gezielt GUI/Layout 2/2 (11,23 s), Vollsuite zuletzt vor diesem GUI-Abschnitt
+48/48 (79,27 s). Keine Ausweitung der 48 Targets oder 456 Katalogpunkte.
