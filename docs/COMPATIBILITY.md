@@ -2315,3 +2315,17 @@ Validation (2026-11-04): full desktop 48/48 (77.17 s), freshly rebuilt
 GUI-free core 1/1 (1.20 s), targeted core/DAO 2/2 (1.44 s), Debian
 payload/permissions/Build-ID/pinned SQLite and all four original fixture
 hashes pass. Scoped checklist: 368 checked / 72 open; not total Access parity.
+
+
+## Persistent scalar module Object fields (2026-11-04)
+
+Private/Public/Global scalar Object fields initialize to Nothing and retain real
+native references in per-host module state. Repeated Dictionary calls share
+actual storage; separate hosts remain independent; clearing both aliases with
+Set ... = Nothing releases bindings. Non-object native binding refuses 13.
+Early-bound Scripting/DAO module declarations and automatic New remain open.
+Existing core target covers repeated calls, identity, visibility, clear/recreate
+and host isolation. Full desktop 48/48 (78.39 s), freshly rebuilt GUI-free 1/1
+(1.09 s), targeted core 1/1 (1.05 s), Debian payload/permissions/Build-ID/pinned
+SQLite and all four original fixture hashes pass. Scoped checklist 369 checked
+/ 72 open; not total Access 2003 parity.
