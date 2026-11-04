@@ -2203,25 +2203,22 @@ Set items=New Collection
 items.Add 1
 items.Add 2
 For Each item In items
-If item>0 Then GoSub Accumulate
+If item>0 Then GoSub 0100
 Next
 items.Add 4
 Me!GoSubValues=CStr(total) & ":" & CStr(items.Count) & ":" & CStr(held)
 Exit Sub
-Accumulate:
-On Error Resume Next
+100 On Error Resume Next
 items.Add 99
 held=Err.Number
 On Error GoTo 0
 For i=1 To 2
-GoSub AddItem
+GoSub 200
 Next
 Return
-AddItem:
-total=total+item
-GoTo ReturnItem
-ReturnItem:
-Return
+200 total=total+item
+GoTo 0300
+300: Return
 End Sub
 )VBA","GoSubScopes",host);
     if(goSubResult.status!=VbaExecutionStatus::Completed) std::cerr<<"GoSub error="<<goSubResult.errorNumber<<" line="<<goSubResult.line<<"\n";
@@ -2234,7 +2231,7 @@ Set items=New Collection
 items.Add 1
 items.Add 2
 text="bad"
-On Error GoTo caught
+On Error GoTo 1000
 For Each item In items
 GoSub Accumulate
 Next
@@ -2244,7 +2241,7 @@ Exit Sub
 Accumulate:
 total=total+CLng(text)+item
 Return
-caught:
+1000:
 handled=handled+1
 text="2"
 GoSub InspectLease
@@ -2253,12 +2250,15 @@ InspectLease:
 On Error Resume Next
 items.Add 99
 Me!GoSubFaultLease=CStr(Err.Number)
-On Error GoTo caught
+On Error GoTo 1000
 Return
 End Sub
 )VBA","HandledGoSub",host);
     if(goSubHandler.status!=VbaExecutionStatus::Completed) std::cerr<<"Handled GoSub error="<<goSubHandler.errorNumber<<" line="<<goSubHandler.line<<"\n";
     assert(goSubHandler.status==VbaExecutionStatus::Completed && host.fields["HandledGoSub"]=="7:1:3" && host.fields["GoSubFaultLease"]=="3251");
+    const auto numericResume=executeVbaProcedure("Sub NumericResume()\nOn Error GoTo 900\nError 13\nExit Sub\n700 Me!NumericResume=\"yes\"\nExit Sub\n900: Resume 0700\nEnd Sub","NumericResume",host);
+    assert(numericResume.status==VbaExecutionStatus::Completed && host.fields["NumericResume"]=="yes");
+    assert(validateVbaProcedure("Sub NumericRange()\n65530: Exit Sub\nEnd Sub","NumericRange").status==VbaExecutionStatus::Unsupported);
     const auto unhandled = executeVbaProcedure(
         "Sub Errors()\nOn Error Resume Next\nErr.Raise(5)\nOn Error GoTo 0\nErr.Raise(6)\nEnd Sub", "Errors", host);
     assert(unhandled.status == VbaExecutionStatus::Error);
@@ -3411,6 +3411,35 @@ End Sub
     assert(executeVbaProcedure(nextLeaseLabel,"NextLeaseLabel",host).status==VbaExecutionStatus::Completed && host.fields["NextLabelFault"]=="13" && host.fields["NextLabelCount"]=="3");
     const auto invalidNext=executeVbaProcedure("Sub InvalidNext()\nDim i As Long,j As Long\nMe!ForbiddenNext=1\nFor i=1 To 2\nFor j=1 To 2\nNext i,j\nEnd Sub","InvalidNext",host);
     assert(invalidNext.status==VbaExecutionStatus::Error && !host.fields.contains("ForbiddenNext"));
+    const auto scopedJumps=executeVbaProcedure(R"VBA(Sub ScopedJumps()
+Dim items As Collection,item As Variant,total As Long,i As Long
+Set items=New Collection
+items.Add 1
+items.Add 2
+For Each item In items
+With items
+If item=1 Then GoTo ContinueItem
+total=total+.Count
+End With
+ContinueItem:
+Next
+items.Add 3
+For i=1 To 3
+If i=2 Then GoTo Tail
+total=total+i
+Tail:
+Next
+If True Then GoTo InlineLabel:total=999:InlineLabel:total=total+10
+For Each item In items
+GoTo ReleasedEnumeration
+Next
+ReleasedEnumeration:
+items.Add 4
+Me!ScopedJumps=CStr(total) & ":" & CStr(items.Count) & ":" & CStr(i)
+End Sub
+)VBA","ScopedJumps",host);
+    if(scopedJumps.status!=VbaExecutionStatus::Completed) std::cerr<<"Scoped jump error="<<scopedJumps.errorNumber<<" line="<<scopedJumps.line<<" detail="<<scopedJumps.explanation<<"\n";
+    assert(scopedJumps.status==VbaExecutionStatus::Completed && host.fields["ScopedJumps"]=="16:4:4");
     const auto uninitializedNext=executeVbaProcedure("Sub UninitializedNext()\nDim i As Long,j As Long\nMe!ForbiddenUninitializedNext=1\nGoTo finish\nFor i=1 To 2\nFor j=1 To 2\nfinish:\nNext j,i\nEnd Sub","UninitializedNext",host);
     assert(uninitializedNext.status==VbaExecutionStatus::Unsupported && !host.fields.contains("ForbiddenUninitializedNext"));
 

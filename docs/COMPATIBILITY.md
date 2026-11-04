@@ -2561,5 +2561,16 @@ gemeinsamen Variablen, geschachtelten Rücksprüngen und lebenden Aufrufer-Scope
 aus. Label-Handler können eigene GoSubs ausführen und den Fehlerzustand mit
 Resume/Resume 0/Resume Next wiederherstellen oder per Resume label verlassen.
 Return ohne GoSub meldet Fehler 3. Direkte Handler-Rückkehr in einen
-suspendierten Fehler-GoSub (3251), numerische Labels und Block-Labels bleiben
+suspendierten Fehler-GoSub (3251) und Sprünge in nicht aktive Blöcke bleiben
 offen; keine vollständige VBA-Sprung-/Debugger-Parität.
+
+
+Unter F040 erlauben Labeldefinitionen innerhalb von Blöcken GoTo zum selben
+aktiven Scope oder einem Vorfahren. Nur verlassene If/Select-/For-/With-Scopes
+werden freigegeben; aktive Enumeration und GoSub-Aufrufer bleiben erhalten.
+Inline-Labelnamen werden beim Zusammenführen behalten und global gebunden.
+Numerische Labels 0–65529 funktionieren mit/ohne Doppelpunkt; kanonische
+Zielnamen unterscheiden sich nicht durch führende Nullen. On Error GoTo 0
+und Resume 0 behalten ihre Sonderbedeutung. Handler-/GoSub-/Resume-Labelziele
+müssen weiterhin außerhalb von Blöcken liegen; Erl-/Debugger-Gleichheit bleibt
+offen. Die feste Katalogzahl bleibt 456.

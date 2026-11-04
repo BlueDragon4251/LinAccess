@@ -17,8 +17,9 @@ rules; full Access error/retry/alias precedence is not claimed.
 
 Inline If wrapper merging relocates both loop partners and shared statement
 boundaries. Native procedure-plan cache entries contain these source-only integer
-metadata fields; storage accounting already includes Statement size. Single Next instructions use the same source-boundary cleanup metadata. Labels inside blocks remain
-explicitly unsupported; this increment does not enable arbitrary jumps into loops.
+metadata fields; storage accounting already includes Statement size. Single Next instructions use the same source-boundary cleanup metadata. GoTo now supports labels in the same active block or an ancestor, with checked
+scope unwinding. Jumps into inactive/sibling blocks remain refused before body
+effects. GoSub/error/Resume targets must still be top-level. See DAO_RUNTIME.md.
 
 Existing core execution covers ordered counters/final values, empty inner/outer
 loops, Exit For, empty/nonempty Collection/array loops and released enumeration

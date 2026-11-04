@@ -950,3 +950,23 @@ oder CTest-Ziele; 456 bleiben fest. Details: docs/DAO_RUNTIME.md.
 Abschluss GoSub/Return: Desktop 48/48 (80,12 s), frisch gebauter GUI-freier
 Kern 1/1 (1,29 s), gezielt Kern/DAO 2/2 (1,80 s), Debian-Paket und vier
 Originalfixture-Hashes bestanden. Feste 456 Punkte/IDs unverändert.
+
+Aktueller F040-Abschnitt (Gesamtprüfung folgt): GoTo kann Labels im selben
+aktiven Block oder einem Vorfahren anspringen. Quelltextreine Unwind-Zähler
+räumen nur verlassene If/Select-/For-/With-Ebenen auf; GoSub-Floors bleiben
+erhalten. Sprünge in nicht aktive/Geschwisterblöcke werden vor dem Rumpf
+abgewiesen. Labelnamen aus Inline-If-Wrappern müssen samt Doppelpunkt erhalten
+und nach dem Zusammenführen global gebunden werden. Die temporäre Scope-Tabelle
+braucht einen Integer pro Anweisung, keine quadratischen Kopien der Pfade.
+Numerische Labels 0–65529 mit/ohne Doppelpunkt und führenden Nullen sind
+angebunden. On Error GoTo 0 deaktiviert weiterhin, Resume 0 wiederholt.
+Handler-/GoSub-/Resume-Labelziele bleiben top-level; Erl/Debugger bleibt offen.
+Gezielt Kern/DAO 2/2 (1,98 s) bestanden; danach vorhandenen DAO-Clone-Fall um
+GoTo aus With ergänzt, dessen Ergebnis ist noch zu prüfen. Keine neuen
+Katalog-/CTest-Einträge; feste 456 bleiben. Details: docs/DAO_RUNTIME.md.
+
+Abschluss Scope-GoTo/numerische Labels: Desktop 48/48 (76,53 s), frisch
+gebauter GUI-freier Kern 1/1 (1,37 s), gezielt Kern/DAO 2/2 (1,98 s) und
+DAO-Clone-Abzweig 1/1 (0,37 s), Debian-Paket und vier Originalfixture-Hashes
+bestanden. Native With-Clone-Freigabe durch GoTo ist damit geprüft.
+Feste 456 IDs/Punkte und breite offene Vollanforderungen unverändert.
