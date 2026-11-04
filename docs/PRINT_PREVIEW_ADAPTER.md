@@ -52,12 +52,27 @@ printable page, keeps detail bands whole, and restores the previously displayed
 record after output. The current-layout actions retain their one-page behavior.
 
 Calculated fields use the existing native Access expression engine, including
-simple Sum(field)/Count(field or *) over the actual loaded record source. Every
+Sum/Count over fields and supported per-row expressions in the actual loaded
+record source. Every
 row is checked before opening the output device, so a calculation error refuses
-the output instead of silently printing error placeholders. Compound aggregate
-arguments, group scope, running totals and exact full Access aggregate typing
-remain outside this path. Existing row expressions and the report-wide sum are
+the output instead of silently printing error placeholders. Compound arguments bind fields to each source row without moving the displayed
+record, including arithmetic, IIf and NULL handling. Nested aggregates and
+compound arguments on empty sources fail explicitly; group scope, running totals
+and exact full Access aggregate typing remain open. Existing row expressions and the report-wide sum are
 checked in the PDF as well as on restored native controls.
+
+During each paginated render, at most 512 scalar aggregate results are cached.
+This avoids rescanning the same row set for every printed detail. The cache is
+cleared after output and on Requery; it is not a persistent module/procedure cache
+and cannot retain object, DAO or widget references. A real SQL insertion followed
+by native Requery and a second export checks that the total changes from 31 to 52.
+The original corpus independently compares three available aggregate expressions
+with SQL. The six original compound calls remain unexecuted in this prepared
+corpus because their report-source context is unavailable.
+
+Reference: [Microsoft's Sum function documentation](https://support.microsoft.com/en-gb/access/functions/sum-function)
+describes expression arguments and NULL omission. These checks use native SQL as
+an independent calculation, not a full Access-2003 output oracle.
 
 Native Qt controls are recorded per section with QPicture and replayed as vector
 commands. Recording only that section prevents duplicate controls; compensating

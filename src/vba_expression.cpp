@@ -273,6 +273,7 @@ std::string dateLiteral(std::string text) {
 struct Token {
     enum class Type { Word, Number, Text, Date, Bracket, Symbol, End } type{Type::End};
     std::string value;
+    std::size_t offset{};
 };
 
 std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) {
@@ -280,6 +281,7 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
     for (std::size_t pos = 0; pos < input.size();) {
         const char ch = input[pos];
         if (std::isspace(static_cast<unsigned char>(ch))) { ++pos; continue; }
+        const auto tokenOffset=pos;
         if (std::isalpha(static_cast<unsigned char>(ch)) || static_cast<unsigned char>(ch) >= 0x80 || ch == '_') {
             const auto start = pos++;
             while (pos < input.size() &&
@@ -344,9 +346,10 @@ std::vector<Token> tokenize(std::string_view input,bool accessExpression=false) 
             tokens.push_back({Token::Type::Symbol, symbol});
             ++pos;
         }
+        tokens.back().offset=tokenOffset;
         if (tokens.size() > 512) throw error("VBA-Ausdruck zu lang");
     }
-    tokens.push_back({});
+    tokens.push_back({Token::Type::End,{},input.size()});
     return tokens;
 }
 
@@ -704,7 +707,7 @@ class ExpressionParser {
 public:
     ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals,
                      const VbaFunctionResolver& resolver = {},bool objectContext=false,bool accessExpression=false,const VbaValue* withContext=nullptr,bool allowWith=false,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0)
-        : tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase),executionEpoch_(vbaExecutionEpoch()) {}
+        : source_(source),tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase),executionEpoch_(vbaExecutionEpoch()) {}
 
     VbaValue parse() {
         auto value = expression(1,objectContext_);
@@ -1147,11 +1150,24 @@ private:
         if ((word=="now" || word=="date" || word=="time" || word=="timer") && !nextSymbol("("))
             return host_ ? clockValue(word) : VbaValue{};
         if (accessExpression_ && (word=="sum" || word=="count") && take("(")) {
-            const auto field=consume();
-            if (field.type!=Token::Type::Word && field.type!=Token::Type::Bracket && field.value!="*")
-                throw error("Aggregate field reference required");
-            require(")");
-            return host_ ? host_->expressionAggregate(word,field.value,field.value=="*") : VbaValue{};
+            const auto start=index_;
+            auto end=start; int depth=1;
+            for (;end<tokens_.size() && tokens_[end].type!=Token::Type::End;++end) {
+                if (tokens_[end].type!=Token::Type::Symbol) continue;
+                if (tokens_[end].value=="(") ++depth;
+                else if (tokens_[end].value==")" && --depth==0) break;
+            }
+            if (depth || end==start) throw error("Aggregate argument is missing or unclosed",450);
+            index_=end+1;
+            const auto& field=tokens_[start];
+            const auto fieldWord=lower(field.value);
+            if (end==start+1 && ((field.type==Token::Type::Word && fieldWord!="null"
+                    && fieldWord!="true" && fieldWord!="false" && fieldWord!="empty")
+                || field.type==Token::Type::Bracket || (field.type==Token::Type::Symbol && field.value=="*")))
+                return host_ ? host_->expressionAggregate(word,field.value,field.type==Token::Type::Symbol && field.value=="*") : VbaValue{};
+            const auto body=source_.substr(field.offset,tokens_[end].offset-field.offset);
+            if (!host_) { (void)ExpressionParser(body,nullptr,locals_,{},false,true).parse(); return {}; }
+            return host_->expressionAggregateExpression(word,body);
         }
         if (nextSymbol("(")) {
             const auto variable=locals_.find(word);
@@ -1955,6 +1971,7 @@ private:
         }
         return variable->second;
     }
+    std::string_view source_;
     std::vector<Token> tokens_;
     std::size_t index_{};
     VbaHost* host_{};
@@ -2026,6 +2043,7 @@ VbaValue VbaHost::bracketValue(std::string_view,bool) { throw VbaRuntimeError(43
 VbaValue VbaHost::expressionValue(std::string_view,bool) { throw VbaRuntimeError(438,"Access expression context unavailable"); }
 VbaValue VbaHost::domainAggregate(std::string_view,const std::vector<VbaValue>&) { throw VbaRuntimeError(438,"Access domain context unavailable"); }
 VbaValue VbaHost::expressionAggregate(std::string_view,std::string_view,bool) { throw VbaRuntimeError(438,"Access aggregate context unavailable"); }
+VbaValue VbaHost::expressionAggregateExpression(std::string_view,std::string_view) { throw VbaRuntimeError(3251,"Compound aggregate context unavailable"); }
 VbaValue VbaHost::controlValue(std::string_view name) { return fieldValue(name); }
 void VbaHost::setControlValue(std::string_view name,const VbaValue& value) { setFieldValue(name,value); }
 VbaValue VbaHost::fieldValue(std::string_view name) {

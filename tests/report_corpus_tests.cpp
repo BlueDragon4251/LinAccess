@@ -801,7 +801,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
         assert(db.rollback());
     }
     assert(completedInitializers==1);
-    int scanned=0,available=0,cells=0;
+    int scanned=0,available=0,cells=0,reportAggregateCells=0;
     QJsonArray inventory;
     QMap<QString,int> failures;
     for (const auto& value : objects) {
@@ -844,6 +844,25 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                     if (!line->property("la_null").toBool()) ++reportCells;
                 }
             }
+            const QRegularExpression rootSum(R"sum(^=Sum\((.*)\)$)sum",QRegularExpression::CaseInsensitiveOption);
+            for (const auto& control:layout.controls) {
+                const auto match=rootSum.match(control.controlSource.trimmed());
+                if (!match.hasMatch()) continue;
+                auto* line=report.findChild<QLineEdit*>("access-control-"+control.name);
+                assert(line && line->property("la_calculation_error").toInt()==0);
+                auto rows=plan.sql.trimmed(); if(rows.endsWith(';')) rows.chop(1);
+                const auto aggregatePlan=linaccess::compileAccessQuery("SELECT "+control.controlSource.trimmed().mid(1)
+                    +" AS total FROM ("+rows+") AS report_rows");
+                QSqlQuery aggregate(db); assert(aggregate.prepare(aggregatePlan.sql));
+                for(auto it=bindings.cbegin();it!=bindings.cend();++it) aggregate.bindValue(it.key(),it.value());
+                assert(aggregate.exec() && aggregate.next());
+                assert(line->property("la_null").toBool()==aggregate.value(0).isNull());
+                if (!aggregate.value(0).isNull()) {
+                    bool valid=false; const auto native=line->text().toDouble(&valid),expected=aggregate.value(0).toDouble();
+                    assert(valid && std::abs(native-expected)<=qMax(1e-9,std::abs(expected)*1e-12));
+                }
+                ++reportAggregateCells;
+            }
             cells+=reportCells;
             status=reportCells ? "bound_cells_no_access_reference_oracle" : "source_executed_no_bound_cells";
         } else {
@@ -879,6 +898,8 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
     assert(output.write(QJsonDocument(inventory).toJson())>0);
     std::cout<<"Original reports: "<<scanned<<", executed sources: "<<available<<", non-NULL bound controls: "<<cells<<'\n';
     for (auto it=failures.cbegin();it!=failures.cend();++it) std::cout<<"Report source category "<<it.key().toStdString()<<": "<<it.value()<<'\n';
+    std::cout<<"Original report aggregate expressions independently SQL-checked: "<<reportAggregateCells<<'\n';
+    assert(reportAggregateCells>0);
     assert(available>0 && cells>0);
     acknowledge.stop();
     {
