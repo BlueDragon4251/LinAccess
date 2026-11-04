@@ -169,6 +169,13 @@ Private Sub first_DblClick(Cancel As Integer)
 Me.Tag="text-double"
 Cancel=True
 End Sub
+Private Sub btnSpeichern_MouseDown(Button As Integer, Shift As Integer, X As Single, Y As Single)
+Me.Tag="save-down"
+End Sub
+Private Sub btnSpeichern_MouseUp(Button As Integer, Shift As Integer, X As Single, Y As Single)
+If Me.Tag<>"save-down" Then Err.Raise 5
+Me!first=Me!first & "|up"
+End Sub
 Private Sub btnAktion_Click()
 state=state+1
 Me![second value]=CStr(state)
@@ -236,7 +243,7 @@ End Sub
     first->setFocus(); first->selectAll(); QTest::keyClicks(first,"native save");
     auto* save=form->findChild<QPushButton*>("access-control-btnSpeichern"); auto* action=form->findChild<QPushButton*>("access-control-btnAktion"); assert(save && action);
     QTest::mouseClick(save,Qt::LeftButton); QApplication::processEvents();
-    assert(sql.exec("SELECT first FROM native_designed_records WHERE id=1") && sql.next() && sql.value(0).toString()=="native save"); sql.finish();
+    assert(sql.exec("SELECT first FROM native_designed_records WHERE id=1") && sql.next() && sql.value(0).toString()=="native save|up"); sql.finish();
     QTest::mouseClick(action,Qt::LeftButton); QTest::mouseClick(action,Qt::LeftButton); QApplication::processEvents();
     assert(sql.exec("SELECT \"second value\" FROM native_designed_records WHERE id=1") && sql.next() && sql.value(0).toString()=="3"); sql.finish();
     std::vector<linaccess::VbaValue> arguments;

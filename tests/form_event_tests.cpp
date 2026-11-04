@@ -1795,6 +1795,8 @@ Name ="flag"
 Caption ="Flag"
 ControlSource ="flag"
 OnClick ="[Event Procedure]"
+OnMouseDown ="[Event Procedure]"
+OnMouseUp ="[Event Procedure]"
 Top =1500
 Width =1000
 Height =400
@@ -1848,7 +1850,13 @@ End
 End
 End
 )FORM";
-    const QByteArray module=R"VBA(Sub flag_Click()
+    const QByteArray module=R"VBA(Sub flag_MouseDown(Button As Integer, Shift As Integer, X As Single, Y As Single)
+CurrentDb.Execute "INSERT INTO trace VALUES('mouse-down')"
+End Sub
+Sub flag_MouseUp(Button As Integer, Shift As Integer, X As Single, Y As Single)
+CurrentDb.Execute "INSERT INTO trace VALUES('mouse-up')"
+End Sub
+Sub flag_Click()
 CurrentDb.Execute "INSERT INTO trace VALUES('flag')"
 If Me.Tag="override_flag" Then Me!flag=True
 End Sub
@@ -1888,6 +1896,8 @@ End Sub
     assert(editor->text()=="one" && stored("value")=="one" && !form.hasUnsavedChanges());
     int number=0; try { root->objectMember("combo",{}).object->member("Dropdown",{}); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==2448);
     QTest::mouseClick(flag,Qt::LeftButton); assert(!flag->isChecked() && !stored("flag").toBool() && !form.hasUnsavedChanges() && traceCount("flag")==1);
+    assert(sql.exec("SELECT group_concat(event,'|') FROM (SELECT event FROM trace ORDER BY rowid)") && sql.next());
+    assert(sql.value(0).toString()=="mouse-down|mouse-up|flag"); sql.finish();
     QTest::mouseClick(second,Qt::LeftButton); assert(first->isChecked() && !second->isChecked() && root->item("choice").asNumber()==1);
     assert(!form.hasUnsavedChanges() && traceCount("group")==1 && traceCount("forbidden_child")==0);
     search->setFocus(); QTest::keyClicks(search,"query"); assert(search->text()=="query" && !form.hasUnsavedChanges());

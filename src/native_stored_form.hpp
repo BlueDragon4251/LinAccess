@@ -106,7 +106,10 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
         lines<<"        Begin CommandButton"<<"            Name = "+quoted(unique(eventPrefix))<<"            EventProcPrefix = "+quoted(eventPrefix)
              <<"            Caption = "+quoted(caption)<<"            Left = "+QString::number(left)<<"            Top = "+QString::number(buttonTop)
              <<"            Width = 1500"<<"            Height = 420"<<"            TabIndex = "+QString::number(names.size()+left/1700)
-             <<"            OnClick = \"[Event Procedure]\""<<"        End";
+             <<"            OnClick = \"[Event Procedure]\"";
+        for(const auto* event:{"MouseDown","MouseUp"})
+            if(procedures.contains((eventPrefix+"_"+event).toCaseFolded())) lines<<"            On"+QString::fromLatin1(event)+" = \"[Event Procedure]\"";
+        lines<<"        End";
     };
     button("btnNeu","Neu",240,"DoCmd.GoToRecord , , acNewRec");
     button("btnSpeichern","Speichern",1940,"DoCmd.RunCommand acCmdSaveRecord");
