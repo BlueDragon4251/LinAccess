@@ -2198,7 +2198,7 @@ End Sub
     for(const auto expression:{"-Null","+Null","-(Null+1)","+(Null+1)"})
         assert(evaluateVbaExpression(expression,host,{}).kind==VbaValue::Kind::Null);
     const auto nativeTypeChecks=executeVbaProcedure(R"VBA(Private inspected As Long
-Private owned As Collection
+Private owned As VBA.Collection
 Function RetainedObject() As Object
 inspected=inspected+1
 Set RetainedObject=owned

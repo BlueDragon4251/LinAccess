@@ -151,8 +151,47 @@ void exerciseStoredForm(MainWindow& window,QSqlDatabase db) {
     assert(sql.exec("INSERT INTO native_designed_records VALUES(1,'before','initial')"));
     const QString module=R"VBA(Private state As Long
 Private mouseTrace As String
+Private heldOwner As Access.Form
+Private heldControl As Control
+Function TypedSelf() As Form
+Set TypedSelf=Me
+End Function
+Sub ClearForm(ByRef value As Access.Form)
+Set value=Nothing
+End Sub
+Sub MarkControl(ByVal value As Access.Control)
+value.Tag="typed-control"
+End Sub
+Function EmptyControl(Optional ByVal value As Control=Nothing) As Boolean
+EmptyControl=value Is Nothing
+End Function
+Sub EditTypedField()
+Dim target As TextBox
+Set target=Me!first
+target="typed edit"
+End Sub
 Private Sub Form_Load()
 state=1
+Dim owner As Form, field As Access.TextBox, wrong As Object, slotError As Long, argumentError As Long
+Set owner=TypedSelf()
+Set heldOwner=owner
+Set field=Me!first
+Set heldControl=field
+MarkControl heldControl
+ClearForm owner
+If Not owner Is Nothing Then Err.Raise 5
+If Not EmptyControl() Then Err.Raise 5
+Set wrong=CurrentDb
+On Error Resume Next
+Set heldOwner=wrong
+slotError=Err.Number
+Err.Clear
+MarkControl wrong
+argumentError=Err.Number
+On Error GoTo 0
+If slotError<>13 Or argumentError<>13 Then Err.Raise 5
+If Not heldOwner Is Me Then Err.Raise 5
+If field.Name<>"first" Then Err.Raise 5
 If Not TypeOf Me Is Access.Form Then Err.Raise 5
 If Not TypeOf Me!first Is TextBox Then Err.Raise 5
 If Not TypeOf Me!btnSpeichern Is CommandButton Then Err.Raise 5
@@ -237,6 +276,15 @@ End Sub
     bool caption=false; for(auto* label:form->findChildren<QLabel*>()) if(label->text()=="Second \"caption\"") caption=true;
     assert(caption && AccessFormPreview::projectObjectLoaded(db,linaccess::AccessDocumentKind::Form,"Owned Native Form"));
     auto formObject=makePreviewFormObject(*form);
+    const auto loadResult=form->eventResult("OnLoad");
+    if(loadResult && loadResult->status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Typed Access load error="<<loadResult->errorNumber<<" line="<<loadResult->line<<" explanation="<<loadResult->explanation<<"\n";
+    assert(loadResult && loadResult->status==linaccess::VbaExecutionStatus::Completed);
+    assert(first->property("la_access_tag").toString()=="typed-control");
+    std::vector<linaccess::VbaValue> typedArguments;
+    assert(form->executeProcedure("EditTypedField",typedArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(first->text()=="typed edit" && form->hasUnsavedChanges());
+    assert(sql.exec("SELECT first FROM native_designed_records WHERE id=1") && sql.next() && sql.value(0).toString()=="before"); sql.finish();
+    (void)formObject->member("Undo",{}); assert(first->text()=="before" && !form->hasUnsavedChanges());
     QApplication::setActiveWindow(form); first->setFocus();
     QTest::mouseClick(first,Qt::LeftButton,Qt::ShiftModifier|Qt::ControlModifier,QPoint(3,4));
     assert(formObject->member("Tag",{}).asText()=="1:3:45:60|up|click" && !formObject->member("Dirty",{}).boolean && first->cursorPosition()==0);

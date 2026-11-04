@@ -472,3 +472,39 @@ Fresh GUI-free build/core 1/1 (1.69 s), Debian payload/permissions/Build-ID/pinn
 SQLite and four original fixture hashes pass. Last single clean full 48/48 run
 was the preceding computed-branch commit (81.46 s). No new CTest target or fixed
 catalog ID. Full static/UDT/user-class/COM/Access type binding remains open.
+
+
+## Typed native Access object slots (2026-11-04)
+
+Under existing F050/F043/F122, a shared closed native object vocabulary now
+normalizes Access class aliases for locals, module fields, parameters and
+function results. Native Form/Report/Control, supported concrete controls,
+Application and Forms/Reports/Controls wrappers initialize as Nothing and use
+explicit class/interface metadata for assignment/conversion. Incorrect native
+classes fail with 13 before replacing a valid slot or entering the callee body.
+Optional native Access object defaults support Nothing. Equal qualified/short
+names share a canonical ByRef declaration identity. VBA.Collection declarations
+normalize to the existing Collection type. Unknown parameter classes remain
+unsupported before body execution; broadening signature syntax does not admit
+unimplemented class bindings.
+
+TypeOf uses the same vocabulary. Typed control Let/default assignments continue
+through actual native field setters, without treating the object reference as a
+scalar typed variable. Existing GUI exercises typed function results, module
+Form/Control state, optional Nothing, canonical ByRef aliases, rejected dynamic
+class assignments/arguments, a real TextBox edit followed by record Undo, and
+actual Report references. It explicitly checks successful Form_Load completion.
+Core/DAO/mainwindow/layout targeted 4/4 (13.84 s) pass. Complete validation follows.
+
+These are scalar native object slots, not full static interface-member binding,
+context-sensitive direct property actuals, class arrays, project classes,
+reference-order resolution or COM coercion. Exact existing ByRef declaration
+checks remain; arbitrary interface/COM argument conversions stay open. Fixed
+456 work entries and 48 CTest targets remain unchanged.
+
+Completion: full desktop 48/48 (85.72 s), freshly rebuilt GUI-free core 1/1
+(2.15 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original fixture hashes pass. This is a clean single complete suite run and
+also covers the preceding TypeOf/temporary-clone validation correction.
+Fixed 456 work entries, 384 confirmed scoped entries/72 open and 48 CTest
+targets remain unchanged. No full Access/interface-binding claim.

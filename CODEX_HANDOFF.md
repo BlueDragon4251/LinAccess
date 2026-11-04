@@ -1124,3 +1124,25 @@ diese Läufe geprüft, übrige 47 nicht wiederholt. Frischer GUI-freier Build/Ke
 sauberer einzelner Vollsuite-Lauf 48/48 war vorheriger Verzweigungscommit
 (81,46 s). TypeOf jetzt geprüft inkl. Temp-Clone-Freigabe ohne Guards zu lockern.
 Feste 456/48 unverändert; vollständige statische Typbindung/Klassen/COM offen.
+
+
+Aktueller Access-Typabschnitt F050/F043/F122: native_object_types.hpp als
+C++-Vokabular für TypeOf und Typbindung. Bekannte Access-Klassennamen in lokalen/
+Modulvariablen, Parametern/Rückgaben kanonisiert; Default Nothing, konkrete
+Form/Report/Control-/Controlklassen/Collections/Application per isNativeType
+geprüft. Falsche Klassen Fehler 13 vor Slotersetzung/Callee-Körper. Optionale
+Access-Objekte =Nothing, ByRef-Aliase Form/Access.Form identisch, VBA.Collection
+auf vorhandene Collection normalisiert. Parameter-Signaturfilter erkennt neue
+Typen, unbekannte Klassen bleiben vor Körperausführung Unsupported.
+Gezielt Kern/DAO/GUI/Layout 4/4 (13,84 s): vollständiges Form_Load explizit
+geprüft, typisierte Rückgabe/Modulfelder/Optional/ByRef, dynamische Fehltypen,
+realer TextBox-Let-Edit mit SQL unverändert und Undo, echte Report-Referenzen.
+Gesamtprüfung/GUI-freier Build/Paket folgen. Direkte kontextsensitive Property-
+Actuals, Klassenarrays, vollständige statische Member-/Projekt-/Referenz-/COM-
+Bindung und nicht-identische ByRef-Interfacekonvertierungen bleiben offen.
+Feste 456/48 unverändert. Details VARIANT_ARRAY_RUNTIME.md.
+
+Abschluss native Access-Typslots: Desktop sauberer Vollsuite-Lauf 48/48
+(85,72 s), frischer GUI-freier Build/Kern 1/1 (2,15 s), Debian-Paket und vier
+Originalfixture-Hashes bestanden. Deckt TypeOf/Temp-Clone-Korrektur mit ab.
+Feste 456, 384 bestätigte Teilumfänge/72 offen und 48 Targets unverändert.
