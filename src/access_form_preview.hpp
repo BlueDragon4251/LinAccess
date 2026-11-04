@@ -201,6 +201,8 @@ private:
     QMap<QString,int> subformErrors_;
     mutable QSet<QString> calculatingControls_;
     mutable QMap<QString,std::shared_ptr<linaccess::VbaValue>> calculatedValues_;
+    QMap<QString,std::shared_ptr<linaccess::VbaValue>> reportAggregateValues_;
+    bool reportAggregateCaching_{};
     int dataSourceErrorNumber_{};
     QStringList dataColumns_;
     QMap<QString,QString> dataTypes_;

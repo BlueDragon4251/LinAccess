@@ -5026,3 +5026,34 @@ Validation: existing access_2003_layouts 1/1 (9.46 s), desktop build, Debian
 payload/permissions/Build-ID/pinned SQLite and four original hashes pass. This
 renderer-only integration reuses the preceding full48/core1 evidence; no repeated
 full suite or new CTest target. Fixed catalog stays 456/384/72.
+
+
+## Compound Sum/Count arguments and render-scoped results (2026-11-04)
+
+The Access expression parser now preserves source token offsets and passes the
+exact balanced Sum/Count argument to a native per-row aggregate context. Arithmetic,
+IIf and NULL arguments read the actual source row without moving the displayed
+record. Bare Null/True/False/Empty are expressions rather than field names;
+Count([*]) no longer acquires Count(*) semantics. Nested aggregates, missing source
+context, incomplete rows, and compound arguments on empty sources fail explicitly.
+Compound Sum rejects text and checks numeric overflow; full Access aggregate typing,
+Currency precision and group scope remain open. Simple-field behavior is retained.
+
+Paginated rendering caches at most 512 Number/Null/Error aggregate results within
+the render scope, clears them on Requery/exit and retains no DAO/widget/object
+references. Existing report tests check Sum(IIf(...))+Count(IIf(...))+Count(Null)
+=31, a real SQL insertion/native Requery, then a second PDF and total52. Existing
+original corpus independently compares three available report aggregate expressions
+with SQL. The attempted compound-only original selector found no executable case;
+it was replaced with an explicit available-expression check. Six original compound
+calls still lack report-source context here; no original compound execution claim.
+
+Validation: targeted core/layout checks and original DAO/report 1/1 (33.33 s)
+before the render-cache addition, then final core/layout 2/2 (11.11 s), full desktop
+48/48 (83.17 s), freshly rebuilt GUI-free core 1/1 (1.76 s), Debian payload/
+permissions/Build-ID/pinned SQLite and four original SHA-256 checks pass. No new
+CTest target or catalog ID. Fixed catalog 456/384/72; F085 remains open.
+
+Reference: Microsoft Sum documentation (linked in PRINT_PREVIEW_ADAPTER.md),
+including expression arguments and omission of NULL rows; native SQL is an
+independent calculation, not a complete Access output oracle.

@@ -69,6 +69,7 @@ public:
     virtual VbaValue bracketValue(std::string_view name,bool objectReference);
     virtual VbaValue domainAggregate(std::string_view function,const std::vector<VbaValue>& arguments);
     virtual VbaValue expressionAggregate(std::string_view function,std::string_view field,bool allRecords);
+    virtual VbaValue expressionAggregateExpression(std::string_view function,std::string_view expression);
     virtual VbaValue fieldValue(std::string_view name);
     virtual VbaValue controlValue(std::string_view name);
     virtual void setControlValue(std::string_view name,const VbaValue& value);

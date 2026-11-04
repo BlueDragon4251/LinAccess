@@ -12,6 +12,7 @@
 #include <QTemporaryDir>
 #include <QToolBar>
 #include <QScopeGuard>
+#include <QScopedValueRollback>
 #include <QRegion>
 #include <QPicture>
 #include <QtMath>
@@ -98,7 +99,7 @@ bool AccessFormPreview::renderLayout(QPrinter& printer) {
     return painter.end();
 }
 bool AccessFormPreview::renderReport(QPrinter& printer) {
-    if (layout_.kind!=linaccess::AccessDocumentKind::Report || !dataSourceAvailable_
+    if (reportAggregateCaching_ || layout_.kind!=linaccess::AccessDocumentKind::Report || !dataSourceAvailable_
         || dataTruncated_ || !layout_.reportPrintLimitations.isEmpty()) return false;
     auto* canvas=findChild<QWidget*>("access-form-canvas");
     if (!canvas || layout_.width<=0 || layout_.height<=0
@@ -137,6 +138,9 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         || (!recordRows_.isEmpty() && (detail<=0 || detail>pageHeight-header-footer))
         || height("FormHeader")>pageHeight-header-footer
         || height("FormFooter")>pageHeight-header-footer) return false;
+    QScopedValueRollback<bool> caching(reportAggregateCaching_,true);
+    reportAggregateValues_.clear();
+    const auto clearAggregates=qScopeGuard([&] { reportAggregateValues_.clear(); });
     const int savedRecord=currentRecordIndex_;
     const auto restore=qScopeGuard([&] { currentRecordIndex_=savedRecord; loadRecord(); });
     // Validate every row before opening the output device: an unsupported

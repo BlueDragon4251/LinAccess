@@ -424,6 +424,14 @@ public:
         return reference ? makePreviewFormObject(preview_)->objectItem(name) : preview_.getFieldValue(name);
     }
     linaccess::VbaValue expressionValue(std::string_view name,bool reference) override {
+        if (aggregateRow_) {
+            if (reference) return linaccess::VbaValue::errorValue(3251);
+            const auto key=QString::fromUtf8(name.data(),name.size());
+            const auto column=columnIndex(key,preview_.dataColumns_);
+            if (column<0) return linaccess::VbaValue::errorValue(2465);
+            return linaccess::qtFieldValue(preview_.recordRows_[*aggregateRow_][column],
+                preview_.dataTypes_.value(preview_.dataColumns_[column].toCaseFolded()));
+        }
         try { return reference ? makePreviewFormObject(preview_)->objectItem(name) : preview_.getFieldValue(name); }
         catch(const linaccess::VbaRuntimeError& failure) {
             if(failure.number==2465 && recordProperty(name)) {
@@ -459,8 +467,24 @@ public:
         } catch(const linaccess::VbaRuntimeError&) { throw; }
         catch(...) { throw linaccess::VbaRuntimeError(3146,"Domain aggregate execution failed"); }
     }
+    linaccess::VbaValue cachedAggregate(const QString& key,const std::function<linaccess::VbaValue()>& compute) {
+        if (aggregateRow_) return linaccess::VbaValue::errorValue(3251);
+        if (preview_.reportAggregateCaching_) {
+            const auto found=preview_.reportAggregateValues_.constFind(key);
+            if (found!=preview_.reportAggregateValues_.cend()) return **found;
+        }
+        auto value=compute();
+        if (preview_.reportAggregateCaching_ && preview_.reportAggregateValues_.size()<512
+            && (value.kind==linaccess::VbaValue::Kind::Number || value.kind==linaccess::VbaValue::Kind::Null
+                || value.kind==linaccess::VbaValue::Kind::Error))
+            preview_.reportAggregateValues_.insert(key,std::make_shared<linaccess::VbaValue>(value));
+        return value;
+    }
     linaccess::VbaValue expressionAggregate(std::string_view function,std::string_view field,bool allRecords) override {
+        const auto key=QString::fromStdString(std::string(function)+(allRecords ? ":all:" : ":field:")+std::string(field));
+        return cachedAggregate(key,[&]() -> linaccess::VbaValue {
         try {
+        if (aggregateRow_) throw linaccess::VbaRuntimeError(3251,"Nested aggregates are unsupported");
         if (!preview_.dataSourceAvailable_) throw linaccess::VbaRuntimeError(3146,"Aggregate record source unavailable");
         if (preview_.dataTruncated_) throw linaccess::VbaRuntimeError(3035,"Aggregate would use incomplete records");
         if (allRecords) {
@@ -482,6 +506,37 @@ public:
         if (function=="count") return linaccess::VbaValue::numeric(count);
         return count ? linaccess::VbaValue::numeric(total) : linaccess::VbaValue{};
         } catch(const linaccess::VbaRuntimeError& failure) { return linaccess::VbaValue::errorValue(failure.number); }
+        });
+    }
+    linaccess::VbaValue expressionAggregateExpression(std::string_view function,std::string_view expression) override {
+        const auto key=QString::fromStdString(std::string(function)+":expression:"+std::string(expression));
+        return cachedAggregate(key,[&]() -> linaccess::VbaValue {
+        try {
+            if (aggregateRow_) throw linaccess::VbaRuntimeError(3251,"Nested aggregates are unsupported");
+            if (!preview_.dataSourceAvailable_) throw linaccess::VbaRuntimeError(3146,"Aggregate record source unavailable");
+            if (preview_.dataTruncated_) throw linaccess::VbaRuntimeError(3035,"Aggregate would use incomplete records");
+            if (preview_.recordRows_.isEmpty()) throw linaccess::VbaRuntimeError(3251,"Empty compound aggregate binding requires validation");
+            const QScopedValueRollback<std::optional<int>> scope(aggregateRow_);
+            double total=0; int count=0;
+            for (int row=0;row<preview_.recordRows_.size();++row) {
+                aggregateRow_=row;
+                const auto value=linaccess::evaluateAccessExpression(expression,*this);
+                if (value.kind==linaccess::VbaValue::Kind::Error) return value;
+                if (value.kind==linaccess::VbaValue::Kind::Null) continue;
+                ++count;
+                if (function=="sum") {
+                    if (value.kind==linaccess::VbaValue::Kind::Text)
+                        throw linaccess::VbaRuntimeError(13,"Sum requires a numeric expression");
+                    total+=value.asNumber();
+                    if (!std::isfinite(total)) throw linaccess::VbaRuntimeError(6,"Aggregate overflow");
+                }
+            }
+            if (function=="count") return linaccess::VbaValue::numeric(count);
+            return count ? linaccess::VbaValue::numeric(total) : linaccess::VbaValue{};
+        } catch(const linaccess::VbaRuntimeError& failure) {
+            return linaccess::VbaValue::errorValue(failure.number);
+        }
+        });
     }
     linaccess::VbaValue fieldValue(std::string_view name) override {
         requireInstance();
@@ -900,6 +955,7 @@ private:
     bool instanceScope() const { return moduleScopes_.empty() || moduleScopes_.back(); }
     void requireInstance() const { if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Me is unavailable in a standard module"); }
     AccessFormPreview& preview_;
+    std::optional<int> aggregateRow_;
 };
 
 linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,std::string_view command,const std::vector<linaccess::VbaValue>& actuals) {
@@ -1869,6 +1925,7 @@ bool AccessFormPreview::advanceTabFocus(bool next) {
 }
 
 void AccessFormPreview::loadRecords() {
+    reportAggregateValues_.clear();
     recordsetSnapshot_.reset();
     const bool wasNew = initialized_ && currentRecordIndex_ == 0;
     const auto oldId = currentRecordIndex_ > 0 && currentRecordIndex_ <= rowIds_.size()
