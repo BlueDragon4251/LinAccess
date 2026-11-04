@@ -1254,3 +1254,11 @@ keine Attrappen für fehlende Access-Menüs. Dateikürzel sind window-scoped, be
 modale/KeyPreview-Projektwechselregeln bleiben. docs/DESIGNER_SAVE_KEYS.md.
 Aktueller UI-Lauf1/1 (2.63 s), Paket und vier Originalfixture-Hashes bestanden;
 letzter breiter Stand48/48 (83.20 s), GUI-freier Runtime-Scope unverändert1/1 (1.66 s).
+
+Partition(Number,Start,Stop,Interval) führt nun dieselbe native VBA-Berechnung auch
+über den SQL-Adapter aus, einschließlich benannter VBA-Argumente, Null,
+Nearest-even-Long-Konvertierung, aufgefüllter Grenzen und tatsächlicher
+GROUP-BY-Buckets. Stop=Long-Max bleibt explizit3251 ohne Windows-Oracle.
+docs/NATIVE_PARTITION.md; keine neue CTest-Zielzahl und keine neuen Katalog-IDs.
+Vollstand48/48 (84.06 s), frischer GUI-freier Core1/1, Paket/Build-ID/SQLite und
+vier Originalfixture-Hashes bestanden. Weiterhin456/384/72, keine Vollparität.

@@ -715,6 +715,20 @@ End Sub
 }
 
 int main() {
+    {
+        FakeForm host;
+        const auto eval=[&](const std::string& source) { return linaccess::evaluateVbaExpression(source,host,{}); };
+        assert(eval("Partition(0,0,99,5)").asText()=="  0:  4");
+        assert(eval("Partition(Interval:=20,Stop:=1010,Start:=100,Number:=1001)").asText()=="1000:1010");
+        assert(eval("Partition(-1,0,99,5)").asText()=="   : -1");
+        assert(eval("Partition(100,0,99,5)").asText()=="100:   ");
+        assert(eval("Partition(4.5,0,99,5)").asText()=="  0:  4");
+        assert(eval("Partition(5.5,0,99,5)").asText()=="  5:  9");
+        assert(eval("Partition(Null,0,99,0)").kind==linaccess::VbaValue::Kind::Null);
+        bool invalid=false;
+        try { eval("Partition(1,0,99,0)"); } catch(const linaccess::VbaRuntimeError& e) { invalid=e.number==5; }
+        assert(invalid);
+    }
     testNativeCollection();
     testCalendarFunctions();
     testCurrencyRealStorage();
