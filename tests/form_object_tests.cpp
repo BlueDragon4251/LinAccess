@@ -74,9 +74,9 @@ Me!Summary = frm.Name & ":" & CStr(count) & ":" & CStr(Forms.Count)
 End Sub
 Sub Write_Click()
 Dim ctl As Control
-Forms![second form]![Name.Field] = "changed"
-Forms("second form").Dirty = False
 Set ctl = Forms("second form").Controls("Name.Field")
+Let ctl = "changed"
+Forms("second form").Dirty = False
 Me!Summary = ctl.Value
 End Sub
 )VBA";

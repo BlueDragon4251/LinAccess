@@ -84,13 +84,19 @@ End Sub
     assert(sql.exec("INSERT INTO native_indexed_fields VALUES(1,'before')"));
     const auto indexedFields=linaccess::executeVbaProcedure(R"VBA(Sub IndexedFields()
 Dim rows As DAO.Recordset, check As DAO.Recordset
-Dim fields As Object
+Dim fields As Object, genericField As Object
+Dim field As DAO.Field
 Set rows=CurrentDb.OpenRecordset("native_indexed_fields")
 rows.Edit
 rows("value")="indexed"
 Set fields=rows.Fields
 fields("value")="fields"
-rows.Fields("value")="final"
+rows.Fields("value")="indexed-member"
+Set field=rows.Fields("value")
+Let field="typed-default"
+Set genericField=field
+genericField="final"
+Me!DefaultFieldIdentity=CStr(field Is genericField)
 Me!IndexedPending=rows("value")
 Set check=CurrentDb.OpenRecordset("SELECT value FROM native_indexed_fields")
 Me!IndexedBeforeUpdate=check!value
@@ -101,6 +107,7 @@ rows.Close
 End Sub
 )VBA","IndexedFields",host);
     if(indexedFields.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Indexed DAO error="<<indexedFields.errorNumber<<" line="<<indexedFields.line<<"\n";
+    assert(host.fields["DefaultFieldIdentity"]=="True");
     assert(indexedFields.status==linaccess::VbaExecutionStatus::Completed && host.fields["IndexedPending"]=="final" && host.fields["IndexedBeforeUpdate"]=="before" && host.fields["IndexedCommitted"]=="final");
     assert(sql.exec("SELECT value FROM native_indexed_fields WHERE id=1") && sql.next() && sql.value(0).toString()=="final"); sql.finish();
 
@@ -837,7 +844,7 @@ Me!ParameterIdentity=CStr(first Is definition.Parameters("FIRST"))
 Me!ParameterCount=CStr(parameters.Count)
 names=""
 For Each parameter In parameters
-parameter.Value=3
+Let parameter=3
 names=names & parameter.Name & ":"
 Next
 Me!ParameterNames=names

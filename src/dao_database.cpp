@@ -178,6 +178,10 @@ public:
     Field(std::shared_ptr<Recordset> owner, QString name) : owner_(std::move(owner)), name_(std::move(name)) {}
     bool hasScalarDefault() const override { return true; }
     VbaValue scalarValue() override { return member("Value",{}); }
+    void assignDefaultMember(const std::vector<VbaValue>& args,const VbaValue& value) override {
+        if(!args.empty()) throw VbaRuntimeError(450,"DAO scalar default assignment takes no indices");
+        assign("Value",value);
+    }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override;
     void assign(std::string_view name, const VbaValue& value) override;
 private:
@@ -668,6 +672,10 @@ public:
     QueryParameter(std::shared_ptr<QueryDefinition> query, QString name,quint64 generation) : query_(std::move(query)), name_(std::move(name)),generation_(generation) {}
     bool hasScalarDefault() const override { return true; }
     VbaValue scalarValue() override { return member("Value",{}); }
+    void assignDefaultMember(const std::vector<VbaValue>& args,const VbaValue& value) override {
+        if(!args.empty()) throw VbaRuntimeError(450,"DAO scalar default assignment takes no indices");
+        assign("Value",value);
+    }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override;
     void assign(std::string_view name, const VbaValue& value) override;
 private:
