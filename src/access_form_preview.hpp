@@ -157,6 +157,7 @@ private:
     friend std::shared_ptr<linaccess::VbaObject> makePreviewCommandBarObject(AccessFormPreview&,QWidget*);
     friend class PreviewObjectBase;
     friend class PreviewFormObject;
+    friend class PreviewSectionObject;
     friend class PreviewRecordsetObject;
     friend class PreviewFormsObject;
     friend class PreviewControlsObject;
@@ -165,7 +166,7 @@ private:
     void requeryControl(std::string_view name);
 
     std::weak_ptr<linaccess::VbaObject> formObject_, formsObject_, reportsObject_, controlsObject_;
-    QMap<QString,std::weak_ptr<linaccess::VbaObject>> controlObjects_;
+    QMap<QString,std::weak_ptr<linaccess::VbaObject>> controlObjects_,sectionObjects_;
     std::unordered_map<std::string,std::shared_ptr<linaccess::VbaModuleState>> moduleStates_;
     std::weak_ptr<linaccess::VbaObject> applicationObject_,doCmdObject_,screenObject_;
     QMap<QWidget*,std::weak_ptr<linaccess::VbaObject>> commandBarObjects_;

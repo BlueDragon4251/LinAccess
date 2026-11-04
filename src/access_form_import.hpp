@@ -106,6 +106,7 @@ struct AccessFormLayout {
     bool allowAdditions{true};
     int height{5000};
     QMap<QString,int> sectionHeights;
+    QMap<QString,QString> sectionNames;
     QMap<QString,int> sectionOffsets;
     QMap<QString,qint32> sectionBackColors;
     QMap<QString,bool> sectionCanGrow;

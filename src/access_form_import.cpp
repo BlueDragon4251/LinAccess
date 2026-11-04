@@ -350,6 +350,8 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
                 if (!valid || height<0 || height>std::numeric_limits<int>::max())
                     throw std::runtime_error("Invalid imported section height");
                 sections[current.type]=static_cast<int>(height);
+            } else if(key=="Name") {
+                form.sectionNames.insert(current.type,value);
             } else if(key=="ForceNewPage" && current.type=="Section") {
                 bool valid=false; const int setting=value.toInt(&valid);
                 if(!valid || setting<0 || setting>3) throw std::runtime_error("Invalid detail ForceNewPage");
