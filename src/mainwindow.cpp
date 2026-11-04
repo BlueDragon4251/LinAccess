@@ -37,6 +37,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QSpinBox>
+#include <QSignalBlocker>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -1768,6 +1770,38 @@ void MainWindow::editForm(const QString& existingName) {
     fields->setMaximumHeight(170);
     outer->addWidget(new QLabel("Formularfelder — ziehen für Reihenfolge, F2 für Beschriftung"));
     outer->addWidget(fields);
+    auto* geometryRow=new QHBoxLayout();
+    outer->addWidget(new QLabel("Ausgewähltes Feld: Position und Größe in Twips"));
+    QList<QSpinBox*> geometry;
+    const QStringList geometryKeys{"left","top","width","height"};
+    const QStringList geometryLabels{"Links","Oben","Breite","Höhe"};
+    for(int part=0;part<4;++part) {
+        geometryRow->addWidget(new QLabel(geometryLabels[part],&dialog));
+        auto* value=new QSpinBox(&dialog); value->setRange(part<2 ? 0 : 1,30000);
+        value->setObjectName("native-form-field-"+geometryKeys[part]); value->setEnabled(false);
+        geometryRow->addWidget(value); geometry.push_back(value);
+        connect(value,&QSpinBox::valueChanged,&dialog,[fields,part,geometryKeys](int number) {
+            if(auto* item=fields->currentItem()) {
+                auto properties=item->data(Qt::UserRole+1).toJsonObject();
+                properties.insert(geometryKeys[part],number); item->setData(Qt::UserRole+1,properties);
+            }
+        });
+    }
+    outer->addLayout(geometryRow);
+    const auto updateGeometry=[fields,geometry,geometryKeys] {
+        auto* item=fields->currentItem(); int ordinal=0;
+        for(int row=0;row<fields->row(item);++row) if(fields->item(row)->checkState()==Qt::Checked) ++ordinal;
+        const auto properties=item ? item->data(Qt::UserRole+1).toJsonObject() : QJsonObject{};
+        const QList<int> defaults{2160,240+ordinal*420,3300,300};
+        for(int part=0;part<geometry.size();++part) {
+            const QSignalBlocker blocked(geometry[part]);
+            geometry[part]->setEnabled(item!=nullptr);
+            geometry[part]->setValue(properties.value(geometryKeys[part]).toInt(defaults[part]));
+        }
+    };
+    connect(fields,&QListWidget::currentItemChanged,&dialog,updateGeometry);
+    connect(fields,&QListWidget::itemChanged,&dialog,updateGeometry);
+    connect(fields->model(),&QAbstractItemModel::rowsMoved,&dialog,updateGeometry);
     auto populate = [this, fields, source, old] {
         fields->clear(); const auto table=source->currentText(); if(table.isEmpty()) return;
         QSqlQuery query(db_); if(!query.exec("PRAGMA table_info("+quoteSql(table)+")")) return;
@@ -1780,6 +1814,7 @@ void MainWindow::editForm(const QString& existingName) {
         for(const auto& field:ordered) {
             auto* item=new QListWidgetItem(captions.value(field).toString(field),fields);
             item->setData(Qt::UserRole,field); item->setToolTip("Gebundenes Feld: "+field);
+            if(sameSource) item->setData(Qt::UserRole+1,old.value("field_layout").toObject().value(field).toObject());
             item->setFlags(item->flags()|Qt::ItemIsUserCheckable|Qt::ItemIsEditable);
             item->setCheckState(!sameSource || previous.isEmpty() || previous.contains(field) ? Qt::Checked : Qt::Unchecked);
         }
@@ -1859,13 +1894,16 @@ void MainWindow::editForm(const QString& existingName) {
         findings->setPlainText(lines.join('\n'));
     });
     connect(save, &QPushButton::clicked, &dialog, [this, &dialog, name, caption, source, fields, vba, importedBytes,old] {
-        QJsonArray chosen; QJsonObject captions;
+        QJsonArray chosen; QJsonObject captions,positions;
         for(int index=0;index<fields->count();++index) if(fields->item(index)->checkState()==Qt::Checked) {
             const auto field=fields->item(index)->data(Qt::UserRole).toString(); chosen.append(field); captions.insert(field,fields->item(index)->text());
+            const auto position=fields->item(index)->data(Qt::UserRole+1).toJsonObject();
+            if(!position.isEmpty()) positions.insert(field,position);
         }
         if(chosen.isEmpty()) { messageError(&dialog,"Mindestens ein Feld auswählen."); return; }
         auto content=old; content.insert("table",source->currentText()); content.insert("fields",chosen);
         content.insert("caption",caption->text()); content.insert("field_captions",captions); content.insert("vba",vba->toPlainText());
+        content.insert("field_layout",positions);
         content.insert("original_vba_base64",QString::fromLatin1(importedBytes->toBase64())); content.insert("language","vba_subset_experimental");
         try { (void)linaccess::nativeStoredForm(name->text(),content,db_); }
         catch(const std::exception& error) { messageError(&dialog,QString::fromUtf8(error.what())); return; }

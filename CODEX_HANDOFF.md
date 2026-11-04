@@ -1020,3 +1020,25 @@ Abschluss eigene Formular-Dokumentlaufzeit: Desktop 48/48 (82,61 s),
 GUI-freier Build und Kern 1/1 (1,52 s), Debian-Paket und alle vier
 Originalfixture-Hashes bestanden. Gezielt GUI 1/1 (2,24 s). Feste 456,
 384 bestätigte Teilumfänge und 72 offene Vollanforderungen unverändert.
+
+
+Folgeabschnitt F080/F058: Eigene Formulare jetzt auch als echte ungebundene
+Unterformulare (ohne Master/Child-Verknüpfung). SQL/VBA, Dirty=False-Speichern,
+IsLoaded und Eltern-Schließen nutzen vorhandene eingebettete Dokumentlaufzeit.
+Native Katalogabfragen qualifizieren main, damit TEMP-Schatten keine eigenen
+Definitionen verdecken. Gezielt GUI/Layout 2/2 (11,47 s) bestanden; keine neuen
+Targets/IDs. Letzte Vollsuite 48/48 (82,61 s) war vor diesem Folgeabschnitt.
+Master/Child-Verknüpfung bleibt ausdrücklich 3251, kein vollständiger Designer.
+
+
+F080 erweitert: Eigene Formularfelder speichern left/top/width/height in Twips
+als field_layout. Adapter validiert ganzzahlige Grenzen, erweitert Canvas und
+Buttonpositionen entsprechend echten Feldgrößen. Eigenschaftenanzeige folgt
+Auswahl, Häkchenreihenfolge und Drag/Drop; Standardpositionen zählen nur gewählte
+Felder. GUI/Layout 2/2 (11,23 s) vor finaler Anzeige-Aktualisierung bestanden.
+Vollprüfung dieses Folgeabschnitts steht noch aus; feste 456 unverändert.
+Keine Behauptung eines vollständigen visuellen Access-Designers.
+
+Abschluss eigene Unterformulare/Feldgeometrie: Desktop 48/48 (78,56 s),
+Debian-Paket und vier Originalfixture-Hashes bestanden. GUI-freier Build/Kern
+zuletzt vor diesen GUI-Änderungen 1/1 (1,52 s). Feste 456 bleiben unverändert.

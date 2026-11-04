@@ -4667,3 +4667,36 @@ parity or an original Access result oracle. Owned subform loading remains open.
 Completion: desktop 48/48 (82.61 s), GUI-free build and core 1/1 (1.52 s),
 Debian payload/permissions/Build-ID/pinned SQLite and four original fixture
 hashes pass. Fixed inventory remains 384/456 scoped entries, 72 open.
+
+
+### Follow-up: owned embedded forms and catalog resolution
+
+Owned native forms also load as real unlinked embedded subforms. They share the
+same SQL/VBA instance and parent close traversal as imported subforms, while
+LinkMasterFields/LinkChildFields remain explicitly unsupported. Native catalog
+and definition queries now qualify main storage, matching project metadata and
+preventing temporary same-name SQL tables from shadowing saved definitions.
+Existing GUI exercises native-source lookup under a temporary shadow, an actual
+embedded form SQL save through Dirty=False, IsLoaded and parent-close cleanup.
+Targeted mainwindow_documents and access_2003_layouts pass 2/2 (11.47 s).
+The preceding complete desktop run passed 48/48 (82.61 s); it predates this
+follow-up. No new test target, catalog entry or full-parity claim.
+
+
+### Owned form field geometry
+
+The existing native form editor now persists per-field left/top/width/height in
+Twips (`field_layout`). The runtime adapter validates integral bounded geometry,
+uses the actual dimensions and expands the canvas/button area to contain fields.
+The property row follows selection, checked-field order and drag/drop moves;
+default positions count included fields rather than unchecked list entries.
+Existing GUI verifies saved metadata, actual rendered position/size and restored
+properties alongside unchanged user VBA. GUI/layout 2/2 (11.23 s) passed before
+the final property-row refresh adjustment; complete validation follows.
+This remains a bounded form editor: arbitrary controls/bands, full visual design,
+master/child links and Access rendering/event oracle remain open. Fixed 456.
+
+Completion of owned subforms and field geometry: full desktop 48/48 (78.56 s),
+Debian package payload/permissions/Build-ID/pinned SQLite and all four original
+fixture hashes pass. The GUI-free build/core last passed before these GUI-only
+changes (1.52 s). Fixed 456 IDs, 384 confirmed scoped entries and 72 open remain.
