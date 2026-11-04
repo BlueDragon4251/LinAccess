@@ -238,3 +238,7 @@ reference linked above distinguishes fit-page navigation from zoomed scrolling.
 
 Numeric [Avg/Min/Max](REPORT_AGGREGATES.md) now extend the native aggregate subset
 for complete loaded rows and supported row expressions, with explicit type guards.
+
+First/Last now select scalar endpoints from the actual loaded report source,
+including NULL endpoints; [ordering, cache limits and evidence](REPORT_AGGREGATES.md)
+remain explicitly bounded.

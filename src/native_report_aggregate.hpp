@@ -5,15 +5,28 @@
 #include <string>
 
 namespace linaccess {
-// Numeric report aggregate state only; never retains a host, object or cursor.
+// Scalar report aggregate state only; never retains a host, object or cursor.
 class NativeReportAggregate {
 public:
     NativeReportAggregate(std::string_view function,bool allowTextSum=false)
         : function_(function),allowTextSum_(allowTextSum) {
-        if(function_!="sum" && function_!="count" && function_!="avg" && function_!="min" && function_!="max")
+        if(function_!="sum" && function_!="count" && function_!="avg" && function_!="min" && function_!="max" && function_!="first" && function_!="last")
             throw VbaRuntimeError(3251,"Report aggregate unsupported");
     }
     void add(const VbaValue& value) {
+        if(function_=="first" || function_=="last") {
+            switch(value.kind) {
+                case VbaValue::Kind::Null: case VbaValue::Kind::Empty: case VbaValue::Kind::Number:
+                case VbaValue::Kind::Text: case VbaValue::Kind::Boolean: case VbaValue::Kind::Currency:
+                case VbaValue::Kind::Date: break;
+                default: throw VbaRuntimeError(3251,"Report selector value type unsupported");
+            }
+            if((value.kind==VbaValue::Kind::Number || value.kind==VbaValue::Kind::Date) && !std::isfinite(value.number))
+                throw VbaRuntimeError(6,"Aggregate overflow");
+            ++count_;
+            if(!extremum_ || function_=="last") extremum_=value;
+            return;
+        }
         if(value.kind==VbaValue::Kind::Null) return;
         if(function_=="count") { ++count_; return; }
         if(function_!="sum" && value.kind!=VbaValue::Kind::Number)
