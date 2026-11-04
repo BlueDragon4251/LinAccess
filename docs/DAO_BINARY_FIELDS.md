@@ -42,3 +42,7 @@ an empty BLOB size0; independent SQL already verifies stored bytes/type/length.
 Reference: [DAO FieldSize](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-fieldsize-property-dao)
 distinguishes database byte count from Unicode string/memory length. No new target
 or catalog item.
+
+Field.Size now separately exposes the defined LongBinary metadata size0 on
+proven native BLOB fields, including empty recordsets. It does not replace
+FieldSize's current stored data length. See [schema field scope](DAO_TABLEDEF_FIELDS.md).

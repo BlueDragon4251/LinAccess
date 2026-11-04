@@ -1316,3 +1316,14 @@ docs/DAO_TABLEDEF_FIELDS.md; vollständiges DAO-Metadaten-/Refresh-/Identitätsm
 bleibt F121 offen. Gebündelter aktueller Vollstand48/48 (84.55 s), Paket/Build-ID/
 SQLite und vier Originalfixture-Hashes bestanden; Core unverändert1/1 (1.66 s).
 Katalog weiterhin456/384/72. Keine neuen CTest-Ziele.
+
+TableDef.Field.Type wertet nun eindeutige gespeicherte Main-Schema-Herkunftstypen
+schreibgeschützt aus; ununterscheidbares TEXT/FLOAT bleibt3251. Fehlerhafte,
+doppelte oder fremde Feldmetadaten werden abgewiesen. Field.Size liefert bewiesene
+feste Größen als Long, einschließlich LongBinary/Memo0 (Metadaten, keine aktuelle
+Datenlänge); Textkapazität mangels erhaltener Länge3251. Recordset.Field.Size
+nutzt denselben Größenhelfer für seinen weiterhin engeren bewiesenen Typumfang.
+docs/DAO_TABLEDEF_FIELDS.md und DAO_BINARY_FIELDS.md aktualisiert.
+Gezielt DAO1/1 (0.59 s), Paket/Build-ID/SQLite und vier Originalfixture-Hashes
+bestanden; letzter Vollstand davor48/48 (84.55 s), Core unverändert1/1 (1.66 s).
+F121 und vollständige Typ-/Speicher-/Access-Gleichheit offen; weiterhin456/384/72.
