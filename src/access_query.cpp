@@ -337,14 +337,15 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             expression=std::move(code);
         }
         const QSet<QString> dates{"linaccess_jet_date_add_1","linaccess_jet_date_add_2","linaccess_jet_date_add_3","linaccess_jet_date_subtract_1","linaccess_jet_date_subtract_2","linaccess_jet_date_subtract_3","dateserial","timeserial","cdate","linaccess_jet_dateserial","linaccess_jet_timeserial","linaccess_jet_cdate","datevalue","linaccess_jet_datevalue","timevalue","linaccess_jet_timevalue","dateadd","linaccess_jet_dateadd","datevalue","linaccess_jet_datevalue","timevalue","linaccess_jet_timevalue","date","time","now"};
-        if(dates.contains(expression.front().value.toCaseFolded())) {
+        const bool fileLength=function=="filelen" || function=="linaccess_jet_filelen";
+        if(dates.contains(expression.front().value.toCaseFolded()) || fileLength || function=="filedatetime" || function=="linaccess_jet_filedatetime") {
             if((function=="date" || function=="time" || function=="now") && expression.size()!=3) throw VbaRuntimeError(450,"Clock SQL function requires no arguments");
             int depth=0;
             for(qsizetype index=1;index<expression.size();++index) {
                 if(symbol(expression[index],"(")) ++depth;
                 else if(symbol(expression[index],")")) { if(--depth==0 && index!=expression.size()-1) return unknown; }
             }
-            if(depth==0) return {expression.front().value.compare("linaccess_jet_date_subtract_3",Qt::CaseInsensitive)==0 ? "DOUBLE" : "DATETIME",expression};
+            if(depth==0) return {fileLength ? "INTEGER4" : expression.front().value.compare("linaccess_jet_date_subtract_3",Qt::CaseInsensitive)==0 ? "DOUBLE" : "DATETIME",expression};
             return unknown;
         }
         const bool currency=expression.front().value.compare("CCur",Qt::CaseInsensitive)==0,sum=expression.front().value.compare("Sum",Qt::CaseInsensitive)==0;
@@ -1095,7 +1096,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
                  && (token.value.compare("Format$",Qt::CaseInsensitive)==0 || token.value.compare("Format",Qt::CaseInsensitive)==0))
             output << (token.value.endsWith('$') ? "linaccess_jet_format_string" : "linaccess_jet_format");
         else if(token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="("
-                && QSet<QString>{"lenb","sqr","exp","log","sin","cos","tan","atn","lcase","ucase","datevalue","timevalue","dateadd","dateserial","timeserial","cdate","datepart","choose","switch","val","hex","oct","space","string","asc","ascw","chr","chrw","instrrev","strreverse","datediff","year","month","day","hour","minute","second","weekday"}.contains(token.value.toCaseFolded()))
+                && QSet<QString>{"filelen","filedatetime","lenb","sqr","exp","log","sin","cos","tan","atn","lcase","ucase","datevalue","timevalue","dateadd","dateserial","timeserial","cdate","datepart","choose","switch","val","hex","oct","space","string","asc","ascw","chr","chrw","instrrev","strreverse","datediff","year","month","day","hour","minute","second","weekday"}.contains(token.value.toCaseFolded()))
             output << "linaccess_jet_"+token.value.toCaseFolded();
         else if (token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="(" && token.value.compare("Len",Qt::CaseInsensitive)==0)
             output << "linaccess_jet_len";

@@ -7,6 +7,7 @@
 #include <QCoreApplication>
 #include <QSqlQuery>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -36,6 +37,18 @@ void testSqlRgbDao() {
     assert(sql.exec("INSERT INTO color_rows VALUES(1,255,0,0,0),(2,0,255,0,0)"));
     assert(sql.exec("CREATE TABLE color_values(value INTEGER)"));
     Host host(db);
+    {
+        QTemporaryFile file; assert(file.open() && file.write("abc",3)==3 && file.flush());
+        auto path=file.fileName(); path.replace(QChar(39),"''");
+        const auto source="SELECT FileLen('"+path+"') AS bytes,FileDateTime('"+path+"') AS stamp";
+        const auto rows=host.currentDatabase()->member("OpenRecordset",{linaccess::VbaValue::string(source.toStdString())}).object;
+        const auto bytes=rows->member("Fields",{linaccess::VbaValue::string("bytes")}).object;
+        const auto stamp=rows->member("Fields",{linaccess::VbaValue::string("stamp")}).object;
+        assert(bytes->member("Type",{}).number==4 && bytes->member("Value",{}).number==3 && bytes->member("Value",{}).numericType==linaccess::VbaValue::NumericType::Long);
+        assert(stamp->member("Type",{}).number==8 && stamp->member("Value",{}).kind==linaccess::VbaValue::Kind::Date);
+        rows->member("Close",{});
+    }
+
     const auto painted=linaccess::executeVbaProcedure(R"VBA(Sub PaintRows()
 Dim database As DAO.Database
 Dim rows As DAO.Recordset

@@ -4208,3 +4208,18 @@ scope and current primary references. Existing core target extended only.
 Full desktop 48/48 (93.70 s), fresh GUI-free core 1/1 (1.65 s), Debian payload/
 permissions/Build-ID/pinned SQLite and four original fixture hashes pass.
 Scoped checklist 356 checked / 72 open, not total Access 2003 parity.
+
+
+## Native filesystem metadata through SQL and DAO (2026-11-04)
+
+Native FileLen/FileDateTime callbacks execute from actual parameterized SQL,
+returning canonical INTEGER4/DATETIME metadata. Real DAO OpenRecordset fields
+expose dbLong/dbDate and actual Long/Date values; proven DATE/DATETIME Field.Type
+now returns dbDate. Re-execution reads changed file sizes, compilation performs
+no I/O, and checked filesystem errors retain their codes through the sanitized
+SQL adapter. No deterministic/pure rewrite declaration or broad filesystem/Jet
+claim. FILE_METADATA_RUNTIME.md records scope and remaining boundaries.
+Full desktop 48/48 (94.77 s), GUI-free recheck 1/1 (1.89 s; runtime unchanged),
+rebuilt Debian payload/permissions/Build-ID/pinned SQLite and four original
+fixture hashes pass. Existing query-model/DAO targets extended only. Scoped
+checklist 358 checked / 72 open, not total Access 2003 parity.

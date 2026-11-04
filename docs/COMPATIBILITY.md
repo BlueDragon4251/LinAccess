@@ -2239,3 +2239,15 @@ and typed local-time Date results. No contents are read or written by these
 functions. FILE_METADATA_RUNTIME.md documents Windows path/handle/locale/SQL
 boundaries and native error mapping. Full desktop 48/48 (93.70 s), rebuilt
 GUI-free 1/1 (1.65 s), Debian package and four original fixture hashes pass.
+
+
+## Native SQL/DAO file metadata (2026-11-04)
+
+FileLen/FileDateTime execute actual C++ filesystem functions from parameterized
+SQL, exposing INTEGER4/DATETIME projections and real Long/Date DAO Values.
+DAO Field.Type recognizes proven DATE/DATETIME as dbDate. Callbacks remain
+non-deterministic; pure rewrite allowlists are not widened. Checked filesystem
+errors propagate without private path text. FILE_METADATA_RUNTIME.md defines
+native path/handle/concurrency and unsupported rewrite boundaries.
+Full desktop 48/48 (94.77 s), GUI-free 1/1 (1.89 s; runtime unchanged), rebuilt
+Debian package and four original fixture hashes pass; no new test targets.

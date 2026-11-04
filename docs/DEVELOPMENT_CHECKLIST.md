@@ -1041,3 +1041,6 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 
 - [x] Native VBA FileLen reads actual UTF-8 absolute/relative Linux file sizes as checked Long values, with real sparse-file overflow and path error handling.
 - [x] Native VBA FileDateTime returns typed actual last-write Date values in local time, with named/qualified calls and timezone-checked real file metadata.
+
+- [x] FileLen/FileDateTime execute through real parameterized native SQL callbacks with volatile metadata refresh, canonical integer/date projection types and checked filesystem error propagation.
+- [x] DAO recordset Fields expose actual SQL file metadata as Long/Date values and dbLong/dbDate types; proven DATE/DATETIME Field.Type returns dbDate.

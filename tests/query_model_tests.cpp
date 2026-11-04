@@ -7,6 +7,9 @@
 #include <QCoreApplication>
 #include <QSqlQuery>
 #include <QSqlError>
+#include <QTemporaryFile>
+#include <QDateTime>
+#include <QTimeZone>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -21,6 +24,24 @@ int main(int argc, char** argv) {
     QSqlQuery query(db);
     assert(query.exec("CREATE TABLE samples(id INTEGER, score INTEGER, label TEXT)"));
     assert(query.exec("INSERT INTO samples VALUES(1,10,'one'),(2,20,'two'),(3,20,NULL),(4,30,'four')"));
+    {
+        QTemporaryFile file("/tmp/linaccess-sql-file-ä-XXXXXX"); assert(file.open() && file.write("abc",3)==3 && file.flush());
+        const auto modified=QDateTime(QDate(2024,2,29),QTime(12,34,56),QTimeZone::utc());
+        assert(file.setFileTime(modified,QFileDevice::FileModificationTime));
+        const QString source="PARAMETERS path Text; SELECT FileLen([path]) AS bytes,FileDateTime([path]) AS stamp";
+        const QMap<QString,QVariant> parameters{{"path",file.fileName()}};
+        linaccess::AccessQueryModel metadata; metadata.execute(db,source,parameters);
+        assert(metadata.rowCount()==1 && metadata.index(0,0).data().toLongLong()==3);
+        assert(metadata.fieldSqlType(0)=="INTEGER4" && metadata.fieldSqlType(1)=="DATETIME");
+        assert(metadata.index(0,1).data().toString()==modified.toLocalTime().toString("yyyy-MM-dd HH:mm:ss"));
+        assert(file.resize(7) && file.flush()); metadata.execute(db,source,parameters);
+        assert(metadata.index(0,0).data().toLongLong()==7);
+        assert(file.remove()); const auto plan=linaccess::compileAccessQuery(source); assert(!plan.sql.isEmpty());
+        int failure=0; try { metadata.execute(db,source,parameters); } catch(const linaccess::VbaRuntimeError& error) { failure=error.number; }
+        assert(failure==53 && metadata.rowCount()==0);
+        failure=0; try { metadata.execute(db,"SELECT FileDateTime(Null)"); } catch(const linaccess::VbaRuntimeError& error) { failure=error.number; }
+        assert(failure==94);
+    }
     {
         assert(query.exec("CREATE TABLE origin_left(id INTEGER,key INTEGER)"));
         assert(query.exec("CREATE TABLE origin_right(id INTEGER,key INTEGER)"));
