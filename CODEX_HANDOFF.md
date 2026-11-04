@@ -1262,3 +1262,10 @@ GROUP-BY-Buckets. Stop=Long-Max bleibt explizit3251 ohne Windows-Oracle.
 docs/NATIVE_PARTITION.md; keine neue CTest-Zielzahl und keine neuen Katalog-IDs.
 Vollstand48/48 (84.06 s), frischer GUI-freier Core1/1, Paket/Build-ID/SQLite und
 vier Originalfixture-Hashes bestanden. Weiterhin456/384/72, keine Vollparität.
+
+FileDialog.Filters unterstützt nun natives For Each über tatsächliche typisierte
+Filterobjekte in der aktuellen Einfügereihenfolge einschließlich Add Position.
+Leere/Clear-Sammlung liefert keine Elemente. Bestehende echte VBA-/Qt-Dateiauswahl
+prüft Reihenfolge, Typen und leere Enumeration, danach tatsächliche Textdateiauswahl.
+Layout-Ziel1/1 (10.56 s), Paket/Build-ID/SQLite und vier Originalfixture-Hashes
+bestanden. Letzter Vollstand48/48 (84.06 s), Core1/1; weiterhin456/384/72.

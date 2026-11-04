@@ -9,7 +9,9 @@ it does not execute/open a selected document or copy its contents into artifacts
 The bounded adapter supports Title, InitialFileName, ButtonName, FilterIndex and
 AllowMultiSelect for file selection. Folder selection is single-directory. Filters
 supports Clear/Add (including named Description/Extensions/Position), Count and
-one-based Item with read-only Description/Extensions. Patterns are limited to
+one-based Item with read-only Description/Extensions. Native For Each over Filters
+returns actual typed filter objects in insertion order, including Add Position;
+an empty/cleared collection enumerates no objects. Patterns are limited to
 supported wildcard extension lists; unsafe/unhandled delimiters refuse explicitly.
 The Windows all-files pattern *.* maps to Qt's * so dotless files remain visible.
 Filters metadata feeds the actual Qt name filters; file modes feed actual Qt
