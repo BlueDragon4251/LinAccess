@@ -5400,3 +5400,27 @@ retained. The full current suite and package are checked for this report milesto
 Navigation milestone: full current desktop48/48 under Windows style passes
 (88.77 s), Debian payload/Build-ID/pinned SQLite and all four original fixture
 SHA-256 checks pass. GUI-free runtime unchanged from fresh core1 (1.76 s).
+
+
+## Saved native report page geometry and repair (2026-11-04)
+
+Page setup optionally stores versioned geometry in an existing owned report
+definition. Main-qualified, case-aware lookup and a conditional atomic update
+preserve SQL/VBA/archive/extra fields and reject changed definitions without
+committing caller transactions. Native report editing reloads latest extras so
+nested preview page changes survive later Save. Unsaved/imported layouts retain
+session setup; original Access printer/designer binary round trips remain open.
+
+Stored geometry is validated before output. Invalid metadata selects explicit
+layout fallback and blocks report PDF/print; actual page-setup repair clears it.
+The existing mainwindow cycle saves/reopens geometry, verifies SQL/code and TEMP
+shadow immunity, changes it in nested preview, then saves the editor and retains
+the newer margin. A malformed orientation preserves a prior PDF and is repaired
+through real controls. Five balanced Open/Close effects cover all document cycles.
+Validation: desktop build, initial mainwindow/layout2/2 (12.76 s), final mainwindow
+1/1 including invalid-state repair (2.81 s). Fixed 456/384/72, no new target/ID.
+Full current suite/package are checked for this persistence milestone.
+
+Stored-page-geometry milestone: full current desktop48/48 under Windows style
+passes (83.50 s), Debian payload/Build-ID/pinned SQLite and all four original
+fixture SHA-256 checks pass. GUI-free runtime unchanged from fresh core1 (1.76 s).

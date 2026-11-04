@@ -10,6 +10,8 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
@@ -412,6 +414,19 @@ End Sub
     auto* value=report->findChild<QLineEdit*>("access-control-Display value"); assert(value && value->isReadOnly() && value->text()=="first" && value->property("la_access_tag").toString()=="bound");
     assert(report->findChild<QComboBox*>("access-record-selector")->count()==3);
     assert(report->findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==3);
+    QTimer::singleShot(0,report,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="access-report-page-setup-dialog");
+        auto* save=dialog->findChild<QCheckBox*>("report-page-save"); assert(save && save->isEnabled()); save->setChecked(true);
+        dialog->findChild<QComboBox*>("report-page-orientation")->setCurrentIndex(1);
+        dialog->findChild<QDoubleSpinBox*>("report-page-left")->setValue(25);
+        dialog->findChild<QDialogButtonBox*>("report-page-buttons")->button(QDialogButtonBox::Ok)->click();
+    });
+    report->findChild<QAction*>("access-report-page-setup")->trigger();
+    assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='report' AND name='Owned Native Report'") && sql.next());
+    const auto withPage=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
+    assert(withPage.value("sql").toString()==source && withPage.value("vba").toString()==module);
+    assert(withPage.value("page_setup").toObject().value("orientation").toInt()==1);
+    assert(sql.exec("SELECT definition FROM temp._la_objects WHERE kind='report'") && sql.next() && sql.value(0).toString()=="{}"); sql.finish();
     std::vector<VbaValue> none;
     assert(report->executeProcedure("Increment",none).status==VbaExecutionStatus::Completed && object->member("Tag",{}).asText()=="2");
     QTemporaryDir output; assert(output.isValid() && report->exportReportPdf(output.filePath("owned.pdf")));
@@ -432,6 +447,34 @@ End Sub
     assert(sql.exec("DROP TABLE temp._la_objects"));
     assert(QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,selected),Q_ARG(int,0)));
     assert(locate());
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="access-report-page-setup-dialog");
+        assert(dialog->findChild<QComboBox*>("report-page-orientation")->currentIndex()==1);
+        assert(dialog->findChild<QDoubleSpinBox*>("report-page-left")->value()==25);
+        dialog->reject();
+    });
+    locate()->findChild<QAction*>("access-report-page-setup")->trigger();
+    assert(locate()->close()); dispose();
+    auto invalidDesign=withPage; auto invalidPage=invalidDesign.value("page_setup").toObject();
+    invalidPage.insert("orientation",2); invalidDesign.insert("page_setup",invalidPage);
+    sql.prepare("UPDATE main._la_objects SET definition=? WHERE kind='report' AND name='Owned Native Report'");
+    sql.addBindValue(QString::fromUtf8(QJsonDocument(invalidDesign).toJson(QJsonDocument::Compact))); assert(sql.exec()); sql.finish();
+    assert(QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,selected),Q_ARG(int,0)));
+    auto invalidReport=locate(); assert(invalidReport && !invalidReport->findChild<QTabWidget*>("access-report-view-tabs")->isTabEnabled(0));
+    QFile protectedPdf(output.filePath("owned.pdf")); assert(protectedPdf.open(QIODevice::ReadOnly));
+    const auto previousPdf=protectedPdf.readAll(); protectedPdf.close();
+    assert(!invalidReport->exportReportPdf(output.filePath("owned.pdf")));
+    assert(protectedPdf.open(QIODevice::ReadOnly) && protectedPdf.readAll()==previousPdf); protectedPdf.close();
+    QTimer::singleShot(0,invalidReport,[] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="access-report-page-setup-dialog");
+        dialog->findChild<QComboBox*>("report-page-orientation")->setCurrentIndex(1);
+        dialog->findChild<QDoubleSpinBox*>("report-page-left")->setValue(25);
+        dialog->findChild<QCheckBox*>("report-page-save")->setChecked(true);
+        dialog->findChild<QDialogButtonBox*>("report-page-buttons")->button(QDialogButtonBox::Ok)->click();
+    });
+    invalidReport->findChild<QAction*>("access-report-page-setup")->trigger();
+    assert(invalidReport->findChild<QTabWidget*>("access-report-view-tabs")->isTabEnabled(0));
+    assert(invalidReport->exportReportPdf(output.filePath("repaired.pdf")));
     auto* edit=window.findChild<QAction*>("native-report-edit"); assert(edit);
     QTimer::singleShot(0,&window,[&] {
         auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-report-designer");
@@ -445,16 +488,27 @@ End Sub
             auto* preview=dynamic_cast<AccessFormPreview*>(QApplication::activeModalWidget());
             assert(preview && preview->documentKind()==AccessDocumentKind::Report && preview->hasDataSource());
             assert(preview->findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==3);
+            QTimer::singleShot(0,preview,[] {
+                auto* setup=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(setup && setup->objectName()=="access-report-page-setup-dialog");
+                setup->findChild<QDoubleSpinBox*>("report-page-left")->setValue(30);
+                setup->findChild<QCheckBox*>("report-page-save")->setChecked(true);
+                setup->findChild<QDialogButtonBox*>("report-page-buttons")->button(QDialogButtonBox::Ok)->click();
+            });
+            preview->findChild<QAction*>("access-report-page-setup")->trigger();
             previewed=true; preview->reject();
         });
         dialog->findChild<QPushButton*>("native-report-preview")->click();
         assert(previewed && QApplication::activeModalWidget()==dialog);
         assert(dialog->findChild<QPlainTextEdit*>("native-report-sql")->toPlainText()==source);
-        dialog->reject();
+        dialog->findChild<QPushButton*>("native-report-save")->click();
     });
     explorer->setCurrentItem(selected); edit->trigger(); dispose();
-    assert(sql.exec("SELECT COUNT(*) FROM native_report_events WHERE kind='open'") && sql.next() && sql.value(0).toInt()==4); sql.finish();
-    assert(sql.exec("SELECT COUNT(*) FROM native_report_events WHERE kind='close'") && sql.next() && sql.value(0).toInt()==4); sql.finish();
+    assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='report' AND name='Owned Native Report'") && sql.next());
+    const auto finalDesign=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
+    assert(finalDesign.value("page_setup").toObject().value("margins_mm").toArray()[0].toDouble()==30);
+    assert(finalDesign.value("sql").toString()==source && finalDesign.value("vba").toString()==module);
+    assert(sql.exec("SELECT COUNT(*) FROM native_report_events WHERE kind='open'") && sql.next() && sql.value(0).toInt()==5); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM native_report_events WHERE kind='close'") && sql.next() && sql.value(0).toInt()==5); sql.finish();
 }
 
 void exerciseRecordEscape(MainWindow& window,QSqlDatabase db) {

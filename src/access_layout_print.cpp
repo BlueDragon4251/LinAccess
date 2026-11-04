@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QPrintDialog>
 #include "native_report_page_setup.hpp"
+#include "native_report_page_store.hpp"
 #include <QPageLayout>
 #include <QPrinter>
 #include <QPrintPreviewDialog>
@@ -79,7 +80,7 @@ public:
         }
         connect(pages_,&QPrintPreviewWidget::paintRequested,this,[this,render](QPrinter* printer) {
             setProperty("la_report_pages_valid",false);
-            setProperty("la_report_pages_valid",render(*printer));
+            if(property("la_page_setup_error").toString().isEmpty()) setProperty("la_report_pages_valid",render(*printer));
         });
         connect(pages_,&QPrintPreviewWidget::previewChanged,this,[this,previous,next,number,total,changed] {
             const int count=pages_->pageCount(),page=pages_->currentPage();
@@ -99,14 +100,18 @@ public:
     }
     ~NativeReportPageView() override { delete pages_; } // printer outlives its preview.
     QPageLayout pageLayout() const { return printer_.pageLayout(); }
-    bool setupPage() {
+    bool setPageLayout(const QPageLayout& layout) { return printer_.setPageLayout(layout); }
+    bool setupPage(bool canSave,const std::function<void(const QPageLayout&)>& save) {
         const auto previous=printer_.pageLayout();
-        NativeReportPageSetupDialog dialog(previous,this);
+        NativeReportPageSetupDialog dialog(previous,this,canSave);
         if(dialog.exec()!=QDialog::Accepted) return false;
         if(!printer_.setPageLayout(dialog.pageLayout())) {
             printer_.setPageLayout(previous);
             QMessageBox::warning(this,"Seite einrichten","Der Drucker kann diese Seiteneinrichtung nicht übernehmen."); return false;
         }
+        try { if(dialog.saveToDesign()) save(dialog.pageLayout()); }
+        catch(...) { printer_.setPageLayout(previous); throw; }
+        setProperty("la_page_setup_error",QString());
         refreshPages(); return true;
     }
     bool refreshPages() {
@@ -121,7 +126,7 @@ private:
 };
 bool applyReportPageLayout(QWidget* view,QPrinter& printer) {
     const auto* pages=dynamic_cast<NativeReportPageView*>(view);
-    return !pages || printer.setPageLayout(pages->pageLayout());
+    return !pages || (pages->property("la_page_setup_error").toString().isEmpty() && printer.setPageLayout(pages->pageLayout()));
 }
 void synchronizeReportView(QWidget* document,NativeReportPageView* pages) {
     auto* tabs=document->findChild<QTabWidget*>("access-report-view-tabs");
@@ -129,6 +134,10 @@ void synchronizeReportView(QWidget* document,NativeReportPageView* pages) {
     auto* view=pages ? pages->findChild<QPrintPreviewWidget*>("access-report-pages") : nullptr;
     if (!tabs || !notice || !view) return;
     const bool valid=pages->property("la_report_pages_valid").toBool() && view->pageCount()>0;
+    const auto pageError=pages->property("la_page_setup_error").toString();
+    notice->setText(pageError.isEmpty()
+        ? QString("Nur Layoutansicht: Die vollständige Berichtsausgabe ist für dieses Layout noch nicht unterstützt.")
+        : pageError+" Öffnen Sie Seite einrichten, um gültige Einstellungen zu wählen.");
     tabs->setTabEnabled(0,valid); notice->setVisible(!valid);
     if (!valid) { tabs->setProperty("la_report_fallback",true); tabs->setCurrentIndex(1); }
     else if (tabs->property("la_report_fallback").toBool()) {
@@ -155,6 +164,12 @@ void AccessFormPreview::buildReportPageView(QVBoxLayout* layout,QWidget* layoutV
             }
         },[this] { refreshReportPageView(); },tabs);
     reportPageView_=pages;
+    try {
+        if(const auto saved=linaccess::report_page_store::load(db_,formName_);saved && !pages->setPageLayout(*saved))
+            pages->setProperty("la_page_setup_error","Die gespeicherte Seiteneinrichtung kann nicht übernommen werden.");
+    } catch(const std::exception&) {
+        pages->setProperty("la_page_setup_error","Die gespeicherte Seiteneinrichtung konnte nicht geladen werden.");
+    }
     auto* printKey=new QShortcut(QKeySequence(Qt::Key_P),pages);
     printKey->setContext(Qt::WidgetWithChildrenShortcut);
     connect(printKey,&QShortcut::activated,this,[this] {
@@ -212,7 +227,14 @@ void AccessFormPreview::buildPrintToolbar(QVBoxLayout* layout) {
     connect(setup,&QAction::triggered,this,[this] {
         if(reportAggregateCaching_) return;
         auto* pages=dynamic_cast<NativeReportPageView*>(reportPageView_.data());
-        if(pages && pages->setupPage()) { synchronizeReportView(this,pages); refreshCalculatedControls(); }
+        try {
+            const bool canSave=linaccess::report_page_store::definition(db_,formName_).has_value();
+            if(pages && pages->setupPage(canSave,[this](const QPageLayout& layout) { linaccess::report_page_store::save(db_,formName_,layout); })) {
+                synchronizeReportView(this,pages); refreshCalculatedControls();
+            }
+        } catch(const std::exception&) {
+            QMessageBox::warning(this,"Seite einrichten","Die Seiteneinrichtung konnte nicht im Berichtsentwurf gespeichert werden.");
+        }
     });
     auto* reportPreview=printToolbar_->addAction("Berichtsvorschau …");
     reportPreview->setObjectName("access-report-preview");

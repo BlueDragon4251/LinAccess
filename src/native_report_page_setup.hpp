@@ -2,6 +2,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -15,7 +16,7 @@
 // Actual document page geometry; works with PDF and physical QPrinter backends.
 class NativeReportPageSetupDialog final : public QDialog {
 public:
-    NativeReportPageSetupDialog(QPageLayout initial,QWidget* parent)
+    NativeReportPageSetupDialog(QPageLayout initial,QWidget* parent,bool canSave=false)
         : QDialog(parent),layout_(std::move(initial)) {
         setObjectName("access-report-page-setup-dialog"); setWindowTitle("Seite einrichten");
         layout_.setUnits(QPageLayout::Millimeter);
@@ -56,12 +57,17 @@ public:
         top_=addMargin("Oben","report-page-top",current.top(),minimum.top());
         bottom_=addMargin("Unten","report-page-bottom",current.bottom(),minimum.bottom());
         outer->addWidget(group);
+        save_=new QCheckBox("Im Berichtsentwurf speichern",this); save_->setObjectName("report-page-save");
+        save_->setEnabled(canSave);
+        if(!canSave) save_->setToolTip("Für gespeicherte, in LinAccess angelegte Berichte verfügbar.");
+        outer->addWidget(save_);
         auto* buttons=new QDialogButtonBox(QDialogButtonBox::Ok|QDialogButtonBox::Cancel,this);
         buttons->setObjectName("report-page-buttons"); buttons->button(QDialogButtonBox::Cancel)->setText("Abbrechen");
         connect(buttons,&QDialogButtonBox::accepted,this,&NativeReportPageSetupDialog::accept);
         connect(buttons,&QDialogButtonBox::rejected,this,&QDialog::reject); outer->addWidget(buttons);
     }
     QPageLayout pageLayout() const { return layout_; }
+    bool saveToDesign() const { return save_->isEnabled() && save_->isChecked(); }
     void accept() override {
         auto candidate=layout_;
         const auto id=static_cast<QPageSize::PageSizeId>(paper_->currentData().toInt());
@@ -82,6 +88,7 @@ private:
         spin->setRange(0,5000); spin->setSuffix(" mm"); return spin;
     }
     QPageLayout layout_;
+    QCheckBox* save_{};
     QComboBox *paper_{},*orientation_{};
     QDoubleSpinBox *width_{},*height_{},*left_{},*right_{},*top_{},*bottom_{};
 };
