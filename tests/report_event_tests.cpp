@@ -23,6 +23,9 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QPrintPreviewDialog>
+#include <QPrintDialog>
+#include <QGraphicsView>
+#include <QTest>
 #include <QPrintPreviewWidget>
 #include <QTimer>
 #include <QAction>
@@ -198,6 +201,21 @@ Height =1500)BANDS");
         });
         previewAction->trigger();
         assert(previewChecked && paged.findChild<QLineEdit*>("access-control-Name")->text()=="first");
+        paged.show(); QApplication::setActiveWindow(&paged); reportPages->setFocus(); QApplication::processEvents();
+        for(const auto modifiers:{Qt::ControlModifier,Qt::NoModifier}) {
+            QApplication::setActiveWindow(&paged);
+            auto* surface=reportPages->findChild<QGraphicsView*>(); assert(surface);
+            surface->setFocus(); QApplication::processEvents();
+            bool printChecked=false;
+            QTimer::singleShot(0,&paged,[&] {
+                auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget());
+                assert(dialog && !dialog->testOption(QAbstractPrintDialog::PrintPageRange));
+                printChecked=true; dialog->reject();
+            });
+            QTest::keyClick(surface,Qt::Key_P,modifiers);
+            assert(printChecked && paged.findChild<QLineEdit*>("access-control-Name")->text()=="first");
+        }
+        paged.hide();
         assert(paged.findChild<QLineEdit*>("access-control-Info")->text()=="10");
         assert(paged.findChild<QLineEdit*>("access-control-ReportSummary")->text()=="3");
         auto footerSource=pagedSource;
@@ -336,7 +354,12 @@ End Sub
         try { section->assign("ForceNewPage",linaccess::VbaValue::integer(4)); }
         catch(const linaccess::VbaRuntimeError& error) { invalidSectionSetting=error.number==5; }
         assert(invalidSectionSetting && section->member("ForceNewPage",{}).asNumber()==0);
-        assert(sectionReport.close());
+        sectionReport.show(); QApplication::setActiveWindow(&sectionReport);
+        auto* sectionPages=sectionReport.findChild<QPrintPreviewWidget*>("access-report-pages");
+        auto* sectionSurface=sectionPages->findChild<QGraphicsView*>(); assert(sectionSurface);
+        sectionSurface->setFocus(); QApplication::processEvents();
+        QTest::keyClick(sectionSurface,Qt::Key_C);
+        assert(!sectionReport.isVisible() && sectionReport.close());
         bool closedSection=false;
         try { (void)section->member("Height",{}); }
         catch(const linaccess::VbaRuntimeError& error) { closedSection=error.number==2450; }

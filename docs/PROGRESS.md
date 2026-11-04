@@ -5321,3 +5321,22 @@ Fixed 456/384/72 retained; no new target or catalog ID.
 
 Section-color checkpoint: Debian payload/Build-ID/pinned SQLite and all four
 original fixture SHA-256 checks pass.
+
+
+## Native report preview P/Ctrl+P/C (2026-11-04)
+
+Ctrl+P opens the existing native full-report print dialog. Plain P and C are
+scoped to the paginated preview/navigation pane; layout control text input stays
+outside that scope. P respects print-action availability; C uses normal closing.
+Existing report cases send actual keys to the native graphics surface, reject
+both print dialogs without a job, preserve current data and close through C
+before checking retained native-object guards. See PRINT_PREVIEW_ADAPTER.md.
+
+Validation: desktop build and final mainwindow/layout2/2 (13.05 s). Earlier
+Ctrl+P-only2/2 passed (12.54 s). The first plain-letter probe lost active surface
+focus after a modal dialog; the corrected actual-surface regression passes.
+No new CTest target or catalog ID; fixed 456/384/72. Core unchanged from prior
+full48 (84.06 s) / GUI-free core1 (1.76 s). Full keyboard parity remains open.
+
+Report-shortcut checkpoint: Debian payload/Build-ID/pinned SQLite and all four
+original fixture SHA-256 checks pass.
