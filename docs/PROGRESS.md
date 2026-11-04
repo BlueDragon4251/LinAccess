@@ -5571,3 +5571,23 @@ Fixed 456/384/72; no new target/ID. See NATIVE_DLOOKUP.md for exact scope.
 DFirst/DLast Debian executable/Build-ID/pinned SQLite and four original fixture
 hashes also pass. Last full suite remains domain aggregates48/48 (84.14 s);
 this bounded selector addition used core/layout2/2 and fresh GUI-free core1/1.
+
+## Native sample report/domain statistics (2026-11-04)
+
+Report Var/StDev and global/Application field DVar/DStDev now execute on actual
+complete SQL rows through a shared Welford sample accumulator. NULL observations
+are skipped; fewer than two values return NULL; n-1 is the sample divisor. Only
+finite Number values are accepted. Long-double mean/central-moment updates and
+Double result checks avoid naive squared-total cancellation. Currency/Date/text/
+Boolean coercions, population functions and full Access error/rounding/grouping/
+original-output oracle parity remain open.
+Existing SQL-row report checks compare independent scalar SQL moments across
+insertion/Requery, one observation and all-NULL input. Actual VBA domain calls
+check sample values, named Application arguments and cardinality. Desktop build
+and existing core/layout2/2 pass (13.19 s), fresh GUI-free core1/1 (1.79 s).
+Full current suite/package follow for the accumulated domain/report changes.
+Fixed 456/384/72; no new target/ID. Exact scope in REPORT_AGGREGATES.md and
+NATIVE_DLOOKUP.md.
+Sample-statistics milestone: full current desktop48/48 passes (86.40 s), fresh
+GUI-free core1/1 (1.79 s), Debian payload/Build-ID/pinned SQLite and all four
+original fixture hashes pass. No added targets or fixed-catalog IDs.

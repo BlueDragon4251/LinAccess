@@ -91,3 +91,13 @@ and Currency identity. No Jet/Access physical scan-order equivalence is claimed.
 Without a defined source order, no stable arbitrary selection promise is made.
 Reference: Microsoft Access
 [DFirst/DLast](https://support.microsoft.com/en-us/access/functions/dfirst-dlast-functions).
+
+## Native sample DVar/DStDev
+
+Global/Application DVar/DStDev accept the field-only numeric domain/criteria
+subset with positional/named calls. They use the same schema proof, complete
+bounded query execution and native Welford sample accumulator as report Var/StDev.
+NULL observations are skipped; fewer than two Number observations return NULL.
+Actual VBA checks independent hand-calculated sample values, named Application
+calls, one match and no matches. Currency/Date/text/Boolean inputs, calculated
+Expr, DVarP/DStDevP and full Access error/rounding/reference parity remain open.

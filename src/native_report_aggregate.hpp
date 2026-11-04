@@ -11,7 +11,7 @@ class NativeReportAggregate {
 public:
     NativeReportAggregate(std::string_view function,bool allowTextSum=false)
         : function_(function),allowTextSum_(allowTextSum) {
-        if(function_!="sum" && function_!="count" && function_!="avg" && function_!="min" && function_!="max" && function_!="first" && function_!="last")
+        if(function_!="sum" && function_!="count" && function_!="avg" && function_!="min" && function_!="max" && function_!="first" && function_!="last" && function_!="var" && function_!="stdev")
             throw VbaRuntimeError(3251,"Report aggregate unsupported");
     }
     void add(const VbaValue& value) {
@@ -66,13 +66,26 @@ public:
             total_+=number;
             if(!std::isfinite(total_)) throw VbaRuntimeError(6,"Aggregate overflow");
         } else {
-            mean_+=(static_cast<long double>(number)-mean_)/count_;
+            const long double delta=static_cast<long double>(number)-mean_;
+            mean_+=delta/count_;
             if(!std::isfinite(mean_)) throw VbaRuntimeError(6,"Aggregate overflow");
+            if(function_=="var" || function_=="stdev") {
+                secondMoment_+=delta*(static_cast<long double>(number)-mean_);
+                if(!std::isfinite(secondMoment_)) throw VbaRuntimeError(6,"Aggregate overflow");
+            }
         }
     }
     VbaValue result() const {
         if(function_=="count") return VbaValue::numeric(count_);
         if(!count_) return {};
+        if(function_=="var" || function_=="stdev") {
+            if(count_<2) return {};
+            const long double variance=secondMoment_/(count_-1);
+            if(variance<0) throw VbaRuntimeError(6,"Variance computation overflow");
+            const double value=static_cast<double>(function_=="stdev" ? std::sqrt(variance) : variance);
+            if(!std::isfinite(value)) throw VbaRuntimeError(6,"Aggregate overflow");
+            return VbaValue::numeric(value);
+        }
         if(extremum_) return *extremum_;
         if(currencyTotal_) return VbaValue::currency(*currencyTotal_);
         const double value=function_=="avg" ? static_cast<double>(mean_) : total_;
@@ -84,7 +97,7 @@ private:
     bool allowTextSum_{};
     std::size_t count_{};
     double total_{};
-    long double mean_{};
+    long double mean_{},secondMoment_{};
     std::optional<VbaValue> extremum_;
     std::optional<std::int64_t> currencyTotal_;
 };
