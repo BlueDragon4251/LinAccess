@@ -5190,3 +5190,33 @@ desktop build, Debian payload/permissions/Build-ID/pinned SQLite and four origin
 hashes pass. Headless sources unchanged; preceding full48/core1 retained without
 another full run for this report-only painter. No new target or catalog item;
 fixed 456/384/72 unchanged.
+
+
+## Bounded detail CanGrow and native design option (2026-11-04)
+
+TextBox/template and section CanGrow metadata are retained; native control reads
+return the flag and runtime writes fail explicitly as design-only. Owned report
+design saves a CanGrow option and emits it into native fields. The renderer uses
+the actual Qt text layout height for one actually growing direct/unbound textbox
+per detail record, shifts lower controls, grows the section across its width and
+plans pages from variable detail heights. Scoped band visibility/background and
+geometry/canvas/record restoration prevent later sections leaking into grown bands.
+
+The long probe exposed Qt single-line display normalization: 44 paragraph breaks
+in raw text became zero in displayText. Normal unmasked fields now preserve their
+original text; password/other input masks still use their display string. Earlier
+short multiline evidence had happened to wrap at that location; it did not prove
+paragraph preservation. The corrected long probe does. Masked PDF checks remain.
+
+Existing cases verify one fixed page versus two complete grown pages, final text
+markers plus values moved below them, raw data/geometries/canvas restoration,
+source flag reads through actual Report VBA, and refusal of an oversized detail
+without replacing a valid PDF. Multiple simultaneously growing fields, overlap,
+calculated growers, growing header/footer sections, CanShrink and splitting long
+details remain open. No original CanGrow/Windows geometry oracle was executed.
+
+Validation: mainwindow/layout2/2 (11.62 s), final layout1/1 (9.29 s), full desktop
+48/48 under Windows style (78.58 s), freshly rebuilt GUI-free core1/1 (1.68 s),
+Debian payload/permissions/Build-ID/pinned SQLite and four original hashes pass.
+No new target or work-catalog point; fixed 456/384/72 unchanged. F085 stays open.
+Reference and exact bounds: REPORT_CANGROW.md.

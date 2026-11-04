@@ -79,6 +79,7 @@ struct AccessVisualControl {
     bool locked{};
     bool defaultButton{};
     bool cancelButton{};
+    bool canGrow{};
     bool tabStop{true};
     int tabIndex{};
 };
@@ -107,6 +108,7 @@ struct AccessFormLayout {
     QMap<QString,int> sectionHeights;
     QMap<QString,int> sectionOffsets;
     QMap<QString,qint32> sectionBackColors;
+    QMap<QString,bool> sectionCanGrow;
     QStringList reportPrintLimitations;
     QVector<AccessVisualControl> controls;
     QMap<QString,QString> events;

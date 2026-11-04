@@ -49,9 +49,11 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
         lines<<"Begin Label"<<"Name ="+quoted(unique("label_"+columns[i]))<<"Caption ="+quoted(columns[i])
             <<"Left ="+QString::number(i*width+30)<<"Width ="+QString::number(width-60)<<"Height =300"<<"End";
     lines<<"End"<<"Begin Section"<<"Height =360";
-    for (int i=0;i<columns.size();++i)
-        lines<<"Begin TextBox"<<"Name ="+quoted(columns[i])<<"ControlSource ="+quoted("["+columns[i]+"]")
-            <<"Left ="+QString::number(i*width+30)<<"Top =30"<<"Width ="+QString::number(width-60)<<"Height =270"<<"End";
+    for (int i=0;i<columns.size();++i) {
+        lines<<"Begin TextBox"<<"Name ="+quoted(columns[i])<<"ControlSource ="+quoted("["+columns[i]+"]");
+        if(definition.value("can_grow").toBool()) lines<<"CanGrow =-1";
+        lines<<"Left ="+QString::number(i*width+30)<<"Top =30"<<"Width ="+QString::number(width-60)<<"Height =270"<<"End";
+    }
     lines<<"End"<<"Begin PageFooter"<<"Height =360"<<"Begin TextBox"<<"Name ="+quoted(unique("native_report_page"))
         <<"ControlSource =\"=CStr([Page]) & Chr(47) & CStr([Pages])\""<<"Top =30"<<"Width =900"<<"Height =270"<<"End"<<"End"<<"End";
     return {std::move(name),lines.join('\n').toUtf8(),bytes,source};

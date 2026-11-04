@@ -84,6 +84,11 @@ protected:
     void paintEvent(QPaintEvent* event) override {
         QWidget::paintEvent(event);
         QPainter painter(this);
+        const auto active=property("la_print_band_rect");
+        if (active.isValid()) {
+            painter.fillRect(active.toRect(),property("la_print_band_color").value<QColor>());
+            return;
+        }
         for (const auto& band:backgrounds_)
             painter.fillRect(QRect(0,band.first.y(),contentWidth_,band.first.height()),band.second);
     }
@@ -188,27 +193,43 @@ private:
 class AccessReportTextBox final : public AccessTextBox {
 public:
     using AccessTextBox::AccessTextBox;
+    QSize sizeHint() const override {
+        auto result=QLineEdit::sizeHint(); QStyleOptionFrame frame;
+        const auto area=textArea(frame); if(area.width()<=0) return result;
+        QTextDocument text; prepareText(text,area.width());
+        const double content=text.size().height(); const int extra=qMax(0,height()-area.height());
+        if(!std::isfinite(content) || content>std::numeric_limits<int>::max()-extra)
+            return QSize(result.width(),std::numeric_limits<int>::max());
+        result.setHeight(qMax(1,int(std::ceil(content))+extra)); return result;
+    }
 protected:
     void paintEvent(QPaintEvent*) override {
-        QStyleOptionFrame frame; initStyleOption(&frame);
-        QStylePainter painter(this);
-        painter.drawPrimitive(QStyle::PE_PanelLineEdit,frame);
-        auto area=style()->subElementRect(QStyle::SE_LineEditContents,&frame,this);
-        const auto margins=textMargins();
-        area.adjust(margins.left()+2,margins.top(),-margins.right()-2,-margins.bottom());
-        if (area.isEmpty()) return;
-        QTextDocument text;
-        text.setDocumentMargin(0); text.setDefaultFont(font());
-        QTextOption options;
-        options.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-        options.setAlignment(alignment() & Qt::AlignHorizontal_Mask);
-        text.setDefaultTextOption(options);
-        // Echo/input-mask presentation is authoritative; never paint the raw
-        // password value while adapting the report's multiline display.
-        text.setPlainText(displayText()); text.setTextWidth(area.width());
+        QStyleOptionFrame frame; const auto area=textArea(frame);
+        QStylePainter painter(this); painter.drawPrimitive(QStyle::PE_PanelLineEdit,frame);
+        if(area.isEmpty()) return;
+        QTextDocument text; prepareText(text,area.width());
         painter.setClipRect(area); painter.translate(area.topLeft());
         QAbstractTextDocumentLayout::PaintContext context; context.palette=frame.palette;
         text.documentLayout()->draw(&painter,context);
+    }
+private:
+    QRect textArea(QStyleOptionFrame& frame) const {
+        initStyleOption(&frame);
+        auto area=style()->subElementRect(QStyle::SE_LineEditContents,&frame,this);
+        const auto margins=textMargins();
+        return area.adjusted(margins.left()+2,margins.top(),-margins.right()-2,-margins.bottom());
+    }
+    void prepareText(QTextDocument& text,int width) const {
+        text.setDocumentMargin(0); text.setDefaultFont(font());
+        QTextOption options; options.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+        options.setAlignment(alignment() & Qt::AlignHorizontal_Mask);
+        text.setDefaultTextOption(options);
+        // Normal QLineEdit display text flattens paragraph characters. Use
+        // its original text only for unmasked normal echo; preserve the
+        // authoritative display string for password/other input masks.
+        const auto presentation=echoMode()==QLineEdit::Normal && inputMask().isEmpty()
+            ? QLineEdit::text() : displayText();
+        text.setPlainText(presentation); text.setTextWidth(width);
     }
 };
 class AccessComboBox final : public QComboBox {

@@ -1962,15 +1962,19 @@ void MainWindow::editReport(const QString& existingName) {
     auto* name=new QLineEdit(existingName,&dialog); name->setObjectName("native-report-name"); name->setPlaceholderText("Berichtname"); outer->addWidget(name);
     auto* title=new QLineEdit(old.value("title").toString(),&dialog); title->setObjectName("native-report-title"); title->setPlaceholderText("Überschrift"); outer->addWidget(title);
     auto* sql=new QPlainTextEdit(&dialog); sql->setObjectName("native-report-sql"); sql->setPlaceholderText("SELECT * FROM kunden"); sql->setPlainText(old.value("sql").toString()); outer->addWidget(sql,1);
+    auto* canGrow=new QCheckBox("Text vertikal erweitern (CanGrow)",&dialog); canGrow->setObjectName("native-report-cangrow");
+    canGrow->setChecked(old.value("can_grow").toBool());
+    canGrow->setToolTip("Derzeit ein wachsendes Textfeld je Datensatz innerhalb einer Seite."); outer->addWidget(canGrow);
     outer->addWidget(new QLabel("VBA-Ereignisse: Open, Load, NoData und Close. Druck-/Format-Ereignisse sind noch nicht unterstützt.",&dialog));
     auto* vba=new QPlainTextEdit(&dialog); vba->setObjectName("native-report-vba"); vba->setPlaceholderText("Private Sub Report_Load()\nEnd Sub"); vba->setPlainText(old.value("vba").toString()); outer->addWidget(vba,1);
     auto codeFont=QFontDatabase::systemFont(QFontDatabase::FixedFont); codeFont.setPointSize(10);
     sql->setFont(codeFont); vba->setFont(codeFont);
     auto* row=new QHBoxLayout; auto* preview=addButton(row,"Vorschau"); preview->setObjectName("native-report-preview");
     auto* pdf=addButton(row,"PDF exportieren"); auto* save=addButton(row,"Speichern"); save->setObjectName("native-report-save"); outer->addLayout(row);
-    const auto definition=[old,title,sql,vba] {
+    const auto definition=[old,title,sql,vba,canGrow] {
         auto content=old; content.insert("title",title->text()); content.insert("sql",sql->toPlainText());
-        content.insert("vba",vba->toPlainText()); content.insert("language","vba_subset_experimental"); return content;
+        content.insert("vba",vba->toPlainText()); content.insert("can_grow",canGrow->isChecked());
+        content.insert("language","vba_subset_experimental"); return content;
     };
     const auto packet=[this,name,definition] { return linaccess::nativeStoredReport(name->text().isEmpty() ? QString("Berichtsvorschau") : name->text(),definition(),db_); };
     connect(preview,&QPushButton::clicked,&dialog,[this,&dialog,packet] {

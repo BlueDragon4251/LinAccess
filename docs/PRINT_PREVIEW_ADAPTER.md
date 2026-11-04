@@ -47,16 +47,17 @@ Report-footer placement follows the print-preview ordering described in
 Report textboxes retain their native QLineEdit-derived value/mask/object interface
 but paint plain text with Qt's text layout inside the actual styled content area.
 Paragraph breaks, word wrapping, horizontal alignment, font and palette therefore
-reach both canvas and vector PDF. The painter uses displayText(), so password and
-input-mask presentation cannot be bypassed by this print adaptation. Forms keep
-their existing editable textboxes. This is fixed-height rendering: CanGrow,
-CanShrink, section flow, splitting long controls across pages and full Windows
+reach both canvas and vector PDF. Unmasked normal text retains paragraph characters; masked controls use
+displayText(), so this print adaptation preserves password/input-mask presentation. Forms keep
+their existing editable textboxes. This is fixed-height rendering: CanShrink, full section flow, splitting long controls across pages and full Windows
 text/selection metrics remain open.
 
 The existing report-event case reads a multiline SQL value, checks paragraphs and
 an automatic line break through independent PDF extraction, preserves the raw
 bound value, and verifies masked PDF output does not contain the synthetic clear
 text. It restores the test rows afterwards. No new CTest target was added.
+
+Bounded detail CanGrow is now implemented separately: [rules and evidence](REPORT_CANGROW.md).
 
 ## Section backgrounds
 
@@ -141,10 +142,10 @@ destination after an unsupported or failed rendering attempt.
 
 This is a fixed-band subset: Label, TextBox, Rectangle and Line, with direct field
 bindings, supported calculated expressions, or unbound values. Truncated row sets, missing fields, other controls,
-failed calculated expressions, overflowing controls/bands, groups, declared growing/
+failed calculated expressions, overflowing controls/bands, groups, unsupported growing/
 shrinking/repeated sections, running sums, hidden duplicates, multiple columns,
 forced page breaks and section/page print events are rejected. It does not
-implement Access page setup, grouping, dynamic layout, CanGrow, subreports,
+implement Access page setup, grouping, full dynamic layout/CanGrow, subreports,
 Format/Print/Page scheduling, or DoCmd's direct-print view. The current-layout toolbar
 commands retain their one-page behavior. Separate Berichtsvorschau and Bericht
 drucken actions use the same paginated renderer. The direct print dialog offers

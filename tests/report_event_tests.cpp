@@ -226,12 +226,12 @@ Height =1500)BANDS");
         AccessFormPreview invalid("invalid expression report",invalidSource,{},db);
         assert(!invalid.exportReportPdf(document));
         assert(invalid.close());
-        auto growingSource=pagedSource; growingSource.replace("Name =\"Name\"","Name =\"Name\"\nCanGrow =-1");
-        AccessFormPreview growing("growing report",growingSource,{},db);
-        assert(growing.findChild<QTabWidget*>("access-report-view-tabs")->currentIndex()==1);
-        assert(!growing.exportReportPdf(document));
+        auto shrinkingSource=pagedSource; shrinkingSource.replace("Name =\"Name\"","Name =\"Name\"\nCanShrink =-1");
+        AccessFormPreview shrinking("shrinking report",shrinkingSource,{},db);
+        assert(shrinking.findChild<QTabWidget*>("access-report-view-tabs")->currentIndex()==1);
+        assert(!shrinking.exportReportPdf(document));
         QFile unchanged(document); assert(unchanged.open(QIODevice::ReadOnly) && unchanged.readAll()==bytes);
-        assert(growing.close());
+        assert(shrinking.close());
         query.prepare("UPDATE records SET name=? WHERE id=1");
         const QString paragraphs="ALPHA paragraph\nOMEGA paragraph with wrapped words";
         query.addBindValue(paragraphs); assert(query.exec()); query.finish();
@@ -263,6 +263,51 @@ Height =1500)BANDS");
         }
         assert(masked.close());
         assert(query.exec("UPDATE records SET name='first' WHERE id=1")); query.finish();
+        QStringList alphaLines,omegaLines;
+        for(int line=0;line<44;++line) { alphaLines.append("ALPHA "+QString::number(line)); omegaLines.append("OMEGA "+QString::number(line)); }
+        alphaLines.append("ALPHA_END"); omegaLines.append("OMEGA_END");
+        for(int id=1;id<=2;++id) {
+            query.prepare("UPDATE records SET name=? WHERE id=?");
+            query.addBindValue((id==1 ? alphaLines : omegaLines).join('\n')); query.addBindValue(id); assert(query.exec()); query.finish();
+        }
+        auto shortSource=pagedSource; shortSource.replace("Height =9000","Height =900");
+        AccessFormPreview fixedGrowth("fixed growth baseline",shortSource,{},db);
+        const auto originalName=fixedGrowth.findChild<QLineEdit*>("access-control-Name")->geometry();
+        const auto originalInfo=fixedGrowth.findChild<QLineEdit*>("access-control-Info")->geometry();
+        const auto originalCanvas=fixedGrowth.findChild<QWidget*>("access-form-canvas")->size();
+        assert(fixedGrowth.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==1);
+        assert(fixedGrowth.close());
+        shortSource.replace("Name =\"Name\"","Name =\"Name\"\nCanGrow =-1");
+        AccessFormPreview flowed("flowed report",shortSource,{},db);
+        auto* flowedPages=flowed.findChild<QPrintPreviewWidget*>("access-report-pages");
+        auto* flowedName=flowed.findChild<QLineEdit*>("access-control-Name");
+        if(flowedPages->pageCount()!=2) std::cerr<<"CanGrow preview: pages="<<flowedPages->pageCount()<<", width="<<flowedName->width()<<", height="<<flowedName->height()<<", preferred="<<flowedName->sizeHint().height()<<", raw-breaks="<<flowedName->text().count('\n')<<", display-breaks="<<flowedName->displayText().count('\n')<<'\n';
+        assert(flowedPages->pageCount()==2);
+        assert(makePreviewControlsObject(flowed)->member("Item",{linaccess::VbaValue::string("Name")}).object->member("CanGrow",{}).truthy());
+        const auto flowPdf=output.filePath("flowed.pdf"); assert(flowed.exportReportPdf(flowPdf));
+        assert(flowed.findChild<QLineEdit*>("access-control-Name")->geometry()==originalName);
+        assert(flowed.findChild<QLineEdit*>("access-control-Info")->geometry()==originalInfo);
+        assert(flowed.findChild<QWidget*>("access-form-canvas")->size()==originalCanvas);
+        assert(flowed.findChild<QLineEdit*>("access-control-Name")->text()==alphaLines.join('\n'));
+        if (!reader.isEmpty()) {
+            QProcess textReader; textReader.start(reader,{"-layout",flowPdf,"-"});
+            assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);
+            const auto text=QString::fromUtf8(textReader.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);
+            const auto pages=text.split(QChar('\f')); assert(pages.size()>=2);
+            assert(pages[0].count("ALPHA_END")==1 && pages[1].count("OMEGA_END")==1);
+            assert(QRegularExpression("\\b10\\b").match(pages[0],pages[0].indexOf("ALPHA_END")+9).hasMatch());
+            assert(QRegularExpression("\\b20\\b").match(pages[1],pages[1].indexOf("OMEGA_END")+9).hasMatch());
+        }
+        assert(flowed.close());
+        QFile protectedFlow(flowPdf); assert(protectedFlow.open(QIODevice::ReadOnly)); const auto completeFlow=protectedFlow.readAll(); protectedFlow.close();
+        query.prepare("UPDATE records SET name=? WHERE id=1"); query.addBindValue(QString("LONG\n").repeated(400)); assert(query.exec()); query.finish();
+        AccessFormPreview tooLong("too long growing report",shortSource,{},db);
+        assert(!tooLong.exportReportPdf(flowPdf));
+        assert(tooLong.findChild<QLineEdit*>("access-control-Name")->geometry()==originalName);
+        assert(tooLong.findChild<QLineEdit*>("access-control-Info")->geometry()==originalInfo);
+        assert(protectedFlow.open(QIODevice::ReadOnly) && protectedFlow.readAll()==completeFlow);
+        assert(tooLong.close());
+        assert(query.exec("UPDATE records SET name=CASE id WHEN 1 THEN 'first' ELSE 'second' END")); query.finish();
         assert(banded.close());
     }
     AccessFormPreview report("report",source,code,db);
