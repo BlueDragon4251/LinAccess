@@ -18,6 +18,8 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QSpinBox>
+#include <QSettings>
+#include "native_classic_style.hpp"
 #include <QToolBar>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -1934,17 +1936,47 @@ void dispose() { QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDele
 
 int main(int argc,char** argv) {
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
-    QApplication app(argc,argv); app.setQuitOnLastWindowClosed(false); app.setApplicationName("LinAccessSyntheticGuiTest");
+    QApplication app(argc,argv); app.setQuitOnLastWindowClosed(false); app.setApplicationName("LinAccessSyntheticGuiTest"); app.setOrganizationName("LinAccessSyntheticTests");
     QStandardPaths::setTestModeEnabled(true);
     QTimer watchdog; watchdog.setSingleShot(true);
     QObject::connect(&watchdog,&QTimer::timeout,[] { std::cerr<<"Synthetic main-window document test timed out\n"; std::abort(); }); watchdog.start(20000);
     QTemporaryDir temporary; assert(temporary.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,temporary.path());
     const auto first=temporary.filePath("first.linaccess"),second=temporary.filePath("second.linaccess");
     auto seed=QSqlDatabase::addDatabase("QSQLITE","mainwindow-seed"); seed.setDatabaseName(first); assert(seed.open());
     QSqlQuery initial(seed); assert(initial.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)"));
     assert(initial.exec("INSERT INTO records VALUES(1,'old')")); assert(initial.exec("CREATE TABLE events(id INTEGER PRIMARY KEY,kind TEXT)")); initial.finish(); seed.close();
     seed.setDatabaseName(second); assert(seed.open()); seed.close();
     MainWindow window; window.show(); QApplication::setActiveWindow(&window); QApplication::processEvents();
+    {
+        const auto originalFont=app.font();
+        auto* options=window.findChild<QAction*>("application-options"); assert(options);
+        QTimer::singleShot(0,&window,[&] {
+            auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="application-options-dialog");
+            auto* size=dialog->findChild<QSpinBox*>("options-font-size"); assert(size); size->setValue(13);
+            dialog->reject();
+        });
+        options->trigger(); assert(app.font()==originalFont && !QSettings().contains("ui/applicationFont"));
+        QTimer::singleShot(0,&window,[&] {
+            auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+            auto* size=dialog->findChild<QSpinBox*>("options-font-size"); assert(size); size->setValue(10);
+            auto* buttons=dialog->findChild<QDialogButtonBox*>(); assert(buttons);
+            buttons->button(QDialogButtonBox::Apply)->click();
+            assert(app.font().pointSize()==10 && QSettings().value("ui/applicationFont").value<QFont>().pointSize()==10);
+            size->setValue(13); dialog->reject();
+        });
+        options->trigger(); assert(app.font().pointSize()==10);
+        app.setFont(originalFont); linaccess::initializeClassicStyle(); assert(app.font().pointSize()==10);
+        QTimer::singleShot(0,&window,[&] {
+            auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+            auto* size=dialog->findChild<QSpinBox*>("options-font-size"); assert(size && size->value()==10); size->setValue(9);
+            dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+        });
+        options->trigger(); assert(app.font().pointSize()==9);
+        QSettings().remove("ui/applicationFont"); QSettings().remove("ui/classicStyle");
+        app.setFont(originalFont);
+    }
     openProject(window,first); auto db=QSqlDatabase::database("linaccess-main"); assert(db.isOpen() && db.databaseName()==first);
     const QByteArray form="Begin Form\nRecordSource =\"records\"\nKeyPreview =NotDefault\nOnKeyDown =\"[Event Procedure]\"\nOnActivate =\"[Event Procedure]\"\nOnDeactivate =\"[Event Procedure]\"\nOnLoad =\"[Event Procedure]\"\nOnUnload =\"[Event Procedure]\"\nBegin Section\nBegin TextBox\nName =\"editor\"\nControlSource =\"value\"\nBeforeUpdate =\"[Event Procedure]\"\nEnd\nEnd\nEnd";
     const QByteArray code="Sub Form_Load()\nCurrentDb.Execute \"INSERT INTO events(kind) VALUES('load')\"\nEnd Sub\nSub Form_Unload(Cancel As Integer)\nIf Me.Tag=\"hold\" Then Cancel=True\nEnd Sub\nSub CloseSelf()\nDoCmd.Close\nMsgBox \"Synthetic retained document\"\nEnd Sub\n"

@@ -4,6 +4,7 @@
 #include "native_input_box.hpp"
 #include "native_edit_menu.hpp"
 #include "native_classic_style.hpp"
+#include "native_options_dialog.hpp"
 #include <QCloseEvent>
 #include <QKeyEvent>
 #include <QShortcut>
@@ -307,6 +308,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             classicStyle->setChecked(qApp->property("la_classic_style").toBool());
         }
     });
+    auto* toolsMenu=menuBar()->addMenu("E&xtras");
+    auto* options=toolsMenu->addAction("&Optionen..."); options->setObjectName("application-options");
+    connect(options,&QAction::triggered,this,[this,classicStyle] { linaccess::showNativeOptions(this,classicStyle); });
     auto* windowMenu=menuBar()->addMenu("&Fenster");
     windowMenu->setObjectName("window-menu");
     auto* nextWindow=windowMenu->addAction("Nächstes Fenster\tStrg+F6");
@@ -346,6 +350,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             item->setProperty("la_document_entry",true); item->setCheckable(true); item->setChecked(activePreviewDocument()==document);
             connect(item,&QAction::triggered,this,[this,document] { if(document && finishActiveDataEditors()) (void)AccessFormPreview::activateProjectDocument(db_,this,document); });
         }
+    });
+    auto* helpMenu=menuBar()->addMenu("&?");
+    auto* about=helpMenu->addAction("Über &LinAccess..."); about->setObjectName("application-about");
+    connect(about,&QAction::triggered,this,[this] {
+        QMessageBox::about(this,"Über LinAccess","LinAccess\nNative Datenbankanwendung für Linux.\nEntwicklungsstand: Access-Kompatibilität ist noch nicht vollständig.");
     });
     statusBar()->showMessage("Neue SQLite-Datenbank erstellen oder Access-Datei untersuchen");
 }

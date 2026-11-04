@@ -31,11 +31,15 @@ inline bool setClassicStyle(bool enabled) {
         if (QFontDatabase::families().contains("Tahoma",Qt::CaseInsensitive)) font.setFamily("Tahoma");
         font.setPointSize(8);
     }
+    const auto configuredFont=QSettings().value("ui/applicationFont");
+    if(configuredFont.canConvert<QFont>()) font=configuredFont.value<QFont>();
     application->setFont(font);
     application->setProperty("la_classic_style",enabled);
     return true;
 }
 inline void initializeClassicStyle() {
     if (QSettings().value("ui/classicStyle",true).toBool()) (void)setClassicStyle(true);
+    const auto configuredFont=QSettings().value("ui/applicationFont");
+    if(configuredFont.canConvert<QFont>()) qApp->setFont(configuredFont.value<QFont>());
 }
 }

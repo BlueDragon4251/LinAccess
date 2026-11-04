@@ -2875,3 +2875,7 @@ VBA-Datei-I/O und Windows-Pfad-/Fehlergleichheit bleiben offen.
 Begrenzte native FV-/Pmt-Berechnung läuft auch in tatsächlichen SQL-Abfragen:
 [Umfang und Grenzen](NATIVE_FINANCIAL_FUNCTIONS.md). Vollständige Finanzbibliothek,
 alle numerischen Randfälle und Windows-Oracle bleiben offen.
+
+Extras/Optionen bietet echte gespeicherte UI-Schrift-/Stileinstellungen;
+[Umfang und Grenzen](NATIVE_APPLICATION_OPTIONS.md). Vollständige Access-Menüs,
+Optionen und Windows-Pixelgleichheit bleiben offen.
