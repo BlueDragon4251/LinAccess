@@ -5340,3 +5340,25 @@ full48 (84.06 s) / GUI-free core1 (1.76 s). Full keyboard parity remains open.
 
 Report-shortcut checkpoint: Debian payload/Build-ID/pinned SQLite and all four
 original fixture SHA-256 checks pass.
+
+
+## Report-header/footer ForceNewPage and title-page design (2026-11-04)
+
+Imported header/detail/footer flags now feed the same native page plan. A header
+after-break creates a title page; a footer before-break creates a summary page;
+concurrent detail/before/after breaks coalesce on fresh pages. Native Section
+reads/writes support all three report body sections and refresh current pages.
+The owned report editor also persists header page-break choices, validated by
+the adapter and read through actual Report VBA. Page sections, group scheduling,
+nonzero zero-height header/footer rules and a Windows blank-page oracle remain
+explicitly unsupported/open. See REPORT_DETAIL_BREAKS.md.
+
+Existing real SQL/PDF cases check title/summary pages independently and together
+with exact row/final-marker placement. Typed VBA sets/resets the three section
+flags; mainwindow save/reopen/preview retains both selectors. Validation: desktop
+build and mainwindow/layout/original DAO3/3 (47.84 s). Runtime core unchanged from
+previous full48 (84.06 s) / fresh GUI-free core1 (1.76 s). Fixed 456/384/72; no new
+target or catalog ID. F050/F085 remain open.
+
+Report body-break checkpoint: Debian payload/Build-ID/pinned SQLite and all four
+original fixture SHA-256 checks pass.

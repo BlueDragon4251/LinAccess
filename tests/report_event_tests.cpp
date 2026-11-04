@@ -309,6 +309,26 @@ Height =1500)BANDS");
             }
             assert(forced.close());
         }
+        for(const auto flags:{QPair<int,int>{2,0},{0,1},{2,1}}) {
+            auto separatedSource=pagedSource;
+            separatedSource.replace("Height =9000","Height =900");
+            separatedSource.replace("Begin FormHeader\nHeight =600","Begin FormHeader\nForceNewPage ="+QByteArray::number(flags.first)+"\nHeight =600");
+            separatedSource.replace("Begin FormFooter\nHeight =600","Begin FormFooter\nForceNewPage ="+QByteArray::number(flags.second)+"\nHeight =600");
+            separatedSource.replace("=Sum([id])","=Chr(83) & Chr(70) & CStr(Sum([id]))");
+            AccessFormPreview separated("separated report bands",separatedSource,{},db);
+            const int expected=1+(flags.first ? 1 : 0)+(flags.second ? 1 : 0);
+            assert(separated.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==expected);
+            const auto separatedPdf=output.filePath("separated.pdf"); assert(separated.exportReportPdf(separatedPdf));
+            if(!reader.isEmpty()) {
+                QProcess textReader; textReader.start(reader,{"-layout",separatedPdf,"-"});
+                assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);
+                const auto text=QString::fromUtf8(textReader.readAllStandardOutput()); const auto pages=text.split(QChar('\f'));
+                const int recordsPage=flags.first ? 1 : 0;
+                assert(pages[recordsPage].contains("FIRST_BREAK") && pages[recordsPage].contains("LAST_BREAK"));
+                assert(pages[expected-1].contains("SF3") && text.count("SF3")==1);
+            }
+            assert(separated.close());
+        }
         for(int id=1;id<=2;++id) {
             query.prepare("UPDATE records SET name=? WHERE id=?");
             query.addBindValue((id==1 ? alphaLines : omegaLines).join('\n')); query.addBindValue(id); assert(query.exec()); query.finish();
@@ -322,10 +342,14 @@ If Not TypeOf retainedSection Is Section Then Err.Raise 5
 If retainedSection.Height<>900 Then Err.Raise 5
 If retainedSection.Name<>"DetailFixture" Then Err.Raise 5
 retainedSection.ForceNewPage=3
+Me.Section(acHeader).ForceNewPage=2
+Me.Section(acFooter).ForceNewPage=1
 retainedSection.BackColor=255
 End Sub
 Sub ResetSections()
 retainedSection.ForceNewPage=0
+Me.Section(acHeader).ForceNewPage=0
+Me.Section(acFooter).ForceNewPage=0
 retainedSection.BackColor=65280
 End Sub
 )VBA";

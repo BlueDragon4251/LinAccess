@@ -361,6 +361,7 @@ counter=counter+1
 Me.Tag=CStr(counter)
 Me![Display value].Tag="bound"
 If Not Me![Display value].CanGrow Then Err.Raise 5
+If Me.Section(acHeader).ForceNewPage<>2 Then Err.Raise 5
 End Sub
 Sub Increment()
 counter=counter+1
@@ -379,6 +380,7 @@ End Sub
         dialog->findChild<QPlainTextEdit*>("native-report-vba")->setPlainText(module);
         dialog->findChild<QCheckBox*>("native-report-cangrow")->setChecked(true);
         dialog->findChild<QComboBox*>("native-report-page-break")->setCurrentIndex(3);
+        dialog->findChild<QComboBox*>("native-report-header-break")->setCurrentIndex(2);
         dialog->findChild<QPushButton*>("native-report-save")->click();
     });
     create->trigger(); QApplication::processEvents();
@@ -386,7 +388,7 @@ End Sub
     const auto saved=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
     assert(saved.value("sql").toString()==source && saved.value("vba").toString()==module);
     assert(saved.value("can_grow").toBool());
-    assert(saved.value("detail_force_new_page").toInt()==3);
+    assert(saved.value("detail_force_new_page").toInt()==3 && saved.value("header_force_new_page").toInt()==2);
     assert(sql.exec("SELECT COUNT(*) FROM native_report_events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
     auto* explorer=window.findChild<QTreeWidget*>("database-explorer"); assert(explorer);
     QTreeWidgetItem* selected=nullptr;
@@ -437,6 +439,7 @@ End Sub
         assert(dialog->findChild<QPlainTextEdit*>("native-report-sql")->toPlainText()==source);
         assert(dialog->findChild<QPlainTextEdit*>("native-report-vba")->toPlainText()==module);
         assert(dialog->findChild<QComboBox*>("native-report-page-break")->currentIndex()==3);
+        assert(dialog->findChild<QComboBox*>("native-report-header-break")->currentIndex()==2);
         bool previewed=false;
         QTimer::singleShot(0,dialog,[&] {
             auto* preview=dynamic_cast<AccessFormPreview*>(QApplication::activeModalWidget());
