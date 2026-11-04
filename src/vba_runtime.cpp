@@ -2022,9 +2022,18 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 break;
             case Statement::Type::SetVar:
                 if (active) {
-                    const auto value=evaluate(instruction.expression);
                     const auto name=lower(instruction.argument);
-                    if (locals.contains(name) || !host.assignIdentifier(instruction.argument,value)) assignVariable(name,value);
+                    if(objectType(variableType(name))) {
+                        const auto binding=locals.find(name);
+                        if(binding==locals.end() || binding->second.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Object binding required");
+                        const auto target=binding->second.object;
+                        if(!target) throw VbaRuntimeError(91,"Object variable is not set");
+                        if(!target->hasScalarDefault()) throw VbaRuntimeError(3251,"Object scalar default assignment is not implemented for this class");
+                        target->assignDefaultMember({},scalarVbaValue(evaluate(instruction.expression)));
+                    } else {
+                        const auto value=evaluate(instruction.expression);
+                        if (locals.contains(name) || !host.assignIdentifier(instruction.argument,value)) assignVariable(name,value);
+                    }
                 }
                 break;
             case Statement::Type::ForEach: {

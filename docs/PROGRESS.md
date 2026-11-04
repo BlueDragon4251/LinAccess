@@ -4393,3 +4393,16 @@ SCRIPTING_DICTIONARY_RUNTIME.md specifies the bounded native path. Full desktop
 48/48 (77.95 s), freshly rebuilt GUI-free 1/1 (1.26 s), targeted core 1/1
 (1.20 s), Debian payload/permissions/Build-ID/pinned SQLite and all four original
 hashes pass. Scoped checklist 375 checked / 72 open, not complete Access parity.
+
+
+## Native scalar object default-member value assignments (2026-11-04)
+
+Declared object value/Let assignments invoke actual Field/Parameter/Control
+Value setters and preserve their reference binding; Set continues reference
+replacement. Real DAO edit/SQL and bound form/save paths execute in existing
+cases, including explicit Let syntax (already parsed previously).
+OBJECT_DEFAULT_ASSIGNMENT_RUNTIME.md records Nothing/no-default and remaining
+Variant/coercion/oracle boundaries. Full desktop 48/48 (79.37 s), freshly rebuilt
+GUI-free core 1/1 (1.49 s), targeted core/DAO/forms 3/3 (10.76 s), Debian payload/
+permissions/Build-ID/pinned SQLite and four original fixture hashes pass. No new
+CTest target. Scoped checklist 376 checked / 72 open, not complete Access parity.

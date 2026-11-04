@@ -116,6 +116,10 @@ public:
     PreviewControlObject(AccessFormPreview& preview,QString name) : PreviewObjectBase(preview),name_(std::move(name)) {}
     bool hasScalarDefault() const override { return true; }
     linaccess::VbaValue scalarValue() override { return member("Value",{}); }
+    void assignDefaultMember(const std::vector<linaccess::VbaValue>& args,const linaccess::VbaValue& value) override {
+        if(!args.empty()) throw linaccess::VbaRuntimeError(450,"Control default assignment takes no indices");
+        assign("Value",value);
+    }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked();
         auto* widget = control();

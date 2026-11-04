@@ -1073,3 +1073,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native datasheet Esc/context action discards only current-record pending changes, preserves other drafts, cancels pending inserts and leaves saved SQL intact; first editor Esc retains existing model drafts.
 
 - [x] Qualified native Scripting.Dictionary local/module/parameter/function-result bindings retain actual checked references and optional Nothing defaults without a COM/type-library dependency.
+
+- [x] Declared native object value/Let assignments route actual Field/Parameter/Control scalar defaults to checked Value setters while preserving references and real buffered SQL/form update behavior.
