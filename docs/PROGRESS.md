@@ -5684,3 +5684,21 @@ Fixed456/384/72; no added target/ID. Reference and scope: DAO_BINARY_FIELDS.md.
 Stored FieldSize Debian payload/Build-ID/pinned SQLite and four original fixture
 hashes pass. Last full suite remains owned dependencies48/48 (89.59 s); GUI-free
 runtime unchanged, last1/1 (1.79 s). This property addition used existing DAO1/1.
+
+## Native Access FileDialog pickers and explicit Office identities (2026-11-04)
+
+Application.FileDialog3/4 now uses actual modal Qt file/folder selection, native
+Long Show-1/0, configured title/initial path/button/filter/index/multi-file mode,
+Filters Clear/Add/Count/Item and read-only SelectedItems with one-based/default
+items and For Each. Access-unsupported Open/SaveAs remain refused. Per-document
+picker state persists; paths are actual selected values, not mock results. Weak
+context guards protect retained objects after closure. Four explicit Office class
+identities join the closed registry; typed slots and TypeOf use those identities.
+The actual VBA case selects a real temporary filtered text file, enumerates its
+path, cancels, selects a real directory and checks retained collection closure2450.
+Initial core/layout2/2 pass (13.28 s), fresh GUI-free core1/1 (1.50 s). After completing
+Filters read-only metadata, full current desktop48/48 passes (91.42 s), Debian
+payload/Build-ID/pinned SQLite and all four original fixture hashes pass.
+No added target/ID; fixed456/384/72. Full Office/COM/Windows Access2003 singleton,
+default/case/error/CWD/namespace/lifetime parity remains open. Scope/references:
+NATIVE_FILE_DIALOG.md. This full run also includes native binary Value/FieldSize.

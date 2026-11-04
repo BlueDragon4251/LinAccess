@@ -8,6 +8,7 @@
 #include <QMainWindow>
 #include "vba_qt_value.hpp"
 #include "native_domain_lookup.hpp"
+#include "native_access_file_dialog.hpp"
 #include <QApplication>
 #include <QAbstractButton>
 #include <QPushButton>
@@ -1655,6 +1656,7 @@ public:
     explicit PreviewApplicationObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     bool isNativeType(std::string_view type) const override { return type=="access.application"; }
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if (text(name).compare("FileDialog",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"DialogType"},1};
         if (text(name).compare("Quit",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Option"},0};
         if (text(name).compare("RunCommand",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Command"},1};
         if (QStringList{"dlookup","dmin","dmax","davg","dsum","dcount","dfirst","dlast","dvar","dstdev"}.contains(text(name).toCaseFolded())) return linaccess::VbaArgumentSignature{{"Expr","Domain","Criteria"},2};
@@ -1662,6 +1664,15 @@ public:
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if(key=="filedialog") {
+            if(args.size()!=1) throw linaccess::VbaRuntimeError(450,"FileDialog requires one type");
+            const QPointer<AccessFormPreview> owner=&preview;
+            auto guard=[owner] {
+                if(!owner) throw linaccess::VbaRuntimeError(2450,"File dialog context is closed");
+                (void)makePreviewFormObject(*owner)->member("Name",{});
+            };
+            return linaccess::VbaValue::reference(linaccess::native_picker::create(&preview,linaccess::native_picker::integer(args[0]),guard));
+        }
         if (key=="quit") return PreviewDoCmdObject(preview).member("Quit",args);
         if (key=="runcommand") return dispatchPreviewDocumentCommand(preview,"runcommand",args);
         if (key=="dlookup" || key=="dmin" || key=="dmax" || key=="davg" || key=="dsum" || key=="dcount" || key=="dfirst" || key=="dlast" || key=="dvar" || key=="dstdev") return linaccess::nativeDomainValue(preview.db_,args,key.toStdString());

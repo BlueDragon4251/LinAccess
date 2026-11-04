@@ -10,12 +10,96 @@
 #include <QMenu>
 #include <QPushButton>
 #include <QSqlQuery>
+#include <QApplication>
+#include <QFileDialog>
+#include <QFile>
+#include <QTemporaryDir>
+#include <QTimer>
+#include <QFileInfo>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
 #include <cassert>
 
+namespace {
+void testNativeFilePicker() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","native-file-picker"); db.setDatabaseName(":memory:"); assert(db.open());
+    QTemporaryDir directory; assert(directory.isValid()); const auto path=directory.filePath("picker.txt");
+    QFile file(path); assert(file.open(QIODevice::WriteOnly)); assert(file.write("synthetic picker fixture")==24); file.close();
+    const QByteArray source="Begin Form\nBegin Section\nHeight =600\nEnd\nEnd\n";
+    const QByteArray module=R"VBA(Sub PickFile()
+Dim picker As Office.FileDialog, filters As Office.FileDialogFilters, entry As Office.FileDialogFilter
+Dim selected As Office.FileDialogSelectedItems, item As Variant, count As Long
+Set picker=Application.FileDialog(DialogType:=msoFileDialogFilePicker)
+If Not TypeOf picker Is Office.FileDialog Then Err.Raise 5
+picker.Title="Native file selection"
+picker.AllowMultiSelect=False
+picker.InitialFileName=Me.Tag
+Set filters=picker.Filters
+filters.Clear
+filters.Add Description:="Text files",Extensions:="*.txt"
+If filters.Count<>1 Then Err.Raise 5
+Set entry=filters.Item(1)
+If entry.Description<>"Text files" Or entry.Extensions<>"*.txt" Then Err.Raise 5
+If picker.Show<>-1 Then Err.Raise 5
+Set selected=picker.SelectedItems
+If selected.Count<>1 Then Err.Raise 5
+For Each item In selected
+count=count+1
+Me.Tag=item
+Next
+If count<>1 Or picker.SelectedItems(1)<>Me.Tag Then Err.Raise 5
+End Sub
+Sub CancelFile()
+Dim picker As FileDialog
+Set picker=Application.FileDialog(msoFileDialogFilePicker)
+If picker.Title<>"Native file selection" Then Err.Raise 5
+If picker.Show<>0 Then Err.Raise 5
+If picker.SelectedItems.Count<>0 Then Err.Raise 5
+End Sub
+Sub PickFolder()
+Dim picker As Office.FileDialog
+Set picker=Application.FileDialog(msoFileDialogFolderPicker)
+picker.InitialFileName=Me.Tag
+If picker.DialogType<>4 Then Err.Raise 5
+If picker.Show<>-1 Then Err.Raise 5
+Me.Tag=picker.SelectedItems(1)
+End Sub
+)VBA";
+    AccessFormPreview preview("native picker",source,module,db); preview.show(); QApplication::processEvents();
+    auto object=makePreviewFormObject(preview); object->assign("Tag",linaccess::VbaValue::string(path.toStdString()));
+    QTimer::singleShot(0,&preview,[path] {
+        auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="access-file-dialog");
+        assert(dialog->windowTitle()=="Native file selection" && dialog->fileMode()==QFileDialog::ExistingFile);
+        assert(dialog->nameFilters().size()==1 && dialog->nameFilters().front().contains("*.txt"));
+        dialog->selectFile(path); assert(QMetaObject::invokeMethod(dialog,"accept",Qt::DirectConnection));
+    });
+    std::vector<linaccess::VbaValue> args;
+    const auto picked=preview.executeProcedure("PickFile",args);
+    assert(picked.status==linaccess::VbaExecutionStatus::Completed);
+    assert(object->member("Tag",{}).asText()==path.toStdString());
+    QTimer::singleShot(0,&preview,[] {
+        auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog); dialog->reject();
+    });
+    assert(preview.executeProcedure("CancelFile",args).status==linaccess::VbaExecutionStatus::Completed);
+    object->assign("Tag",linaccess::VbaValue::string(directory.path().toStdString()));
+    QTimer::singleShot(0,&preview,[folder=directory.path()] {
+        auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->fileMode()==QFileDialog::Directory);
+        dialog->setDirectory(QFileInfo(folder).absolutePath()); dialog->selectFile(folder);
+        assert(QMetaObject::invokeMethod(dialog,"accept",Qt::DirectConnection));
+    });
+    assert(preview.executeProcedure("PickFolder",args).status==linaccess::VbaExecutionStatus::Completed);
+    assert(QFileInfo(QString::fromStdString(object->member("Tag",{}).asText())).isDir());
+    auto picker=makePreviewApplicationObject(preview)->member("FileDialog",{linaccess::VbaValue::longInteger(3)}).object;
+    auto selected=picker->member("SelectedItems",{}).object;
+    assert(preview.close()); int error=0;
+    try { selected->member("Count",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+    assert(error==2450);
+}
+}
+
 void testFormObjects() {
+    testNativeFilePicker();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-object-test");
     db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);

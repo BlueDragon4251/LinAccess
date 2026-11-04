@@ -1031,6 +1031,9 @@ private:
             {"dbsingle",6},{"dbdouble",7},{"dbdate",8},{"dbbinary",9},{"dbtext",10},
             {"dblongbinary",11},{"dbmemo",12},{"dbguid",15}};
         if (const auto type=daoTypes.find(word);type!=daoTypes.end()) return VbaValue::longInteger(type->second);
+        static const std::unordered_map<std::string,int> fileDialogTypes{
+            {"msofiledialogopen",1},{"msofiledialogsaveas",2},{"msofiledialogfilepicker",3},{"msofiledialogfolderpicker",4}};
+        if(const auto type=fileDialogTypes.find(word);type!=fileDialogTypes.end()) return VbaValue::longInteger(type->second);
         if (word == "dbopendynaset") return VbaValue::numeric(2);
         if (word == "dbopensnapshot") return VbaValue::numeric(4);
         if (word == "acquitprompt") return VbaValue::integer(0);

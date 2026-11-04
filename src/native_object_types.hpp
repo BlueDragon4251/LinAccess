@@ -14,7 +14,9 @@ inline std::string_view nativeAccessObjectType(std::string_view type) {
         {"checkbox","access.checkbox"},{"optionbutton","access.optionbutton"},{"togglebutton","access.togglebutton"},
         {"commandbutton","access.commandbutton"},{"label","access.label"},{"rectangle","access.rectangle"},
         {"line","access.line"},{"subform","access.subform"},{"optiongroup","access.optiongroup"},
-        {"tabcontrol","access.tabcontrol"},{"page","access.page"}};
+        {"tabcontrol","access.tabcontrol"},{"page","access.page"},
+        {"filedialog","office.filedialog"},{"filedialogfilters","office.filedialogfilters"},
+        {"filedialogfilter","office.filedialogfilter"},{"filedialogselecteditems","office.filedialogselecteditems"}};
     for(const auto& [shortName,qualified]:types) if(type==shortName || type==qualified) return qualified;
     return {};
 }
