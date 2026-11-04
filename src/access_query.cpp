@@ -1642,7 +1642,7 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
     return {std::move(query),plan.hiddenRank && !topOne,types,columnTypes};
 }
 }
-QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan) {
+QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan,QVector<QString>* columnTypes) {
     SqliteExecutionBudget budget(db);
     const auto databaseHandle=db.driver()->handle();
     if (!databaseHandle.isValid() || QByteArray(databaseHandle.typeName())!="sqlite3*")
@@ -1662,6 +1662,11 @@ QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan) {
     QStringList columns;
     const int count=sqlite3_column_count(statement)-(prepared.hiddenRank ? 1 : 0);
     for (int i=0;i<count;++i) columns.append(QString::fromUtf8(sqlite3_column_name(statement,i)));
+    if(columnTypes) {
+        *columnTypes=prepared.columnTypes; columnTypes->resize(count);
+        for(int i=0;i<count && i<prepared.types.size();++i)
+            if(!prepared.types[i].isEmpty()) (*columnTypes)[i]=prepared.types[i];
+    }
     return columns;
 }
 AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan& plan,

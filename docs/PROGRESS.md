@@ -5507,3 +5507,22 @@ Fixed 456/384/72; broad F085 remains open. See REPORT_AGGREGATES.md for limits.
 Typed-extrema Debian payload/Build-ID/pinned SQLite and four original fixture
 hashes also pass. The last full suite remains DLookup48/48 (84.24 s); this bounded
 report-accumulator change used the existing targeted layout regression.
+
+## Native field DMin/DMax/DAvg (2026-11-04)
+
+Global/Application calls now share typed field/domain/criteria binding with
+DLookup. Schema-only preparation exposes proven per-position types before user
+rows are fetched. DMin/DMax preserve homogeneous Number/Date/Currency; DAvg is
+Number-only. NULL observations are omitted; empty/all-NULL selections yield NULL.
+The actual query executor enforces its existing row/budget limits without partial
+results. Computed Expr, text ordering, Date/Currency averages and full Access
+binding/error/result precision equivalence remain open. No original MDB writes.
+
+Desktop build and existing query/model/SQL-value/layout3/3 pass (10.19 s); actual
+VBA checks global/Application/named calls, predicates, NULL and Date/Currency
+identity/value. Fresh GUI-free core1/1 passes (2.67 s). Full suite/package follow
+for the shared parser/schema API change. Fixed 456/384/72; no new target or ID.
+See NATIVE_DLOOKUP.md for exact scope and public references.
+Domain aggregate milestone: full desktop48/48 passes (84.14 s), fresh GUI-free
+core1/1 (2.67 s), Debian payload/Build-ID/pinned SQLite and all four original
+fixture SHA-256 checks pass. No additional target or catalog item.
