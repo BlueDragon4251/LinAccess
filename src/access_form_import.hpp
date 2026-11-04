@@ -66,6 +66,8 @@ struct AccessVisualControl {
     QString onKeyDown;
     QString onKeyPress;
     QString onKeyUp;
+    QString onMouseDown;
+    QString onMouseUp;
     QString className;
     QString oleClass;
     int left{};

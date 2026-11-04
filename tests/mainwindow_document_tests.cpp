@@ -150,8 +150,24 @@ void exerciseStoredForm(MainWindow& window,QSqlDatabase db) {
     assert(sql.exec("CREATE TABLE native_designed_records(id INTEGER PRIMARY KEY,first TEXT,\"second value\" TEXT)"));
     assert(sql.exec("INSERT INTO native_designed_records VALUES(1,'before','initial')"));
     const QString module=R"VBA(Private state As Long
+Private mouseTrace As String
 Private Sub Form_Load()
 state=1
+End Sub
+Private Sub first_MouseDown(Button As Integer, Shift As Integer, X As Single, Y As Single)
+If Button=1 Then mouseTrace=CStr(Button) & ":" & CStr(Shift) & ":" & CStr(X) & ":" & CStr(Y)
+End Sub
+Private Sub first_MouseUp(Button As Integer, Shift As Integer, X As Single, Y As Single)
+If Button=1 Then mouseTrace=mouseTrace & "|up"
+End Sub
+Private Sub first_Click()
+Me.Tag=mouseTrace & "|click"
+Me!first.SelStart=0
+Me!first.SelLength=0
+End Sub
+Private Sub first_DblClick(Cancel As Integer)
+Me.Tag="text-double"
+Cancel=True
 End Sub
 Private Sub btnAktion_Click()
 state=state+1
@@ -208,6 +224,15 @@ End Sub
     assert(first && second && second->y()<first->y() && second->x()>first->x() && second->width()<first->width() && first->text()=="before");
     bool caption=false; for(auto* label:form->findChildren<QLabel*>()) if(label->text()=="Second \"caption\"") caption=true;
     assert(caption && AccessFormPreview::projectObjectLoaded(db,linaccess::AccessDocumentKind::Form,"Owned Native Form"));
+    auto formObject=makePreviewFormObject(*form);
+    QApplication::setActiveWindow(form); first->setFocus();
+    QTest::mouseClick(first,Qt::LeftButton,Qt::ShiftModifier|Qt::ControlModifier,QPoint(3,4));
+    assert(formObject->member("Tag",{}).asText()=="1:3:45:60|up|click" && !formObject->member("Dirty",{}).boolean && first->cursorPosition()==0);
+    formObject->assign("Tag",linaccess::VbaValue::string("right-click"));
+    QTest::mouseClick(first,Qt::RightButton);
+    assert(formObject->member("Tag",{}).asText()=="right-click");
+    QTest::mouseDClick(first,Qt::LeftButton);
+    assert(formObject->member("Tag",{}).asText()=="text-double");
     first->setFocus(); first->selectAll(); QTest::keyClicks(first,"native save");
     auto* save=form->findChild<QPushButton*>("access-control-btnSpeichern"); auto* action=form->findChild<QPushButton*>("access-control-btnAktion"); assert(save && action);
     QTest::mouseClick(save,Qt::LeftButton); QApplication::processEvents();

@@ -32,6 +32,7 @@
 #include <QDateTime>
 #include <QCloseEvent>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QTimer>
 #include <QEventLoop>
 #include <QScopedValueRollback>
@@ -135,6 +136,33 @@ void clearDefaultError(QWidget* widget) {
         widget->setToolTip(widget->property("la_default_tooltip").toString()); widget->setProperty("la_default_tooltip",QVariant{});
     }
 }
+class AccessTextBox final : public QLineEdit {
+public:
+    using QLineEdit::QLineEdit;
+    std::function<void()> clicked;
+    std::function<bool(QMouseEvent*,bool)> mouse;
+protected:
+    void mousePressEvent(QMouseEvent* event) override {
+        pressed_=event->button()==Qt::LeftButton;
+        const QPointer<QLineEdit> alive(this); const auto callback=mouse;
+        QLineEdit::mousePressEvent(event);
+        if(alive && callback && !callback(event,true) && alive) pressed_=false;
+    }
+    void mouseDoubleClickEvent(QMouseEvent* event) override {
+        pressed_=false;
+        QLineEdit::mouseDoubleClickEvent(event);
+    }
+    void mouseReleaseEvent(QMouseEvent* event) override {
+        const bool fire=pressed_ && event->button()==Qt::LeftButton && rect().contains(event->position().toPoint());
+        pressed_=false;
+        const auto callback=clicked; const auto released=mouse; const QPointer<QLineEdit> alive(this);
+        QLineEdit::mouseReleaseEvent(event);
+        if(alive && released && !released(event,false)) return;
+        if(alive && fire && callback) callback();
+    }
+private:
+    bool pressed_{};
+};
 class AccessComboBox final : public QComboBox {
 public:
     using QComboBox::QComboBox;
@@ -1405,11 +1433,42 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
                 (void)runControlBinding(name,"Click",binding);
             });
         } else if (control.type == "TextBox") {
-            auto* edit = new QLineEdit(canvas);
+            auto* edit = new AccessTextBox(canvas);
             // QLineEdit defaults to 32767 UTF-16 units. A bound Memo may be
             // longer, and saving any field writes the bound control values.
             edit->setMaxLength(std::numeric_limits<int>::max());
             edit->setReadOnly(control.controlSource.startsWith('='));
+            if(!control.onMouseDown.isEmpty() || !control.onMouseUp.isEmpty())
+                edit->mouse=[this,name=control.name,down=control.onMouseDown,up=control.onMouseUp](QMouseEvent* event,bool pressed) {
+                    if(!opened_ || closed_ || openCancelled_ || loading_ || layout_.kind!=linaccess::AccessDocumentKind::Form) return false;
+                    const auto binding=pressed ? down : up;
+                    if(binding.isEmpty()) return true;
+                    ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+                    const QString suffix=pressed ? "MouseDown" : "MouseUp";
+                    linaccess::VbaExecutionResult result;
+                    if(eventProcedure(binding)) {
+                        const auto button=event->button()==Qt::LeftButton ? 1 : event->button()==Qt::RightButton ? 2 : event->button()==Qt::MiddleButton ? 4 : 0;
+                        const int shift=(event->modifiers().testFlag(Qt::ShiftModifier) ? 1 : 0)
+                            | (event->modifiers().testFlag(Qt::ControlModifier) ? 2 : 0) | (event->modifiers().testFlag(Qt::AltModifier) ? 4 : 0);
+                        if(!button) {
+                            result.status=linaccess::VbaExecutionStatus::Unsupported; result.errorNumber=3251;
+                            result.explanation="Mouse button mapping is unsupported";
+                        } else {
+                            std::vector<linaccess::VbaValue> arguments{linaccess::VbaValue::integer(button),linaccess::VbaValue::integer(shift),
+                                linaccess::VbaValue::single(static_cast<float>(event->position().x()*15.0)),
+                                linaccess::VbaValue::single(static_cast<float>(event->position().y()*15.0))};
+                            result=executeProcedure(controlEventPrefix(name)+"_"+suffix,arguments);
+                        }
+                        eventResults_.insert(("control:"+name+":"+suffix).toCaseFolded(),result);
+                        if(failed(result) && status_) status_->setText("Mausereignisfehler "+QString::number(result.errorNumber)+" (Zeile "+QString::number(result.line)+")");
+                    } else result=runControlBinding(name,suffix,binding);
+                    return !failed(result) && !closed_ && !openCancelled_;
+                };
+            if(!control.onClick.isEmpty()) edit->clicked=[this,name=control.name,binding=control.onClick] {
+                if(closed_ || openCancelled_ || loading_ || layout_.kind!=linaccess::AccessDocumentKind::Form) return;
+                ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+                (void)runControlBinding(name,"Click",binding);
+            };
             widget = edit;
         } else if(control.type=="ListBox") {
             widget=new AccessListBox(canvas,control.multiSelect);

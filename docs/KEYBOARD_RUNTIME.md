@@ -272,3 +272,37 @@ Ctrl+Insert shares the table grid's checked Ctrl+C TSV copy route, including
 readonly selection. Shift+Insert shares checked Ctrl+V rectangular paste, with
 typed preflight and no SQL submission. Actual QLineEdit cells keep Qt's native
 text shortcuts; no row/range Cut or full Access key equivalence is implied.
+
+
+## Native TextBox mouse events (2026-11-04)
+
+Under existing F058/F148, imported and owned native form TextBoxes now execute
+bound Click handlers after native editor mouse release, preserving handler-driven
+cursor/selection changes without committing edits merely because of a click.
+A normal left click dispatches once; right clicks do not dispatch Click. The
+existing cancelable DblClick binding remains before native word selection, and
+its second release does not generate an additional TextBox Click.
+
+SaveAsText OnMouseDown/OnMouseUp metadata is retained. Actual TextBox mouse
+handlers receive Integer Button (left=1/right=2/middle=4), Integer Shift
+(Shift=1/Ctrl=2/Alt=4) and Single X/Y in the renderer's 96-dpi Twip coordinate
+space. Unmapped extra buttons return unsupported 3251. Bound event functions
+continue through the existing expression runtime. Failed procedures stop the
+remaining click dispatch and retain native event diagnostics. Closed documents
+are guarded through native execution/disposal scope.
+
+The existing GUI case verifies MouseDown/MouseUp/Click order, actual typed
+coordinates/modifiers, a VBA-driven cursor reset, unchanged record dirty state,
+right-click exclusion and cancelable double click. Targeted GUI/layout 2/2
+(11.43 s) passed before the final extra-button guard. Full validation follows.
+No new CTest targets or fixed-catalog IDs. MouseMove, other control/form mouse
+events, complete focus sequencing, custom scale modes and Windows Access event/
+rendering oracles remain open; this is not complete mouse compatibility.
+
+Public references: [TextBox.DblClick](https://learn.microsoft.com/en-us/office/vba/api/access.textbox.dblclick),
+[TextBox.MouseDown](https://learn.microsoft.com/en-us/office/vba/api/access.textbox.mousedown)
+and [event ordering](https://support.microsoft.com/en-us/office/order-of-events-for-database-objects-e76fbbfe-6180-4a52-8787-ce86553682f9).
+
+Completion: desktop 48/48 (79.27 s), freshly rebuilt GUI-free core 1/1
+(1.56 s), Debian package payload/permissions/Build-ID/pinned SQLite and all four
+original fixture hashes pass. Fixed 456 entries and 48 CTest targets unchanged.
