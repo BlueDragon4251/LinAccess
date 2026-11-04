@@ -255,7 +255,12 @@ End Sub
         fields->setCurrentItem(moved);
         dialog->findChild<QSpinBox*>("native-form-field-left")->setValue(2400);
         dialog->findChild<QSpinBox*>("native-form-field-width")->setValue(2400);
-        dialog->findChild<QPlainTextEdit*>("native-form-vba")->setPlainText(module);
+        auto* code=dialog->findChild<QPlainTextEdit*>("native-form-vba"); code->setPlainText(module);
+        QApplication::setActiveWindow(dialog); code->setFocus(); QApplication::processEvents();
+        QTest::keyClick(code,Qt::Key_S,Qt::ControlModifier);
+        assert(dialog->isVisible() && QApplication::activeModalWidget()==dialog);
+        assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='form' AND name='Owned Native Form'") && sql.next());
+        assert(QJsonDocument::fromJson(sql.value(0).toByteArray()).object().value("vba").toString()==module); sql.finish();
         dialog->findChild<QPushButton*>("native-form-save")->click();
     });
     create->trigger(); QApplication::processEvents();
@@ -389,6 +394,31 @@ End Sub
         dialog->reject();
     });
     explorer->setCurrentItem(selected); edit->trigger(); dispose();
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-query-designer");
+        dialog->findChild<QLineEdit*>("native-query-name")->setText("Shortcut Saved Query");
+        auto* code=dialog->findChild<QPlainTextEdit*>("native-query-sql"); code->setPlainText("SELECT 42 AS value");
+        QApplication::setActiveWindow(dialog); code->setFocus(); QApplication::processEvents();
+        QTest::keyClick(code,Qt::Key_S,Qt::ControlModifier);
+        assert(dialog->isVisible() && QApplication::activeModalWidget()==dialog);
+        assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='query' AND name='Shortcut Saved Query'") && sql.next());
+        auto definition=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
+        assert(definition.value("sql").toString()=="SELECT 42 AS value"); definition.insert("archive","preserve");
+        sql.prepare("UPDATE main._la_objects SET definition=? WHERE kind='query' AND name='Shortcut Saved Query'");
+        sql.addBindValue(QString::fromUtf8(QJsonDocument(definition).toJson(QJsonDocument::Compact))); assert(sql.exec()); sql.finish();
+        code->setPlainText("SELECT 43 AS value"); QTest::keyClick(code,Qt::Key_S,Qt::ControlModifier);
+        assert(dialog->isVisible() && QApplication::activeModalWidget()==dialog);
+        assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='query' AND name='Shortcut Saved Query'") && sql.next());
+        definition=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
+        assert(definition.value("sql").toString()=="SELECT 43 AS value" && definition.value("archive").toString()=="preserve");
+        dialog->findChild<QPushButton*>("native-query-run")->click();
+        auto* results=dialog->findChild<QTableView*>(); assert(results && results->model()->rowCount()==1 && results->model()->index(0,0).data().toInt()==43);
+        dialog->reject();
+    });
+    QAction* createQuery=nullptr;
+    for(auto* candidate:toolbar->actions()) if(candidate->text()=="+ Abfrage") createQuery=candidate;
+    assert(createQuery); createQuery->trigger(); dispose();
+    assert(sql.exec("DELETE FROM main._la_objects WHERE kind='query' AND name='Shortcut Saved Query'")); sql.finish();
 }
 
 void exerciseStoredReport(MainWindow& window,QSqlDatabase db) {
@@ -430,6 +460,12 @@ End Sub
         dialog->findChild<QCheckBox*>("native-report-cangrow")->setChecked(true);
         dialog->findChild<QComboBox*>("native-report-page-break")->setCurrentIndex(3);
         dialog->findChild<QComboBox*>("native-report-header-break")->setCurrentIndex(2);
+        auto* code=dialog->findChild<QPlainTextEdit*>("native-report-vba");
+        QApplication::setActiveWindow(dialog); code->setFocus(); QApplication::processEvents();
+        QTest::keyClick(code,Qt::Key_S,Qt::ControlModifier);
+        assert(dialog->isVisible() && QApplication::activeModalWidget()==dialog);
+        assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='report' AND name='Owned Native Report'") && sql.next());
+        assert(QJsonDocument::fromJson(sql.value(0).toByteArray()).object().value("sql").toString()==source); sql.finish();
         dialog->findChild<QPushButton*>("native-report-save")->click();
     });
     create->trigger(); QApplication::processEvents();

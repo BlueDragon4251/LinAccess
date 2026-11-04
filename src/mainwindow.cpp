@@ -167,6 +167,23 @@ QPushButton* addButton(QBoxLayout* layout, const QString& name) {
     layout->addWidget(button);
     return button;
 }
+void installDesignerSaveShortcut(QDialog& dialog,QPushButton* save) {
+    auto* status=new QLabel(&dialog); status->setObjectName("native-designer-save-status");
+    dialog.layout()->addWidget(status);
+    auto* shortcut=new QShortcut(QKeySequence::Save,&dialog); shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    const QPointer<QDialog> guarded=&dialog; const QPointer<QPushButton> button=save;
+    QObject::connect(shortcut,&QShortcut::activated,&dialog,[guarded,button] {
+        if(!guarded || !button) return;
+        const auto previous=guarded->property("la_editor_keep_open"); guarded->setProperty("la_editor_keep_open",true);
+        const auto reset=qScopeGuard([guarded,previous] { if(guarded) guarded->setProperty("la_editor_keep_open",previous); });
+        button->click();
+    });
+}
+void completeDesignerSave(QDialog& dialog,const QString& name) {
+    dialog.setProperty("la_editor_saved_name",name);
+    if(auto* status=dialog.findChild<QLabel*>("native-designer-save-status")) status->setText("Gespeichert: "+name);
+    if(!dialog.property("la_editor_keep_open").toBool()) dialog.accept();
+}
 QString asText(const QVariant& value) {
     return value.isNull() ? QString{} : value.toString();
 }
@@ -230,6 +247,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     action("Aktualisieren", [this] { refreshExplorer(); });
     auto* fileMenu=menuBar()->addMenu("&Datei");
     const auto projectActions=toolbar->actions();
+    projectActions[0]->setObjectName("project-new"); projectActions[0]->setShortcut(QKeySequence::New);
+    projectActions[1]->setObjectName("project-open"); projectActions[1]->setShortcut(QKeySequence::Open);
+    for(int index=0;index<2;++index) projectActions[index]->setShortcutContext(Qt::WindowShortcut);
     for (int i=0;i<4;++i) fileMenu->addAction(projectActions[i]);
     fileMenu->addSeparator();
     fileMenu->addAction("Beenden",this,[this] { close(); });
@@ -255,23 +275,25 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         findTable->setEnabled(textColumn && !QApplication::activeModalWidget());
         findNext->setEnabled(view && view->hasFindText() && !QApplication::activeModalWidget());
     });
-    auto* objectMenu=menuBar()->addMenu("&Objekte");
+    auto* objectMenu=menuBar()->addMenu("&Einfügen");
+    auto* viewMenu=menuBar()->addMenu("&Ansicht");
+    menuBar()->removeAction(viewMenu->menuAction()); menuBar()->insertMenu(objectMenu->menuAction(),viewMenu);
     for (int i=5;i<9;++i) objectMenu->addAction(projectActions[i]);
-    auto* editStoredForm=objectMenu->addAction("Formular&entwurf bearbeiten..."); editStoredForm->setObjectName("native-form-edit");
+    auto* editStoredForm=viewMenu->addAction("Formular&entwurf bearbeiten..."); editStoredForm->setObjectName("native-form-edit");
     connect(editStoredForm,&QAction::triggered,this,[this] {
         const auto* item=explorer_->currentItem(); if(item && item->data(0,Qt::UserRole).toString()=="form") editForm(item->text(0));
     });
-    connect(objectMenu,&QMenu::aboutToShow,this,[this,editStoredForm] {
+    connect(viewMenu,&QMenu::aboutToShow,this,[this,editStoredForm] {
         const auto* item=explorer_->currentItem(); editStoredForm->setEnabled(db_.isOpen() && item && item->data(0,Qt::UserRole).toString()=="form" && !QApplication::activeModalWidget());
     });
-    auto* editStoredReport=objectMenu->addAction("Berichtsentwurf bearbeiten..."); editStoredReport->setObjectName("native-report-edit");
+    auto* editStoredReport=viewMenu->addAction("Berichtsentwurf bearbeiten..."); editStoredReport->setObjectName("native-report-edit");
     connect(editStoredReport,&QAction::triggered,this,[this] {
         const auto* item=explorer_->currentItem(); if(item && item->data(0,Qt::UserRole).toString()=="report") editReport(item->text(0));
     });
-    connect(objectMenu,&QMenu::aboutToShow,this,[this,editStoredReport] {
+    connect(viewMenu,&QMenu::aboutToShow,this,[this,editStoredReport] {
         const auto* item=explorer_->currentItem(); editStoredReport->setEnabled(db_.isOpen() && item && item->data(0,Qt::UserRole).toString()=="report" && !QApplication::activeModalWidget());
     });
-    auto* viewMenu=menuBar()->addMenu("&Ansicht");
+    viewMenu->addSeparator();
     viewMenu->addAction(projectActions.last());
     viewMenu->addSeparator();
     auto* classicStyle=viewMenu->addAction("&Klassische Oberfläche");
@@ -1706,23 +1728,25 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
 
 void MainWindow::editQuery(const QString& existingName) {
     if (!hasProject()) return;
-    QDialog dialog(this);
+    const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("query",existingName);
+    QDialog dialog(this); dialog.setObjectName("native-query-designer");
     dialog.setWindowTitle("SQL-Abfrage");
     tagProjectObject(&dialog,this,db_,"query",existingName);
     dialog.resize(920, 700);
     auto* outer = new QVBoxLayout(&dialog);
     auto* name = new QLineEdit(existingName, &dialog);
-    name->setPlaceholderText("Name der Abfrage");
+    name->setObjectName("native-query-name"); name->setPlaceholderText("Name der Abfrage");
     outer->addWidget(name);
     auto* sql = new QPlainTextEdit(&dialog);
-    sql->setPlaceholderText("SELECT * FROM kunden");
+    sql->setObjectName("native-query-sql"); sql->setPlaceholderText("SELECT * FROM kunden");
     sql->setMaximumHeight(190);
     if (!existingName.isEmpty()) sql->setPlainText(objectDefinition("query", existingName).value("sql").toString());
     outer->addWidget(sql);
     auto* buttons = new QHBoxLayout();
-    auto* run = addButton(buttons, "Ausführen");
+    auto* run = addButton(buttons, "Ausführen"); run->setObjectName("native-query-run");
     auto* save = addButton(buttons, "Speichern");
     outer->addLayout(buttons);
+    save->setObjectName("native-query-save"); installDesignerSaveShortcut(dialog,save);
     auto* model = new linaccess::AccessQueryModel(&dialog);
     auto* view = new QTableView(&dialog);
     view->setModel(model);
@@ -1751,11 +1775,17 @@ void MainWindow::editQuery(const QString& existingName) {
             }
         } catch(const std::exception& error) { feedback->clear(); messageError(&dialog,QString::fromUtf8(error.what())); }
     });
-    connect(save, &QPushButton::clicked, &dialog, [this, name, sql, &dialog] {
+    connect(save, &QPushButton::clicked, &dialog, [this, name, sql, &dialog,old,existingName] {
         try {
             (void)linaccess::compileAccessQuery(sql->toPlainText());
         } catch(const std::exception& error) { messageError(&dialog,QString::fromUtf8(error.what())); return; }
-        if (saveObject("query", name->text(), {{"sql", sql->toPlainText()}})) dialog.accept();
+        auto content=old; auto savedName=dialog.property("la_editor_saved_name").toString();
+        if(savedName.isEmpty()) savedName=existingName;
+        if(!savedName.isEmpty()) { const auto latest=objectDefinition("query",savedName); if(!latest.isEmpty()) content=latest; }
+        content.insert("sql",sql->toPlainText());
+        if(saveObject("query",name->text(),content)) {
+            tagProjectObject(&dialog,this,db_,"query",name->text()); completeDesignerSave(dialog,name->text());
+        }
     });
     dialog.exec();
 }
@@ -1865,6 +1895,7 @@ void MainWindow::editForm(const QString& existingName) {
     auto* analyze = addButton(row, "VBA analysieren");
     auto* save = addButton(row, "Formular speichern"); save->setObjectName("native-form-save");
     outer->addLayout(row);
+    installDesignerSaveShortcut(dialog,save);
     auto* findings = new QTextBrowser(&dialog);
     findings->setMaximumHeight(105);
     outer->addWidget(findings);
@@ -1929,13 +1960,17 @@ void MainWindow::editForm(const QString& existingName) {
             if(!position.isEmpty()) positions.insert(field,position);
         }
         if(chosen.isEmpty()) { messageError(&dialog,"Mindestens ein Feld auswählen."); return; }
-        auto content=old; content.insert("table",source->currentText()); content.insert("fields",chosen);
+        auto content=old; const auto savedName=dialog.property("la_editor_saved_name").toString();
+        if(!savedName.isEmpty()) { const auto latest=objectDefinition("form",savedName); if(!latest.isEmpty()) content=latest; }
+        content.insert("table",source->currentText()); content.insert("fields",chosen);
         content.insert("caption",caption->text()); content.insert("field_captions",captions); content.insert("vba",vba->toPlainText());
         content.insert("field_layout",positions);
         content.insert("original_vba_base64",QString::fromLatin1(importedBytes->toBase64())); content.insert("language","vba_subset_experimental");
         try { (void)linaccess::nativeStoredForm(name->text(),content,db_); }
         catch(const std::exception& error) { messageError(&dialog,QString::fromUtf8(error.what())); return; }
-        if(saveObject("form",name->text(),content)) dialog.accept();
+        if(saveObject("form",name->text(),content)) {
+            tagProjectObject(&dialog,this,db_,"form",name->text()); completeDesignerSave(dialog,name->text());
+        }
     });
     dialog.exec();
 }
@@ -1993,10 +2028,13 @@ void MainWindow::editReport(const QString& existingName) {
     sql->setFont(codeFont); vba->setFont(codeFont);
     auto* row=new QHBoxLayout; auto* preview=addButton(row,"Vorschau"); preview->setObjectName("native-report-preview");
     auto* pdf=addButton(row,"PDF exportieren"); auto* save=addButton(row,"Speichern"); save->setObjectName("native-report-save"); outer->addLayout(row);
-    const auto definition=[this,existingName,old,title,sql,vba,canGrow,pageBreak,headerBreak,footerExpression,footerBreak] {
+    installDesignerSaveShortcut(dialog,save);
+    const auto definition=[this,&dialog,existingName,old,title,sql,vba,canGrow,pageBreak,headerBreak,footerExpression,footerBreak] {
         auto content=old;
-        if(!existingName.isEmpty()) {
-            const auto latest=objectDefinition("report",existingName);
+        auto savedName=dialog.property("la_editor_saved_name").toString();
+        if(savedName.isEmpty()) savedName=existingName;
+        if(!savedName.isEmpty()) {
+            const auto latest=objectDefinition("report",savedName);
             if(!latest.isEmpty()) content=latest;
         }
         content.insert("title",title->text()); content.insert("sql",sql->toPlainText());
@@ -2034,7 +2072,9 @@ void MainWindow::editReport(const QString& existingName) {
             for (const auto& document:AccessFormPreview::projectDocuments(db_))
                 if (document && document->documentKind()==linaccess::AccessDocumentKind::Report && document->documentName().compare(name->text(),Qt::CaseInsensitive)==0)
                     if (!document->close()) return;
-            if (saveObject("report",name->text(),definition())) dialog.accept();
+            if(saveObject("report",name->text(),definition())) {
+                tagProjectObject(&dialog,this,db_,"report",name->text()); completeDesignerSave(dialog,name->text());
+            }
         } catch(const std::exception& error) { messageError(this,QString::fromUtf8(error.what())); }
     });
     dialog.exec();

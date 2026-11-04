@@ -5747,3 +5747,25 @@ Scope: DAO_QUERYDEFS_CATALOG.md and OWNED_QUERYDEF_SQL.md.
 DAO catalog milestone: full current desktop48/48 passes (83.20 s), fresh GUI-free
 runtime core1/1 (1.66 s), Debian payload/Build-ID/pinned SQLite and four original
 fixture hashes pass. No added target or fixed-catalog ID.
+
+## Native designer Ctrl+S and classic menu order (2026-11-04)
+
+Owned query/form/report Ctrl+S invokes the real save validator/persistence path
+without closing the editor, shows saved-name feedback and tracks the saved native
+context. Explicit save buttons keep save-and-close behavior. Subsequent query saves
+preserve other definition keys; report saves use the saved-name context to retain
+latest nested-preview page geometry. Runtime form/data saving is unchanged.
+Menus order Datei/Bearbeiten/Ansicht/Einfügen/Fenster, with real creation actions in
+Einfügen and selected-object form/report editing in Ansicht. Main-window New/Open
+have actual window-scoped standard shortcuts; existing preview/modal/project guards
+still execute. No placeholder commands or full Access2003 visual/keyboard claim.
+Existing UI checks activate real modal editors before Ctrl+S, read actual saved
+SQL/VBA definitions while the editors remain open and verify repeated query saves
+preserve an externally added metadata marker. Execute returns actual SQL value43.
+Final current mainwindow1/1 passes (2.63 s); existing layout target passed during
+this localized GUI change. Last full backend suite remains catalog48/48 (83.20 s),
+GUI-free runtime unchanged, last core1/1 (1.66 s). No new target/ID; fixed456/384/72.
+Scope: DESIGNER_SAVE_KEYS.md.
+Designer keyboard/menu milestone: Debian payload/Build-ID/pinned SQLite and four
+original fixture hashes pass. Final UI1/1 (2.63 s); last full catalog48/48 (83.20 s)
+and GUI-free core1/1 (1.66 s) remain the broader runtime baseline.
