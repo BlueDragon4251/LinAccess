@@ -8,13 +8,15 @@ empty-compound binding guard remains 3251 until its field references can be
 validated independently of a row. Missing/truncated sources and nested aggregates
 retain their explicit guards. Group scope is not fabricated.
 
-The new Avg/Min/Max subset accepts finite native Number values (Integer/Long/
-Single/Double), including supported numeric IIf/arithmetic expressions. Text,
-Date, Boolean, Currency and other value kinds remain explicitly unsupported for
-these new functions rather than guessing comparison/coercion/precision semantics.
-Avg uses an online long-double mean and returns Double; Min/Max retain the chosen
-native numeric value. Full Access result typing, exact Windows floating rounding,
-locale text ordering, Currency/Date aggregates and a Windows oracle remain open.
+Avg accepts finite native Number values (Integer/Long/Single/Double), including
+supported numeric IIf/arithmetic expressions, and uses an online long-double mean
+returning Double. Min/Max accept homogeneous Number, Date or Currency observations
+and retain the selected native value. Currency compares signed scaled integer
+units directly; Date compares finite serial values. NULL observations are skipped.
+Mixed kinds, text, Boolean and other types are explicitly refused. Actual SQL-row
+CCur/CDate expressions are checked through control Value identities and PDF output.
+Full Access result typing, exact Windows floating rounding, locale text ordering,
+Currency/Date Avg and a Windows oracle remain open.
 
 A shared scalar-only accumulator preserves existing Sum/Count behavior. Direct
 Count does not coerce non-NULL field values merely to count them; compound errors

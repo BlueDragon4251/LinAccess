@@ -5493,3 +5493,17 @@ Exact scope and reference: NATIVE_DLOOKUP.md.
 DLookup milestone: full desktop48/48 passes (84.24 s), fresh GUI-free core1/1
 (1.55 s), Debian executable/Build-ID/pinned SQLite checks and all four original
 fixture SHA-256 checks pass. No additional test target or catalog item.
+
+
+## Typed report Min/Max (2026-11-04)
+
+The native scalar accumulator now selects homogeneous Date and Currency extrema
+without losing the selected subtype. Currency comparison uses signed scaled
+integer units rather than Double. Mixed kinds, text and Boolean remain guarded.
+Actual SQL-row CCur/CDate expressions retain Currency units and Date identity
+through native control Value access and real PDF output. Desktop build and the
+existing layout target pass (1/1, 10.86 s); no additional target or catalog ID.
+Fixed 456/384/72; broad F085 remains open. See REPORT_AGGREGATES.md for limits.
+Typed-extrema Debian payload/Build-ID/pinned SQLite and four original fixture
+hashes also pass. The last full suite remains DLookup48/48 (84.24 s); this bounded
+report-accumulator change used the existing targeted layout regression.
