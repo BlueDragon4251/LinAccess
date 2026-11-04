@@ -5424,3 +5424,26 @@ Full current suite/package are checked for this persistence milestone.
 Stored-page-geometry milestone: full current desktop48/48 under Windows style
 passes (83.50 s), Debian payload/Build-ID/pinned SQLite and all four original
 fixture SHA-256 checks pass. GUI-free runtime unchanged from fresh core1 (1.76 s).
+
+
+## Native numeric report Avg/Min/Max (2026-11-04)
+
+Access expressions now aggregate finite native numeric fields/row expressions
+with Avg/Min/Max. An online long-double mean avoids unnecessary sum overflow;
+results remain bounded native Double/numeric values. A scalar-only accumulator
+also preserves Sum/Count behavior, including direct Count without field coercion,
+NULL omission, overflow/error propagation and render/Requery cache invalidation.
+Text/Date/Boolean/Currency, full typing/rounding/group scope and Windows results
+remain open, explicitly refused where unsupported. REPORT_AGGREGATES.md details
+these bounds; no original Avg/Min/Max execution oracle is asserted.
+
+Existing actual SQL/control/PDF cases compare the three aggregates and compound
+Avg against independent SQL, update after insertion/Requery, handle all-NULL
+values and preserve a valid numeric PDF on unsupported text minimum. Validation:
+desktop build, mainwindow/layout2/2 (13.58 s), freshly rebuilt GUI-free core1/1
+(1.99 s wall total). Full current suite/package are checked for this parser change.
+Fixed 456/384/72 retained; no new target or ID.
+
+Numeric-aggregate milestone: full current desktop48/48 under Windows style
+passes (86.46 s), fresh GUI-free core1/1 (1.99 s wall total), Debian payload/
+Build-ID/pinned SQLite and all four original fixture SHA-256 checks pass.

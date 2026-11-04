@@ -1,6 +1,7 @@
 #include "native_stored_form.hpp"
 #include "native_stored_report.hpp"
 #include "native_report_text_layout.hpp"
+#include "native_report_aggregate.hpp"
 #include <QTextBlock>
 #include <QTextLayout>
 #include <QGlyphRun>
@@ -628,17 +629,14 @@ public:
         const auto name=QString::fromUtf8(field.data(),field.size());
         const auto index=columnIndex(name,preview_.dataColumns_);
         if (index<0) throw linaccess::VbaRuntimeError(2465,"Aggregate field unavailable");
-        double total=0; int count=0;
-        for (const auto& row : preview_.recordRows_) {
-            if (row[index].isNull()) continue;
-            ++count;
-            if (function=="sum") {
-                total+=linaccess::qtFieldValue(row[index],preview_.dataTypes_.value(name.toCaseFolded())).asNumber();
-                if (!std::isfinite(total)) throw linaccess::VbaRuntimeError(6,"Aggregate overflow");
-            }
+        linaccess::NativeReportAggregate aggregate(function,true);
+        for(const auto& row:preview_.recordRows_) {
+            if(row[index].isNull()) continue;
+            // Count must not coerce field types just to count non-NULL cells.
+            aggregate.add(function=="count" ? linaccess::VbaValue::integer(1)
+                : linaccess::qtFieldValue(row[index],preview_.dataTypes_.value(name.toCaseFolded())));
         }
-        if (function=="count") return linaccess::VbaValue::numeric(count);
-        return count ? linaccess::VbaValue::numeric(total) : linaccess::VbaValue{};
+        return aggregate.result();
         } catch(const linaccess::VbaRuntimeError& failure) { return linaccess::VbaValue::errorValue(failure.number); }
         });
     }
@@ -651,22 +649,14 @@ public:
             if (preview_.dataTruncated_) throw linaccess::VbaRuntimeError(3035,"Aggregate would use incomplete records");
             if (preview_.recordRows_.isEmpty()) throw linaccess::VbaRuntimeError(3251,"Empty compound aggregate binding requires validation");
             const QScopedValueRollback<std::optional<int>> scope(aggregateRow_);
-            double total=0; int count=0;
+            linaccess::NativeReportAggregate aggregate(function);
             for (int row=0;row<preview_.recordRows_.size();++row) {
                 aggregateRow_=row;
                 const auto value=linaccess::evaluateAccessExpression(expression,*this);
                 if (value.kind==linaccess::VbaValue::Kind::Error) return value;
-                if (value.kind==linaccess::VbaValue::Kind::Null) continue;
-                ++count;
-                if (function=="sum") {
-                    if (value.kind==linaccess::VbaValue::Kind::Text)
-                        throw linaccess::VbaRuntimeError(13,"Sum requires a numeric expression");
-                    total+=value.asNumber();
-                    if (!std::isfinite(total)) throw linaccess::VbaRuntimeError(6,"Aggregate overflow");
-                }
+                aggregate.add(value);
             }
-            if (function=="count") return linaccess::VbaValue::numeric(count);
-            return count ? linaccess::VbaValue::numeric(total) : linaccess::VbaValue{};
+            return aggregate.result();
         } catch(const linaccess::VbaRuntimeError& failure) {
             return linaccess::VbaValue::errorValue(failure.number);
         }
