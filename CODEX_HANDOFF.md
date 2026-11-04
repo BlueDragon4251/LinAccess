@@ -1297,3 +1297,11 @@ docs/NATIVE_APPLICATION_OPTIONS.md. Kein vollständiger Access-Options-/Pixel-Cl
 Finale Mainwindow1/1 (2.71 s), Layout1/1 (10.70 s), Paket/Build-ID/SQLite und vier
 Originalfixture-Hashes bestanden; vorheriger Vollstand48/48 (82.86 s), GUI-freier
 Core unverändert1/1 (1.54 s). Katalog weiterhin456/384/72.
+
+PV nutzt nun denselben nativen Annuitätenpfad; SLN/SYD führen begrenzte
+Double-Abschreibungen aus, auch über den echten SQL-Adapter. Benannte Argumente,
+abgezinster Zahlungsstrom und vollständige fünfjährige Abschreibungsreihe im
+bestehenden Core/DAO-Ziel unabhängig geprüft. Native_Financial-Dokument erweitert:
+docs/NATIVE_FINANCIAL_FUNCTIONS.md. Keine vollständige Finanzbibliothek behauptet.
+Gezielt3/3 (2.36 s), frischer Core1/1 (1.66 s), Paket/Build-ID/SQLite und vier
+Originalfixture-Hashes bestanden. Letzter Vollstand48/48 (82.86 s); 456/384/72.
