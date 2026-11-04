@@ -2463,3 +2463,16 @@ remaining property/compiler/alias/oracle boundaries. Full desktop 48/48
 Debian payload/permissions/Build-ID/pinned SQLite and four original fixture
 hashes pass. No new CTest target. Scoped checklist 379 checked / 72 open, not
 complete Access 2003 parity.
+
+
+## Validated Up/Down datasheet record movement (2026-11-04)
+
+Bare vertical record keys reuse actual native current-record Save/navigation,
+retaining the current column and stopping on SQL failure with drafts/selection
+intact. TABLE_KEYBOARD_RUNTIME.md records destination, edit, unrelated-draft,
+addition-row and general movement/oracle boundaries. Existing main-window target
+checks actual keys, saved SQL, UNIQUE failure, Esc and retry. Full desktop 48/48
+(77.41 s), GUI-free build confirmed and core 1/1 (1.79 s), targeted GUI/SQL
+1/1 (2.30 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original hashes pass. Scoped checklist 380 checked / 72 open; no extra CTest
+target or complete Access 2003 parity claim.

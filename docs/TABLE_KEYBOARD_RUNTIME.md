@@ -33,3 +33,40 @@ checked typed edits, requester isolation and SQL after Save. The original
 Wait=False probe yields until the native queue is drained rather than assuming
 one Qt processEvents call delivers a complete sequence; its content, receiver
 and event assertions remain intact. No additional CTest targets were added.
+
+
+## Validated vertical record keys (2026-11-04)
+
+When the native table view receives unmodified Up/Down (including keypad keys),
+a destination in the loaded/fetchable record set uses the existing native
+previous/next record dispatcher. Live cell input is completed and the owning
+project/page is activated before the existing checked keyed Save/navigation
+path. SQL failure retains the current row and pending model value instead of
+allowing Qt's default cursor movement. Successful movement retains the current
+column. Readonly native tables use the same dispatcher without introducing writes.
+
+The view keeps a weak-owner navigation callback; closed pages and cancelled
+activation refuse. Existing row-fetch limits, unrelated-draft, pending-insert/
+delete, current-key and context guards remain active. The last-row addition
+placeholder, general mouse/Tab/Page/modified-key movement, broad filtered-query
+refresh and Access 2003 editor/focus equivalence are not added by this increment.
+Editors may consume their own keys before the view receives them. This is not
+complete Access datasheet keyboard parity.
+
+The existing main-window GUI target executes actual Down/Up keys, verifies SQL
+Save before a successful row change, verifies a real UNIQUE failure preserving
+the current row/cache and unchanged SQL, then uses Esc and retries navigation.
+No extra CTest target.
+
+
+## Validated Up/Down datasheet record movement (2026-11-04)
+
+Bare vertical record keys reuse actual native current-record Save/navigation,
+retaining the current column and stopping on SQL failure with drafts/selection
+intact. TABLE_KEYBOARD_RUNTIME.md records destination, edit, unrelated-draft,
+addition-row and general movement/oracle boundaries. Existing main-window target
+checks actual keys, saved SQL, UNIQUE failure, Esc and retry. Full desktop 48/48
+(77.41 s), GUI-free build confirmed and core 1/1 (1.79 s), targeted GUI/SQL
+1/1 (2.30 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
+original hashes pass. Scoped checklist 380 checked / 72 open; no extra CTest
+target or complete Access 2003 parity claim.
