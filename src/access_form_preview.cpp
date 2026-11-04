@@ -611,7 +611,10 @@ public:
         auto value=compute();
         if (preview_.reportAggregateCaching_ && preview_.reportAggregateValues_.size()<512
             && (value.kind==linaccess::VbaValue::Kind::Number || value.kind==linaccess::VbaValue::Kind::Null
-                || value.kind==linaccess::VbaValue::Kind::Error))
+                || value.kind==linaccess::VbaValue::Kind::Error || value.kind==linaccess::VbaValue::Kind::Empty
+                || value.kind==linaccess::VbaValue::Kind::Boolean || value.kind==linaccess::VbaValue::Kind::Date
+                || value.kind==linaccess::VbaValue::Kind::Currency
+                || (value.kind==linaccess::VbaValue::Kind::Text && value.text.size()<=4096)))
             preview_.reportAggregateValues_.insert(key,std::make_shared<linaccess::VbaValue>(value));
         return value;
     }
@@ -631,7 +634,10 @@ public:
         if (index<0) throw linaccess::VbaRuntimeError(2465,"Aggregate field unavailable");
         linaccess::NativeReportAggregate aggregate(function,true);
         for(const auto& row:preview_.recordRows_) {
-            if(row[index].isNull()) continue;
+            if(row[index].isNull()) {
+                if(function=="first" || function=="last") aggregate.add(linaccess::VbaValue{});
+                continue;
+            }
             // Count must not coerce field types just to count non-NULL cells.
             aggregate.add(function=="count" ? linaccess::VbaValue::integer(1)
                 : linaccess::qtFieldValue(row[index],preview_.dataTypes_.value(name.toCaseFolded())));

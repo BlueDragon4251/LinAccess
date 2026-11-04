@@ -1149,7 +1149,7 @@ private:
         }
         if ((word=="now" || word=="date" || word=="time" || word=="timer") && !nextSymbol("("))
             return host_ ? clockValue(word) : VbaValue{};
-        if (accessExpression_ && (word=="sum" || word=="count" || word=="avg" || word=="min" || word=="max") && take("(")) {
+        if (accessExpression_ && (word=="sum" || word=="count" || word=="avg" || word=="min" || word=="max" || word=="first" || word=="last") && take("(")) {
             const auto start=index_;
             auto end=start; int depth=1;
             for (;end<tokens_.size() && tokens_[end].type!=Token::Type::End;++end) {

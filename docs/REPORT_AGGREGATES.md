@@ -19,7 +19,7 @@ locale text ordering, Currency/Date aggregates and a Windows oracle remain open.
 A shared scalar-only accumulator preserves existing Sum/Count behavior. Direct
 Count does not coerce non-NULL field values merely to count them; compound errors
 propagate. Sum keeps its existing numeric conversion/overflow rules. Render-only
-512-entry scalar caching and Requery/exit invalidation also apply to the new
+512-entry bounded scalar caching and Requery/exit invalidation also apply to the new
 functions; no widget, cursor or host is retained.
 
 Existing report cases populate an actual nullable numeric table. Native controls
@@ -33,3 +33,25 @@ No original Avg/Min/Max output oracle is claimed.
 References: [Avg](https://support.microsoft.com/en-us/access/functions/avg-function),
 [Min/Max](https://support.microsoft.com/en-us/access/functions/min-max-functions).
 Statistical variance/deviation cardinality edge cases remain separate work.
+
+## First/Last over the actual report source
+
+First/Last now return the scalar value of the first/last loaded source record,
+including a NULL endpoint. They do not search for the first/last non-NULL value.
+Supported row expressions use the existing row scope; objects, arrays and binary
+values are refused. Empty direct-field sources yield NULL; the existing empty
+compound-binding guard remains. Unsupported groups and complete Jet/Access
+ordering/type/oracle equivalence remain open. An explicit ordered record source
+is used for deterministic evidence; arbitrary underlying scan order is not
+presented as a matching Access insertion order.
+
+Render caching now also permits immutable Empty/Boolean/Date/Currency and text
+up to 4096 UTF-8 bytes. The 512-entry cap limits retained text to at most 2 MiB;
+larger text is computed without caching. No object, array, DAO or widget reference
+is retained. Requery and render exit still invalidate all entries.
+
+Existing actual SQL/Qt/PDF cases compare ascending and descending source
+endpoints, compound selectors, changed endpoints after insertion/Requery and
+NULL endpoints through the actual control Value API. The existing SQL First/Last
+implementation is separate; this extends report-expression execution.
+Reference: [Access 2003 First/Last](https://documentation.help/MS-Office-Access-2003/dasqlfirstlast.htm).

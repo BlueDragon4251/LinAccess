@@ -5447,3 +5447,26 @@ Fixed 456/384/72 retained; no new target or ID.
 Numeric-aggregate milestone: full current desktop48/48 under Windows style
 passes (86.46 s), fresh GUI-free core1/1 (1.99 s wall total), Debian payload/
 Build-ID/pinned SQLite and all four original fixture SHA-256 checks pass.
+
+
+## Native report First/Last scalar selectors (2026-11-04)
+
+Access report expressions now select the first/last actual loaded scalar value,
+including NULL endpoints, with the existing row-expression binding. Supported
+scalar values are copied; objects/arrays/binary values remain unsupported. Source
+truncation/missing fields, nested aggregates and empty compound binding retain
+their guards. Ordering is the actual loaded source order, not an invented Access
+physical/insertion order. Full group/Jet type/order equivalence remains open.
+
+The render cache additionally permits immutable typed scalars and text up to
+4096 UTF-8 bytes, still at most512 entries (at most2MiB retained text), cleared on
+Requery/render exit. No object, cursor or widget can be retained. Existing actual
+SQL/control/PDF cases check ascending/descending endpoints, compound selectors,
+updated text after insertion/Requery and actual VBA-control NULL values at both
+ends. Validation: initial mainwindow/layout2/2 (13.08 s), fresh GUI-free core1/1
+(1.60 s). Full current suite/package are checked for this parser/cache change.
+Fixed 456/384/72; no new target/ID. Exact scope: REPORT_AGGREGATES.md.
+
+First/Last milestone: full current desktop48/48 under Windows style passes
+(87.00 s), fresh GUI-free core1/1 (1.60 s), Debian payload/Build-ID/pinned SQLite
+and all four original fixture SHA-256 checks pass.
