@@ -17,6 +17,111 @@
 #include <QPicture>
 #include <QtMath>
 #include <QVBoxLayout>
+#include <QPrintPreviewWidget>
+#include <QTabWidget>
+#include <QHBoxLayout>
+#include <QPushButton>
+#include <QSpinBox>
+#include <QLabel>
+#include <QSignalBlocker>
+
+namespace {
+class NativeReportPageView final : public QWidget {
+public:
+    NativeReportPageView(std::function<bool(QPrinter&)> render,std::function<void()> changed,
+                         std::function<void()> refreshRequested,QWidget* parent)
+        : QWidget(parent),printer_(QPrinter::HighResolution) {
+        setObjectName("access-report-page-view");
+        auto* layout=new QVBoxLayout(this);
+        auto* navigation=new QHBoxLayout;
+        auto* previous=new QPushButton("Zurück",this);
+        auto* next=new QPushButton("Weiter",this);
+        auto* number=new QSpinBox(this); number->setRange(1,32767);
+        number->setObjectName("access-report-page-number");
+        auto* total=new QLabel(this);
+        auto* smaller=new QPushButton("−",this);
+        auto* larger=new QPushButton("+",this);
+        smaller->setAccessibleName("Verkleinern"); larger->setAccessibleName("Vergrößern");
+        auto* refresh=new QPushButton("Aktualisieren",this);
+        for (auto* button:{previous,next}) navigation->addWidget(button);
+        navigation->addWidget(number); navigation->addWidget(total); navigation->addStretch();
+        navigation->addWidget(smaller); navigation->addWidget(larger); navigation->addWidget(refresh);
+        layout->addLayout(navigation);
+        pages_=new QPrintPreviewWidget(&printer_,this);
+        pages_->setObjectName("access-report-pages");
+        layout->addWidget(pages_,1);
+        connect(pages_,&QPrintPreviewWidget::paintRequested,this,[this,render](QPrinter* printer) {
+            setProperty("la_report_pages_valid",false);
+            setProperty("la_report_pages_valid",render(*printer));
+        });
+        connect(pages_,&QPrintPreviewWidget::previewChanged,this,[this,previous,next,number,total,changed] {
+            const int count=pages_->pageCount(),page=pages_->currentPage();
+            const QSignalBlocker blocked(number);
+            number->setMaximum(qMax(1,count)); number->setValue(qMax(1,page));
+            total->setText("von "+QString::number(count));
+            previous->setEnabled(page>1); next->setEnabled(page<count);
+            changed();
+        });
+        connect(previous,&QPushButton::clicked,pages_,[this] { pages_->setCurrentPage(pages_->currentPage()-1); });
+        connect(next,&QPushButton::clicked,pages_,[this] { pages_->setCurrentPage(pages_->currentPage()+1); });
+        connect(number,&QSpinBox::valueChanged,pages_,&QPrintPreviewWidget::setCurrentPage);
+        connect(smaller,&QPushButton::clicked,pages_,[this] { pages_->zoomOut(); });
+        connect(larger,&QPushButton::clicked,pages_,[this] { pages_->zoomIn(); });
+        connect(refresh,&QPushButton::clicked,this,[refreshRequested] { refreshRequested(); });
+    }
+    ~NativeReportPageView() override { delete pages_; } // printer outlives its preview.
+    bool refreshPages() {
+        setProperty("la_report_pages_valid",false);
+        pages_->updatePreview();
+        return property("la_report_pages_valid").toBool() && pages_->pageCount()>0;
+    }
+private:
+    QPrinter printer_;
+    QPrintPreviewWidget* pages_{};
+};
+void synchronizeReportView(QWidget* document,NativeReportPageView* pages) {
+    auto* tabs=document->findChild<QTabWidget*>("access-report-view-tabs");
+    auto* notice=document->findChild<QLabel*>("access-report-view-notice");
+    auto* view=pages ? pages->findChild<QPrintPreviewWidget*>("access-report-pages") : nullptr;
+    if (!tabs || !notice || !view) return;
+    const bool valid=pages->property("la_report_pages_valid").toBool() && view->pageCount()>0;
+    tabs->setTabEnabled(0,valid); notice->setVisible(!valid);
+    if (!valid) { tabs->setProperty("la_report_fallback",true); tabs->setCurrentIndex(1); }
+    else if (tabs->property("la_report_fallback").toBool()) {
+        tabs->setProperty("la_report_fallback",false); tabs->setCurrentIndex(0);
+    }
+}
+}
+
+void AccessFormPreview::buildReportPageView(QVBoxLayout* layout,QWidget* layoutView) {
+    if (reportPageView_ || closed_ || openCancelled_ || layout_.kind!=linaccess::AccessDocumentKind::Report) return;
+    auto* holder=new QWidget(this);
+    auto* old=layout->replaceWidget(layoutView,holder); delete old;
+    auto* content=new QVBoxLayout(holder); content->setContentsMargins(0,0,0,0);
+    auto* notice=new QLabel("Nur Layoutansicht: Die vollständige Berichtsausgabe ist für dieses Layout noch nicht unterstützt.",holder);
+    notice->setObjectName("access-report-view-notice"); notice->setWordWrap(true);
+    content->addWidget(notice);
+    auto* tabs=new QTabWidget(holder); tabs->setObjectName("access-report-view-tabs");
+    content->addWidget(tabs,1);
+    auto* pages=new NativeReportPageView([this](QPrinter& printer) { return renderReport(printer); },
+        [this] {
+            if (!reportAggregateCaching_ && !closed_) {
+                synchronizeReportView(this,dynamic_cast<NativeReportPageView*>(reportPageView_.data()));
+                refreshCalculatedControls();
+            }
+        },[this] { refreshReportPageView(); },tabs);
+    reportPageView_=pages;
+    tabs->addTab(pages,"Bericht"); tabs->addTab(layoutView,"Aktuelles Layout");
+    refreshReportPageView();
+}
+void AccessFormPreview::refreshReportPageView() {
+    if (!reportPageView_ || reportAggregateCaching_ || closed_ || openCancelled_) return;
+    auto* pages=dynamic_cast<NativeReportPageView*>(reportPageView_.data());
+    if (!pages) return;
+    pages->refreshPages(); synchronizeReportView(this,pages);
+    refreshCalculatedControls();
+}
+
 
 void AccessFormPreview::buildPrintToolbar(QVBoxLayout* layout) {
     printToolbar_ = new QToolBar("Aktuelles Layout drucken",this);

@@ -1219,6 +1219,7 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     if (!initialCurrentDeferred_) initialCurrent();
     if(stopped()) return;
     if (!report) setTimerInterval(layout_.timerInterval);
+    else buildReportPageView(outer,scroll);
 }
 
 AccessFormPreview* AccessFormPreview::showDocument(linaccess::AccessDocumentKind kind,QString name,
@@ -1926,6 +1927,7 @@ bool AccessFormPreview::advanceTabFocus(bool next) {
 
 void AccessFormPreview::loadRecords() {
     reportAggregateValues_.clear();
+    if (reportPageView_) reportPageView_->setProperty("la_report_pages_valid",false);
     recordsetSnapshot_.reset();
     const bool wasNew = initialized_ && currentRecordIndex_ == 0;
     const auto oldId = currentRecordIndex_ > 0 && currentRecordIndex_ <= rowIds_.size()
@@ -2016,6 +2018,7 @@ void AccessFormPreview::loadRecords() {
         ? "Access-Layout: " + QString::number(renderedControls_) + " Elemente, "
             + QString::number(recordRows_.size()) + " Datensätze." + (!directTable_ ? " Datenquelle schreibgeschützt." : "") + (dataTruncated_ ? " Anzeige auf die ersten 10000 begrenzt." : "")
         : "Die Datenquelle ist nicht verfügbar oder ihre Ausführung wurde abgebrochen: " + source);
+    refreshReportPageView();
 }
 
 void AccessFormPreview::setDataEntryState(bool enabled) {

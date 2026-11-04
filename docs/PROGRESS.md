@@ -5079,3 +5079,25 @@ Validation: desktop build and existing mainwindow/layout/original-DAO targets
 original hashes pass. This GUI-only report change does not alter the headless
 runtime; preceding full48/core1 validation remains recorded above rather than
 being repeated. Fixed 456/384/72 and 48 CTest targets unchanged (F085 remains open).
+
+
+## Actual report pages inside the opened document (2026-11-04)
+
+Supported imported reports now open a real QPrintPreviewWidget directly in the
+report document after initial events. Native page navigation/zoom/refresh and
+Requery use the same prepared fixed-band renderer. The existing controls remain
+as runtime backing in an explicit current-layout tab. A failed/unsupported render
+disables the pages tab, selects the layout inspector and shows an incomplete-output
+notice. Page/Pages reads use valid native preview metadata; Requery invalidates
+old metadata before loading. The QPrinter outlives its preview widget.
+
+Existing report cases check two document pages, native navigation and Page/Pages,
+three pages after SQL insertion/Requery, and CanGrow fallback. The real modal
+preview/PDF cases remain checked. This does not complete Access-2003 chrome,
+window/print-event semantics, arbitrary runtime mutation invalidation, grouping,
+CanGrow, direct-print view or original compound-report context. F085 stays open.
+
+Validation: access_2003_layouts 1/1 (9.98 s), full desktop 48/48 (81.95 s),
+Debian payload/permissions/Build-ID/pinned SQLite and four original hashes pass.
+Headless runtime sources did not change; the preceding fresh core1 result remains
+applicable without rebuilding it again. Fixed 456/384/72 and 48 targets unchanged.
