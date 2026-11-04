@@ -5119,3 +5119,23 @@ payload/permissions/Build-ID/pinned SQLite and four original hashes pass. The
 preceding document integration full48 remains recorded above; no repeated full
 suite for this color-only rendering change, no new target or catalog ID.
 Fixed 456/384/72 unchanged.
+
+
+## Native classic interface preference (2026-11-04)
+
+The GUI defaults to the portable Qt Windows style when available, with eight-point
+application font and installed Tahoma when present (otherwise existing family).
+Ansicht/Klassische Oberfläche restores the original style/palette/font and saves
+the preference through per-user QSettings. The main title now uses the product
+name. Unset form surfaces inherit the live Window palette; explicit imported
+colors and white report paper remain. No new dependency or Microsoft font bundle,
+no full Office/Access-2003 chrome, MDI, pixel/Windows oracle or shortcut claim.
+
+Existing transparent-surface checks were adapted from fixed Fusion gray to the
+selected Window palette; explicit color checks remain. Initial classic-style GUI
+run exposed that old palette assumption; no product color rule was suppressed.
+Validation: desktop build; existing mainwindow/layout2/2 (11.78 s); final full48/48
+under Windows style (81.16 s); actual application startup with isolated XDG
+configuration/data until timed shutdown; Debian payload/permissions/Build-ID/
+pinned SQLite and four original hashes pass. Headless sources unchanged from
+preceding fresh core1. No new CTest target; fixed 456/384/72 unchanged.

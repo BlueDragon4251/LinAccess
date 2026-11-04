@@ -3,6 +3,7 @@
 #include "jet_sql_functions.hpp"
 #include "access_autonumber.hpp"
 #include "vba_runtime.hpp"
+#include "native_classic_style.hpp"
 
 #include <QApplication>
 #include <QSqlQuery>
@@ -49,6 +50,7 @@ int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     application.setApplicationName("LinAccess");
     application.setOrganizationName("LinAccess Community");
+    linaccess::initializeClassicStyle();
     MainWindow window;
     window.show();
     return application.exec();
