@@ -95,9 +95,11 @@ End Sub
     auto bandedSource=source;
     bandedSource.replace("Begin Section\nHeight =1500",R"BANDS(Begin FormHeader
 Height =300
+BackColor =65280
 End
 Begin PageHeader
 Height =600
+BackColor =16711680
 Begin TextBox
 Name ="PageTitle"
 Top =150
@@ -105,6 +107,7 @@ End
 End
 Begin PageFooter
 Height =450
+BackColor =255
 Begin TextBox
 Name ="PageNumber"
 Top =150
@@ -134,6 +137,13 @@ Height =1500)BANDS");
         assert(field("Name")->text()=="first" && field("Name")->isReadOnly());
         assert(field("PageTitle")->y()==30 && field("Name")->y()==60);
         assert(field("ReportSummary")->y()==170 && field("PageNumber")->y()==190);
+        auto* canvas=banded.findChild<QWidget*>("access-form-canvas"); assert(canvas);
+        const auto colors=canvas->grab().toImage();
+        assert(colors.pixelColor(200,10)==QColor(Qt::green));
+        assert(colors.pixelColor(200,30)==QColor(Qt::blue));
+        assert(colors.pixelColor(200,100)==QColor(Qt::white));
+        assert(colors.pixelColor(200,200)==QColor(Qt::red));
+
         QTemporaryDir output; assert(output.isValid());
         const auto single=output.filePath("single.pdf");
         // The summary extends outside its short section: do not silently clip it.

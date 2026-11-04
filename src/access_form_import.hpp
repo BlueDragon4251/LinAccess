@@ -106,6 +106,7 @@ struct AccessFormLayout {
     int height{5000};
     QMap<QString,int> sectionHeights;
     QMap<QString,int> sectionOffsets;
+    QMap<QString,qint32> sectionBackColors;
     QStringList reportPrintLimitations;
     QVector<AccessVisualControl> controls;
     QMap<QString,QString> events;

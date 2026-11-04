@@ -5101,3 +5101,21 @@ Validation: access_2003_layouts 1/1 (9.98 s), full desktop 48/48 (81.95 s),
 Debian payload/permissions/Build-ID/pinned SQLite and four original hashes pass.
 Headless runtime sources did not change; the preceding fresh core1 result remains
 applicable without rebuilding it again. Fixed 456/384/72 and 48 targets unchanged.
+
+
+## Native report paper and section backgrounds (2026-11-04)
+
+Section BackColor Longs are now retained and painted by the actual native canvas
+across the report content width. The same paint commands feed the layout view,
+PDF and prepared paginated bands. Reports use a white paper base; forms retain
+the existing gray base. RGB/system colors reuse the native OLE adapter. Runtime
+Section objects/property mutation and full Windows color/profile/pixel parity
+remain open. No original color-layout oracle is claimed.
+
+The existing report-event case samples actual green/blue/red canvas pixels and
+an unset white detail area. Desktop build, layout target1/1 (9.16 s), mainwindow/
+original-DAO2/2 (36.88 s), freshly rebuilt GUI-free core1/1 (1.94 s), Debian
+payload/permissions/Build-ID/pinned SQLite and four original hashes pass. The
+preceding document integration full48 remains recorded above; no repeated full
+suite for this color-only rendering change, no new target or catalog ID.
+Fixed 456/384/72 unchanged.
