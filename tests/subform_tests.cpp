@@ -58,6 +58,14 @@ If DMax("moment","lookup_values")<>DateSerial(2026,11,4) Then Err.Raise 5
 If TypeName(Application.DMax("cash","lookup_values"))<>"Currency" Then Err.Raise 5
 If DMax("cash","lookup_values")<>CCur("12.3456") Then Err.Raise 5
 If DMin("cash","lookup_values")<>CCur(0) Then Err.Raise 5
+If TypeName(DSum("cash","lookup_values"))<>"Currency" Then Err.Raise 5
+If DSum("cash","lookup_values")<>CCur("12.3456") Then Err.Raise 5
+If TypeName(Application.DSum(Expr:="cash",Domain:="lookup_values"))<>"Currency" Then Err.Raise 5
+If Application.DSum("CCur(qty)","lookup_values","qty Is Not Null")<>CCur(14) Then Err.Raise 5
+If Application.DCount("*","lookup_values")<>4 Then Err.Raise 5
+If Application.DCount(Domain:="lookup_values",Expr:="cash")<>2 Then Err.Raise 5
+If Application.DCount("cash","lookup_values","id>2")<>0 Then Err.Raise 5
+If Not IsNull(Application.DSum("cash","lookup_values","id>2")) Then Err.Raise 5
 If Not IsNull(DLookup("label","lookup_values","id=99")) Then Err.Raise 5
 If Not IsNull(DLookup("label","lookup_values","id=4")) Then Err.Raise 5
 If IsNull(DLookup("label","lookup_values","id=3")) Then Err.Raise 5
