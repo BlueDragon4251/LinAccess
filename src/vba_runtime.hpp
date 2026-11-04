@@ -14,8 +14,12 @@ namespace linaccess {
 
 class VbaRuntimeError : public std::runtime_error {
 public:
-    VbaRuntimeError(int code, const std::string& message) : std::runtime_error(message), number(code) {}
+    VbaRuntimeError(int code, const std::string& message, const std::string& origin = {},
+                    const std::string& help = {}, int context = 0)
+        : std::runtime_error(message), number(code), source(origin), helpFile(help), helpContext(context) {}
     int number;
+    std::string source, helpFile;
+    int helpContext{};
 };
 // Successful native application Quit stops existing GUI-thread VBA frames;
 // later independent engine executions get a fresh epoch.
@@ -127,6 +131,8 @@ struct VbaExecutionResult {
     bool cancelled{};
     std::shared_ptr<VbaValue> typedReturnValue;
     int errorNumber{};
+    std::string errorSource, errorHelpFile;
+    int errorHelpContext{};
 };
 
 // Syntax inspection only; Completed here does not mean a procedure was executed.

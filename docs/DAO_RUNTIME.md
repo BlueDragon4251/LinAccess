@@ -31,7 +31,16 @@ Supported and tested:
   Null propagation for Len and explicit invalid-Null errors for CStr.
 - Procedure-local `On Error Resume Next`, `On Error GoTo label/0`, `Resume`,
   `Resume Next`, `Resume label`, `Err.Number`,
-  `Err.Description`, `Err.Clear` and single-argument `Err.Raise(number)`.
+  `Err.Description`, `Err.Source`, `Err.HelpFile`, `Err.HelpContext`, `Err.Clear`
+  and `Err.Raise(Number, Source, Description, HelpFile, HelpContext)` with named
+  and omitted optional arguments. Writable Err fields use native Long/String
+  coercion; signed Long custom codes and the Long vbObjectError constant are
+  preserved through nested native calls and event-function failures. Explicit
+  Resume and Clear reset these fields. Omitted optional Raise fields retain
+  their current Err values; omitted/empty descriptions use a generic diagnostic
+  when no stored description exists. Help metadata does not launch Windows Help.
+  Full Access project-name/default localized message catalogs, HRESULT mapping,
+  handler-state equivalence and debugger behavior remain open under F051.
   Division-by-zero, Long overflow, invalid Null and unset object errors carry
   their explicit codes; other host errors currently use generic error 5.
 

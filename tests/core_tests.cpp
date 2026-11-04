@@ -2143,6 +2143,44 @@ End Sub
 )VBA", "Errors", host);
     assert(handled.status == VbaExecutionStatus::Completed);
     assert(host.fields["Name"] == "11" && host.fields["Nachname"] == "0");
+    const std::string detailedErrors=R"VBA(Sub DetailedErrors()
+Dim result As Long
+On Error GoTo caught
+result=DetailedFailure()
+Me!ClearedError=CStr(Err.Number) & ":" & Err.Source & ":" & Err.Description & ":" & Err.HelpFile & ":" & CStr(Err.HelpContext)
+Exit Sub
+caught:
+Me!DetailedError=CStr(Err.Number) & ":" & Err.Source & ":" & Err.Description & ":" & Err.HelpFile & ":" & CStr(Err.HelpContext)
+Resume Next
+End Sub
+Function DetailedFailure() As Long
+Err.Raise Number:=vbObjectError+513, Source:="native.error", Description:="detail", HelpFile:="local.chm", HelpContext:=42
+End Function
+Sub AssignedError()
+On Error Resume Next
+Err.Source="assigned"
+Err.Description="stored"
+Err.HelpFile="assigned.chm"
+Err.HelpContext=7
+Err.Number=123
+Err.Raise 1001,,"explicit"
+Me!AssignedError=CStr(Err.Number) & ":" & Err.Source & ":" & Err.Description & ":" & Err.HelpFile & ":" & CStr(Err.HelpContext)
+Err.Clear
+Me!AssignedClear=CStr(Err.Number) & ":" & Err.Source & ":" & Err.Description & ":" & Err.HelpFile & ":" & CStr(Err.HelpContext)
+End Sub
+)VBA";
+    const auto detailedErrorRun=executeVbaProcedure(detailedErrors,"DetailedErrors",host);
+    assert(detailedErrorRun.status==VbaExecutionStatus::Completed);
+    assert(host.fields["DetailedError"]=="-2147220991:native.error:detail:local.chm:42");
+    assert(host.fields["ClearedError"]=="0::::0");
+    const auto directError=executeVbaProcedure(detailedErrors,"DetailedFailure",host);
+    assert(directError.status==VbaExecutionStatus::Error && directError.errorNumber==-2147220991);
+    assert(directError.explanation=="detail" && directError.errorSource=="native.error" && directError.errorHelpFile=="local.chm" && directError.errorHelpContext==42);
+    const auto eventError=executeVbaEventExpression(detailedErrors,"=DetailedFailure()",host);
+    assert(eventError.status==VbaExecutionStatus::Error && eventError.errorNumber==directError.errorNumber && eventError.errorSource==directError.errorSource && eventError.errorHelpFile==directError.errorHelpFile && eventError.errorHelpContext==42);
+    assert(executeVbaProcedure(detailedErrors,"AssignedError",host).status==VbaExecutionStatus::Completed);
+    assert(host.fields["AssignedError"]=="1001:assigned:explicit:assigned.chm:7" && host.fields["AssignedClear"]=="0::::0");
+    assert(evaluateVbaExpression("VarType(vbObjectError)",host,{}).asNumber()==3);
     const auto unhandled = executeVbaProcedure(
         "Sub Errors()\nOn Error Resume Next\nErr.Raise(5)\nOn Error GoTo 0\nErr.Raise(6)\nEnd Sub", "Errors", host);
     assert(unhandled.status == VbaExecutionStatus::Error);

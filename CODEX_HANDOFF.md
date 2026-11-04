@@ -887,3 +887,24 @@ Abschluss dieser Korrektur: Desktop 48/48 (81,49 s), frisch gebauter GUI-freier
 Kern 1/1 (1,62 s), Debian-Paket und vier Originalfixture-Hashes bestanden.
 Die wachsende Zahl feiner Checklisten-Unterpunkte nicht mehr als Gesamtstatus
 verwenden. Historische Zählungen sind keine Access-2003-Gesamtmetrik.
+
+Verbindliche Statusstruktur ab 2026-11-04: docs/FIXED_WORK_CATALOG.md enthält
+alle 456 bisherigen Punkte unter unveränderlichen IDs F001–F456, fachlichen
+Kategorien und Unterkategorien. Gesamtzahl nicht mehr erhöhen. Neue Details
+und Befunde bestehenden IDs zuordnen; keine neuen Checkbox-Punkte anhängen.
+384 bestätigte Teilumfänge / 72 offene Voll-/Teilanforderungen sind keine
+84-Prozent-Access-Parität. Breite offene Anforderungen enthalten die weitere
+Entwicklung einschließlich neu entdeckter Access-Details.
+
+In Arbeit unter F051: Err.Raise mit fünf positionalen/benannten Argumenten,
+Missing-Optionalen, signierten Long-Codes/vbObjectError und beschreibbaren
+Err-Feldern. VbaRuntimeError/VbaExecutionResult tragen Source/HelpFile/HelpContext
+durch native Unteraufrufe und Ereignisfunktionen. Clear/Resume setzt die
+Metadaten zurück. Bestehender Kerntest gezielt bestanden (1/1, 1,25 s);
+Gesamtprüfung dieser Erweiterung folgt. Kein Windows-Hilfesystem, kein
+vollständiger Access-Fehlertextkatalog/HRESULT-/Debugger-Nachweis.
+
+Abschluss Err-Metadaten/fester Katalog: Desktop 48/48 (77,97 s), frisch gebauter
+GUI-freier Kern 1/1 (1,39 s), Debian-Paket und vier Originalfixture-Hashes
+bestanden. Gezielt Kern 1/1 (1,25 s). F051 bleibt als breite Vollanforderung
+offen; 456 feste IDs, unverändert 384 bestätigte Teilumfänge / 72 offen.

@@ -2529,3 +2529,18 @@ resumption and retained invalid-order/blocked-label diagnostics. Full desktop
 (1.31 s), Debian payload/permissions/Build-ID/pinned SQLite and all four original
 fixture hashes pass. Scoped checklist 384 checked / 72 open; no extra CTest
 target or complete Access 2003 parity claim.
+
+
+## Fester Statuskatalog und eigene VBA-Fehler (2026-11-04)
+
+[FIXED_WORK_CATALOG.md](FIXED_WORK_CATALOG.md) fixiert F001–F456 in fünf
+Kategorien und 14 fachlichen Unterkategorien. Neue Details gehören zu bestehenden
+IDs; die Gesamtzahl wächst nicht mehr. Die Verhältniszahl bestätigter
+Teilumfänge ist keine Gesamtparität mit Access 2003.
+
+Unter F051 trägt natives Err.Raise eigene signierte Long-Fehlernummern samt
+Quelle/Beschreibung/Hilfeangaben durch verschachtelte native Aufrufe und
+Ereignisfunktionen. Benannte/ausgelassene optionale Argumente, beschreibbare
+Err-Felder sowie Clear/Resume arbeiten mit echtem Laufzeitzustand. Kein
+Windows-Hilfeaufruf und keine vollständige Access-Fehlertext-/HRESULT-/Debugger-
+Gleichheit werden behauptet. Details stehen in DAO_RUNTIME.md.
