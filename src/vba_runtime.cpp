@@ -555,12 +555,12 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     if((optionalSeen && !optional) || (!optional && !defaultExpression.empty()))
                         return {VbaExecutionStatus::Unsupported,"Optional parameters must follow required parameters",line};
                     const auto type=lower(declared[4].str());
-                    const bool collectionDefault=type=="collection" && lower(defaultExpression)=="nothing";
-                    if(optional && type=="collection" && !defaultExpression.empty() && !collectionDefault)
-                        return {VbaExecutionStatus::Unsupported,"Optional Collection default must be Nothing",line};
+                    const bool collectionDefault=(type=="collection" || type=="object") && lower(defaultExpression)=="nothing";
+                    if(optional && (type=="collection" || type=="object") && !defaultExpression.empty() && !collectionDefault)
+                        return {VbaExecutionStatus::Unsupported,"Optional native object default must be Nothing",line};
                     if(optional && lower(defaultExpression)=="null" && !type.empty() && type!="variant")
                         return {VbaExecutionStatus::Unsupported,"Null defaults require a Variant parameter",line};
-                    if(optional && (type=="object" || type.starts_with("dao.")))
+                    if(optional && type.starts_with("dao."))
                         return {VbaExecutionStatus::Unsupported,"Optional object parameters are not implemented",line};
                     optionalSeen=optionalSeen || optional;
                     std::shared_ptr<const VbaValue> defaultValue;
@@ -1354,8 +1354,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     std::unordered_set<std::string> constantNames;
     const int arrayBase=moduleArrayBase(module);
     const auto integralType=[](std::string_view type) { return type=="integer" || type=="long"; };
-    const auto checkedType=[&](std::string_view type) { return type.ends_with("()") || integralType(type) || type=="boolean" || type=="string" || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection"; };
-    const auto scalarType=[&](std::string_view type) { return checkedType(type) && type!="collection" && !type.ends_with("()"); };
+    const auto checkedType=[&](std::string_view type) { return type.ends_with("()") || integralType(type) || type=="boolean" || type=="string" || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection" || type=="object"; };
+    const auto scalarType=[&](std::string_view type) { return checkedType(type) && type!="collection" && type!="object" && !type.ends_with("()"); };
     const auto objectType=[](std::string_view type) { return type=="object" || type=="collection" || type=="control" || type=="form" || type.starts_with("dao.") || type.starts_with("access."); };
     auto errorState = std::make_shared<ErrorObject>();
     locals["err"] = VbaValue::reference(errorState);
@@ -1880,7 +1880,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     if (value.kind != VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set benötigt ein Objekt");
                     if(variableType(lower(instruction.argument))=="collection" && value.object && value.object->className()!="Collection")
                         throw VbaRuntimeError(13,"Collection assignment requires a Collection object");
-                    locals[lower(instruction.argument)] = std::move(value);
+                    assignVariable(lower(instruction.argument),value);
                 }
                 break;
             case Statement::Type::ObjectAssign:
@@ -2035,7 +2035,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 loop.frameDepth = frames.size(); loop.withDepth=withFrames.size();
                 if (loop.items.empty()) ip = static_cast<std::size_t>(instruction.partner);
                 else {
-                    locals[lower(instruction.argument)] = loop.items.front();
+                    assignVariable(lower(instruction.argument),loop.items.front());
                     loops.push_back(std::move(loop));
                 }
                 break;
@@ -2095,7 +2095,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                         break;
                     }
                     if (++loop.itemIndex < loop.items.size()) {
-                        locals[name] = loop.items[loop.itemIndex];
+                        assignVariable(name,loop.items[loop.itemIndex]);
                         ip = static_cast<std::size_t>(loop.forIndex);
                     } else loops.pop_back();
                     break;

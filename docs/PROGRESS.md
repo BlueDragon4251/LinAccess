@@ -4314,3 +4314,16 @@ and host isolation. Full desktop 48/48 (78.39 s), freshly rebuilt GUI-free 1/1
 (1.09 s), targeted core 1/1 (1.05 s), Debian payload/permissions/Build-ID/pinned
 SQLite and all four original fixture hashes pass. Scoped checklist 369 checked
 / 72 open; not total Access 2003 parity.
+
+
+## Checked native Object parameters and optional Nothing (2026-11-04)
+
+As Object binds actual references/Nothing before execution. ByVal shares object
+mutation while replacement stays local; supported ByRef writes replacement back.
+Optional Object Nothing slots are independent per omitted call. Set and object
+collection loops use checked assignment. OPTIONAL_ARGUMENT_RUNTIME.md records
+remaining default-member/compiler/early-bound boundaries. Existing core target
+extended only. Full desktop 48/48 (77.73 s), freshly rebuilt GUI-free 1/1
+(1.24 s), targeted core 1/1 (1.23 s), Debian payload/permissions/Build-ID/pinned
+SQLite and all four original hashes pass. Scoped checklist 370 checked / 72
+open; not complete Access 2003 parity.
