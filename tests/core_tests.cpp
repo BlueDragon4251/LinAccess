@@ -18,6 +18,10 @@
 #include <limits>
 #include <cmath>
 #include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <cstdlib>
+#include <chrono>
 
 namespace {
 class TestSequence final : public linaccess::VbaObject {
@@ -2454,6 +2458,37 @@ Me!Nachname=CStr(StrComp("A","a",vbUseCompareOption))
 End Sub
 )VBA","CompareStrings",host);
     assert(textComparison.status==VbaExecutionStatus::Completed && host.fields["Name"]=="2" && host.fields["Nachname"]=="0");
+    {
+        namespace fs=std::filesystem;
+        char directoryPattern[]="/tmp/linaccess-file-facts-XXXXXX";
+        const auto* directoryName=::mkdtemp(directoryPattern); assert(directoryName);
+        const fs::path directory(directoryName), file=directory/fs::path("native-ä.dat");
+        { std::ofstream output(file,std::ios::binary); output.write("A\0B",3); assert(output.good()); }
+        VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
+        const auto fileEvaluate=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,paths); };
+        const auto length=fileEvaluate("VBA.FileLen(PathName:=filePath)"); assert(length.asNumber()==3 && length.numericType==VbaValue::NumericType::Long);
+        paths["filepath"]=VbaValue::string(fs::relative(file).string()); assert(fileEvaluate("FileLen(filePath)").asNumber()==3);
+        paths["filepath"]=VbaValue::string(file.string());
+        const auto fixed=std::chrono::sys_days(std::chrono::year(2024)/2/29)+std::chrono::hours(12)+std::chrono::minutes(34)+std::chrono::seconds(56);
+        fs::last_write_time(file,fs::file_time_type::clock::from_sys(fixed));
+        const char* previousZone=std::getenv("TZ"); const bool hadZone=previousZone!=nullptr; const std::string savedZone=previousZone ? previousZone : "";
+        assert(::setenv("TZ","UTC0",1)==0); ::tzset();
+        const auto modified=fileEvaluate("VBA.FileDateTime(PathName:=filePath)");
+        assert(modified.kind==VbaValue::Kind::Date && modified.asText()=="2024-02-29 12:34:56");
+        assert(::setenv("TZ","EST5",1)==0); ::tzset();
+        assert(fileEvaluate("FileDateTime(filePath)").asText()=="2024-02-29 07:34:56");
+        if(hadZone) assert(::setenv("TZ",savedZone.c_str(),1)==0); else assert(::unsetenv("TZ")==0); ::tzset();
+        const auto fileError=[&](const std::string& value,int expected) {
+            paths["filepath"]=VbaValue::string(value); int number=0;
+            try { (void)fileEvaluate("FileLen(filePath)"); } catch(const VbaRuntimeError& error) { number=error.number; }
+            assert(number==expected);
+        };
+        fileError((directory/"missing.dat").string(),53); fileError((directory/"missing"/"file.dat").string(),76);
+        fileError(directory.string(),75); fileError(std::string("bad\0path",8),52); fileError("C:\\native.dat",3251);
+        fs::resize_file(file,std::uintmax_t(1)<<31); fileError(file.string(),6);
+        substringError("FileLen(Null)",94); substringError("FileDateTime(Null)",94); substringError("FileLen()",450);
+        fs::remove_all(directory);
+    }
     assert(evaluate("IsArray(Array(1,2))").truthy());
     assert(evaluate("VarType(Array())").asNumber()==8204);
     assert(evaluate("TypeName(Array())").asText()=="Variant()");
