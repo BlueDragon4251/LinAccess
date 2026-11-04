@@ -1079,3 +1079,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native For Each enumerates packed/multidimensional Byte arrays as actual Byte Variants, preserving live supported element edits, copy isolation and source-allocation/replacement guards.
 
 - [x] Multi-target Erase retains one source-mapped instruction, ordered native dynamic/fixed/Variant reset behavior, constant preflight and statement-scoped On Error Resume Next behavior.
+
+- [x] Multi-target ReDim/Preserve uses one source-mapped native instruction, publishes successful module/ByRef bindings before dependent later bounds and retains checked type/copy/error/constant behavior.

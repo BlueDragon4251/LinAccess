@@ -23,6 +23,7 @@ thread_local std::uint64_t stopEpoch=0;
 thread_local std::vector<std::uint64_t> activeExecutionEpochs;
 // This interpreter deliberately reports unsupported VBA instead of silently
 // treating Access/DAO/COM calls as successful no-ops.
+struct ArrayResizeTarget { std::string name,bounds,elementType; };
 struct Statement {
     enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
@@ -38,6 +39,7 @@ struct Statement {
     std::shared_ptr<const VbaValue> constantValue;
     std::vector<VbaArrayDimension> fixedBounds;
     bool persistent{};
+    std::vector<ArrayResizeTarget> resizeTargets;
 };
 
 std::string trim(std::string text) {
@@ -936,25 +938,31 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             if(lower(declaration).starts_with("preserve ") || lower(declaration).starts_with("preserve\t")) {
                 preserve=true; declaration=trim(declaration.substr(8));
             }
-            std::string elementType;
-            if(const auto as=outsideKeyword(declaration,"as");as!=std::string::npos) {
-                elementType=lower(trim(declaration.substr(as+2))); declaration=trim(declaration.substr(0,as));
-                if(elementType!="variant" && elementType!="byte" && elementType!="integer" && elementType!="long" && elementType!="single"
-                    && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string" && elementType!="object")
-                    return {VbaExecutionStatus::Unsupported,"ReDim element type unsupported",line};
+            Statement resize{Statement::Type::ResizeArray,{},{},line,{},preserve ? "preserve" : ""};
+            for(auto entry:splitArguments(declaration)) {
+                std::string elementType;
+                if(const auto as=outsideKeyword(entry,"as");as!=std::string::npos) {
+                    elementType=lower(trim(entry.substr(as+2))); entry=trim(entry.substr(0,as));
+                    if(elementType!="variant" && elementType!="byte" && elementType!="integer" && elementType!="long" && elementType!="single"
+                        && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string" && elementType!="object")
+                        return {VbaExecutionStatus::Unsupported,"ReDim element type unsupported",line};
+                }
+                const auto target=memberTarget(entry);
+                if(!target || !target->arguments) return {VbaExecutionStatus::Unsupported,"Invalid Variant ReDim target",line};
+                const auto dimensions=splitArguments(*target->arguments);
+                if(dimensions.empty() || dimensions.size()>60) return {VbaExecutionStatus::Unsupported,"Invalid ReDim dimension count",line};
+                for(const auto& dimension:dimensions) {
+                    const auto range=outsideKeyword(dimension,"to");
+                    const auto lowerBound=range==std::string::npos ? std::string{} : trim(dimension.substr(0,range));
+                    const auto upperBound=range==std::string::npos ? dimension : trim(dimension.substr(range+2));
+                    if((!lowerBound.empty() && !validExpression(lowerBound)) || !validExpression(upperBound))
+                        return {VbaExecutionStatus::Unsupported,"Invalid ReDim bounds",line};
+                }
+                resize.resizeTargets.push_back({target->name,*target->arguments,std::move(elementType)});
             }
-            const auto target=memberTarget(declaration);
-            if(!target || !target->arguments) return {VbaExecutionStatus::Unsupported,"Invalid Variant ReDim target",line};
-            const auto dimensions=splitArguments(*target->arguments);
-            if(dimensions.empty() || dimensions.size()>60) return {VbaExecutionStatus::Unsupported,"Invalid ReDim dimension count",line};
-            for(const auto& dimension:dimensions) {
-                const auto range=outsideKeyword(dimension,"to");
-                const auto lowerBound=range==std::string::npos ? std::string{} : trim(dimension.substr(0,range));
-                const auto upperBound=range==std::string::npos ? dimension : trim(dimension.substr(range+2));
-                if((!lowerBound.empty() && !validExpression(lowerBound)) || !validExpression(upperBound))
-                    return {VbaExecutionStatus::Unsupported,"Invalid ReDim bounds",line};
-            }
-            statements.push_back({Statement::Type::ResizeArray,target->name,*target->arguments,line,elementType,preserve ? "preserve" : ""});
+            if(resize.resizeTargets.empty()) return {VbaExecutionStatus::Error,"ReDim requires an array",line};
+            resize.argument=resize.resizeTargets.front().name;
+            statements.push_back(std::move(resize));
         } else if (lower(source).starts_with("erase ") || lower(source).starts_with("erase\t")) {
             std::string names;
             for(const auto& entry:splitArguments(trim(source.substr(5)))) {
@@ -1092,6 +1100,8 @@ VbaExecutionResult parseProcedure(std::string_view module,std::string_view name,
     for(const auto& instruction:statements) {
         add(instruction.argument.capacity()+instruction.expression.capacity()+instruction.endExpression.capacity()+instruction.stepExpression.capacity());
         add(instruction.fixedBounds.capacity()*sizeof(VbaArrayDimension)); scalar(instruction.constantValue);
+        add(instruction.resizeTargets.capacity()*sizeof(ArrayResizeTarget));
+        for(const auto& target:instruction.resizeTargets) add(target.name.capacity()+target.bounds.capacity()+target.elementType.capacity());
     }
     for(const auto& parameter:*parsedParameters) {
         add(parameter.name.capacity()+parameter.type.capacity()+parameter.defaultExpression.capacity()); scalar(parameter.defaultValue);
@@ -1515,6 +1525,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         bool constantTarget=constantNames.contains(lower(instruction.argument));
         if(instruction.type==Statement::Type::EraseArray)
             for(const auto& target:splitArguments(instruction.argument)) if(constantNames.contains(lower(target))) constantTarget=true;
+        if(instruction.type==Statement::Type::ResizeArray)
+            for(const auto& target:instruction.resizeTargets) if(constantNames.contains(lower(target.name))) constantTarget=true;
         if(constantTarget && (instruction.type==Statement::Type::SetVar || instruction.type==Statement::Type::ObjectSet
             || instruction.type==Statement::Type::IndexedAssign || instruction.type==Statement::Type::ResizeArray || instruction.type==Statement::Type::EraseArray
             || instruction.type==Statement::Type::For || instruction.type==Statement::Type::ForEach)) {
@@ -1966,19 +1978,19 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 }
                 break;
             case Statement::Type::ResizeArray:
-                if(active) {
-                    const auto name=lower(instruction.argument),type=variableType(name);
+                if(active) for(const auto& target:instruction.resizeTargets) {
+                    const auto name=lower(target.name),type=variableType(name);
                     if(fixedArrays.contains(name)) throw VbaRuntimeError(3251,"ReDim of a fixed array is not implemented");
                     if(type=="paramarray") throw VbaRuntimeError(3251,"ParamArray resize is not implemented");
-                    if(!instruction.endExpression.empty() && type.empty() && !locals.contains(name))
+                    if(!target.elementType.empty() && type.empty() && !locals.contains(name))
                         throw VbaRuntimeError(3251,"Typed ReDim requires an existing Variant variable");
                     const bool declaredArray=type.ends_with("()");
                     const auto declaredElement=declaredArray ? type.substr(0,type.size()-2) : std::string{};
                     if(!type.empty() && type!="variant" && !declaredArray) throw VbaRuntimeError(13,"ReDim requires an array or Variant variable");
-                    if(declaredArray && !instruction.endExpression.empty() && instruction.endExpression!=declaredElement)
+                    if(declaredArray && !target.elementType.empty() && target.elementType!=declaredElement)
                         throw VbaRuntimeError(13,"ReDim cannot change a declared array element type");
                     std::vector<VbaArrayDimension> bounds;
-                    for(const auto& dimension:splitArguments(instruction.expression)) {
+                    for(const auto& dimension:splitArguments(target.bounds)) {
                         const auto range=outsideKeyword(dimension,"to");
                         const auto lowerBound=range==std::string::npos ? arrayBase : static_cast<int>(coerceVbaModuleValue(scalarVbaValue(evaluate(dimension.substr(0,range))),"long").number);
                         const auto upperBound=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(evaluate(range==std::string::npos ? dimension : dimension.substr(range+2))),"long").number);
@@ -1987,7 +1999,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     refreshAliases();
                     const auto found=locals.find(name);
                     const auto original=found==locals.end() ? VbaValue::empty() : found->second;
-                    assignVariable(name,resizeVbaArrayWithBounds(original,std::move(bounds),instruction.stepExpression=="preserve",declaredArray ? declaredElement : instruction.endExpression));
+                    assignVariable(name,resizeVbaArrayWithBounds(original,std::move(bounds),instruction.stepExpression=="preserve",declaredArray ? declaredElement : target.elementType));
+                    storeAliases();
                 }
                 break;
             case Statement::Type::EraseArray:
