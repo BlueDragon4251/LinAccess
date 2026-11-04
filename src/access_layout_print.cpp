@@ -204,6 +204,9 @@ bool AccessFormPreview::renderLayout(QPrinter& printer) {
     return painter.end();
 }
 bool AccessFormPreview::renderReport(QPrinter& printer) {
+    for (const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent","OnNoData"})
+        if (const auto result=eventResult(event);result && (result->status==linaccess::VbaExecutionStatus::Error
+            || result->status==linaccess::VbaExecutionStatus::Unsupported)) return false;
     if (reportAggregateCaching_ || layout_.kind!=linaccess::AccessDocumentKind::Report || !dataSourceAvailable_
         || dataTruncated_ || !layout_.reportPrintLimitations.isEmpty()) return false;
     auto* canvas=findChild<QWidget*>("access-form-canvas");

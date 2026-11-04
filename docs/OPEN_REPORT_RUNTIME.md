@@ -56,3 +56,11 @@ binding source. Unsupported report rules produce an explicit incomplete-output
 notice and layout fallback. This does not add grouping, CanGrow, full print-event
 scheduling, Access page setup, writable Page/Pages or direct-print view support.
 See PRINT_PREVIEW_ADAPTER.md for the bounded renderer and evidence.
+
+
+Owned reports saved in the native project now resolve through the same runtime,
+including actual Report CodeBehind, page view, independent project lifetime and
+bounded WhereCondition. Their generated fixed-band layout retains raw multiline
+RecordSource separately. See [owned reports](NATIVE_STORED_REPORTS.md); automatic
+column layout is not complete Access report design or a TOP-filter compatibility
+claim.

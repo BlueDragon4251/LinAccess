@@ -37,6 +37,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QPrintPreviewWidget>
 #include <QTimer>
 #include <QDateTime>
 #include <QTreeWidget>
@@ -339,6 +340,112 @@ End Sub
         dialog->reject();
     });
     edit->trigger(); dispose();
+}
+
+void exerciseStoredReport(MainWindow& window,QSqlDatabase db) {
+    using namespace linaccess;
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE native_report_rows(id INTEGER PRIMARY KEY,name TEXT)"));
+    assert(sql.exec("INSERT INTO native_report_rows VALUES(1,'first'),(2,'second'),(3,'third')"));
+    assert(sql.exec("CREATE TABLE native_report_events(kind TEXT)"));
+    const QString source="SELECT TOP 2 id,\n name AS [Display value]\n FROM native_report_rows ORDER BY id";
+    const QString module=R"VBA(Private counter As Long
+Sub Report_Open(Cancel As Integer)
+Dim typed As Report
+Set typed=Me
+If Not TypeOf typed Is Access.Report Then Err.Raise 5
+CurrentDb.Execute "INSERT INTO native_report_events VALUES('open')"
+End Sub
+Sub Report_Load()
+counter=counter+1
+Me.Tag=CStr(counter)
+Me![Display value].Tag="bound"
+End Sub
+Sub Increment()
+counter=counter+1
+Me.Tag=CStr(counter)
+End Sub
+Sub Report_Close()
+CurrentDb.Execute "INSERT INTO native_report_events VALUES('close')"
+End Sub
+)VBA";
+    auto* create=action(window,"+ Bericht"); assert(create);
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-report-designer");
+        dialog->findChild<QLineEdit*>("native-report-name")->setText("Owned Native Report");
+        dialog->findChild<QLineEdit*>("native-report-title")->setText("Owned report title");
+        dialog->findChild<QPlainTextEdit*>("native-report-sql")->setPlainText(source);
+        dialog->findChild<QPlainTextEdit*>("native-report-vba")->setPlainText(module);
+        dialog->findChild<QPushButton*>("native-report-save")->click();
+    });
+    create->trigger(); QApplication::processEvents();
+    assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='report' AND name='Owned Native Report'") && sql.next());
+    const auto saved=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
+    assert(saved.value("sql").toString()==source && saved.value("vba").toString()==module);
+    assert(sql.exec("SELECT COUNT(*) FROM native_report_events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
+    auto* explorer=window.findChild<QTreeWidget*>("database-explorer"); assert(explorer);
+    QTreeWidgetItem* selected=nullptr;
+    for(QTreeWidgetItemIterator item(explorer);*item;++item)
+        if((*item)->data(0,Qt::UserRole).toString()=="report" && (*item)->text(0)=="Owned Native Report") selected=*item;
+    assert(selected); explorer->setCurrentItem(selected);
+    assert(sql.exec("CREATE TEMP TABLE _la_objects(kind TEXT,name TEXT,definition TEXT)"));
+    assert(sql.exec("INSERT INTO temp._la_objects VALUES('report','Owned Native Report','{}')"));
+    assert(QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,selected),Q_ARG(int,0)));
+    QApplication::processEvents();
+    const auto locate=[&](const QString& name=QStringLiteral("Owned Native Report")) {
+        QPointer<AccessFormPreview> found;
+        for(const auto& document:AccessFormPreview::projectDocuments(db))
+            if(document && document->documentKind()==AccessDocumentKind::Report && document->documentName()==name) found=document;
+        return found;
+    };
+    auto report=locate(); assert(report && report->parentWidget()==&window && report->hasDataSource());
+    assert(report->eventResult("OnLoad") && report->eventResult("OnLoad")->status==VbaExecutionStatus::Completed);
+    auto object=makePreviewFormObject(*report);
+    assert(object->member("RecordSource",{}).asText()==source.toStdString() && object->member("Tag",{}).asText()=="1");
+    auto* value=report->findChild<QLineEdit*>("access-control-Display value"); assert(value && value->isReadOnly() && value->text()=="first" && value->property("la_access_tag").toString()=="bound");
+    assert(report->findChild<QComboBox*>("access-record-selector")->count()==3);
+    assert(report->findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==1);
+    std::vector<VbaValue> none;
+    assert(report->executeProcedure("Increment",none).status==VbaExecutionStatus::Completed && object->member("Tag",{}).asText()=="2");
+    QTemporaryDir output; assert(output.isValid() && report->exportReportPdf(output.filePath("owned.pdf")));
+    assert(report->close()); dispose(); assert(!locate());
+    auto filtered=saved; auto filteredSource=source; filteredSource.replace("TOP 2 ",""); filtered.insert("sql",filteredSource);
+    sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('report','Owned Filtered Report',?)");
+    sql.addBindValue(QString::fromUtf8(QJsonDocument(filtered).toJson(QJsonDocument::Compact))); assert(sql.exec()); sql.finish();
+    const QByteArray callerSource="Begin Form\nBegin Section\nHeight =300\nEnd\nEnd";
+    const QByteArray callerCode="Sub OpenStored()\nDoCmd.OpenReport \"owned filtered report\", acViewPreview, , \"id=2\"\nEnd Sub";
+    AccessFormPreview caller("Stored report caller",callerSource,callerCode,db,&window);
+    caller.show(); QApplication::setActiveWindow(&caller); QApplication::processEvents();
+    const auto opened=caller.executeProcedure("OpenStored",none);
+    if (opened.status!=VbaExecutionStatus::Completed) std::cerr<<"Stored report OpenReport: error="<<opened.errorNumber<<", line="<<opened.line<<", "<<opened.explanation<<'\n';
+    assert(opened.status==VbaExecutionStatus::Completed);
+    report=locate("Owned Filtered Report"); assert(report && report->findChild<QLineEdit*>("access-control-Display value")->text()=="second");
+    assert(caller.close() && AccessFormPreview::projectObjectLoaded(db,AccessDocumentKind::Report,"Owned Filtered Report"));
+    assert(report->close()); dispose();
+    assert(sql.exec("DROP TABLE temp._la_objects"));
+    assert(QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,selected),Q_ARG(int,0)));
+    assert(locate());
+    auto* edit=window.findChild<QAction*>("native-report-edit"); assert(edit);
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-report-designer");
+        assert(!AccessFormPreview::projectObjectLoaded(db,AccessDocumentKind::Report,"Owned Native Report"));
+        assert(dialog->findChild<QPlainTextEdit*>("native-report-sql")->toPlainText()==source);
+        assert(dialog->findChild<QPlainTextEdit*>("native-report-vba")->toPlainText()==module);
+        bool previewed=false;
+        QTimer::singleShot(0,dialog,[&] {
+            auto* preview=dynamic_cast<AccessFormPreview*>(QApplication::activeModalWidget());
+            assert(preview && preview->documentKind()==AccessDocumentKind::Report && preview->hasDataSource());
+            assert(preview->findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==1);
+            previewed=true; preview->reject();
+        });
+        dialog->findChild<QPushButton*>("native-report-preview")->click();
+        assert(previewed && QApplication::activeModalWidget()==dialog);
+        assert(dialog->findChild<QPlainTextEdit*>("native-report-sql")->toPlainText()==source);
+        dialog->reject();
+    });
+    explorer->setCurrentItem(selected); edit->trigger(); dispose();
+    assert(sql.exec("SELECT COUNT(*) FROM native_report_events WHERE kind='open'") && sql.next() && sql.value(0).toInt()==4); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM native_report_events WHERE kind='close'") && sql.next() && sql.value(0).toInt()==4); sql.finish();
 }
 
 void exerciseRecordEscape(MainWindow& window,QSqlDatabase db) {
@@ -2003,6 +2110,7 @@ int main(int argc,char** argv) {
     exerciseRecordEscape(window,db);
     exercisePageNavigation(window,db);
     exerciseStoredForm(window,db);
+    exerciseStoredReport(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

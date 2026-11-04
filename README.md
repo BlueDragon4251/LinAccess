@@ -124,6 +124,10 @@ ctest --test-dir build-core --output-on-failure
 
 ## Funktionen in dieser Entwicklungsstufe
 
+Selbst angelegte Berichte öffnen jetzt dieselbe native Report-Laufzeit mit SQL,
+VBA-Ereignissen, Seitenansicht und PDF. Der automatische Spaltenentwurf bleibt
+begrenzt; siehe [eigene Berichte](docs/NATIVE_STORED_REPORTS.md).
+
 Die native klassische Oberfläche ist unter **Ansicht → Klassische Oberfläche**
 umschaltbar; die Auswahl wird gespeichert. Sie bildet eine klassische Qt-Grundlage,
 keine nachgewiesene pixelgenaue Access-2003-Oberfläche. Details: [Darstellung](docs/CLASSIC_INTERFACE.md).

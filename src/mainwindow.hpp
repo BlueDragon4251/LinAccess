@@ -75,6 +75,7 @@ private:
     void editQuery(const QString& name = {});
     void editForm(const QString& name = {});
     void runForm(const QString& name);
+    void runReport(const QString& name);
     void editReport(const QString& name = {});
     void openExplorerItem(QTreeWidgetItem* item, int column);
 };
