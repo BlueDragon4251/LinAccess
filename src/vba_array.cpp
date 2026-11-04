@@ -9,9 +9,10 @@ public:
     const std::vector<VbaValue> values;
     const std::vector<VbaArrayDimension> bounds;
     const std::string elementType;
+    const bool detached;
     const std::shared_ptr<const char> allocation;
-    ArrayStorage(std::vector<VbaValue> elements,std::vector<VbaArrayDimension> dimensions,std::string type="variant",std::shared_ptr<const char> identity={})
-        :values(std::move(elements)),bounds(std::move(dimensions)),elementType(std::move(type)),allocation(identity ? std::move(identity) : std::make_shared<const char>(0)) {}
+    ArrayStorage(std::vector<VbaValue> elements,std::vector<VbaArrayDimension> dimensions,std::string type="variant",std::shared_ptr<const char> identity={},bool snapshot=false)
+        :values(std::move(elements)),bounds(std::move(dimensions)),elementType(std::move(type)),detached(snapshot),allocation(identity ? std::move(identity) : std::make_shared<const char>(0)) {}
     VbaValue member(std::string_view,const std::vector<VbaValue>&) override { throw VbaRuntimeError(13,"Array is not an object"); }
 };
 const ArrayStorage& storage(const VbaValue& value) {
@@ -25,14 +26,14 @@ std::vector<VbaArrayDimension> singleDimension(int lower,std::size_t count) {
     if(upper<std::numeric_limits<std::int32_t>::min() || upper>std::numeric_limits<std::int32_t>::max()) throw VbaRuntimeError(6,"Array bound overflow");
     return {{lower,static_cast<int>(upper)}};
 }
-VbaValue array(std::vector<VbaValue> values,std::vector<VbaArrayDimension> bounds,std::string elementType="variant",std::shared_ptr<const char> allocation={}) {
+VbaValue array(std::vector<VbaValue> values,std::vector<VbaArrayDimension> bounds,std::string elementType="variant",std::shared_ptr<const char> allocation={},bool detached=false) {
     if(elementType=="byte" && bounds.size()==1 && bounds[0].lower==0) {
         std::vector<unsigned char> bytes; bytes.reserve(values.size());
         for(const auto& value:values) bytes.push_back(static_cast<unsigned char>(value.number));
         return VbaValue::byteArray(std::move(bytes));
     }
     VbaValue value; value.kind=VbaValue::Kind::Array;
-    value.object=std::make_shared<ArrayStorage>(std::move(values),std::move(bounds),std::move(elementType),std::move(allocation)); return value;
+    value.object=std::make_shared<ArrayStorage>(std::move(values),std::move(bounds),std::move(elementType),std::move(allocation),detached); return value;
 }
 std::size_t boundedShapeSize(const std::vector<VbaArrayDimension>& bounds) {
     if(bounds.empty() || bounds.size()>60) throw VbaRuntimeError(9,"Array dimension count out of range");
@@ -72,6 +73,10 @@ VbaValue makeUnallocatedVbaArray(std::string elementType) { return array({}, {},
 VbaValue makeVbaArray(std::vector<VbaValue> values,int lowerBound) {
     auto bounds=singleDimension(lowerBound,values.size()); return array(std::move(values),std::move(bounds));
 }
+VbaValue makeDetachedVbaArray(std::vector<VbaValue> values,int lowerBound) {
+    auto bounds=singleDimension(lowerBound,values.size()); return array(std::move(values),std::move(bounds),"variant",{},true);
+}
+bool isDetachedVbaArray(const VbaValue& value) { return value.kind==VbaValue::Kind::Array && storage(value).detached; }
 VbaValue makeVbaArrayWithBounds(std::vector<VbaValue> values,std::vector<VbaArrayDimension> bounds) {
     const auto count=boundedShapeSize(bounds);
     if(count!=values.size()) throw VbaRuntimeError(9,"Array shape and storage differ");
@@ -166,6 +171,6 @@ VbaValue withVbaArrayElement(const VbaValue& value,const std::vector<VbaValue>& 
     const auto& original=storage(value); auto values=original.values;
     if(original.elementType=="object" && element.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Object array requires object references");
     values[index]=(original.elementType=="variant" || original.elementType=="object") ? element : coerceVbaModuleValue(scalarVbaValue(element),original.elementType);
-    return array(std::move(values),original.bounds,original.elementType,original.allocation);
+    return array(std::move(values),original.bounds,original.elementType,original.allocation,original.detached);
 }
 }

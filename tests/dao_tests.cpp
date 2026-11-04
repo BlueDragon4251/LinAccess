@@ -37,6 +37,74 @@ void testSqlRgbDao() {
     assert(sql.exec("INSERT INTO color_rows VALUES(1,255,0,0,0),(2,0,255,0,0)"));
     assert(sql.exec("CREATE TABLE color_values(value INTEGER)"));
     Host host(db);
+    assert(sql.exec("CREATE TABLE native_indexed_fields(id INTEGER PRIMARY KEY,value TEXT)"));
+    assert(sql.exec("INSERT INTO native_indexed_fields VALUES(1,'before')"));
+    const auto indexedFields=linaccess::executeVbaProcedure(R"VBA(Sub IndexedFields()
+Dim rows As DAO.Recordset, check As DAO.Recordset
+Dim fields As Object
+Set rows=CurrentDb.OpenRecordset("native_indexed_fields")
+rows.Edit
+rows("value")="indexed"
+Set fields=rows.Fields
+fields("value")="fields"
+rows.Fields("value")="final"
+Me!IndexedPending=rows("value")
+Set check=CurrentDb.OpenRecordset("SELECT value FROM native_indexed_fields")
+Me!IndexedBeforeUpdate=check!value
+check.Close
+rows.Update
+Me!IndexedCommitted=rows("value")
+rows.Close
+End Sub
+)VBA","IndexedFields",host);
+    if(indexedFields.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Indexed DAO error="<<indexedFields.errorNumber<<" line="<<indexedFields.line<<"\n";
+    assert(indexedFields.status==linaccess::VbaExecutionStatus::Completed && host.fields["IndexedPending"]=="final" && host.fields["IndexedBeforeUpdate"]=="before" && host.fields["IndexedCommitted"]=="final");
+    assert(sql.exec("SELECT value FROM native_indexed_fields WHERE id=1") && sql.next() && sql.value(0).toString()=="final"); sql.finish();
+
+    assert(sql.exec("CREATE TABLE native_dictionary_values(value TEXT)"));
+    const auto dictionarySql=linaccess::executeVbaProcedure(R"VBA(Sub DictionarySql()
+Dim d As Object
+Dim database As DAO.Database
+Dim rows As DAO.Recordset
+Dim batch As Variant
+Set d=CreateObject("Scripting.Dictionary")
+Set d("database")=CurrentDb
+Set database=d("database")
+database.Execute "INSERT INTO native_dictionary_values VALUES('native')"
+Set rows=database.OpenRecordset("SELECT value FROM native_dictionary_values")
+d("matrix")=rows.GetRows(1)
+batch=d("matrix")
+Me!DictionarySqlValue=batch(0,0)
+rows.Close
+End Sub
+)VBA","DictionarySql",host);
+    if(dictionarySql.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Dictionary SQL error="<<dictionarySql.errorNumber<<" line="<<dictionarySql.line<<"\n";
+    assert(dictionarySql.status==linaccess::VbaExecutionStatus::Completed && host.fields["DictionarySqlValue"]=="native");
+    const auto dictionaryLifetime=linaccess::executeVbaProcedure(R"VBA(Sub DictionaryLifetime()
+Dim d As Object, key As Variant
+Dim rows As DAO.Recordset, copyRows As DAO.Recordset
+Set rows=CurrentDb.OpenRecordset("native_indexed_fields")
+Set copyRows=rows.Clone
+Set d=CreateObject("Scripting.Dictionary")
+Set d("clone")=copyRows
+Set copyRows=Nothing
+For Each key In d
+Set d=Nothing
+On Error Resume Next
+DBEngine.BeginTrans
+Me!DictionaryHeldClone=CStr(Err.Number)
+On Error GoTo 0
+Exit For
+Next
+DBEngine.BeginTrans
+DBEngine.Rollback
+rows.Close
+End Sub
+)VBA","DictionaryLifetime",host);
+    if(dictionaryLifetime.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Dictionary lifetime error="<<dictionaryLifetime.errorNumber<<" line="<<dictionaryLifetime.line<<"\n";
+    assert(dictionaryLifetime.status==linaccess::VbaExecutionStatus::Completed && host.fields["DictionaryHeldClone"]=="3251");
+
+
     {
         QTemporaryFile file; assert(file.open() && file.write("abc",3)==3 && file.flush());
         auto path=file.fileName(); path.replace(QChar(39),"''");

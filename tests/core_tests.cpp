@@ -2888,6 +2888,95 @@ End Function
         const auto changed=executeVbaProcedure(edited,"Cached",firstCacheHost);
         assert(changed.status==VbaExecutionStatus::Completed && changed.typedReturnValue->number==31);
     }
+    const auto dictionaries=executeVbaProcedure(R"VBA(Sub Dictionaries()
+Dim d As Object, other As Object, held As Object
+Dim c As Collection
+Dim key As Variant, item As Variant, keys As Variant, copy As Variant, values As Variant
+Dim total As Long
+Set d=VBA.CreateObject(Class:="Scripting.Dictionary")
+d.Add Key:="one",Item:=1
+d("two")=2
+d.Item("three")=3
+d.Add CLng(1),"numeric"
+d.Add "1","text"
+Me!DictionaryDistinct=CStr(d.Exists(1)) & ":" & d("1") & ":" & CStr(d.Count)
+d.Key("three")="renamed"
+keys=d.Keys
+Me!DictionaryKeys=Join(keys,"|")
+Me!DictionaryMissing=CStr(IsEmpty(d("missing"))) & ":" & CStr(d.Count)
+d.Remove "missing"
+d.Remove 1
+For Each item In d.Items
+If IsNumeric(item) Then total=total+item
+Next
+Me!DictionaryTotal=CStr(total) & ":" & CStr(UBound(keys))
+For Each key In d
+On Error Resume Next
+d.Add "forbidden",9
+Me!DictionaryEnumerationError=CStr(Err.Number)
+On Error GoTo 0
+Exit For
+Next
+d.Add "after",4
+For Each key In d.Keys
+d.Remove key
+Next
+Me!DictionarySnapshotErase=CStr(d.Count)
+values=Array(10,20)
+d("array")=values
+values(0)=99
+copy=d("array")
+copy(0)=77
+Me!DictionaryArray=CStr(d("array")(0))
+Set other=New Scripting.Dictionary
+Set d("object")=other
+other.Add "x",5
+Set held=d("object")
+Me!DictionaryObject=TypeName(held) & ":" & CStr(held("x"))
+On Error Resume Next
+d.Add "self",d
+Me!DictionarySelfError=CStr(Err.Number)
+On Error GoTo 0
+Set c=New Collection
+c.Add d
+On Error Resume Next
+d.Add "cycle",c
+Me!DictionaryCycleError=CStr(Err.Number)
+On Error GoTo 0
+Set c=New Collection
+d.Add "collection",c
+On Error Resume Next
+c.Add d
+Me!CollectionDictionaryCycleError=CStr(Err.Number)
+On Error GoTo 0
+Set other=CreateObject("Scripting.Dictionary")
+other.Add "A",1
+other.Add "a",2
+Me!DictionaryBinary=CStr(other.Count)
+other.RemoveAll
+other.CompareMode=vbTextCompare
+other.Add "A",1
+Me!DictionaryText=CStr(other.Exists("a")) & ":" & CStr(other.CompareMode)
+On Error Resume Next
+other.Add "a",2
+Me!DictionaryDuplicateError=CStr(Err.Number)
+other.CompareMode=0
+Me!DictionaryCompareError=CStr(Err.Number)
+other.Add "ä",3
+Me!DictionaryRegionalError=CStr(Err.Number)
+Set held=CreateObject("unsupported.class")
+Me!DictionaryClassError=CStr(Err.Number)
+On Error GoTo 0
+End Sub
+)VBA","Dictionaries",host);
+    if(dictionaries.status!=VbaExecutionStatus::Completed) std::cerr<<"Dictionary error="<<dictionaries.errorNumber<<" line="<<dictionaries.line<<"\n";
+    assert(dictionaries.status==VbaExecutionStatus::Completed);
+    assert(host.fields["DictionaryDistinct"]=="True:text:5" && host.fields["DictionaryKeys"]=="one|two|renamed|1|1" && host.fields["DictionaryMissing"]=="True:6");
+    assert(host.fields["DictionaryTotal"]=="6:4" && host.fields["DictionaryEnumerationError"]=="3251" && host.fields["DictionarySnapshotErase"]=="0");
+    assert(host.fields["DictionaryArray"]=="10" && host.fields["DictionaryObject"]=="Dictionary:5");
+    assert(host.fields["DictionarySelfError"]=="3251" && host.fields["DictionaryCycleError"]=="3251" && host.fields["CollectionDictionaryCycleError"]=="3251");
+    assert(host.fields["DictionaryBinary"]=="2" && host.fields["DictionaryText"]=="True:1" && host.fields["DictionaryDuplicateError"]=="457" && host.fields["DictionaryCompareError"]=="5");
+    assert(host.fields["DictionaryRegionalError"]=="3251" && host.fields["DictionaryClassError"]=="3251");
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub

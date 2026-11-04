@@ -7,6 +7,8 @@
 #include "vba_analyzer.hpp"
 
 #include <algorithm>
+#include <bit>
+#include <list>
 #include <chrono>
 #include <charconv>
 #include <cmath>
@@ -71,8 +73,26 @@ VbaValue nativeFileInformation(const VbaValue& input,bool modifiedTime) {
     formatted<<std::put_time(&local,"%Y-%m-%d %H:%M:%S");
     return vbaDateValue(VbaValue::string(formatted.str()));
 }
+class NativeVariantContainer {
+public:
+    virtual ~NativeVariantContainer() = default;
+    virtual void visitOwnedValues(const std::function<void(const VbaValue&)>& visitor) const = 0;
+};
+void checkNativeContainerItem(const VbaObject* owner,const VbaValue& value) {
+    std::unordered_set<const VbaObject*> visited; std::size_t budget=1000000;
+    const auto check=[&](auto&& self,const VbaValue& entry,int depth) -> void {
+        if(!budget-- || depth>64) throw error("Container item traversal limit",3251);
+        if(entry.kind==VbaValue::Kind::Object && entry.object) {
+            if(entry.object.get()==owner) throw error("Cyclic native container lifetime is not implemented",3251);
+            if(visited.insert(entry.object.get()).second) if(const auto* container=dynamic_cast<const NativeVariantContainer*>(entry.object.get()))
+                container->visitOwnedValues([&](const VbaValue& child) { self(self,child,depth+1); });
+        } else if(entry.kind==VbaValue::Kind::Array && visited.insert(entry.object.get()).second)
+            for(std::size_t i=0;i<vbaArraySize(entry);++i) self(self,vbaArrayLinearElement(entry,i),depth+1);
+    };
+    check(check,value,0);
+}
 // VBA Collection owns ordered Variant values and optional case-insensitive keys.
-class VbaCollection final : public VbaObject {
+class VbaCollection final : public VbaObject,public NativeVariantContainer {
     struct Entry { VbaValue value; std::optional<std::string> key; };
     std::vector<Entry> entries_;
     std::shared_ptr<int> enumerators_=std::make_shared<int>(0);
@@ -95,27 +115,13 @@ class VbaCollection final : public VbaObject {
         }
         throw error("Invalid Collection index or key",5);
     }
-    void checkItem(const VbaValue& value) const {
-        std::unordered_set<const VbaObject*> visited;
-        std::size_t budget=1000000;
-        const auto check=[&](auto&& self,const VbaValue& entry,int depth) -> void {
-            if(!budget-- || depth>64) throw error("Collection item traversal limit",3251);
-            if(entry.kind==VbaValue::Kind::Object) {
-                if(const auto* nested=dynamic_cast<const VbaCollection*>(entry.object.get())) {
-                    if(nested==this) throw error("Cyclic Collection lifetime is not implemented",3251);
-                    if(visited.insert(nested).second)
-                        for(const auto& child:nested->entries_) self(self,child.value,depth+1);
-                }
-            } else if(entry.kind==VbaValue::Kind::Array && visited.insert(entry.object.get()).second)
-                for(const auto& child:vbaArrayValues(entry)) self(self,child,depth+1);
-        };
-        check(check,value,0);
-    }
+    void checkItem(const VbaValue& value) const { checkNativeContainerItem(this,value); }
     void requireMutable() const {
         if(*enumerators_) throw error("Collection mutation during For Each is not implemented",3251);
     }
 public:
     std::string_view className() const override { return "Collection"; }
+    void visitOwnedValues(const std::function<void(const VbaValue&)>& visitor) const override { for(const auto& entry:entries_) visitor(entry.value); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto member=lower(std::string(name));
         if(member=="add") return VbaArgumentSignature{{"Item","Key","Before","After"},1};
@@ -572,6 +578,104 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
     return VbaValue::numeric(answer);
 }
 
+class VbaDictionary final : public VbaObject,public NativeVariantContainer {
+    struct Key { bool numeric{}; std::uint64_t number{}; std::string text; bool operator==(const Key&) const = default; };
+    struct Hash { std::size_t operator()(const Key& key) const { return key.numeric ? std::hash<std::uint64_t>{}(key.number)^0x9e3779b9U : std::hash<std::string>{}(key.text); } };
+    struct Entry { Key key; VbaValue original,value; };
+    std::list<Entry> entries_;
+    std::unordered_map<Key,std::list<Entry>::iterator,Hash> index_;
+    std::shared_ptr<int> enumerators_=std::make_shared<int>(0);
+    int compare_{};
+    Key key(const VbaValue& value) const {
+        if(value.kind==VbaValue::Kind::Number) {
+            if(!std::isfinite(value.number)) throw error("Non-finite Dictionary keys are not implemented",3251);
+            return {true,std::bit_cast<std::uint64_t>(value.number==0 ? 0.0 : value.number),{}};
+        }
+        if(value.kind!=VbaValue::Kind::Text) throw error("Dictionary keys require native String or numeric values",3251);
+        (void)utf16String(value.text); auto text=value.text;
+        if(compare_) for(auto& ch:text) {
+            if(static_cast<unsigned char>(ch)>127) throw error("Regional Dictionary text keys are not implemented",3251);
+            if(ch>='A' && ch<='Z') ch=static_cast<char>(ch-'A'+'a');
+        }
+        return {false,0,std::move(text)};
+    }
+    void structural() const { if(*enumerators_) throw error("Dictionary structural mutation during enumeration is not implemented",3251); }
+    void add(const VbaValue& original,const VbaValue& value) {
+        const auto normalized=key(original); structural();
+        if(index_.contains(normalized)) throw error("Duplicate Dictionary key",457);
+        if(entries_.size()>=1000000) throw error("Dictionary allocation limit",3251);
+        checkNativeContainerItem(this,value);
+        entries_.push_back({normalized,original,value});
+        try { index_.emplace(normalized,std::prev(entries_.end())); } catch(...) { entries_.pop_back(); throw; }
+    }
+    static void count(const std::vector<VbaValue>& args,std::size_t expected) {
+        if(args.size()!=expected || std::any_of(args.begin(),args.end(),[](const VbaValue& value){ return value.kind==VbaValue::Kind::Missing; })) throw error("Dictionary argument count",450);
+    }
+public:
+    std::string_view className() const override { return "Dictionary"; }
+    void visitOwnedValues(const std::function<void(const VbaValue&)>& visitor) const override { for(const auto& entry:entries_) visitor(entry.value); }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        const auto member=lower(std::string(name));
+        if(member=="add") return VbaArgumentSignature{{"Key","Item"},2};
+        if(member=="item" || member=="exists" || member=="remove" || member=="key") return VbaArgumentSignature{{"Key"},1};
+        return {};
+    }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        const auto member=lower(std::string(name));
+        if(member=="count" || member=="comparemode") { count(args,0); return VbaValue::longInteger(static_cast<std::int32_t>(member=="count" ? entries_.size() : compare_)); }
+        if(member=="add") { count(args,2); add(args[0],args[1]); return VbaValue::empty(); }
+        if(member=="item" || member=="exists" || member=="remove") {
+            count(args,1); const auto normalized=key(args[0]); const auto found=index_.find(normalized);
+            if(member=="exists") return VbaValue::logical(found!=index_.end());
+            if(member=="remove") {
+                structural(); if(found==index_.end()) throw error("Removing an absent Dictionary key is not implemented",3251);
+                entries_.erase(found->second); index_.erase(found); return VbaValue::empty();
+            }
+            if(found==index_.end()) { add(args[0],VbaValue::empty()); return VbaValue::empty(); }
+            return found->second->value;
+        }
+        if(member=="keys" || member=="items") {
+            count(args,0); std::vector<VbaValue> values; values.reserve(entries_.size());
+            for(const auto& entry:entries_) values.push_back(member=="keys" ? entry.original : entry.value);
+            return makeDetachedVbaArray(std::move(values));
+        }
+        if(member=="removeall") { count(args,0); structural(); index_.clear(); entries_.clear(); return VbaValue::empty(); }
+        throw error("Unknown Dictionary member",438);
+    }
+    void assign(std::string_view name,const VbaValue& value) override {
+        if(lower(std::string(name))!="comparemode") throw error("Dictionary property is read-only or unknown",438);
+        structural(); if(!entries_.empty()) throw error("Dictionary CompareMode cannot change after adding data",5);
+        const auto mode=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(value),"long").number);
+        if(mode!=0 && mode!=1) throw error("Dictionary database/locale comparison is not implemented",3251);
+        compare_=mode;
+    }
+    void assignIndexedMember(std::string_view name,const std::vector<VbaValue>& args,const VbaValue& value) override {
+        count(args,1); const auto member=lower(std::string(name));
+        const auto normalized=key(args[0]); const auto found=index_.find(normalized);
+        if(member=="item") {
+            if(found==index_.end()) { add(args[0],value); return; }
+            checkNativeContainerItem(this,value); auto staged=value; found->second->value=std::move(staged); return;
+        }
+        if(member=="key") {
+            structural(); if(found==index_.end()) throw error("Renaming an absent Dictionary key is not implemented",3251);
+            auto replacement=key(value);
+            if(replacement==normalized) throw error("Equivalent Dictionary key renaming is not implemented",3251);
+            if(index_.contains(replacement)) throw error("Duplicate Dictionary key",457);
+            const auto entry=found->second; auto original=value;
+            index_.emplace(replacement,entry); index_.erase(normalized);
+            entry->key=std::move(replacement); entry->original=std::move(original); return;
+        }
+        throw error("Unknown Dictionary indexed property",438);
+    }
+    std::shared_ptr<void> enumerationGuard() override {
+        struct Lease { std::shared_ptr<int> count; explicit Lease(std::shared_ptr<int> value):count(std::move(value)) { ++*count; } ~Lease() { --*count; } };
+        return std::make_shared<Lease>(enumerators_);
+    }
+    std::vector<VbaValue> enumerate() override {
+        std::vector<VbaValue> keys; keys.reserve(entries_.size()); for(const auto& entry:entries_) keys.push_back(entry.original); return keys;
+    }
+};
+
 class ExpressionParser {
 public:
     ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals,
@@ -776,7 +880,7 @@ private:
             consume(); word=lower(consume().value);
             static const std::unordered_set<std::string> intrinsics{
                 "array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
-                "doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
+                "createobject","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
                 "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdate","cstr","str","str$","format","format$",
                 "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
@@ -794,6 +898,10 @@ private:
         if(word=="new") {
             if(accessExpression_) throw error("New is unavailable in calculated expressions",3251);
             auto type=consume();
+            if(type.type==Token::Type::Word && lower(type.value)=="scripting" && take(".")) {
+                type=consume(); if(type.type!=Token::Type::Word || lower(type.value)!="dictionary") throw error("Native Scripting class is not implemented",3251);
+                return host_ ? VbaValue::reference(std::make_shared<VbaDictionary>()) : VbaValue{};
+            }
             if(type.type==Token::Type::Word && lower(type.value)=="vba" && take(".")) type=consume();
             if(type.type!=Token::Type::Word || lower(type.value)!="collection") throw error("Native class construction is not implemented",3251);
             return host_ ? VbaValue::reference(std::make_shared<VbaCollection>()) : VbaValue{};
@@ -993,6 +1101,7 @@ private:
                     {"lcase",{{"String"},1}}, {"lcase$",{{"String"},1}},
                     {"ucase",{{"String"},1}}, {"ucase$",{{"String"},1}},
                     {"val",{{"String"},1}},
+                    {"createobject",{{"Class","ServerName"},1}},
                     {"filelen",{{"PathName"},1}}, {"filedatetime",{{"PathName"},1}},
                     {"hex",{{"Number"},1}}, {"hex$",{{"Number"},1}},
                     {"oct",{{"Number"},1}}, {"oct$",{{"Number"},1}},
@@ -1138,6 +1247,15 @@ private:
                 std::replace(result.begin(),result.end(),'e','E');
                 if (number>=0) result.insert(result.begin(),' ');
                 return VbaValue::string(std::move(result));
+            }
+            if(word=="createobject") {
+                if(!host_) return {};
+                if(args.empty() || args.size()>2 || omitted[0]) throw error("CreateObject requires a class",450);
+                if(accessExpression_) throw error("CreateObject is unavailable in calculated expressions",3251);
+                const auto name=coerceVbaModuleValue(scalarObjectValue(args[0]),"string").asText();
+                if(args.size()>1 && !omitted[1] && !coerceVbaModuleValue(scalarObjectValue(args[1]),"string").asText().empty()) throw error("Remote object activation is not implemented",3251);
+                if(lower(name)!="scripting.dictionary") throw error("Native object class is not implemented",3251);
+                return VbaValue::reference(std::make_shared<VbaDictionary>());
             }
             if(word=="filelen" || word=="filedatetime") {
                 if(!host_) return {};
