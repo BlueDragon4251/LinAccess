@@ -57,3 +57,18 @@ endpoints, compound selectors, changed endpoints after insertion/Requery and
 NULL endpoints through the actual control Value API. The existing SQL First/Last
 implementation is separate; this extends report-expression execution.
 Reference: [Access 2003 First/Last](https://documentation.help/MS-Office-Access-2003/dasqlfirstlast.htm).
+
+## Exact Currency report Sum
+
+Homogeneous Currency observations now accumulate signed scaled integer units and
+return Currency. Overflow raises error 6 before addition; mixed Currency/non-
+Currency observations remain explicitly unsupported until coercion is validated.
+NULL observations are omitted; all-NULL input still yields NULL. Other existing
+Sum conversion behavior remains unchanged. This report accumulator does not use
+SQLite REAL as an intermediate; SQL Currency storage limits remain separate.
+
+An existing report case reads exact decimal strings from actual SQL rows, uses
+Sum(CCur([amount])) and checks the native control Value equals the maximum signed
+Currency units. Adding 0.0001 through the database and Requery then raises error 6;
+failed PDF output preserves the previous successful PDF. No Windows result oracle
+or complete aggregate coercion/group equivalence is claimed.
