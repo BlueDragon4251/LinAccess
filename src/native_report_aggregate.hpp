@@ -2,6 +2,7 @@
 #include "vba_expression.hpp"
 #include <cmath>
 #include <optional>
+#include <limits>
 #include <string>
 
 namespace linaccess {
@@ -43,6 +44,17 @@ public:
             ++count_;
             return;
         }
+        if(function_=="sum" && value.kind==VbaValue::Kind::Currency) {
+            if(count_ && !currencyTotal_) throw VbaRuntimeError(3251,"Mixed Currency sum types unsupported");
+            const auto previous=currencyTotal_.value_or(0),units=value.currencyUnits;
+            if((units>0 && previous>std::numeric_limits<std::int64_t>::max()-units)
+                || (units<0 && previous<std::numeric_limits<std::int64_t>::min()-units))
+                throw VbaRuntimeError(6,"Currency sum overflow");
+            currencyTotal_=previous+units;
+            ++count_;
+            return;
+        }
+        if(currencyTotal_) throw VbaRuntimeError(3251,"Mixed Currency sum types unsupported");
         if(function_!="sum" && value.kind!=VbaValue::Kind::Number)
             throw VbaRuntimeError(3251,"Report aggregate value type unsupported");
         if(function_=="sum" && !allowTextSum_ && value.kind==VbaValue::Kind::Text)
@@ -62,6 +74,7 @@ public:
         if(function_=="count") return VbaValue::numeric(count_);
         if(!count_) return {};
         if(extremum_) return *extremum_;
+        if(currencyTotal_) return VbaValue::currency(*currencyTotal_);
         const double value=function_=="avg" ? static_cast<double>(mean_) : total_;
         if(!std::isfinite(value)) throw VbaRuntimeError(6,"Aggregate overflow");
         return VbaValue::numeric(value);
@@ -73,5 +86,6 @@ private:
     double total_{};
     long double mean_{};
     std::optional<VbaValue> extremum_;
+    std::optional<std::int64_t> currencyTotal_;
 };
 }

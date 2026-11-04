@@ -5526,3 +5526,17 @@ See NATIVE_DLOOKUP.md for exact scope and public references.
 Domain aggregate milestone: full desktop48/48 passes (84.14 s), fresh GUI-free
 core1/1 (2.67 s), Debian payload/Build-ID/pinned SQLite and all four original
 fixture SHA-256 checks pass. No additional target or catalog item.
+
+## Exact native report Currency Sum (2026-11-04)
+
+Report Sum now accumulates homogeneous Currency units as signed integers and
+retains Currency result identity. Overflow raises error6 before arithmetic;
+mixed Currency/non-Currency inputs remain explicitly guarded. Existing Number
+and Sum text-conversion behavior is preserved. SQL REAL storage bounds are not
+weakened. Actual SQL decimal-string rows plus CCur reach INT64_MAX exactly;
+another 0.0001 and Requery expose overflow6 and preserve the existing PDF.
+Desktop build and existing layout1/1 pass (10.49 s total). No new target/catalog
+item. Fixed 456/384/72; broad report/typing/oracle requirements remain open.
+Exact report Currency Sum: Debian executable/Build-ID/pinned SQLite and all four
+original fixture hashes pass. Last full suite remains domain aggregates48/48
+(84.14 s), GUI-free core1/1 (2.67 s); bounded report change used layout regression.

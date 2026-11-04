@@ -387,6 +387,38 @@ Height =1500)BANDS");
         }
         assert(typedStats.exportReportPdf(output.filePath("typed-extrema.pdf")));
         assert(typedStats.close());
+        assert(query.exec("CREATE TABLE native_currency_sums(id INTEGER PRIMARY KEY,amount TEXT)"));
+        assert(query.exec("INSERT INTO native_currency_sums VALUES(1,'922337203685477.5806'),(2,'0.0001')")); query.finish();
+        const QByteArray currencySource=R"FORM(Begin Report
+Width =9000
+RecordSource ="native_currency_sums"
+Begin Section
+Height =300
+End
+Begin FormFooter
+Height =300
+Begin TextBox
+Name ="ExactTotal"
+ControlSource ="=Sum(CCur([amount]))"
+Width =6000
+Height =270
+End
+End
+End
+)FORM";
+        AccessFormPreview currencyStats("exact Currency sum",currencySource,{},db);
+        const auto currencyControl=makePreviewControlsObject(currencyStats)->member("Item",{linaccess::VbaValue::string("ExactTotal")});
+        const auto exactTotal=currencyControl.object->member("Value",{});
+        assert(exactTotal.kind==linaccess::VbaValue::Kind::Currency && exactTotal.currencyUnits==INT64_MAX);
+        const auto exactPdf=output.filePath("exact-currency-sum.pdf"); assert(currencyStats.exportReportPdf(exactPdf));
+        QFile exactFile(exactPdf); assert(exactFile.open(QIODevice::ReadOnly)); const auto exactBytes=exactFile.readAll(); exactFile.close();
+        assert(query.exec("INSERT INTO native_currency_sums VALUES(3,'0.0001')")); query.finish();
+        (void)makePreviewFormObject(currencyStats)->member("Requery",{});
+        assert(currencyStats.findChild<QLineEdit*>("access-control-ExactTotal")->property("la_calculation_error").toInt()==6);
+        assert(!currencyStats.exportReportPdf(exactPdf));
+        assert(exactFile.open(QIODevice::ReadOnly) && exactFile.readAll()==exactBytes); exactFile.close();
+        assert(currencyStats.close());
+        assert(query.exec("DROP TABLE native_currency_sums")); query.finish();
         assert(query.exec("UPDATE native_report_stats SET value=NULL")); query.finish();
         (void)statsObject->member("Requery",{});
         for(const auto& function:functions) {
