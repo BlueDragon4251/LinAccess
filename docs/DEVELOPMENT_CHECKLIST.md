@@ -1061,3 +1061,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Indexed object default writes support Dictionary values/references and real DAO Recordset/Fields pending edits committed only through Update.
 
 - [x] Scalar module Object fields initialize to Nothing and retain actual native object identity across calls, with checked reference binding, visibility metadata and independent host state.
+
+- [x] Native As Object argument/Set/collection-loop binding checks actual references; ByVal/ByRef replacement and independently omitted Optional Nothing parameters execute through real native objects.

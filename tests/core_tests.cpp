@@ -1752,7 +1752,7 @@ End Sub
         assert(result.status == VbaExecutionStatus::Error && result.errorNumber == 91);
         args[0] = VbaValue::numeric(2);
         result = executeVbaProcedureWithArguments(module,"Iterate",form,args);
-        assert(result.status == VbaExecutionStatus::Error && result.errorNumber == 424);
+        assert(result.status == VbaExecutionStatus::Error && result.errorNumber == 13);
     }
 
     assert(validVbaExpression("Format$(\"2003-12-31\", \"yyyy\")"));
@@ -3008,6 +3008,51 @@ End Sub
     try { (void)coerceVbaModuleValue(VbaValue::longInteger(1),"object"); }
     catch(const VbaRuntimeError& error) { rejectedScalarObject=error.number==13; }
     assert(rejectedScalarObject);
+
+    const std::string objectArguments=R"VBA(Sub ByValue(ByVal item As Object)
+item.Add "shared",1
+Set item=CreateObject("Scripting.Dictionary")
+item.Add "private",2
+End Sub
+Sub ByReference(ByRef item As Object)
+Set item=CreateObject("Scripting.Dictionary")
+item.Add "replacement",3
+End Sub
+Function OptionalItem(Optional ByRef item As Object=Nothing) As Long
+If IsMissing(item) Then Err.Raise 5
+If item Is Nothing Then Set item=CreateObject("Scripting.Dictionary")
+item.Add "local",1
+OptionalItem=item.Count
+End Function
+Sub Exercise()
+Dim item As Object, objects As Collection, entry As Object
+Set item=CreateObject("Scripting.Dictionary")
+ByValue item
+Me!ObjectByValue=CStr(item.Exists("shared")) & ":" & CStr(item.Exists("private"))
+ByReference item
+Me!ObjectByReference=CStr(item.Exists("replacement"))
+Me!ObjectOptional=CStr(OptionalItem()) & ":" & CStr(OptionalItem())
+Set objects=New Collection
+objects.Add item
+For Each entry In objects
+Me!ObjectIteration=CStr(entry.Exists("replacement"))
+Next entry
+objects.Add 10
+On Error Resume Next
+For Each entry In objects
+Next entry
+Me!ObjectIterationError=CStr(Err.Number)
+End Sub
+)VBA";
+    const auto boundObjects=executeVbaProcedure(objectArguments,"Exercise",host);
+    assert(boundObjects.status==VbaExecutionStatus::Completed);
+    assert(host.fields["ObjectByValue"]=="True:False" && host.fields["ObjectByReference"]=="True");
+    assert(host.fields["ObjectOptional"]=="1:1" && host.fields["ObjectIteration"]=="True" && host.fields["ObjectIterationError"]=="13");
+    std::vector<VbaValue> invalidObjectArgument{VbaValue::longInteger(1)};
+    const auto invalidObjectBinding=executeVbaProcedureWithArguments(objectArguments,"ByValue",host,invalidObjectArgument);
+    assert(invalidObjectBinding.status==VbaExecutionStatus::Error && invalidObjectBinding.errorNumber==13);
+    const auto invalidObjectDefault=executeVbaProcedure("Sub Invalid(Optional item As Object=1)\nEnd Sub","Invalid",host);
+    assert(invalidObjectDefault.status==VbaExecutionStatus::Unsupported);
 
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99

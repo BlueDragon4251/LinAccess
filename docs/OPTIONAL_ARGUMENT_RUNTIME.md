@@ -21,7 +21,7 @@ or a distinct Missing Variant. IsMissing distinguishes that marker from Empty,
 Null and CVErr; VarType/TypeName/IsError expose its Error subtype. Function and
 Sub calls support argument holes and forwarded Missing values without aliasing
 defaults back to omitted caller slots. Scalar Missing coercion, exact SCODE/BSTR
-semantics, qualified/cross-module constant linking, general Object defaults and full declaration/
+semantics, qualified/cross-module constant linking, non-Nothing Object defaults, early-bound DAO optional declarations and full declaration/
 compile-time coercion remain open. Named calls are documented in NAMED_ARGUMENT_RUNTIME.md. Bounded
 ParamArray evaluation is documented separately in [PARAMARRAY_RUNTIME.md](PARAMARRAY_RUNTIME.md).
 This segment does not claim complete VBA argument binding or a Windows oracle.
@@ -35,3 +35,35 @@ parameter metadata. Named overrides and explicit Empty remain separate from
 omission; each omitted ByRef argument receives an independent value. Existing
 Null/Empty/Collection Nothing defaults preserve their prior meanings. Runtime
 calls/variables and bare clocks do not execute during default evaluation.
+
+
+## Native Object bindings and Nothing defaults (2026-11-04)
+
+As Object parameters now require actual native object references (including
+Nothing), rejecting scalar arguments with type mismatch 13 before the body.
+ByVal preserves shared object mutation while keeping reference replacement
+local; ByRef replacement writes back through supported caller bindings.
+Optional As Object with an omitted default or explicit Nothing binds a fresh
+Nothing slot for each call, without aliasing omitted arguments. IsMissing
+remains false for these typed slots. Non-Nothing object defaults and optional
+early-bound DAO types remain unsupported.
+
+Set targets use checked binding. Object-collection For Each control assignments
+use the same checked path, refusing scalar values for As Object controls.
+General default-member Let/Set coercion, full compile-time declaration checks,
+class/reference-library binding and Access 2003 error precedence remain open.
+An existing core case now expects parameter mismatch 13 before a numeric
+argument can reach the object's loop, replacing its previous late error 424.
+
+
+## Checked native Object parameters and optional Nothing (2026-11-04)
+
+As Object binds actual references/Nothing before execution. ByVal shares object
+mutation while replacement stays local; supported ByRef writes replacement back.
+Optional Object Nothing slots are independent per omitted call. Set and object
+collection loops use checked assignment. OPTIONAL_ARGUMENT_RUNTIME.md records
+remaining default-member/compiler/early-bound boundaries. Existing core target
+extended only. Full desktop 48/48 (77.73 s), freshly rebuilt GUI-free 1/1
+(1.24 s), targeted core 1/1 (1.23 s), Debian payload/permissions/Build-ID/pinned
+SQLite and all four original hashes pass. Scoped checklist 370 checked / 72
+open; not complete Access 2003 parity.
