@@ -26,6 +26,8 @@
 #include <QPrintPreviewWidget>
 #include <QTimer>
 #include <QAction>
+#include <QTabWidget>
+#include <QSpinBox>
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -145,6 +147,14 @@ Height =1500)BANDS");
         pagedSource.replace("Name =\"ReportSummary\"\nTop", "Name =\"ReportSummary\"\nControlSource =\"=Sum([id])\"\nTop");
         pagedSource.replace("Name =\"PageNumber\"\nTop", "Name =\"PageNumber\"\nControlSource =\"=CStr([Page]) & Chr(47) & CStr([Pages])\"\nTop");
         AccessFormPreview paged("paged report",pagedSource,{},db);
+        auto* reportPages=paged.findChild<QPrintPreviewWidget*>("access-report-pages");
+        auto* reportTabs=paged.findChild<QTabWidget*>("access-report-view-tabs");
+        auto* pageNumber=paged.findChild<QSpinBox*>("access-report-page-number");
+        assert(reportPages && reportPages->pageCount()==2 && reportTabs && reportTabs->currentIndex()==0 && pageNumber);
+        pageNumber->setValue(2);
+        assert(reportPages->currentPage()==2 && makePreviewFormObject(paged)->member("Page",{}).asNumber()==2);
+        assert(makePreviewFormObject(paged)->member("Pages",{}).asNumber()==2);
+        pageNumber->setValue(1);
         const auto document=output.filePath("records.pdf");
         assert(paged.exportReportPdf(document));
         QFile pdf(document); assert(pdf.open(QIODevice::ReadOnly));
@@ -195,6 +205,7 @@ Height =1500)BANDS");
         assert(query.exec("INSERT INTO records VALUES(3,'third')")); query.finish();
         makePreviewFormObject(compound)->member("Requery",{});
         assert(compound.findChild<QLineEdit*>("access-control-ReportSummary")->text()=="52");
+        assert(compound.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==3);
         assert(compound.exportReportPdf(output.filePath("compound.pdf")));
         assert(compound.findChild<QLineEdit*>("access-control-ReportSummary")->text()=="52");
         assert(compound.close());
@@ -207,6 +218,7 @@ Height =1500)BANDS");
         assert(invalid.close());
         auto growingSource=pagedSource; growingSource.replace("Name =\"Name\"","Name =\"Name\"\nCanGrow =-1");
         AccessFormPreview growing("growing report",growingSource,{},db);
+        assert(growing.findChild<QTabWidget*>("access-report-view-tabs")->currentIndex()==1);
         assert(!growing.exportReportPdf(document));
         QFile unchanged(document); assert(unchanged.open(QIODevice::ReadOnly) && unchanged.readAll()==bytes);
         assert(growing.close());

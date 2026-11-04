@@ -43,3 +43,16 @@ window modes and nonempty OpenArgs are also explicitly unsupported. This adapter
 retains the existing bounded report renderer; complete sections/grouping/
 pagination, print jobs, Access event/error/window ordering and original output
 comparison remain open. Four original direct-print calls are not counted solved.
+
+
+## In-document pages for the fixed-band subset
+
+A successful native report now builds its paginated QPrintPreviewWidget after
+initial report events, with actual page navigation and zoom. Supported fixed-band
+reports therefore expose the report pages directly when opened, as well as through
+the separate preview/PDF/print actions. Requery rebuilds the page view. The retained
+native controls live in the current-layout inspector tab and remain the runtime
+binding source. Unsupported report rules produce an explicit incomplete-output
+notice and layout fallback. This does not add grouping, CanGrow, full print-event
+scheduling, Access page setup, writable Page/Pages or direct-print view support.
+See PRINT_PREVIEW_ADAPTER.md for the bounded renderer and evidence.

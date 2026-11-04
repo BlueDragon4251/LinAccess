@@ -173,6 +173,8 @@ private:
     void buildPrintToolbar(QVBoxLayout* layout);
     bool renderLayout(QPrinter& printer);
     bool renderReport(QPrinter& printer);
+    void buildReportPageView(QVBoxLayout* layout,QWidget* layoutView);
+    void refreshReportPageView();
     bool writePdf(const QString& path,bool report);
     QMap<QString,linaccess::VbaExecutionResult> eventResults_;
     QString formName_;
@@ -204,6 +206,7 @@ private:
     QMap<QString,std::shared_ptr<linaccess::VbaValue>> reportAggregateValues_;
     bool reportAggregateCaching_{};
     int reportPrintPage_{},reportPrintPages_{};
+    QPointer<QWidget> reportPageView_;
     int dataSourceErrorNumber_{};
     QStringList dataColumns_;
     QMap<QString,QString> dataTypes_;

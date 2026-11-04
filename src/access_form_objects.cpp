@@ -4,6 +4,7 @@
 #include "dao_database.hpp"
 #include <QThread>
 #include "access_form_preview.hpp"
+#include <QPrintPreviewWidget>
 #include <QMainWindow>
 #include "vba_qt_value.hpp"
 #include <QApplication>
@@ -735,9 +736,13 @@ public:
         if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected form arguments");
         if (key=="page" || key=="pages") {
             if (!report_) throw linaccess::VbaRuntimeError(438,"Page properties require a report");
-            if (preview.reportPrintPages_<=0) throw linaccess::VbaRuntimeError(3251,"Page properties require paginated output");
-            return key=="page" ? linaccess::VbaValue::longInteger(preview.reportPrintPage_)
-                : linaccess::VbaValue::integer(preview.reportPrintPages_);
+            int page=preview.reportPrintPage_,pages=preview.reportPrintPages_;
+            if (pages<=0 && preview.reportPageView_ && preview.reportPageView_->property("la_report_pages_valid").toBool())
+                if (const auto* view=preview.findChild<QPrintPreviewWidget*>("access-report-pages")) {
+                    page=view->currentPage(); pages=view->pageCount();
+                }
+            if (pages<=0) throw linaccess::VbaRuntimeError(3251,"Page properties require paginated output");
+            return key=="page" ? linaccess::VbaValue::longInteger(page) : linaccess::VbaValue::integer(pages);
         }
         if (key == "name") return linaccess::VbaValue::string(bytes(preview.formName_));
         if (key == "tag") return linaccess::VbaValue::string(bytes(preview.property("la_access_tag").toString()));

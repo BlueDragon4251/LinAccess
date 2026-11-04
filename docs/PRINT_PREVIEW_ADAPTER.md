@@ -42,6 +42,28 @@ catalog remains 456 entries; the broader report tasks stay open.
 Report-footer placement follows the print-preview ordering described in
 [Microsoft's report guide](https://support.microsoft.com/en-gb/access/guide-to-designing-reports).
 
+## In-document paginated report view
+
+After successful Open/NoData/Load/initial-current processing, supported imported
+reports open a real QPrintPreviewWidget page view in the report document itself.
+The same fixed-band renderer supplies every page. Page navigation, zoom and an
+explicit refresh act on that widget; Requery rebuilds it automatically. The
+original native controls remain available in the separate **Aktuelles Layout**
+tab as the runtime/data backing and inspector. This is not an Access-2003 pixel
+or complete window-model reproduction.
+
+Unsupported rendering disables the report page tab, selects the layout tab and
+shows an explicit incomplete-output notice. A failed report is not presented as
+a successful empty page view. Page/Pages reads use a valid page widget outside an
+active render; invalidated/stale views cannot supply old page metadata. Native
+QPrinter lifetime encloses the preview widget's lifetime. Property writes, full
+Page/Format/Print events and complete automatic invalidation after arbitrary
+runtime styling/data mutation remain open; users can explicitly refresh.
+
+The existing report-event test checks two native document pages, actual navigation
+and Page/Pages reads, three pages after SQL insertion/Requery, and explicit layout
+fallback for CanGrow. No extra CTest target or work-catalog point was introduced.
+
 ## Fixed-band report PDF output
 
 A separate **Bericht als PDF** action and `exportReportPdf` path now paginate the
@@ -63,8 +85,8 @@ compound arguments on empty sources fail explicitly; group scope, running totals
 and exact full Access aggregate typing remain open.
 
 Page/Pages expressions read the actual planned current/total page during output;
-the bounded report-object getters return Long/Integer respectively. Outside this
-paginated context they fail explicitly. Property writes and Page-event scheduling
+the bounded report-object getters return Long/Integer respectively. Outside an active render or a valid in-document
+paginated preview they fail explicitly. Property writes and Page-event scheduling
 remain unsupported. A two-page PDF independently contains 1/2 and 2/2 once each;
 a final-row-only footer expression is also checked. These reads follow Microsoft's
 [Page](https://learn.microsoft.com/en-us/office/vba/api/access.report.page%28property%29)
