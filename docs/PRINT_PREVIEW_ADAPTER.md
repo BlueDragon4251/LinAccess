@@ -193,3 +193,23 @@ its OnOpen; complete startup is not
 claimed (NATIVE_FORM_RUNTIME.md). Its diagnostic test rolls back changes on an isolated
 MDB import before the report inventory runs. No original toolbar names or
 complete Office menu hierarchy are fabricated.
+
+## Bounded report preview keyboard commands
+
+Ctrl+P invokes the existing full-report print action in the report window. Plain
+P opens the same dialog and C closes through the normal document-close path when
+focus is inside the actual paginated preview/navigation pane. The plain-letter
+shortcuts have WidgetWithChildren scope there, so they do not intercept typing
+in the separate layout controls. The P command respects the print action's
+visible/enabled state. Existing Escape dialog closing remains unchanged.
+
+The existing report case sends actual Qt key events to the preview surface,
+opens/rejects native QPrintDialog for Ctrl+P and P without submitting a job,
+checks preserved record state, and closes a report with C before checking its
+retained Section wrapper's closed guard. The first plain-P probe targeted an
+inactive outer preview widget after a modal dialog; activating the document and
+focusing the real graphics surface gives the same path as user keyboard input.
+No printer-output or complete Access keyboard parity is claimed.
+
+Reference: [Access 2003 keyboard documentation](https://documentation.help/MS-Office-Access-2003/AccessKeyboardShortcuts.htm)
+records P/Ctrl+P for the print dialog and C/Escape for leaving preview.

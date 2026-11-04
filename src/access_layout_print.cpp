@@ -25,6 +25,7 @@
 #include <QSpinBox>
 #include <QLabel>
 #include <QSignalBlocker>
+#include <QShortcut>
 
 namespace {
 class NativeReportPageView final : public QWidget {
@@ -112,6 +113,14 @@ void AccessFormPreview::buildReportPageView(QVBoxLayout* layout,QWidget* layoutV
             }
         },[this] { refreshReportPageView(); },tabs);
     reportPageView_=pages;
+    auto* printKey=new QShortcut(QKeySequence(Qt::Key_P),pages);
+    printKey->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(printKey,&QShortcut::activated,this,[this] {
+        if(auto* action=findChild<QAction*>("access-report-print");action && action->isVisible() && action->isEnabled()) action->trigger();
+    });
+    auto* closeKey=new QShortcut(QKeySequence(Qt::Key_C),pages);
+    closeKey->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(closeKey,&QShortcut::activated,this,&AccessFormPreview::reject);
     tabs->addTab(pages,"Bericht"); tabs->addTab(layoutView,"Aktuelles Layout");
     refreshReportPageView();
 }
@@ -170,6 +179,8 @@ void AccessFormPreview::buildPrintToolbar(QVBoxLayout* layout) {
     });
     auto* reportPrint=printToolbar_->addAction("Bericht drucken …");
     reportPrint->setObjectName("access-report-print");
+    reportPrint->setShortcut(QKeySequence::Print);
+    reportPrint->setShortcutContext(Qt::WindowShortcut);
     connect(reportPrint,&QAction::triggered,this,[this] {
         QPrinter printer(QPrinter::HighResolution);
         QPrintDialog dialog(&printer,this);
