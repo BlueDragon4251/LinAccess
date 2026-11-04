@@ -38,6 +38,10 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     const int force=forceValue.toInt(-1);
     if(!forceValue.isUndefined() && (!forceValue.isDouble() || force<0 || force>3 || forceValue.toDouble()!=force))
         throw VbaRuntimeError(5,"Invalid native report detail page break setting");
+    const auto headerForceValue=definition.value("header_force_new_page");
+    const int headerForce=headerForceValue.toInt(-1);
+    if(!headerForceValue.isUndefined() && (!headerForceValue.isDouble() || headerForce<0 || headerForce>3 || headerForceValue.toDouble()!=headerForce))
+        throw VbaRuntimeError(5,"Invalid native report header page break setting");
     const auto code=definition.value("vba").toString();
     const auto bytes=code.toUtf8(); const auto analysis=analyzeVba(std::string_view(bytes.constData(),bytes.size()));
     QSet<QString> procedures;
@@ -46,7 +50,9 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     QStringList lines{"Begin Report","Caption ="+quoted(definition.value("title").toString(name)),"Width ="+QString::number(reportWidth)};
     for (const auto& event:{QString("Open"),QString("Load"),QString("NoData"),QString("Close")})
         if (procedures.contains(("Report_"+event).toCaseFolded())) lines<<"On"+event+" =\"[Event Procedure]\"";
-    lines<<"Begin FormHeader"<<"Height =600"<<"Begin Label"<<"Name ="+quoted(unique("native_report_title"))
+    lines<<"Begin FormHeader"<<"Height =600";
+    if(!headerForceValue.isUndefined()) lines<<"ForceNewPage ="+QString::number(headerForce);
+    lines<<"Begin Label"<<"Name ="+quoted(unique("native_report_title"))
         <<"Caption ="+quoted(definition.value("title").toString(name))<<"Width ="+QString::number(reportWidth-60)
         <<"Height =450"<<"FontWeight =700"<<"End"<<"End"<<"Begin PageHeader"<<"Height =450";
     for (int i=0;i<columns.size();++i)

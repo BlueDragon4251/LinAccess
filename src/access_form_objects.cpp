@@ -758,8 +758,7 @@ public:
             return linaccess::VbaValue::logical(enabled);
         }
         if(key=="forcenewpage") {
-            requireDetail(preview);
-            return linaccess::VbaValue::byte(preview.layout_.detailForceNewPage);
+            return linaccess::VbaValue::byte(forceNewPage(preview));
         }
         throw linaccess::VbaRuntimeError(438,"Section property unsupported");
     }
@@ -783,12 +782,12 @@ public:
             canvas->setProperty("la_section_runtime_backgrounds",overrides); canvas->update();
             refresh(preview); return;
         }
-        requireDetail(preview);
+        auto& flags=forceNewPage(preview);
         if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null ForceNewPage");
         const int setting=linaccess::sqlFieldValue(scalar,"INTEGER1").toInt();
         if(setting>3) throw linaccess::VbaRuntimeError(5,"ForceNewPage setting out of range");
-        if(preview.layout_.detailForceNewPage==setting) return;
-        preview.layout_.detailForceNewPage=setting;
+        if(flags==setting) return;
+        flags=setting;
         refresh(preview);
     }
 private:
@@ -796,9 +795,13 @@ private:
         if(preview.reportPageView_) preview.reportPageView_->setProperty("la_report_pages_valid",false);
         preview.refreshReportPageView();
     }
-    void requireDetail(const AccessFormPreview& preview) const {
-        if(preview.layout_.kind!=linaccess::AccessDocumentKind::Report || section_!="Section")
-            throw linaccess::VbaRuntimeError(3251,"ForceNewPage currently requires a report detail section");
+    int& forceNewPage(AccessFormPreview& preview) const {
+        if(preview.layout_.kind==linaccess::AccessDocumentKind::Report) {
+            if(section_=="Section") return preview.layout_.detailForceNewPage;
+            if(section_=="FormHeader") return preview.layout_.reportHeaderForceNewPage;
+            if(section_=="FormFooter") return preview.layout_.reportFooterForceNewPage;
+        }
+        throw linaccess::VbaRuntimeError(3251,"ForceNewPage requires a supported report body section");
     }
     QString section_;
 };

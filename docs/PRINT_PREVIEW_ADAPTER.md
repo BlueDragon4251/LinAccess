@@ -147,7 +147,7 @@ bindings, supported calculated expressions, or unbound values. Truncated row set
 failed calculated expressions, overflowing controls/bands, groups, unsupported growing/
 shrinking/repeated sections, running sums, hidden duplicates, multiple columns,
 unsupported forced page breaks and section/page print events are rejected.
-[Detail ForceNewPage](REPORT_DETAIL_BREAKS.md) is supported separately. It does not
+[Report body ForceNewPage](REPORT_DETAIL_BREAKS.md) is supported separately. It does not
 implement Access page setup, grouping, full dynamic layout/CanGrow, subreports,
 Format/Print/Page scheduling, or DoCmd's direct-print view. The current-layout toolbar
 commands retain their one-page behavior. Separate Berichtsvorschau and Bericht

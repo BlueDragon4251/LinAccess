@@ -262,6 +262,8 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         || (!recordRows_.isEmpty() && (detail<=0 || detail>3500))
         || height("FormHeader")>pageHeight-header-footer
         || height("FormFooter")>pageHeight-header-footer) return false;
+    if((layout_.reportHeaderForceNewPage && height("FormHeader")==0)
+        || (layout_.reportFooterForceNewPage && height("FormFooter")==0)) return false;
     if (!growers.isEmpty() && layout_.sectionCanGrow.contains("Section") && !layout_.sectionCanGrow.value("Section")) return false;
     struct SavedControl { QPointer<QWidget> widget; QRect geometry; bool hidden; };
     QMap<QString,SavedControl> saved;
@@ -354,9 +356,9 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
     const auto startPage=[&](int row) {
         ++pageNumber; record=row; append("PageHeader",0,record); y=header;
     };
-    bool pendingDetailBreak=false;
+    bool pendingBodyBreak=(layout_.reportHeaderForceNewPage&2)!=0;
     for (int row=0;row<recordRows_.size();++row) {
-        if((pendingDetailBreak || (layout_.detailForceNewPage&1)) && y>header) {
+        if((pendingBodyBreak || (layout_.detailForceNewPage&1)) && y>header) {
             finishPage(); startPage(row+1);
         }
         const int size=detailHeights[row];
@@ -364,7 +366,7 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
         record=row+1;
         if(size<=pageHeight-header-footer) {
             append("Section",y,record); y+=size;
-            pendingDetailBreak=(layout_.detailForceNewPage&2)!=0; continue;
+            pendingBodyBreak=(layout_.detailForceNewPage&2)!=0; continue;
         }
         resetControls(); applyGrowth(row); currentRecordIndex_=record; loadRecord();
         QVector<QPair<int,int>> forbidden;
@@ -404,9 +406,9 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
             y+=end-slice; slice=end;
             if(slice<size) { finishPage(); startPage(record); }
         }
-        pendingDetailBreak=(layout_.detailForceNewPage&2)!=0;
+        pendingBodyBreak=(layout_.detailForceNewPage&2)!=0;
     }
-    if(pendingDetailBreak && height("FormFooter")>0 && y>header) { finishPage(); startPage(record); }
+    if((pendingBodyBreak || (layout_.reportFooterForceNewPage&1)) && height("FormFooter")>0 && y>header) { finishPage(); startPage(record); }
     if (y+height("FormFooter")>pageHeight-footer) { finishPage(); startPage(record); }
     append("FormFooter",y,record); finishPage();
     if (pageNumber>32767) return false;
