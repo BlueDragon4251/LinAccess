@@ -4960,3 +4960,30 @@ SQLite and all four original fixture hashes pass. This remains a single-detail
 layout/PDF path: repeated detail bands, pagination, CanGrow, grouping and section
 Format/Print/Page scheduling remain open. Fixed catalog 456 (384 checked bounded
 entries), 48 CTest targets unchanged; no full Access parity percentage is claimed.
+
+
+## Fixed-band multi-record report PDF (2026-11-04)
+
+A separate native Bericht als PDF action now emits the actual loaded SQL rows
+through repeated fixed detail bands, report header/footer and repeated page
+header/footer. It keeps details whole, uses physical TWIP-derived dimensions on
+the QPrinter page and restores the displayed record. Per-section QPicture vector
+recording avoids rasterized widget output, duplicate bands and double DPI scaling.
+The existing current-layout one-page actions keep their previous behavior.
+
+This bounded path refuses truncated rows, unsupported controls/calculated field
+bindings, declared group/growing/shrinking/multicolumn/running-sum/page-event rules
+and geometry that would silently clip data. Failed output cannot overwrite an
+existing destination. Access page setup, complete formatting/event scheduling,
+groups, aggregates, CanGrow, subreports and direct-print view remain open (F085).
+
+The existing report-event case checks two SQL rows on two PDF pages, restoration,
+and destination preservation. Available pdftotext independently confirms each
+value occurs exactly once in order, normalizing Unicode ligatures. Initial raster,
+DPI and clipping defects were found and corrected before this validation. No new
+CTest target or catalog item was introduced.
+
+Validation: access_2003_layouts 1/1 (9.73 s); full desktop 48/48 (81.28 s);
+GUI-free core 1/1 (2.23 s); Debian payload/permissions/Build-ID/pinned SQLite;
+all four original fixture SHA-256 checks pass. Catalog stays 456/384/72 and the
+broader full Access-2003 parity requirement stays open.

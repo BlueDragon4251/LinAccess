@@ -42,6 +42,36 @@ catalog remains 456 entries; the broader report tasks stay open.
 Report-footer placement follows the print-preview ordering described in
 [Microsoft's report guide](https://support.microsoft.com/en-gb/access/guide-to-designing-reports).
 
+## Fixed-band report PDF output
+
+A separate **Bericht als PDF** action and `exportReportPdf` path now paginate the
+loaded SQL rows. Report header is emitted once, page header/footer on each page,
+detail once per row, and report footer after the last row (on another page when
+necessary). The renderer uses physical TWIP-derived dimensions on QPrinter's
+printable page, keeps detail bands whole, and restores the previously displayed
+record after output. The current-layout actions retain their one-page behavior.
+
+Native Qt controls are recorded per section with QPicture and replayed as vector
+commands. Recording only that section prevents duplicate controls; compensating
+QPicture's device-DPI conversion avoids applying the print scale twice. Output
+uses the existing temporary-file/QSaveFile path and does not overwrite the
+destination after an unsupported or failed rendering attempt.
+
+This is a fixed-band subset: Label, TextBox, Rectangle and Line, with direct field
+bindings or unbound values. Truncated row sets, missing fields, other controls,
+calculated control sources, overflowing controls/bands, groups, declared growing/
+shrinking/repeated sections, running sums, hidden duplicates, multiple columns,
+forced page breaks and section/page print events are rejected. It does not
+implement Access page setup, grouping, expression pagination, CanGrow, subreports,
+Format/Print/Page scheduling, or DoCmd's direct-print view. Preview/print toolbar
+commands still show the current layout, not this separate paginated PDF path.
+
+The existing report-event target creates two pages from two real SQL rows and
+checks that the displayed record is restored. Where `pdftotext` is installed,
+it also verifies both values occur exactly once in order (Unicode ligatures are
+normalized). It checks that overflowing and CanGrow sources cannot replace a
+previously generated PDF. No additional CTest target or catalog item was added.
+
 ## Original source execution evidence
 
 Three hash-fixed original Kassa Report_Open procedures execute in full through
