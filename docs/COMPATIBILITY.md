@@ -2229,3 +2229,13 @@ Variant ByRef bindings remain guarded; explicit Variant copies can be inspected.
 VARIANT_ARRAY_RUNTIME.md defines fixed/class/Optional/COM/enumeration boundaries.
 Full desktop 48/48 (93.65 s), rebuilt GUI-free 1/1 (1.85 s), Debian package and
 four original fixture hashes pass; no new test targets or full VBA claim.
+
+
+## Native VBA file metadata (2026-11-04)
+
+FileLen and FileDateTime read actual native Linux file metadata, with named/
+VBA-qualified calls, UTF-8 absolute/relative paths, checked Long size overflow
+and typed local-time Date results. No contents are read or written by these
+functions. FILE_METADATA_RUNTIME.md documents Windows path/handle/locale/SQL
+boundaries and native error mapping. Full desktop 48/48 (93.70 s), rebuilt
+GUI-free 1/1 (1.65 s), Debian package and four original fixture hashes pass.

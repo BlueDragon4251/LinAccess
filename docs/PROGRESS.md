@@ -4194,3 +4194,17 @@ Complete desktop 48/48 (93.65 s), fresh GUI-free core 1/1 (1.85 s), Debian paylo
 permissions/Build-ID/pinned SQLite and all four original fixture hashes pass.
 Existing core tests extended; no new CTest targets. Scoped checklist 354 checked /
 72 open, not total Access 2003 parity.
+
+
+## Real native VBA file size and timestamp functions (2026-11-04)
+
+FileLen returns checked native byte sizes as VBA Long; FileDateTime converts
+actual last-write timestamps to local typed Date values. Relative/absolute
+UTF-8 paths, named/qualified calls, NUL/path failures and sparse-file overflow
+are integrated without reading/modifying source file contents. Windows drive/
+UNC mapping and VBA handle/snapshot/LOF semantics remain open; no general
+Windows filesystem or SQL registration claim. FILE_METADATA_RUNTIME.md defines
+scope and current primary references. Existing core target extended only.
+Full desktop 48/48 (93.70 s), fresh GUI-free core 1/1 (1.65 s), Debian payload/
+permissions/Build-ID/pinned SQLite and four original fixture hashes pass.
+Scoped checklist 356 checked / 72 open, not total Access 2003 parity.

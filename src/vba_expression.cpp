@@ -13,6 +13,7 @@
 #include <cctype>
 #include <ctime>
 #include <iomanip>
+#include <filesystem>
 #include <cstdint>
 #include <limits>
 #include <locale>
@@ -32,6 +33,43 @@ VbaRuntimeError error(const std::string& reason, int code = 5) { return VbaRunti
 VbaValue stringLongResult(std::size_t value) {
     if(value>static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) throw error("String result exceeds VBA Long",6);
     return VbaValue::longInteger(static_cast<std::int32_t>(value));
+}
+VbaValue nativeFileInformation(const VbaValue& input,bool modifiedTime) {
+    const auto text=coerceVbaModuleValue(input,"string").asText();
+    if(text.find('\0')!=std::string::npos || text.find_first_of("*?")!=std::string::npos) throw error("Invalid native file pathname",52);
+    if(text.find('\\')!=std::string::npos || (text.size()>1 && text[1]==':')) throw error("Windows drive/UNC path mapping is not implemented",3251);
+    if(text.empty()) throw error("File not found",53);
+    namespace fs=std::filesystem;
+    const fs::path path(text);
+    const auto failure=[&](const std::error_code& reason) -> VbaRuntimeError {
+        if(reason==std::errc::permission_denied) return error("File permission denied",70);
+        if(reason==std::errc::filename_too_long || reason==std::errc::invalid_argument) return error("Invalid native file pathname",52);
+        if(reason==std::errc::no_such_file_or_directory || reason==std::errc::not_a_directory) {
+            std::error_code parentError;
+            const bool parentExists=!path.has_parent_path() || fs::is_directory(path.parent_path(),parentError);
+            if(parentError==std::errc::permission_denied) return error("File permission denied",70);
+            return parentExists ? error("File not found",53) : error("Path not found",76);
+        }
+        return error("Native file metadata unavailable",75);
+    };
+    std::error_code problem;
+    const auto status=fs::status(path,problem);
+    if(problem) throw failure(problem);
+    if(!fs::exists(status)) throw failure(std::make_error_code(std::errc::no_such_file_or_directory));
+    if(!fs::is_regular_file(status) && !(modifiedTime && fs::is_directory(status))) throw error("Unsupported file metadata target",75);
+    if(!modifiedTime) {
+        const auto length=fs::file_size(path,problem); if(problem) throw failure(problem);
+        if(length>static_cast<std::uintmax_t>(std::numeric_limits<std::int32_t>::max())) throw error("File length exceeds VBA Long",6);
+        return VbaValue::longInteger(static_cast<std::int32_t>(length));
+    }
+    const auto modified=fs::last_write_time(path,problem); if(problem) throw failure(problem);
+    const auto system=std::chrono::floor<std::chrono::seconds>(fs::file_time_type::clock::to_sys(modified));
+    const auto stamp=std::chrono::system_clock::to_time_t(system);
+    std::tm local{};
+    if(!localtime_r(&stamp,&local) || local.tm_year+1900<100 || local.tm_year+1900>9999) throw error("File timestamp exceeds VBA Date",6);
+    std::ostringstream formatted; formatted.imbue(std::locale::classic());
+    formatted<<std::put_time(&local,"%Y-%m-%d %H:%M:%S");
+    return vbaDateValue(VbaValue::string(formatted.str()));
 }
 // VBA Collection owns ordered Variant values and optional case-insensitive keys.
 class VbaCollection final : public VbaObject {
@@ -745,7 +783,7 @@ private:
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
                 "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
-                "choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor"};
+                "filelen","filedatetime","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor"};
             if(!intrinsics.contains(word) && !word.starts_with("vb")) throw error("Qualified VBA member is not implemented",3251);
             qualifiedIntrinsic=true; qualifiedArray=word=="array";
         }
@@ -948,6 +986,7 @@ private:
                     {"lcase",{{"String"},1}}, {"lcase$",{{"String"},1}},
                     {"ucase",{{"String"},1}}, {"ucase$",{{"String"},1}},
                     {"val",{{"String"},1}},
+                    {"filelen",{{"PathName"},1}}, {"filedatetime",{{"PathName"},1}},
                     {"hex",{{"Number"},1}}, {"hex$",{{"Number"},1}},
                     {"oct",{{"Number"},1}}, {"oct$",{{"Number"},1}},
                     {"space",{{"Number"},1}}, {"space$",{{"Number"},1}},
@@ -1092,6 +1131,13 @@ private:
                 std::replace(result.begin(),result.end(),'e','E');
                 if (number>=0) result.insert(result.begin(),' ');
                 return VbaValue::string(std::move(result));
+            }
+            if(word=="filelen" || word=="filedatetime") {
+                if(!host_) return {};
+                if(args.size()!=1 || omitted[0]) throw error("File metadata requires one pathname",450);
+                const auto path=scalarObjectValue(args[0]);
+                const auto text=coerceVbaModuleValue(path,"string"); (void)utf16String(text.asText());
+                return nativeFileInformation(text,word=="filedatetime");
             }
             if(word=="array") {
                 if(!host_) return {};
