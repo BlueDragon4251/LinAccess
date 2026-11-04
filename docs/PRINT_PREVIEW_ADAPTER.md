@@ -220,3 +220,18 @@ records P/Ctrl+P for the print dialog and C/Escape for leaving preview.
 for the current native report session; preview, PDF and print share that layout.
 S invokes it only inside the preview/navigation pane. This does not complete
 original Access printer setup decoding or persisted report design properties.
+
+## Native F5/Z and fit-page navigation
+
+F5 focuses/selects the actual page-number spinbox. Keyboard tracking is disabled
+for typed numbers, so Enter commits navigation; buttons and programmatic selection
+still act immediately. Z toggles native 100% custom zoom and FitInView. While
+FitInView is active, PageDown/Down advance and PageUp/Up return, clamped to actual
+page bounds. These navigation bindings belong to the graphics surface and disable
+in other zoom modes, leaving native Qt scrolling available. Plain-letter/F5 keys
+belong to the report pane, outside editable layout controls.
+
+Existing actual-key cases verify focus, deferred page-number commit, both pairs
+of page keys and both zoom directions. Exact Windows zoom anchoring and all
+Access scroll/keyboard/window behavior remain open. The Access-2003 keyboard
+reference linked above distinguishes fit-page navigation from zoomed scrolling.

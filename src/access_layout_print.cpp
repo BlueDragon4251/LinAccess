@@ -28,6 +28,8 @@
 #include <QLabel>
 #include <QSignalBlocker>
 #include <QShortcut>
+#include <QGraphicsView>
+#include <utility>
 
 namespace {
 class NativeReportPageView final : public QWidget {
@@ -40,7 +42,7 @@ public:
         auto* navigation=new QHBoxLayout;
         auto* previous=new QPushButton("Zurück",this);
         auto* next=new QPushButton("Weiter",this);
-        auto* number=new QSpinBox(this); number->setRange(1,32767);
+        auto* number=new QSpinBox(this); number->setRange(1,32767); number->setKeyboardTracking(false);
         number->setObjectName("access-report-page-number");
         auto* total=new QLabel(this);
         auto* smaller=new QPushButton("−",this);
@@ -54,12 +56,34 @@ public:
         pages_=new QPrintPreviewWidget(&printer_,this);
         pages_->setObjectName("access-report-pages");
         layout->addWidget(pages_,1);
+        auto* pageNumberKey=new QShortcut(QKeySequence(Qt::Key_F5),this);
+        pageNumberKey->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(pageNumberKey,&QShortcut::activated,number,[number] { number->setFocus(); number->selectAll(); });
+        auto* zoomKey=new QShortcut(QKeySequence(Qt::Key_Z),this);
+        zoomKey->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(zoomKey,&QShortcut::activated,pages_,[this] {
+            if(pages_->zoomMode()==QPrintPreviewWidget::CustomZoom) pages_->setZoomMode(QPrintPreviewWidget::FitInView);
+            else pages_->setZoomFactor(1.0);
+        });
+        if(auto* surface=pages_->findChild<QGraphicsView*>()) {
+            const std::pair<Qt::Key,int> commands[]{{Qt::Key_PageDown,1},{Qt::Key_Down,1},{Qt::Key_PageUp,-1},{Qt::Key_Up,-1}};
+            for(const auto& [key,direction]:commands) {
+                auto* shortcut=new QShortcut(QKeySequence(key),surface);
+                shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+                shortcut->setEnabled(pages_->zoomMode()==QPrintPreviewWidget::FitInView);
+                pageKeys_.append(shortcut);
+                connect(shortcut,&QShortcut::activated,pages_,[this,direction] {
+                    pages_->setCurrentPage(qBound(1,pages_->currentPage()+direction,qMax(1,pages_->pageCount())));
+                });
+            }
+        }
         connect(pages_,&QPrintPreviewWidget::paintRequested,this,[this,render](QPrinter* printer) {
             setProperty("la_report_pages_valid",false);
             setProperty("la_report_pages_valid",render(*printer));
         });
         connect(pages_,&QPrintPreviewWidget::previewChanged,this,[this,previous,next,number,total,changed] {
             const int count=pages_->pageCount(),page=pages_->currentPage();
+            for(const auto& key:pageKeys_) if(key) key->setEnabled(pages_->zoomMode()==QPrintPreviewWidget::FitInView);
             const QSignalBlocker blocked(number);
             number->setMaximum(qMax(1,count)); number->setValue(qMax(1,page));
             total->setText("von "+QString::number(count));
@@ -93,6 +117,7 @@ public:
 private:
     QPrinter printer_;
     QPrintPreviewWidget* pages_{};
+    QVector<QPointer<QShortcut>> pageKeys_;
 };
 bool applyReportPageLayout(QWidget* view,QPrinter& printer) {
     const auto* pages=dynamic_cast<NativeReportPageView*>(view);
