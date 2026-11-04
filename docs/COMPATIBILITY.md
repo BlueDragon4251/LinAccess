@@ -2554,3 +2554,12 @@ Variablen/Arrays/Parameter As Enum und vollständige Typbibliotheks-/Klassensich
 barkeit bleiben offen. Unter F051 nutzt Error expression eine eigene native
 Anweisung; ein lokales Err ersetzt diesen Fehlerpfad nicht. Unary +/- erhält
 Null (F041). Diese Details gehören zu bestehenden IDs; Gesamtzahl bleibt 456.
+
+
+GoSub/Return (F040/F051) führt native prozedurlokale Unterprogramme mit
+gemeinsamen Variablen, geschachtelten Rücksprüngen und lebenden Aufrufer-Scopes
+aus. Label-Handler können eigene GoSubs ausführen und den Fehlerzustand mit
+Resume/Resume 0/Resume Next wiederherstellen oder per Resume label verlassen.
+Return ohne GoSub meldet Fehler 3. Direkte Handler-Rückkehr in einen
+suspendierten Fehler-GoSub (3251), numerische Labels und Block-Labels bleiben
+offen; keine vollständige VBA-Sprung-/Debugger-Parität.

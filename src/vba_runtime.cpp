@@ -28,7 +28,7 @@ struct Statement {
     enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
-                      Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, RaiseError, ErrorResumeNext, ErrorDisable, Label, Jump, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
+                      Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, RaiseError, ErrorResumeNext, ErrorDisable, Label, Jump, GoSub, ReturnSubroutine, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
     std::string argument;
     std::string expression;
     int line{};
@@ -554,8 +554,10 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     const std::regex cancelParam(R"(^Cancel\s+As\s+(?:Integer|Boolean)$)", std::regex::icase);
     const std::regex objectSet(R"(^Set\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
     const std::regex label(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*):$)");
+    const std::regex goSub(R"(^GoSub\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
     const std::regex jump(R"(^GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
     const std::regex errorHandler(R"(^On\s+Error\s+GoTo\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
+    const std::regex resumeZero(R"(^Resume\s+0$)",std::regex::icase);
     const std::regex resumeLabel(R"(^Resume\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)$)", std::regex::icase);
     const std::regex whileStart(R"(^(Do\s+(While|Until)|While)\s+(.+)$)", std::regex::icase);
     const std::regex loopEnd(R"(^(Loop|Wend)(?:\s+(While|Until)\s+(.+))?$)",std::regex::icase);
@@ -616,7 +618,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 source=trim(source.substr(0,separator));
                 if(source.empty()) continue;
                 static const std::regex identifier(R"(^[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*$)");
-                static const std::unordered_set<std::string> statements{"else","do","loop","wend","next","stop","return","end","exit","error"};
+                static const std::unordered_set<std::string> statements{"else","do","loop","wend","next","stop","return","end","exit","error","gosub"};
                 if(std::regex_match(source,identifier) && !statements.contains(lower(source))) source+=':';
             }
         }
@@ -723,7 +725,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 }
             }
             if (resolveLabels) for (auto& instruction : statements) {
-                if (instruction.type != Statement::Type::Jump && instruction.type != Statement::Type::ErrorHandler
+                if (instruction.type != Statement::Type::Jump && instruction.type != Statement::Type::GoSub && instruction.type != Statement::Type::ErrorHandler
                     && instruction.type != Statement::Type::ResumeLabel) continue;
                 const auto target = labels.find(lower(instruction.argument));
                 if (target == labels.end()) return {VbaExecutionStatus::Error, "Sprungmarke fehlt", instruction.line};
@@ -826,13 +828,21 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             if (!labels.emplace(lower(match[1].str()), static_cast<int>(statements.size())).second)
                 return {VbaExecutionStatus::Error, "Doppelte Sprungmarke", line};
             statements.push_back({Statement::Type::Label, {}, {}, line});
+        } else if (std::regex_match(source, match, goSub)) {
+            statements.push_back({Statement::Type::GoSub,match[1].str(),{},line});
+        } else if (normalized=="gosub") {
+            return {VbaExecutionStatus::Unsupported,"GoSub requires a local line label",line};
+        } else if (normalized=="return") {
+            statements.push_back({Statement::Type::ReturnSubroutine,{},{},line});
+        } else if (normalized.starts_with("return ") || normalized.starts_with("return\t")) {
+            return {VbaExecutionStatus::Unsupported,"Return does not take an argument",line};
         } else if (std::regex_match(source, match, jump)) {
             statements.push_back({Statement::Type::Jump, match[1].str(), {}, line});
         } else if (std::regex_match(source, match, errorHandler)) {
             statements.push_back({Statement::Type::ErrorHandler, match[1].str(), {}, line});
         } else if (lower(source) == "resume next") {
             statements.push_back({Statement::Type::ResumeNext, {}, {}, line});
-        } else if (lower(source) == "resume") {
+        } else if (lower(source) == "resume" || std::regex_match(source,resumeZero)) {
             statements.push_back({Statement::Type::Resume, {}, {}, line});
         } else if (std::regex_match(source, match, resumeLabel)) {
             statements.push_back({Statement::Type::ResumeLabel, match[1].str(), {}, line});
@@ -1495,6 +1505,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     std::vector<LoopFrame> loops;
     struct WithFrame { std::size_t instruction; VbaValue value; bool pending{}; };
     std::vector<WithFrame> withFrames,faultWithFrames;
+    struct SubroutineFrame { std::size_t instruction,frameDepth,loopDepth,withDepth; bool active; };
+    std::vector<SubroutineFrame> subroutines,faultSubroutines;
     VbaVariables locals;
     std::unordered_map<std::string,std::string> localTypes;
     std::unordered_set<std::string> fixedArrays;
@@ -1879,7 +1891,35 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::Label:
                 break;
             case Statement::Type::Jump:
-                if (active) { frames.clear(); loops.clear(); withFrames.clear(); active = true; ip = static_cast<std::size_t>(instruction.partner); }
+                if (active) {
+                    const auto frameDepth=subroutines.empty() ? 0 : subroutines.back().frameDepth;
+                    const auto loopDepth=subroutines.empty() ? 0 : subroutines.back().loopDepth;
+                    const auto withDepth=subroutines.empty() ? 0 : subroutines.back().withDepth;
+                    if(frames.size()<frameDepth || loops.size()<loopDepth || withFrames.size()<withDepth)
+                        throw VbaRuntimeError(5,"Invalid GoSub scope");
+                    frames.resize(frameDepth); loops.resize(loopDepth); withFrames.resize(withDepth);
+                    active=true; ip=static_cast<std::size_t>(instruction.partner);
+                }
+                break;
+            case Statement::Type::GoSub:
+                if(active) {
+                    if(subroutines.size()>=48) throw VbaRuntimeError(28,"GoSub return stack exhausted");
+                    subroutines.push_back({ip,frames.size(),loops.size(),withFrames.size(),active});
+                    active=true; ip=static_cast<std::size_t>(instruction.partner);
+                }
+                break;
+            case Statement::Type::ReturnSubroutine:
+                if(active) {
+                    if(subroutines.empty()) {
+                        if(handlingError && !faultSubroutines.empty()) throw VbaRuntimeError(3251,"Return from an error handler into a suspended GoSub requires Resume");
+                        throw VbaRuntimeError(3,"Return without GoSub");
+                    }
+                    const auto caller=subroutines.back();
+                    if(frames.size()<caller.frameDepth || loops.size()<caller.loopDepth || withFrames.size()<caller.withDepth)
+                        throw VbaRuntimeError(5,"Invalid GoSub return scope");
+                    frames.resize(caller.frameDepth); loops.resize(caller.loopDepth); withFrames.resize(caller.withDepth);
+                    subroutines.pop_back(); active=caller.active; ip=caller.instruction;
+                }
                 break;
             case Statement::Type::ErrorHandler:
                 if (active) { handler = instruction.partner; resumeNext = false; }
@@ -1895,10 +1935,12 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     if (instruction.type == Statement::Type::ResumeLabel) {
                         frames.clear(); loops.clear(); withFrames.clear(); active = true;
                         faultFrames.clear(); faultLoops.clear(); faultWithFrames.clear();
+                        subroutines.clear(); faultSubroutines.clear();
                         ip = static_cast<std::size_t>(instruction.partner);
                     } else {
                         frames = faultFrames; loops = faultLoops; withFrames=faultWithFrames; active = faultActive;
-                        faultFrames.clear(); faultLoops.clear(); faultWithFrames.clear();
+                        subroutines=faultSubroutines;
+                        faultFrames.clear(); faultLoops.clear(); faultWithFrames.clear(); faultSubroutines.clear();
                         if(instruction.type==Statement::Type::Resume) {
                             ip=faultInstruction-1;
                         } else if(groupEnd>=0) {
@@ -2327,7 +2369,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if (!resumeNext) {
                     handlingError = true; faultInstruction = instruction.sourceStatementEnd>=0 ? executingIp : ip;
                     faultFrames = frames; faultLoops = loops; faultWithFrames=withFrames; faultActive = active;
-                    frames.clear(); loops.clear(); withFrames.clear(); active = true;
+                    faultSubroutines=subroutines;
+                    frames.clear(); loops.clear(); withFrames.clear(); subroutines.clear(); active = true;
                     ip = static_cast<std::size_t>(handler);
                 } else if(instruction.sourceStatementEnd>=0) {
                     leaveFailedNextGroup(executingIp);

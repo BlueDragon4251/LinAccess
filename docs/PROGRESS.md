@@ -4574,3 +4574,22 @@ No new checklist IDs or CTest targets; the catalog remains fixed at 456.
 Existing targeted core/DAO 2/2 (1.64 s), freshly rebuilt GUI-free core 1/1
 (1.31 s), full desktop 48/48 (82.80 s), Debian payload/permissions/Build-ID/
 pinned SQLite and all four original fixture hashes pass.
+
+
+## Native GoSub/Return and handler retry (2026-11-04)
+
+Under existing F040/F051, native procedure-local GoSub/Return uses a bounded
+LIFO stack and preserves actual caller conditional/loop/With scopes. Nested
+subroutines share procedure locals, GoTo retains the caller floor, Return
+continues after the latest GoSub and unmatched Return raises 3. Label handlers
+snapshot the return context, can run their own GoSubs and restore or abandon
+the fault context with explicit Resume variants, including Resume 0. Obsolete
+snapshots release ownership. Direct handler Return into the suspended fault
+GoSub remains refused (3251); numeric and block-label boundaries are unchanged.
+
+Existing core runs nested collection/numeric/inline-If scopes, held mutation
+guards and post-loop release, plus a failing callee retried after the handler's
+own lease-inspection GoSub. Targeted core/DAO 2/2 (1.80 s), freshly rebuilt
+GUI-free core 1/1 (1.29 s), full desktop 48/48 (80.12 s), Debian payload/
+permissions/Build-ID/pinned SQLite and four original fixture hashes pass.
+No new CTest targets or catalog IDs; the fixed 456-point denominator remains.

@@ -932,3 +932,21 @@ Abschluss Error-/Null-/Enum-Konstanten: Desktop 48/48 (82,80 s), frisch gebauter
 GUI-freier Kern 1/1 (1,31 s), gezielt Kern/DAO 2/2 (1,64 s), Debian-Paket und
 vier Originalfixture-Hashes bestanden. Gesamtzahl unverändert 456; breite
 F041/F042/F051 bleiben offen.
+
+Aktueller GoSub-/Return-Abschnitt unter F040/F051: Eigene native
+Anweisungen/Labelbindung und ein auf 48 Einträge begrenzter prozedurlokaler
+Rücksprungstapel. Aufrufer-If/For/For-Each/With-Scope bleibt lebendig; Return
+räumt nur die Scope-Ebenen des Unterprogramms auf. GoTo innerhalb GoSub
+behält den jeweiligen Aufrufer-Floor. Return ohne GoSub Fehler 3. Label-Handler
+sichern den Rücksprungstapel mit den Fehler-Scopes; eigene Handler-GoSubs und
+Resume/Resume 0/Resume Next/Resume label sind angebunden. Veraltete Snapshots
+freigeben. Direktes Return vom Handler in einen suspendierten Fehler-GoSub
+bleibt mit 3251 gesperrt, bis dessen Referenzsemantik feststeht. Numerische
+Labels und Labels innerhalb von Blöcken bleiben offen.
+Gezielt Kern/DAO 2/2 (1,80 s) bestanden. Gesamtsuite/GUI-freier Build/Paket
+dieses Abschnitts werden als nächstes geprüft. Keine neuen Katalog-IDs
+oder CTest-Ziele; 456 bleiben fest. Details: docs/DAO_RUNTIME.md.
+
+Abschluss GoSub/Return: Desktop 48/48 (80,12 s), frisch gebauter GUI-freier
+Kern 1/1 (1,29 s), gezielt Kern/DAO 2/2 (1,80 s), Debian-Paket und vier
+Originalfixture-Hashes bestanden. Feste 456 Punkte/IDs unverändert.

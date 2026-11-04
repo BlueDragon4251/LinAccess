@@ -2197,6 +2197,68 @@ End Sub
     assert(host.fields["StatementError"]=="-2147220990:ErrObject" && host.fields["StatementDivision"]=="11");
     for(const auto expression:{"-Null","+Null","-(Null+1)","+(Null+1)"})
         assert(evaluateVbaExpression(expression,host,{}).kind==VbaValue::Kind::Null);
+    const auto goSubResult=executeVbaProcedure(R"VBA(Sub GoSubScopes()
+Dim items As Collection, item As Variant, total As Long, held As Long, i As Long
+Set items=New Collection
+items.Add 1
+items.Add 2
+For Each item In items
+If item>0 Then GoSub Accumulate
+Next
+items.Add 4
+Me!GoSubValues=CStr(total) & ":" & CStr(items.Count) & ":" & CStr(held)
+Exit Sub
+Accumulate:
+On Error Resume Next
+items.Add 99
+held=Err.Number
+On Error GoTo 0
+For i=1 To 2
+GoSub AddItem
+Next
+Return
+AddItem:
+total=total+item
+GoTo ReturnItem
+ReturnItem:
+Return
+End Sub
+)VBA","GoSubScopes",host);
+    if(goSubResult.status!=VbaExecutionStatus::Completed) std::cerr<<"GoSub error="<<goSubResult.errorNumber<<" line="<<goSubResult.line<<"\n";
+    assert(goSubResult.status==VbaExecutionStatus::Completed && host.fields["GoSubValues"]=="6:3:3251");
+    const auto missingGoSub=executeVbaProcedure("Sub MissingGoSub()\nReturn\nEnd Sub","MissingGoSub",host);
+    assert(missingGoSub.status==VbaExecutionStatus::Error && missingGoSub.errorNumber==3);
+    const auto goSubHandler=executeVbaProcedure(R"VBA(Sub HandledGoSub()
+Dim items As Collection,item As Variant,total As Long,handled As Long,text As String
+Set items=New Collection
+items.Add 1
+items.Add 2
+text="bad"
+On Error GoTo caught
+For Each item In items
+GoSub Accumulate
+Next
+items.Add 4
+Me!HandledGoSub=CStr(total) & ":" & CStr(handled) & ":" & CStr(items.Count)
+Exit Sub
+Accumulate:
+total=total+CLng(text)+item
+Return
+caught:
+handled=handled+1
+text="2"
+GoSub InspectLease
+Resume 0
+InspectLease:
+On Error Resume Next
+items.Add 99
+Me!GoSubFaultLease=CStr(Err.Number)
+On Error GoTo caught
+Return
+End Sub
+)VBA","HandledGoSub",host);
+    if(goSubHandler.status!=VbaExecutionStatus::Completed) std::cerr<<"Handled GoSub error="<<goSubHandler.errorNumber<<" line="<<goSubHandler.line<<"\n";
+    assert(goSubHandler.status==VbaExecutionStatus::Completed && host.fields["HandledGoSub"]=="7:1:3" && host.fields["GoSubFaultLease"]=="3251");
     const auto unhandled = executeVbaProcedure(
         "Sub Errors()\nOn Error Resume Next\nErr.Raise(5)\nOn Error GoTo 0\nErr.Raise(6)\nEnd Sub", "Errors", host);
     assert(unhandled.status == VbaExecutionStatus::Error);

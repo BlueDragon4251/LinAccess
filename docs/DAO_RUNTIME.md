@@ -166,3 +166,23 @@ refused before body effects when they name a constant. Under F042, variables/
 arrays/parameters declared As an Enum type, imported type libraries, complete
 standard/class-module scope rules and Access validation remain open. Enum types
 are not fabricated as runtime objects. No new catalog ID or CTest target.
+
+
+Native GoSub/Return uses procedure-local identifier labels and a bounded LIFO
+return stack (48 frames). It shares actual procedure locals; caller conditional,
+For/For Each and With scopes stay alive. Return discards callee scopes and
+continues immediately after the latest GoSub. GoTo inside a subroutine discards
+only scopes above that caller's floor, retaining actual collection leases and
+array-source guards. Return without GoSub raises 3; exhausted return stack
+raises 28. Native calls do not enter or leave other procedures through GoSub.
+
+Under F040/F051, label handlers snapshot the return stack with the real scopes.
+A handler can make its own GoSub calls; Resume/Resume 0 and Resume Next restore
+fault context, and Resume label abandons it. Obsolete snapshots are released.
+Direct Return from a handler into the suspended fault GoSub is explicitly refused
+with 3251 pending reference semantics; use Resume. On Error Resume Next remains
+available. Numeric labels and labels inside blocks retain existing unsupported
+boundaries. Existing core execution covers nested GoSub in a live Collection
+loop, inline If, numeric loops, GoTo/Return, retry through a label handler's own
+GoSub, held mutation guards and actual lease release afterward.
+Reference: https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/gosubreturn-statement
