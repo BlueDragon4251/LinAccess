@@ -40,6 +40,7 @@ struct Statement {
     std::vector<VbaArrayDimension> fixedBounds;
     bool persistent{};
     std::vector<ArrayResizeTarget> resizeTargets;
+    int sourceStatementEnd{-1};
 };
 
 std::string trim(std::string text) {
@@ -476,7 +477,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*))?$)", std::regex::icase);
     const std::regex forStart(R"(^For\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+?)\s+To\s+(.+?)(?:\s+Step\s+(.+))?$)", std::regex::icase);
     const std::regex forEach(R"(^For\s+Each\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s+In\s+(.+)$)", std::regex::icase);
-    const std::regex next(R"(^Next(?:\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?$)", std::regex::icase);
+    const std::regex next(R"(^Next(?:\s+(.+))?$)", std::regex::icase);
 
     std::istringstream stream{std::string(module)};
     std::string raw;
@@ -667,7 +668,11 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 auto parsed=parseProcedure(wrapper,"__la_inline",body,function,cancel,nullptr,false,nullptr,withActive());
                 if (parsed.status!=VbaExecutionStatus::Completed) { parsed.line=line; return parsed; }
                 const auto offset=static_cast<int>(statements.size());
-                for (auto& statement:body) { if (statement.partner>=0) statement.partner+=offset; statement.line=line; statements.push_back(std::move(statement)); }
+                for (auto& statement:body) {
+                    if(statement.partner>=0) statement.partner+=offset;
+                    if(statement.sourceStatementEnd>=0) statement.sourceStatementEnd+=offset;
+                    statement.line=line; statements.push_back(std::move(statement));
+                }
                 continue;
             }
         }
@@ -789,17 +794,23 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             statements.push_back({Statement::Type::For, match[1].str(), start,
                                   line, endValue, step});
         } else if (std::regex_match(source, match, next)) {
-            if (blocks.empty() || blocks.back() != Statement::Type::For)
-                return {VbaExecutionStatus::Error, "Next ohne For", line};
-            const int startIndex = forStarts.back();
-            if (match[1].matched && lower(match[1].str()) != lower(statements[startIndex].argument))
-                return {VbaExecutionStatus::Error, "Next-Variable passt nicht zum For", line};
-            forStarts.pop_back();
-            blocks.pop_back();
-            const int nextIndex = static_cast<int>(statements.size());
-            statements[startIndex].partner = nextIndex;
-            statements.push_back({Statement::Type::Next, {}, {}, line});
-            statements.back().partner = startIndex;
+            const auto names=match[1].matched ? splitArguments(match[1].str()) : std::vector<std::string>{""};
+            const auto groupStart=statements.size();
+            static const std::regex identifier(R"(^[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*$)");
+            for(const auto& name:names) {
+                if(match[1].matched && !std::regex_match(name,identifier)) return {VbaExecutionStatus::Error,"Invalid Next control variable",line};
+                if(blocks.empty() || blocks.back()!=Statement::Type::For || forStarts.empty())
+                    return {VbaExecutionStatus::Error,"Next ohne For",line};
+                const int startIndex=forStarts.back();
+                if(!name.empty() && lower(name)!=lower(statements[startIndex].argument))
+                    return {VbaExecutionStatus::Error,"Next-Variable passt nicht zum For",line};
+                forStarts.pop_back(); blocks.pop_back();
+                const int nextIndex=static_cast<int>(statements.size());
+                statements[startIndex].partner=nextIndex;
+                statements.push_back({Statement::Type::Next,{},{},line}); statements.back().partner=startIndex;
+            }
+            if(statements.size()>groupStart+1)
+                for(auto index=groupStart;index<statements.size();++index) statements[index].sourceStatementEnd=static_cast<int>(statements.size()-1);
         } else if (normalized=="do" || std::regex_match(source,match,whileStart)) {
             const auto expression=normalized=="do" ? std::string{} : trim(match[3].str());
             const auto mode=normalized=="do" ? "while" : match[2].matched ? lower(match[2].str()) : "wend";
@@ -1704,6 +1715,13 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     const auto evaluateObject = [&](std::string_view expression) {
         return evaluateVbaObjectExpression(expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase);
     };
+    const auto leaveFailedNextGroup=[&](std::size_t first) {
+        const int end=instructions[first].sourceStatementEnd;
+        if(end<0) return;
+        for(auto index=first;index<=static_cast<std::size_t>(end);++index)
+            if(instructions[index].type==Statement::Type::Next && !loops.empty() && loops.back().forIndex==instructions[index].partner)
+                loops.pop_back();
+    };
     bool active = true;
     int currentLine = 0;
     int steps = 0;
@@ -1712,6 +1730,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         for (std::size_t ip = 0; ip < instructions.size(); ++ip) {
             if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
             const auto& instruction = instructions[ip];
+            const auto executingIp=ip;
             currentLine = instruction.line;
             if (++steps > 10000)
                 return {VbaExecutionStatus::Error, "VBA-Ausführungsbudget (10.000 Schritte) erreicht", currentLine};
@@ -1760,12 +1779,21 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     if (!handlingError) throw VbaRuntimeError(20, "Resume ohne aktiven Fehler");
                     handlingError = false;
                     errorState->number = 0; errorState->description.clear();
+                    const int groupEnd=instructions[faultInstruction].sourceStatementEnd;
                     if (instruction.type == Statement::Type::ResumeLabel) {
                         frames.clear(); loops.clear(); withFrames.clear(); active = true;
+                        if(groupEnd>=0) { faultFrames.clear(); faultLoops.clear(); faultWithFrames.clear(); }
                         ip = static_cast<std::size_t>(instruction.partner);
                     } else {
                         frames = faultFrames; loops = faultLoops; withFrames=faultWithFrames; active = faultActive;
-                        ip = instruction.type == Statement::Type::Resume ? faultInstruction - 1 : faultInstruction;
+                        if(instruction.type==Statement::Type::Resume) {
+                            if(groupEnd>=0) { faultFrames.clear(); faultLoops.clear(); faultWithFrames.clear(); }
+                            ip=faultInstruction-1;
+                        } else if(groupEnd>=0) {
+                            leaveFailedNextGroup(faultInstruction);
+                            faultFrames.clear(); faultLoops.clear(); faultWithFrames.clear();
+                            ip=static_cast<std::size_t>(groupEnd);
+                        } else ip=faultInstruction;
                     }
                 }
                 break;
@@ -2183,10 +2211,13 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 errorState->number = typed ? typed->number : 5;
                 errorState->description = exception.what();
                 if (!resumeNext) {
-                    handlingError = true; faultInstruction = ip;
+                    handlingError = true; faultInstruction = instruction.sourceStatementEnd>=0 ? executingIp : ip;
                     faultFrames = frames; faultLoops = loops; faultWithFrames=withFrames; faultActive = active;
                     frames.clear(); loops.clear(); withFrames.clear(); active = true;
                     ip = static_cast<std::size_t>(handler);
+                } else if(instruction.sourceStatementEnd>=0) {
+                    leaveFailedNextGroup(executingIp);
+                    ip=static_cast<std::size_t>(instruction.sourceStatementEnd);
                 }
             }
         }
