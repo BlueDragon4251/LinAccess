@@ -20,6 +20,8 @@ void testNativeDomainLookup() {
     assert(query.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
     query.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('query','Lookup Alias',?)");
     query.addBindValue(QByteArray("SELECT id,label AS [display name],qty,moment,flag,cash FROM lookup_values")); assert(query.exec()); query.finish();
+    query.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('query','Lookup Ordered',?)");
+    query.addBindValue(QByteArray("SELECT id,label,qty,moment,flag,cash FROM lookup_values ORDER BY id")); assert(query.exec()); query.finish();
     const QByteArray source=R"FORM(Begin Form
 RecordSource ="lookup_values"
 Begin Section
@@ -66,6 +68,13 @@ If Application.DCount("*","lookup_values")<>4 Then Err.Raise 5
 If Application.DCount(Domain:="lookup_values",Expr:="cash")<>2 Then Err.Raise 5
 If Application.DCount("cash","lookup_values","id>2")<>0 Then Err.Raise 5
 If Not IsNull(Application.DSum("cash","lookup_values","id>2")) Then Err.Raise 5
+If DFirst("label","Lookup Ordered")<>"before" Then Err.Raise 5
+If Not IsNull(Application.DLast(Domain:="Lookup Ordered",Expr:="label")) Then Err.Raise 5
+If DLast("qty","Lookup Ordered","qty Is Not Null")<>3.5 Then Err.Raise 5
+If DFirst(Expr:="qty",Domain:="Lookup Ordered",Criteria:="qty Is Not Null")<>10.5 Then Err.Raise 5
+If Not IsNull(DFirst("id","Lookup Ordered","id=99")) Then Err.Raise 5
+If Not IsNull(DLast("id","Lookup Ordered","id=99")) Then Err.Raise 5
+If TypeName(DLast("cash","Lookup Ordered","id=1"))<>"Currency" Then Err.Raise 5
 If Not IsNull(DLookup("label","lookup_values","id=99")) Then Err.Raise 5
 If Not IsNull(DLookup("label","lookup_values","id=4")) Then Err.Raise 5
 If IsNull(DLookup("label","lookup_values","id=3")) Then Err.Raise 5

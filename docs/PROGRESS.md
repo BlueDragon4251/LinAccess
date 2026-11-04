@@ -5556,3 +5556,18 @@ and original output-oracle requirements remain open. Scope: NATIVE_DLOOKUP.md.
 Application Sum/Count: Debian payload/Build-ID/pinned SQLite and four original
 fixture hashes also pass. Last full suite remains domain aggregates48/48 (84.14 s),
 GUI-free1/1 (2.67 s); the shared native host path used existing targeted3/3.
+
+## Native field DFirst/DLast (2026-11-04)
+
+Global/Application field selectors use real query endpoints and proven native
+scalar conversion, including NULL endpoints. DFirst uses TOP1; DLast requires a
+complete result within the existing row/budget guards. An explicitly sorted saved
+query supplies deterministic native evidence; underlying Access physical scan
+order is not claimed. Existing actual VBA cases cover named calls, predicates,
+empty selections, endpoint NULL and Currency identity. Computed Expr and full
+Access binding/type/error/order-oracle parity remain open.
+Desktop build plus core/layout2/2 pass (12.59 s); fresh GUI-free core1/1 (1.96 s).
+Fixed 456/384/72; no new target/ID. See NATIVE_DLOOKUP.md for exact scope.
+DFirst/DLast Debian executable/Build-ID/pinned SQLite and four original fixture
+hashes also pass. Last full suite remains domain aggregates48/48 (84.14 s);
+this bounded selector addition used core/layout2/2 and fresh GUI-free core1/1.
