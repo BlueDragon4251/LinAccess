@@ -2871,3 +2871,7 @@ Hashes bestanden; fester Arbeitskatalog unverändert456/384/72.
 Native MkDir/RmDir-Anweisungen verändern echte Linux-Verzeichnisse im begrenzten
 Umfang: [Umfang und Grenzen](NATIVE_DIRECTORY_STATEMENTS.md). Vollständige
 VBA-Datei-I/O und Windows-Pfad-/Fehlergleichheit bleiben offen.
+
+Begrenzte native FV-/Pmt-Berechnung läuft auch in tatsächlichen SQL-Abfragen:
+[Umfang und Grenzen](NATIVE_FINANCIAL_FUNCTIONS.md). Vollständige Finanzbibliothek,
+alle numerischen Randfälle und Windows-Oracle bleiben offen.

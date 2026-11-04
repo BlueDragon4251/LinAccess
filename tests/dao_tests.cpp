@@ -17,6 +17,7 @@
 #include <iostream>
 #include <map>
 #include <limits>
+#include <cmath>
 
 class Host final : public linaccess::VbaHost {
 public:
@@ -39,6 +40,22 @@ void testSqlRgbDao() {
     assert(sql.exec("INSERT INTO color_rows VALUES(1,255,0,0,0),(2,0,255,0,0)"));
     assert(sql.exec("CREATE TABLE color_values(value INTEGER)"));
     Host host(db);
+    {
+        assert(sql.exec("CREATE TABLE financial_rows(id INTEGER PRIMARY KEY,rate REAL,periods INTEGER,payment REAL,principal REAL)"));
+        assert(sql.exec("INSERT INTO financial_rows VALUES(1,0.01,12,-100,1000),(2,0,12,-100,1200)"));
+        const auto definition=host.currentDatabase()->member("CreateQueryDef",{
+            linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT FV(rate,periods,payment) AS future,Pmt(rate,periods,principal) AS due FROM financial_rows ORDER BY id")}).object;
+        const auto rows=definition->member("OpenRecordset",{}).object;
+        const auto fields=rows->member("Fields",{}).object;
+        const auto value=[&](const char* name) { return fields->member("Item",{linaccess::VbaValue::string(name)}).object->member("Value",{}).asNumber(); };
+        double expected=0; for(int i=0;i<12;++i) expected=expected*1.01+100;
+        assert(std::abs(value("future")-expected)<1e-9);
+        double loan=1000; const auto due=value("due"); for(int i=0;i<12;++i) loan=loan*1.01+due;
+        assert(std::abs(loan)<1e-9);
+        rows->member("MoveNext",{});
+        assert(value("future")==1200 && value("due")==-100);
+        rows->member("Close",{});
+    }
     {
         assert(sql.exec("CREATE TABLE partition_rows(value INTEGER)"));
         assert(sql.exec("INSERT INTO partition_rows VALUES(-1),(0),(4),(5),(99),(100),(NULL)"));
