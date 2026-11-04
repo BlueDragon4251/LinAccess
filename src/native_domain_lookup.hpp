@@ -7,8 +7,38 @@
 #include <QStringList>
 
 namespace linaccess {
-// Field-only, typed lookup. Expressions needing further binding are refused.
+// Existing SQL-expression Sum/Count path; preserve proven scalar result types.
+inline VbaValue nativeSqlDomainAggregate(QSqlDatabase database,std::string_view function,const std::vector<VbaValue>& args) {
+    const auto quoted=[](QString name) { name.replace(']',"]]"); return '['+name+']'; };
+    if (args.size()<2 || args.size()>3) throw linaccess::VbaRuntimeError(450,"Invalid domain aggregate arguments");
+    if (args[0].kind==linaccess::VbaValue::Kind::Null || args[1].kind==linaccess::VbaValue::Kind::Null)
+        throw linaccess::VbaRuntimeError(94,"Invalid Null domain aggregate argument");
+    const auto expression=QString::fromStdString(args[0].asText()).trimmed();
+    const auto domain=QString::fromStdString(args[1].asText());
+    if (expression.isEmpty() || domain.isEmpty()) throw linaccess::VbaRuntimeError(5,"Empty domain aggregate argument");
+    // Domain is an object name, never executable SQL. Saved non-parameter
+    // queries are installed as views on the same native connection.
+    linaccess::installAccessQueryViews(database);
+    if (!database.tables(QSql::AllTables).contains(domain,Qt::CaseInsensitive))
+        throw linaccess::VbaRuntimeError(3078,"Domain object unavailable");
+    QString source="SELECT "+QString(function=="dsum" ? "Sum" : "Count")+"("+expression+") FROM "+quoted(domain);
+    if (args.size()==3 && args[2].kind!=linaccess::VbaValue::Kind::Null) {
+        const auto criteria=QString::fromStdString(args[2].asText()).trimmed();
+        if (!criteria.isEmpty()) source+=" WHERE "+criteria;
+    }
+    const auto plan=linaccess::compileAccessQuery(source);
+    try {
+        const auto result=linaccess::executeAccessQueryPlan(database,plan,linaccess::bindAccessQueryParameters(plan,{}));
+        if (result.rows.size()!=1 || result.rows.front().size()!=1)
+            throw linaccess::VbaRuntimeError(3146,"Invalid domain aggregate result");
+        return linaccess::qtFieldValue(result.rows.front().front(),result.columnTypes.value(0));
+    } catch(const linaccess::VbaRuntimeError&) { throw; }
+    catch(...) { throw linaccess::VbaRuntimeError(3146,"Domain aggregate execution failed"); }
+}
+
+// Field-only typed lookup/extrema/mean. Further expression binding is refused.
 inline VbaValue nativeDomainValue(QSqlDatabase database,const std::vector<VbaValue>& args,std::string_view function="dlookup") {
+    if(function=="dsum" || function=="dcount") return nativeSqlDomainAggregate(database,function,args);
     const bool lookup=function=="dlookup";
     if(!lookup && function!="dmin" && function!="dmax" && function!="davg")
         throw VbaRuntimeError(3251,"Domain function unsupported");

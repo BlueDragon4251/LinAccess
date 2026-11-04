@@ -59,3 +59,18 @@ References: Microsoft Access
 [DMin/DMax](https://support.microsoft.com/en-us/access/functions/dmin-dmax-functions)
 and [DAvg](https://support.microsoft.com/en-us/access/functions/davg-function).
 No Windows/original-output oracle is claimed.
+
+## Application DSum/DCount and SQL result types
+
+Application.DSum/Application.DCount now use the same existing SQL-expression
+execution path as global calls, including named Expr/Domain/Criteria arguments.
+That shared path now passes proven per-position SQL result types to the scalar
+converter. In particular, SQL Currency sums remain Currency rather than losing
+the subtype at the host boundary. SQL Currency storage/precision guards remain.
+Existing expression support and NULL-criteria behavior of Sum/Count are retained;
+this does not extend the stricter field-only Min/Max/Avg rules to calculated Expr.
+Full Access coercion/error/reference parity remains open.
+
+Actual VBA checks global/Application Currency identity, a calculated CCur sum over
+explicit non-NULL input rows, Count(*) versus Count(nullable field), named calls,
+criteria and an all-NULL sum. CCur(NULL) correctly remains runtime error 94.

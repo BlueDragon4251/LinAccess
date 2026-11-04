@@ -5540,3 +5540,19 @@ item. Fixed 456/384/72; broad report/typing/oracle requirements remain open.
 Exact report Currency Sum: Debian executable/Build-ID/pinned SQLite and all four
 original fixture hashes pass. Last full suite remains domain aggregates48/48
 (84.14 s), GUI-free core1/1 (2.67 s); bounded report change used layout regression.
+
+## Shared Application DSum/DCount and preserved SQL result types (2026-11-04)
+
+Application now exposes DSum/DCount with positional/named arguments over the same
+SQL-expression executor as global calls. The scalar handoff retains proven SQL
+column types, fixing lost Currency identity in DSum. Existing SQL precision,
+expression and NULL-criteria behavior is retained. Actual VBA covers Currency
+identity/value, non-NULL calculated CCur input, Count(*)/nullable field differences,
+predicates, named arguments and all-NULL sum. The initial synthetic CCur(NULL)
+expectation was corrected to explicitly filter NULL input; runtime error94 remains.
+Desktop build and existing mainwindow/Currency-SQL/layout3/3 pass (15.79 s).
+No new target/catalog item. Fixed 456/384/72; full Access coercion/reference/error
+and original output-oracle requirements remain open. Scope: NATIVE_DLOOKUP.md.
+Application Sum/Count: Debian payload/Build-ID/pinned SQLite and four original
+fixture hashes also pass. Last full suite remains domain aggregates48/48 (84.14 s),
+GUI-free1/1 (2.67 s); the shared native host path used existing targeted3/3.

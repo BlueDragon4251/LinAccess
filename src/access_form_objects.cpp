@@ -1657,14 +1657,14 @@ public:
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         if (text(name).compare("Quit",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Option"},0};
         if (text(name).compare("RunCommand",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Command"},1};
-        if (QStringList{"dlookup","dmin","dmax","davg"}.contains(text(name).toCaseFolded())) return linaccess::VbaArgumentSignature{{"Expr","Domain","Criteria"},2};
+        if (QStringList{"dlookup","dmin","dmax","davg","dsum","dcount"}.contains(text(name).toCaseFolded())) return linaccess::VbaArgumentSignature{{"Expr","Domain","Criteria"},2};
         return {};
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
         if (key=="quit") return PreviewDoCmdObject(preview).member("Quit",args);
         if (key=="runcommand") return dispatchPreviewDocumentCommand(preview,"runcommand",args);
-        if (key=="dlookup" || key=="dmin" || key=="dmax" || key=="davg") return linaccess::nativeDomainValue(preview.db_,args,key.toStdString());
+        if (key=="dlookup" || key=="dmin" || key=="dmax" || key=="davg" || key=="dsum" || key=="dcount") return linaccess::nativeDomainValue(preview.db_,args,key.toStdString());
         if(key=="currentproject" || key=="currentdata") {
             if(!args.empty()) throw linaccess::VbaRuntimeError(450,"Project/data context requires no arguments");
             QObject* owner=nullptr;
