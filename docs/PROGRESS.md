@@ -5470,3 +5470,26 @@ Fixed 456/384/72; no new target/ID. Exact scope: REPORT_AGGREGATES.md.
 First/Last milestone: full current desktop48/48 under Windows style passes
 (87.00 s), fresh GUI-free core1/1 (1.60 s), Debian payload/Build-ID/pinned SQLite
 and all four original fixture SHA-256 checks pass.
+
+
+## Native global/Application field DLookup (2026-11-04)
+
+DLookup now binds an actual field in a table/installed saved query, performs a
+real bounded read-only TOP1 query and uses proven result-column types. Global
+and Application calls accept positional/named arguments. Empty strings, NULL
+matching values and no matches remain distinct; failed/unavailable sources do
+not masquerade as empty lookups. Numeric/date/Boolean/Currency values use the
+existing typed converter. Calculated Expr, explicit NULL criteria, unproven types
+and complete domain/reference/collation/error parity remain open.
+
+Existing actual VBA/calculated-control cases cover a real nullable typed table,
+saved-query alias, apostrophe criteria, named calls, and dirty versus saved form
+values. Currency units/type and Date/Boolean identities are checked. No lookup
+cache or cursor/host retention is introduced. Initial desktop build and mainwindow/
+layout2/2 pass (12.38 s); full current suite/package and fresh GUI-free runtime
+are checked for this parser/Application change. Fixed 456/384/72; no new target/ID.
+Exact scope and reference: NATIVE_DLOOKUP.md.
+
+DLookup milestone: full desktop48/48 passes (84.24 s), fresh GUI-free core1/1
+(1.55 s), Debian executable/Build-ID/pinned SQLite checks and all four original
+fixture SHA-256 checks pass. No additional test target or catalog item.
