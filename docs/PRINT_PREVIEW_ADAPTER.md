@@ -53,13 +53,23 @@ record after output. The current-layout actions retain their one-page behavior.
 
 Calculated fields use the existing native Access expression engine, including
 Sum/Count over fields and supported per-row expressions in the actual loaded
-record source. Every
-row is checked before opening the output device, so a calculation error refuses
-the output instead of silently printing error placeholders. Compound arguments bind fields to each source row without moving the displayed
+record source. A fixed section plan assigns each printed band a record and page.
+Only its own calculated controls must be valid in that context. A footer that is
+valid on the last row is not refused because its formula fails on an earlier
+unprinted row. All band commands are prepared before opening the output device.
+Compound arguments bind fields to each source row without moving the displayed
 record, including arithmetic, IIf and NULL handling. Nested aggregates and
 compound arguments on empty sources fail explicitly; group scope, running totals
-and exact full Access aggregate typing remain open. Existing row expressions and the report-wide sum are
-checked in the PDF as well as on restored native controls.
+and exact full Access aggregate typing remain open.
+
+Page/Pages expressions read the actual planned current/total page during output;
+the bounded report-object getters return Long/Integer respectively. Outside this
+paginated context they fail explicitly. Property writes and Page-event scheduling
+remain unsupported. A two-page PDF independently contains 1/2 and 2/2 once each;
+a final-row-only footer expression is also checked. These reads follow Microsoft's
+[Page](https://learn.microsoft.com/en-us/office/vba/api/access.report.page%28property%29)
+and [Pages](https://learn.microsoft.com/en-us/office/vba/api/access.report.pages)
+property definitions, without claiming the full writable property model.
 
 During each paginated render, at most 512 scalar aggregate results are cached.
 This avoids rescanning the same row set for every printed detail. The cache is
@@ -85,7 +95,7 @@ bindings, supported calculated expressions, or unbound values. Truncated row set
 failed calculated expressions, overflowing controls/bands, groups, declared growing/
 shrinking/repeated sections, running sums, hidden duplicates, multiple columns,
 forced page breaks and section/page print events are rejected. It does not
-implement Access page setup, grouping, expression pagination, CanGrow, subreports,
+implement Access page setup, grouping, dynamic layout, CanGrow, subreports,
 Format/Print/Page scheduling, or DoCmd's direct-print view. The current-layout toolbar
 commands retain their one-page behavior. Separate Berichtsvorschau and Bericht
 drucken actions use the same paginated renderer. The direct print dialog offers

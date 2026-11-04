@@ -950,7 +950,7 @@ private:
     std::vector<bool> moduleScopes_;
     static bool recordProperty(std::string_view name) {
         const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
-        return key=="newrecord" || key=="dataentry" || key=="modal" || key=="popup" || key=="openargs" || key=="currentrecord" || key=="orderby" || key=="orderbyon";
+        return key=="page" || key=="pages" || key=="newrecord" || key=="dataentry" || key=="modal" || key=="popup" || key=="openargs" || key=="currentrecord" || key=="orderby" || key=="orderbyon";
     }
     bool instanceScope() const { return moduleScopes_.empty() || moduleScopes_.back(); }
     void requireInstance() const { if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Me is unavailable in a standard module"); }
