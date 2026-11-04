@@ -5651,3 +5651,23 @@ remain open. Exact scope: NATIVE_QUERY_FORM_DESIGN.md.
 Owned dependency milestone: full current desktop48/48 passes (89.59 s), Debian
 payload/Build-ID/pinned SQLite and four original fixture hashes pass. GUI-free
 runtime unchanged, last core1/1 (1.79 s). No new target or fixed-catalog ID.
+
+## Native DAO Byte() field values (2026-11-04)
+
+DAO Field.Value now reads actual SQLite BLOBs as copied Byte() values, including
+empty BLOB versus NULL. Native physical BLOB Field.Type is11. Edit/AddNew stage
+Byte() only for declared binary fields, using a non-NULL empty QByteArray for an
+empty binary. Unsupported scalar/binary coercions fail before mutation; existing
+scalar conversion and closed/transaction/cursor guards remain. No pointer retention.
+Actual VBA reads/modifies/saves exact binary bytes, reads pending Value, stores an
+empty binary, cancels an edit and checks held Field after Close3420. Independent
+SQL verifies hex, blob type, empty length and NULL. An initial property-array
+indexing probe was replaced with an explicit Byte() variable read; no API was
+widened to bypass property argument checks.
+Desktop build and final existing DAO1/1 pass (0.53 s); existing mainwindow/layout
+also passed on this native code before the test-only indexing correction. No added
+target/ID; fixed456/384/72. OLE extraction/rendering, chunks, binary parameters and
+original-format round trips remain open. Exact scope: DAO_BINARY_FIELDS.md.
+DAO binary-value Debian payload/Build-ID/pinned SQLite and four original fixture
+hashes pass. Last full suite remains owned dependencies48/48 (89.59 s), GUI-free
+runtime unchanged, last1/1 (1.79 s). Binary changes used targeted existing cases.
