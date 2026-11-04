@@ -970,3 +970,34 @@ gebauter GUI-freier Kern 1/1 (1,37 s), gezielt Kern/DAO 2/2 (1,98 s) und
 DAO-Clone-Abzweig 1/1 (0,37 s), Debian-Paket und vier Originalfixture-Hashes
 bestanden. Native With-Clone-Freigabe durch GoTo ist damit geprüft.
 Feste 456 IDs/Punkte und breite offene Vollanforderungen unverändert.
+
+Aktueller ByRef-Zellenabschnitt unter F043 (noch uncommittet/Gesamtprüfung
+offen): Argument-Metadaten transportieren benannte Arraywurzel, einmalig
+geprüften linearen Offset, Elementtyp und opaken Allokationstoken. Token darf
+keine Arrayinhalte/DAO-Objekte halten. Sub-/Funktions-/Named-Aufrufe und Scalar-
+Weiterleitung nutzen echte gemeinsame getter/setter-Slots. ByRef liest nach
+späteren Argumenten aktuellen Zellinhalt, ByVal den früheren Wert. Ganze
+Quellersetzung/ReDim/Erase bei aktiver Zelle ist gesperrt; Compound-/ParamArray-
+Adressen und Arraywurzeln durch bestehende Zellaliase bleiben 3251.
+Argumentkopien echter ByRef-Aliase nach Bindung freigeben, Named-Reihenfolge
+verschieben statt alte Kopien zu halten. Nur Alias-Publikation schreibt Quellen;
+ByVal-Werte niemals in ursprüngliche Variablen zurückkopieren. Aktive Alias-
+Frames anderer Aufrufer nach Publikation aktualisieren, eigenen Frame erst nach
+seinen Schreiboperationen: sonst halten alte Modul-/Static-Snapshots DAO-Clones.
+Kern/DAO gezielt 2/2 (1,88 s) vor zusätzlicher Compound-Adress-Regression
+bestanden; diese sowie Gesamtsuite/GUI-freier Build/Paket noch zu prüfen.
+Keine zusätzlichen Katalog-/CTest-Einträge. Details: VARIANT_ARRAY_RUNTIME.md.
+
+Aktualisierung ByRef-Zellen: Auch interne ByVal-Transportkopien werden nach
+Bindung freigegeben; die eigentlichen lokalen ByVal-Werte bleiben erhalten.
+Frische unbenutzte Zellslots nicht als Objektbesitzer behalten. Öffentliche
+C++-Argumentvektoren (ohne interne Referenzbindungen) behalten ihren Vertrag.
+Der echte DAO-Fall leitet einen Modul-Array-Clone weiter, löst eine zusätzliche
+ByVal-Kopie sowie die ByRef-Quelle auf und startet die Transaktion bereits vor
+der Rückkehr. Aktualisierte gezielte Kern-/DAO-Prüfung 2/2 (2,21 s) und frisch
+gebauter GUI-freier Kern 1/1 (2,05 s) bestanden. Gesamtsuite/Paket folgen.
+
+Abschluss ByRef-Zellen/Alias-Lebensdauer: Desktop 48/48 (76,34 s), frisch
+gebauter GUI-freier Kern 1/1 (2,05 s), gezielt Kern/DAO 2/2 (2,21 s),
+Debian-Paket und vier Originalfixture-Hashes bestanden. F043 bleibt breit
+offen; feste 456 IDs/Punkte unverändert.

@@ -3502,20 +3502,89 @@ End Sub
     assert(executeVbaProcedure(resumeScopes,"ResumeLabelBody",host).status==VbaExecutionStatus::Completed && host.fields["ResumeLabelResult"]=="3:1");
     assert(executeVbaProcedure(resumeScopes,"SingleNextFault",host).status==VbaExecutionStatus::Completed && host.fields["SingleNextFault"]=="13" && host.fields["SingleNextCount"]=="3");
 
+    const std::string arrayCellModule=R"VBA(Private cells() As Long
+Private cellIndexes As Long
+Function CellIndex() As Long
+cellIndexes=cellIndexes+1
+CellIndex=0
+End Function
+Function ReadCells() As Long
+ReadCells=cells(0,-1)
+End Function
+Sub IncrementCell(ByRef value As Long)
+value=value+1
+Me!CellImmediate=CStr(ReadCells())
+End Sub
+Sub ForwardCell(ByRef value As Long)
+Call IncrementCell(value)
+End Sub
+Sub AliasCells(ByRef first As Long,ByRef second As Long)
+first=first+1
+second=second+first
+End Sub
+Function LaterCell() As Long
+cells(0,-1)=10
+LaterCell=0
+End Function
+Function RefCell(ByRef value As Long,ByVal ignored As Long) As Long
+value=value+1
+RefCell=value
+End Function
+Function ValueCell(ByVal value As Long,ByVal ignored As Long) As Long
+ValueCell=value
+End Function
+Sub ReplaceActiveArray(ByRef value As Long)
+ReDim cells(0 To 4)
+End Sub
+Sub IncrementByte(ByRef value As Byte)
+value=value+1
+End Sub
+Sub ArrayCellCalls()
+Dim copy As Variant,bytes() As Byte
+ReDim cells(0 To 1,-1 To -1)
+cells(0,-1)=1
+ForwardCell cells(CellIndex(),-1)
+copy=cells
+Me!CellAfterLater=CStr(RefCell(cells(CellIndex(),-1),LaterCell()))
+cells(0,-1)=1
+Me!CellValueAfterLater=CStr(ValueCell(cells(CellIndex(),-1),LaterCell()))
+AliasCells cells(0,-1),cells(0,-1)
+Me!CellNamed=CStr(RefCell(ignored:=0,value:=cells(CellIndex(),-1)))
+On Error Resume Next
+ReplaceActiveArray cells(0,-1)
+Me!CellReplacementGuard=CStr(Err.Number)
+On Error GoTo 0
+ReDim bytes(0)
+bytes(0)=1
+IncrementByte bytes(0)
+Me!CellSummary=CStr(cells(0,-1)) & ":" & CStr(copy(0,-1)) & ":" & CStr(cellIndexes) & ":" & CStr(UBound(cells)) & ":" & CStr(bytes(0))
+End Sub
+)VBA";
+    const auto arrayCellResult=executeVbaProcedure(arrayCellModule,"ArrayCellCalls",host);
+    if(arrayCellResult.status!=VbaExecutionStatus::Completed) std::cerr<<"Array cell error="<<arrayCellResult.errorNumber<<" line="<<arrayCellResult.line<<" detail="<<arrayCellResult.explanation<<"\n";
+    assert(arrayCellResult.status==VbaExecutionStatus::Completed);
+    assert(host.fields["CellImmediate"]=="2" && host.fields["CellAfterLater"]=="11" && host.fields["CellValueAfterLater"]=="1");
+    assert(host.fields["CellNamed"]=="23" && host.fields["CellReplacementGuard"]=="3251" && host.fields["CellSummary"]=="23:2:4:1:2");
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub
-Sub RejectElement()
+Sub ChangeElement()
 Dim a As Variant
 a=Array(1)
 On Error Resume Next
 Call Change(a(0))
 Me!IndexedReferenceError=CStr(Err.Number)
-Me!UnchangedElement=a(0)
+Me!ChangedElement=a(0)
+a=Array(Array(1))
+Err.Clear
+Call Change(a(0)(0))
+Me!CompoundReferenceError=CStr(Err.Number)
+Me!CompoundUnchanged=a(0)(0)
 End Sub
-)VBA","RejectElement",host);
+)VBA","ChangeElement",host);
     assert(indexedReference.status==VbaExecutionStatus::Completed);
-    assert(host.fields["IndexedReferenceError"]=="3251" && host.fields["UnchangedElement"]=="1");
+    assert(host.fields["IndexedReferenceError"]=="0" && host.fields["ChangedElement"]=="99");
+    assert(host.fields["CompoundReferenceError"]=="3251" && host.fields["CompoundUnchanged"]=="1");
     const auto arrays=executeVbaProcedure(R"VBA(Option Base 1
 Sub Modify(ByRef items As Variant)
 items(1)=42

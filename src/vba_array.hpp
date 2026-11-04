@@ -20,6 +20,9 @@ std::vector<VbaArrayDimension> vbaArrayBounds(const VbaValue& value);
 std::size_t vbaArraySize(const VbaValue& value);
 VbaValue vbaArrayLinearElement(const VbaValue& value,std::size_t index);
 VbaValue vbaArrayBound(const VbaValue& value,bool upper,int dimension=1);
+std::shared_ptr<const void> vbaArrayAllocation(const VbaValue& value);
+std::size_t vbaArrayElementOffset(const VbaValue& value,const std::vector<VbaValue>& indices);
+VbaValue withVbaArrayLinearElement(const VbaValue& value,std::size_t index,const VbaValue& element);
 VbaValue vbaArrayElement(const VbaValue& value,const std::vector<VbaValue>& indices);
 VbaValue withVbaArrayElement(const VbaValue& value,const std::vector<VbaValue>& indices,const VbaValue& element);
 }

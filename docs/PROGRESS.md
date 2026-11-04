@@ -4615,3 +4615,30 @@ after handled/retried field access. Targeted core/DAO 2/2 (1.98 s), additional
 DAO 1/1 (0.37 s), freshly rebuilt GUI-free core 1/1 (1.37 s), full desktop
 48/48 (76.53 s), Debian payload/permissions/Build-ID/pinned SQLite and all four
 original fixture hashes pass. No new CTest targets or catalog IDs: fixed 456.
+
+
+## Live native ByRef array-element binding (2026-11-04)
+
+Under existing F043, named array roots bind direct elements through captured
+checked offsets and opaque allocation tokens, without reevaluating subscripts
+or retaining array contents in metadata. Native Sub/function/named calls, typed
+multidimensional/Byte cells, same-cell aliases and scalar forwarding write
+immediately to actual sources. Later-argument mutation is observed by ByRef;
+ByVal keeps its earlier value. Source replacement is guarded while a cell is
+active. Compound/ParamArray addresses and roots reached through existing cell
+aliases remain refused (3251); broader property/COM/class identity is open.
+
+Only real aliases publish caller changes; ByVal values no longer copy back old
+state. Internal transport copies and unused fresh slots release objects after
+binding; public C++ argument vectors retain their contract. Other active alias
+frames refresh after publication, releasing stale module/static/object snapshots
+while the writer completes its own publications before refreshing itself.
+Existing core verifies one-time indices, later-argument order, aliases/forwarding,
+immediate module reads, named order, copy isolation, Byte and allocation guards.
+Existing DAO clears a clone through a forwarded module-array Object slot plus
+a ByVal copy, then runs a real transaction before returning.
+
+Targeted core/DAO 2/2 (2.21 s), freshly rebuilt GUI-free core 1/1 (2.05 s), full
+desktop 48/48 (76.34 s), Debian payload/permissions/Build-ID/pinned SQLite and
+all four original fixture hashes pass. No new CTest targets or catalog IDs;
+fixed 456 remains, with full F043/Access parity still open.
