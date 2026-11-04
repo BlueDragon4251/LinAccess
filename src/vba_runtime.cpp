@@ -7,6 +7,9 @@
 
 #include <algorithm>
 #include <deque>
+#include <filesystem>
+#include <cerrno>
+#include <unistd.h>
 #include <list>
 #include <new>
 #include <cctype>
@@ -43,7 +46,7 @@ struct BranchDestination {
     int conditionalUnwind{},withUnwind{},forUnwind{};
 };
 struct Statement {
-    enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
+    enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, Directory, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
                       Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, RaiseError, ErrorResumeNext, ErrorDisable, Label, Jump, GoSub, ComputedJump, ComputedGoSub, ReturnSubroutine, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
@@ -921,6 +924,11 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             const auto argument=trim(source.substr(5));
             if(!validExpression(argument)) return {VbaExecutionStatus::Unsupported,"Error statement requires one expression",line};
             statements.push_back({Statement::Type::RaiseError,{},argument,line});
+        } else if (normalized.starts_with("mkdir ") || normalized.starts_with("mkdir\t")
+                   || normalized.starts_with("rmdir ") || normalized.starts_with("rmdir\t")) {
+            const auto expression=trim(source.substr(5));
+            if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Directory statement requires one path expression",line};
+            statements.push_back({Statement::Type::Directory,normalized.substr(0,5),expression,line});
         } else if (lower(source).starts_with("sendkeys ") || lower(source).starts_with("sendkeys\t")) {
             const auto args=splitArguments(trim(source.substr(8)));
             if (args.empty() || args.size()>2 || args[0].empty()) return {VbaExecutionStatus::Unsupported,"SendKeys arguments unsupported",line};
@@ -2108,6 +2116,36 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::EndWith:
                 if (withFrames.empty()) throw VbaRuntimeError(5,"With stack invalid");
                 withFrames.pop_back(); break;
+            case Statement::Type::Directory:
+                if (active) {
+                    const auto value=scalarVbaValue(evaluate(instruction.expression));
+                    if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null directory path");
+                    const auto text=value.asText();
+                    if (text.empty() || text.find('\0')!=std::string::npos || text.find('*')!=std::string::npos || text.find('?')!=std::string::npos)
+                        throw VbaRuntimeError(52,"Invalid directory path");
+                    if (text.find('\\')!=std::string::npos || text.find(':')!=std::string::npos)
+                        throw VbaRuntimeError(3251,"Windows directory paths require an unavailable drive adapter");
+                    const std::filesystem::path path(text);
+                    std::error_code failure;
+                    if (instruction.argument=="mkdir") {
+                        const bool created=std::filesystem::create_directory(path,failure);
+                        if (!created && !failure) throw VbaRuntimeError(75,"Directory already exists");
+                    } else {
+                        const auto status=std::filesystem::symlink_status(path,failure);
+                        if (!failure) {
+                            if (std::filesystem::is_symlink(status)) throw VbaRuntimeError(3251,"RmDir symbolic-link behavior is unsupported");
+                            if (!std::filesystem::exists(status)) throw VbaRuntimeError(76,"Directory path not found");
+                            if (!std::filesystem::is_directory(status)) throw VbaRuntimeError(75,"RmDir requires a directory");
+                            if (::rmdir(path.c_str())!=0) failure=std::error_code(errno,std::generic_category());
+                        }
+                    }
+                    if (failure) {
+                        if (failure==std::errc::no_such_file_or_directory || failure==std::errc::not_a_directory)
+                            throw VbaRuntimeError(76,"Directory path not found");
+                        throw VbaRuntimeError(75,"Directory operation failed");
+                    }
+                }
+                break;
             case Statement::Type::SendKeys:
                 if (active) {
                     const auto expressions=splitArguments(instruction.expression);

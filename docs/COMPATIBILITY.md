@@ -2867,3 +2867,7 @@ Begrenztes natives VBA-/SQL-Partition mit benannten Argumenten und tatsächliche
 SQL-Gruppierung ist implementiert: [Umfang und Grenzen](NATIVE_PARTITION.md).
 Vollstand danach48/48 (84.06 s), GUI-freier Core1/1, Paket und vier Originalfixture-
 Hashes bestanden; fester Arbeitskatalog unverändert456/384/72.
+
+Native MkDir/RmDir-Anweisungen verändern echte Linux-Verzeichnisse im begrenzten
+Umfang: [Umfang und Grenzen](NATIVE_DIRECTORY_STATEMENTS.md). Vollständige
+VBA-Datei-I/O und Windows-Pfad-/Fehlergleichheit bleiben offen.
