@@ -106,3 +106,38 @@ TABLE_KEYBOARD_RUNTIME.md. Full desktop 48/48 (78.54 s), GUI-free build confirme
 and core 1/1 (2.07 s), targeted GUI/SQL 1/1 (2.48 s), Debian payload/permissions/
 Build-ID/pinned SQLite and all four original hashes pass. Scoped checklist
 381 checked / 72 open, no extra CTest target or complete Access parity claim.
+
+
+## Validated Ctrl+Home/Ctrl+End boundaries (2026-11-04)
+
+Ctrl+Home/Ctrl+End in the native table view use typed previous/next/first/last
+navigation requests. A move to another record follows the existing checked
+Save/context/fetch path, then selects the first/last visible field in current
+header order. SQL failure retains the current row/cache. The first current row
+and the known fully fetched last current row only change fields; their pending
+record edits are not saved merely to change the field position. Live cell input
+first follows the existing completion/validation rules.
+
+Readonly query-view behavior and standalone views without the callback retain
+their existing paths. Existing limits for unrelated drafts, new/deleted rows,
+fetching, hidden/filtered results, editor-consumed keys, extended selections and
+full Access focus/error/timing equivalence remain open. A driver that still
+reports fetchable rows uses the native Last-record path.
+
+The existing main-window target checks actual Ctrl+Home/Ctrl+End positions and
+saved SQL, verifies same-first-record field movement leaves SQL/drafts unchanged,
+and verifies a UNIQUE failure refuses a record change while retaining the draft.
+No extra CTest target.
+
+
+## Checked native Ctrl+Home/Ctrl+End record boundaries (2026-11-04)
+
+Typed native record movement requests route first/last keys through checked
+Save/context/fetch behavior and actual visible-field header order. Current-first
+and known fully fetched current-last field moves preserve pending edits without
+SQL Save. Existing GUI checks positions, SQL persistence, same-record drafts
+and UNIQUE failure. TABLE_KEYBOARD_RUNTIME.md records driver/editor/selection/
+insert/delete/oracle limits. Full desktop 48/48 (80.50 s), GUI-free build
+confirmed and core 1/1 (2.31 s), targeted GUI/SQL 1/1 (2.12 s), Debian payload/
+permissions/Build-ID/pinned SQLite and four original hashes pass. Scoped checklist
+382 checked / 72 open; no extra CTest target or complete Access parity claim.
