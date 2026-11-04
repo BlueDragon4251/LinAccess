@@ -366,6 +366,27 @@ Height =1500)BANDS");
             const auto control=makePreviewControlsObject(stats)->member("Item",{linaccess::VbaValue::string(("Stat_"+function).toStdString())});
             assert(control.object->member("Value",{}).kind==linaccess::VbaValue::Kind::Null);
         }
+        QStringList typedLines{"Begin Report","Width =9000",
+            "RecordSource =\"SELECT * FROM native_report_stats WHERE value IS NOT NULL ORDER BY id\"",
+            "Begin Section","Height =300","End","Begin FormFooter","Height =1200"};
+        const QStringList typedNames{"mincash","maxcash","mindate","maxdate"};
+        for(int index=0;index<typedNames.size();++index) {
+            const auto expression=QString(index%2 ? "Max(" : "Min(")
+                +(index<2 ? "CCur([value]))" : "CDate([value]))");
+            typedLines<<"Begin TextBox"<<"Name =\""+typedNames[index]+"\""<<"ControlSource =\"="+expression+"\""
+                <<"Top ="+QString::number(index*300)<<"Width =4000"<<"Height =270"<<"End";
+        }
+        typedLines<<"End"<<"End";
+        AccessFormPreview typedStats("typed report extrema",typedLines.join('\n').toUtf8(),{},db);
+        for(int index=0;index<typedNames.size();++index) {
+            const auto control=makePreviewControlsObject(typedStats)->member("Item",{linaccess::VbaValue::string(typedNames[index].toStdString())});
+            const auto value=control.object->member("Value",{});
+            const int expected=index%2 ? 40 : 10;
+            if(index<2) assert(value.kind==linaccess::VbaValue::Kind::Currency && value.currencyUnits==expected*10000);
+            else assert(value.kind==linaccess::VbaValue::Kind::Date && value.number==expected);
+        }
+        assert(typedStats.exportReportPdf(output.filePath("typed-extrema.pdf")));
+        assert(typedStats.close());
         assert(query.exec("UPDATE native_report_stats SET value=NULL")); query.finish();
         (void)statsObject->member("Requery",{});
         for(const auto& function:functions) {
