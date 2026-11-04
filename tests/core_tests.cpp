@@ -2846,6 +2846,28 @@ End Sub
     assert(badConstant.status==VbaExecutionStatus::Unsupported && badConstant.errorNumber==3251);
     assert(evaluate("vbNewLine").asText()=="\r\n" && evaluate("vbCr & vbLf").asText()=="\r\n");
     assert(evaluate("Len(vbNullChar)").asNumber()==1 && evaluate("vbNullString").asText().empty());
+    const auto foldedDefaults=executeVbaProcedure(R"VBA(Private Const DEFAULT_COUNT As Long=5
+Function FoldedDefault(Optional ByVal count As Long=DEFAULT_COUNT*2+1,Optional ByVal prefix As String="a" & "b",Optional ByVal stamp As Date=#2024-02-29#) As String
+FoldedDefault=CStr(count) & ":" & prefix & ":" & CStr(Year(stamp))
+End Function
+Function IndependentDefault(Optional ByRef value As Long=DEFAULT_COUNT) As Long
+value=value+1
+IndependentDefault=value
+End Function
+Sub FoldedDefaults()
+Me!FoldedDefault=FoldedDefault()
+Me!FoldedNamed=FoldedDefault(prefix:="explicit")
+Me!FoldedEmpty=FoldedDefault(Empty)
+Me!FoldedCopies=CStr(IndependentDefault()) & ":" & CStr(IndependentDefault())
+End Sub
+)VBA","FoldedDefaults",host);
+    if(foldedDefaults.status!=VbaExecutionStatus::Completed) std::cerr<<"Default fold error="<<foldedDefaults.errorNumber<<" line="<<foldedDefaults.line<<"\n";
+    assert(foldedDefaults.status==VbaExecutionStatus::Completed && host.fields["FoldedDefault"]=="11:ab:2024" && host.fields["FoldedNamed"]=="11:explicit:2024");
+    assert(host.fields["FoldedEmpty"]=="0:ab:2024" && host.fields["FoldedCopies"]=="6:6");
+    const auto badDefault=validateVbaProcedure(R"VBA(Sub BadDefault(Optional count As Long=FileLen("missing.dat"))
+End Sub
+)VBA","BadDefault");
+    assert(badDefault.status==VbaExecutionStatus::Unsupported && badDefault.errorNumber==3251);
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub

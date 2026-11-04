@@ -1051,3 +1051,5 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native scalar local/module Const declarations compose checked pure expressions, retain typed immutable bindings and pass temporary values through supported ByRef calls.
 - [x] Fixed array dimensions fold integral constant expressions and prior module/local constants without executing runtime APIs.
 - [x] Native VBA character constants include Windows-target vbNewLine/CRLF and checked empty/NUL/control-character String values without claiming null-BSTR interoperability.
+
+- [x] Optional scalar parameter defaults fold pure expressions and prior same-module constants into immutable metadata, preserving named overrides, explicit Empty/Null/Missing distinctions and independent ByRef default values.

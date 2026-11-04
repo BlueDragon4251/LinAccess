@@ -218,7 +218,7 @@ public:
     }
 };
 
-struct Parameter { std::string name; bool byReference{true}; std::string type; bool optional{}; std::string defaultExpression; bool paramArray{}; };
+struct Parameter { std::string name; bool byReference{true}; std::string type; bool optional{}; std::string defaultExpression; bool paramArray{}; std::shared_ptr<const VbaValue> defaultValue; };
 std::vector<std::string> splitArguments(const std::string& input) {
     std::vector<std::string> args;
     if (trim(input).empty()) return args;
@@ -343,6 +343,7 @@ VbaValue constantExpression(const std::string& expression,const VbaVariables& va
         if(std::isalpha(ch) || ch=='_' || ch>=128) {
             const auto start=i++; while(i<expression.size() && word(static_cast<unsigned char>(expression[i]))) ++i;
             const auto name=lower(expression.substr(start,i-start));
+            if(name=="date" || name=="time" || name=="now" || name=="timer") throw VbaRuntimeError(3251,"Clock reads are not constant expressions");
             auto next=i; while(next<expression.size() && std::isspace(static_cast<unsigned char>(expression[next]))) ++next;
             if((next<expression.size() && expression[next]=='(' && !operators.contains(name))
                 || (!values.contains(name) && name!="true" && name!="false" && !operators.contains(name)
@@ -527,7 +528,6 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                 bool optionalSeen=false,paramArraySeen=false;
                 const std::regex paramArray(R"(^ParamArray\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+Variant)?$)",std::regex::icase);
                 const std::regex arrayParameter(R"(^(?:ByRef\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+(Byte|Integer|Long|Single|Double|Currency|Date|Boolean|String|Object|Variant))?$)",std::regex::icase);
-                const std::regex defaultLiteral(R"CONST(^(?:"(?:[^"]|"")*"|[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|[+-]?&H[0-9A-F]+[&%]?|[+-]?&O[0-7]+[&%]?|#[^#]+#|True|False|Empty|Null)$)CONST",std::regex::icase);
                 for (const auto& declaration : splitArguments(params)) {
                     std::smatch declared;
                     if(paramArraySeen) return {VbaExecutionStatus::Unsupported,"ParamArray must be the last parameter",line};
@@ -551,8 +551,6 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                         return {VbaExecutionStatus::Unsupported,"Optional parameters must follow required parameters",line};
                     const auto type=lower(declared[4].str());
                     const bool collectionDefault=type=="collection" && lower(defaultExpression)=="nothing";
-                    if(optional && !defaultExpression.empty() && !collectionDefault && (!std::regex_match(defaultExpression,defaultLiteral) || !validVbaExpression(defaultExpression)))
-                        return {VbaExecutionStatus::Unsupported,"Optional parameter default is not implemented",line};
                     if(optional && type=="collection" && !defaultExpression.empty() && !collectionDefault)
                         return {VbaExecutionStatus::Unsupported,"Optional Collection default must be Nothing",line};
                     if(optional && lower(defaultExpression)=="null" && !type.empty() && type!="variant")
@@ -560,7 +558,15 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
                     if(optional && (type=="object" || type.starts_with("dao.")))
                         return {VbaExecutionStatus::Unsupported,"Optional object parameters are not implemented",line};
                     optionalSeen=optionalSeen || optional;
-                    if (parameters) parameters->push_back({declared[3].str(), lower(declared[2].str()) != "byval",type,optional,defaultExpression});
+                    std::shared_ptr<const VbaValue> defaultValue;
+                    if(!defaultExpression.empty()) {
+                        try {
+                            const auto folded=lower(defaultExpression)=="null" ? VbaValue{} : lower(defaultExpression)=="empty" ? VbaValue::empty()
+                                : collectionDefault ? VbaValue::reference(nullptr) : constantExpression(defaultExpression,declarationConstants,constantMode);
+                            defaultValue=std::make_shared<const VbaValue>(folded);
+                        } catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Optional constant default unsupported",line}; result.errorNumber=error.number; return result; }
+                    }
+                    if (parameters) parameters->push_back({declared[3].str(), lower(declared[2].str()) != "byval",type,optional,defaultExpression,false,std::move(defaultValue)});
                 }
                 within = true;
                 isFunction = lower(match[1].str()) == "function";
@@ -1318,7 +1324,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             if(!omitted && references && i<references->size() && !implicitCancel && parameter.byReference && (*references)[i].indexedArray)
                 throw VbaRuntimeError(3251,"ByRef array element binding is not implemented");
             const auto value=implicitCancel ? VbaValue::numeric(0) : !omitted ? arguments[i]
-                : !parameter.defaultExpression.empty() ? evaluateVbaExpression(parameter.defaultExpression,host,{})
+                : parameter.defaultValue ? *parameter.defaultValue
                 : parameter.type.empty() || parameter.type=="variant" ? VbaValue::missing() : initialLocalValue(parameter.type);
             if(!omitted && references && i<references->size() && !parameter.byReference && (*references)[i].type.ends_with("()"))
                 throw VbaRuntimeError(3251,"Declared array arguments require ByRef or an explicit Variant/value copy");
