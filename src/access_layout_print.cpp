@@ -44,6 +44,34 @@ void AccessFormPreview::buildPrintToolbar(QVBoxLayout* layout) {
         if (!path.isEmpty() && !exportLayoutPdf(path))
             QMessageBox::warning(this,"PDF","Das aktuelle Layout konnte nicht gespeichert werden.");
     });
+    auto* reportPreview=printToolbar_->addAction("Berichtsvorschau …");
+    reportPreview->setObjectName("access-report-preview");
+    connect(reportPreview,&QAction::triggered,this,[this] {
+        QPrinter printer(QPrinter::HighResolution);
+        QPrintPreviewDialog dialog(&printer,this);
+        dialog.setWindowTitle("Berichtsvorschau");
+        bool failed=false;
+        connect(&dialog,&QPrintPreviewDialog::paintRequested,this,[this,&dialog,&failed](QPrinter* target) {
+            if (!renderReport(*target)) {
+                failed=true;
+                QMetaObject::invokeMethod(&dialog,&QDialog::reject,Qt::QueuedConnection);
+            }
+        });
+        dialog.exec();
+        if (failed) QMessageBox::warning(this,"Berichtsvorschau",
+            "Dieser Bericht enthält noch nicht unterstützte Druckregeln oder konnte nicht vollständig dargestellt werden.");
+    });
+    auto* reportPrint=printToolbar_->addAction("Bericht drucken …");
+    reportPrint->setObjectName("access-report-print");
+    connect(reportPrint,&QAction::triggered,this,[this] {
+        QPrinter printer(QPrinter::HighResolution);
+        QPrintDialog dialog(&printer,this);
+        dialog.setOption(QAbstractPrintDialog::PrintPageRange,false);
+        dialog.setOption(QAbstractPrintDialog::PrintSelection,false);
+        if (dialog.exec()==QDialog::Accepted && !renderReport(printer))
+            QMessageBox::warning(this,"Bericht drucken",
+                "Dieser Bericht enthält noch nicht unterstützte Druckregeln oder konnte nicht vollständig ausgegeben werden.");
+    });
     auto* reportPdf=printToolbar_->addAction("Bericht als PDF …");
     connect(reportPdf,&QAction::triggered,this,[this] {
         const auto path=QFileDialog::getSaveFileName(this,"Bericht als PDF",{},"PDF (*.pdf)");
