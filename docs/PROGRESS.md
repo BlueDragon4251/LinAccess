@@ -5671,3 +5671,16 @@ original-format round trips remain open. Exact scope: DAO_BINARY_FIELDS.md.
 DAO binary-value Debian payload/Build-ID/pinned SQLite and four original fixture
 hashes pass. Last full suite remains owned dependencies48/48 (89.59 s), GUI-free
 runtime unchanged, last1/1 (1.79 s). Binary changes used targeted existing cases.
+
+## Stored native binary FieldSize (2026-11-04)
+
+DAO Field.FieldSize exposes Long byte length for the current non-NULL binary
+observation in browse mode, using the stored QByteArray size without a copied
+Byte() allocation. Empty BLOB size0, Long identity and read-only383 execute in the
+existing actual VBA binary case; SQL bytes/type/length checks remain. NULL, pending
+Edit/AddNew size semantics, Memo/codepage sizes and original Jet/OLE storage sizes
+remain explicitly unsupported. Desktop build and existing DAO1/1 pass (0.57 s).
+Fixed456/384/72; no added target/ID. Reference and scope: DAO_BINARY_FIELDS.md.
+Stored FieldSize Debian payload/Build-ID/pinned SQLite and four original fixture
+hashes pass. Last full suite remains owned dependencies48/48 (89.59 s); GUI-free
+runtime unchanged, last1/1 (1.79 s). This property addition used existing DAO1/1.
