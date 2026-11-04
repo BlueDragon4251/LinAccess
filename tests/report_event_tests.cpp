@@ -299,6 +299,41 @@ Height =1500)BANDS");
             assert(QRegularExpression("\\b20\\b").match(pages[1],pages[1].indexOf("OMEGA_END")+9).hasMatch());
         }
         assert(flowed.close());
+        auto parallelSource=shortSource;
+        parallelSource.replace("Name =\"Info\"","Name =\"Info\"\nCanGrow =-1\nLeft =2000");
+        parallelSource.replace("ControlSource =\"=[id] * 10\"","ControlSource =\"[name]\"");
+        parallelSource.replace("Top =400","Top =0");
+        AccessFormPreview parallel("parallel growth report",parallelSource,{},db);
+        assert(parallel.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==2);
+        const auto parallelPdf=output.filePath("parallel.pdf"); assert(parallel.exportReportPdf(parallelPdf));
+        if (!reader.isEmpty()) {
+            QProcess textReader; textReader.start(reader,{"-layout",parallelPdf,"-"});
+            assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);
+            const auto text=QString::fromUtf8(textReader.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);
+            assert(text.count("ALPHA_END")==2 && text.count("OMEGA_END")==2);
+        }
+        assert(parallel.close());
+        for(int id=1;id<=2;++id) {
+            QStringList lines; for(int line=0;line<19;++line) lines.append((id==1 ? "ALPHA " : "OMEGA ")+QString::number(line));
+            lines.append(id==1 ? "ALPHA_END" : "OMEGA_END");
+            query.prepare("UPDATE records SET name=? WHERE id=?"); query.addBindValue(lines.join('\n')); query.addBindValue(id); assert(query.exec()); query.finish();
+        }
+        auto stackedSource=shortSource;
+        stackedSource.replace("Name =\"Info\"","Name =\"Info\"\nCanGrow =-1");
+        stackedSource.replace("ControlSource =\"=[id] * 10\"","ControlSource =\"[name]\"");
+        AccessFormPreview stacked("stacked growth report",stackedSource,{},db);
+        assert(stacked.findChild<QPrintPreviewWidget*>("access-report-pages")->pageCount()==2);
+        const auto stackedPdf=output.filePath("stacked.pdf"); assert(stacked.exportReportPdf(stackedPdf));
+        if (!reader.isEmpty()) {
+            QProcess textReader; textReader.start(reader,{"-layout",stackedPdf,"-"});
+            assert(textReader.waitForFinished(10000) && textReader.exitCode()==0);
+            const auto text=QString::fromUtf8(textReader.readAllStandardOutput()).normalized(QString::NormalizationForm_KC);
+            const auto pages=text.split(QChar('\f')); assert(pages.size()>=2);
+            assert(pages[0].count("ALPHA_END")==2 && pages[1].count("OMEGA_END")==2);
+        }
+        assert(stacked.findChild<QLineEdit*>("access-control-Name")->geometry()==originalName);
+        assert(stacked.findChild<QLineEdit*>("access-control-Info")->geometry()==originalInfo);
+        assert(stacked.close());
         QFile protectedFlow(flowPdf); assert(protectedFlow.open(QIODevice::ReadOnly)); const auto completeFlow=protectedFlow.readAll(); protectedFlow.close();
         query.prepare("UPDATE records SET name=? WHERE id=1"); query.addBindValue(QString("LONG\n").repeated(400)); assert(query.exec()); query.finish();
         AccessFormPreview tooLong("too long growing report",shortSource,{},db);

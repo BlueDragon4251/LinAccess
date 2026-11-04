@@ -6,15 +6,16 @@ runtime view fails explicitly because the property is design-only there. Owned
 report design offers **Text vertikal erweitern (CanGrow)** and saves its setting.
 
 The renderer measures the actual plain/masked text with the same Qt layout used
-for painting. For one actually growing direct-field/unbound textbox per detail
-record, it increases field height, shifts controls below it by the height delta,
-and increases the detail section across its width. Variable detail heights feed
+for painting. For growing direct-field/unbound textboxes it increases field heights and moves
+lower controls. Growers with identical original top/bottom form an aligned group
+whose greatest delta controls movement below it. Vertically disjoint groups add
+their deltas, including for later growers. The detail expands across its width. Variable detail heights feed
 the existing page plan. Other sections are hidden only for their captured band;
 a scoped background override prevents later section colors leaking into a grown
 detail. Control geometry/visibility, canvas size/background, record/page state
 and aggregate cache are restored on success and failure.
 
-The subset refuses multiple simultaneously growing fields, overlapping controls,
+The subset refuses partially staggered/overlapping vertical growth groups, overlapping controls,
 calculated-source growers, growing page/report headers/footers, contradictory
 explicit section settings and details too tall for one printable page. CanShrink,
 full multi-control flow, group/layout scheduling and long-control page splitting
@@ -29,7 +30,8 @@ long-flow probe exposed and corrected this normalization issue. Masked-output
 checks remain active.
 
 The existing report case uses real SQL multiline rows that occupy one page with
-fixed fields and two pages with growth. PDF extraction independently checks both
+fixed fields and two pages with growth. Additional parallel/stacked cases extract
+both complete fields on the expected pages, checking max-versus-sum flow. PDF extraction independently checks both
 final text markers and the calculated values below them. It checks restored
 geometry/value/canvas and refusal of an oversized detail without replacing an
 existing PDF. The existing mainwindow case persists the design setting and reads

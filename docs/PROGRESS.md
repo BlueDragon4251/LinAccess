@@ -5220,3 +5220,18 @@ Validation: mainwindow/layout2/2 (11.62 s), final layout1/1 (9.29 s), full deskt
 Debian payload/permissions/Build-ID/pinned SQLite and four original hashes pass.
 No new target or work-catalog point; fixed 456/384/72 unchanged. F085 stays open.
 Reference and exact bounds: REPORT_CANGROW.md.
+
+
+## Multiple detail CanGrow groups (2026-11-04)
+
+Aligned growing fields share the greatest height delta; vertically disjoint
+groups contribute cumulative movement of lower controls. Partial staggered
+spans and actual control overlap remain refused. Existing SQL/PDF cases cover
+parallel and stacked growth, complete end markers on both expected pages and
+restored control geometry. This extends the preceding single-grow subset;
+calculated growers, long-band splitting and full Access layout remain open.
+
+Validation: desktop build, mainwindow/layout2/2 (11.71 s), final layout/original
+DAO2/2 (42.54 s), Debian payload/Build-ID/pinned SQLite and four original hashes
+pass. Core unchanged; preceding full48/core1 evidence retained. No new CTest
+target or catalog ID; fixed 456/384/72 retained, F085 remains open.
