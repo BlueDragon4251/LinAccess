@@ -734,6 +734,12 @@ int main() {
         for(int month=0;month<12;++month) { discountFactor*=1.01; discounted+=100/discountFactor; }
         assert(std::abs(eval("PV(Type:=0,Pmt:=-100,NPer:=12,Rate:=0.01)").number-discounted)<1e-9);
         assert(eval("PV(0,12,-100)").number==1200);
+        assert(eval("NPer(0,-100,1200)").number==12);
+        assert(std::abs(eval("NPer(0.1,-110,100)").number-1)<1e-12);
+        assert(std::abs(eval("VBA.NPer(Type:=1,Pv:=100,Pmt:=-100,Rate:=0.1)").number-1)<1e-12);
+        assert(std::abs(eval("NPer(0.000000000000001,-100,1200)").number-12)<1e-9);
+        assert(std::abs(eval("NPer(0.1,0,100,-200)").number-7.272540897341713)<1e-12);
+
         assert(eval("SLN(Life:=5,Salvage:=1000,Cost:=10000)").number==1800);
         double depreciation=0;
         for(int year=1;year<=5;++year) depreciation+=eval("SYD(10000,1000,5,"+std::to_string(year)+")").number;
@@ -742,6 +748,9 @@ int main() {
 
         bool invalid=false;
         try { eval("Pmt(0,0,1000)"); } catch(const linaccess::VbaRuntimeError& e) { invalid=e.number==5; }
+        assert(invalid);
+        invalid=false;
+        try { eval("NPer(0,0,1000)"); } catch(const linaccess::VbaRuntimeError& e) { invalid=e.number==5; }
         assert(invalid);
     }
     {
