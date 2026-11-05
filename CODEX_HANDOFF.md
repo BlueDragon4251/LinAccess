@@ -1676,3 +1676,23 @@ object-state guards remain strict. Scope: docs/NATIVE_FILE_SYSTEM_OBJECT.md.
 Final full desktop48/48 (85.42 s), fresh headless1/1 (1.69 s), updated Debian/
 build-ID/SQLite/four hashes pass. Original78/100; no Access result oracle.
 No new target/ID; F040/F042/F091 open,456/384/72 fixed.
+
+Native FSO GetFileName/GetBaseName/GetExtensionName/GetParentFolderName now
+perform actual lexical extraction for bounded Windows/Linux paths, including
+UTF-8 and nonexistent paths, without filesystem access or drive mapping.
+Unvalidated root/dot/trailing-separator edge cases remain explicit3251. Scope:
+docs/NATIVE_FILE_SYSTEM_OBJECT.md. Desktop core1/1 (1.73 s), fresh headless1/1
+(1.72 s), current Debian/build-ID/SQLite/four hashes pass. Last broader full
+48/48 (85.42 s) precedes this increment. No new target/ID; F091 remains open,
+fixed456/384/72.
+
+Native FSO GetFile(FileSpec) returns an independent real File object with
+normalized absolute Path, Name and live Size. Actual regular Linux files only;
+no host/stream/database retention. Long sizes and larger exact Double sizes
+are distinguished; above exact range6. Symlinks, mutations, typed File binding,
+full sharing/race/Windows metadata contract remain bounded/unimplemented.
+Scope: docs/NATIVE_FILE_SYSTEM_OBJECT.md. Actual binary/UTF-8 metadata and a
+retained object reading a resized2-GiB file pass desktop core1/1 (1.82 s) and
+fresh GUI-free core1/1 (1.72 s). Current Debian/build-ID/SQLite/four hashes pass.
+Last broader48/48 (85.42 s) predates both FSO increments. No new target/ID;
+F091 open, fixed456/384/72.

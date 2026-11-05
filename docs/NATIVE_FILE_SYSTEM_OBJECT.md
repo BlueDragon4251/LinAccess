@@ -11,6 +11,7 @@ Supported members:
 - FolderExists(FolderSpec): checks an actual directory.
 - BuildPath(Path,Name): joins native Linux path components without requiring existence.
 - GetAbsolutePathName(PathSpec): resolves the process working directory and normalizes a native absolute path.
+- GetFileName(PathSpec), GetBaseName(Path), GetExtensionName(Path), GetParentFolderName(Path): extract lexical path components without accessing the filesystem.
 
 Existence checks distinguish files, directories and absent paths; empty paths
 return False, and missing/not-a-directory results return False. Other errors use
@@ -43,3 +44,39 @@ fixed456/384/72.
 
 Reference: [FileSystemObject](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/filesystemobject-object),
 [GetAbsolutePathName](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/getabsolutepathname-method).
+
+Lexical component methods accept both Windows and Linux separators, preserve
+UTF-8/case, and need no existing file. Drive-only input returns an empty string;
+ordinary drive-qualified and UNC file paths can be parsed without drive mapping.
+Trailing separators, UNC roots, dot-directory components, leading-dot extension
+semantics and drive-relative parent extraction remain explicit3251 boundaries.
+This does not enable Windows paths for physical filesystem operations.
+
+Path-component increment: desktop core1/1 (1.73 s), fresh GUI-free core1/1
+(1.72 s), current Debian/build-ID/SQLite/four fixture hashes pass. The broader
+48/48 above precedes this increment. No new test target or catalog ID.
+
+## Native GetFile objects
+
+GetFile(FileSpec) resolves an actual existing regular Linux file and returns
+a real independent native File object (TypeName File, VarType9). Path is the
+normalized absolute path, Name is its final component, and Size reads the
+filesystem again on each access. No host, stream or database handle is retained.
+Sizes through signed Long maximum retain Long; larger exact sizes use Double.
+Beyond the exact Double integer range raises6 instead of returning rounded data.
+Missing files raise53; final symlinks and nonregular objects remain bounded.
+
+Only these three property reads are implemented. File mutations, default-member
+behavior, qualified Scripting.File binding, parent folders, timestamps, attributes,
+sharing, Windows drive mapping and race/identity semantics remain unimplemented
+or unvalidated. A retained path does not pin the original inode. This is not a
+full Windows File object contract.
+
+References: [GetFile](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/getfile-method),
+[File](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/file-object),
+[Size](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/size-property-filesystemobject-object).
+Numeric size policy cross-checked against the public Wine scrrun implementation;
+no Windows Access result oracle is claimed.
+
+GetFile validation: desktop core1/1 (1.82 s), fresh headless1/1 (1.72 s),
+current Debian/build-ID/SQLite/four original fixture hashes pass.
