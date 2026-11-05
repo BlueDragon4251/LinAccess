@@ -9,6 +9,7 @@
 #include "vba_qt_value.hpp"
 #include "native_domain_lookup.hpp"
 #include "native_access_file_dialog.hpp"
+#include "native_access_status.hpp"
 #include <QApplication>
 #include <QAbstractButton>
 #include <QPushButton>
@@ -1656,6 +1657,7 @@ public:
     explicit PreviewApplicationObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     bool isNativeType(std::string_view type) const override { return type=="access.application"; }
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if (text(name).compare("SysCmd",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Action","Argument2","Argument3"},1};
         if (text(name).compare("FileDialog",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"DialogType"},1};
         if (text(name).compare("Quit",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Option"},0};
         if (text(name).compare("RunCommand",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Command"},1};
@@ -1664,6 +1666,7 @@ public:
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if(key=="syscmd") return linaccess::nativeAccessStatus(preview,args);
         if(key=="filedialog") {
             if(args.size()!=1) throw linaccess::VbaRuntimeError(450,"FileDialog requires one type");
             const QPointer<AccessFormPreview> owner=&preview;

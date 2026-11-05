@@ -1034,6 +1034,10 @@ private:
         static const std::unordered_map<std::string,int> fileDialogTypes{
             {"msofiledialogopen",1},{"msofiledialogsaveas",2},{"msofiledialogfilepicker",3},{"msofiledialogfolderpicker",4}};
         if(const auto type=fileDialogTypes.find(word);type!=fileDialogTypes.end()) return VbaValue::longInteger(type->second);
+        static const std::unordered_map<std::string,int> statusActions{
+            {"acsyscmdinitmeter",1},{"acsyscmdupdatemeter",2},{"acsyscmdremovemeter",3},
+            {"acsyscmdsetstatus",4},{"acsyscmdclearstatus",5}};
+        if(const auto action=statusActions.find(word);action!=statusActions.end()) return VbaValue::longInteger(action->second);
         if (word == "dbopendynaset") return VbaValue::numeric(2);
         if (word == "dbopensnapshot") return VbaValue::numeric(4);
         if (word == "acquitprompt") return VbaValue::integer(0);
@@ -1257,6 +1261,7 @@ private:
                 if(qualifiedArray) throw error("Named qualified Array arguments are not implemented",3251);
                 if(accessExpression_) throw error("Named arguments are not implemented in Access expression context",3251);
                 static const std::unordered_map<std::string,VbaArgumentSignature> signatures{
+                    {"syscmd",{{"Action","Argument2","Argument3"},1}},
                     {"msgbox",{{"Prompt","Buttons","Title","HelpFile","Context"},1}},
                     {"inputbox",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
                     {"inputbox$",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
@@ -1331,6 +1336,13 @@ private:
                 const auto size=word=="instr" ? ordered.size() : last+1;
                 ordered.resize(size); missing.resize(size); orderedRefs.resize(size);
                 args=std::move(ordered); omitted=std::move(missing); references=std::move(orderedRefs);
+            }
+            if(word=="syscmd") {
+                if(!host_) return {};
+                if(accessExpression_) throw error("SysCmd is unavailable in calculated expressions",3251);
+                auto values=args;
+                for(std::size_t i=0;i<values.size();++i) if(omitted[i]) values[i]=VbaValue::missing();
+                return host_->applicationObject()->member("SysCmd",values);
             }
             if(word=="doevents") {
                 if(!args.empty()) throw error("DoEvents takes no arguments",450);

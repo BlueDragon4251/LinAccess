@@ -1428,3 +1428,13 @@ invented default semantics. Native selection-index adjustment is documented
 without Windows parity claim. Existing layouts1/1 (10.58 s), current package/
 build-ID/SQLite3.54.1 and four hashes pass. Last full48/48 (83.85 s), headless
 runtime unchanged1/1 (1.79 s);456/384/72. docs/NATIVE_FILE_DIALOG.md.
+
+Native SysCmd status actions1..5 now drive the actual main-window status bar /
+Qt progress widget, with standalone document fallback. Application.SysCmd plus
+unqualified statement/function calls and named arguments share native execution;
+module procedures retain resolution priority. Successful operations return Null,
+SetStatus removes the meter; invalid updates preserve its value. Other actions
+3251, no Access version/registry/ActiveX fiction. docs/NATIVE_ACCESS_STATUS.md.
+Targeted core/layout2/2 (13.17 s), fresh GUI-free1/1 (1.75 s), current Debian/
+build-ID/SQLite3.54.1 and four original hashes passed. Last full baseline48/48
+(83.85 s), not rerun after this extension. F068 open;456/384/72 unchanged.

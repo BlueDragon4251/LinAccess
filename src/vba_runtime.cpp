@@ -1646,7 +1646,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 const auto external = host.moduleForProcedure(instruction.argument);
                 if (external) declaration = validateVbaProcedure(*external, instruction.argument);
             }
-            if(declaration.status==VbaExecutionStatus::ProcedureMissing && lower(instruction.argument)=="doevents") continue;
+            if(declaration.status==VbaExecutionStatus::ProcedureMissing
+               && (lower(instruction.argument)=="doevents" || lower(instruction.argument)=="syscmd")) continue;
             if (declaration.status != VbaExecutionStatus::Completed)
                 return {VbaExecutionStatus::Unsupported, "Aufgerufene Prozedur nicht verfügbar oder nicht unterstützt", instruction.line};
         }
@@ -1992,6 +1993,23 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     declaration=parseProcedure(targetModule,name,compiled,function,cancel,&parameters);
                 }
             }
+            if(declaration.status==VbaExecutionStatus::ProcedureMissing && lower(std::string(name))=="syscmd") {
+                static const std::vector<std::string> names{"action","argument2","argument3"};
+                std::vector<VbaValue> ordered(3,VbaValue::missing()); std::vector<bool> assigned(3);
+                bool namedSeen=false;
+                for(std::size_t index=0;index<actuals.size();++index) {
+                    auto target=index;
+                    if(!argumentNames[index].empty()) {
+                        namedSeen=true; const auto argument=lower(argumentNames[index]);
+                        const auto found=std::find(names.begin(),names.end(),argument);
+                        if(found==names.end()) throw VbaRuntimeError(448,"Named argument not found");
+                        target=static_cast<std::size_t>(found-names.begin());
+                    } else if(namedSeen) throw VbaRuntimeError(450,"Positional arguments cannot follow named arguments");
+                    if(target>=ordered.size() || assigned[target]) throw VbaRuntimeError(450,"SysCmd argument supplied more than once or too many arguments");
+                    assigned[target]=true; ordered[target]=actuals[index];
+                }
+                return host.applicationObject()->member("SysCmd",ordered);
+            }
             if(declaration.status!=VbaExecutionStatus::Completed) throw VbaRuntimeError(3251,"Named arguments require a supported VBA procedure declaration");
             if(std::any_of(parameters.begin(),parameters.end(),[](const Parameter& parameter){ return parameter.paramArray; }))
                 throw VbaRuntimeError(3251,"Named ParamArray calls are not implemented");
@@ -2019,6 +2037,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if(external) nested=executeProcedure(*external,name,host,actuals,&bindings);
             }
         }
+        if(nested.status==VbaExecutionStatus::ProcedureMissing && lower(std::string(name))=="syscmd")
+            return host.applicationObject()->member("SysCmd",actuals);
         if(nested.status==VbaExecutionStatus::ProcedureMissing && lower(std::string(name))=="doevents") {
             if(!actuals.empty()) throw VbaRuntimeError(450,"DoEvents takes no arguments");
             const auto result=VbaValue::integer(host.doEvents());

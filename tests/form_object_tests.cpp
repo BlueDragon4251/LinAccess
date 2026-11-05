@@ -6,6 +6,8 @@
 #include <QToolBar>
 #include <QAction>
 #include <QMainWindow>
+#include <QStatusBar>
+#include <QProgressBar>
 #include <QMenuBar>
 #include <QMenu>
 #include <QPushButton>
@@ -66,6 +68,45 @@ End Sub
     assert(sql.value(0).toInt()==11 && sql.value(1).toString()=="saved value" && sql.value(2).toInt()==0); sql.finish();
     assert(preview.close());
 }
+void testNativeStatusMeter() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","native-status-meter"); db.setDatabaseName(":memory:"); assert(db.open());
+    QMainWindow window;
+    const QByteArray source="Begin Form\nBegin Section\nHeight =600\nEnd\nEnd\n";
+    const QByteArray module=R"VBA(Sub StartMeter()
+If Not IsNull(SysCmd(Action:=acSysCmdInitMeter,Argument2:="Loading rows",Argument3:=200)) Then Err.Raise 5
+End Sub
+Sub AdvanceMeter()
+SysCmd acSysCmdUpdateMeter,Argument2:=100
+End Sub
+Sub StatusMessage()
+Application.SysCmd acSysCmdSetStatus,"Sorting rows"
+End Sub
+Sub ClearMessage()
+SysCmd acSysCmdClearStatus
+End Sub
+)VBA";
+    AccessFormPreview preview("native status",source,module,db,&window);
+    window.show(); preview.show(); QApplication::processEvents();
+    std::vector<linaccess::VbaValue> args;
+    assert(preview.executeProcedure("StartMeter",args).status==linaccess::VbaExecutionStatus::Completed);
+    auto* status=window.statusBar();
+    auto* meter=status->findChild<QProgressBar*>("access-syscmd-meter");
+    assert(meter && meter->maximum()==200 && meter->value()==0 && status->currentMessage()=="Loading rows");
+    assert(preview.executeProcedure("AdvanceMeter",args).status==linaccess::VbaExecutionStatus::Completed && meter->value()==100);
+    const auto application=makePreviewApplicationObject(preview);
+    int error=0;
+    try { application->member("SysCmd",{linaccess::VbaValue::integer(2),linaccess::VbaValue::integer(201)}); }
+    catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+    assert(error==5 && meter->value()==100);
+    assert(preview.executeProcedure("StatusMessage",args).status==linaccess::VbaExecutionStatus::Completed);
+    assert(!status->findChild<QProgressBar*>("access-syscmd-meter") && status->currentMessage()=="Sorting rows");
+    assert(preview.executeProcedure("ClearMessage",args).status==linaccess::VbaExecutionStatus::Completed && status->currentMessage().isEmpty());
+    assert(preview.close()); error=0;
+    try { application->member("SysCmd",{linaccess::VbaValue::integer(5)}); }
+    catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+    assert(error==2450);
+}
+
 void testNativeFilePicker() {
     auto db=QSqlDatabase::addDatabase("QSQLITE","native-file-picker"); db.setDatabaseName(":memory:"); assert(db.open());
     QTemporaryDir directory; assert(directory.isValid()); const auto path=directory.filePath("picker.txt");
@@ -172,6 +213,7 @@ End Sub
 
 void testFormObjects() {
     testNativeTableDefaults();
+    testNativeStatusMeter();
     testNativeFilePicker();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-object-test");
     db.setDatabaseName(":memory:"); assert(db.open());
