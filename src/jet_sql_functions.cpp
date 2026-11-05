@@ -13,6 +13,7 @@
 #include "vba_round.hpp"
 #include "vba_calendar.hpp"
 #include "vba_qt_value.hpp"
+#include "native_vba_sql.hpp"
 #include "vba_currency.hpp"
 #include "vba_qt_value.hpp"
 #include <QSet>
@@ -560,7 +561,7 @@ std::optional<int> jetSqlFunctionErrorNumber(std::string_view foldedMessage) {
     int number=0;
     const auto parsed=std::from_chars(code.data(),code.data()+code.size(),number);
     if (parsed.ec!=std::errc{}) return {};
-    if (number==5 || number==6 || number==7 || number==13 || number==52 || number==53 || number==70 || number==75 || number==76 || number==94 || number==438 || number==450 || number==3035 || number==3146 || number==3163 || number==3061 || number==2450 || number==2451 || number==2455 || number==2465 || number==3251 || number==3085) return number;
+    if (number==5 || number==6 || number==7 || number==13 || number==52 || number==53 || number==70 || number==75 || number==76 || number==94 || number==438 || number==450 || number==3035 || number==3146 || number==3163 || number==3061 || number==2450 || number==2451 || number==2455 || number==2465 || number==3251 || number==3420 || number==3085) return number;
     return {};
 }
 std::string jetSqlFunctionErrorExplanation(std::string_view foldedMessage) {
@@ -672,6 +673,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_lenb",-1,&stringLenB,nullptr,nullptr);
     ensure("linaccess_jet_like_pattern",1,&likePattern,nullptr,nullptr);
     ensure("linaccess_jet_object_value",3,&objectValue,nullptr,nullptr);
+    vba_sql::install(db,connection);
 }
 void setJetSqlObjectResolver(QSqlDatabase db,JetSqlObjectResolver resolver) {
     installJetSqlFunctions(db);

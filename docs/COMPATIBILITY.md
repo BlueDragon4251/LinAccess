@@ -2894,3 +2894,17 @@ native SQL-Defaults, DAO-AddNew-Puffer und neue gebundene Formularfelder führen
 sie tatsächlich aus: [Umfang und Grenzen](SOURCE_LITERAL_DEFAULTS.md).
 Allgemeine Ausdrücke und vollständige Windows-Default-/Eigenschaftsgleichheit
 bleiben offen; keine Migration alter Projekte wird erfunden.
+
+## Public standard-module functions in native SQL
+
+The first native SQL/VBA scalar bridge executes actual public standard-module
+bodies in SELECT and UPDATE expressions, sharing module/scalar Static state with
+the existing per-connection runtime. Private/class/ambiguous sources, GUI/DAO host
+operations, pre-existing object/array state and unproven result transports are
+refused. Prepared source replacement, savepoint rollback, reopened connections,
+TEMP shadows, builtin protection and private error-output boundaries are covered.
+This does not add Currency/Date/object/array transport, complete Jet result metadata,
+reentrant DAO/GUI or a Windows Access2003 oracle. Original coverage stays78/100.
+See [native SQL/VBA scope](NATIVE_VBA_SQL.md). Production code full48/48 (87.35 s),
+subsequent actual UPDATE DAO1/1 (0.74 s), current package/SQLite/four fixture hashes
+pass. No new target/catalog ID;456/384/72 unchanged, F040/F068/F121 remain open.

@@ -1498,3 +1498,28 @@ claim. Unsupported/range boundaries explicit; docs/NATIVE_STRING_MUTATION.md.
 Desktop core1/1 (1.82 s), fresh headless1/1 (1.66 s), current Debian/build-ID/
 SQLite3.54.1/four original hashes pass. Last full baseline48/48 (85.02 s), not
 rerun after language extension. F040/F068 open;456/384/72 stays fixed.
+
+Native SQL/VBA standard-module scalar bridge implemented in native_vba_sql.hpp,
+installed through the verified Jet SQL adapter path. Real SELECT/UPDATE calls use
+the existing native interpreter and per-connection module/scalar Static state.
+Private/Friend/class/ambiguous definitions and builtin/reserved-name overwrites
+are excluded/refused. No permanent QSqlDatabase or Qt form host in callbacks;
+weak driver/registry, SQLite-owned tokens, native-handle/thread checks and fresh
+connection generations. GUI/DAO host APIs and non-null object/general-array
+module/static/public-global state refused; no fabricated context/results.
+Initial arguments NULL/finite numeric/UTF8 text, results Null/Boolean/Number/String.
+Currency/Date/BLOB/object/array/Error/Empty result transport and complete Jet result
+metadata are NOT implemented. No pauschal compatibility or Windows oracle claim.
+Statement-generation trace ignores SQL text and logs nothing; metadata scope avoids
+per-row source reload. Prepared source changes, source savepoint rollback, TEMP
+archive shadows, removed/ambiguous sources, reopened state and real UPDATE passed.
+Trace-hook interoperation/concurrent source editing/full VBA transaction-state/
+large-project performance remain open. docs/NATIVE_VBA_SQL.md. Full production48/48
+(87.35 s), final source guards DAO/original-query2/2 (8.12 s), subsequent actual
+UPDATE DAO1/1 (0.74 s), current package/build-ID/SQLite3.54.1/four hashes pass.
+GUI-free core runtime unchanged fresh1/1 (1.66 s); DAO SQL bridge uses Qt Core/SQL
+without Widgets. Original corpus still78/100; fixed456/384/72, F040/F068/F121 open.
+Next useful bridge stage: proven declared Currency/Date return metadata/transport
+with stale-signature guards; do not simply convert unknown variants to REAL/TEXT.
+GitHub branch still needs verified non-force CAS push; immutable backups are not
+published branch updates. Maintain privacy and original test-copy/hash policy.

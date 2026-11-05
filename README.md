@@ -73,6 +73,13 @@ Abfragemetadaten, einschließlich mehrspaltiger Auswahl und gebundener Speicheru
 öffentliche VBA-Funktionen aus, einschließlich echter Formularverweise:
 [Eval-Laufzeit und Grenzen](docs/EVAL_RUNTIME.md).
 
+Öffentliche Standardmodulfunktionen können außerdem in tatsächlichen nativen
+SQL-SELECTs und UPDATE-Berechnungen ausgeführt werden, mit geteiltem Modul-/Static-
+Zustand. Diese erste skalare SQL-/VBA-Stufe bietet keinen GUI-/DAO-Aufrufkontext und
+keinen vollständigen Geld-/Datums-/Objekttransport:
+[SQL-/VBA-Ausführung und Grenzen](docs/NATIVE_VBA_SQL.md).
+
+
 Native Datensatzauswahl und begrenztes Löschen verwenden echte Transaktionen,
 Bestätigungs-/Abbruchereignisse und `AllowDeletions`. Ein unveränderter
 Original-Löschhandler ist auf synthetischen Zeilen direkt und per Button geprüft:
