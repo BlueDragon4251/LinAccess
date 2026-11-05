@@ -93,3 +93,7 @@ specifies inspection of the default property when present.
 
 File binding/default/timestamp increment: targeted core/DAO2/2 (2.62 s),
 fresh GUI-free1/1 (1.66 s), current Debian/build-ID/SQLite/four hashes pass.
+
+Final filesystem segment: full current desktop48/48 (84.89 s), fresh
+headless1/1 (1.83 s), current Debian/build-ID/SQLite/four hashes pass.
+Original queries78/100; no Windows result oracle. No new test target/ID.

@@ -12,7 +12,7 @@ Explicit bounded errors: Null94, empty/NUL/wildcard path52, missing path76,
 existing MkDir target75 and denied/nonempty/wrong-target operations75. Windows
 backslash/drive paths and RmDir symbolic-link targets are explicitly unsupported
 3251. Other platform/Windows path, permission, locale and exact error precedence
-behavior has no Access2003 execution oracle. FileCopy/Kill/Open/Print/input and
+behavior has no Access2003 execution oracle. Open/Print/input and
 complete VBA filesystem support remain open. No recursive deletion is added.
 
 The existing core target operates on a unique temporary directory: Unicode name,
@@ -112,3 +112,29 @@ Final desktop core1/1 (1.78 s), fresh GUI-free core1/1 (1.69 s), updated Debian/
 build-ID/pinned SQLite3.54.1 and all four original fixture hashes pass. Last
 broader full remains preceding multi-record milestone48/48 (84.19 s). No added
 target/ID; F040 remains open, fixed456/384/72.
+
+## Native Kill
+
+Unqualified Kill pathnameExpression now compiles to a native operation evaluated
+only in active branches. A local identifier named Kill still supports ordinary
+assignment. The normal scalar/default-member path coercion and VBA error handler
+are used. Actual UTF-8/relative Linux regular files are unlinked; no shell command
+or recursive deletion is used. The unlink syscall cannot delete directories.
+
+Null94, NUL52, empty/missing file53, missing parent76, denied/read-only file70
+and wrong-kind/other operation75 remain explicit. Read-only here means no Unix
+write permission bits; this does not claim Windows attribute/ACL equivalence.
+Wildcard deletion, terminal symlinks, drive/backslash mapping, Windows open-file
+sharing behavior and exact error precedence remain unsupported/unvalidated.
+Path replacement races and external open handles have no Windows oracle.
+
+The existing core target deletes a synthetic binary test copy, preserves its
+source and directory, checks an inactive branch and distinguishes missing file
+from missing parent. No original fixture is a deletion target. No new test
+program or catalog ID; F040 remains open, fixed456/384/72.
+
+Reference: [Kill](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/kill-statement).
+
+Final filesystem segment: full current desktop48/48 (84.89 s), fresh
+headless1/1 (1.83 s), current Debian/build-ID/SQLite/four hashes pass.
+Original queries78/100; no Windows result oracle. No new test target/ID.

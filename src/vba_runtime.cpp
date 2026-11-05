@@ -74,6 +74,37 @@ void nativeFileCopy(const VbaValue& sourceValue,const VbaValue& destinationValue
     if(problem) fail(problem,false);
     if(!copied) throw VbaRuntimeError(75,"Native FileCopy did not copy a file");
 }
+void nativeFileKill(const VbaValue& value) {
+    namespace fs=std::filesystem;
+    const auto text=coerceVbaModuleValue(value,"string").asText();
+    if(text.find('\0')!=std::string::npos) throw VbaRuntimeError(52,"Invalid Kill pathname");
+    if(text.find_first_of("*?")!=std::string::npos) throw VbaRuntimeError(3251,"Kill wildcard semantics require reference validation");
+    const auto path=nativeFilePath(VbaValue::string(text));
+    if(path.empty()) throw VbaRuntimeError(53,"Kill file not found");
+    const auto fail=[&](const std::error_code& reason) {
+        if(reason==std::errc::permission_denied || reason==std::errc::operation_not_permitted)
+            throw VbaRuntimeError(70,"Kill permission denied");
+        if(reason==std::errc::invalid_argument || reason==std::errc::filename_too_long)
+            throw VbaRuntimeError(52,"Invalid Kill pathname");
+        if(reason==std::errc::no_such_file_or_directory || reason==std::errc::not_a_directory) {
+            std::error_code parentError;
+            const auto parent=path.has_parent_path() ? path.parent_path() : fs::path(".");
+            const bool exists=fs::is_directory(parent,parentError);
+            if(parentError==std::errc::permission_denied) throw VbaRuntimeError(70,"Kill permission denied");
+            throw VbaRuntimeError(exists ? 53 : 76,"Kill file or path not found");
+        }
+        throw VbaRuntimeError(75,"Native Kill operation failed");
+    };
+    std::error_code problem;
+    const auto status=fs::symlink_status(path,problem);
+    if(problem) fail(problem);
+    if(fs::is_symlink(status)) throw VbaRuntimeError(3251,"Kill link semantics require reference validation");
+    if(!fs::is_regular_file(status)) throw VbaRuntimeError(75,"Kill requires a regular file");
+    const auto writable=fs::perms::owner_write | fs::perms::group_write | fs::perms::others_write;
+    if((status.permissions() & writable)==fs::perms::none) throw VbaRuntimeError(70,"Kill read-only file");
+    // unlink cannot remove a directory, including one replacing the checked path.
+    if(::unlink(path.c_str())!=0) fail(std::error_code(errno,std::generic_category()));
+}
 void nativeFileRename(const VbaValue& sourceValue,const VbaValue& destinationValue) {
     namespace fs=std::filesystem;
     const auto source=nativeFilePath(sourceValue),destination=nativeFilePath(destinationValue);
@@ -139,7 +170,7 @@ struct BranchDestination {
     int conditionalUnwind{},withUnwind{},forUnwind{};
 };
 struct Statement {
-    enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, Directory, FileCopy, FileRename, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
+    enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, Directory, FileCopy, FileRename, FileKill, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
                       Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, StringAlign, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, RaiseError, ErrorResumeNext, ErrorDisable, Label, Jump, GoSub, ComputedJump, ComputedGoSub, ReturnSubroutine, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
@@ -1029,6 +1060,11 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             if(from.empty() || to.empty() || !validExpression(from) || !validExpression(to))
                 return {VbaExecutionStatus::Unsupported,"Name requires two pathname expressions separated by As",line};
             statements.push_back({Statement::Type::FileRename,from,to,line});
+        } else if ((normalized=="kill" || normalized.starts_with("kill ") || normalized.starts_with("kill\t")) && !assignsBareName(source,"kill")) {
+            const auto expression=trim(source.substr(4));
+            if(expression.empty() || !validExpression(expression))
+                return {VbaExecutionStatus::Unsupported,"Kill requires a pathname expression",line};
+            statements.push_back({Statement::Type::FileKill,{},expression,line});
         } else if ((normalized=="filecopy" || normalized.starts_with("filecopy ") || normalized.starts_with("filecopy\t")) && !assignsBareName(source,"filecopy")) {
             const auto expression=trim(source.substr(8)); const auto arguments=splitArguments(expression);
             if(arguments.size()!=2 || arguments[0].empty() || arguments[1].empty()
@@ -2263,6 +2299,9 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::EndWith:
                 if (withFrames.empty()) throw VbaRuntimeError(5,"With stack invalid");
                 withFrames.pop_back(); break;
+            case Statement::Type::FileKill:
+                if(active) nativeFileKill(scalarVbaValue(evaluate(instruction.expression)));
+                break;
             case Statement::Type::FileRename:
                 if(active) {
                     const auto source=scalarVbaValue(evaluate(instruction.argument));
