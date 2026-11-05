@@ -11,6 +11,7 @@
 #include "native_access_file_dialog.hpp"
 #include "native_access_status.hpp"
 #include "native_access_cursor.hpp"
+#include "native_access_echo.hpp"
 #include <QApplication>
 #include <QAbstractButton>
 #include <QPushButton>
@@ -1290,6 +1291,7 @@ public:
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=text(name).toCaseFolded();
         using Signature=linaccess::VbaArgumentSignature;
+        if(key=="echo") return Signature{{"EchoOn","StatusBarText"},1};
         if(key=="hourglass") return Signature{{"HourglassOn"},1};
         if(key=="opentable") return Signature{{"TableName","View","DataMode"},1};
         if(key=="openquery") return Signature{{"QueryName","View","DataMode"},1};
@@ -1312,6 +1314,7 @@ public:
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
         if (key=="domenuitem" || key=="runcommand" || key=="sendkeys" || key=="findrecord" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="minimize" || key=="restore" || key=="runsql" || key=="selectobject")
             return dispatchPreviewDocumentCommand(preview,key.toStdString(),args);
+        if(key=="echo") return linaccess::nativeEcho(preview,args);
         if(key=="hourglass") {
             if(args.size()!=1 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"Hourglass requires one Boolean argument");
             linaccess::nativeHourglass(linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[0]),"boolean").boolean);
@@ -1683,6 +1686,7 @@ public:
     explicit PreviewApplicationObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     bool isNativeType(std::string_view type) const override { return type=="access.application"; }
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if (text(name).compare("Echo",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"EchoOn","bstrStatusBarText"},1};
         if (text(name).compare("SysCmd",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Action","Argument2","Argument3"},1};
         if (text(name).compare("FileDialog",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"DialogType"},1};
         if (text(name).compare("Quit",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Option"},0};
@@ -1692,6 +1696,7 @@ public:
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if(key=="echo") return linaccess::nativeEcho(preview,args);
         if(key=="syscmd") {
             if(!args.empty() && args[0].kind!=linaccess::VbaValue::Kind::Missing
                && linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[0]),"long").number==10) {

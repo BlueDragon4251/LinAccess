@@ -8,6 +8,7 @@
 #include <QMainWindow>
 #include <QStatusBar>
 #include <QProgressBar>
+#include <QMessageBox>
 #include <QMenuBar>
 #include <QMenu>
 #include <QPushButton>
@@ -70,7 +71,7 @@ End Sub
 }
 void testNativeStatusMeter() {
     auto db=QSqlDatabase::addDatabase("QSQLITE","native-status-meter"); db.setDatabaseName(":memory:"); assert(db.open());
-    QMainWindow window;
+    QMainWindow window; window.setCentralWidget(new QWidget(&window));
     const QByteArray source="Begin Form\nBegin Section\nHeight =600\nEnd\nEnd\n";
     const QByteArray module=R"VBA(Sub StartMeter()
 If Not IsNull(SysCmd(Action:=acSysCmdInitMeter,Argument2:="Loading rows",Argument3:=200)) Then Err.Raise 5
@@ -97,6 +98,13 @@ Sub BusyFailure()
 DoCmd.Hourglass True
 Err.Raise 5
 End Sub
+Sub EchoOff()
+Application.Echo EchoOn:=False,bstrStatusBarText:="Importing rows"
+End Sub
+Sub EchoOn()
+DoCmd.Echo EchoOn:=True,StatusBarText:="Ready"
+End Sub
+
 
 )VBA";
     AccessFormPreview preview("native status",source,module,db,&window);
@@ -122,6 +130,24 @@ End Sub
     catch(const linaccess::VbaRuntimeError& failure) { foreignCursorError=failure.number; }
     assert(foreignCursorError==3251 && QApplication::overrideCursor()->shape()==Qt::CrossCursor);
     QApplication::restoreOverrideCursor();
+
+    assert(preview.executeProcedure("EchoOff",args).status==linaccess::VbaExecutionStatus::Completed);
+    auto* selector=preview.findChild<QComboBox*>("access-record-selector"); assert(selector);
+    assert(!window.centralWidget()->updatesEnabled() && !selector->updatesEnabled() && status->updatesEnabled());
+    assert(status->currentMessage()=="Importing rows" && meter->value()==100);
+    AccessFormPreview late("echo late",source,{},db,&window); late.show(); QApplication::processEvents();
+    auto* lateSelector=late.findChild<QComboBox*>("access-record-selector"); assert(lateSelector && !lateSelector->updatesEnabled());
+    QMessageBox message(QMessageBox::Information,"Native modal message","Synthetic modal message",QMessageBox::Ok,&window);
+    QTimer::singleShot(0,&message,[&] { assert(message.updatesEnabled()); message.accept(); });
+    message.exec();
+    assert(preview.executeProcedure("EchoOn",args).status==linaccess::VbaExecutionStatus::Completed);
+    assert(window.centralWidget()->updatesEnabled() && selector->updatesEnabled() && lateSelector->updatesEnabled());
+    assert(status->currentMessage()=="Ready" && meter->value()==100);
+    assert(late.close());
+    window.centralWidget()->setUpdatesEnabled(false);
+    application->member("Echo",{linaccess::VbaValue::logical(false)});
+    application->member("Echo",{linaccess::VbaValue::logical(true)});
+    assert(!window.centralWidget()->updatesEnabled()); window.centralWidget()->setUpdatesEnabled(true);
 
     int error=0;
     try { application->member("SysCmd",{linaccess::VbaValue::integer(2),linaccess::VbaValue::integer(201)}); }

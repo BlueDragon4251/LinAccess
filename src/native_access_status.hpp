@@ -6,6 +6,20 @@
 #include <QStatusBar>
 
 namespace linaccess {
+inline QStatusBar* nativeStatusSurface(QWidget& document) {
+    QStatusBar* status=nullptr;
+    for(auto* ancestor=document.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+        if(auto* window=qobject_cast<QMainWindow*>(ancestor)) { status=window->statusBar(); break; }
+    if(!status) {
+        status=document.findChild<QStatusBar*>("access-status-bar",Qt::FindDirectChildrenOnly);
+        if(!status) {
+            if(!document.layout()) throw VbaRuntimeError(3251,"Native status surface unavailable");
+            status=new QStatusBar(&document); status->setObjectName("access-status-bar");
+            status->setSizeGripEnabled(false); document.layout()->addWidget(status);
+        }
+    }
+    return status;
+}
 inline VbaValue nativeAccessStatus(QWidget& document,const std::vector<VbaValue>& arguments) {
     auto count=arguments.size();
     while(count && arguments[count-1].kind==VbaValue::Kind::Missing) --count;
@@ -29,17 +43,7 @@ inline VbaValue nativeAccessStatus(QWidget& document,const std::vector<VbaValue>
         value=number(arguments[action==1 ? 2 : 1]);
         if(value<(action==1 ? 1 : 0)) throw VbaRuntimeError(5,"Invalid SysCmd meter value");
     }
-    QStatusBar* status=nullptr;
-    for(auto* ancestor=document.parentWidget();ancestor;ancestor=ancestor->parentWidget())
-        if(auto* window=qobject_cast<QMainWindow*>(ancestor)) { status=window->statusBar(); break; }
-    if(!status) {
-        status=document.findChild<QStatusBar*>("access-status-bar",Qt::FindDirectChildrenOnly);
-        if(!status) {
-            if(!document.layout()) throw VbaRuntimeError(3251,"Native status surface unavailable");
-            status=new QStatusBar(&document); status->setObjectName("access-status-bar");
-            status->setSizeGripEnabled(false); document.layout()->addWidget(status);
-        }
-    }
+    auto* status=nativeStatusSurface(document);
     auto* meter=status->findChild<QProgressBar*>("access-syscmd-meter",Qt::FindDirectChildrenOnly);
     if(action==2) {
         if(!meter) throw VbaRuntimeError(3251,"SysCmd meter is not initialized");
