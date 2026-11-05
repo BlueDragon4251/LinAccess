@@ -194,5 +194,5 @@ Final file-operation segment: desktop48/48 (86.15 s), fresh GUI-free1/1
 A private native Force probe confirms read-only preservation with False70 and
 actual deletion with True. No new repository test target/ID; fixed456/384/72.
 
-Native read-only OpenTextFile/OpenAsTextStream and owned TextStream handles
+Native OpenTextFile/OpenAsTextStream/CreateTextFile and owned TextStream handles
 are bounded separately in [NATIVE_TEXT_STREAM.md](NATIVE_TEXT_STREAM.md).

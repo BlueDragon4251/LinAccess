@@ -54,7 +54,7 @@ inline void nativeFileCopy(const VbaValue& sourceValue,const VbaValue& destinati
         if(problem) fail(problem,false);
         if(same) throw VbaRuntimeError(3251,"FileCopy identical-file behavior requires reference validation");
     }
-    nativeGuardFileRead(destination);
+    nativeGuardFileStreams(destination);
     const bool copied=fs::copy_file(source,destination,overwrite ? fs::copy_options::overwrite_existing : fs::copy_options::none,problem);
     if(problem) fail(problem,false);
     if(!copied) throw VbaRuntimeError(75,"Native FileCopy did not copy a file");
@@ -88,7 +88,7 @@ inline void nativeFileKill(const VbaValue& value,bool force=false) {
     const auto writable=fs::perms::owner_write | fs::perms::group_write | fs::perms::others_write;
     if(!force && (status.permissions() & writable)==fs::perms::none) throw VbaRuntimeError(70,"Kill read-only file");
     // unlink cannot remove a directory, including one replacing the checked path.
-    nativeGuardFileRead(path);
+    nativeGuardFileStreams(path);
     if(::unlink(path.c_str())!=0) fail(std::error_code(errno,std::generic_category()));
 }
 inline void nativeFileRename(const VbaValue& sourceValue,const VbaValue& destinationValue) {
@@ -127,7 +127,7 @@ inline void nativeFileRename(const VbaValue& sourceValue,const VbaValue& destina
     if(problem && problem!=std::errc::no_such_file_or_directory) fail(problem,false);
     if(fs::exists(target)) throw VbaRuntimeError(58,"Name destination already exists");
 #if defined(__linux__) && defined(SYS_renameat2)
-    nativeGuardFileRead(source);
+    nativeGuardFileStreams(source);
     if(::syscall(SYS_renameat2,AT_FDCWD,source.c_str(),AT_FDCWD,destination.c_str(),RENAME_NOREPLACE)!=0)
         fail(std::error_code(errno,std::generic_category()),false);
 #else

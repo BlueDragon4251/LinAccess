@@ -1,19 +1,19 @@
-# Native bounded TextStream reading
+# Native bounded TextStream input/output
 
 FSO OpenTextFile(FileName,[IOMode=1],[Create=False],[Format=0]) and
 File.OpenAsTextStream([IOMode=1],[Format=0]) now return a real native
-Scripting.TextStream read object. The object owns a POSIX regular-file handle;
+Scripting.TextStream object. The object owns a POSIX regular-file handle;
 O_NOFOLLOW/nonblocking open and descriptor checks refuse terminal links and
 special files without opening a blocking FIFO. No host/database handle is held.
 
 Supported: Read(Characters), ReadLine, ReadAll, AtEndOfStream, Line, Column and
 Close. Reads use actual file bytes, preserving embedded NUL and CR/LF sequences.
 ReadLine strips its terminator; CRLF advances one line. Positions start at1.
-Explicit Close and destruction release the read handle. Qualified native type
+Explicit Close and destruction release the file handle. Qualified native type
 binding uses explicit interface identity rather than TypeName guessing.
 
 This first adapter accepts ASCII content only. Non-ASCII, Unicode/default-code-
-page formats, write/append modes, Create=True, Skip and AtEndOfLine remain
+page formats, Skip and AtEndOfLine remain
 explicit3251. No locale encoding or Unicode conversion is fabricated. Read
 supports positive counts through1000000 within the remaining byte extent;
 zero/negative/over-end requests are3251 pending reference validation. ReadLine
@@ -21,7 +21,7 @@ is bounded to1000000 bytes, ReadAll to16MiB. Failed content/limit reads restore
 the prior position where seeking succeeds; I/O failures are75. Reading a line
 already at EOF raises62. Closed-stream error identity remains explicit3251.
 
-A process-wide weak registry records device/inode identities of native open read
+A process-wide weak registry records device/inode identities of native open
 streams, not paths or hosts. Shared copy-destination/rename-source/unlink guards
 refuse mutation of these identities3251 while open. Close releases the guard,
 including across hard-link aliases. This is a conservative native sharing bound,
@@ -40,3 +40,42 @@ hard-link guard/release, EOF62 and non-ASCII read position recovery. The broader
 
 References: [OpenTextFile](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/opentextfile-method),
 [TextStream](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/textstream-object).
+
+## Native ASCII writing and appending
+
+OpenTextFile and File.OpenAsTextStream now implement modes1 (read),2 (write/
+truncate),8 (append), with Format0. OpenTextFile Create=True can create a missing
+file. FSO CreateTextFile(FileName,[Overwrite=True],[Unicode=False]) returns a
+write stream; Overwrite=False uses atomic O_CREAT/O_EXCL and raises58 without
+changing an existing file. The default follows IFileSystem interface metadata
+and the method parameter table; no Windows execution oracle is claimed. Folder
+CreateTextFile and Unicode output remain unimplemented.
+
+Write(Text), WriteLine([Text=""]) and WriteBlankLines(Lines) write actual ASCII
+bytes. WriteLine/WriteBlankLines emit CRLF; NUL is preserved. Complete text is
+validated before writing so unsupported non-ASCII input writes no prefix. Each
+call flushes its stdio buffer; normal partial OS/I/O failures can still occur and
+are not filesystem transactions. Text is bounded to16MiB per call, blank-line
+counts to positive1000000; unsupported ranges are3251. Read/position properties
+on write streams and output on read streams are currently explicit3251.
+
+The registry now distinguishes readers/writers under one mutex and refuses
+writer overlaps or readers overlapping a writer. Registration and descriptor
+validation happen before ftruncate, so a refused write-open preserves existing
+bytes. Open uses no O_TRUNC before these checks. Native read-only permission
+bits are checked before truncation. This remains a conservative native bound,
+not Windows cross-process sharing/ACL/locking equivalence.
+
+The existing core VBA workflow creates a file, writes text/CRLF/blank lines,
+rejects a non-ASCII write before partial output, refuses read/write overlaps,
+closes, appends, reopens and reads exact resulting bytes. A no-overwrite create
+refusal preserves those bytes; a read-held write-open cannot truncate them.
+No new test program/catalog ID.
+
+Reference: [CreateTextFile](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/createtextfile-method).
+
+Final input/output segment: full current desktop48/48 (87.77 s), fresh
+GUI-free1/1 (2.23 s), zero compiler warnings in both builds; current Debian/
+build-ID/SQLite3.54.1/four original hashes pass. Current private native
+hard-link/close/EOF/encoding-recovery probe passes. Original78/100; no Windows
+execution oracle. No new CTest target/ID; fixed456/384/72.

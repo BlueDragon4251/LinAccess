@@ -37,8 +37,8 @@ public:
         std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
         if(method=="openastextstream") {
             if(args.size()>2) throw VbaRuntimeError(450,"Invalid OpenAsTextStream argument count");
-            nativeTextReadOptions(args,0,1);
-            return nativeOpenTextStream(VbaValue::string(path_.string()));
+            const auto mode=nativeTextOptions(args,0,1);
+            return nativeOpenTextStream(VbaValue::string(path_.string()),mode);
         }
         if(method=="copy" || method=="move" || method=="delete") {
             if(method=="delete") {
@@ -241,6 +241,7 @@ public:
     bool isNativeType(std::string_view type) const override { return type=="scripting.filesystemobject"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto method=key(name);
+        if(method=="createtextfile") return VbaArgumentSignature{{"FileName","Overwrite","Unicode"},1};
         if(method=="opentextfile") return VbaArgumentSignature{{"FileName","IOMode","Create","Format"},1};
         if(method=="copyfile") return VbaArgumentSignature{{"Source","Destination","OverWriteFiles"},2};
         if(method=="movefile") return VbaArgumentSignature{{"Source","Destination"},2};
@@ -258,11 +259,14 @@ public:
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto method=key(name);
+        if(method=="createtextfile") {
+            if(args.empty() || args.size()>3 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Invalid CreateTextFile argument count");
+            return nativeCreateTextStream(VbaValue::string(path(args[0]).string()),args);
+        }
         if(method=="opentextfile") {
             if(args.empty() || args.size()>4 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Invalid OpenTextFile argument count");
-            nativeTextReadOptions(args,1,3);
-            if(nativeFileFlag(args,2,false)) throw VbaRuntimeError(3251,"Text file creation is not implemented");
-            return nativeOpenTextStream(VbaValue::string(path(args[0]).string()));
+            const auto mode=nativeTextOptions(args,1,3);
+            return nativeOpenTextStream(VbaValue::string(path(args[0]).string()),mode,nativeFileFlag(args,2,false));
         }
         if(method=="copyfile" || method=="movefile" || method=="deletefile") {
             const auto required=method=="deletefile" ? 1u : 2u;

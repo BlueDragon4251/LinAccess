@@ -2992,6 +2992,46 @@ End Sub)VBA","ReadNativeText",host);
         assert(host.fields["FsoStreamType"]=="TextStream:True" && host.fields["FsoTextLine"]=="one" && host.fields["FsoTextPosition"]=="2:1");
         assert(host.fields["FsoTextPart"]=="two" && host.fields["FsoTextRest"]=="\nend" && host.fields["FsoTextEnd"]=="True" && host.fields["FsoTextHeld"]=="3251");
         assert(host.fields["FsoTextBinary"]==std::string("A\0B",3));
+        const auto writeFile=directory/"write-lines.txt";
+        host.fields["FsoWriteFile"]=writeFile.string();
+        const auto writeProbe=executeVbaProcedure(R"VBA(Sub WriteNativeText()
+Dim fs As Scripting.FileSystemObject, stream As Scripting.TextStream, other As Scripting.TextStream
+Set fs=New Scripting.FileSystemObject
+Set stream=fs.CreateTextFile(FileName:=Me!FsoWriteFile, Overwrite:=False, Unicode:=False)
+stream.Write Text:="A"
+stream.WriteLine Text:="B"
+stream.WriteBlankLines Lines:=1
+On Error Resume Next
+Err.Clear
+stream.Write "unexpected ä"
+Me!FsoWriteEncoding=CStr(Err.Number)
+Err.Clear
+Set other=fs.OpenTextFile(Me!FsoWriteFile,1)
+Me!FsoWriteHeld=CStr(Err.Number)
+On Error GoTo 0
+stream.Write "tail"
+stream.Close
+Set stream=fs.OpenTextFile(FileName:=Me!FsoWriteFile,IOMode:=8,Create:=False,Format:=0)
+stream.WriteLine "+end"
+stream.Close
+Set stream=fs.OpenTextFile(Me!FsoWriteFile)
+On Error Resume Next
+Err.Clear
+Set other=fs.OpenTextFile(Me!FsoWriteFile,2)
+Me!FsoReadHeldWrite=CStr(Err.Number)
+On Error GoTo 0
+Me!FsoWritten=stream.ReadAll()
+stream.Close
+On Error Resume Next
+Err.Clear
+Set stream=fs.CreateTextFile(Me!FsoWriteFile,False)
+Me!FsoTextNoOverwrite=CStr(Err.Number)
+On Error GoTo 0
+End Sub)VBA","WriteNativeText",host);
+        assert(writeProbe.status==VbaExecutionStatus::Completed);
+        const std::string written="AB\r\n\r\ntail+end\r\n";
+        assert(host.fields["FsoWritten"]==written && host.fields["FsoWriteEncoding"]=="3251" && host.fields["FsoWriteHeld"]=="3251" && host.fields["FsoReadHeldWrite"]=="3251" && host.fields["FsoTextNoOverwrite"]=="58");
+        { std::ifstream input(writeFile,std::ios::binary); assert(std::string(std::istreambuf_iterator<char>(input),{})==written); }
         VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
         const auto fileEvaluate=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,paths); };
         const auto folderLink=directory/"folder-link";
