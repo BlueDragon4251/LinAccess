@@ -1420,3 +1420,11 @@ reexecution after an actual directory change and DAO String value passed.
 Targeted core/DAO/query3/3 (2.33 s), updated package/build-ID/SQLite and all four
 hashes passed; no full rerun claimed after bounded SQL adapter change. Full
 baseline48/48 (83.85 s), headless runtime1/1 (1.79 s).456/384/72 unchanged.
+
+Native Filters.Delete now supports an explicit one-based numeric filter selector
+including named filter. Actual shared-list mutation feeds the real Qt picker;
+active-modal mutations refused, omitted/name/object variants3251 rather than
+invented default semantics. Native selection-index adjustment is documented
+without Windows parity claim. Existing layouts1/1 (10.58 s), current package/
+build-ID/SQLite3.54.1 and four hashes pass. Last full48/48 (83.85 s), headless
+runtime unchanged1/1 (1.79 s);456/384/72. docs/NATIVE_FILE_DIALOG.md.

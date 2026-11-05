@@ -53,16 +53,31 @@ public:
     bool isNativeType(std::string_view type) const override { return type=="office.filedialogfilters"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         if(key(name)=="add") return VbaArgumentSignature{{"Description","Extensions","Position"},2};
+        if(key(name)=="delete") return VbaArgumentSignature{{"filter"},0};
         if(key(name)=="item") return VbaArgumentSignature{{"Index"},1};
         return {};
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         state_->guard(); const auto property=key(name);
-        if(state_->showing && (property=="add" || property=="clear")) throw VbaRuntimeError(3251,"File dialog is active");
+        if(state_->showing && (property=="add" || property=="clear" || property=="delete")) throw VbaRuntimeError(3251,"File dialog is active");
         if(property=="count" && args.empty()) return VbaValue::longInteger(static_cast<std::int32_t>(state_->filters.size()));
         if(property=="clear" && args.empty()) { state_->filters.clear(); state_->filterIndex=1; return {}; }
         if(property=="item" && args.size()==1)
             return VbaValue::reference(std::make_shared<FilterObject>(state_,state_->filters[index(args[0],state_->filters.size())]));
+        if(property=="delete") {
+            if(args.size()>1) throw VbaRuntimeError(450,"Filters.Delete accepts one filter selector");
+            if(args.empty() || args[0].kind==VbaValue::Kind::Missing)
+                throw VbaRuntimeError(3251,"Omitted filter deletion requires an unavailable Office default oracle");
+            const auto selector=scalarVbaValue(args[0]);
+            if(selector.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null filter selector");
+            if(selector.kind!=VbaValue::Kind::Number)
+                throw VbaRuntimeError(3251,"Only numeric filter positions are supported for deletion");
+            const auto position=index(selector,state_->filters.size());
+            state_->filters.removeAt(position);
+            if(position+1<state_->filterIndex) --state_->filterIndex;
+            state_->filterIndex=qBound(1,state_->filterIndex,qMax(1,int(state_->filters.size())));
+            return {};
+        }
         if(property=="add") {
             if(args.size()<2 || args.size()>3) throw VbaRuntimeError(450,"Filters.Add requires two or three arguments");
             auto filter=std::make_shared<Filter>(Filter{string(args[0]),string(args[1])});
