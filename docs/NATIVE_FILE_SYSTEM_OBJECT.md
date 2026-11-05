@@ -10,8 +10,11 @@ Supported members:
 - FileExists(FileSpec): checks an actual regular file.
 - FolderExists(FolderSpec): checks an actual directory.
 - BuildPath(Path,Name): joins native Linux path components without requiring existence.
-- GetAbsolutePathName(PathSpec): resolves the process working directory and normalizes a native absolute path.
-- GetFileName(PathSpec), GetBaseName(Path), GetExtensionName(Path), GetParentFolderName(Path): extract lexical path components without accessing the filesystem.
+- GetAbsolutePathName(Path): resolves the process working directory and normalizes a native absolute path.
+- GetFileName(Path), GetBaseName(Path), GetExtensionName(Path), GetParentFolderName(Path): extract lexical path components without accessing the filesystem.
+- GetFile(FilePath), GetFolder(FolderPath): return actual native file/folder objects, with the bounded members below.
+- CreateFolder(Path): creates one actual directory and returns its Folder object.
+- CopyFile, MoveFile, DeleteFile: real bounded single-file operations described below.
 
 Existence checks distinguish files, directories and absent paths; empty paths
 return False, and missing/not-a-directory results return False. Other errors use
@@ -58,7 +61,7 @@ Path-component increment: desktop core1/1 (1.73 s), fresh GUI-free core1/1
 
 ## Native GetFile objects
 
-GetFile(FileSpec) resolves an actual existing regular Linux file and returns
+GetFile(FilePath) resolves an actual existing regular Linux file and returns
 a real independent native File object (TypeName File). Path is the
 normalized absolute path, Name is its final component, and Size reads the
 filesystem again on each access. No host, stream or database handle is retained.
@@ -72,8 +75,8 @@ locals/parameters/results use explicit native identity. The scalar default is
 Path, so VarType(file) now reports String8 while TypeName(file) remains File;
 CStr(file) reads the path. File property writes remain explicit3251.
 
-Only these four property reads are implemented. File mutations, parent folders,
-creation/access timestamps, attributes,
+Additional bounded native file operations and ParentFolder are described below.
+Creation/access timestamps, attributes,
 sharing, Windows drive mapping and race/identity semantics remain unimplemented
 or unvalidated. A retained path does not pin the original inode. This is not a
 full Windows File object contract.
@@ -100,7 +103,7 @@ Original queries78/100; no Windows result oracle. No new test target/ID.
 
 ## Native GetFolder and Files enumeration
 
-GetFolder(FolderSpec) resolves an actual existing native directory and returns
+GetFolder(FolderPath) resolves an actual existing native directory and returns
 a Folder object. Qualified Scripting.Folder and Scripting.Files bindings use
 explicit native identity. Folder Path/Name read path components; Path is the
 scalar default (VarType8, TypeName Folder). Folder.Files returns a real native
@@ -129,3 +132,67 @@ use. Files and folders are selected by actual filesystem kind, not name guesses.
 Folder increment: expanded desktop core1/1 (1.86 s), fresh GUI-free1/1
 (1.79 s), current Debian/build-ID/SQLite/four original fixture hashes pass.
 Last broader48/48 (84.89 s) precedes this increment. F091 stays open.
+
+## Native CreateFolder
+
+CreateFolder(Path) creates one actual native directory and returns a typed
+Folder object usable immediately. It does not invent missing parents or overwrite
+existing objects. Existing target58, empty/NUL52, Null94, missing parent76 and
+permission70 flow through native VBA error handling. Linux permissions/umask
+apply; Windows drive/ACL/sharing and external race behavior remain bounded.
+Held SubFolders collections observe the new directory on the next Count or
+enumeration because they read the filesystem again. No recursive creation is
+added and the original fixture files are not used as write targets.
+
+Reference: [CreateFolder](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/createfolder-method).
+
+Named-argument binding follows the public IFileSystem IDL vocabulary: GetFile
+FilePath, GetFolder FolderPath, CreateFolder Path, GetFileName Path and
+GetAbsolutePathName Path. These correct earlier documentation-placeholder
+names; positional calls keep their behavior. Public scrrun IDL is a reference
+for this bounded interface, not a Windows Access execution oracle.
+
+CreateFolder/IDL parameter validation: desktop core1/1 (1.87 s), fresh
+GUI-free1/1 (1.77 s), current Debian/build-ID/SQLite/four hashes pass.
+
+## Native file operations
+
+FSO CopyFile(Source,Destination,[OverWriteFiles=True]), MoveFile(Source,Destination)
+and DeleteFile(FileSpec,[Force=False]) now perform actual single-file operations.
+File objects support Copy(Destination,[OverWriteFiles=True]), Move(Destination),
+Delete([Force=False]) and writable Name. Successful File.Move/Name updates the
+held object's path; a failed move/name assignment leaves it intact. Source
+metadata is read from the filesystem; no file contents or outcomes are mocked.
+
+The VBA FileCopy/Name/Kill statements share the native operations implementation.
+Copy uses actual binary copy with explicit overwrite policy; Move/Name use Linux
+renameat2/RENAME_NOREPLACE and never replace a target; deletion uses unlink and
+cannot remove directories. A destination ending in / denotes an existing real
+folder and retains the source filename. Terminal folder links remain refused
+even with a trailing separator. Plain File.Name cannot escape its parent.
+
+Overwrite=False rejects an existing target58. Native read-only here is the lack
+of Unix write permission bits; Copy refuses such a destination, and Force=True
+allows deletion without changing those bits when directory permissions permit.
+This is not Windows attribute/ACL/open-sharing equivalence. Wildcards, terminal
+links/special files, cross-filesystem moves, inode pinning/races, metadata/ACL
+copy fidelity and exact Windows error precedence remain unsupported/unvalidated.
+An operation can have normal OS side effects before an external-race failure; no
+multi-file or filesystem transaction/rollback is claimed.
+
+The existing core target executes a full synthetic binary file workflow through
+VBA FSO and File members: copy, no-overwrite error, rename, move, delete, live
+metadata and empty destination-folder check. Existing statement binary/rename/
+delete cases use the same helpers. No new test target/ID; F091 remains open.
+
+References: [CopyFile](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/copyfile-method),
+[MoveFile](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/movefile-method),
+[DeleteFile](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/deletefile-method).
+
+Final file-operation segment: desktop48/48 (86.15 s), fresh GUI-free1/1
+(1.92 s), current Debian/build-ID/SQLite3.54.1/four original hashes pass.
+A private native Force probe confirms read-only preservation with False70 and
+actual deletion with True. No new repository test target/ID; fixed456/384/72.
+
+Native read-only OpenTextFile/OpenAsTextStream and owned TextStream handles
+are bounded separately in [NATIVE_TEXT_STREAM.md](NATIVE_TEXT_STREAM.md).

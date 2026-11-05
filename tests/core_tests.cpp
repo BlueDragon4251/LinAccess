@@ -2885,17 +2885,17 @@ Me!FsoTypedCall=CStr(TypedFileExists(fs,Me!FsoFile))
 Me!FsoHasFolder=CStr(fs.FolderExists(FolderSpec:=Me!FsoFolder))
 Me!FsoWrongKinds=CStr(fs.FileExists(Me!FsoFolder)) & ":" & CStr(fs.FolderExists(Me!FsoFile))
 Me!FsoMissing=CStr(fs.FileExists(fs.BuildPath(Name:="missing.dat",Path:=Me!FsoFolder)))
-Me!FsoAbsolute=fs.GetAbsolutePathName(PathSpec:=".")
-Me!FsoLeaf=fs.GetFileName(PathSpec:="C:\docs\alpha-ä.tar.gz")
+Me!FsoAbsolute=fs.GetAbsolutePathName(Path:=".")
+Me!FsoLeaf=fs.GetFileName(Path:="C:\docs\alpha-ä.tar.gz")
 Me!FsoBase=fs.GetBaseName(Path:="C:\docs\alpha-ä.tar.gz")
 Me!FsoExtension=fs.GetExtensionName(Path:="/missing/alpha-ä.tar.gz")
 Me!FsoParent=fs.GetParentFolderName(Path:="C:\docs\alpha-ä.tar.gz")
 Me!FsoWildcardLeaf=fs.GetFileName("C:\docs\*.csv")
 Me!FsoDriveOnly=fs.GetFileName("C:")
 Dim nativeFile As Scripting.File
-Set nativeFile=fs.GetFile(FileSpec:=Me!FsoFile)
+Set nativeFile=fs.GetFile(FilePath:=Me!FsoFile)
 Dim folder As Scripting.Folder, files As Scripting.Files, entry As Variant, total As Long
-Set folder=fs.GetFolder(FolderSpec:=Me!FsoFolder & "/")
+Set folder=fs.GetFolder(FolderPath:=Me!FsoFolder & "/")
 Set files=folder.Files
 Me!FsoFolderMetadata=TypeName(folder) & ":" & CStr(VarType(folder)) & ":" & CStr(TypeOf folder Is Scripting.Folder)
 Me!FsoFolderPath=CStr(folder)
@@ -2909,6 +2909,32 @@ For Each entry In files
  total=total+entry.Size
 Next entry
 Me!FsoFilesTotal=CStr(total)
+Dim created As Scripting.Folder, subfolders As Scripting.Folders
+Set subfolders=folder.SubFolders
+Set created=fs.CreateFolder(Path:=folder.Path & "/created-ä")
+Me!FsoCreated=created.Name & ":" & CStr(subfolders.Count)
+On Error Resume Next
+Set created=fs.CreateFolder(folder.Path & "/created-ä")
+Me!FsoDuplicateFolder=CStr(Err.Number) & ":" & created.Name
+On Error GoTo 0
+Dim copied As Scripting.File
+fs.CopyFile Source:=Me!FsoFile, Destination:=created.Path & "/copy.dat", OverWriteFiles:=False
+Set copied=fs.GetFile(created.Path & "/copy.dat")
+Me!FsoCopiedSize=CStr(copied.Size)
+On Error Resume Next
+Err.Clear
+fs.CopyFile Me!FsoFile, copied.Path, False
+Me!FsoCopyExisting=CStr(Err.Number)
+On Error GoTo 0
+copied.Copy Destination:=created.Path & "/copy2.dat", OverWriteFiles:=False
+copied.Name="renamed.dat"
+copied.Move Destination:=created.Path & "/moved.dat"
+Me!FsoMoved=copied.Name & ":" & CStr(copied.Size)
+fs.MoveFile Source:=copied.Path, Destination:=created.Path & "/final.dat"
+fs.DeleteFile FileSpec:=created.Path & "/copy2.dat", Force:=False
+Set copied=fs.GetFile(created.Path & "/final.dat")
+copied.Delete Force:=False
+Me!FsoOpsClean=CStr(created.Files.Count)
 Me!FsoFileDefault=CStr(nativeFile)
 Me!FsoFileTyped=CStr(TypeOf nativeFile Is Scripting.File)
 Me!FsoFileObject=TypeName(nativeFile) & ":" & CStr(VarType(nativeFile))
@@ -2931,11 +2957,51 @@ End Sub)VBA","ProbeFs",host);
         assert(host.fields["FsoFolderMetadata"]=="Folder:8:True" && host.fields["FsoFolderPath"]==directory.string());
         assert(host.fields["FsoFilesCount"]=="1" && host.fields["FsoFilesTotal"]=="3");
         assert(host.fields["FsoSubFoldersCount"]=="1" && host.fields["FsoSubFolderName"]=="folder-target" && host.fields["FsoFileParent"]==directory.string());
+        assert(host.fields["FsoCreated"]=="created-ä:2" && host.fields["FsoDuplicateFolder"]=="58:created-ä" && fs::is_directory(directory/"created-ä"));
+        assert(host.fields["FsoCopiedSize"]=="3" && host.fields["FsoCopyExisting"]=="58" && host.fields["FsoMoved"]=="moved.dat:3" && host.fields["FsoOpsClean"]=="0");
+        assert(fs::is_empty(directory/"created-ä") && fs::file_size(file)==3);
         assert(host.fields["FsoFileObject"]=="File:8" && host.fields["FsoFileTyped"]=="True" && host.fields["FsoFileDefault"]==file.string());
         assert(host.fields["FsoFileMetadata"]==file.string()+"|"+file.filename().string()+"|3:3");
         assert(host.fields["FsoWrongKinds"]=="False:False" && host.fields["FsoMissing"]=="False" && host.fields["FsoAbsolute"]==fs::current_path().string());
+        const auto textFile=directory/"read-lines.txt";
+        { std::ofstream output(textFile,std::ios::binary); output<<"one\r\ntwo\nend"; }
+        host.fields["FsoTextFile"]=textFile.string();
+        const auto textProbe=executeVbaProcedure(R"VBA(Sub ReadNativeText()
+Dim fs As Scripting.FileSystemObject, stream As Scripting.TextStream, file As Scripting.File
+Set fs=New Scripting.FileSystemObject
+Set stream=fs.OpenTextFile(FileName:=Me!FsoTextFile, IOMode:=1, Create:=False, Format:=0)
+Me!FsoStreamType=TypeName(stream) & ":" & CStr(TypeOf stream Is Scripting.TextStream)
+Me!FsoTextLine=stream.ReadLine()
+Me!FsoTextPosition=CStr(stream.Line) & ":" & CStr(stream.Column)
+Me!FsoTextPart=stream.Read(Characters:=3)
+Me!FsoTextRest=stream.ReadAll()
+Me!FsoTextEnd=CStr(stream.AtEndOfStream)
+On Error Resume Next
+Err.Clear
+fs.DeleteFile Me!FsoTextFile
+Me!FsoTextHeld=CStr(Err.Number)
+On Error GoTo 0
+stream.Close
+fs.CopyFile Me!FsoFile, Me!FsoTextFile
+Set file=fs.GetFile(Me!FsoTextFile)
+Set stream=file.OpenAsTextStream(IOMode:=1, Format:=0)
+Me!FsoTextBinary=stream.Read(3)
+stream.Close
+End Sub)VBA","ReadNativeText",host);
+        assert(textProbe.status==VbaExecutionStatus::Completed);
+        assert(host.fields["FsoStreamType"]=="TextStream:True" && host.fields["FsoTextLine"]=="one" && host.fields["FsoTextPosition"]=="2:1");
+        assert(host.fields["FsoTextPart"]=="two" && host.fields["FsoTextRest"]=="\nend" && host.fields["FsoTextEnd"]=="True" && host.fields["FsoTextHeld"]=="3251");
+        assert(host.fields["FsoTextBinary"]==std::string("A\0B",3));
         VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
         const auto fileEvaluate=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,paths); };
+        const auto folderLink=directory/"folder-link";
+        fs::create_directory_symlink(directory/"created-ä",folderLink);
+        paths["linkpath"]=VbaValue::string(folderLink.string()+"/");
+        for(const auto& expression:{"CreateObject(\"Scripting.FileSystemObject\").GetFolder(linkPath)","CreateObject(\"Scripting.FileSystemObject\").CopyFile(filePath,linkPath)"}) {
+            int number=0; try { (void)fileEvaluate(expression); } catch(const VbaRuntimeError& error) { number=error.number; }
+            assert(number==3251 && fs::is_empty(directory/"created-ä"));
+        }
+        fs::remove(folderLink);
         const auto length=fileEvaluate("VBA.FileLen(PathName:=filePath)"); assert(length.asNumber()==3 && length.numericType==VbaValue::NumericType::Long);
         paths["filepath"]=VbaValue::string(fs::relative(file).string()); assert(fileEvaluate("FileLen(filePath)").asNumber()==3);
         paths["filepath"]=VbaValue::string(file.string());

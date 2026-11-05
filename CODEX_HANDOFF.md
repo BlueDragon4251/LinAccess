@@ -1730,3 +1730,44 @@ Scope: docs/NATIVE_FILE_SYSTEM_OBJECT.md. Expanded desktop core1/1 (1.86 s),
 fresh GUI-free core1/1 (1.79 s), current Debian/build-ID/SQLite/four hashes pass.
 Last broader48/48 (84.89 s) precedes this increment. No new target/ID; F091 open,
 fixed456/384/72.
+
+Native FSO CreateFolder(Path) creates one actual directory, returning a typed
+Folder. Existing target58 preserves both directory and caller reference; a held
+SubFolders collection observes the newly created UTF-8 folder. No recursive
+creation, fabricated parent, overwrite or Windows ACL/sharing contract. Named
+FSO parameters now follow IFileSystem IDL: GetFile FilePath, GetFolder FolderPath,
+CreateFolder/GetFileName/GetAbsolutePathName Path. These supersede earlier
+descriptive help placeholders; positional calls are unchanged. Scope:
+docs/NATIVE_FILE_SYSTEM_OBJECT.md. Final desktop core1/1 (1.87 s), fresh
+GUI-free core1/1 (1.77 s), current Debian/build-ID/SQLite/four fixture hashes
+pass. Last broader48/48 (84.89 s) precedes folder/create increments. No new
+target/ID; F091 remains open, fixed456/384/72.
+
+Native FSO CopyFile/MoveFile/DeleteFile and File.Copy/Move/Delete/writable Name
+now perform actual bounded single-file operations. Shared native_file_operations
+keeps VBA FileCopy/Name/Kill and object methods on the same binary-copy, atomic
+nonreplacement rename and unlink implementation. Overwrite=False58, live path
+updates after File.Move/Name, directory destinations ending /, and read-only
+Force policy are real. Trailing separators no longer hide a terminal folder
+link from GetFolder or destination checks. Wildcards, links/special files,
+cross-filesystem moves, full Windows ACL/sharing/metadata/race/error contracts
+stay bounded. Scope: docs/NATIVE_FILE_SYSTEM_OBJECT.md. Final full desktop48/48
+(86.15 s), fresh GUI-free1/1 (1.92 s), current Debian/build-ID/SQLite3.54.1 and
+all four original hashes after the full run pass. A private native manual probe
+confirms Force=False70 preserves a read-only binary test file and Force=True
+unlinks it. Original queries78/100; no Windows result oracle. No new test
+target/ID; F040/F091 open, fixed456/384/72.
+
+Native read-only FSO OpenTextFile/File.OpenAsTextStream now return an owned
+Scripting.TextStream with real Read/ReadLine/ReadAll/AtEndOfStream/Line/Column/
+Close. Descriptor validation refuses terminal links/special files; ASCII only,
+explicit non-ASCII/Unicode/write/create/count limits3251 rather than invented
+conversion. A weak device/inode registry guards shared native copy-destination,
+rename-source and unlink operations while a native reader is held; Close releases
+it. No host/database retention or full Windows sharing/encoding/EOF oracle.
+Scope: docs/NATIVE_TEXT_STREAM.md. Actual native VBA CRLF/LF/position/EOF/NUL/
+held-delete/close/reopen workflow passes core/DAO2/2 (2.67 s), fresh headless1/1
+(1.68 s), current Debian/build-ID/SQLite/four fixture hashes. Private manual
+probe confirms hard-link alias mutation guard, Close release, EOF62 and failed
+encoding-read position recovery. Last broader48/48 (86.15 s) precedes this
+increment. No new target/ID; F040/F091 remain open, fixed456/384/72.
