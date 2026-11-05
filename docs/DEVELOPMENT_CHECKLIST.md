@@ -1101,3 +1101,10 @@ in SQL, DAO-AddNew und gebundenen Formular-Neudatensätzen verwendet:
 [SOURCE_LITERAL_DEFAULTS.md](SOURCE_LITERAL_DEFAULTS.md). Diese Erweiterung gehört
 zum bestehenden offenen Umfang F015 und erhöht weder456 IDs noch die384 begrenzt
 bestätigten Einträge. Allgemeine Defaults/Eigenschaften bleiben offen.
+
+Native scalar SQL/VBA standard-module calls now execute real SELECT/UPDATE work
+with shared scalar module/Static state and checked source/connection generations.
+Private/class/ambiguous calls, GUI/DAO host context, existing object/array state and
+unproven transports remain refused. See NATIVE_VBA_SQL.md. F040/F068/F121 are still
+open; no new checkbox or ID. Catalog456/384/72 unchanged. Production code full48/48
+(87.35 s), additional actual UPDATE DAO1/1 (0.74 s), package/backend/four hashes pass.

@@ -3,9 +3,12 @@
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
 #include "sqlite_execution.hpp"
+#include "jet_sql_functions.hpp"
+#include "vba_module_context.hpp"
 #include "vba_runtime.hpp"
 #include <QCoreApplication>
 #include <QSqlQuery>
+#include <QSqlError>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -1033,11 +1036,116 @@ End Sub
     assert(error==6 && rows->member("AbsolutePosition",{}).number==0 && rows->item("value").number==1); rows->member("Close",{});
     db.close();
 }
+void testSqlVbaFunctions() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","native-vba-sql-functions"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    assert(sql.exec("CREATE TABLE inputs(value INTEGER4)")); assert(sql.exec("INSERT INTO inputs VALUES(1),(2),(3)"));
+    QByteArray module=R"VBA(Public calls As Long
+Public held As Object
+Public Function NativeScale(ByVal value As Long) As Long
+calls=calls+1
+NativeScale=SQLDoubleHelper(value)
+End Function
+Private Function SQLDoubleHelper(ByVal value As Long) As Long
+SQLDoubleHelper=value*2
+End Function
+Public Function NativeCalls() As Long
+NativeCalls=calls
+End Function
+Public Function NativeSequence() As Long
+Static counter As Long
+counter=counter+1
+NativeSequence=counter
+End Function
+Public Function NativeMaybe(ByVal value As Variant) As Variant
+If IsNull(value) Then
+NativeMaybe=Null
+Else
+NativeMaybe=CStr(value)
+End If
+End Function
+Public Function NativeFlag(ByVal value As Long) As Boolean
+NativeFlag=value>1
+End Function
+Public Function NativeNeedsUI() As String
+MsgBox "must not display"
+NativeNeedsUI="unreachable"
+End Function
+Public Function NativeMoney() As Currency
+NativeMoney=CCur(1)
+End Function
+Public Function Abs() As Long
+Abs=999
+End Function
+)VBA";
+    const auto store=[&](const QString& name,const QByteArray& source) {
+        sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba',?,?)"); sql.addBindValue(name); sql.addBindValue(source);
+        assert(sql.exec()); sql.finish();
+    };
+    store("NativeMath",module);
+    store("NativeOther",R"VBA(Public Function NativeNested(ByVal value As Long) As Long
+NativeNested=NativeScale(value)+1
+End Function
+)VBA");
+    store("Form_PrivateContext","VERSION 1.0 CLASS\nPublic Function ClassOnly() As Long\nClassOnly=42\nEnd Function\n");
+    linaccess::installJetSqlFunctions(db);
+    QSqlQuery rows(db); assert(rows.exec("SELECT NativeScale(value) FROM inputs ORDER BY value"));
+    for(int expected:{2,4,6}) assert(rows.next() && rows.value(0).toInt()==expected); assert(!rows.next()); rows.finish();
+    assert(rows.exec("SELECT NativeCalls(),NativeNested(3),NativeFlag(2),abs(-2)")); assert(rows.next());
+    assert(rows.value(0).toInt()==3 && rows.value(1).toInt()==7 && rows.value(2).toInt()==-1 && rows.value(3).toInt()==2); rows.finish();
+    assert(rows.exec("SELECT NativeSequence() FROM inputs ORDER BY value"));
+    for(int expected:{1,2,3}) assert(rows.next() && rows.value(0).toInt()==expected); assert(!rows.next()); rows.finish();
+    assert(rows.exec("SELECT NativeSequence()") && rows.next() && rows.value(0).toInt()==4); rows.finish();
+    assert(sql.exec("UPDATE inputs SET value=NativeScale(value)")); sql.finish();
+    assert(rows.exec("SELECT value FROM inputs ORDER BY value"));
+    for(int expected:{2,4,6}) assert(rows.next() && rows.value(0).toInt()==expected); assert(!rows.next()); rows.finish();
+    assert(rows.exec("SELECT NativeMaybe(NULL),NativeMaybe('A'||char(0)||'B')") && rows.next());
+    assert(rows.value(0).isNull() && rows.value(1).toString().toUtf8()==QByteArray("A\0B",3)); rows.finish();
+    assert(!rows.exec("SELECT SQLDoubleHelper(2)")); rows.finish(); assert(!rows.exec("SELECT ClassOnly()")); rows.finish();
+    assert(!rows.exec("SELECT NativeNeedsUI()"));
+    assert(linaccess::jetSqlFunctionErrorNumber(rows.lastError().text().toCaseFolded().toStdString())==3251); rows.finish();
+    assert(!rows.exec("SELECT NativeMoney()"));
+    assert(linaccess::jetSqlFunctionErrorNumber(rows.lastError().text().toCaseFolded().toStdString())==3251); rows.finish();
+    assert(sql.exec("CREATE TEMP VIEW _la_access_artifacts AS SELECT * FROM main._la_access_artifacts")); sql.finish();
+    assert(!rows.exec("SELECT NativeScale(3)"));
+    assert(linaccess::jetSqlFunctionErrorNumber(rows.lastError().text().toCaseFolded().toStdString())==3251); rows.finish();
+    assert(sql.exec("DROP VIEW temp._la_access_artifacts")); sql.finish();
+    const auto sharedFrame=linaccess::standardVbaModuleState(db,module.toStdString());
+    const auto beforeBlockedCall=sharedFrame->values.at("calls").asNumber();
+    sharedFrame->values["held"]=linaccess::VbaValue::reference(linaccess::makeDaoDatabase(db));
+    assert(!rows.exec("SELECT NativeScale(3)"));
+    assert(linaccess::jetSqlFunctionErrorNumber(rows.lastError().text().toCaseFolded().toStdString())==3251);
+    assert(sharedFrame->values.at("calls").asNumber()==beforeBlockedCall); rows.finish();
+    sharedFrame->values["held"]=linaccess::VbaValue::reference(nullptr);
+    QSqlQuery prepared(db); assert(prepared.prepare("SELECT NativeScale(?)")); prepared.addBindValue(3);
+    assert(prepared.exec() && prepared.next() && prepared.value(0).toInt()==6); prepared.finish();
+    module.replace("SQLDoubleHelper=value*2","SQLDoubleHelper=value*3");
+    sql.prepare("UPDATE _la_access_artifacts SET source_bytes=? WHERE name='NativeMath'"); sql.addBindValue(module); assert(sql.exec()); sql.finish();
+    assert(prepared.exec() && prepared.next() && prepared.value(0).toInt()==9); prepared.finish();
+    assert(sql.exec("SAVEPOINT native_source_edit")); sql.finish();
+    auto transientModule=module; transientModule.replace("SQLDoubleHelper=value*3","SQLDoubleHelper=value*4");
+    sql.prepare("UPDATE _la_access_artifacts SET source_bytes=? WHERE name='NativeMath'"); sql.addBindValue(transientModule); assert(sql.exec()); sql.finish();
+    assert(prepared.exec() && prepared.next() && prepared.value(0).toInt()==12); prepared.finish();
+    assert(sql.exec("ROLLBACK TO native_source_edit")); assert(sql.exec("RELEASE native_source_edit")); sql.finish();
+    assert(prepared.exec() && prepared.next() && prepared.value(0).toInt()==9); prepared.finish();
+    store("AmbiguousMath","Public Function NativeScale(ByVal value As Long) As Long\nNativeScale=999\nEnd Function\n");
+    linaccess::installJetSqlFunctions(db);
+    assert(!rows.exec("SELECT NativeScale(3)")); assert(linaccess::jetSqlFunctionErrorNumber(rows.lastError().text().toCaseFolded().toStdString())==3251); rows.clear(); prepared.clear(); sql.clear();
+    db.close(); assert(db.open()); sql=QSqlQuery(db); rows=QSqlQuery(db);
+    assert(sql.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
+    store("NativeMath",module); linaccess::installJetSqlFunctions(db);
+    assert(rows.exec("SELECT NativeSequence()") && rows.next() && rows.value(0).toInt()==1); rows.finish();
+    assert(sql.exec("DELETE FROM _la_access_artifacts")); sql.finish();
+    assert(!rows.exec("SELECT NativeScale(3)")); assert(linaccess::jetSqlFunctionErrorNumber(rows.lastError().text().toCaseFolded().toStdString())==3251);
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     testVariantArraysDao();
     testDaoGetRows();
     testOwnedQueryDefs();
+    testSqlVbaFunctions();
     testDdlRecordsAffected();
     testTypedSqlTargets();
     testDeclaredParameterTypes();
