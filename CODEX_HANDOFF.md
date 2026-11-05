@@ -1399,3 +1399,16 @@ Alle96 Original-Defaultausdrücke auf Arbeitskopie zusätzlich gelesen; gezielt3
 Letzter Vollstand48/48 (85.12 s), Core unverändert1/1 (1.66 s);456/384/72.
 docs/SOURCE_LITERAL_DEFAULTS.md. GitHub-Ref-Push weiterhin nicht bestätigt;
 vor nächstem Ref-Update tatsächlichen Remote und private Sichtbarkeit prüfen.
+
+### Native process working directory (2026-11-05)
+
+ChDir plus CurDir/CurDir$ use real Linux process cwd, not a mock or per-drive
+Windows adapter. Optional empty Drive accepted, nonempty3251, Null94; bare
+locals/procedures/host identifiers retain priority. Failed ChDir preserves cwd;
+RmDir refuses the current directory by filesystem equivalence. Existing core
+cases restore cwd after unique temporary-directory operations. No SQL CurDir
+registration yet. docs/NATIVE_DIRECTORY_STATEMENTS.md; F040 remains open.
+Desktop48/48 (83.85 s), fresh headless1/1 (1.79 s), current package/build-ID/
+SQLite3.54.1 and original four hashes pass.456/384/72 stays fixed. Private GitHub
+branch still806d158; CAS ref update again returned UNKNOWN, no published-head
+claim for subsequent private immutable backups.
