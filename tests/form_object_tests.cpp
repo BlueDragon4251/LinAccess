@@ -84,6 +84,20 @@ End Sub
 Sub ClearMessage()
 SysCmd acSysCmdClearStatus
 End Sub
+Sub BusyProcedure()
+DoCmd.Hourglass HourglassOn:=True
+If Screen.MousePointer<>vbHourglass Then Err.Raise 5
+NestedBusy
+If Screen.MousePointer<>vbHourglass Then Err.Raise 5
+End Sub
+Sub NestedBusy()
+If Screen.MousePointer<>vbHourglass Then Err.Raise 5
+End Sub
+Sub BusyFailure()
+DoCmd.Hourglass True
+Err.Raise 5
+End Sub
+
 )VBA";
     AccessFormPreview preview("native status",source,module,db,&window);
     window.show(); preview.show(); QApplication::processEvents();
@@ -94,6 +108,21 @@ End Sub
     assert(meter && meter->maximum()==200 && meter->value()==0 && status->currentMessage()=="Loading rows");
     assert(preview.executeProcedure("AdvanceMeter",args).status==linaccess::VbaExecutionStatus::Completed && meter->value()==100);
     const auto application=makePreviewApplicationObject(preview);
+    assert(!QApplication::overrideCursor());
+    assert(preview.executeProcedure("BusyProcedure",args).status==linaccess::VbaExecutionStatus::Completed && !QApplication::overrideCursor());
+    assert(preview.executeProcedure("BusyFailure",args).errorNumber==5 && !QApplication::overrideCursor());
+    const auto screen=application->member("Screen",{}).object;
+    screen->assign("MousePointer",linaccess::VbaValue::integer(11));
+    assert(QApplication::overrideCursor() && screen->member("MousePointer",{}).asNumber()==11);
+    screen->assign("MousePointer",linaccess::VbaValue::integer(0));
+    assert(!QApplication::overrideCursor());
+    QApplication::setOverrideCursor(QCursor(Qt::CrossCursor));
+    int foreignCursorError=0;
+    try { application->member("DoCmd",{}).object->member("Hourglass",{linaccess::VbaValue::logical(true)}); }
+    catch(const linaccess::VbaRuntimeError& failure) { foreignCursorError=failure.number; }
+    assert(foreignCursorError==3251 && QApplication::overrideCursor()->shape()==Qt::CrossCursor);
+    QApplication::restoreOverrideCursor();
+
     int error=0;
     try { application->member("SysCmd",{linaccess::VbaValue::integer(2),linaccess::VbaValue::integer(201)}); }
     catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }

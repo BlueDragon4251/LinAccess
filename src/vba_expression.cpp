@@ -1039,6 +1039,8 @@ private:
             {"acsyscmdsetstatus",4},{"acsyscmdclearstatus",5},{"acsyscmdgetobjectstate",10},
             {"acobjstateopen",1},{"acobjstatedirty",2},{"acobjstatenew",4}};
         if(const auto action=statusActions.find(word);action!=statusActions.end()) return VbaValue::longInteger(action->second);
+        if(word=="vbdefault") return VbaValue::integer(0);
+        if(word=="vbhourglass") return VbaValue::integer(11);
         if (word == "dbopendynaset") return VbaValue::numeric(2);
         if (word == "dbopensnapshot") return VbaValue::numeric(4);
         if (word == "acquitprompt") return VbaValue::integer(0);
