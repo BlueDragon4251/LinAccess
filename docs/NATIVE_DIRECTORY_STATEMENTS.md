@@ -56,3 +56,27 @@ SQL dollar/qualified spelling and complete Windows SQL metadata/error semantics
 remain open. Existing targeted core/DAO/query3/3 (2.33 s), updated Debian build-ID/
 SQLite backend and four original hashes pass. Last full48/48 (83.85 s), fresh
 GUI-free1/1 (1.79 s); runtime code unchanged in this SQL adapter extension.
+
+## Native FileCopy
+
+The unqualified `FileCopy sourceExpression, destinationExpression` statement now
+executes actual C++ filesystem copying in active branches, with normal scalar
+evaluation and String coercion. Existing destination files are replaced. Binary
+contents including embedded NUL bytes and UTF-8 Linux pathnames are preserved.
+Validation compiles expressions without doing filesystem I/O.
+
+The bounded implementation requires regular source/destination files. Final-path
+symlinks, identical files/hardlink identities and Windows drive/UNC mapping are
+explicitly refused3251. It does not claim race-free pathname resolution, Windows
+open-file sharing/readonly flags, complete error precedence, timestamps/ACL
+equivalence or atomic replacement on an I/O failure. Native file-channel Open/Close
+integration remains open. Null94, invalid NUL/wildcard names52, missing source53,
+missing parent76, denied operations70 and other native failures75 use the native
+VBA error path; no pathname or contents are copied into diagnostics.
+
+The existing Core target checks actual binary copying, replacement of a longer
+destination, missing-source failure preserving the destination and same-file
+refusal preserving the source. Desktop core1/1 (1.77 s), fresh GUI-free core1/1
+(1.69 s), updated Debian/build-ID/SQLite3.54.1 and all four fixture hashes pass.
+Last broader baseline is typed make-table48/48 (87.98 s); no new target/ID.
+F040/F068 remain open, fixed456/384/72 unchanged.

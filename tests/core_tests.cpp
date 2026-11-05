@@ -2779,6 +2779,17 @@ End Sub
         assert(directoryRun("MkDir \"\"").errorNumber==52);
 
         { std::ofstream output(file,std::ios::binary); output.write("A\0B",3); assert(output.good()); }
+        const auto copy=directory/"copied-ä.dat";
+        host.fields["CopySource"]=file.string(); host.fields["CopyDestination"]=copy.string();
+        assert(directoryRun("FileCopy Me!CopySource, Me!CopyDestination").status==VbaExecutionStatus::Completed);
+        const auto copiedBytes=[&] { std::ifstream input(copy,std::ios::binary); return std::string(std::istreambuf_iterator<char>(input),{}); };
+        assert(copiedBytes()==std::string("A\0B",3));
+        { std::ofstream output(copy,std::ios::binary); output << "old destination content"; }
+        assert(directoryRun("FileCopy Me!CopySource, Me!CopyDestination").status==VbaExecutionStatus::Completed && copiedBytes()==std::string("A\0B",3));
+        host.fields["CopySource"]=(directory/"absent.dat").string();
+        assert(directoryRun("FileCopy Me!CopySource, Me!CopyDestination").errorNumber==53 && copiedBytes()==std::string("A\0B",3));
+        host.fields["CopySource"]=file.string(); host.fields["CopyDestination"]=file.string();
+        assert(directoryRun("FileCopy Me!CopySource, Me!CopyDestination").errorNumber==3251 && fs::file_size(file)==3);
         VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
         const auto fileEvaluate=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,paths); };
         const auto length=fileEvaluate("VBA.FileLen(PathName:=filePath)"); assert(length.asNumber()==3 && length.numericType==VbaValue::NumericType::Long);
