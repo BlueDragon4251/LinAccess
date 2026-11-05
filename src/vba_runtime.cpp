@@ -925,7 +925,8 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             if(!validExpression(argument)) return {VbaExecutionStatus::Unsupported,"Error statement requires one expression",line};
             statements.push_back({Statement::Type::RaiseError,{},argument,line});
         } else if (normalized.starts_with("mkdir ") || normalized.starts_with("mkdir\t")
-                   || normalized.starts_with("rmdir ") || normalized.starts_with("rmdir\t")) {
+                   || normalized.starts_with("rmdir ") || normalized.starts_with("rmdir\t")
+                   || normalized.starts_with("chdir ") || normalized.starts_with("chdir\t")) {
             const auto expression=trim(source.substr(5));
             if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Directory statement requires one path expression",line};
             statements.push_back({Statement::Type::Directory,normalized.substr(0,5),expression,line});
@@ -2121,6 +2122,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     const auto value=scalarVbaValue(evaluate(instruction.expression));
                     if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null directory path");
                     const auto text=value.asText();
+                    if (text.empty() && instruction.argument=="chdir") throw VbaRuntimeError(76,"Directory path not found");
                     if (text.empty() || text.find('\0')!=std::string::npos || text.find('*')!=std::string::npos || text.find('?')!=std::string::npos)
                         throw VbaRuntimeError(52,"Invalid directory path");
                     if (text.find('\\')!=std::string::npos || text.find(':')!=std::string::npos)
@@ -2130,13 +2132,18 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     if (instruction.argument=="mkdir") {
                         const bool created=std::filesystem::create_directory(path,failure);
                         if (!created && !failure) throw VbaRuntimeError(75,"Directory already exists");
+                    } else if (instruction.argument=="chdir") {
+                        std::filesystem::current_path(path,failure);
                     } else {
                         const auto status=std::filesystem::symlink_status(path,failure);
                         if (!failure) {
                             if (std::filesystem::is_symlink(status)) throw VbaRuntimeError(3251,"RmDir symbolic-link behavior is unsupported");
                             if (!std::filesystem::exists(status)) throw VbaRuntimeError(76,"Directory path not found");
                             if (!std::filesystem::is_directory(status)) throw VbaRuntimeError(75,"RmDir requires a directory");
-                            if (::rmdir(path.c_str())!=0) failure=std::error_code(errno,std::generic_category());
+                            const auto current=std::filesystem::current_path(failure);
+                            if (!failure && std::filesystem::equivalent(path,current,failure))
+                                throw VbaRuntimeError(75,"Cannot remove the current directory");
+                            if (!failure && ::rmdir(path.c_str())!=0) failure=std::error_code(errno,std::generic_category());
                         }
                     }
                     if (failure) {

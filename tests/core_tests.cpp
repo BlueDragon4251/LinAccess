@@ -2743,6 +2743,25 @@ End Sub
         };
         assert(directoryRun("MkDir Me!NativeDirectory").status==VbaExecutionStatus::Completed && fs::is_directory(child));
         assert(directoryRun("MkDir Me!NativeDirectory").errorNumber==75);
+        const auto savedDirectory=fs::current_path();
+        assert(directoryRun("ChDir Me!NativeDirectory").status==VbaExecutionStatus::Completed);
+        assert(fs::equivalent(fs::current_path(),child));
+        assert(evaluate("CurDir()").asText()==child.string());
+        assert(evaluate("CurDir").asText()==child.string());
+        assert(evaluate("VBA.CurDir$(Drive:=\"\")").asText()==child.string());
+        substringError("CurDir(Null)",94);
+        substringError("CurDir(\"C\")",3251);
+        substringError("CurDir(1,2)",450);
+        VbaVariables directoryLocals{{"curdir",VbaValue::string("local directory variable")}};
+        assert(evaluateVbaExpression("CurDir",host,directoryLocals).asText()=="local directory variable");
+
+        assert(directoryRun("RmDir \".\"").errorNumber==75 && fs::exists(child));
+        assert(directoryRun("ChDir \"missing-child\"").errorNumber==76);
+        assert(fs::equivalent(fs::current_path(),child));
+        assert(directoryRun("ChDir Null").errorNumber==94);
+        assert(directoryRun("ChDir \"\"").errorNumber==76);
+        fs::current_path(savedDirectory);
+
         { std::ofstream output(child/"retained.txt"); output<<"synthetic"; }
         assert(directoryRun("RmDir Me!NativeDirectory").errorNumber==75 && fs::exists(child/"retained.txt"));
         host.fields["NativeDirectory"]=(child/"retained.txt").string();

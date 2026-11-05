@@ -699,7 +699,7 @@ bool vbaIntrinsicName(const std::string& name) {
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
                 "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
-                "filelen","filedatetime","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt","pv","sln","syd"};
+                "filelen","filedatetime","curdir","curdir$","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt","pv","sln","syd"};
     return intrinsics.contains(name);
 }
 
@@ -1145,6 +1145,34 @@ private:
                 return host_->currentForm()->member("Controls",{VbaValue::string(field.value)});
             return item ? host_->controlValue(field.value) : host_->fieldValue(field.value);
         }
+        const auto currentDirectory=[&]() -> VbaValue {
+            if(!host_) return {};
+            std::error_code failure;
+            const auto path=std::filesystem::current_path(failure);
+            if(failure) {
+                if(failure==std::errc::permission_denied) throw error("Current directory access denied",70);
+                if(failure==std::errc::no_such_file_or_directory) throw error("Current directory not found",76);
+                throw error("Current directory unavailable",75);
+            }
+            const auto text=path.string(); (void)utf16String(text);
+            return VbaValue::string(text);
+        };
+        if((word=="curdir" || word=="curdir$") && !nextSymbol("(") && !accessExpression_) {
+            if(!host_) return {};
+            if(!qualifiedIntrinsic) {
+                if(const auto variable=locals_.find(word); variable!=locals_.end()) return variable->second;
+                if(resolver_.argumentSignature) {
+                    const auto signature=resolver_.argumentSignature(tok.value);
+                    if(signature && signature->localProcedure) {
+                        if(!signature->function) throw error("A Sub cannot be used as a function expression",3251);
+                        std::vector<VbaValue> arguments;
+                        return resolver_(tok.value,arguments,VbaArgumentReferences{});
+                    }
+                }
+                if(auto value=host_->resolveIdentifier(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return *value;
+            }
+            return currentDirectory();
+        }
         if(word=="doevents" && !nextSymbol("(")) {
             if(!host_) return {};
             if(accessExpression_) throw error("DoEvents is unavailable in calculated expressions",3251);
@@ -1239,6 +1267,7 @@ private:
                     {"val",{{"String"},1}},
                     {"createobject",{{"Class","ServerName"},1}},
                     {"filelen",{{"PathName"},1}}, {"filedatetime",{{"PathName"},1}},
+                    {"curdir",{{"Drive"},0}}, {"curdir$",{{"Drive"},0}},
                     {"hex",{{"Number"},1}}, {"hex$",{{"Number"},1}},
                     {"oct",{{"Number"},1}}, {"oct$",{{"Number"},1}},
                     {"space",{{"Number"},1}}, {"space$",{{"Number"},1}},
@@ -1398,6 +1427,16 @@ private:
                 if(args.size()>1 && !omitted[1] && !coerceVbaModuleValue(scalarObjectValue(args[1]),"string").asText().empty()) throw error("Remote object activation is not implemented",3251);
                 if(lower(name)!="scripting.dictionary") throw error("Native object class is not implemented",3251);
                 return VbaValue::reference(std::make_shared<VbaDictionary>());
+            }
+            if(word=="curdir" || word=="curdir$") {
+                if(!host_) return {};
+                if(args.size()>1) throw error("CurDir accepts one optional drive",450);
+                if(!args.empty() && !omitted[0]) {
+                    const auto drive=coerceVbaModuleValue(scalarObjectValue(args[0]),"string").asText();
+                    (void)utf16String(drive);
+                    if(!drive.empty()) throw error("Windows drive directories require an unavailable drive adapter",3251);
+                }
+                return currentDirectory();
             }
             if(word=="filelen" || word=="filedatetime") {
                 if(!host_) return {};
