@@ -49,7 +49,7 @@ struct Statement {
     enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, Directory, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
-                      Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, RaiseError, ErrorResumeNext, ErrorDisable, Label, Jump, GoSub, ComputedJump, ComputedGoSub, ReturnSubroutine, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
+                      Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, StringAlign, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, RaiseError, ErrorResumeNext, ErrorDisable, Label, Jump, GoSub, ComputedJump, ComputedGoSub, ReturnSubroutine, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
     std::string argument;
     std::string expression;
     int line{};
@@ -581,6 +581,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     const std::regex ifThen(R"(^If\s+(.+)\s+Then\s*$)", std::regex::icase);
     const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
     const std::regex variableAssignment(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
+    const std::regex stringAlignment(R"(^(LSet|RSet)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)",std::regex::icase);
     const std::regex message(R"(^MsgBox(?:\s+(.+)|\((.*)\))$)", std::regex::icase);
     const std::regex evaluation(R"(^Eval(?:\s+(.+)|\((.*)\))$)",std::regex::icase);
     const std::regex save(R"(^DoCmd\s*\.\s*RunCommand\s+acCmdSaveRecord$)", std::regex::icase);
@@ -1254,6 +1255,11 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 Statement local{Statement::Type::Dim, declared[1].str(), type, line};
                 local.persistent=persistent; statements.push_back(std::move(local));
             }
+        } else if (std::regex_match(source,match,stringAlignment)) {
+            const auto expression=trim(match[3].str());
+            if(!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"String alignment expression unsupported",line};
+            Statement alignment{Statement::Type::StringAlign,match[2].str(),expression,line};
+            alignment.stepExpression=lower(match[1].str()); statements.push_back(std::move(alignment));
         } else if (std::regex_match(source, match, variableAssignment)) {
             const auto expr = trim(match[2].str());
             if (!validExpression(expr)) return {VbaExecutionStatus::Unsupported, "Zuweisung: " + expr, line};
@@ -1837,6 +1843,11 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     };
     for(const auto& instruction:instructions) {
         bool constantTarget=constantNames.contains(lower(instruction.argument));
+        if(instruction.type==Statement::Type::IndexedAssign && lower(instruction.argument)=="mid" && !locals.contains("mid") && instruction.stepExpression!="object") {
+            const auto arguments=splitArguments(instruction.endExpression);
+            if(!arguments.empty()) constantTarget=constantNames.contains(lower(trim(arguments[0])));
+        }
+
         if(instruction.type==Statement::Type::ObjectAssign) {
             constantTarget=false;
             const auto dot=memberSeparator(instruction.argument);
@@ -1851,7 +1862,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             for(const auto& target:splitArguments(instruction.argument)) if(constantNames.contains(lower(target))) constantTarget=true;
         if(instruction.type==Statement::Type::ResizeArray)
             for(const auto& target:instruction.resizeTargets) if(constantNames.contains(lower(target.name))) constantTarget=true;
-        if(constantTarget && (instruction.type==Statement::Type::ObjectAssign || instruction.type==Statement::Type::SetVar || instruction.type==Statement::Type::ObjectSet
+        if(constantTarget && (instruction.type==Statement::Type::ObjectAssign || instruction.type==Statement::Type::SetVar || instruction.type==Statement::Type::StringAlign || instruction.type==Statement::Type::ObjectSet
             || instruction.type==Statement::Type::IndexedAssign || instruction.type==Statement::Type::ResizeArray || instruction.type==Statement::Type::EraseArray
             || instruction.type==Statement::Type::For || instruction.type==Statement::Type::ForEach)) {
             VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Assignment to a constant is not permitted",instruction.line}; result.errorNumber=3251; return result;
@@ -2517,6 +2528,32 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                 if(active) {
                     const auto name=lower(instruction.argument);
                     const auto initial=locals.find(name);
+                    // Mid statements share indexed syntax; actual variables named Mid keep their normal array/object path.
+                    if(name=="mid" && initial==locals.end() && instruction.stepExpression!="object") {
+                        const auto parts=splitArguments(instruction.endExpression);
+                        if(parts.size()<2 || parts.size()>3) throw VbaRuntimeError(450,"Mid assignment requires a String variable, start and optional length");
+                        static const std::regex targetName(R"(^[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*$)");
+                        const auto destination=trim(parts[0]);
+                        if(!std::regex_match(destination,targetName)) throw VbaRuntimeError(3251,"Mid assignment requires a simple String variable");
+                        const auto start=static_cast<std::int64_t>(coerceVbaModuleValue(scalarVbaValue(evaluate(parts[1])),"long").number);
+                        const auto requested=parts.size()==3 ? static_cast<std::int64_t>(coerceVbaModuleValue(scalarVbaValue(evaluate(parts[2])),"long").number) : std::numeric_limits<std::int32_t>::max();
+                        const auto input=coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.expression)),"string");
+                        const auto target=locals.find(lower(destination));
+                        if(target==locals.end() || target->second.kind!=VbaValue::Kind::Text) throw VbaRuntimeError(3251,"Mid assignment requires an existing String variable");
+                        const auto width=vbaStringCodeUnits(target->second.text),inputWidth=vbaStringCodeUnits(input.text);
+                        if(start<1 || requested<0) throw VbaRuntimeError(5,"Invalid Mid assignment start or length");
+                        if(width>std::numeric_limits<std::int32_t>::max() || inputWidth>std::numeric_limits<std::int32_t>::max()) throw VbaRuntimeError(6,"Mid assignment length overflow");
+                        if(start>static_cast<std::int64_t>(width)) throw VbaRuntimeError(3251,"Out-of-range Mid assignment requires reference validation");
+                        const auto count=std::min({requested,static_cast<std::int64_t>(inputWidth),static_cast<std::int64_t>(width)-start+1});
+                        if(count==0) break;
+                        if(start+count>std::numeric_limits<std::int32_t>::max()) throw VbaRuntimeError(6,"Mid assignment boundary overflow");
+                        const VbaVariables values{{"_mid_target",target->second},{"_mid_input",input},
+                            {"_mid_prefix",VbaValue::longInteger(static_cast<std::int32_t>(start-1))},
+                            {"_mid_count",VbaValue::longInteger(static_cast<std::int32_t>(count))},
+                            {"_mid_tail",VbaValue::longInteger(static_cast<std::int32_t>(start+count))}};
+                        const auto result=evaluateVbaExpression("Left$(_mid_target,_mid_prefix) & Left$(_mid_input,_mid_count) & Mid$(_mid_target,_mid_tail)",host,values);
+                        assignVariable(lower(destination),result); break;
+                    }
                     const bool objectTarget=initial!=locals.end() && initial->second.kind==VbaValue::Kind::Object;
                     const auto target=objectTarget ? initial->second.object : std::shared_ptr<VbaObject>{};
                     if(objectTarget && !target) throw VbaRuntimeError(91,"Object variable is not set");
@@ -2538,6 +2575,22 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     if(object && (!isVbaArray(found->second) || (vbaArrayType(found->second)!=8204 && vbaArrayType(found->second)!=8201))) throw VbaRuntimeError(13,"Object references require a Variant or Object array");
                     if(!object && isVbaArray(found->second) && vbaArrayType(found->second)==8201) throw VbaRuntimeError(3251,"Object array default-member assignment is not implemented");
                     assignVariable(name,withVbaArrayElement(found->second,indices,value),true);
+                }
+                break;
+            case Statement::Type::StringAlign:
+                if(active) {
+                    const auto input=coerceVbaModuleValue(scalarVbaValue(evaluate(instruction.expression)),"string");
+                    const auto name=lower(instruction.argument); const auto target=locals.find(name);
+                    if(target==locals.end() || target->second.kind!=VbaValue::Kind::Text)
+                        throw VbaRuntimeError(3251,"LSet/RSet requires an existing String variable");
+                    const auto width=vbaStringCodeUnits(target->second.text);
+                    if(width>static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) throw VbaRuntimeError(6,"String alignment length overflow");
+                    const VbaVariables values{{"_align_input",input},{"_align_width",VbaValue::longInteger(static_cast<std::int32_t>(width))}};
+                    auto result=evaluateVbaExpression("Left$(_align_input,_align_width)",host,values).text;
+                    const auto padding=width-vbaStringCodeUnits(result);
+                    if(instruction.stepExpression=="rset") result.insert(0,padding,' ');
+                    else result.append(padding,' ');
+                    assignVariable(name,VbaValue::string(std::move(result)));
                 }
                 break;
             case Statement::Type::SetVar:
