@@ -2888,3 +2888,9 @@ Neue Importe erhalten bestätigte Textlängen und Memo-Herkunft und erzwingen
 Textgrenzen bei tatsächlichen SQL-/DAO-Schreibzugriffen:
 [Umfang und Grenzen](SOURCE_TEXT_CAPACITY.md). Alte Projekte werden nicht
 stillschweigend umgeschrieben; vollständige Jet-/UI-Textgleichheit bleibt offen.
+
+Neue MDB-Importe erhalten96 bestätigte literale Original-Standardvorgaben;
+native SQL-Defaults, DAO-AddNew-Puffer und neue gebundene Formularfelder führen
+sie tatsächlich aus: [Umfang und Grenzen](SOURCE_LITERAL_DEFAULTS.md).
+Allgemeine Ausdrücke und vollständige Windows-Default-/Eigenschaftsgleichheit
+bleiben offen; keine Migration alter Projekte wird erfunden.

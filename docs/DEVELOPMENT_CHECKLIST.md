@@ -1095,3 +1095,9 @@ remain open. Both data-loss paths were reproduced on synthetic working data.
 - [x] Native loaded-page PageUp/PageDown pass actual viewport record distances through checked Save/navigation, retain failed SQL drafts/current rows and avoid SQL Save on zero-distance page movement.
 
 - [x] Native Next counter lists preserve matched loop partners, zero/Exit For and mixed For Each execution, source-group Resume Next boundaries and released abandoned enumeration state.
+
+Literale Tabellen-Standardwerte werden jetzt aus dem MDB-Export erhalten und
+in SQL, DAO-AddNew und gebundenen Formular-Neudatensätzen verwendet:
+[SOURCE_LITERAL_DEFAULTS.md](SOURCE_LITERAL_DEFAULTS.md). Diese Erweiterung gehört
+zum bestehenden offenen Umfang F015 und erhöht weder456 IDs noch die384 begrenzt
+bestätigten Einträge. Allgemeine Defaults/Eigenschaften bleiben offen.

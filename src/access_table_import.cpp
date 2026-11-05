@@ -10,6 +10,8 @@
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <algorithm>
+#include <cmath>
+#include <optional>
 
 #include <QRegularExpression>
 #include <QSqlError>
@@ -24,10 +26,32 @@ QString sqlQuote(QString name) {
     name.replace('"', "\"\"");
     return '"' + name + '"';
 }
+std::optional<QString> nativeDefaultLiteral(const QString& token) {
+    if(token.compare("NULL",Qt::CaseInsensitive)==0) return QString("NULL");
+    if(token.compare("TRUE",Qt::CaseInsensitive)==0) return QString("-1");
+    if(token.compare("FALSE",Qt::CaseInsensitive)==0) return QString("0");
+    if(QRegularExpression(R"(^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$)").match(token).hasMatch()) {
+        bool valid=false; const auto number=token.toDouble(&valid);
+        if(valid && std::isfinite(number)) return token;
+        return {};
+    }
+    if(token.size()<2 || (token.front()!=QChar(39) && token.front()!=QChar(34)) || token.back()!=token.front()) return {};
+    QString text; const auto quote=token.front();
+    for(qsizetype i=1;i<token.size()-1;++i) {
+        if(token[i]==quote) {
+            if(i+1>=token.size()-1 || token[i+1]!=quote) return {};
+            ++i;
+        }
+        text+=token[i];
+    }
+    text.replace(QChar(39),QString("''")); return QChar(39)+text+QChar(39);
+}
 std::runtime_error fail(const QString& error) {
     return std::runtime_error(error.toUtf8().toStdString());
 }
 }
+
+std::optional<QString> accessLiteralDefaultSql(const QString& token) { return nativeDefaultLiteral(token); }
 
 AccessTableSchema parseMdbSchema(const QString& schema) {
     const QRegularExpression column(R"(^\s*`((?:``|[^`])+)`\s+([A-Za-z][A-Za-z0-9_]*)(.*)$)");
@@ -107,12 +131,25 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
                  || native == "MEMO") type = "TEXT";
         else if (native == "BLOB") type = "BLOB";
         else return {};
-        auto modifiers=match.captured(3);
-        modifiers.remove(QRegularExpression(R"sql('(?:''|[^'])*'|"(?:""|[^"])*")sql"));
+        const auto rawModifiers=match.captured(3);
+        auto modifiers=rawModifiers;
+        auto literals=QRegularExpression(R"sql('(?:''|[^'])*'|"(?:""|[^"])*")sql").globalMatch(rawModifiers);
+        while(literals.hasNext()) {
+            const auto literal=literals.next();
+            modifiers.replace(literal.capturedStart(),literal.capturedLength(),QString(literal.capturedLength(),' '));
+        }
         const bool generated=QRegularExpression("\\bauto_increment\\b",QRegularExpression::CaseInsensitiveOption).match(modifiers).hasMatch();
         if (generated && type!="INTEGER") return {};
         result.columns.append({match.captured(1).replace("``", "`"), type, native,
-            match.captured(3).contains("NOT NULL", Qt::CaseInsensitive), 0,generated});
+            QRegularExpression("\\bNOT\\s+NULL\\b",QRegularExpression::CaseInsensitiveOption).match(modifiers).hasMatch(), 0,generated});
+        const auto defaultTag=QRegularExpression("\\bDEFAULT\\b",QRegularExpression::CaseInsensitiveOption).match(modifiers);
+        if(defaultTag.hasMatch()) {
+            auto token=rawModifiers.mid(defaultTag.capturedEnd()).trimmed();
+            if(token.endsWith(',')) { token.chop(1); token=token.trimmed(); }
+            const auto translated=nativeDefaultLiteral(token);
+            if(!translated) return {};
+            result.columns.last().hasDefault=true; result.columns.last().sourceDefault=token; result.columns.last().sqlDefault=*translated;
+        }
     }
     for (int i = 0; i < keys.size(); ++i) {
         bool found = false;
@@ -170,9 +207,14 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             || column.sourceSize<0 || column.sourceSize>255
             || (column.sourceSize>0 && (column.sourceType!="VARCHAR" || column.sourceOrigin!="MDBTOOLS_MYSQL")))
             throw fail("Spaltenname/-typ stimmt nicht mit MDBTools überein");
+        if(column.hasDefault) {
+            const auto literal=nativeDefaultLiteral(column.sourceDefault);
+            if(!literal || *literal!=column.sqlDefault) throw fail("Nicht unterstützter oder widersprüchlicher Standardwert");
+        } else if(!column.sourceDefault.isEmpty() || !column.sqlDefault.isEmpty()) throw fail("Standardwert-Metadaten widersprüchlich");
         seen.insert(column.name.toCaseFolded());
         definitions << sqlQuote(column.name) + ' ' + column.sqliteType
             + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : column.autoNumber ? " DEFAULT ("+accessCounterDefault(tableName,column.name)+")" : QString{})
+            + (!column.autoNumber && column.hasDefault ? " DEFAULT "+column.sqlDefault : QString{})
             + (column.required || column.primaryKeyOrder || column.autoNumber ? " NOT NULL" : "")
             + (column.sourceSize>0 ? " CHECK (linaccess_jet_text_capacity("+sqlQuote(column.name)+","+QString::number(column.sourceSize)+"))" : QString{});
     }
@@ -264,7 +306,9 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                 {"name", col.name}, {"source_type", col.sourceType}, {"sqlite_type", col.sqliteType},
                 {"required", col.required}, {"primary_key_order", col.primaryKeyOrder},
                 {"auto_number", col.autoNumber}, {"auto_number_native", col.autoNumber},
-                {"source_origin", col.sourceOrigin}, {"source_size", col.sourceSize}});
+                {"source_origin", col.sourceOrigin}, {"source_size", col.sourceSize},
+                {"has_default", col.hasDefault}, {"source_default", col.sourceDefault}, {"default_sql", col.sqlDefault},
+                {"default_native", col.hasDefault && !col.autoNumber}});
             query.prepare("INSERT INTO _la_table_schema VALUES (?,?)");
             query.addBindValue(tableName);
             query.addBindValue(QString::fromUtf8(QJsonDocument(metadata).toJson(QJsonDocument::Compact)));
@@ -278,7 +322,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             log.addBindValue(tableName);
             log.addBindValue("partial_typed_nulls");
             log.addBindValue("MDBTools schema+CSV; SQLite types and NULLs retained; "
-                             "PK and exported indices retained; FK retained by full-database import only; defaults/OLE/Access semantics NOT retained");
+                             "PK, exported indices, literal defaults and proven text capacities retained; FK retained by full-database import only; OLE and general Access semantics NOT retained");
             if (!log.exec()) throw fail(log.lastError().text());
         }
         if (!scope.exec("RELEASE la_table_import")) throw fail(scope.lastError().text());

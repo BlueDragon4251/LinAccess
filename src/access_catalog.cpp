@@ -156,7 +156,7 @@ QMap<QString,QString> AccessCatalog::floatingSourceTypes(const QString& accessSc
 }
 
 QString AccessCatalog::tableSchema(const QString& name) const {
-    auto schema = QString::fromUtf8(tool("mdb-schema", {"-T", name, file_, "sqlite"}));
+    auto schema = QString::fromUtf8(tool("mdb-schema", {"--default-values", "-T", name, file_, "sqlite"}));
     // MDBTools 1.0.0's SQLite backend omits all keys and indexes. Its MySQL
     // backend exposes them. Read only structural ALTER lines; never execute them.
     {

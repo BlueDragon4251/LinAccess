@@ -83,7 +83,7 @@ AccessInspector::AccessInspector(QString sourceFile, QSqlDatabase projectDb, QWi
     status_->setMaximumHeight(150);
     status_->setHtml(
         "<b>Kompatibilität:</b> Datentypen und NULLs werden beim Tabellenimport nach Möglichkeit erhalten. "
-        "Primärschlüssel und exportierte Indizes werden übernommen; der Gesamtimport erhält auch Beziehungen. Access-Standardwerte und OLE-Nutzdaten fehlen. "
+        "Primärschlüssel, exportierte Indizes, literale Tabellen-Standardwerte und bestätigte Textlängen werden übernommen; der Gesamtimport erhält auch Beziehungen. Allgemeine Access-Standardausdrücke und OLE-Nutzdaten fehlen. "
         "Der Katalog zeigt Objektnamen und SQL, <b>nicht</b> VBA-Code oder GUI-Layouts. "
         "Importierte Katalogeinträge sind <b>metadata_only</b> und nicht ausführbar. "
         "Die Access-Originaldatei bleibt unverändert.");

@@ -2054,7 +2054,7 @@ void AccessFormPreview::loadRecords() {
         ? rowIds_[currentRecordIndex_-1] : QVariant{};
     const int oldIndex = currentRecordIndex_;
     recordSelector_->blockSignals(true);
-    recordSelector_->clear(); recordRows_.clear(); rowIds_.clear(); dataColumns_.clear(); dataTypes_.clear();
+    recordSelector_->clear(); recordRows_.clear(); rowIds_.clear(); dataColumns_.clear(); dataTypes_.clear(); tableLiteralDefaults_.clear();
     dataSourceAvailable_ = false; directTable_ = false; dataTruncated_ = false;
     dataSourceErrorNumber_=0;
     recordSelector_->addItem(layout_.kind==linaccess::AccessDocumentKind::Report ? "(Kein Datensatz)" : "(Neuer Datensatz)");
@@ -2119,6 +2119,8 @@ void AccessFormPreview::loadRecords() {
                     recordSelector_->addItem("Datensatz " + QString::number(recordRows_.size()));
                 }
                 if (query.lastError().isValid()) throw std::runtime_error("Record source read interrupted");
+                query.finish();
+                tableLiteralDefaults_=linaccess::nativeTableLiteralDefaults(db_,source);
                 dataSourceAvailable_ = true;
             }
         } catch (const std::exception& error) {
@@ -2251,6 +2253,7 @@ void AccessFormPreview::loadRecord() {
         const int row = currentRecordIndex_-1;
         QVariant value;
         if (row >= 0 && row < recordRows_.size() && index >= 0) value = recordRows_[row][index];
+        else if(currentRecordIndex_==0 && directTable_ && dataSourceAvailable_ && layout_.allowAdditions && index>=0) value=tableLiteralDefaults_.value(dataColumns_[index].toCaseFolded());
         auto type = index >= 0 ? dataTypes_.value(dataColumns_[index].toCaseFolded()) : QString{};
         if (type.isEmpty() && value.isValid()) {
             const auto id = value.metaType().id();

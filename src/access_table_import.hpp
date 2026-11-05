@@ -6,8 +6,11 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include <optional>
 
 namespace linaccess {
+// Only scalar literal defaults; never evaluates a VBA or SQL expression.
+std::optional<QString> accessLiteralDefaultSql(const QString& token);
 struct AccessColumn {
     QString name;
     QString sqliteType;
@@ -17,6 +20,8 @@ struct AccessColumn {
     bool autoNumber{};
     QString sourceOrigin;
     int sourceSize{};
+    bool hasDefault{};
+    QString sourceDefault,sqlDefault;
 };
 
 struct AccessIndex {

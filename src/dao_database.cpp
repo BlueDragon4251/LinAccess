@@ -1,6 +1,7 @@
 #include "dao_database.hpp"
 #include "vba_array.hpp"
 #include "access_autonumber.hpp"
+#include "access_table_import.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
 #include "jet_sql_functions.hpp"
@@ -179,7 +180,13 @@ std::shared_ptr<WorkspaceState> workspaceState(QSqlDatabase db) {
         throw VbaRuntimeError(3146,"DAO: Workspace lifetime tracking unavailable");
     db.driver()->setProperty("la_dao_workspace_state",QVariant::fromValue(state)); return state;
 }
-struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; };
+QString sqliteLiteralDefaultSql(const QVariant& declaration) {
+    if(declaration.isNull()) return {};
+    const auto token=declaration.toString().trimmed(); const auto literal=accessLiteralDefaultSql(token);
+    // Raw SQLite TRUE is1; imported Access TRUE is already normalized to-1.
+    return token.compare("TRUE",Qt::CaseInsensitive)==0 ? QString("1") : literal.value_or(QString{});
+}
+struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; };
 QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString& tableName) {
     QSqlQuery shadow(db);
     shadow.prepare("SELECT 1 FROM temp.sqlite_schema WHERE type IN ('table','view') AND (name=? COLLATE NOCASE OR name='_la_table_schema' COLLATE NOCASE)");
@@ -193,7 +200,7 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
     QVector<TableSchemaColumn> columns;
     while(query.next()) {
         const auto name=query.value(1).toString();
-        columns.push_back({name,types.value(name.toCaseFolded())});
+        columns.push_back({name,types.value(name.toCaseFolded()),0,0,sqliteLiteralDefaultSql(query.value(4))});
     }
     if(query.lastError().isValid()) queryFailure(query);
     if(columns.isEmpty()) throw VbaRuntimeError(3420,"DAO main-schema table unavailable");
@@ -210,7 +217,7 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
             QSet<QString> seen;
             for(const auto& entry:document.array()) {
                 const auto object=entry.toObject();
-                if(!object.value("name").isString() || !object.value("source_type").isString()) throw VbaRuntimeError(3251,"DAO source field metadata invalid");
+                if(!object.value("name").isString() || (object.contains("source_type") && !object.value("source_type").isString())) throw VbaRuntimeError(3251,"DAO source field metadata invalid");
                 const auto name=object.value("name").toString().toCaseFolded();
                 if(seen.contains(name)) throw VbaRuntimeError(5,"DAO source field metadata ambiguous"); seen.insert(name);
                 const auto source=object.value("source_type").toString().toUpper();
@@ -218,7 +225,7 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
                 const auto size=object.value("source_size").toDouble();
                 if(object.contains("source_size") && (!object.value("source_size").isDouble() || size<0 || size>255 || std::floor(size)!=size))
                     throw VbaRuntimeError(3251,"DAO source field capacity invalid");
-                const int code=(source=="BOOLEAN" || source=="BIT") ? 1 : source=="TINYINT" ? 2 : source=="SMALLINT" ? 3 : source=="INT" ? 4
+                const int code=!object.contains("source_type") ? 0 : (source=="BOOLEAN" || source=="BIT") ? 1 : source=="TINYINT" ? 2 : source=="SMALLINT" ? 3 : source=="INT" ? 4
                     : source=="CURRENCY" ? 5 : source=="SINGLE" ? 6 : source=="DOUBLE" ? 7 : (source=="DATE" || source=="DATETIME") ? 8
                     : source=="VARCHAR" ? 10 : source=="BLOB" ? 11 : (source=="MEMO" || (source=="TEXT" && origin=="MDBTOOLS_MYSQL")) ? 12 : source=="GUID" ? 15 : -1;
                 bool found=false;
@@ -231,6 +238,16 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
     }
     return columns;
 }
+QMap<QString,QVariant> literalDefaultValues(QSqlDatabase db,const QVector<TableSchemaColumn>& columns) {
+    QStringList keys,expressions;
+    for(const auto& field:columns) if(!field.literalDefault.isEmpty()) { keys.append(field.name.toCaseFolded()); expressions.append(field.literalDefault); }
+    QMap<QString,QVariant> result;
+    if(expressions.isEmpty()) return result;
+    QSqlQuery values(db);
+    if(!values.exec("SELECT "+expressions.join(',')) || !values.next()) queryFailure(values);
+    for(int i=0;i<keys.size();++i) result.insert(keys[i],values.value(i));
+    return result;
+}
 class Recordset;
 struct RecordsetData {
     std::shared_ptr<WorkspaceState> workspace;
@@ -238,6 +255,7 @@ struct RecordsetData {
     QStringList columns;
     QMap<QString,QString> types;
     QMap<QString,int> daoTypes,definitionSizes;
+    QMap<QString,QVariant> literalDefaults;
     QVector<QVariantList> rows;
     QVector<QVariant> ids;
     QVector<quint64> bookmarks;
@@ -458,7 +476,14 @@ public:
             require(!readOnly_, "DAO: Recordset is read-only");
             require(mode_ == Mode::Browse, "DAO: Edit already in progress");
             if (key == "edit") { current(); pending_ = data_->rows[position_]; mode_ = Mode::Edit; }
-            else { pending_ = QVariantList(data_->columns.size()); mode_ = Mode::Add; }
+            else {
+                pending_=QVariantList(data_->columns.size());
+                for(int i=0;i<data_->columns.size();++i) {
+                    const auto key=data_->columns[i].toCaseFolded();
+                    if(data_->literalDefaults.contains(key)) pending_[i]=data_->literalDefaults.value(key);
+                }
+                mode_=Mode::Add;
+            }
             changed_.clear();
             return {};
         }
@@ -666,19 +691,23 @@ private:
             ++data_->revision;
             completed=true;
         };
-        data_->types.clear(); data_->daoTypes.clear(); data_->definitionSizes.clear();
+        data_->types.clear(); data_->daoTypes.clear(); data_->definitionSizes.clear(); data_->literalDefaults.clear();
         if(table_) {
             QSqlQuery origin(db_); origin.prepare("SELECT name FROM main.sqlite_schema WHERE type='table' AND name=? COLLATE NOCASE"); origin.addBindValue(source_);
             if(!origin.exec()) queryFailure(origin);
             const auto mainName=origin.next() ? origin.value(0).toString() : QString{}; origin.finish();
             if(mainName.isEmpty()) data_->types=sqliteColumnTypes(db_,source_);
-            else for(const auto& field:readTableSchemaColumns(db_,mainName)) {
+            else {
+                const auto schema=readTableSchemaColumns(db_,mainName);
+                data_->literalDefaults=literalDefaultValues(db_,schema);
+                for(const auto& field:schema) {
                 const auto key=field.name.toCaseFolded(); data_->types.insert(key,field.type);
                 const auto code=field.sourceType ? field.sourceType : provenDaoFieldType(field.type);
                 data_->daoTypes.insert(key,code);
                 const auto size=code<=0 ? -1 : code==10 ? (field.sourceSize>0 ? field.sourceSize : -1)
                     : static_cast<int>(fixedDaoFieldSize(code).number);
                 data_->definitionSizes.insert(key,size);
+                }
             }
         }
         if (!table_) {
@@ -1483,6 +1512,23 @@ private:
     std::shared_ptr<WorkspaceState> state_;
     std::weak_ptr<VbaObject> workspaces_;
 };
+}
+QMap<QString,QVariant> nativeTableLiteralDefaults(QSqlDatabase database,const QString& table) {
+    workspaceState(database)->check();
+    QSqlQuery origin(database); origin.prepare("SELECT name FROM main.sqlite_schema WHERE type='table' AND name=? COLLATE NOCASE"); origin.addBindValue(table);
+    if(!origin.exec()) queryFailure(origin);
+    if(!origin.next()) return {};
+    const auto canonical=origin.value(0).toString(); origin.finish();
+    QSqlQuery shadow(database);
+    shadow.prepare("SELECT 1 FROM temp.sqlite_schema WHERE type IN ('table','view') AND (name=? COLLATE NOCASE OR name='_la_table_schema' COLLATE NOCASE)"); shadow.addBindValue(canonical);
+    if(!shadow.exec()) queryFailure(shadow);
+    if(shadow.next()) throw VbaRuntimeError(3251,"Native defaults have a TEMP shadow"); shadow.finish();
+    QSqlQuery columns(database);
+    if(!columns.exec("PRAGMA main.table_info("+quote(canonical)+")")) queryFailure(columns);
+    QVector<TableSchemaColumn> schema;
+    while(columns.next()) schema.push_back({columns.value(1).toString(),QString{},0,0,sqliteLiteralDefaultSql(columns.value(4))});
+    if(columns.lastError().isValid()) queryFailure(columns); columns.finish();
+    return literalDefaultValues(database,schema);
 }
 std::shared_ptr<VbaObject> makeDaoEngine(QSqlDatabase database) {
     const auto state=workspaceState(database); auto value=state->engine.lock();

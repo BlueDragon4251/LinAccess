@@ -1351,3 +1351,19 @@ Variant-/Single-Speichergleichheit bleiben offen. docs/DAO_TABLEDEF_FIELDS.md.
 57 Textlängen/3 Memo-Typen auf echten Original-Arbeitskopie-Recordsets verifiziert.
 Aktueller Vollstand48/48 (84.98 s), Paket/Build-ID/SQLite/vier Originalfixture-Hashes
 bestanden; Core unverändert1/1 (1.66 s). Fester Katalog weiterhin456/384/72.
+
+Native literale Tabellen-Standardwerte sind jetzt vom MDB-Export bis SQL, DAO
+und gebundenen Formular-Neudatensätzen erhalten. AccessCatalog fordert
+--default-values an; sicherer Literalcompiler akzeptiert endliche Zahlen,
+Boolean (-1/0), Text und NULL, keine allgemeinen Ausdrücke. AutoNumber behält
+seinen Generator. Quelle/normalisierte Defaults werden gespeichert. AddNew liest
+Literale vor Update, CancelUpdate schreibt nichts. Form_Current sieht Tabellen-
+Literale; ausdrückliche Control-Defaults gewinnen, Anzeige allein bleibt nicht-Dirty.
+96 originale Deklarationen/SQL-Defaults/DAO-Pufferwerte auf Arbeitskopie verifiziert.
+Teilweise alte Counter-Metadaten ohne source_type bleiben lesbar; Defaults lesen
+unabhängig vom Typkatalog tatsächliche Main-DDL, keine Generatorauswertung.
+docs/SOURCE_LITERAL_DEFAULTS.md. Dynamische Defaultausdrücke, Field.DefaultValue-
+Eigenschaften/-Bearbeitung, vollständige Windows-Timing-/Formatgleichheit offen.
+Aktueller Vollstand48/48 (85.12 s); danach nur Importhinweistext geändert,
+Inspector1/1 (11.04 s), finales Paket/Build-ID/SQLite/vier Originalfixture-Hashes
+bestanden. Core unverändert1/1 (1.66 s). Weiterhin456/384/72, keine neue Testzielzahl.
