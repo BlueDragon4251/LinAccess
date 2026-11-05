@@ -67,3 +67,23 @@ the entered text and signed-1. Focused UI1/1 (2.82 s), Debian/build ID/SQLite an
 four original fixture hashes passed. Last full data/UI baseline immediately before
 this dialog extension48/48 (85.12 s); no repeat full run is claimed for this
 localized UI change. Catalog456/384/72 remains fixed.
+
+## Read-only DAO Field.DefaultValue
+
+Direct main-table Recordset fields and checked TableDef fields now expose
+DefaultValue as a String for supported native literals. SQL string quoting is
+translated into a canonical VBA quoted expression, numeric literals retain their
+value expression, and explicit SQL NULL becomes Null. An actually absent default
+returns an empty String. Unknown/query/frozen expressions, generators, binary
+field defaults, multiline/NUL text and expressions over255 UTF-16 units refuse
+3251; no arbitrary default function is evaluated by a property read. Recordset
+maps follow the same data-family/Clone/Requery/closed guards. Writes remain383;
+TableDef default editing and exact original Windows lexical representation remain
+open. This is a canonical native expression, not a claim of original VBA spelling.
+
+Existing import cases check String identity, numbers, quoted text, NULL, the
+table catalog and readonly refusal. The original-copy case checks all96 reported
+default expressions while independently checking their pending values.
+Focused DAO/import/original3/3 (10.48 s), latest Debian/build ID/SQLite/four fixture
+hashes passed. Last full baseline48/48 (85.12 s); headless runtime unchanged1/1
+(1.66 s). Catalog456/384/72 remains fixed; no extra CTest target.

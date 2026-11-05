@@ -1387,3 +1387,15 @@ wegen GitHub-Serverfehlern bei GraphQL-/REST-Ref-Updates nicht bewegt werden.
 Auch Contents-API scheiterte; der Remote blieb unverändert. Nicht als gepusht
 behaupten. Private externe Checkpoint-/Patch-Sicherung unter linaccess-onboarding;
 keine öffentlichen Artefakte, kein Force-Push, keine Recovery-Branch wurde erzeugt.
+
+DAO.Field.DefaultValue ist jetzt für unterstützte native Literale schreibgeschützt
+als String lesbar: direkte Main-Recordsets/Clone sowie geprüfte TableDef-Felder.
+SQL-Text wird in kanonischen VBA-Ausdruck umgequotet, explizites NULL ergibt Null,
+tatsächlich fehlender Default leeren String. Unbewiesene Projections/Generatoren,
+Binary-Defaults, Mehrzeilen-/NUL-Text und Ausdrücke>255UTF-16-Einheiten3251.
+Writes383; vollständiges TableDef-Editing/Windows-Originalschreibweise offen.
+Alle96 Original-Defaultausdrücke auf Arbeitskopie zusätzlich gelesen; gezielt3/3
+(10.48 s), aktuelles Paket/Build-ID/SQLite und vier Fixture-Hashes bestanden.
+Letzter Vollstand48/48 (85.12 s), Core unverändert1/1 (1.66 s);456/384/72.
+docs/SOURCE_LITERAL_DEFAULTS.md. GitHub-Ref-Push weiterhin nicht bestätigt;
+vor nächstem Ref-Update tatsächlichen Remote und private Sichtbarkeit prüfen.

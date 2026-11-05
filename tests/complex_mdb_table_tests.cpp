@@ -105,7 +105,10 @@ int main(int argc, char** argv) {
                     for(const auto& column:schema.columns) if(column.hasDefault && !column.autoNumber) {
                         QSqlQuery value(db); assert(value.exec("SELECT "+column.sqlDefault) && value.next());
                         const auto expected=linaccess::qtFieldValue(value.value(0),linaccess::sqliteColumnTypes(db,table).value(column.name.toCaseFolded()));
-                        const auto actual=records->member("Fields",{linaccess::VbaValue::string(column.name.toStdString())}).object->member("Value",{});
+                        const auto field=records->member("Fields",{linaccess::VbaValue::string(column.name.toStdString())}).object;
+                        const auto expression=field->member("DefaultValue",{});
+                        assert(expression.kind==linaccess::VbaValue::Kind::Text && !expression.text.empty());
+                        const auto actual=field->member("Value",{});
                         assert(actual.kind==expected.kind && actual.asText()==expected.asText()); ++pendingDefaults;
                     }
                     records->member("CancelUpdate",{});
