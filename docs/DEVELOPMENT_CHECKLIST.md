@@ -1283,3 +1283,15 @@ desktop48/48 (84.89 s), current Debian/build-ID/SQLite3.54.1/four original
 hashes pass, covering all preceding FSO increments. Original query inventory
 remains78/100 without Windows Access result oracle. No new target/ID; F040/F091
 remain open, fixed456/384/72.
+
+Native FSO GetFolder(FolderSpec) now returns a real typed Folder with Path/Name
+and scalar Path default; trailing separators normalize. Files and SubFolders
+produce native typed Files/Folders collections with fresh bounded Count and
+For Each snapshots of actual regular files/directories. File.ParentFolder and
+non-root Folder.ParentFolder return existing parent Folder objects. No open
+handle/host retained; links/special entries, >10000 entries, root parents, Item,
+recursive size, mutations and full Windows collection semantics stay bounded.
+Scope: docs/NATIVE_FILE_SYSTEM_OBJECT.md. Expanded desktop core1/1 (1.86 s),
+fresh GUI-free core1/1 (1.79 s), current Debian/build-ID/SQLite/four hashes pass.
+Last broader48/48 (84.89 s) precedes this increment. No new target/ID; F091 open,
+fixed456/384/72.

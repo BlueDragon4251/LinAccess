@@ -2894,6 +2894,21 @@ Me!FsoWildcardLeaf=fs.GetFileName("C:\docs\*.csv")
 Me!FsoDriveOnly=fs.GetFileName("C:")
 Dim nativeFile As Scripting.File
 Set nativeFile=fs.GetFile(FileSpec:=Me!FsoFile)
+Dim folder As Scripting.Folder, files As Scripting.Files, entry As Variant, total As Long
+Set folder=fs.GetFolder(FolderSpec:=Me!FsoFolder & "/")
+Set files=folder.Files
+Me!FsoFolderMetadata=TypeName(folder) & ":" & CStr(VarType(folder)) & ":" & CStr(TypeOf folder Is Scripting.Folder)
+Me!FsoFolderPath=CStr(folder)
+Me!FsoFilesCount=CStr(files.Count)
+Me!FsoSubFoldersCount=CStr(folder.SubFolders.Count)
+Me!FsoFileParent=nativeFile.ParentFolder.Path
+For Each entry In folder.SubFolders
+ Me!FsoSubFolderName=entry.Name
+Next entry
+For Each entry In files
+ total=total+entry.Size
+Next entry
+Me!FsoFilesTotal=CStr(total)
 Me!FsoFileDefault=CStr(nativeFile)
 Me!FsoFileTyped=CStr(TypeOf nativeFile Is Scripting.File)
 Me!FsoFileObject=TypeName(nativeFile) & ":" & CStr(VarType(nativeFile))
@@ -2913,6 +2928,9 @@ End Sub)VBA","ProbeFs",host);
         assert(host.fields["FsoIdentity"]=="FileSystemObject:9" && host.fields["FsoHasFile"]=="True" && host.fields["FsoHasFolder"]=="True");
         assert(host.fields["FsoLeaf"]=="alpha-ä.tar.gz" && host.fields["FsoBase"]=="alpha-ä.tar" && host.fields["FsoExtension"]=="gz");
         assert(host.fields["FsoParent"]=="C:\\docs" && host.fields["FsoWildcardLeaf"]=="*.csv" && host.fields["FsoDriveOnly"]=="");
+        assert(host.fields["FsoFolderMetadata"]=="Folder:8:True" && host.fields["FsoFolderPath"]==directory.string());
+        assert(host.fields["FsoFilesCount"]=="1" && host.fields["FsoFilesTotal"]=="3");
+        assert(host.fields["FsoSubFoldersCount"]=="1" && host.fields["FsoSubFolderName"]=="folder-target" && host.fields["FsoFileParent"]==directory.string());
         assert(host.fields["FsoFileObject"]=="File:8" && host.fields["FsoFileTyped"]=="True" && host.fields["FsoFileDefault"]==file.string());
         assert(host.fields["FsoFileMetadata"]==file.string()+"|"+file.filename().string()+"|3:3");
         assert(host.fields["FsoWrongKinds"]=="False:False" && host.fields["FsoMissing"]=="False" && host.fields["FsoAbsolute"]==fs::current_path().string());

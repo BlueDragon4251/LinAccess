@@ -6,6 +6,7 @@
 #include <filesystem>
 
 namespace linaccess {
+inline VbaValue nativeFolderReference(std::filesystem::path path);
 // Read-only native file object. Metadata is read again rather than cached.
 class VbaFileObject final : public VbaObject {
     std::filesystem::path path_;
@@ -23,10 +24,11 @@ public:
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         std::string method(name);
         std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
-        if(method!="path" && method!="name" && method!="size" && method!="datelastmodified") throw VbaRuntimeError(3251,"Native file member is not implemented");
+        if(method!="path" && method!="name" && method!="size" && method!="datelastmodified" && method!="parentfolder") throw VbaRuntimeError(3251,"Native file member is not implemented");
         if(!args.empty()) throw VbaRuntimeError(450,"File property takes no arguments");
         if(method=="path") return VbaValue::string(path_.string());
         if(method=="name") return VbaValue::string(path_.filename().string());
+        if(method=="parentfolder") return nativeFolderReference(path_.parent_path());
         std::error_code error;
         const auto status=std::filesystem::symlink_status(path_,error);
         if(error==std::errc::no_such_file_or_directory || error==std::errc::not_a_directory) throw VbaRuntimeError(53,"File unavailable");
@@ -48,6 +50,92 @@ public:
     }
     void assign(std::string_view,const VbaValue&) override { throw VbaRuntimeError(3251,"Native file property mutation is not implemented"); }
 };
+// Fresh directory snapshots for native For Each; never fabricate entries.
+class VbaFilesObject final : public VbaObject {
+    std::filesystem::path folder_;
+    bool folders_{};
+    static void failure(const std::error_code& error) {
+        if(error==std::errc::permission_denied) throw VbaRuntimeError(70,"Folder enumeration permission denied");
+        if(error==std::errc::no_such_file_or_directory || error==std::errc::not_a_directory) throw VbaRuntimeError(76,"Folder unavailable");
+        throw VbaRuntimeError(75,"Native folder enumeration failed");
+    }
+public:
+    explicit VbaFilesObject(std::filesystem::path folder,bool folders=false) : folder_(std::move(folder)),folders_(folders) {}
+    std::string_view className() const override { return folders_ ? "Folders" : "Files"; }
+    bool isNativeType(std::string_view type) const override { return type==(folders_ ? "scripting.folders" : "scripting.files"); }
+    std::vector<VbaValue> enumerate() override {
+        std::error_code error;
+        const auto root=std::filesystem::symlink_status(folder_,error);
+        if(error) failure(error);
+        if(std::filesystem::is_symlink(root)) throw VbaRuntimeError(3251,"Folder link enumeration requires reference validation");
+        if(!std::filesystem::is_directory(root)) throw VbaRuntimeError(76,"Folder unavailable");
+        std::filesystem::directory_iterator current(folder_,error),end;
+        if(error) failure(error);
+        std::vector<VbaValue> result;
+        std::size_t inspected=0;
+        while(current!=end) {
+            if(++inspected>10000) throw VbaRuntimeError(3251,"Native folder enumeration limit exceeded");
+            const auto status=current->symlink_status(error);
+            if(error) failure(error);
+            if(std::filesystem::is_regular_file(status)) {
+                if(!folders_) result.push_back(VbaValue::reference(std::make_shared<VbaFileObject>(current->path())));
+            } else if(std::filesystem::is_directory(status)) {
+                if(folders_) result.push_back(nativeFolderReference(current->path()));
+            } else throw VbaRuntimeError(3251,"Folder contains unsupported link or special-file entries");
+            current.increment(error);
+            if(error) failure(error);
+        }
+        return result;
+    }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        std::string method(name);
+        std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
+        if(method!="count") throw VbaRuntimeError(3251,"Native Files member is not implemented");
+        if(!args.empty()) throw VbaRuntimeError(450,"Files Count takes no arguments");
+        return VbaValue::longInteger(static_cast<std::int32_t>(enumerate().size()));
+    }
+    void assign(std::string_view,const VbaValue&) override { throw VbaRuntimeError(438,"Files property is not writable"); }
+};
+class VbaFolderObject final : public VbaObject {
+    std::filesystem::path path_;
+public:
+    explicit VbaFolderObject(std::filesystem::path path) : path_(std::move(path)) {
+        if(path_.filename().empty() && path_!=path_.root_path()) path_=path_.parent_path();
+    }
+    std::string_view className() const override { return "Folder"; }
+    bool isNativeType(std::string_view type) const override { return type=="scripting.folder"; }
+    bool hasScalarDefault() const override { return true; }
+    VbaValue scalarValue() override { return VbaValue::string(path_.string()); }
+    VbaValue defaultMember(const std::vector<VbaValue>& args,bool reference) override {
+        if(!args.empty()) throw VbaRuntimeError(450,"Folder default property takes no arguments");
+        if(reference) throw VbaRuntimeError(13,"Folder default property is scalar");
+        return scalarValue();
+    }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        std::string method(name);
+        std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
+        if(method!="path" && method!="name" && method!="files" && method!="subfolders" && method!="parentfolder") throw VbaRuntimeError(3251,"Native Folder member is not implemented");
+        if(!args.empty()) throw VbaRuntimeError(450,"Folder property takes no arguments");
+        if(method=="path") return scalarValue();
+        if(method=="name") return VbaValue::string(path_.filename().string());
+        if(method=="parentfolder") {
+            if(path_==path_.root_path()) throw VbaRuntimeError(3251,"Root ParentFolder semantics require reference validation");
+            return nativeFolderReference(path_.parent_path());
+        }
+        return VbaValue::reference(std::make_shared<VbaFilesObject>(path_,method=="subfolders"));
+    }
+    void assign(std::string_view,const VbaValue&) override { throw VbaRuntimeError(3251,"Native Folder mutation is not implemented"); }
+};
+inline VbaValue nativeFolderReference(std::filesystem::path path) {
+    std::error_code error;
+    const auto status=std::filesystem::symlink_status(path,error);
+    if(error==std::errc::permission_denied) throw VbaRuntimeError(70,"Folder permission denied");
+    if(error==std::errc::no_such_file_or_directory || error==std::errc::not_a_directory) throw VbaRuntimeError(76,"Folder unavailable");
+    if(error) throw VbaRuntimeError(75,"Native folder metadata unavailable");
+    if(std::filesystem::is_symlink(status)) throw VbaRuntimeError(3251,"Folder link semantics require reference validation");
+    if(!std::filesystem::is_directory(status)) throw VbaRuntimeError(76,"Folder unavailable");
+    return VbaValue::reference(std::make_shared<VbaFolderObject>(std::move(path)));
+}
 // Stateless local filesystem adapter. No COM activation, host or database handle.
 class VbaFileSystemObject final : public VbaObject {
     static std::string key(std::string_view name) {
@@ -108,6 +196,7 @@ public:
     bool isNativeType(std::string_view type) const override { return type=="scripting.filesystemobject"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto method=key(name);
+        if(method=="getfolder") return VbaArgumentSignature{{"FolderSpec"},1};
         if(method=="getfile") return VbaArgumentSignature{{"FileSpec"},1};
         if(method=="fileexists") return VbaArgumentSignature{{"FileSpec"},1};
         if(method=="folderexists") return VbaArgumentSignature{{"FolderSpec"},1};
@@ -120,7 +209,7 @@ public:
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto method=key(name);
         const bool lexical=method=="getfilename" || method=="getbasename" || method=="getextensionname" || method=="getparentfoldername";
-        if(!lexical && method!="getfile" && method!="fileexists" && method!="folderexists" && method!="buildpath" && method!="getabsolutepathname")
+        if(!lexical && method!="getfolder" && method!="getfile" && method!="fileexists" && method!="folderexists" && method!="buildpath" && method!="getabsolutepathname")
             throw VbaRuntimeError(3251,"Native FileSystemObject member is not implemented");
         if(args.size()!=(method=="buildpath" ? 2u : 1u) || std::any_of(args.begin(),args.end(),[](const auto& value) { return value.kind==VbaValue::Kind::Missing; }))
             throw VbaRuntimeError(450,"Invalid FileSystemObject argument count");
@@ -139,15 +228,21 @@ public:
             if(result.filename().empty() && result!=result.root_path()) result=result.parent_path();
             return VbaValue::string(result.string());
         }
-        if(method=="getfile") {
-            if(source.empty()) throw VbaRuntimeError(53,"File unavailable");
+        if(method=="getfile" || method=="getfolder") {
+            const bool folder=method=="getfolder";
+            const int missing=folder ? 76 : 53;
+            if(source.empty()) throw VbaRuntimeError(missing,"Filesystem entry unavailable");
             auto absolute=std::filesystem::absolute(source,problem);
             if(problem) failure(problem);
             absolute=absolute.lexically_normal();
             const auto status=std::filesystem::symlink_status(absolute,problem);
-            if(problem==std::errc::no_such_file_or_directory || problem==std::errc::not_a_directory) throw VbaRuntimeError(53,"File unavailable");
+            if(problem==std::errc::no_such_file_or_directory || problem==std::errc::not_a_directory) throw VbaRuntimeError(missing,"Filesystem entry unavailable");
             if(problem) failure(problem);
             if(std::filesystem::is_symlink(status)) throw VbaRuntimeError(3251,"GetFile link semantics require reference validation");
+            if(folder) {
+                if(!std::filesystem::is_directory(status)) throw VbaRuntimeError(76,"Folder unavailable");
+                return VbaValue::reference(std::make_shared<VbaFolderObject>(std::move(absolute)));
+            }
             if(!std::filesystem::is_regular_file(status)) throw VbaRuntimeError(53,"File unavailable");
             return VbaValue::reference(std::make_shared<VbaFileObject>(std::move(absolute)));
         }

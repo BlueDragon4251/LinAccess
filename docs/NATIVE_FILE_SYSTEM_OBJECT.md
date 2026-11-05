@@ -97,3 +97,35 @@ fresh GUI-free1/1 (1.66 s), current Debian/build-ID/SQLite/four hashes pass.
 Final filesystem segment: full current desktop48/48 (84.89 s), fresh
 headless1/1 (1.83 s), current Debian/build-ID/SQLite/four hashes pass.
 Original queries78/100; no Windows result oracle. No new test target/ID.
+
+## Native GetFolder and Files enumeration
+
+GetFolder(FolderSpec) resolves an actual existing native directory and returns
+a Folder object. Qualified Scripting.Folder and Scripting.Files bindings use
+explicit native identity. Folder Path/Name read path components; Path is the
+scalar default (VarType8, TypeName Folder). Folder.Files returns a real native
+Files object with Count and For Each. Each Count/enumeration reads the directory
+again; the For Each operation holds a bounded snapshot of native File objects,
+whose metadata remains live. No open directory handle survives the operation.
+
+Only regular files are included; directories are excluded from Files. Hidden
+Linux entries are included. Terminal folder links, any link/special-file entry,
+permission errors and more than10000 inspected entries fail explicitly; they
+are not silently skipped. Enumeration order is native and has no Windows order
+or concurrent-mutation oracle. Item lookup, recursive size, folder
+mutations, timestamps and complete Windows collection/attribute/identity behavior
+remain unimplemented or unvalidated.
+
+References: [GetFolder](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/getfolder-method),
+[Files](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/files-collection).
+
+SubFolders uses the same bounded fresh directory snapshot and returns native
+Folder entries through a Folders collection with Count/For Each and qualified
+Scripting.Folders identity. File.ParentFolder and non-root Folder.ParentFolder
+return actual existing parent Folder objects; a root parent remains3251. Folder
+paths with trailing separators normalize consistently before Path/Name/collection
+use. Files and folders are selected by actual filesystem kind, not name guesses.
+
+Folder increment: expanded desktop core1/1 (1.86 s), fresh GUI-free1/1
+(1.79 s), current Debian/build-ID/SQLite/four original fixture hashes pass.
+Last broader48/48 (84.89 s) precedes this increment. F091 stays open.
