@@ -2970,3 +2970,13 @@ range or Windows error/numeric oracle claim. Scope: docs/NATIVE_FINANCIAL_FUNCTI
 Current full desktop48/48 (85.94 s), fresh GUI-free core1/1 (1.67 s), updated
 Debian/build-ID/pinned SQLite3.54.1/four original fixture hashes pass. Original
 corpus78/100; no new target or ID. F068 stays open, fixed456/384/72.
+
+Native Rate/IRR now share an actual balance/analytic-derivative root kernel with
+default guess0.1, bounded twenty iterations, residual validation and explicit
+nonconvergence5. Rate supports VBA/SQL whole annuity periods1..32767; IRR supports
+actual one-dimensional Double arrays with documented Values/Guess names and
+positive/negative flows. No direct SQL array transport or full Windows root/
+error/precision/selection oracle claim. Scope: docs/NATIVE_FINANCIAL_FUNCTIONS.md.
+Existing core/DAO/query3/3 (2.52 s), fresh headless1/1 (1.73 s), updated Debian/
+build-ID/SQLite/four hashes pass. Last broader full is preceding financial
+milestone48/48 (85.94 s). No new target/ID; F068 open,456/384/72 fixed.

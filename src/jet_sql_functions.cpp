@@ -233,6 +233,7 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
       catch(...) { native.error(context,"SQL scalar evaluation failed",-1); }
 }
 void financialDdb(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"DDB",4,5); }
+void financialRate(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Rate",3,6); }
 void financialNper(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"NPer",3,5); }
 void financialPv(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"PV",3,5); }
 void financialSln(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"SLN",3,3); }
@@ -607,6 +608,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_fv",-1,&financialFv,nullptr,nullptr);
     ensure("linaccess_jet_pv",-1,&financialPv,nullptr,nullptr);
     ensure("linaccess_jet_nper",-1,&financialNper,nullptr,nullptr);
+    ensure("linaccess_jet_rate",-1,&financialRate,nullptr,nullptr);
     ensure("linaccess_jet_ddb",-1,&financialDdb,nullptr,nullptr);
     ensure("linaccess_jet_sln",-1,&financialSln,nullptr,nullptr);
     ensure("linaccess_jet_syd",-1,&financialSyd,nullptr,nullptr);

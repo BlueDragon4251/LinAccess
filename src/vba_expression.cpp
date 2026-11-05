@@ -40,6 +40,46 @@ public:
         throw VbaRuntimeError(3251,"Internal Byte array metadata is not a callable object");
     }
 };
+struct FinancialBalance { long double residual,derivative,scale; };
+template<class Evaluate>
+double nativeFinancialRoot(long double guess,Evaluate evaluate) {
+    if(guess<=-1) throw error("Financial initial guess outside supported range",3251);
+    auto rate=guess;
+    for(int attempt=0;attempt<20;++attempt) {
+        const auto state=evaluate(rate);
+        if(!std::isfinite(state.residual) || !std::isfinite(state.derivative) || !std::isfinite(state.scale))
+            throw error("Financial iteration overflow",6);
+        if(state.derivative==0) throw error("Financial iteration has no usable derivative",5);
+        if(state.scale>0 && std::abs(state.residual)<=state.scale*1e-12L) {
+            const auto result=static_cast<double>(rate);
+            if(!std::isfinite(result)) throw error("Financial root result overflow",6);
+            return result;
+        }
+        auto next=rate-state.residual/state.derivative;
+        if(!std::isfinite(next)) throw error("Financial iteration did not converge",5);
+        if(next<=-1) next=(rate-1)/2;
+        if(next==rate) throw error("Financial iteration did not converge",5);
+        rate=next;
+    }
+    throw error("Financial root did not converge within twenty iterations",5);
+}
+double nativePeriodicRate(long double periods,long double payment,long double present,long double future,long double timing,long double guess) {
+    if(periods<=0) throw error("Rate requires positive periods",5);
+    if(periods>32767 || std::floor(periods)!=periods || (timing!=0 && timing!=1))
+        throw error("Rate period or timing outside supported range",3251);
+    if(present==0 && payment==0 && future==0) throw error("Rate has no unique solution",5);
+    return nativeFinancialRoot(guess,[&](long double rate) {
+        const auto multiplier=1+rate;
+        long double balance=present,derivative=0,scale=std::abs(present);
+        for(int period=0;period<static_cast<int>(periods);++period) {
+            const auto opening=balance+(timing==1 ? payment : 0);
+            derivative=derivative*multiplier+opening;
+            balance=opening*multiplier+(timing==0 ? payment : 0);
+            scale=scale*multiplier+std::abs(payment)*(timing==1 ? multiplier : 1);
+        }
+        return FinancialBalance{balance+future,derivative,scale+std::abs(future)};
+    });
+}
 std::size_t nativeFinancialArraySize(const VbaValue& value) {
     if(value.kind==VbaValue::Kind::Null) throw error("Invalid Null financial array",94);
     if(!isVbaArray(value)) throw error("Financial function requires an array",13);
@@ -709,7 +749,7 @@ bool vbaIntrinsicName(const std::string& name) {
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
                 "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
-                "filelen","filedatetime","curdir","curdir$","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt","pv","nper","npv","mirr","sln","syd","ddb"};
+                "filelen","filedatetime","curdir","curdir$","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt","pv","nper","rate","npv","irr","mirr","sln","syd","ddb"};
     return intrinsics.contains(name);
 }
 
@@ -1308,7 +1348,9 @@ private:
                     {"strcomp",{{"String1","String2","Compare"},2}},
                     {"pv",{{"Rate","NPer","Pmt","Fv","Type"},3}},
                     {"nper",{{"Rate","Pmt","Pv","Fv","Type"},3}},
+                    {"rate",{{"NPer","Pmt","Pv","Fv","Type","Guess"},3}},
                     {"npv",{{"Rate","Values"},2}},
+                    {"irr",{{"Values","Guess"},1}},
                     {"mirr",{{"Values","Finance_rate","Reinvest_rate"},3}},
                     {"sln",{{"Cost","Salvage","Life"},3}},
                     {"syd",{{"Cost","Salvage","Life","Period"},4}},
@@ -1876,6 +1918,35 @@ private:
                 if(!std::isfinite(converted)) throw error("Depreciation result overflow",6);
                 return VbaValue::numeric(converted);
             }
+            if(word=="irr") {
+                if(!host_) return {};
+                if(args.empty() || args.size()>2 || omitted[0]) throw error("IRR requires cash-flow array and optional guess",450);
+                const auto array=scalarObjectValue(args[0]); const auto count=nativeFinancialArraySize(array);
+                long double guess=0.1L;
+                if(args.size()==2 && !omitted[1]) {
+                    const auto value=scalarObjectValue(args[1]);
+                    if(value.kind==VbaValue::Kind::Null) throw error("Invalid Null IRR guess",94);
+                    guess=coerceVbaModuleValue(value,"double").number;
+                    if(!std::isfinite(guess)) throw error("IRR guess overflow",6);
+                }
+                std::vector<double> flows; flows.reserve(count); bool positive=false,negative=false;
+                for(std::size_t i=0;i<count;++i) {
+                    const auto flow=coerceVbaModuleValue(vbaArrayLinearElement(array,i),"double").number;
+                    if(!std::isfinite(flow)) throw error("IRR cash-flow overflow",6);
+                    positive|=flow>0; negative|=flow<0; flows.push_back(flow);
+                }
+                if(!positive || !negative) throw error("IRR requires positive and negative flows",5);
+                return VbaValue::numeric(nativeFinancialRoot(guess,[&](long double rate) {
+                    const auto multiplier=1+rate;
+                    long double balance=flows.front(),derivative=0,scale=std::abs(balance);
+                    for(std::size_t i=1;i<flows.size();++i) {
+                        derivative=derivative*multiplier+balance;
+                        balance=balance*multiplier+flows[i];
+                        scale=scale*multiplier+std::abs(flows[i]);
+                    }
+                    return FinancialBalance{balance,derivative,scale};
+                }));
+            }
             if(word=="mirr") {
                 if(!host_) return {};
                 if(args.size()!=3 || omitted[0] || omitted[1] || omitted[2])
@@ -1927,11 +1998,11 @@ private:
                 if(!std::isfinite(result)) throw error("NPV result overflow",6);
                 return VbaValue::numeric(result);
             }
-            if (word=="fv" || word=="pmt" || word=="pv" || word=="nper") {
+            if (word=="fv" || word=="pmt" || word=="pv" || word=="nper" || word=="rate") {
                 if (!host_) return {};
-                if (args.size()<3 || args.size()>5 || omitted[0] || omitted[1] || omitted[2])
-                    throw error("Financial function requires three to five arguments",450);
-                long double values[5]{};
+                if (args.size()<3 || args.size()>(word=="rate" ? 6u : 5u) || omitted[0] || omitted[1] || omitted[2])
+                    throw error("Invalid financial argument count",450);
+                long double values[6]{0,0,0,0,0,0.1L};
                 for (std::size_t i=0;i<args.size();++i) {
                     if (omitted[i]) continue;
                     const auto value=scalarObjectValue(args[i]);
@@ -1939,6 +2010,7 @@ private:
                     values[i]=coerceVbaModuleValue(value,"double").number;
                     if (!std::isfinite(values[i])) throw error("Financial argument overflow",6);
                 }
+                if(word=="rate") return VbaValue::numeric(nativePeriodicRate(values[0],values[1],values[2],values[3],values[4],values[5]));
                 if(word=="nper") {
                     const auto rate=values[0],payment=values[1],present=values[2],future=values[3],timing=values[4];
                     if(rate<=-1 || (timing!=0 && timing!=1))
