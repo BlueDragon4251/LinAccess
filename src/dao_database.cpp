@@ -927,6 +927,11 @@ public:
         require(args.empty(),"DAO: Unexpected QueryDef arguments");
         if (key == "sql") return VbaValue::string(source_.toUtf8().toStdString());
         if (key == "name") return VbaValue::string(name_.toStdString());
+        if(key=="type") {
+            if(!name_.isEmpty() && !owned_) throw VbaRuntimeError(3251,"DAO: Imported QueryDef type metadata is unavailable");
+            if(plan_.daoQueryType<0) throw VbaRuntimeError(3251,"DAO: QueryDef type is not proven for this source");
+            return VbaValue::integer(static_cast<std::int16_t>(plan_.daoQueryType));
+        }
         if (key == "recordsaffected") return longCount(affected_);
         if (key == "close") { closed_ = true; return {}; }
         throw VbaRuntimeError(438,"DAO: QueryDef member unsupported");
@@ -934,6 +939,7 @@ public:
     void assign(std::string_view name, const VbaValue& value) override {
         refresh();
         if(lower(name)=="name") throw VbaRuntimeError(3251,"DAO: QueryDef renaming is unsupported");
+        if(lower(name)=="type") throw VbaRuntimeError(383,"DAO: QueryDef.Type is read-only");
         require(lower(name) == "sql","DAO: QueryDef property is not writable");
         const auto scalar=scalarVbaValue(value);
         if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null SQL");

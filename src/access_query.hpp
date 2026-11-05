@@ -34,6 +34,7 @@ struct AccessQueryPlan {
     QString source;
     QString compiledSql;
     bool currencyContextResolved{};
+    int daoQueryType{-1}; // Native DAO source kind, unknown until classified by the compiler.
 };
 struct AccessQueryResult {
     QStringList columns;

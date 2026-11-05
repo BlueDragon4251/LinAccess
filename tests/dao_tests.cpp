@@ -374,6 +374,41 @@ End Sub
         assert(QDir::setCurrent(savedDirectory));
     }
 
+    {
+        using linaccess::VbaValue;
+        const auto definition=host.currentDatabase()->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("SELECT 1 AS value")}).object;
+        const std::vector<std::pair<std::string,int>> kinds{
+            {"PARAMETERS p Long; SELECT p AS value",0},
+            {"SELECT 'UNION UPDATE' AS marker",0},
+            {"SELECT 1 AS value UNION ALL SELECT 2 AS value",128},
+            {"SELECT * FROM (SELECT 1 AS value UNION ALL SELECT 2 AS value) AS nested",0},
+            {"SELECT TOP 1 id FROM items ORDER BY id",0},
+            {"UPDATE items AS a INNER JOIN items AS b ON a.id=b.id SET a.qty=b.qty",48}
+        };
+        for(const auto& [source,expected]:kinds) {
+            definition->assign("SQL",VbaValue::string(source));
+            const auto type=definition->member("Type",{});
+            assert(type.asNumber()==expected && type.numericType==VbaValue::NumericType::Integer);
+        }
+        const auto action=[&](const std::string& source,int expected) {
+            definition->assign("SQL",VbaValue::string(source)); assert(definition->member("Type",{}).asNumber()==expected);
+            definition->member("Execute",{});
+        };
+        action("CREATE TABLE native_query_type_rows(id INTEGER4,value INTEGER4)",96);
+        action("INSERT INTO native_query_type_rows VALUES(1,4)",64);
+        action("UPDATE native_query_type_rows SET value=9 WHERE id=1",48);
+        definition->assign("SQL",VbaValue::string("SELECT value FROM native_query_type_rows"));
+        assert(definition->member("Type",{}).asNumber()==0);
+        const auto rows=definition->member("OpenRecordset",{}).object;
+        assert(rows->member("Fields",{VbaValue::string("value")}).object->member("Value",{}).asNumber()==9); rows->member("Close",{});
+        action("SELECT id,value INTO native_query_type_copy FROM native_query_type_rows",80);
+        action("DELETE FROM native_query_type_rows",32);
+        action("ALTER TABLE native_query_type_copy ADD COLUMN extra INTEGER4",96);
+        action("DROP TABLE native_query_type_copy",96); action("DROP TABLE native_query_type_rows",96);
+        int error=0; try { definition->assign("Type",VbaValue::integer(0)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+        assert(error==383); definition->member("Close",{});
+    }
+
     const auto painted=linaccess::executeVbaProcedure(R"VBA(Sub PaintRows()
 Dim database As DAO.Database
 Dim rows As DAO.Recordset
@@ -714,6 +749,7 @@ void testOwnedQueryDefs() {
 Dim query As DAO.QueryDef, other As DAO.QueryDef, base As DAO.QueryDef, parameter As DAO.Parameter
 Dim rows As DAO.Recordset, workspace As DAO.Workspace
 Set query=CurrentDb.QueryDefs("owned caller")
+If query.Type<>dbQSelect Or VarType(query.Type)<>vbInteger Then Err.Raise 5
 If query.Name<>"Owned Caller" Then Err.Raise 5
 Set parameter=query.Parameters("p")
 parameter.Value=2
@@ -1211,6 +1247,12 @@ End Sub
     q.addBindValue("minimum");
     q.addBindValue(QByteArray("PARAMETERS [Minimum] Long, [Pattern] Text(255); SELECT id,qty,label FROM items WHERE qty >= [Minimum] AND label LIKE [Pattern]"));
     assert(q.exec());
+    {
+        const auto imported=host.currentDatabase()->member("QueryDefs",{linaccess::VbaValue::string("minimum")}).object;
+        int typeError=0; try { (void)imported->member("Type",{}); }
+        catch(const linaccess::VbaRuntimeError& failure) { typeError=failure.number; }
+        assert(typeError==3251);
+    }
     const auto parameterized = linaccess::executeVbaProcedure(R"VBA(
 Sub QueryParameters()
 Dim definition As DAO.QueryDef
