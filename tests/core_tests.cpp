@@ -2748,6 +2748,11 @@ End Sub
         assert(fs::equivalent(fs::current_path(),child));
         assert(evaluate("CurDir()").asText()==child.string());
         assert(evaluate("CurDir").asText()==child.string());
+        assert(directoryRun("Me!CurrentNativeDirectory=CurDir").status==VbaExecutionStatus::Completed);
+        assert(host.fields["CurrentNativeDirectory"]==child.string());
+        const auto shadow=executeVbaProcedure("Function CurDir() As String\nCurDir=\"module function\"\nEnd Function\nSub ReadNativeDirectory()\nMe!CurrentNativeDirectory=CurDir\nEnd Sub", "ReadNativeDirectory",host);
+        assert(shadow.status==VbaExecutionStatus::Completed && host.fields["CurrentNativeDirectory"]=="module function");
+
         assert(evaluate("VBA.CurDir$(Drive:=\"\")").asText()==child.string());
         substringError("CurDir(Null)",94);
         substringError("CurDir(\"C\")",3251);

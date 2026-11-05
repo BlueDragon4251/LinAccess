@@ -1412,3 +1412,11 @@ Desktop48/48 (83.85 s), fresh headless1/1 (1.79 s), current package/build-ID/
 SQLite3.54.1 and original four hashes pass.456/384/72 stays fixed. Private GitHub
 branch still806d158; CAS ref update again returned UNKNOWN, no published-head
 claim for subsequent private immutable backups.
+
+
+SQL CurDir extension: compiler rewrites parenthesized CurDir to the same native
+VBA implementation via a non-deterministic SQLite callback. Prepared SELECT
+reexecution after an actual directory change and DAO String value passed.
+Targeted core/DAO/query3/3 (2.33 s), updated package/build-ID/SQLite and all four
+hashes passed; no full rerun claimed after bounded SQL adapter change. Full
+baseline48/48 (83.85 s), headless runtime1/1 (1.79 s).456/384/72 unchanged.
