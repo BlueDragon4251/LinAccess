@@ -10,6 +10,7 @@
 #include <QFontMetricsF>
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
+#include "native_access_cursor.hpp"
 #include "native_project_close_guard.hpp"
 #include "access_list_box.hpp"
 #include "native_send_keys.hpp"
@@ -141,6 +142,7 @@ QVector<QPointer<AccessFormPreview>>& pendingFormDisposals() {
 }
 void disposeClosedForms() {
     if (nativeExecutionDepth()!=0) return;
+    linaccess::resetNativeHourglass();
     auto pending=std::move(pendingFormDisposals()); pendingFormDisposals().clear();
     for (const auto& form:pending) if (form) form->deleteLater();
 }

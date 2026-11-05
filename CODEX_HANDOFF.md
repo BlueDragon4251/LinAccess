@@ -1456,3 +1456,11 @@ Qt owner guards. Actual query designer1→3→1→closed0 and pending query-reco
 passed. docs/NATIVE_ACCESS_STATUS.md. Targeted core/mainwindow/layout3/3 (15.13 s),
 fresh headless1/1 (1.76 s), current Debian/build-ID/SQLite3.54.1/four hashes pass.
 Last full baseline48/48 (83.85 s), catalog456/384/72 unchanged.
+
+DoCmd.Hourglass and Screen.MousePointer0/11 now control/observe a real owned Qt
+hourglass cursor, with automatic outer-native-execution success/error cleanup and
+nested-call retention. Original native raster cursor; no Windows pixel/animation
+claim. Foreign overrides are not popped; obscured ownership3251 and full stack
+interop remains open. docs/NATIVE_HOURGLASS.md. Existing core/mainwindow/layout3/3
+(14.78 s), fresh headless1/1 (1.67 s), current package/build-ID/SQLite3.54.1/four
+hashes pass. Last full baseline48/48 (83.85 s); F068 open,456/384/72 unchanged.
