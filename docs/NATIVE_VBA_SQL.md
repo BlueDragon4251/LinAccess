@@ -133,3 +133,19 @@ Typed make-table milestone (2026-11-05): full current desktop48/48 passed
 fixture hashes passed. GUI-free core runtime unchanged from fresh1/1 (2.36 s).
 Original-query coverage remains78/100 without Access result oracle. No new
 CTest target or catalog ID; fixed456/384/72. Native SQL scope: NATIVE_VBA_SQL.md.
+
+## Native Jet alias collision guard
+
+SQL adapter source aliases are now reserved alongside actual SQLite function
+names. A standard module's public FV declaration, for example, cannot supply
+Currency result proof to a source FV call rewritten to the native financial
+adapter. The native SQL builtin keeps its execution and no unrelated module
+declaration is used as metadata. Internal adapter suffix names are conservatively
+reserved as well. This does not establish complete Access module/library name
+priority; native calls inside a VBA module still use their existing resolver.
+
+Actual SQL FV(0,2,-10) returns20 even when archived VBA declares FV As Currency;
+the output is not falsely classified as Currency. Existing DAO/query/original
+3/3 (7.79 s), updated Debian/build-ID/SQLite3.54.1/four hashes pass. GUI-free
+runtime unchanged FileCopy1/1 (1.69 s), last broader full48/48 (87.98 s).
+F040/F068 remain open; no added target or catalog ID,456/384/72 unchanged.

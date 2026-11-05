@@ -1085,6 +1085,9 @@ End Function
 Public Function Abs() As Long
 Abs=999
 End Function
+Public Function FV(ByVal rate As Double, ByVal periods As Double, ByVal payment As Double) As Currency
+FV=CCur(999)
+End Function
 )VBA";
     const auto store=[&](const QString& name,const QByteArray& source) {
         sql.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('vba',?,?)"); sql.addBindValue(name); sql.addBindValue(source);
@@ -1097,6 +1100,9 @@ End Function
 )VBA");
     store("Form_PrivateContext","VERSION 1.0 CLASS\nPublic Function ClassOnly() As Long\nClassOnly=42\nEnd Function\n");
     linaccess::installJetSqlFunctions(db);
+    assert(!linaccess::nativeVbaSqlFunctionResultTypes(db).contains("fv"));
+    const auto builtinFuture=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT FV(0,2,-10) AS future"),{});
+    assert(builtinFuture.rows.size()==1 && builtinFuture.rows[0][0].toDouble()==20 && builtinFuture.columnTypes.value(0)!="CURRENCY_REAL");
     QSqlQuery rows(db); assert(rows.exec("SELECT NativeScale(value) FROM inputs ORDER BY value"));
     for(int expected:{2,4,6}) assert(rows.next() && rows.value(0).toInt()==expected); assert(!rows.next()); rows.finish();
     assert(rows.exec("SELECT NativeCalls(),NativeNested(3),NativeFlag(2),abs(-2)")); assert(rows.next());

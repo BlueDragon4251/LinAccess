@@ -1572,3 +1572,11 @@ selected combo-row removal, text-key removal and empty/Null-only edge cases rema
 bounded refusals. Full scope: docs/COMBO_LIST_PROPERTIES_RUNTIME.md. Final existing
 layout1/1 (10.66 s), current Debian/build-ID/SQLite/four hashes pass; headless runtime
 unchanged FileCopy1/1 (1.69 s), last full48/48 (87.98 s). F162 stays open;456/384/72.
+
+SQL/VBA registry now reserves source aliases of registered linaccess_jet_ adapters
+as well as actual SQLite names. This prevents public VBA FV As Currency from
+providing false Currency metadata to builtin SQL FV. Actual builtin result20
+and absent false Currency proof pass in existing DAO/query/original3/3 (7.79 s);
+Debian/build-ID/SQLite/four hashes pass. Core runtime unchanged FileCopy1/1
+(1.69 s), last full48/48 (87.98 s). Complete name-priority oracle remains open.
+Scope: docs/NATIVE_VBA_SQL.md; fixed456/384/72 unchanged.
