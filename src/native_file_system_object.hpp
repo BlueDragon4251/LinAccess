@@ -5,6 +5,34 @@
 #include <filesystem>
 
 namespace linaccess {
+// Read-only native file object. Metadata is read again rather than cached.
+class VbaFileObject final : public VbaObject {
+    std::filesystem::path path_;
+public:
+    explicit VbaFileObject(std::filesystem::path path) : path_(std::move(path)) {}
+    std::string_view className() const override { return "File"; }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        std::string method(name);
+        std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
+        if(method!="path" && method!="name" && method!="size") throw VbaRuntimeError(3251,"Native file member is not implemented");
+        if(!args.empty()) throw VbaRuntimeError(450,"File property takes no arguments");
+        if(method=="path") return VbaValue::string(path_.string());
+        if(method=="name") return VbaValue::string(path_.filename().string());
+        std::error_code error;
+        const auto status=std::filesystem::symlink_status(path_,error);
+        if(error==std::errc::no_such_file_or_directory || error==std::errc::not_a_directory) throw VbaRuntimeError(53,"File unavailable");
+        if(error==std::errc::permission_denied) throw VbaRuntimeError(70,"Filesystem permission denied");
+        if(error) throw VbaRuntimeError(75,"Native file metadata unavailable");
+        if(!std::filesystem::is_regular_file(status)) throw VbaRuntimeError(3251,"File metadata requires a regular file");
+        const auto size=std::filesystem::file_size(path_,error);
+        if(error==std::errc::permission_denied) throw VbaRuntimeError(70,"Filesystem permission denied");
+        if(error) throw VbaRuntimeError(75,"Native file size unavailable");
+        if(size>9007199254740991ULL) throw VbaRuntimeError(6,"File size exceeds exact numeric range");
+        if(size<=2147483647ULL) return VbaValue::longInteger(static_cast<std::int32_t>(size));
+        return VbaValue::numeric(static_cast<double>(size));
+    }
+    void assign(std::string_view,const VbaValue&) override { throw VbaRuntimeError(438,"Native file property is not writable"); }
+};
 // Stateless local filesystem adapter. No COM activation, host or database handle.
 class VbaFileSystemObject final : public VbaObject {
     static std::string key(std::string_view name) {
@@ -65,6 +93,7 @@ public:
     bool isNativeType(std::string_view type) const override { return type=="scripting.filesystemobject"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto method=key(name);
+        if(method=="getfile") return VbaArgumentSignature{{"FileSpec"},1};
         if(method=="fileexists") return VbaArgumentSignature{{"FileSpec"},1};
         if(method=="folderexists") return VbaArgumentSignature{{"FolderSpec"},1};
         if(method=="buildpath") return VbaArgumentSignature{{"Path","Name"},2};
@@ -76,7 +105,7 @@ public:
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto method=key(name);
         const bool lexical=method=="getfilename" || method=="getbasename" || method=="getextensionname" || method=="getparentfoldername";
-        if(!lexical && method!="fileexists" && method!="folderexists" && method!="buildpath" && method!="getabsolutepathname")
+        if(!lexical && method!="getfile" && method!="fileexists" && method!="folderexists" && method!="buildpath" && method!="getabsolutepathname")
             throw VbaRuntimeError(3251,"Native FileSystemObject member is not implemented");
         if(args.size()!=(method=="buildpath" ? 2u : 1u) || std::any_of(args.begin(),args.end(),[](const auto& value) { return value.kind==VbaValue::Kind::Missing; }))
             throw VbaRuntimeError(450,"Invalid FileSystemObject argument count");
@@ -94,6 +123,18 @@ public:
             result=result.lexically_normal();
             if(result.filename().empty() && result!=result.root_path()) result=result.parent_path();
             return VbaValue::string(result.string());
+        }
+        if(method=="getfile") {
+            if(source.empty()) throw VbaRuntimeError(53,"File unavailable");
+            auto absolute=std::filesystem::absolute(source,problem);
+            if(problem) failure(problem);
+            absolute=absolute.lexically_normal();
+            const auto status=std::filesystem::symlink_status(absolute,problem);
+            if(problem==std::errc::no_such_file_or_directory || problem==std::errc::not_a_directory) throw VbaRuntimeError(53,"File unavailable");
+            if(problem) failure(problem);
+            if(std::filesystem::is_symlink(status)) throw VbaRuntimeError(3251,"GetFile link semantics require reference validation");
+            if(!std::filesystem::is_regular_file(status)) throw VbaRuntimeError(53,"File unavailable");
+            return VbaValue::reference(std::make_shared<VbaFileObject>(std::move(absolute)));
         }
         if(source.empty()) return VbaValue::logical(false);
         const auto status=std::filesystem::status(source,problem);

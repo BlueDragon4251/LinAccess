@@ -2882,6 +2882,10 @@ Me!FsoExtension=fs.GetExtensionName(Path:="/missing/alpha-ä.tar.gz")
 Me!FsoParent=fs.GetParentFolderName(Path:="C:\docs\alpha-ä.tar.gz")
 Me!FsoWildcardLeaf=fs.GetFileName("C:\docs\*.csv")
 Me!FsoDriveOnly=fs.GetFileName("C:")
+Dim nativeFile As Object
+Set nativeFile=fs.GetFile(FileSpec:=Me!FsoFile)
+Me!FsoFileObject=TypeName(nativeFile) & ":" & CStr(VarType(nativeFile))
+Me!FsoFileMetadata=nativeFile.Path & "|" & nativeFile.Name & "|" & CStr(nativeFile.Size) & ":" & CStr(VarType(nativeFile.Size))
 
 On Error Resume Next
 Set fs=New Scripting.Dictionary
@@ -2897,6 +2901,8 @@ End Sub)VBA","ProbeFs",host);
         assert(host.fields["FsoIdentity"]=="FileSystemObject:9" && host.fields["FsoHasFile"]=="True" && host.fields["FsoHasFolder"]=="True");
         assert(host.fields["FsoLeaf"]=="alpha-ä.tar.gz" && host.fields["FsoBase"]=="alpha-ä.tar" && host.fields["FsoExtension"]=="gz");
         assert(host.fields["FsoParent"]=="C:\\docs" && host.fields["FsoWildcardLeaf"]=="*.csv" && host.fields["FsoDriveOnly"]=="");
+        assert(host.fields["FsoFileObject"]=="File:9");
+        assert(host.fields["FsoFileMetadata"]==file.string()+"|"+file.filename().string()+"|3:3");
         assert(host.fields["FsoWrongKinds"]=="False:False" && host.fields["FsoMissing"]=="False" && host.fields["FsoAbsolute"]==fs::current_path().string());
         VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
         const auto fileEvaluate=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,paths); };
@@ -2919,7 +2925,11 @@ End Sub)VBA","ProbeFs",host);
         };
         fileError((directory/"missing.dat").string(),53); fileError((directory/"missing"/"file.dat").string(),76);
         fileError(directory.string(),75); fileError(std::string("bad\0path",8),52); fileError("C:\\native.dat",3251);
+        paths["filepath"]=VbaValue::string(file.string());
+        const auto liveFile=fileEvaluate("CreateObject(\"Scripting.FileSystemObject\").GetFile(filePath)");
         fs::resize_file(file,std::uintmax_t(1)<<31); fileError(file.string(),6);
+        const auto largeSize=liveFile.object->member("Size",{});
+        assert(largeSize.asNumber()==2147483648.0 && largeSize.numericType==VbaValue::NumericType::Double);
         substringError("FileLen(Null)",94); substringError("FileDateTime(Null)",94); substringError("FileLen()",450);
         fs::remove_all(directory);
     }

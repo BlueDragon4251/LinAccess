@@ -55,3 +55,28 @@ This does not enable Windows paths for physical filesystem operations.
 Path-component increment: desktop core1/1 (1.73 s), fresh GUI-free core1/1
 (1.72 s), current Debian/build-ID/SQLite/four fixture hashes pass. The broader
 48/48 above precedes this increment. No new test target or catalog ID.
+
+## Native GetFile objects
+
+GetFile(FileSpec) resolves an actual existing regular Linux file and returns
+a real independent native File object (TypeName File, VarType9). Path is the
+normalized absolute path, Name is its final component, and Size reads the
+filesystem again on each access. No host, stream or database handle is retained.
+Sizes through signed Long maximum retain Long; larger exact sizes use Double.
+Beyond the exact Double integer range raises6 instead of returning rounded data.
+Missing files raise53; final symlinks and nonregular objects remain bounded.
+
+Only these three property reads are implemented. File mutations, default-member
+behavior, qualified Scripting.File binding, parent folders, timestamps, attributes,
+sharing, Windows drive mapping and race/identity semantics remain unimplemented
+or unvalidated. A retained path does not pin the original inode. This is not a
+full Windows File object contract.
+
+References: [GetFile](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/getfile-method),
+[File](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/file-object),
+[Size](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/size-property-filesystemobject-object).
+Numeric size policy cross-checked against the public Wine scrrun implementation;
+no Windows Access result oracle is claimed.
+
+GetFile validation: desktop core1/1 (1.82 s), fresh headless1/1 (1.72 s),
+current Debian/build-ID/SQLite/four original fixture hashes pass.
