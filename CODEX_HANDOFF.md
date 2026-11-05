@@ -1523,3 +1523,20 @@ Next useful bridge stage: proven declared Currency/Date return metadata/transpor
 with stale-signature guards; do not simply convert unknown variants to REAL/TEXT.
 GitHub branch still needs verified non-force CAS push; immutable backups are not
 published branch updates. Maintain privacy and original test-copy/hash policy.
+
+Declared SQL/VBA Currency/Date transport added using source-only native procedure
+signature API (nativeVbaProcedureSignature) and contextual compiler hints. Currency
+uses existing checked CURRENCY_REAL limits, Date canonical DATETIME. Live native
+result guards reject changed return signatures on retained prepared SQL3251; no
+observed-value type guesses. Actual DAO Currency5/Date8/Long4 values and Boolean,
+exact Currency sum, typed INSERT, no-effect metadata preparation and signature
+restoration passed. Unknown Variant Currency/Date, Single/full DAO scalar metadata,
+argument provenance and full compound/nested/view typing remain open. Typed-function
+make-table explicitly3251/no table because created-column metadata is not proven.
+Unaliased guarded function projections retain original-expression native labels;
+no Windows Expr1000 naming claim. docs/NATIVE_VBA_SQL.md. Full48/48 (85.94 s),
+fresh headless1/1 (2.36 s), final label fix afterward DAO/query/original3/3 (8.36 s),
+updated Debian/build-ID/SQLite3.54.1/four hashes pass. Original78/100 unchanged,
+no Access oracle; F014/F068/F121 still open,456/384/72 fixed. Next natural work:
+proven make-table output types or read-only/reentrant DAO inside SQL callbacks,
+with real object/connection lifetime guards; do not remove restrictions blindly.

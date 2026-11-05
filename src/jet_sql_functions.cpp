@@ -675,6 +675,9 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_object_value",3,&objectValue,nullptr,nullptr);
     vba_sql::install(db,connection);
 }
+QMap<QString,QString> nativeVbaSqlFunctionResultTypes(QSqlDatabase db) {
+    installJetSqlFunctions(db); return vba_sql::declaredTypes(db);
+}
 void setJetSqlObjectResolver(QSqlDatabase db,JetSqlObjectResolver resolver) {
     installJetSqlFunctions(db);
     objectContext(db)->resolver=std::move(resolver);

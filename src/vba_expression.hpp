@@ -60,6 +60,9 @@ struct VbaArgumentSignature {
     bool objectArgument(std::size_t position,std::string_view name={}) const;
 };
 
+// Source-only declaration metadata; never executes a procedure or retains a host.
+std::optional<VbaArgumentSignature> nativeVbaProcedureSignature(std::string_view module,std::string_view procedure);
+
 // Late-bound Access/DAO members. Unknown properties and methods must throw.
 class VbaObject {
 public:

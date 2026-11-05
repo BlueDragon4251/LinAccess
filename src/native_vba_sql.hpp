@@ -3,6 +3,8 @@
 #include "vba_expression.hpp"
 #include "vba_module_context.hpp"
 #include "vba_source_codec.hpp"
+#include "vba_qt_value.hpp"
+#include "vba_currency.hpp"
 #include <QMap>
 #include <QPointer>
 #include <QRegularExpression>
@@ -24,6 +26,7 @@ struct Lifetime { bool alive{true}; };
 struct Procedure {
     std::shared_ptr<const std::string> module;
     bool function{},ambiguous{};
+    std::string resultType;
 };
 class Registry final : public QObject {
 public:
@@ -108,7 +111,10 @@ inline void refresh(QSqlDatabase db,sqlite3* native,Registry& registry) {
                 if(item.line<1 || item.line>lines.size() || privateDeclaration.match(lines[item.line-1]).hasMatch()) continue;
                 const bool function=QString::fromStdString(item.kind).compare("function",Qt::CaseInsensitive)==0;
                 if(auto found=procedures.find(key);found!=procedures.end()) { found->ambiguous=true; found->function|=function; }
-                else procedures.insert(key,{module,function,false});
+                else {
+                    const auto signature=function ? nativeVbaProcedureSignature(*module,item.name) : std::optional<VbaArgumentSignature>{};
+                    procedures.insert(key,{module,function,false,signature && signature->function ? signature->resultType : std::string{}});
+                }
                 if(procedures.size()>4096) throw VbaRuntimeError(3251,"VBA SQL procedure inventory limit exceeded");
             }
         }
@@ -210,6 +216,12 @@ inline void invoke(sqlite3_context* context,int count,sqlite3_value** values) no
         const auto& value=*result.typedReturnValue;
         if(value.kind==VbaValue::Kind::Null) sqlite3_result_null(context);
         else if(value.kind==VbaValue::Kind::Boolean) sqlite3_result_int64(context,value.boolean ? -1 : 0);
+        else if(value.kind==VbaValue::Kind::Currency && definition.resultType=="currency")
+            sqlite3_result_double(context,currencyToRealStorage(value));
+        else if(value.kind==VbaValue::Kind::Date && definition.resultType=="date") {
+            const auto text=sqlFieldValue(value,"DATETIME").toString().toUtf8();
+            sqlite3_result_text(context,text.constData(),text.size(),SQLITE_TRANSIENT);
+        }
         else if(value.kind==VbaValue::Kind::Number) {
             if(!std::isfinite(value.number)) throw VbaRuntimeError(6,"VBA SQL numeric overflow");
             if(value.numericType==VbaValue::NumericType::Double || value.numericType==VbaValue::NumericType::Single) sqlite3_result_double(context,value.number);
@@ -221,6 +233,34 @@ inline void invoke(sqlite3_context* context,int count,sqlite3_value** values) no
         } else throw VbaRuntimeError(3251,"VBA SQL result type requires unavailable transport metadata");
     } catch(const VbaRuntimeError& error) { failure(context,error.number); }
       catch(...) { sqlite3_result_error(context,"Native VBA SQL execution failed",-1); }
+}
+inline void resultGuard(sqlite3_context* context,int count,sqlite3_value** values) noexcept {
+    try {
+        auto* binding=static_cast<TraceBinding*>(sqlite3_user_data(context));
+        if(!binding || !binding->registry || !binding->lifetime->alive || binding->registry->lifetime!=binding->lifetime)
+            throw VbaRuntimeError(3420,"VBA SQL result declaration expired");
+        if(count!=3 || sqlite3_value_type(values[0])!=SQLITE_TEXT || sqlite3_value_type(values[1])!=SQLITE_TEXT)
+            throw VbaRuntimeError(450,"VBA SQL result guard requires declaration metadata");
+        auto& registry=*binding->registry; auto* native=sqlite3_context_db_handle(context);
+        auto db=registry.database(native); refresh(db,native,registry);
+        const auto name=QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_value_text(values[0])),sqlite3_value_bytes(values[0])).toCaseFolded();
+        const auto expected=QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_value_text(values[1])),sqlite3_value_bytes(values[1])).toStdString();
+        const auto procedure=registry.procedures.value(name);
+        if(!procedure.module || !procedure.function || procedure.ambiguous || procedure.resultType!=expected || !registry.registered.contains(name))
+            throw VbaRuntimeError(3251,"VBA SQL function result declaration changed; reprepare required");
+        sqlite3_result_value(context,values[2]);
+    } catch(const VbaRuntimeError& error) { failure(context,error.number); }
+      catch(...) { sqlite3_result_error(context,"Native VBA SQL result declaration failed",-1); }
+}
+inline QMap<QString,QString> declaredTypes(QSqlDatabase db) {
+    for(auto* child:db.driver()->children()) if(auto* registry=dynamic_cast<Registry*>(child)) {
+        QMap<QString,QString> types;
+        for(auto it=registry->procedures.cbegin();it!=registry->procedures.cend();++it)
+            if(it->function && !it->ambiguous && !it->resultType.empty() && registry->registered.contains(it.key()))
+                types.insert(it.key(),QString::fromStdString(it->resultType));
+        return types;
+    }
+    return {};
 }
 inline void install(QSqlDatabase db,sqlite3* native) {
     Registry* registry=nullptr;
@@ -246,6 +286,10 @@ inline void install(QSqlDatabase db,sqlite3* native) {
             },token)!=SQLITE_OK) {
             registry->lifetime->alive=false; throw VbaRuntimeError(3251,"VBA SQL statement generation unavailable");
         }
+        auto* guard=new TraceBinding{registry,registry->lifetime};
+        if(sqlite3_create_function_v2(native,"linaccess_vba_result",3,SQLITE_UTF8,guard,&resultGuard,nullptr,nullptr,
+            [](void* pointer) { delete static_cast<TraceBinding*>(pointer); })!=SQLITE_OK)
+            throw VbaRuntimeError(3251,"VBA SQL result guard registration failed");
         registry->statementEpoch=0; registry->observedEpoch=std::numeric_limits<quint64>::max();
         registry->connectionName=db.connectionName(); registry->databaseName=db.databaseName();
         registry->registered.clear(); registry->procedures.clear(); registry->sources.clear();

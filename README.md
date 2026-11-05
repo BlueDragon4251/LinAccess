@@ -75,8 +75,9 @@ Abfragemetadaten, einschließlich mehrspaltiger Auswahl und gebundener Speicheru
 
 Öffentliche Standardmodulfunktionen können außerdem in tatsächlichen nativen
 SQL-SELECTs und UPDATE-Berechnungen ausgeführt werden, mit geteiltem Modul-/Static-
-Zustand. Diese erste skalare SQL-/VBA-Stufe bietet keinen GUI-/DAO-Aufrufkontext und
-keinen vollständigen Geld-/Datums-/Objekttransport:
+Zustand. Deklarierte Geld-/Datumsrückgaben werden in unterstützten Projektionen
+typisiert und gegen veraltete Funktionsdeklarationen geprüft. GUI-/DAO-Kontext,
+allgemeiner Objekt-/Varianttransport und vollständige Jet-Typweitergabe bleiben offen:
 [SQL-/VBA-Ausführung und Grenzen](docs/NATIVE_VBA_SQL.md).
 
 

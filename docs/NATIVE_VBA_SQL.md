@@ -34,10 +34,11 @@ changes to these temporaries do not become writes to the originating SQL field.
 Arguments transport SQL NULL, finite numeric values and valid UTF-8 text including
 embedded NULs. Integer values beyond exact Double transport are refused3251. The
 native procedure binder applies supported declared types/defaults. Results support
-Null, Boolean with True=-1, finite Number and valid String. Empty, Currency, Date,
-BLOB, array/object/error results and complete Jet projection/Variant metadata need
-further transport/type work and are explicitly refused3251. This is not complete
-SQL/VBA type equivalence.
+Null, Boolean with True=-1, finite Number and valid String. Proven declared Currency
+and Date results additionally use the bounded typed transport below. Empty, BLOB,
+array/object/error results and Currency/Date carried by unproven Variant returns
+remain refused3251. Complete Jet projection/argument-Variant metadata is not added.
+This is not complete SQL/VBA type equivalence.
 
 There is no GUI or DAO execution context inside the SQL host. Direct UI/database
 host operations are refused. Existing non-null object and general array values in
@@ -85,3 +86,38 @@ Debian/build-ID/SQLite3.54.1 and all four original fixture hashes pass. GUI-free
 runtime remains the unchanged fresh1/1 (1.66 s) from the string-mutation segment;
 the SQL bridge itself is exercised by the Qt Core/SQL DAO target without Widgets.
 F040/F068/F121 stay open; fixed catalog456/384/72 remains unchanged.
+
+
+## Proven declared Currency and Date results
+
+The registry now obtains source-only result declarations from the actual native
+procedure compiler. Metadata inspection does not execute a function or acquire a
+form host. Contextual query compilation uses supported declarations for its proven
+projection types. Currency uses the existing checked CURRENCY_REAL carrier/range;
+Date uses the existing canonical DATETIME adapter. Native Long projections retain
+Long value/type proof. Boolean values normalize True=-1; complete DAO metadata for
+all other scalar types, Single and arbitrary Variant results remains open.
+
+Generated result guards compare each compiled return declaration against the live
+module declaration. A retained prepared query whose function changes from Currency
+to Double fails3251 rather than silently retaining obsolete Currency metadata;
+restoring the declaration makes the prepared path usable again. Unknown Currency/
+Date Variant returns are not guessed from observed values. SQL argument provenance,
+all nested/compound/view/HAVING type propagation and complete Jet coercion semantics
+remain open; proof applies to the adapter's supported projection/action shapes.
+
+Existing typed INSERT/UPDATE expression paths receive the same function declaration
+map and storage guards. Typed function make-table cases explicitly3251 because the
+created-column metadata contract is not implemented; no target table is left behind.
+Unaliased supported function projections use their original expression as the native
+column label, keeping internal result-guard names out of the displayed field name.
+This is not a claim of Windows Access's generated Expr1000 naming rules.
+
+Actual DAO/query cases verify Currency units1000 and exact Currency addition3000,
+Date value2024-02-29 12:34:56 with field type8, Currency field type5, Long field type4,
+Boolean identity, metadata inspection without counter effects, typed INSERT,
+stale-signature refusal/restoration and make-table refusal without mutation.
+Full48/48 (85.94 s), fresh GUI-free core1/1 (2.36 s); final label change afterward
+passed targeted DAO/query/original-corpus3/3 (8.36 s). Updated Debian/build-ID/
+SQLite3.54.1 and all four original hashes pass. Original corpus stays78/100;
+no Windows result oracle, new target or catalog ID.456/384/72 unchanged.
