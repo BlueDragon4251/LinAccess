@@ -65,6 +65,8 @@ QString accessLikePattern(const QString& value);
 AccessQueryPlan compileAccessQuery(const QString& source);
 // Resolves compiled action metadata against the live writable destination.
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan);
+// Recover the SELECT source through SQL tokens, preserving parameter declarations.
+AccessQueryPlan accessMakeTableSource(QSqlDatabase db,const AccessQueryPlan& plan);
 AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& criteria);
 QString accessOrderByClause(const QString& orderBy,const QStringList& columns,const QString& tableQualifier={});
 AccessQueryPlan sortAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& orderBy);

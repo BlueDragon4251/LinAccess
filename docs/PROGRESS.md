@@ -5774,3 +5774,9 @@ Begrenztes natives VBA-/SQL-Partition mit benannten Argumenten und tatsächliche
 SQL-Gruppierung ist implementiert: [Umfang und Grenzen](NATIVE_PARTITION.md).
 Vollstand danach48/48 (84.06 s), GUI-freier Core1/1, Paket und vier Originalfixture-
 Hashes bestanden; fester Arbeitskatalog unverändert456/384/72.
+
+Typed make-table milestone (2026-11-05): full current desktop48/48 passed
+(87.98 s); Debian payload/build-ID/pinned SQLite3.54.1 and all four original
+fixture hashes passed. GUI-free core runtime unchanged from fresh1/1 (2.36 s).
+Original-query coverage remains78/100 without Access result oracle. No new
+CTest target or catalog ID; fixed456/384/72. Native SQL scope: NATIVE_VBA_SQL.md.

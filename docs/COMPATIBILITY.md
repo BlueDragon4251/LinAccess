@@ -2914,8 +2914,15 @@ checked CURRENCY_REAL/DATETIME transport and live result-declaration guards. Act
 DAO fields retain Currency5/Date8 and values; metadata preparation has no body
 counter effects. Typed arithmetic/INSERT and stale prepared-signature rejection are
 covered. Unknown Variant transports, complete compound/nested/argument type
-propagation and typed-function make-table metadata remain open (make-table3251,
+propagation and complete make-table metadata remain open (complex typed shapes3251,
 no target created). Unaliased function labels show the original expression instead
 of internal guard calls. Full48/48 (85.94 s), fresh core1/1 (2.36 s), subsequent label
 DAO/query/original3/3 (8.36 s), updated package/SQLite/four hashes pass. Original78/100
 unchanged; [scope](NATIVE_VBA_SQL.md),456/384/72, F014/F068/F121 still open.
+
+Simple native SELECT INTO now creates proven Currency/Date output declarations and
+copies actual source rows atomically. Output metadata preparation does not evaluate
+VBA bodies; failed source execution rolls back the destination. Unproven columns
+remain untyped, and typed UNION/TOP/ranked/RIGHT JOIN shapes or duplicate names are
+explicitly refused. AutoNumber/keys/defaults/validation/complete Jet metadata remain
+open under F014/F130; no additional catalog point. docs/NATIVE_VBA_SQL.md.

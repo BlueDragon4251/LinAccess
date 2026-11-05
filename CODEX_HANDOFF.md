@@ -1532,7 +1532,8 @@ observed-value type guesses. Actual DAO Currency5/Date8/Long4 values and Boolean
 exact Currency sum, typed INSERT, no-effect metadata preparation and signature
 restoration passed. Unknown Variant Currency/Date, Single/full DAO scalar metadata,
 argument provenance and full compound/nested/view typing remain open. Typed-function
-make-table explicitly3251/no table because created-column metadata is not proven.
+make-table initially refused3251; the subsequent bounded typed make-table stage
+below supersedes that restriction for simple SELECT sources.
 Unaliased guarded function projections retain original-expression native labels;
 no Windows Expr1000 naming claim. docs/NATIVE_VBA_SQL.md. Full48/48 (85.94 s),
 fresh headless1/1 (2.36 s), final label fix afterward DAO/query/original3/3 (8.36 s),
@@ -1540,3 +1541,18 @@ updated Debian/build-ID/SQLite3.54.1/four hashes pass. Original78/100 unchanged,
 no Access oracle; F014/F068/F121 still open,456/384/72 fixed. Next natural work:
 proven make-table output types or read-only/reentrant DAO inside SQL callbacks,
 with real object/connection lifetime guards; do not remove restrictions blindly.
+
+Bounded typed SELECT INTO now uses token-derived SELECT source metadata, explicit
+CURRENCY_REAL/DATETIME columns and INSERT SELECT inside the existing DAO savepoint.
+Output metadata is prepared without source-body execution. Actual three-row money/
+date copying and failure rollback pass in the existing DAO target. Unknown output
+columns are untyped; typed compound/UNION/TOP/ranked/RIGHT JOIN and duplicate labels
+refuse3251. No AutoNumber/keys/defaults/validation or full Jet metadata claim. Source
+function state effects are not transactionally rolled back. F014/F130 remain open;
+fixed456/384/72 unchanged. See docs/NATIVE_VBA_SQL.md.
+
+Typed make-table milestone (2026-11-05): full current desktop48/48 passed
+(87.98 s); Debian payload/build-ID/pinned SQLite3.54.1 and all four original
+fixture hashes passed. GUI-free core runtime unchanged from fresh1/1 (2.36 s).
+Original-query coverage remains78/100 without Access result oracle. No new
+CTest target or catalog ID; fixed456/384/72. Native SQL scope: NATIVE_VBA_SQL.md.

@@ -1372,6 +1372,25 @@ static QString checkedUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     installJetSqlFunctions(db);
     return result;
 }
+AccessQueryPlan accessMakeTableSource(QSqlDatabase db,const AccessQueryPlan& plan) {
+    if(plan.makeTable.isEmpty() || plan.source.isEmpty() || plan.sql!=plan.compiledSql)
+        throw VbaRuntimeError(3251,"Make-table source metadata unavailable");
+    auto tokens=tokenize(plan.source); int depth=0; bool removed=false;
+    for(qsizetype i=0;i+1<tokens.size();++i) {
+        if(symbol(tokens[i],"(")) ++depth;
+        else if(symbol(tokens[i],")")) --depth;
+        else if(depth==0 && tokens[i].kind==Token::Word && tokens[i].value.compare("INTO",Qt::CaseInsensitive)==0) {
+            if(tokens[i+1].value.compare(plan.makeTable,Qt::CaseInsensitive)!=0)
+                throw VbaRuntimeError(3251,"Make-table destination metadata changed");
+            tokens.remove(i,2); removed=true; break;
+        }
+    }
+    if(!removed) throw VbaRuntimeError(3251,"Make-table SELECT source unavailable");
+    auto select=resolveCurrencyQuery(db,compileAccessQuery(renderJetTokens(tokens)));
+    if(!select.makeTable.isEmpty() || !select.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
+        throw VbaRuntimeError(3251,"Complex typed make-table source unsupported");
+    return select;
+}
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     if(!plan.makeTable.isEmpty()) {
         const auto functions=nativeVbaSqlFunctionResultTypes(db); const auto tokens=tokenize(plan.source);
