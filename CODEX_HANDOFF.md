@@ -1367,3 +1367,23 @@ Eigenschaften/-Bearbeitung, vollständige Windows-Timing-/Formatgleichheit offen
 Aktueller Vollstand48/48 (85.12 s); danach nur Importhinweistext geändert,
 Inspector1/1 (11.04 s), finales Paket/Build-ID/SQLite/vier Originalfixture-Hashes
 bestanden. Core unverändert1/1 (1.66 s). Weiterhin456/384/72, keine neue Testzielzahl.
+
+Neue-Tabelle-Dialog unterstützt nun echte literale Standardwerte mit
+Typprüfung und normalisiertem Boolean0/-1. Validierung erfolgt vor CREATE TABLE;
+Fehler lassen Dialog/Feldliste geöffnet, Schließen nur nach Erfolg. Auto-id und
+das begrenzte Erstellungsschema bleiben; vollständiger Access-Tabellendesigner offen.
+Bestehender Mainwindow-Fall prüft abgewiesenen Ausdruck ohne Tabelle/Datenverlust,
+anschließende gültige Erstellung und tatsächliches DEFAULT-VALUES-Ergebnis.
+UI1/1 (2.82 s), aktuelles Paket/Build-ID/SQLite und vier Originalfixture-Hashes
+bestanden. Letzter Vollstand davor48/48 (85.12 s), Core unverändert1/1 (1.66 s).
+docs/SOURCE_LITERAL_DEFAULTS.md; weiterhin456/384/72.
+
+Push-Status 2026-11-05: letzter verifizierter Arbeitsbranch-Remote ist
+806d1581802b6026ee60688021041c5ee8b40f76 (Repository weiterhin privat).
+Geprüfte Literaldefaults liegen lokal in35a68112a70b5460ce594b705439ec8522156858;
+ihr identischer GitHub-Git-Tree b12d338dfa3edb269ed84eb7534f3f7a05ac9d6c und
+Commit8943d06ee6ca2a92e389fc58754e00a08df3ccfc wurden erstellt, der Branch konnte
+wegen GitHub-Serverfehlern bei GraphQL-/REST-Ref-Updates nicht bewegt werden.
+Auch Contents-API scheiterte; der Remote blieb unverändert. Nicht als gepusht
+behaupten. Private externe Checkpoint-/Patch-Sicherung unter linaccess-onboarding;
+keine öffentlichen Artefakte, kein Force-Push, keine Recovery-Branch wurde erzeugt.

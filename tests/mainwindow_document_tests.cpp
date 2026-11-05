@@ -26,6 +26,7 @@
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QTableView>
+#include <QTableWidget>
 #include <QTabWidget>
 #include <QTabBar>
 #include <QContextMenuEvent>
@@ -2320,6 +2321,28 @@ int main(int argc,char** argv) {
     exercisePageNavigation(window,db);
     exerciseStoredForm(window,db);
     exerciseStoredReport(window,db);
+    {
+        QTimer::singleShot(0,&window,[&] {
+            auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-table-designer");
+            dialog->findChild<QLineEdit*>("native-table-name")->setText("authored_defaults");
+            auto* grid=dialog->findChild<QTableWidget*>("native-table-fields"); assert(grid && grid->columnCount()==4);
+            grid->item(0,0)->setText("qty"); qobject_cast<QComboBox*>(grid->cellWidget(0,1))->setCurrentText("INTEGER");
+            grid->item(0,2)->setText("ja"); grid->item(0,3)->setText("Now()");
+            auto* buttons=dialog->findChild<QDialogButtonBox*>(); assert(buttons);
+            QTimer::singleShot(0,dialog,[] { auto* error=qobject_cast<QMessageBox*>(QApplication::activeModalWidget()); assert(error); error->accept(); });
+            buttons->button(QDialogButtonBox::Save)->click();
+            assert(dialog->isVisible() && grid->item(0,0)->text()=="qty" && !db.tables().contains("authored_defaults"));
+            grid->item(0,3)->setText("7"); dialog->findChild<QPushButton*>("native-table-add-field")->click();
+            grid->item(1,0)->setText("label"); grid->item(1,3)->setText("\"ui value\"");
+            dialog->findChild<QPushButton*>("native-table-add-field")->click();
+            grid->item(2,0)->setText("enabled"); qobject_cast<QComboBox*>(grid->cellWidget(2,1))->setCurrentText("BOOLEAN"); grid->item(2,3)->setText("True");
+            buttons->button(QDialogButtonBox::Save)->click();
+        });
+        action(window,"+ Tabelle")->trigger();
+        QSqlQuery authored(db); assert(authored.exec("INSERT INTO authored_defaults DEFAULT VALUES"));
+        assert(authored.exec("SELECT qty,label,enabled FROM authored_defaults") && authored.next());
+        assert(authored.value(0).toInt()==7 && authored.value(1).toString()=="ui value" && authored.value(2).toInt()==-1); authored.finish();
+    }
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

@@ -11,6 +11,7 @@
 #include <QScopeGuard>
 
 #include "access_inspector.hpp"
+#include "access_table_import.hpp"
 #include "access_form_import.hpp"
 #include "access_form_preview.hpp"
 #include "native_stored_form.hpp"
@@ -30,6 +31,7 @@
 #include "access_format.hpp"
 #include "vba_source_codec.hpp"
 
+#include <cmath>
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -1526,66 +1528,76 @@ void MainWindow::showAccessArtifact(int id) {
 
 void MainWindow::newTable() {
     if (!hasProject()) return;
-    QDialog dialog(this);
-    dialog.setWindowTitle("Neue Tabelle");
-    dialog.resize(610, 440);
-    auto* outer = new QVBoxLayout(&dialog);
-    auto* name = new QLineEdit(&dialog);
-    name->setPlaceholderText("Tabellenname");
-    outer->addWidget(name);
-    outer->addWidget(new QLabel("Felder (id wird automatisch als Primärschlüssel angelegt)"));
-    auto* grid = new QTableWidget(0, 3, &dialog);
-    grid->setHorizontalHeaderLabels({"Feldname", "Datentyp", "Pflichtfeld (ja/nein)"});
-    grid->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    outer->addWidget(grid);
-    auto addRow = [grid] {
-        const int row = grid->rowCount();
-        grid->insertRow(row);
-        grid->setItem(row, 0, new QTableWidgetItem());
-        auto* type = new QComboBox(grid);
-        type->addItems({"TEXT", "INTEGER", "REAL", "DATE", "BOOLEAN", "BLOB"});
-        grid->setCellWidget(row, 1, type);
-        grid->setItem(row, 2, new QTableWidgetItem("nein"));
+    QDialog dialog(this); dialog.setObjectName("native-table-designer");
+    dialog.setWindowTitle("Neue Tabelle"); dialog.resize(760,440);
+    auto* outer=new QVBoxLayout(&dialog);
+    auto* name=new QLineEdit(&dialog); name->setObjectName("native-table-name"); name->setPlaceholderText("Tabellenname"); outer->addWidget(name);
+    outer->addWidget(new QLabel("Felder (id wird automatisch als Primärschlüssel angelegt)",&dialog));
+    auto* grid=new QTableWidget(0,4,&dialog); grid->setObjectName("native-table-fields");
+    grid->setHorizontalHeaderLabels({"Feldname","Datentyp","Pflichtfeld (ja/nein)","Standardwert (optional)"});
+    grid->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch); outer->addWidget(grid);
+    outer->addWidget(new QLabel("Standardwerte als Literal: Zahl, True/False, \"Text\" oder Null.",&dialog));
+    const auto addRow=[grid] {
+        const int row=grid->rowCount(); grid->insertRow(row);
+        grid->setItem(row,0,new QTableWidgetItem());
+        auto* type=new QComboBox(grid); type->addItems({"TEXT","INTEGER","REAL","DATE","BOOLEAN","BLOB"}); grid->setCellWidget(row,1,type);
+        grid->setItem(row,2,new QTableWidgetItem("nein")); grid->setItem(row,3,new QTableWidgetItem());
     };
-    auto* plus = addButton(outer, "+ Feld");
-    connect(plus, &QPushButton::clicked, &dialog, addRow);
-    addRow();
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
-    outer->addWidget(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    if (dialog.exec() != QDialog::Accepted) return;
-    const auto tableName = name->text().trimmed();
-    if (tableName.isEmpty() || tableName.startsWith("_la_", Qt::CaseInsensitive) ||
-        tableName.startsWith("sqlite_", Qt::CaseInsensitive)) {
-        messageError(this, "Ungültiger/reservierter Tabellenname");
-        return;
-    }
-    QStringList columns = {"\"id\" INTEGER PRIMARY KEY AUTOINCREMENT"};
-    std::set<QString> seen = {"id"};
-    for (int row = 0; row < grid->rowCount(); ++row) {
-        const auto field = grid->item(row, 0)->text().trimmed();
-        if (field.isEmpty()) continue;
-        if (field.startsWith("_la_", Qt::CaseInsensitive) || seen.contains(field.toCaseFolded())) {
-            messageError(this, "Reservierter oder doppelter Feldname: " + field);
-            return;
+    auto* plus=addButton(outer,"+ Feld"); plus->setObjectName("native-table-add-field"); connect(plus,&QPushButton::clicked,&dialog,addRow); addRow();
+    auto* buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,&dialog); outer->addWidget(buttons);
+    connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
+    connect(buttons,&QDialogButtonBox::accepted,&dialog,[&] {
+        const auto tableName=name->text().trimmed();
+        if(tableName.isEmpty() || tableName.startsWith("_la_",Qt::CaseInsensitive) || tableName.startsWith("sqlite_",Qt::CaseInsensitive)) {
+            messageError(&dialog,"Ungültiger/reservierter Tabellenname"); return;
         }
-        seen.insert(field.toCaseFolded());
-        const auto type = qobject_cast<QComboBox*>(grid->cellWidget(row, 1))->currentText();
-        const auto required = grid->item(row, 2)->text().trimmed().toLower();
-        if (required != "ja" && required != "nein" && !required.isEmpty()) {
-            messageError(this, "Pflichtfeld muss ja oder nein sein");
-            return;
+        QStringList columns={"\"id\" INTEGER PRIMARY KEY AUTOINCREMENT"}; std::set<QString> seen={"id"};
+        for(int row=0;row<grid->rowCount();++row) {
+            const auto field=grid->item(row,0)->text().trimmed(); if(field.isEmpty()) continue;
+            if(field.startsWith("_la_",Qt::CaseInsensitive) || seen.contains(field.toCaseFolded())) {
+                messageError(&dialog,"Reservierter oder doppelter Feldname: "+field); return;
+            }
+            seen.insert(field.toCaseFolded());
+            const auto type=qobject_cast<QComboBox*>(grid->cellWidget(row,1))->currentText();
+            const auto required=grid->item(row,2)->text().trimmed().toLower();
+            if(required!="ja" && required!="nein" && !required.isEmpty()) { messageError(&dialog,"Pflichtfeld muss ja oder nein sein"); return; }
+            const auto token=grid->item(row,3)->text().trimmed(); QString defaultSql;
+            if(!token.isEmpty()) {
+                const auto literal=linaccess::accessLiteralDefaultSql(token);
+                if(!literal || token.size()>255) { messageError(&dialog,"Standardwert: Literal mit höchstens 255 Zeichen eingeben; allgemeine Ausdrücke sind noch nicht unterstützt."); return; }
+                QSqlQuery value(db_);
+                if(!value.exec("SELECT "+*literal) || !value.next()) { messageError(&dialog,"Standardwert konnte nicht gelesen werden."); return; }
+                const auto scalar=value.value(0); defaultSql=*literal;
+                if(!scalar.isNull()) {
+                    const auto kind=scalar.metaType().id(); const bool numeric=kind==QMetaType::Int || kind==QMetaType::LongLong || kind==QMetaType::Double;
+                    if(type=="TEXT" && kind!=QMetaType::QString) { messageError(&dialog,"Text-Standardwert in Anführungszeichen eingeben."); return; }
+                    if(type=="INTEGER") {
+                        if(!numeric || (kind==QMetaType::Double && (std::floor(scalar.toDouble())!=scalar.toDouble() || std::abs(scalar.toDouble())>9007199254740991.0))) {
+                            messageError(&dialog,"Ganzzahligen Standardwert eingeben."); return;
+                        }
+                        defaultSql=QString::number(scalar.toLongLong());
+                    }
+                    if(type=="REAL" && !numeric) { messageError(&dialog,"Numerischen Standardwert eingeben."); return; }
+                    if(type=="BOOLEAN") {
+                        if(!numeric) { messageError(&dialog,"Boolean-Standardwert als True, False oder Zahl eingeben."); return; }
+                        defaultSql=scalar.toDouble()==0 ? "0" : "-1";
+                    }
+                    if(type=="DATE") {
+                        try { (void)linaccess::qtFieldValue(scalar,"DATE"); }
+                        catch(const linaccess::VbaRuntimeError&) { messageError(&dialog,"Datum-Standardwert als gültigen ISO-Text in Anführungszeichen eingeben."); return; }
+                    }
+                    if(type=="BLOB") { messageError(&dialog,"Binärfelder unterstützen hier nur Null als Standardwert."); return; }
+                }
+                defaultSql=" DEFAULT "+defaultSql;
+            }
+            columns << quoteSql(field)+" "+type+defaultSql+(required=="ja" ? " NOT NULL" : "");
         }
-        columns << quoteSql(field) + " " + type + (required == "ja" ? " NOT NULL" : "");
-    }
-    if (columns.size() == 1) {
-        messageError(this, "Mindestens ein Feld anlegen");
-        return;
-    }
-    QSqlQuery query(db_);
-    if (!query.exec("CREATE TABLE " + quoteSql(tableName) + " (" + columns.join(",") + ")"))
-        messageError(this, query.lastError().text());
+        if(columns.size()==1) { messageError(&dialog,"Mindestens ein Feld anlegen"); return; }
+        QSqlQuery query(db_);
+        if(!query.exec("CREATE TABLE "+quoteSql(tableName)+" ("+columns.join(',')+")")) { messageError(&dialog,query.lastError().text()); return; }
+        dialog.accept();
+    });
+    if(dialog.exec()!=QDialog::Accepted) return;
     refreshExplorer();
 }
 
