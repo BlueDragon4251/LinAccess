@@ -1322,3 +1322,17 @@ all four original hashes after the full run pass. A private native manual probe
 confirms Force=False70 preserves a read-only binary test file and Force=True
 unlinks it. Original queries78/100; no Windows result oracle. No new test
 target/ID; F040/F091 open, fixed456/384/72.
+
+Native read-only FSO OpenTextFile/File.OpenAsTextStream now return an owned
+Scripting.TextStream with real Read/ReadLine/ReadAll/AtEndOfStream/Line/Column/
+Close. Descriptor validation refuses terminal links/special files; ASCII only,
+explicit non-ASCII/Unicode/write/create/count limits3251 rather than invented
+conversion. A weak device/inode registry guards shared native copy-destination,
+rename-source and unlink operations while a native reader is held; Close releases
+it. No host/database retention or full Windows sharing/encoding/EOF oracle.
+Scope: docs/NATIVE_TEXT_STREAM.md. Actual native VBA CRLF/LF/position/EOF/NUL/
+held-delete/close/reopen workflow passes core/DAO2/2 (2.67 s), fresh headless1/1
+(1.68 s), current Debian/build-ID/SQLite/four fixture hashes. Private manual
+probe confirms hard-link alias mutation guard, Close release, EOF62 and failed
+encoding-read position recovery. Last broader48/48 (86.15 s) precedes this
+increment. No new target/ID; F040/F091 remain open, fixed456/384/72.

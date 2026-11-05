@@ -2,6 +2,7 @@
 #include "vba_expression.hpp"
 #include "native_file_time.hpp"
 #include "native_file_operations.hpp"
+#include "native_text_stream.hpp"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -18,6 +19,7 @@ public:
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         std::string method(name);
         std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
+        if(method=="openastextstream") return VbaArgumentSignature{{"IOMode","Format"},0};
         if(method=="copy") return VbaArgumentSignature{{"Destination","OverWriteFiles"},1};
         if(method=="move") return VbaArgumentSignature{{"Destination"},1};
         if(method=="delete") return VbaArgumentSignature{{"Force"},0};
@@ -33,6 +35,11 @@ public:
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         std::string method(name);
         std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
+        if(method=="openastextstream") {
+            if(args.size()>2) throw VbaRuntimeError(450,"Invalid OpenAsTextStream argument count");
+            nativeTextReadOptions(args,0,1);
+            return nativeOpenTextStream(VbaValue::string(path_.string()));
+        }
         if(method=="copy" || method=="move" || method=="delete") {
             if(method=="delete") {
                 if(args.size()>1) throw VbaRuntimeError(450,"Invalid File.Delete argument count");
@@ -234,6 +241,7 @@ public:
     bool isNativeType(std::string_view type) const override { return type=="scripting.filesystemobject"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto method=key(name);
+        if(method=="opentextfile") return VbaArgumentSignature{{"FileName","IOMode","Create","Format"},1};
         if(method=="copyfile") return VbaArgumentSignature{{"Source","Destination","OverWriteFiles"},2};
         if(method=="movefile") return VbaArgumentSignature{{"Source","Destination"},2};
         if(method=="deletefile") return VbaArgumentSignature{{"FileSpec","Force"},1};
@@ -250,6 +258,12 @@ public:
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto method=key(name);
+        if(method=="opentextfile") {
+            if(args.empty() || args.size()>4 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Invalid OpenTextFile argument count");
+            nativeTextReadOptions(args,1,3);
+            if(nativeFileFlag(args,2,false)) throw VbaRuntimeError(3251,"Text file creation is not implemented");
+            return nativeOpenTextStream(VbaValue::string(path(args[0]).string()));
+        }
         if(method=="copyfile" || method=="movefile" || method=="deletefile") {
             const auto required=method=="deletefile" ? 1u : 2u;
             const auto maximum=method=="copyfile" ? 3u : 2u;

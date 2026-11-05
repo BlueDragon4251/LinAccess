@@ -2963,6 +2963,35 @@ End Sub)VBA","ProbeFs",host);
         assert(host.fields["FsoFileObject"]=="File:8" && host.fields["FsoFileTyped"]=="True" && host.fields["FsoFileDefault"]==file.string());
         assert(host.fields["FsoFileMetadata"]==file.string()+"|"+file.filename().string()+"|3:3");
         assert(host.fields["FsoWrongKinds"]=="False:False" && host.fields["FsoMissing"]=="False" && host.fields["FsoAbsolute"]==fs::current_path().string());
+        const auto textFile=directory/"read-lines.txt";
+        { std::ofstream output(textFile,std::ios::binary); output<<"one\r\ntwo\nend"; }
+        host.fields["FsoTextFile"]=textFile.string();
+        const auto textProbe=executeVbaProcedure(R"VBA(Sub ReadNativeText()
+Dim fs As Scripting.FileSystemObject, stream As Scripting.TextStream, file As Scripting.File
+Set fs=New Scripting.FileSystemObject
+Set stream=fs.OpenTextFile(FileName:=Me!FsoTextFile, IOMode:=1, Create:=False, Format:=0)
+Me!FsoStreamType=TypeName(stream) & ":" & CStr(TypeOf stream Is Scripting.TextStream)
+Me!FsoTextLine=stream.ReadLine()
+Me!FsoTextPosition=CStr(stream.Line) & ":" & CStr(stream.Column)
+Me!FsoTextPart=stream.Read(Characters:=3)
+Me!FsoTextRest=stream.ReadAll()
+Me!FsoTextEnd=CStr(stream.AtEndOfStream)
+On Error Resume Next
+Err.Clear
+fs.DeleteFile Me!FsoTextFile
+Me!FsoTextHeld=CStr(Err.Number)
+On Error GoTo 0
+stream.Close
+fs.CopyFile Me!FsoFile, Me!FsoTextFile
+Set file=fs.GetFile(Me!FsoTextFile)
+Set stream=file.OpenAsTextStream(IOMode:=1, Format:=0)
+Me!FsoTextBinary=stream.Read(3)
+stream.Close
+End Sub)VBA","ReadNativeText",host);
+        assert(textProbe.status==VbaExecutionStatus::Completed);
+        assert(host.fields["FsoStreamType"]=="TextStream:True" && host.fields["FsoTextLine"]=="one" && host.fields["FsoTextPosition"]=="2:1");
+        assert(host.fields["FsoTextPart"]=="two" && host.fields["FsoTextRest"]=="\nend" && host.fields["FsoTextEnd"]=="True" && host.fields["FsoTextHeld"]=="3251");
+        assert(host.fields["FsoTextBinary"]==std::string("A\0B",3));
         VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
         const auto fileEvaluate=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,paths); };
         const auto folderLink=directory/"folder-link";
