@@ -59,15 +59,21 @@ Path-component increment: desktop core1/1 (1.73 s), fresh GUI-free core1/1
 ## Native GetFile objects
 
 GetFile(FileSpec) resolves an actual existing regular Linux file and returns
-a real independent native File object (TypeName File, VarType9). Path is the
+a real independent native File object (TypeName File). Path is the
 normalized absolute path, Name is its final component, and Size reads the
 filesystem again on each access. No host, stream or database handle is retained.
 Sizes through signed Long maximum retain Long; larger exact sizes use Double.
 Beyond the exact Double integer range raises6 instead of returning rounded data.
 Missing files raise53; final symlinks and nonregular objects remain bounded.
 
-Only these three property reads are implemented. File mutations, default-member
-behavior, qualified Scripting.File binding, parent folders, timestamps, attributes,
+The additional DateLastModified property uses the shared native FileDateTime
+local-time conversion and rereads the filesystem. Qualified Scripting.File
+locals/parameters/results use explicit native identity. The scalar default is
+Path, so VarType(file) now reports String8 while TypeName(file) remains File;
+CStr(file) reads the path. File property writes remain explicit3251.
+
+Only these four property reads are implemented. File mutations, parent folders,
+creation/access timestamps, attributes,
 sharing, Windows drive mapping and race/identity semantics remain unimplemented
 or unvalidated. A retained path does not pin the original inode. This is not a
 full Windows File object contract.
@@ -80,3 +86,10 @@ no Windows Access result oracle is claimed.
 
 GetFile validation: desktop core1/1 (1.82 s), fresh headless1/1 (1.72 s),
 current Debian/build-ID/SQLite/four original fixture hashes pass.
+
+The default-Path contract is cross-checked against the public scrrun IFile IDL
+(DISPID_VALUE); [VarType documentation](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/vartype-function)
+specifies inspection of the default property when present.
+
+File binding/default/timestamp increment: targeted core/DAO2/2 (2.62 s),
+fresh GUI-free1/1 (1.66 s), current Debian/build-ID/SQLite/four hashes pass.

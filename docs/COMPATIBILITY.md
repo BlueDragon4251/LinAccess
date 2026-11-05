@@ -3066,3 +3066,14 @@ retained object reading a resized2-GiB file pass desktop core1/1 (1.82 s) and
 fresh GUI-free core1/1 (1.72 s). Current Debian/build-ID/SQLite/four hashes pass.
 Last broader48/48 (85.42 s) predates both FSO increments. No new target/ID;
 F091 open, fixed456/384/72.
+
+Native Scripting.File binding now uses explicit native identity for qualified
+locals/parameters/results. Path is the scalar/default value: CStr(file) reads
+the path, VarType(file) is8 and TypeName(file) remains File. DateLastModified
+reads actual filesystem modification time through the same shared local-time
+conversion as FileDateTime, including UTC/EST changes. Property mutations
+remain explicit3251 rather than claiming a writable implementation. Scope:
+docs/NATIVE_FILE_SYSTEM_OBJECT.md. Targeted core/DAO2/2 (2.62 s), fresh
+headless1/1 (1.66 s), current Debian/build-ID/SQLite/four fixture hashes pass.
+Last broader48/48 (85.42 s) predates the FSO increments. No new target/ID;
+F091 open, fixed456/384/72.
