@@ -186,7 +186,22 @@ QString sqliteLiteralDefaultSql(const QVariant& declaration) {
     // Raw SQLite TRUE is1; imported Access TRUE is already normalized to-1.
     return token.compare("TRUE",Qt::CaseInsensitive)==0 ? QString("1") : literal.value_or(QString{});
 }
-struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; };
+struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; };
+std::optional<QString> nativeFieldDefaultExpression(const TableSchemaColumn& field) {
+    if(provenDaoFieldType(field.type)==11 || field.sourceType==11) return {};
+    if(!field.hasDefault) return QString{};
+    auto expression=field.literalDefault;
+    if(expression.isEmpty() || expression.size()>512) return {};
+    if(expression=="NULL") expression="Null";
+    else if(expression.startsWith(QChar(39))) {
+        auto text=expression.mid(1,expression.size()-2); text.replace("''","'");
+        if(text.contains(QChar(0)) || text.contains('\r') || text.contains('\n')) return {};
+        text.replace(QChar(34),QString("\"\"")); expression=QChar(34)+text+QChar(34);
+    } else if(expression.startsWith('.')) expression.prepend('0');
+    else if(expression.startsWith("-.") || expression.startsWith("+.")) expression.insert(1,'0');
+    if(expression.size()>255) return {};
+    return expression;
+}
 QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString& tableName) {
     QSqlQuery shadow(db);
     shadow.prepare("SELECT 1 FROM temp.sqlite_schema WHERE type IN ('table','view') AND (name=? COLLATE NOCASE OR name='_la_table_schema' COLLATE NOCASE)");
@@ -200,7 +215,7 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
     QVector<TableSchemaColumn> columns;
     while(query.next()) {
         const auto name=query.value(1).toString();
-        columns.push_back({name,types.value(name.toCaseFolded()),0,0,sqliteLiteralDefaultSql(query.value(4))});
+        columns.push_back({name,types.value(name.toCaseFolded()),0,0,sqliteLiteralDefaultSql(query.value(4)),!query.value(4).isNull()});
     }
     if(query.lastError().isValid()) queryFailure(query);
     if(columns.isEmpty()) throw VbaRuntimeError(3420,"DAO main-schema table unavailable");
@@ -256,6 +271,7 @@ struct RecordsetData {
     QMap<QString,QString> types;
     QMap<QString,int> daoTypes,definitionSizes;
     QMap<QString,QVariant> literalDefaults;
+    QMap<QString,QString> defaultExpressions;
     QVector<QVariantList> rows;
     QVector<QVariant> ids;
     QVector<quint64> bookmarks;
@@ -548,6 +564,11 @@ public:
         }
         return fixedDaoFieldSize(provenDaoFieldType(declaration));
     }
+    VbaValue defaultExpression(const QString& name) const {
+        (void)fieldType(name); const auto key=name.toCaseFolded();
+        if(!data_->defaultExpressions.contains(key)) throw VbaRuntimeError(3251,"Field.DefaultValue is not proven for this source");
+        return VbaValue::string(data_->defaultExpressions.value(key).toStdString());
+    }
     VbaValue fieldOrdinal(const QString& name) const {
         (void)fieldType(name); return integerCount(column(name));
     }
@@ -691,7 +712,7 @@ private:
             ++data_->revision;
             completed=true;
         };
-        data_->types.clear(); data_->daoTypes.clear(); data_->definitionSizes.clear(); data_->literalDefaults.clear();
+        data_->types.clear(); data_->daoTypes.clear(); data_->definitionSizes.clear(); data_->literalDefaults.clear(); data_->defaultExpressions.clear();
         if(table_) {
             QSqlQuery origin(db_); origin.prepare("SELECT name FROM main.sqlite_schema WHERE type='table' AND name=? COLLATE NOCASE"); origin.addBindValue(source_);
             if(!origin.exec()) queryFailure(origin);
@@ -707,6 +728,7 @@ private:
                 const auto size=code<=0 ? -1 : code==10 ? (field.sourceSize>0 ? field.sourceSize : -1)
                     : static_cast<int>(fixedDaoFieldSize(code).number);
                 data_->definitionSizes.insert(key,size);
+                if(const auto expression=nativeFieldDefaultExpression(field)) data_->defaultExpressions.insert(key,*expression);
                 }
             }
         }
@@ -823,6 +845,10 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
         if(!args.empty()) throw VbaRuntimeError(450,"Field.OrdinalPosition requires no arguments");
         return owner_->fieldOrdinal(name_);
     }
+    if(lower(name)=="defaultvalue") {
+        if(!args.empty()) throw VbaRuntimeError(450,"Field.DefaultValue requires no arguments");
+        return owner_->defaultExpression(name_);
+    }
     if(lower(name)=="size") {
         if(!args.empty()) throw VbaRuntimeError(450,"Field.Size requires no arguments");
         return owner_->definitionFieldSize(name_);
@@ -837,6 +863,7 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
     throw std::runtime_error("DAO: Unknown Field member");
 }
 void Field::assign(std::string_view name, const VbaValue& value) {
+    if(lower(name)=="defaultvalue") { (void)owner_->fieldType(name_); throw VbaRuntimeError(383,"Recordset Field.DefaultValue is read-only"); }
     if(lower(name)=="size") { (void)owner_->fieldType(name_); throw VbaRuntimeError(383,"Field.Size is read-only"); }
     if(lower(name)=="fieldsize") { (void)owner_->fieldSize(name_); throw VbaRuntimeError(383,"FieldSize is read-only"); }
     if(lower(name)=="ordinalposition") { (void)owner_->fieldOrdinal(name_); throw VbaRuntimeError(383,"Recordset Field.OrdinalPosition is read-only"); }
@@ -1171,6 +1198,11 @@ public:
         const auto key=lower(name);
         if(key=="name") return VbaValue::string(columns[position].name.toStdString());
         if(key=="ordinalposition") return integerCount(position);
+        if(key=="defaultvalue") {
+            const auto expression=nativeFieldDefaultExpression(columns[position]);
+            if(!expression) throw VbaRuntimeError(3251,"Schema Field.DefaultValue is not proven");
+            return VbaValue::string(expression->toStdString());
+        }
         if(key=="type" || key=="size") {
             const auto& column=columns[position];
             const int code=column.sourceType ? column.sourceType : provenDaoFieldType(column.type);

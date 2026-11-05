@@ -84,3 +84,8 @@ field refusal. The original-copy test verifies57 text capacities and3 Memo
 identities on real physical recordsets as well as the table catalog.
 Final full desktop48/48 (84.98 s), package/build ID/SQLite/four original hashes
 passed; fresh headless runtime1/1 (1.66 s) is unchanged. Catalog456/384/72.
+
+Supported native literal Field.DefaultValue is now readable as a String on
+checked TableDef fields and direct-table Recordset fields. Canonical expression,
+limits and unsupported setters/projections: [default scope](SOURCE_LITERAL_DEFAULTS.md).
+This does not close the complete F121 metadata/schema contract.

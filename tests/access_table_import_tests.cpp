@@ -78,6 +78,15 @@ CREATE INDEX `label` ON `source` (`a``b`);
     importAccessTable(db,"synthetic-defaults","literal_defaults",literalDefaults,parseCsvDetailed("qty,flag,label,optional,amount\n"));
     {
         const auto records=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("literal_defaults")}).object;
+        const auto quantity=records->member("Fields",{VbaValue::string("qty")}).object;
+        const auto caption=records->member("Fields",{VbaValue::string("label")}).object;
+        const auto optional=records->member("Fields",{VbaValue::string("optional")}).object;
+        assert(quantity->member("DefaultValue",{}).kind==VbaValue::Kind::Text && quantity->member("DefaultValue",{}).asText()=="7");
+        assert(caption->member("DefaultValue",{}).asText()=="\"native's NOT NULL\"");
+        assert(optional->member("DefaultValue",{}).asText()=="Null");
+        const auto schemaField=makeDaoDatabase(db)->member("TableDefs",{VbaValue::string("literal_defaults")}).object->member("Fields",{VbaValue::string("qty")}).object;
+        assert(schemaField->member("DefaultValue",{}).asText()=="7");
+        bool readOnly=false; try { quantity->assign("DefaultValue",VbaValue::string("8")); } catch(const VbaRuntimeError& error) { readOnly=error.number==383; } assert(readOnly);
         records->member("AddNew",{});
         assert(records->member("Fields",{VbaValue::string("qty")}).object->member("Value",{}).number==7);
         assert(records->member("Fields",{VbaValue::string("label")}).object->member("Value",{}).asText()=="native's NOT NULL");
