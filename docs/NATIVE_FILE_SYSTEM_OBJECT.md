@@ -11,6 +11,7 @@ Supported members:
 - FolderExists(FolderSpec): checks an actual directory.
 - BuildPath(Path,Name): joins native Linux path components without requiring existence.
 - GetAbsolutePathName(PathSpec): resolves the process working directory and normalizes a native absolute path.
+- GetFileName(PathSpec), GetBaseName(Path), GetExtensionName(Path), GetParentFolderName(Path): extract lexical path components without accessing the filesystem.
 
 Existence checks distinguish files, directories and absent paths; empty paths
 return False, and missing/not-a-directory results return False. Other errors use
@@ -43,3 +44,14 @@ fixed456/384/72.
 
 Reference: [FileSystemObject](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/filesystemobject-object),
 [GetAbsolutePathName](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/getabsolutepathname-method).
+
+Lexical component methods accept both Windows and Linux separators, preserve
+UTF-8/case, and need no existing file. Drive-only input returns an empty string;
+ordinary drive-qualified and UNC file paths can be parsed without drive mapping.
+Trailing separators, UNC roots, dot-directory components, leading-dot extension
+semantics and drive-relative parent extraction remain explicit3251 boundaries.
+This does not enable Windows paths for physical filesystem operations.
+
+Path-component increment: desktop core1/1 (1.73 s), fresh GUI-free core1/1
+(1.72 s), current Debian/build-ID/SQLite/four fixture hashes pass. The broader
+48/48 above precedes this increment. No new test target or catalog ID.

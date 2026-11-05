@@ -12,14 +12,44 @@ class VbaFileSystemObject final : public VbaObject {
         std::transform(result.begin(),result.end(),result.begin(),[](unsigned char ch) { return std::tolower(ch); });
         return result;
     }
-    static std::filesystem::path path(const VbaValue& value,bool pattern=false) {
-        const auto text=coerceVbaModuleValue(scalarVbaValue(value),"string").asText();
+    static std::string pathText(const VbaValue& value) {
+        auto text=coerceVbaModuleValue(scalarVbaValue(value),"string").asText();
         if(text.find('\0')!=std::string::npos) throw VbaRuntimeError(52,"Invalid filesystem pathname");
+        return text;
+    }
+    static std::filesystem::path path(const VbaValue& value,bool pattern=false) {
+        const auto text=pathText(value);
         if(text.find('\\')!=std::string::npos || text.starts_with("//") || (text.size()>1 && text[1]==':'))
             throw VbaRuntimeError(3251,"Windows filesystem path mapping is unavailable");
         if(!pattern && text.find_first_of("*?")!=std::string::npos)
             throw VbaRuntimeError(3251,"Filesystem wildcard existence semantics require reference validation");
         return std::filesystem::path(text);
+    }
+    static VbaValue pathPart(const std::string& method,const VbaValue& value) {
+        const auto text=pathText(value);
+        const auto separator=[](char ch) { return ch=='/' || ch=='\\'; };
+        const bool drive=text.size()>=2 && std::isalpha(static_cast<unsigned char>(text[0])) && text[1]==':';
+        if(text.empty() || (drive && text.size()==2)) return VbaValue::string("");
+        if(separator(text.back())) throw VbaRuntimeError(3251,"Trailing-separator path component semantics require reference validation");
+        if(text.size()>1 && separator(text[0]) && separator(text[1])) {
+            int components=0; bool inside=false;
+            for(const auto ch:text) { if(separator(ch)) inside=false; else if(!inside) { ++components; inside=true; } }
+            if(components<3) throw VbaRuntimeError(3251,"UNC-root component semantics require reference validation");
+        }
+        const auto split=text.find_last_of("/\\");
+        const auto leaf=text.substr(split==std::string::npos ? (drive ? 2 : 0) : split+1);
+        if(leaf=="." || leaf=="..") throw VbaRuntimeError(3251,"Dot-directory component semantics require reference validation");
+        if(method=="getfilename") return VbaValue::string(leaf);
+        if(method=="getparentfoldername") {
+            if(drive && split==std::string::npos) throw VbaRuntimeError(3251,"Drive-relative parent semantics require reference validation");
+            if(split==std::string::npos) return VbaValue::string("");
+            const auto length=(split==0 || (drive && split==2)) ? split+1 : split;
+            return VbaValue::string(text.substr(0,length));
+        }
+        if(!leaf.empty() && leaf.front()=='.') throw VbaRuntimeError(3251,"Leading-dot extension semantics require reference validation");
+        const auto dot=leaf.find_last_of('.');
+        if(method=="getbasename") return VbaValue::string(dot==std::string::npos ? leaf : leaf.substr(0,dot));
+        return VbaValue::string(dot==std::string::npos ? "" : leaf.substr(dot+1));
     }
     static void failure(const std::error_code& reason) {
         if(reason==std::errc::permission_denied || reason==std::errc::operation_not_permitted)
@@ -39,14 +69,18 @@ public:
         if(method=="folderexists") return VbaArgumentSignature{{"FolderSpec"},1};
         if(method=="buildpath") return VbaArgumentSignature{{"Path","Name"},2};
         if(method=="getabsolutepathname") return VbaArgumentSignature{{"PathSpec"},1};
+        if(method=="getfilename") return VbaArgumentSignature{{"PathSpec"},1};
+        if(method=="getbasename" || method=="getextensionname" || method=="getparentfoldername") return VbaArgumentSignature{{"Path"},1};
         return {};
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto method=key(name);
-        if(method!="fileexists" && method!="folderexists" && method!="buildpath" && method!="getabsolutepathname")
+        const bool lexical=method=="getfilename" || method=="getbasename" || method=="getextensionname" || method=="getparentfoldername";
+        if(!lexical && method!="fileexists" && method!="folderexists" && method!="buildpath" && method!="getabsolutepathname")
             throw VbaRuntimeError(3251,"Native FileSystemObject member is not implemented");
         if(args.size()!=(method=="buildpath" ? 2u : 1u) || std::any_of(args.begin(),args.end(),[](const auto& value) { return value.kind==VbaValue::Kind::Missing; }))
             throw VbaRuntimeError(450,"Invalid FileSystemObject argument count");
+        if(lexical) return pathPart(method,args[0]);
         const auto source=path(args[0],method=="buildpath");
         if(method=="buildpath") {
             const auto name=path(args[1],true);

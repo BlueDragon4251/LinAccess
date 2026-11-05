@@ -2876,6 +2876,13 @@ Me!FsoHasFolder=CStr(fs.FolderExists(FolderSpec:=Me!FsoFolder))
 Me!FsoWrongKinds=CStr(fs.FileExists(Me!FsoFolder)) & ":" & CStr(fs.FolderExists(Me!FsoFile))
 Me!FsoMissing=CStr(fs.FileExists(fs.BuildPath(Name:="missing.dat",Path:=Me!FsoFolder)))
 Me!FsoAbsolute=fs.GetAbsolutePathName(PathSpec:=".")
+Me!FsoLeaf=fs.GetFileName(PathSpec:="C:\docs\alpha-ä.tar.gz")
+Me!FsoBase=fs.GetBaseName(Path:="C:\docs\alpha-ä.tar.gz")
+Me!FsoExtension=fs.GetExtensionName(Path:="/missing/alpha-ä.tar.gz")
+Me!FsoParent=fs.GetParentFolderName(Path:="C:\docs\alpha-ä.tar.gz")
+Me!FsoWildcardLeaf=fs.GetFileName("C:\docs\*.csv")
+Me!FsoDriveOnly=fs.GetFileName("C:")
+
 On Error Resume Next
 Set fs=New Scripting.Dictionary
 Me!FsoWrongClass=CStr(Err.Number) & ":" & TypeName(fs)
@@ -2888,6 +2895,8 @@ End Sub)VBA","ProbeFs",host);
         assert(fsoProbe.status==VbaExecutionStatus::Completed);
         assert(host.fields["FsoTyped"]=="True" && host.fields["FsoTypedCall"]=="True" && host.fields["FsoWrongClass"]=="13:FileSystemObject" && host.fields["FsoLate"]=="True");
         assert(host.fields["FsoIdentity"]=="FileSystemObject:9" && host.fields["FsoHasFile"]=="True" && host.fields["FsoHasFolder"]=="True");
+        assert(host.fields["FsoLeaf"]=="alpha-ä.tar.gz" && host.fields["FsoBase"]=="alpha-ä.tar" && host.fields["FsoExtension"]=="gz");
+        assert(host.fields["FsoParent"]=="C:\\docs" && host.fields["FsoWildcardLeaf"]=="*.csv" && host.fields["FsoDriveOnly"]=="");
         assert(host.fields["FsoWrongKinds"]=="False:False" && host.fields["FsoMissing"]=="False" && host.fields["FsoAbsolute"]==fs::current_path().string());
         VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
         const auto fileEvaluate=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,paths); };
