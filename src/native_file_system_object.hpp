@@ -37,8 +37,8 @@ public:
         std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
         if(method=="openastextstream") {
             if(args.size()>2) throw VbaRuntimeError(450,"Invalid OpenAsTextStream argument count");
-            const auto mode=nativeTextOptions(args,0,1);
-            return nativeOpenTextStream(VbaValue::string(path_.string()),mode);
+            const auto options=nativeTextOptions(args,0,1);
+            return nativeOpenTextStream(VbaValue::string(path_.string()),options.mode,false,false,options.unicode);
         }
         if(method=="copy" || method=="move" || method=="delete") {
             if(method=="delete") {
@@ -265,8 +265,8 @@ public:
         }
         if(method=="opentextfile") {
             if(args.empty() || args.size()>4 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Invalid OpenTextFile argument count");
-            const auto mode=nativeTextOptions(args,1,3);
-            return nativeOpenTextStream(VbaValue::string(path(args[0]).string()),mode,nativeFileFlag(args,2,false));
+            const auto options=nativeTextOptions(args,1,3);
+            return nativeOpenTextStream(VbaValue::string(path(args[0]).string()),options.mode,nativeFileFlag(args,2,false),false,options.unicode);
         }
         if(method=="copyfile" || method=="movefile" || method=="deletefile") {
             const auto required=method=="deletefile" ? 1u : 2u;

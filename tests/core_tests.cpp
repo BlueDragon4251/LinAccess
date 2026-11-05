@@ -3032,6 +3032,36 @@ End Sub)VBA","WriteNativeText",host);
         const std::string written="AB\r\n\r\ntail+end\r\n";
         assert(host.fields["FsoWritten"]==written && host.fields["FsoWriteEncoding"]=="3251" && host.fields["FsoWriteHeld"]=="3251" && host.fields["FsoReadHeldWrite"]=="3251" && host.fields["FsoTextNoOverwrite"]=="58");
         { std::ifstream input(writeFile,std::ios::binary); assert(std::string(std::istreambuf_iterator<char>(input),{})==written); }
+        const auto unicodeFile=directory/"unicode-lines.txt";
+        host.fields["FsoUnicodeFile"]=unicodeFile.string();
+        const auto unicodeProbe=executeVbaProcedure(R"VBA(Sub UnicodeNativeText()
+Dim fs As Scripting.FileSystemObject, stream As Scripting.TextStream
+Set fs=New Scripting.FileSystemObject
+Set stream=fs.CreateTextFile(FileName:=Me!FsoUnicodeFile,Overwrite:=False,Unicode:=True)
+stream.WriteLine "ä😀X"
+stream.Write "Z"
+stream.Close
+Set stream=fs.OpenTextFile(FileName:=Me!FsoUnicodeFile,IOMode:=8,Create:=False,Format:=-1)
+stream.Write "ß"
+stream.Close
+Set stream=fs.OpenTextFile(FileName:=Me!FsoUnicodeFile,IOMode:=1,Create:=False,Format:=-1)
+Me!FsoUnicodeFirst=stream.Read(1)
+On Error Resume Next
+Err.Clear
+Me!FsoUnicodeHalf=stream.Read(1)
+Me!FsoUnicodeSplit=CStr(Err.Number) & ":" & CStr(stream.Column)
+On Error GoTo 0
+Me!FsoUnicodePair=stream.Read(2)
+Me!FsoUnicodeLine=stream.ReadLine()
+Me!FsoUnicodeRest=stream.ReadAll()
+Me!FsoUnicodeEnd=CStr(stream.AtEndOfStream)
+stream.Close
+End Sub)VBA","UnicodeNativeText",host);
+        assert(unicodeProbe.status==VbaExecutionStatus::Completed);
+        assert(host.fields["FsoUnicodeFirst"]=="ä" && host.fields["FsoUnicodeSplit"]=="3251:2" && host.fields["FsoUnicodePair"]=="😀");
+        assert(host.fields["FsoUnicodeLine"]=="X" && host.fields["FsoUnicodeRest"]=="Zß" && host.fields["FsoUnicodeEnd"]=="True");
+        { std::ifstream input(unicodeFile,std::ios::binary); const std::vector<unsigned char> bytes(std::istreambuf_iterator<char>(input),{});
+          const std::vector<unsigned char> expected{255,254,228,0,61,216,0,222,88,0,13,0,10,0,90,0,223,0}; assert(bytes==expected); }
         VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
         const auto fileEvaluate=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,paths); };
         const auto folderLink=directory/"folder-link";

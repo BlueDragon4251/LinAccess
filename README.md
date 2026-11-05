@@ -605,3 +605,11 @@ dokumentiert; ein Access-Referenzlauf steht weiterhin aus.
 Ausdrücke lesbare Quellbezeichnungen statt interner SQL-Hilfsnamen. Eigene
 Spaltenaliase bleiben erhalten; Access-spezifische Expr1000-Regeln sind weiterhin
 nicht durch einen Referenzlauf bestätigt.
+
+[Native FileSystemObject-Adapter](docs/NATIVE_FILE_SYSTEM_OBJECT.md) arbeiten mit
+tatsächlichen Dateien und Ordnern: Lesen von Metadaten, Auflisten, Anlegen,
+Kopieren, Umbenennen, Verschieben und Löschen innerhalb dokumentierter Grenzen.
+[Native TextStreams](docs/NATIVE_TEXT_STREAM.md) lesen und schreiben ASCII oder
+ausdrücklich gewähltes UTF-16LE mit BOM; Anhängen und Surrogatgrenzen sind
+abgegrenzt. Vollständige COM-, Windows-Pfad-, Kodierungs- und Freigabeparität
+bleibt offen.
