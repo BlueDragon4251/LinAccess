@@ -57,7 +57,7 @@ public:
     bool isNativeType(std::string_view type) const override { return type=="scripting.textstream"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto method=key(name);
-        if(method=="read") return VbaArgumentSignature{{"Characters"},1};
+        if(method=="read" || method=="skip") return VbaArgumentSignature{{"Characters"},1};
         if(method=="write") return VbaArgumentSignature{{"Text"},1};
         if(method=="writeline") return VbaArgumentSignature{{"Text"},0};
         if(method=="writeblanklines") return VbaArgumentSignature{{"Lines"},1};
@@ -65,7 +65,9 @@ public:
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto method=key(name);
-        if(method!="close" && method!="read" && method!="readline" && method!="readall" && method!="atendofstream" && method!="line" && method!="column" && method!="write" && method!="writeline" && method!="writeblanklines")
+        if(method=="skip") { (void)member("Read",args); return {}; }
+        if(method=="skipline") { (void)member("ReadLine",args); return {}; }
+        if(method!="close" && method!="read" && method!="readline" && method!="readall" && method!="atendofstream" && method!="line" && method!="column" && method!="write" && method!="writeline" && method!="writeblanklines" && method!="atendofline")
             throw VbaRuntimeError(3251,"Native TextStream member is not implemented");
         const bool output=method=="write" || method=="writeline" || method=="writeblanklines";
         if(output) {
@@ -103,6 +105,11 @@ public:
         }
         if(mode_!=1) throw VbaRuntimeError(3251,"TextStream input properties require reading mode");
         if(method=="atendofstream") return VbaValue::logical(peek()==EOF);
+        if(method=="atendofline") {
+            const auto ch=peek();
+            if(ch==EOF) throw VbaRuntimeError(3251,"AtEndOfLine at EOF requires reference validation");
+            return VbaValue::logical(ch=='\r' || ch=='\n');
+        }
         if(method=="line") return VbaValue::longInteger(line_);
         if(method=="column") return VbaValue::longInteger(column_);
         std::size_t count=(unicode_ ? 8u : 16u)*1024u*1024u;

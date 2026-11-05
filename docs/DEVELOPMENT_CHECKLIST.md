@@ -1365,3 +1365,13 @@ builds zero compiler warnings; current Debian/build-ID/SQLite3.54.1/four origina
 hashes pass. Private malformed-BOM append preservation, malformed-surrogate
 position recovery and refused-create/no-side-effect probe pass. Original78/100;
 no Windows result oracle. No new CTest target/ID; F040/F091 open, fixed456/384/72.
+
+Native TextStream Skip/SkipLine now reuse the real checked read/line paths;
+AtEndOfLine observes actual next CR/LF without consuming it. Its EOF contract
+remains explicit3251. Folder.CreateTextFile now creates an actual plain child
+name through the shared atomic-create/guarded-truncate/ASCII-or-UTF16LE pipeline;
+path escapes remain3251. Actual VBA line-end/skip/NUL and Folder-created Unicode
+readback cases pass core/DAO2/2 (2.69 s), fresh GUI-free1/1 (1.92 s), both builds
+zero compiler warnings; current Debian/build-ID/SQLite/four original hashes pass.
+Scope: docs/NATIVE_TEXT_STREAM.md. Last broader48/48 (89.99 s) precedes this
+increment. No new CTest target/ID; F040/F091 open, fixed456/384/72.

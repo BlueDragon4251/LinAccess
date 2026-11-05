@@ -149,6 +149,12 @@ public:
     }
     std::string_view className() const override { return "Folder"; }
     bool isNativeType(std::string_view type) const override { return type=="scripting.folder"; }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        std::string method(name);
+        std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
+        if(method=="createtextfile") return VbaArgumentSignature{{"FileName","Overwrite","Unicode"},1};
+        return {};
+    }
     bool hasScalarDefault() const override { return true; }
     VbaValue scalarValue() override { return VbaValue::string(path_.string()); }
     VbaValue defaultMember(const std::vector<VbaValue>& args,bool reference) override {
@@ -159,6 +165,14 @@ public:
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         std::string method(name);
         std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
+        if(method=="createtextfile") {
+            if(args.empty() || args.size()>3 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Invalid Folder.CreateTextFile argument count");
+            const auto name=coerceVbaModuleValue(scalarVbaValue(args[0]),"string").asText();
+            if(name.empty()) throw VbaRuntimeError(52,"Invalid child filename");
+            if(name=="." || name==".." || name.find_first_of("/\\:")!=std::string::npos) throw VbaRuntimeError(3251,"Folder.CreateTextFile requires a plain child filename");
+            const auto destination=path_/nativeFilePath(VbaValue::string(name));
+            return nativeCreateTextStream(VbaValue::string(destination.string()),args);
+        }
         if(method!="path" && method!="name" && method!="files" && method!="subfolders" && method!="parentfolder") throw VbaRuntimeError(3251,"Native Folder member is not implemented");
         if(!args.empty()) throw VbaRuntimeError(450,"Folder property takes no arguments");
         if(method=="path") return scalarValue();
