@@ -126,7 +126,7 @@ void testSqlRgbDao() {
         assert(sql.exec("CREATE TABLE financial_rows(id INTEGER PRIMARY KEY,rate REAL,periods INTEGER,payment REAL,principal REAL)"));
         assert(sql.exec("INSERT INTO financial_rows VALUES(1,0.01,12,-100,1000),(2,0,12,-100,1200)"));
         const auto definition=host.currentDatabase()->member("CreateQueryDef",{
-            linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT FV(rate,periods,payment) AS future,Pmt(rate,periods,principal) AS due,PV(rate,periods,payment) AS present,NPer(rate,Pmt(rate,periods,principal),principal) AS duration,Rate(periods,Pmt(rate,periods,principal),principal) AS effective_rate FROM financial_rows ORDER BY id")}).object;
+            linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT FV(rate,periods,payment) AS future,Pmt(rate,periods,principal) AS due,PV(rate,periods,payment) AS present,NPer(rate,Pmt(rate,periods,principal),principal) AS duration,Rate(periods,Pmt(rate,periods,principal),principal) AS effective_rate,IPmt(rate,1,periods,principal) AS interest,PPmt(rate,1,periods,principal) AS principal_paid FROM financial_rows ORDER BY id")}).object;
         const auto rows=definition->member("OpenRecordset",{}).object;
         const auto fields=rows->member("Fields",{}).object;
         const auto value=[&](const char* name) { return fields->member("Item",{linaccess::VbaValue::string(name)}).object->member("Value",{}).asNumber(); };
@@ -136,9 +136,11 @@ void testSqlRgbDao() {
         assert(std::abs(value("present")-discounted)<1e-9);
         double loan=1000; const auto due=value("due"); for(int i=0;i<12;++i) loan=loan*1.01+due;
         assert(std::abs(loan)<1e-9 && std::abs(value("duration")-12)<1e-9 && std::abs(value("effective_rate")-0.01)<1e-11);
+        assert(value("interest")==-10 && std::abs(value("interest")+value("principal_paid")-due)<1e-9);
         rows->member("MoveNext",{});
         assert(value("future")==1200 && value("due")==-100);
         assert(value("present")==1200 && value("duration")==12 && std::abs(value("effective_rate"))<1e-11);
+        assert(value("interest")==0 && value("principal_paid")==-100);
         rows->member("Close",{});
     }
     {

@@ -727,8 +727,18 @@ int main() {
         assert(std::abs(eval("FV(0.000000000000001,12,-100)").number-1200)<1e-9);
         const auto payment=eval("Pmt(Pv:=1000,Rate:=0.01,NPer:=12,Fv:=100)").number;
         double loan=1000;
-        for (int month=0;month<12;++month) loan=loan*1.01+payment;
+        for (int month=0;month<12;++month) {
+            const auto period=std::to_string(month+1);
+            const auto interest=eval("IPmt(0.01,"+period+",12,1000,100)").number;
+            const auto principal=eval("PPmt(0.01,"+period+",12,1000,100)").number;
+            assert(std::abs(interest+loan*0.01)<1e-9 && std::abs(interest+principal-payment)<1e-9);
+            loan=loan*1.01+payment;
+        }
         assert(std::abs(loan+100)<1e-9);
+        assert(eval("IPmt(Type:=1,Pv:=100,NPer:=2,Per:=1,Rate:=0.1)").number==0);
+        const auto earlyPayment=eval("Pmt(0.1,2,100,,1)").number;
+        assert(std::abs(eval("IPmt(0.1,2,2,100,,1)").number+(100+earlyPayment)*0.1)<1e-11);
+        assert(eval("PPmt(0,1,12,1200)").number==-100);
         assert(eval("Pmt(0,12,1000,200)").number==-100);
         double discounted=0,discountFactor=1;
         for(int month=0;month<12;++month) { discountFactor*=1.01; discounted+=100/discountFactor; }

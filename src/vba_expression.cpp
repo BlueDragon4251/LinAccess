@@ -40,6 +40,13 @@ public:
         throw VbaRuntimeError(3251,"Internal Byte array metadata is not a callable object");
     }
 };
+struct FinancialAnnuity { long double growth,factor; };
+FinancialAnnuity nativeFinancialAnnuity(long double rate,long double periods,long double timing) {
+    const auto exponent=periods*std::log1p(rate);
+    const auto growth=std::exp(exponent);
+    const auto annuity=rate==0 ? periods : std::expm1(exponent)/rate;
+    return {growth,annuity*(1+rate*timing)};
+}
 struct FinancialBalance { long double residual,derivative,scale; };
 template<class Evaluate>
 double nativeFinancialRoot(long double guess,Evaluate evaluate) {
@@ -749,7 +756,7 @@ bool vbaIntrinsicName(const std::string& name) {
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
                 "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
-                "filelen","filedatetime","curdir","curdir$","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt","pv","nper","rate","npv","irr","mirr","sln","syd","ddb"};
+                "filelen","filedatetime","curdir","curdir$","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt","ipmt","ppmt","pv","nper","rate","npv","irr","mirr","sln","syd","ddb"};
     return intrinsics.contains(name);
 }
 
@@ -1357,6 +1364,8 @@ private:
                     {"ddb",{{"Cost","Salvage","Life","Period","Factor"},4}},
                     {"fv",{{"Rate","NPer","Pmt","Pv","Type"},3}},
                     {"pmt",{{"Rate","NPer","Pv","Fv","Type"},3}},
+                    {"ipmt",{{"Rate","Per","NPer","Pv","Fv","Type"},4}},
+                    {"ppmt",{{"Rate","Per","NPer","Pv","Fv","Type"},4}},
                     {"partition",{{"Number","Start","Stop","Interval"},4}},
                     {"rgb",{{"Red","Green","Blue"},3}}, {"qbcolor",{{"Color"},1}},
                     {"cdate",{{"Expression"},1}},
@@ -1998,6 +2007,35 @@ private:
                 if(!std::isfinite(result)) throw error("NPV result overflow",6);
                 return VbaValue::numeric(result);
             }
+            if(word=="ipmt" || word=="ppmt") {
+                if(!host_) return {};
+                if(args.size()<4 || args.size()>6 || omitted[0] || omitted[1] || omitted[2] || omitted[3])
+                    throw error("Interest/principal payment requires four to six arguments",450);
+                long double values[6]{};
+                for(std::size_t i=0;i<args.size();++i) {
+                    if(omitted[i]) continue;
+                    const auto value=scalarObjectValue(args[i]);
+                    if(value.kind==VbaValue::Kind::Null) throw error("Invalid Null payment argument",94);
+                    values[i]=coerceVbaModuleValue(value,"double").number;
+                    if(!std::isfinite(values[i])) throw error("Payment argument overflow",6);
+                }
+                const auto rate=values[0],period=values[1],periods=values[2],present=values[3],future=values[4],timing=values[5];
+                if(periods<=0 || period<1 || period>periods) throw error("Payment period out of range",5);
+                if(periods>32767 || std::floor(periods)!=periods || std::floor(period)!=period || rate<=-1 || (timing!=0 && timing!=1))
+                    throw error("Payment period, rate or timing outside supported range",3251);
+                const auto factors=nativeFinancialAnnuity(rate,periods,timing);
+                const auto payment=-(present*factors.growth+future)/factors.factor;
+                if(!std::isfinite(static_cast<double>(payment))) throw error("Payment result overflow",6);
+                long double balance=present;
+                for(int i=1;i<static_cast<int>(period);++i) {
+                    balance=timing==1 ? (balance+payment)*(1+rate) : balance*(1+rate)+payment;
+                    if(!std::isfinite(balance)) throw error("Payment balance overflow",6);
+                }
+                const auto interest=timing==1 ? (period==1 ? 0.0L : -balance*rate/(1+rate)) : -balance*rate;
+                const auto result=static_cast<double>(word=="ipmt" ? interest : payment-interest);
+                if(!std::isfinite(result)) throw error("Payment component overflow",6);
+                return VbaValue::numeric(result);
+            }
             if (word=="fv" || word=="pmt" || word=="pv" || word=="nper" || word=="rate") {
                 if (!host_) return {};
                 if (args.size()<3 || args.size()>(word=="rate" ? 6u : 5u) || omitted[0] || omitted[1] || omitted[2])
@@ -2041,10 +2079,8 @@ private:
                 if (rate<=-1 || (timing!=0 && timing!=1))
                     throw error("Financial rate or payment timing outside supported range",3251);
                 if (word=="pmt" && periods==0) throw error("Pmt requires nonzero periods",5);
-                const auto exponent=periods*std::log1p(rate);
-                const auto growth=std::exp(exponent);
-                const auto annuity=rate==0 ? periods : std::expm1(exponent)/rate;
-                const auto factor=annuity*(1+rate*timing);
+                const auto factors=nativeFinancialAnnuity(rate,periods,timing);
+                const auto growth=factors.growth,factor=factors.factor;
                 const auto result=word=="fv" ? -(values[3]*growth+values[2]*factor)
                     : word=="pv" ? -(values[3]+values[2]*factor)/growth
                     : -(values[2]*growth+values[3])/factor;

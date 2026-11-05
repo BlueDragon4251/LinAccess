@@ -1175,3 +1175,13 @@ error/precision/selection oracle claim. Scope: docs/NATIVE_FINANCIAL_FUNCTIONS.m
 Existing core/DAO/query3/3 (2.52 s), fresh headless1/1 (1.73 s), updated Debian/
 build-ID/SQLite/four hashes pass. Last broader full is preceding financial
 milestone48/48 (85.94 s). No new target/ID; F068 open,456/384/72 fixed.
+
+Native IPmt/PPmt now calculate actual interest/principal portions in VBA/SQL,
+sharing stable annuity factors with existing FV/PV/Pmt and advancing balances
+through earlier periods. Beginning/end timing, first beginning-payment interest0,
+zero-rate principal and actual SQL credit rows pass. Whole periods1..NPer up to
+32767, rate greater than-1 and timing0/1 only; full Windows rounding/error/domain
+oracle stays open. Scope: docs/NATIVE_FINANCIAL_FUNCTIONS.md. Final existing
+core/DAO/query3/3 (2.68 s), fresh headless1/1 (1.79 s), updated Debian/build-ID/
+SQLite/four hashes pass. Last full is fb63120 financial milestone48/48 (85.94 s),
+preceding roots/components. No new target/ID; F068 open,456/384/72 unchanged.
