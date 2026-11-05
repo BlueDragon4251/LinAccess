@@ -3034,3 +3034,15 @@ sharing/error oracle stay bounded. Scope: docs/NATIVE_DIRECTORY_STATEMENTS.md.
 Final desktop core1/1 (1.78 s), fresh GUI-free core1/1 (1.69 s), updated Debian/
 build-ID/SQLite/four hashes pass. Last broader full is preceding multi-record
 48/48 (84.19 s); no new target/ID, F040 open,456/384/72 fixed.
+
+Native Scripting.FileSystemObject now supports real FileExists, FolderExists,
+BuildPath and GetAbsolutePathName through local CreateObject/New and qualified
+typed locals/parameters/results. TypeOf uses explicit native identity; wrong
+classes13 leave the existing target intact. Scripting type validation/defaults
+share a closed canonical family rather than guessing identity from TypeName.
+No retained host/database handle, fabricated filesystem state, general COM/
+reference resolution, drive/UNC/wildcard mapping or full FSO contract. SQL global
+object-state guards remain strict. Scope: docs/NATIVE_FILE_SYSTEM_OBJECT.md.
+Final full desktop48/48 (85.42 s), fresh headless1/1 (1.69 s), updated Debian/
+build-ID/SQLite/four hashes pass. Original78/100; no Access result oracle.
+No new target/ID; F040/F042/F091 open,456/384/72 fixed.

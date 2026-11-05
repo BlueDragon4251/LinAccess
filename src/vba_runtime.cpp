@@ -815,10 +815,10 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     const auto type=nativeDeclaredType(lower(declared[4].str()));
                     if(!type.empty() && type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="string"
                         && type!="boolean" && type!="double" && type!="single" && type!="currency" && type!="date" && type!="object"
-                        && type!="collection" && type!="scripting.dictionary" && !nativeDaoType(type) && nativeAccessObjectType(type).empty())
+                        && type!="collection" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty())
                         return {VbaExecutionStatus::Unsupported,"Declared parameter type is not implemented",line};
-                    const bool objectDefault=(type=="collection" || type=="object" || type=="scripting.dictionary" || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) && lower(defaultExpression)=="nothing";
-                    if(optional && (type=="collection" || type=="object" || type=="scripting.dictionary" || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) && !defaultExpression.empty() && !objectDefault)
+                    const bool objectDefault=(type=="collection" || type=="object" || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) && lower(defaultExpression)=="nothing";
+                    if(optional && (type=="collection" || type=="object" || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) && !defaultExpression.empty() && !objectDefault)
                         return {VbaExecutionStatus::Unsupported,"Optional native object default must be Nothing",line};
                     if(optional && lower(defaultExpression)=="null" && !type.empty() && type!="variant")
                         return {VbaExecutionStatus::Unsupported,"Null defaults require a Variant parameter",line};
@@ -842,7 +842,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 within = true;
                 isFunction = lower(match[1].str()) == "function";
                 const auto declaredResult=nativeDeclaredType(lower(match[4].str()));
-                if (isFunction && !declaredResult.empty() && declaredResult!="variant" && declaredResult!="boolean" && declaredResult!="string" && declaredResult!="integer" && declaredResult!="long" && declaredResult!="single" && declaredResult!="double" && declaredResult!="currency" && declaredResult!="date" && declaredResult!="byte" && declaredResult!="object" && declaredResult!="collection" && declaredResult!="scripting.dictionary" && !nativeDaoType(declaredResult) && nativeAccessObjectType(declaredResult).empty())
+                if (isFunction && !declaredResult.empty() && declaredResult!="variant" && declaredResult!="boolean" && declaredResult!="string" && declaredResult!="integer" && declaredResult!="long" && declaredResult!="single" && declaredResult!="double" && declaredResult!="currency" && declaredResult!="date" && declaredResult!="byte" && declaredResult!="object" && declaredResult!="collection" && nativeScriptingObjectType(declaredResult).empty() && !nativeDaoType(declaredResult) && nativeAccessObjectType(declaredResult).empty())
                     return {VbaExecutionStatus::Unsupported,"Function result type unsupported",line};
                 if (resultType) *resultType=declaredResult;
             } else if (std::regex_match(source, match, anyBegin)
@@ -1357,7 +1357,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 if (!std::regex_match(entry, declared, declaration))
                     return {VbaExecutionStatus::Unsupported, "Variablendeklaration", line};
                 const auto type = nativeDeclaredType(lower(declared[2].str()));
-                if (!type.empty() && type != "variant" && type != "object" && type != "collection" && type != "scripting.dictionary" && !nativeDaoType(type)
+                if (!type.empty() && type != "variant" && type != "object" && type != "collection" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type)
                     && nativeAccessObjectType(type).empty()
                     && type != "string" && type != "boolean"
                     && type != "integer" && type != "long" && type != "single" && type != "double" && type != "currency" && type != "date"
@@ -1494,7 +1494,7 @@ std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view mod
         signature.required+=!parameter.optional && !parameter.paramArray;
         const auto& type=parameter.type;
         signature.objectArguments.push_back(!parameter.paramArray && (type=="object" || type=="collection"
-            || type=="scripting.dictionary" || nativeDaoType(type) || !nativeAccessObjectType(type).empty()));
+            || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()));
     }
     return signature;
 }
@@ -1569,10 +1569,10 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
             }
             if (!std::regex_match(entry,field,variable)) throw VbaRuntimeError(3251,"Module declaration unsupported");
             const auto name=lower(field[1].str()); const auto type=nativeDeclaredType(lower(field[2].str()));
-            if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency" && type!="date" && type!="byte" && type!="collection" && type!="object" && type!="scripting.dictionary" && !nativeDaoType(type) && nativeAccessObjectType(type).empty())
+            if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency" && type!="date" && type!="byte" && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty())
                 throw VbaRuntimeError(3251,"Module field type unsupported");
             if (state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
-            state->values.emplace(name,(type=="collection" || type=="object" || type=="scripting.dictionary" || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) ? VbaValue::reference(nullptr) : type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : type=="single" ? VbaValue::single(0) : type=="double" ? VbaValue::numeric(0) : type=="currency" ? VbaValue::currency(0) : type=="date" ? VbaValue::dateSerial(0) : type=="byte" ? VbaValue::byte(0) : VbaValue::empty());
+            state->values.emplace(name,(type=="collection" || type=="object" || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) ? VbaValue::reference(nullptr) : type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : type=="single" ? VbaValue::single(0) : type=="double" ? VbaValue::numeric(0) : type=="currency" ? VbaValue::currency(0) : type=="date" ? VbaValue::dateSerial(0) : type=="byte" ? VbaValue::byte(0) : VbaValue::empty());
             state->types.emplace(name,type);
             if (visibility=="public" || visibility=="global") state->publicVariables.insert(name);
         }
@@ -1600,9 +1600,9 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
             throw VbaRuntimeError(13,"Access binding requires the declared native class or interface");
         return value;
     }
-    if(type=="scripting.dictionary") {
-        if(value.kind!=VbaValue::Kind::Object || (value.object && value.object->className()!="Dictionary"))
-            throw VbaRuntimeError(13,"Dictionary binding requires a native Dictionary object");
+    if(!nativeScriptingObjectType(type).empty()) {
+        if(value.kind!=VbaValue::Kind::Object || (value.object && !value.object->isNativeType(nativeScriptingObjectType(type))))
+            throw VbaRuntimeError(13,"Scripting binding requires the declared native object type");
         return value;
     }
     if(type=="object") {
@@ -1702,7 +1702,7 @@ void VbaHost::openFormArguments(const std::vector<VbaValue>& args) {
 namespace {
 VbaValue initialLocalValue(const std::string& type) {
     if(type.ends_with("()")) return makeUnallocatedVbaArray(type.substr(0,type.size()-2));
-    if (type=="object" || type=="collection" || type=="scripting.dictionary" || type=="control" || type=="form" || type.starts_with("access.") || type.starts_with("dao.")) return VbaValue::reference(nullptr);
+    if (type=="object" || type=="collection" || !nativeScriptingObjectType(type).empty() || type=="control" || type=="form" || type.starts_with("access.") || type.starts_with("dao.")) return VbaValue::reference(nullptr);
     if (type=="string") return VbaValue::string("");
     if (type=="boolean") return VbaValue::logical(false);
     if (type=="byte") return VbaValue::byte(0);
@@ -1805,9 +1805,9 @@ static VbaExecutionResult executeProcedure(std::string_view module,
     std::unordered_set<std::string> constantNames;
     const int arrayBase=moduleArrayBase(module);
     const auto integralType=[](std::string_view type) { return type=="integer" || type=="long"; };
-    const auto checkedType=[&](std::string_view type) { return type.ends_with("()") || integralType(type) || type=="boolean" || type=="string" || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection" || type=="object" || type=="scripting.dictionary" || nativeDaoType(type) || !nativeAccessObjectType(type).empty(); };
-    const auto scalarType=[&](std::string_view type) { return checkedType(type) && type!="collection" && type!="object" && type!="scripting.dictionary" && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !type.ends_with("()"); };
-    const auto objectType=[](std::string_view type) { return type=="object" || type=="collection" || type=="scripting.dictionary" || type.starts_with("dao.") || type.starts_with("access.") || !nativeAccessObjectType(type).empty(); };
+    const auto checkedType=[&](std::string_view type) { return type.ends_with("()") || integralType(type) || type=="boolean" || type=="string" || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection" || type=="object" || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty(); };
+    const auto scalarType=[&](std::string_view type) { return checkedType(type) && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !type.ends_with("()"); };
+    const auto objectType=[](std::string_view type) { return type=="object" || type=="collection" || !nativeScriptingObjectType(type).empty() || type.starts_with("dao.") || type.starts_with("access.") || !nativeAccessObjectType(type).empty(); };
     auto errorState = std::make_shared<ErrorObject>();
     locals["err"] = VbaValue::reference(errorState);
     bool resumeNext = false;

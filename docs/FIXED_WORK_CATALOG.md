@@ -489,7 +489,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 
 - [ ] **F083** — Embedded linked subforms, tab/option groups, complete combos/lists and expression controls.
 - [x] **F089** — Existing real Bridge regressions cover 192 artifacts and hashes, 47 forms, 9 reports, 100 queries, 32 VBA files and 187 statically catalogued procedures.
-- [ ] **F091** — COM/ActiveX/WinAPI reference inventory and feasible native/optional Windows adapters.
+- [ ] **F091** — COM/ActiveX/WinAPI reference inventory and feasible native/optional Windows adapters. The bounded native FileSystemObject subset is in NATIVE_FILE_SYSTEM_OBJECT.md; full references/interfaces remain open.
 - [ ] **F092** — Real Windows Access 2003/365 Bridge export validation, 32/64-bit registration, references, encoding and failed-export diagnostics.
 
 ### Linux, Paketierung und Betrieb
