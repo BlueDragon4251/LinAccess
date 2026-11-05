@@ -613,3 +613,8 @@ Kopieren, Umbenennen, Verschieben und Löschen innerhalb dokumentierter Grenzen.
 ausdrücklich gewähltes UTF-16LE mit BOM; Anhängen und Surrogatgrenzen sind
 abgegrenzt. Vollständige COM-, Windows-Pfad-, Kodierungs- und Freigabeparität
 bleibt offen.
+
+[Strg+P für native Dokumente](docs/FORM_PRINT_SHORTCUT_RUNTIME.md) nutzt den
+echten Druckdialog: Formulare geben das aktuelle Layout aus, Berichte ihren
+unterstützten Seitenumfang. Formular-KeyDown kann den Aufruf abbrechen;
+vollständige Access-Druck- und Tastaturparität bleibt offen.

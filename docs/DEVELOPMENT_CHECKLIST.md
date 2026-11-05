@@ -1375,3 +1375,17 @@ readback cases pass core/DAO2/2 (2.69 s), fresh GUI-free1/1 (1.92 s), both build
 zero compiler warnings; current Debian/build-ID/SQLite/four original hashes pass.
 Scope: docs/NATIVE_TEXT_STREAM.md. Last broader48/48 (89.99 s) precedes this
 increment. No new CTest target/ID; F040/F091 open, fixed456/384/72.
+
+Native Ctrl+P in active top-level forms now follows KeyPreview/KeyDown and can
+be cancelled by KeyCode=0 before opening the genuine print dialog. The existing
+form toolbar and report print command share a native execution/reentry/active-
+window/modal/close guard; pending form controls are confirmed before the dialog.
+Closed/cancelled documents are not rendered after acceptance. Report page setup
+and the actual layout/report renderers remain in use. Embedded-form contexts,
+complete form recordset/page/confirmation and Windows printer/event oracle
+remain open. Scope: docs/FORM_PRINT_SHORTCUT_RUNTIME.md. Actual Qt/VBA form
+cancellation and genuine form/report dialogs (rejected without physical jobs)
+pass targeted layout/mainwindow2/2 (13.00 s); final full current desktop48/48
+(86.11 s), current Debian/build-ID/SQLite/four hashes pass. GUI-free core is
+unchanged since navigation1/1 (1.92 s). No new CTest target/ID; F148/F135 remain
+open, fixed456/384/72.

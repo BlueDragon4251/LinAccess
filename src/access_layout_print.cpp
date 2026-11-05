@@ -210,12 +210,10 @@ void AccessFormPreview::buildPrintToolbar(QVBoxLayout* layout) {
         dialog.exec();
     });
     auto* print = printToolbar_->addAction("Drucken …");
-    connect(print,&QAction::triggered,this,[this] {
-        QPrinter printer(QPrinter::HighResolution);
-        QPrintDialog dialog(&printer,this);
-        if (dialog.exec()==QDialog::Accepted && !renderLayout(printer))
-            QMessageBox::warning(this,"Drucken","Das aktuelle Layout konnte nicht ausgegeben werden.");
-    });
+    print->setObjectName("access-layout-print");
+    print->setToolTip("Aktuelles Formularlayout drucken (Strg+P)");
+    // The form key handler runs Access KeyDown/KeyPreview before this command.
+    connect(print,&QAction::triggered,this,[this] { printCurrentDocument(); });
     auto* pdf = printToolbar_->addAction("Aktuelles Layout als PDF …");
     connect(pdf,&QAction::triggered,this,[this] {
         const auto path = QFileDialog::getSaveFileName(this,"Aktuelles Layout als PDF",{},"PDF (*.pdf)");
@@ -260,18 +258,7 @@ void AccessFormPreview::buildPrintToolbar(QVBoxLayout* layout) {
     reportPrint->setObjectName("access-report-print");
     reportPrint->setShortcut(QKeySequence::Print);
     reportPrint->setShortcutContext(Qt::WindowShortcut);
-    connect(reportPrint,&QAction::triggered,this,[this] {
-        QPrinter printer(QPrinter::HighResolution);
-        if(!applyReportPageLayout(reportPageView_.data(),printer)) {
-            QMessageBox::warning(this,"Bericht drucken","Die Seiteneinrichtung kann für diese Ausgabe nicht verwendet werden."); return;
-        }
-        QPrintDialog dialog(&printer,this);
-        dialog.setOption(QAbstractPrintDialog::PrintPageRange,false);
-        dialog.setOption(QAbstractPrintDialog::PrintSelection,false);
-        if (dialog.exec()==QDialog::Accepted && !renderReport(printer))
-            QMessageBox::warning(this,"Bericht drucken",
-                "Dieser Bericht enthält noch nicht unterstützte Druckregeln oder konnte nicht vollständig ausgegeben werden.");
-    });
+    connect(reportPrint,&QAction::triggered,this,[this] { printCurrentDocument(); });
     auto* reportPdf=printToolbar_->addAction("Bericht als PDF …");
     connect(reportPdf,&QAction::triggered,this,[this] {
         const auto path=QFileDialog::getSaveFileName(this,"Bericht als PDF",{},"PDF (*.pdf)");
@@ -283,6 +270,21 @@ void AccessFormPreview::buildPrintToolbar(QVBoxLayout* layout) {
     auto* close = printToolbar_->addAction("&Schließen");
     connect(close,&QAction::triggered,this,&AccessFormPreview::reject);
 
+}
+void AccessFormPreview::showDocumentPrintDialog() {
+    const bool report=layout_.kind==linaccess::AccessDocumentKind::Report;
+    QPrinter printer(QPrinter::HighResolution);
+    if(report && !applyReportPageLayout(reportPageView_.data(),printer)) {
+        QMessageBox::warning(this,"Bericht drucken","Die Seiteneinrichtung kann für diese Ausgabe nicht verwendet werden."); return;
+    }
+    QPrintDialog dialog(&printer,this);
+    dialog.setObjectName(report ? "access-report-print-dialog" : "access-layout-print-dialog");
+    dialog.setWindowTitle(report ? "Bericht drucken" : "Aktuelles Formularlayout drucken");
+    dialog.setOption(QAbstractPrintDialog::PrintPageRange,false);
+    dialog.setOption(QAbstractPrintDialog::PrintSelection,false);
+    if(dialog.exec()!=QDialog::Accepted || closed_ || openCancelled_) return;
+    if(!(report ? renderReport(printer) : renderLayout(printer)))
+        QMessageBox::warning(this,"Drucken","Dieses Dokument konnte nicht vollständig ausgegeben werden.");
 }
 bool AccessFormPreview::renderLayout(QPrinter& printer) {
     auto* canvas = findChild<QWidget*>("access-form-canvas");
