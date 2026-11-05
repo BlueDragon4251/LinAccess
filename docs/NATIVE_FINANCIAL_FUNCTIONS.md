@@ -12,7 +12,7 @@ Fractional/negative/larger periods, rate<=-1 and other timing values explicitly
 raise3251 rather than invent compatibility outside the proven scope. Null raises94;
 missing required/wrong arity raises450; nonfinite arguments/results raise6.
 The result retains Double identity. There is no complete financial library claim:
-IPmt/PPmt, unrestricted array/period semantics, other financial functions and the Windows error/edge-case oracle remain open.
+Unrestricted array/period semantics and the Windows error/edge-case oracle remain open.
 
 The computation uses long-double intermediates and log1p/expm1 to avoid the
 usual near-zero-rate loss from subtracting1 from a rounded power. Rate0 uses
@@ -167,3 +167,33 @@ No new target or catalog ID; F068 stays open,456/384/72.
 
 References: [Rate](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/rate-function),
 [IRR](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/irr-function).
+
+## IPmt and PPmt
+
+IPmt(Rate,Per,NPer,Pv,[Fv],[Type]) and PPmt with the same signature now compute
+the real interest/principal components of a payment in native VBA and SQL. The
+normal binder supports documented named arguments. Fv defaults to0, Type to0.
+Shared stable annuity factors supply the payment; the actual balance is advanced
+through prior periods. Interest is0 for the first beginning-of-period payment;
+later beginning payments account for interest from the preceding period. Principal
+is payment minus interest. Cash-flow signs are preserved.
+
+The bounded domain is finite Double-coercible inputs, rate greater than-1, timing
+0/end or1/beginning and whole periods1..NPer up to32767. Invalid period range5,
+unsupported fractional/larger/rate/timing3251, Null94, arity450 and nonfinite
+argument/payment/balance/component6 use the native error path. Exact Windows
+rounding, error precedence and unrestricted domain behavior remain open.
+
+Existing core cases validate all payments of an independently advanced credit
+balance and their sum against Pmt, beginning/end timing and zero-rate principal.
+Actual SQL financial rows verify interest plus principal equals payment. Final
+core/DAO/query3/3 (2.68 s), fresh GUI-free core1/1 (1.79 s), current Debian/
+build-ID/SQLite3.54.1 and all four original hashes pass. Last broader full remains
+fb63120 financial milestone48/48 (85.94 s), preceding roots/payment components.
+No new target or catalog ID; F068 remains open,456/384/72.
+
+The native entry points now include FV, PV, Pmt, IPmt, PPmt, NPer, Rate, NPV,
+IRR, MIRR, SLN, SYD and DDB within their explicit domains above. This inventories
+implemented entry points, not complete financial-library or Access2003 parity.
+References: [IPmt](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/ipmt-function),
+[PPmt](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/ppmt-function).
