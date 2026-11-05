@@ -222,7 +222,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F035** — Currency scaled-unit changes survive nested ByRef synchronization, shared aliases and handled errors; original calculated Currency value passes through a separate native nested helper exactly.
 - [x] **F039** — Original function-expression date-field events, native Screen/Parent getters and bounded MSCAL adapter; both unchanged original date bindings navigate/select/close and feed actual MDB records in an explicitly enabled calendar context. See CALENDAR_RUNTIME.md.
 - [x] **F063** — Canonical MDB/date-literal/Date()/Now() timestamps at second precision.
-- [ ] **F068** — JOIN/DISTINCT/UNION/TOP, TRANSFORM/PIVOT and Access expressions/functions. Native scalar standard-module SQL/VBA calls are documented in NATIVE_VBA_SQL.md; the complete requirement remains open.
+- [ ] **F068** — JOIN/DISTINCT/UNION/TOP, TRANSFORM/PIVOT and Access expressions/functions. Native scalar standard-module SQL/VBA calls are documented in NATIVE_VBA_SQL.md; bounded native NPer/NPV/MIRR/DDB scope is in NATIVE_FINANCIAL_FUNCTIONS.md. The complete requirement remains open.
 - [x] **F069** — Bounded date Format/Format$ masks in SQL/VBA; actual values from ten original date columns, NULL/error/locale/DST tests.
 - [ ] **F071** — Complete date/format masks, wildcard semantics, Null/coercion, DDL/DML and action queries.
 - [x] **F074** — Pure IIf projection-alias chains and leading-dot decimal/exponent literals; three additional original queries produce positive non-NULL results (77/100 execute).

@@ -1,4 +1,4 @@
-# Native FV, Pmt, PV, NPer, SLN and SYD
+# Native financial calculations
 
 FV(Rate,NPer,Pmt,[Pv],[Type]) and Pmt(Rate,NPer,Pv,[Fv],[Type]) now execute
 native C++ floating-point calculations. The VBA binder supports the documented
@@ -12,7 +12,7 @@ Fractional/negative/larger periods, rate<=-1 and other timing values explicitly
 raise3251 rather than invent compatibility outside the proven scope. Null raises94;
 missing required/wrong arity raises450; nonfinite arguments/results raise6.
 The result retains Double identity. There is no complete financial library claim:
-NPV/Rate/IRR/MIRR/DDB and other financial functions and Windows error/edge-case oracle remain open.
+Rate/IRR, unrestricted array/period semantics, other financial functions and the Windows error/edge-case oracle remain open.
 
 The computation uses long-double intermediates and log1p/expm1 to avoid the
 usual near-zero-rate loss from subtracting1 from a rounded power. Rate0 uses
@@ -74,3 +74,62 @@ their computed payments and match independently amortized twelve-period balances
 Existing core/DAO/query3/3 (2.76 s), fresh GUI-free core1/1 (1.77 s), updated
 Debian/build-ID/SQLite3.54.1 and all four original hashes pass. Last broader full
 48/48 (87.98 s); no new target/ID. F068 remains open, fixed456/384/72.
+
+## NPV and MIRR over actual Double arrays
+
+NPV(Rate,Values) and MIRR(Values,Finance_rate,Reinvest_rate) now execute native
+C++ calculations over allocated, one-dimensional Double arrays. The normal VBA
+named-argument binder uses these documented names, including Values rather than
+the differently named .NET ValueArray. Arbitrary lower bounds are supported;
+ascending array position determines chronology, including explicit zero flows.
+The native limit is1,000,000 entries. Variant/other-element/rank and empty arrays
+are outside this bounded stage; they are not silently converted or flattened.
+
+NPV discounts the first flow at the end of period1 using reverse Horner evaluation
+with long-double intermediates. The first initial investment must be included or
+added separately according to the intended dates; no automatic date correction
+is invented. This bounded scope follows the documented positive/negative-flow
+requirement and refuses single-sign arrays3251 pending an Access execution oracle.
+
+MIRR discounts negative flows at the financing rate and accumulates positive
+flows at the reinvestment rate. The first flow is at period0. The final annualized
+per-period return uses log/expm1, with the actual array length minus1 determining
+periods. At least two flows, both signs and rates greater than-1 are required.
+Missing signs raise5, unsupported rate range3251, Null94, arity450, scalar-array
+mismatch13 and nonfinite input/intermediate/result6 follow the native error path.
+Complete sign/underflow/error precedence and coercion comparison remain open.
+
+There is no SQLite array transport for direct SQL NPV/MIRR arguments. Public native
+VBA functions may use supported local arrays through the existing native runtime,
+subject to the SQL host's documented context/state restrictions. No SQL array
+callback or complete financial library compatibility is claimed.
+
+Actual VBA checks negative-lower-bound arrays, reversed named arguments, a mixed
+cash-flow NPV, zero discount and separate financing/reinvestment across multiple
+negative and positive periods.
+
+## DDB
+
+DDB(Cost,Salvage,Life,Period,[Factor]) executes native declining-balance depreciation
+in VBA and real SQL rows. Factor defaults to2. The period's opening book value
+comes from the declining-balance factor; depreciation is capped at the remaining
+amount above salvage. Fraction at least1 consumes that amount in period1 and
+returns0 for later periods. There is no invented switch to straight-line.
+
+Supported scope: nonnegative finite asset values, salvage no greater than cost,
+whole positive life/period up to32767, period no greater than life and positive
+factor. Fractional/larger periods, salvage above cost and negative asset values
+remain explicit3251 boundaries. Invalid lifetime/period/factor5, Null94, arity450
+and nonfinite values6 use the native error path. Full Windows numeric/error
+equivalence remains open. Actual SQL depreciation is checked against independently
+updated balances, including the final salvage cap.
+
+Combined current milestone: targeted core/DAO/query3/3 (2.54 s); full desktop48/48
+(85.94 s), fresh GUI-free core1/1 (1.67 s), updated Debian payload/build-ID/pinned
+SQLite3.54.1 and all four original fixture hashes pass. Original query coverage
+stays78/100 without an Access result oracle. No new CTest target or catalog ID;
+F068 stays open, fixed456/384/72.
+
+References: [NPV](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/npv-function),
+[MIRR](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/mirr-function),
+[DDB](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/ddb-function).

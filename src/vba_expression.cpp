@@ -40,6 +40,16 @@ public:
         throw VbaRuntimeError(3251,"Internal Byte array metadata is not a callable object");
     }
 };
+std::size_t nativeFinancialArraySize(const VbaValue& value) {
+    if(value.kind==VbaValue::Kind::Null) throw error("Invalid Null financial array",94);
+    if(!isVbaArray(value)) throw error("Financial function requires an array",13);
+    constexpr int doubleArrayType=8192|5;
+    if(vbaArrayRank(value)!=1 || vbaArrayType(value)!=doubleArrayType)
+        throw error("Financial function requires a one-dimensional Double array",3251);
+    const auto count=vbaArraySize(value);
+    if(count==0 || count>1000000) throw error("Financial array size outside supported range",3251);
+    return count;
+}
 VbaValue stringLongResult(std::size_t value) {
     if(value>static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) throw error("String result exceeds VBA Long",6);
     return VbaValue::longInteger(static_cast<std::int32_t>(value));
@@ -699,7 +709,7 @@ bool vbaIntrinsicName(const std::string& name) {
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
                 "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
-                "filelen","filedatetime","curdir","curdir$","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt","pv","nper","sln","syd"};
+                "filelen","filedatetime","curdir","curdir$","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt","pv","nper","npv","mirr","sln","syd","ddb"};
     return intrinsics.contains(name);
 }
 
@@ -1298,8 +1308,11 @@ private:
                     {"strcomp",{{"String1","String2","Compare"},2}},
                     {"pv",{{"Rate","NPer","Pmt","Fv","Type"},3}},
                     {"nper",{{"Rate","Pmt","Pv","Fv","Type"},3}},
+                    {"npv",{{"Rate","Values"},2}},
+                    {"mirr",{{"Values","Finance_rate","Reinvest_rate"},3}},
                     {"sln",{{"Cost","Salvage","Life"},3}},
                     {"syd",{{"Cost","Salvage","Life","Period"},4}},
+                    {"ddb",{{"Cost","Salvage","Life","Period","Factor"},4}},
                     {"fv",{{"Rate","NPer","Pmt","Pv","Type"},3}},
                     {"pmt",{{"Rate","NPer","Pv","Fv","Type"},3}},
                     {"partition",{{"Number","Start","Stop","Interval"},4}},
@@ -1824,13 +1837,15 @@ private:
                 if (word!="ltrim" && word!="ltrim$") while(last>first && text[last-1]==' ') --last;
                 return VbaValue::string(text.substr(first,last-first));
             }
-            if (word=="sln" || word=="syd") {
+            if (word=="sln" || word=="syd" || word=="ddb") {
                 if (!host_) return {};
                 const std::size_t count=word=="sln" ? 3 : 4;
-                if(args.size()!=count || std::any_of(omitted.begin(),omitted.end(),[](bool value){return value;}))
+                if(args.size()<count || args.size()>(word=="ddb" ? 5u : count)
+                   || std::any_of(omitted.begin(),omitted.begin()+std::min(count,omitted.size()),[](bool value){return value;}))
                     throw error("Depreciation arguments are required",450);
-                long double values[4]{};
-                for(std::size_t i=0;i<count;++i) {
+                long double values[5]{0,0,0,0,2};
+                for(std::size_t i=0;i<args.size();++i) {
+                    if(omitted[i]) continue;
                     const auto value=scalarObjectValue(args[i]);
                     if(value.kind==VbaValue::Kind::Null) throw error("Invalid Null depreciation argument",94);
                     values[i]=coerceVbaModuleValue(value,"double").number;
@@ -1838,12 +1853,79 @@ private:
                 }
                 const auto cost=values[0],salvage=values[1],life=values[2],period=values[3];
                 if(cost<0 || salvage<0) throw error("Negative asset values outside supported scope",3251);
-                if(life<=0 || (word=="syd" && (period<=0 || period>life))) throw error("Invalid depreciation lifetime or period",5);
+                if(life<=0 || (word!="sln" && (period<=0 || period>life))) throw error("Invalid depreciation lifetime or period",5);
+                if(word=="ddb") {
+                    const auto factor=values[4];
+                    if(factor<=0) throw error("DDB requires positive factor",5);
+                    if(salvage>cost || life>32767 || std::floor(life)!=life || std::floor(period)!=period)
+                        throw error("DDB asset or fractional period range requires reference validation",3251);
+                    const auto fraction=factor/life;
+                    long double depreciation;
+                    if(fraction>=1) depreciation=period==1 ? cost-salvage : 0;
+                    else {
+                        const auto balance=cost*std::exp((period-1)*std::log1p(-fraction));
+                        depreciation=std::min(balance*fraction,std::max(0.0L,balance-salvage));
+                    }
+                    const auto result=static_cast<double>(depreciation);
+                    if(!std::isfinite(result)) throw error("DDB result overflow",6);
+                    return VbaValue::numeric(result);
+                }
                 const auto result=word=="sln" ? (cost-salvage)/life
                     : (cost-salvage)*(life-period+1)*2/(life*(life+1));
                 const auto converted=static_cast<double>(result);
                 if(!std::isfinite(converted)) throw error("Depreciation result overflow",6);
                 return VbaValue::numeric(converted);
+            }
+            if(word=="mirr") {
+                if(!host_) return {};
+                if(args.size()!=3 || omitted[0] || omitted[1] || omitted[2])
+                    throw error("MIRR requires cash flows, financing rate and reinvestment rate",450);
+                const auto array=scalarObjectValue(args[0]); const auto count=nativeFinancialArraySize(array);
+                const auto financeValue=scalarObjectValue(args[1]),reinvestValue=scalarObjectValue(args[2]);
+                if(financeValue.kind==VbaValue::Kind::Null || reinvestValue.kind==VbaValue::Kind::Null)
+                    throw error("Invalid Null MIRR rate",94);
+                const long double finance=coerceVbaModuleValue(financeValue,"double").number;
+                const long double reinvest=coerceVbaModuleValue(reinvestValue,"double").number;
+                if(!std::isfinite(finance) || !std::isfinite(reinvest)) throw error("MIRR rate overflow",6);
+                if(finance<=-1 || reinvest<=-1) throw error("MIRR rate outside supported range",3251);
+                if(count<2) throw error("MIRR requires positive and negative flows",5);
+                long double positiveFuture=0,negativePresent=0;
+                for(std::size_t i=0;i<count;++i) {
+                    const long double forward=coerceVbaModuleValue(vbaArrayLinearElement(array,i),"double").number;
+                    const long double reverse=coerceVbaModuleValue(vbaArrayLinearElement(array,count-i-1),"double").number;
+                    if(!std::isfinite(forward) || !std::isfinite(reverse)) throw error("MIRR cash-flow overflow",6);
+                    positiveFuture=positiveFuture*(1+reinvest)+std::max(0.0L,forward);
+                    negativePresent=negativePresent/(1+finance)+std::min(0.0L,reverse);
+                    if(!std::isfinite(positiveFuture) || !std::isfinite(negativePresent)) throw error("MIRR intermediate overflow",6);
+                }
+                if(positiveFuture<=0 || negativePresent>=0) throw error("MIRR requires positive and negative flows",5);
+                const auto result=static_cast<double>(std::expm1((std::log(positiveFuture)-std::log(-negativePresent))/(count-1)));
+                if(!std::isfinite(result)) throw error("MIRR result overflow",6);
+                return VbaValue::numeric(result);
+            }
+            if(word=="npv") {
+                if(!host_) return {};
+                if(args.size()!=2 || omitted[0] || omitted[1]) throw error("NPV requires rate and cash-flow array",450);
+                const auto rateValue=scalarObjectValue(args[0]); const auto array=scalarObjectValue(args[1]);
+                if(rateValue.kind==VbaValue::Kind::Null || array.kind==VbaValue::Kind::Null) throw error("Invalid Null NPV argument",94);
+                const long double rate=coerceVbaModuleValue(rateValue,"double").number;
+                if(!std::isfinite(rate)) throw error("NPV rate overflow",6);
+                if(rate<=-1) throw error("NPV rate outside supported range",3251);
+                const auto count=nativeFinancialArraySize(array);
+                long double total=0; bool positive=false,negative=false;
+                // Reverse Horner discounts the first flow at period end and
+                // avoids an independent power/weight that could overflow on zero flows.
+                for(auto i=count;i>0;--i) {
+                    const auto flow=coerceVbaModuleValue(vbaArrayLinearElement(array,i-1),"double").number;
+                    if(!std::isfinite(flow)) throw error("NPV cash-flow overflow",6);
+                    positive|=flow>0; negative|=flow<0;
+                    total=(total+static_cast<long double>(flow))/(1+rate);
+                    if(!std::isfinite(total)) throw error("NPV intermediate overflow",6);
+                }
+                if(!positive || !negative) throw error("NPV single-sign array behavior requires reference validation",3251);
+                const auto result=static_cast<double>(total);
+                if(!std::isfinite(result)) throw error("NPV result overflow",6);
+                return VbaValue::numeric(result);
             }
             if (word=="fv" || word=="pmt" || word=="pv" || word=="nper") {
                 if (!host_) return {};
