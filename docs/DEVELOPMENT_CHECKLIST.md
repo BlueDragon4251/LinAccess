@@ -1115,3 +1115,9 @@ INSERT and side-effect-free metadata preparation passed. General Variant/nested/
 compound typing and typed-function make-table metadata remain open. Full48/48
 (85.94 s), fresh core1/1 (2.36 s), final label DAO/query/original3/3 (8.36 s), updated
 package/backend/four hashes pass. No new checkbox or ID;456/384/72 unchanged.
+
+Typed make-table milestone (2026-11-05): full current desktop48/48 passed
+(87.98 s); Debian payload/build-ID/pinned SQLite3.54.1 and all four original
+fixture hashes passed. GUI-free core runtime unchanged from fresh1/1 (2.36 s).
+Original-query coverage remains78/100 without Access result oracle. No new
+CTest target or catalog ID; fixed456/384/72. Native SQL scope: NATIVE_VBA_SQL.md.

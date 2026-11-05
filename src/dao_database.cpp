@@ -76,7 +76,34 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
         {
             SqliteExecutionBudget budget(db);
             QSqlQuery query(db);
-            if (!query.prepare(accessActionSql(db,plan))) queryFailure(query);
+            QString action;
+            if(makeTable) {
+                const auto select=accessMakeTableSource(db,plan);
+                QVector<QString> types;
+                const auto columns=accessQueryColumns(db,select,&types);
+                if(types.contains("CURRENCY_REAL") || types.contains("DATETIME") || types.contains("DATE")) {
+                    if(select.hiddenRank || select.topLimit || select.daoQueryType!=0 || !select.rightJoinSql.isEmpty())
+                        throw VbaRuntimeError(3251,"Complex typed make-table source unsupported");
+                    // Build actual declared columns before executing any source rows.
+                    // Unknown output types remain untyped; never infer Jet types from values.
+                    const QSet<QString> allowed={"CURRENCY_REAL","DATETIME","DATE","TEXT","BOOLEAN","INTEGER1","INTEGER2","INTEGER4","INTEGER","INT","REAL","DOUBLE","FLOAT"};
+                    QSet<QString> names; QStringList definitions;
+                    for(qsizetype i=0;i<columns.size();++i) {
+                        const auto name=columns[i];
+                        if(name.isEmpty() || names.contains(name.toCaseFolded()))
+                            throw VbaRuntimeError(3251,"Make-table output names must be unique");
+                        names.insert(name.toCaseFolded());
+                        const auto type=types.value(i).toUpper();
+                        definitions.append(quote(name)+(allowed.contains(type) ? " "+type : QString{}));
+                    }
+                    if(definitions.isEmpty()) throw VbaRuntimeError(3251,"Make-table columns unavailable");
+                    if(!query.exec("CREATE TABLE "+quote(plan.makeTable)+" ("+definitions.join(',')+")")) queryFailure(query);
+                    query.finish();
+                    action="INSERT INTO "+quote(plan.makeTable)+" "+select.sql;
+                }
+            }
+            if(action.isEmpty()) action=accessActionSql(db,plan);
+            if (!query.prepare(action)) queryFailure(query);
             for (auto it=bindings.cbegin();it!=bindings.cend();++it) query.bindValue(it.key(),it.value());
             if (!query.exec()) queryFailure(query);
             if (query.isSelect()) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");

@@ -107,8 +107,13 @@ all nested/compound/view/HAVING type propagation and complete Jet coercion seman
 remain open; proof applies to the adapter's supported projection/action shapes.
 
 Existing typed INSERT/UPDATE expression paths receive the same function declaration
-map and storage guards. Typed function make-table cases explicitly3251 because the
-created-column metadata contract is not implemented; no target table is left behind.
+map and storage guards. Simple typed make-table sources now prepare output metadata
+without executing their bodies, create real CURRENCY_REAL/DATETIME columns and copy
+actual source rows inside the existing savepoint. Failure rolls back the new table.
+Unproven output types stay untyped rather than being guessed from observed values.
+Duplicate/empty typed output names and complex typed UNION/TOP/ranked/RIGHT JOIN
+shapes are refused3251. Index/default/validation/AutoNumber propagation and complete
+Jet make-table metadata remain open.
 Unaliased supported function projections use their original expression as the native
 column label, keeping internal result-guard names out of the displayed field name.
 This is not a claim of Windows Access's generated Expr1000 naming rules.
@@ -116,8 +121,15 @@ This is not a claim of Windows Access's generated Expr1000 naming rules.
 Actual DAO/query cases verify Currency units1000 and exact Currency addition3000,
 Date value2024-02-29 12:34:56 with field type8, Currency field type5, Long field type4,
 Boolean identity, metadata inspection without counter effects, typed INSERT,
-stale-signature refusal/restoration and make-table refusal without mutation.
+stale-signature refusal/restoration, actual typed make-table rows and rollback on
+a source-function failure.
 Full48/48 (85.94 s), fresh GUI-free core1/1 (2.36 s); final label change afterward
 passed targeted DAO/query/original-corpus3/3 (8.36 s). Updated Debian/build-ID/
 SQLite3.54.1 and all four original hashes pass. Original corpus stays78/100;
 no Windows result oracle, new target or catalog ID.456/384/72 unchanged.
+
+Typed make-table milestone (2026-11-05): full current desktop48/48 passed
+(87.98 s); Debian payload/build-ID/pinned SQLite3.54.1 and all four original
+fixture hashes passed. GUI-free core runtime unchanged from fresh1/1 (2.36 s).
+Original-query coverage remains78/100 without Access result oracle. No new
+CTest target or catalog ID; fixed456/384/72. Native SQL scope: NATIVE_VBA_SQL.md.

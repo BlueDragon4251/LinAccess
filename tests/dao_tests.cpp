@@ -1144,10 +1144,18 @@ End Function
     assert(!guarded.exec()); assert(linaccess::jetSqlFunctionErrorNumber(guarded.lastError().text().toCaseFolded().toStdString())==3251); guarded.finish();
     sql.prepare("UPDATE _la_access_artifacts SET source_bytes=? WHERE name='NativeMath'"); sql.addBindValue(module); assert(sql.exec()); sql.finish();
     assert(guarded.exec() && guarded.next() && std::abs(guarded.value(0).toDouble()-0.1)<1e-12); guarded.clear();
+    database->member("Execute",{linaccess::VbaValue::string("SELECT NativeMoney() AS amount,NativeDate() AS stamp INTO typed_udf_copy FROM inputs")});
+    assert(database->member("RecordsAffected",{}).asNumber()==3);
+    assert(rows.exec("PRAGMA table_info(typed_udf_copy)") && rows.next() && rows.value(2).toString()=="CURRENCY_REAL");
+    assert(rows.next() && rows.value(2).toString()=="DATETIME"); rows.finish();
+    const auto copied=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT * FROM typed_udf_copy"),{});
+    assert(copied.rows.size()==3 && copied.columnTypes[0]=="CURRENCY_REAL" && copied.columnTypes[1]=="DATETIME");
+    assert(linaccess::qtFieldValue(copied.rows[0][0],"CURRENCY_REAL").currencyUnits==1000);
+    assert(copied.rows[0][1].toString()=="2024-02-29 12:34:56");
     int makeTableError=0;
-    try { database->member("Execute",{linaccess::VbaValue::string("SELECT NativeMoney() AS amount INTO unproven_udf_copy FROM inputs")}); }
+    try { database->member("Execute",{linaccess::VbaValue::string("SELECT NativeMoney() AS amount,NativeNeedsUI() AS blocked INTO failed_udf_copy FROM inputs")}); }
     catch(const linaccess::VbaRuntimeError& failure) { makeTableError=failure.number; }
-    assert(makeTableError==3251 && !db.tables().contains("unproven_udf_copy"));
+    assert(makeTableError==3251 && !db.tables().contains("failed_udf_copy"));
     assert(sql.exec("CREATE TEMP VIEW _la_access_artifacts AS SELECT * FROM main._la_access_artifacts")); sql.finish();
     assert(!rows.exec("SELECT NativeScale(3)"));
     assert(linaccess::jetSqlFunctionErrorNumber(rows.lastError().text().toCaseFolded().toStdString())==3251); rows.finish();
