@@ -1446,3 +1446,13 @@ Existing form geometry display changes block signals. No new close-time promptin
 complete Undo/equality/name-reservation claim. docs/DESIGNER_SAVE_KEYS.md; F080 open.
 Existing mainwindow1/1 (2.71 s), current package/build-ID/SQLite3.54.1/four hashes pass;
 last full48/48 (83.85 s), unchanged runtime headless1/1 (1.75 s);456/384/72 fixed.
+
+SysCmd GetObjectState10 now consumes the shared checked native project/window
+registry for tables/queries/forms/reports. Open1, tracked design-modified2 and
+registered new4; data-record dirty does not set design bit. Closed/nonexistent0,
+other object types3251, complete anonymous-new-name/COM/VBE/Windows state parity
+open. Existing IsLoaded uses the same state reader with original generation and
+Qt owner guards. Actual query designer1→3→1→closed0 and pending query-record1
+passed. docs/NATIVE_ACCESS_STATUS.md. Targeted core/mainwindow/layout3/3 (15.13 s),
+fresh headless1/1 (1.76 s), current Debian/build-ID/SQLite3.54.1/four hashes pass.
+Last full baseline48/48 (83.85 s), catalog456/384/72 unchanged.

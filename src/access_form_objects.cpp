@@ -1527,22 +1527,32 @@ public:
         }
         return names.values();
     }
-    bool objectLoaded(const QString& kind,const QString& name) const {
-        check();
-        if((kind=="form" || kind=="report") && AccessFormPreview::projectObjectLoaded(database_,kind=="form" ? linaccess::AccessDocumentKind::Form : linaccess::AccessDocumentKind::Report,name)) return true;
+    int objectState(const QString& kind,const QString& name) const {
+        check(); int state=0;
+        if((kind=="form" || kind=="report") && AccessFormPreview::projectObjectLoaded(database_,kind=="form" ? linaccess::AccessDocumentKind::Form : linaccess::AccessDocumentKind::Report,name)) state=1;
         for(auto* widget:QApplication::allWidgets()) {
             if(widget->property("la_project_object_kind").toString()==kind
                 && widget->property("la_project_object_name").toString().compare(name,Qt::CaseInsensitive)==0
                 && widget->property("la_project_object_connection").toString()==database_.connectionName()
                 && widget->property("la_project_object_database").toString()==identity_
                 && widget->property("la_project_object_generation").toULongLong()==generation_) {
+                bool open=widget->isVisible();
                 if(widget->property("la_project_object_scope").toString()=="tab") {
-                    if(owner_) for(auto* tabs:owner_->findChildren<QTabWidget*>()) if(tabs->indexOf(widget)>=0) return true;
-                } else if(widget->isVisible()) return true;
+                    open=false;
+                    if(owner_) for(auto* tabs:owner_->findChildren<QTabWidget*>()) if(tabs->indexOf(widget)>=0) { open=true; break; }
+                }
+                if(open) {
+                    state|=1;
+                    if(widget->property("la_designer_state_available").toBool()) {
+                        if(widget->isWindowModified()) state|=2;
+                        if(widget->property("la_designer_new").toBool()) state|=4;
+                    }
+                }
             }
         }
-        return false;
+        return state;
     }
+    bool objectLoaded(const QString& kind,const QString& name) const { return objectState(kind,name)!=0; }
     void check() const {
         if(!database_.isOpen() || database_.databaseName()!=identity_ || (hasOwner_ && (!owner_
             || owner_->property("la_project_generation").toULongLong()!=generation_)))
@@ -1666,7 +1676,22 @@ public:
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
-        if(key=="syscmd") return linaccess::nativeAccessStatus(preview,args);
+        if(key=="syscmd") {
+            if(!args.empty() && args[0].kind!=linaccess::VbaValue::Kind::Missing
+               && linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[0]),"long").number==10) {
+                if(args.size()!=3 || args[1].kind==linaccess::VbaValue::Kind::Missing || args[2].kind==linaccess::VbaValue::Kind::Missing)
+                    throw linaccess::VbaRuntimeError(450,"GetObjectState requires object type and name");
+                const auto type=linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[1]),"long").number;
+                const auto objectName=linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[2]),"string").asText();
+                if(objectName.find('\0')!=std::string::npos) throw linaccess::VbaRuntimeError(5,"Invalid object name");
+                const QStringList kinds{"table","query","form","report"};
+                if(type<0 || type>=kinds.size()) throw linaccess::VbaRuntimeError(3251,"GetObjectState object type is not implemented");
+                auto project=std::dynamic_pointer_cast<NativeCurrentProjectObject>(member("CurrentProject",{}).object);
+                if(!project) throw linaccess::VbaRuntimeError(3420,"Native project context unavailable");
+                return linaccess::VbaValue::longInteger(project->objectState(kinds[static_cast<int>(type)],text(objectName)));
+            }
+            return linaccess::nativeAccessStatus(preview,args);
+        }
         if(key=="filedialog") {
             if(args.size()!=1) throw linaccess::VbaRuntimeError(450,"FileDialog requires one type");
             const QPointer<AccessFormPreview> owner=&preview;

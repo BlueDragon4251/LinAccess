@@ -1195,6 +1195,7 @@ End Sub
     assert(unchanged.exec(R"SQL(UPDATE _la_objects SET definition='{"sql":"SELECT * FROM command_edit"}' WHERE kind='query' AND name='command_edit_query')SQL"));
     assert(editableQueryModel->setData(editableQueryModel->index(0,queryValueColumn),"blocked"));
     assert(mixed->executeProcedure("CloseEditableQuery",selectArguments).status==linaccess::VbaExecutionStatus::Error && editableDescriptor->member("IsLoaded",{}).boolean && editableQueryModel->isDirty());
+    assert(makePreviewApplicationObject(*mixed)->member("SysCmd",{linaccess::VbaValue::integer(10),linaccess::VbaValue::integer(1),linaccess::VbaValue::string("command_edit_query")}).asNumber()==1);
     assert(unchanged.exec("SELECT value FROM command_edit WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="query-refreshed"); unchanged.finish();
     editableQueryModel->revertAll(); assert(editableQueryModel->setData(editableQueryModel->index(0,queryValueColumn),"query-closed"));
     assert(mixed->executeProcedure("CloseEditableQuery",selectArguments).status==linaccess::VbaExecutionStatus::Completed && !editableDescriptor->member("IsLoaded",{}).boolean);
@@ -2031,6 +2032,24 @@ int main(int argc,char** argv) {
     auto root=makePreviewFormObject(*entry); auto* editor=entry->findChild<QLineEdit*>("access-control-editor"); assert(editor);
     std::vector<linaccess::VbaValue> arguments;
     auto projectMetadata=makePreviewApplicationObject(*entry)->member("CurrentProject",{}).object; assert(projectMetadata);
+    const auto statusApplication=makePreviewApplicationObject(*entry);
+    const auto objectState=[&](int type,const std::string& name) {
+        return statusApplication->member("SysCmd",{linaccess::VbaValue::integer(10),linaccess::VbaValue::integer(type),linaccess::VbaValue::string(name)}).asNumber();
+    };
+    assert(objectState(2,"ENTRY")==1 && objectState(3,"report")==0 && objectState(2,"missing state object")==0);
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-query-designer");
+        dialog->findChild<QLineEdit*>("native-query-name")->setText("Native State Query");
+        auto* code=dialog->findChild<QPlainTextEdit*>("native-query-sql"); code->setPlainText("SELECT 1 AS value");
+        QApplication::setActiveWindow(dialog); code->setFocus(); QApplication::processEvents();
+        QTest::keyClick(code,Qt::Key_S,Qt::ControlModifier);
+        assert(objectState(1,"Native State Query")==1);
+        code->setPlainText("SELECT 2 AS value"); assert(objectState(1,"Native State Query")==3);
+        QTest::keyClick(code,Qt::Key_S,Qt::ControlModifier); assert(objectState(1,"Native State Query")==1);
+        dialog->reject();
+    });
+    action(window,"+ Abfrage")->trigger(); assert(objectState(1,"Native State Query")==0);
+
     assert(projectMetadata->member("Name",{}).asText()=="first.linaccess" && projectMetadata->member("Path",{}).asText()==temporary.path().toStdString());
     assert(entry->executeProcedure("ReadProjectMetadata",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("Tag",{}).asText()==first.toStdString());
     assert(entry->executeProcedure("RenameProjectMetadata",arguments).errorNumber==438 && root->member("Tag",{}).asText()==first.toStdString() && QFileInfo::exists(first));

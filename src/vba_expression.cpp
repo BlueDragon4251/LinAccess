@@ -1036,7 +1036,8 @@ private:
         if(const auto type=fileDialogTypes.find(word);type!=fileDialogTypes.end()) return VbaValue::longInteger(type->second);
         static const std::unordered_map<std::string,int> statusActions{
             {"acsyscmdinitmeter",1},{"acsyscmdupdatemeter",2},{"acsyscmdremovemeter",3},
-            {"acsyscmdsetstatus",4},{"acsyscmdclearstatus",5}};
+            {"acsyscmdsetstatus",4},{"acsyscmdclearstatus",5},{"acsyscmdgetobjectstate",10},
+            {"acobjstateopen",1},{"acobjstatedirty",2},{"acobjstatenew",4}};
         if(const auto action=statusActions.find(word);action!=statusActions.end()) return VbaValue::longInteger(action->second);
         if (word == "dbopendynaset") return VbaValue::numeric(2);
         if (word == "dbopensnapshot") return VbaValue::numeric(4);
