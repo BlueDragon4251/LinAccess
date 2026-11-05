@@ -43,3 +43,23 @@ filter/case/namespace/lifetime parity has no execution oracle and is not claimed
 References: [Access FileDialog](https://learn.microsoft.com/en-us/office/vba/api/access.application.filedialog),
 [Show](https://learn.microsoft.com/en-us/office/vba/api/office.filedialog.show),
 [SelectedItems](https://learn.microsoft.com/en-us/office/vba/api/office.filedialog.selecteditems).
+
+## Explicit numeric filter deletion
+
+`Filters.Delete filter:=position` now removes an actual one-based numeric entry
+from the shared filter collection. The native picker uses the resulting list on
+its next Show. Deletion before the current selection adjusts its ordinal to
+retain the selection; deleting the final entry resets the bounded native index1.
+This index policy is native behavior, not a Windows Access2003 oracle result.
+Delete is refused while the modal picker is active. Invalid positions raise5,
+Null94, excess arguments450; omitted/Missing/non-numeric selectors explicitly
+raise3251 pending Office default/name/object-selector evidence. No assumed
+Clear-all behavior is substituted for an omitted selector.
+
+The existing actual VBA/UI case deletes before/at selection, checks the empty
+collection and invalid-position error without mutation, then shows the real Qt
+picker after removing a CSV filter. The actual dialog contains only the retained
+text filter. Targeted layouts1/1 (10.58 s), updated package/build-ID/SQLite3.54.1
+and all four original hashes pass; no new CTest target or catalog item. Last full
+baseline48/48 (83.85 s), fresh headless runtime1/1 (1.79 s);456/384/72 unchanged.
+Reference: [Office Delete](https://learn.microsoft.com/en-us/office/vba/api/office.filedialogfilters.delete).

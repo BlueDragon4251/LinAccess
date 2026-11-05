@@ -91,12 +91,25 @@ If count=1 And entry.Description<>"First" Then Err.Raise 5
 If count=2 And entry.Description<>"Second" Then Err.Raise 5
 Next
 If count<>2 Then Err.Raise 5
+picker.FilterIndex=2
+filters.Delete filter:=1
+If filters.Count<>1 Or filters(1).Description<>"Second" Or picker.FilterIndex<>1 Then Err.Raise 5
+On Error Resume Next
+filters.Delete filter:=0
+count=Err.Number
+On Error GoTo 0
+If count<>5 Then Err.Raise 5
+If filters.Count<>1 Then Err.Raise 5
+filters.Delete filter:=1
+If filters.Count<>0 Or picker.FilterIndex<>1 Then Err.Raise 5
 filters.Clear
 count=0
 For Each entry In filters
 Err.Raise 5
 Next
 filters.Add Description:="Text files",Extensions:="*.txt"
+filters.Add Description:="Remove before Show",Extensions:="*.csv"
+filters.Delete filter:=2
 If filters.Count<>1 Then Err.Raise 5
 Set entry=filters.Item(1)
 If entry.Description<>"Text files" Or entry.Extensions<>"*.txt" Then Err.Raise 5
