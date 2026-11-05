@@ -1707,3 +1707,14 @@ docs/NATIVE_FILE_SYSTEM_OBJECT.md. Targeted core/DAO2/2 (2.62 s), fresh
 headless1/1 (1.66 s), current Debian/build-ID/SQLite/four fixture hashes pass.
 Last broader48/48 (85.42 s) predates the FSO increments. No new target/ID;
 F091 open, fixed456/384/72.
+
+Native unqualified Kill pathnameExpression now unlinks an actual regular Linux
+file only in active VBA branches; a local Kill identifier retains assignment
+semantics. No shell/recursive deletion. Missing file53 vs parent76, Null94,
+NUL52, read-only/denied70, wrong-kind75; wildcard/final-link/Windows sharing
+semantics remain bounded. Scope: docs/NATIVE_DIRECTORY_STATEMENTS.md.
+Targeted core1/1 (2.21 s), fresh headless1/1 (1.83 s); final full current
+desktop48/48 (84.89 s), current Debian/build-ID/SQLite3.54.1/four original
+hashes pass, covering all preceding FSO increments. Original query inventory
+remains78/100 without Windows Access result oracle. No new target/ID; F040/F091
+remain open, fixed456/384/72.

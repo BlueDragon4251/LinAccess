@@ -2858,6 +2858,16 @@ End Sub
         host.fields["RenameSource"]=folder.string(); host.fields["RenameTarget"]=movedFolder.string();
         assert(directoryRun("Name Me!RenameSource As Me!RenameTarget").status==VbaExecutionStatus::Completed);
         assert(!fs::exists(folder) && fs::file_size(movedFolder/"kept.dat")==4);
+        host.fields["KillTarget"]=copy.string();
+        assert(directoryRun("If False Then\nKill Me!KillTarget\nEnd If").status==VbaExecutionStatus::Completed && fs::exists(copy));
+        assert(directoryRun("Kill CStr(Me!KillTarget)").status==VbaExecutionStatus::Completed && !fs::exists(copy) && fs::file_size(file)==3);
+        assert(directoryRun("Kill Me!KillTarget").errorNumber==53);
+        host.fields["KillTarget"]=(directory/"missing-parent"/"missing.dat").string();
+        assert(directoryRun("Kill Me!KillTarget").errorNumber==76);
+        host.fields["KillTarget"]=directory.string();
+        assert(directoryRun("Kill Me!KillTarget").errorNumber==75 && fs::exists(directory));
+        assert(directoryRun("Kill Null").errorNumber==94 && directoryRun("Kill \"*.dat\"").errorNumber==3251);
+        assert(directoryRun("Dim Kill As String\nKill = \"kept\"\nMe!KillVariable=Kill").status==VbaExecutionStatus::Completed && host.fields["KillVariable"]=="kept");
         host.fields["FsoFile"]=file.string(); host.fields["FsoFolder"]=directory.string();
         const auto fsoProbe=executeVbaProcedure(R"VBA(Function MakeFs() As Scripting.FileSystemObject
 Set MakeFs=New Scripting.FileSystemObject
