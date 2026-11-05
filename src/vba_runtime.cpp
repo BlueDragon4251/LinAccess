@@ -10,6 +10,11 @@
 #include <filesystem>
 #include <cerrno>
 #include <unistd.h>
+#if defined(__linux__)
+#include <sys/syscall.h>
+#include <fcntl.h>
+#include <linux/fs.h>
+#endif
 #include <list>
 #include <new>
 #include <cctype>
@@ -23,17 +28,17 @@
 
 namespace linaccess {
 namespace {
+std::filesystem::path nativeFilePath(const VbaValue& value) {
+    const auto text=coerceVbaModuleValue(value,"string").asText();
+    if(text.find('\0')!=std::string::npos || text.find_first_of("*?")!=std::string::npos)
+        throw VbaRuntimeError(52,"Invalid native file pathname");
+    if(text.find('\\')!=std::string::npos || (text.size()>1 && text[1]==':'))
+        throw VbaRuntimeError(3251,"Windows file path mapping is unavailable");
+    return std::filesystem::path(text);
+}
 void nativeFileCopy(const VbaValue& sourceValue,const VbaValue& destinationValue) {
     namespace fs=std::filesystem;
-    const auto pathname=[](const VbaValue& value) {
-        const auto text=coerceVbaModuleValue(value,"string").asText();
-        if(text.find('\0')!=std::string::npos || text.find_first_of("*?")!=std::string::npos)
-            throw VbaRuntimeError(52,"Invalid FileCopy pathname");
-        if(text.find('\\')!=std::string::npos || (text.size()>1 && text[1]==':'))
-            throw VbaRuntimeError(3251,"Windows FileCopy path mapping is unavailable");
-        return fs::path(text);
-    };
-    const auto source=pathname(sourceValue),destination=pathname(destinationValue);
+    const auto source=nativeFilePath(sourceValue),destination=nativeFilePath(destinationValue);
     if(source.empty()) throw VbaRuntimeError(53,"FileCopy source not found");
     if(destination.empty()) throw VbaRuntimeError(52,"Invalid FileCopy destination");
     const auto fail=[&](const std::error_code& reason,bool sourceOperation) {
@@ -69,6 +74,48 @@ void nativeFileCopy(const VbaValue& sourceValue,const VbaValue& destinationValue
     if(problem) fail(problem,false);
     if(!copied) throw VbaRuntimeError(75,"Native FileCopy did not copy a file");
 }
+void nativeFileRename(const VbaValue& sourceValue,const VbaValue& destinationValue) {
+    namespace fs=std::filesystem;
+    const auto source=nativeFilePath(sourceValue),destination=nativeFilePath(destinationValue);
+    if(source.empty()) throw VbaRuntimeError(53,"Name source not found");
+    if(destination.empty()) throw VbaRuntimeError(52,"Invalid Name destination");
+    const auto fail=[&](const std::error_code& reason,bool sourceOperation) {
+        if(reason==std::errc::file_exists) throw VbaRuntimeError(58,"Name destination already exists");
+        if(reason==std::errc::permission_denied || reason==std::errc::operation_not_permitted)
+            throw VbaRuntimeError(70,"Name permission denied");
+        if(reason==std::errc::filename_too_long) throw VbaRuntimeError(52,"Invalid Name pathname");
+        if(reason==std::errc::no_such_file_or_directory || reason==std::errc::not_a_directory) {
+            std::error_code parentError;
+            const auto parent=source.has_parent_path() ? source.parent_path() : fs::path(".");
+            const bool exists=fs::is_directory(parent,parentError);
+            if(parentError==std::errc::permission_denied) throw VbaRuntimeError(70,"Name permission denied");
+            throw VbaRuntimeError(sourceOperation && exists ? 53 : 76,"Name file or path not found");
+        }
+        if(reason==std::errc::cross_device_link || reason==std::errc::function_not_supported || reason==std::errc::operation_not_supported || reason==std::errc::invalid_argument)
+            throw VbaRuntimeError(3251,"Atomic native Name operation unavailable");
+        throw VbaRuntimeError(75,"Native Name operation failed");
+    };
+    std::error_code problem;
+    const auto status=fs::symlink_status(source,problem);
+    if(problem) fail(problem,true);
+    if(!fs::is_regular_file(status) && !fs::is_directory(status))
+        throw VbaRuntimeError(3251,"Name requires a regular file or directory, without terminal symlinks");
+    if(fs::is_directory(status)) {
+        const auto working=fs::current_path(problem); if(problem) fail(problem,false);
+        const auto relative=fs::relative(working,source,problem); if(problem) fail(problem,true);
+        if(relative.empty() || *relative.begin()!=fs::path(".."))
+            throw VbaRuntimeError(3251,"Renaming an active working-directory ancestor requires reference validation");
+    }
+    const auto target=fs::symlink_status(destination,problem);
+    if(problem && problem!=std::errc::no_such_file_or_directory) fail(problem,false);
+    if(fs::exists(target)) throw VbaRuntimeError(58,"Name destination already exists");
+#if defined(__linux__) && defined(SYS_renameat2)
+    if(::syscall(SYS_renameat2,AT_FDCWD,source.c_str(),AT_FDCWD,destination.c_str(),RENAME_NOREPLACE)!=0)
+        fail(std::error_code(errno,std::generic_category()),false);
+#else
+    throw VbaRuntimeError(3251,"Atomic native Name operation unavailable");
+#endif
+}
 thread_local std::uint64_t stopEpoch=0;
 thread_local std::vector<std::uint64_t> activeExecutionEpochs;
 thread_local std::vector<const VbaValue*> activeArrayElementRoots;
@@ -92,7 +139,7 @@ struct BranchDestination {
     int conditionalUnwind{},withUnwind{},forUnwind{};
 };
 struct Statement {
-    enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, Directory, FileCopy, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
+    enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, Directory, FileCopy, FileRename, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
                       Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, StringAlign, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, RaiseError, ErrorResumeNext, ErrorDisable, Label, Jump, GoSub, ComputedJump, ComputedGoSub, ReturnSubroutine, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
@@ -373,6 +420,10 @@ CallArgument callArgument(const std::string& source) {
     std::smatch match;
     if(std::regex_match(source,match,named)) return {lower(match[1].str()),trim(match[2].str())};
     return {{},source};
+}
+bool assignsBareName(const std::string& source,std::string_view name) {
+    const auto assignment=topLevelAssignment(source);
+    return assignment && lower(assignment->first)==name;
 }
 std::size_t outsideKeyword(const std::string& source,std::string_view keyword,std::size_t start=0) {
     bool quoted=false,bracket=false; int depth=0;
@@ -971,15 +1022,22 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             const auto argument=trim(source.substr(5));
             if(!validExpression(argument)) return {VbaExecutionStatus::Unsupported,"Error statement requires one expression",line};
             statements.push_back({Statement::Type::RaiseError,{},argument,line});
-        } else if (normalized=="filecopy" || normalized.starts_with("filecopy ") || normalized.starts_with("filecopy\t")) {
+        } else if ((normalized.starts_with("name ") || normalized.starts_with("name\t"))
+                   && !assignsBareName(source,"name") && outsideKeyword(source,"as",4)!=std::string::npos) {
+            const auto separator=outsideKeyword(source,"as",4);
+            const auto from=trim(source.substr(4,separator-4)),to=trim(source.substr(separator+2));
+            if(from.empty() || to.empty() || !validExpression(from) || !validExpression(to))
+                return {VbaExecutionStatus::Unsupported,"Name requires two pathname expressions separated by As",line};
+            statements.push_back({Statement::Type::FileRename,from,to,line});
+        } else if ((normalized=="filecopy" || normalized.starts_with("filecopy ") || normalized.starts_with("filecopy\t")) && !assignsBareName(source,"filecopy")) {
             const auto expression=trim(source.substr(8)); const auto arguments=splitArguments(expression);
             if(arguments.size()!=2 || arguments[0].empty() || arguments[1].empty()
                || !validExpression(arguments[0]) || !validExpression(arguments[1]))
                 return {VbaExecutionStatus::Unsupported,"FileCopy requires source and destination expressions",line};
             statements.push_back({Statement::Type::FileCopy,{},expression,line});
-        } else if (normalized.starts_with("mkdir ") || normalized.starts_with("mkdir\t")
+        } else if ((normalized.starts_with("mkdir ") || normalized.starts_with("mkdir\t")
                    || normalized.starts_with("rmdir ") || normalized.starts_with("rmdir\t")
-                   || normalized.starts_with("chdir ") || normalized.starts_with("chdir\t")) {
+                   || normalized.starts_with("chdir ") || normalized.starts_with("chdir\t")) && !assignsBareName(source,normalized.substr(0,5))) {
             const auto expression=trim(source.substr(5));
             if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Directory statement requires one path expression",line};
             statements.push_back({Statement::Type::Directory,normalized.substr(0,5),expression,line});
@@ -2205,6 +2263,13 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::EndWith:
                 if (withFrames.empty()) throw VbaRuntimeError(5,"With stack invalid");
                 withFrames.pop_back(); break;
+            case Statement::Type::FileRename:
+                if(active) {
+                    const auto source=scalarVbaValue(evaluate(instruction.argument));
+                    const auto destination=scalarVbaValue(evaluate(instruction.expression));
+                    nativeFileRename(source,destination);
+                }
+                break;
             case Statement::Type::FileCopy:
                 if(active) {
                     const auto expressions=splitArguments(instruction.expression);

@@ -2844,6 +2844,20 @@ End Sub
         assert(directoryRun("FileCopy Me!CopySource, Me!CopyDestination").errorNumber==53 && copiedBytes()==std::string("A\0B",3));
         host.fields["CopySource"]=file.string(); host.fields["CopyDestination"]=file.string();
         assert(directoryRun("FileCopy Me!CopySource, Me!CopyDestination").errorNumber==3251 && fs::file_size(file)==3);
+        const auto renamed=directory/"renamed-ä As file.dat";
+        host.fields["RenameSource"]=copy.string(); host.fields["RenameTarget"]=renamed.string();
+        assert(directoryRun("Name Me!RenameSource As Me!RenameTarget").status==VbaExecutionStatus::Completed);
+        assert(!fs::exists(copy) && fs::file_size(renamed)==3);
+        assert(directoryRun("Name CStr(\""+renamed.string()+"\") As Me!RenameSource").status==VbaExecutionStatus::Completed);
+        assert(fs::exists(copy) && !fs::exists(renamed));
+        host.fields["RenameTarget"]=file.string();
+        assert(directoryRun("Name Me!RenameSource As Me!RenameTarget").errorNumber==58 && fs::exists(copy) && fs::file_size(file)==3);
+        assert(directoryRun("Dim Name As String\nDim FileCopy As String\nDim MkDir As String\nName = \"kept As text\"\nFileCopy = \"kept copy\"\nMkDir = \"kept directory\"\nMe!NameStatementVariable=Name & \"|\" & FileCopy & \"|\" & MkDir").status==VbaExecutionStatus::Completed && host.fields["NameStatementVariable"]=="kept As text|kept copy|kept directory");
+        const auto folder=directory/"folder-source",movedFolder=directory/"folder-target";
+        assert(fs::create_directory(folder)); { std::ofstream output(folder/"kept.dat"); output << "kept"; }
+        host.fields["RenameSource"]=folder.string(); host.fields["RenameTarget"]=movedFolder.string();
+        assert(directoryRun("Name Me!RenameSource As Me!RenameTarget").status==VbaExecutionStatus::Completed);
+        assert(!fs::exists(folder) && fs::file_size(movedFolder/"kept.dat")==4);
         VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
         const auto fileEvaluate=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,paths); };
         const auto length=fileEvaluate("VBA.FileLen(PathName:=filePath)"); assert(length.asNumber()==3 && length.numericType==VbaValue::NumericType::Long);
