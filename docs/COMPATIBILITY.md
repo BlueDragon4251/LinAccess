@@ -3156,3 +3156,17 @@ builds zero compiler warnings; current Debian/build-ID/SQLite3.54.1 and four
 original hashes after full tests pass. Current native hard-link/close/EOF/
 encoding-recovery probe passes. Original inventory78/100; no Windows result
 oracle. No new CTest target/ID; F040/F091 open, fixed456/384/72.
+
+Native TextStream Format=-1/CreateTextFile Unicode=True now implement explicit
+UTF-16LE BOM reading, writing and appending. Existing strict UTF converters are
+shared in native_utf.hpp with the VBA string runtime, preserving scalar checks.
+Actual output bytes include one BOM, correct non-BMP surrogate pairs and CRLF;
+append validates rather than duplicates BOM. Read/column counts use UTF-16 units;
+a split surrogate read3251 restores position. BOM-less/big-endian/odd-byte/default
+code-page and Unicode read/Create=True remain explicit bounds, not guessed
+conversion. Scope: docs/NATIVE_TEXT_STREAM.md. Final targeted core/DAO2/2
+(2.77 s), full current desktop48/48 (89.99 s), fresh GUI-free1/1 (1.85 s), both
+builds zero compiler warnings; current Debian/build-ID/SQLite3.54.1/four original
+hashes pass. Private malformed-BOM append preservation, malformed-surrogate
+position recovery and refused-create/no-side-effect probe pass. Original78/100;
+no Windows result oracle. No new CTest target/ID; F040/F091 open, fixed456/384/72.

@@ -12,8 +12,8 @@ ReadLine strips its terminator; CRLF advances one line. Positions start at1.
 Explicit Close and destruction release the file handle. Qualified native type
 binding uses explicit interface identity rather than TypeName guessing.
 
-This first adapter accepts ASCII content only. Non-ASCII, Unicode/default-code-
-page formats, Skip and AtEndOfLine remain
+ASCII and explicit UTF-16LE formats are implemented as described below.
+Default-code-page formats, Skip and AtEndOfLine remain
 explicit3251. No locale encoding or Unicode conversion is fabricated. Read
 supports positive counts through1000000 within the remaining byte extent;
 zero/negative/over-end requests are3251 pending reference validation. ReadLine
@@ -49,7 +49,7 @@ file. FSO CreateTextFile(FileName,[Overwrite=True],[Unicode=False]) returns a
 write stream; Overwrite=False uses atomic O_CREAT/O_EXCL and raises58 without
 changing an existing file. The default follows IFileSystem interface metadata
 and the method parameter table; no Windows execution oracle is claimed. Folder
-CreateTextFile and Unicode output remain unimplemented.
+CreateTextFile remains unimplemented; explicit UTF-16LE output is described below.
 
 Write(Text), WriteLine([Text=""]) and WriteBlankLines(Lines) write actual ASCII
 bytes. WriteLine/WriteBlankLines emit CRLF; NUL is preserved. Complete text is
@@ -79,3 +79,32 @@ GUI-free1/1 (2.23 s), zero compiler warnings in both builds; current Debian/
 build-ID/SQLite3.54.1/four original hashes pass. Current private native
 hard-link/close/EOF/encoding-recovery probe passes. Original78/100; no Windows
 execution oracle. No new CTest target/ID; fixed456/384/72.
+
+## Explicit UTF-16LE streams
+
+Format=-1 and CreateTextFile Unicode=True now select native UTF-16LE. New/truncated
+Unicode files receive one FF FE BOM. Reading/append require a complete even-length
+UTF-16LE file with that BOM; big-endian, BOM-less, odd-byte and default-code-page
+inputs remain3251. Unicode read/Create=True remains3251 before file creation.
+Append validates the existing BOM and does not duplicate it; an empty append
+file receives its BOM. Unicode append uses a native read/write descriptor to
+validate the BOM, so native OS read permission is also required.
+
+The existing strict UTF-8/UTF-16 conversion is shared in native_utf.hpp with the
+VBA string runtime. UTF-8 invalid scalars remain errors. Read counts and columns
+use UTF-16 code units; a request splitting a surrogate pair fails3251 and restores
+position rather than returning an invalid UTF-8 value. ReadLine/ReadAll decode
+actual complete units; output validates/converts the whole string before writes.
+NUL and CRLF are preserved. Unicode ReadAll/write payloads are bounded to16MiB
+of encoded input/output, respectively; default-code-page/ANSI extensions and
+full Windows encoding/error/position behavior remain unvalidated.
+
+The existing native VBA workflow writes ä/emoji/CRLF, appends ß, checks exact
+little-endian BOM/UTF-16 bytes independently, refuses a split surrogate read,
+then successfully reads the pair/line/remainder. No new CTest target or catalog
+ID; F040/F091 remain open, fixed456/384/72.
+
+Final Unicode validation: full current desktop48/48 (89.99 s), fresh GUI-free
+1/1 (1.85 s), zero compiler warnings in both builds; current Debian/build-ID/
+SQLite/four hashes pass. Private malformed BOM/surrogate/refused-create probes
+pass. Original78/100; no Windows result oracle. No new CTest target/ID.

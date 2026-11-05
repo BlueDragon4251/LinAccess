@@ -1,4 +1,5 @@
 #include "native_object_types.hpp"
+#include "native_utf.hpp"
 #include "native_file_system_object.hpp"
 #include "vba_array.hpp"
 #include "vba_calendar.hpp"
@@ -256,43 +257,8 @@ VbaValue clockValue(const std::string& word) {
 
 // Runtime strings use UTF-8 at the API boundary; VBA substring positions use
 // UTF-16 code units. Do not silently split a UTF-8 byte sequence.
-std::u16string utf16String(std::string_view input) {
-    std::u16string output;
-    for (std::size_t i=0;i<input.size();) {
-        const auto first=static_cast<unsigned char>(input[i++]);
-        std::uint32_t point=first,minimum=0; unsigned continuation=0;
-        if (first<128) {}
-        else if (first>=0xc2 && first<=0xdf) { point=first&31; continuation=1; minimum=0x80; }
-        else if (first>=0xe0 && first<=0xef) { point=first&15; continuation=2; minimum=0x800; }
-        else if (first>=0xf0 && first<=0xf4) { point=first&7; continuation=3; minimum=0x10000; }
-        else throw error("Invalid UTF-8 runtime string",13);
-        if (continuation>input.size()-i) throw error("Truncated UTF-8 runtime string",13);
-        for (unsigned n=0;n<continuation;++n) {
-            const auto byte=static_cast<unsigned char>(input[i++]);
-            if ((byte&0xc0)!=0x80) throw error("Invalid UTF-8 continuation",13);
-            point=(point<<6)|(byte&63);
-        }
-        if (point<minimum || point>0x10ffff || (point>=0xd800 && point<=0xdfff)) throw error("Invalid Unicode scalar",13);
-        if (point<=0xffff) output.push_back(static_cast<char16_t>(point));
-        else { point-=0x10000; output.push_back(static_cast<char16_t>(0xd800+(point>>10))); output.push_back(static_cast<char16_t>(0xdc00+(point&1023))); }
-    }
-    return output;
-}
-std::string utf8String(std::u16string_view input) {
-    std::string output;
-    for (std::size_t i=0;i<input.size();++i) {
-        std::uint32_t point=input[i];
-        if (point>=0xd800 && point<=0xdbff) {
-            if (i+1>=input.size() || input[i+1]<0xdc00 || input[i+1]>0xdfff) throw error("Isolated UTF-16 surrogate unsupported",3251);
-            point=0x10000+((point-0xd800)<<10)+(input[++i]-0xdc00);
-        } else if (point>=0xdc00 && point<=0xdfff) throw error("Isolated UTF-16 surrogate unsupported",3251);
-        if (point<0x80) output.push_back(static_cast<char>(point));
-        else if (point<0x800) { output.push_back(static_cast<char>(0xc0|(point>>6))); output.push_back(static_cast<char>(0x80|(point&63))); }
-        else if (point<0x10000) { output.push_back(static_cast<char>(0xe0|(point>>12))); output.push_back(static_cast<char>(0x80|((point>>6)&63))); output.push_back(static_cast<char>(0x80|(point&63))); }
-        else { output.push_back(static_cast<char>(0xf0|(point>>18))); output.push_back(static_cast<char>(0x80|((point>>12)&63))); output.push_back(static_cast<char>(0x80|((point>>6)&63))); output.push_back(static_cast<char>(0x80|(point&63))); }
-    }
-    return output;
-}
+std::u16string utf16String(std::string_view input) { return nativeUtf16(input); }
+std::string utf8String(std::u16string_view input) { return nativeUtf8(input); }
 
 std::string dateLiteral(std::string text) {
     const auto first=text.find_first_not_of(" \t\r\n"),last=text.find_last_not_of(" \t\r\n");
