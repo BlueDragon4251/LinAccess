@@ -23,6 +23,52 @@
 
 namespace linaccess {
 namespace {
+void nativeFileCopy(const VbaValue& sourceValue,const VbaValue& destinationValue) {
+    namespace fs=std::filesystem;
+    const auto pathname=[](const VbaValue& value) {
+        const auto text=coerceVbaModuleValue(value,"string").asText();
+        if(text.find('\0')!=std::string::npos || text.find_first_of("*?")!=std::string::npos)
+            throw VbaRuntimeError(52,"Invalid FileCopy pathname");
+        if(text.find('\\')!=std::string::npos || (text.size()>1 && text[1]==':'))
+            throw VbaRuntimeError(3251,"Windows FileCopy path mapping is unavailable");
+        return fs::path(text);
+    };
+    const auto source=pathname(sourceValue),destination=pathname(destinationValue);
+    if(source.empty()) throw VbaRuntimeError(53,"FileCopy source not found");
+    if(destination.empty()) throw VbaRuntimeError(52,"Invalid FileCopy destination");
+    const auto fail=[&](const std::error_code& reason,bool sourceOperation) {
+        if(reason==std::errc::permission_denied || reason==std::errc::operation_not_permitted)
+            throw VbaRuntimeError(70,"FileCopy permission denied");
+        if(reason==std::errc::invalid_argument || reason==std::errc::filename_too_long)
+            throw VbaRuntimeError(52,"Invalid FileCopy pathname");
+        if(reason==std::errc::no_such_file_or_directory || reason==std::errc::not_a_directory) {
+            std::error_code parentError;
+            const auto parent=source.has_parent_path() ? source.parent_path() : fs::path(".");
+            const bool exists=fs::is_directory(parent,parentError);
+            if(parentError==std::errc::permission_denied) throw VbaRuntimeError(70,"FileCopy permission denied");
+            throw VbaRuntimeError(sourceOperation && exists ? 53 : 76,"FileCopy file or path not found");
+        }
+        throw VbaRuntimeError(75,"Native FileCopy failed");
+    };
+    std::error_code problem;
+    const auto sourceStatus=fs::symlink_status(source,problem);
+    if(problem) fail(problem,true);
+    if(fs::is_symlink(sourceStatus)) throw VbaRuntimeError(3251,"FileCopy symbolic-link source unsupported");
+    if(!fs::is_regular_file(sourceStatus)) throw VbaRuntimeError(75,"FileCopy requires a regular source file");
+    const auto destinationStatus=fs::symlink_status(destination,problem);
+    if(problem && problem!=std::errc::no_such_file_or_directory) fail(problem,false);
+    problem.clear();
+    if(fs::is_symlink(destinationStatus)) throw VbaRuntimeError(3251,"FileCopy symbolic-link destination unsupported");
+    if(fs::exists(destinationStatus)) {
+        if(!fs::is_regular_file(destinationStatus)) throw VbaRuntimeError(75,"FileCopy destination must be a file");
+        const bool same=fs::equivalent(source,destination,problem);
+        if(problem) fail(problem,false);
+        if(same) throw VbaRuntimeError(3251,"FileCopy identical-file behavior requires reference validation");
+    }
+    const bool copied=fs::copy_file(source,destination,fs::copy_options::overwrite_existing,problem);
+    if(problem) fail(problem,false);
+    if(!copied) throw VbaRuntimeError(75,"Native FileCopy did not copy a file");
+}
 thread_local std::uint64_t stopEpoch=0;
 thread_local std::vector<std::uint64_t> activeExecutionEpochs;
 thread_local std::vector<const VbaValue*> activeArrayElementRoots;
@@ -46,7 +92,7 @@ struct BranchDestination {
     int conditionalUnwind{},withUnwind{},forUnwind{};
 };
 struct Statement {
-    enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, Directory, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
+    enum class Type { With, EndWith, Select, Case, EndSelect, SendKeys, Directory, FileCopy, If, ElseIf, Else, EndIf, For, ForEach, ExitFor, Next, Evaluate, Save, Maximize, GoLast,
                       GoNext, GoNew, Requery,
                       ExecuteSql, OpenForm, ControlRequery, ControlFocus, ControlVisible,
                       Call, SetField, IndexedAssign, ResizeArray, EraseArray, SetVar, StringAlign, Exit, Dim, ObjectSet, ObjectAssign, ObjectCall, While, EndWhile, ExitDo, Quit, RaiseError, ErrorResumeNext, ErrorDisable, Label, Jump, GoSub, ComputedJump, ComputedGoSub, ReturnSubroutine, ErrorHandler, Resume, ResumeNext, ResumeLabel } type;
@@ -925,6 +971,12 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             const auto argument=trim(source.substr(5));
             if(!validExpression(argument)) return {VbaExecutionStatus::Unsupported,"Error statement requires one expression",line};
             statements.push_back({Statement::Type::RaiseError,{},argument,line});
+        } else if (normalized=="filecopy" || normalized.starts_with("filecopy ") || normalized.starts_with("filecopy\t")) {
+            const auto expression=trim(source.substr(8)); const auto arguments=splitArguments(expression);
+            if(arguments.size()!=2 || arguments[0].empty() || arguments[1].empty()
+               || !validExpression(arguments[0]) || !validExpression(arguments[1]))
+                return {VbaExecutionStatus::Unsupported,"FileCopy requires source and destination expressions",line};
+            statements.push_back({Statement::Type::FileCopy,{},expression,line});
         } else if (normalized.starts_with("mkdir ") || normalized.starts_with("mkdir\t")
                    || normalized.starts_with("rmdir ") || normalized.starts_with("rmdir\t")
                    || normalized.starts_with("chdir ") || normalized.starts_with("chdir\t")) {
@@ -2153,6 +2205,14 @@ static VbaExecutionResult executeProcedure(std::string_view module,
             case Statement::Type::EndWith:
                 if (withFrames.empty()) throw VbaRuntimeError(5,"With stack invalid");
                 withFrames.pop_back(); break;
+            case Statement::Type::FileCopy:
+                if(active) {
+                    const auto expressions=splitArguments(instruction.expression);
+                    const auto source=scalarVbaValue(evaluate(expressions[0]));
+                    const auto destination=scalarVbaValue(evaluate(expressions[1]));
+                    nativeFileCopy(source,destination);
+                }
+                break;
             case Statement::Type::Directory:
                 if (active) {
                     const auto value=scalarVbaValue(evaluate(instruction.expression));
