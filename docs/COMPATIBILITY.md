@@ -2908,3 +2908,14 @@ reentrant DAO/GUI or a Windows Access2003 oracle. Original coverage stays78/100.
 See [native SQL/VBA scope](NATIVE_VBA_SQL.md). Production code full48/48 (87.35 s),
 subsequent actual UPDATE DAO1/1 (0.74 s), current package/SQLite/four fixture hashes
 pass. No new target/catalog ID;456/384/72 unchanged, F040/F068/F121 remain open.
+
+Declared SQL/VBA Currency/Date returns now use native compiler declaration metadata,
+checked CURRENCY_REAL/DATETIME transport and live result-declaration guards. Actual
+DAO fields retain Currency5/Date8 and values; metadata preparation has no body
+counter effects. Typed arithmetic/INSERT and stale prepared-signature rejection are
+covered. Unknown Variant transports, complete compound/nested/argument type
+propagation and typed-function make-table metadata remain open (make-table3251,
+no target created). Unaliased function labels show the original expression instead
+of internal guard calls. Full48/48 (85.94 s), fresh core1/1 (2.36 s), subsequent label
+DAO/query/original3/3 (8.36 s), updated package/SQLite/four hashes pass. Original78/100
+unchanged; [scope](NATIVE_VBA_SQL.md),456/384/72, F014/F068/F121 still open.

@@ -1108,3 +1108,10 @@ Private/class/ambiguous calls, GUI/DAO host context, existing object/array state
 unproven transports remain refused. See NATIVE_VBA_SQL.md. F040/F068/F121 are still
 open; no new checkbox or ID. Catalog456/384/72 unchanged. Production code full48/48
 (87.35 s), additional actual UPDATE DAO1/1 (0.74 s), package/backend/four hashes pass.
+
+Native compiler declarations now drive supported SQL/VBA Currency/Date return
+transport and stale-signature guards. Actual DAO types/values, typed arithmetic/
+INSERT and side-effect-free metadata preparation passed. General Variant/nested/
+compound typing and typed-function make-table metadata remain open. Full48/48
+(85.94 s), fresh core1/1 (2.36 s), final label DAO/query/original3/3 (8.36 s), updated
+package/backend/four hashes pass. No new checkbox or ID;456/384/72 unchanged.

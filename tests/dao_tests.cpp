@@ -1073,7 +1073,14 @@ MsgBox "must not display"
 NativeNeedsUI="unreachable"
 End Function
 Public Function NativeMoney() As Currency
-NativeMoney=CCur(1)
+calls=calls+1
+NativeMoney=CCur("0.1")
+End Function
+Public Function NativeDate() As Date
+NativeDate=DateSerial(2024,2,29)+TimeSerial(12,34,56)
+End Function
+Public Function NativeVariantMoney() As Variant
+NativeVariantMoney=CCur(1)
 End Function
 Public Function Abs() As Long
 Abs=999
@@ -1105,8 +1112,42 @@ End Function
     assert(!rows.exec("SELECT SQLDoubleHelper(2)")); rows.finish(); assert(!rows.exec("SELECT ClassOnly()")); rows.finish();
     assert(!rows.exec("SELECT NativeNeedsUI()"));
     assert(linaccess::jetSqlFunctionErrorNumber(rows.lastError().text().toCaseFolded().toStdString())==3251); rows.finish();
-    assert(!rows.exec("SELECT NativeMoney()"));
+    assert(!rows.exec("SELECT NativeVariantMoney()"));
     assert(linaccess::jetSqlFunctionErrorNumber(rows.lastError().text().toCaseFolded().toStdString())==3251); rows.finish();
+    const auto typedSource=QStringLiteral("SELECT NativeMoney() AS amount,NativeDate() AS stamp,NativeScale(2) AS integer_value,NativeFlag(2) AS enabled");
+    const auto metadataFrame=linaccess::standardVbaModuleState(db,module.toStdString());
+    const auto beforeMetadata=metadataFrame->values.at("calls").asNumber();
+    QVector<QString> columnTypes;
+    const auto columns=linaccess::accessQueryColumns(db,linaccess::compileAccessQuery(typedSource),&columnTypes);
+    assert(columns.size()==4 && columnTypes.value(0)=="CURRENCY_REAL" && columnTypes.value(1)=="DATETIME");
+    const auto unnamed=linaccess::accessQueryColumns(db,linaccess::compileAccessQuery("SELECT NativeMoney()"));
+    assert(unnamed.size()==1 && unnamed.front().contains("NativeMoney",Qt::CaseInsensitive) && !unnamed.front().contains("linaccess_"));
+    assert(metadataFrame->values.at("calls").asNumber()==beforeMetadata);
+    const auto database=linaccess::makeDaoDatabase(db);
+    const auto typedRows=database->member("OpenRecordset",{linaccess::VbaValue::string(typedSource.toStdString())}).object;
+    const auto amount=typedRows->member("Fields",{linaccess::VbaValue::string("amount")}).object;
+    const auto stamp=typedRows->member("Fields",{linaccess::VbaValue::string("stamp")}).object;
+    const auto integer=typedRows->member("Fields",{linaccess::VbaValue::string("integer_value")}).object;
+    assert(amount->member("Type",{}).asNumber()==5 && amount->member("Value",{}).kind==linaccess::VbaValue::Kind::Currency && amount->member("Value",{}).currencyUnits==1000);
+    assert(stamp->member("Type",{}).asNumber()==8 && stamp->member("Value",{}).kind==linaccess::VbaValue::Kind::Date && stamp->member("Value",{}).asText()=="2024-02-29 12:34:56");
+    assert(integer->member("Type",{}).asNumber()==4 && integer->member("Value",{}).numericType==linaccess::VbaValue::NumericType::Long);
+    assert(typedRows->member("Fields",{linaccess::VbaValue::string("enabled")}).object->member("Value",{}).kind==linaccess::VbaValue::Kind::Boolean); typedRows->member("Close",{});
+    const auto moneyResult=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT NativeMoney()+CCur('0.2') AS amount"),{});
+    assert(moneyResult.types.value("amount")=="CURRENCY_REAL" && linaccess::qtFieldValue(moneyResult.rows[0][0],"CURRENCY_REAL").currencyUnits==3000);
+    assert(sql.exec("CREATE TABLE udf_money_target(amount CURRENCY_REAL,stamp DATETIME)")); sql.finish();
+    database->member("Execute",{linaccess::VbaValue::string("INSERT INTO udf_money_target(amount,stamp) VALUES(NativeMoney()+CCur('0.2'),NativeDate())")});
+    assert(rows.exec("SELECT amount,stamp FROM udf_money_target") && rows.next() && std::abs(rows.value(0).toDouble()-0.3)<1e-12 && rows.value(1).toString()=="2024-02-29 12:34:56"); rows.finish();
+    const auto guardedPlan=linaccess::filterAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT NativeMoney() AS amount"),{});
+    QSqlQuery guarded(db); assert(guarded.prepare(guardedPlan.sql)); assert(guarded.exec() && guarded.next()); guarded.finish();
+    auto changedSignature=module; changedSignature.replace("Public Function NativeMoney() As Currency","Public Function NativeMoney() As Double");
+    sql.prepare("UPDATE _la_access_artifacts SET source_bytes=? WHERE name='NativeMath'"); sql.addBindValue(changedSignature); assert(sql.exec()); sql.finish();
+    assert(!guarded.exec()); assert(linaccess::jetSqlFunctionErrorNumber(guarded.lastError().text().toCaseFolded().toStdString())==3251); guarded.finish();
+    sql.prepare("UPDATE _la_access_artifacts SET source_bytes=? WHERE name='NativeMath'"); sql.addBindValue(module); assert(sql.exec()); sql.finish();
+    assert(guarded.exec() && guarded.next() && std::abs(guarded.value(0).toDouble()-0.1)<1e-12); guarded.clear();
+    int makeTableError=0;
+    try { database->member("Execute",{linaccess::VbaValue::string("SELECT NativeMoney() AS amount INTO unproven_udf_copy FROM inputs")}); }
+    catch(const linaccess::VbaRuntimeError& failure) { makeTableError=failure.number; }
+    assert(makeTableError==3251 && !db.tables().contains("unproven_udf_copy"));
     assert(sql.exec("CREATE TEMP VIEW _la_access_artifacts AS SELECT * FROM main._la_access_artifacts")); sql.finish();
     assert(!rows.exec("SELECT NativeScale(3)"));
     assert(linaccess::jetSqlFunctionErrorNumber(rows.lastError().text().toCaseFolded().toStdString())==3251); rows.finish();

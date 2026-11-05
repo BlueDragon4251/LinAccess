@@ -28,6 +28,7 @@ struct sqlite3_stmt;
 namespace linaccess {
 namespace {
 struct Token { enum Kind { Word, Identifier, String, Other } kind; QString value; };
+QString renderJetTokens(const QVector<Token>& tokens);
 void require(bool value, const char* reason) { if (!value) throw VbaRuntimeError(3085, reason); }
 QString canonicalDate(const QString& input, bool literalDate = false) {
     const QStringList formats = literalDate
@@ -233,7 +234,7 @@ void adaptObjectReferences(QVector<Token>& tokens,qsizetype start) {
         i+=replacement.size()-1;
     }
 }
-QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters,const QMap<QString,QString>& fields) {
+QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions) {
     const auto word=[&](qsizetype i,const char* text) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(text,Qt::CaseInsensitive)==0; };
     if(!word(start,"SELECT")) return {};
     int depth=0;
@@ -337,6 +338,17 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             }
             expression=std::move(code);
         }
+        if(functions.contains(function)) {
+            static const QMap<QString,QString> nativeTypes{{"currency","CURRENCY_REAL"},{"date","DATETIME"},
+                {"string","TEXT"},{"boolean","BOOLEAN"},{"byte","INTEGER1"},{"integer","INTEGER2"},{"long","INTEGER4"},
+                {"double","DOUBLE"}};
+            const auto declared=functions.value(function),type=nativeTypes.value(declared);
+            if(!type.isEmpty()) {
+                QVector<Token> guarded{{Token::Word,"linaccess_vba_result"},{Token::Other,"("},{Token::String,function},
+                    {Token::Other,","},{Token::String,declared},{Token::Other,","}};
+                guarded+=expression; guarded.append({Token::Other,")"}); return {type,guarded};
+            }
+        }
         const QSet<QString> dates{"linaccess_jet_date_add_1","linaccess_jet_date_add_2","linaccess_jet_date_add_3","linaccess_jet_date_subtract_1","linaccess_jet_date_subtract_2","linaccess_jet_date_subtract_3","dateserial","timeserial","cdate","linaccess_jet_dateserial","linaccess_jet_timeserial","linaccess_jet_cdate","datevalue","linaccess_jet_datevalue","timevalue","linaccess_jet_timevalue","dateadd","linaccess_jet_dateadd","datevalue","linaccess_jet_datevalue","timevalue","linaccess_jet_timevalue","date","time","now"};
         const bool fileLength=function=="filelen" || function=="linaccess_jet_filelen";
         if(dates.contains(expression.front().value.toCaseFolded()) || fileLength || function=="filedatetime" || function=="linaccess_jet_filedatetime") {
@@ -376,7 +388,11 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             auto expression=tokens.mid(first,i-first); QVector<Token> alias;
             if(expression.size()>=3 && expression[expression.size()-2].kind==Token::Word && expression[expression.size()-2].value.compare("AS",Qt::CaseInsensitive)==0 && name(expression.back())) { alias=expression.mid(expression.size()-2); expression.resize(expression.size()-2); }
             if((expression.size()==1 && symbol(expression.front(),"*")) || (expression.size()>=3 && symbol(expression.back(),"*") && symbol(expression[expression.size()-2],"."))) return {};
-            auto parsed=parse(expression,0); result.append(parsed.type); parsed.code+=alias; rewrites.append({first,i,parsed.code}); first=i+1;
+            auto parsed=parse(expression,0); result.append(parsed.type);
+            if(alias.isEmpty() && std::any_of(parsed.code.cbegin(),parsed.code.cend(),[](const Token& token) {
+                return token.kind==Token::Word && token.value=="linaccess_vba_result";
+            })) alias={{Token::Word,"AS"},{Token::Identifier,renderJetTokens(expression)}};
+            parsed.code+=alias; rewrites.append({first,i,parsed.code}); first=i+1;
             if(end) break;
         } else if(symbol(tokens[i],"(")) ++depth;
         else if(symbol(tokens[i],")")) --depth;
@@ -908,9 +924,9 @@ AccessQueryPlan compileJoinedUpdate(const QVector<Token>& tokens,qsizetype start
 }
 }
 QString accessLikePattern(const QString& value) { return pattern(value); }
-static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields);
+static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions={});
 AccessQueryPlan compileAccessQuery(const QString& source) { return compileCurrencyQuery(source,{}); }
-static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields) {
+static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions) {
     auto tokens = tokenize(source);
     require(!tokens.empty(), "Jet SQL: empty query");
     AccessQueryPlan plan;
@@ -967,7 +983,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         else if(command=="CREATE" || command=="ALTER" || command=="DROP") plan.daoQueryType=96;
     }
 
-    plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields);
+    plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields,functions);
     if (tokens[pos].kind==Token::Word && tokens[pos].value.compare("UPDATE",Qt::CaseInsensitive)==0) {
         for (auto i=pos+1;i<tokens.size();++i) {
             if (tokens[i].kind==Token::Word && tokens[i].value.compare("SET",Qt::CaseInsensitive)==0) break;
@@ -1146,7 +1162,9 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
 static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPlan& input) {
     if(input.source.isEmpty()) return input;
     if(input.sql!=input.compiledSql) { auto changed=input; changed.resultTypes.clear(); changed.source.clear(); return changed; }
-    const auto source=input.currencyContextResolved ? compileAccessQuery(input.source) : input;
+    const auto functions=nativeVbaSqlFunctionResultTypes(db);
+    auto source=input.currencyContextResolved ? compileAccessQuery(input.source) : input;
+    if(!functions.isEmpty()) { source=compileCurrencyQuery(source.source,{},functions); source.currencyContextResolved=true; }
     if(!source.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) return source;
     const auto tokens=tokenize(source.source);
     const auto word=[&](qsizetype i,const char* value) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0; };
@@ -1178,7 +1196,7 @@ static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPla
         if(!alias.isEmpty()) fields.insert(alias.toCaseFolded()+'.'+it.key(),it.value());
     }
     if(fields.isEmpty()) return source;
-    auto resolved=compileCurrencyQuery(source.source,fields); resolved.currencyContextResolved=true; return resolved;
+    auto resolved=compileCurrencyQuery(source.source,fields,functions); resolved.currencyContextResolved=true; return resolved;
 }
 static bool checkedSqlStorageType(const QString& type) {
     static const QSet<QString> types{"CURRENCY_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DATE","DATETIME"};
@@ -1194,8 +1212,8 @@ static QString currencyParameterHeader(const AccessQueryPlan& plan) {
     for(const auto& parameter:plan.parameters) declarations.append(renderJetTokens({{Token::Identifier,parameter.name}})+' '+parameter.type);
     return declarations.isEmpty()?QString{}:"PARAMETERS "+declarations.join(',')+"; ";
 }
-static QString currencyActionExpression(const AccessQueryPlan& plan,const QVector<Token>& code,const QMap<QString,QString>& fields={}) {
-    const auto compiled=compileCurrencyQuery(currencyParameterHeader(plan)+"SELECT "+renderJetTokens(code)+" AS [__la_currency_expr]",fields).sql;
+static QString currencyActionExpression(QSqlDatabase db,const AccessQueryPlan& plan,const QVector<Token>& code,const QMap<QString,QString>& fields={}) {
+    const auto compiled=compileCurrencyQuery(currencyParameterHeader(plan)+"SELECT "+renderJetTokens(code)+" AS [__la_currency_expr]",fields,nativeVbaSqlFunctionResultTypes(db)).sql;
     const QString prefix="SELECT ",suffix=" AS "+identifier("__la_currency_expr");
     if(!compiled.startsWith(prefix) || !compiled.endsWith(suffix)) throw VbaRuntimeError(3251,"Typed action expression shape unsupported");
     return compiled.mid(prefix.size(),compiled.size()-prefix.size()-suffix.size());
@@ -1281,7 +1299,7 @@ static QString checkedInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     if(!closed || pos!=tokens.size() || expressions.size()!=columns.size()) return plan.sql;
     QStringList targets,values;
     for(qsizetype i=0;i<columns.size();++i) {
-        targets.append(identifier(columns[i])); auto value=currencyActionExpression(plan,expressions[i]);
+        targets.append(identifier(columns[i])); auto value=currencyActionExpression(db,plan,expressions[i]);
         value=checkedSqlStorageValue(types.value(columns[i].toCaseFolded()),value);
         values.append(value);
     }
@@ -1342,7 +1360,7 @@ static QString checkedUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
         checkedTarget|=checkedSqlStorageType(targetType); assignments.append({column,tokens.mid(pos,stop-pos),targetType}); pos=stop+1;
     }
     if(!checkedTarget) return plan.sql;
-    const auto expression=[&](const QVector<Token>& code) { return currencyActionExpression(plan,code,fields); };
+    const auto expression=[&](const QVector<Token>& code) { return currencyActionExpression(db,plan,code,fields); };
     QStringList set;
     for(const auto& assignment:assignments) {
         auto value=expression(assignment.expression);
@@ -1355,6 +1373,15 @@ static QString checkedUpdateSql(QSqlDatabase db,const AccessQueryPlan& plan) {
     return result;
 }
 QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
+    if(!plan.makeTable.isEmpty()) {
+        const auto functions=nativeVbaSqlFunctionResultTypes(db); const auto tokens=tokenize(plan.source);
+        for(qsizetype i=0;i+1<tokens.size();++i)
+            if((tokens[i].kind==Token::Word || tokens[i].kind==Token::Identifier) && symbol(tokens[i+1],"(")) {
+                const auto type=functions.value(tokens[i].value.toCaseFolded());
+                if(type=="currency" || type=="date") throw VbaRuntimeError(3251,"Typed VBA function make-table metadata is not implemented");
+            }
+    }
+
     if (plan.updateTarget.isEmpty()) {
         const auto insert=checkedInsertSql(db,plan);
         return insert==plan.sql ? checkedUpdateSql(db,plan) : insert;

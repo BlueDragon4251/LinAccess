@@ -1,5 +1,6 @@
 #pragma once
 #include <QSqlDatabase>
+#include <QMap>
 #include "vba_expression.hpp"
 #include <optional>
 #include <functional>
@@ -12,4 +13,5 @@ std::string jetSqlFunctionErrorExplanation(std::string_view foldedMessage);
 using JetSqlObjectResolver=std::function<VbaValue(std::string_view collection,std::string_view object,std::string_view field)>;
 void setJetSqlObjectResolver(QSqlDatabase db,JetSqlObjectResolver resolver);
 void installJetSqlFunctions(QSqlDatabase db);
+QMap<QString,QString> nativeVbaSqlFunctionResultTypes(QSqlDatabase db);
 }

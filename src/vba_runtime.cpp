@@ -1391,6 +1391,11 @@ std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view mod
 
 }
 
+std::optional<VbaArgumentSignature> nativeVbaProcedureSignature(std::string_view module,std::string_view procedure) {
+    if(module.size()>1024*1024) return {};
+    return localProcedureSignature(module,procedure);
+}
+
 VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_view procedure) {
     if (module.size() > 1024 * 1024)
         return {VbaExecutionStatus::Unsupported, "VBA-Modul größer als 1 MiB", 0};
