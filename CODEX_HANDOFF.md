@@ -1464,3 +1464,15 @@ claim. Foreign overrides are not popped; obscured ownership3251 and full stack
 interop remains open. docs/NATIVE_HOURGLASS.md. Existing core/mainwindow/layout3/3
 (14.78 s), fresh headless1/1 (1.67 s), current package/build-ID/SQLite3.54.1/four
 hashes pass. Last full baseline48/48 (83.85 s); F068 open,456/384/72 unchanged.
+
+Application.Echo and DoCmd.Echo now control actual native Qt document-surface
+repainting with documented named-argument spellings. New ordinary forms are
+suppressed; modal/PopUp documents/dialogs and status bars excluded; data/VBA/input
+continue. Echo True restores prior per-surface update state via weak pointers.
+Echo stays off across procedure returns until explicit True; Hourglass cleanup
+remains separate. Optional native status text preserves a progress meter. No
+unqualified/SQL Echo or complete Windows paint/invalidation parity claim.
+docs/NATIVE_ECHO.md. Existing mainwindow/layout2/2 (13.25 s), then full48/48
+(85.02 s), current Debian/build-ID/SQLite3.54.1/four hashes pass. GUI-free runtime
+unchanged from fresh1/1 (1.67 s). Fixed456/384/72; F068/F080 still open. Private
+GitHub branch update remains unconfirmed; immutable private backups are not pushes.
