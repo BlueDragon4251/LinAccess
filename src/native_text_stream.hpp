@@ -4,12 +4,13 @@
 #include <cstdio>
 #include <limits>
 namespace linaccess {
-// A real owned read handle. No host or database reference is retained.
+// A real owned text handle. No host or database reference is retained.
 class VbaTextStream final : public VbaObject {
     std::FILE* file_{};
-    std::shared_ptr<NativeFileReadToken> token_;
+    std::shared_ptr<NativeFileStreamToken> token_;
     std::int32_t line_{1},column_{1};
     bool previousCr_{};
+    int mode_{1};
     static std::string key(std::string_view name) {
         std::string result(name);
         std::transform(result.begin(),result.end(),result.begin(),[](unsigned char ch) { return std::tolower(ch); });
@@ -32,19 +33,26 @@ class VbaTextStream final : public VbaObject {
         return ch;
     }
 public:
-    VbaTextStream(std::FILE* file,std::shared_ptr<NativeFileReadToken> token) : file_(file),token_(std::move(token)) {}
+    VbaTextStream(std::FILE* file,std::shared_ptr<NativeFileStreamToken> token,int mode=1) : file_(file),token_(std::move(token)),mode_(mode) {}
     ~VbaTextStream() override { if(file_) std::fclose(file_); }
     std::string_view className() const override { return "TextStream"; }
     bool isNativeType(std::string_view type) const override { return type=="scripting.textstream"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
-        if(key(name)=="read") return VbaArgumentSignature{{"Characters"},1};
+        const auto method=key(name);
+        if(method=="read") return VbaArgumentSignature{{"Characters"},1};
+        if(method=="write") return VbaArgumentSignature{{"Text"},1};
+        if(method=="writeline") return VbaArgumentSignature{{"Text"},0};
+        if(method=="writeblanklines") return VbaArgumentSignature{{"Lines"},1};
         return {};
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto method=key(name);
-        if(method!="close" && method!="read" && method!="readline" && method!="readall" && method!="atendofstream" && method!="line" && method!="column")
+        if(method!="close" && method!="read" && method!="readline" && method!="readall" && method!="atendofstream" && method!="line" && method!="column" && method!="write" && method!="writeline" && method!="writeblanklines")
             throw VbaRuntimeError(3251,"Native TextStream member is not implemented");
-        if(args.size()!=(method=="read" ? 1u : 0u)) throw VbaRuntimeError(450,"Invalid TextStream argument count");
+        const bool output=method=="write" || method=="writeline" || method=="writeblanklines";
+        if(output) {
+            if(args.size()>1 || (method!="writeline" && (args.empty() || args[0].kind==VbaValue::Kind::Missing))) throw VbaRuntimeError(450,"Invalid TextStream write argument count");
+        } else if(args.size()!=(method=="read" ? 1u : 0u)) throw VbaRuntimeError(450,"Invalid TextStream argument count");
         if(!file_) throw VbaRuntimeError(3251,"Closed TextStream error contract requires reference validation");
         if(method=="close") {
             auto* closing=file_; file_=nullptr;
@@ -52,6 +60,24 @@ public:
             if(result!=0) throw VbaRuntimeError(75,"TextStream close failed");
             return {};
         }
+        if(output) {
+            if(mode_==1) throw VbaRuntimeError(3251,"TextStream is not open for writing");
+            std::string text;
+            if(method=="writeblanklines") {
+                const auto count=coerceVbaModuleValue(scalarVbaValue(args[0]),"long").number;
+                if(count<=0 || count>1000000) throw VbaRuntimeError(3251,"WriteBlankLines count outside supported range");
+                text.reserve(static_cast<std::size_t>(count)*2);
+                for(std::size_t i=0;i<static_cast<std::size_t>(count);++i) text+="\r\n";
+            } else {
+                if(!args.empty() && args[0].kind!=VbaValue::Kind::Missing) text=coerceVbaModuleValue(scalarVbaValue(args[0]),"string").asText();
+                if(text.size()>16u*1024u*1024u) throw VbaRuntimeError(3251,"Native text write limit exceeded");
+                if(std::any_of(text.begin(),text.end(),[](unsigned char ch) { return ch>127; })) throw VbaRuntimeError(3251,"Non-ASCII output requires a validated encoding adapter");
+                if(method=="writeline") text+="\r\n";
+            }
+            if(std::fwrite(text.data(),1,text.size(),file_)!=text.size() || std::fflush(file_)!=0) throw VbaRuntimeError(75,"Native text write failed");
+            return {};
+        }
+        if(mode_!=1) throw VbaRuntimeError(3251,"TextStream input properties require reading mode");
         if(method=="atendofstream") return VbaValue::logical(peek()==EOF);
         if(method=="line") return VbaValue::longInteger(line_);
         if(method=="column") return VbaValue::longInteger(column_);
@@ -93,25 +119,52 @@ public:
     }
     void assign(std::string_view,const VbaValue&) override { throw VbaRuntimeError(438,"TextStream property is not writable"); }
 };
-inline VbaValue nativeOpenTextStream(const VbaValue& input) {
+struct NativeTextFileCloser {
+    void operator()(std::FILE* file) const noexcept { std::fclose(file); }
+};
+struct NativeTextDescriptor {
+    int value{-1};
+    ~NativeTextDescriptor() { if(value>=0) ::close(value); }
+};
+inline VbaValue nativeOpenTextStream(const VbaValue& input,int mode=1,bool create=false,bool exclusive=false) {
+    if(mode!=1 && mode!=2 && mode!=8) throw VbaRuntimeError(3251,"Unsupported native text mode");
     const auto path=nativeFilePath(scalarVbaValue(input));
     if(path.empty()) throw VbaRuntimeError(53,"Text file unavailable");
-    const auto descriptor=::open(path.c_str(),O_RDONLY|O_NONBLOCK|O_NOFOLLOW|O_CLOEXEC);
-    if(descriptor<0) {
+    int flags=O_NONBLOCK|O_NOFOLLOW|O_CLOEXEC|(mode==1 ? O_RDONLY : O_WRONLY);
+    if(create) flags|=O_CREAT;
+    if(exclusive) flags|=O_EXCL;
+    if(mode==8) flags|=O_APPEND;
+    NativeTextDescriptor descriptor{::open(path.c_str(),flags,0666)};
+    if(descriptor.value<0) {
+        if(errno==EEXIST) throw VbaRuntimeError(58,"Text file already exists");
         if(errno==EACCES || errno==EPERM) throw VbaRuntimeError(70,"Text file permission denied");
         if(errno==ENOENT || errno==ENOTDIR) throw VbaRuntimeError(53,"Text file unavailable");
         if(errno==ELOOP) throw VbaRuntimeError(3251,"Text stream link semantics require reference validation");
         throw VbaRuntimeError(75,"Native text file open failed");
     }
     struct stat status{};
-    if(::fstat(descriptor,&status)!=0 || !S_ISREG(status.st_mode)) { ::close(descriptor); throw VbaRuntimeError(3251,"TextStream requires a regular native file"); }
-    auto* file=::fdopen(descriptor,"rb");
-    if(!file) { ::close(descriptor); throw VbaRuntimeError(75,"Native text stream open failed"); }
-    try { return VbaValue::reference(std::make_shared<VbaTextStream>(file,nativeRegisterFileRead(status))); }
-    catch(...) { std::fclose(file); throw; }
+    if(::fstat(descriptor.value,&status)!=0 || !S_ISREG(status.st_mode)) throw VbaRuntimeError(3251,"TextStream requires a regular native file");
+    if(mode!=1 && !(status.st_mode & (S_IWUSR|S_IWGRP|S_IWOTH))) throw VbaRuntimeError(70,"Text file is read-only");
+    auto token=nativeRegisterFileStream(status,mode!=1);
+    // Register/check sharing before truncation, so refusal preserves existing bytes.
+    if(mode==2 && ::ftruncate(descriptor.value,0)!=0) throw VbaRuntimeError(75,"Native text truncation failed");
+    auto* file=::fdopen(descriptor.value,mode==1 ? "rb" : mode==8 ? "ab" : "wb");
+    if(!file) throw VbaRuntimeError(75,"Native text stream open failed");
+    descriptor.value=-1;
+    std::unique_ptr<std::FILE,NativeTextFileCloser> owned(file);
+    auto stream=std::make_shared<VbaTextStream>(file,std::move(token),mode);
+    owned.release();
+    return VbaValue::reference(std::move(stream));
 }
-inline void nativeTextReadOptions(const std::vector<VbaValue>& args,std::size_t modeIndex,std::size_t formatIndex) {
+inline int nativeTextOptions(const std::vector<VbaValue>& args,std::size_t modeIndex,std::size_t formatIndex) {
     const auto number=[&](std::size_t index,double fallback) { return index>=args.size() || args[index].kind==VbaValue::Kind::Missing ? fallback : coerceVbaModuleValue(scalarVbaValue(args[index]),"long").number; };
-    if(number(modeIndex,1)!=1 || number(formatIndex,0)!=0) throw VbaRuntimeError(3251,"Only native ASCII text reading is currently implemented");
+    const auto mode=number(modeIndex,1);
+    if((mode!=1 && mode!=2 && mode!=8) || number(formatIndex,0)!=0) throw VbaRuntimeError(3251,"Only native ASCII text modes are currently implemented");
+    return static_cast<int>(mode);
+}
+inline VbaValue nativeCreateTextStream(const VbaValue& path,const std::vector<VbaValue>& args) {
+    const bool overwrite=nativeFileFlag(args,1,true);
+    if(nativeFileFlag(args,2,false)) throw VbaRuntimeError(3251,"Unicode text output requires a validated encoding adapter");
+    return nativeOpenTextStream(path,2,true,!overwrite);
 }
 }

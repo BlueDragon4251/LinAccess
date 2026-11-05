@@ -3141,3 +3141,18 @@ held-delete/close/reopen workflow passes core/DAO2/2 (2.67 s), fresh headless1/1
 probe confirms hard-link alias mutation guard, Close release, EOF62 and failed
 encoding-read position recovery. Last broader48/48 (86.15 s) precedes this
 increment. No new target/ID; F040/F091 remain open, fixed456/384/72.
+
+Native ASCII TextStream writing/appending is now implemented through FSO
+CreateTextFile and OpenTextFile/File.OpenAsTextStream modes1/2/8. Real Write/
+WriteLine/WriteBlankLines output, CRLF, append, Create and atomic no-overwrite
+creation are supported. Payload validation rejects non-ASCII before writing a
+prefix. The weak inode registry distinguishes readers/writers; descriptor
+validation and sharing registration precede truncation, preserving bytes on
+refused overlap. No O_TRUNC occurs before these guards. Unicode/locale codecs,
+Folder.CreateTextFile, full Windows sharing/error/mode/position semantics and
+filesystem transaction guarantees remain open. Scope: docs/NATIVE_TEXT_STREAM.md.
+Final full current desktop48/48 (87.77 s), fresh GUI-free1/1 (2.23 s), both
+builds zero compiler warnings; current Debian/build-ID/SQLite3.54.1 and four
+original hashes after full tests pass. Current native hard-link/close/EOF/
+encoding-recovery probe passes. Original inventory78/100; no Windows result
+oracle. No new CTest target/ID; F040/F091 open, fixed456/384/72.
