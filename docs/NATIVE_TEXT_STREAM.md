@@ -13,7 +13,7 @@ Explicit Close and destruction release the file handle. Qualified native type
 binding uses explicit interface identity rather than TypeName guessing.
 
 ASCII and explicit UTF-16LE formats are implemented as described below.
-Default-code-page formats, Skip and AtEndOfLine remain
+Default-code-page formats and certain EOF/position cases remain
 explicit3251. No locale encoding or Unicode conversion is fabricated. Read
 supports positive counts through1000000 within the remaining byte extent;
 zero/negative/over-end requests are3251 pending reference validation. ReadLine
@@ -49,7 +49,7 @@ file. FSO CreateTextFile(FileName,[Overwrite=True],[Unicode=False]) returns a
 write stream; Overwrite=False uses atomic O_CREAT/O_EXCL and raises58 without
 changing an existing file. The default follows IFileSystem interface metadata
 and the method parameter table; no Windows execution oracle is claimed. Folder
-CreateTextFile remains unimplemented; explicit UTF-16LE output is described below.
+CreateTextFile is supported for plain child names as described below.
 
 Write(Text), WriteLine([Text=""]) and WriteBlankLines(Lines) write actual ASCII
 bytes. WriteLine/WriteBlankLines emit CRLF; NUL is preserved. Complete text is
@@ -108,3 +108,26 @@ Final Unicode validation: full current desktop48/48 (89.99 s), fresh GUI-free
 1/1 (1.85 s), zero compiler warnings in both builds; current Debian/build-ID/
 SQLite/four hashes pass. Private malformed BOM/surrogate/refused-create probes
 pass. Original78/100; no Windows result oracle. No new CTest target/ID.
+
+## Stream navigation and folder-local text creation
+
+Skip(Characters) and SkipLine now use the actual existing read/line paths,
+discarding the resulting text while retaining checked positions and encoding/
+count/surrogate bounds. AtEndOfLine checks the next real ASCII/UTF-16 unit for
+CR/LF without consuming it. Its EOF behavior remains explicit3251 pending an
+Access reference result; it is not guessed from AtEndOfStream.
+
+Folder.CreateTextFile(FileName,[Overwrite=True],[Unicode=False]) now creates
+a real child through the same atomic create/guarded-truncate/encoding pipeline
+as FSO CreateTextFile. This bounded method requires a plain child filename;
+path separators, drive syntax and . or .. are refused3251 before filesystem
+mutation. UTF-8 filenames and explicit UTF-16LE text output are supported.
+Full Windows path/reference/default/error contracts remain open.
+
+Existing core VBA checks a real line marker, SkipLine consumption, Skip followed
+by a read containing NUL, and actual Folder-created Unicode file/readback.
+No new CTest target or catalog ID; F040/F091 remain open, fixed456/384/72.
+
+Navigation/folder increment: core/DAO2/2 (2.69 s), fresh GUI-free1/1
+(1.92 s), zero compiler warnings; current Debian/build-ID/SQLite/four original
+hashes pass. Last broader48/48 (89.99 s) precedes this increment.

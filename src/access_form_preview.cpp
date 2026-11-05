@@ -3286,6 +3286,19 @@ bool AccessFormPreview::zoomFocusedText() {
     if(!binding.isEmpty()) (void)runControlBinding(name,"Change",binding);
     return true;
 }
+void AccessFormPreview::printCurrentDocument() {
+    if(closed_ || openCancelled_ || printingDocument_ || !isActiveWindow()) return;
+    if(window()!=this) { if(status_) status_->setText("Der Druckkontext eingebetteter Formulare ist noch nicht implementiert."); return; }
+    if(auto* modal=QApplication::activeModalWidget();modal && modal!=this) return;
+    ++nativeExecutionDepth();
+    const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
+    QScopedValueRollback<bool> printing(printingDocument_,true);
+    try {
+        if(layout_.kind==linaccess::AccessDocumentKind::Form && !commitControls()) return;
+        if(closed_ || openCancelled_ || !isActiveWindow()) return;
+        showDocumentPrintDialog();
+    } catch(const std::exception& error) { if(status_) status_->setText(QString::fromUtf8(error.what())); }
+}
 bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
     if (closed_ || openCancelled_) return false;
     const auto modifiers=event->modifiers() & ~Qt::KeypadModifier;
@@ -3314,6 +3327,9 @@ bool AccessFormPreview::handleDocumentKey(QKeyEvent* event) {
             if(!commitControls() || closed_ || openCancelled_) return true;
             (void)QMetaObject::invokeMethod(owner,projectCommand,Qt::DirectConnection);
             return true;
+        }
+        if(event->key()==Qt::Key_P && modifiers==Qt::ControlModifier && layout_.kind==linaccess::AccessDocumentKind::Form) {
+            printCurrentDocument(); return true;
         }
         if ((event->key()==Qt::Key_PageDown || event->key()==Qt::Key_PageUp) && modifiers==Qt::ControlModifier) {
             (void)dispatchPreviewDocumentCommand(*this,"runcommand",{linaccess::VbaValue::integer(event->key()==Qt::Key_PageDown ? 65 : 66)});

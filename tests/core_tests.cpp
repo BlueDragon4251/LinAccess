@@ -2974,6 +2974,8 @@ Me!FsoStreamType=TypeName(stream) & ":" & CStr(TypeOf stream Is Scripting.TextSt
 Me!FsoTextLine=stream.ReadLine()
 Me!FsoTextPosition=CStr(stream.Line) & ":" & CStr(stream.Column)
 Me!FsoTextPart=stream.Read(Characters:=3)
+Me!FsoTextLineEnd=CStr(stream.AtEndOfLine)
+stream.SkipLine
 Me!FsoTextRest=stream.ReadAll()
 Me!FsoTextEnd=CStr(stream.AtEndOfStream)
 On Error Resume Next
@@ -2987,11 +2989,15 @@ Set file=fs.GetFile(Me!FsoTextFile)
 Set stream=file.OpenAsTextStream(IOMode:=1, Format:=0)
 Me!FsoTextBinary=stream.Read(3)
 stream.Close
+Set stream=file.OpenAsTextStream()
+stream.Skip Characters:=1
+Me!FsoTextSkipped=stream.Read(2)
+stream.Close
 End Sub)VBA","ReadNativeText",host);
         assert(textProbe.status==VbaExecutionStatus::Completed);
         assert(host.fields["FsoStreamType"]=="TextStream:True" && host.fields["FsoTextLine"]=="one" && host.fields["FsoTextPosition"]=="2:1");
-        assert(host.fields["FsoTextPart"]=="two" && host.fields["FsoTextRest"]=="\nend" && host.fields["FsoTextEnd"]=="True" && host.fields["FsoTextHeld"]=="3251");
-        assert(host.fields["FsoTextBinary"]==std::string("A\0B",3));
+        assert(host.fields["FsoTextPart"]=="two" && host.fields["FsoTextRest"]=="end" && host.fields["FsoTextLineEnd"]=="True" && host.fields["FsoTextEnd"]=="True" && host.fields["FsoTextHeld"]=="3251");
+        assert(host.fields["FsoTextBinary"]==std::string("A\0B",3) && host.fields["FsoTextSkipped"]==std::string("\0B",2));
         const auto writeFile=directory/"write-lines.txt";
         host.fields["FsoWriteFile"]=writeFile.string();
         const auto writeProbe=executeVbaProcedure(R"VBA(Sub WriteNativeText()
@@ -3027,9 +3033,18 @@ Err.Clear
 Set stream=fs.CreateTextFile(Me!FsoWriteFile,False)
 Me!FsoTextNoOverwrite=CStr(Err.Number)
 On Error GoTo 0
+Dim folder As Scripting.Folder
+Set folder=fs.GetFolder(Me!FsoFolder)
+Set stream=folder.CreateTextFile(FileName:="via-folder.txt",Overwrite:=False,Unicode:=True)
+stream.WriteLine "ä"
+stream.Close
+Set stream=fs.OpenTextFile(folder.Path & "/via-folder.txt",1,False,-1)
+Me!FsoFolderCreatedText=stream.ReadLine()
+stream.Close
 End Sub)VBA","WriteNativeText",host);
         assert(writeProbe.status==VbaExecutionStatus::Completed);
         const std::string written="AB\r\n\r\ntail+end\r\n";
+        assert(host.fields["FsoFolderCreatedText"]=="ä" && fs::is_regular_file(directory/"via-folder.txt"));
         assert(host.fields["FsoWritten"]==written && host.fields["FsoWriteEncoding"]=="3251" && host.fields["FsoWriteHeld"]=="3251" && host.fields["FsoReadHeldWrite"]=="3251" && host.fields["FsoTextNoOverwrite"]=="58");
         { std::ifstream input(writeFile,std::ios::binary); assert(std::string(std::istreambuf_iterator<char>(input),{})==written); }
         const auto unicodeFile=directory/"unicode-lines.txt";

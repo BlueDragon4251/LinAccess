@@ -172,6 +172,9 @@ private:
     QMap<QWidget*,std::weak_ptr<linaccess::VbaObject>> commandBarObjects_;
     QMap<QAction*,std::weak_ptr<linaccess::VbaObject>> commandControlObjects_;
     QToolBar* printToolbar_{};
+    bool printingDocument_{};
+    void printCurrentDocument();
+    void showDocumentPrintDialog();
     void buildPrintToolbar(QVBoxLayout* layout);
     bool renderLayout(QPrinter& printer);
     bool renderReport(QPrinter& printer);

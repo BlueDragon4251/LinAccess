@@ -14,6 +14,7 @@
 #include <QTimer>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QPrintDialog>
 #include <QKeyEvent>
 #include <iostream>
 #include <QApplication>
@@ -31,8 +32,40 @@
 void testKeyboardEvents();
 void testTextSelection();
 
+static void testFormPrintShortcut() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","keyboard-print"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery query(db); assert(query.exec("CREATE TABLE print_keys(kind TEXT)"));
+    const QByteArray layout="Begin Form\nKeyPreview =-1\nOnKeyDown =\"[Event Procedure]\"\nBegin Section\nHeight =1000\nBegin TextBox\nName =\"entry\"\nEnd\nEnd\nEnd\n";
+    const QByteArray code=R"VBA(Sub Form_KeyDown(KeyCode As Integer, Shift As Integer)
+If KeyCode=80 And Shift=2 Then
+ CurrentDb.Execute "INSERT INTO print_keys VALUES('key')"
+ If Me.Tag="cancel" Then KeyCode=0
+End If
+End Sub)VBA";
+    AccessFormPreview form("printkeys",layout,code,db); form.show(); form.activateWindow(); QApplication::processEvents();
+    auto* editor=form.findChild<QLineEdit*>("access-control-entry"); assert(editor);
+    auto object=makePreviewFormObject(form); object->assign("Tag",linaccess::VbaValue::string("cancel"));
+    editor->setFocus(); QApplication::processEvents();
+    int dialogs=0,warnings=0;
+    QTimer dismiss;
+    QObject::connect(&dismiss,&QTimer::timeout,&form,[&] {
+        if(auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget())) { ++dialogs; dialog->reject(); }
+        else if(auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) { ++warnings; message->reject(); }
+    });
+    dismiss.start(1); QTest::keyClick(editor,Qt::Key_P,Qt::ControlModifier); QApplication::processEvents(); dismiss.stop();
+    assert(dialogs==0 && warnings==0 && query.exec("SELECT COUNT(*) FROM print_keys") && query.next() && query.value(0).toInt()==1);
+    object->assign("Tag",linaccess::VbaValue::string(""));
+    dismiss.start(1); QTest::keyClick(editor,Qt::Key_P,Qt::ControlModifier); dismiss.stop();
+    assert(dialogs==1 && warnings==0 && form.isVisible() && query.exec("SELECT COUNT(*) FROM print_keys") && query.next() && query.value(0).toInt()==2);
+    const QByteArray reportSource="Begin Report\nRecordSource =\"print_keys\"\nBegin Section\nHeight =1000\nBegin TextBox\nName =\"kind\"\nControlSource =\"kind\"\nWidth =2000\nHeight =300\nEnd\nEnd\nEnd\n";
+    AccessFormPreview report("printreport",reportSource,{},db); report.show(); report.activateWindow(); QApplication::processEvents();
+    dismiss.start(1); QTest::keyClick(&report,Qt::Key_P,Qt::ControlModifier); dismiss.stop();
+    assert(dialogs==2 && warnings==0 && report.isVisible());
+    report.close(); form.close(); db.close();
+}
 void testKeyboardCommands() {
     testTextSelection();
+    testFormPrintShortcut();
     using linaccess::VbaValue;
     auto db=QSqlDatabase::addDatabase("QSQLITE","keyboard-commands"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery query(db);
