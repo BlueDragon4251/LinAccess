@@ -10,8 +10,10 @@ Supported members:
 - FileExists(FileSpec): checks an actual regular file.
 - FolderExists(FolderSpec): checks an actual directory.
 - BuildPath(Path,Name): joins native Linux path components without requiring existence.
-- GetAbsolutePathName(PathSpec): resolves the process working directory and normalizes a native absolute path.
-- GetFileName(PathSpec), GetBaseName(Path), GetExtensionName(Path), GetParentFolderName(Path): extract lexical path components without accessing the filesystem.
+- GetAbsolutePathName(Path): resolves the process working directory and normalizes a native absolute path.
+- GetFileName(Path), GetBaseName(Path), GetExtensionName(Path), GetParentFolderName(Path): extract lexical path components without accessing the filesystem.
+- GetFile(FilePath), GetFolder(FolderPath): return actual native file/folder objects, with the bounded members below.
+- CreateFolder(Path): creates one actual directory and returns its Folder object.
 
 Existence checks distinguish files, directories and absent paths; empty paths
 return False, and missing/not-a-directory results return False. Other errors use
@@ -58,7 +60,7 @@ Path-component increment: desktop core1/1 (1.73 s), fresh GUI-free core1/1
 
 ## Native GetFile objects
 
-GetFile(FileSpec) resolves an actual existing regular Linux file and returns
+GetFile(FilePath) resolves an actual existing regular Linux file and returns
 a real independent native File object (TypeName File). Path is the
 normalized absolute path, Name is its final component, and Size reads the
 filesystem again on each access. No host, stream or database handle is retained.
@@ -100,7 +102,7 @@ Original queries78/100; no Windows result oracle. No new test target/ID.
 
 ## Native GetFolder and Files enumeration
 
-GetFolder(FolderSpec) resolves an actual existing native directory and returns
+GetFolder(FolderPath) resolves an actual existing native directory and returns
 a Folder object. Qualified Scripting.Folder and Scripting.Files bindings use
 explicit native identity. Folder Path/Name read path components; Path is the
 scalar default (VarType8, TypeName Folder). Folder.Files returns a real native
@@ -129,3 +131,25 @@ use. Files and folders are selected by actual filesystem kind, not name guesses.
 Folder increment: expanded desktop core1/1 (1.86 s), fresh GUI-free1/1
 (1.79 s), current Debian/build-ID/SQLite/four original fixture hashes pass.
 Last broader48/48 (84.89 s) precedes this increment. F091 stays open.
+
+## Native CreateFolder
+
+CreateFolder(Path) creates one actual native directory and returns a typed
+Folder object usable immediately. It does not invent missing parents or overwrite
+existing objects. Existing target58, empty/NUL52, Null94, missing parent76 and
+permission70 flow through native VBA error handling. Linux permissions/umask
+apply; Windows drive/ACL/sharing and external race behavior remain bounded.
+Held SubFolders collections observe the new directory on the next Count or
+enumeration because they read the filesystem again. No recursive creation is
+added and the original fixture files are not used as write targets.
+
+Reference: [CreateFolder](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/createfolder-method).
+
+Named-argument binding follows the public IFileSystem IDL vocabulary: GetFile
+FilePath, GetFolder FolderPath, CreateFolder Path, GetFileName Path and
+GetAbsolutePathName Path. These correct earlier documentation-placeholder
+names; positional calls keep their behavior. Public scrrun IDL is a reference
+for this bounded interface, not a Windows Access execution oracle.
+
+CreateFolder/IDL parameter validation: desktop core1/1 (1.87 s), fresh
+GUI-free1/1 (1.77 s), current Debian/build-ID/SQLite/four hashes pass.

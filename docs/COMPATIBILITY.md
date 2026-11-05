@@ -3100,3 +3100,15 @@ Scope: docs/NATIVE_FILE_SYSTEM_OBJECT.md. Expanded desktop core1/1 (1.86 s),
 fresh GUI-free core1/1 (1.79 s), current Debian/build-ID/SQLite/four hashes pass.
 Last broader48/48 (84.89 s) precedes this increment. No new target/ID; F091 open,
 fixed456/384/72.
+
+Native FSO CreateFolder(Path) creates one actual directory, returning a typed
+Folder. Existing target58 preserves both directory and caller reference; a held
+SubFolders collection observes the newly created UTF-8 folder. No recursive
+creation, fabricated parent, overwrite or Windows ACL/sharing contract. Named
+FSO parameters now follow IFileSystem IDL: GetFile FilePath, GetFolder FolderPath,
+CreateFolder/GetFileName/GetAbsolutePathName Path. These supersede earlier
+descriptive help placeholders; positional calls are unchanged. Scope:
+docs/NATIVE_FILE_SYSTEM_OBJECT.md. Final desktop core1/1 (1.87 s), fresh
+GUI-free core1/1 (1.77 s), current Debian/build-ID/SQLite/four fixture hashes
+pass. Last broader48/48 (84.89 s) precedes folder/create increments. No new
+target/ID; F091 remains open, fixed456/384/72.

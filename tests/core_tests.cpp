@@ -2885,17 +2885,17 @@ Me!FsoTypedCall=CStr(TypedFileExists(fs,Me!FsoFile))
 Me!FsoHasFolder=CStr(fs.FolderExists(FolderSpec:=Me!FsoFolder))
 Me!FsoWrongKinds=CStr(fs.FileExists(Me!FsoFolder)) & ":" & CStr(fs.FolderExists(Me!FsoFile))
 Me!FsoMissing=CStr(fs.FileExists(fs.BuildPath(Name:="missing.dat",Path:=Me!FsoFolder)))
-Me!FsoAbsolute=fs.GetAbsolutePathName(PathSpec:=".")
-Me!FsoLeaf=fs.GetFileName(PathSpec:="C:\docs\alpha-ä.tar.gz")
+Me!FsoAbsolute=fs.GetAbsolutePathName(Path:=".")
+Me!FsoLeaf=fs.GetFileName(Path:="C:\docs\alpha-ä.tar.gz")
 Me!FsoBase=fs.GetBaseName(Path:="C:\docs\alpha-ä.tar.gz")
 Me!FsoExtension=fs.GetExtensionName(Path:="/missing/alpha-ä.tar.gz")
 Me!FsoParent=fs.GetParentFolderName(Path:="C:\docs\alpha-ä.tar.gz")
 Me!FsoWildcardLeaf=fs.GetFileName("C:\docs\*.csv")
 Me!FsoDriveOnly=fs.GetFileName("C:")
 Dim nativeFile As Scripting.File
-Set nativeFile=fs.GetFile(FileSpec:=Me!FsoFile)
+Set nativeFile=fs.GetFile(FilePath:=Me!FsoFile)
 Dim folder As Scripting.Folder, files As Scripting.Files, entry As Variant, total As Long
-Set folder=fs.GetFolder(FolderSpec:=Me!FsoFolder & "/")
+Set folder=fs.GetFolder(FolderPath:=Me!FsoFolder & "/")
 Set files=folder.Files
 Me!FsoFolderMetadata=TypeName(folder) & ":" & CStr(VarType(folder)) & ":" & CStr(TypeOf folder Is Scripting.Folder)
 Me!FsoFolderPath=CStr(folder)
@@ -2909,6 +2909,14 @@ For Each entry In files
  total=total+entry.Size
 Next entry
 Me!FsoFilesTotal=CStr(total)
+Dim created As Scripting.Folder, subfolders As Scripting.Folders
+Set subfolders=folder.SubFolders
+Set created=fs.CreateFolder(Path:=folder.Path & "/created-ä")
+Me!FsoCreated=created.Name & ":" & CStr(subfolders.Count)
+On Error Resume Next
+Set created=fs.CreateFolder(folder.Path & "/created-ä")
+Me!FsoDuplicateFolder=CStr(Err.Number) & ":" & created.Name
+On Error GoTo 0
 Me!FsoFileDefault=CStr(nativeFile)
 Me!FsoFileTyped=CStr(TypeOf nativeFile Is Scripting.File)
 Me!FsoFileObject=TypeName(nativeFile) & ":" & CStr(VarType(nativeFile))
@@ -2931,6 +2939,7 @@ End Sub)VBA","ProbeFs",host);
         assert(host.fields["FsoFolderMetadata"]=="Folder:8:True" && host.fields["FsoFolderPath"]==directory.string());
         assert(host.fields["FsoFilesCount"]=="1" && host.fields["FsoFilesTotal"]=="3");
         assert(host.fields["FsoSubFoldersCount"]=="1" && host.fields["FsoSubFolderName"]=="folder-target" && host.fields["FsoFileParent"]==directory.string());
+        assert(host.fields["FsoCreated"]=="created-ä:2" && host.fields["FsoDuplicateFolder"]=="58:created-ä" && fs::is_directory(directory/"created-ä"));
         assert(host.fields["FsoFileObject"]=="File:8" && host.fields["FsoFileTyped"]=="True" && host.fields["FsoFileDefault"]==file.string());
         assert(host.fields["FsoFileMetadata"]==file.string()+"|"+file.filename().string()+"|3:3");
         assert(host.fields["FsoWrongKinds"]=="False:False" && host.fields["FsoMissing"]=="False" && host.fields["FsoAbsolute"]==fs::current_path().string());

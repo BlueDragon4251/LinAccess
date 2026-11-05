@@ -196,20 +196,21 @@ public:
     bool isNativeType(std::string_view type) const override { return type=="scripting.filesystemobject"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto method=key(name);
-        if(method=="getfolder") return VbaArgumentSignature{{"FolderSpec"},1};
-        if(method=="getfile") return VbaArgumentSignature{{"FileSpec"},1};
+        if(method=="createfolder") return VbaArgumentSignature{{"Path"},1};
+        if(method=="getfolder") return VbaArgumentSignature{{"FolderPath"},1};
+        if(method=="getfile") return VbaArgumentSignature{{"FilePath"},1};
         if(method=="fileexists") return VbaArgumentSignature{{"FileSpec"},1};
         if(method=="folderexists") return VbaArgumentSignature{{"FolderSpec"},1};
         if(method=="buildpath") return VbaArgumentSignature{{"Path","Name"},2};
-        if(method=="getabsolutepathname") return VbaArgumentSignature{{"PathSpec"},1};
-        if(method=="getfilename") return VbaArgumentSignature{{"PathSpec"},1};
+        if(method=="getabsolutepathname") return VbaArgumentSignature{{"Path"},1};
+        if(method=="getfilename") return VbaArgumentSignature{{"Path"},1};
         if(method=="getbasename" || method=="getextensionname" || method=="getparentfoldername") return VbaArgumentSignature{{"Path"},1};
         return {};
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto method=key(name);
         const bool lexical=method=="getfilename" || method=="getbasename" || method=="getextensionname" || method=="getparentfoldername";
-        if(!lexical && method!="getfolder" && method!="getfile" && method!="fileexists" && method!="folderexists" && method!="buildpath" && method!="getabsolutepathname")
+        if(!lexical && method!="createfolder" && method!="getfolder" && method!="getfile" && method!="fileexists" && method!="folderexists" && method!="buildpath" && method!="getabsolutepathname")
             throw VbaRuntimeError(3251,"Native FileSystemObject member is not implemented");
         if(args.size()!=(method=="buildpath" ? 2u : 1u) || std::any_of(args.begin(),args.end(),[](const auto& value) { return value.kind==VbaValue::Kind::Missing; }))
             throw VbaRuntimeError(450,"Invalid FileSystemObject argument count");
@@ -227,6 +228,16 @@ public:
             result=result.lexically_normal();
             if(result.filename().empty() && result!=result.root_path()) result=result.parent_path();
             return VbaValue::string(result.string());
+        }
+        if(method=="createfolder") {
+            if(source.empty()) throw VbaRuntimeError(52,"Invalid folder pathname");
+            auto absolute=std::filesystem::absolute(source,problem);
+            if(problem) failure(problem);
+            absolute=absolute.lexically_normal();
+            const bool created=std::filesystem::create_directory(absolute,problem);
+            if(problem==std::errc::file_exists || (!created && !problem)) throw VbaRuntimeError(58,"Folder already exists");
+            if(problem) failure(problem);
+            return nativeFolderReference(std::move(absolute));
         }
         if(method=="getfile" || method=="getfolder") {
             const bool folder=method=="getfolder";
