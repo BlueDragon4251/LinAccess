@@ -1,4 +1,4 @@
-# Native MkDir and RmDir statements
+# Native directory and filesystem statements
 
 The native interpreter compiles unqualified `MkDir pathExpression` and
 `RmDir pathExpression` statements and executes them only in active branches.
@@ -80,3 +80,35 @@ refusal preserving the source. Desktop core1/1 (1.77 s), fresh GUI-free core1/1
 (1.69 s), updated Debian/build-ID/SQLite3.54.1 and all four fixture hashes pass.
 Last broader baseline is typed make-table48/48 (87.98 s); no new target/ID.
 F040/F068 remain open, fixed456/384/72 unchanged.
+
+## Native Name statement
+
+`Name sourceExpression As destinationExpression` now executes actual native
+filesystem renaming for regular files and directories within one filesystem.
+The compiler finds As outside strings, brackets and parentheses; embedded As
+text inside a pathname is not treated as the delimiter. Normal scalar/String
+coercion and native errors apply. Execution occurs only in active branches.
+Assignments to local Name/FileCopy/MkDir/RmDir/ChDir identifiers retain ordinary
+assignment binding instead of being captured by file-statement dispatch.
+
+Linux renameat2 with RENAME_NOREPLACE supplies the atomic no-overwrite operation.
+An existing destination, including an existing directory or link, raises58.
+No check-then-overwrite fallback is used when the kernel/filesystem does not
+support the operation. Terminal source symlinks and special files refuse3251.
+The working directory and its ancestors also refuse3251; directory moves must
+not silently change the interpreter's active file context. Cross-filesystem
+operations and Windows drive/UNC mapping remain unsupported3251. Parent symlink,
+concurrent source replacement, Windows open/share/readonly rules and complete
+error precedence/reference equivalence are not claimed.
+
+Null94, invalid NUL/wildcard pathname52, empty/missing source53, missing parent76,
+denied operation70 and other native failures75 use the existing VBA error path.
+Diagnostics do not contain supplied paths or file contents.
+
+Actual core cases rename a binary file, parse a parenthesized literal pathname
+containing As, reverse the move, preserve a pre-existing destination, rename a
+directory with its contents and execute local keyword-named variable assignments.
+Final desktop core1/1 (1.78 s), fresh GUI-free core1/1 (1.69 s), updated Debian/
+build-ID/pinned SQLite3.54.1 and all four original fixture hashes pass. Last
+broader full remains preceding multi-record milestone48/48 (84.19 s). No added
+target/ID; F040 remains open, fixed456/384/72.

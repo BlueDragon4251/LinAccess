@@ -1219,3 +1219,13 @@ docs/TABLE_MULTI_DELETE_RUNTIME.md. Final targeted mainwindow1/1 (2.80 s), full
 current desktop48/48 (84.19 s), updated Debian/build-ID/SQLite/four hashes pass;
 core unchanged fresh GUI-free1/1 (1.79 s). No new target/ID; F168/F148 open,
 fixed456/384/72.
+
+Native Name sourceExpression As destinationExpression now uses actual Linux
+renameat2/RENAME_NOREPLACE for files/directories within one filesystem. No target
+overwrite fallback; existing target58. String/bracket/parenthesis-aware As
+parsing and local keyword-named assignments are preserved. Source links/special
+files, current-directory ancestors, cross-filesystem/Windows mapping and full
+sharing/error oracle stay bounded. Scope: docs/NATIVE_DIRECTORY_STATEMENTS.md.
+Final desktop core1/1 (1.78 s), fresh GUI-free core1/1 (1.69 s), updated Debian/
+build-ID/SQLite/four hashes pass. Last broader full is preceding multi-record
+48/48 (84.19 s); no new target/ID, F040 open,456/384/72 fixed.
