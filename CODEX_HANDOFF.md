@@ -1487,3 +1487,14 @@ Existing real actions CREATE/INSERT/UPDATE/SELECT/INTO/DELETE/ALTER/DROP passed;
 targeted core/DAO/query3/3 (2.25 s), fresh headless1/1 (2.75 s), current Debian/
 build-ID/SQLite3.54.1/four hashes pass. Last full baseline48/48 (85.02 s), no full
 rerun after extension. F068/F121 still open;456/384/72 fixed.
+
+Native LSet/RSet plus writing Mid(stringVariable,start[,length]) now mutate actual
+String slots through shared typed/ByRef assignment. UTF-16 widths, bounded
+padding/truncation, documented Mid examples, constants, complete pairs and refusal
+without mutation covered. Actual arrays named Mid retain indexed assignment
+priority. Simple existing String/Variant-String targets only; no UDT memory copy,
+fixed-length declarations, MidB, general lvalues or arbitrary unpaired-surrogate
+claim. Unsupported/range boundaries explicit; docs/NATIVE_STRING_MUTATION.md.
+Desktop core1/1 (1.82 s), fresh headless1/1 (1.66 s), current Debian/build-ID/
+SQLite3.54.1/four original hashes pass. Last full baseline48/48 (85.02 s), not
+rerun after language extension. F040/F068 open;456/384/72 stays fixed.

@@ -2804,6 +2804,72 @@ End Sub
         substringError("FileLen(Null)",94); substringError("FileDateTime(Null)",94); substringError("FileLen()",450);
         fs::remove_all(directory);
     }
+    {
+        const auto aligned=executeVbaProcedure(R"VBA(Sub AlignStrings()
+Dim text As String, value As Variant, errorNumber As Long
+text=Space$(6)
+LSet text="A😀Z"
+If text<>"A😀Z  " Or Len(text)<>6 Then Err.Raise 5
+RSet text="😀"
+If text<>"    😀" Then Err.Raise 5
+value="012"
+RSet value="abcdef"
+If value<>"abc" Then Err.Raise 5
+AlignByReference text
+If text<>"ok    " Then Err.Raise 5
+text="_"
+On Error Resume Next
+LSet text="😀"
+errorNumber=Err.Number
+On Error GoTo 0
+If errorNumber<>3251 Or text<>"_" Then Err.Raise 5
+text=""
+LSet text="no expansion"
+If text<>"" Then Err.Raise 5
+Me!AlignedStrings="checked"
+End Sub
+Sub AlignByReference(ByRef target As String)
+LSet target="ok"
+End Sub
+)VBA","AlignStrings",host);
+        assert(aligned.status==VbaExecutionStatus::Completed && host.fields["AlignedStrings"]=="checked");
+    }
+    {
+        const auto mutated=executeVbaProcedure(R"VBA(Sub MutateString()
+Dim text As String, errorNumber As Long
+text="The dog jumps"
+Mid(text,5,3)="fox"
+If text<>"The fox jumps" Then Err.Raise 5
+Mid(text,5)="cow jumped over"
+If text<>"The cow jumpe" Then Err.Raise 5
+text="A😀Z"
+Mid(text,2,2)="ÖX"
+If text<>"AÖXZ" Or Len(text)<>4 Then Err.Raise 5
+text="A😀Z"
+On Error Resume Next
+Mid(text,3,1)="X"
+errorNumber=Err.Number
+On Error GoTo 0
+If errorNumber<>3251 Or text<>"A😀Z" Then Err.Raise 5
+text="abc"
+MutateByReference text
+If text<>"aXc" Then Err.Raise 5
+Mid(text,1,0)="unchanged"
+If text<>"aXc" Then Err.Raise 5
+NamedMidArray
+Me!MidMutation="checked"
+End Sub
+Sub MutateByReference(ByRef target As String)
+Mid(target,2,1)="X"
+End Sub
+Sub NamedMidArray()
+Dim Mid(0 To 1,0 To 1) As String
+Mid(0,0)="array survives"
+If Mid(0,0)<>"array survives" Then Err.Raise 5
+End Sub
+)VBA","MutateString",host);
+        assert(mutated.status==VbaExecutionStatus::Completed && host.fields["MidMutation"]=="checked");
+    }
     assert(evaluate("IsArray(Array(1,2))").truthy());
     assert(evaluate("VarType(Array())").asNumber()==8204);
     assert(evaluate("TypeName(Array())").asText()=="Variant()");
