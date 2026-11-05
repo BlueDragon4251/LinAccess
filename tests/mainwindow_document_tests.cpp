@@ -261,6 +261,7 @@ End Sub
         auto* code=dialog->findChild<QPlainTextEdit*>("native-form-vba"); code->setPlainText(module);
         QApplication::setActiveWindow(dialog); code->setFocus(); QApplication::processEvents();
         QTest::keyClick(code,Qt::Key_S,Qt::ControlModifier);
+        assert(!dialog->isWindowModified());
         assert(dialog->isVisible() && QApplication::activeModalWidget()==dialog);
         assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='form' AND name='Owned Native Form'") && sql.next());
         assert(QJsonDocument::fromJson(sql.value(0).toByteArray()).object().value("vba").toString()==module); sql.finish();
@@ -401,15 +402,22 @@ End Sub
         auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-query-designer");
         dialog->findChild<QLineEdit*>("native-query-name")->setText("Shortcut Saved Query");
         auto* code=dialog->findChild<QPlainTextEdit*>("native-query-sql"); code->setPlainText("SELECT 42 AS value");
+        assert(dialog->isWindowModified());
         QApplication::setActiveWindow(dialog); code->setFocus(); QApplication::processEvents();
         QTest::keyClick(code,Qt::Key_S,Qt::ControlModifier);
+        assert(!dialog->isWindowModified());
         assert(dialog->isVisible() && QApplication::activeModalWidget()==dialog);
         assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='query' AND name='Shortcut Saved Query'") && sql.next());
         auto definition=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
+        assert(!dialog->isWindowModified() && !dialog->property("la_designer_new").toBool());
         assert(definition.value("sql").toString()=="SELECT 42 AS value"); definition.insert("archive","preserve");
         sql.prepare("UPDATE main._la_objects SET definition=? WHERE kind='query' AND name='Shortcut Saved Query'");
         sql.addBindValue(QString::fromUtf8(QJsonDocument(definition).toJson(QJsonDocument::Compact))); assert(sql.exec()); sql.finish();
-        code->setPlainText("SELECT 43 AS value"); QTest::keyClick(code,Qt::Key_S,Qt::ControlModifier);
+        code->setPlainText("SELECT 43 AS value");
+        assert(dialog->isWindowModified());
+        assert(dialog->findChild<QLabel*>("native-designer-save-status")->text()=="Nicht gespeicherte Änderungen");
+        QTest::keyClick(code,Qt::Key_S,Qt::ControlModifier);
+        assert(!dialog->isWindowModified());
         assert(dialog->isVisible() && QApplication::activeModalWidget()==dialog);
         assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='query' AND name='Shortcut Saved Query'") && sql.next());
         definition=QJsonDocument::fromJson(sql.value(0).toByteArray()).object(); sql.finish();
@@ -466,6 +474,7 @@ End Sub
         auto* code=dialog->findChild<QPlainTextEdit*>("native-report-vba");
         QApplication::setActiveWindow(dialog); code->setFocus(); QApplication::processEvents();
         QTest::keyClick(code,Qt::Key_S,Qt::ControlModifier);
+        assert(!dialog->isWindowModified());
         assert(dialog->isVisible() && QApplication::activeModalWidget()==dialog);
         assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='report' AND name='Owned Native Report'") && sql.next());
         assert(QJsonDocument::fromJson(sql.value(0).toByteArray()).object().value("sql").toString()==source); sql.finish();
@@ -1914,7 +1923,7 @@ End Sub
 void exerciseQueryEditor(MainWindow& window,QSqlDatabase db) {
     QSqlQuery sql(db); assert(sql.exec("CREATE TABLE sql_editor_audit(value REAL)")); bool saved=false;
     QTimer::singleShot(0,&window,[&] {
-        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->windowTitle()=="SQL-Abfrage");
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-query-designer");
         auto* source=dialog->findChild<QPlainTextEdit*>(); auto* table=dialog->findChild<QTableView*>(); assert(source && table);
         QPushButton* run=nullptr; QPushButton* save=nullptr;
         for(auto* button:dialog->findChildren<QPushButton*>()) { if(button->text()=="Ausführen") run=button; if(button->text()=="Speichern") save=button; } assert(run && save);

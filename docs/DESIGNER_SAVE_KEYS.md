@@ -30,3 +30,23 @@ project/window/KeyPreview/modal-switch and report page-geometry/event cases rema
 No new CTest target or fixed-catalog item. Activating the modal window before key
 injection is necessary in the offscreen fixture; production code does not bypass
 keyboard or validation to satisfy the check.
+
+## Actual native editor modified state
+
+Owned query/form/report editors now track changes after initialization: text,
+source choices, checkboxes, spin values and field-list/table model mutations mark
+the actual Qt window modified. The saved-status label changes to
+`Nicht gespeicherte Änderungen`; the title contains the native Qt modified marker.
+A new unsaved editor starts modified. Successful actual saves reset modified/new
+state and show the persisted object name. Failed validation/save does not execute
+the successful-reset path. Query result models are not design-input models and do
+not mark the editor modified merely because Execute refreshes results. Existing
+form geometry selection uses blocked signals and does not invent a geometry edit.
+
+This is change tracking, not baseline equality after arbitrary undo, complete
+Access object rename/new-name reservation, design locking, shutdown save prompting
+or a full design-view Undo pipeline. Existing core data-record dirty state is
+separate. Native editor state is tagged for future checked API consumption.
+Existing mainwindow1/1 (2.71 s), current Debian/build-ID/SQLite3.54.1 and four original
+hashes pass. Latest full baseline48/48 (83.85 s), headless runtime unchanged1/1
+(1.75 s); no extra target or catalog item. F080 remains open;456/384/72.

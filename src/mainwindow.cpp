@@ -182,8 +182,36 @@ void installDesignerSaveShortcut(QDialog& dialog,QPushButton* save) {
         button->click();
     });
 }
+void trackDesignerChanges(QDialog& dialog) {
+    dialog.setProperty("la_designer_state_available",true);
+    const bool fresh=dialog.property("la_project_object_name").toString().isEmpty();
+    dialog.setProperty("la_designer_new",fresh);
+    if(!dialog.windowTitle().contains("[*]")) dialog.setWindowTitle(dialog.windowTitle()+" [*]");
+    dialog.setWindowModified(fresh);
+    const QPointer<QDialog> guarded=&dialog;
+    const auto changed=[guarded] {
+        if(!guarded) return;
+        guarded->setWindowModified(true);
+        if(auto* status=guarded->findChild<QLabel*>("native-designer-save-status")) status->setText("Nicht gespeicherte Änderungen");
+    };
+    for(auto* editor:dialog.findChildren<QLineEdit*>()) QObject::connect(editor,&QLineEdit::textChanged,&dialog,changed);
+    for(auto* editor:dialog.findChildren<QPlainTextEdit*>()) QObject::connect(editor,&QPlainTextEdit::textChanged,&dialog,changed);
+    for(auto* editor:dialog.findChildren<QComboBox*>()) QObject::connect(editor,&QComboBox::currentTextChanged,&dialog,changed);
+    for(auto* editor:dialog.findChildren<QCheckBox*>()) QObject::connect(editor,&QCheckBox::toggled,&dialog,changed);
+    for(auto* editor:dialog.findChildren<QSpinBox*>()) QObject::connect(editor,&QSpinBox::valueChanged,&dialog,changed);
+    const auto trackModel=[&](QAbstractItemModel* model) {
+        QObject::connect(model,&QAbstractItemModel::dataChanged,&dialog,changed);
+        QObject::connect(model,&QAbstractItemModel::rowsInserted,&dialog,changed);
+        QObject::connect(model,&QAbstractItemModel::rowsRemoved,&dialog,changed);
+        QObject::connect(model,&QAbstractItemModel::rowsMoved,&dialog,changed);
+        QObject::connect(model,&QAbstractItemModel::modelReset,&dialog,changed);
+    };
+    for(auto* list:dialog.findChildren<QListWidget*>()) trackModel(list->model());
+    for(auto* table:dialog.findChildren<QTableWidget*>()) trackModel(table->model());
+}
 void completeDesignerSave(QDialog& dialog,const QString& name) {
     dialog.setProperty("la_editor_saved_name",name);
+    dialog.setProperty("la_designer_new",false); dialog.setWindowModified(false);
     if(auto* status=dialog.findChild<QLabel*>("native-designer-save-status")) status->setText("Gespeichert: "+name);
     if(!dialog.property("la_editor_keep_open").toBool()) dialog.accept();
 }
@@ -1808,6 +1836,7 @@ void MainWindow::editQuery(const QString& existingName) {
             tagProjectObject(&dialog,this,db_,"query",name->text()); completeDesignerSave(dialog,name->text());
         }
     });
+    trackDesignerChanges(dialog);
     dialog.exec();
 }
 
@@ -1993,6 +2022,7 @@ void MainWindow::editForm(const QString& existingName) {
             tagProjectObject(&dialog,this,db_,"form",name->text()); completeDesignerSave(dialog,name->text());
         }
     });
+    trackDesignerChanges(dialog);
     dialog.exec();
 }
 
@@ -2098,6 +2128,7 @@ void MainWindow::editReport(const QString& existingName) {
             }
         } catch(const std::exception& error) { messageError(this,QString::fromUtf8(error.what())); }
     });
+    trackDesignerChanges(dialog);
     dialog.exec();
 }
 

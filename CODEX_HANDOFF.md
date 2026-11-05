@@ -1438,3 +1438,11 @@ SetStatus removes the meter; invalid updates preserve its value. Other actions
 Targeted core/layout2/2 (13.17 s), fresh GUI-free1/1 (1.75 s), current Debian/
 build-ID/SQLite3.54.1 and four original hashes passed. Last full baseline48/48
 (83.85 s), not rerun after this extension. F068 open;456/384/72 unchanged.
+
+Owned query/form/report designers now track actual modified/new state, reset only
+on successful validated save, and replace stale saved messages after editing.
+Real input and field-list models are tracked; query result models are excluded.
+Existing form geometry display changes block signals. No new close-time prompting,
+complete Undo/equality/name-reservation claim. docs/DESIGNER_SAVE_KEYS.md; F080 open.
+Existing mainwindow1/1 (2.71 s), current package/build-ID/SQLite3.54.1/four hashes pass;
+last full48/48 (83.85 s), unchanged runtime headless1/1 (1.75 s);456/384/72 fixed.
