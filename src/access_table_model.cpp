@@ -177,6 +177,71 @@ bool AccessTableModel::submitTransactionally() {
     setLastError(QSqlError("LinAccess",QStringLiteral("Änderungen gespeichert; die Ansicht konnte nicht aktualisiert werden. ")+problem.text(),problem.type(),problem.nativeErrorCode()));
     return false;
 }
+bool AccessTableModel::replaceAllWholeText(int column,const QString& search,const QString& replacement,Qt::CaseSensitivity sensitivity,int* count) {
+    if(count) *count=0;
+    if(saving_ || changing_ || isDirty()) return reject(2501);
+    if(readOnly_) return reject(2448);
+    if(editStrategy()!=OnManualSubmit || !isTextColumn(column)) return reject(3251);
+    if(metadataError_) return reject(metadataError_);
+    if(search.isEmpty()) return reject(5);
+    if(search.size()>1000000 || replacement.size()>1000000) return reject(3251);
+    const auto primary=primaryKey(); const auto name=record().fieldName(column);
+    if(primary.isEmpty()) return rejectEdit(3251,"Alle ersetzen erfordert eine Tabelle mit Primärschlüssel.");
+    for(int field=0;field<primary.count();++field)
+        if(primary.fieldName(field).compare(name,Qt::CaseInsensitive)==0) return rejectEdit(3251,"Primärschlüsselfelder können hier nicht gemeinsam ersetzt werden.");
+    QVector<int> matches; QVariant converted;
+    try {
+        converted=checkedInput(columnType(column),replacement);
+        setLastError({});
+        while(canFetchMore({})) {
+            if(rowCount()>1000000) return reject(3251);
+            fetchMore({});
+        }
+        if(lastError().isValid()) return false;
+        if(rowCount()>1000000) return reject(3251);
+        for(int row=0;row<rowCount();++row) {
+            const auto target=index(row,column); const auto value=QSqlTableModel::data(target,Qt::EditRole);
+            if(value.isNull() || value.toString().compare(search,sensitivity)!=0) continue;
+            if(!(flags(target)&Qt::ItemIsEditable) || !indexInQuery(target).isValid()) return reject(2448);
+            matches.append(row);
+        }
+    } catch(const VbaRuntimeError& error) { return reject(error.number); }
+      catch(const std::bad_alloc&) { return reject(7); }
+    if(matches.isEmpty()) { setLastError({}); return true; }
+    int failure=0;
+    {
+        const QScopedValueRollback<bool> saving(saving_,true);
+        const QScopedValueRollback<bool> changing(changing_,true);
+        {
+            const QSignalBlocker blocked(this);
+            try {
+                for(const auto row:matches) if(!QSqlTableModel::setData(index(row,column),converted,Qt::EditRole)) { failure=3251; break; }
+            } catch(const std::bad_alloc&) { failure=7; }
+              catch(const std::exception&) { failure=3251; }
+            if(failure) {
+                for(const auto row:matches) QSqlTableModel::revertRow(row);
+                dirtyRows_.clear(); deletedRows_.clear();
+            }
+        }
+        emit dataChanged(index(matches.front(),column),index(matches.back(),column),{Qt::DisplayRole,Qt::EditRole});
+    }
+    if(failure) { dirtyRows_.clear(); deletedRows_.clear(); return reject(failure); }
+    if(!submitTransactionally()) {
+        const auto problem=lastError();
+        // Entry was clean. A failed SQL transaction must leave neither partial
+        // database updates nor replacement drafts for a later unrelated Save.
+        if(isDirty()) {
+            const QScopedValueRollback<bool> saving(saving_,true);
+            // Qualified row rollback bypasses our saving guard; revertAll
+            // dispatches virtual revertRow and would leave the drafts intact.
+            for(const auto row:matches) QSqlTableModel::revertRow(row);
+            dirtyRows_.clear(); deletedRows_.clear();
+        }
+        setLastError(problem); return false;
+    }
+    if(count) *count=matches.size();
+    return true;
+}
 void AccessTableModel::sort(int column,Qt::SortOrder order) {
     const bool protectedEditor=protectSort_; protectSort_=false;
     if(protectedEditor || isDirty()) {

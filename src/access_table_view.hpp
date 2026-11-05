@@ -79,7 +79,10 @@ public:
                 if(self) { self->findMessage_=QString::fromUtf8(error.what()); (void)self->refuse(error.number,self->findMessage_); }
             }
             return self ? self->findMessage_ : QString{};
-        },std::move(replaceAction));
+        },std::move(replaceAction),replace ? std::function<QString(NativeTableFindArguments,QString)>([self](NativeTableFindArguments arguments,QString value) {
+            if(self) self->replaceAllText(std::move(arguments),std::move(value));
+            return self ? self->findMessage_ : QString{};
+        }) : std::function<QString(NativeTableFindArguments,QString)>{});
         if(!self) return false;
         if(replace) replaceDialog_=dialog; else findDialog_=dialog;
         return bool(dialog);
@@ -130,6 +133,49 @@ public:
         if(!changed) { findMessage_=typed->lastError().text(); return false; }
         findArguments_=std::move(arguments); findArguments_.origin=0; findAdvance_=true;
         findMessage_="Feldwert ersetzt.";
+        return true;
+    }
+    bool replaceAllText(NativeTableFindArguments arguments,QString replacement) {
+        const QPointer<AccessTableView> self=this;
+        QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
+        const auto fail=[&](int number,const QString& message) { if(self) { findMessage_=message; (void)refuse(number,message); } return false; };
+        if(!typed) return fail(2046,"Kein natives Datenblatt zum Ersetzen.");
+        if(replacing_ || finding_) return fail(3251,"Eine Such- oder Ersetzungsaktion läuft bereits.");
+        replacing_=true; const auto finished=qScopeGuard([self] { if(self) self->replacing_=false; });
+        if(typed->isReadOnly()) return fail(2046,"Das Datenblatt ist schreibgeschützt.");
+        if(arguments.value || arguments.mode!=1 || arguments.direction!=2 || arguments.column<0 || arguments.column>=typed->columnCount()
+            || isColumnHidden(arguments.column) || !typed->isTextColumn(arguments.column))
+            return fail(3251,"Alle ersetzen erfordert ein Textfeld, ganze Feldwerte und die Suchrichtung Alle.");
+        if(arguments.text.isEmpty()) return fail(5,"Der Suchwert darf nicht leer sein.");
+        if(!finishEditing() || !self || !typed) return false;
+        const auto table=typed->tableName(),field=typed->record().fieldName(arguments.column);
+        const auto primary=typed->primaryKey(); QMap<QString,QVariant> key;
+        if(currentIndex().isValid()) for(int i=0;i<primary.count();++i) key.insert(primary.fieldName(i),typed->record(currentIndex().row()).value(primary.fieldName(i)));
+        if(recordNavigationGuard_) {
+            const auto guard=recordNavigationGuard_; if(!guard()) { if(self && typed) findMessage_=typed->lastError().text(); return false; }
+        } else if(typed->isDirty()) return fail(2501,"Zuerst bestehende Änderungen speichern.");
+        if(!self || !typed) return false;
+        if(model()!=typed || typed->tableName()!=table || typed->record().fieldName(arguments.column)!=field || isColumnHidden(arguments.column))
+            return fail(2501,"Die Datenquelle wurde während der Validierung geändert.");
+        for(auto it=key.cbegin();it!=key.cend();++it)
+            if(!currentIndex().isValid() || typed->record(currentIndex().row()).value(it.key())!=it.value())
+                return fail(2501,"Der aktuelle Datensatz wurde während der Validierung geändert.");
+        int count=0;
+        if(!typed->replaceAllWholeText(arguments.column,arguments.text,replacement,arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive,&count)) {
+            if(self && typed) findMessage_=typed->lastError().text(); return false;
+        }
+        if(!self || !typed) return false;
+        bool restored=key.isEmpty();
+        for(int row=0;!restored && row<1000000;++row) {
+            if(row>=typed->rowCount()) { if(typed->canFetchMore({})) typed->fetchMore({}); else break; }
+            if(row>=typed->rowCount()) break;
+            const auto record=typed->record(row); bool same=true;
+            for(auto it=key.cbegin();it!=key.cend();++it) same&=record.value(it.key())==it.value();
+            if(same) { setCurrentIndex(typed->index(row,arguments.column)); scrollTo(currentIndex()); restored=true; }
+        }
+        findArguments_=std::move(arguments); findArguments_.origin=0; findAdvance_=false;
+        findMessage_=count ? QString::number(count)+" Feldwerte ersetzt und gespeichert." : QStringLiteral("Keine passenden Feldwerte gefunden.");
+        if(!restored) findMessage_+=" Der zuvor ausgewählte Datensatz ist in dieser Ansicht nicht mehr sichtbar.";
         return true;
     }
     bool hasFindText() const { return !findArguments_.text.isEmpty(); }

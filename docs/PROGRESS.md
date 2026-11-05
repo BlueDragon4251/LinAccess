@@ -5802,3 +5802,15 @@ Final full current desktop48/48 (86.70 s), updated Debian/build-ID/pinned SQLite
 four original hashes pass. Qt-only label change leaves GUI-free runtime unchanged
 from fresh payment-components1/1 (1.79 s). Original78/100; no Access oracle.
 No new target or catalog ID; F068/F080/F148 open,456/384/72 fixed.
+
+Native table Ctrl+H now offers real atomic Alle ersetzen for literal whole-field
+text in a visible non-key column of a keyed writable table. Current filtered/
+sorted rows are fetched; Qt Unicode case matching, NULL preservation and current
+primary-key restoration are implemented. Later SQL failure rolls back the batch
+and clears only its own staged replacements; qualified base revertRow bypasses
+the saving guard that previously blocked revertAll. Unrelated drafts are refused
+and preserved. No full key/query/wildcard/locale/concurrency/Undo/Access oracle
+claim. Scope: docs/TABLE_REPLACE_ALL_RUNTIME.md. Final existing mainwindow1/1
+(2.92 s), current Debian/build-ID/SQLite/four hashes pass. Last broader full is
+preceding labels48/48 (86.70 s), unchanged fresh headless runtime1/1 (1.79 s).
+No new target/ID; F373/F160/F168 stay open,456/384/72 fixed.

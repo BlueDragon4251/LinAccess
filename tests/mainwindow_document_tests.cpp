@@ -150,6 +150,34 @@ void exerciseTableReplace(MainWindow& window,QSqlDatabase db) {
     assert(!view->replaceCurrentText({"beta",1,1},"unintended"));
     assert(!model->isDirty() && model->lastError().nativeErrorCode()=="2501" && model->index(1,1).data().toString()=="beta");
     assert(window.closeTableDocument(0,"command_replace",2).value("error").toInt()==0); dispose(); assert(!dialog);
+    assert(sql.exec("CREATE TABLE command_replace_all(id INTEGER PRIMARY KEY,value TEXT CHECK(id<>2 OR value<>'blocked'))"));
+    assert(sql.exec("INSERT INTO command_replace_all VALUES(1,'Äpfel'),(2,'äpfel'),(3,NULL),(4,'other')"));
+    assert(window.openTableDocument("command_replace_all",0,1)==0);
+    view=nullptr;
+    for(auto* candidate:tabs->currentWidget()->findChildren<QTableView*>()) if(auto* typed=dynamic_cast<linaccess::AccessTableView*>(candidate)) view=typed;
+    assert(view); model=qobject_cast<linaccess::AccessTableModel*>(view->model()); assert(model);
+    view->sortByColumn(1,Qt::DescendingOrder);
+    for(int row=0;row<model->rowCount();++row) if(model->record(row).value("id").toInt()==2) view->setCurrentIndex(model->index(row,1));
+    assert(view->openReplaceDialog()); dialog=view->findChild<QDialog*>("native-table-replace-dialog"); assert(dialog);
+    sought=dialog->findChild<QLineEdit*>("native-table-find-text"); replacement=dialog->findChild<QLineEdit*>("native-table-replace-with");
+    auto* all=dialog->findChild<QPushButton*>("native-table-replace-all"); auto* direction=dialog->findChild<QComboBox*>("native-table-find-direction");
+    assert(sought && replacement && all && direction);
+    sought->setText("ÄPFEL"); replacement->setText("Obst");
+    direction->setCurrentIndex(direction->findData(1)); assert(!all->isEnabled());
+    direction->setCurrentIndex(direction->findData(2)); assert(all->isEnabled()); all->click();
+    assert(!model->isDirty() && model->record(view->currentIndex().row()).value("id").toInt()==2);
+    assert(sql.exec("SELECT COUNT(*) FROM command_replace_all WHERE value='Obst'") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+    assert(sql.exec("SELECT value FROM command_replace_all WHERE id=3") && sql.next() && sql.value(0).isNull()); sql.finish();
+    sought->setText("Obst"); replacement->setText("blocked"); all->click();
+    assert(!model->isDirty());
+    assert(sql.exec("SELECT COUNT(*) FROM command_replace_all WHERE value='Obst'") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM command_replace_all WHERE value='blocked'") && sql.next() && sql.value(0).toInt()==0); sql.finish();
+    int draft=-1;
+    for(int row=0;row<model->rowCount();++row) if(model->record(row).value("id").toInt()==4) draft=row;
+    assert(draft>=0 && model->setData(model->index(draft,1),"unsaved",Qt::EditRole));
+    replacement->setText("unintended"); all->click(); assert(model->isDirty() && model->index(draft,1).data(Qt::EditRole).toString()=="unsaved");
+    assert(sql.exec("SELECT COUNT(*) FROM command_replace_all WHERE value='Obst'") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+    model->revertAll(); assert(window.closeTableDocument(0,"command_replace_all",2).value("error").toInt()==0); dispose(); assert(!dialog);
 }
 void exerciseStoredForm(MainWindow& window,QSqlDatabase db) {
     QSqlQuery sql(db);
