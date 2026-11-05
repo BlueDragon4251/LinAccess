@@ -1666,7 +1666,7 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     }
     page->setProperty("la_project_object_scope","tab");
     auto* outer = new QVBoxLayout(page);
-    outer->addWidget(new QLabel((queryName.isEmpty() ? "Tabelle: " + name : "Abfrage: " + queryName) + (readOnly ? " — Schreibgeschützt" : " — Änderungen erst mit 'Speichern' festschreiben")));
+    outer->addWidget(new QLabel((queryName.isEmpty() ? "Tabelle: " + name : "Abfrage: " + queryName) + (readOnly ? " — Schreibgeschützt" : " — Zelländerungen mit 'Speichern' festschreiben")));
     auto* actions = new QHBoxLayout();
     auto* add = addButton(actions, "+ Datensatz");
     auto* remove = addButton(actions, "Datensatz löschen");

@@ -286,14 +286,55 @@ public:
         return true;
     }
     bool deleteCurrentRecord() {
-        auto* typed=qobject_cast<AccessTableModel*>(model());
+        const QPointer<AccessTableView> self=this;
+        QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !currentIndex().isValid()) return false;
-        if(selectionModel()) for(const auto& selected:selectionModel()->selectedIndexes())
-            if(selected.row()!=currentIndex().row()) return refuse(3251,"Mehrere Datensätze gemeinsam zu löschen ist noch nicht implementiert.");
-        if(!finishEditing()) return false;
-        const auto row=currentIndex().row(),column=currentIndex().column();
-        if(!typed->removeRow(row)) return false;
-        if(typed->rowCount()) setCurrentIndex(typed->index(qMin(row,typed->rowCount()-1),column));
+        if(deletingRecords_) return refuse(2501,"Eine Datensatzlöschung läuft bereits.");
+        deletingRecords_=true; const auto finished=qScopeGuard([self] { if(self) self->deletingRecords_=false; });
+        const auto selected=selectionModel() ? selectionModel()->selectedRows() : QModelIndexList{};
+        if(selected.size()<=1) {
+            if(selectionModel()) for(const auto& index:selectionModel()->selectedIndexes())
+                if(index.row()!=currentIndex().row()) return refuse(3251,"Zum Löschen mehrerer Datensätze vollständige Zeilen auswählen.");
+            if(!finishEditing() || !self || !typed || model()!=typed || !currentIndex().isValid()) return false;
+            const auto row=currentIndex().row(),column=currentIndex().column();
+            if(!typed->removeRow(row) || !self || !typed) return false;
+            if(typed->rowCount()) setCurrentIndex(typed->index(qMin(row,typed->rowCount()-1),column));
+            return true;
+        }
+        if(selected.size()>1000000 || typed->editStrategy()!=QSqlTableModel::OnManualSubmit || typed->primaryKey().isEmpty())
+            return refuse(3251,"Mehrfachlöschung erfordert gespeicherte Datensätze mit Primärschlüssel.");
+        QSet<int> rows; QVector<QPersistentModelIndex> anchors;
+        const auto primary=typed->primaryKey(); const auto source=typed->tableName();
+        for(const auto& index:selected) {
+            rows.insert(index.row()); anchors.append(index);
+            const auto record=typed->record(index.row());
+            for(int field=0;field<primary.count();++field)
+                if(record.value(primary.fieldName(field)).isNull()) return refuse(3251,"Neue Datensätze zuerst speichern oder verwerfen.");
+        }
+        if(selectionModel()) for(const auto& index:selectionModel()->selectedIndexes())
+            if(!rows.contains(index.row())) return refuse(3251,"Zum Löschen vollständige Zeilen ohne zusätzliche Zellbereiche auswählen.");
+        if(!finishEditing() || !self || !typed) return false;
+        if(model()!=typed || typed->tableName()!=source) return refuse(2501,"Die Datenquelle wurde während der Validierung geändert.");
+        if(typed->isDirty()) return refuse(2501,"Vor der Mehrfachlöschung bestehende Änderungen speichern oder verwerfen.");
+        for(const auto& anchor:anchors) if(!anchor.isValid() || anchor.model()!=typed) return refuse(2501,"Die Datensatzauswahl wurde während der Validierung geändert.");
+        std::sort(anchors.begin(),anchors.end(),[](const auto& left,const auto& right) { return left.row()>right.row(); });
+        const int column=currentIndex().column(),first=anchors.back().row();
+        for(const auto& anchor:anchors) {
+            const bool removed=typed->removeRow(anchor.row());
+            if(!self || !typed) return false;
+            if(removed) continue;
+            const auto problem=typed->lastError();
+            for(const auto& staged:anchors) {
+                if(!self || !typed) return false;
+                if(staged.isValid() && typed->hasPendingRecord(staged.row())) (void)typed->undoPendingRecord(staged.row());
+            }
+            if(!self || !typed) return false;
+            bool valid=false; const int number=problem.nativeErrorCode().toInt(&valid);
+            return typed->rejectEdit(problem.driverText()=="LinAccess" && valid ? number : 2501,problem.text());
+        }
+        if(!self || !typed) return false;
+        clearSelection();
+        if(typed->rowCount()) setCurrentIndex(typed->index(qMin(first,typed->rowCount()-1),qMax(0,column)));
         return true;
     }
     bool undoCurrentRecord() {
@@ -640,7 +681,7 @@ private:
     QPointer<QDialog> findDialog_,replaceDialog_;
     NativeTableFindArguments findArguments_;
     QString findMessage_;
-    bool findAdvance_{},finding_{},replacing_{},movingRecord_{};
+    bool findAdvance_{},finding_{},replacing_{},movingRecord_{},deletingRecords_{};
     QMetaObject::Connection restore_;
 };
 }
