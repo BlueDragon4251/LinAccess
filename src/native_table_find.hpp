@@ -24,7 +24,8 @@ struct NativeTableFindArguments {
 };
 inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString,int>>& columns,const QMap<int,QString>& typedHints,
                                      NativeTableFindArguments initial,std::function<QString(NativeTableFindArguments)> search,
-                                     std::function<QString(NativeTableFindArguments,QString)> replace={}) {
+                                     std::function<QString(NativeTableFindArguments,QString)> replace={},
+                                     std::function<QString(NativeTableFindArguments,QString)> replaceAll={}) {
     auto* dialog=new QDialog(owner);
     dialog->setObjectName(replace ? "native-table-replace-dialog" : "native-table-find-dialog"); dialog->setWindowTitle(replace ? "Suchen und Ersetzen" : "Suchen"); dialog->setAttribute(Qt::WA_DeleteOnClose);
     auto* box=new QVBoxLayout(dialog); auto* fields=new QFormLayout;
@@ -50,7 +51,7 @@ inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString
         const auto column=scope->currentData().toInt(); const bool exact=typedHints.contains(column);
         if(exact || replacing) match->setCurrentIndex(1);
         match->setEnabled(!exact && !replacing); sensitive->setEnabled(!exact);
-        hint->setText(exact ? typedHints.value(column) : replacing ? QStringLiteral("Text wird als ganzer Feldwert gesucht.") : QStringLiteral("Text wird wörtlich gesucht."));
+        hint->setText(exact ? typedHints.value(column) : replacing ? QStringLiteral("Text wird wörtlich als ganzer Feldwert gesucht.") : QStringLiteral("Text wird wörtlich gesucht."));
     };
     QObject::connect(scope,&QComboBox::currentIndexChanged,dialog,[updateField](int) { updateField(); }); updateField();
     auto* result=new QLabel(dialog); result->setObjectName("native-table-find-result"); result->setWordWrap(true); box->addWidget(result);
@@ -73,6 +74,18 @@ inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString
         QObject::connect(apply,&QPushButton::clicked,dialog,[guarded,text,scope,sensitive,direction,replacement,result,replace] {
             try {
                 const auto message=replace({text->text(),scope->currentData().toInt(),1,sensitive->isChecked(),0,direction->currentData().toInt()},replacement->text());
+                if(guarded) result->setText(message);
+            } catch(const std::exception& error) { if(guarded) result->setText(QString::fromUtf8(error.what())); }
+        });
+    }
+    if(replaceAll && replacement) {
+        auto* all=new QPushButton("&Alle ersetzen",dialog); all->setObjectName("native-table-replace-all"); buttons->insertWidget(2,all);
+        const auto enabled=[all,text,direction] { all->setEnabled(!text->text().isEmpty() && direction->currentData().toInt()==2); };
+        QObject::connect(text,&QLineEdit::textChanged,dialog,[enabled] { enabled(); });
+        QObject::connect(direction,&QComboBox::currentIndexChanged,dialog,[enabled] { enabled(); }); enabled();
+        QObject::connect(all,&QPushButton::clicked,dialog,[guarded,text,scope,sensitive,replacement,result,replaceAll] {
+            try {
+                const auto message=replaceAll({text->text(),scope->currentData().toInt(),1,sensitive->isChecked(),0,2},replacement->text());
                 if(guarded) result->setText(message);
             } catch(const std::exception& error) { if(guarded) result->setText(QString::fromUtf8(error.what())); }
         });

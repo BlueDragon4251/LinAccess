@@ -16,6 +16,7 @@ public:
     bool insertRows(int row,int count,const QModelIndex& parent={}) override;
     bool removeRows(int row,int count,const QModelIndex& parent={}) override;
     bool submitTransactionally();
+    bool replaceAllWholeText(int column,const QString& search,const QString& replacement,Qt::CaseSensitivity sensitivity,int* count);
     bool hasPendingRecord(int row) const;
     bool undoPendingRecord(int row);
     QMap<QString,QVariant> submittedPrimaryKey(int originalRow) const { return submittedKeys_.value(originalRow); }
