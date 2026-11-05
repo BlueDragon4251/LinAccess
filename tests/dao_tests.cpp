@@ -107,17 +107,20 @@ void testSqlRgbDao() {
         assert(sql.exec("CREATE TABLE depreciation_rows(period INTEGER,cost REAL,salvage REAL,life REAL)"));
         assert(sql.exec("INSERT INTO depreciation_rows VALUES(1,10000,1000,5),(2,10000,1000,5),(3,10000,1000,5),(4,10000,1000,5),(5,10000,1000,5)"));
         const auto definition=host.currentDatabase()->member("CreateQueryDef",{
-            linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT SLN(cost,salvage,life) AS straight,SYD(cost,salvage,life,period) AS accelerated FROM depreciation_rows ORDER BY period")}).object;
+            linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT SLN(cost,salvage,life) AS straight,SYD(cost,salvage,life,period) AS accelerated,DDB(cost,salvage,life,period) AS declining FROM depreciation_rows ORDER BY period")}).object;
         const auto rows=definition->member("OpenRecordset",{}).object;
         const auto fields=rows->member("Fields",{}).object;
-        double total=0;
+        double total=0,decliningBalance=10000;
         for(int i=0;i<5;++i) {
             assert(fields->member("Item",{linaccess::VbaValue::string("straight")}).object->member("Value",{}).asNumber()==1800);
             const auto depreciation=fields->member("Item",{linaccess::VbaValue::string("accelerated")}).object->member("Value",{}).asNumber();
             assert(depreciation==3000-i*600); total+=depreciation;
+            const auto expectedDecline=std::min(decliningBalance*0.4,decliningBalance-1000);
+            const auto decline=fields->member("Item",{linaccess::VbaValue::string("declining")}).object->member("Value",{}).asNumber();
+            assert(std::abs(decline-expectedDecline)<1e-9); decliningBalance-=expectedDecline;
             rows->member("MoveNext",{});
         }
-        assert(total==9000 && rows->member("EOF",{}).truthy()); rows->member("Close",{});
+        assert(total==9000 && decliningBalance==1000 && rows->member("EOF",{}).truthy()); rows->member("Close",{});
     }
     {
         assert(sql.exec("CREATE TABLE financial_rows(id INTEGER PRIMARY KEY,rate REAL,periods INTEGER,payment REAL,principal REAL)"));

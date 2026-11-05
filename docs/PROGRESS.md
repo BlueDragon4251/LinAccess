@@ -5780,3 +5780,15 @@ Typed make-table milestone (2026-11-05): full current desktop48/48 passed
 fixture hashes passed. GUI-free core runtime unchanged from fresh1/1 (2.36 s).
 Original-query coverage remains78/100 without Access result oracle. No new
 CTest target or catalog ID; fixed456/384/72. Native SQL scope: NATIVE_VBA_SQL.md.
+
+Native financial expansion (2026-11-05): NPV(Rate,Values) and
+MIRR(Values,Finance_rate,Reinvest_rate) execute real one-dimensional Double arrays
+with arbitrary lower bounds, mixed cash-flow signs and bounded finite rates.
+NPV first-flow period1, MIRR first-flow period0; no array flattening or SQL array
+transport. Other element/rank/empty/single-sign NPV semantics stay bounded3251.
+DDB executes real VBA/SQL declining-balance depreciation with default factor2
+and actual salvage cap, whole life/period up to32767. No full fractional/asset
+range or Windows error/numeric oracle claim. Scope: docs/NATIVE_FINANCIAL_FUNCTIONS.md.
+Current full desktop48/48 (85.94 s), fresh GUI-free core1/1 (1.67 s), updated
+Debian/build-ID/pinned SQLite3.54.1/four original fixture hashes pass. Original
+corpus78/100; no new target or ID. F068 stays open, fixed456/384/72.

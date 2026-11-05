@@ -740,7 +740,29 @@ int main() {
         assert(std::abs(eval("NPer(0.000000000000001,-100,1200)").number-12)<1e-9);
         assert(std::abs(eval("NPer(0.1,0,100,-200)").number-7.272540897341713)<1e-12);
 
+        const auto cashflows=linaccess::executeVbaProcedure(R"VBA(Sub DiscountCashflows()
+Dim flows(-1 To 1) As Double
+flows(-1)=-100
+flows(0)=60
+flows(1)=60
+Me!Npv=CStr(VBA.NPV(Values:=flows,Rate:=0.1))
+Me!NpvZero=CStr(NPV(0,flows))
+Dim financed(5 To 8) As Double
+financed(5)=-100
+financed(6)=110
+financed(7)=-100
+financed(8)=110
+Me!Mirr=CStr(MIRR(Reinvest_rate:=0.1,Values:=financed,Finance_rate:=0.1))
+End Sub
+)VBA","DiscountCashflows",host);
+        assert(cashflows.status==linaccess::VbaExecutionStatus::Completed);
+        assert(std::abs(std::stod(host.fields["Npv"].value())-3.756574004507888)<1e-9 && host.fields["NpvZero"]=="20");
+        assert(std::abs(std::stod(host.fields["Mirr"].value())-0.1)<1e-12);
         assert(eval("SLN(Life:=5,Salvage:=1000,Cost:=10000)").number==1800);
+        assert(eval("DDB(1000,100,5,1)").number==400);
+        assert(std::abs(eval("DDB(1000,100,5,5)").number-29.6)<1e-10);
+        assert(eval("DDB(Factor:=1,Period:=2,Life:=5,Salvage:=0,Cost:=1000)").number==160);
+
         double depreciation=0;
         for(int year=1;year<=5;++year) depreciation+=eval("SYD(10000,1000,5,"+std::to_string(year)+")").number;
         assert(depreciation==9000);

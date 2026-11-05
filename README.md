@@ -595,3 +595,8 @@ belegen weiterhin keine vollständige Access-2003-Kompatibilität.
 begrenzte tatsächliche Speicher-/Navigationspfade für Pfeil hoch/runter,
 Tab/Umschalt+Tab zwischen Nachbarzeilen und Strg+Pos1/Strg+Ende. Die jeweiligen
 Kontext-, Zeilen-, Editor- und Tastaturgrenzen bleiben ausdrücklich dokumentiert.
+
+[Native Finanzberechnungen](docs/NATIVE_FINANCIAL_FUNCTIONS.md) umfassen begrenztes
+NPer und DDB in VBA/SQL sowie NPV/MIRR mit tatsächlichen eindimensionalen
+Double-Arrays in VBA. Typ-, Perioden- und Fehlergrenzen bleiben ausdrücklich
+dokumentiert; ein Access-Referenzlauf steht weiterhin aus.
