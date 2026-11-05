@@ -304,7 +304,15 @@ inline void install(QSqlDatabase db,sqlite3* native) {
     QSet<QString> occupied;
     QSqlQuery functions(db);
     if(!functions.exec("PRAGMA function_list")) throw VbaRuntimeError(3251,"SQLite function inventory unavailable");
-    while(functions.next()) occupied.insert(functions.value(0).toString().toCaseFolded()); functions.finish();
+    const QString adapterPrefix="linaccess_jet_";
+    while(functions.next()) {
+        const auto name=functions.value(0).toString().toCaseFolded();
+        occupied.insert(name);
+        // Jet source names are rewritten to these native adapters. Their VBA
+        // declaration must not become false result metadata for the builtin.
+        if(name.startsWith(adapterPrefix)) occupied.insert(name.mid(adapterPrefix.size()));
+    }
+    functions.finish();
     for(auto it=registry->procedures.cbegin();it!=registry->procedures.cend();++it) {
         if(!it->function || registry->registered.contains(it.key()) || occupied.contains(it.key())) continue;
         const auto name=it.key().toUtf8(); auto* binding=new Binding{registry,registry->lifetime,it.key()};
