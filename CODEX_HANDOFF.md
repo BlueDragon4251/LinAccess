@@ -1564,3 +1564,11 @@ sharing/error/metadata equivalence claim. Scope: docs/NATIVE_DIRECTORY_STATEMENT
 Existing desktop core1/1 (1.77 s), fresh headless core1/1 (1.69 s), latest Debian/
 build-ID/SQLite3.54.1/four fixture hashes pass. Last full typed make-table48/48
 (87.98 s); no new target or fixed ID,456/384/72 unchanged.
+
+Value List ComboBox/ListBox AddItem(Item,Index)/numeric RemoveItem(Index) now
+mutate real Qt models, including named VBA calls, preserving clean record/bound
+value. Stable Form context only; active popup/selection, headers/ordinal binding,
+selected combo-row removal, text-key removal and empty/Null-only edge cases remain
+bounded refusals. Full scope: docs/COMBO_LIST_PROPERTIES_RUNTIME.md. Final existing
+layout1/1 (10.66 s), current Debian/build-ID/SQLite/four hashes pass; headless runtime
+unchanged FileCopy1/1 (1.69 s), last full48/48 (87.98 s). F162 stays open;456/384/72.

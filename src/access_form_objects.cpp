@@ -1,5 +1,6 @@
 #include "access_form_objects.hpp"
 #include "access_list_box.hpp"
+#include "access_value_list.hpp"
 #include "jet_sql_functions.hpp"
 #include "dao_database.hpp"
 #include <QThread>
@@ -131,6 +132,12 @@ public:
         if(!args.empty()) throw linaccess::VbaRuntimeError(450,"Control default assignment takes no indices");
         assign("Value",value);
     }
+    std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        const auto key=text(name).toCaseFolded();
+        if(key=="additem") return linaccess::VbaArgumentSignature{{"Item","Index"},1};
+        if(key=="removeitem") return linaccess::VbaArgumentSignature{{"Index"},1};
+        return std::nullopt;
+    }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked();
         auto* widget = control();
@@ -176,6 +183,59 @@ public:
             return linaccess::VbaValue::logical(key=="fontbold" ? font.weight()>=700 : key=="fontitalic" ? font.italic() : font.underline());
         }
 
+        if(key=="additem" || key=="removeitem") {
+            auto* combo=qobject_cast<QComboBox*>(widget); auto* list=dynamic_cast<AccessListBox*>(widget);
+            if(!combo && !list) throw linaccess::VbaRuntimeError(438,"Control has no list mutation methods");
+            const bool adding=key=="additem";
+            if(args.empty() || args.size()>(adding ? 2u : 1u)) throw linaccess::VbaRuntimeError(450,"Invalid list mutation arguments");
+            if(preview.layout_.kind!=linaccess::AccessDocumentKind::Form || preview.updatingControl_.compare(name_,Qt::CaseInsensitive)==0)
+                throw linaccess::VbaRuntimeError(3251,"List mutation requires a stable native Form context");
+            if((combo && combo->view()->isVisible()) || (list && !list->selectedRows().isEmpty()))
+                throw linaccess::VbaRuntimeError(3251,"List mutation with active popup or list selection requires reference validation");
+            for(auto& definition:preview.layout_.controls) if(definition.name.compare(name_,Qt::CaseInsensitive)==0) {
+                const auto type=definition.rowSourceType.toCaseFolded();
+                if(type!="value list" && type!="wertliste") throw linaccess::VbaRuntimeError(3251,"List mutation requires Value List row source");
+                if(definition.columnHeads || definition.boundColumn==0)
+                    throw linaccess::VbaRuntimeError(3251,"Header or ordinal-bound list mutation requires reference validation");
+                auto rows=linaccess::parseAccessValueList(definition.rowSource.trimmed(),definition.columnCount).rows;
+                qlonglong index=rows.size();
+                if(!adding || args.size()==2) {
+                    const auto value=linaccess::scalarVbaValue(args[adding ? 1 : 0]);
+                    if(value.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null list index");
+                    if(!adding && value.kind==linaccess::VbaValue::Kind::Text)
+                        throw linaccess::VbaRuntimeError(3251,"RemoveItem text-value matching requires reference validation");
+                    index=linaccess::sqlFieldValue(value,"INTEGER").toLongLong();
+                }
+                if(index<0 || index>rows.size() || (!adding && index==rows.size()))
+                    throw linaccess::VbaRuntimeError(5,"List mutation index out of range");
+                if(adding) {
+                    const auto value=linaccess::scalarVbaValue(args[0]);
+                    const auto item=text(linaccess::coerceVbaModuleValue(value,"string").asText());
+                    if(item.isEmpty()) throw linaccess::VbaRuntimeError(3251,"Empty AddItem semantics require reference validation");
+                    const auto added=linaccess::parseAccessValueList(item,definition.columnCount).rows;
+                    if(added.size()!=1) throw linaccess::VbaRuntimeError(5,"AddItem requires one row");
+                    if(rows.size()>=10000) throw linaccess::VbaRuntimeError(3035,"Control row limit exceeded");
+                    rows.insert(index,added.front());
+                } else {
+                    if(combo && combo->currentIndex()==index)
+                        throw linaccess::VbaRuntimeError(3251,"Removing selected item requires reference validation");
+                    rows.removeAt(index);
+                }
+                QStringList cells;
+                for(const auto& row:rows) for(const auto& value:row) {
+                    if(value.isNull()) cells.append(QString{});
+                    else { auto cell=value.toString(); cell.replace('"',"\"\""); cells.append('"'+cell+'"'); }
+                }
+                if(cells.size()==1 && cells.front().isEmpty())
+                    throw linaccess::VbaRuntimeError(3251,"Single Null list-row serialization requires reference validation");
+                const auto previous=definition.rowSource;
+                definition.rowSource=cells.join(';');
+                try { preview.requeryControl(bytes(name_)); }
+                catch(...) { definition.rowSource=previous; throw; }
+                return {};
+            }
+            throw linaccess::VbaRuntimeError(2465,"Control definition unavailable");
+        }
         if(key=="listindex" || key=="itemdata") {
             auto* combo=listCombo();
             if(key=="listindex") {
