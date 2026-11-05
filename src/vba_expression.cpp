@@ -1,4 +1,5 @@
 #include "native_object_types.hpp"
+#include "native_file_system_object.hpp"
 #include "vba_array.hpp"
 #include "vba_calendar.hpp"
 #include "vba_expression.hpp"
@@ -1063,8 +1064,12 @@ private:
             if(accessExpression_) throw error("New is unavailable in calculated expressions",3251);
             auto type=consume();
             if(type.type==Token::Type::Word && lower(type.value)=="scripting" && take(".")) {
-                type=consume(); if(type.type!=Token::Type::Word || lower(type.value)!="dictionary") throw error("Native Scripting class is not implemented",3251);
-                return host_ ? VbaValue::reference(std::make_shared<VbaDictionary>()) : VbaValue{};
+                type=consume();
+                if(type.type!=Token::Type::Word) throw error("Native Scripting class is not implemented",3251);
+                const auto name=lower(type.value);
+                if(name=="dictionary") return host_ ? VbaValue::reference(std::make_shared<VbaDictionary>()) : VbaValue{};
+                if(name=="filesystemobject") return host_ ? VbaValue::reference(std::make_shared<VbaFileSystemObject>()) : VbaValue{};
+                throw error("Native Scripting class is not implemented",3251);
             }
             if(type.type==Token::Type::Word && lower(type.value)=="vba" && take(".")) type=consume();
             if(type.type!=Token::Type::Word || lower(type.value)!="collection") throw error("Native class construction is not implemented",3251);
@@ -1510,8 +1515,10 @@ private:
                 if(accessExpression_) throw error("CreateObject is unavailable in calculated expressions",3251);
                 const auto name=coerceVbaModuleValue(scalarObjectValue(args[0]),"string").asText();
                 if(args.size()>1 && !omitted[1] && !coerceVbaModuleValue(scalarObjectValue(args[1]),"string").asText().empty()) throw error("Remote object activation is not implemented",3251);
-                if(lower(name)!="scripting.dictionary") throw error("Native object class is not implemented",3251);
-                return VbaValue::reference(std::make_shared<VbaDictionary>());
+                const auto classId=lower(name);
+                if(classId=="scripting.filesystemobject") return VbaValue::reference(std::make_shared<VbaFileSystemObject>());
+                if(classId=="scripting.dictionary") return VbaValue::reference(std::make_shared<VbaDictionary>());
+                throw error("Native object class is not implemented",3251);
             }
             if(word=="curdir" || word=="curdir$") {
                 if(!host_) return {};

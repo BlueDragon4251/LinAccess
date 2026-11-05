@@ -1,8 +1,8 @@
 # Native Dictionary and indexed object writes (2026-11-04)
 
 CreateObject("Scripting.Dictionary") and New Scripting.Dictionary create actual
-independent C++ dictionaries. CreateObject supports the local known class only;
-unknown classes/remote activation refuse 3251. This is a native compatibility
+independent C++ dictionaries. Additional local FileSystemObject scope is in
+NATIVE_FILE_SYSTEM_OBJECT.md; other unknown classes/remote activation refuse3251. This is a native compatibility
 object, not general COM/ActiveX or reference-library activation. Use local Object
 variables, qualified Scripting.Dictionary declarations and scalar
 Private/Public/Global module Object/Dictionary fields. Module fields

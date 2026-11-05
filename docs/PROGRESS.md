@@ -5826,3 +5826,15 @@ docs/TABLE_MULTI_DELETE_RUNTIME.md. Final targeted mainwindow1/1 (2.80 s), full
 current desktop48/48 (84.19 s), updated Debian/build-ID/SQLite/four hashes pass;
 core unchanged fresh GUI-free1/1 (1.79 s). No new target/ID; F168/F148 open,
 fixed456/384/72.
+
+Native Scripting.FileSystemObject now supports real FileExists, FolderExists,
+BuildPath and GetAbsolutePathName through local CreateObject/New and qualified
+typed locals/parameters/results. TypeOf uses explicit native identity; wrong
+classes13 leave the existing target intact. Scripting type validation/defaults
+share a closed canonical family rather than guessing identity from TypeName.
+No retained host/database handle, fabricated filesystem state, general COM/
+reference resolution, drive/UNC/wildcard mapping or full FSO contract. SQL global
+object-state guards remain strict. Scope: docs/NATIVE_FILE_SYSTEM_OBJECT.md.
+Final full desktop48/48 (85.42 s), fresh headless1/1 (1.69 s), updated Debian/
+build-ID/SQLite/four hashes pass. Original78/100; no Access result oracle.
+No new target/ID; F040/F042/F091 open,456/384/72 fixed.

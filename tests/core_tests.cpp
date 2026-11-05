@@ -2858,6 +2858,37 @@ End Sub
         host.fields["RenameSource"]=folder.string(); host.fields["RenameTarget"]=movedFolder.string();
         assert(directoryRun("Name Me!RenameSource As Me!RenameTarget").status==VbaExecutionStatus::Completed);
         assert(!fs::exists(folder) && fs::file_size(movedFolder/"kept.dat")==4);
+        host.fields["FsoFile"]=file.string(); host.fields["FsoFolder"]=directory.string();
+        const auto fsoProbe=executeVbaProcedure(R"VBA(Function MakeFs() As Scripting.FileSystemObject
+Set MakeFs=New Scripting.FileSystemObject
+End Function
+Function TypedFileExists(ByVal fs As Scripting.FileSystemObject,ByVal spec As String) As Boolean
+TypedFileExists=fs.FileExists(spec)
+End Function
+Sub ProbeFs()
+Dim fs As Scripting.FileSystemObject
+Set fs=MakeFs()
+Me!FsoTyped=CStr(TypeOf fs Is Scripting.FileSystemObject)
+Me!FsoIdentity=TypeName(fs) & ":" & CStr(VarType(fs))
+Me!FsoHasFile=CStr(fs.FileExists(FileSpec:=Me!FsoFile))
+Me!FsoTypedCall=CStr(TypedFileExists(fs,Me!FsoFile))
+Me!FsoHasFolder=CStr(fs.FolderExists(FolderSpec:=Me!FsoFolder))
+Me!FsoWrongKinds=CStr(fs.FileExists(Me!FsoFolder)) & ":" & CStr(fs.FolderExists(Me!FsoFile))
+Me!FsoMissing=CStr(fs.FileExists(fs.BuildPath(Name:="missing.dat",Path:=Me!FsoFolder)))
+Me!FsoAbsolute=fs.GetAbsolutePathName(PathSpec:=".")
+On Error Resume Next
+Set fs=New Scripting.Dictionary
+Me!FsoWrongClass=CStr(Err.Number) & ":" & TypeName(fs)
+On Error GoTo 0
+Set fs=Nothing
+Set fs=CreateObject("Scripting.FileSystemObject")
+Me!FsoLate=CStr(fs.FileExists(Me!FsoFile))
+Set fs=Nothing
+End Sub)VBA","ProbeFs",host);
+        assert(fsoProbe.status==VbaExecutionStatus::Completed);
+        assert(host.fields["FsoTyped"]=="True" && host.fields["FsoTypedCall"]=="True" && host.fields["FsoWrongClass"]=="13:FileSystemObject" && host.fields["FsoLate"]=="True");
+        assert(host.fields["FsoIdentity"]=="FileSystemObject:9" && host.fields["FsoHasFile"]=="True" && host.fields["FsoHasFolder"]=="True");
+        assert(host.fields["FsoWrongKinds"]=="False:False" && host.fields["FsoMissing"]=="False" && host.fields["FsoAbsolute"]==fs::current_path().string());
         VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
         const auto fileEvaluate=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,paths); };
         const auto length=fileEvaluate("VBA.FileLen(PathName:=filePath)"); assert(length.asNumber()==3 && length.numericType==VbaValue::NumericType::Long);
