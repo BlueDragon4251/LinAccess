@@ -30,6 +30,10 @@ int main(int argc, char** argv) {
     const auto currencySchema=parseMdbSchema("CREATE TABLE `cash`\n(\n`price` REAL,\n`rate` REAL\n);\n-- LINACCESS_SOURCE_TYPE 7072696365 FLOAT\n-- LINACCESS_SOURCE_TYPE 7072696365 CURRENCY\n-- LINACCESS_SOURCE_TYPE 72617465 SINGLE\n");
     assert(currencySchema.columns.size()==2 && currencySchema.columns[0].sourceType=="CURRENCY" && currencySchema.columns[1].sourceType=="SINGLE");
     assert(currencySchema.columns[0].sqliteType=="REAL" && currencySchema.columns[1].sqliteType=="REAL");
+    const auto literalDefaults=parseMdbSchema("CREATE TABLE `source`\n(\n`qty` INTEGER DEFAULT 7,\n`flag` INTEGER DEFAULT FALSE,\n`label` TEXT DEFAULT 'native''s NOT NULL',\n`optional` TEXT DEFAULT NULL,\n`amount` REAL DEFAULT 1.25\n);\n");
+    assert(literalDefaults.columns.size()==5 && literalDefaults.columns[0].hasDefault && literalDefaults.columns[1].sqlDefault=="0");
+    assert(!literalDefaults.columns[2].required && literalDefaults.columns[2].sqlDefault=="'native''s NOT NULL'");
+    assert(parseMdbSchema("CREATE TABLE `source`\n(\n`stamp` TEXT DEFAULT Now()\n);\n").columns.isEmpty());
     const auto schema = parseMdbSchema(R"SQL(CREATE TABLE `source`
  (
  `part` INTEGER NOT NULL,
@@ -71,6 +75,21 @@ CREATE INDEX `label` ON `source` (`a``b`);
     assert(query.exec("SELECT COUNT(*) FROM _la_import_log"));
     assert(query.next() && query.value(0).toInt() == 1);
     query.finish();
+    importAccessTable(db,"synthetic-defaults","literal_defaults",literalDefaults,parseCsvDetailed("qty,flag,label,optional,amount\n"));
+    {
+        const auto records=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("literal_defaults")}).object;
+        records->member("AddNew",{});
+        assert(records->member("Fields",{VbaValue::string("qty")}).object->member("Value",{}).number==7);
+        assert(records->member("Fields",{VbaValue::string("label")}).object->member("Value",{}).asText()=="native's NOT NULL");
+        assert(records->member("Fields",{VbaValue::string("optional")}).object->member("Value",{}).kind==VbaValue::Kind::Null);
+        records->member("CancelUpdate",{});
+        assert(query.exec("SELECT COUNT(*) FROM literal_defaults") && query.next() && query.value(0).toInt()==0); query.finish();
+        records->member("AddNew",{}); records->member("Update",{});
+        assert(records->member("Fields",{VbaValue::string("qty")}).object->member("Value",{}).number==7);
+        records->member("Close",{});
+        assert(query.exec("SELECT qty,flag,label,optional,amount FROM literal_defaults") && query.next());
+        assert(query.value(0).toInt()==7 && query.value(1).toInt()==0 && query.value(2).toString()=="native's NOT NULL" && query.value(3).isNull() && query.value(4).toDouble()==1.25); query.finish();
+    }
     importAccessTable(db,"synthetic-floating-types","floating_types",currencySchema,parseCsvDetailed("price,rate\n1.2345,0.25\n"));
     assert(query.exec("SELECT definition FROM _la_table_schema WHERE table_name='floating_types'") && query.next());
     const auto floatingMetadata=QJsonDocument::fromJson(query.value(0).toByteArray()).array(); query.finish();

@@ -9,6 +9,8 @@
 namespace linaccess {
 // SQLite-backed subset of DAO. Unsupported members throw; original MDBs are
 // never opened for writing. Database must refer to the LinAccess project copy.
+// Immutable literal defaults from a real main-schema table; never runs generators.
+QMap<QString,QVariant> nativeTableLiteralDefaults(QSqlDatabase database,const QString& table);
 std::shared_ptr<VbaObject> makeDaoDatabase(QSqlDatabase database);
 std::shared_ptr<VbaObject> makeDaoEngine(QSqlDatabase database);
 std::shared_ptr<VbaObject> makeDaoSnapshot(QSqlDatabase database,const QStringList& columns,

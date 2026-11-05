@@ -22,6 +22,50 @@
 #include <cassert>
 
 namespace {
+void testNativeTableDefaults() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","form-table-defaults"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE defaults_rows(id INTEGER PRIMARY KEY AUTOINCREMENT,qty INTEGER DEFAULT 7,label TEXT DEFAULT 'table value',flag BOOLEAN DEFAULT 0)"));
+    const QByteArray layout=R"LAYOUT(Begin Form
+RecordSource ="defaults_rows"
+OnCurrent ="[Event Procedure]"
+Begin Section
+Height =1200
+Begin TextBox
+Name ="qty"
+ControlSource ="qty"
+DefaultValue ="11"
+End
+Begin TextBox
+Name ="label"
+ControlSource ="label"
+End
+Begin CheckBox
+Name ="flag"
+ControlSource ="flag"
+End
+End
+End
+)LAYOUT";
+    const QByteArray code=R"VBA(Sub Form_Current()
+Me.Tag=CStr(Me!qty) & ":" & Me!label & ":" & CStr(Me!flag)
+End Sub
+Sub StoreDefaults()
+Me!label="saved value"
+Me.Dirty=False
+End Sub
+)VBA";
+    AccessFormPreview preview("table defaults",layout,code,db); preview.show(); QApplication::processEvents();
+    auto object=makePreviewFormObject(preview);
+    assert(preview.hasDataSource());
+    assert(object->member("Tag",{}).asText()=="11:table value:False");
+    assert(!object->member("Dirty",{}).truthy());
+    assert(sql.exec("SELECT COUNT(*) FROM defaults_rows") && sql.next() && sql.value(0).toInt()==0); sql.finish();
+    std::vector<linaccess::VbaValue> args;
+    assert(preview.executeProcedure("StoreDefaults",args).status==linaccess::VbaExecutionStatus::Completed);
+    assert(sql.exec("SELECT qty,label,flag FROM defaults_rows") && sql.next());
+    assert(sql.value(0).toInt()==11 && sql.value(1).toString()=="saved value" && sql.value(2).toInt()==0); sql.finish();
+    assert(preview.close());
+}
 void testNativeFilePicker() {
     auto db=QSqlDatabase::addDatabase("QSQLITE","native-file-picker"); db.setDatabaseName(":memory:"); assert(db.open());
     QTemporaryDir directory; assert(directory.isValid()); const auto path=directory.filePath("picker.txt");
@@ -114,6 +158,7 @@ End Sub
 }
 
 void testFormObjects() {
+    testNativeTableDefaults();
     testNativeFilePicker();
     auto db = QSqlDatabase::addDatabase("QSQLITE","form-object-test");
     db.setDatabaseName(":memory:"); assert(db.open());

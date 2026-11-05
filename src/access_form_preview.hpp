@@ -212,6 +212,7 @@ private:
     int dataSourceErrorNumber_{};
     QStringList dataColumns_;
     QMap<QString,QString> dataTypes_;
+    QMap<QString,QVariant> tableLiteralDefaults_;
     QVector<QVariantList> recordRows_;
     QVector<QVariant> rowIds_;
     std::shared_ptr<linaccess::VbaObject> recordsetSnapshot_;

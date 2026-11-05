@@ -4,6 +4,7 @@
 #include "access_table_import.hpp"
 #include "csv.hpp"
 #include "vba_currency.hpp"
+#include "vba_qt_value.hpp"
 #include <QRegularExpression>
 
 #include <QCoreApplication>
@@ -64,6 +65,8 @@ int main(int argc, char** argv) {
     int currencyColumns=0,doubleColumns=0,typedCurrencyValues=0,currencySums=0,unsupportedCurrencySums=0;
     int formattedDates = 0;
     int sourceTextSizes=0,sourceMemos=0;
+    int sourceDefaults=0,nativeDefaults=0;
+    int pendingDefaults=0;
     int counters=0,nativeCounters=0,counterProbes=0,managedProbes=0;
     QStringList failures;
     for (const auto& table : tables) {
@@ -77,11 +80,12 @@ int main(int argc, char** argv) {
             for (const auto& column:schema.columns) {
                 if(column.sourceType=="CURRENCY") ++currencyColumns;
                 if(column.sourceType=="DOUBLE") ++doubleColumns;
+                if(column.hasDefault) { ++sourceDefaults; if(!column.autoNumber) ++nativeDefaults; }
             }
             linaccess::importAccessTable(db, source, table, schema, rows);
             {
                 const auto fields=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string(table.toStdString())}).object->member("Fields",{}).object;
-                const auto records=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{linaccess::VbaValue::string(table.toStdString()),linaccess::VbaValue::integer(4)}).object;
+                const auto records=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{linaccess::VbaValue::string(table.toStdString())}).object;
                 for(const auto& column:schema.columns) {
                     if(column.sourceOrigin=="MDBTOOLS_MYSQL" && column.sourceType=="VARCHAR" && column.sourceSize>0) {
                         const auto field=fields->member("Item",{linaccess::VbaValue::string(column.name.toStdString())}).object;
@@ -95,6 +99,16 @@ int main(int argc, char** argv) {
                         const auto actual=records->member("Fields",{linaccess::VbaValue::string(column.name.toStdString())}).object;
                         assert(actual->member("Type",{}).number==12 && actual->member("Size",{}).number==0);
                     }
+                }
+                if(std::any_of(schema.columns.begin(),schema.columns.end(),[](const auto& column){return column.hasDefault && !column.autoNumber;})) {
+                    records->member("AddNew",{});
+                    for(const auto& column:schema.columns) if(column.hasDefault && !column.autoNumber) {
+                        QSqlQuery value(db); assert(value.exec("SELECT "+column.sqlDefault) && value.next());
+                        const auto expected=linaccess::qtFieldValue(value.value(0),linaccess::sqliteColumnTypes(db,table).value(column.name.toCaseFolded()));
+                        const auto actual=records->member("Fields",{linaccess::VbaValue::string(column.name.toStdString())}).object->member("Value",{});
+                        assert(actual.kind==expected.kind && actual.asText()==expected.asText()); ++pendingDefaults;
+                    }
+                    records->member("CancelUpdate",{});
                 }
                 records->member("Close",{});
             }
@@ -304,6 +318,7 @@ End Function
             int col = 0;
             while (copied.next()) {
                 assert(copied.value(5).toInt() == schema.columns[col].primaryKeyOrder);
+                if(schema.columns[col].hasDefault && !schema.columns[col].autoNumber) assert(!copied.value(4).isNull());
                 ++col;
             }
             assert(col == schema.columns.size());
@@ -325,6 +340,9 @@ End Function
     std::cout << "Original date columns formatted through native SQL: " << formattedDates << '\n';
     assert(tables.size() == 29);
     assert(imported == 29 && failures.empty());
+    assert(sourceDefaults==96 && nativeDefaults>0);
+    assert(pendingDefaults==nativeDefaults);
+    std::cout<<"Source literal defaults: "<<sourceDefaults<<", applied outside AutoNumber: "<<nativeDefaults<<", verified pending defaults: "<<pendingDefaults<<'\n';
     assert(sourceTextSizes>0);
     std::cout<<"Verified source text capacities: "<<sourceTextSizes<<", confirmed Memo declarations: "<<sourceMemos<<'\n';
     assert(currencyColumns==43 && doubleColumns==57 && typedCurrencyValues>0);
