@@ -249,6 +249,7 @@ void mathTan(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
 void mathAtn(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"Atn",1,1); }
 void stringLCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"LCase",1,1); }
 void stringUCase(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"UCase",1,1); }
+void currentDirectory(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"CurDir",0,1); }
 void fileLength(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"FileLen",1,1); }
 void fileModified(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"FileDateTime",1,1); }
 template<unsigned mask,bool subtract>
@@ -619,6 +620,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_lcase",-1,&stringLCase,nullptr,nullptr);
     ensure("linaccess_jet_ucase",-1,&stringUCase,nullptr,nullptr);
     ensure("linaccess_jet_filelen",-1,&fileLength,nullptr,nullptr);
+    ensure("linaccess_jet_curdir",-1,&currentDirectory,nullptr,nullptr);
     ensure("linaccess_jet_filedatetime",-1,&fileModified,nullptr,nullptr);
     ensure("linaccess_jet_date_add_1",-1,&calendarDateArithmetic<1,false>,nullptr,nullptr);
     ensure("linaccess_jet_date_add_2",-1,&calendarDateArithmetic<2,false>,nullptr,nullptr);

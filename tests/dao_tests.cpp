@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QDir>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
 #ifdef NDEBUG
@@ -354,6 +355,23 @@ End Sub
         assert(bytes->member("Type",{}).number==4 && bytes->member("Value",{}).number==3 && bytes->member("Value",{}).numericType==linaccess::VbaValue::NumericType::Long);
         assert(stamp->member("Type",{}).number==8 && stamp->member("Value",{}).kind==linaccess::VbaValue::Kind::Date);
         rows->member("Close",{});
+    }
+
+    {
+        const auto savedDirectory=QDir::currentPath();
+        QTemporaryDir directory; assert(directory.isValid());
+        const auto plan=linaccess::compileAccessQuery("SELECT CurDir() AS cwd,CurDir('') AS optional_drive");
+        QSqlQuery current(db); assert(current.prepare(plan.sql));
+        assert(current.exec() && current.next() && current.value(0).toString()==savedDirectory);
+        current.finish();
+        assert(QDir::setCurrent(directory.path()));
+        assert(current.exec() && current.next());
+        assert(current.value(0).toString()==QDir::currentPath() && current.value(1).toString()==QDir::currentPath());
+        current.finish();
+        const auto rows=host.currentDatabase()->member("OpenRecordset",{linaccess::VbaValue::string("SELECT CurDir() AS cwd")}).object;
+        assert(rows->member("Fields",{linaccess::VbaValue::string("cwd")}).object->member("Value",{}).asText()==QDir::currentPath().toStdString());
+        rows->member("Close",{});
+        assert(QDir::setCurrent(savedDirectory));
     }
 
     const auto painted=linaccess::executeVbaProcedure(R"VBA(Sub PaintRows()

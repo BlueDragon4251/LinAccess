@@ -1097,7 +1097,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
                  && (token.value.compare("Format$",Qt::CaseInsensitive)==0 || token.value.compare("Format",Qt::CaseInsensitive)==0))
             output << (token.value.endsWith('$') ? "linaccess_jet_format_string" : "linaccess_jet_format");
         else if(token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="("
-                && QSet<QString>{"pv","sln","syd","fv","pmt","partition","filelen","filedatetime","lenb","sqr","exp","log","sin","cos","tan","atn","lcase","ucase","datevalue","timevalue","dateadd","dateserial","timeserial","cdate","datepart","choose","switch","val","hex","oct","space","string","asc","ascw","chr","chrw","instrrev","strreverse","datediff","year","month","day","hour","minute","second","weekday"}.contains(token.value.toCaseFolded()))
+                && QSet<QString>{"pv","sln","syd","fv","pmt","partition","filelen","filedatetime","curdir","lenb","sqr","exp","log","sin","cos","tan","atn","lcase","ucase","datevalue","timevalue","dateadd","dateserial","timeserial","cdate","datepart","choose","switch","val","hex","oct","space","string","asc","ascw","chr","chrw","instrrev","strreverse","datediff","year","month","day","hour","minute","second","weekday"}.contains(token.value.toCaseFolded()))
             output << "linaccess_jet_"+token.value.toCaseFolded();
         else if (token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="(" && token.value.compare("Len",Qt::CaseInsensitive)==0)
             output << "linaccess_jet_len";

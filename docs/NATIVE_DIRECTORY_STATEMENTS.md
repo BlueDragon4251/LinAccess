@@ -38,10 +38,21 @@ priority over the unqualified intrinsic. Syntax validation does not read cwd.
 ChDir empty path76; other invalid paths follow the bounded rules above. RmDir
 refuses removal of the current directory, including equivalent path aliases75.
 The working directory is process-wide, not a per-form property or Windows
-per-drive directory emulation. SQL CurDir is not registered in this segment.
+per-drive directory emulation. SQL CurDir was not registered in the first segment.
 
 Existing core cases cover a Unicode directory, actual changes, failed changes,
 current-directory removal protection, named/qualified/dollar/bare reads, local
 variable shadowing and restoration of the original working directory. Desktop
 48/48 (83.85 s), fresh GUI-free1/1 (1.79 s), current Debian build-ID/SQLite3.54.1
 and all four original fixture hashes passed. F040 remains open;456/384/72.
+
+
+The SQL compiler now rewrites `CurDir(...)` to a native non-deterministic scalar
+adapter which invokes the same VBA calculation. It is not marked deterministic
+or innocuous and is not evaluated as a compile-time constant. A prepared actual
+SQLite SELECT is reused after a native directory change; both results reflect
+the current directory. DAO OpenRecordset returns the actual path as a String.
+SQL dollar/qualified spelling and complete Windows SQL metadata/error semantics
+remain open. Existing targeted core/DAO/query3/3 (2.33 s), updated Debian build-ID/
+SQLite backend and four original hashes pass. Last full48/48 (83.85 s), fresh
+GUI-free1/1 (1.79 s); runtime code unchanged in this SQL adapter extension.
