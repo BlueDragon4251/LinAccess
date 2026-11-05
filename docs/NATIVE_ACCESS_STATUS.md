@@ -13,7 +13,7 @@ native document obtains an actual status bar in its layout. Maximum200/update100
 produces an actual half-filled meter. SetStatus removes the meter, as documented.
 RemoveMeter removes its widget and message; ClearStatus clears the message.
 Successful status actions return a Null Variant. No fake Access version, registry,
-ActiveX, compiler or object-state result is returned for other actions3251.
+ActiveX or compiler result is returned for other unimplemented actions3251.
 
 Bounded validation happens before changing existing message/meter values: correct
 arity450, required arguments, normal VBA String/Long conversions, Null94,
@@ -36,3 +36,28 @@ References: [Application.SysCmd](https://learn.microsoft.com/en-us/office/vba/ap
 [AcSysCmdAction](https://learn.microsoft.com/en-us/office/vba/api/access.acsyscmdaction).
 Only the five longstanding status actions are exposed; newer Office constants
 from the evolving online documentation are not added as Access2003 features.
+
+
+## Native GetObjectState
+
+SysCmd action10 / acSysCmdGetObjectState now reports actual native object state
+for table0, query1, form2 and report3. Open bit1 comes from the existing project
+registry and actual registered tab/dialog membership, including hidden native
+runtime documents. Modified bit2 is set only by tracked design editors; pending
+data-record changes do not become design changes. New bit4 is available only for
+tracked registered design identities. Unsaved anonymous native editors do not
+reserve an Access object name, so complete Access temporary naming/new-object
+state semantics remain open. Closed or nonexistent native object names return0.
+The named action/object-type/object-name arguments use Argument2/Argument3.
+
+The shared checked state reader also backs existing AccessObject.IsLoaded;
+connection, database identity, project-generation and Qt owner guards are retained.
+Other Access object types explicitly3251. No generic all-object COM/VBE state,
+external-instance state, original Access designer bits or complete Windows error
+precedence claim. Native acObjStateOpen/Dirty/New constants expose1/2/4.
+
+Existing real mainwindow case checks runtime form open, closed report/nonexistent
+object, real query designer open1/modified3/saved1/closed0, and pending editable
+query data remaining open1. Targeted core/mainwindow/layout3/3 (15.13 s), fresh
+headless1/1 (1.76 s), current package/build-ID/SQLite3.54.1/four hashes pass.
+Last full baseline48/48 (83.85 s); no full rerun claimed.456/384/72 unchanged.
