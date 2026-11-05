@@ -1,5 +1,6 @@
 #pragma once
 #include "vba_expression.hpp"
+#include "native_file_time.hpp"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -11,10 +12,18 @@ class VbaFileObject final : public VbaObject {
 public:
     explicit VbaFileObject(std::filesystem::path path) : path_(std::move(path)) {}
     std::string_view className() const override { return "File"; }
+    bool isNativeType(std::string_view type) const override { return type=="scripting.file"; }
+    bool hasScalarDefault() const override { return true; }
+    VbaValue scalarValue() override { return VbaValue::string(path_.string()); }
+    VbaValue defaultMember(const std::vector<VbaValue>& args,bool reference) override {
+        if(!args.empty()) throw VbaRuntimeError(450,"File default property takes no arguments");
+        if(reference) throw VbaRuntimeError(13,"File default property is scalar");
+        return scalarValue();
+    }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         std::string method(name);
         std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
-        if(method!="path" && method!="name" && method!="size") throw VbaRuntimeError(3251,"Native file member is not implemented");
+        if(method!="path" && method!="name" && method!="size" && method!="datelastmodified") throw VbaRuntimeError(3251,"Native file member is not implemented");
         if(!args.empty()) throw VbaRuntimeError(450,"File property takes no arguments");
         if(method=="path") return VbaValue::string(path_.string());
         if(method=="name") return VbaValue::string(path_.filename().string());
@@ -24,6 +33,12 @@ public:
         if(error==std::errc::permission_denied) throw VbaRuntimeError(70,"Filesystem permission denied");
         if(error) throw VbaRuntimeError(75,"Native file metadata unavailable");
         if(!std::filesystem::is_regular_file(status)) throw VbaRuntimeError(3251,"File metadata requires a regular file");
+        if(method=="datelastmodified") {
+            const auto modified=std::filesystem::last_write_time(path_,error);
+            if(error==std::errc::permission_denied) throw VbaRuntimeError(70,"Filesystem permission denied");
+            if(error) throw VbaRuntimeError(75,"Native file timestamp unavailable");
+            return nativeFileDate(modified);
+        }
         const auto size=std::filesystem::file_size(path_,error);
         if(error==std::errc::permission_denied) throw VbaRuntimeError(70,"Filesystem permission denied");
         if(error) throw VbaRuntimeError(75,"Native file size unavailable");
@@ -31,7 +46,7 @@ public:
         if(size<=2147483647ULL) return VbaValue::longInteger(static_cast<std::int32_t>(size));
         return VbaValue::numeric(static_cast<double>(size));
     }
-    void assign(std::string_view,const VbaValue&) override { throw VbaRuntimeError(438,"Native file property is not writable"); }
+    void assign(std::string_view,const VbaValue&) override { throw VbaRuntimeError(3251,"Native file property mutation is not implemented"); }
 };
 // Stateless local filesystem adapter. No COM activation, host or database handle.
 class VbaFileSystemObject final : public VbaObject {

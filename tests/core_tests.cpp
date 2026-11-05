@@ -2882,8 +2882,10 @@ Me!FsoExtension=fs.GetExtensionName(Path:="/missing/alpha-ä.tar.gz")
 Me!FsoParent=fs.GetParentFolderName(Path:="C:\docs\alpha-ä.tar.gz")
 Me!FsoWildcardLeaf=fs.GetFileName("C:\docs\*.csv")
 Me!FsoDriveOnly=fs.GetFileName("C:")
-Dim nativeFile As Object
+Dim nativeFile As Scripting.File
 Set nativeFile=fs.GetFile(FileSpec:=Me!FsoFile)
+Me!FsoFileDefault=CStr(nativeFile)
+Me!FsoFileTyped=CStr(TypeOf nativeFile Is Scripting.File)
 Me!FsoFileObject=TypeName(nativeFile) & ":" & CStr(VarType(nativeFile))
 Me!FsoFileMetadata=nativeFile.Path & "|" & nativeFile.Name & "|" & CStr(nativeFile.Size) & ":" & CStr(VarType(nativeFile.Size))
 
@@ -2901,7 +2903,7 @@ End Sub)VBA","ProbeFs",host);
         assert(host.fields["FsoIdentity"]=="FileSystemObject:9" && host.fields["FsoHasFile"]=="True" && host.fields["FsoHasFolder"]=="True");
         assert(host.fields["FsoLeaf"]=="alpha-ä.tar.gz" && host.fields["FsoBase"]=="alpha-ä.tar" && host.fields["FsoExtension"]=="gz");
         assert(host.fields["FsoParent"]=="C:\\docs" && host.fields["FsoWildcardLeaf"]=="*.csv" && host.fields["FsoDriveOnly"]=="");
-        assert(host.fields["FsoFileObject"]=="File:9");
+        assert(host.fields["FsoFileObject"]=="File:8" && host.fields["FsoFileTyped"]=="True" && host.fields["FsoFileDefault"]==file.string());
         assert(host.fields["FsoFileMetadata"]==file.string()+"|"+file.filename().string()+"|3:3");
         assert(host.fields["FsoWrongKinds"]=="False:False" && host.fields["FsoMissing"]=="False" && host.fields["FsoAbsolute"]==fs::current_path().string());
         VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
@@ -2913,10 +2915,14 @@ End Sub)VBA","ProbeFs",host);
         fs::last_write_time(file,fs::file_time_type::clock::from_sys(fixed));
         const char* previousZone=std::getenv("TZ"); const bool hadZone=previousZone!=nullptr; const std::string savedZone=previousZone ? previousZone : "";
         assert(::setenv("TZ","UTC0",1)==0); ::tzset();
+        const auto datedFile=fileEvaluate("CreateObject(\"Scripting.FileSystemObject\").GetFile(filePath)");
         const auto modified=fileEvaluate("VBA.FileDateTime(PathName:=filePath)");
+        const auto fileDate=datedFile.object->member("DateLastModified",{});
+        assert(fileDate.kind==VbaValue::Kind::Date && fileDate.asText()=="2024-02-29 12:34:56");
         assert(modified.kind==VbaValue::Kind::Date && modified.asText()=="2024-02-29 12:34:56");
         assert(::setenv("TZ","EST5",1)==0); ::tzset();
         assert(fileEvaluate("FileDateTime(filePath)").asText()=="2024-02-29 07:34:56");
+        assert(datedFile.object->member("DateLastModified",{}).asText()=="2024-02-29 07:34:56");
         if(hadZone) assert(::setenv("TZ",savedZone.c_str(),1)==0); else assert(::unsetenv("TZ")==0); ::tzset();
         const auto fileError=[&](const std::string& value,int expected) {
             paths["filepath"]=VbaValue::string(value); int number=0;

@@ -131,13 +131,7 @@ VbaValue nativeFileInformation(const VbaValue& input,bool modifiedTime) {
         return VbaValue::longInteger(static_cast<std::int32_t>(length));
     }
     const auto modified=fs::last_write_time(path,problem); if(problem) throw failure(problem);
-    const auto system=std::chrono::floor<std::chrono::seconds>(fs::file_time_type::clock::to_sys(modified));
-    const auto stamp=std::chrono::system_clock::to_time_t(system);
-    std::tm local{};
-    if(!localtime_r(&stamp,&local) || local.tm_year+1900<100 || local.tm_year+1900>9999) throw error("File timestamp exceeds VBA Date",6);
-    std::ostringstream formatted; formatted.imbue(std::locale::classic());
-    formatted<<std::put_time(&local,"%Y-%m-%d %H:%M:%S");
-    return vbaDateValue(VbaValue::string(formatted.str()));
+    return nativeFileDate(modified);
 }
 class NativeVariantContainer {
 public:

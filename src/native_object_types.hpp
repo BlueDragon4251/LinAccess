@@ -23,6 +23,7 @@ inline std::string_view nativeAccessObjectType(std::string_view type) {
 
 inline std::string_view nativeScriptingObjectType(std::string_view type) {
     if(type=="scripting.dictionary") return "scripting.dictionary";
+    if(type=="scripting.file") return "scripting.file";
     if(type=="scripting.filesystemobject") return "scripting.filesystemobject";
     return {};
 }
