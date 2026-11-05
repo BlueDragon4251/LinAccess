@@ -14,6 +14,7 @@ Supported members:
 - GetFileName(Path), GetBaseName(Path), GetExtensionName(Path), GetParentFolderName(Path): extract lexical path components without accessing the filesystem.
 - GetFile(FilePath), GetFolder(FolderPath): return actual native file/folder objects, with the bounded members below.
 - CreateFolder(Path): creates one actual directory and returns its Folder object.
+- CopyFile, MoveFile, DeleteFile: real bounded single-file operations described below.
 
 Existence checks distinguish files, directories and absent paths; empty paths
 return False, and missing/not-a-directory results return False. Other errors use
@@ -74,8 +75,8 @@ locals/parameters/results use explicit native identity. The scalar default is
 Path, so VarType(file) now reports String8 while TypeName(file) remains File;
 CStr(file) reads the path. File property writes remain explicit3251.
 
-Only these four property reads are implemented. File mutations, parent folders,
-creation/access timestamps, attributes,
+Additional bounded native file operations and ParentFolder are described below.
+Creation/access timestamps, attributes,
 sharing, Windows drive mapping and race/identity semantics remain unimplemented
 or unvalidated. A retained path does not pin the original inode. This is not a
 full Windows File object contract.
@@ -153,3 +154,42 @@ for this bounded interface, not a Windows Access execution oracle.
 
 CreateFolder/IDL parameter validation: desktop core1/1 (1.87 s), fresh
 GUI-free1/1 (1.77 s), current Debian/build-ID/SQLite/four hashes pass.
+
+## Native file operations
+
+FSO CopyFile(Source,Destination,[OverWriteFiles=True]), MoveFile(Source,Destination)
+and DeleteFile(FileSpec,[Force=False]) now perform actual single-file operations.
+File objects support Copy(Destination,[OverWriteFiles=True]), Move(Destination),
+Delete([Force=False]) and writable Name. Successful File.Move/Name updates the
+held object's path; a failed move/name assignment leaves it intact. Source
+metadata is read from the filesystem; no file contents or outcomes are mocked.
+
+The VBA FileCopy/Name/Kill statements share the native operations implementation.
+Copy uses actual binary copy with explicit overwrite policy; Move/Name use Linux
+renameat2/RENAME_NOREPLACE and never replace a target; deletion uses unlink and
+cannot remove directories. A destination ending in / denotes an existing real
+folder and retains the source filename. Terminal folder links remain refused
+even with a trailing separator. Plain File.Name cannot escape its parent.
+
+Overwrite=False rejects an existing target58. Native read-only here is the lack
+of Unix write permission bits; Copy refuses such a destination, and Force=True
+allows deletion without changing those bits when directory permissions permit.
+This is not Windows attribute/ACL/open-sharing equivalence. Wildcards, terminal
+links/special files, cross-filesystem moves, inode pinning/races, metadata/ACL
+copy fidelity and exact Windows error precedence remain unsupported/unvalidated.
+An operation can have normal OS side effects before an external-race failure; no
+multi-file or filesystem transaction/rollback is claimed.
+
+The existing core target executes a full synthetic binary file workflow through
+VBA FSO and File members: copy, no-overwrite error, rename, move, delete, live
+metadata and empty destination-folder check. Existing statement binary/rename/
+delete cases use the same helpers. No new test target/ID; F091 remains open.
+
+References: [CopyFile](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/copyfile-method),
+[MoveFile](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/movefile-method),
+[DeleteFile](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/deletefile-method).
+
+Final file-operation segment: desktop48/48 (86.15 s), fresh GUI-free1/1
+(1.92 s), current Debian/build-ID/SQLite3.54.1/four original hashes pass.
+A private native Force probe confirms read-only preservation with False70 and
+actual deletion with True. No new repository test target/ID; fixed456/384/72.

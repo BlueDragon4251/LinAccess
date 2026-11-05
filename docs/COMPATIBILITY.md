@@ -3112,3 +3112,18 @@ docs/NATIVE_FILE_SYSTEM_OBJECT.md. Final desktop core1/1 (1.87 s), fresh
 GUI-free core1/1 (1.77 s), current Debian/build-ID/SQLite/four fixture hashes
 pass. Last broader48/48 (84.89 s) precedes folder/create increments. No new
 target/ID; F091 remains open, fixed456/384/72.
+
+Native FSO CopyFile/MoveFile/DeleteFile and File.Copy/Move/Delete/writable Name
+now perform actual bounded single-file operations. Shared native_file_operations
+keeps VBA FileCopy/Name/Kill and object methods on the same binary-copy, atomic
+nonreplacement rename and unlink implementation. Overwrite=False58, live path
+updates after File.Move/Name, directory destinations ending /, and read-only
+Force policy are real. Trailing separators no longer hide a terminal folder
+link from GetFolder or destination checks. Wildcards, links/special files,
+cross-filesystem moves, full Windows ACL/sharing/metadata/race/error contracts
+stay bounded. Scope: docs/NATIVE_FILE_SYSTEM_OBJECT.md. Final full desktop48/48
+(86.15 s), fresh GUI-free1/1 (1.92 s), current Debian/build-ID/SQLite3.54.1 and
+all four original hashes after the full run pass. A private native manual probe
+confirms Force=False70 preserves a read-only binary test file and Force=True
+unlinks it. Original queries78/100; no Windows result oracle. No new test
+target/ID; F040/F091 open, fixed456/384/72.

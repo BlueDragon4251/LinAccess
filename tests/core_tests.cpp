@@ -2917,6 +2917,24 @@ On Error Resume Next
 Set created=fs.CreateFolder(folder.Path & "/created-ä")
 Me!FsoDuplicateFolder=CStr(Err.Number) & ":" & created.Name
 On Error GoTo 0
+Dim copied As Scripting.File
+fs.CopyFile Source:=Me!FsoFile, Destination:=created.Path & "/copy.dat", OverWriteFiles:=False
+Set copied=fs.GetFile(created.Path & "/copy.dat")
+Me!FsoCopiedSize=CStr(copied.Size)
+On Error Resume Next
+Err.Clear
+fs.CopyFile Me!FsoFile, copied.Path, False
+Me!FsoCopyExisting=CStr(Err.Number)
+On Error GoTo 0
+copied.Copy Destination:=created.Path & "/copy2.dat", OverWriteFiles:=False
+copied.Name="renamed.dat"
+copied.Move Destination:=created.Path & "/moved.dat"
+Me!FsoMoved=copied.Name & ":" & CStr(copied.Size)
+fs.MoveFile Source:=copied.Path, Destination:=created.Path & "/final.dat"
+fs.DeleteFile FileSpec:=created.Path & "/copy2.dat", Force:=False
+Set copied=fs.GetFile(created.Path & "/final.dat")
+copied.Delete Force:=False
+Me!FsoOpsClean=CStr(created.Files.Count)
 Me!FsoFileDefault=CStr(nativeFile)
 Me!FsoFileTyped=CStr(TypeOf nativeFile Is Scripting.File)
 Me!FsoFileObject=TypeName(nativeFile) & ":" & CStr(VarType(nativeFile))
@@ -2940,11 +2958,21 @@ End Sub)VBA","ProbeFs",host);
         assert(host.fields["FsoFilesCount"]=="1" && host.fields["FsoFilesTotal"]=="3");
         assert(host.fields["FsoSubFoldersCount"]=="1" && host.fields["FsoSubFolderName"]=="folder-target" && host.fields["FsoFileParent"]==directory.string());
         assert(host.fields["FsoCreated"]=="created-ä:2" && host.fields["FsoDuplicateFolder"]=="58:created-ä" && fs::is_directory(directory/"created-ä"));
+        assert(host.fields["FsoCopiedSize"]=="3" && host.fields["FsoCopyExisting"]=="58" && host.fields["FsoMoved"]=="moved.dat:3" && host.fields["FsoOpsClean"]=="0");
+        assert(fs::is_empty(directory/"created-ä") && fs::file_size(file)==3);
         assert(host.fields["FsoFileObject"]=="File:8" && host.fields["FsoFileTyped"]=="True" && host.fields["FsoFileDefault"]==file.string());
         assert(host.fields["FsoFileMetadata"]==file.string()+"|"+file.filename().string()+"|3:3");
         assert(host.fields["FsoWrongKinds"]=="False:False" && host.fields["FsoMissing"]=="False" && host.fields["FsoAbsolute"]==fs::current_path().string());
         VbaVariables paths{{"filepath",VbaValue::string(file.string())}};
         const auto fileEvaluate=[&](const std::string& expression) { return evaluateVbaExpression(expression,host,paths); };
+        const auto folderLink=directory/"folder-link";
+        fs::create_directory_symlink(directory/"created-ä",folderLink);
+        paths["linkpath"]=VbaValue::string(folderLink.string()+"/");
+        for(const auto& expression:{"CreateObject(\"Scripting.FileSystemObject\").GetFolder(linkPath)","CreateObject(\"Scripting.FileSystemObject\").CopyFile(filePath,linkPath)"}) {
+            int number=0; try { (void)fileEvaluate(expression); } catch(const VbaRuntimeError& error) { number=error.number; }
+            assert(number==3251 && fs::is_empty(directory/"created-ä"));
+        }
+        fs::remove(folderLink);
         const auto length=fileEvaluate("VBA.FileLen(PathName:=filePath)"); assert(length.asNumber()==3 && length.numericType==VbaValue::NumericType::Long);
         paths["filepath"]=VbaValue::string(fs::relative(file).string()); assert(fileEvaluate("FileLen(filePath)").asNumber()==3);
         paths["filepath"]=VbaValue::string(file.string());

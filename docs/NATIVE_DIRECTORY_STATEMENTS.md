@@ -138,3 +138,8 @@ Reference: [Kill](https://learn.microsoft.com/en-us/office/vba/language/referenc
 Final filesystem segment: full current desktop48/48 (84.89 s), fresh
 headless1/1 (1.83 s), current Debian/build-ID/SQLite/four hashes pass.
 Original queries78/100; no Windows result oracle. No new test target/ID.
+
+FileCopy/Name/Kill now share native_file_operations.hpp with bounded FSO/File
+operations. Their existing binary/no-overwrite/active-branch cases pass the
+current full desktop48/48 (86.15 s), headless1/1 (1.92 s), Debian/backend/four
+fixture hashes. The shared native path guard also refuses // Windows/UNC mapping.

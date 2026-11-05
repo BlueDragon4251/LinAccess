@@ -1,19 +1,28 @@
 #pragma once
 #include "vba_expression.hpp"
 #include "native_file_time.hpp"
+#include "native_file_operations.hpp"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
 
 namespace linaccess {
 inline VbaValue nativeFolderReference(std::filesystem::path path);
-// Read-only native file object. Metadata is read again rather than cached.
+// Native file object. Metadata is read again; successful moves update its path.
 class VbaFileObject final : public VbaObject {
     std::filesystem::path path_;
 public:
     explicit VbaFileObject(std::filesystem::path path) : path_(std::move(path)) {}
     std::string_view className() const override { return "File"; }
     bool isNativeType(std::string_view type) const override { return type=="scripting.file"; }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        std::string method(name);
+        std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
+        if(method=="copy") return VbaArgumentSignature{{"Destination","OverWriteFiles"},1};
+        if(method=="move") return VbaArgumentSignature{{"Destination"},1};
+        if(method=="delete") return VbaArgumentSignature{{"Force"},0};
+        return {};
+    }
     bool hasScalarDefault() const override { return true; }
     VbaValue scalarValue() override { return VbaValue::string(path_.string()); }
     VbaValue defaultMember(const std::vector<VbaValue>& args,bool reference) override {
@@ -24,6 +33,25 @@ public:
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         std::string method(name);
         std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
+        if(method=="copy" || method=="move" || method=="delete") {
+            if(method=="delete") {
+                if(args.size()>1) throw VbaRuntimeError(450,"Invalid File.Delete argument count");
+                nativeFileKill(VbaValue::string(path_.string()),nativeFileFlag(args,0,false));
+            } else {
+                if(args.empty() || args[0].kind==VbaValue::Kind::Missing || args.size()>(method=="copy" ? 2u : 1u)) throw VbaRuntimeError(450,"Invalid File operation argument count");
+                const bool overwrite=nativeFileFlag(args,1,true);
+                const auto destination=nativeFileDestination(path_,args[0]);
+                if(method=="copy") {
+                    nativeCopyDestinationWritable(destination);
+                    nativeFileCopy(VbaValue::string(path_.string()),VbaValue::string(destination.string()),overwrite);
+                } else {
+                    nativeRegularFile(path_);
+                    nativeFileRename(VbaValue::string(path_.string()),VbaValue::string(destination.string()));
+                    path_=destination;
+                }
+            }
+            return {};
+        }
         if(method!="path" && method!="name" && method!="size" && method!="datelastmodified" && method!="parentfolder") throw VbaRuntimeError(3251,"Native file member is not implemented");
         if(!args.empty()) throw VbaRuntimeError(450,"File property takes no arguments");
         if(method=="path") return VbaValue::string(path_.string());
@@ -48,7 +76,17 @@ public:
         if(size<=2147483647ULL) return VbaValue::longInteger(static_cast<std::int32_t>(size));
         return VbaValue::numeric(static_cast<double>(size));
     }
-    void assign(std::string_view,const VbaValue&) override { throw VbaRuntimeError(3251,"Native file property mutation is not implemented"); }
+    void assign(std::string_view name,const VbaValue& value) override {
+        std::string method(name);
+        std::transform(method.begin(),method.end(),method.begin(),[](unsigned char ch) { return std::tolower(ch); });
+        if(method!="name") throw VbaRuntimeError(3251,"Native file property mutation is not implemented");
+        const auto newName=coerceVbaModuleValue(scalarVbaValue(value),"string").asText();
+        if(newName.empty() || newName=="." || newName==".." || newName.find_first_of("/\\:")!=std::string::npos) throw VbaRuntimeError(3251,"File.Name requires a plain native filename");
+        const auto destination=path_.parent_path()/nativeFilePath(VbaValue::string(newName));
+        nativeRegularFile(path_);
+        nativeFileRename(VbaValue::string(path_.string()),VbaValue::string(destination.string()));
+        path_=destination;
+    }
 };
 // Fresh directory snapshots for native For Each; never fabricate entries.
 class VbaFilesObject final : public VbaObject {
@@ -196,6 +234,9 @@ public:
     bool isNativeType(std::string_view type) const override { return type=="scripting.filesystemobject"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto method=key(name);
+        if(method=="copyfile") return VbaArgumentSignature{{"Source","Destination","OverWriteFiles"},2};
+        if(method=="movefile") return VbaArgumentSignature{{"Source","Destination"},2};
+        if(method=="deletefile") return VbaArgumentSignature{{"FileSpec","Force"},1};
         if(method=="createfolder") return VbaArgumentSignature{{"Path"},1};
         if(method=="getfolder") return VbaArgumentSignature{{"FolderPath"},1};
         if(method=="getfile") return VbaArgumentSignature{{"FilePath"},1};
@@ -209,6 +250,27 @@ public:
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto method=key(name);
+        if(method=="copyfile" || method=="movefile" || method=="deletefile") {
+            const auto required=method=="deletefile" ? 1u : 2u;
+            const auto maximum=method=="copyfile" ? 3u : 2u;
+            if(args.size()<required || args.size()>maximum || (method=="movefile" && args.size()!=2) ||
+                std::any_of(args.begin(),args.begin()+std::min<std::size_t>(required,args.size()),[](const auto& value) { return value.kind==VbaValue::Kind::Missing; }))
+                throw VbaRuntimeError(450,"Invalid filesystem operation argument count");
+            const auto source=path(args[0]);
+            if(method=="deletefile") nativeFileKill(VbaValue::string(source.string()),nativeFileFlag(args,1,false));
+            else {
+                const bool overwrite=nativeFileFlag(args,2,true);
+                const auto destination=nativeFileDestination(source,args[1]);
+                if(method=="copyfile") {
+                    nativeCopyDestinationWritable(destination);
+                    nativeFileCopy(VbaValue::string(source.string()),VbaValue::string(destination.string()),overwrite);
+                } else {
+                    nativeRegularFile(source);
+                    nativeFileRename(VbaValue::string(source.string()),VbaValue::string(destination.string()));
+                }
+            }
+            return {};
+        }
         const bool lexical=method=="getfilename" || method=="getbasename" || method=="getextensionname" || method=="getparentfoldername";
         if(!lexical && method!="createfolder" && method!="getfolder" && method!="getfile" && method!="fileexists" && method!="folderexists" && method!="buildpath" && method!="getabsolutepathname")
             throw VbaRuntimeError(3251,"Native FileSystemObject member is not implemented");
@@ -246,6 +308,7 @@ public:
             auto absolute=std::filesystem::absolute(source,problem);
             if(problem) failure(problem);
             absolute=absolute.lexically_normal();
+            if(absolute.filename().empty() && absolute!=absolute.root_path()) absolute=absolute.parent_path();
             const auto status=std::filesystem::symlink_status(absolute,problem);
             if(problem==std::errc::no_such_file_or_directory || problem==std::errc::not_a_directory) throw VbaRuntimeError(missing,"Filesystem entry unavailable");
             if(problem) failure(problem);
