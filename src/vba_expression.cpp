@@ -699,7 +699,7 @@ bool vbaIntrinsicName(const std::string& name) {
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
                 "sqr","exp","log","sin","cos","tan","atn","date","time","now","timer","dateadd","datediff","datepart",
                 "year","month","day","hour","minute","second","weekday","dateserial","timeserial","datevalue","timevalue",
-                "filelen","filedatetime","curdir","curdir$","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt","pv","sln","syd"};
+                "filelen","filedatetime","curdir","curdir$","choose","switch","iif","isnumeric","isnull","isempty","rgb","qbcolor","partition","fv","pmt","pv","nper","sln","syd"};
     return intrinsics.contains(name);
 }
 
@@ -1297,6 +1297,7 @@ private:
                     {"instr",{{"Start","String1","String2","Compare"},0}},
                     {"strcomp",{{"String1","String2","Compare"},2}},
                     {"pv",{{"Rate","NPer","Pmt","Fv","Type"},3}},
+                    {"nper",{{"Rate","Pmt","Pv","Fv","Type"},3}},
                     {"sln",{{"Cost","Salvage","Life"},3}},
                     {"syd",{{"Cost","Salvage","Life","Period"},4}},
                     {"fv",{{"Rate","NPer","Pmt","Pv","Type"},3}},
@@ -1844,7 +1845,7 @@ private:
                 if(!std::isfinite(converted)) throw error("Depreciation result overflow",6);
                 return VbaValue::numeric(converted);
             }
-            if (word=="fv" || word=="pmt" || word=="pv") {
+            if (word=="fv" || word=="pmt" || word=="pv" || word=="nper") {
                 if (!host_) return {};
                 if (args.size()<3 || args.size()>5 || omitted[0] || omitted[1] || omitted[2])
                     throw error("Financial function requires three to five arguments",450);
@@ -1855,6 +1856,30 @@ private:
                     if (value.kind==VbaValue::Kind::Null) throw error("Invalid Null financial argument",94);
                     values[i]=coerceVbaModuleValue(value,"double").number;
                     if (!std::isfinite(values[i])) throw error("Financial argument overflow",6);
+                }
+                if(word=="nper") {
+                    const auto rate=values[0],payment=values[1],present=values[2],future=values[3],timing=values[4];
+                    if(rate<=-1 || (timing!=0 && timing!=1))
+                        throw error("NPer rate or timing outside supported range",3251);
+                    long double periods;
+                    if(rate==0) {
+                        if(payment==0) throw error("NPer has no unique solution",5);
+                        periods=-(present+future)/payment;
+                    } else {
+                        const auto adjustedPayment=payment*(1+rate*timing);
+                        const auto numerator=adjustedPayment-rate*future;
+                        const auto denominator=rate*present+adjustedPayment;
+                        if(!std::isfinite(numerator) || !std::isfinite(denominator)) throw error("NPer intermediate overflow",6);
+                        if(numerator==0 || denominator==0 || std::signbit(numerator)!=std::signbit(denominator))
+                            throw error("NPer has no finite real solution",5);
+                        const auto delta=-rate*(present+future)/denominator;
+                        const auto logarithm=std::abs(delta)<0.5L ? std::log1p(delta)
+                            : std::log(std::abs(numerator))-std::log(std::abs(denominator));
+                        periods=logarithm/std::log1p(rate);
+                    }
+                    const auto result=static_cast<double>(periods);
+                    if(!std::isfinite(result)) throw error("NPer result overflow",6);
+                    return VbaValue::numeric(result);
                 }
                 const auto rate=values[0],periods=values[1],timing=values[4];
                 if (periods<0 || periods>32767 || std::floor(periods)!=periods)

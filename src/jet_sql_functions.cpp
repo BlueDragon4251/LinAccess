@@ -232,6 +232,7 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
     } catch(const VbaRuntimeError& failure) { functionError(context,failure); }
       catch(...) { native.error(context,"SQL scalar evaluation failed",-1); }
 }
+void financialNper(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"NPer",3,5); }
 void financialPv(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"PV",3,5); }
 void financialSln(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"SLN",3,3); }
 void financialSyd(sqlite3_context* context,int count,sqlite3_value** args) noexcept { scalarBuiltinFunction(context,count,args,"SYD",4,4); }
@@ -604,6 +605,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_partition",-1,&partitionRange,nullptr,nullptr);
     ensure("linaccess_jet_fv",-1,&financialFv,nullptr,nullptr);
     ensure("linaccess_jet_pv",-1,&financialPv,nullptr,nullptr);
+    ensure("linaccess_jet_nper",-1,&financialNper,nullptr,nullptr);
     ensure("linaccess_jet_sln",-1,&financialSln,nullptr,nullptr);
     ensure("linaccess_jet_syd",-1,&financialSyd,nullptr,nullptr);
     ensure("linaccess_jet_pmt",-1,&financialPmt,nullptr,nullptr);

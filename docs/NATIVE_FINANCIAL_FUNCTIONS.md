@@ -1,4 +1,4 @@
-# Native FV, Pmt, PV, SLN and SYD
+# Native FV, Pmt, PV, NPer, SLN and SYD
 
 FV(Rate,NPer,Pmt,[Pv],[Type]) and Pmt(Rate,NPer,Pv,[Fv],[Type]) now execute
 native C++ floating-point calculations. The VBA binder supports the documented
@@ -12,7 +12,7 @@ Fractional/negative/larger periods, rate<=-1 and other timing values explicitly
 raise3251 rather than invent compatibility outside the proven scope. Null raises94;
 missing required/wrong arity raises450; nonfinite arguments/results raise6.
 The result retains Double identity. There is no complete financial library claim:
-NPV/NPer/Rate/IRR/MIRR/DDB and other financial functions and Windows error/edge-case oracle remain open.
+NPV/Rate/IRR/MIRR/DDB and other financial functions and Windows error/edge-case oracle remain open.
 
 The computation uses long-double intermediates and log1p/expm1 to avoid the
 usual near-zero-rate loss from subtracting1 from a rounded power. Rate0 uses
@@ -51,3 +51,26 @@ full baseline remains48/48 (82.86 s), not rerun for this bounded extension.
 Additional references: [VBA PV](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/pv-function),
 [VBA SLN](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/sln-function),
 [VBA SYD](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/syd-function).
+
+## NPer
+
+NPer(Rate,Pmt,Pv,[Fv],[Type]) now computes the actual number of payment periods
+in the native expression engine and SQL adapter. Optional Fv/Type default to0;
+VBA named arguments and VBA.NPer are supported. Finite Double-coercible inputs,
+rate greater than-1 and timing0/end or1/beginning are supported. Results may be
+fractional and retain Double identity; the earlier FV/PV/Pmt whole-period bound
+does not constrain this inverse result.
+
+Zero rate uses the linear balance. Nonzero rate uses long-double logarithms,
+log1p for a ratio near1 and separate magnitude logs otherwise. No zero/negative
+logarithm or indeterminate linear solution is returned as a successful value.
+No finite unique real solution raises5; unsupported rate/timing3251, Null94,
+arity450 and nonfinite argument/intermediate/result6 use the native error path.
+Complete Windows edge-case/error/precision comparison remains open.
+
+Core cases check zero/tiny rate, a one-payment balance at both timing choices,
+capital doubling and named qualified calls. Actual SQL financial rows invert
+their computed payments and match independently amortized twelve-period balances.
+Existing core/DAO/query3/3 (2.76 s), fresh GUI-free core1/1 (1.77 s), updated
+Debian/build-ID/SQLite3.54.1 and all four original hashes pass. Last broader full
+48/48 (87.98 s); no new target/ID. F068 remains open, fixed456/384/72.

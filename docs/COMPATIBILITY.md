@@ -2950,3 +2950,11 @@ and absent false Currency proof pass in existing DAO/query/original3/3 (7.79 s);
 Debian/build-ID/SQLite/four hashes pass. Core runtime unchanged FileCopy1/1
 (1.69 s), last full48/48 (87.98 s). Complete name-priority oracle remains open.
 Scope: docs/NATIVE_VBA_SQL.md; fixed456/384/72 unchanged.
+
+Native NPer(Rate,Pmt,Pv,[Fv],[Type]) now computes real fractional financial
+periods in VBA and SQL with qualified/named VBA calls, zero-rate balance and
+stable logarithmic nonzero-rate calculation. No finite unique solution5;
+bounded rate/timing3251; full Windows numeric/error oracle remains open. Scope:
+docs/NATIVE_FINANCIAL_FUNCTIONS.md. Existing core/DAO/query3/3 (2.76 s), fresh
+headless1/1 (1.77 s), updated Debian/build-ID/SQLite/four hashes pass. Last
+broader full48/48 (87.98 s); no new target/ID,456/384/72 fixed.
