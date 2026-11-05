@@ -402,7 +402,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [ ] **F054** — OpenRecordset, Fields/default members, EOF/BOF, navigation and bookmarks.
 - [ ] **F080** — Navigator, datasheet/form/design views, properties, toolbox, undo/redo and SQL designer.
 - [ ] **F129** — Full initialized original sale workflow: subsequent first/second keyboard AfterUpdate still fails 3075/1023 without a sale ID; independent document lifetimes, positive original sale snapshot and real report/printing remain open.
-- [ ] **F168** — Complete clipboard interoperability, multi-record selection/deletion, complete writable query sources, full deletion focus/event ordering and Access 2003 oracle.
+- [ ] **F168** — Complete clipboard interoperability, multi-record selection/deletion, complete writable query sources, full deletion focus/event ordering and Access 2003 oracle. Bounded staged multi-record table deletion is in TABLE_MULTI_DELETE_RUNTIME.md; the complete requirement remains open.
 - [x] **F172** — Native single-record Copy/PasteAppend and selected-record Ctrl+C, typed clipboard, real SQL/bookmark/active-target tests and original manual-key conflict via direct invocation and native click on synthetic rows.
 - [x] **F237** — Native Ctrl+Plus/Ctrl+Shift+Equals new-row navigation and documented RunCommand 28/65-68, KeyPreview/validation/policy/no-INSERT/SendKeys Qt/SQL tests; full keyboard/layout/navigation/MDI/query semantics remain open.
 - [x] **F250** — Native Ctrl+Page Down/Up record navigation through validation/save, actual text/ComboBox focus, KeyDown/SendKeys/boundaries/Current self-close regression; multi-page/other views/full Windows keyboard identity remain open.

@@ -3012,3 +3012,15 @@ claim. Scope: docs/TABLE_REPLACE_ALL_RUNTIME.md. Final existing mainwindow1/1
 (2.92 s), current Debian/build-ID/SQLite/four hashes pass. Last broader full is
 preceding labels48/48 (86.70 s), unchanged fresh headless runtime1/1 (1.79 s).
 No new target/ID; F373/F160/F168 stay open,456/384/72 fixed.
+
+Native Ctrl+Minus/DeleteRecord now stages multiple completely selected stored
+table records, including noncontiguous rows. Partial-cell selection, mixed drafts,
+keyless/new rows and reentrant/context changes stay refused. Persistent anchors
+and weak view/model guards preserve identity/lifetime. Existing Save commits the
+set atomically; a later FK failure retains all SQL rows and pending choices.
+Native VBA SelectAllRecords/DeleteRecord now executes the supported selection.
+No full Access confirmation/event/Undo/concurrency/selection oracle claim. Scope:
+docs/TABLE_MULTI_DELETE_RUNTIME.md. Final targeted mainwindow1/1 (2.80 s), full
+current desktop48/48 (84.19 s), updated Debian/build-ID/SQLite/four hashes pass;
+core unchanged fresh GUI-free1/1 (1.79 s). No new target/ID; F168/F148 open,
+fixed456/384/72.

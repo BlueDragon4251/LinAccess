@@ -179,6 +179,37 @@ void exerciseTableReplace(MainWindow& window,QSqlDatabase db) {
     assert(sql.exec("SELECT COUNT(*) FROM command_replace_all WHERE value='Obst'") && sql.next() && sql.value(0).toInt()==2); sql.finish();
     model->revertAll(); assert(window.closeTableDocument(0,"command_replace_all",2).value("error").toInt()==0); dispose(); assert(!dialog);
 }
+void exerciseTableMultiDelete(MainWindow& window,QSqlDatabase db) {
+    QSqlQuery sql(db); assert(sql.exec("PRAGMA foreign_keys=ON"));
+    assert(sql.exec("CREATE TABLE delete_many(id INTEGER PRIMARY KEY,value TEXT)"));
+    assert(sql.exec("INSERT INTO delete_many VALUES(1,'one'),(2,'two'),(3,'three')"));
+    assert(sql.exec("CREATE TABLE delete_many_child(parent INTEGER REFERENCES delete_many(id))"));
+    assert(sql.exec("INSERT INTO delete_many_child VALUES(3)"));
+    assert(window.openTableDocument("delete_many",0,1)==0);
+    auto* tabs=window.findChild<QTabWidget*>(); linaccess::AccessTableView* view=nullptr;
+    for(auto* candidate:tabs->currentWidget()->findChildren<QTableView*>()) if(auto* typed=dynamic_cast<linaccess::AccessTableView*>(candidate)) view=typed;
+    assert(view); auto* model=qobject_cast<linaccess::AccessTableModel*>(view->model()); assert(model);
+    view->sortByColumn(0,Qt::AscendingOrder); QApplication::setActiveWindow(&window); view->setFocus(); QApplication::processEvents();
+    QItemSelection cells(model->index(0,1),model->index(2,1));
+    view->selectionModel()->select(cells,QItemSelectionModel::ClearAndSelect);
+    view->selectionModel()->setCurrentIndex(model->index(0,1),QItemSelectionModel::NoUpdate);
+    QTest::keyClick(view,Qt::Key_Minus,Qt::ControlModifier); assert(!model->isDirty());
+    const auto selectRecords=[&] {
+        QItemSelection rows; rows.select(model->index(0,0),model->index(0,1)); rows.select(model->index(2,0),model->index(2,1));
+        view->selectionModel()->select(rows,QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);
+        view->selectionModel()->setCurrentIndex(model->index(0,1),QItemSelectionModel::NoUpdate);
+    };
+    selectRecords(); QTest::keyClick(view,Qt::Key_Minus,Qt::ControlModifier); assert(model->isDirty());
+    assert(sql.exec("SELECT COUNT(*) FROM delete_many") && sql.next() && sql.value(0).toInt()==3); sql.finish();
+    assert(window.dispatchTableCommand(97).value("error").toInt()==3146);
+    assert(sql.exec("SELECT COUNT(*) FROM delete_many") && sql.next() && sql.value(0).toInt()==3); sql.finish();
+    model->revertAll(); assert(!model->isDirty());
+    assert(sql.exec("DELETE FROM delete_many_child")); sql.finish();
+    selectRecords(); QTest::keyClick(view,Qt::Key_Minus,Qt::ControlModifier);
+    assert(window.dispatchTableCommand(97).value("error").toInt()==0 && !model->isDirty());
+    assert(sql.exec("SELECT id FROM delete_many") && sql.next() && sql.value(0).toInt()==2 && !sql.next()); sql.finish();
+    assert(window.closeTableDocument(0,"delete_many",2).value("error").toInt()==0); dispose();
+}
 void exerciseStoredForm(MainWindow& window,QSqlDatabase db) {
     QSqlQuery sql(db);
     assert(sql.exec("CREATE TABLE native_designed_records(id INTEGER PRIMARY KEY,first TEXT,\"second value\" TEXT)"));
@@ -1471,7 +1502,9 @@ End Sub
     assert(unchanged.exec("SELECT id FROM command_record_edits WHERE value='new-record'") && unchanged.next() && unchanged.value(0).toInt()==2); unchanged.finish();
     assert(mixed->executeProcedure("SelectAllTableRecords",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     recordEditView->selectionModel()->setCurrentIndex(recordEditModel->index(1,1),QItemSelectionModel::NoUpdate);
-    assert(mixed->executeProcedure("DeleteTableRecord",selectArguments).errorNumber==3251 && !recordEditModel->isDirty());
+    assert(mixed->executeProcedure("DeleteTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditModel->isDirty());
+    assert(unchanged.exec("SELECT count(*) FROM command_record_edits") && unchanged.next() && unchanged.value(0).toInt()==2); unchanged.finish();
+    recordEditModel->revertAll(); assert(!recordEditModel->isDirty());
     recordEditView->clearSelection();
     recordEditView->setCurrentIndex(recordEditModel->index(1,1));
     assert(mixed->executeProcedure("DeleteTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditModel->isDirty());
@@ -2373,6 +2406,7 @@ int main(int argc,char** argv) {
     exerciseQueryEditor(window,db);
     exerciseTableSave(window,db);
     exerciseTableReplace(window,db);
+    exerciseTableMultiDelete(window,db);
     exerciseRecordEscape(window,db);
     exercisePageNavigation(window,db);
     exerciseStoredForm(window,db);
