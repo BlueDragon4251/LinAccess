@@ -48,3 +48,22 @@ source expressions use MDBTools' representation, not a Windows DAO string oracle
 Raw existing SQLite dynamic defaults can still run on insert but are not
 preinitialized by this literal-only buffer. No Windows Access2003 equivalence
 claim follows from these measurements.
+
+## Creating native tables
+
+The existing New Table dialog now accepts optional literal defaults. It validates
+all fields before creating actual SQLite DDL and closes only after successful
+creation. Validation/database errors keep the dialog and field entries available.
+Integer/real defaults must be numeric; Boolean numerics normalize to0/-1; text
+uses quoted literals, date literals use the implemented ISO reader, and binary
+fields accept only NULL defaults. General expressions and default input beyond
+255 characters refuse explicitly. The automatic id field remains the existing
+creation-wizard behavior; this is not the complete Access table designer.
+
+The existing main-window case first tries an unsupported expression and verifies
+that no table exists and the fields remain, then corrects it and creates actual
+integer/text/Boolean defaults. An independent DEFAULT VALUES insert stores7,
+the entered text and signed-1. Focused UI1/1 (2.82 s), Debian/build ID/SQLite and
+four original fixture hashes passed. Last full data/UI baseline immediately before
+this dialog extension48/48 (85.12 s); no repeat full run is claimed for this
+localized UI change. Catalog456/384/72 remains fixed.
