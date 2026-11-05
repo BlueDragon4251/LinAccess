@@ -41,3 +41,28 @@ Public references:
 ColumnHeads is now implemented within COLUMN_HEADS_RUNTIME.md. Its documented
 ListCount includes a visual header row independently of selectable model data;
 exact Windows behavior at that extra index boundary remains unverified.
+
+## Bounded Value List AddItem and RemoveItem
+
+Native ComboBox/ListBox methods now mutate the actual Value List row source and
+rebuild the Qt model. AddItem(Item, Index) accepts one semicolon-separated row,
+appends by default or inserts at an explicit zero-based index. Existing quoted
+semicolons/quotes, Null cells and empty text cells are serialized distinctly.
+RemoveItem(Index) supports numeric row indices. Both support native named arguments.
+Changing choices preserves the existing bound value and does not mark a record
+dirty. Source text is restored if rebuilding fails.
+
+This first bounded scope requires Form view, Value List/Wertliste, no header row,
+and a value-bound column. Active combo popups, selected ListBox rows, removal of
+the selected combo row and mutation during that control's update are refused3251.
+RemoveItem text-key matching, empty AddItem strings, single Null-only one-column
+serialization, ordinal-bound/header cases, full event/reentrancy/error precedence
+and exact Access2003 behavior remain open. Wrong indices5, Null94, arity450 and
+existing row limit3035 use native errors. F162 is not closed.
+
+Existing layout target exercises real combo append/insertion/removal, quoted
+multicolumn cells, preserved bound value/clean record, and real ListBox VBA calls
+with reversed named arguments. Final target1/1 passes (10.66 s); updated Debian/
+build-ID/SQLite3.54.1 and four original hashes pass. Headless runtime unchanged
+from FileCopy1/1 (1.69 s), last broader full suite48/48 (87.98 s). No added test
+target or catalog ID; fixed456/384/72 unchanged.

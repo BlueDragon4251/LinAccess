@@ -60,6 +60,14 @@ End
     control->assign("RowSource",VbaValue::string(R"LIST(1;"alpha;beta";2;"say ""hi""")LIST"));
     assert(combo->count()==2 && combo->currentText()=="say \"hi\"" && control->member("Value",{}).asNumber()==2);
     assert(control->member("Column",{VbaValue::numeric(1),VbaValue::numeric(0)}).asText()=="alpha;beta");
+    control->member("AddItem",{VbaValue::string("3;third")});
+    assert(combo->count()==3 && combo->currentText()=="say \"hi\"" && !root->member("Dirty",{}).truthy());
+    control->member("AddItem",{VbaValue::string("4;\"four;quoted\""),VbaValue::numeric(0)});
+    assert(combo->count()==4 && control->member("Column",{VbaValue::numeric(1),VbaValue::numeric(0)}).asText()=="four;quoted");
+    assert(control->member("Value",{}).asNumber()==2 && !root->member("Dirty",{}).truthy());
+    control->member("RemoveItem",{VbaValue::numeric(0)});
+    control->member("RemoveItem",{VbaValue::numeric(2)});
+    assert(combo->count()==2 && combo->currentText()=="say \"hi\"" && control->member("Value",{}).asNumber()==2);
     QPointer<QAbstractItemModel> before=combo->model(); const auto source=control->member("RowSource",{}).asText();
     int number=0; try { control->assign("RowSource",VbaValue::string("\"unterminated")); }
     catch (const VbaRuntimeError& failure) { number=failure.number; }
@@ -69,6 +77,22 @@ End
     catch (const VbaRuntimeError& failure) { number=failure.number; }
     assert(number==3035 && combo->count()==4 && control->member("RowSource",{}).asText()==source);
     control->assign("ColumnCount",VbaValue::numeric(2)); assert(combo->count()==2 && form.close());
+
+    auto listLayout=layout; listLayout.replace("Begin ComboBox","Begin ListBox");
+    listLayout.replace("RecordSource =\"records\"",""); listLayout.replace("ControlSource =\"choice\"","");
+    const QByteArray mutationCode=R"VBA(Sub MutateRows()
+Me!pick.AddItem Index:=2, Item:="3;third"
+Me!pick.RemoveItem Index:=1
+End Sub
+)VBA";
+    AccessFormPreview listForm("mutable value list",listLayout,mutationCode,db); listForm.show(); QApplication::processEvents();
+    auto listRoot=makePreviewFormObject(listForm);
+    auto listControl=listRoot->member("Controls",{VbaValue::string("pick")}).object;
+    std::vector<VbaValue> mutationArguments;
+    assert(listForm.executeProcedure("MutateRows",mutationArguments).status==VbaExecutionStatus::Completed);
+    assert(listControl->member("ListCount",{}).asNumber()==2);
+    assert(listControl->member("Column",{VbaValue::numeric(1),VbaValue::numeric(1)}).asText()=="third");
+    assert(!listRoot->member("Dirty",{}).truthy() && listForm.close());
 
     const auto dangerous=compileAccessQuery("SELECT IIf(True,7,abs(-9223372036854775808)) AS [danger],id AS [identifier] FROM records");
     assert(accessQueryColumns(db,dangerous)==QStringList({"danger","identifier"}));
