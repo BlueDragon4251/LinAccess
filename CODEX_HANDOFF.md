@@ -1476,3 +1476,14 @@ docs/NATIVE_ECHO.md. Existing mainwindow/layout2/2 (13.25 s), then full48/48
 (85.02 s), current Debian/build-ID/SQLite3.54.1/four hashes pass. GUI-free runtime
 unchanged from fresh1/1 (1.67 s). Fixed456/384/72; F068/F080 still open. Private
 GitHub branch update remains unconfirmed; immutable private backups are not pushes.
+
+Native anonymous/owned QueryDef.Type now exposes Integer statement-kind metadata
+recorded by compiler tokens before TOP/SELECT-INTO/JOIN-UPDATE rewrites. SELECT0,
+DELETE32, UPDATE48, append64, make-table80, DDL96, outer UNION128. Original named
+imported types explicitly3251 because passthrough/Connect metadata is unavailable;
+empty/unclassified3251, assignment383. Native DAO type enum constants defined
+without pretending to execute unsupported kinds. docs/DAO_QUERYDEF_TYPE.md.
+Existing real actions CREATE/INSERT/UPDATE/SELECT/INTO/DELETE/ALTER/DROP passed;
+targeted core/DAO/query3/3 (2.25 s), fresh headless1/1 (2.75 s), current Debian/
+build-ID/SQLite3.54.1/four hashes pass. Last full baseline48/48 (85.02 s), no full
+rerun after extension. F068/F121 still open;456/384/72 fixed.

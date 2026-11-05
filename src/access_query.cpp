@@ -897,6 +897,7 @@ AccessQueryPlan compileJoinedUpdate(const QVector<Token>& tokens,qsizetype start
     auto plan=compileAccessQuery(select);
     check(!plan.hiddenRank && !plan.topLimit && plan.makeTable.isEmpty());
     plan.updateTarget=target->table; plan.updateIdentity=identity; plan.updateSource=plan.sql;
+    plan.daoQueryType=48;
     const auto prefix="WITH "+identifier(cte)+" AS MATERIALIZED ("; plan.updateSourceOffset=prefix.size();
     QStringList changes;
     const auto id=identifier(targetAlias)+'.'+identifier(identity);
@@ -950,6 +951,22 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         }
     }
     require(pos < tokens.size(), "Jet SQL: query body required");
+    if(tokens[pos].kind==Token::Word) {
+        const auto command=tokens[pos].value.toUpper();
+        if(command=="SELECT") {
+            plan.daoQueryType=0; int depth=0;
+            for(auto i=pos+1;i<tokens.size();++i) {
+                if(symbol(tokens[i],"(")) ++depth;
+                else if(symbol(tokens[i],")")) --depth;
+                else if(depth==0 && tokens[i].kind==Token::Word && tokens[i].value.compare("UNION",Qt::CaseInsensitive)==0)
+                    plan.daoQueryType=128;
+            }
+        } else if(command=="INSERT") plan.daoQueryType=64;
+        else if(command=="UPDATE") plan.daoQueryType=48;
+        else if(command=="DELETE") plan.daoQueryType=32;
+        else if(command=="CREATE" || command=="ALTER" || command=="DROP") plan.daoQueryType=96;
+    }
+
     plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields);
     if (tokens[pos].kind==Token::Word && tokens[pos].value.compare("UPDATE",Qt::CaseInsensitive)==0) {
         for (auto i=pos+1;i<tokens.size();++i) {
@@ -1121,6 +1138,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
     if (!plan.makeTable.isEmpty()) {
         if (plan.topLimit || !plan.rightJoinSql.isEmpty()) throw VbaRuntimeError(3251,"Make-table TOP/RIGHT JOIN materialization unsupported");
         plan.sql="CREATE TABLE "+identifier(plan.makeTable)+" AS "+plan.sql;
+        plan.daoQueryType=80;
     }
     plan.source=source; plan.compiledSql=plan.sql;
     return plan;
