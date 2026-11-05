@@ -25,6 +25,21 @@ int main(int argc, char** argv) {
     assert(query.exec("CREATE TABLE samples(id INTEGER, score INTEGER, label TEXT)"));
     assert(query.exec("INSERT INTO samples VALUES(1,10,'one'),(2,20,'two'),(3,20,NULL),(4,30,'four')"));
     {
+        linaccess::AccessQueryModel labels;
+        labels.execute(db,"SELECT FV(0,2,-10),IPmt(0,1,12,1200) AS paid FROM samples");
+        assert(labels.rowCount()==4 && labels.index(0,0).data().toDouble()==20);
+        assert(labels.headerData(0,Qt::Horizontal).toString().contains("FV") && !labels.headerData(0,Qt::Horizontal).toString().contains("linaccess_"));
+        assert(labels.headerData(1,Qt::Horizontal).toString()=="paid");
+        labels.execute(db,"SELECT *,IPmt(0,1,12,1200) FROM samples");
+        assert(labels.columnCount()==4 && labels.headerData(3,Qt::Horizontal).toString().contains("IPmt") && !labels.headerData(3,Qt::Horizontal).toString().contains("linaccess_"));
+        labels.execute(db,"SELECT FV(0,2,-10) UNION ALL SELECT FV(0,3,-10)");
+        assert(labels.rowCount()==2 && labels.index(1,0).data().toDouble()==30 && !labels.headerData(0,Qt::Horizontal).toString().contains("linaccess_"));
+        labels.execute(db,"SELECT FV(0,2,-10) future"); assert(labels.headerData(0,Qt::Horizontal).toString()=="future");
+        labels.execute(db,"SELECT FV(0,2,-10) 'future'"); assert(labels.headerData(0,Qt::Horizontal).toString()=="future");
+        labels.execute(db,"SELECT [label] & '!' FROM samples");
+        assert(labels.index(0,0).data().toString()=="one!" && !labels.headerData(0,Qt::Horizontal).toString().contains("linaccess_"));
+    }
+    {
         QTemporaryFile file("/tmp/linaccess-sql-file-ä-XXXXXX"); assert(file.open() && file.write("abc",3)==3 && file.flush());
         const auto modified=QDateTime(QDate(2024,2,29),QTime(12,34,56),QTimeZone(0));
         assert(file.setFileTime(modified,QFileDevice::FileModificationTime));

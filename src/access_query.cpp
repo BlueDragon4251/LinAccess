@@ -29,6 +29,13 @@ namespace linaccess {
 namespace {
 struct Token { enum Kind { Word, Identifier, String, Other } kind; QString value; };
 QString renderJetTokens(const QVector<Token>& tokens);
+QString nativeScalarSqlName(const QString& source) {
+    const auto name=source.toCaseFolded();
+    if(name=="format$") return "linaccess_jet_format_string";
+    static const QSet<QString> names{"pv","nper","rate","sln","syd","ddb","fv","pmt","ipmt","ppmt","partition","filelen","filedatetime","curdir","lenb","sqr","exp","log","sin","cos","tan","atn","lcase","ucase","datevalue","timevalue","dateadd","dateserial","timeserial","cdate","datepart","choose","switch","val","hex","oct","space","string","asc","ascw","chr","chrw","instrrev","strreverse","datediff","year","month","day","hour","minute","second","weekday","format","len","rgb","qbcolor","round","ccur","iif","first","last"};
+    return names.contains(name) ? "linaccess_jet_"+name : QString{};
+}
+
 void require(bool value, const char* reason) { if (!value) throw VbaRuntimeError(3085, reason); }
 QString canonicalDate(const QString& input, bool literalDate = false) {
     const QStringList formats = literalDate
@@ -234,6 +241,46 @@ void adaptObjectReferences(QVector<Token>& tokens,qsizetype start) {
         i+=replacement.size()-1;
     }
 }
+void preserveComputedProjectionNames(QVector<Token>& tokens,qsizetype start) {
+    const auto word=[&](qsizetype i,const char* value) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0; };
+    if(!word(start,"SELECT")) return;
+    qsizetype first=start+1;
+    if(word(first,"DISTINCT") || word(first,"DISTINCTROW") || word(first,"ALL")) ++first;
+    if(word(first,"TOP")) first+=2;
+    QVector<QPair<qsizetype,QString>> aliases; int depth=0;
+    for(qsizetype i=first;i<=tokens.size();++i) {
+        const bool end=i==tokens.size() || (depth==0 && (word(i,"FROM") || word(i,"INTO") || word(i,"WHERE") || word(i,"ORDER") || word(i,"GROUP") || word(i,"HAVING") || word(i,"UNION") || word(i,"INTERSECT") || word(i,"EXCEPT") || symbol(tokens[i],";")));
+        if(end || (depth==0 && symbol(tokens[i],","))) {
+            const auto expression=tokens.mid(first,i-first);
+            bool rewritten=false; int inner=0; bool explicitAlias=false;
+            for(qsizetype index=0;index<expression.size();++index) {
+                const auto& token=expression[index];
+                if(symbol(token,"(")) ++inner;
+                else if(symbol(token,")")) --inner;
+                else if(inner==0 && token.kind==Token::Word && token.value.compare("AS",Qt::CaseInsensitive)==0) explicitAlias=true;
+                if(symbol(token,"&")) rewritten=true;
+                if(token.kind==Token::Word && index+1<expression.size() && symbol(expression[index+1],"(") && !nativeScalarSqlName(token.value).isEmpty()) rewritten=true;
+            }
+            // Preserve an existing implicit alias after an expression operand.
+            bool implicitAlias=false;
+            if(expression.size()>1) {
+                const auto& last=expression.back(); const auto& previous=expression[expression.size()-2];
+                static const QSet<QString> operators{"and","or","xor","is","not","like","in","between","mod"};
+                static const QSet<QString> terminals{"null","true","false","end"};
+                const bool aliasName=last.kind==Token::Identifier || last.kind==Token::String || (last.kind==Token::Word && !terminals.contains(last.value.toCaseFolded()));
+                const bool previousName=(previous.kind==Token::Identifier || previous.kind==Token::Word) && !operators.contains(previous.value.toCaseFolded());
+                const bool previousNumber=previous.kind==Token::Other && !previous.value.isEmpty() && (previous.value.front().isDigit() || previous.value.front()=='.');
+                implicitAlias=aliasName && (previousName || previousNumber || previous.kind==Token::String || symbol(previous,")"));
+            }
+            if(rewritten && !explicitAlias && !implicitAlias) aliases.append({i,renderJetTokens(expression)});
+            first=i+1; if(end) break;
+        } else if(symbol(tokens[i],"(")) ++depth;
+        else if(symbol(tokens[i],")")) --depth;
+    }
+    for(auto it=aliases.crbegin();it!=aliases.crend();++it) {
+        tokens.insert(it->first,{Token::Word,"AS"}); tokens.insert(it->first+1,{Token::Identifier,it->second});
+    }
+}
 QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype start,const QVector<AccessQueryParameter>& parameters,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions) {
     const auto word=[&](qsizetype i,const char* text) { return i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(text,Qt::CaseInsensitive)==0; };
     if(!word(start,"SELECT")) return {};
@@ -390,7 +437,7 @@ QVector<QString> typedProjectionExpressions(QVector<Token>& tokens,qsizetype sta
             if((expression.size()==1 && symbol(expression.front(),"*")) || (expression.size()>=3 && symbol(expression.back(),"*") && symbol(expression[expression.size()-2],"."))) return {};
             auto parsed=parse(expression,0); result.append(parsed.type);
             if(alias.isEmpty() && std::any_of(parsed.code.cbegin(),parsed.code.cend(),[](const Token& token) {
-                return token.kind==Token::Word && token.value=="linaccess_vba_result";
+                return token.kind==Token::Word && token.value.startsWith("linaccess_");
             })) alias={{Token::Word,"AS"},{Token::Identifier,renderJetTokens(expression)}};
             parsed.code+=alias; rewrites.append({first,i,parsed.code}); first=i+1;
             if(end) break;
@@ -983,6 +1030,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         else if(command=="CREATE" || command=="ALTER" || command=="DROP") plan.daoQueryType=96;
     }
 
+    preserveComputedProjectionNames(tokens,pos);
     plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields,functions);
     if (tokens[pos].kind==Token::Word && tokens[pos].value.compare("UPDATE",Qt::CaseInsensitive)==0) {
         for (auto i=pos+1;i<tokens.size();++i) {
@@ -1126,19 +1174,8 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
             output << literal(like ? pattern(token.value) : token.value);
             if (like) output << "ESCAPE '\\'";
         } else if (token.kind == Token::Identifier) output << identifier(token.value);
-        else if (token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="("
-                 && (token.value.compare("Format$",Qt::CaseInsensitive)==0 || token.value.compare("Format",Qt::CaseInsensitive)==0))
-            output << (token.value.endsWith('$') ? "linaccess_jet_format_string" : "linaccess_jet_format");
-        else if(token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="("
-                && QSet<QString>{"pv","nper","rate","sln","syd","ddb","fv","pmt","ipmt","ppmt","partition","filelen","filedatetime","curdir","lenb","sqr","exp","log","sin","cos","tan","atn","lcase","ucase","datevalue","timevalue","dateadd","dateserial","timeserial","cdate","datepart","choose","switch","val","hex","oct","space","string","asc","ascw","chr","chrw","instrrev","strreverse","datediff","year","month","day","hour","minute","second","weekday"}.contains(token.value.toCaseFolded()))
-            output << "linaccess_jet_"+token.value.toCaseFolded();
-        else if (token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="(" && token.value.compare("Len",Qt::CaseInsensitive)==0)
-            output << "linaccess_jet_len";
-        else if (token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="(" && (token.value.compare("RGB",Qt::CaseInsensitive)==0 || token.value.compare("QBColor",Qt::CaseInsensitive)==0 || token.value.compare("Round",Qt::CaseInsensitive)==0 || token.value.compare("CCur",Qt::CaseInsensitive)==0))
-            output << "linaccess_jet_"+token.value.toCaseFolded();
-        else if (token.kind == Token::Word && i + 1 < tokens.size() && tokens[i+1].value == "("
-                 && (token.value.compare("IIf",Qt::CaseInsensitive)==0 || token.value.compare("First",Qt::CaseInsensitive)==0
-                     || token.value.compare("Last",Qt::CaseInsensitive)==0)) output << "linaccess_jet_" + token.value.toCaseFolded();
+        else if(token.kind==Token::Word && i+1<tokens.size() && tokens[i+1].value=="(" && !nativeScalarSqlName(token.value).isEmpty())
+            output << nativeScalarSqlName(token.value);
         else if (token.kind == Token::Word && token.value.compare("TRUE",Qt::CaseInsensitive) == 0) output << "-1";
         else if (token.kind == Token::Word && token.value.compare("FALSE",Qt::CaseInsensitive) == 0) output << "0";
         else output << token.value;

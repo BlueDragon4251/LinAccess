@@ -5792,3 +5792,13 @@ range or Windows error/numeric oracle claim. Scope: docs/NATIVE_FINANCIAL_FUNCTI
 Current full desktop48/48 (85.94 s), fresh GUI-free core1/1 (1.67 s), updated
 Debian/build-ID/pinned SQLite3.54.1/four original fixture hashes pass. Original
 corpus78/100; no new target or ID. F068 stays open, fixed456/384/72.
+
+Calculated query headers now preserve native source-expression labels before
+scalar/concat/backend helper rewriting. Explicit/implicit/plain/quoted aliases,
+mixed-star projections and first-leg UNION names stay supported. Internal helper
+names are removed from supported generated headers. No Windows Expr1000, duplicate
+numbering or complete alias-grammar claim. Scope: docs/QUERY_COLUMN_LABELS.md.
+Final full current desktop48/48 (86.70 s), updated Debian/build-ID/pinned SQLite/
+four original hashes pass. Qt-only label change leaves GUI-free runtime unchanged
+from fresh payment-components1/1 (1.79 s). Original78/100; no Access oracle.
+No new target or catalog ID; F068/F080/F148 open,456/384/72 fixed.

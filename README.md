@@ -600,3 +600,8 @@ Kontext-, Zeilen-, Editor- und Tastaturgrenzen bleiben ausdrücklich dokumentier
 NPer und DDB in VBA/SQL sowie NPV/MIRR mit tatsächlichen eindimensionalen
 Double-Arrays in VBA. Typ-, Perioden- und Fehlergrenzen bleiben ausdrücklich
 dokumentiert; ein Access-Referenzlauf steht weiterhin aus.
+
+[Berechnete Abfragespalten](docs/QUERY_COLUMN_LABELS.md) zeigen für unterstützte
+Ausdrücke lesbare Quellbezeichnungen statt interner SQL-Hilfsnamen. Eigene
+Spaltenaliase bleiben erhalten; Access-spezifische Expr1000-Regeln sind weiterhin
+nicht durch einen Referenzlauf bestätigt.
