@@ -1620,3 +1620,13 @@ oracle stays open. Scope: docs/NATIVE_FINANCIAL_FUNCTIONS.md. Final existing
 core/DAO/query3/3 (2.68 s), fresh headless1/1 (1.79 s), updated Debian/build-ID/
 SQLite/four hashes pass. Last full is fb63120 financial milestone48/48 (85.94 s),
 preceding roots/components. No new target/ID; F068 open,456/384/72 unchanged.
+
+Calculated query headers now preserve native source-expression labels before
+scalar/concat/backend helper rewriting. Explicit/implicit/plain/quoted aliases,
+mixed-star projections and first-leg UNION names stay supported. Internal helper
+names are removed from supported generated headers. No Windows Expr1000, duplicate
+numbering or complete alias-grammar claim. Scope: docs/QUERY_COLUMN_LABELS.md.
+Final full current desktop48/48 (86.70 s), updated Debian/build-ID/pinned SQLite/
+four original hashes pass. Qt-only label change leaves GUI-free runtime unchanged
+from fresh payment-components1/1 (1.79 s). Original78/100; no Access oracle.
+No new target or catalog ID; F068/F080/F148 open,456/384/72 fixed.
