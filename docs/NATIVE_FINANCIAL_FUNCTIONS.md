@@ -12,7 +12,7 @@ Fractional/negative/larger periods, rate<=-1 and other timing values explicitly
 raise3251 rather than invent compatibility outside the proven scope. Null raises94;
 missing required/wrong arity raises450; nonfinite arguments/results raise6.
 The result retains Double identity. There is no complete financial library claim:
-Rate/IRR, unrestricted array/period semantics, other financial functions and the Windows error/edge-case oracle remain open.
+IPmt/PPmt, unrestricted array/period semantics, other financial functions and the Windows error/edge-case oracle remain open.
 
 The computation uses long-double intermediates and log1p/expm1 to avoid the
 usual near-zero-rate loss from subtracting1 from a rounded power. Rate0 uses
@@ -133,3 +133,37 @@ F068 stays open, fixed456/384/72.
 References: [NPV](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/npv-function),
 [MIRR](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/mirr-function),
 [DDB](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/ddb-function).
+
+## Iterative Rate and IRR
+
+Rate(NPer,Pmt,Pv,[Fv],[Type],[Guess]) and IRR(Values,[Guess]) now execute the
+native financial root solver, with default guess0.1 and at most20 iterations.
+Rate is available in actual SQL expressions; direct SQL array transport for IRR
+is not implemented. Native VBA calls support qualified and documented named
+arguments. Results retain Double identity.
+
+Each evaluation advances the actual balance and its analytic derivative together.
+The solver uses long-double intermediates, a relative cash-flow residual threshold
+of1e-12, Newton updates and backtracking inside rate greater than-1. No derivative,
+no advance or no convergence returns native error5, not a fabricated0/guess.
+Nonfinite arguments/intermediates/results raise6; Null94 and arity450 remain
+native errors. Root existence, unique selection and exact Windows iteration/error/
+rounding equivalence are not claimed. Multiple-root behavior remains open even
+when the native solver finds a mathematically valid root near its starting guess.
+
+Rate requires whole positive periods up to32767 and timing0/end or1/beginning;
+other period/timing/initial-guess domains refuse3251. All-zero annuities raise5.
+IRR uses the existing allocated one-dimensional Double-array scope and1,000,000
+entry limit. Both cash-flow signs are required, and the first flow is at period0;
+chronology follows ascending array position regardless of the lower bound.
+The solver reads a scalar copy of each flow and does not mutate the input array.
+
+Actual core/DAO/query3/3 (2.52 s) verify nondefault guesses, qualified named calls,
+zero-rate annuities, inversion of actual SQL loan payments and IRR balances with
+multiple positive/negative periods. Fresh GUI-free core1/1 (1.73 s), updated
+Debian/build-ID/SQLite3.54.1/four fixture hashes pass. Last broader full suite is
+the previous financial milestone48/48 (85.94 s), not a new full run after roots.
+No new target or catalog ID; F068 stays open,456/384/72.
+
+References: [Rate](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/rate-function),
+[IRR](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/irr-function).

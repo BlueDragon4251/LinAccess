@@ -739,6 +739,10 @@ int main() {
         assert(std::abs(eval("VBA.NPer(Type:=1,Pv:=100,Pmt:=-100,Rate:=0.1)").number-1)<1e-12);
         assert(std::abs(eval("NPer(0.000000000000001,-100,1200)").number-12)<1e-9);
         assert(std::abs(eval("NPer(0.1,0,100,-200)").number-7.272540897341713)<1e-12);
+        assert(std::abs(eval("VBA.Rate(NPer:=1,Pmt:=-105,Pv:=100,Guess:=0.2)").number-0.05)<1e-12);
+        assert(std::abs(eval("Rate(12,Pmt(0.01,12,1000,100),1000,100)").number-0.01)<1e-11);
+        assert(eval("Rate(12,-100,1200,,,0)").number==0);
+
 
         const auto cashflows=linaccess::executeVbaProcedure(R"VBA(Sub DiscountCashflows()
 Dim flows(-1 To 1) As Double
@@ -753,11 +757,17 @@ financed(6)=110
 financed(7)=-100
 financed(8)=110
 Me!Mirr=CStr(MIRR(Reinvest_rate:=0.1,Values:=financed,Finance_rate:=0.1))
+Me!Irr=CStr(IRR(Values:=flows,Guess:=0.2))
+Me!IrrCycle=CStr(VBA.IRR(financed))
 End Sub
 )VBA","DiscountCashflows",host);
         assert(cashflows.status==linaccess::VbaExecutionStatus::Completed);
         assert(std::abs(std::stod(host.fields["Npv"].value())-3.756574004507888)<1e-9 && host.fields["NpvZero"]=="20");
         assert(std::abs(std::stod(host.fields["Mirr"].value())-0.1)<1e-12);
+        const auto investmentRate=std::stod(host.fields["Irr"].value());
+        double investment=-100; for(const auto receipt:{60,60}) investment=investment*(1+investmentRate)+receipt;
+        assert(std::abs(investment)<1e-8 && std::abs(std::stod(host.fields["IrrCycle"].value())-0.1)<1e-12);
+
         assert(eval("SLN(Life:=5,Salvage:=1000,Cost:=10000)").number==1800);
         assert(eval("DDB(1000,100,5,1)").number==400);
         assert(std::abs(eval("DDB(1000,100,5,5)").number-29.6)<1e-10);
@@ -773,6 +783,9 @@ End Sub
         assert(invalid);
         invalid=false;
         try { eval("NPer(0,0,1000)"); } catch(const linaccess::VbaRuntimeError& e) { invalid=e.number==5; }
+        assert(invalid);
+        invalid=false;
+        try { eval("Rate(12,0,0)"); } catch(const linaccess::VbaRuntimeError& e) { invalid=e.number==5; }
         assert(invalid);
     }
     {
