@@ -5944,3 +5944,5 @@ verified SQLite3.54.1 and all four original hashes. Their preceding e2d64c9 full
 suites remain48/48 each; the final bounded mode-conversion increment above has
 host-targeted evidence rather than an invented repeat of those full suites.
 GitHub account CI remains blocked; local container results are distinguished.
+
+TableDef.RecordCount: DAO/originales Kassa-Ziel2/2 (53,71 s) bestanden, einschließlich unabhängiger Zählung aller29 Originaltabellen. Aktuelle App/Paket/Build-ID/SQLite3.54.1 und vier Originalfixture-Hashes bestanden. Bestehende unveränderte Syntaxinventur separat187/187 akzeptiert (1,12 s), keine Ausführungsaussage. Kein neuer Vollsuite-/Matrixlauf dieses Inkrements.456/384/72 unverändert.

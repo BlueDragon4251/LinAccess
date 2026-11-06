@@ -356,3 +356,26 @@ values, refreshes, checks identity/value preservation, executes actual SQL and
 checks replaced/closed definitions. F055/F121/F122 remain open;456/384/72 unchanged.
 
 Parameterfortsetzung: bestehendes DAO-Ziel1/1 (1,09 s), aktuelle App und Debian-Paket/Build-ID/SQLite3.54.1/vier Originalhashes bestanden. Named Index/Refresh und Werterhalt durch echtes VBA geprüft; letzter Vollsuite-Lauf bleibt a00eb29 mit48/48 (98,29 s). Kein neuer Katalogpunkt, keine vollständige Parameter-/Jet-Parität.
+
+
+## Physical TableDef.RecordCount (2026-11-06)
+
+A live local TableDef now returns checked readonly Long RecordCount from an
+actual bounded SELECT COUNT(*) over main.<quoted table>. No rows are loaded into
+a Recordset and a same-named TEMP table cannot redirect the count. Empty local
+tables return0; current transaction writes/rollback are observed on the actual
+connection. Extra arguments raise450 and assignment383; workspace/thread/
+closed-table guards apply before SQL. Overflow is6. Linked-table count -1 is not
+implemented because this native catalog exposes local physical tables, not a
+linked-table adapter. Unobserved drop/recreate identity remains open under F121.
+
+Existing DAO cases cover typed VBA/Long identity, empty/populated counts,
+readonly/arity, same-connection insert/rollback and TEMP shadow separation.
+The original Kassa DAO case compares TableDef counts for all29 imported physical
+tables with independent SQL counts and real snapshot RecordCount. Original
+business code and fixture bytes are unchanged. Reference (API contract, not an
+Access2003 execution oracle):
+https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/tabledef-recordcount-property-dao
+No new test target, catalog ID or checkbox;456/384/72 unchanged.
+
+TableDef.RecordCount: DAO/originales Kassa-Ziel2/2 (53,71 s) bestanden, einschließlich unabhängiger Zählung aller29 Originaltabellen. Aktuelle App/Paket/Build-ID/SQLite3.54.1 und vier Originalfixture-Hashes bestanden. Bestehende unveränderte Syntaxinventur separat187/187 akzeptiert (1,12 s), keine Ausführungsaussage. Kein neuer Vollsuite-/Matrixlauf dieses Inkrements.456/384/72 unverändert.

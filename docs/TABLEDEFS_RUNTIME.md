@@ -51,7 +51,7 @@ lookup, hidden metadata/views, dynamic create/drop counts, observed invalidation
 recreation, closed connections, real editing through TableDef.OpenRecordset and
 independent persisted SQL checks. All original MDB/Bridge files stay unchanged.
 
-The current syntax inventory accepts 182/187 procedures. This remains separate
+At the initial TableDefs checkpoint the syntax inventory accepted 182/187 procedures. This remains separate
 from actual procedure execution coverage and does not mean that the Kassa
 application runs end to end or matches a Windows Access oracle.
 
@@ -69,3 +69,26 @@ workspace before member access and enumeration; cross-thread access is refused
 3251 before querying Qt SQL. Existing close/replacement guards apply. This does
 not solve unobserved drop/recreate identity or full Access ordering/refresh.
 Existing DAO target only; F055/F121 remain open,456/384/72 unchanged.
+
+
+## Physical TableDef.RecordCount (2026-11-06)
+
+A live local TableDef now returns checked readonly Long RecordCount from an
+actual bounded SELECT COUNT(*) over main.<quoted table>. No rows are loaded into
+a Recordset and a same-named TEMP table cannot redirect the count. Empty local
+tables return0; current transaction writes/rollback are observed on the actual
+connection. Extra arguments raise450 and assignment383; workspace/thread/
+closed-table guards apply before SQL. Overflow is6. Linked-table count -1 is not
+implemented because this native catalog exposes local physical tables, not a
+linked-table adapter. Unobserved drop/recreate identity remains open under F121.
+
+Existing DAO cases cover typed VBA/Long identity, empty/populated counts,
+readonly/arity, same-connection insert/rollback and TEMP shadow separation.
+The original Kassa DAO case compares TableDef counts for all29 imported physical
+tables with independent SQL counts and real snapshot RecordCount. Original
+business code and fixture bytes are unchanged. Reference (API contract, not an
+Access2003 execution oracle):
+https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/tabledef-recordcount-property-dao
+No new test target, catalog ID or checkbox;456/384/72 unchanged.
+
+Current repeated unchanged-original syntax audit (2026-11-06):187/187 accepted across32 hash-checked modules, existing target1/1 (1.12 s). All records are explicitly unexecuted by this audit; this is separate from original runtime evidence.

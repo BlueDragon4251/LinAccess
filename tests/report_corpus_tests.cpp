@@ -373,6 +373,8 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
             auto records=definition->member("OpenRecordset",{linaccess::VbaValue::numeric(4)}).object;
             QSqlQuery count(db); assert(count.exec("SELECT COUNT(*) FROM "+db.driver()->escapeIdentifier(table,QSqlDriver::TableName)) && count.next());
             assert(records->member("RecordCount",{}).asNumber()==count.value(0).toLongLong());
+            const auto catalogCount=definition->member("RecordCount",{});
+            assert(catalogCount.asNumber()==count.value(0).toLongLong() && catalogCount.numericType==linaccess::VbaValue::NumericType::Long);
             records->member("Close",{}); ++checked;
         }
         assert(checked==29);

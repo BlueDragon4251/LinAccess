@@ -1392,6 +1392,12 @@ public:
             if (!args.empty()) throw VbaRuntimeError(450,"DAO: Name takes no arguments");
             return VbaValue::string(name_.toStdString());
         }
+        if(key=="recordcount") {
+            if(!args.empty()) throw VbaRuntimeError(450,"DAO: RecordCount takes no arguments");
+            SqliteExecutionBudget budget(db_); QSqlQuery count(db_);
+            if(!count.exec("SELECT COUNT(*) FROM main."+quote(name_)) || !count.next()) queryFailure(count);
+            return longCount(count.value(0).toLongLong());
+        }
         if(key=="fields") {
             if(args.size()>1) throw VbaRuntimeError(450,"DAO TableDef.Fields takes at most one index");
             const auto version=schemaVersion(),rollback=workspace_->rollbackRevision;
@@ -1413,6 +1419,11 @@ public:
             return VbaValue::reference(std::make_shared<Recordset>(db_,name_,mode==4));
         }
         throw VbaRuntimeError(438,"DAO: TableDef member unsupported");
+    }
+    void assign(std::string_view name,const VbaValue& value) override {
+        if(!valid()) throw VbaRuntimeError(3420,"DAO: TableDef is unavailable");
+        if(lower(name)=="recordcount") throw VbaRuntimeError(383,"DAO: TableDef.RecordCount is read-only");
+        VbaObject::assign(name,value);
     }
 private:
     quint64 schemaVersion() const {

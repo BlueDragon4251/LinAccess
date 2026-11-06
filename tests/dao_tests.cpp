@@ -73,6 +73,7 @@ Set database=CurrentDb
 Set definitions=database.TableDefs
 Set table=database.TableDefs(Index:="schema_rows")
 If Not (table Is definitions.Item(Index:="schema_rows")) Then Err.Raise 5
+If table.RecordCount<>0 Or VarType(table.RecordCount)<>vbLong Then Err.Raise 5
 definitions.Refresh
 If Not (table Is definitions.Item(Index:="schema_rows")) Then Err.Raise 5
 Set query=database.CreateQueryDef("","SELECT id,amount,payload FROM schema_rows")
@@ -1311,6 +1312,17 @@ End Sub)VBA","Übertragen",host);
         assert(table==definitions->member("Item",{linaccess::VbaValue::numeric(0)}).object);
         assert(table==definitions->item("items").object);
         assert(table->member("Name",{}).asText()=="items");
+        const auto recordCount=table->member("RecordCount",{}); assert(recordCount.asNumber()==2 && recordCount.numericType==linaccess::VbaValue::NumericType::Long);
+        try { table->assign("RecordCount",linaccess::VbaValue::integer(8)); assert(false); }
+        catch(const linaccess::VbaRuntimeError& error) { assert(error.number==383); }
+        try { (void)table->member("RecordCount",{linaccess::VbaValue::integer(0)}); assert(false); }
+        catch(const linaccess::VbaRuntimeError& error) { assert(error.number==450); }
+        assert(q.exec("SAVEPOINT record_count_probe"));
+        assert(q.exec("INSERT INTO items VALUES(3,9,'probe')")); assert(table->member("RecordCount",{}).asNumber()==3);
+        assert(q.exec("ROLLBACK TO record_count_probe")); assert(q.exec("RELEASE record_count_probe"));
+        assert(table->member("RecordCount",{}).asNumber()==2);
+        assert(q.exec("CREATE TEMP TABLE items(id INTEGER)")); assert(q.exec("INSERT INTO temp.items VALUES(1)"));
+        assert(table->member("RecordCount",{}).asNumber()==2); assert(q.exec("DROP TABLE temp.items"));
         assert(definitions->enumerate().size()==2);
         for (const auto& [arguments,number]:std::vector<std::pair<std::vector<linaccess::VbaValue>,int>>{
             {{},450},{{linaccess::VbaValue{}},94},{{linaccess::VbaValue::numeric(-1)},3265},{{linaccess::VbaValue::string("missing")},3265}}) {
