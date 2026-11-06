@@ -941,6 +941,7 @@ public:
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=lower(name);
+        if (key=="fields") return VbaArgumentSignature{{"Index"},0};
         if (key=="openrecordset") return VbaArgumentSignature{{"Type"},0};
         if (key=="execute") return VbaArgumentSignature{{"Options"},0};
         return {};
@@ -1422,12 +1423,23 @@ class TableDefinitions final : public VbaObject {
 public:
     std::string_view className() const override { return "TableDefs"; }
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
-    explicit TableDefinitions(QSqlDatabase db) : db_(std::move(db)) {}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(lower(name)=="item") return VbaArgumentSignature{{"Index"},1}; return {};
+    }
+    explicit TableDefinitions(QSqlDatabase db) : db_(std::move(db)),workspace_(workspaceState(db_)) {}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
-        const auto names=nativeTableNames(db_); const auto key=lower(name);
+        workspace_->check(); const auto names=nativeTableNames(db_); const auto key=lower(name);
         if (key=="count") {
             if (!args.empty()) throw VbaRuntimeError(450,"DAO: Count takes no arguments");
             return VbaValue::numeric(names.size());
+        }
+        if (key=="refresh") {
+            if(!args.empty()) throw VbaRuntimeError(450,"DAO: Refresh takes no arguments");
+            for(auto it=definitions_.begin();it!=definitions_.end();) {
+                const auto object=it.value().lock();
+                if(!object || !object->valid()) it=definitions_.erase(it); else ++it;
+            }
+            return {};
         }
         if (key!="item") throw VbaRuntimeError(438,"DAO: TableDefs member unsupported");
         if (args.size()!=1) throw VbaRuntimeError(450,"DAO: TableDef name/index required");
@@ -1448,12 +1460,12 @@ public:
     }
     VbaValue item(std::string_view name) override { return member("Item",{VbaValue::string(std::string(name))}); }
     std::vector<VbaValue> enumerate() override {
-        const auto names=nativeTableNames(db_); std::vector<VbaValue> result;
+        workspace_->check(); const auto names=nativeTableNames(db_); std::vector<VbaValue> result;
         for (const auto& name:names) result.push_back(member("Item",{VbaValue::string(name.toStdString())}));
         return result;
     }
 private:
-    QSqlDatabase db_;
+    QSqlDatabase db_; std::shared_ptr<WorkspaceState> workspace_;
     QMap<QString,std::weak_ptr<TableDefinition>> definitions_;
 };
 class Database final : public VbaObject {
@@ -1465,6 +1477,7 @@ public:
         if (key=="openrecordset") return VbaArgumentSignature{{"Name","Type"},1};
         if (key=="execute") return VbaArgumentSignature{{"Query","Options"},1};
         if (key=="createquerydef") return VbaArgumentSignature{{"Name","SQLText"},1};
+        if (key=="tabledefs") return VbaArgumentSignature{{"Index"},0};
         if (key=="querydefs") return VbaArgumentSignature{{"Index"},0};
         return {};
     }
@@ -1477,7 +1490,7 @@ public:
         if (key=="tabledefs") {
             auto definitions=tableDefinitions_.lock();
             if (!definitions) { definitions=std::make_shared<TableDefinitions>(db_); tableDefinitions_=definitions; }
-            if (args.empty()) return VbaValue::reference(definitions);
+            if (args.empty() || (args.size()==1 && args[0].kind==VbaValue::Kind::Missing)) return VbaValue::reference(definitions);
             return definitions->member("Item",args);
         }
         if (key == "querydefs") {

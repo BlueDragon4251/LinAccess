@@ -23,6 +23,7 @@
 #include <map>
 #include <limits>
 #include <cmath>
+#include <thread>
 
 class Host final : public linaccess::VbaHost {
 public:
@@ -67,6 +68,28 @@ count=count+1
 positions=positions+field.OrdinalPosition
 Next
 If count<>3 Or positions<>3 Then Err.Raise 5
+Dim database As DAO.Database, definitions As DAO.TableDefs, query As DAO.QueryDef
+Set database=CurrentDb
+Set definitions=database.TableDefs
+Set table=database.TableDefs(Index:="schema_rows")
+If Not (table Is definitions.Item(Index:="schema_rows")) Then Err.Raise 5
+definitions.Refresh
+If Not (table Is definitions.Item(Index:="schema_rows")) Then Err.Raise 5
+Set query=database.CreateQueryDef("","SELECT id,amount,payload FROM schema_rows")
+Set fields=query.Fields
+If Not TypeOf fields Is DAO.Fields Then Err.Raise 5
+Set field=query.Fields(Index:="amount")
+If Not TypeOf field Is DAO.Field Then Err.Raise 5
+If field.Type<>dbCurrency Or field.Size<>8 Then Err.Raise 5
+If fields.Item(Index:=0).Name<>"id" Then Err.Raise 5
+count=0
+For Each field In fields
+count=count+1
+Next
+If count<>3 Then Err.Raise 5
+fields.Refresh
+query.Close
+Set fields=table.Fields
 fields.Refresh
 Me!SchemaFields="checked"
 End Sub
@@ -1274,6 +1297,12 @@ End Sub)VBA","Übertragen",host);
         auto database=linaccess::makeDaoDatabase(db);
         const auto definitions=database->member("TableDefs",{}).object;
         assert(definitions==database->member("TableDefs",{}).object);
+        int wrongThreadMember=0,wrongThreadEnumeration=0;
+        std::thread foreign([&] {
+            try { (void)definitions->member("Count",{}); } catch(const linaccess::VbaRuntimeError& error) { wrongThreadMember=error.number; }
+            try { (void)definitions->enumerate(); } catch(const linaccess::VbaRuntimeError& error) { wrongThreadEnumeration=error.number; }
+        });
+        foreign.join(); assert(wrongThreadMember==3251 && wrongThreadEnumeration==3251);
         assert(definitions->member("Count",{}).asNumber()==2);
         assert(q.exec("CREATE TABLE _la_private_metadata(secret TEXT)"));
         assert(q.exec("CREATE VIEW visible_query AS SELECT * FROM items"));
@@ -1297,6 +1326,9 @@ End Sub)VBA","Übertragen",host);
         auto transient=definitions->item("transient_table").object;
         assert(q.exec("DROP TABLE transient_table"));
         assert(definitions->member("Count",{}).asNumber()==2);
+        definitions->member("Refresh",{});
+        try { (void)definitions->member("Refresh",{linaccess::VbaValue::integer(1)}); assert(false); }
+        catch(const linaccess::VbaRuntimeError& error) { assert(error.number==450); }
         try { (void)transient->member("Name",{}); assert(false); }
         catch(const linaccess::VbaRuntimeError& error) { assert(error.number==3420); }
         assert(q.exec("CREATE TABLE transient_table(value INTEGER)"));

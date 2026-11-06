@@ -1975,3 +1975,20 @@ Access2003 oracle remain open under F055/F121/F122. No catalog ID or checkbox
 changes:456 total,384 scoped confirmations,72 open full requirements.
 
 Nachweis dieser QueryDef.Fields-Etappe: bestehendes DAO-Ziel1/1 (0,96 s), anschließend vollständige Debian13-Desktop-Suite48/48 (98,29 s). Aktuelles Debian-Paket/Build-ID/SQLite3.54.1 und vier Originalfixture-Hashes bestanden. Keine neue Distributionsmatrix/GitHub-CI behauptet.
+
+
+## Native metadata binding and TableDefs.Refresh (2026-11-06)
+
+QueryDef.Fields and Database.TableDefs now expose the checked optional Index
+signature; TableDefs.Item exposes its required Index signature. Actual typed VBA
+reads query fields using named arguments, enumerates DAO.Field objects and checks
+Currency Type/Size without opening a rowset. TableDefs.Refresh reads the real
+current catalog and prunes dead/invalid cached items while preserving held valid
+item identity. It neither creates tables nor revives invalid TableDefs. Extra
+Refresh arguments are450. The collection now retains/checks the original native
+workspace before member access and enumeration; cross-thread access is refused
+3251 before querying Qt SQL. Existing close/replacement guards apply. This does
+not solve unobserved drop/recreate identity or full Access ordering/refresh.
+Existing DAO target only; F055/F121 remain open,456/384/72 unchanged.
+
+Metadatenanbindung: vorhandenes DAO-Ziel1/1 (0,99 s) einschließlich tatsächlichem typisiertem VBA, benannten Zugriffen, Refresh und fremdem Thread bestanden; aktuelles Paket/Build-ID/SQLite3.54.1 und vier Originalhashes bestanden. Die Vollsuite48/48 (98,29 s) gehört zum vorherigen a00eb29; kein neuer Vollsuite-/Matrixlauf für dieses kleine Inkrement behauptet.

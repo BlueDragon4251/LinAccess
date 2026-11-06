@@ -54,3 +54,18 @@ independent persisted SQL checks. All original MDB/Bridge files stay unchanged.
 The current syntax inventory accepts 182/187 procedures. This remains separate
 from actual procedure execution coverage and does not mean that the Kassa
 application runs end to end or matches a Windows Access oracle.
+
+
+## Native metadata binding and TableDefs.Refresh (2026-11-06)
+
+QueryDef.Fields and Database.TableDefs now expose the checked optional Index
+signature; TableDefs.Item exposes its required Index signature. Actual typed VBA
+reads query fields using named arguments, enumerates DAO.Field objects and checks
+Currency Type/Size without opening a rowset. TableDefs.Refresh reads the real
+current catalog and prunes dead/invalid cached items while preserving held valid
+item identity. It neither creates tables nor revives invalid TableDefs. Extra
+Refresh arguments are450. The collection now retains/checks the original native
+workspace before member access and enumeration; cross-thread access is refused
+3251 before querying Qt SQL. Existing close/replacement guards apply. This does
+not solve unobserved drop/recreate identity or full Access ordering/refresh.
+Existing DAO target only; F055/F121 remain open,456/384/72 unchanged.

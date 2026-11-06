@@ -57,3 +57,5 @@ Nach jeder sinnvollen Programmieretappe angemessen prüfen, Dokumentation aktual
 DAO-Abfragefeld-Fortsetzung: QueryDef.Fields für vorbereitbare SELECTs implementiert; Metadaten ohne Zeilenausführung/UDF-Aufruf, konservative Type/Size, Lebensdauer-/Schema-/Rollback-Invalidierung. Grenzen und Nachweise in docs/DAO_RUNTIME.md;456/384/72 unverändert.
 
 Nachweis dieser QueryDef.Fields-Etappe: bestehendes DAO-Ziel1/1 (0,96 s), anschließend vollständige Debian13-Desktop-Suite48/48 (98,29 s). Aktuelles Debian-Paket/Build-ID/SQLite3.54.1 und vier Originalfixture-Hashes bestanden. Keine neue Distributionsmatrix/GitHub-CI behauptet.
+
+Metadatenanbindung: vorhandenes DAO-Ziel1/1 (0,99 s) einschließlich tatsächlichem typisiertem VBA, benannten Zugriffen, Refresh und fremdem Thread bestanden; aktuelles Paket/Build-ID/SQLite3.54.1 und vier Originalhashes bestanden. Die Vollsuite48/48 (98,29 s) gehört zum vorherigen a00eb29; kein neuer Vollsuite-/Matrixlauf für dieses kleine Inkrement behauptet.
