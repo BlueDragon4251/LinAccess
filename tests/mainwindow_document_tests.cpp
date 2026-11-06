@@ -272,6 +272,30 @@ void exerciseDatasheetOutput(MainWindow& window,QSqlDatabase db) {
             else assert(leaves[0]==leaves[1] && leaves[2]==leaves[3]);
         }
     }
+    const auto selectedPdf=output.filePath("selection.pdf");
+    view->selectionModel()->select(model->index(0,0),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);
+    view->selectionModel()->select(model->index(2,0),QItemSelectionModel::Select|QItemSelectionModel::Rows);
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->testOption(QAbstractPrintDialog::PrintSelection));
+        auto* printer=dialog->printer(); printer->setOutputFormat(QPrinter::PdfFormat); printer->setOutputFileName(selectedPdf);
+        printer->setCopyCount(1); printer->setPrintRange(QPrinter::Selection);
+        view->clearSelection(); view->selectRow(1); dialog->QDialog::done(QDialog::Accepted);
+    });
+    assert(window.outputDatasheet(false).value("error").toInt()==0);
+    if(!reader.isEmpty()) {
+        QProcess text; text.start(reader,{"-layout",selectedPdf,"-"}); assert(text.waitForFinished(10000) && text.exitCode()==0);
+        const auto content=text.readAllStandardOutput(); assert(content.contains("row_320") && content.contains("row_318") && !content.contains("row_319") && !content.contains("row_317"));
+    }
+    for(const bool partial:{false,true}) {
+        view->clearSelection();
+        if(partial) view->selectionModel()->select(model->index(1,0),QItemSelectionModel::ClearAndSelect);
+        QTimer::singleShot(0,&window,[&] {
+            auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget()); assert(dialog && !dialog->testOption(QAbstractPrintDialog::PrintSelection));
+            auto* printer=dialog->printer(); printer->setOutputFormat(QPrinter::PdfFormat); printer->setOutputFileName(path);
+            printer->setPrintRange(QPrinter::Selection); dialog->QDialog::done(QDialog::Accepted);
+        });
+        assert(window.outputDatasheet(false).value("error").toInt()==3251 && read()==original);
+    }
     bool printPdf=false;
     const auto dialogPdf=output.filePath("dialog.pdf");
     QTimer::singleShot(0,&window,[&] {
@@ -392,6 +416,18 @@ End Sub
     });
     assert(window.setupDatasheetPage().value("error").toInt()==0);
     assert(window.outputDatasheet(true,output.filePath("query.pdf")).value("error").toInt()==0);
+    queryView->selectRow(1);
+    const auto querySelection=output.filePath("query-selection.pdf");
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->testOption(QAbstractPrintDialog::PrintSelection));
+        auto* printer=dialog->printer(); printer->setOutputFormat(QPrinter::PdfFormat); printer->setOutputFileName(querySelection);
+        printer->setPrintRange(QPrinter::Selection); dialog->QDialog::done(QDialog::Accepted);
+    });
+    assert(window.outputDatasheet(false).value("error").toInt()==0);
+    if(!reader.isEmpty()) {
+        QProcess text; text.start(reader,{"-layout",querySelection,"-"}); assert(text.waitForFinished(10000) && text.exitCode()==0);
+        const auto content=text.readAllStandardOutput(); assert(content.contains("row_010") && !content.contains("row_020"));
+    }
     assert(window.closeQueryDocument(1,"output_query",2).value("error").toInt()==0);
     assert(sql.exec("DELETE FROM _la_objects WHERE kind='query' AND name='output_query'"));
     assert(sql.exec("DROP TABLE output_rows"));

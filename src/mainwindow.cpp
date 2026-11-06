@@ -1139,7 +1139,13 @@ QVariantMap MainWindow::outputDatasheetInternal(int mode,const QString& requeste
             const auto source=validateEditableQuerySource(page,qobject_cast<linaccess::AccessTableModel*>(table->model()));
             if(source.value("error").toInt()) return source;
         }
+        QSet<int> selectedRows;
+        if(mode==0 && view->selectionModel()) for(const auto& index:view->selectionModel()->selectedRows()) selectedRows.insert(index.row());
         const auto snapshot=linaccess::nativeDatasheetSnapshot(*view,page->property("la_project_object_name").toString());
+        auto selected=snapshot; selected.rows.clear(); selected.sourceRows.clear();
+        for(int i=0;i<snapshot.rows.size();++i) if(selectedRows.contains(snapshot.sourceRows[i])) {
+            selected.rows.append(snapshot.rows[i]); selected.sourceRows.append(snapshot.sourceRows[i]);
+        }
         const QPointer<QAbstractItemModel> capturedModel=view->model();
         if(!alive()) return tableCommandFailure(2501,"Datenblatt wurde während der Vorbereitung geschlossen.");
         const auto kind=page->property("la_project_object_kind").toString(),name=page->property("la_project_object_name").toString();
@@ -1218,14 +1224,17 @@ QVariantMap MainWindow::outputDatasheetInternal(int mode,const QString& requeste
             QPrinter printer(QPrinter::HighResolution);
             const bool layoutApplied=printer.setPageLayout(layout);
             QPointer<QPrintDialog> dialog=new QPrintDialog(&printer,this);
-            dialog->setOption(QAbstractPrintDialog::PrintSelection,false);
+            dialog->setOption(QAbstractPrintDialog::PrintSelection,!selected.rows.isEmpty());
             dialog->setOption(QAbstractPrintDialog::PrintPageRange,true);
             const int accepted=dialog->exec(); if(dialog) delete dialog;
             if(accepted!=QDialog::Accepted) return tableCommandFailure(2501,"Druckausgabe abgebrochen.");
             if(!alive() || view->model()!=capturedModel) return tableCommandFailure(2501,"Datenblatt ist nach dem Dialog nicht mehr verfügbar.");
             if(!layoutApplied && !printer.setPageLayout(layout)) throw linaccess::VbaRuntimeError(3251,"Seitenlayout kann nicht übertragen werden.");
-            if(printer.printRange()!=QPrinter::AllPages && printer.printRange()!=QPrinter::PageRange)
+            if(printer.printRange()!=QPrinter::AllPages && printer.printRange()!=QPrinter::PageRange && printer.printRange()!=QPrinter::Selection)
                 return tableCommandFailure(3251,"Dieser Druckbereich wird noch nicht unterstützt.");
+            if(printer.printRange()==QPrinter::Selection && selected.rows.isEmpty())
+                return tableCommandFailure(3251,"Keine vollständig markierten sichtbaren Datensätze für die Ausgabe vorhanden.");
+            const auto& output=printer.printRange()==QPrinter::Selection ? selected : snapshot;
             const int copies=printer.copyCount(); const bool collated=printer.collateCopies();
             if(copies<1 || copies>100) return tableCommandFailure(3251,"Datenblatt unterstützt 1 bis 100 Druckexemplare.");
             const int first=printer.printRange()==QPrinter::PageRange ? printer.fromPage() : 1;
@@ -1235,12 +1244,12 @@ QVariantMap MainWindow::outputDatasheetInternal(int mode,const QString& requeste
                 const auto path=printer.outputFileName();
                 if(path.isEmpty() || QFileInfo(path).canonicalFilePath()==QFileInfo(identity).canonicalFilePath())
                     return tableCommandFailure(75,"Kein zulässiges PDF-Ziel ausgewählt.");
-                linaccess::exportNativeDatasheetPdf(snapshot,path,printer.pageLayout(),first,last,reverse,copies,collated);
+                linaccess::exportNativeDatasheetPdf(output,path,printer.pageLayout(),first,last,reverse,copies,collated);
             } else {
                 if(!printer.outputFileName().isEmpty()) return tableCommandFailure(3251,"Native Druckdateien außer PDF werden noch nicht unterstützt.");
                 const int renderedCopies=printer.supportsMultipleCopies() ? 1 : copies;
                 if(renderedCopies>1) printer.setCopyCount(1);
-                linaccess::renderNativeDatasheet(snapshot,printer,first,last,reverse,renderedCopies,collated);
+                linaccess::renderNativeDatasheet(output,printer,first,last,reverse,renderedCopies,collated);
                 if(printer.printerState()==QPrinter::Error) return tableCommandFailure(3146,"Druckgerät meldet einen Fehler.");
             }
         }

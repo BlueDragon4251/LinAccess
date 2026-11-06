@@ -20,12 +20,13 @@
 #include <memory>
 
 namespace linaccess {
-// Own strings only: modal dialogs must never retain a live SQL cursor or draft.
+// Own text/widths/row ordinals only; retain no live SQL cursor or draft.
 struct NativeDatasheetSnapshot {
     QString title;
     QStringList headers;
     QVector<int> widths;
     QVector<QStringList> rows;
+    QVector<int> sourceRows;
 };
 inline NativeDatasheetSnapshot nativeDatasheetSnapshot(QTableView& grid,const QString& title) {
     const QPointer<QTableView> view=&grid;
@@ -81,7 +82,7 @@ inline NativeDatasheetSnapshot nativeDatasheetSnapshot(QTableView& grid,const QS
             record.append(checkedText(table ? table->clipboardText(index) : query->clipboardText(index)));
             check();
         }
-        snapshot.rows.append(std::move(record));
+        snapshot.rows.append(std::move(record)); snapshot.sourceRows.append(row);
     }
     check();
     if(table && table->isDirty()) throw VbaRuntimeError(2501,"Datenblatt enthält neue Entwürfe.");

@@ -21,7 +21,7 @@ Null is blank, supported Currency/Date/Boolean/number/text conversions remain as
 documented for native clipboard values. Non-null binary values, NUL, malformed
 Unicode, failed SQL fetching/model changes, more than one million candidate cells,
 and more than 16 Mi UTF-16 text units refuse explicitly. Hidden cells are omitted;
-this prints the whole supported visible datasheet, not just selected records.
+the default prints the whole supported visible datasheet; bounded full-row selection is described below.
 
 The snapshot precedes either modal dialog. Subsequent SQL writes do not change
 its values. A scoped output/reentry flag and native project-close participant
@@ -37,7 +37,7 @@ page layout, page range and forward/reverse page order. Page/painter failures
 propagate. Column geometry which exceeds the selected printable width is refused,
 not silently clipped. Empty results retain their real headers. This does not
 implement Access field-format masks, row-height/font parity, horizontal multi-sheet
-pagination, selection printing, multiple copies, full page setup, print events or
+pagination, arbitrary cell-only output, full Access page setup, print events or
 an Access 2003 printer/rendering oracle.
 
 Dedicated PDF output and PDF selected in the print dialog both use QPdfWriter
@@ -157,3 +157,31 @@ installation/backend and all original hashes. These platform checks precede the
 copy increment; no fresh complete matrix or GitHub CI success is claimed.
 F080/F087/F148 remain open;456/384/72 unchanged. No new CTest target or ID.
 Reference: https://doc.qt.io/qt-6/qprinter.html#supportsMultipleCopies
+
+
+## Frozen selected-record printing (2026-11-06)
+
+The print dialog now enables Selection when fully selected visible records exist.
+Actual selected model-row ordinals are captured before remaining batches load;
+the owned string snapshot retains matching row ordinals, with no QModelIndex,
+SQL cursor or host pointer kept across the modal dialog. Selected output preserves
+visible column/row order, filter/sort, formatting and hidden-cell rules, and uses
+the existing page geometry, atomic PDF writer and copy/collation path.
+
+Only complete record selections are eligible; individual cell rectangles are not
+expanded. An unavailable/empty Selection request fails3251 before output and never
+falls back to the entire table. Dedicated PDF/preview defaults still address the
+whole datasheet; selected PDF output is available through the real print dialog.
+The complete bounded snapshot is still required, so selection does not bypass
+whole-source cell/text/draft/binary limits or introduce unbounded streaming.
+
+Existing mainwindow_documents prints two nonadjacent table records and one actual
+readonly query record to PDFs, then independently extracts text to check inclusion
+and exclusion. Changing the selection inside the dialog cannot change the frozen
+output. Empty and partial-cell Selection requests leave an existing PDF untouched.
+Target1/1 (4.15 s), matching app/package/Build-ID/SQLite3.54.1 and four original
+hashes pass; the three uploaded original hashes are also unchanged. No new target,
+ID or checkbox. Last full host suite e8375e8:48/48 (89.86 s), with its earlier
+platform/headless evidence distinguished from these later GUI increments.
+Full Access selection/error/printer/rendering equivalence remains open under
+F080/F087/F148;456/384/72 unchanged.
