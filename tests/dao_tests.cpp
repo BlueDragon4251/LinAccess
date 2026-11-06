@@ -1094,6 +1094,9 @@ held.AppendChunk payload
 If UBound(held.Value)<>2 Then Err.Raise 5
 rows.CancelUpdate
 If rows.RecordCount<>3 Then Err.Raise 5
+rows.MoveLast
+rows.MoveNext
+If Not rows.EOF Or held.Name<>"raw" Then Err.Raise 5
 rows.Close
 On Error Resume Next
 payload=held.Value
@@ -1101,10 +1104,13 @@ Me!BinaryClosedError=CStr(Err.Number)
 Err.Clear
 payload=held.GetChunk(0,1)
 Me!BinaryChunkClosedError=CStr(Err.Number)
+Err.Clear
+Me!ClosedBinaryFieldName=held.Name
+Me!BinaryNameClosedError=CStr(Err.Number)
 End Sub
 )VBA","BinaryFields",host);
     if(binaryFields.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Synthetic binary fields: "<<binaryFields.errorNumber<<" line "<<binaryFields.line<<" "<<binaryFields.explanation<<'\n';
-    assert(binaryFields.status==linaccess::VbaExecutionStatus::Completed && host.fields["BinaryClosedError"]=="3420" && host.fields["BinarySizeWriteError"]=="383" && host.fields["BinaryChunkClosedError"]=="3420");
+    assert(binaryFields.status==linaccess::VbaExecutionStatus::Completed && host.fields["BinaryClosedError"]=="3420" && host.fields["BinarySizeWriteError"]=="383" && host.fields["BinaryChunkClosedError"]=="3420" && host.fields["BinaryNameClosedError"]=="3420");
     assert(host.fields["BinaryChunkBoundary"]=="3251" && host.fields["BinaryChunkNullOffset"]=="94" && host.fields["BinaryChunkArity"]=="450" && host.fields["BinaryMixedChunkError"]=="3251" && host.fields["BinaryMixedValueError"]=="3251");
     assert(sql.exec("SELECT hex(raw),typeof(raw),length(raw) FROM batch_records ORDER BY id") && sql.next());
     assert(sql.value(0).toString()=="000742" && sql.value(1).toString()=="blob" && sql.value(2).toInt()==3);

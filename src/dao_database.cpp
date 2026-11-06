@@ -950,7 +950,10 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
     }
     require(args.empty(), "DAO: Unexpected field arguments");
     if (lower(name) == "value") return owner_->value(name_);
-    if (lower(name) == "name") return VbaValue::string(name_.toUtf8().toStdString());
+    if (lower(name) == "name") {
+        (void)owner_->fieldType(name_);
+        return VbaValue::string(name_.toUtf8().toStdString());
+    }
     throw std::runtime_error("DAO: Unknown Field member");
 }
 void Field::assign(std::string_view name, const VbaValue& value) {
