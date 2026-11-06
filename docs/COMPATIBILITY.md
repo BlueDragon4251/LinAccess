@@ -50,7 +50,7 @@ Form.Recordset und generelle Array-/Sperrsemantik bleiben offen:
 
 | Bereich | Jetzt | Geplante Strategie | Grenze / Risiko |
 |---|---|---|---|
-| `.mdb`-Tabellen | MDBTools: typisierte INTEGER/REAL/TEXT-Kopie inklusive NULL, BLOB-Spalten ohne Nutzdaten; **29/29** Tabellen der echten Kassen-MDB in SQLite-Kopie importiert | Vollständiger Jet-Schemaimport | Standardwerte, echte OLE-Daten, exakte Jet-Typen, Encoding |
+| `.mdb`-Tabellen | MDBTools: typisierte INTEGER/REAL/TEXT/BLOB-Kopie inklusive NULL, begrenzte Rohbinärbytes mit explizitem Hexexport; **29/29** Tabellen der echten Kassen-MDB in SQLite-Kopie importiert | Vollständiger Jet-Schemaimport | Vollständige Standardausdrücke, OLE-Anzeige/Anhänge/Originalformat-Roundtrip, exakte Jet-Typen, Encoding |
 | `.accdb`-Tabellen | Nur soweit installierte MDBTools-Version liest | Zusätzlicher Importadapter | Versions- und Feature-Abhängigkeit |
 | Tabellen-/Datensatzeditor | Ja, für SQLite | Constraints, Indizes, Migrationen | Noch rudimentär |
 | Access-Abfragen | Jet-Adapter mit typisierten PARAMETERS/QueryDefs, grundlegenden Strings/LIKE/TOP einschließlich Sortiergleichständen, Datumswerten und eager IIf; Navigator-Ergebnisansicht. 100 Originalabfragen klassifiziert, 77 ausgeführt (davon fünf mit Datenparametern) ohne Access-Referenzergebnis | Jet/ACE-SQL vervollständigen | Funktionen, implizite Formularparameter, Crosstab, genaue Typ-/Ausdruckssemantik; [Details](QUERY_ADAPTER.md) |

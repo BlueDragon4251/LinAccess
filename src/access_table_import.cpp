@@ -181,9 +181,18 @@ QVector<AccessColumn> parseMdbColumns(const QString& schema) {
     return parseMdbSchema(schema).columns;
 }
 
+QByteArray decodeMdbBinaryHex(std::string_view encoded) {
+    if(encoded.size()%2 || encoded.size()>32*1024*1024) throw fail("Ungültige oder zu große Binär-Hexlänge");
+    for(const unsigned char ch:encoded) if(!((ch>='0' && ch<='9') || (ch>='a' && ch<='f') || (ch>='A' && ch<='F')))
+        throw fail("Ungültiger Binär-Hexexport");
+    if(encoded.empty()) return QByteArray("",0);
+    return QByteArray::fromHex(QByteArray(encoded.data(),static_cast<qsizetype>(encoded.size())));
+}
+
 static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                        const QString& tableName, const AccessTableSchema& schema,
-                       const std::vector<std::vector<CsvField>>& rows, bool insertOnly = false) {
+                       const std::vector<std::vector<CsvField>>& rows, bool insertOnly = false,
+                       AccessBinaryEncoding binaryEncoding=AccessBinaryEncoding::Unsupported) {
     const auto& columns = schema.columns;
     if (!db.isOpen() || columns.isEmpty() || rows.empty())
         throw fail("Datenbank, Schema oder CSV-Daten fehlen");
@@ -263,11 +272,9 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                     else if (value == "0" || value.compare("FALSE",Qt::CaseInsensitive) == 0) converted = qlonglong(0);
                     else throw fail("Ungültiger Boolean-Exportwert");
                 } else if (columns[c].sqliteType == "BLOB") {
-                    // MDBTools CSV exports are not an unambiguous OLE binary
-                    // serialization. Preserve NULLs, but do not reinterpret
-                    // arbitrary bytes as images or silently corrupt them.
-                    throw fail("Nicht-NULL-OLE/BLOB-Daten brauchen einen Binäradapter: "
-                               + columns[c].name + " Zeile " + QString::number(r));
+                    if(binaryEncoding!=AccessBinaryEncoding::MdbToolsHex)
+                        throw fail("Nicht-NULL-Binärdaten benötigen einen ausdrücklich gewählten Hexexport");
+                    converted=decodeMdbBinaryHex(cell.value);
                 } else if (columns[c].sqliteType == "INTEGER") {
                     bool ok = false;
                     const auto number = value.toLongLong(&ok);
@@ -322,7 +329,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             log.addBindValue(tableName);
             log.addBindValue("partial_typed_nulls");
             log.addBindValue("MDBTools schema+CSV; SQLite types and NULLs retained; "
-                             "PK, exported indices, literal defaults and proven text capacities retained; FK retained by full-database import only; OLE and general Access semantics NOT retained");
+                             "PK, exported indices, literal defaults and proven text capacities retained; explicit hex preserves raw binary bytes; FK retained by full-database import only; OLE rendering and general Access semantics NOT retained");
             if (!log.exec()) throw fail(log.lastError().text());
         }
         if (!scope.exec("RELEASE la_table_import")) throw fail(scope.lastError().text());
@@ -335,14 +342,14 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
 
 void importAccessTable(QSqlDatabase db, const QString& sourceFile,
                        const QString& tableName, const AccessTableSchema& schema,
-                       const std::vector<std::vector<CsvField>>& rows) {
-    importAccessTablePhase(db, sourceFile, tableName, schema, rows);
+                       const std::vector<std::vector<CsvField>>& rows,AccessBinaryEncoding binaryEncoding) {
+    importAccessTablePhase(db, sourceFile, tableName, schema, rows,false,binaryEncoding);
 }
 
 void importAccessTable(QSqlDatabase db, const QString& sourceFile,
                        const QString& tableName, const QVector<AccessColumn>& columns,
-                       const std::vector<std::vector<CsvField>>& rows) {
-    importAccessTable(db, sourceFile, tableName, AccessTableSchema{columns, {}, {}}, rows);
+                       const std::vector<std::vector<CsvField>>& rows,AccessBinaryEncoding binaryEncoding) {
+    importAccessTable(db, sourceFile, tableName, AccessTableSchema{columns, {}, {}}, rows,binaryEncoding);
 }
 int importAccessDatabase(QSqlDatabase db, const QString& sourceFile) {
     // Read every schema and row from one immutable working copy. In particular,
@@ -415,9 +422,9 @@ int importAccessDatabase(QSqlDatabase db, const QString& sourceFile) {
             importAccessTablePhase(db, sourceFile, it.key(), it.value(), {header});
         }
         for (auto it = schemas.cbegin(); it != schemas.cend(); ++it) {
-            const auto csv = AccessCatalog::exportTable(readPath,it.key());
+            const auto csv = AccessCatalog::exportTable(readPath,it.key(),true);
             importAccessTablePhase(db, sourceFile, it.key(), it.value(),
-                parseCsvDetailed(std::string_view(csv.constData(), csv.size())), true);
+                parseCsvDetailed(std::string_view(csv.constData(), csv.size())), true,AccessBinaryEncoding::MdbToolsHex);
         }
         if (!db.commit()) throw fail(db.lastError().text());
     } catch (...) { db.rollback(); throw; }

@@ -35,7 +35,8 @@ public:
     QString tableSchema(const QString& name) const;
     // Decode exact Currency/Single/Double labels; storage/coercion remains separate.
     static QMap<QString,QString> floatingSourceTypes(const QString& accessSchema);
-    static QByteArray exportTable(const QString& source, const QString& table);
+    // Explicit unprefixed hexadecimal MDBTools binary serialization when requested.
+    static QByteArray exportTable(const QString& source, const QString& table,bool binaryHex=false);
     static QByteArray tool(const QString& executable, const QStringList& args,
                            const QByteArray& input = {});
 private:

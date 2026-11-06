@@ -8,6 +8,11 @@
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QTableWidget>
+#include <QFile>
+#include <QFileInfo>
+#include <QDir>
+#include <QCryptographicHash>
 
 #ifdef NDEBUG
 #undef NDEBUG
@@ -83,5 +88,38 @@ int main(int argc, char** argv) {
     assert(check.exec("SELECT COUNT(*) FROM sqlite_master "
                       "WHERE type='table' AND name IN ('3_tbl_Rezepte','33_tbl_ZutatenRezept')"));
     assert(check.next() && check.value(0).toInt() == 2);
+    check.finish();
+    const auto reference=qEnvironmentVariable("LINACCESS_JET_BINARY_REFERENCE");
+    if(!reference.isEmpty()) {
+        const auto digest=[&] { QFile source(reference); assert(source.open(QIODevice::ReadOnly)); return QCryptographicHash::hash(source.readAll(),QCryptographicHash::Sha256); };
+        const auto before=digest(); AccessInspector binary(reference,db); binary.show(); QApplication::processEvents();
+        for(auto* list:binary.findChildren<QListWidget*>()) {
+            const auto matches=list->findItems("binary_probe",Qt::MatchExactly); if(!matches.isEmpty()) list->setCurrentItem(matches.front());
+        }
+        QPushButton *preview=nullptr,*copy=nullptr;
+        for(auto* button:binary.findChildren<QPushButton*>()) {
+            if(button->text()=="Tabelle ansehen") preview=button;
+            if(button->text().contains("Typisierte Kopie")) copy=button;
+        }
+        assert(preview && copy); preview->click();
+        auto* grid=binary.findChild<QTableWidget*>(); assert(grid && grid->rowCount()==4 && grid->columnCount()==2);
+        const QMap<int,int> sizes{{1,7},{3,4097},{4,65539}};
+        for(int row=0;row<grid->rowCount();++row) {
+            const int id=grid->item(row,0)->text().toInt();
+            assert(grid->item(row,1)->text()==(id==2 ? QString("<NULL>") : QString("<Binärdaten: %1 Bytes>").arg(sizes.value(id))));
+        }
+        assert(copy->isEnabled()); copy->click();
+        assert(check.exec("SELECT id,payload,typeof(payload) FROM binary_probe ORDER BY id")); int copied=0;
+        while(check.next()) {
+            const int id=check.value(0).toInt();
+            if(id==2) assert(check.value(1).isNull() && check.value(2).toString()=="null");
+            else {
+                QFile expected(QFileInfo(reference).dir().filePath("payload-"+QString::number(id)+".bin")); assert(expected.open(QIODevice::ReadOnly));
+                assert(check.value(2).toString()=="blob" && check.value(1).toByteArray()==expected.readAll());
+            }
+            ++copied;
+        }
+        check.finish(); assert(copied==4 && digest()==before); binary.close();
+    }
     std::cout << "Real MDB inspector GUI test passed (11 catalog objects)\n";
 }

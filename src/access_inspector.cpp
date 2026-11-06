@@ -83,7 +83,7 @@ AccessInspector::AccessInspector(QString sourceFile, QSqlDatabase projectDb, QWi
     status_->setMaximumHeight(150);
     status_->setHtml(
         "<b>Kompatibilität:</b> Datentypen und NULLs werden beim Tabellenimport nach Möglichkeit erhalten. "
-        "Primärschlüssel, exportierte Indizes, literale Tabellen-Standardwerte und bestätigte Textlängen werden übernommen; der Gesamtimport erhält auch Beziehungen. Allgemeine Access-Standardausdrücke und OLE-Nutzdaten fehlen. "
+        "Primärschlüssel, exportierte Indizes, literale Tabellen-Standardwerte und bestätigte Textlängen werden übernommen; der Gesamtimport erhält auch Beziehungen. Rohbinärbytes können begrenzt kopiert werden; vollständige Standardausdrücke, OLE-Anzeige und Originalformat-Schreiben fehlen. "
         "Der Katalog zeigt Objektnamen und SQL, <b>nicht</b> VBA-Code oder GUI-Layouts. "
         "Importierte Katalogeinträge sind <b>metadata_only</b> und nicht ausführbar. "
         "Die Access-Originaldatei bleibt unverändert.");
@@ -142,12 +142,15 @@ void AccessInspector::previewTable() {
     try {
         // The control-character marker is different from an empty text field;
         // quoted text identical to the marker is also not considered NULL.
-        const QByteArray typedOutput = linaccess::AccessCatalog::exportTable(sourceFile_,selectedTable_);
+        const QByteArray typedOutput = linaccess::AccessCatalog::exportTable(sourceFile_,selectedTable_,true);
         csvRows_ = linaccess::parseCsvDetailed(std::string_view(typedOutput.constData(),
                                                                static_cast<std::size_t>(typedOutput.size())));
         if (csvRows_.empty()) throw std::runtime_error("Leerer Export ohne Kopfzeile");
         const auto& header = csvRows_[0];
         if (header.empty()) throw std::runtime_error("Kopfzeile fehlt");
+        linaccess::AccessCatalog catalog(sourceFile_);
+        const auto schema=linaccess::parseMdbSchema(catalog.tableSchema(selectedTable_));
+        if(schema.columns.size()!=static_cast<int>(header.size())) throw std::runtime_error("Binärvorschau benötigt ein eindeutiges Tabellenschema");
         preview_->setColumnCount(static_cast<int>(header.size()));
         QStringList headers;
         for (const auto& field : header) headers << toQString(field.value);
@@ -156,10 +159,12 @@ void AccessInspector::previewTable() {
         preview_->setRowCount(static_cast<int>(shown));
         for (std::size_t row = 0; row < shown; ++row) {
             const auto& cells = csvRows_[row + 1];
-            for (std::size_t col = 0; col < std::min(header.size(), cells.size()); ++col)
-                preview_->setItem(static_cast<int>(row), static_cast<int>(col),
-                                  new QTableWidgetItem(!cells[col].quoted && cells[col].value == "\x1e"
-                                      ? QStringLiteral("<NULL>") : toQString(cells[col].value)));
+            for (std::size_t col = 0; col < std::min(header.size(), cells.size()); ++col) {
+                const bool null=!cells[col].quoted && cells[col].value=="\x1e";
+                const auto text=null ? QStringLiteral("<NULL>") : schema.columns[static_cast<int>(col)].sqliteType=="BLOB"
+                    ? QString("<Binärdaten: %1 Bytes>").arg(linaccess::decodeMdbBinaryHex(cells[col].value).size()) : toQString(cells[col].value);
+                preview_->setItem(static_cast<int>(row),static_cast<int>(col),new QTableWidgetItem(text));
+            }
         }
         importButton_->setEnabled(projectDb_.isOpen());
         status_->append("Vorschau: " + selectedTable_.toHtmlEscaped() + " — "
@@ -174,15 +179,15 @@ void AccessInspector::previewTable() {
 void AccessInspector::importTable() {
     if (!projectDb_.isOpen() || csvRows_.empty() || selectedTable_.isEmpty()) return;
     if (QMessageBox::warning(this, "Verlustbehafteter Import",
-            "Die Tabelle wird als neue SQLite-Tabelle mit INTEGER/REAL/TEXT und echten NULL-Werten importiert. "
-            "Beziehungen, Access-Standardwerte, Formulare und VBA "
+            "Die Tabelle wird als neue SQLite-Tabelle mit INTEGER/REAL/TEXT/BLOB und echten NULL-Werten importiert. "
+            "Beziehungen, vollständige Access-Standardausdrücke, Formulare und VBA "
             "werden NICHT übernommen. "
             "Die Access-Quelldatei bleibt erhalten. Fortfahren?",
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes) return;
     try {
         linaccess::AccessCatalog catalog(sourceFile_);
         const auto columns = linaccess::parseMdbSchema(catalog.tableSchema(selectedTable_));
-        linaccess::importAccessTable(projectDb_, sourceFile_, selectedTable_, columns, csvRows_);
+        linaccess::importAccessTable(projectDb_, sourceFile_, selectedTable_, columns, csvRows_,linaccess::AccessBinaryEncoding::MdbToolsHex);
         importButton_->setEnabled(false);
         QMessageBox::information(this, "Importiert", "Tabelle mit Datentypen und NULLs kopiert. "
             "Primärschlüssel und Indizes erhalten. Beziehungen nur beim Gesamtimport. Original unverändert.");

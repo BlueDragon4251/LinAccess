@@ -5,6 +5,10 @@
 #include "dao_database.hpp"
 #include <QCoreApplication>
 #include <QFile>
+#include <QFileInfo>
+#include <QDir>
+#include <QCryptographicHash>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -19,6 +23,51 @@
 #endif
 #include <cassert>
 #include <iostream>
+
+void verifyJetBinaryReference(const QString& path) {
+    using namespace linaccess;
+    const QDir directory=QFileInfo(path).dir();
+    const auto digest=[](const QString& file) { QFile input(file); assert(input.open(QIODevice::ReadOnly)); return QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256); };
+    const auto before=digest(path);
+    auto db=QSqlDatabase::addDatabase("QSQLITE","jet-binary-reference"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery query(db); assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)")); query.finish();
+    assert(importAccessDatabase(db,path)==1);
+    assert(query.exec("SELECT id,payload,typeof(payload) FROM binary_probe ORDER BY id"));
+    QSet<int> seen;
+    while(query.next()) {
+        const int id=query.value(0).toInt(); assert(!seen.contains(id)); seen.insert(id);
+        if(id==2) { assert(query.value(1).isNull() && query.value(2).toString()=="null"); continue; }
+        QFile expected(directory.filePath("payload-"+QString::number(id)+".bin")); assert(expected.open(QIODevice::ReadOnly));
+        assert(query.value(2).toString()=="blob" && query.value(1).toByteArray()==expected.readAll());
+    }
+    query.finish(); assert(seen==QSet<int>({1,2,3,4}));
+    const auto rows=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("binary_probe"),VbaValue::integer(4)}).object;
+    int count=0;
+    while(!rows->member("EOF",{}).truthy()) {
+        const int id=static_cast<int>(rows->item("id").asNumber()); const auto field=rows->member("Fields",{VbaValue::string("payload")}).object;
+        const auto value=field->member("Value",{});
+        if(id==2) assert(value.kind==VbaValue::Kind::Null);
+        else {
+            QFile expected(directory.filePath("payload-"+QString::number(id)+".bin")); assert(expected.open(QIODevice::ReadOnly)); const auto bytes=expected.readAll();
+            assert(value.kind==VbaValue::Kind::ByteArray && QByteArray(reinterpret_cast<const char*>(value.bytes.data()),static_cast<qsizetype>(value.bytes.size()))==bytes);
+            assert(field->member("Type",{}).asNumber()==11 && field->member("Size",{}).asNumber()==0);
+            assert(field->member("FieldSize",{}).asNumber()==bytes.size());
+            const auto tail=field->member("GetChunk",{VbaValue::longInteger(static_cast<std::int32_t>(bytes.size()-2)),VbaValue::integer(20)});
+            assert(tail.kind==VbaValue::Kind::ByteArray && tail.bytes.size()==2 && QByteArray(reinterpret_cast<const char*>(tail.bytes.data()),2)==bytes.right(2));
+        }
+        ++count; rows->member("MoveNext",{});
+    }
+    rows->member("Close",{}); assert(count==4); db.close(); assert(digest(path)==before);
+    const auto oversize=directory.filePath("binary-oversize.mdb"); const auto largeBefore=digest(oversize);
+    auto failure=QSqlDatabase::addDatabase("QSQLITE","jet-binary-limit"); failure.setDatabaseName(":memory:"); assert(failure.open());
+    QSqlQuery check(failure); assert(check.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
+    assert(check.exec("CREATE TABLE untouched(value INTEGER)")); assert(check.exec("INSERT INTO untouched VALUES(17)")); check.finish();
+    const auto tables=failure.tables(); bool bounded=false;
+    try { (void)importAccessDatabase(failure,oversize); } catch(const std::exception& error) { bounded=QString::fromUtf8(error.what()).contains("Puffergröße"); }
+    assert(bounded && failure.tables()==tables && check.exec("SELECT value FROM untouched") && check.next() && check.value(0).toInt()==17); check.finish();
+    failure.close(); assert(digest(oversize)==largeBefore);
+    std::cout<<"Actual technical Jet binary import: exact inline/multi-page bytes, DAO chunks, NULL, bounded oversized rollback and source hashes verified\n";
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
@@ -246,5 +295,19 @@ CREATE INDEX `label` ON `source` (`a``b`);
     bool rejectedPartial = false;
     try { (void)AccessCatalog::tool(fake.fileName(), {}); } catch (...) { rejectedPartial = true; }
     assert(rejectedPartial);
+    const auto binary=parseMdbSchema("CREATE TABLE `binary`\n(\n`id` INTEGER,\n`payload` BLOB\n);\n");
+    const auto binaryRows=parseCsvDetailed("id,payload\n1,00ff\n2,\x1e\n3,\n");
+    bool codecRequired=false;
+    try { importAccessTable(db,"technical","binary_no_codec",binary,binaryRows); } catch(const std::exception&) { codecRequired=true; }
+    assert(codecRequired && !db.tables().contains("binary_no_codec"));
+    importAccessTable(db,"technical","binary_hex",binary,binaryRows,AccessBinaryEncoding::MdbToolsHex);
+    QSqlQuery binaryCheck(db); assert(binaryCheck.exec("SELECT hex(payload),typeof(payload),length(payload) FROM binary_hex ORDER BY id"));
+    assert(binaryCheck.next() && binaryCheck.value(0).toString()=="00FF" && binaryCheck.value(1).toString()=="blob" && binaryCheck.value(2).toInt()==2);
+    assert(binaryCheck.next() && binaryCheck.value(1).toString()=="null");
+    assert(binaryCheck.next() && binaryCheck.value(1).toString()=="blob" && binaryCheck.value(2).toInt()==0); binaryCheck.finish();
+    for(const auto* malformed:{"0","0x00","GG","00 1","00\n00"}) {
+        bool rejected=false; try { (void)decodeMdbBinaryHex(malformed); } catch(const std::exception&) { rejected=true; } assert(rejected);
+    }
+    const auto reference=qEnvironmentVariable("LINACCESS_JET_BINARY_REFERENCE"); if(!reference.isEmpty()) verifyJetBinaryReference(reference);
     std::cout << "Schema, composite keys, indices, quoted identifiers and rollback verified\n";
 }

@@ -97,3 +97,5 @@ independent unchanged SQL row count/hex/type/length assertions. Original OLE/
 attachment extraction, original-format writes and full binary parity remain open.
 Reference: https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-appendchunk-method-dao
 F016/F055/F121/F122 remain open;456/384/72 unchanged. No new test target.
+
+Raw non-NULL Jet value bytes can now reach these native BLOB interfaces through the explicit bounded importer; actual technical MDB/DAO proof and limits: [JET_BINARY_IMPORT.md](JET_BINARY_IMPORT.md). This does not implement OLE rendering, ACE attachments or original-format round trips.

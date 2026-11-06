@@ -2,6 +2,7 @@
 #include "csv.hpp"
 
 #include <QProcess>
+#include <QElapsedTimer>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStandardPaths>
@@ -36,29 +37,39 @@ QByteArray AccessCatalog::tool(const QString& name, const QStringList& args,
         }
     }
     process.closeWriteChannel();
-    if (!process.waitForFinished(30000)) {
-        process.kill();
-        process.waitForFinished(2000);
-        throw std::runtime_error("MDBTools: 30-Sekunden-Zeitlimit");
+    QByteArray result,diagnostics;
+    const auto collect=[&] {
+        const auto output=process.readAllStandardOutput(),errors=process.readAllStandardError();
+        if(output.size()>20*1024*1024-result.size() || errors.size()>64*1024-diagnostics.size()) {
+            process.kill(); process.waitForFinished(2000);
+            throw std::runtime_error("MDBTools-Ausgabe überschreitet die begrenzte Puffergröße");
+        }
+        result+=output; diagnostics+=errors;
+    };
+    QElapsedTimer elapsed; elapsed.start();
+    while(process.state()!=QProcess::NotRunning) {
+        process.waitForReadyRead(static_cast<int>(qBound<qint64>(qint64{1},30000-elapsed.elapsed(),qint64{100}))); collect();
+        if(elapsed.elapsed()>=30000 && process.state()!=QProcess::NotRunning) {
+            process.kill(); process.waitForFinished(2000);
+            throw std::runtime_error("MDBTools: 30-Sekunden-Zeitlimit");
+        }
     }
+    collect();
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
-        throw std::runtime_error("MDBTools: " + process.readAllStandardError().toStdString());
-    const auto diagnostics = process.readAllStandardError();
+        throw std::runtime_error("MDBTools: " + diagnostics.toStdString());
     // MDBTools can report damaged pages while returning exit code zero.
     // Never accept a silently truncated schema or row set in that case.
     const QRegularExpression fatalDiagnostic("beyond EOF|error|failed|unable|could not",
         QRegularExpression::CaseInsensitiveOption);
     if (fatalDiagnostic.match(QString::fromUtf8(diagnostics)).hasMatch())
         throw std::runtime_error("MDBTools meldet einen Lesefehler; Import wurde abgebrochen");
-    const auto result = process.readAllStandardOutput();
-    if (result.size() > 20 * 1024 * 1024)
-        throw std::runtime_error("MDBTools-Ausgabe überschreitet 20 MB");
     return result;
 }
 
-QByteArray AccessCatalog::exportTable(const QString& source, const QString& table) {
-    return tool("mdb-export",{"-D","%Y-%m-%d %H:%M:%S","-T","%Y-%m-%d %H:%M:%S",
-        "-0",QString(QChar(0x1e)),source,table});
+QByteArray AccessCatalog::exportTable(const QString& source, const QString& table,bool binaryHex) {
+    QStringList args{"-D","%Y-%m-%d %H:%M:%S","-T","%Y-%m-%d %H:%M:%S","-0",QString(QChar(0x1e))};
+    if(binaryHex) args<<"-b"<<"hex";
+    args<<source<<table; return tool("mdb-export",args);
 }
 
 QString AccessCatalog::formatVersion() const {
