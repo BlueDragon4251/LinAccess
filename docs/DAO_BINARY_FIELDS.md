@@ -21,7 +21,7 @@ checks pending Value, saves an empty binary, cancels a pending NULL-to-binary ed
 then checks a held Field fails with 3420 after Close. Independent SQL verifies exact
 hex bytes, typeof(blob), zero length and NULL after execution.
 
-GetChunk/AppendChunk, QueryDef binary parameters, OLE/attachment import and original
+Full GetChunk/AppendChunk semantics, QueryDef binary parameters, OLE/attachment import and original
 MDB/ACCDB binary round trips, OLE rendering and full Access type/coercion/error
 parity remain open. The general Qt form/report scalar converter still refuses
 binary display; this change does not turn binary data into text or publish bytes.
@@ -73,3 +73,27 @@ and unchanged independent persisted SQL bytes. No new CTest target or catalog ID
 F016/F055/F121/F122 remain open and456/384/72 unchanged.
 Reference: https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-getchunk-method-dao
 This current public contract is not an Access2003 execution oracle.
+
+
+## Staged native binary AppendChunk (2026-11-06)
+
+Field.AppendChunk(Val), including named Val, now accepts copied native Byte()
+chunks in an existing Edit/AddNew buffer. The first successful append for a field
+in that session replaces the prior bytes; subsequent chunks append. Each field
+tracks its own sequence. Update persists through the existing transaction-safe
+binding; CancelUpdate discards the buffer. New Edit/AddNew, successful Update,
+CancelUpdate, Close and supported rollback-Requery reset chunk state. An empty
+Byte() creates a non-NULL empty BLOB. Input/cumulative buffer limit16MiB is checked
+before mutation; no SQL executes during staging.
+
+String/Memo/encoding/Null chunk arguments, browse-mode/other source fields and
+mixed direct Value writes with an active chunk sequence refuse3251. These scoped
+refusals do not claim exact Access error precedence. Direct Value assignments
+retain their existing behavior in sessions without chunks. Byte buffers contain
+no live host/cursor references; existing workspace/current/closed guards apply.
+Actual VBA checks first-chunk replacement, multiple chunks, pending Value, a
+fresh editing session, Update/CancelUpdate, empty BLOB and canceled AddNew, with
+independent unchanged SQL row count/hex/type/length assertions. Original OLE/
+attachment extraction, original-format writes and full binary parity remain open.
+Reference: https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-appendchunk-method-dao
+F016/F055/F121/F122 remain open;456/384/72 unchanged. No new test target.

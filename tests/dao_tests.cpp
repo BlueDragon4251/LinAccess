@@ -1017,6 +1017,7 @@ End Sub
     assert(sql.exec("SELECT value FROM object_array_values") && sql.next() && sql.value(0).toInt()==9); sql.finish();
     const auto binaryFields=linaccess::executeVbaProcedure(R"VBA(Sub BinaryFields()
 Dim rows As DAO.Recordset, held As DAO.Field, payload() As Byte, emptyBytes() As Byte
+Dim prefix() As Byte, middle() As Byte, suffix() As Byte
 Set rows=CurrentDb.OpenRecordset("batch_records")
 Set held=rows.Fields("raw")
 If held.Type<>11 Then Err.Raise 5
@@ -1044,25 +1045,55 @@ On Error GoTo 0
 payload=held.Value
 If VarType(payload)<>8209 Or UBound(payload)<>2 Then Err.Raise 5
 If payload(0)<>0 Or payload(1)<>255 Or payload(2)<>66 Then Err.Raise 5
-payload(1)=7
+prefix=held.GetChunk(0,1)
+middle=held.GetChunk(1,1)
+suffix=held.GetChunk(2,1)
+middle(0)=7
+rows.Edit
+held.AppendChunk Val:=prefix
+payload=held.Value
+If UBound(payload)<>0 Or payload(0)<>0 Then Err.Raise 5
+held.AppendChunk middle
+held.AppendChunk suffix
+payload=held.Value
+If UBound(payload)<>2 Or payload(1)<>7 Then Err.Raise 5
+On Error Resume Next
+held.Value=payload
+Me!BinaryMixedChunkError=CStr(Err.Number)
+On Error GoTo 0
+rows.Update
 rows.Edit
 held.Value=payload
-payload=held.Value
-If payload(1)<>7 Then Err.Raise 5
+On Error Resume Next
+held.AppendChunk prefix
+Me!BinaryMixedValueError=CStr(Err.Number)
+On Error GoTo 0
 rows.Update
+rows.Edit
+held.AppendChunk suffix
+payload=held.Value
+If UBound(payload)<>0 Or payload(0)<>66 Then Err.Raise 5
+rows.CancelUpdate
+payload=held.Value
+If UBound(payload)<>2 Or payload(1)<>7 Then Err.Raise 5
 rows.MoveNext
 emptyBytes=held.Value
 If held.FieldSize<>0 Then Err.Raise 5
 If UBound(emptyBytes)<>-1 Then Err.Raise 5
 rows.Edit
-held.Value=emptyBytes
+held.AppendChunk emptyBytes
 rows.Update
 rows.MoveNext
 If Not IsNull(held.Value) Then Err.Raise 5
 rows.Edit
-held.Value=payload
+held.AppendChunk payload
 rows.CancelUpdate
 If Not IsNull(held.Value) Then Err.Raise 5
+rows.AddNew
+held.AppendChunk payload
+If UBound(held.Value)<>2 Then Err.Raise 5
+rows.CancelUpdate
+If rows.RecordCount<>3 Then Err.Raise 5
 rows.Close
 On Error Resume Next
 payload=held.Value
@@ -1074,7 +1105,7 @@ End Sub
 )VBA","BinaryFields",host);
     if(binaryFields.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Synthetic binary fields: "<<binaryFields.errorNumber<<" line "<<binaryFields.line<<" "<<binaryFields.explanation<<'\n';
     assert(binaryFields.status==linaccess::VbaExecutionStatus::Completed && host.fields["BinaryClosedError"]=="3420" && host.fields["BinarySizeWriteError"]=="383" && host.fields["BinaryChunkClosedError"]=="3420");
-    assert(host.fields["BinaryChunkBoundary"]=="3251" && host.fields["BinaryChunkNullOffset"]=="94" && host.fields["BinaryChunkArity"]=="450");
+    assert(host.fields["BinaryChunkBoundary"]=="3251" && host.fields["BinaryChunkNullOffset"]=="94" && host.fields["BinaryChunkArity"]=="450" && host.fields["BinaryMixedChunkError"]=="3251" && host.fields["BinaryMixedValueError"]=="3251");
     assert(sql.exec("SELECT hex(raw),typeof(raw),length(raw) FROM batch_records ORDER BY id") && sql.next());
     assert(sql.value(0).toString()=="000742" && sql.value(1).toString()=="blob" && sql.value(2).toInt()==3);
     assert(sql.next() && sql.value(1).toString()=="blob" && sql.value(2).toInt()==0);

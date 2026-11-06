@@ -324,7 +324,8 @@ public:
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     Field(std::shared_ptr<Recordset> owner, QString name) : owner_(std::move(owner)), name_(std::move(name)) {}
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
-        if(lower(name)=="getchunk") return VbaArgumentSignature{{"Offset","Bytes"},2}; return {};
+        if(lower(name)=="getchunk") return VbaArgumentSignature{{"Offset","Bytes"},2};
+        if(lower(name)=="appendchunk") return VbaArgumentSignature{{"Val"},1}; return {};
     }
     bool hasScalarDefault() const override { return true; }
     VbaValue scalarValue() override { return member("Value",{}); }
@@ -541,10 +542,10 @@ public:
                 }
                 mode_=Mode::Add;
             }
-            changed_.clear();
+            changed_.clear(); chunkFields_.clear();
             return {};
         }
-        if (key == "cancelupdate") { pending_.clear(); changed_.clear(); mode_ = Mode::Browse; return {}; }
+        if (key == "cancelupdate") { pending_.clear(); changed_.clear(); chunkFields_.clear(); mode_ = Mode::Browse; return {}; }
         if (key == "update") { update(); return {}; }
         if (key == "delete") {
             require(!readOnly_ && mode_ == Mode::Browse, "DAO: Cannot delete this Recordset");
@@ -558,11 +559,11 @@ public:
         }
         if (key == "requery") {
             data_->workspace->check();
-            if (data_->rollbackRevision!=data_->workspace->rollbackRevision) { mode_=Mode::Browse; pending_.clear(); changed_.clear(); }
+            if (data_->rollbackRevision!=data_->workspace->rollbackRevision) { mode_=Mode::Browse; pending_.clear(); changed_.clear(); chunkFields_.clear(); }
             require(mode_ == Mode::Browse, "DAO: Pending edit");
             reload(); return {};
         }
-        if (key == "close") { if (cloneCounted_) { --data_->workspace->clones; cloneCounted_=false; } closed_ = true; data_->cursors.remove(this); pending_.clear(); changed_.clear(); return {}; }
+        if (key == "close") { if (cloneCounted_) { --data_->workspace->clones; cloneCounted_=false; } closed_ = true; data_->cursors.remove(this); pending_.clear(); changed_.clear(); chunkFields_.clear(); return {}; }
         return value(text(name)); // implicit default Fields(name).Value
     }
     void assign(std::string_view name, const VbaValue& value) override {
@@ -662,12 +663,29 @@ public:
         if(!raw.isNull() && binaryFieldType(type)) throw VbaRuntimeError(13,"Binary field requires BLOB storage");
         return qtFieldValue(raw,type);
     }
+    void appendBinaryChunk(const QString& name,const VbaValue& argument) {
+        const auto type=fieldType(name);
+        if(!binaryFieldType(type) || mode_==Mode::Browse)
+            throw VbaRuntimeError(3251,"AppendChunk requires a native binary Edit/AddNew buffer");
+        const auto value=scalarVbaValue(argument);
+        if(value.kind!=VbaValue::Kind::ByteArray) throw VbaRuntimeError(3251,"AppendChunk currently requires Byte()");
+        const int index=column(name);
+        if(changed_.contains(index) && !chunkFields_.contains(index))
+            throw VbaRuntimeError(3251,"Mixed binary Value assignment and AppendChunk is unsupported");
+        auto bytes=chunkFields_.contains(index) ? pending_[index].toByteArray() : QByteArray("",0);
+        constexpr std::size_t limit=16*1024*1024;
+        if(value.bytes.size()>limit || static_cast<std::size_t>(bytes.size())>limit-value.bytes.size())
+            throw VbaRuntimeError(3251,"AppendChunk exceeds native binary buffer bound");
+        if(!value.bytes.empty()) bytes.append(reinterpret_cast<const char*>(value.bytes.data()),static_cast<qsizetype>(value.bytes.size()));
+        pending_[index]=bytes; changed_.insert(index); chunkFields_.insert(index);
+    }
     void set(const QString& name, const VbaValue& value) {
         checkTransaction();
         if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         require(mode_ != Mode::Browse, "DAO: Edit or AddNew required");
         const auto index = column(name);
         const auto type=data_->types.value(name.toCaseFolded());
+        if(chunkFields_.contains(index)) throw VbaRuntimeError(3251,"Mixed AppendChunk and binary Value assignment is unsupported");
         if(value.kind==VbaValue::Kind::ByteArray) {
             if(!binaryFieldType(type)) throw VbaRuntimeError(13,"Byte array requires a binary field");
             if(value.bytes.size()>static_cast<std::size_t>(std::numeric_limits<qsizetype>::max()))
@@ -854,7 +872,7 @@ private:
         }
         if (adding) id = query.lastInsertId();
         if(!adding && position_>=0 && position_<data_->ids.size()) data_->ids[position_]=id;
-        mode_ = Mode::Browse; pending_.clear(); changed_.clear();
+        mode_ = Mode::Browse; pending_.clear(); changed_.clear(); chunkFields_.clear();
         reload(false); position_ = data_->ids.indexOf(id);
         if(position_>=0) lastModified_=bookmarkAt(position_); else lastModified_.reset();
     }
@@ -866,7 +884,7 @@ private:
     std::optional<int> recordsetType_; // Opening kind, independent of write capability; unknown for host-only frozen adapters.
     std::optional<VbaValue> lastModified_;
     QVariantList pending_;
-    QSet<int> changed_;
+    QSet<int> changed_,chunkFields_;
     qsizetype position_{};
     Mode mode_{Mode::Browse};
     AccessQueryPlan queryPlan_;
@@ -902,6 +920,10 @@ VbaValue fieldCollection(std::shared_ptr<Recordset> owner) {
 }
 
 VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args) {
+    if(lower(name)=="appendchunk") {
+        if(args.size()!=1) throw VbaRuntimeError(450,"Field.AppendChunk requires Val");
+        owner_->appendBinaryChunk(name_,args[0]); return {};
+    }
     if(lower(name)=="getchunk") {
         if(args.size()!=2) throw VbaRuntimeError(450,"Field.GetChunk requires Offset and Bytes");
         return owner_->binaryChunk(name_,args[0],args[1]);
