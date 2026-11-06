@@ -1221,7 +1221,7 @@ public:
         const auto key=lower(name);
         if (key=="count") {
             if (!args.empty()) throw VbaRuntimeError(450,"DAO: Count takes no arguments");
-            return VbaValue::numeric(query_->plan_.parameters.size());
+            return integerCount(query_->plan_.parameters.size());
         }
         if(key=="refresh") {
             if(!args.empty()) throw VbaRuntimeError(450,"DAO: Refresh takes no arguments");
@@ -1326,7 +1326,7 @@ public:
             if(!query.exec("RELEASE "+savepoint)) queryFailure(query);
             ++generation; objects_.remove(canonical.toCaseFolded()); completed=true; return {};
         }
-        if(key=="count" && args.empty()) return longCount(names().size());
+        if(key=="count" && args.empty()) return integerCount(names().size());
         if(key=="refresh" && args.empty()) { (void)names(); return {}; }
         if(key!="item") throw VbaRuntimeError(438,"DAO: QueryDefs member unsupported");
         if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"DAO: QueryDef name/index required");
@@ -1551,7 +1551,7 @@ public:
         workspace_->check(); const auto names=nativeTableNames(db_); const auto key=lower(name);
         if (key=="count") {
             if (!args.empty()) throw VbaRuntimeError(450,"DAO: Count takes no arguments");
-            return VbaValue::numeric(names.size());
+            return integerCount(names.size());
         }
         if (key=="refresh") {
             if(!args.empty()) throw VbaRuntimeError(450,"DAO: Refresh takes no arguments");
@@ -1691,7 +1691,7 @@ public:
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto key=lower(name);
-        if (key=="count" && args.empty()) { (void)object_->member("Name",{}); return VbaValue::numeric(1); }
+        if (key=="count" && args.empty()) { (void)object_->member("Name",{}); return VbaValue::integer(1); }
         if (key=="item") return defaultMember(args,true);
         throw VbaRuntimeError(3251,"DAO: Collection member unsupported");
     }

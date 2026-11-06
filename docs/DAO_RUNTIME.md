@@ -472,3 +472,5 @@ covers the preceding copies and selected-record printing increments, including
 original recipe PDF output. GUI-free source is unchanged from the e837 core1/1
 (2.20 s); latest earlier e837 local Debian12/Ubuntu24.04 follow-ups remain2/2 each,
 not a new platform claim for this DDL increment.456/384/72 unchanged.
+
+DAO-Katalog-Count liefert nun für Parameters/QueryDefs/TableDefs/Workspaces/Databases nach öffentlicher statisch geprüfter PIA-Int16-Signatur200006 einen kontrollierten VBA Integer, keine generischen Double/Long. Echtes VBA VarType/NativeSubtype geprüft; Ziel1/1 (1,06 s), aktuelle App/Paket/Build-ID/SQLite/vier Originalhashes bestanden. Details/PIA-Hashes docs/DAO_COUNTS_RUNTIME.md; keine COM-Ausführung/Access2003-Oraclebehauptung. Letzte Vollsuite6cd40d1:48/48 (91,47 s).456/384/72 unverändert.

@@ -45,3 +45,25 @@ business code and fixture bytes are unchanged. Reference (API contract, not an
 Access2003 execution oracle):
 https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/tabledef-recordcount-property-dao
 No new test target, catalog ID or checkbox;456/384/72 unchanged.
+
+
+## DAO collection Count return contracts (2026-11-06)
+
+Parameters, QueryDefs, TableDefs and the native singleton Workspaces/Databases
+collections now return checked VBA Integer Count, matching existing Fields.Count.
+The public net20 Microsoft.Office.Interop.Access.Dao15.0 assembly was inspected
+without loading/executing COM: each get_Count method, including _Collection and
+_DynaCollection, has ECMA-335 signature200006 (instance, zero arguments, Int16).
+This corrects generic Double/Long responses; values above signed Integer range
+refuse overflow6 rather than returning a different subtype. Native record counts
+and RecordsAffected remain their separate checked Long contracts.
+
+Static source: NuGet Microsoft.Office.Interop.Access.Dao15.0.4420.1018, package
+SHA-256985973fed5435acfdcf05c7852ab6768879d70b9d75beb7436a05c549a229dea;
+net20 assembly SHA-25682589b2d5ecae5ddcda39076a33180b6cddb7f54a0cffd4329087eb1f507bed6.
+This is interface metadata evidence, not an Access2003 runtime/oracle test. No
+PIA, .NET or metadata parser is linked/shipped in LinAccess. Existing DAO VBA/
+C++ cases check VarType and numeric subtypes for all changed collections.
+DAO1/1 (1.06 s), current app/package/Build-ID/SQLite3.54.1/four original hashes
+pass. Last full suite6cd40d1:48/48 (91.47 s); no new full-suite/platform claim
+for this small subtype increment. F055/F121/F122 remain open;456/384/72 unchanged.

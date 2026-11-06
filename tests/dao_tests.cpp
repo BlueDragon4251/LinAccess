@@ -878,7 +878,7 @@ Dim item As Variant, count As Long
 Set database=CurrentDb
 Set definitions=database.QueryDefs
 If Not TypeOf definitions Is DAO.QueryDefs Then Err.Raise 5
-If definitions.Count<>2 Then Err.Raise 5
+If definitions.Count<>2 Or VarType(definitions.Count)<>vbInteger Then Err.Raise 5
 Set query=database.CreateQueryDef(Name:="Created From VBA",SQLText:="SELECT value FROM records")
 If query.Name<>"Created From VBA" Then Err.Raise 5
 If definitions.Count<>3 Then Err.Raise 5
@@ -1410,7 +1410,7 @@ End Sub)VBA","Übertragen",host);
             try { (void)definitions->enumerate(); } catch(const linaccess::VbaRuntimeError& error) { wrongThreadEnumeration=error.number; }
         });
         foreign.join(); assert(wrongThreadMember==3251 && wrongThreadEnumeration==3251);
-        assert(definitions->member("Count",{}).asNumber()==2);
+        assert(definitions->member("Count",{}).asNumber()==2 && definitions->member("Count",{}).numericType==linaccess::VbaValue::NumericType::Integer);
         assert(q.exec("CREATE TABLE _la_private_metadata(secret TEXT)"));
         assert(q.exec("CREATE VIEW visible_query AS SELECT * FROM items"));
         assert(definitions->member("Count",{}).asNumber()==2);
@@ -1659,6 +1659,7 @@ Set first=parameters.Item(Index:=0)
 If Not (first Is definition.Parameters(Index:="FIRST")) Then Err.Raise 5
 Me!ParameterIdentity=CStr(first Is definition.Parameters("FIRST"))
 Me!ParameterCount=CStr(parameters.Count)
+If VarType(parameters.Count)<>vbInteger Then Err.Raise 5
 names=""
 For Each parameter In parameters
 Let parameter=3
@@ -1960,9 +1961,9 @@ void testDaoTransactions() {
     auto workspace=engine->defaultMember({VbaValue::numeric(0)},true).object;
     assert(engine==linaccess::makeDaoEngine(db));
     assert(workspace==spaces->member("Item",{VbaValue::string("#Default Workspace#")}).object);
-    assert(spaces->member("Count",{}).asNumber()==1 && spaces->enumerate().size()==1);
+    assert(spaces->member("Count",{}).asNumber()==1 && spaces->enumerate().size()==1 && spaces->member("Count",{}).numericType==VbaValue::NumericType::Integer);
     auto databases=workspace->member("Databases",{}).object;
-    assert(databases->member("Count",{}).asNumber()==1 && databases->enumerate().size()==1);
+    assert(databases->member("Count",{}).asNumber()==1 && databases->enumerate().size()==1 && databases->member("Count",{}).numericType==VbaValue::NumericType::Integer);
     const auto defaultDatabase=workspace->defaultMember({VbaValue::numeric(0)},true).object;
     assert(defaultDatabase->member("Transactions",{}).truthy());
     assert(defaultDatabase==workspace->defaultMember({VbaValue::numeric(0)},true).object);
