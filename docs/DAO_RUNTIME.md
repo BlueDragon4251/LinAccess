@@ -251,3 +251,29 @@ original fixture hashes pass. The existing real DAO With/clone case now exits
 through a computed GoTo and successfully starts its real transaction afterward.
 This full run also covers the preceding native button mouse follow-up. Fixed
 456 work entries and 48 CTest targets remain unchanged.
+
+
+## Native Recordset.Type and local platform validation (2026-11-06)
+
+Recordset.Type exposes the selected native dbOpenDynaset2/dbOpenSnapshot4 kind
+as a readonly Integer. SQL-result readonly policy is separate from opening kind;
+Database/QueryDef factories now carry the actual mode instead of reinterpreting
+readonly as Snapshot. Clones retain that mode. Frozen form cursor adapters lack
+proven DAO type and continue to refuse3251. Invalid arguments450, writes383,
+closed handles3420; a real field named Type remains available through rs!Type.
+Existing DAO execution1/1 (1.02 s), rebuilt current app/all-target relink, current
+Debian payload/Build-ID/SQLite3.54.1 and four original hashes pass. GUI-free runtime
+is unchanged from1/1 (1.77 s). Full table-type/default/locking/ADO/Access-oracle
+semantics remain open under F054/F055. Original32-module inventory has zero dot-
+Type spellings; no additional original business execution is claimed.
+Reference: Microsoft Recordset.Type (DAO), readonly Integer, and
+QueryDef.OpenRecordset (DAO) query/dynaset default; current documentation is not
+an Access2003 execution oracle.
+
+Independent immutable e2d64c9 source copies now pass full local Debian12/Qt6.4
+48/48 (101.29 s) and Ubuntu24.04/Qt6.4 48/48 (93.65 s), including native preview/
+VBA print and actual recipe PDF proof. Both .deb packages pass payload/Build-ID/
+SQLite3.54.1 checks, actual installation/backend smoke and four original hashes.
+These are local container results, not GitHub CI successes; account payment/
+spending-limit rejection remains. The newer Recordset.Type increment has targeted
+host evidence, not yet a new full platform-matrix claim.456/384/72 unchanged.

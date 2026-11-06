@@ -1658,8 +1658,8 @@ End Sub
     assert(wrongCollection.status == linaccess::VbaExecutionStatus::Error && wrongCollection.errorNumber == 438);
     assert(linaccess::validateVbaProcedure("Sub Bad()\nExit For\nEnd Sub","Bad").status == linaccess::VbaExecutionStatus::Error);
 
-    assert(q.exec("CREATE TABLE property_collision(EOF INTEGER,Fields TEXT)"));
-    assert(q.exec("INSERT INTO property_collision VALUES(9,'field')"));
+    assert(q.exec("CREATE TABLE property_collision(EOF INTEGER,Fields TEXT,Type INTEGER)"));
+    assert(q.exec("INSERT INTO property_collision VALUES(9,'field',7)"));
     const auto collision = linaccess::executeVbaProcedure(R"VBA(
 Sub Collision()
 Dim rs As DAO.Recordset
@@ -1669,19 +1669,49 @@ Me!EofField = rs!EOF
 Me!EofProperty = rs.EOF
 Me!FieldsField = rs!Fields
 Me!FieldsCount = rs.Fields.Count
+Me!CursorType = rs.Type
+Me!CursorTypeKind = VarType(rs.Type)
+Me!TypeField = rs!Type
 rs.Edit
 Set fld = rs!EOF
 fld.Value = 10
 Me!FieldReference = rs!EOF.Value
 rs!Fields.Value = "changed"
+rs!Type.Value = 11
 rs.Update
 rs.Close
 End Sub
 )VBA","Collision",host);
     assert(collision.status == linaccess::VbaExecutionStatus::Completed);
     assert(host.fields["EofField"]=="9" && host.fields["EofProperty"]=="False");
-    assert(host.fields["FieldsField"]=="field" && host.fields["FieldsCount"]=="2");
+    assert(host.fields["FieldsField"]=="field" && host.fields["FieldsCount"]=="3");
     assert(host.fields["FieldReference"]=="10");
+    assert(host.fields["CursorType"]=="2" && host.fields["CursorTypeKind"]=="2" && host.fields["TypeField"]=="7");
+    assert(q.exec("SELECT Type FROM property_collision") && q.next() && q.value(0).toInt()==11); q.finish();
+    {
+        using linaccess::VbaValue;
+        auto database=host.currentDatabase();
+        auto dynaset=database->member("OpenRecordset",{VbaValue::string("property_collision"),VbaValue::integer(2)}).object;
+        auto clone=dynaset->member("Clone",{}).object;
+        assert(dynaset->member("Type",{}).asNumber()==2 && clone->member("Type",{}).asNumber()==2);
+        auto snapshot=database->member("OpenRecordset",{VbaValue::string("SELECT * FROM property_collision"),VbaValue::integer(4)}).object;
+        assert(snapshot->member("Type",{}).asNumber()==4 && !snapshot->member("Updatable",{}).boolean);
+        auto readonlyDynaset=database->member("OpenRecordset",{VbaValue::string("SELECT * FROM property_collision"),VbaValue::integer(2)}).object;
+        assert(readonlyDynaset->member("Type",{}).asNumber()==2 && !readonlyDynaset->member("Updatable",{}).boolean);
+        auto definition=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("SELECT * FROM property_collision")}).object;
+        auto queryDynaset=definition->member("OpenRecordset",{VbaValue::integer(2)}).object;
+        auto querySnapshot=definition->member("OpenRecordset",{VbaValue::integer(4)}).object;
+        assert(queryDynaset->member("Type",{}).asNumber()==2 && querySnapshot->member("Type",{}).asNumber()==4);
+
+        int error=0; try { dynaset->assign("Type",VbaValue::integer(4)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
+        assert(error==383 && dynaset->member("Type",{}).asNumber()==2);
+        error=0; try { (void)dynaset->member("Type",{VbaValue::integer(0)}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==450);
+        clone->member("Close",{}); dynaset->member("Close",{});
+        error=0; try { (void)dynaset->member("Type",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==3420);
+        auto frozen=linaccess::makeDaoSnapshot(db,{"id"},{},{{QVariant(1)}});
+        error=0; try { (void)frozen->member("Type",{}); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; } assert(error==3251);
+    }
+
     assert(q.exec("SELECT EOF FROM property_collision") && q.next() && q.value(0).toInt()==10); q.finish();
     assert(q.exec("SELECT Fields FROM property_collision") && q.next() && q.value(0).toString()=="changed"); q.finish();
     std::cout << "DAO recordset iteration, edit, insert, fields, cancel, delete and read-only checks passed\n";

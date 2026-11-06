@@ -31,6 +31,10 @@ Aktuelle Ausgabefortsetzung (2026-11-06)
 - GitHub Actions startet wegen Konto-Zahlungs-/Ausgabenlimitfehlern aktuell keine Jobs (Baseline c0ed5d1, Run42221275422). Keine frische erfolgreiche Distributionsmatrix behaupten.
 - Echte paginierte Datenblatt-Seitenansicht mit Navigation/Zoom sowie DoCmd/Application RunCommand acCmdPrint340/acCmdPrintPreview54 sind anschließend implementiert und gezielt geprüft: Kern/MainWindow/Layout3/3 (18,86 s), frisch GUI-freier Kern1/1 (1,77 s), aktuelles Paket/Build-ID/SQLite/vier Hashes bestanden. Letzter einzelner Vollsuite-Lauf48/48 gehört zu40c6b13 vor diesem Inkrement. Wahre9-Punkt-Metrik im PDF per Glyphhöhe geprüft. Keine neuen Katalogpunkte. Weitere feste offene Anforderungen selbstständig bearbeiten; tatsächlichen Git-Stand prüfen.
 
+Weitere geprüfte Fortsetzung
+- Unveränderliche Quellkopien von e2d64c9 bestehen lokal Debian12/Qt6.4 48/48 (101,29 s) und Ubuntu24.04/Qt6.4 48/48 (93,65 s), beide mit Paket-/Build-ID-/SQLite-/Installations-/Hashprüfung. Das sind lokale Containerprüfungen; GitHub-CI bleibt gesperrt.
+- Danach native Recordset.Type-Metadaten ergänzt: aufgezeichneter Cursor2/4 als readonly Integer, getrennt von SQL-Readonly, Clone-Erhalt und echte Type-Feld-Bang-Auflösung. Unbewiesene gefrorene Formularadapter3251; kein Table-/ADO-/Locking-Vollnachweis. DAO-Ziel1/1 (1,02 s), aktuelles Paket/Build-ID/SQLite/vier Hashes bestanden. Noch keine neue Vollmatrix dieses letzten Inkrements behaupten. F054/F055 bleiben offen;456/384/72 unverändert.
+
 Unbedingt offen lassen, bis korrekt gelöst
 - Original-Login: ColumnCount 5 gegenüber Column(5). Keine sechste Spalte, kein Passwort, kein Null-Fallback erfinden; Access-Referenz fehlt.
 - Verkaufsinitialisierung: Fehler3075 wegen fehlender aktiver Verkaufs-ID; keinen Geschäftszustand erfinden.

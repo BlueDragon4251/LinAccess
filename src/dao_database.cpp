@@ -341,8 +341,8 @@ public:
         if (key=="getrows") return VbaArgumentSignature{{"NumRows"},0};
         return {};
     }
-    Recordset(QSqlDatabase db, QString source, bool snapshot, QMap<QString,QVariant> bindings = {},AccessQueryPlan plan={})
-        : db_(std::move(db)), source_(std::move(source)), readOnly_(snapshot), bindings_(std::move(bindings)),queryPlan_(std::move(plan)) {
+    Recordset(QSqlDatabase db, QString source, bool snapshot, QMap<QString,QVariant> bindings = {},AccessQueryPlan plan={},int cursorKind=0)
+        : db_(std::move(db)), source_(std::move(source)), bindings_(std::move(bindings)), readOnly_(snapshot), recordsetType_(cursorKind ? cursorKind : snapshot ? 4 : 2),queryPlan_(std::move(plan)) {
         data_->workspace=workspaceState(db_); data_->rollbackRevision=data_->workspace->rollbackRevision;
         table_ = db_.tables().contains(source_, Qt::CaseInsensitive);
         readOnly_ |= !table_;
@@ -491,6 +491,11 @@ public:
             (void)column(field);
             return VbaValue::reference(std::make_shared<Field>(shared_from_this(), field));
         }
+        if(key=="type") {
+            if(!args.empty()) throw VbaRuntimeError(450,"DAO: Recordset.Type takes no arguments");
+            if(!recordsetType_) throw VbaRuntimeError(3251,"DAO: Frozen form cursor has no proven Recordset.Type");
+            return VbaValue::integer(static_cast<std::int16_t>(*recordsetType_));
+        }
         require(args.empty(), "DAO: Unexpected Recordset arguments");
         if (key=="bookmark") return bookmarkAt(position_);
         if (key=="lastmodified") {
@@ -552,6 +557,11 @@ public:
         return value(text(name)); // implicit default Fields(name).Value
     }
     void assign(std::string_view name, const VbaValue& value) override {
+        if(lower(name)=="type") {
+            if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
+            checkTransaction();
+            throw VbaRuntimeError(383,"DAO: Recordset.Type is read-only");
+        }
         if(lower(name)=="absoluteposition") {
             checkTransaction();
             if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
@@ -648,7 +658,7 @@ private:
     struct CloneTag {};
     Recordset(const Recordset& source,CloneTag)
         : data_(source.data_),db_(source.db_),source_(source.source_),bindings_(source.bindings_),
-          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),position_(-1),queryPlan_(source.queryPlan_) {
+          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),recordsetType_(source.recordsetType_),position_(-1),queryPlan_(source.queryPlan_) {
         cloneCounted_=true; ++data_->workspace->clones;
         data_->cursors.insert(this);
     }
@@ -826,6 +836,7 @@ private:
     QString source_;
     QMap<QString,QVariant> bindings_;
     bool table_{}, readOnly_{}, closed_{}, frozen_{},noMatch_{},cloneCounted_{};
+    std::optional<int> recordsetType_; // Opening kind, independent of write capability; unknown for host-only frozen adapters.
     std::optional<VbaValue> lastModified_;
     QVariantList pending_;
     QSet<int> changed_;
@@ -943,7 +954,7 @@ public:
             if(plan_.sql.isEmpty()) throw VbaRuntimeError(3251,"DAO: QueryDef SQL is not set");
             require(args.empty() || (args.size() == 1 && (args[0].asNumber() == 2 || args[0].asNumber() == 4)),"DAO: Recordset type unsupported");
             require(plan_.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT QueryDef required");
-            return VbaValue::reference(std::make_shared<Recordset>(db_,plan_.sql,true,bindAccessQueryParameters(plan_,values_),plan_));
+            return VbaValue::reference(std::make_shared<Recordset>(db_,plan_.sql,true,bindAccessQueryParameters(plan_,values_),plan_,args.empty() ? 2 : static_cast<int>(args[0].asNumber())));
         }
         if (key == "execute") {
             if(plan_.sql.isEmpty()) throw VbaRuntimeError(3251,"DAO: QueryDef SQL is not set");
@@ -1464,7 +1475,7 @@ public:
             const auto sql = source.trimmed().startsWith("SELECT ",Qt::CaseInsensitive) ? source : accessQuerySource(db_,source);
             const auto plan = compileAccessQuery(sql);
             require(plan.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT required");
-            return VbaValue::reference(std::make_shared<Recordset>(db_,plan.sql,true,bindAccessQueryParameters(plan,{}),plan));
+            return VbaValue::reference(std::make_shared<Recordset>(db_,plan.sql,true,bindAccessQueryParameters(plan,{}),plan,mode));
         }
         if (key == "execute") {
             require(args.size() == 1 || (args.size() == 2 && args[1].asNumber() == 128), "DAO: Execute arguments unsupported");
