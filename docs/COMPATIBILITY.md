@@ -3194,3 +3194,9 @@ pass targeted layout/mainwindow2/2 (13.00 s); final full current desktop48/48
 (86.11 s), current Debian/build-ID/SQLite/four hashes pass. GUI-free core is
 unchanged since navigation1/1 (1.92 s). No new CTest target/ID; F148/F135 remain
 open, fixed456/384/72.
+
+Native table and saved-query datasheets now offer genuine print dialogs and
+paginated atomic PDF output from checked snapshots of actual visible/filter/sort
+state. Dirty drafts and unsupported binary/size/geometry contexts refuse explicitly.
+Scope and remaining Access print/layout/oracle limits: [datasheet output](DATASHEET_PRINT_RUNTIME.md).
+F080/F148/F087 remain open; fixed456/384/72 unchanged.

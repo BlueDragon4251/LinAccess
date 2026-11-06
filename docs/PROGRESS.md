@@ -5838,3 +5838,37 @@ object-state guards remain strict. Scope: docs/NATIVE_FILE_SYSTEM_OBJECT.md.
 Final full desktop48/48 (85.42 s), fresh headless1/1 (1.69 s), updated Debian/
 build-ID/SQLite/four hashes pass. Original78/100; no Access result oracle.
 No new target/ID; F040/F042/F091 open,456/384/72 fixed.
+
+
+## Native datasheet output and new source comparison (2026-11-06)
+
+Tables and readonly/editable saved-query documents now print actual checked
+snapshots and export paginated PDFs atomically. Visible header order, filter/sort,
+complete bounded fetching, dirty/binary/Unicode refusal, modal/project/model
+lifetime guards and existing-file preservation are implemented. A Qt percentage-
+width table initially protruded by its grid padding; explicit point width now
+reserves both edges and a live frame-boundary guard prevents actual clipping.
+Scope: docs/DATASHEET_PRINT_RUNTIME.md. No physical printer job was accepted.
+
+Final current desktop48/48 (92.62 s), fresh GUI-free core1/1 (1.90 s), current
+Debian payload/Build-ID/pinned SQLite3.54.1 and four original fixture hashes pass.
+Existing mainwindow target additionally prints both actual recipe tables/39 rows
+from the supplied identical MDB, checking text/Null and unchanged original hash.
+No new CTest target or fixed ID; F080/F148/F087 remain open,456/384/72 fixed.
+
+The newly supplied Kassa MDB is a separate source variant, not a replacement for
+fixtures/raw: SHA-256 d9ff0f9d002b3ab59b3336a34e6c09d9c058d5b9b944b754259a78e277e77102,
+31227904 bytes. Same exported schema;28/29 tables have identical CSV bytes.
+The sole change is tblAnmeldung: upload0 rows, previous fixture1 row. No login
+state or credentials are manufactured. Its isolated copy passes the existing
+full table/cell regression and original query inventory:78/100, still without
+Access execution/printing oracle. Source comparison logs/copies stay private
+under /workspace/work/reference-20261106. Keks MDB and supplied Bridge ZIP are
+byte-identical to the existing fixtures; originals remain unchanged.
+
+Remote CI is currently blocked before job execution by GitHub account payment/
+spending limits (c0ed5d1, run42221275422); no fresh remote matrix pass is claimed.
+Codex Call was read from the actual feat/ask-via-call fd2cea7 checkout. The single
+reference-access request received a call ID but ended timeout with no API answer
+or confirmed decision; no delivery/conversation claim. User subsequently supplied
+source databases in chat. No completion call: the overall parity task is open.

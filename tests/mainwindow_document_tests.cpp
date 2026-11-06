@@ -3,6 +3,13 @@
 #include "access_form_objects.hpp"
 #include "access_table_view.hpp"
 #include "access_query.hpp"
+#include "native_datasheet_print.hpp"
+#include "access_table_import.hpp"
+#include "access_catalog.hpp"
+#include <QProcess>
+#include <QPrintDialog>
+#include <QPrinter>
+#include <QRegularExpression>
 #include <QAction>
 #include <QApplication>
 #include <QCryptographicHash>
@@ -107,6 +114,139 @@ AccessFormPreview* document(const std::string& name) {
     return nullptr;
 }
 void dispose();
+void exerciseReferenceDatasheet() {
+    const auto source=qEnvironmentVariable("LINACCESS_DATASHEET_REFERENCE");
+    if(source.isEmpty()) return;
+    const auto digest=[&] { QFile file(source); assert(file.open(QIODevice::ReadOnly)); return QCryptographicHash::hash(file.readAll(),QCryptographicHash::Sha256); };
+    const auto before=digest();
+    QTemporaryDir temporary; assert(temporary.isValid());
+    {
+        auto db=QSqlDatabase::addDatabase("QSQLITE","datasheet-reference"); db.setDatabaseName(temporary.filePath("copy.linaccess")); assert(db.open());
+        QSqlQuery setup(db); assert(setup.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
+        assert(linaccess::importAccessDatabase(db,source)==2);
+        int tables=0,rows=0,texts=0;
+        for(const auto& object:linaccess::AccessCatalog(source).objects()) {
+            if(object.kind!="table" || object.internal) continue;
+            QTableView view; linaccess::AccessTableModel model(nullptr,db);
+            model.setTable(object.name); assert(model.select()); view.setModel(&model);
+            const auto snapshot=linaccess::nativeDatasheetSnapshot(view,object.name);
+            const auto quoted='"'+QString(object.name).replace('"',"\"\"")+'"';
+            QSqlQuery actual(db); assert(actual.exec("SELECT * FROM "+quoted)); int row=0;
+            while(actual.next()) {
+                assert(row<snapshot.rows.size());
+                for(int col=0;col<actual.record().count();++col) {
+                    const auto value=actual.value(col);
+                    if(value.isNull()) assert(snapshot.rows[row][col].isEmpty());
+                    else if(value.metaType().id()==QMetaType::QString) { assert(snapshot.rows[row][col]==value.toString()); ++texts; }
+                }
+                ++row;
+            }
+            assert(row==snapshot.rows.size()); rows+=row;
+            linaccess::exportNativeDatasheetPdf(snapshot,temporary.filePath(QString::number(tables++)+".pdf"));
+        }
+        assert(tables==2 && rows==39 && texts>0);
+        db.close();
+    }
+    QSqlDatabase::removeDatabase("datasheet-reference"); assert(digest()==before);
+    std::cout<<"Original recipe datasheet PDF: 2 tables, 39 rows, actual text/NULL values and unchanged original hash verified\n";
+}
+
+void exerciseDatasheetOutput(MainWindow& window,QSqlDatabase db) {
+    QTemporaryDir output; assert(output.isValid());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE output_rows(id INTEGER PRIMARY KEY, value TEXT, hidden TEXT, bytes BLOB)"));
+    assert(sql.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<320) INSERT INTO output_rows SELECT x, 'row_'||printf('%03d',x), 'excluded', X'0102' FROM n"));
+    assert(window.openTableDocument("output_rows",0,1)==0);
+    auto* tabs=window.findChild<QTabWidget*>(); assert(tabs);
+    const QPointer<QWidget> page=tabs->currentWidget();
+    auto* view=page->findChild<QTableView*>(); assert(view);
+    auto* model=qobject_cast<linaccess::AccessTableModel*>(view->model()); assert(model);
+    view->hideColumn(2); view->hideColumn(3);
+    model->setFilter("id>=10"); view->sortByColumn(0,Qt::DescendingOrder);
+    view->horizontalHeader()->moveSection(view->horizontalHeader()->visualIndex(1),0);
+    view->setFocus(); window.activateWindow(); QApplication::processEvents();
+    const auto snapshot=linaccess::nativeDatasheetSnapshot(*view,"output_rows");
+    assert(snapshot.rows.size()==311 && snapshot.headers==QStringList({"value","id"}));
+    assert(snapshot.rows.front()==QStringList({"row_320","320"}) && snapshot.rows.back()==QStringList({"row_010","10"}));
+    const auto path=output.filePath("data.pdf");
+    assert(window.outputDatasheet(true,path).value("error").toInt()==0);
+    const auto read=[&] { QFile file(path); assert(file.open(QIODevice::ReadOnly)); return file.readAll(); };
+    const auto original=read(); assert(original.startsWith("%PDF-"));
+    QRegularExpression pages("/Type\\s*/Page(?:\\s|/|>)");
+    auto matches=pages.globalMatch(QString::fromLatin1(original)); int count=0;
+    while(matches.hasNext()) { matches.next(); ++count; } assert(count>1);
+    const auto reader=QStandardPaths::findExecutable("pdftotext");
+    if(!reader.isEmpty()) {
+        QProcess text; text.start(reader,{"-layout",path,"-"}); assert(text.waitForFinished(10000) && text.exitCode()==0);
+        const auto content=QString::fromUtf8(text.readAllStandardOutput());
+        assert(content.count("row_320")==1 && content.count("row_010")==1 && !content.contains("row_009") && !content.contains("excluded"));
+        assert(content.indexOf("row_320")<content.indexOf("row_010") && content.count("value")==count);
+        const auto lastPage=content.split(QChar(12),Qt::SkipEmptyParts).last(); assert(lastPage.contains("row_010"));
+    }
+    // A late rendering/range failure must preserve an existing destination too.
+    bool rangeRejected=false;
+    try { linaccess::exportNativeDatasheetPdf(snapshot,path,QPageLayout(QPageSize(QPageSize::A4),QPageLayout::Portrait,QMarginsF(15,15,15,15)),999999,999999); }
+    catch(const linaccess::VbaRuntimeError& error) { rangeRejected=error.number==5; }
+    assert(rangeRejected && read()==original);
+    bool printPdf=false;
+    const auto dialogPdf=output.filePath("dialog.pdf");
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        auto* printer=dialog->printer(); printer->setOutputFormat(QPrinter::PdfFormat); printer->setOutputFileName(dialogPdf);
+        printer->setPrintRange(QPrinter::PageRange); printer->setFromTo(2,2); printPdf=true;
+        dialog->QDialog::done(QDialog::Accepted);
+    });
+    const auto printResult=window.outputDatasheet(false);
+    if(printResult.value("error").toInt()) std::cerr<<"Datasheet print: "<<printResult.value("error").toInt()<<" "<<printResult.value("description").toString().toStdString()<<"\n";
+    assert(printResult.value("error").toInt()==0 && printPdf);
+    QFile dialogFile(dialogPdf); assert(dialogFile.open(QIODevice::ReadOnly));
+    auto printedPages=pages.globalMatch(QString::fromLatin1(dialogFile.readAll())); int printedCount=0;
+    while(printedPages.hasNext()) { printedPages.next(); ++printedCount; } assert(printedCount==1);
+    assert(model->setData(model->index(0,1),"draft"));
+    assert(window.outputDatasheet(true,path).value("error").toInt()==2501 && read()==original && model->isDirty()); model->revertAll();
+    view->showColumn(3);
+    assert(window.outputDatasheet(true,path).value("error").toInt()==3251 && read()==original); view->hideColumn(3);
+    assert(QFile::link(path,output.filePath("alias.pdf")));
+    assert(window.outputDatasheet(true,output.filePath("alias.pdf")).value("error").toInt()!=0 && read()==original);
+    bool printed=false;
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        printed=true; assert(!window.allowProjectClose(db.connectionName()));
+        assert(window.outputDatasheet(true,path).value("error").toInt()==2046); dialog->reject();
+    });
+    QTest::keyClick(view,Qt::Key_P,Qt::ControlModifier); assert(printed && read()==original);
+    // The modal dialog freezes actual values before another independent SQL write.
+    bool selected=false;
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        selected=true; assert(!window.allowProjectClose(db.connectionName()));
+        assert(sql.exec("UPDATE output_rows SET value='changed_after_snapshot' WHERE id=320"));
+        dialog->selectFile(output.filePath("frozen.pdf")); static_cast<QDialog*>(dialog)->accept();
+    });
+    assert(window.outputDatasheet(true).value("error").toInt()==0 && selected);
+    if(!reader.isEmpty()) {
+        QProcess text; text.start(reader,{"-layout",output.filePath("frozen.pdf"),"-"}); assert(text.waitForFinished(10000) && text.exitCode()==0);
+        const auto content=text.readAllStandardOutput(); assert(content.contains("row_320") && !content.contains("changed_after_snapshot"));
+    }
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        const int index=tabs->indexOf(page); assert(index>=0);
+        emit tabs->tabCloseRequested(index); assert(tabs->indexOf(page)<0);
+        dialog->selectFile(path); dialog->setOption(QFileDialog::DontConfirmOverwrite,true); static_cast<QDialog*>(dialog)->accept();
+    });
+    assert(window.outputDatasheet(true).value("error").toInt()==2501 && read()==original);
+    assert(sql.exec("INSERT INTO _la_objects(kind,name,definition) VALUES('query','output_query','{\"sql\":\"SELECT value,id FROM output_rows WHERE id IN (10,20) ORDER BY id DESC\"}')"));
+    assert(window.openQueryDocument("output_query",0,2).value("error").toInt()==0);
+    auto* queryView=tabs->currentWidget()->findChild<QTableView*>(); assert(queryView);
+    queryView->setFocus(); window.activateWindow(); QApplication::processEvents();
+    const auto query=linaccess::nativeDatasheetSnapshot(*queryView,"output_query");
+    assert(query.rows==QVector<QStringList>({{"row_020","20"},{"row_010","10"}}));
+    assert(window.outputDatasheet(true,output.filePath("query.pdf")).value("error").toInt()==0);
+    assert(window.closeQueryDocument(1,"output_query",2).value("error").toInt()==0);
+    assert(sql.exec("DELETE FROM _la_objects WHERE kind='query' AND name='output_query'"));
+    assert(sql.exec("DROP TABLE output_rows"));
+}
+
 void exerciseTableReplace(MainWindow& window,QSqlDatabase db) {
     QSqlQuery sql(db);
     assert(sql.exec("CREATE TABLE command_replace(id INTEGER PRIMARY KEY,value TEXT UNIQUE)"));
@@ -2405,6 +2545,8 @@ int main(int argc,char** argv) {
     assert(refused && hash()==beforeRefusal && QSqlDatabase::database("linaccess-main").databaseName()==third);
     exerciseQueryEditor(window,db);
     exerciseTableSave(window,db);
+    exerciseReferenceDatasheet();
+    exerciseDatasheetOutput(window,db);
     exerciseTableReplace(window,db);
     exerciseTableMultiDelete(window,db);
     exerciseRecordEscape(window,db);

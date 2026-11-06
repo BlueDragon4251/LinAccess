@@ -1389,3 +1389,7 @@ pass targeted layout/mainwindow2/2 (13.00 s); final full current desktop48/48
 (86.11 s), current Debian/build-ID/SQLite/four hashes pass. GUI-free core is
 unchanged since navigation1/1 (1.92 s). No new CTest target/ID; F148/F135 remain
 open, fixed456/384/72.
+
+Native table/query datasheet printing and atomic PDF output are implemented as
+bounded work under existing F080/F148/F087; scope and evidence are recorded in
+DATASHEET_PRINT_RUNTIME.md. The full requirements remain open, 456/384/72 unchanged.

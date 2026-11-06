@@ -618,3 +618,8 @@ bleibt offen.
 echten Druckdialog: Formulare geben das aktuelle Layout aus, Berichte ihren
 unterstützten Seitenumfang. Formular-KeyDown kann den Aufruf abbrechen;
 vollständige Access-Druck- und Tastaturparität bleibt offen.
+
+[Tabellen-/Abfragedatenblatt drucken und als PDF ausgeben](docs/DATASHEET_PRINT_RUNTIME.md)
+verwendet echte sichtbare, gefilterte/sortierte Daten und atomare PDF-Speicherung.
+Ungespeicherte Entwürfe und nicht unterstützte Inhalte werden ausdrücklich gemeldet;
+vollständige Access-Druck-/Formatparität bleibt offen.

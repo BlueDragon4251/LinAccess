@@ -34,6 +34,7 @@ public:
     Q_INVOKABLE QVariantMap findTableRecord(const QVariantMap& request);
     Q_INVOKABLE QVariantMap tableKeyboardContext();
     Q_INVOKABLE QVariantMap requeryTableDocument();
+    Q_INVOKABLE QVariantMap outputDatasheet(bool pdf,const QString& path = {});
     Q_INVOKABLE int selectDatabaseObject(int objectType,const QString& name,bool activate);
 
 private:
@@ -46,6 +47,7 @@ private:
     QTabWidget* tabs_{};
     QPointer<QWidget> activeDataPage_;
     int queryExecutionDepth_{};
+    bool datasheetOutputActive_{};
     QSet<QString> executingQueries_;
 
     bool finishActiveDataEditors();

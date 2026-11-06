@@ -400,7 +400,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 ### Datenblatt, Bearbeiten und Tastatur
 
 - [ ] **F054** — OpenRecordset, Fields/default members, EOF/BOF, navigation and bookmarks.
-- [ ] **F080** — Navigator, datasheet/form/design views, properties, toolbox, undo/redo and SQL designer.
+- [ ] **F080** — Navigator, datasheet/form/design views, properties, toolbox, undo/redo and SQL designer. Bounded native datasheet print/PDF is documented in DATASHEET_PRINT_RUNTIME.md; the complete requirement remains open.
 - [ ] **F129** — Full initialized original sale workflow: subsequent first/second keyboard AfterUpdate still fails 3075/1023 without a sale ID; independent document lifetimes, positive original sale snapshot and real report/printing remain open.
 - [ ] **F168** — Complete clipboard interoperability, multi-record selection/deletion, complete writable query sources, full deletion focus/event ordering and Access 2003 oracle. Bounded staged multi-record table deletion is in TABLE_MULTI_DELETE_RUNTIME.md; the complete requirement remains open.
 - [x] **F172** — Native single-record Copy/PasteAppend and selected-record Ctrl+C, typed clipboard, real SQL/bookmark/active-target tests and original manual-key conflict via direct invocation and native click on synthetic rows.

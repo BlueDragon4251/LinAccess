@@ -1,5 +1,6 @@
 #include "mainwindow.hpp"
 #include "native_grid_clipboard.hpp"
+#include "native_datasheet_print.hpp"
 #include "native_query_view.hpp"
 #include "native_input_box.hpp"
 #include "native_edit_menu.hpp"
@@ -283,6 +284,20 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     for(int index=0;index<2;++index) projectActions[index]->setShortcutContext(Qt::WindowShortcut);
     for (int i=0;i<4;++i) fileMenu->addAction(projectActions[i]);
     fileMenu->addSeparator();
+    auto* printData=fileMenu->addAction("Datenblatt &drucken...\tStrg+P"); printData->setObjectName("datasheet-print");
+    auto* pdfData=fileMenu->addAction("Datenblatt als PDF..."); pdfData->setObjectName("datasheet-pdf");
+    const auto outputData=[this](bool pdf) {
+        const QPointer<MainWindow> self=this;
+        const auto result=outputDatasheet(pdf);
+        if(self) if(const int error=result.value("error").toInt()) self->statusBar()->showMessage(result.value("description").toString()+" ("+QString::number(error)+")",10000);
+    };
+    connect(printData,&QAction::triggered,this,[outputData] { outputData(false); });
+    connect(pdfData,&QAction::triggered,this,[outputData] { outputData(true); });
+    connect(fileMenu,&QMenu::aboutToShow,this,[this,printData,pdfData] {
+        const bool enabled=activeDataPage_ && tabs_->currentWidget()==activeDataPage_ && !activePreviewDocument()
+            && AccessFormPreview::databaseWindowActive(this) && !QApplication::activeModalWidget() && !datasheetOutputActive_;
+        printData->setEnabled(enabled); pdfData->setEnabled(enabled);
+    });
     fileMenu->addAction("Beenden",this,[this] { close(); });
     auto* editMenu=linaccess::addNativeEditMenu(menuBar(),this);
     editMenu->addSeparator();
@@ -1077,6 +1092,83 @@ void MainWindow::focusDatabaseWindow() {
     explorer_->setFocus(Qt::ShortcutFocusReason);
 }
 
+QVariantMap MainWindow::outputDatasheet(bool pdf,const QString& requestedPath) {
+    if(datasheetOutputActive_ || queryExecutionDepth_ || QApplication::activeModalWidget() || !db_.isOpen()
+        || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this)
+        || !activeDataPage_ || tabs_->currentWidget()!=activeDataPage_)
+        return tableCommandFailure(2046,"Kein aktives Datenblatt für die Ausgabe verfügbar.");
+    const QPointer<MainWindow> self=this;
+    const QPointer<QWidget> page=activeDataPage_;
+    const QPointer<QTableView> view=page->findChild<QTableView*>();
+    const auto generation=property("la_project_generation");
+    const auto identity=db_.databaseName();
+    const auto alive=[self,page,view,generation,identity] {
+        return self && page && view && self->db_.isOpen() && self->db_.databaseName()==identity
+            && self->property("la_project_generation")==generation && self->tabs_->indexOf(page)>=0
+            && self->tabs_->currentWidget()==page && self->activeDataPage_==page
+            && !activePreviewDocument() && AccessFormPreview::databaseWindowActive(self)
+            && !linaccess::vbaExecutionStopRequested();
+    };
+    if(!view) return tableCommandFailure(2046,"Keine Datenblattansicht verfügbar.");
+    datasheetOutputActive_=true; ++queryExecutionDepth_;
+    const auto finished=qScopeGuard([self] { if(self) { self->datasheetOutputActive_=false; --self->queryExecutionDepth_; } });
+    try {
+        if(auto* table=dynamic_cast<linaccess::AccessTableView*>(view.data())) {
+            if(!table->finishEditing()) return tableModelFailure(qobject_cast<linaccess::AccessTableModel*>(table->model()),2501);
+            if(!alive()) return tableCommandFailure(2501,"Datenblatt wurde geschlossen.");
+            const auto source=validateEditableQuerySource(page,qobject_cast<linaccess::AccessTableModel*>(table->model()));
+            if(source.value("error").toInt()) return source;
+        }
+        const auto snapshot=linaccess::nativeDatasheetSnapshot(*view,page->property("la_project_object_name").toString());
+        const QPointer<QAbstractItemModel> capturedModel=view->model();
+        if(!alive()) return tableCommandFailure(2501,"Datenblatt wurde während der Vorbereitung geschlossen.");
+        if(pdf) {
+            auto path=requestedPath;
+            if(path.isEmpty()) {
+                // A heap dialog can be destroyed safely together with its owner.
+                QPointer<QFileDialog> dialog=new QFileDialog(this,"Datenblatt als PDF speichern",{},"PDF (*.pdf)");
+                dialog->setAcceptMode(QFileDialog::AcceptSave); dialog->setDefaultSuffix("pdf");
+                const int accepted=dialog->exec();
+                if(dialog && accepted==QDialog::Accepted && !dialog->selectedFiles().isEmpty()) path=dialog->selectedFiles().front();
+                if(dialog) delete dialog;
+                if(path.isEmpty()) return tableCommandFailure(2501,"PDF-Ausgabe abgebrochen.");
+            }
+            if(!alive() || view->model()!=capturedModel) return tableCommandFailure(2501,"Datenblatt ist nach dem Dialog nicht mehr verfügbar.");
+            if(QFileInfo(path).canonicalFilePath()==QFileInfo(identity).canonicalFilePath())
+                return tableCommandFailure(75,"Die geöffnete Projektdatei darf nicht durch PDF ersetzt werden.");
+            linaccess::exportNativeDatasheetPdf(snapshot,path);
+        } else {
+            QPrinter printer(QPrinter::HighResolution);
+            printer.setPageSize(QPageSize(QPageSize::A4)); printer.setPageMargins(QMarginsF(15,15,15,15));
+            QPointer<QPrintDialog> dialog=new QPrintDialog(&printer,this);
+            dialog->setOption(QAbstractPrintDialog::PrintSelection,false);
+            dialog->setOption(QAbstractPrintDialog::PrintPageRange,true);
+            const int accepted=dialog->exec(); if(dialog) delete dialog;
+            if(accepted!=QDialog::Accepted) return tableCommandFailure(2501,"Druckausgabe abgebrochen.");
+            if(!alive() || view->model()!=capturedModel) return tableCommandFailure(2501,"Datenblatt ist nach dem Dialog nicht mehr verfügbar.");
+            if(printer.printRange()!=QPrinter::AllPages && printer.printRange()!=QPrinter::PageRange)
+                return tableCommandFailure(3251,"Dieser Druckbereich wird noch nicht unterstützt.");
+            if(printer.copyCount()!=1) return tableCommandFailure(3251,"Mehrere Druckexemplare sind für Datenblätter noch nicht unterstützt.");
+            const int first=printer.printRange()==QPrinter::PageRange ? printer.fromPage() : 1;
+            const int last=printer.printRange()==QPrinter::PageRange ? printer.toPage() : 0;
+            const bool reverse=printer.pageOrder()==QPrinter::LastPageFirst;
+            if(printer.outputFormat()==QPrinter::PdfFormat) {
+                const auto path=printer.outputFileName();
+                if(path.isEmpty() || QFileInfo(path).canonicalFilePath()==QFileInfo(identity).canonicalFilePath())
+                    return tableCommandFailure(75,"Kein zulässiges PDF-Ziel ausgewählt.");
+                linaccess::exportNativeDatasheetPdf(snapshot,path,printer.pageLayout(),first,last,reverse);
+            } else {
+                if(!printer.outputFileName().isEmpty()) return tableCommandFailure(3251,"Native Druckdateien außer PDF werden noch nicht unterstützt.");
+                linaccess::renderNativeDatasheet(snapshot,printer,first,last,reverse);
+                if(printer.printerState()==QPrinter::Error) return tableCommandFailure(3146,"Druckgerät meldet einen Fehler.");
+            }
+        }
+        return {{"handled",true},{"error",0}};
+    } catch(const linaccess::VbaRuntimeError& error) {
+        return tableCommandFailure(error.number,QString::fromUtf8(error.what()));
+    }
+}
+
 bool MainWindow::eventFilter(QObject* watched,QEvent* event) {
     if(!tabs_) return QMainWindow::eventFilter(watched,event);
     if(watched==tabs_->tabBar() && (event->type()==QEvent::MouseButtonPress || event->type()==QEvent::MouseButtonRelease)) {
@@ -1118,6 +1210,12 @@ bool MainWindow::eventFilter(QObject* watched,QEvent* event) {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent* event) {
+    if(event->key()==Qt::Key_P && event->modifiers()==Qt::ControlModifier) {
+        const QPointer<MainWindow> self=this;
+        const auto result=outputDatasheet(false);
+        if(self) if(const int error=result.value("error").toInt()) self->statusBar()->showMessage(result.value("description").toString()+" ("+QString::number(error)+")",10000);
+        event->accept(); return;
+    }
     if(event->key()==Qt::Key_F6 && (event->modifiers()==Qt::ControlModifier || event->modifiers()==(Qt::ControlModifier|Qt::ShiftModifier))) {
         AccessFormPreview::cycleProjectDocuments(db_,this,event->modifiers().testFlag(Qt::ShiftModifier)); event->accept(); return;
     }
