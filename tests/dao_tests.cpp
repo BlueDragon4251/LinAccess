@@ -1520,7 +1520,8 @@ Dim rows As DAO.Recordset
 Dim names As String
 Set definition=CurrentDb.CreateQueryDef("", "PARAMETERS [first] Long, [second] Long; SELECT [first]+[second] AS result")
 Set parameters=definition.Parameters
-Set first=parameters.Item(0)
+Set first=parameters.Item(Index:=0)
+If Not (first Is definition.Parameters(Index:="FIRST")) Then Err.Raise 5
 Me!ParameterIdentity=CStr(first Is definition.Parameters("FIRST"))
 Me!ParameterCount=CStr(parameters.Count)
 names=""
@@ -1529,10 +1530,14 @@ Let parameter=3
 names=names & parameter.Name & ":"
 Next
 Me!ParameterNames=names
+parameters.Refresh
+If Not (first Is parameters.Item(Index:="first")) Then Err.Raise 5
+If first.Value<>3 Or parameters.Item(Index:="second").Value<>3 Then Err.Raise 5
 Set rows=definition.OpenRecordset(dbOpenSnapshot)
 Me!CollectionValue=CStr(rows.Fields(0).Value)
 rows.Close
 definition.SQL="PARAMETERS [replacement] Long; SELECT [replacement] AS result"
+parameters.Refresh
 Me!ReplacementCount=CStr(parameters.Count)
 On Error Resume Next
 Me!InvalidName=first.Name
@@ -1543,15 +1548,21 @@ Err.Clear
 On Error Resume Next
 Me!InvalidCount=parameters.Count
 Me!ClosedParameters=CStr(Err.Number)
+Err.Clear
+parameters.Refresh
+Me!ClosedParameterRefresh=CStr(Err.Number)
 End Sub
 )VBA","CollectionExecution",host);
     assert(parameterCollection.status==linaccess::VbaExecutionStatus::Completed);
     assert(host.fields["ParameterIdentity"]=="True" && host.fields["ParameterCount"]=="2");
     assert(host.fields["ParameterNames"]=="first:second:" && host.fields["CollectionValue"]=="6");
-    assert(host.fields["ReplacementCount"]=="1" && host.fields["StaleParameter"]=="3420" && host.fields["ClosedParameters"]=="3420");
+    assert(host.fields["ReplacementCount"]=="1" && host.fields["StaleParameter"]=="3420" && host.fields["ClosedParameters"]=="3420" && host.fields["ClosedParameterRefresh"]=="3420");
     auto emptyDefinition=host.currentDatabase()->member("CreateQueryDef",{linaccess::VbaValue::string(""),linaccess::VbaValue::string("SELECT 1")}).object;
     auto emptyParameters=emptyDefinition->member("Parameters",{}).object;
     assert(emptyParameters->member("Count",{}).asNumber()==0 && emptyParameters->enumerate().empty());
+    emptyParameters->member("Refresh",{});
+    int refreshArguments=0; try { emptyParameters->member("Refresh",{linaccess::VbaValue::integer(1)}); }
+    catch(const linaccess::VbaRuntimeError& error) { refreshArguments=error.number; } assert(refreshArguments==450);
     bool absentIndex=false;
     try { (void)emptyParameters->member("Item",{linaccess::VbaValue::numeric(0)}); }
     catch(const linaccess::VbaRuntimeError& error) { absentIndex=error.number==3265; }

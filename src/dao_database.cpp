@@ -941,7 +941,7 @@ public:
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=lower(name);
-        if (key=="fields") return VbaArgumentSignature{{"Index"},0};
+        if (key=="fields" || key=="parameters") return VbaArgumentSignature{{"Index"},0};
         if (key=="openrecordset") return VbaArgumentSignature{{"Type"},0};
         if (key=="execute") return VbaArgumentSignature{{"Options"},0};
         return {};
@@ -960,7 +960,8 @@ public:
         }
         if (key == "parameters") {
             auto collection=parameters();
-            return args.empty() ? VbaValue::reference(collection) : collection->member("Item",args);
+            return args.empty() || (args.size()==1 && args[0].kind==VbaValue::Kind::Missing)
+                ? VbaValue::reference(collection) : collection->member("Item",args);
         }
         if (key == "openrecordset") {
             if(plan_.sql.isEmpty()) throw VbaRuntimeError(3251,"DAO: QueryDef SQL is not set");
@@ -1111,6 +1112,9 @@ class QueryParameters final : public VbaObject {
 public:
     std::string_view className() const override { return "Parameters"; }
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(lower(name)=="item") return VbaArgumentSignature{{"Index"},1}; return {};
+    }
     explicit QueryParameters(std::shared_ptr<QueryDefinition> query) : query_(std::move(query)) {}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         query_->refresh();
@@ -1118,6 +1122,10 @@ public:
         if (key=="count") {
             if (!args.empty()) throw VbaRuntimeError(450,"DAO: Count takes no arguments");
             return VbaValue::numeric(query_->plan_.parameters.size());
+        }
+        if(key=="refresh") {
+            if(!args.empty()) throw VbaRuntimeError(450,"DAO: Refresh takes no arguments");
+            return {};
         }
         if (key!="item") throw VbaRuntimeError(438,"DAO: Parameters collection member unsupported");
         if (args.size()!=1) throw VbaRuntimeError(450,"DAO: Parameter name/index required");

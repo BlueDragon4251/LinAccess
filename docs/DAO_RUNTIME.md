@@ -118,7 +118,7 @@ results, SQL replacement, stale references, empty collections and close errors.
 The six original parameter declarations exercise collection count/order/identity;
 five also execute positive filtered recordsets (QUERY_ORIGINS.md).
 
-Parameter Type/Attributes metadata, implicit parameter inference, Refresh,
+Complete Parameter Type/Attributes metadata, implicit parameter inference, full Access Refresh,
 ADO collections and every default-member/coercion combination remain incomplete.
 
 Cursor/clone/bookmark operations and the original generated form-search path
@@ -338,3 +338,21 @@ not solve unobserved drop/recreate identity or full Access ordering/refresh.
 Existing DAO target only; F055/F121 remain open,456/384/72 unchanged.
 
 Metadatenanbindung: vorhandenes DAO-Ziel1/1 (0,99 s) einschließlich tatsächlichem typisiertem VBA, benannten Zugriffen, Refresh und fremdem Thread bestanden; aktuelles Paket/Build-ID/SQLite3.54.1 und vier Originalhashes bestanden. Die Vollsuite48/48 (98,29 s) gehört zum vorherigen a00eb29; kein neuer Vollsuite-/Matrixlauf für dieses kleine Inkrement behauptet.
+
+
+## Parameter collection refresh and named lookup (2026-11-06)
+
+QueryDef.Parameters accepts the checked optional Index signature and explicit
+Missing returns the actual collection. Parameters.Item supports named Index.
+Refresh validates the live QueryDef and its currently compiled declaration
+collection; unchanged source preserves cached Parameter identity and assigned
+values. A replaced owned SQL source still uses the existing refresh/generation
+path, so prior Parameter handles remain invalid rather than being revived.
+Closed QueryDef refresh is3420 and extra Refresh arguments450. No rows or
+parameter expressions execute during Refresh. This bounded implementation does
+not discover undeclared Access context parameters or claim full COM/Jet metadata
+refresh behavior. Existing DAO regression executes named VBA lookups, assigns
+values, refreshes, checks identity/value preservation, executes actual SQL and
+checks replaced/closed definitions. F055/F121/F122 remain open;456/384/72 unchanged.
+
+Parameterfortsetzung: bestehendes DAO-Ziel1/1 (1,09 s), aktuelle App und Debian-Paket/Build-ID/SQLite3.54.1/vier Originalhashes bestanden. Named Index/Refresh und Werterhalt durch echtes VBA geprüft; letzter Vollsuite-Lauf bleibt a00eb29 mit48/48 (98,29 s). Kein neuer Katalogpunkt, keine vollständige Parameter-/Jet-Parität.
