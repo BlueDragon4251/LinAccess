@@ -151,6 +151,66 @@ void exerciseReferenceDatasheet() {
     std::cout<<"Original recipe datasheet PDF: 2 tables, 39 rows, actual text/NULL values and unchanged original hash verified\n";
 }
 
+void exerciseDatasheetPageSetup(MainWindow& window,QSqlDatabase db) {
+    QTemporaryDir directory; assert(directory.isValid()); QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE page_layout_rows(id INTEGER PRIMARY KEY,value TEXT)"));
+    assert(sql.exec("INSERT INTO page_layout_rows VALUES(1,'geometry')")); sql.finish();
+    const auto open=[&] { assert(window.openTableDocument("page_layout_rows",0,1)==0); window.activateWindow(); QApplication::processEvents(); };
+    const auto close=[&] { assert(window.closeTableDocument(0,"page_layout_rows",2).value("error").toInt()==0); QApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); };
+    const auto accept=[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-datasheet-page-setup");
+        assert(!window.allowProjectClose(db.connectionName()) && window.setupDatasheetPage().value("error").toInt()==2046);
+        dialog->findChild<QComboBox*>("report-page-orientation")->setCurrentIndex(1);
+        dialog->findChild<QDoubleSpinBox*>("report-page-left")->setValue(25);
+        auto* save=dialog->findChild<QCheckBox*>("report-page-save"); assert(save && save->isEnabled()); save->setChecked(true);
+        dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+    };
+    open(); QTimer::singleShot(0,&window,accept); assert(window.setupDatasheetPage().value("error").toInt()==0);
+    const auto path=directory.filePath("geometry.pdf");
+    const auto read=[&] { QFile file(path); assert(file.open(QIODevice::ReadOnly)); return file.readAll(); };
+    assert(window.outputDatasheet(true,path).value("error").toInt()==0);
+    const QRegularExpression media("/MediaBox\\s*\\[\\s*0\\s+0\\s+([0-9.]+)\\s+([0-9.]+)");
+    auto match=media.match(QString::fromLatin1(read())); assert(match.hasMatch() && match.captured(1).toDouble()>match.captured(2).toDouble());
+    const auto reader=QStandardPaths::findExecutable("pdftotext");
+    if(!reader.isEmpty()) {
+        QProcess text; text.start(reader,{"-bbox",path,"-"}); assert(text.waitForFinished(10000) && text.exitCode()==0);
+        const auto position=QRegularExpression("<word xMin=\"([0-9.]+)\"").match(QString::fromUtf8(text.readAllStandardOutput()));
+        assert(position.hasMatch() && position.captured(1).toDouble()>70 && position.captured(1).toDouble()<90);
+    }
+    assert(db.transaction()); assert(sql.exec("UPDATE page_layout_rows SET value='pending'"));
+    QTimer::singleShot(0,&window,accept); assert(window.setupDatasheetPage().value("error").toInt()==0);
+    assert(db.rollback()); assert(sql.exec("SELECT value FROM page_layout_rows") && sql.next() && sql.value(0).toString()=="geometry"); sql.finish();
+    close(); open();
+    assert(sql.exec("CREATE TEMP TABLE _la_datasheet_page_setup(incorrect TEXT)"));
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        assert(dialog->findChild<QComboBox*>("report-page-orientation")->currentIndex()==1);
+        assert(dialog->findChild<QDoubleSpinBox*>("report-page-left")->value()==25);
+        dialog->findChild<QComboBox*>("report-page-orientation")->setCurrentIndex(0); dialog->reject();
+    });
+    assert(window.setupDatasheetPage().value("error").toInt()==2501);
+    assert(window.outputDatasheet(true,path).value("error").toInt()==0);
+    match=media.match(QString::fromLatin1(read())); assert(match.hasMatch() && match.captured(1).toDouble()>match.captured(2).toDouble());
+    assert(sql.exec("DROP TABLE temp._la_datasheet_page_setup"));
+    assert(sql.exec("SELECT layout FROM main._la_datasheet_page_setup WHERE kind='table' AND name='page_layout_rows'") && sql.next());
+    auto changed=QJsonDocument::fromJson(sql.value(0).toString().toUtf8()).object(); sql.finish();
+    auto edges=changed.value("margins_mm").toArray(); edges[0]=30; changed.insert("margins_mm",edges);
+    const auto external=QString::fromUtf8(QJsonDocument(changed).toJson(QJsonDocument::Compact));
+    QTimer::singleShot(0,&window,[&] {
+        sql.prepare("UPDATE main._la_datasheet_page_setup SET layout=? WHERE kind='table' AND name='page_layout_rows'"); sql.addBindValue(external); assert(sql.exec()); sql.finish(); accept();
+    });
+    assert(window.setupDatasheetPage().value("error").toInt()==3251);
+    assert(sql.exec("SELECT layout FROM main._la_datasheet_page_setup WHERE kind='table' AND name='page_layout_rows'") && sql.next() && sql.value(0).toString()==external); sql.finish();
+    close();
+    assert(sql.exec("UPDATE main._la_datasheet_page_setup SET layout='{invalid' WHERE kind='table' AND name='page_layout_rows'"));
+    open(); const auto prior=read(); assert(window.outputDatasheet(true,path).value("error").toInt()==3251 && read()==prior);
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->windowTitle().contains("reparieren")); accept();
+    });
+    assert(window.setupDatasheetPage().value("error").toInt()==0 && window.outputDatasheet(true,path).value("error").toInt()==0);
+    assert(sql.exec("SELECT COUNT(*) FROM page_layout_rows") && sql.next() && sql.value(0).toInt()==1); sql.finish(); close();
+}
+
 void exerciseDatasheetOutput(MainWindow& window,QSqlDatabase db) {
     QTemporaryDir output; assert(output.isValid());
     QSqlQuery sql(db);
@@ -258,6 +318,11 @@ DoCmd.SelectObject acTable, "output_rows", False
 Application.RunCommand Command:=acCmdPrintPreview
 Me.Tag = "previewed"
 End Sub
+Sub SetupData()
+DoCmd.SelectObject acTable, "output_rows", False
+Application.RunCommand Command:=acCmdPageSetup
+Me.Tag = "configured"
+End Sub
 )vb";
         AccessFormPreview caller("output-command-caller",source,code,db,&window);
         std::vector<linaccess::VbaValue> arguments;
@@ -274,6 +339,12 @@ End Sub
         previewed=false; QTimer::singleShot(0,&window,inspectPreview);
         const auto preview=caller.executeProcedure("PreviewData",arguments);
         assert(preview.status==linaccess::VbaExecutionStatus::Completed && previewed && makePreviewFormObject(caller)->member("Tag",{}).asText()=="previewed");
+        QTimer::singleShot(0,&window,[&] {
+            auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-datasheet-page-setup");
+            dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+        });
+        const auto configured=caller.executeProcedure("SetupData",arguments);
+        assert(configured.status==linaccess::VbaExecutionStatus::Completed && makePreviewFormObject(caller)->member("Tag",{}).asText()=="configured");
         assert(caller.close());
     }
     QTimer::singleShot(0,&window,[&] {
@@ -289,6 +360,13 @@ End Sub
     queryView->setFocus(); window.activateWindow(); QApplication::processEvents();
     const auto query=linaccess::nativeDatasheetSnapshot(*queryView,"output_query");
     assert(query.rows==QVector<QStringList>({{"row_020","20"},{"row_010","10"}}));
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-datasheet-page-setup");
+        dialog->findChild<QComboBox*>("report-page-orientation")->setCurrentIndex(1);
+        dialog->findChild<QCheckBox*>("report-page-save")->setChecked(true);
+        dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+    });
+    assert(window.setupDatasheetPage().value("error").toInt()==0);
     assert(window.outputDatasheet(true,output.filePath("query.pdf")).value("error").toInt()==0);
     assert(window.closeQueryDocument(1,"output_query",2).value("error").toInt()==0);
     assert(sql.exec("DELETE FROM _la_objects WHERE kind='query' AND name='output_query'"));
@@ -2595,6 +2673,7 @@ int main(int argc,char** argv) {
     exerciseTableSave(window,db);
     exerciseReferenceDatasheet();
     exerciseDatasheetOutput(window,db);
+    exerciseDatasheetPageSetup(window,db);
     exerciseTableReplace(window,db);
     exerciseTableMultiDelete(window,db);
     exerciseRecordEscape(window,db);

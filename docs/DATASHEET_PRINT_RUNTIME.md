@@ -86,3 +86,47 @@ Actual VBA Print writes a private PDF, then continues in its caller; named
 Application preview navigates real pages and continues with its own Tag intact.
 The last single full desktop48/48 (92.62 s) is the preceding40c6b13 output commit,
 not a new full-suite claim for this increment. No new target or ID;456/384/72 fixed.
+
+
+## Datasheet page setup and persisted geometry (2026-11-06)
+
+File > Datenblatt: Seite einrichten and native RunCommand acCmdPageSetup32 open
+the existing functional Qt document-geometry dialog. It edits actual QPageLayout
+paper size/custom dimensions, portrait/landscape and four millimeter margins.
+The report dialog implementation is reused; its save choice is labeled for the
+project. No fake printer or print job is created to configure page geometry.
+Accepted geometry belongs to the open table/query document and drives the same
+preview, PDF writer and print-layout transfer. Native print-dialog selection can
+still supply actual device settings. Initial defaults remain A4/15mm; Cancel
+preserves the prior layout. Existing snapshot/draft/content/size/modal/project/
+reentry/weak-owner checks also gate setup; this does not expand binary printing.
+
+The explicit Im Projekt speichern choice stores version1 mm geometry in the
+checked main._la_datasheet_page_setup catalog, keyed by table/query kind and
+case-folded object name. It writes only the native project, never the MDB or
+archived VBA. A savepoint plus conditional existing-row update/new-row insert
+rejects concurrent edits and does not commit a caller's transaction. Actual catalog
+shape and resulting settings are verified; TEMP shadows cannot redirect reads/
+writes. Declining persistence keeps session-only geometry. Name-based settings
+are not proof of immutable drop/recreate/rename identity or imported printer data.
+
+Malformed stored geometry blocks fresh-document output3251 without touching an
+existing PDF. Setup explicitly offers repair geometry; persistence still requires
+the save choice. Oversized/wrong-schema catalogs are refused rather than rewritten.
+Project/table closure after a dialog cannot save/apply settings to another target.
+Physical printer capabilities, original PrtMip/PrtDevMode/PrtDevNames, print events,
+full Access format/layout/error equivalence and horizontal multi-sheet output
+remain open under F080/F087/F148. No new catalog ID/checkbox/test target.
+
+Existing mainwindow_documents checks real table/query setup, exact PDF MediaBox
+orientation and independent25mm glyph x-position, close/reopen persistence,
+cancel, TEMP shadow immunity, concurrent-update preservation, outer-transaction
+rollback, malformed-setting refusal/repair and actual named Application.RunCommand
+with caller Me/continuation preserved. Microsoft's actual AcCommand table confirms
+PageSetup32; this is an API source, not an Access2003 execution oracle.
+Targeted1/1 (3.64 s), then full current Debian13 desktop48/48 (89.86 s), including
+both original recipe tables/39 rows from a protected copy, pass. Current package/
+Build-ID/pinned SQLite3.54.1 and four original fixture hashes pass. Latest earlier
+local Debian12/Ubuntu24.04 follow-ups cover41b193c DAO/payload/install/hash checks;
+no new distribution matrix or GitHub CI claim for this page-setup increment.
+456/384/72 unchanged.

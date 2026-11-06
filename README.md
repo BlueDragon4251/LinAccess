@@ -625,3 +625,5 @@ vollständige Access-Druck- und Tastaturparität bleibt offen.
 verwendet echte sichtbare, gefilterte/sortierte Daten und atomare PDF-Speicherung.
 Ungespeicherte Entwürfe und nicht unterstützte Inhalte werden ausdrücklich gemeldet;
 vollständige Access-Druck-/Formatparität bleibt offen.
+
+Die Datenblatt-Seiteneinrichtung verwendet echte Papier-/Randgeometrie für Vorschau, Druck und PDF. Einstellungen gelten je geöffnetem Dokument und lassen sich ausdrücklich im nativen Projekt speichern; Details und Grenzen stehen in der verlinkten Druckdokumentation.
