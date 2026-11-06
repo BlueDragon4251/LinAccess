@@ -202,6 +202,24 @@ void exerciseDatasheetOutput(MainWindow& window,QSqlDatabase db) {
     QFile dialogFile(dialogPdf); assert(dialogFile.open(QIODevice::ReadOnly));
     auto printedPages=pages.globalMatch(QString::fromLatin1(dialogFile.readAll())); int printedCount=0;
     while(printedPages.hasNext()) { printedPages.next(); ++printedCount; } assert(printedCount==1);
+    bool previewed=false;
+    const auto inspectPreview=[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-datasheet-preview");
+        auto* pages=dialog->findChild<QPrintPreviewWidget*>("datasheet-preview-pages"); assert(pages); pages->updatePreview();
+        assert(pages->property("la_datasheet_pages_valid").toBool() && pages->pageCount()>1);
+        auto* number=dialog->findChild<QSpinBox*>("datasheet-preview-page"); assert(number && number->maximum()==pages->pageCount());
+        number->setValue(pages->pageCount()); assert(pages->currentPage()==pages->pageCount());
+        assert(!window.allowProjectClose(db.connectionName()) && window.previewDatasheet().value("error").toInt()==2046);
+        previewed=true; dialog->reject();
+    };
+    QTimer::singleShot(0,&window,inspectPreview);
+    window.findChild<QAction*>("datasheet-preview")->trigger(); assert(previewed);
+    if(!reader.isEmpty()) {
+        QProcess text; text.start(reader,{"-bbox",path,"-"}); assert(text.waitForFinished(10000) && text.exitCode()==0);
+        QRegularExpression word("<word[^>]*yMin=\"([^\"]+)\"[^>]*yMax=\"([^\"]+)\"[^>]*>value</word>");
+        const auto bounds=word.match(QString::fromUtf8(text.readAllStandardOutput())); assert(bounds.hasMatch());
+        const double height=bounds.captured(2).toDouble()-bounds.captured(1).toDouble(); assert(height>6 && height<11);
+    }
     assert(model->setData(model->index(0,1),"draft"));
     assert(window.outputDatasheet(true,path).value("error").toInt()==2501 && read()==original && model->isDirty()); model->revertAll();
     view->showColumn(3);
@@ -227,6 +245,36 @@ void exerciseDatasheetOutput(MainWindow& window,QSqlDatabase db) {
     if(!reader.isEmpty()) {
         QProcess text; text.start(reader,{"-layout",output.filePath("frozen.pdf"),"-"}); assert(text.waitForFinished(10000) && text.exitCode()==0);
         const auto content=text.readAllStandardOutput(); assert(content.contains("row_320") && !content.contains("changed_after_snapshot"));
+    }
+    {
+        const QByteArray source="Begin Form\nEnd\n";
+        const QByteArray code=R"vb(Sub PrintData()
+DoCmd.SelectObject acTable, "output_rows", False
+DoCmd.RunCommand acCmdPrint
+Me.Tag = "printed"
+End Sub
+Sub PreviewData()
+DoCmd.SelectObject acTable, "output_rows", False
+Application.RunCommand Command:=acCmdPrintPreview
+Me.Tag = "previewed"
+End Sub
+)vb";
+        AccessFormPreview caller("output-command-caller",source,code,db,&window);
+        std::vector<linaccess::VbaValue> arguments;
+        const auto nativePdf=output.filePath("vba.pdf");
+        QTimer::singleShot(0,&window,[&] {
+            auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget()); assert(dialog);
+            auto* printer=dialog->printer(); printer->setOutputFormat(QPrinter::PdfFormat); printer->setOutputFileName(nativePdf);
+            dialog->QDialog::done(QDialog::Accepted);
+        });
+        const auto printed=caller.executeProcedure("PrintData",arguments);
+        if(printed.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Native VBA print: "<<printed.errorNumber<<" "<<printed.explanation<<"\n";
+        assert(printed.status==linaccess::VbaExecutionStatus::Completed && QFileInfo::exists(nativePdf));
+        assert(makePreviewFormObject(caller)->member("Tag",{}).asText()=="printed");
+        previewed=false; QTimer::singleShot(0,&window,inspectPreview);
+        const auto preview=caller.executeProcedure("PreviewData",arguments);
+        assert(preview.status==linaccess::VbaExecutionStatus::Completed && previewed && makePreviewFormObject(caller)->member("Tag",{}).asText()=="previewed");
+        assert(caller.close());
     }
     QTimer::singleShot(0,&window,[&] {
         auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(dialog);

@@ -5872,3 +5872,27 @@ Codex Call was read from the actual feat/ask-via-call fd2cea7 checkout. The sing
 reference-access request received a call ID but ended timeout with no API answer
 or confirmed decision; no delivery/conversation claim. User subsequently supplied
 source databases in chat. No completion call: the overall parity task is open.
+
+
+## Datasheet preview and VBA print commands (2026-11-06)
+
+The same checked snapshot now drives a genuine modal QPrintPreviewWidget page
+view with actual page count, page navigation and zoom. Its dialog owns the widget
+and is destroyed before its printer. It offers no uncontrolled print-to-file
+shortcut bypassing the atomic output controller. Failed rendering disables the
+page view and preserves an explicit failure; source/project closure cannot be
+reported as successful output. The original project/reentry/draft guards remain.
+
+DoCmd.RunCommand acCmdPrint and Application.RunCommand acCmdPrintPreview address
+the active table/query through the existing dispatcher, preserving caller Me.
+Microsoft's actual AcCommand enumeration was read: Print340, PrintPreview54.
+Unsupported form/report RunCommand coverage remains unchanged. The renderer now
+uses a 72-dpi measurement device for true 9-point document metrics, independent
+of screen DPI; an extracted PDF glyph-height assertion checks the actual result.
+
+Existing core/mainwindow/layout3/3 (18.86 s), fresh GUI-free core1/1 (1.77 s),
+current Debian payload/Build-ID/SQLite3.54.1 and four original hashes pass.
+Actual VBA Print writes a private PDF, then continues in its caller; named
+Application preview navigates real pages and continues with its own Tag intact.
+The last single full desktop48/48 (92.62 s) is the preceding40c6b13 output commit,
+not a new full-suite claim for this increment. No new target or ID;456/384/72 fixed.

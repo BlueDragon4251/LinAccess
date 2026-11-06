@@ -12,6 +12,7 @@
 #include <QSaveFile>
 #include <QFileInfo>
 #include <QPainter>
+#include <QImage>
 #include <QAbstractTextDocumentLayout>
 #include <QSqlError>
 #include <QScopeGuard>
@@ -110,7 +111,10 @@ inline std::unique_ptr<QTextDocument> nativeDatasheetDocument(const NativeDatash
 }
 // Render explicitly to observe painter/page failures; QTextDocument::print is void.
 inline void renderNativeDatasheet(const NativeDatasheetSnapshot& snapshot,QPagedPaintDevice& device,int first=1,int last=0,bool reverse=false) {
+    QImage pointMetrics(1,1,QImage::Format_ARGB32);
+    pointMetrics.setDotsPerMeterX(2835); pointMetrics.setDotsPerMeterY(2835); // 72 dpi, rounded to integral dots/metre.
     auto doc=nativeDatasheetDocument(snapshot);
+    doc->documentLayout()->setPaintDevice(&pointMetrics);
     QPainter painter;
     if(!painter.begin(&device)) throw VbaRuntimeError(3146,"Druckgerät konnte nicht geöffnet werden.");
     const auto finish=qScopeGuard([&] { if(painter.isActive()) painter.end(); });
