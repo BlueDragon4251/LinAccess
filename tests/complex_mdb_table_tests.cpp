@@ -329,6 +329,16 @@ End Function
             assert(copied.exec(QString("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND tbl_name=")
                               + "'" + QString(table).replace("'", "''") + "' AND sql IS NOT NULL"));
             assert(copied.next() && copied.value(0).toInt() == schema.indexes.size());
+            copied.finish();
+            for(const auto& index:schema.indexes) {
+                QSqlQuery details(db); assert(details.exec("PRAGMA main.index_xinfo("+quote(table+"_"+index.name)+")"));
+                int ordinal=0;
+                while(details.next()) if(details.value(5).toBool()) {
+                    assert(ordinal<index.columns.size() && details.value(2).toString()==index.columns[ordinal]);
+                    assert(details.value(3).toBool()==(!index.descending.isEmpty() && index.descending[ordinal])); ++ordinal;
+                }
+                assert(ordinal==index.columns.size());
+            }
             ++imported;
         } catch (const std::exception& e) {
             failures << QString::number(imported + failures.size() + 1);

@@ -29,6 +29,7 @@ struct AccessIndex {
     QString name;
     QStringList columns;
     bool unique{};
+    QVector<bool> descending; // Empty means the legacy all-ascending declaration.
 };
 struct AccessForeignKey {
     QStringList columns;

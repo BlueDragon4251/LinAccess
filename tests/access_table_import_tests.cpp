@@ -69,6 +69,41 @@ void verifyJetBinaryReference(const QString& path) {
     std::cout<<"Actual technical Jet binary import: exact inline/multi-page bytes, DAO chunks, NULL, bounded oversized rollback and source hashes verified\n";
 }
 
+void verifyJetIndexReference(const QString& path) {
+    using namespace linaccess;
+    QFile input(path); assert(input.open(QIODevice::ReadOnly));
+    const auto before=QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256); input.close();
+    const auto schema=parseMdbSchema(AccessCatalog(path).tableSchema("index_order_probe"));
+    assert(schema.columns.size()==2 && schema.indexes.size()==2);
+    int mixed=0,ascending=0;
+    for(const auto& index:schema.indexes) {
+        if(index.columns.size()==2) { assert(index.unique && index.columns==QStringList({"first_key","second_key"}) && index.descending==QVector<bool>({true,false})); ++mixed; }
+        else { assert(index.columns==QStringList({"first_key"}) && index.descending==QVector<bool>({false})); ++ascending; }
+    }
+    assert(mixed==1 && ascending==1);
+    auto db=QSqlDatabase::addDatabase("QSQLITE","jet-index-reference"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery query(db); assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)")); query.finish();
+    assert(importAccessDatabase(db,path)==1);
+    int indexes=0,keys=0;
+    assert(query.exec("PRAGMA main.index_list('index_order_probe')"));
+    while(query.next()) {
+        assert(query.value(3).toString()=="c" && !query.value(4).toBool());
+        const bool unique=query.value(2).toBool();
+        auto name=query.value(1).toString(); name.replace('\"',"\"\"");
+        QSqlQuery fields(db); assert(fields.exec("PRAGMA main.index_xinfo(\""+name+"\")")); int ordinal=0;
+        while(fields.next()) if(fields.value(5).toBool()) {
+            assert(fields.value(2).toString()==(ordinal==0 ? "first_key" : "second_key"));
+            assert(fields.value(3).toBool()==(unique && ordinal==0));
+            assert(fields.value(4).toString()=="BINARY"); ++ordinal; ++keys;
+        }
+        assert(ordinal==(unique ? 2 : 1)); ++indexes;
+    }
+    assert(indexes==2 && keys==3); query.finish();
+    assert(query.exec("SELECT COUNT(*) FROM index_order_probe") && query.next() && query.value(0).toInt()==0); query.finish();
+    db.close(); assert(input.open(QIODevice::ReadOnly)); assert(QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256)==before);
+    std::cout<<"Actual technical Jet index import: mixed directions, key order, uniqueness and source hash verified\n";
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     using namespace linaccess;
@@ -95,6 +130,13 @@ CREATE UNIQUE INDEX `pair` ON `source` (`part`, `line`);
 CREATE INDEX `label` ON `source` (`a``b`);
 )SQL");
     assert(schema.columns.size() == 4 && schema.indexes.size() == 2);
+    const QString orderedPrefix="CREATE TABLE `x`\n(\n`a``b` INTEGER,\n`second` INTEGER\n);\n";
+    const auto ordered=parseMdbSchema(orderedPrefix+"CREATE UNIQUE INDEX `ordered` ON `x` (`a``b` DESC, `second` ASC);\n");
+    assert(ordered.indexes.size()==1 && ordered.indexes[0].columns==QStringList({"a`b","second"}) && ordered.indexes[0].descending==QVector<bool>({true,false}));
+    const auto altered=parseMdbSchema(orderedPrefix+"ALTER TABLE `x` ADD INDEX `ordered` (`a``b` desc, `second`);\n");
+    assert(altered.indexes.size()==1 && altered.indexes[0].descending==QVector<bool>({true,false}));
+    for(const auto* fields:{"`a``b` SIDEWAYS","`a``b`,","`a``b` DESC extra","`a``b` DESC `second`","`a``b`, lower(`second`)"})
+        assert(parseMdbSchema(orderedPrefix+"CREATE INDEX `bad` ON `x` ("+fields+");\n").columns.isEmpty());
     assert(schema.columns[0].primaryKeyOrder == 1);
     assert(schema.columns[1].primaryKeyOrder == 2);
     assert(schema.columns[2].name == "a`b");
@@ -121,6 +163,10 @@ CREATE INDEX `label` ON `source` (`a``b`);
     try { importAccessTable(db, "not-a-real-file", "failed", schema, bad); }
     catch (...) { refused = true; }
     assert(refused && !db.tables().contains("failed"));
+    auto incompleteDirections=schema; incompleteDirections.indexes[0].descending=QVector<bool>{true};
+    bool invalidDirections=false;
+    try { importAccessTable(db,"technical","invalid_directions",incompleteDirections,data); } catch(const std::exception&) { invalidDirections=true; }
+    assert(invalidDirections && !db.tables().contains("invalid_directions"));
     assert(query.exec("SELECT COUNT(*) FROM _la_import_log"));
     assert(query.next() && query.value(0).toInt() == 1);
     query.finish();
@@ -308,6 +354,7 @@ CREATE INDEX `label` ON `source` (`a``b`);
     for(const auto* malformed:{"0","0x00","GG","00 1","00\n00"}) {
         bool rejected=false; try { (void)decodeMdbBinaryHex(malformed); } catch(const std::exception&) { rejected=true; } assert(rejected);
     }
+    const auto indexReference=qEnvironmentVariable("LINACCESS_JET_INDEX_REFERENCE"); if(!indexReference.isEmpty()) verifyJetIndexReference(indexReference);
     const auto reference=qEnvironmentVariable("LINACCESS_JET_BINARY_REFERENCE"); if(!reference.isEmpty()) verifyJetBinaryReference(reference);
     std::cout << "Schema, composite keys, indices, quoted identifiers and rollback verified\n";
 }

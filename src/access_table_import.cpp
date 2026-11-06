@@ -66,6 +66,22 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
         while (matches.hasNext()) result << matches.next().captured(1).replace("``", "`");
         return result;
     };
+    const auto orderedIndex=[&](QString name,const QString& fields,bool unique)->std::optional<AccessIndex> {
+        static const QRegularExpression part(R"(^\s*`((?:``|[^`])+)`(?:\s+(ASC|DESC))?\s*(,|$))",QRegularExpression::CaseInsensitiveOption);
+        AccessIndex result; result.name=std::move(name); result.unique=unique;
+        qsizetype offset=0;
+        while(offset<fields.size()) {
+            const auto match=part.match(fields.mid(offset));
+            if(!match.hasMatch() || match.capturedLength()==0 || result.columns.size()>=32767) return {};
+            result.columns.append(match.captured(1).replace("``","`"));
+            result.descending.append(match.captured(2).compare("DESC",Qt::CaseInsensitive)==0);
+            offset+=match.capturedLength();
+            if(match.captured(3).isEmpty()) break;
+            if(offset>=fields.size()) return {};
+        }
+        if(result.columns.isEmpty() || offset!=fields.size()) return {};
+        return result;
+    };
     AccessTableSchema result;
     QStringList keys;
     QMap<QString,QString> sourceTypes,sourceOrigins;
@@ -108,11 +124,15 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
             const auto pk = alterKey.match(text);
             if (pk.hasMatch()) keys = names(pk.captured(1));
             const auto idx = alterIndex.match(text);
-            if (idx.hasMatch()) result.indexes.append({idx.captured(2).replace("``", "`"),
-                names(idx.captured(3)), !idx.captured(1).isEmpty()});
+            if (idx.hasMatch()) {
+                const auto parsed=orderedIndex(idx.captured(2).replace("``","`"),idx.captured(3),!idx.captured(1).isEmpty());
+                if(!parsed) return {}; result.indexes.append(*parsed);
+            }
             const auto match = index.match(text);
-            if (match.hasMatch()) result.indexes.append({match.captured(2).replace("``", "`"),
-                names(match.captured(4)), !match.captured(1).isEmpty()});
+            if (match.hasMatch()) {
+                const auto parsed=orderedIndex(match.captured(2).replace("``","`"),match.captured(4),!match.captured(1).isEmpty());
+                if(!parsed) return {}; result.indexes.append(*parsed);
+            }
             continue;
         }
         if (text == "(" || text.isEmpty()) continue;
@@ -293,9 +313,11 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
         if (!insertOnly) {
             for (const auto& index : schema.indexes) {
                 QStringList fields;
-                for (const auto& name : index.columns) {
+                if(!index.descending.isEmpty() && index.descending.size()!=index.columns.size()) throw fail("Indexrichtungen unvollständig");
+                for (qsizetype ordinal=0;ordinal<index.columns.size();++ordinal) {
+                    const auto& name=index.columns[ordinal];
                     if (!seen.contains(name.toCaseFolded())) throw fail("Indexspalte fehlt");
-                    fields << sqlQuote(name);
+                    fields << sqlQuote(name)+(index.descending.isEmpty() || !index.descending[ordinal] ? " ASC" : " DESC");
                 }
                 if (fields.empty()) throw fail("Leerer Index");
                 // Access index names are table-scoped; SQLite names are database-scoped.
