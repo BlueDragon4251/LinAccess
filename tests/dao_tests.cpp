@@ -40,6 +40,85 @@ private:
 };
 void testDaoCursors();
 void testDaoTransactions();
+void testDaoRelations() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-relations"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE primary_rows(primary_a INTEGER,primary_b INTEGER,PRIMARY KEY(primary_a,primary_b))"));
+    assert(sql.exec("CREATE TABLE foreign_rows(foreign_a INTEGER,foreign_b INTEGER,FOREIGN KEY(foreign_a,foreign_b) REFERENCES primary_rows(primary_a,primary_b) ON UPDATE CASCADE)"));
+    assert(sql.exec("CREATE TABLE _la_access_relations(source_file TEXT,name TEXT,flags INTEGER,ordinal INTEGER,child_table TEXT,child_column TEXT,parent_table TEXT,parent_column TEXT)"));
+    assert(sql.exec("INSERT INTO _la_access_relations VALUES('technical','CompositeReference',256,0,'foreign_rows','foreign_a','primary_rows','primary_a'),('technical','CompositeReference',256,1,'foreign_rows','foreign_b','primary_rows','primary_b')"));
+    const auto error=[](const std::function<void()>& operation,int expected) { int number=0; try { operation(); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==expected); };
+    auto database=linaccess::makeDaoDatabase(db);
+    auto relations=database->member("Relations",{}).object;
+    auto relation=relations->member("Item",{VbaValue::string("compositereference")}).object;
+    auto fields=relation->member("Fields",{}).object;
+    auto field=fields->member("Item",{VbaValue::string("PRIMARY_A")}).object;
+    assert(relation==database->member("Relations",{VbaValue::numeric(0)}).object);
+    assert(relations->member("Count",{}).asNumber()==1 && relations->member("Count",{}).numericType==VbaValue::NumericType::Integer);
+    assert(fields->member("Count",{}).asNumber()==2 && field->member("Name",{}).asText()=="primary_a" && field->member("ForeignName",{}).asText()=="foreign_a");
+    assert(field==fields->enumerate().front().object && relation==relations->enumerate().front().object);
+    error([&] { relations->member("Item",{VbaValue{}}); },94);
+    error([&] { relations->member("Item",{VbaValue::numeric(1)}); },3265);
+    error([&] { relations->member("Refresh",{VbaValue::numeric(1)}); },450);
+    error([&] { relation->assign("Name",VbaValue::string("renamed")); },383);
+    error([&] { field->assign("ForeignName",VbaValue::string("other")); },383);
+    error([&] { field->member("Type",{}); },3251);
+    Host host(db);
+    const auto result=linaccess::executeVbaProcedure(R"VBA(Sub InspectRelations()
+Dim relations As DAO.Relations, relation As DAO.Relation, fields As DAO.Fields, field As DAO.Field
+Dim database As DAO.Database, total As Long
+Set database=CurrentDb
+Set relations=database.Relations
+If Not TypeOf relations Is DAO.Relations Then Err.Raise 5
+If VarType(relations.Count)<>vbInteger Or relations.Count<>1 Then Err.Raise 5
+Set relation=database.Relations(Index:="CompositeReference")
+If Not TypeOf relation Is DAO.Relation Then Err.Raise 5
+If Not (relation Is relations.Item(Index:=0)) Then Err.Raise 5
+If relation.Table<>"primary_rows" Or relation.ForeignTable<>"foreign_rows" Then Err.Raise 5
+If VarType(relation.Attributes)<>vbLong Or relation.Attributes<>dbRelationUpdateCascade Then Err.Raise 5
+Set fields=relation.Fields
+Set field=relation.Fields(Index:="primary_b")
+If field.Name<>"primary_b" Or field.ForeignName<>"foreign_b" Then Err.Raise 5
+For Each relation In relations
+For Each field In relation.Fields
+total=total+1
+Next
+Next
+If total<>2 Then Err.Raise 5
+relations.Refresh
+fields.Refresh
+Me!RelationsChecked="yes"
+End Sub)VBA","InspectRelations",host);
+    if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Relation VBA error="<<result.errorNumber<<", line="<<result.line<<'\n';
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && host.fields["RelationsChecked"]=="yes");
+    assert(sql.exec("CREATE TEMP TABLE _la_access_relations(bad)"));
+    assert(relations->member("Count",{}).asNumber()==1 && field->member("Name",{}).asText()=="primary_a");
+    assert(sql.exec("UPDATE main._la_access_relations SET source_file='changed'"));
+    error([&] { field->member("Name",{}); },3420);
+    relation=relations->member("Item",{VbaValue::numeric(0)}).object;
+    auto engine=linaccess::makeDaoEngine(db); engine->member("BeginTrans",{});
+    assert(sql.exec("UPDATE main._la_access_relations SET source_file='transient'"));
+    auto transient=relations->member("Item",{VbaValue::numeric(0)}).object;
+    engine->member("Rollback",{});
+    error([&] { transient->member("Name",{}); },3420);
+    error([&] { relation->member("Name",{}); },3420);
+    relation=relations->member("Item",{VbaValue::numeric(0)}).object;
+    assert(sql.exec("CREATE TABLE unknown_foreign(x INTEGER,y INTEGER,FOREIGN KEY(x,y) REFERENCES primary_rows(primary_a,primary_b))"));
+    error([&] { relation->member("Name",{}); },3420);
+    error([&] { relations->member("Count",{}); },3251);
+    assert(sql.exec("DROP TABLE unknown_foreign"));
+    assert(relations->member("Count",{}).asNumber()==1);
+    assert(sql.exec("UPDATE main._la_access_relations SET flags=2"));
+    error([&] { relations->member("Count",{}); },3251); // Enforced native key cannot silently become unenforced.
+    assert(sql.exec("DROP TABLE foreign_rows"));
+    assert(sql.exec("CREATE TABLE foreign_rows(foreign_a INTEGER,foreign_b INTEGER)"));
+    assert(relations->member("Count",{}).asNumber()==1); // Genuine imported don't-enforce metadata remains visible.
+    assert(sql.exec("UPDATE main._la_access_relations SET ordinal=3 WHERE ordinal=1"));
+    error([&] { relations->member("Count",{}); },3251);
+    db.close(); error([&] { relations->member("Count",{}); },3420);
+}
+
 void testTableDefSchemaFields() {
     auto db=QSqlDatabase::addDatabase("QSQLITE","tabledef-schema-fields"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery sql(db); assert(sql.exec("CREATE TABLE schema_rows(id INTEGER4,amount CURRENCY_REAL,payload BLOB)"));
@@ -1379,6 +1458,7 @@ int main(int argc, char** argv) {
     testDaoCursors();
     testDaoTransactions();
     testTableDefSchemaFields();
+    testDaoRelations();
     testDaoTableGenerations();
     testSqlRgbDao();
     auto db = QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());

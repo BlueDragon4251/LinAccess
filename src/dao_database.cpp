@@ -234,7 +234,7 @@ QString sqliteLiteralDefaultSql(const QVariant& declaration) {
     // Raw SQLite TRUE is1; imported Access TRUE is already normalized to-1.
     return token.compare("TRUE",Qt::CaseInsensitive)==0 ? QString("1") : literal.value_or(QString{});
 }
-struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; };
+struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; };
 std::optional<QString> nativeFieldDefaultExpression(const TableSchemaColumn& field) {
     if(provenDaoFieldType(field.type)==11 || field.sourceType==11) return {};
     if(!field.hasDefault) return QString{};
@@ -1386,6 +1386,10 @@ public:
         if(position<0) throw VbaRuntimeError(3420,"DAO schema field unavailable");
         const auto key=lower(name);
         if(key=="name") return VbaValue::string(columns[position].name.toStdString());
+        if(key=="foreignname") {
+            if(columns[position].foreignName.isNull()) throw VbaRuntimeError(3251,"ForeignName is proven only for Relation fields");
+            return VbaValue::string(columns[position].foreignName.toStdString());
+        }
         if(key=="ordinalposition") return integerCount(position);
         if(key=="defaultvalue") {
             if(!defaults_) throw VbaRuntimeError(3251,"QueryDef field default is not proven");
@@ -1588,6 +1592,184 @@ private:
     QSqlDatabase db_; std::shared_ptr<WorkspaceState> workspace_;
     QMap<QString,std::weak_ptr<TableDefinition>> definitions_;
 };
+struct NativeRelationData {
+    QString name,source,parent,child;
+    quint32 attributes{};
+    QVector<QPair<QString,QString>> columns; // primary Name, foreign ForeignName
+    bool operator==(const NativeRelationData&) const = default;
+};
+struct NativeRelationCatalog {
+    QSqlDatabase db; std::shared_ptr<WorkspaceState> workspace;
+    explicit NativeRelationCatalog(QSqlDatabase database) : db(std::move(database)),workspace(workspaceState(db)) {}
+    quint64 version() const {
+        workspace->check(); QSqlQuery query(db);
+        if(!query.exec("PRAGMA main.schema_version") || !query.next()) queryFailure(query);
+        return query.value(0).toULongLong();
+    }
+    QVector<NativeRelationData> read() const {
+        workspace->check();
+        QMap<QString,QString> tables;
+        for(const auto& name:nativeTableNames(db)) {
+            const auto key=name.toCaseFolded(); if(tables.contains(key)) throw VbaRuntimeError(3251,"DAO: Relation table names ambiguous"); tables.insert(key,name);
+        }
+        const auto table=[&](const QString& name) {
+            if(name.isEmpty() || name.contains(QChar(0)) || !name.isValidUtf16() || !tables.contains(name.toCaseFolded())) throw VbaRuntimeError(3251,"DAO: Relation table is unavailable");
+            return tables.value(name.toCaseFolded());
+        };
+        const auto field=[&](const QString& owner,const QString& name) {
+            if(name.isEmpty() || name.contains(QChar(0)) || !name.isValidUtf16()) throw VbaRuntimeError(3251,"DAO: Relation field invalid");
+            QSqlQuery query(db); if(!query.exec("PRAGMA main.table_info("+quote(owner)+")")) queryFailure(query);
+            QString result; int matches=0;
+            while(query.next()) if(query.value(1).toString().compare(name,Qt::CaseInsensitive)==0) { result=query.value(1).toString(); ++matches; }
+            if(matches!=1) throw VbaRuntimeError(3251,"DAO: Relation field is unavailable or ambiguous");
+            return result;
+        };
+        struct Key { QString parent,child,update,erase; QMap<int,QPair<QString,QString>> columns; };
+        QVector<Key> actual;
+        for(const auto& child:tables) {
+            QSqlQuery query(db); if(!query.exec("PRAGMA main.foreign_key_list("+quote(child)+")")) queryFailure(query);
+            QMap<int,Key> groups; int count=0;
+            while(query.next()) {
+                if(++count>1000000) throw VbaRuntimeError(3251,"DAO: Relation catalog bound exceeded");
+                const int id=query.value(0).toInt(),ordinal=query.value(1).toInt(); auto& key=groups[id];
+                const auto parent=table(query.value(2).toString()),update=query.value(5).toString(),erase=query.value(6).toString();
+                if(!key.parent.isEmpty() && (key.parent!=parent || key.update!=update || key.erase!=erase)) throw VbaRuntimeError(3251,"DAO: Foreign key metadata inconsistent");
+                if(ordinal<0 || key.columns.contains(ordinal)) throw VbaRuntimeError(3251,"DAO: Foreign key ordinal invalid");
+                key.parent=parent; key.child=child; key.update=update; key.erase=erase;
+                key.columns.insert(ordinal,{field(parent,query.value(4).toString()),field(child,query.value(3).toString())});
+            }
+            for(const auto& key:groups) actual.append(key);
+        }
+        QMap<QString,NativeRelationData> definitions;
+        QSqlQuery query(db);
+        if(!query.exec("SELECT type FROM main.sqlite_schema WHERE name='_la_access_relations'")) queryFailure(query);
+        const bool stored=query.next();
+        if(stored && (query.value(0).toString()!="table" || query.next())) throw VbaRuntimeError(3251,"DAO: Relation catalog shape invalid"); query.finish();
+        if(stored) {
+            const QStringList expected{"source_file","name","flags","ordinal","child_table","child_column","parent_table","parent_column"};
+            if(!query.exec("PRAGMA main.table_info('_la_access_relations')")) queryFailure(query); int position=0;
+            while(query.next()) { if(position>=expected.size() || query.value(1).toString()!=expected[position++]) throw VbaRuntimeError(3251,"DAO: Relation catalog shape invalid"); }
+            if(position!=expected.size()) throw VbaRuntimeError(3251,"DAO: Relation catalog shape invalid"); query.finish();
+            if(!query.exec("SELECT source_file,name,flags,ordinal,child_table,child_column,parent_table,parent_column FROM main._la_access_relations ORDER BY name,ordinal")) queryFailure(query);
+            int rows=0; constexpr quint32 allowed=1u|2u|4u|256u|4096u|16777216u|33554432u;
+            while(query.next()) {
+                if(++rows>1000000) throw VbaRuntimeError(3251,"DAO: Relation catalog bound exceeded");
+                const auto name=query.value(1).toString();
+                if(name.isEmpty() || name.contains(QChar(0)) || !name.isValidUtf16()) throw VbaRuntimeError(3251,"DAO: Relation name invalid");
+                bool flagOk=false,ordinalOk=false; const auto flags=query.value(2).toLongLong(&flagOk),ordinal=query.value(3).toLongLong(&ordinalOk);
+                if(!flagOk || !ordinalOk || flags<0 || flags>std::numeric_limits<std::uint32_t>::max() || (static_cast<quint32>(flags)&~allowed)
+                    || query.value(2).toDouble()!=static_cast<double>(flags) || query.value(3).toDouble()!=static_cast<double>(ordinal) || ordinal<0 || ordinal>=32767)
+                    throw VbaRuntimeError(3251,"DAO: Relation flags/ordinal unsupported");
+                const auto parent=table(query.value(6).toString()),child=table(query.value(4).toString()),source=query.value(0).toString();
+                auto& item=definitions[name.toCaseFolded()];
+                if(item.name.isEmpty()) { item.name=name; item.parent=parent; item.child=child; item.source=source; item.attributes=static_cast<quint32>(flags); }
+                if(item.name!=name || item.parent!=parent || item.child!=child || item.source!=source || item.attributes!=static_cast<quint32>(flags) || ordinal!=item.columns.size())
+                    throw VbaRuntimeError(3251,"DAO: Relation definitions are ambiguous or incomplete");
+                const auto pair=qMakePair(field(parent,query.value(7).toString()),field(child,query.value(5).toString()));
+                for(const auto& previous:item.columns) if(previous.first.compare(pair.first,Qt::CaseInsensitive)==0 || previous.second.compare(pair.second,Qt::CaseInsensitive)==0)
+                    throw VbaRuntimeError(3251,"DAO: Relation fields duplicated");
+                item.columns.append(pair);
+            }
+            if(query.lastError().isValid()) queryFailure(query);
+        }
+        QVector<NativeRelationData> result;
+        for(const auto& item:definitions) {
+            if(!(item.attributes&2)) {
+                int found=-1;
+                for(int i=0;i<actual.size();++i) {
+                    const auto& key=actual[i]; QVector<QPair<QString,QString>> columns; int ordinal=0;
+                    for(auto it=key.columns.cbegin();it!=key.columns.cend();++it) { if(it.key()!=ordinal++) throw VbaRuntimeError(3251,"DAO: Foreign key ordinal gap"); columns.append(it.value()); }
+                    if(key.parent==item.parent && key.child==item.child && columns==item.columns
+                        && key.update==((item.attributes&256) ? "CASCADE" : "NO ACTION") && key.erase==((item.attributes&4096) ? "CASCADE" : "NO ACTION")) { found=i; break; }
+                }
+                if(found<0) throw VbaRuntimeError(3251,"DAO: Declared relation does not match an enforced native key"); actual.removeAt(found);
+            }
+            result.append(item);
+        }
+        if(!actual.isEmpty()) throw VbaRuntimeError(3251,"DAO: Native foreign keys without proven relation names are unsupported");
+        return result;
+    }
+};
+class NativeRelation final : public VbaObject, public std::enable_shared_from_this<NativeRelation> {
+public:
+    NativeRelation(std::shared_ptr<NativeRelationCatalog> catalog,NativeRelationData data,quint64 version,quint64 rollback)
+        : catalog_(std::move(catalog)),data_(std::move(data)),version_(version),rollback_(rollback) {}
+    std::string_view className() const override { return "Relation"; }
+    bool isNativeType(std::string_view type) const override { return type=="dao.relation"; }
+    bool matches(const NativeRelationData& data,quint64 version,quint64 rollback) const { return data_==data && version_==version && rollback_==rollback; }
+    void check() const {
+        if(catalog_->version()!=version_ || catalog_->workspace->rollbackRevision!=rollback_) throw VbaRuntimeError(3420,"DAO: Relation metadata invalidated");
+        for(const auto& current:catalog_->read()) if(current.name.compare(data_.name,Qt::CaseInsensitive)==0) {
+            if(current==data_) return; break;
+        }
+        throw VbaRuntimeError(3420,"DAO: Relation definition changed");
+    }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(lower(name)=="fields") return VbaArgumentSignature{{"Index"},0}; return {};
+    }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        check(); const auto key=lower(name);
+        if(key=="fields") {
+            if(args.size()>1) throw VbaRuntimeError(450,"DAO: Relation.Fields takes one index");
+            auto fields=fields_.lock();
+            if(!fields) {
+                const auto self=shared_from_this();
+                fields=std::make_shared<TableSchemaFields>([self] {
+                    self->check(); QVector<TableSchemaColumn> columns;
+                    for(const auto& pair:self->data_.columns) { TableSchemaColumn field; field.name=pair.first; field.foreignName=pair.second; columns.append(field); }
+                    return columns;
+                },false); fields_=fields;
+            }
+            return args.empty() || args[0].kind==VbaValue::Kind::Missing ? VbaValue::reference(fields) : fields->member("Item",args);
+        }
+        if(!args.empty()) throw VbaRuntimeError(450,"DAO: Relation property takes no arguments");
+        if(key=="name") return VbaValue::string(data_.name.toStdString());
+        if(key=="table") return VbaValue::string(data_.parent.toStdString());
+        if(key=="foreigntable") return VbaValue::string(data_.child.toStdString());
+        if(key=="attributes") return VbaValue::longInteger(static_cast<std::int32_t>(data_.attributes));
+        throw VbaRuntimeError(3251,"DAO: Relation property unsupported");
+    }
+    void assign(std::string_view,const VbaValue&) override { check(); throw VbaRuntimeError(383,"DAO: Imported relation metadata is read-only"); }
+private:
+    std::shared_ptr<NativeRelationCatalog> catalog_; NativeRelationData data_; quint64 version_{},rollback_{};
+    std::weak_ptr<VbaObject> fields_;
+};
+class NativeRelations final : public VbaObject {
+public:
+    explicit NativeRelations(QSqlDatabase db) : catalog_(std::make_shared<NativeRelationCatalog>(std::move(db))) {}
+    std::string_view className() const override { return "Relations"; }
+    bool isNativeType(std::string_view type) const override { return type=="dao.relations"; }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(lower(name)=="item") return VbaArgumentSignature{{"Index"},1}; return {};
+    }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        const auto rows=catalog_->read(); const auto key=lower(name);
+        if(key=="count" || key=="refresh") {
+            if(!args.empty()) throw VbaRuntimeError(450,"DAO: Relation collection property takes no arguments");
+            return key=="count" ? integerCount(rows.size()) : VbaValue{};
+        }
+        if(key!="item") throw VbaRuntimeError(3251,"DAO: Relation catalog mutation unsupported");
+        if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"DAO: Relation index required");
+        const auto value=scalarVbaValue(args[0]); if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null relation index");
+        int position=-1;
+        if(value.kind==VbaValue::Kind::Text) {
+            const auto requested=text(value.asText()); for(int i=0;i<rows.size();++i) if(rows[i].name.compare(requested,Qt::CaseInsensitive)==0) position=i;
+        } else { const auto index=coerceVbaModuleValue(value,"long").number; if(index>=0 && index<rows.size()) position=static_cast<int>(index); }
+        if(position<0) throw VbaRuntimeError(3265,"DAO: Relation not found");
+        const auto& row=rows[position]; const auto version=catalog_->version(),rollback=catalog_->workspace->rollbackRevision;
+        auto& cached=objects_[row.name.toCaseFolded()]; auto object=cached.lock();
+        if(!object || !object->matches(row,version,rollback)) { object=std::make_shared<NativeRelation>(catalog_,row,version,rollback); cached=object; }
+        return VbaValue::reference(object);
+    }
+    VbaValue item(std::string_view name) override { return member("Item",{VbaValue::string(std::string(name))}); }
+    std::vector<VbaValue> enumerate() override {
+        const auto rows=catalog_->read(); std::vector<VbaValue> result;
+        for(const auto& row:rows) result.push_back(member("Item",{VbaValue::string(row.name.toStdString())})); return result;
+    }
+private:
+    std::shared_ptr<NativeRelationCatalog> catalog_; QMap<QString,std::weak_ptr<NativeRelation>> objects_;
+};
+
 class Database final : public VbaObject {
 public:
     std::string_view className() const override { return "Database"; }
@@ -1597,7 +1779,7 @@ public:
         if (key=="openrecordset") return VbaArgumentSignature{{"Name","Type"},1};
         if (key=="execute") return VbaArgumentSignature{{"Query","Options"},1};
         if (key=="createquerydef") return VbaArgumentSignature{{"Name","SQLText"},1};
-        if (key=="tabledefs") return VbaArgumentSignature{{"Index"},0};
+        if (key=="tabledefs" || key=="relations") return VbaArgumentSignature{{"Index"},0};
         if (key=="querydefs") return VbaArgumentSignature{{"Index"},0};
         return {};
     }
@@ -1607,6 +1789,10 @@ public:
         const auto key = lower(name);
         if (key=="transactions" && args.empty()) return VbaValue::logical(true);
         if (key=="name" && args.empty()) return VbaValue::string(db_.databaseName().toUtf8().toStdString());
+        if(key=="relations") {
+            auto collection=relations_.lock(); if(!collection) { collection=std::make_shared<NativeRelations>(db_); relations_=collection; }
+            return args.empty() || (args.size()==1 && args[0].kind==VbaValue::Kind::Missing) ? VbaValue::reference(collection) : collection->member("Item",args);
+        }
         if (key=="tabledefs") {
             auto definitions=tableDefinitions_.lock();
             if (!definitions) { definitions=std::make_shared<TableDefinitions>(db_); tableDefinitions_=definitions; }
@@ -1680,6 +1866,7 @@ public:
 private:
     QSqlDatabase db_;
     std::weak_ptr<TableDefinitions> tableDefinitions_;
+    std::weak_ptr<VbaObject> relations_;
     std::shared_ptr<VbaObject> queryDefinitions_;
     std::shared_ptr<WorkspaceState> workspace_;
     qlonglong affected_{};

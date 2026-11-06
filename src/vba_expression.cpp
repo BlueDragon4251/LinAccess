@@ -1068,6 +1068,9 @@ private:
         if(const auto action=statusActions.find(word);action!=statusActions.end()) return VbaValue::longInteger(action->second);
         if(word=="vbdefault") return VbaValue::integer(0);
         if(word=="vbhourglass") return VbaValue::integer(11);
+        static const std::unordered_map<std::string,std::int32_t> relationAttributes{{"dbrelationunique",1},{"dbrelationdontenforce",2},{"dbrelationinherited",4},
+            {"dbrelationupdatecascade",256},{"dbrelationdeletecascade",4096},{"dbrelationleft",16777216},{"dbrelationright",33554432}};
+        if(const auto attribute=relationAttributes.find(word);attribute!=relationAttributes.end()) return VbaValue::longInteger(attribute->second);
         if (word == "dbopendynaset") return VbaValue::numeric(2);
         if (word == "dbopensnapshot") return VbaValue::numeric(4);
         if (word == "acquitprompt") return VbaValue::integer(0);

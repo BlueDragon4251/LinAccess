@@ -1,6 +1,7 @@
 #include "access_catalog.hpp"
 #include "access_query.hpp"
 #include "dao_database.hpp"
+#include <QSet>
 #include "access_table_import.hpp"
 #include "csv.hpp"
 #include "vba_currency.hpp"
@@ -368,5 +369,24 @@ End Function
     assert(!fullQuery.next());
     assert(fullQuery.exec("SELECT COUNT(*) FROM _la_access_relations"));
     assert(fullQuery.next() && fullQuery.value(0).toInt() == catalog.relationships().size());
+    const auto nativeRelations=linaccess::makeDaoDatabase(full)->member("Relations",{}).object;
+    const auto sourceRelations=catalog.relationships();
+    QSet<QString> names;
+    for(const auto& row:sourceRelations) {
+        names.insert(row.name.toCaseFolded());
+        auto relation=nativeRelations->member("Item",{linaccess::VbaValue::string(row.name.toStdString())}).object;
+        assert(relation->member("Name",{}).asText()==row.name.toStdString());
+        assert(relation->member("Table",{}).asText()==row.parentTable.toStdString());
+        assert(relation->member("ForeignTable",{}).asText()==row.childTable.toStdString());
+        assert(relation->member("Attributes",{}).asNumber()==row.flags);
+        auto field=relation->member("Fields",{linaccess::VbaValue::numeric(row.ordinal)}).object;
+        assert(field->member("Name",{}).asText()==row.parentColumn.toStdString());
+        assert(field->member("ForeignName",{}).asText()==row.childColumn.toStdString());
+    }
+    assert(nativeRelations->member("Count",{}).asNumber()==names.size());
+    std::cout<<"Verified original DAO relation definitions: "<<names.size()<<", field pairs: "<<sourceRelations.size()<<'\n';
+    original.close();
+    assert(original.open(QIODevice::ReadOnly));
+    assert(QCryptographicHash::hash(original.readAll(),QCryptographicHash::Sha256)==before);
     return 0;
 }

@@ -383,6 +383,9 @@ Tabellenrecordsets können jetzt per VBA geöffnet, durchlaufen und mit
 unveränderten Kassenhandler `SF_Ende_Kassa_Click` gegen eine SQLite-Testkopie aus.
 Das belegt einen Originalhandler, keine vollständige Kassen-/VBA-Kompatibilität.
 Unterstützung, Tests und offene Grenzen stehen unter [DAO-Laufzeit](docs/DAO_RUNTIME.md).
+Der lesende [Beziehungskatalog](docs/DAO_RELATIONS_RUNTIME.md) erschließt originale
+Beziehungsnamen und geordnete Primär-/Fremdfelder aus realen Importen; vollständige
+DAO-Katalogmutation und Jet-Parität bleiben offen.
 `Recordset.GetRows(Anzahl)` liefert bei ausdrücklich positiver Zeilenzahl echte
 zweidimensionale Variant-Arrays mit typisierten Feldwerten; VBA-Indizierung,
 Dimensionsgrenzen und mehrdimensionales `ReDim Preserve` sind nativ angebunden.
