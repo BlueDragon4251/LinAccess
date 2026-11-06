@@ -110,7 +110,8 @@ inline std::unique_ptr<QTextDocument> nativeDatasheetDocument(const NativeDatash
     return doc;
 }
 // Render explicitly to observe painter/page failures; QTextDocument::print is void.
-inline void renderNativeDatasheet(const NativeDatasheetSnapshot& snapshot,QPagedPaintDevice& device,int first=1,int last=0,bool reverse=false) {
+inline void renderNativeDatasheet(const NativeDatasheetSnapshot& snapshot,QPagedPaintDevice& device,int first=1,int last=0,bool reverse=false,int copies=1,bool collated=true) {
+    if(copies<1 || copies>100) throw VbaRuntimeError(3251,"Datenblatt unterstützt 1 bis 100 Druckexemplare.");
     QImage pointMetrics(1,1,QImage::Format_ARGB32);
     pointMetrics.setDotsPerMeterX(2835); pointMetrics.setDotsPerMeterY(2835); // 72 dpi, rounded to integral dots/metre.
     auto doc=nativeDatasheetDocument(snapshot);
@@ -140,21 +141,24 @@ inline void renderNativeDatasheet(const NativeDatasheetSnapshot& snapshot,QPaged
     }
     const int begin=qMax(1,first),end=last>0 ? qMin(count,last) : count;
     if(begin>end) throw VbaRuntimeError(5,"Der gewählte Seitenbereich enthält keine Datenblattseite.");
-    for(int offset=0;offset<=end-begin;++offset) {
-        const int page=reverse ? end-offset : begin+offset;
-        if(offset && !device.newPage()) throw VbaRuntimeError(3146,"Neue Druckseite konnte nicht angelegt werden.");
+    if(copies>1 && static_cast<qint64>(end-begin+1)*copies>10000) throw VbaRuntimeError(3251,"Mehrfache Datenblattausgabe überschreitet 10000 Seiten.");
+    int printed=0;
+    const auto draw=[&](int page) {
+        if(printed++ && !device.newPage()) throw VbaRuntimeError(3146,"Neue Druckseite konnte nicht angelegt werden.");
         painter.save(); painter.scale(scaleX,scaleY);
         painter.setClipRect(QRectF(0,0,size.width(),size.height()));
         painter.translate(0,-(page-1)*size.height());
         QAbstractTextDocumentLayout::PaintContext context;
         context.clip=QRectF(0,(page-1)*size.height(),size.width(),size.height());
         doc->documentLayout()->draw(&painter,context); painter.restore();
-    }
+    };
+    if(collated) for(int copy=0;copy<copies;++copy) for(int offset=0;offset<=end-begin;++offset) draw(reverse ? end-offset : begin+offset);
+    else for(int offset=0;offset<=end-begin;++offset) for(int copy=0;copy<copies;++copy) draw(reverse ? end-offset : begin+offset);
     if(!painter.end()) throw VbaRuntimeError(3146,"Druckausgabe konnte nicht abgeschlossen werden.");
 }
 inline void exportNativeDatasheetPdf(const NativeDatasheetSnapshot& snapshot,const QString& path,
     const QPageLayout& layout=QPageLayout(QPageSize(QPageSize::A4),QPageLayout::Portrait,QMarginsF(15,15,15,15)),
-    int first=1,int last=0,bool reverse=false) {
+    int first=1,int last=0,bool reverse=false,int copies=1,bool collated=true) {
     if(path.contains(QChar(0))) throw VbaRuntimeError(5,"Ungültiger PDF-Zielname.");
     if(QFileInfo(path).suffix().compare("pdf",Qt::CaseInsensitive)!=0) throw VbaRuntimeError(5,"PDF-Ausgabe benötigt eine .pdf-Zieldatei.");
     if(QFileInfo(path).isSymLink()) throw VbaRuntimeError(75,"PDF-Ziel darf kein symbolischer Link sein.");
@@ -163,7 +167,7 @@ inline void exportNativeDatasheetPdf(const NativeDatasheetSnapshot& snapshot,con
     {
         QPdfWriter writer(&output); writer.setTitle(snapshot.title); writer.setCreator("LinAccess");
         if(!writer.setPageLayout(layout)) throw VbaRuntimeError(3251,"PDF-Seiteneinstellungen werden nicht unterstützt.");
-        renderNativeDatasheet(snapshot,writer,first,last,reverse);
+        renderNativeDatasheet(snapshot,writer,first,last,reverse,copies,collated);
     }
     if(output.error()!=QFileDevice::NoError || !output.commit()) throw VbaRuntimeError(75,"PDF-Zieldatei konnte nicht atomar gespeichert werden.");
 }

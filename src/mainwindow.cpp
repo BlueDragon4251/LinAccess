@@ -1226,7 +1226,8 @@ QVariantMap MainWindow::outputDatasheetInternal(int mode,const QString& requeste
             if(!layoutApplied && !printer.setPageLayout(layout)) throw linaccess::VbaRuntimeError(3251,"Seitenlayout kann nicht übertragen werden.");
             if(printer.printRange()!=QPrinter::AllPages && printer.printRange()!=QPrinter::PageRange)
                 return tableCommandFailure(3251,"Dieser Druckbereich wird noch nicht unterstützt.");
-            if(printer.copyCount()!=1) return tableCommandFailure(3251,"Mehrere Druckexemplare sind für Datenblätter noch nicht unterstützt.");
+            const int copies=printer.copyCount(); const bool collated=printer.collateCopies();
+            if(copies<1 || copies>100) return tableCommandFailure(3251,"Datenblatt unterstützt 1 bis 100 Druckexemplare.");
             const int first=printer.printRange()==QPrinter::PageRange ? printer.fromPage() : 1;
             const int last=printer.printRange()==QPrinter::PageRange ? printer.toPage() : 0;
             const bool reverse=printer.pageOrder()==QPrinter::LastPageFirst;
@@ -1234,10 +1235,12 @@ QVariantMap MainWindow::outputDatasheetInternal(int mode,const QString& requeste
                 const auto path=printer.outputFileName();
                 if(path.isEmpty() || QFileInfo(path).canonicalFilePath()==QFileInfo(identity).canonicalFilePath())
                     return tableCommandFailure(75,"Kein zulässiges PDF-Ziel ausgewählt.");
-                linaccess::exportNativeDatasheetPdf(snapshot,path,printer.pageLayout(),first,last,reverse);
+                linaccess::exportNativeDatasheetPdf(snapshot,path,printer.pageLayout(),first,last,reverse,copies,collated);
             } else {
                 if(!printer.outputFileName().isEmpty()) return tableCommandFailure(3251,"Native Druckdateien außer PDF werden noch nicht unterstützt.");
-                linaccess::renderNativeDatasheet(snapshot,printer,first,last,reverse);
+                const int renderedCopies=printer.supportsMultipleCopies() ? 1 : copies;
+                if(renderedCopies>1) printer.setCopyCount(1);
+                linaccess::renderNativeDatasheet(snapshot,printer,first,last,reverse,renderedCopies,collated);
                 if(printer.printerState()==QPrinter::Error) return tableCommandFailure(3146,"Druckgerät meldet einen Fehler.");
             }
         }

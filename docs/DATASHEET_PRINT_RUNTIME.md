@@ -130,3 +130,30 @@ Build-ID/pinned SQLite3.54.1 and four original fixture hashes pass. Latest earli
 local Debian12/Ubuntu24.04 follow-ups cover41b193c DAO/payload/install/hash checks;
 no new distribution matrix or GitHub CI claim for this page-setup increment.
 456/384/72 unchanged.
+
+
+## Checked multiple copies and page collation (2026-11-06)
+
+The real print dialog now accepts1..100 copies. PDF jobs explicitly render each
+requested copy in the chosen collation and forward/reverse page order, preserving
+selected page-range semantics and atomic replacement. Manual multi-copy output
+is capped at10000 pages. Unsupported counts fail3251 and retain an existing PDF.
+
+For actual native devices, Qt's documented supportsMultipleCopies determines
+whether the driver handles the requested count or the application renders copies
+with the printer count reset to1. This prevents application/driver duplication.
+Collation follows the actual printer setting. Physical spooler/hardware behavior
+has not been tested and is not an Access2003 printer oracle.
+
+Existing mainwindow_documents produces real four-page PDFs from two selected
+pages/two copies: collated forward and uncollated reverse. Independently extracted
+page text verifies exact order and equality of repeated pages; the invalid101-copy
+request preserves a prior destination. Original recipe PDF proof is rerun in the
+same target. Current target1/1 (3.99 s), package/Build-ID/SQLite3.54.1 and four
+original hashes pass. Latest full host suite remains e8375e8 with48/48 (89.86 s).
+Its updated GUI-free core1/1 (2.20 s) also passes. Immutable e8375e8 Debian12 and
+Ubuntu24.04 app/DAO/mainwindow follow-ups pass2/2 (6.65 s /5.65 s), matching package
+installation/backend and all original hashes. These platform checks precede the
+copy increment; no fresh complete matrix or GitHub CI success is claimed.
+F080/F087/F148 remain open;456/384/72 unchanged. No new CTest target or ID.
+Reference: https://doc.qt.io/qt-6/qprinter.html#supportsMultipleCopies

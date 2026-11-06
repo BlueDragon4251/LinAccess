@@ -248,6 +248,30 @@ void exerciseDatasheetOutput(MainWindow& window,QSqlDatabase db) {
     try { linaccess::exportNativeDatasheetPdf(snapshot,path,QPageLayout(QPageSize(QPageSize::A4),QPageLayout::Portrait,QMarginsF(15,15,15,15)),999999,999999); }
     catch(const linaccess::VbaRuntimeError& error) { rangeRejected=error.number==5; }
     assert(rangeRejected && read()==original);
+    bool copiesRejected=false;
+    try { linaccess::exportNativeDatasheetPdf(snapshot,path,QPageLayout(QPageSize(QPageSize::A4),QPageLayout::Portrait,QMarginsF(15,15,15,15)),1,2,false,101); }
+    catch(const linaccess::VbaRuntimeError& error) { copiesRejected=error.number==3251; }
+    assert(copiesRejected && read()==original);
+    for(const bool collated:{true,false}) {
+        const auto copiesPath=output.filePath(collated ? "collated.pdf" : "uncollated.pdf");
+        QTimer::singleShot(0,&window,[&] {
+            auto* dialog=qobject_cast<QPrintDialog*>(QApplication::activeModalWidget()); assert(dialog);
+            auto* printer=dialog->printer(); printer->setOutputFormat(QPrinter::PdfFormat); printer->setOutputFileName(copiesPath);
+            printer->setPrintRange(QPrinter::PageRange); printer->setFromTo(1,2);
+            printer->setCopyCount(2); printer->setCollateCopies(collated);
+            printer->setPageOrder(collated ? QPrinter::FirstPageFirst : QPrinter::LastPageFirst); dialog->QDialog::done(QDialog::Accepted);
+        });
+        assert(window.outputDatasheet(false).value("error").toInt()==0);
+        QFile file(copiesPath); assert(file.open(QIODevice::ReadOnly)); auto found=pages.globalMatch(QString::fromLatin1(file.readAll()));
+        int actual=0; while(found.hasNext()) { found.next(); ++actual; } assert(actual==4);
+        if(!reader.isEmpty()) {
+            QProcess text; text.start(reader,{"-layout",copiesPath,"-"}); assert(text.waitForFinished(10000) && text.exitCode()==0);
+            const auto leaves=QString::fromUtf8(text.readAllStandardOutput()).split(QChar(12),Qt::SkipEmptyParts); assert(leaves.size()==4);
+            assert(leaves[0].contains("row_320")==collated && leaves[0]!=leaves[collated ? 1 : 2]);
+            if(collated) assert(leaves[0]==leaves[2] && leaves[1]==leaves[3]);
+            else assert(leaves[0]==leaves[1] && leaves[2]==leaves[3]);
+        }
+    }
     bool printPdf=false;
     const auto dialogPdf=output.filePath("dialog.pdf");
     QTimer::singleShot(0,&window,[&] {
