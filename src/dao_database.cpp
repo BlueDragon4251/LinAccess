@@ -952,6 +952,11 @@ public:
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         refresh();
         const auto key = lower(name);
+        if(key=="fields") {
+            auto collection=fields();
+            return args.empty() || (args.size()==1 && args[0].kind==VbaValue::Kind::Missing)
+                ? VbaValue::reference(collection) : collection->member("Item",args);
+        }
         if (key == "parameters") {
             auto collection=parameters();
             return args.empty() ? VbaValue::reference(collection) : collection->member("Item",args);
@@ -1028,6 +1033,26 @@ private:
     friend class QueryParameters;
     friend class QueryDefinitions;
     friend class Database;
+    std::shared_ptr<VbaObject> fields();
+    quint64 fieldSchemaVersion() const {
+        workspace_->check(); QSqlQuery query(db_);
+        if(!query.exec("PRAGMA main.schema_version") || !query.next()) queryFailure(query);
+        return query.value(0).toULongLong();
+    }
+    QVector<TableSchemaColumn> queryFieldColumns() const {
+        const auto fresh=source_.trimmed().isEmpty() ? AccessQueryPlan{} : compileAccessQuery(source_);
+        if(!fresh.makeTable.isEmpty() || !fresh.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive))
+            throw VbaRuntimeError(3251,"DAO: QueryDef.Fields requires a supported SELECT definition");
+        QVector<QString> types; const auto names=accessQueryColumns(db_,fresh,&types);
+        QVector<TableSchemaColumn> columns; QSet<QString> seen;
+        for(int i=0;i<names.size();++i) {
+            if(names[i].isEmpty() || seen.contains(names[i].toCaseFolded()))
+                throw VbaRuntimeError(3251,"DAO: QueryDef field names are empty or ambiguous");
+            seen.insert(names[i].toCaseFolded());
+            TableSchemaColumn column; column.name=names[i]; column.type=types.value(i); columns.append(std::move(column));
+        }
+        return columns;
+    }
     std::shared_ptr<VbaObject> parameters();
     void installSource(const QString& source,const AccessQueryPlan& plan) {
         source_=source; plan_=plan; values_.clear(); parameterObjects_.clear(); ++generation_;
@@ -1069,6 +1094,10 @@ private:
     AccessQueryPlan plan_;
     QMap<QString,QVariant> values_;
     std::weak_ptr<VbaObject> parameters_;
+    std::weak_ptr<VbaObject> fields_;
+    QVector<TableSchemaColumn> fieldColumns_;
+    quint64 fieldGeneration_{},fieldSchema_{},fieldRollback_{};
+
     QMap<QString,std::weak_ptr<VbaObject>> parameterObjects_;
     quint64 generation_{};
     qlonglong affected_{};
@@ -1235,7 +1264,7 @@ private:
 using TableSchemaReader=std::function<QVector<TableSchemaColumn>()>;
 class TableSchemaField final : public VbaObject {
 public:
-    TableSchemaField(TableSchemaReader reader,QString name) : reader_(std::move(reader)),name_(std::move(name)) {}
+    TableSchemaField(TableSchemaReader reader,QString name,bool defaults=true) : reader_(std::move(reader)),name_(std::move(name)),defaults_(defaults) {}
     std::string_view className() const override { return "Field"; }
     bool isNativeType(std::string_view type) const override { return type=="dao.field"; }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
@@ -1250,6 +1279,7 @@ public:
         if(key=="name") return VbaValue::string(columns[position].name.toStdString());
         if(key=="ordinalposition") return integerCount(position);
         if(key=="defaultvalue") {
+            if(!defaults_) throw VbaRuntimeError(3251,"QueryDef field default is not proven");
             const auto expression=nativeFieldDefaultExpression(columns[position]);
             if(!expression) throw VbaRuntimeError(3251,"Schema Field.DefaultValue is not proven");
             return VbaValue::string(expression->toStdString());
@@ -1264,11 +1294,11 @@ public:
         throw VbaRuntimeError(3251,"DAO schema field property is unsupported");
     }
     void assign(std::string_view,const VbaValue&) override { (void)reader_(); throw VbaRuntimeError(383,"DAO schema fields are read-only"); }
-private: TableSchemaReader reader_; QString name_;
+private: TableSchemaReader reader_; QString name_; bool defaults_{};
 };
 class TableSchemaFields final : public VbaObject {
 public:
-    explicit TableSchemaFields(TableSchemaReader reader) : reader_(std::move(reader)) {}
+    explicit TableSchemaFields(TableSchemaReader reader,bool defaults=true) : reader_(std::move(reader)),defaults_(defaults) {}
     std::string_view className() const override { return "Fields"; }
     bool isNativeType(std::string_view type) const override { return type=="dao.fields"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
@@ -1295,7 +1325,7 @@ public:
         if(position<0) throw VbaRuntimeError(3265,"DAO schema field index not found");
         const auto column=columns[position].name;
         auto& cached=fields_[column.toCaseFolded()]; auto field=cached.lock();
-        if(!field) { field=std::make_shared<TableSchemaField>(reader_,column); cached=field; }
+        if(!field) { field=std::make_shared<TableSchemaField>(reader_,column,defaults_); cached=field; }
         return VbaValue::reference(field);
     }
     VbaValue item(std::string_view name) override { return member("Item",{VbaValue::string(std::string(name))}); }
@@ -1304,8 +1334,32 @@ public:
         for(const auto& column:columns) result.push_back(member("Item",{VbaValue::string(column.name.toStdString())}));
         return result;
     }
-private: TableSchemaReader reader_; QMap<QString,std::weak_ptr<TableSchemaField>> fields_;
+private: TableSchemaReader reader_; QMap<QString,std::weak_ptr<TableSchemaField>> fields_; bool defaults_{};
 };
+bool sameQueryFieldColumns(const QVector<TableSchemaColumn>& left,const QVector<TableSchemaColumn>& right) {
+    if(left.size()!=right.size()) return false;
+    for(int i=0;i<left.size();++i) if(left[i].name!=right[i].name || left[i].type!=right[i].type) return false;
+    return true;
+}
+std::shared_ptr<VbaObject> QueryDefinition::fields() {
+    const auto version=fieldSchemaVersion(),rollback=workspace_->rollbackRevision;
+    const auto columns=queryFieldColumns(); auto collection=fields_.lock();
+    if(!collection || fieldGeneration_!=generation_ || fieldSchema_!=version || fieldRollback_!=rollback
+        || !sameQueryFieldColumns(fieldColumns_,columns)) {
+        const auto self=shared_from_this(); const auto generation=generation_;
+        collection=std::make_shared<TableSchemaFields>([self,generation,version,rollback,columns] {
+            self->alive();
+            if(self->generation_!=generation || self->workspace_->rollbackRevision!=rollback || self->fieldSchemaVersion()!=version
+                || (self->owned_ && self->ownedSource()!=self->source_))
+                throw VbaRuntimeError(3420,"DAO: QueryDef.Fields metadata was invalidated");
+            const auto fresh=self->queryFieldColumns();
+            if(!sameQueryFieldColumns(columns,fresh)) throw VbaRuntimeError(3420,"DAO: QueryDef field metadata changed");
+            return fresh;
+        },false);
+        fields_=collection; fieldColumns_=columns; fieldGeneration_=generation_; fieldSchema_=version; fieldRollback_=rollback;
+    }
+    return collection;
+}
 class TableDefinition final : public VbaObject, public std::enable_shared_from_this<TableDefinition> {
 public:
     std::string_view className() const override { return "TableDef"; }

@@ -3200,3 +3200,23 @@ paginated atomic PDF output from checked snapshots of actual visible/filter/sort
 state. Dirty drafts and unsupported binary/size/geometry contexts refuse explicitly.
 Scope and remaining Access print/layout/oracle limits: [datasheet output](DATASHEET_PRINT_RUNTIME.md).
 F080/F148/F087 remain open; fixed456/384/72 unchanged.
+
+
+## QueryDef.Fields without executing query bodies (2026-11-06)
+
+Supported prepared SELECT definitions now expose native DAO.Fields/Field metadata:
+Count, zero-based/name Item, enumeration, Name and OrdinalPosition, plus Type/Size
+only where the existing native type proof establishes them. Repeated references
+preserve identity while held. Preparation does not step rows or invoke native VBA
+function bodies; the existing DAO regression checks the actual function-call
+counter and unchanged input rows. Action/make-table definitions and ambiguous
+field names are refused3251. Query field DefaultValue remains explicitly
+unproven3251; unknown types/sizes and other metadata are not guessed.
+
+Collections/fields hold their QueryDef owner but retain no live cursor. SQL
+replacement, closure, main-schema changes and workspace rollback invalidate
+held metadata3420. Fresh preparation also compares result names/types, rather
+than caching UDF declarations forever. Unsupported dependency/context preparation
+is still an explicit boundary; full Jet metadata/error precedence and a Windows
+Access2003 oracle remain open under F055/F121/F122. No catalog ID or checkbox
+changes:456 total,384 scoped confirmations,72 open full requirements.

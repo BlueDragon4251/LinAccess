@@ -299,3 +299,25 @@ verified SQLite3.54.1 and all four original hashes. Their preceding e2d64c9 full
 suites remain48/48 each; the final bounded mode-conversion increment above has
 host-targeted evidence rather than an invented repeat of those full suites.
 GitHub account CI remains blocked; local container results are distinguished.
+
+
+## QueryDef.Fields without executing query bodies (2026-11-06)
+
+Supported prepared SELECT definitions now expose native DAO.Fields/Field metadata:
+Count, zero-based/name Item, enumeration, Name and OrdinalPosition, plus Type/Size
+only where the existing native type proof establishes them. Repeated references
+preserve identity while held. Preparation does not step rows or invoke native VBA
+function bodies; the existing DAO regression checks the actual function-call
+counter and unchanged input rows. Action/make-table definitions and ambiguous
+field names are refused3251. Query field DefaultValue remains explicitly
+unproven3251; unknown types/sizes and other metadata are not guessed.
+
+Collections/fields hold their QueryDef owner but retain no live cursor. SQL
+replacement, closure, main-schema changes and workspace rollback invalidate
+held metadata3420. Fresh preparation also compares result names/types, rather
+than caching UDF declarations forever. Unsupported dependency/context preparation
+is still an explicit boundary; full Jet metadata/error precedence and a Windows
+Access2003 oracle remain open under F055/F121/F122. No catalog ID or checkbox
+changes:456 total,384 scoped confirmations,72 open full requirements.
+
+Nachweis dieser QueryDef.Fields-Etappe: bestehendes DAO-Ziel1/1 (0,96 s), anschließend vollständige Debian13-Desktop-Suite48/48 (98,29 s). Aktuelles Debian-Paket/Build-ID/SQLite3.54.1 und vier Originalfixture-Hashes bestanden. Keine neue Distributionsmatrix/GitHub-CI behauptet.
