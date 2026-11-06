@@ -323,6 +323,9 @@ public:
     std::string_view className() const override { return "Field"; }
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     Field(std::shared_ptr<Recordset> owner, QString name) : owner_(std::move(owner)), name_(std::move(name)) {}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(lower(name)=="getchunk") return VbaArgumentSignature{{"Offset","Bytes"},2}; return {};
+    }
     bool hasScalarDefault() const override { return true; }
     VbaValue scalarValue() override { return member("Value",{}); }
     void assignDefaultMember(const std::vector<VbaValue>& args,const VbaValue& value) override {
@@ -626,6 +629,24 @@ public:
         if(size>std::numeric_limits<std::int32_t>::max()) throw VbaRuntimeError(6,"FieldSize Long overflow");
         return VbaValue::longInteger(static_cast<std::int32_t>(size));
     }
+    VbaValue binaryChunk(const QString& name,const VbaValue& offsetValue,const VbaValue& bytesValue) const {
+        const auto type=fieldType(name);
+        if(!binaryFieldType(type) || mode_!=Mode::Browse)
+            throw VbaRuntimeError(3251,"GetChunk supports stored binary observations only");
+        current();
+        const auto offset=static_cast<qint64>(coerceVbaModuleValue(scalarVbaValue(offsetValue),"long").number);
+        const auto requested=static_cast<qint64>(coerceVbaModuleValue(scalarVbaValue(bytesValue),"long").number);
+        const auto& raw=data_->rows[position_][column(name)];
+        if(raw.isNull()) throw VbaRuntimeError(3251,"Null GetChunk requires reference validation");
+        if(raw.metaType().id()!=QMetaType::QByteArray) throw VbaRuntimeError(13,"Binary field requires BLOB storage");
+        const auto bytes=raw.toByteArray();
+        if(offset<0 || offset>=bytes.size() || requested<=0)
+            throw VbaRuntimeError(3251,"GetChunk boundary case requires reference validation");
+        const auto count=std::min(requested,static_cast<qint64>(bytes.size())-offset);
+        if(count>16*1024*1024) throw VbaRuntimeError(3251,"GetChunk exceeds native output bound");
+        const auto* begin=reinterpret_cast<const unsigned char*>(bytes.constData())+offset;
+        return VbaValue::byteArray(std::vector<unsigned char>(begin,begin+count));
+    }
     VbaValue value(const QString& name) const {
         checkTransaction();
         if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
@@ -881,6 +902,10 @@ VbaValue fieldCollection(std::shared_ptr<Recordset> owner) {
 }
 
 VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args) {
+    if(lower(name)=="getchunk") {
+        if(args.size()!=2) throw VbaRuntimeError(450,"Field.GetChunk requires Offset and Bytes");
+        return owner_->binaryChunk(name_,args[0],args[1]);
+    }
     if(lower(name)=="fieldsize") {
         if(!args.empty()) throw VbaRuntimeError(450,"Field.FieldSize requires no arguments");
         return owner_->fieldSize(name_);

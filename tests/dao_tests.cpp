@@ -1021,9 +1021,25 @@ Set rows=CurrentDb.OpenRecordset("batch_records")
 Set held=rows.Fields("raw")
 If held.Type<>11 Then Err.Raise 5
 If held.FieldSize<>3 Or VarType(held.FieldSize)<>3 Then Err.Raise 5
+payload=held.GetChunk(Bytes:=1,Offset:=1)
+If VarType(payload)<>8209 Or UBound(payload)<>0 Or payload(0)<>255 Then Err.Raise 5
+payload(0)=8
+payload=held.GetChunk(0,99)
+If UBound(payload)<>2 Or payload(0)<>0 Or payload(1)<>255 Or payload(2)<>66 Then Err.Raise 5
+payload=held.GetChunk(2,99)
+If UBound(payload)<>0 Or payload(0)<>66 Then Err.Raise 5
 On Error Resume Next
 held.FieldSize=1
 Me!BinarySizeWriteError=CStr(Err.Number)
+Err.Clear
+payload=held.GetChunk(3,1)
+Me!BinaryChunkBoundary=CStr(Err.Number)
+Err.Clear
+payload=held.GetChunk(Null,1)
+Me!BinaryChunkNullOffset=CStr(Err.Number)
+Err.Clear
+payload=held.GetChunk(0)
+Me!BinaryChunkArity=CStr(Err.Number)
 On Error GoTo 0
 payload=held.Value
 If VarType(payload)<>8209 Or UBound(payload)<>2 Then Err.Raise 5
@@ -1051,10 +1067,14 @@ rows.Close
 On Error Resume Next
 payload=held.Value
 Me!BinaryClosedError=CStr(Err.Number)
+Err.Clear
+payload=held.GetChunk(0,1)
+Me!BinaryChunkClosedError=CStr(Err.Number)
 End Sub
 )VBA","BinaryFields",host);
     if(binaryFields.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Synthetic binary fields: "<<binaryFields.errorNumber<<" line "<<binaryFields.line<<" "<<binaryFields.explanation<<'\n';
-    assert(binaryFields.status==linaccess::VbaExecutionStatus::Completed && host.fields["BinaryClosedError"]=="3420" && host.fields["BinarySizeWriteError"]=="383");
+    assert(binaryFields.status==linaccess::VbaExecutionStatus::Completed && host.fields["BinaryClosedError"]=="3420" && host.fields["BinarySizeWriteError"]=="383" && host.fields["BinaryChunkClosedError"]=="3420");
+    assert(host.fields["BinaryChunkBoundary"]=="3251" && host.fields["BinaryChunkNullOffset"]=="94" && host.fields["BinaryChunkArity"]=="450");
     assert(sql.exec("SELECT hex(raw),typeof(raw),length(raw) FROM batch_records ORDER BY id") && sql.next());
     assert(sql.value(0).toString()=="000742" && sql.value(1).toString()=="blob" && sql.value(2).toInt()==3);
     assert(sql.next() && sql.value(1).toString()=="blob" && sql.value(2).toInt()==0);

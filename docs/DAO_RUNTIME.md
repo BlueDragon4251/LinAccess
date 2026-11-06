@@ -379,3 +379,32 @@ https://learn.microsoft.com/en-us/office/client-developer/access/desktop-databas
 No new test target, catalog ID or checkbox;456/384/72 unchanged.
 
 TableDef.RecordCount: DAO/originales Kassa-Ziel2/2 (53,71 s) bestanden, einschließlich unabhängiger Zählung aller29 Originaltabellen. Aktuelle App/Paket/Build-ID/SQLite3.54.1 und vier Originalfixture-Hashes bestanden. Bestehende unveränderte Syntaxinventur separat187/187 akzeptiert (1,12 s), keine Ausführungsaussage. Kein neuer Vollsuite-/Matrixlauf dieses Inkrements.456/384/72 unverändert.
+
+
+## Bounded stored binary GetChunk (2026-11-06)
+
+Recordset Field.GetChunk(Offset, Bytes), including named arguments, copies the
+requested range of actual non-NULL native BLOB storage into an independent Byte()
+Variant. Both arguments use checked Long conversion. Offset0 starts at the first
+byte; a positive requested count exceeding the remaining bytes returns the actual
+remaining bytes. Embedded0/255 bytes are retained; changing the returned array
+does not change the stored field. The returned range is limited to16MiB. Existing
+recordset/thread/transaction/current-record guards apply, and closure remains3420.
+
+This deliberately supports stored browse-mode observations with an offset inside
+nonempty data and a positive byte count. NULL/empty fields, offsets outside the
+value, nonpositive counts, Edit/AddNew observations, Memo/encoding and unsupported
+source types refuse3251 pending reference validation; their full Access result/
+error precedence is not guessed. Wrong BLOB storage is13, arity450, Null numeric
+arguments94 through existing checked conversion. This is copying from the native
+loaded rowset, not streaming original MDB/OLE containers. AppendChunk, original
+OLE/attachment extraction/roundtrip and full DAO binary semantics remain open.
+
+Existing DAO binary cases verify named middle-byte extraction, first/tail ranges,
+over-request truncation, isolated copied bytes, boundary/Null/arity/closed errors
+and unchanged independent persisted SQL bytes. No new CTest target or catalog ID;
+F016/F055/F121/F122 remain open and456/384/72 unchanged.
+Reference: https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-getchunk-method-dao
+This current public contract is not an Access2003 execution oracle.
+
+Binär-GetChunk: bestehendes DAO-Ziel1/1 (1,23 s), aktuelle App/Paket/Build-ID/SQLite3.54.1 und vier Originalfixture-Hashes bestanden. Nur gespeicherte positive native Binärbereiche; AppendChunk/OLE/Memo/Null/Randsemantik bleiben offen. Letzte Vollsuite a00eb29:48/48 (98,29 s), nicht diesem Inkrement zuschreiben.456/384/72 unverändert.
