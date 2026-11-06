@@ -443,13 +443,15 @@ Diese Funktion liefert im eingeschränkten Interpreter `10` zurück.
 
 ## Build-Status
 
-Aktuelle lokale Regression (Debian 13 / GCC 14 / Qt 6.8): **21/21 Tests**,
-einschließlich vollständigem 29-Tabellen-Zellvergleich und einem echten Kassen-
-DAO-Buttonereignis. Die MDB-Regressionen wurden zusätzlich mit MDBTools 1.0.0
-mehrfach ausgeführt. Private GitHub-Läufe bestätigen zusätzlich Debian 12/13,
-Ubuntu 24.04 und die Windows-PowerShell-Syntaxprüfung. Die Linux-Jobs prüfen
-Tests, Pakete, installierte Backends und Fixture-Hashes. Dies ist kein Nachweis
-für Windows-Access-Laufzeit oder vollständige Access-Kompatibilität.
+Letzter vollständiger lokaler Lauf (Debian 13 / GCC 14 / Qt 6.8,418719d):
+**48/48 Tests**, einschließlich vollständigem 29-Tabellen-Zellvergleich und
+originalem Kassen-DAO-Buttonereignis. Separate unveränderliche e2d64c9-Kopien
+bestehen lokal Debian12/Qt6.4 und Ubuntu24.04/Qt6.4 ebenfalls mit jeweils48/48,
+Paketinstallation, Build-ID, SQLite und Fixture-Hashes. Der folgende kleine
+OpenRecordset-Modus-Fix ist gezielt geprüft; exakte Grenzen und neueste Belege
+stehen in [PROGRESS.md](docs/PROGRESS.md). GitHub startet die aktuellen Jobs wegen
+Kontozahlungs-/Ausgabenlimits nicht. Lokale Containerprüfungen sind keine neuen
+GitHub-CI-Erfolge und kein Windows-Access-/Gesamtparitätsnachweis.
 
 Früherer Referenzstand:
 

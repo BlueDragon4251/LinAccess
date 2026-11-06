@@ -1702,6 +1702,21 @@ End Sub
         auto queryDynaset=definition->member("OpenRecordset",{VbaValue::integer(2)}).object;
         auto querySnapshot=definition->member("OpenRecordset",{VbaValue::integer(4)}).object;
         assert(queryDynaset->member("Type",{}).asNumber()==2 && querySnapshot->member("Type",{}).asNumber()==4);
+        for(const auto& kind:std::vector<VbaValue>{VbaValue::numeric(2.5),VbaValue::string("2"),VbaValue::missing()}) {
+            auto converted=database->member("OpenRecordset",{VbaValue::string("property_collision"),kind}).object;
+            assert(converted->member("Type",{}).asNumber()==2); converted->member("Close",{});
+            auto parameterized=definition->member("OpenRecordset",{kind}).object;
+            assert(parameterized->member("Type",{}).asNumber()==2); parameterized->member("Close",{});
+        }
+        auto rounded=definition->member("OpenRecordset",{VbaValue::numeric(3.5)}).object;
+        assert(rounded->member("Type",{}).asNumber()==4); rounded->member("Close",{});
+        for(const auto& invalid:std::vector<std::pair<VbaValue,int>>{{VbaValue::numeric(2.6),3251},{VbaValue::empty(),3251},{VbaValue{},94},{VbaValue::string("invalid"),13}}) {
+            int problem=0;
+            try { (void)database->member("OpenRecordset",{VbaValue::string("property_collision"),invalid.first}); }
+            catch(const linaccess::VbaRuntimeError& failure) { problem=failure.number; }
+            assert(problem==invalid.second);
+        }
+
 
         int error=0; try { dynaset->assign("Type",VbaValue::integer(4)); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
         assert(error==383 && dynaset->member("Type",{}).asNumber()==2);

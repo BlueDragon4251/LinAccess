@@ -47,6 +47,12 @@ VbaValue fixedDaoFieldSize(int type) {
     if(size<0) throw VbaRuntimeError(3251,"DAO field size is not proven for this type");
     return VbaValue::longInteger(size);
 }
+int nativeRecordsetMode(const std::vector<VbaValue>& args,std::size_t index) {
+    if(index>=args.size() || args[index].kind==VbaValue::Kind::Missing) return 2;
+    const auto mode=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(args[index]),"long").number);
+    if(mode!=2 && mode!=4) throw VbaRuntimeError(3251,"DAO: Native Recordset mode is not supported");
+    return mode;
+}
 void require(bool valid, const char* message) { if (!valid) throw std::runtime_error(message); }
 void exec(QSqlQuery& query, const QString& sql) {
     if (!query.exec(sql)) throw std::runtime_error("DAO: SQL operation failed");
@@ -952,9 +958,10 @@ public:
         }
         if (key == "openrecordset") {
             if(plan_.sql.isEmpty()) throw VbaRuntimeError(3251,"DAO: QueryDef SQL is not set");
-            require(args.empty() || (args.size() == 1 && (args[0].asNumber() == 2 || args[0].asNumber() == 4)),"DAO: Recordset type unsupported");
+            if(args.size()>1) throw VbaRuntimeError(450,"DAO: QueryDef OpenRecordset accepts one mode");
+            const int mode=nativeRecordsetMode(args,0);
             require(plan_.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT QueryDef required");
-            return VbaValue::reference(std::make_shared<Recordset>(db_,plan_.sql,true,bindAccessQueryParameters(plan_,values_),plan_,args.empty() ? 2 : static_cast<int>(args[0].asNumber())));
+            return VbaValue::reference(std::make_shared<Recordset>(db_,plan_.sql,true,bindAccessQueryParameters(plan_,values_),plan_,mode));
         }
         if (key == "execute") {
             if(plan_.sql.isEmpty()) throw VbaRuntimeError(3251,"DAO: QueryDef SQL is not set");
@@ -1339,9 +1346,7 @@ public:
         }
         if (key=="openrecordset") {
             if (args.size()>1) throw VbaRuntimeError(450,"DAO: TableDef OpenRecordset arguments unsupported");
-            if (!args.empty() && args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null recordset mode");
-            const auto mode=args.empty() ? 2 : sqlFieldValue(args[0],"INTEGER").toLongLong();
-            if (mode!=2 && mode!=4) throw VbaRuntimeError(3251,"DAO: TableDef recordset mode unsupported");
+            const int mode=nativeRecordsetMode(args,0);
             return VbaValue::reference(std::make_shared<Recordset>(db_,name_,mode==4));
         }
         throw VbaRuntimeError(438,"DAO: TableDef member unsupported");
@@ -1466,9 +1471,8 @@ public:
             completed=true; return VbaValue::reference(std::move(object));
         }
         if (key == "openrecordset") {
-            require(args.size() == 1 || args.size() == 2, "DAO: OpenRecordset arguments unsupported");
-            const int mode = args.size() == 2 ? static_cast<int>(args[1].asNumber()) : 2;
-            require(mode == 2 || mode == 4, "DAO: Recordset type unsupported");
+            if(args.empty() || args.size()>2) throw VbaRuntimeError(450,"DAO: Database OpenRecordset accepts Name and optional Type");
+            const int mode=nativeRecordsetMode(args,1);
             const auto source = text(args[0].asText());
             if (db_.tables().contains(source,Qt::CaseInsensitive))
                 return VbaValue::reference(std::make_shared<Recordset>(db_,source,mode == 4));

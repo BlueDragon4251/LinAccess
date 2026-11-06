@@ -16,7 +16,7 @@ Zuerst lesen und prüfen
 3. Danach README.md, docs/COMPATIBILITY.md, docs/DEVELOPMENT_CHECKLIST.md, docs/FIXED_WORK_CATALOG.md und die vorhandenen Fortschritts-/Laufzeitdokumente lesen.
 4. Der feste Katalog hat genau 456 IDs F001–F456 in 14 Unterkategorien: aktuell 384 bestätigte Teilumfänge und 72 offene Vollanforderungen. IDs/Gesamtzahl nicht erhöhen, keine Punkte durch Zerlegung vermehren. Neue Details bestehenden offenen Anforderungen zuordnen. Alle offenen Punkte stehen im Katalog; auch breite COM-/VBA-/Jet-/Designer-/Berichts-/UI-/Tastaturanforderungen bleiben verbindlich.
 
-Gesicherter Ausgangsstand
+Historischer Ausgangsstand vor dieser Fortsetzung
 - Letzter vollständig geprüfter Laufzeitcommit: 6f77ac842e169ba34c144372dde6b682f82e50c0; identischer privater Sicherungscommit: 1a43d9c03c314bb551e16147450f4d9a5379c867; Laufzeit-Tree: bcc7d8b6122b8f2abf7df9558e4ac30a88bd20d4.
 - Beide Verläufe wurden danach ohne Inhaltsänderung mit 11751d4dc270e3c237514802426db8beb33d4b1f zusammengeführt. Nachfolgende Übergabedokumentation ist zusätzlich gepusht. Der Branch wurde ohne Force aktualisiert; trotzdem den tatsächlichen Remote-HEAD zuerst prüfen.
 - Aktueller Gesamtlauf: 48/48 CTests bestanden (86,11 s). Debian-Paket, Build-ID, SQLite 3.54.1 und alle vier Originalfixture-Hashes bestanden. GUI-freier Kern zuletzt 1/1 (1,92 s); die anschließenden Druckänderungen betreffen ausschließlich GUI-Code. Originalabfragen: 78/100 tatsächlich ausgeführt; kein Windows-Access-Ergebnisorakel.
@@ -34,6 +34,11 @@ Aktuelle Ausgabefortsetzung (2026-11-06)
 Weitere geprüfte Fortsetzung
 - Unveränderliche Quellkopien von e2d64c9 bestehen lokal Debian12/Qt6.4 48/48 (101,29 s) und Ubuntu24.04/Qt6.4 48/48 (93,65 s), beide mit Paket-/Build-ID-/SQLite-/Installations-/Hashprüfung. Das sind lokale Containerprüfungen; GitHub-CI bleibt gesperrt.
 - Danach native Recordset.Type-Metadaten ergänzt: aufgezeichneter Cursor2/4 als readonly Integer, getrennt von SQL-Readonly, Clone-Erhalt und echte Type-Feld-Bang-Auflösung. Unbewiesene gefrorene Formularadapter3251; kein Table-/ADO-/Locking-Vollnachweis. DAO-Ziel1/1 (1,02 s), aktuelles Paket/Build-ID/SQLite/vier Hashes bestanden. Noch keine neue Vollmatrix dieses letzten Inkrements behaupten. F054/F055 bleiben offen;456/384/72 unverändert.
+
+Aktuellste Nachweise und Moduskorrektur
+-418719d bestand anschließend Debian13 Vollsuite48/48 (94,15 s); unveränderliche418719d-Folgekopien bestanden auf Debian12/Ubuntu24.04 aktualisierte App/DAO1/1 (1,55 s /1,06 s), Paketinstallation/SQLite/vier Hashes.
+- Danach gemeinsame geprüfte Long-Konvertierung der nativen OpenRecordset-Typargumente ergänzt: banker rounding, Missing/ausgelassen nativer Default2, Empty0/andere Modi3251, Null94/Text13; keine1/Table-/ADO-/Locking-Parität. DAO1/1 (0,97 s), aktuelle App/Paket/Build-ID/SQLite/vier Originalhashes und drei Uploadhashes bestanden. Breite Vollsuite/Matrix dieses letzten kleinen Inkrements nicht neu behaupten. F055/F122 bleiben offen.
+- Codex Call ist für notwendige Fragen und tatsächlichen Gesamtabschluss nach aktueller Nutzeranweisung zu verwenden. Skill-/Client-Checkout: /workspace/work/codex-call, feat/ask-via-call fd2cea7; vorhandene Schnittstellen lesen, keine Secrets ausgeben. Erste Referenzanfrage endete timeout ohne API-Antwort; Nutzer lieferte Dateien im Chat. Eine weitere gebündelte Original-Login-/Windows-Referenzfrage läuft unter /workspace/work/login-reference-call.json; tatsächlichen Resultatstand lesen, nichts aus Schweigen ableiten, nicht blind neu anlegen. Kein Gesamtabschluss oder Abschlussanruf:72 Vollanforderungen offen.
 
 Unbedingt offen lassen, bis korrekt gelöst
 - Original-Login: ColumnCount 5 gegenüber Column(5). Keine sechste Spalte, kein Passwort, kein Null-Fallback erfinden; Access-Referenz fehlt.

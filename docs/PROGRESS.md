@@ -5922,3 +5922,25 @@ SQLite3.54.1 checks, actual installation/backend smoke and four original hashes.
 These are local container results, not GitHub CI successes; account payment/
 spending-limit rejection remains. The newer Recordset.Type increment has targeted
 host evidence, not yet a new full platform-matrix claim.456/384/72 unchanged.
+
+
+## Checked OpenRecordset mode arguments and latest verification (2026-11-06)
+
+Database/QueryDef/TableDef.OpenRecordset now share checked native Long mode
+conversion: round-to-even before selection, native omitted/Missing mode2,
+explicit Empty0 refused, Null94, invalid text13 and unsupported modes3251.
+Database/QueryDef arity errors are450. This removes Database's truncating cast,
+QueryDef's inconsistent exact-Double comparison and TableDef's narrower Integer
+conversion. Existing native supported modes remain2/4; table-type1, full Access
+workspace defaults, options/locking/ADO and complete error priority remain open.
+Existing DAO target1/1 (0.97 s), current app/DAO build, current .deb payload/
+Build-ID/pinned SQLite3.54.1 and four original hashes pass. All three supplied
+upload hashes also remain unchanged. No new target/checkbox/ID; F055/F122 open.
+
+The preceding418719d runtime passed a fresh Debian13 full48/48 (94.15 s).
+Debian12 and Ubuntu24.04 immutable418719d follow-ups rebuilt the actual app/DAO,
+passed DAO1/1 (1.55 s /1.06 s), regenerated and installed their matching packages,
+verified SQLite3.54.1 and all four original hashes. Their preceding e2d64c9 full
+suites remain48/48 each; the final bounded mode-conversion increment above has
+host-targeted evidence rather than an invented repeat of those full suites.
+GitHub account CI remains blocked; local container results are distinguished.
