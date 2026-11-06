@@ -1824,3 +1824,26 @@ pass targeted layout/mainwindow2/2 (13.00 s); final full current desktop48/48
 (86.11 s), current Debian/build-ID/SQLite/four hashes pass. GUI-free core is
 unchanged since navigation1/1 (1.92 s). No new CTest target/ID; F148/F135 remain
 open, fixed456/384/72.
+
+## Chatwechsel am 2026-11-06
+
+Alle Laufzeitänderungen bis6f77ac842e169ba34c144372dde6b682f82e50c0 sind
+vollständig im privaten Repository gesichert. Der inhaltlich identische private
+API-Sicherungscommit1a43d9c03c314bb551e16147450f4d9a5379c867 wurde am Chatwechsel
+erfolgreich per direktem Git ohne Force auf development/access-compatibility
+gepusht und per API zurückgelesen. Beide Historien sind mit
+11751d4dc270e3c237514802426db8beb33d4b1f ohne Inhaltsänderung zusammengeführt.
+Die früheren API-Ref-Fehler sind damit kein Beleg für einen aktuellen fehlenden
+Push. Direkter Git-Zugang funktioniert wieder.
+
+Kopierfertiger Fortsetzungsauftrag: NEXT_CHAT_PROMPT.md. Unverändert456 feste
+Punkte/384 bestätigte Teilumfänge/72 offene Vollanforderungen; keine nachgewiesene
+Gesamtparität. Letzter vollständiger Lauf48/48 (86,11 s), Debian/Build-ID/SQLite/
+vier Originalfixture-Hashes bestanden. Kern seit letztem GUI-frei1/1 (1,92 s)
+unverändert. Originalabfragen78/100 ohne Windows-Ergebnisorakel.
+
+Tabellen-/Abfragedatenblatt-Druck/PDF war lediglich die nächste geplante Etappe.
+Dafür wurde KEINE Implementierung begonnen. Es verbleibt kein uncommitteter
+Laufzeitcode. Alte geschützte WIP-Patches dürfen nicht ungeprüft auf den neuen
+Stand angewendet werden. Alle weiteren offenen Anforderungen stehen im festen
+Katalog und den technischen Laufzeitdokumenten.
