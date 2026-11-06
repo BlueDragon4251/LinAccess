@@ -69,6 +69,31 @@ void verifyJetBinaryReference(const QString& path) {
     std::cout<<"Actual technical Jet binary import: exact inline/multi-page bytes, DAO chunks, NULL, bounded oversized rollback and source hashes verified\n";
 }
 
+void verifyJetSingleReference(const QString& path) {
+    using namespace linaccess;
+    QFile input(path); assert(input.open(QIODevice::ReadOnly));
+    const auto before=QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256); input.close();
+    auto db=QSqlDatabase::addDatabase("QSQLITE","jet-single-reference"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery query(db); assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)")); query.finish();
+    assert(importAccessDatabase(db,path)==1);
+    auto rows=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("single_type_probe")}).object;
+    const float expected[]{0.1f,16777216.0f,1.5f}; int count=0;
+    while(!rows->member("EOF",{}).truthy()) {
+        const auto id=static_cast<int>(rows->item("id").asNumber()); assert(id>=1 && id<=4);
+        const auto field=rows->member("Fields",{VbaValue::string("sample")}).object;
+        assert(field->member("Type",{}).asNumber()==6 && field->member("Size",{}).asNumber()==4);
+        const auto value=field->member("Value",{});
+        if(id==4) assert(value.kind==VbaValue::Kind::Null);
+        else assert(value.kind==VbaValue::Kind::Number && value.numericType==VbaValue::NumericType::Single && value.asNumber()==static_cast<double>(expected[id-1]));
+        ++count; rows->member("MoveNext",{});
+    }
+    assert(count==4); rows->member("MoveFirst",{}); rows->member("Edit",{}); rows->assignItem("sample",VbaValue::numeric(0.2)); rows->member("Update",{});
+    assert(query.exec("SELECT sample FROM single_type_probe WHERE id=1") && query.next() && query.value(0).toDouble()==static_cast<double>(0.2f)); query.finish();
+    rows->member("Requery",{}); assert(rows->item("sample").numericType==VbaValue::NumericType::Single && rows->item("sample").asNumber()==static_cast<double>(0.2f));
+    rows->member("Close",{}); db.close(); assert(input.open(QIODevice::ReadOnly)); assert(QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256)==before);
+    std::cout<<"Actual technical Jet Single import: source field identity, Single values, NULL, rounded native write and unchanged hash verified\n";
+}
+
 void verifyJetIndexReference(const QString& path) {
     using namespace linaccess;
     QFile input(path); assert(input.open(QIODevice::ReadOnly));
@@ -354,6 +379,7 @@ CREATE INDEX `label` ON `source` (`a``b`);
     for(const auto* malformed:{"0","0x00","GG","00 1","00\n00"}) {
         bool rejected=false; try { (void)decodeMdbBinaryHex(malformed); } catch(const std::exception&) { rejected=true; } assert(rejected);
     }
+    const auto singleReference=qEnvironmentVariable("LINACCESS_JET_SINGLE_REFERENCE"); if(!singleReference.isEmpty()) verifyJetSingleReference(singleReference);
     const auto indexReference=qEnvironmentVariable("LINACCESS_JET_INDEX_REFERENCE"); if(!indexReference.isEmpty()) verifyJetIndexReference(indexReference);
     const auto reference=qEnvironmentVariable("LINACCESS_JET_BINARY_REFERENCE"); if(!reference.isEmpty()) verifyJetBinaryReference(reference);
     std::cout << "Schema, composite keys, indices, quoted identifiers and rollback verified\n";

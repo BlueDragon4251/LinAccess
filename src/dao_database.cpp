@@ -699,7 +699,9 @@ public:
             return VbaValue::byteArray(std::vector<unsigned char>(bytes.begin(),bytes.end()));
         }
         if(!raw.isNull() && binaryFieldType(type)) throw VbaRuntimeError(13,"Binary field requires BLOB storage");
-        return qtFieldValue(raw,type);
+        const auto value=qtFieldValue(raw,type);
+        return data_->daoTypes.value(name.toCaseFolded())==6 && value.kind!=VbaValue::Kind::Null
+            ? coerceVbaModuleValue(value,"single") : value;
     }
     void appendBinaryChunk(const QString& name,const VbaValue& argument) {
         const auto type=fieldType(name);
@@ -733,7 +735,10 @@ public:
         } else {
             if(binaryFieldType(type) && value.kind!=VbaValue::Kind::Null)
                 throw VbaRuntimeError(3251,"Binary field assignment requires Byte() or Null");
-            pending_[index]=sqlFieldValue(value,type);
+            const auto scalar=data_->daoTypes.value(name.toCaseFolded())==6 ? scalarVbaValue(value) : value;
+            const auto converted=data_->daoTypes.value(name.toCaseFolded())==6 && scalar.kind!=VbaValue::Kind::Null
+                ? coerceVbaModuleValue(scalar,"single") : scalar;
+            pending_[index]=sqlFieldValue(converted,type);
         }
         changed_.insert(index);
     }

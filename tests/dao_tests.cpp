@@ -40,6 +40,57 @@ private:
 };
 void testDaoCursors();
 void testDaoTransactions();
+void testDaoSingleFields() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-single-fields"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db); assert(sql.exec("CREATE TABLE samples(id INTEGER4,sample REAL DEFAULT 0.1)"));
+    assert(sql.exec("INSERT INTO samples VALUES(1,1.5),(2,NULL)"));
+    assert(sql.exec("CREATE TABLE _la_table_schema(table_name TEXT PRIMARY KEY,definition TEXT NOT NULL)"));
+    const QJsonArray metadata{QJsonObject{{"name","id"},{"source_type","INT"}},QJsonObject{{"name","sample"},{"source_type","SINGLE"}}};
+    sql.prepare("INSERT INTO _la_table_schema VALUES('samples',?)"); sql.addBindValue(QJsonDocument(metadata).toJson(QJsonDocument::Compact)); assert(sql.exec()); sql.finish();
+    auto rows=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("samples")}).object;
+    const auto field=rows->member("Fields",{VbaValue::string("sample")}).object;
+    assert(field->member("Type",{}).asNumber()==6 && field->member("Value",{}).numericType==VbaValue::NumericType::Single);
+    const auto error=[](const std::function<void()>& operation,int expected) { int number=0; try { operation(); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==expected); };
+    rows->member("Edit",{}); rows->assignItem("sample",VbaValue::numeric(16777217.0));
+    assert(rows->item("sample").asNumber()==16777216.0 && rows->item("sample").numericType==VbaValue::NumericType::Single);
+    error([&] { rows->assignItem("sample",VbaValue::numeric(1e40)); },6);
+    error([&] { rows->assignItem("sample",VbaValue::string("invalid")); },13);
+    error([&] { rows->assignItem("sample",VbaValue::numeric(1e-50)); },3251);
+    assert(rows->item("sample").asNumber()==16777216.0);
+    rows->member("Update",{});
+    assert(sql.exec("SELECT sample FROM samples WHERE id=1") && sql.next() && sql.value(0).toDouble()==16777216.0); sql.finish();
+    auto clone=rows->member("Clone",{}).object; clone->member("MoveFirst",{}); assert(clone->item("sample").numericType==VbaValue::NumericType::Single); clone->member("Close",{});
+    rows->member("MoveNext",{}); assert(rows->item("sample").kind==VbaValue::Kind::Null);
+    rows->member("Edit",{}); rows->assignItem("sample",VbaValue::empty()); assert(rows->item("sample").asNumber()==0 && rows->item("sample").numericType==VbaValue::NumericType::Single);
+    rows->assignItem("sample",VbaValue{}); assert(rows->item("sample").kind==VbaValue::Kind::Null); rows->member("CancelUpdate",{});
+    rows->member("AddNew",{}); assert(rows->item("sample").numericType==VbaValue::NumericType::Single && rows->item("sample").asNumber()==static_cast<double>(0.1f)); rows->member("CancelUpdate",{});
+    rows->member("Close",{});
+    Host host(db); const auto result=linaccess::executeVbaProcedure(R"VBA(Sub InspectSingles()
+Dim rows As DAO.Recordset
+Set rows=CurrentDb.OpenRecordset("samples")
+If VarType(rows!sample)<>vbSingle Then Err.Raise 5
+rows.Edit
+rows!sample=0.1
+If VarType(rows!sample)<>vbSingle Or rows!sample<>CSng(0.1) Then Err.Raise 5
+rows.Update
+rows.Requery
+If VarType(rows!sample)<>vbSingle Or rows!sample<>CSng(0.1) Then Err.Raise 5
+rows.MoveNext
+If Not IsNull(rows!sample) Then Err.Raise 5
+rows.Close
+Me!SingleChecked="yes"
+End Sub)VBA","InspectSingles",host);
+    if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Single VBA error="<<result.errorNumber<<", line="<<result.line<<'\n';
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && host.fields["SingleChecked"]=="yes");
+    assert(sql.exec("CREATE TABLE ordinary_double(value REAL)")); assert(sql.exec("INSERT INTO ordinary_double VALUES(0.1)"));
+    auto ordinary=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("ordinary_double")}).object;
+    assert(ordinary->item("value").numericType==VbaValue::NumericType::Double); ordinary->member("Close",{});
+    assert(sql.exec("UPDATE samples SET sample=1e40 WHERE id=1"));
+    auto invalid=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("samples")}).object;
+    error([&] { invalid->item("sample"); },6); invalid->member("Close",{}); db.close();
+}
+
 void testDaoRelations() {
     using linaccess::VbaValue;
     auto db=QSqlDatabase::addDatabase("QSQLITE","dao-relations"); db.setDatabaseName(":memory:"); assert(db.open());
@@ -1459,6 +1510,7 @@ int main(int argc, char** argv) {
     testDaoTransactions();
     testTableDefSchemaFields();
     testDaoRelations();
+    testDaoSingleFields();
     testDaoTableGenerations();
     testSqlRgbDao();
     auto db = QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());
