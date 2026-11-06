@@ -349,6 +349,7 @@ public:
             return VbaArgumentSignature{{"Criteria"},1};
         if (key=="move") return VbaArgumentSignature{{"Rows","Start"},1};
         if (key=="getrows") return VbaArgumentSignature{{"NumRows"},0};
+        if (key=="fields") return VbaArgumentSignature{{"Index"},0};
         return {};
     }
     Recordset(QSqlDatabase db, QString source, bool snapshot, QMap<QString,QVariant> bindings = {},AccessQueryPlan plan={},int cursorKind=0)
@@ -490,16 +491,32 @@ public:
             return VbaValue::reference(std::shared_ptr<Recordset>(new Recordset(*this,CloneTag{})));
         }
         if (key == "fields") {
-            if (args.empty()) return fieldCollection(shared_from_this());
-            require(args.size() == 1, "DAO: Fields requires one field name/index");
-            QString field;
-            if (args[0].kind == VbaValue::Kind::Number) {
-                const auto index = sqlFieldValue(args[0],"INTEGER").toLongLong();
-                if (index < 0 || index >= data_->columns.size()) throw VbaRuntimeError(3265,"DAO: Field index out of range");
-                field = data_->columns[static_cast<int>(index)];
-            } else field = text(args[0].asText());
-            (void)column(field);
-            return VbaValue::reference(std::make_shared<Field>(shared_from_this(), field));
+            if (args.empty() || (args.size()==1 && args[0].kind==VbaValue::Kind::Missing)) {
+                auto collection=fields_.lock();
+                if(!collection) { collection=fieldCollection(shared_from_this()).object; fields_=collection; }
+                return VbaValue::reference(collection);
+            }
+            if(args.size()!=1) throw VbaRuntimeError(450,"DAO: Fields requires one field name/index");
+            const auto value=scalarVbaValue(args[0]);
+            if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null field index");
+            int position=-1;
+            if(value.kind==VbaValue::Kind::Text) {
+                const auto requested=text(value.asText());
+                for(int i=0;i<data_->columns.size();++i) if(data_->columns[i].compare(requested,Qt::CaseInsensitive)==0) {
+                    if(position>=0) throw VbaRuntimeError(3251,"DAO: Ambiguous field name"); position=i;
+                }
+            } else {
+                const auto index=coerceVbaModuleValue(value,"long").number;
+                if(index>=0 && index<data_->columns.size()) position=static_cast<int>(index);
+            }
+            if(position<0) throw VbaRuntimeError(3265,"DAO: Field index/name not found");
+            const auto canonical=data_->columns[position];
+            int matches=0; for(const auto& name:data_->columns) if(name.compare(canonical,Qt::CaseInsensitive)==0) ++matches;
+            if(matches!=1) throw VbaRuntimeError(3251,"DAO: Duplicate result fields require unambiguous labels");
+            auto& cached=fieldObjects_[canonical.toCaseFolded()];
+            auto field=cached.lock();
+            if(!field) { field=std::make_shared<Field>(shared_from_this(),canonical); cached=field; }
+            return VbaValue::reference(field);
         }
         if(key=="type") {
             if(!args.empty()) throw VbaRuntimeError(450,"DAO: Recordset.Type takes no arguments");
@@ -888,16 +905,27 @@ private:
     qsizetype position_{};
     Mode mode_{Mode::Browse};
     AccessQueryPlan queryPlan_;
+    std::weak_ptr<VbaObject> fields_;
+    QMap<QString,std::weak_ptr<Field>> fieldObjects_;
 };
 class Fields final : public VbaObject {
 public:
     std::string_view className() const override { return "Fields"; }
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     explicit Fields(std::shared_ptr<Recordset> owner) : owner_(std::move(owner)) {}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(lower(name)=="item") return VbaArgumentSignature{{"Index"},1}; return {};
+    }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto key = lower(name);
-        if (key == "count" && args.empty()) return integerCount(owner_->fieldNames().size());
-        if (key == "item" && args.size() == 1) return owner_->member("Fields",args);
+        if(key=="count") {
+            if(!args.empty()) throw VbaRuntimeError(450,"DAO: Fields.Count takes no arguments");
+            return integerCount(owner_->fieldNames().size());
+        }
+        if(key=="item") {
+            if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"DAO: Fields.Item requires one index");
+            return owner_->member("Fields",args);
+        }
         throw VbaRuntimeError(438,"DAO: Fields member unsupported");
     }
     VbaValue item(std::string_view name) override { return owner_->member("Fields",{VbaValue::string(std::string(name))}); }
@@ -909,7 +937,7 @@ public:
     std::vector<VbaValue> enumerate() override {
         std::vector<VbaValue> values;
         for (const auto& name : owner_->fieldNames())
-            values.push_back(VbaValue::reference(std::make_shared<Field>(owner_,name)));
+            values.push_back(owner_->member("Fields",{VbaValue::string(name.toStdString())}));
         return values;
     }
 private:

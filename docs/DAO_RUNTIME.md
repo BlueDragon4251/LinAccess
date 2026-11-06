@@ -415,3 +415,25 @@ Binär-AppendChunk-Nachweis: finales bestehendes DAO-Ziel1/1 (1,38 s), danach vo
 Unveränderlicher629b3c9-Folgecheck: Debian12 DAO1/1 (1,49 s), Ubuntu24.04 DAO1/1 (1,27 s), jeweils aktuelle App/DAO neu gebaut, passende Pakete erzeugt/tatsächlich installiert, SQLite3.54.1 und vier Originalhashes bestanden. Diese629-Nachweise enthalten noch nicht die anschließenden TableDef.RecordCount-/Binärchunk-Inkremente; keine neue Vollmatrix/GitHub-CI behaupten. Letzte früheren vollständigen lokalen Distributionssuiten bleiben e2d64c9 mit48/48 je Plattform.456/384/72 unverändert; kein Gesamtabschluss.
 
 Recordset.Field.Name prüft jetzt wie die übrigen Feldmetadaten die tatsächliche Besitzer-/Verbindungs-/Rollback-Lebensdauer. Der Name bleibt ohne aktuellen Datensatz am EOF lesbar, nach Close aber3420. Vorhandenes DAO-Ziel1/1 (1,05 s), aktuelles Paket/Build-ID/SQLite3.54.1 und vier Originalhashes bestanden. Letzte Vollsuite41b193c:48/48 (98,95 s), kein neuer Gesamtlauf für diese Lebensdauerkorrektur.456/384/72 unverändert.
+
+
+## Checked Recordset.Fields lookup and native identity (2026-11-06)
+
+Recordset.Fields and Fields.Item support checked named Index arguments. Omitted/
+Missing optional Recordset.Fields returns the actual held collection; required
+Item index omission remains450. Field lookup uses canonical actual result labels,
+case-insensitive string names and checked Long indices (including Empty0 and
+round-to-even). Null is94 and absent names/out-of-range indices3265. Duplicate
+case-insensitive labels refuse3251 rather than selecting a first matching value.
+
+Weak caches preserve collection/Field identity while held, including enumeration
+and named/ordinal lookup, without a strong owner cycle. Each clone retains its
+own wrapper identities. The collection still reflects the native owner's current
+schema/data and uses the existing closed/rollback/thread guards; complete Jet
+schema generation/metadata lifetime/error precedence remains open. Existing DAO
+VBA/SQL cases check named invocation, canonical case, repeated identity, numeric
+coercion/Null/missing names and refusal of a real duplicate-label SELECT.
+F055/F121/F122 open;456/384/72 unchanged. No new CTest target.
+
+Recordset.Fields-Fortsetzung: benannte/geprüfte Indizes, kanonische Ergebnisnamen, gehaltene Collection-/Field-Identität auch bei Enumeration, Null94/fehlend3265/Arity450 und explizite Doppelspalten-Verweigerung3251. Bestehendes DAO-Ziel1/1 (1,01 s), aktuelles Paket/Build-ID/SQLite3.54.1/vier Originalhashes bestanden; Details docs/DAO_RUNTIME.md. Kein neuer Vollsuite-Lauf dieses Inkrements.
+Unveränderliche41b193c-Folgeläufe bestanden Debian12 DAO1/1 (1,61 s) und Ubuntu24.04 DAO1/1 (1,21 s), jeweils aktuelle App/Paket/Installation/SQLite3.54.1/vier Originalhashes. Diese Belege enthalten TableDef.RecordCount/GetChunk/AppendChunk, nicht die danach folgenden Field.Name-/Recordset.Fields-Inkremente. Letzte komplette Host-Suite41b193c:48/48 (98,95 s).456/384/72 unverändert; GitHub-CI weiter gesperrt.

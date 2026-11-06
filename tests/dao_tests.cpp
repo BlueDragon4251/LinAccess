@@ -257,6 +257,10 @@ Set rows=CurrentDb.OpenRecordset("native_indexed_fields")
 rows.Edit
 rows("value")="indexed"
 Set fields=rows.Fields
+If Not (fields Is rows.Fields) Then Err.Raise 5
+Set genericField=fields.Item(Index:="VALUE")
+If genericField.Name<>"value" Then Err.Raise 5
+If Not (genericField Is rows.Fields(Index:="value")) Then Err.Raise 5
 fields("value")="fields"
 rows.Fields("value")="indexed-member"
 Set field=rows.Fields("value")
@@ -1387,6 +1391,23 @@ End Sub)VBA","Übertragen",host);
             catch(const linaccess::VbaRuntimeError& error) { assert(error.number==number); }
         }
         auto rows=table->member("OpenRecordset",{}).object;
+        const auto recordFields=rows->member("Fields",{}).object;
+        assert(recordFields==rows->member("Fields",{linaccess::VbaValue::missing()}).object);
+        const auto firstField=rows->member("Fields",{linaccess::VbaValue::empty()}).object;
+        assert(firstField->member("Name",{}).asText()=="id" && firstField==recordFields->member("Item",{linaccess::VbaValue::numeric(0.5)}).object);
+        const auto namedField=recordFields->member("Item",{linaccess::VbaValue::string("QTY")}).object;
+        assert(namedField->member("Name",{}).asText()=="qty" && namedField==recordFields->enumerate()[1].object);
+        for(const auto& [index,expected]:std::vector<std::pair<linaccess::VbaValue,int>>{{{},94},{linaccess::VbaValue::integer(-1),3265},{linaccess::VbaValue::string("absent"),3265}}) {
+            try { (void)rows->member("Fields",{index}); assert(false); }
+            catch(const linaccess::VbaRuntimeError& error) { assert(error.number==expected); }
+        }
+        int duplicateField=0;
+        try {
+            const auto duplicateRows=database->member("OpenRecordset",{linaccess::VbaValue::string("SELECT id AS same,qty AS same FROM items")}).object;
+            assert(duplicateRows->member("RecordCount",{}).asNumber()==2);
+            (void)duplicateRows->member("Fields",{linaccess::VbaValue::integer(0)});
+        } catch(const linaccess::VbaRuntimeError& error) { duplicateField=error.number; }
+        assert(duplicateField==3251);
         rows->member("Edit",{}); rows->assignItem("qty",linaccess::VbaValue::numeric(2.5)); rows->member("Update",{}); rows->member("Close",{});
         assert(q.exec("SELECT qty FROM items WHERE id=1") && q.next() && q.value(0).toDouble()==2.5); q.finish();
         assert(q.exec("UPDATE items SET qty=2 WHERE id=1"));
