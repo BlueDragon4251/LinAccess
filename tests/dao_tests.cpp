@@ -121,6 +121,50 @@ End Sub
 
     db.close(); stale=false; try { fresh->member("Count",{}); } catch(const linaccess::VbaRuntimeError& error) { stale=error.number==3420; } assert(stale);
 }
+void testDaoTableGenerations() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-table-generations"); db.setDatabaseName(":memory:"); assert(db.open());
+    const auto database=linaccess::makeDaoDatabase(db);
+    const auto execute=[&](const char* source) { database->member("Execute",{VbaValue::string(source)}); };
+    const auto error=[&](const std::function<void()>& operation,int expected) { int number=0; try { operation(); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==expected); };
+    execute("CREATE TABLE epoch_rows(id INTEGER PRIMARY KEY,payload INTEGER4)"); execute("INSERT INTO epoch_rows VALUES(1,11)");
+    const auto definitions=database->member("TableDefs",{}).object;
+    const auto previous=definitions->item("epoch_rows").object;
+    const auto schema=previous->member("Fields",{}).object;
+    const auto rows=previous->member("OpenRecordset",{}).object;
+    const auto field=rows->member("Fields",{VbaValue::string("payload")}).object;
+    const auto clone=rows->member("Clone",{}).object;
+    rows->member("Edit",{}); field->assign("Value",VbaValue::integer(777));
+    QSqlQuery sql(db); assert(sql.exec("SELECT sql,rootpage FROM main.sqlite_schema WHERE name='epoch_rows'") && sql.next());
+    const auto definition=sql.value(0).toString(); const auto root=sql.value(1).toLongLong(); sql.finish();
+    execute("CREATE TABLE IF NOT EXISTS epoch_rows(id INTEGER PRIMARY KEY,payload INTEGER4)");
+    error([&] { execute("CREATE TABLE epoch_rows(id INTEGER PRIMARY KEY,payload INTEGER4)"); },3010);
+    assert(previous==definitions->item("epoch_rows").object && previous->member("Name",{}).asText()=="epoch_rows");
+    execute("DROP\nTABLE [epoch_rows]"); execute("CREATE TABLE epoch_rows(id INTEGER PRIMARY KEY,payload INTEGER4)");
+    execute("INSERT INTO epoch_rows VALUES(1,99)");
+    assert(sql.exec("SELECT sql,rootpage FROM main.sqlite_schema WHERE name='epoch_rows'") && sql.next());
+    assert(sql.value(0).toString()==definition && sql.value(1).toLongLong()==root); sql.finish();
+    error([&] { (void)previous->member("Name",{}); },3420);
+    error([&] { (void)schema->member("Count",{}); },3420);
+    error([&] { rows->member("Update",{}); },3420);
+    error([&] { rows->member("Requery",{}); },3420);
+    error([&] { clone->member("Edit",{}); },3420);
+    error([&] { (void)field->member("Name",{}); },3420);
+    clone->member("Close",{}); rows->member("Close",{});
+    assert(sql.exec("SELECT payload FROM epoch_rows") && sql.next() && sql.value(0).toInt()==99); sql.finish();
+    const auto current=definitions->item("epoch_rows").object; assert(current!=previous);
+    const auto fresh=current->member("OpenRecordset",{}).object;
+    execute("ALTER TABLE epoch_rows ADD COLUMN extra INTEGER");
+    assert(current==definitions->item("epoch_rows").object); fresh->member("Requery",{});
+    assert(fresh->member("Fields",{}).object->member("Count",{}).asNumber()==3);
+    const auto workspace=linaccess::makeDaoEngine(db)->defaultMember({VbaValue::integer(0)},true).object;
+    const auto drop=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string("DROP TABLE epoch_rows")}).object;
+    workspace->member("BeginTrans",{}); drop->member("Execute",{}); workspace->member("Rollback",{});
+    error([&] { (void)current->member("Name",{}); },3420); error([&] { fresh->member("Requery",{}); },3420); fresh->member("Close",{});
+    const auto restored=definitions->item("epoch_rows").object;
+    assert(restored!=current && restored->member("RecordCount",{}).asNumber()==1);
+    assert(sql.exec("SELECT payload FROM epoch_rows") && sql.next() && sql.value(0).toInt()==99); sql.finish(); db.close();
+}
 void testSqlRgbDao() {
     auto db=QSqlDatabase::addDatabase("QSQLITE","sql-rgb-dao"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery sql(db); assert(sql.exec("CREATE TABLE color_rows(id INTEGER PRIMARY KEY,r REAL,g REAL,b REAL,packed INTEGER)"));
@@ -1335,6 +1379,7 @@ int main(int argc, char** argv) {
     testDaoCursors();
     testDaoTransactions();
     testTableDefSchemaFields();
+    testDaoTableGenerations();
     testSqlRgbDao();
     auto db = QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());
     QSqlQuery q(db);

@@ -437,3 +437,38 @@ F055/F121/F122 open;456/384/72 unchanged. No new CTest target.
 
 Recordset.Fields-Fortsetzung: benannte/geprüfte Indizes, kanonische Ergebnisnamen, gehaltene Collection-/Field-Identität auch bei Enumeration, Null94/fehlend3265/Arity450 und explizite Doppelspalten-Verweigerung3251. Bestehendes DAO-Ziel1/1 (1,01 s), aktuelles Paket/Build-ID/SQLite3.54.1/vier Originalhashes bestanden; Details docs/DAO_RUNTIME.md. Kein neuer Vollsuite-Lauf dieses Inkrements.
 Unveränderliche41b193c-Folgeläufe bestanden Debian12 DAO1/1 (1,61 s) und Ubuntu24.04 DAO1/1 (1,21 s), jeweils aktuelle App/Paket/Installation/SQLite3.54.1/vier Originalhashes. Diese Belege enthalten TableDef.RecordCount/GetChunk/AppendChunk, nicht die danach folgenden Field.Name-/Recordset.Fields-Inkremente. Letzte komplette Host-Suite41b193c:48/48 (98,95 s).456/384/72 unverändert; GitHub-CI weiter gesperrt.
+
+
+## Generations across observed native DAO table DDL (2026-11-06)
+
+Successful supported Database/QueryDef.Execute DDL and make-table operations now
+compare actual main user-table catalogs before/after the statement. Appearance/
+disappearance advances a monotonic native workspace table generation. The checked
+compiler dbQDDL96 classification covers whitespace/comments without inferring
+statement kind from a single literal space. DDL affected counts remain0.
+
+TableDefs and direct-main-table Recordsets capture that generation; clones retain
+it. Dropping/recreating the same name invalidates old TableDef/Field/Recordset
+access3420 even when SQLite reuses identical SQL, root page and row IDs. Old staged
+Update and Requery cannot write/rebind to the replacement table. Close remains
+available for cleanup. Fresh lookups return new wrappers. Ordinary ALTER ADD
+COLUMN and CREATE IF NOT EXISTS retain the table identity; failed CREATE does
+not advance it. Rollback deliberately does not revive a wrapper whose observed
+physical identity was removed; reacquire rather than resurrect it.
+
+This is a native safety contract for observed own DAO actions, not Jet table
+locking or exact Access error/lifetime equivalence. Unobserved external/raw SQL,
+TEMP-only sources, full cross-connection/schema identity, linked tables and all
+full F055/F121 contracts remain open. Query/frozen read-only results do not receive
+a fabricated physical-table generation.
+
+The existing DAO regression uses real SQLite DDL/data: identical recreated SQL/
+root page/rowid, a staged old write, clone, fields and fresh lookup; independent
+SQL proves the new value stays99 rather than the old pending777. It checks no-op/
+failed DDL, supported ALTER and a QueryDef DROP rolled back through Workspace.
+No new CTest target or catalog point. Current full desktop48/48 (89.70 s), matching
+app/package/Build-ID/SQLite3.54.1 and four original hashes pass. This full suite also
+covers the preceding copies and selected-record printing increments, including
+original recipe PDF output. GUI-free source is unchanged from the e837 core1/1
+(2.20 s); latest earlier e837 local Debian12/Ubuntu24.04 follow-ups remain2/2 each,
+not a new platform claim for this DDL increment.456/384/72 unchanged.

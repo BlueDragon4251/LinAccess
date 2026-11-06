@@ -70,11 +70,13 @@ void exec(QSqlQuery& query, const QString& sql) {
     if (message.contains("interrupted")) throw VbaRuntimeError(3035,"DAO: query execution budget exceeded");
     throw VbaRuntimeError(3146,"DAO: SQL operation failed");
 }
+QStringList nativeTableNames(QSqlDatabase db);
+void observeNativeTableCatalog(QSqlDatabase db,const QStringList& before);
 qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<QString,QVariant>& bindings) {
     if (plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");
     const bool makeTable=!plan.makeTable.isEmpty();
-    const auto statement=plan.sql.trimmed();
-    const bool schemaAction=statement.startsWith("CREATE ",Qt::CaseInsensitive) || statement.startsWith("ALTER ",Qt::CaseInsensitive) || statement.startsWith("DROP ",Qt::CaseInsensitive);
+    const bool schemaAction=plan.daoQueryType==96; // Checked compiler dbQDDL classification, including whitespace/comments.
+    const auto before=(schemaAction || makeTable) ? nativeTableNames(db) : QStringList{};
     QSqlQuery guard(db);
     if (makeTable && !guard.exec("SAVEPOINT la_make_table")) queryFailure(guard);
     try {
@@ -119,6 +121,7 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
                 affected=query.value(0).toLongLong(); query.finish();
             }
         }
+        if(schemaAction || makeTable) observeNativeTableCatalog(db,before);
         if (makeTable && !guard.exec("RELEASE la_make_table")) queryFailure(guard);
         return affected;
     } catch (...) {
@@ -153,7 +156,7 @@ struct WorkspaceState {
     sqlite3* connection{};
     bool alive{true};
     quint64 rollbackRevision{};
-    QMap<QString,quint64> queryGenerations;
+    QMap<QString,quint64> queryGenerations,tableGenerations;
     QVariantMap queryViewSnapshot;
     static constexpr const char* queryViewProperties[]{"la_query_database","la_query_views","la_query_internal_views","la_query_rank_pending","la_query_revision"};
     int clones{};
@@ -212,6 +215,18 @@ std::shared_ptr<WorkspaceState> workspaceState(QSqlDatabase db) {
         [](void* data) { auto* holder=static_cast<std::shared_ptr<WorkspaceState>*>(data); (*holder)->alive=false; (*holder)->connection=nullptr; delete holder; })!=SQLITE_OK)
         throw VbaRuntimeError(3146,"DAO: Workspace lifetime tracking unavailable");
     db.driver()->setProperty("la_dao_workspace_state",QVariant::fromValue(state)); return state;
+}
+void observeNativeTableCatalog(QSqlDatabase db,const QStringList& before) {
+    const auto after=nativeTableNames(db); const auto state=workspaceState(db);
+    QSet<QString> previous,current;
+    for(const auto& name:before) previous.insert(name.toCaseFolded());
+    for(const auto& name:after) current.insert(name.toCaseFolded());
+    auto names=previous; names.unite(current);
+    for(const auto& name:names) if(previous.contains(name)!=current.contains(name)) {
+        auto& generation=state->tableGenerations[name];
+        if(generation==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Table generation overflow");
+        ++generation;
+    }
 }
 QString sqliteLiteralDefaultSql(const QVariant& declaration) {
     if(declaration.isNull()) return {};
@@ -356,6 +371,7 @@ public:
         : db_(std::move(db)), source_(std::move(source)), bindings_(std::move(bindings)), readOnly_(snapshot), recordsetType_(cursorKind ? cursorKind : snapshot ? 4 : 2),queryPlan_(std::move(plan)) {
         data_->workspace=workspaceState(db_); data_->rollbackRevision=data_->workspace->rollbackRevision;
         table_ = db_.tables().contains(source_, Qt::CaseInsensitive);
+        if(table_ && nativeTableNames(db_).contains(source_,Qt::CaseInsensitive)) tableGeneration_=data_->workspace->tableGenerations.value(source_.toCaseFolded());
         readOnly_ |= !table_;
         reload();
         data_->cursors.insert(this);
@@ -368,8 +384,13 @@ public:
         data_->cursors.insert(this);
     }
     ~Recordset() override { if (cloneCounted_) --data_->workspace->clones; data_->cursors.remove(this); }
-    void checkTransaction() const {
+    void checkTableGeneration() const {
         data_->workspace->check();
+        if(tableGeneration_ && *tableGeneration_!=data_->workspace->tableGenerations.value(source_.toCaseFolded()))
+            throw VbaRuntimeError(3420,"DAO: Physical table identity was replaced");
+    }
+    void checkTransaction() const {
+        checkTableGeneration();
         if (data_->rollbackRevision!=data_->workspace->rollbackRevision) throw VbaRuntimeError(3420,"DAO: Recordset requires Requery after Rollback");
     }
     void refreshSnapshot(const QStringList& columns,const QMap<QString,QString>& types,
@@ -575,7 +596,7 @@ public:
             return {};
         }
         if (key == "requery") {
-            data_->workspace->check();
+            checkTableGeneration();
             if (data_->rollbackRevision!=data_->workspace->rollbackRevision) { mode_=Mode::Browse; pending_.clear(); changed_.clear(); chunkFields_.clear(); }
             require(mode_ == Mode::Browse, "DAO: Pending edit");
             reload(); return {};
@@ -720,7 +741,7 @@ private:
     struct CloneTag {};
     Recordset(const Recordset& source,CloneTag)
         : data_(source.data_),db_(source.db_),source_(source.source_),bindings_(source.bindings_),
-          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),recordsetType_(source.recordsetType_),position_(-1),queryPlan_(source.queryPlan_) {
+          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),position_(-1),queryPlan_(source.queryPlan_) {
         cloneCounted_=true; ++data_->workspace->clones;
         data_->cursors.insert(this);
     }
@@ -899,6 +920,7 @@ private:
     QMap<QString,QVariant> bindings_;
     bool table_{}, readOnly_{}, closed_{}, frozen_{},noMatch_{},cloneCounted_{};
     std::optional<int> recordsetType_; // Opening kind, independent of write capability; unknown for host-only frozen adapters.
+    std::optional<quint64> tableGeneration_;
     std::optional<VbaValue> lastModified_;
     QVariantList pending_;
     QSet<int> changed_,chunkFields_;
@@ -1268,7 +1290,7 @@ QStringList nativeTableNames(QSqlDatabase db) {
     if (!db.isOpen()) throw VbaRuntimeError(3420,"DAO: Database is closed");
     QStringList result;
     QSqlQuery query(db);
-    if (!query.exec("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY rowid")) queryFailure(query);
+    if (!query.exec("SELECT name FROM main.sqlite_schema WHERE type='table' ORDER BY rowid")) queryFailure(query);
     while (query.next()) {
         const auto name=query.value(0).toString();
         if (!name.startsWith("sqlite_",Qt::CaseInsensitive) && !name.startsWith("_la_",Qt::CaseInsensitive)) result.append(name);
@@ -1457,10 +1479,10 @@ public:
         if (key=="openrecordset") return VbaArgumentSignature{{"Type"},0};
         return {};
     }
-    TableDefinition(QSqlDatabase db,QString name) : db_(std::move(db)),name_(std::move(name)),workspace_(workspaceState(db_)) {}
+    TableDefinition(QSqlDatabase db,QString name) : db_(std::move(db)),name_(std::move(name)),workspace_(workspaceState(db_)),generation_(workspace_->tableGenerations.value(name_.toCaseFolded())) {}
     bool valid() {
         workspace_->check();
-        if (invalidated_ || !db_.isOpen() || !nativeTableNames(db_).contains(name_,Qt::CaseInsensitive)) invalidated_=true;
+        if (invalidated_ || generation_!=workspace_->tableGenerations.value(name_.toCaseFolded()) || !db_.isOpen() || !nativeTableNames(db_).contains(name_,Qt::CaseInsensitive)) invalidated_=true;
         return !invalidated_;
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
@@ -1515,6 +1537,7 @@ private:
     std::weak_ptr<TableSchemaFields> fields_;
     quint64 fieldsVersion_{},fieldsRollback_{};
     bool invalidated_{};
+    quint64 generation_{};
 };
 class TableDefinitions final : public VbaObject {
 public:

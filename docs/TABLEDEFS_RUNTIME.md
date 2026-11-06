@@ -92,3 +92,5 @@ https://learn.microsoft.com/en-us/office/client-developer/access/desktop-databas
 No new test target, catalog ID or checkbox;456/384/72 unchanged.
 
 Current repeated unchanged-original syntax audit (2026-11-06):187/187 accepted across32 hash-checked modules, existing target1/1 (1.12 s). All records are explicitly unexecuted by this audit; this is separate from original runtime evidence.
+
+Native own DAO DDL generation tracking now closes the previously unobserved-between-two-DAO-calls drop/recreate hole for main tables: see DAO_RUNTIME.md. Unobserved external/raw SQL and complete Access/linked-table identity remain open; no complete F121 checkbox is earned.
