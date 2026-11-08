@@ -6,6 +6,8 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QElapsedTimer>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
@@ -175,6 +177,13 @@ QMap<QString,QString> AccessCatalog::floatingSourceTypes(const QString& accessSc
     return result;
 }
 
+QByteArray AccessCatalog::singleValues(const QString& name) const {
+    const auto values=tool("linaccess-mdb-metadata",{"--single-values",file_,name});
+    if(values.isEmpty() || values.size()>16*1024*1024 || !QJsonDocument::fromJson(values).isObject())
+        throw std::runtime_error("Exakte Single-Quelldaten sind nicht verfügbar");
+    return values;
+}
+
 QString AccessCatalog::tableSchema(const QString& name) const {
     auto schema = QString::fromUtf8(tool("mdb-schema", {"--default-values", "-T", name, file_, "sqlite"}));
     // MDBTools 1.0.0's SQLite backend omits all keys and indexes. Its MySQL
@@ -225,6 +234,8 @@ QString AccessCatalog::tableSchema(const QString& name) const {
     if(indexes.isEmpty() || indexes.size()>1024*1024 || !QJsonDocument::fromJson(indexes).isObject())
         throw std::runtime_error("Originale Indexmetadaten konnten nicht gelesen werden");
     schema+="\n-- LINACCESS_INDEX_METADATA "+QString::fromLatin1(indexes.toHex())+"\n";
+    const auto singleColumns=QJsonDocument::fromJson(indexes).object().value("single_columns");
+    if(!singleColumns.isArray()) throw std::runtime_error("Single-Quellmetadaten sind nicht verfügbar");
     return schema;
 }
 }

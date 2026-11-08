@@ -1,6 +1,8 @@
 #include "access_table_import.hpp"
 #include "access_catalog.hpp"
 #include "access_index_metadata.hpp"
+#include "access_single_metadata.hpp"
+#include <QLocale>
 #include "access_autonumber.hpp"
 #include "jet_sql_functions.hpp"
 #include <QMap>
@@ -249,6 +251,23 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
     for (const auto& column:columns) { actualNames.append(column.name); if (column.primaryKeyOrder) ++primaryCount; }
     for(int order=1;order<=columns.size();++order) for(const auto& column:columns) if(column.primaryKeyOrder==order) declaredPrimary.append(column.name);
     const auto sourceIndexes=schema.sourceIndexMetadata.isEmpty() ? QVector<AccessSourceIndex>{} : checkedAccessSourceIndexes(schema.sourceIndexMetadata,actualNames);
+    std::optional<AccessSingleValues> exactSingles;
+    if(!schema.sourceIndexMetadata.isEmpty()) {
+        const auto sourceRoot=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();
+        const auto singleNames=sourceRoot.value("single_columns"); QStringList names;
+        for(const auto& column:columns) if(column.sourceType=="SINGLE") {
+            if(column.sqliteType!="REAL") throw fail("Single-Quelltyp benötigt nachgewiesenen REAL-Speicher");
+            names.append(column.name);
+        }
+        if(!names.isEmpty()) {
+            if(!singleNames.isArray() || singleNames.toArray().size()!=names.size()) throw fail("Single-Quelltyp und Bibliothek widersprechen sich");
+            for(int i=0;i<names.size();++i) if(singleNames.toArray()[i].toString()!=names[i]) throw fail("Single-Quellspalten widersprechen sich");
+            const auto sourceTable=sourceRoot.value("source_table").toString();
+            exactSingles=checkedAccessSingleValues(AccessCatalog(sourceFile).singleValues(sourceTable),names,sourceTable);
+            if((insertOnly || rows.size()>1) && exactSingles->rowCount!=static_cast<qsizetype>(rows.size()-1)) throw fail("Single-Quelle und CSV-Zeilenzahl widersprechen sich");
+            if(accessSourceDigest(sourceFile)!=exactSingles->sourceDigest) throw fail("Single-Quelle wurde während des Lesens verändert");
+        } else if(singleNames.isArray() && !singleNames.toArray().isEmpty()) throw fail("Single-Quelltypen sind nicht nachgewiesen");
+    }
     QMap<QString,bool> primaryDirections; int storedPrimary=0,storedOrdinary=0;
     for(const auto& index:sourceIndexes) {
         if(index.kind==1) {
@@ -327,6 +346,10 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                 const auto& cell = rows[r][c];
                 const QString value = QString::fromUtf8(cell.value.data(), cell.value.size());
                 QVariant converted;
+                const auto proof=exactSingles ? exactSingles->columns.constFind(columns[c].name.toCaseFolded()) : QMap<QString,QVector<std::optional<float>>>::const_iterator{};
+                const bool hasSingleProof=exactSingles && proof!=exactSingles->columns.cend();
+                const bool csvNull=!cell.quoted && cell.value=="\x1e";
+                if(hasSingleProof && ((*proof)[static_cast<qsizetype>(r-1)].has_value()==csvNull)) throw fail("Single-NULL-Quelle und CSV widersprechen sich");
                 // ASCII 0x1E is supplied by `mdb-export -0`: only unquoted
                 // single-character markers mean NULL, not quoted literal text.
                 if (!cell.quoted && cell.value == "\x1e") {
@@ -348,7 +371,12 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                     bool ok = false;
                     const auto number = value.toDouble(&ok);
                     if (!ok) throw fail("Ungültiger REAL-Wert in Zeile " + QString::number(r));
-                    converted = number;
+                    if(hasSingleProof) {
+                        const auto exact=(*proof)[static_cast<qsizetype>(r-1)].value();
+                        bool formatted=false; const auto exported=QLocale::c().toString(static_cast<double>(exact),'g',8).toDouble(&formatted);
+                        if(!formatted || exported!=number) throw fail("Single-Rohwert und CSV-Snapshot widersprechen sich");
+                        converted=static_cast<double>(exact);
+                    } else converted = number;
                 } else converted = value;
                 query.bindValue(c, converted);
             }
@@ -403,6 +431,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                              "PK, exported indices, literal defaults and proven text capacities retained; explicit hex preserves raw binary bytes; FK retained by full-database import only; OLE rendering and general Access semantics NOT retained");
             if (!log.exec()) throw fail(log.lastError().text());
         }
+        if(exactSingles && accessSourceDigest(sourceFile)!=exactSingles->sourceDigest) throw fail("Single-Quelle wurde während des Imports verändert");
         if (!scope.exec("RELEASE la_table_import")) throw fail(scope.lastError().text());
     } catch (...) {
         scope.exec("ROLLBACK TO la_table_import");

@@ -27,12 +27,14 @@ Size4, actual Single values/NULL, a narrowed native write/Requery and unchanged
 source hash. The existing DAO target also exercises VBA VarType/CSng, Clone,
 Edit/Update, AddNew defaults, Null/Empty, refused conversions and Double isolation.
 
-This is not proof that MDBTools exports every Float bit pattern losslessly.
-Its1.0.0 data.c MDB_FLOAT formatter uses %.8g. For example, technical IEEE754
-bits509022793 (about1.1385786510416537e-20) format as1.1385787e-20, which can
-reconstruct a neighboring Float. The original-format/precision import requirement
-remains open; the three chosen non-NULL reference values do round-trip. No broad
-exact Float storage/import or Windows Access2003 execution claim is made.
+The native importer now bypasses the known %.8g precision loss for proven Single
+source fields through the read-only helper's exact raw values; see
+[SOURCE_SINGLE_PRECISION.md](SOURCE_SINGLE_PRECISION.md). The formatter still
+exists in ordinary MDBTools CSV and loses technical bits509022793. Finite raw
+Single values are validated and expanded exactly into SQLite REAL, with source
+hash/row/NULL/CSV checks. Negative zero and nonfinite values refuse explicitly.
+Legacy arbitrary CSV, generic SQL/default writes and the broader storage/runtime
+requirements remain open; no Windows execution oracle is claimed.
 F014/F041/F055/F105/F122 remain open; fixed catalog456/384/72.
 
 Focused existing DAO/import targets2/2 (1.94 s) passed with all optional Jet

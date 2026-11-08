@@ -638,3 +638,6 @@ lesenden nativen Helfer geprüft; Umfang und Grenzen: [Indexmetadaten](docs/SOUR
 
 Der lesende [DAO-Indexkatalog](docs/DAO_INDEXES_RUNTIME.md) verwendet diese Originalnamen
 und prüft Felder, Richtungen und Schlüssel gegen den vollständigen nativen Indexbestand.
+
+Bei tatsächlichen MDB-Importen werden bestätigte endliche Single-Werte direkt aus
+den ursprünglichen Bits übernommen: [Präzisionsumfang und Grenzen](docs/SOURCE_SINGLE_PRECISION.md).
