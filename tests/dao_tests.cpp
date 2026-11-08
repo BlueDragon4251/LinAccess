@@ -1640,7 +1640,8 @@ End Sub)VBA","BuildSchema",host);
     table->member("Indexes",{}).object->member("Delete",{VbaValue::string("EnabledThenID")});
     error([&] {extra->member("Name",{});},3420);
     assert(table->member("Indexes",{}).object->member("Count",{}).asNumber()==2);
-    error([&] {table->member("Indexes",{}).object->member("Delete",{VbaValue::string("PrimaryKey")});},3251);
+    table->member("Indexes",{}).object->member("Delete",{VbaValue::string("PrimaryKey")});assert(table->member("Indexes",{}).object->member("Count",{}).asNumber()==1);
+    auto restoredPrimary=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;restoredPrimary->assign("Primary",VbaValue::logical(true));restoredPrimary->member("Fields",{}).object->member("Append",{restoredPrimary->member("CreateField",{VbaValue::string("ID")})});table->member("Indexes",{}).object->member("Append",{VbaValue::reference(restoredPrimary)});assert(restoredPrimary->member("Primary",{}).truthy());
     auto rollbackIndex=table->member("CreateIndex",{VbaValue::string("RolledBack")}).object;
     rollbackIndex->member("Fields",{}).object->member("Append",{rollbackIndex->member("CreateField",{VbaValue::string("ID")})});
     auto workspace=linaccess::makeDaoEngine(db)->defaultMember({VbaValue::integer(0)},true).object;
@@ -1934,6 +1935,7 @@ void testOneToOneNativeRelations() {
     auto child=tables->member("Item",{VbaValue::string("UniqueChild")}).object;
     auto unique=child->member("CreateIndex",{VbaValue::string("ParentUnique")}).object;unique->assign("Unique",VbaValue::logical(true));unique->member("Fields",{}).object->member("Append",{unique->member("CreateField",{VbaValue::string("ParentID")})});child->member("Indexes",{}).object->member("Append",{VbaValue::reference(unique)});
     relations->member("Append",{VbaValue::reference(relation)});assert(relation->member("Attributes",{}).asNumber()==1);
+    error([&] {tables->member("Item",{VbaValue::string("UniqueParent")}).object->member("Indexes",{}).object->member("Delete",{VbaValue::string("PrimaryKey")});},3251);
     database->member("Execute",{VbaValue::string("INSERT INTO UniqueParent VALUES(10)")});database->member("Execute",{VbaValue::string("INSERT INTO UniqueChild VALUES(1,10)")});
     error([&] {database->member("Execute",{VbaValue::string("INSERT INTO UniqueChild VALUES(2,10)")});},3022);
     error([&] {database->member("Execute",{VbaValue::string("INSERT INTO UniqueChild VALUES(2,999)")});},3146);
@@ -2038,8 +2040,43 @@ End Sub)VBA","EditProperties",host);
     assert(tables->member("Item",{VbaValue::string("FieldReentry")}).object->member("Fields",{VbaValue::string("Label")}).object->member("Size",{}).asNumber()==8);
 }
 
+void testExistingNativePrimaryIndexes() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-existing-native-primary");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);
+    auto database=linaccess::makeDaoDatabase(db),tables=database->member("TableDefs",{}).object;
+    auto table=database->member("CreateTableDef",{VbaValue::string("PrimaryRows")}).object;
+    for(const auto& item:std::vector<std::pair<const char*,int>>{{"ID",4},{"Code",10},{"GroupID",4},{"Payload",11}}) {
+        auto field=table->member("CreateField",{VbaValue::string(item.first),VbaValue::integer(static_cast<std::int16_t>(item.second)),VbaValue::longInteger(item.second==10 ? 12 : 0)}).object;
+        if(std::string(item.first)=="ID") field->assign("Attributes",VbaValue::longInteger(16));if(item.second==10) field->assign("AllowZeroLength",VbaValue::logical(false));table->member("Fields",{}).object->member("Append",{VbaValue::reference(field)});
+    }
+    tables->member("Append",{VbaValue::reference(table)});
+    auto lookup=table->member("CreateIndex",{VbaValue::string("GroupDescending")}).object;auto lookupField=lookup->member("CreateField",{VbaValue::string("GroupID")}).object;lookupField->assign("Attributes",VbaValue::longInteger(1));lookup->member("Fields",{}).object->member("Append",{VbaValue::reference(lookupField)});table->member("Indexes",{}).object->member("Append",{VbaValue::reference(lookup)});
+    assert(sql.exec("CREATE TABLE primary_audit(value INTEGER)"));assert(sql.exec("CREATE TRIGGER primary_rows_audit AFTER INSERT ON PrimaryRows BEGIN INSERT INTO primary_audit VALUES(new.ID); END"));assert(sql.exec("CREATE VIEW primary_rows_view AS SELECT Code AS observed FROM PrimaryRows"));
+    sql.prepare("INSERT INTO PrimaryRows(Code,GroupID,Payload) VALUES(?,?,?)");for(int row=0;row<2;++row) {sql.bindValue(0,"a");sql.bindValue(1,7+row);sql.bindValue(2,QByteArray::fromHex(row==0 ? "0001ff" : "dead"));assert(sql.exec());}sql.finish();
+    const auto error=[](const std::function<void()>& operation,int expected) {int number=0;try {operation();}catch(const linaccess::VbaRuntimeError& failure) {number=failure.number;if(number!=expected) std::cerr<<"Primary edit error="<<number<<", reason="<<failure.what()<<"\n";}assert(number==expected);};
+    const auto build=[&](const char* name) {auto index=table->member("CreateIndex",{VbaValue::string(name)}).object;index->assign("Primary",VbaValue::logical(true));auto field=index->member("CreateField",{VbaValue::string("Code")}).object;field->assign("Attributes",VbaValue::longInteger(1));index->member("Fields",{}).object->member("Append",{VbaValue::reference(field)});return index;};
+    auto primary=build("CodePrimary");error([&] {table->member("Indexes",{}).object->member("Append",{VbaValue::reference(primary)});},3022);assert(table->member("Indexes",{}).object->member("Count",{}).asNumber()==1);
+    database->member("Execute",{VbaValue::string("UPDATE PrimaryRows SET Code=NULL WHERE ID=2")});error([&] {table->member("Indexes",{}).object->member("Append",{VbaValue::reference(primary)});},3314);database->member("Execute",{VbaValue::string("UPDATE PrimaryRows SET Code='b' WHERE ID=2")});
+    auto cursor=database->member("OpenRecordset",{VbaValue::string("PrimaryRows")}).object,clone=cursor->member("Clone",{}).object;
+    table->member("Indexes",{}).object->member("Append",{VbaValue::reference(primary)});assert(primary->member("Primary",{}).truthy() && primary->member("Unique",{}).truthy());
+    error([&] {cursor->member("RecordCount",{});},3420);error([&] {clone->member("RecordCount",{});},3420);cursor->member("Requery",{});assert(clone->member("RecordCount",{}).asNumber()==2);
+    assert(sql.exec("PRAGMA table_info(PrimaryRows)"));bool codeKey=false;while(sql.next()) if(sql.value(1).toString()=="Code") codeKey=sql.value(3).toBool() && sql.value(5).toInt()==1;assert(codeKey);sql.finish();
+    assert(primary->member("Fields",{VbaValue::integer(0)}).object->member("Attributes",{}).asNumber()==1);
+    error([&] {database->member("Execute",{VbaValue::string("UPDATE PrimaryRows SET Code=NULL WHERE ID=2")});},3314);auto second=build("SecondPrimary");error([&] {table->member("Indexes",{}).object->member("Append",{VbaValue::reference(second)});},3283);
+    assert(sql.exec("SELECT COUNT(*) FROM primary_audit") && sql.next() && sql.value(0).toInt()==2);sql.finish();assert(sql.exec("SELECT observed FROM primary_rows_view ORDER BY observed") && sql.next() && sql.value(0).toString()=="a");sql.finish();
+    assert(sql.exec("SELECT value FROM _la_counter32_sequences WHERE table_name='PrimaryRows'") && sql.next() && sql.value(0).toInt()==2);sql.finish();
+    table->member("Indexes",{}).object->member("Delete",{VbaValue::string("CodePrimary")});assert(table->member("Indexes",{}).object->member("Count",{}).asNumber()==1);error([&] {primary->member("Name",{});},3420);
+    database->member("Execute",{VbaValue::string("INSERT INTO PrimaryRows(Code,GroupID) VALUES(NULL,9)")});assert(sql.exec("SELECT ID,Code FROM PrimaryRows WHERE GroupID=9") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).isNull());sql.finish();
+    error([&] {database->member("Execute",{VbaValue::string("UPDATE PrimaryRows SET Code='' WHERE ID=1")});},3315);
+    assert(sql.exec("SELECT hex(Payload) FROM PrimaryRows WHERE ID=1") && sql.next() && sql.value(0).toString()=="0001FF");sql.finish();assert(sql.exec("SELECT COUNT(*) FROM primary_audit") && sql.next() && sql.value(0).toInt()==3);sql.finish();
+    clone.reset();cursor.reset();
+    auto workspace=linaccess::makeDaoEngine(db)->defaultMember({VbaValue::integer(0)},true).object;workspace->member("BeginTrans",{});error([&] {table->member("Indexes",{}).object->member("Append",{VbaValue::reference(build("InTransaction"))});},3251);workspace->member("Rollback",{});
+    assert(sql.exec("PRAGMA foreign_keys") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testExistingNativePrimaryIndexes();
     testNativeFieldPropertyChanges();
     testOneToOneNativeRelations();
     testEnforcedNativeRelations();

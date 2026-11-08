@@ -361,7 +361,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(editIndexes,&QAction::triggered,this,[this] {
         const auto* item=explorer_->currentItem();if(!item || item->data(0,Qt::UserRole).toString()!="table" || QApplication::activeModalWidget() || !db_.isOpen()) return;
         const auto table=item->text(0);
-        for(auto* model:findChildren<linaccess::AccessTableModel*>()) if(model->tableName().compare(table,Qt::CaseInsensitive)==0 && model->isDirty()) {messageError(this,"Bitte Änderungen an der Tabelle vor der Indexbearbeitung speichern oder verwerfen.");return;}
+        for(auto* model:findChildren<linaccess::AccessTableModel*>()) if(model->tableName().compare(table,Qt::CaseInsensitive)==0) {messageError(this,"Schließen Sie die Tabelle und zugehörige bearbeitbare Abfragen vor Änderungen an Indizes oder Primärschlüsseln.");return;}
         linaccess::editNativeIndexes(this,db_,table);
     });
     connect(viewMenu,&QMenu::aboutToShow,this,[this,editIndexes] {

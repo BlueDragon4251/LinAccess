@@ -1,5 +1,6 @@
 #include "native_index_designer.hpp"
 #include "dao_database.hpp"
+#include "dao_schema_change.hpp"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
@@ -21,7 +22,8 @@ void editNativeIndexes(QWidget* parent,QSqlDatabase database,const QString& tabl
     auto* remove=new QPushButton("Ausgewählten Index löschen",&dialog);remove->setObjectName("native-index-delete");layout->addWidget(remove);
     auto* name=new QLineEdit(&dialog);name->setObjectName("native-index-name");name->setPlaceholderText("Name des neuen Index");name->setMaxLength(64);layout->addWidget(name);
     auto* options=new QHBoxLayout;
-    auto* unique=new QCheckBox("Eindeutig",&dialog);unique->setObjectName("native-index-unique");options->addWidget(unique);
+    auto* primary=new QCheckBox("Primärschlüssel",&dialog);primary->setObjectName("native-index-primary");options->addWidget(primary);
+    auto* unique=new QCheckBox("Eindeutig",&dialog);unique->setObjectName("native-index-unique");options->addWidget(unique);QObject::connect(primary,&QCheckBox::toggled,&dialog,[unique](bool checked) {if(checked) unique->setChecked(true);unique->setEnabled(!checked);});
     auto* required=new QCheckBox("Keine Nullwerte",&dialog);required->setObjectName("native-index-required");options->addWidget(required);layout->addLayout(options);
     auto* grid=new QTableWidget(0,2,&dialog);grid->setObjectName("native-index-fields");grid->setHorizontalHeaderLabels({"Feld","Sortierung"});grid->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);layout->addWidget(grid);
     auto* rowButtons=new QHBoxLayout;
@@ -63,19 +65,20 @@ void editNativeIndexes(QWidget* parent,QSqlDatabase database,const QString& tabl
     QObject::connect(addField,&QPushButton::clicked,&dialog,addRow);addRow();
     QObject::connect(removeField,&QPushButton::clicked,&dialog,[&] {if(grid->currentRow()>=0) grid->removeRow(grid->currentRow());});
     bool catalogValid=true;
-    QObject::connect(list,&QListWidget::currentRowChanged,&dialog,[&] {const auto* item=list->currentItem();remove->setEnabled(catalogValid && item && !item->data(Qt::UserRole+1).toBool());});
-    remove->setEnabled(list->currentItem() && !list->currentItem()->data(Qt::UserRole+1).toBool());
+    QObject::connect(list,&QListWidget::currentRowChanged,&dialog,[&] {const auto* item=list->currentItem();remove->setEnabled(catalogValid && item);});
+    remove->setEnabled(list->currentItem());
     append->setEnabled(!fields.isEmpty());addField->setEnabled(!fields.isEmpty());
     const auto refreshAfterCommit=[&](const QString& message) {
         status->setText(message);
         try {reload();}
         catch(const std::exception& error) {catalogValid=false;append->setEnabled(false);remove->setEnabled(false);QMessageBox::warning(&dialog,"Änderung gespeichert",message+"\nDie Indexliste konnte nicht neu geladen werden: "+QString::fromUtf8(error.what()));}
     };
+    const auto storedFailure=[&](const DaoStoredSchemaChange& error) {catalogValid=false;append->setEnabled(false);remove->setEnabled(false);status->setText("Indexänderung gespeichert. Bitte das Projekt neu öffnen.");QMessageBox::warning(&dialog,"Änderung gespeichert",status->text()+"\n"+QString::fromUtf8(error.what()));};
     QObject::connect(append,&QPushButton::clicked,&dialog,[&] {
         if(!catalogValid) return;
         try {
             auto index=table->member("CreateIndex",{VbaValue::string(name->text().toStdString())}).object;
-            index->assign("Unique",VbaValue::logical(unique->isChecked()));index->assign("Required",VbaValue::logical(required->isChecked()));
+            index->assign("Unique",VbaValue::logical(unique->isChecked()));index->assign("Required",VbaValue::logical(required->isChecked()));index->assign("Primary",VbaValue::logical(primary->isChecked()));
             auto columns=index->member("Fields",{}).object;
             for(int row=0;row<grid->rowCount();++row) {
                 const auto fieldName=qobject_cast<QComboBox*>(grid->cellWidget(row,0))->currentText();
@@ -83,16 +86,16 @@ void editNativeIndexes(QWidget* parent,QSqlDatabase database,const QString& tabl
                 field->assign("Attributes",VbaValue::longInteger(qobject_cast<QComboBox*>(grid->cellWidget(row,1))->currentIndex()==1 ? 1 : 0));columns->member("Append",{VbaValue::reference(field)});
             }
             table->member("Indexes",{}).object->member("Append",{VbaValue::reference(index)});
-        } catch(const std::exception& error) {failure(error);return;}
+        } catch(const DaoStoredSchemaChange& error) {storedFailure(error);return;}catch(const std::exception& error) {failure(error);return;}
         refreshAfterCommit("Index angelegt: "+name->text());
     });
     QObject::connect(remove,&QPushButton::clicked,&dialog,[&] {
         if(!catalogValid) return;
-        const auto* item=list->currentItem();if(!item || item->data(Qt::UserRole+1).toBool()) return;
+        const auto* item=list->currentItem();if(!item) return;
         const auto indexName=item->data(Qt::UserRole).toString();
         if(QMessageBox::question(&dialog,"Index löschen","Index „"+indexName+"“ löschen? Gespeicherte Datensätze bleiben erhalten.",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
         try {table->member("Indexes",{}).object->member("Delete",{VbaValue::string(indexName.toStdString())});}
-        catch(const std::exception& error) {failure(error);return;}
+        catch(const DaoStoredSchemaChange& error) {storedFailure(error);return;}catch(const std::exception& error) {failure(error);return;}
         refreshAfterCommit("Index gelöscht: "+indexName);
     });
     dialog.exec();

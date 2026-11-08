@@ -136,3 +136,33 @@ Graphic-flow validation: existing mainwindow/DAO2/2 (5.11s), app build passed.
 The real modal dialog creates a descending index on the UI-authored table,
 reloads its actual catalog, deletes that index through confirmation and preserves
 both existing rows. No new test target or broad suite.
+
+## Primary indexes on existing native tables
+
+Existing native TableDef.CreateIndex/Indexes.Append now accept Primary=True;
+Indexes.Delete can remove a native primary index. The graphic index editor
+exposes Primary and confirmed deletion. Physical primary uniqueness and NOT NULL
+constraints are rebuilt atomically from complete known native declarations;
+duplicate/Null existing keys fail3022/3314 without schema/data changes. A second
+primary is refused3283. Rowid/value digests, non-primary indexes, triggers,
+views, explicit field rules and counter state are preserved. Deleted primary
+constraints release only implicit null restrictions; explicit Required and
+remaining required indexes still enforce their own constraints.
+
+Dependent declared relationships must be removed before primary deletion.
+Original/imported/mixed or custom unreconstructable schemas, active transactions
+and reserved counter drafts are refused. Held cursors/clones need Requery after
+a successful rebuild; index bindings are checked before savepoint release.
+Postcommit connection-restore failure is reported as stored/reopen, not as a
+failed write. Mainwindow requires matching table/editable-query documents closed
+before index editing. Existing index property setters remain readonly; this
+does not close F121 or claim an original MDB writer/complete Jet locking.
+
+App built; graphic existing target1/1 (4.30s), final DAO1/1 (1.64s). The first
+DAO case setup was corrected to use supported single-row parameterized native
+inserts and release its clones before testing transaction refusal. Actual DAO
+checks duplicate/Null rollback, DESC primary keys, physical NOT NULL/uniqueness,
+existing-key removal/recreation, dependent relation refusal, counter frontier,
+BLOBs, views/triggers, zero-length rules and cursor/clone guards. GUI deletes
+and recreates the actual id primary key without changing rows. No fresh broad
+suite or additional target; fixed456/384/72 unchanged.

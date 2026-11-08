@@ -2831,6 +2831,10 @@ int main(int argc,char** argv) {
             for(int row=0;row<list->count();++row) if(list->item(row)->data(Qt::UserRole).toString()=="QtyDescending") list->setCurrentRow(row);
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});
             dialog->findChild<QPushButton*>("native-index-delete")->click();assert(list->count()==2);
+            for(int row=0;row<list->count();++row) if(list->item(row)->data(Qt::UserRole).toString()=="PrimaryKey") list->setCurrentRow(row);
+            QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});dialog->findChild<QPushButton*>("native-index-delete")->click();assert(list->count()==1);
+            dialog->findChild<QCheckBox*>("native-index-primary")->setChecked(true);dialog->findChild<QLineEdit*>("native-index-name")->setText("PrimaryKey");qobject_cast<QComboBox*>(grid->cellWidget(0,0))->setCurrentText("id");qobject_cast<QComboBox*>(grid->cellWidget(0,1))->setCurrentIndex(0);
+            QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());if(box && box->windowTitle()=="Index konnte nicht geändert werden") {std::cerr<<"Primary GUI error: "<<box->text().toStdString()<<"\n";box->accept();}});dialog->findChild<QPushButton*>("native-index-create")->click();assert(list->count()==2);
             dialog->reject();
         });
         auto* editIndexes=window.findChild<QAction*>("native-table-indexes");assert(editIndexes);editIndexes->trigger();

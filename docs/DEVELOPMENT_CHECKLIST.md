@@ -1566,3 +1566,11 @@ Original-/unbewiesene Eigenschaften nicht erfunden. GUI/DAO2/2 (5,99s), App
 gebaut; Details DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert. Nächste Arbeit:
 Primärindizes vorhandener nativer Tabellen wirklich anlegen/entfernen, samt
 Daten-/Counter-/Abhängigkeitsschutz und grafischer Bedienung; dann weiter.
+
+Primärindizes vorhandener nativer Tabellen sind jetzt per DAO und grafisch
+wirklich anleg-/entfernbar: echter PK/NOT NULL, atomarer Daten-/Counter-/
+Regelerhalt, Abhängigkeits-/Cursor-/Transaktionsschutz. GUI1/1 (4,30s), finales
+DAO1/1 (1,64s), App gebaut; keinen frischen2/2-/Gesamtlauf behaupten. Details
+DAO_INDEXES_RUNTIME.md.456/384/72 unverändert. Als Nächstes Required-Indizes
+vorhandener nativer Tabellen mit echten Nullregeln auch auf bisher nullable
+Feldern sowie korrekter Regelentfernung umsetzen; danach fortlaufend weiter.
