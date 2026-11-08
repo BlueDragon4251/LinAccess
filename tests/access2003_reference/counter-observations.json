@@ -1,0 +1,371 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "kind": "user_executed_technical_Access2003_reference",
+    "access_version": "11.0",
+    "engine_version": "3.6",
+    "collector_sha256": "92455f7a1bf57c924578319200e09da01b4fa465a8c7013aee8e62d42fdc8f50",
+    "input_archive_sha256": "9a78930834b1ad811bb73ab33e4573771e29b06f7d0bff5f321c28a0680c0076",
+    "technical_database_only": true,
+    "source_metadata_included": false
+  },
+  "observations": [
+    {
+      "case": "counter.deleted_highest_and_all_rows",
+      "status": "observed",
+      "verdict": "reference_observation_only",
+      "result": {
+        "la_deleted_highest": {
+          "remaining": {
+            "kind": "System.Int32",
+            "value": 2
+          },
+          "next": {
+            "after_update": {
+              "kind": "System.Int32",
+              "value": 4
+            },
+            "before_update": {
+              "result": {
+                "kind": "System.Int32",
+                "value": 4
+              },
+              "status": "observed"
+            }
+          }
+        },
+        "la_deleted_all": {
+          "remaining": {
+            "kind": "System.Int32",
+            "value": 0
+          },
+          "next": {
+            "after_update": {
+              "kind": "System.Int32",
+              "value": 4
+            },
+            "before_update": {
+              "result": {
+                "kind": "System.Int32",
+                "value": 4
+              },
+              "status": "observed"
+            }
+          }
+        }
+      }
+    },
+    {
+      "case": "counter.cancel_failed_update_and_transaction_rollback",
+      "status": "observed",
+      "verdict": "reference_observation_only",
+      "result": {
+        "failed_update": {
+          "update_error": {
+            "dao_numbers": [
+              3314
+            ],
+            "message": "The field 'la_allocation.payload_text' cannot contain a Null value because the Required property for this field is set to True.  Enter a value in this field.",
+            "hresult": "0x800A0CF2"
+          },
+          "before_update": {
+            "result": {
+              "kind": "System.Int32",
+              "value": 4
+            },
+            "status": "observed"
+          }
+        },
+        "after_failure": {
+          "after_update": {
+            "kind": "System.Int32",
+            "value": 5
+          },
+          "before_update": {
+            "result": {
+              "kind": "System.Int32",
+              "value": 5
+            },
+            "status": "observed"
+          }
+        },
+        "baseline": {
+          "after_update": {
+            "kind": "System.Int32",
+            "value": 1
+          },
+          "before_update": {
+            "result": {
+              "kind": "System.Int32",
+              "value": 1
+            },
+            "status": "observed"
+          }
+        },
+        "after_cancel": {
+          "after_update": {
+            "kind": "System.Int32",
+            "value": 3
+          },
+          "before_update": {
+            "result": {
+              "kind": "System.Int32",
+              "value": 3
+            },
+            "status": "observed"
+          }
+        },
+        "rolled_back": {
+          "after_update": {
+            "kind": "System.Int32",
+            "value": 6
+          },
+          "before_update": {
+            "result": {
+              "kind": "System.Int32",
+              "value": 6
+            },
+            "status": "observed"
+          }
+        },
+        "cancelled": {
+          "cancelled": true,
+          "before_update": {
+            "result": {
+              "kind": "System.Int32",
+              "value": 2
+            },
+            "status": "observed"
+          }
+        },
+        "after_rollback": {
+          "after_update": {
+            "kind": "System.Int32",
+            "value": 7
+          },
+          "before_update": {
+            "result": {
+              "kind": "System.Int32",
+              "value": 7
+            },
+            "status": "observed"
+          }
+        }
+      }
+    },
+    {
+      "case": "counter.DAO_SQL_explicit_seed_and_increment",
+      "status": "observed",
+      "verdict": "reference_observation_only",
+      "result": {
+        "third": {
+          "after_update": {
+            "kind": "System.Int32",
+            "value": 114
+          },
+          "before_update": {
+            "result": {
+              "kind": "System.Int32",
+              "value": 114
+            },
+            "status": "observed"
+          }
+        },
+        "first": {
+          "after_update": {
+            "kind": "System.Int32",
+            "value": 100
+          },
+          "before_update": {
+            "result": {
+              "kind": "System.Int32",
+              "value": 100
+            },
+            "status": "observed"
+          }
+        },
+        "second": {
+          "after_update": {
+            "kind": "System.Int32",
+            "value": 107
+          },
+          "before_update": {
+            "result": {
+              "kind": "System.Int32",
+              "value": 107
+            },
+            "status": "observed"
+          }
+        }
+      }
+    },
+    {
+      "case": "counter.signed_Long_boundary_after_explicit_append",
+      "status": "observed",
+      "verdict": "reference_observation_only",
+      "result": [
+        {
+          "result": {
+            "after_update": {
+              "kind": "System.Int32",
+              "value": 2147483647
+            },
+            "before_update": {
+              "result": {
+                "kind": "System.Int32",
+                "value": 2147483647
+              },
+              "status": "observed"
+            }
+          },
+          "status": "observed"
+        },
+        {
+          "result": {
+            "after_update": {
+              "kind": "System.Int32",
+              "value": -2147483648
+            },
+            "before_update": {
+              "result": {
+                "kind": "System.Int32",
+                "value": -2147483648
+              },
+              "status": "observed"
+            }
+          },
+          "status": "observed"
+        },
+        {
+          "result": {
+            "after_update": {
+              "kind": "System.Int32",
+              "value": -2147483647
+            },
+            "before_update": {
+              "result": {
+                "kind": "System.Int32",
+                "value": -2147483647
+              },
+              "status": "observed"
+            }
+          },
+          "status": "observed"
+        }
+      ]
+    },
+    {
+      "case": "counter.generated_field_assignment",
+      "status": "observed",
+      "verdict": "reference_observation_only",
+      "result": {
+        "attributes": 49,
+        "existing_record_assignment": {
+          "error": {
+            "dao_numbers": [
+              3164
+            ],
+            "message": "Field cannot be updated.",
+            "hresult": "0x800A0C5C"
+          },
+          "status": "error"
+        },
+        "data_updatable": {
+          "result": {
+            "kind": "System.Boolean",
+            "value": true
+          },
+          "available": true
+        }
+      }
+    },
+    {
+      "case": "guid.GenGUID_default_creation_and_values",
+      "status": "observed",
+      "verdict": "reference_observation_only",
+      "result": {
+        "values": [
+          {
+            "kind": "System.String",
+            "value": "{guid {6A9B6D21-6FDB-4B10-88E4-B3880CF3AC51}}"
+          },
+          {
+            "kind": "System.String",
+            "value": "{guid {C5B29AD8-1EE9-441F-96B6-8337C5CE4016}}"
+          }
+        ],
+        "attributes": 1,
+        "type": 15
+      }
+    },
+    {
+      "case": "counter.non_primary_key_allocation",
+      "status": "observed",
+      "verdict": "reference_observation_only",
+      "result": {
+        "initial": [
+          {
+            "kind": "System.Int32",
+            "value": 1
+          },
+          {
+            "kind": "System.Int32",
+            "value": 2
+          },
+          {
+            "kind": "System.Int32",
+            "value": 3
+          }
+        ],
+        "after_delete_all": {
+          "kind": "System.Int32",
+          "value": 4
+        }
+      }
+    },
+    {
+      "case": "counter.explicit_NULL_and_existing_id_SQL",
+      "status": "observed",
+      "verdict": "reference_observation_only",
+      "result": {
+        "existing_SQL_id_update": {
+          "error": {
+            "dao_numbers": [
+              3113
+            ],
+            "message": "Cannot update 'id'; field not updateable.",
+            "hresult": "0x800A0C29"
+          },
+          "status": "error"
+        },
+        "explicit_id_then_generated": {
+          "result": {
+            "after_update": {
+              "kind": "System.Int32",
+              "value": 101
+            },
+            "before_update": {
+              "result": {
+                "kind": "System.Int32",
+                "value": 101
+              },
+              "status": "observed"
+            }
+          },
+          "status": "observed"
+        },
+        "explicit_NULL": {
+          "error": {
+            "dao_numbers": [
+              3162
+            ],
+            "message": "You tried to assign the Null value to a variable that is not a Variant data type.",
+            "hresult": "0x800A0C5A"
+          },
+          "status": "error"
+        }
+      }
+    }
+  ],
+  "compatibility_verdict": "Reference only; implementation must be checked separately"
+}

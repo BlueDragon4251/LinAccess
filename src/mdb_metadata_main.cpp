@@ -42,7 +42,7 @@ int main(int argc,char** argv) {
         const auto args=app.arguments(); const int filePosition=floating ? 2 : 1,tablePosition=floating ? 3 : 2;
         const auto file=QFile::encodeName(args[filePosition]); auto requested=args[tablePosition].toUtf8();
         if(args[filePosition].contains(QChar(0)) || args[tablePosition].contains(QChar(0))) throw 1;
-        const auto before=floating ? digest(args[filePosition]) : QByteArray{};
+        const auto before=digest(args[filePosition]);
         std::unique_ptr<MdbHandle,decltype(&mdb_close)> mdb(mdb_open(file.constData(),MDB_NOFLAGS),&mdb_close);
         if(!mdb) throw 1;
         std::unique_ptr<MdbTableDef,decltype(&mdb_free_tabledef)> table(mdb_read_table_by_name(mdb.get(),requested.data(),MDB_TABLE),&mdb_free_tabledef);
@@ -52,7 +52,7 @@ int main(int argc,char** argv) {
         // the actual populated array, never use that return value as success.
         mdb_read_indices(table.get());
         if(!table->indices || table->indices->len!=table->num_idxs) throw 1;
-        QJsonArray columns,indexes,singleColumns,doubleColumns; QVector<const MdbColumn*> singleFields,doubleFields; QSet<QString> columnNames,indexNames;
+        QJsonArray columns,indexes,singleColumns,doubleColumns,counterColumns; QVector<const MdbColumn*> singleFields,doubleFields; QSet<QString> columnNames,indexNames;
         for(unsigned i=0;i<table->columns->len;++i) {
             const auto* column=static_cast<MdbColumn*>(g_ptr_array_index(table->columns,i)); if(!column) throw 1;
             const auto name=checkedName(column->name,sizeof(column->name));
@@ -86,6 +86,24 @@ int main(int argc,char** argv) {
                 {"columns",doubles ? doubleColumns : singleColumns},{"rows",rows}},16*1024*1024);
             return 0;
         }
+        // Jet3/4 table-definition state stores the last allocated Long,
+        // including IDs no longer represented by rows. Never infer it from MAX.
+        bool hasLongCounter=false;
+        for(unsigned i=0;i<table->columns->len;++i) {
+            const auto* column=static_cast<MdbColumn*>(g_ptr_array_index(table->columns,i));
+            if(column->is_uuid_auto) throw 1; // GUID generation is not a Long sequence.
+            if(!column->is_long_auto) continue;
+            if(hasLongCounter || column->col_type!=MDB_LONGINT
+                || (mdb->f->jet_version!=MDB_VER_JET3 && mdb->f->jet_version!=MDB_VER_JET4)
+                || mdb_col_get_prop(const_cast<MdbColumn*>(column),"NewValues")
+                || mdb_col_get_prop(const_cast<MdbColumn*>(column),"Increment")
+                || mdb_col_get_prop(const_cast<MdbColumn*>(column),"Seed")) throw 1;
+            hasLongCounter=true;
+            if(mdb_read_pg(mdb.get(),table->entry->table_pg)<=0) throw 1;
+            const auto last=static_cast<qint32>(mdb_get_int32(mdb->pg_buf,mdb->f->jet_version==MDB_VER_JET4 ? 20 : 16));
+            if(last<0) throw 1; // Random/negative counter state remains unsupported.
+            counterColumns.append(QJsonObject{{"name",checkedName(column->name,sizeof(column->name))},{"last_value",last}});
+        }
         for(unsigned i=0;i<table->indices->len;++i) {
             const auto* index=static_cast<MdbIndex*>(g_ptr_array_index(table->indices,i)); if(!index) throw 1;
             const auto name=checkedName(index->name,sizeof(index->name));
@@ -100,7 +118,8 @@ int main(int argc,char** argv) {
             }
             indexes.append(QJsonObject{{"name",name},{"kind",index->index_type},{"flags",index->flags},{"fields",fields}});
         }
-        const QJsonObject root{{"version",1},{"source_table",args[tablePosition]},{"library",QString::fromUtf8(mdb_get_version())},{"columns",columns},{"indexes",indexes},{"single_columns",singleColumns},{"double_columns",doubleColumns}};
+        const QJsonObject root{{"version",1},{"source_table",args[tablePosition]},{"library",QString::fromUtf8(mdb_get_version())},{"columns",columns},{"indexes",indexes},{"single_columns",singleColumns},{"double_columns",doubleColumns},{"counter_columns",counterColumns},{"source_sha256",QString::fromLatin1(before)}};
+        if(digest(args[filePosition])!=before) throw 1;
         output(root,1024*1024);
         return 0;
     } catch(...) {

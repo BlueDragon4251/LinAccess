@@ -63,6 +63,37 @@ void createAccessCounter(QSqlDatabase db,const QString& table,const QString& col
         || !query.exec("CREATE TRIGGER "+identifier(prefix+"_update")+" AFTER UPDATE OF "+identifier(column)+" ON "+identifier(table)+body))
         throw VbaRuntimeError(3146,"Counter seed trigger creation failed");
 }
+void protectAccessCounterUpdates(QSqlDatabase db,const QString& table,const QString& column) {
+    QByteArray identity=table.toUtf8(); identity.append('\0'); identity+=column.toUtf8();
+    const auto name="_la_counter_readonly_"+QString::fromLatin1(QCryptographicHash::hash(identity,QCryptographicHash::Sha256).toHex());
+    QSqlQuery query(db);
+    if(!query.exec("CREATE TRIGGER "+identifier(name)+" BEFORE UPDATE OF "+identifier(column)+" ON "+identifier(table)
+        +" BEGIN SELECT RAISE(ABORT,'LinAccess SQL function error 3113'); END"))
+        throw VbaRuntimeError(3146,"Source counter update protection failed");
+}
+void restoreAccessCounter(QSqlDatabase db,const QString& table,const QString& column,qint32 last,bool native) {
+    if(last<0) throw VbaRuntimeError(3251,"Unsupported source counter state");
+    QSqlQuery query(db);
+    if(!query.exec("SELECT MAX("+identifier(column)+") FROM "+identifier(table)) || !query.next())
+        throw VbaRuntimeError(3146,"Counter row validation failed");
+    if(!query.value(0).isNull() && query.value(0).toLongLong()>last)
+        throw VbaRuntimeError(3251,"Source counter state contradicts active rows");
+    query.finish();
+    if(native) {
+        query.prepare("UPDATE main.sqlite_sequence SET seq=? WHERE name=?");
+        query.addBindValue(last); query.addBindValue(table);
+        if(!query.exec()) throw VbaRuntimeError(3146,"Native counter restoration failed");
+        if(query.numRowsAffected()==0) {
+            query.prepare("INSERT INTO main.sqlite_sequence(name,seq) VALUES(?,?)");
+            query.addBindValue(table); query.addBindValue(last);
+            if(!query.exec()) throw VbaRuntimeError(3146,"Empty native counter restoration failed");
+        }
+    } else {
+        query.prepare("UPDATE main._la_counter_sequences SET value=? WHERE table_name=? AND column_name=?");
+        query.addBindValue(last); query.addBindValue(table); query.addBindValue(column);
+        if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3146,"Managed counter restoration failed");
+    }
+}
 QSet<QString> generatedAccessColumns(QSqlDatabase db,const QString& requested) {
     installJetSqlFunctions(db);
     QString table;

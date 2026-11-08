@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <limits>
 
 #include <QRegularExpression>
 #include <QSqlError>
@@ -288,6 +289,30 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             }
         } else if(doubleNames.isArray() && !doubleNames.toArray().isEmpty()) throw fail("Double-Quelltypen sind nicht nachgewiesen");
     }
+    QMap<QString,qint32> sourceCounterStates;
+    QByteArray counterDigest;
+    if(floatingSource==AccessFloatingSource::NativeMdbBits) {
+        QStringList counterNames;
+        for(const auto& column:columns) if(column.autoNumber) counterNames.append(column.name);
+        if(!counterNames.isEmpty()) {
+            const auto root=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();
+            const auto states=root.value("counter_columns");
+            counterDigest=root.value("source_sha256").toString().toLatin1();
+            if(!states.isArray() || states.toArray().size()!=counterNames.size() || counterDigest.size()!=64
+                || root.value("source_table").toString().isEmpty()
+                || accessSourceDigest(floatingReadPath)!=counterDigest)
+                throw fail("Gespeicherter AutoWert-Quellstand fehlt oder wurde verändert");
+            for(const auto& state:states.toArray()) {
+                if(!state.isObject()) throw fail("Ungültiger AutoWert-Quellstand");
+                const auto object=state.toObject(); const auto name=object.value("name").toString();
+                const auto value=object.value("last_value"); const auto number=value.toDouble(-1);
+                if(!counterNames.contains(name) || sourceCounterStates.contains(name) || !value.isDouble()
+                    || number<0 || number>std::numeric_limits<qint32>::max() || std::floor(number)!=number)
+                    throw fail("Widersprüchlicher AutoWert-Quellstand");
+                sourceCounterStates.insert(name,static_cast<qint32>(number));
+            }
+        }
+    }
     QMap<QString,bool> primaryDirections; int storedPrimary=0,storedOrdinary=0;
     for(const auto& index:sourceIndexes) {
         if(index.kind==1) {
@@ -354,6 +379,8 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
         if (!insertOnly && !query.exec("CREATE TABLE " + sqlQuote(tableName) + " (" + definitions.join(",") + ")"))
             throw fail("CREATE TABLE: " + query.lastError().text());
         if (!insertOnly) for (const auto& column:columns) if (column.autoNumber && !nativeCounter(column)) createAccessCounter(db,tableName,column.name);
+        if(!insertOnly) for(const auto& column:columns) if(sourceCounterStates.contains(column.name))
+            protectAccessCounterUpdates(db,tableName,column.name);
         QStringList placeholders;
         for (int i = 0; i < columns.size(); ++i) placeholders << "?";
         if (rows.size() > 1 && !query.prepare("INSERT INTO " + sqlQuote(tableName) + " VALUES ("
@@ -408,6 +435,8 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             }
             if (!query.exec()) throw fail("INSERT: " + query.lastError().text());
         }
+        for(const auto& column:columns) if(sourceCounterStates.contains(column.name))
+            restoreAccessCounter(db,tableName,column.name,sourceCounterStates.value(column.name),nativeCounter(column));
         if (!insertOnly) {
             for (const auto& index : schema.indexes) {
                 QStringList fields;
@@ -457,6 +486,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                              "PK, exported indices, literal defaults and proven text capacities retained; explicit hex preserves raw binary bytes; FK retained by full-database import only; OLE rendering and general Access semantics NOT retained");
             if (!log.exec()) throw fail(log.lastError().text());
         }
+        if(!counterDigest.isEmpty() && accessSourceDigest(floatingReadPath)!=counterDigest) throw fail("AutoWert-Quelle wurde während des Imports verändert");
         if(exactSingles && accessSourceDigest(floatingReadPath)!=exactSingles->sourceDigest) throw fail("Single-Quelle wurde während des Imports verändert");
         if(exactDoubles && accessSourceDigest(floatingReadPath)!=exactDoubles->sourceDigest) throw fail("Double-Quelle wurde während des Imports verändert");
         if (!scope.exec("RELEASE la_table_import")) throw fail(scope.lastError().text());

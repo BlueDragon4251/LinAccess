@@ -641,6 +641,14 @@ public:
         if(code<=0) throw VbaRuntimeError(3251,"Field.Type is not proven for this source");
         return VbaValue::integer(static_cast<std::int16_t>(code));
     }
+    VbaValue generatedFieldProperty(const QString& name,bool attributes) const {
+        (void)fieldType(name);
+        if(!table_ || readOnly_ || declaredFieldType(name).asNumber()!=4
+            || !generatedAccessColumns(db_,source_).contains(name.toCaseFolded()))
+            throw VbaRuntimeError(3251,"DAO: Field generator property is not proven in this context");
+        // Access2003/DAO3.6 writable Long counter observation: Fixed|AutoIncr|Updatable.
+        return attributes ? VbaValue::longInteger(49) : VbaValue::logical(true);
+    }
     VbaValue definitionFieldSize(const QString& name) const {
         const auto declaration=fieldType(name),key=name.toCaseFolded();
         if(data_->definitionSizes.contains(key)) {
@@ -725,6 +733,8 @@ public:
         if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         require(mode_ != Mode::Browse, "DAO: Edit or AddNew required");
         const auto index = column(name);
+        if(mode_==Mode::Edit && table_ && generatedAccessColumns(db_,source_).contains(name.toCaseFolded()))
+            throw VbaRuntimeError(3164,"DAO: AutoNumber field cannot be updated");
         const auto type=data_->types.value(name.toCaseFolded());
         if(chunkFields_.contains(index)) throw VbaRuntimeError(3251,"Mixed AppendChunk and binary Value assignment is unsupported");
         if(value.kind==VbaValue::Kind::ByteArray) {
@@ -984,6 +994,10 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
         if(args.size()!=2) throw VbaRuntimeError(450,"Field.GetChunk requires Offset and Bytes");
         return owner_->binaryChunk(name_,args[0],args[1]);
     }
+    if(lower(name)=="attributes" || lower(name)=="dataupdatable") {
+        if(!args.empty()) throw VbaRuntimeError(450,"Field generator property requires no arguments");
+        return owner_->generatedFieldProperty(name_,lower(name)=="attributes");
+    }
     if(lower(name)=="fieldsize") {
         if(!args.empty()) throw VbaRuntimeError(450,"Field.FieldSize requires no arguments");
         return owner_->fieldSize(name_);
@@ -1015,6 +1029,10 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
 void Field::assign(std::string_view name, const VbaValue& value) {
     if(lower(name)=="defaultvalue") { (void)owner_->fieldType(name_); throw VbaRuntimeError(383,"Recordset Field.DefaultValue is read-only"); }
     if(lower(name)=="size") { (void)owner_->fieldType(name_); throw VbaRuntimeError(383,"Field.Size is read-only"); }
+    if(lower(name)=="attributes" || lower(name)=="dataupdatable") {
+        (void)owner_->generatedFieldProperty(name_,lower(name)=="attributes");
+        throw VbaRuntimeError(383,"Field generator property is read-only");
+    }
     if(lower(name)=="fieldsize") { (void)owner_->fieldSize(name_); throw VbaRuntimeError(383,"FieldSize is read-only"); }
     if(lower(name)=="ordinalposition") { (void)owner_->fieldOrdinal(name_); throw VbaRuntimeError(383,"Recordset Field.OrdinalPosition is read-only"); }
     if(lower(name)=="type") { (void)owner_->fieldType(name_); throw VbaRuntimeError(383,"Field.Type is read-only"); }

@@ -28,6 +28,41 @@
 #include <cassert>
 #include <iostream>
 
+void verifyJetCounterStateReference(const QString& path) {
+    using namespace linaccess;
+    const auto digest=[&] { QFile source(path); assert(source.open(QIODevice::ReadOnly)); return QCryptographicHash::hash(source.readAll(),QCryptographicHash::Sha256); };
+    const auto before=digest();
+    auto db=QSqlDatabase::addDatabase("QSQLITE","jet-counter-state"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery query(db); assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)")); query.finish();
+    assert(importAccessDatabase(db,path)==2);
+    for(const auto& table:{QString("native_counter"),QString("managed_counter")}) {
+        assert(query.exec("INSERT INTO "+table+" DEFAULT VALUES"));
+        assert(query.exec("SELECT MAX(id) FROM "+table) && query.next() && query.value(0).toInt()==4); query.finish();
+    }
+    const auto records=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("native_counter")}).object;
+    const auto field=records->member("Fields",{VbaValue::string("id")}).object;
+    assert(field->member("Attributes",{}).asNumber()==49 && field->member("DataUpdatable",{}).truthy());
+    records->member("Edit",{}); bool readonly=false;
+    try { field->assign("Value",VbaValue::longInteger(100)); } catch(const VbaRuntimeError& error) { readonly=error.number==3164; }
+    assert(readonly); records->member("CancelUpdate",{}); records->member("Close",{});
+    assert(!query.exec("UPDATE native_counter SET id=100 WHERE id=1"));
+    assert(jetSqlFunctionErrorNumber(query.lastError().text().toLower().toStdString())==3113); query.finish();
+    AccessCatalog catalog(path);
+    auto schema=parseMdbSchema(catalog.tableSchema("native_counter"));
+    auto root=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();
+    assert(root.value("counter_columns").toArray().first().toObject().value("last_value").toInt()==3);
+    root.insert("counter_columns",QJsonArray{QJsonObject{{"name","id"},{"last_value",1}}});
+    schema.sourceIndexMetadata=QJsonDocument(root).toJson(QJsonDocument::Compact);
+    const auto rows=parseCsvDetailed(AccessCatalog::exportTable(path,"native_counter",true).toStdString());
+    bool rejected=false;
+    try { importAccessTable(db,path,"invalid_counter",schema,rows,AccessBinaryEncoding::MdbToolsHex,AccessFloatingSource::NativeMdbBits); }
+    catch(const std::exception&) { rejected=true; }
+    assert(rejected && !db.tables().contains("invalid_counter"));
+    assert(query.exec("SELECT seq FROM sqlite_sequence WHERE name='native_counter'") && query.next() && query.value(0).toInt()==4); query.finish();
+    assert(digest()==before);
+    std::cout<<"Actual Jet stored counters: deleted-highest native/deleted-all managed next4, contradictory state atomic rollback and original hash verified\n";
+}
+
 void verifyJetBinaryReference(const QString& path) {
     using namespace linaccess;
     const QDir directory=QFileInfo(path).dir();
@@ -554,6 +589,7 @@ CREATE INDEX `label` ON `source` (`a``b`);
     for(const auto* malformed:{"0","0x00","GG","00 1","00\n00"}) {
         bool rejected=false; try { (void)decodeMdbBinaryHex(malformed); } catch(const std::exception&) { rejected=true; } assert(rejected);
     }
+    const auto counterReference=qEnvironmentVariable("LINACCESS_JET_COUNTER_STATE_REFERENCE"); if(!counterReference.isEmpty()) verifyJetCounterStateReference(counterReference);
     const auto doubleReference=qEnvironmentVariable("LINACCESS_JET_DOUBLE_PRECISION_REFERENCE"); if(!doubleReference.isEmpty()) verifyJetDoublePrecisionReference(doubleReference);
     const auto precisionReference=qEnvironmentVariable("LINACCESS_JET_SINGLE_PRECISION_REFERENCE"); if(!precisionReference.isEmpty()) verifyJetSinglePrecisionReference(precisionReference);
     const auto catalogReference=qEnvironmentVariable("LINACCESS_JET_INDEX_CATALOG_REFERENCE"); if(!catalogReference.isEmpty()) verifyJetIndexCatalogReference(catalogReference);

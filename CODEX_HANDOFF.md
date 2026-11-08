@@ -2118,3 +2118,66 @@ Double-Import bitgenau: vorhandener lesender Helfer --double-values, binäre64-B
 Unabhängiger Jackcess-Auszug beider Kassa-Testkopien:13 Tabellen/57 Double-Spalten,69405 Nicht-NULLwerte/514 NULLs, kein negatives Null/NaN/Infinity. Der bisherige Dezimalexport reproduzierte2404 numerische Zeilentupel in zwei Tabellen nicht exakt; neue native Kopien stimmen bitgenau mit allen unabhängigen Tupeln überein. Echte Jet-Extremwertreferenz, Gesamt-/Teilimport, DAO Type7/Size8, Herkunfts-/CSV-Guards und atomare Negativnull-Verweigerung geprüft. Aktueller korrigierter Debian13-Desktop48/48 (143,10 s), aktuelle neue Uploadkopie erneut29/29 und unabhängiger Auszug exakt; dort weiterhin78/100 Originalabfragen ohne Windows-Ergebnisorakel. App/Paket/Build-IDs/SQLite3.54.1/vier Originalfixture-/drei Uploadhashes und tatsächlich entpackter --double-values-Helfer mit bekannten Originalbits/SHA bestanden. Details docs/SOURCE_DOUBLE_PRECISION.md. Zuvor entdeckte technische CSV-Herkunftsfehler behoben, keine Schutzprüfung für Originale entfernt.456/384/72 unverändert; keine neue Matrix für Double behaupten.
 
 Nach einmaligem lesendem Resume derselben Codex-Call-Anfrage3ea2a1b8-75c6-411c-8f85-3cb76c4f3571 wurde status=unresolved und eine normale finale LiveKit-Teilantwort „Genau“ zur Windows-Referenzfrage geliefert; keine konkrete Umgebung/Protokolle/Zugriffsinformation und keine confirmed_decisions. CI-Frage bleibt unbeantwortet. Beide externen Blocker bleiben offen, keine Freigabe erfinden oder neue Anrufanforderung daraus ableiten. Privates Ergebnis resumed-result.json im bestehenden Call-Verzeichnis.
+
+
+## 2026-11-08 — tatsächliche Access-2003-Referenzen und AutoWert-Quellstand
+
+Nutzerpriorität: allgemeiner Access-Ersatz für Linux, einschließlich eigener neuer
+Datenbanken/Tabellen/Abfragen/Formulare/Berichte; die Kassa-Datei bleibt nur eine
+Praxisreferenz. Keine Namen-/Geschäftslogik-Sonderbehandlung. Ganze fachliche
+Arbeit bündeln und anschließend bestehende gezielte Prüfungen ausführen; keine
+Kleinsttest-/Zwischenabschluss-Schleife. Katalog456/384/72 bleibt unverändert.
+
+Nutzer führte Referenzpakete v3 und v4 tatsächlich mit Access11.0/DAO3.6 aus;
+Original-SHA unverändert. Geschützte Ergebnisarchive liegen nur unter
+/workspace/attachments/13b07826-03ad-4205-9109-c8f99a021e6b/ und
+/workspace/attachments/bd2f7462-2959-4696-89e4-31f778f6929b/.
+Das v4-Archiv heißt LinAccess-Gesamtreferenz-20261108-181858-f70a7afd.zip.
+Kein weiterer Anruf/Testlauf allein aufgrund alter ungeklärter Call-Statuswerte.
+Die technischen, von Originalmetadaten bereinigten Counter-Beobachtungen stehen
+in tests/access2003_reference/counter-observations.json. Das private Gesamtarchiv,
+Originalschema/Original-SQL/VBA/Geschäftsdaten dürfen nicht committed werden.
+
+Alle sechs v4-Worker haben Abschlussmanifeste. Der Starter meldet fälschlich
+partial_modules_failed wegen nicht ausgelesener Prozess-Exitcodes; seine
+observed/error-Zählung zählt zudem JSON-Arrays falsch. Workerbeobachtungen direkt
+lesen. Nicht alle Beobachtungen sind verwertbare Verhaltensreferenzen: sql.setup
+und dao.setup scheiterten im COM-Interop beim Zuweisen der technischen Werte
+(Int32->String); spätere SELECT-Ergebnisse können daher leere Tabellen betreffen.
+DAO-Navigation hatte dann3021. Diese Ergebnisse nicht als vollständige SQL-/DAO-
+Oracles nutzen. Decimal-CreateField gab3259, LongBinary COM-E_INVALIDCAST;
+auch dies ist kein pauschaler Access-Unfähigkeitsnachweis. Kein erneuter breiter
+Windows-Testlauf statt Programmierung; weitere Referenzen erst bei tatsächlichem
+Bedarf gezielt vorbereiten.
+
+Counter-Referenzen sind dagegen verwertbar: Nummer bei AddNew bereits vorhanden;
+CancelUpdate/fehlgeschlagenes Required-Update/Rollback verbrauchen2/4/6 und danach
+werden3/5/7 vergeben. Gelöschte höchste/alle Zeilen ergeben danach4. COUNTER(100,7)
+ergibt100/107/114. Nach explizitem2147483646 folgen2147483647,-2147483648,-2147483647.
+Recordset-Feld Attributes49/DataUpdatableTrue bei bestehendem Datensatz, DAO-Änderung
+3164, SQL-Änderung3113, explizites SQL-NULL3162. GUID-GenGUID-Default wurde beobachtet,
+beweist aber keinen Replikationsmodus. Form-/Combo-Erzeugung bleibt wegen des
+vorherigen nativen CreateControl-Absturzes aus den Paketen entfernt.
+
+Implementiert: Hashgebundene native Jet3/4-Long-Quellzählerstände, Wiederherstellung
+von sqlite_sequence/verwalteten Sequenzen einschließlich leerer Tabellen und
+höchster gelöschter ID. Quellstand/Werte/Hash-Widersprüche brechen atomar ab.
+Native-source UPDATE-Sperre3113 und DAO-Änderungsschutz3164; für bestätigte direkte
+writable Long-Generatorfelder Field.Attributes49 und DataUpdatableTrue. Keine
+automatische Legacy-Migration oder Diagnosepfad-Auswertung im CSV-Modus.
+F171 bleibt offen: alter SQLite64-Bit-/Rollback-Allocator implementiert noch nicht
+AddNew-Zeitpunkt, verbrauchte Nummern bei Rollback/Fehler, signed32-Wrap,
+Random/Replication, vollständige Schrittweiten-/Property-/Schema-Lifecycle-Regeln.
+Native Decoder verweigert negative/UUID/offengelegte Seed-/Increment-/NewValues-
+Zustände; fehlende Properties beweisen nicht sämtliche möglichen Modi. Details in
+AUTONUMBER_IMPORT.md. Optionale tatsächliche Jet4-Zustandsreferenz erzeugt
+JetCounterStateReference.java; externe Jackcess-Dateien nicht committen/ausliefern.
+
+Gebündelte Validierung dieses Arbeitsstands: gezielte bestehende Ziele
+(table_import_contracts mit echter Jet-Counter-Zustandsreferenz und
+complex_real_mdb_table_copy mit unabhängigen Double-Oracles)2/2 in81,28s.
+Zusätzlich dieselbe bestehende29-Tabellen-Prüfung auf der neu hochgeladenen
+Kassa-Version erfolgreich; alle4 Fixture- und3 Upload-SHAs unverändert. App und
+nativer Helfer neu gebaut. Keine neue48/48-Vollsuite oder grüne GitHub-CI behaupten.
+Logs privat: /workspace/work/counter-batch-{build,tests,upload,hashes}.log,
+/workspace/work/counter-{app-build,upload-hashes}.log.
