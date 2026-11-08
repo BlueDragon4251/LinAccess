@@ -1698,3 +1698,11 @@ Append weiter383. GUI/DAO2/2 (6,94s), App gebaut; DAO_TABLEDEF_FIELDS.md.
 456/384/72 unverändert. Fortsetzung: doppelte Hauptfenster-Kompilierung von App
 und GUI-Ziel über gemeinsame statische Desktopimplementierung beseitigen, dann
 weitere offene Entwurfs-/Access-Anforderungen ohne Zwischenabschluss.
+
+App und Hauptfensterintegration teilen jetzt dieselbe statische Desktopbibliothek
+(MainWindow/Inspector/BridgeImporter und Qt-Metaobjekte), ohne zusätzliche Runtime-
+DSO. Hauptfenster wird im gemeinsamen Build nur einmal kompiliert. GUI1/1 (5,25s),
+GUI-freier Kern1/1 (1,93s), App mit SQLite3.54.1/JOIN-/Null-/Counter-Backendcheck
+bestanden; kein frischer Vollsuite-/Distributionslauf.456/384/72 unverändert.
+Fortsetzung: ISO-#Datum#-Defaults und führendes= bei begrenzten Literaldefaults
+im Tabellen-/Feldentwurf und DAO; danach weitere offene Anforderungen fortlaufend.

@@ -31,9 +31,9 @@ if(LINACCESS_BUILD_GUI)
         src/native_input_box.cpp src/native_field_designer.cpp src/native_index_designer.cpp src/native_relation_designer.cpp src/access_form_preview.hpp)
     target_link_libraries(linaccess_forms PUBLIC linaccess_data Qt6::Widgets Qt6::PrintSupport)
     target_include_directories(linaccess_forms PUBLIC src)
-    add_executable(linaccess
-
-        src/main.cpp
+    # Share the identical desktop translation units and Qt metaobjects between
+    # the app and its window integration test; no additional runtime DSO.
+    add_library(linaccess_desktop STATIC
         src/mainwindow.cpp
         src/mainwindow.hpp
         src/access_inspector.cpp
@@ -59,7 +59,10 @@ if(LINACCESS_BUILD_GUI)
 
         src/csv.hpp
     )
-    target_link_libraries(linaccess PRIVATE linaccess_forms linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport)
+    target_link_libraries(linaccess_desktop PUBLIC linaccess_forms linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport)
+    target_include_directories(linaccess_desktop PUBLIC src)
+    add_executable(linaccess src/main.cpp)
+    target_link_libraries(linaccess PRIVATE linaccess_desktop linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport)
     set_target_properties(linaccess PROPERTIES INSTALL_RPATH "$ORIGIN/../lib/linaccess")
     # Cloud workspaces can use umask 0077. Installed system directories must
     # remain traversable by ordinary desktop users in the generated package.
@@ -92,11 +95,9 @@ if(BUILD_TESTING)
     add_test(NAME core_tests COMMAND linaccess_core_tests)
     if(LINACCESS_BUILD_GUI)
         find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
-        get_target_property(linaccess_mainwindow_test_sources linaccess SOURCES)
-        list(REMOVE_ITEM linaccess_mainwindow_test_sources src/main.cpp)
-        add_executable(linaccess_mainwindow_tests tests/mainwindow_document_tests.cpp ${linaccess_mainwindow_test_sources})
+        add_executable(linaccess_mainwindow_tests tests/mainwindow_document_tests.cpp)
         target_include_directories(linaccess_mainwindow_tests PRIVATE src)
-        target_link_libraries(linaccess_mainwindow_tests PRIVATE linaccess_forms linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport Qt6::Test)
+        target_link_libraries(linaccess_mainwindow_tests PRIVATE linaccess_desktop linaccess_runtime linaccess_data Qt6::Widgets Qt6::Sql Qt6::PrintSupport Qt6::Test)
         add_test(NAME mainwindow_documents COMMAND linaccess_mainwindow_tests)
         set_tests_properties(mainwindow_documents PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
         add_executable(linaccess_integer_arithmetic_tests tests/integer_arithmetic_tests.cpp)
