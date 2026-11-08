@@ -281,7 +281,7 @@ QString sqliteLiteralDefaultSql(const QVariant& declaration) {
     // Raw SQLite TRUE is1; imported Access TRUE is already normalized to-1.
     return token.compare("TRUE",Qt::CaseInsensitive)==0 ? QString("1") : literal.value_or(QString{});
 }
-struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1}; };
+struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1},generatorAttributes{-1}; };
 std::optional<QString> nativeFieldDefaultExpression(const TableSchemaColumn& field) {
     if(provenDaoFieldType(field.type)==11 || field.sourceType==11) return {};
     if(!field.hasDefault) return QString{};
@@ -347,7 +347,7 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
         if(query.lastError().isValid()) queryFailure(query);
     }
     const auto counter32=jetLongAccessColumns(db,tableName);
-    for(auto& column:columns) if(counter32.contains(column.name.toCaseFolded())) {column.type="INTEGER4";column.sourceType=4;}
+    for(auto& column:columns) if(counter32.contains(column.name.toCaseFolded())) {column.type="INTEGER4";column.sourceType=4;column.generatorAttributes=17;}
     return columns;
 }
 QMap<QString,QVariant> literalDefaultValues(QSqlDatabase db,const QVector<TableSchemaColumn>& columns) {
@@ -1471,6 +1471,10 @@ public:
         const auto key=lower(name);
         if(key=="name") return VbaValue::string(columns[position].name.toStdString());
         if(key=="attributes" && columns[position].indexAttributes>=0) return VbaValue::longInteger(columns[position].indexAttributes);
+        if(defaults_ && columns[position].generatorAttributes>=0) {
+            if(key=="attributes") return VbaValue::longInteger(columns[position].generatorAttributes);
+            if(key=="dataupdatable") return VbaValue::logical(false); // TableDef field has no data buffer.
+        }
         if(key=="foreignname") {
             if(columns[position].foreignName.isNull()) throw VbaRuntimeError(3251,"ForeignName is proven only for Relation fields");
             return VbaValue::string(columns[position].foreignName.toStdString());

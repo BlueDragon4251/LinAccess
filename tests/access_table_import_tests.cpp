@@ -57,6 +57,12 @@ void verifyJetCounterStateReference(const QString& path) {
     const auto records=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("native_counter")}).object;
     const auto field=records->member("Fields",{VbaValue::string("id")}).object;
     assert(field->member("Attributes",{}).asNumber()==49 && field->member("DataUpdatable",{}).truthy());
+    const auto tableDefinition=makeDaoDatabase(db)->member("TableDefs",{VbaValue::string("native_counter")}).object;
+    const auto schemaField=tableDefinition->member("Fields",{VbaValue::string("id")}).object;
+    assert(schemaField->member("Attributes",{}).asNumber()==17 && !schemaField->member("DataUpdatable",{}).truthy());
+    bool catalogReadonly=false;
+    try {schemaField->assign("Attributes",VbaValue::longInteger(1));}catch(const VbaRuntimeError& error){catalogReadonly=error.number==383;}
+    assert(catalogReadonly);
     records->member("Edit",{}); bool readonly=false;
     try { field->assign("Value",VbaValue::longInteger(100)); } catch(const VbaRuntimeError& error) { readonly=error.number==3164; }
     assert(readonly); records->member("CancelUpdate",{}); records->member("Close",{});

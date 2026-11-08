@@ -46,7 +46,9 @@ already reserved generated value; this is not proof of every DAO assignment case
 Imported managed counters reject explicit SQL NULL with3162. Source-backed
 counter UPDATEs raise3113; DAO existing-record assignment raises3164. Proven
 writable direct-table Long generators expose recordset Field.Attributes49 and
-DataUpdatable=True. Bound form controls reject existing counter assignment2448;
+DataUpdatable=True. Proven TableDef Long-generator fields expose Attributes17
+and DataUpdatable=False (catalog field, not a record buffer); catalog assignment
+remains read-only383. Bound form controls reject existing counter assignment2448;
 normal form updates omit unchanged generated fields. These properties are not
 inferred for unsupported contexts.
 

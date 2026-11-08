@@ -2274,3 +2274,13 @@ und counter-step-app-build.log unter /workspace/work/. Binäre MDB-Schrittweiten
 Moduserkennung, negative Source-Seeds, Random/Replikation und vollständige
 Property-/ALTER-/Transaktions-/Event-Regeln bleiben F171 offen. Katalog456/384/72
 unverändert; kein Abschlussanruf/kein Gesamtabschluss für diese Ergänzung.
+
+
+Nach cae1a9d: nachgewiesene32-Bit-Generatorfelder im TableDef-Katalog liefern
+Attributes17 (Fixed|AutoIncr) und DataUpdatableFalse; Recordset49/True bleibt
+getrennt. Die21 Original-TableDef-Counter aus dem tatsächlichen Access-2003-
+Metadatenlauf zeigen17/False. Keine Attribut-Ableitung für unbewiesene Query-/
+Expression-/Nichtcounter-Kontexte. Katalogzuweisung bleibt383, Indexfeld-
+Attributes (Descending1) bleiben getrennt. Vorhandenes Importziel mit tatsächlicher
+Jet-Counterreferenz1/1 (0,26s), App gebaut. Private Logs counter-catalog-properties-
+{build,tests}.log. Keine Aussage vollständiger Field.Properties-Semantik.
