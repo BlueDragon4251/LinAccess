@@ -1,6 +1,7 @@
 #include "dao_database.hpp"
 #include "vba_array.hpp"
 #include "access_autonumber.hpp"
+#include "access_index_metadata.hpp"
 #include "access_table_import.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
@@ -234,7 +235,7 @@ QString sqliteLiteralDefaultSql(const QVariant& declaration) {
     // Raw SQLite TRUE is1; imported Access TRUE is already normalized to-1.
     return token.compare("TRUE",Qt::CaseInsensitive)==0 ? QString("1") : literal.value_or(QString{});
 }
-struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; };
+struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1}; };
 std::optional<QString> nativeFieldDefaultExpression(const TableSchemaColumn& field) {
     if(provenDaoFieldType(field.type)==11 || field.sourceType==11) return {};
     if(!field.hasDefault) return QString{};
@@ -1391,6 +1392,7 @@ public:
         if(position<0) throw VbaRuntimeError(3420,"DAO schema field unavailable");
         const auto key=lower(name);
         if(key=="name") return VbaValue::string(columns[position].name.toStdString());
+        if(key=="attributes" && columns[position].indexAttributes>=0) return VbaValue::longInteger(columns[position].indexAttributes);
         if(key=="foreignname") {
             if(columns[position].foreignName.isNull()) throw VbaRuntimeError(3251,"ForeignName is proven only for Relation fields");
             return VbaValue::string(columns[position].foreignName.toStdString());
@@ -1478,13 +1480,153 @@ std::shared_ptr<VbaObject> QueryDefinition::fields() {
     }
     return collection;
 }
+struct NativeIndexData {
+    AccessSourceIndex source;
+    QByteArray definition;
+    bool operator==(const NativeIndexData&) const = default;
+};
+QVector<NativeIndexData> readNativeIndexCatalog(QSqlDatabase db,const QString& table) {
+    workspaceState(db)->check(); QSqlQuery query(db);
+    if(!query.exec("SELECT type FROM main.sqlite_schema WHERE name='_la_access_indexes'")) queryFailure(query);
+    if(!query.next() || query.value(0).toString()!="table" || query.next()) throw VbaRuntimeError(3251,"DAO: Original index identities are unavailable"); query.finish();
+    if(!query.exec("PRAGMA main.table_info('_la_access_indexes')")) queryFailure(query); int shape=0;
+    const QStringList expected{"table_name","definition"};
+    while(query.next()) if(shape>=expected.size() || query.value(1).toString()!=expected[shape++]) throw VbaRuntimeError(3251,"DAO: Index catalog shape invalid");
+    if(shape!=2) throw VbaRuntimeError(3251,"DAO: Index catalog shape invalid"); query.finish();
+    query.prepare("SELECT definition FROM main._la_access_indexes WHERE table_name=? COLLATE NOCASE"); query.addBindValue(table);
+    if(!query.exec()) queryFailure(query);
+    if(!query.next() || query.value(0).isNull()) throw VbaRuntimeError(3251,"DAO: Original index identities are unavailable");
+    const auto definition=query.value(0).toString().toUtf8();
+    if(query.next()) throw VbaRuntimeError(3251,"DAO: Original index definitions are ambiguous"); query.finish();
+    QStringList columns,primary; QMap<QString,bool> required; QMap<QString,QString> types; QMap<int,QString> keyOrder;
+    if(!query.exec("PRAGMA main.table_info("+quote(table)+")")) queryFailure(query);
+    while(query.next()) {
+        const auto name=query.value(1).toString(); columns.append(name); types.insert(name,query.value(2).toString()); required.insert(name,query.value(3).toBool());
+        if(query.value(5).toInt()>0) keyOrder.insert(query.value(5).toInt(),name);
+    }
+    for(auto it=keyOrder.cbegin();it!=keyOrder.cend();++it) { if(it.key()!=primary.size()+1) throw VbaRuntimeError(3251,"DAO: Primary key order invalid"); primary.append(it.value()); }
+    QVector<AccessSourceIndex> source;
+    try { source=checkedAccessSourceIndexes(definition,columns); }
+    catch(const std::exception&) { throw VbaRuntimeError(3251,"DAO: Original index definitions cannot be verified"); }
+    struct Actual { QString name,origin; bool unique{}; QStringList columns; QVector<bool> descending; };
+    QVector<Actual> actual;
+    if(!query.exec("PRAGMA main.index_list("+quote(table)+")")) queryFailure(query);
+    while(query.next()) {
+        if(actual.size()>=4096) throw VbaRuntimeError(3251,"DAO: Index catalog bound exceeded");
+        if(query.value(4).toBool()) throw VbaRuntimeError(3251,"DAO: Partial indexes are unsupported");
+        Actual index; index.name=query.value(1).toString(); index.unique=query.value(2).toBool(); index.origin=query.value(3).toString();
+        QSqlQuery fields(db); if(!fields.exec("PRAGMA main.index_xinfo("+quote(index.name)+")")) queryFailure(fields);
+        while(fields.next()) if(fields.value(5).toBool()) {
+            if(fields.value(1).toInt()<0 || fields.value(4).toString()!="BINARY") throw VbaRuntimeError(3251,"DAO: Expression/collated index metadata unsupported");
+            index.columns.append(fields.value(2).toString()); index.descending.append(fields.value(3).toBool());
+        }
+        actual.append(index);
+    }
+    QVector<NativeIndexData> result; int primaryCount=0;
+    for(const auto& index:source) {
+        if(index.kind==2 || (index.flags&~(128|8|2|1)) || (index.flags&2)) throw VbaRuntimeError(3251,"DAO: Logical/unknown/IgnoreNulls index semantics unsupported");
+        if(index.flags&8) for(const auto& field:index.columns) if(!required.value(field)) throw VbaRuntimeError(3251,"DAO: Required index constraint is unproven");
+        int found=-1;
+        if(index.kind==1) { ++primaryCount; if(index.columns!=primary) throw VbaRuntimeError(3251,"DAO: Original primary key does not match table"); }
+        for(int i=0;i<actual.size();++i) {
+            const auto& native=actual[i];
+            const bool identity=index.kind==1 ? native.origin=="pk" : native.origin=="c" && native.name==table+"_"+index.name;
+            if(identity && native.unique==((index.flags&1)!=0) && native.columns==index.columns && native.descending==index.descending) {
+                if(found>=0) throw VbaRuntimeError(3251,"DAO: Native index identity ambiguous"); found=i;
+            }
+        }
+        if(found>=0) actual.removeAt(found);
+        else if(!(index.kind==1 && index.columns.size()==1 && !index.descending[0] && types.value(index.columns[0]).compare("INTEGER",Qt::CaseInsensitive)==0))
+            throw VbaRuntimeError(3251,"DAO: Original index does not match native constraint");
+        result.append({index,definition});
+    }
+    if(!actual.isEmpty() || primaryCount!=(primary.isEmpty() ? 0 : 1)) throw VbaRuntimeError(3251,"DAO: Native index catalog is incomplete");
+    return result;
+}
+using NativeIndexReader=std::function<QVector<NativeIndexData>()>;
+class NativeIndex final : public VbaObject,public std::enable_shared_from_this<NativeIndex> {
+public:
+    NativeIndex(NativeIndexReader reader,NativeIndexData data) : reader_(std::move(reader)),data_(std::move(data)) {}
+    std::string_view className() const override { return "Index"; }
+    bool isNativeType(std::string_view type) const override { return type=="dao.index"; }
+    bool matches(const NativeIndexData& data) const { return data_==data; }
+    void check() const {
+        for(const auto& row:reader_()) if(row.source.name.compare(data_.source.name,Qt::CaseInsensitive)==0 && row==data_) return;
+        throw VbaRuntimeError(3420,"DAO: Index definition changed");
+    }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(lower(name)=="fields") return VbaArgumentSignature{{"Index"},0}; return {};
+    }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        check(); const auto key=lower(name);
+        if(key=="fields") {
+            if(args.size()>1) throw VbaRuntimeError(450,"DAO: Index.Fields takes at most one index");
+            auto fields=fields_.lock();
+            if(!fields) {
+                const auto self=shared_from_this(); fields=std::make_shared<TableSchemaFields>([self] {
+                    self->check(); QVector<TableSchemaColumn> result;
+                    for(int i=0;i<self->data_.source.columns.size();++i) {
+                        TableSchemaColumn field; field.name=self->data_.source.columns[i]; field.indexAttributes=self->data_.source.descending[i] ? 1 : 0; result.append(field);
+                    }
+                    return result;
+                },false); fields_=fields;
+            }
+            return args.empty() || args[0].kind==VbaValue::Kind::Missing ? VbaValue::reference(fields) : fields->member("Item",args);
+        }
+        if(!args.empty()) throw VbaRuntimeError(450,"DAO: Index property takes no arguments");
+        if(key=="name") return VbaValue::string(data_.source.name.toStdString());
+        if(key=="primary") return VbaValue::logical(data_.source.kind==1);
+        if(key=="unique") return VbaValue::logical(data_.source.flags&1);
+        if(key=="required") return VbaValue::logical(data_.source.flags&8);
+        if(key=="ignorenulls") return VbaValue::logical(data_.source.flags&2);
+        throw VbaRuntimeError(3251,"DAO: Index property unsupported");
+    }
+    void assign(std::string_view,const VbaValue&) override { check(); throw VbaRuntimeError(383,"DAO: Imported index metadata is read-only"); }
+private:
+    NativeIndexReader reader_; NativeIndexData data_; std::weak_ptr<VbaObject> fields_;
+};
+class NativeIndexes final : public VbaObject {
+public:
+    explicit NativeIndexes(NativeIndexReader reader) : reader_(std::move(reader)) {}
+    std::string_view className() const override { return "Indexes"; }
+    bool isNativeType(std::string_view type) const override { return type=="dao.indexes"; }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(lower(name)=="item") return VbaArgumentSignature{{"Index"},1}; return {};
+    }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        const auto rows=reader_(); const auto key=lower(name);
+        if(key=="count" || key=="refresh") {
+            if(!args.empty()) throw VbaRuntimeError(450,"DAO: Index collection property takes no arguments");
+            return key=="count" ? integerCount(rows.size()) : VbaValue{};
+        }
+        if(key!="item") throw VbaRuntimeError(3251,"DAO: Index catalog mutation unsupported");
+        if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"DAO: Index required");
+        const auto value=scalarVbaValue(args[0]); if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null index");
+        int position=-1;
+        if(value.kind==VbaValue::Kind::Text) {
+            const auto requested=text(value.asText()); for(int i=0;i<rows.size();++i) if(rows[i].source.name.compare(requested,Qt::CaseInsensitive)==0) position=i;
+        } else { const auto index=coerceVbaModuleValue(value,"long").number; if(index>=0 && index<rows.size()) position=static_cast<int>(index); }
+        if(position<0) throw VbaRuntimeError(3265,"DAO: Index not found");
+        const auto& row=rows[position]; auto& cached=objects_[row.source.name.toCaseFolded()]; auto object=cached.lock();
+        if(!object || !object->matches(row)) { object=std::make_shared<NativeIndex>(reader_,row); cached=object; }
+        return VbaValue::reference(object);
+    }
+    VbaValue item(std::string_view name) override { return member("Item",{VbaValue::string(std::string(name))}); }
+    std::vector<VbaValue> enumerate() override {
+        const auto rows=reader_(); std::vector<VbaValue> result;
+        for(const auto& row:rows) result.push_back(member("Item",{VbaValue::string(row.source.name.toStdString())})); return result;
+    }
+private:
+    NativeIndexReader reader_; QMap<QString,std::weak_ptr<NativeIndex>> objects_;
+};
+
 class TableDefinition final : public VbaObject, public std::enable_shared_from_this<TableDefinition> {
 public:
     std::string_view className() const override { return "TableDef"; }
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=lower(name);
-        if (key=="fields") return VbaArgumentSignature{{"Index"},0};
+        if (key=="fields" || key=="indexes") return VbaArgumentSignature{{"Index"},0};
         if (key=="openrecordset") return VbaArgumentSignature{{"Type"},0};
         return {};
     }
@@ -1506,6 +1648,19 @@ public:
             SqliteExecutionBudget budget(db_); QSqlQuery count(db_);
             if(!count.exec("SELECT COUNT(*) FROM main."+quote(name_)) || !count.next()) queryFailure(count);
             return longCount(count.value(0).toLongLong());
+        }
+        if(key=="indexes") {
+            if(args.size()>1) throw VbaRuntimeError(450,"DAO: TableDef.Indexes takes at most one index");
+            const auto version=schemaVersion(),rollback=workspace_->rollbackRevision; auto indexes=indexes_.lock();
+            if(!indexes || version!=indexesVersion_ || rollback!=indexesRollback_) {
+                const auto self=shared_from_this();
+                indexes=std::make_shared<NativeIndexes>([self,version,rollback] {
+                    if(!self->valid() || self->schemaVersion()!=version || self->workspace_->rollbackRevision!=rollback)
+                        throw VbaRuntimeError(3420,"DAO: Index metadata invalidated; reacquire TableDef.Indexes");
+                    return readNativeIndexCatalog(self->db_,self->name_);
+                }); indexes_=indexes; indexesVersion_=version; indexesRollback_=rollback;
+            }
+            return args.empty() || args[0].kind==VbaValue::Kind::Missing ? VbaValue::reference(indexes) : indexes->member("Item",args);
         }
         if(key=="fields") {
             if(args.size()>1) throw VbaRuntimeError(450,"DAO TableDef.Fields takes at most one index");
@@ -1545,6 +1700,8 @@ private:
     std::shared_ptr<WorkspaceState> workspace_;
     std::weak_ptr<TableSchemaFields> fields_;
     quint64 fieldsVersion_{},fieldsRollback_{};
+    std::weak_ptr<VbaObject> indexes_;
+    quint64 indexesVersion_{},indexesRollback_{};
     bool invalidated_{};
     quint64 generation_{};
 };

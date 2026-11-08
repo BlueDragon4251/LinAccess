@@ -104,6 +104,13 @@ void verifyJetIndexCatalogReference(const QString& path) {
     assert(query.exec("SELECT definition FROM main._la_access_indexes WHERE table_name='single_primary_probe'") && query.next());
     const auto singleIndexes=checkedAccessSourceIndexes(query.value(0).toString().toUtf8(),{"primary_key"});
     assert(singleIndexes.size()==1 && singleIndexes[0].name=="NamedDescendingSingle" && singleIndexes[0].descending==QVector<bool>({true})); query.finish();
+    auto table=makeDaoDatabase(db)->member("TableDefs",{VbaValue::string("catalog_probe")}).object;
+    auto daoIndexes=table->member("Indexes",{}).object; assert(daoIndexes->member("Count",{}).asNumber()==2);
+    auto daoPrimary=daoIndexes->member("Item",{VbaValue::string("DeliberatelyNamedPrimary")}).object;
+    assert(daoPrimary->member("Primary",{}).truthy() && daoPrimary->member("Unique",{}).truthy());
+    assert(daoPrimary->member("Fields",{VbaValue::numeric(0)}).object->member("Attributes",{}).asNumber()==1);
+    auto single=makeDaoDatabase(db)->member("TableDefs",{VbaValue::string("single_primary_probe")}).object->member("Indexes",{VbaValue::string("NamedDescendingSingle")}).object;
+    assert(single->member("Primary",{}).truthy() && single->member("Fields",{VbaValue::numeric(0)}).object->member("Attributes",{}).asNumber()==1);
     auto malformed=QJsonDocument::fromJson(schema.sourceIndexMetadata).object(); auto entries=malformed["indexes"].toArray(); auto duplicate=entries[0].toObject();
     auto second=entries[1].toObject(); second["name"]=duplicate["name"]; entries[1]=second; malformed["indexes"]=entries;
     auto bad=schema; bad.sourceIndexMetadata=QJsonDocument(malformed).toJson(QJsonDocument::Compact); bool refused=false;

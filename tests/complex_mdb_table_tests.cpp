@@ -92,6 +92,22 @@ int main(int argc, char** argv) {
             linaccess::importAccessTable(db, source, table, schema, rows);
             QSqlQuery storedIndexes(db); storedIndexes.prepare("SELECT definition FROM main._la_access_indexes WHERE table_name=?"); storedIndexes.addBindValue(table);
             assert(storedIndexes.exec() && storedIndexes.next() && storedIndexes.value(0).toString().toUtf8()==schema.sourceIndexMetadata); storedIndexes.finish();
+            const auto indexTable=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string(table.toStdString())}).object;
+            const auto daoIndexes=indexTable->member("Indexes",{}).object;
+            assert(daoIndexes->member("Count",{}).asNumber()==originalIndexes.size());
+            for(const auto& originalIndex:originalIndexes) {
+                const auto index=daoIndexes->member("Item",{linaccess::VbaValue::string(originalIndex.name.toStdString())}).object;
+                assert(index->member("Name",{}).asText()==originalIndex.name.toStdString());
+                assert(index->member("Primary",{}).truthy()==(originalIndex.kind==1));
+                assert(index->member("Unique",{}).truthy()==((originalIndex.flags&1)!=0));
+                assert(index->member("Required",{}).truthy()==((originalIndex.flags&8)!=0));
+                const auto fields=index->member("Fields",{}).object; assert(fields->member("Count",{}).asNumber()==originalIndex.columns.size());
+                for(int ordinal=0;ordinal<originalIndex.columns.size();++ordinal) {
+                    const auto field=fields->member("Item",{linaccess::VbaValue::numeric(ordinal)}).object;
+                    assert(field->member("Name",{}).asText()==originalIndex.columns[ordinal].toStdString());
+                    assert(field->member("Attributes",{}).asNumber()==(originalIndex.descending[ordinal] ? 1 : 0));
+                }
+            }
             {
                 const auto fields=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string(table.toStdString())}).object->member("Fields",{}).object;
                 const auto records=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{linaccess::VbaValue::string(table.toStdString())}).object;

@@ -40,6 +40,75 @@ private:
 };
 void testDaoCursors();
 void testDaoTransactions();
+void testDaoIndexes() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-indexes"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery sql(db);
+    assert(sql.exec("CREATE TABLE keyed(primary_a INTEGER NOT NULL,primary_b INTEGER NOT NULL,other_key INTEGER,PRIMARY KEY(primary_a DESC,primary_b ASC))"));
+    assert(sql.exec("CREATE INDEX keyed_ActualSecondary ON keyed(other_key ASC,primary_b DESC)"));
+    assert(sql.exec("CREATE TABLE _la_access_indexes(table_name TEXT PRIMARY KEY,definition TEXT NOT NULL)"));
+    QJsonObject definition{{"version",1},{"source_table","keyed"},{"columns",QJsonArray{"primary_a","primary_b","other_key"}},
+        {"indexes",QJsonArray{
+            QJsonObject{{"name","NamedPrimary"},{"kind",1},{"flags",137},{"fields",QJsonArray{QJsonObject{{"name","primary_a"},{"descending",true}},QJsonObject{{"name","primary_b"},{"descending",false}}}}},
+            QJsonObject{{"name","ActualSecondary"},{"kind",0},{"flags",128},{"fields",QJsonArray{QJsonObject{{"name","other_key"},{"descending",false}},QJsonObject{{"name","primary_b"},{"descending",true}}}}}}}};
+    const auto store=[&] { sql.prepare("INSERT OR REPLACE INTO main._la_access_indexes VALUES('keyed',?)"); sql.addBindValue(QJsonDocument(definition).toJson(QJsonDocument::Compact)); assert(sql.exec()); sql.finish(); }; store();
+    auto database=linaccess::makeDaoDatabase(db); auto table=database->member("TableDefs",{VbaValue::string("keyed")}).object;
+    auto indexes=table->member("Indexes",{}).object; auto primary=indexes->member("Item",{VbaValue::string("namedprimary")}).object;
+    auto field=primary->member("Fields",{VbaValue::string("PRIMARY_A")}).object;
+    assert(indexes->member("Count",{}).asNumber()==2 && indexes->member("Count",{}).numericType==VbaValue::NumericType::Integer);
+    assert(primary==table->member("Indexes",{VbaValue::numeric(0)}).object && primary==indexes->enumerate()[0].object);
+    assert(field->member("Attributes",{}).asNumber()==1 && field->member("Attributes",{}).numericType==VbaValue::NumericType::Long);
+    const auto error=[](const std::function<void()>& operation,int expected) { int number=0; try { operation(); } catch(const linaccess::VbaRuntimeError& failure) { number=failure.number; } assert(number==expected); };
+    error([&] { indexes->member("Item",{VbaValue{}}); },94);
+    error([&] { indexes->member("Item",{VbaValue::numeric(2)}); },3265);
+    error([&] { indexes->member("Refresh",{VbaValue::numeric(1)}); },450);
+    error([&] { primary->assign("Name",VbaValue::string("renamed")); },383);
+    error([&] { field->assign("Attributes",VbaValue::numeric(0)); },383);
+    error([&] { primary->member("Foreign",{}); },3251);
+    error([&] { field->member("Type",{}); },3251);
+    Host host(db); const auto result=linaccess::executeVbaProcedure(R"VBA(Sub InspectIndexes()
+Dim table As DAO.TableDef, indexes As DAO.Indexes, index As DAO.Index, fields As DAO.Fields, field As DAO.Field
+Dim count As Long
+Set table=CurrentDb.TableDefs("keyed")
+Set indexes=table.Indexes
+If Not TypeOf indexes Is DAO.Indexes Then Err.Raise 5
+If indexes.Count<>2 Or VarType(indexes.Count)<>vbInteger Then Err.Raise 5
+Set index=table.Indexes(Index:="NamedPrimary")
+If Not TypeOf index Is DAO.Index Then Err.Raise 5
+If Not (index Is indexes.Item(Index:=0)) Then Err.Raise 5
+If Not index.Primary Or Not index.Unique Or Not index.Required Or index.IgnoreNulls Then Err.Raise 5
+If VarType(index.Primary)<>vbBoolean Then Err.Raise 5
+Set fields=index.Fields
+Set field=index.Fields(Index:="primary_a")
+If field.Name<>"primary_a" Or field.Attributes<>dbDescending Or VarType(field.Attributes)<>vbLong Then Err.Raise 5
+If index.Fields(1).Attributes<>0 Then Err.Raise 5
+For Each index In indexes
+For Each field In index.Fields
+count=count+1
+Next
+Next
+If count<>4 Then Err.Raise 5
+indexes.Refresh
+fields.Refresh
+Me!IndexesChecked="yes"
+End Sub)VBA","InspectIndexes",host);
+    if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Index VBA error="<<result.errorNumber<<", line="<<result.line<<'\n';
+    assert(result.status==linaccess::VbaExecutionStatus::Completed && host.fields["IndexesChecked"]=="yes");
+    assert(sql.exec("CREATE TEMP TABLE _la_access_indexes(bad)")); assert(sql.exec("CREATE TEMP TABLE keyed(bad)"));
+    assert(indexes->member("Count",{}).asNumber()==2 && field->member("Name",{}).asText()=="primary_a");
+    auto entries=definition["indexes"].toArray(); auto entry=entries[1].toObject(); entry["flags"]=0; entries[1]=entry; definition["indexes"]=entries; store();
+    error([&] { field->member("Name",{}); },3420); primary=indexes->member("Item",{VbaValue::numeric(0)}).object;
+    auto engine=linaccess::makeDaoEngine(db); engine->member("BeginTrans",{}); engine->member("Rollback",{});
+    error([&] { primary->member("Name",{}); },3420); indexes=table->member("Indexes",{}).object;
+    assert(sql.exec("CREATE INDEX main.unexpected_native ON keyed(other_key)")); error([&] { indexes->member("Count",{}); },3420);
+    indexes=table->member("Indexes",{}).object; error([&] { indexes->member("Count",{}); },3251);
+    assert(sql.exec("DROP INDEX main.unexpected_native")); indexes=table->member("Indexes",{}).object; assert(indexes->member("Count",{}).asNumber()==2);
+    assert(sql.exec("CREATE TABLE missing_index_identity(id INTEGER)"));
+    auto missing=database->member("TableDefs",{VbaValue::string("missing_index_identity")}).object->member("Indexes",{}).object;
+    error([&] { missing->member("Count",{}); },3251);
+    db.close(); error([&] { indexes->member("Count",{}); },3420);
+}
+
 void testDaoSingleFields() {
     using linaccess::VbaValue;
     auto db=QSqlDatabase::addDatabase("QSQLITE","dao-single-fields"); db.setDatabaseName(":memory:"); assert(db.open());
@@ -1511,6 +1580,7 @@ int main(int argc, char** argv) {
     testTableDefSchemaFields();
     testDaoRelations();
     testDaoSingleFields();
+    testDaoIndexes();
     testDaoTableGenerations();
     testSqlRgbDao();
     auto db = QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());

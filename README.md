@@ -635,3 +635,6 @@ Die Datenblatt-Seiteneinrichtung verwendet echte Papier-/Randgeometrie für Vors
 
 Originale Indexnamen und Feldrichtungen werden bei neuen MDB-Importen über einen
 lesenden nativen Helfer geprüft; Umfang und Grenzen: [Indexmetadaten](docs/SOURCE_INDEX_METADATA.md).
+
+Der lesende [DAO-Indexkatalog](docs/DAO_INDEXES_RUNTIME.md) verwendet diese Originalnamen
+und prüft Felder, Richtungen und Schlüssel gegen den vollständigen nativen Indexbestand.

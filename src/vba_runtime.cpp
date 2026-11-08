@@ -86,7 +86,7 @@ bool nativeDaoType(std::string_view type) {
     return type=="dao.database" || type=="dao.databases" || type=="dao.workspace" || type=="dao.workspaces"
         || type=="dao.dbengine" || type=="dao.recordset" || type=="dao.field" || type=="dao.fields"
         || type=="dao.querydef" || type=="dao.querydefs" || type=="dao.parameter" || type=="dao.parameters"
-        || type=="dao.tabledef" || type=="dao.tabledefs" || type=="dao.relation" || type=="dao.relations";
+        || type=="dao.tabledef" || type=="dao.tabledefs" || type=="dao.relation" || type=="dao.relations" || type=="dao.index" || type=="dao.indexes";
 }
 std::size_t memberSeparator(const std::string& expression) {
     std::size_t result = std::string::npos;
