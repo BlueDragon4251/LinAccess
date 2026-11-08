@@ -307,7 +307,7 @@ QString sqliteLiteralDefaultSql(const QVariant& declaration) {
     // Raw SQLite TRUE is1; imported Access TRUE is already normalized to-1.
     return token.compare("TRUE",Qt::CaseInsensitive)==0 ? QString("1") : literal.value_or(QString{});
 }
-struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1},generatorAttributes{-1}; std::optional<bool> required;std::optional<int> nativeAttributes; };
+struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1},generatorAttributes{-1}; std::optional<bool> required;std::optional<int> nativeAttributes;std::optional<bool> allowZeroLength; };
 std::optional<QString> nativeFieldDefaultExpression(const TableSchemaColumn& field) {
     if(provenDaoFieldType(field.type)==11 || field.sourceType==11) return {};
     if(!field.hasDefault) return QString{};
@@ -379,6 +379,9 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
                         if(!attribute.isDouble() || (attribute.toDouble()!=expected && !(code==4 && attribute.toDouble()==17))) throw VbaRuntimeError(3251,"DAO native field attributes invalid");
                         column.nativeAttributes=static_cast<int>(attribute.toDouble());
                     }
+                    if(origin=="DAO_NATIVE" && object.contains("native_allow_zero_length")) {
+                        const auto allowed=object.value("native_allow_zero_length");if(!allowed.isBool() || (code!=10 && code!=12)) throw VbaRuntimeError(3251,"DAO: Native AllowZeroLength declaration invalid");column.allowZeroLength=allowed.toBool();
+                    }
                     found=true;break;
                 }
                 if(!found) throw VbaRuntimeError(3251,"DAO source schema field unavailable");
@@ -412,6 +415,7 @@ struct RecordsetData {
     QMap<QString,int> daoTypes,definitionSizes;
     QMap<QString,QVariant> literalDefaults;
     QMap<QString,QString> defaultExpressions;
+    QMap<QString,bool> requiredFields,allowZeroLengthFields;
     QVector<QVariantList> rows;
     QVector<QVariant> ids;
     QVector<quint64> bookmarks;
@@ -751,6 +755,10 @@ public:
         // Access2003/DAO3.6 writable Long counter observation: Fixed|AutoIncr|Updatable.
         return attributes ? VbaValue::longInteger(49) : VbaValue::logical(true);
     }
+    VbaValue schemaFieldBoolean(const QString& name,bool allowZeroLength) const {
+        (void)fieldType(name);const auto& properties=allowZeroLength ? data_->allowZeroLengthFields : data_->requiredFields;const auto key=name.toCaseFolded();
+        if(!properties.contains(key)) throw VbaRuntimeError(3251,"DAO: Recordset field property has no proven native declaration");return VbaValue::logical(properties.value(key));
+    }
     VbaValue definitionFieldSize(const QString& name) const {
         const auto declaration=fieldType(name),key=name.toCaseFolded();
         if(data_->definitionSizes.contains(key)) {
@@ -955,7 +963,7 @@ private:
             ++data_->revision;
             completed=true;
         };
-        data_->types.clear(); data_->daoTypes.clear(); data_->definitionSizes.clear(); data_->literalDefaults.clear(); data_->defaultExpressions.clear();
+        data_->types.clear(); data_->daoTypes.clear(); data_->definitionSizes.clear(); data_->literalDefaults.clear(); data_->defaultExpressions.clear();data_->requiredFields.clear();data_->allowZeroLengthFields.clear();
         if(table_) {
             QSqlQuery origin(db_); origin.prepare("SELECT name FROM main.sqlite_schema WHERE type='table' AND name=? COLLATE NOCASE"); origin.addBindValue(source_);
             if(!origin.exec()) queryFailure(origin);
@@ -966,6 +974,7 @@ private:
                 data_->literalDefaults=literalDefaultValues(db_,schema);
                 for(const auto& field:schema) {
                 const auto key=field.name.toCaseFolded(); data_->types.insert(key,field.type);
+                if(field.required) data_->requiredFields.insert(key,*field.required);if(field.allowZeroLength) data_->allowZeroLengthFields.insert(key,*field.allowZeroLength);
                 const auto code=field.sourceType ? field.sourceType : provenDaoFieldType(field.type);
                 data_->daoTypes.insert(key,code);
                 const auto size=code<=0 ? -1 : code==10 ? (field.sourceSize>0 ? field.sourceSize : -1)
@@ -1113,6 +1122,9 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
         if(!args.empty()) throw VbaRuntimeError(450,"Field.OrdinalPosition requires no arguments");
         return owner_->fieldOrdinal(name_);
     }
+    if(lower(name)=="required" || lower(name)=="allowzerolength") {
+        if(!args.empty()) throw VbaRuntimeError(450,"Field schema property requires no arguments");return owner_->schemaFieldBoolean(name_,lower(name)=="allowzerolength");
+    }
     if(lower(name)=="defaultvalue") {
         if(!args.empty()) throw VbaRuntimeError(450,"Field.DefaultValue requires no arguments");
         return owner_->defaultExpression(name_);
@@ -1134,6 +1146,7 @@ VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args)
     throw std::runtime_error("DAO: Unknown Field member");
 }
 void Field::assign(std::string_view name, const VbaValue& value) {
+    if(lower(name)=="required" || lower(name)=="allowzerolength") {(void)owner_->schemaFieldBoolean(name_,lower(name)=="allowzerolength");throw VbaRuntimeError(383,"Recordset schema field property is read-only");}
     if(lower(name)=="defaultvalue") { (void)owner_->fieldType(name_); throw VbaRuntimeError(383,"Recordset Field.DefaultValue is read-only"); }
     if(lower(name)=="size") { (void)owner_->fieldType(name_); throw VbaRuntimeError(383,"Field.Size is read-only"); }
     if(lower(name)=="attributes" || lower(name)=="dataupdatable") {
@@ -1520,6 +1533,7 @@ public:
         const auto key=lower(name);
         if(key=="name") return VbaValue::string(columns[position].name.toStdString());
         if(defaults_ && key=="required" && columns[position].required) return VbaValue::logical(*columns[position].required);
+        if(defaults_ && key=="allowzerolength" && columns[position].allowZeroLength) return VbaValue::logical(*columns[position].allowZeroLength);
         if(defaults_ && columns[position].nativeAttributes) {
             if(key=="attributes") return VbaValue::longInteger(*columns[position].nativeAttributes);
             if(key=="dataupdatable") return VbaValue::logical(false);
@@ -1551,7 +1565,7 @@ public:
     }
     void assign(std::string_view name,const VbaValue& value) override {
         (void)reader_();const auto key=lower(name);
-        if(!setter_ || (key!="required" && key!="defaultvalue" && key!="size" && key!="name")) throw VbaRuntimeError(383,"DAO schema field property is read-only");
+        if(!setter_ || (key!="required" && key!="defaultvalue" && key!="size" && key!="name" && key!="allowzerolength")) throw VbaRuntimeError(383,"DAO schema field property is read-only");
         bool native=false;for(const auto& column:reader_()) if(column.name.compare(name_,Qt::CaseInsensitive)==0) native=column.nativeAttributes.has_value() && column.required.has_value();
         if(!native) throw VbaRuntimeError(383,"DAO: Original/unproven schema fields remain read-only");
         const auto scalar=scalarVbaValue(value);(void)reader_();auto next=setter_(name_,key,scalar);reader_=std::move(next);if(key=="name") name_=text(scalar.asText());
@@ -1908,6 +1922,7 @@ public:
         if(key=="size") return VbaValue::longInteger(size_);
         if(key=="attributes") return VbaValue::longInteger(attributes_);
         if(key=="required") return VbaValue::logical(required_);
+        if(key=="allowzerolength" && (type_==10 || type_==12)) return VbaValue::logical(allowZeroLength_);
         if(key=="defaultvalue") return VbaValue::string(default_.toStdString());
         throw VbaRuntimeError(3251,"DAO: Detached field property unsupported");
     }
@@ -1924,12 +1939,13 @@ public:
             if(((static_cast<int>(attributes)&3) && (static_cast<int>(attributes)&3)!=intrinsic) || ((static_cast<int>(attributes)&16) && type_!=4)) throw VbaRuntimeError(3251,"DAO: Attributes conflict with the field type");
             attributes_=(static_cast<int>(attributes)&16)|intrinsic;return;}
         if(key=="required") {required_=coerceVbaModuleValue(value,"boolean").truthy();return;}
+        if(key=="allowzerolength") {if(type_!=10 && type_!=12) throw VbaRuntimeError(3251,"DAO: AllowZeroLength requires Text or Memo");allowZeroLength_=coerceVbaModuleValue(value,"boolean").truthy();return;}
         if(key=="defaultvalue") {const auto token=text(value.asText());if(!token.isEmpty() && !accessLiteralDefaultSql(token)) throw VbaRuntimeError(3251,"DAO: Field default requires a supported literal");default_=token;return;}
         throw VbaRuntimeError(3251,"DAO: Detached field assignment unsupported");
     }
     QJsonObject metadata() const {
         const auto source=type_==1 ? "BOOLEAN" : type_==2 ? "TINYINT" : type_==3 ? "SMALLINT" : type_==4 ? "INT" : type_==7 ? "DOUBLE" : type_==8 ? "DATETIME" : type_==10 ? "VARCHAR" : type_==11 ? "BLOB" : "MEMO";
-        return QJsonObject{{"name",name_},{"source_type",source},{"source_origin","DAO_NATIVE"},{"source_size",type_==10 ? size_ : 0},{"native_attributes",attributes_},{"native_required",required_}};
+        auto object=QJsonObject{{"name",name_},{"source_type",source},{"source_origin","DAO_NATIVE"},{"source_size",type_==10 ? size_ : 0},{"native_attributes",attributes_},{"native_required",required_}};if(type_==10 || type_==12) object.insert("native_allow_zero_length",allowZeroLength_);return object;
     }
     QString definition() const {
         if(name_.isEmpty() || name_.trimmed()!=name_ || name_.size()>64 || name_.contains(QChar(0)) || !name_.isValidUtf16()) throw VbaRuntimeError(5,"DAO: Invalid field name");
@@ -1951,13 +1967,14 @@ public:
         if(!default_.isEmpty()) result+=" DEFAULT "+*accessLiteralDefaultSql(default_);
         if(type_==10) result+=" CHECK (linaccess_jet_text_capacity("+schemaJetName(name_)+","+QString::number(size_)+"))";
         const auto column=schemaJetName(name_);
+        if((type_==10 || type_==12) && !allowZeroLength_) result+=" CHECK (linaccess_jet_nonempty_text("+column+"))";
         if(type_==2 || type_==3 || type_==4 || type_==1) result+=" CHECK ("+column+" IS NULL OR (typeof("+column+")='integer' AND "+column+"=linaccess_jet_field_store('"+type+"',"+column+")))";
         if(type_==7) result+=" CHECK ("+column+" IS NULL OR (typeof("+column+") IN ('integer','real') AND abs("+column+")<=1.7976931348623157e308))";
         if(type_==8) result+=" CHECK ("+column+" IS NULL OR (typeof("+column+")='text' AND linaccess_jet_field_store('DATETIME',"+column+") IS NOT NULL))";
         if(type_==11 || type_==12) result+=" CHECK ("+column+" IS NULL OR typeof("+column+")='"+QString(type_==11 ? "blob" : "text")+"')";
         return result;
     }
-    std::shared_ptr<VbaObject> attachedField_;std::shared_ptr<DetachedTableState> owner_;QString name_;int type_{},size_{},attributes_{};bool required_{},appended_{};QString default_;
+    std::shared_ptr<VbaObject> attachedField_;std::shared_ptr<DetachedTableState> owner_;QString name_;int type_{},size_{},attributes_{};bool required_{},appended_{},allowZeroLength_{true};QString default_;
 };
 class DetachedFields final : public VbaObject {
 public:
@@ -2662,7 +2679,7 @@ private:
     int pragma(const QString& name) {if(!query_.exec("PRAGMA "+name) || !query_.next()) queryFailure(query_);const int result=query_.value(0).toInt();query_.finish();return result;}
     QSqlDatabase db_;QSqlQuery query_;int foreignKeys_{},legacy_{};bool changed_{};
 };
-struct NativeFieldChange {std::optional<bool> required;std::optional<int> size;std::optional<QString> defaultValue;};
+struct NativeFieldChange {std::optional<bool> required,allowZeroLength;std::optional<int> size;std::optional<QString> defaultValue;};
 
 QPair<qint64,QByteArray> nativeTableValueDigest(QSqlDatabase db,const QString& table,const QStringList& columns) {
     QCryptographicHash hash(QCryptographicHash::Sha256);QSqlQuery query(db);QStringList projection{"rowid"};for(const auto& column:columns) projection.append(quote(column));
@@ -2706,11 +2723,11 @@ void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVect
     for(const auto& column:columns) {
         if(column.name.compare("rowid",Qt::CaseInsensitive)==0 || column.name.compare("_rowid_",Qt::CaseInsensitive)==0 || column.name.compare("oid",Qt::CaseInsensitive)==0) throw VbaRuntimeError(3251,"DAO: Shadowed row identity migration unsupported");
         if(!declarations.contains(column.name.toCaseFolded()) || !column.nativeAttributes || !column.required) throw VbaRuntimeError(3251,"DAO: Native field properties incomplete for migration");
-        DetachedField field(owner,column.name,column.sourceType,column.sourceSize);field.attributes_=*column.nativeAttributes;field.required_=*column.required;
+        DetachedField field(owner,column.name,column.sourceType,column.sourceSize);field.attributes_=*column.nativeAttributes;field.required_=*column.required;field.allowZeroLength_=column.allowZeroLength.value_or(true);
         if(!(field.attributes_&16) && column.hasDefault) {if(column.literalDefault.isEmpty()) throw VbaRuntimeError(3251,"DAO: Nonliteral default migration unsupported");field.default_=column.literalDefault;}
         const auto definition=[&](const DetachedField& value) {auto result=value.attributes_&16 ? schemaJetName(column.name)+" INT NOT NULL DEFAULT ("+accessCounterDefault(table,column.name)+")" : value.definition();if(required.contains(column.name.toCaseFolded()) && !value.required_ && !(value.attributes_&16)) result+=" NOT NULL";return result;};
         definitions.append(definition(field));
-        if(changes.contains(column.name.toCaseFolded())) {const auto change=changes.value(column.name.toCaseFolded());if(change.required) field.required_=*change.required;if(change.size) field.size_=*change.size;if(change.defaultValue) field.default_=*change.defaultValue;}
+        if(changes.contains(column.name.toCaseFolded())) {const auto change=changes.value(column.name.toCaseFolded());if(change.required) field.required_=*change.required;if(change.allowZeroLength) field.allowZeroLength_=*change.allowZeroLength;if(change.size) field.size_=*change.size;if(change.defaultValue) field.default_=*change.defaultValue;}
         modifiedDefinitions.append(definition(field));names.append(column.name);
     }
     for(const auto& index:indexes) if(index.source.kind==1) {QStringList fields;for(int i=0;i<index.source.columns.size();++i) fields.append(schemaJetName(index.source.columns[i])+(index.source.descending[i] ? " DESC" : " ASC"));const auto primary="PRIMARY KEY ("+fields.join(',')+")";definitions.append(primary);modifiedDefinitions.append(primary);}
@@ -2796,7 +2813,7 @@ TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString&
     if(table.isEmpty()) throw VbaRuntimeError(3265,"DAO: Field table unavailable");
     const auto version=nativeSchemaVersion(db),generation=workspace->tableGenerations.value(table.toCaseFolded());
     QMap<QString,VbaValue> evaluated;
-    for(auto it=properties.cbegin();it!=properties.cend();++it) {const auto key=it.key().toCaseFolded();if(key!="required" && key!="defaultvalue" && key!="size" && key!="name") throw VbaRuntimeError(383,"DAO: Field property is read-only");if(evaluated.contains(key)) throw VbaRuntimeError(450,"DAO: Duplicate field property");evaluated.insert(key,scalarVbaValue(it.value()));}
+    for(auto it=properties.cbegin();it!=properties.cend();++it) {const auto key=it.key().toCaseFolded();if(key!="required" && key!="defaultvalue" && key!="size" && key!="name" && key!="allowzerolength") throw VbaRuntimeError(383,"DAO: Field property is read-only");if(evaluated.contains(key)) throw VbaRuntimeError(450,"DAO: Duplicate field property");evaluated.insert(key,scalarVbaValue(it.value()));}
     workspace->check();if(version!=nativeSchemaVersion(db) || generation!=workspace->tableGenerations.value(table.toCaseFolded())) throw VbaRuntimeError(3420,"DAO: Field identity changed while evaluating properties");
     const auto columns=readTableSchemaColumns(db,table);std::optional<TableSchemaColumn> selected;
     for(const auto& column:columns) if(column.name.compare(requestedField,Qt::CaseInsensitive)==0) {selected=column;break;}
@@ -2806,7 +2823,7 @@ TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString&
     if(*column.nativeAttributes&16) throw VbaRuntimeError(3251,"DAO: Counter property alteration requires dedicated migration");
     if(evaluated.contains("name")) {if(evaluated.size()!=1) throw VbaRuntimeError(3251,"DAO: Rename must be a separate field operation");if(evaluated.value("name").kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null field name");return renameNativeField(db,table,column,text(evaluated.value("name").asText()));}
     auto owner=std::make_shared<DetachedTableState>();owner->db=db;owner->workspace=workspace;owner->name=table;
-    DetachedField field(owner,column.name,column.sourceType,column.sourceSize);field.attributes_=*column.nativeAttributes;field.required_=*column.required;
+    DetachedField field(owner,column.name,column.sourceType,column.sourceSize);field.attributes_=*column.nativeAttributes;field.required_=*column.required;field.allowZeroLength_=column.allowZeroLength.value_or(true);
     if(column.hasDefault) {if(column.literalDefault.isEmpty()) throw VbaRuntimeError(3251,"DAO: Nonliteral default alteration unsupported");field.default_=column.literalDefault;}
     for(auto it=evaluated.cbegin();it!=evaluated.cend();++it) {
         if(it.key()=="size" && field.type_!=10) throw VbaRuntimeError(3251,"DAO: Only Text capacities can be changed");
@@ -2824,7 +2841,7 @@ TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString&
     }
     if(field.type_==10 && !field.default_.isEmpty()) {QSqlQuery literal(db);if(!literal.exec("SELECT "+*accessLiteralDefaultSql(field.default_)) || !literal.next()) queryFailure(literal);if(!literal.value(0).isNull() && literal.value(0).toString().size()>field.size_) throw VbaRuntimeError(3163,"DAO: Existing default exceeds new Text capacity");}
     const auto oldDefault=column.hasDefault ? column.literalDefault : QString{};
-    if(field.required_==*column.required && field.size_==(field.type_==10 ? column.sourceSize : static_cast<int>(fixedDaoFieldSize(field.type_).number)) && field.default_==oldDefault) return currentNativeFieldReader(db,table);
+    if(field.required_==*column.required && field.size_==(field.type_==10 ? column.sourceSize : static_cast<int>(fixedDaoFieldSize(field.type_).number)) && field.default_==oldDefault && field.allowZeroLength_==column.allowZeroLength.value_or(true) && (!evaluated.contains("allowzerolength") || column.allowZeroLength.has_value())) return currentNativeFieldReader(db,table);
     checkReservedCounterSchemaAction(db);
     NativeSchemaSettings settings(db);settings.begin(false);
     QSqlQuery query(db);const auto savepoint="la_field_properties_"+QUuid::createUuid().toString(QUuid::Id128);
@@ -2837,9 +2854,9 @@ TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString&
     query.prepare("SELECT definition FROM main._la_table_schema WHERE table_name=? COLLATE NOCASE");query.addBindValue(table);if(!query.exec() || !query.next()) throw VbaRuntimeError(3251,"DAO: Native field metadata unavailable");
     const auto originalMetadataValue=query.value(0);const auto originalMetadata=originalMetadataValue.toByteArray();if(query.next()) throw VbaRuntimeError(3251,"DAO: Native field metadata ambiguous");query.finish();
     auto metadata=QJsonDocument::fromJson(originalMetadata).array();bool found=false;
-    for(int i=0;i<metadata.size();++i) {auto object=metadata[i].toObject();if(object.value("name").toString().compare(column.name,Qt::CaseInsensitive)==0) {if(object.value("source_origin").toString()!="DAO_NATIVE") throw VbaRuntimeError(3251,"DAO: Original field alteration unsupported");object.insert("native_required",field.required_);if(field.type_==10) object.insert("source_size",field.size_);metadata[i]=object;found=true;break;}}
+    for(int i=0;i<metadata.size();++i) {auto object=metadata[i].toObject();if(object.value("name").toString().compare(column.name,Qt::CaseInsensitive)==0) {if(object.value("source_origin").toString()!="DAO_NATIVE") throw VbaRuntimeError(3251,"DAO: Original field alteration unsupported");object.insert("native_required",field.required_);if(field.type_==10 || field.type_==12) object.insert("native_allow_zero_length",field.allowZeroLength_);if(field.type_==10) object.insert("source_size",field.size_);metadata[i]=object;found=true;break;}}
     if(!found) throw VbaRuntimeError(3251,"DAO: Native field declaration missing");
-    NativeFieldChange change;change.required=field.required_;if(field.type_==10) change.size=field.size_;change.defaultValue=field.default_;
+    NativeFieldChange change;change.required=field.required_;change.allowZeroLength=field.allowZeroLength_;if(field.type_==10) change.size=field.size_;change.defaultValue=field.default_;
     if(workspace->tableFieldRevisions.value(table.toCaseFolded())==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Field schema revision overflow");
     rebuildNativeRelationTable(db,table,relations,relations,{{column.name.toCaseFolded(),change}});
     query.prepare("UPDATE main._la_table_schema SET definition=? WHERE table_name=? COLLATE NOCASE AND definition=?");query.addBindValue(QJsonDocument(metadata).toJson(QJsonDocument::Compact));query.addBindValue(table);query.addBindValue(originalMetadataValue);if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Field metadata changed during edit");

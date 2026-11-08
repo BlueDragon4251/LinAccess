@@ -2558,3 +2558,12 @@ Digestprüfung der Werte/rowids. Access-Abfrageartefakte/VBA/Formularbindungen
 werden nicht refaktoriert. Echtes GUI/DAO2/2 (5,66s), App gebaut. Umfang/Grenzen
 DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert. Weiter native Feldvalidierung
 und weitere offene Anforderungen implementieren, keine Zwischen-Finals.
+
+Native AllowZeroLength für Text/Memo ist bei DAO-Anlage und vorhandenen Feldern
+sowie in Neuer-Tabelle-/Feld-Dialogen implementiert, echte SQL-Prüfung/3315,
+Null separat Required. Physische DAO-/Clonefelder lesen explizite Required-/
+AllowZeroLength-Metadaten schreibgeschützt. Atomarer Umbau/Fehlerrücknahme;
+Original-/unbewiesene Eigenschaften nicht erfunden. GUI/DAO2/2 (5,99s), App
+gebaut; Details DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert. Nächste Arbeit:
+Primärindizes vorhandener nativer Tabellen wirklich anlegen/entfernen, samt
+Daten-/Counter-/Abhängigkeitsschutz und grafischer Bedienung; dann weiter.

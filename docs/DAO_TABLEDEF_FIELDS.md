@@ -307,3 +307,29 @@ view/trigger behavior, cursor refresh, binary/max-Double values and next counter
 allocation. Two initial test sequencing errors were corrected (stale field
 reacquisition and a delayed popup helper); no new target or broad suite.
 F015/F121/F155 and fixed456/384/72 remain unchanged.
+
+## Native zero-length text validation
+
+Text/Memo fields expose AllowZeroLength on detached/new native TableDefs and
+explicitly declared existing native fields. False emits an actual deterministic
+SQLite CHECK with the shared innocuous native text validator; empty strings
+raise3315, Null remains governed separately by Required, and a space is not an
+empty string. Both table creation and field creation/property editors expose
+the setting. Existing property changes use the same atomic digest-checked
+rebuild; offending stored empty strings prevent the change without data filling
+or loss. Original/imported/unproven declarations stay unavailable. Older native
+metadata without this explicit property returns3251 until a checked explicit
+edit records it; the prior native definition must still reconstruct exactly.
+
+Physical DAO recordset/clone fields now also read checked native Required and
+AllowZeroLength snapshots. They are readonly383 there; changes belong to
+TableDef fields. Requery refreshes the maps with existing metadata/clone guards;
+queries/frozen projections or original fields without proof remain3251.
+
+Existing GUI/DAO2/2 (5.99s), application built. Text/Memo creation and change,
+empty rejection, Null/space distinction, atomic failed multirow update and
+failed constraint tightening, default insertion, AddNew correction after3315,
+clone/readonly metadata, and actual graphic create/edit/rename constraints
+passed. The GUI expectation was updated for the real sixth designer column.
+No extra test target/broad suite. Full field validation/Access oracle and
+F015/F121 remain open;456/384/72 unchanged.

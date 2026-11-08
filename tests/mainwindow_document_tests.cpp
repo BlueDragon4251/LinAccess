@@ -2784,7 +2784,7 @@ int main(int argc,char** argv) {
         QTimer::singleShot(0,&window,[&] {
             auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-table-designer");
             dialog->findChild<QLineEdit*>("native-table-name")->setText("authored_defaults");
-            auto* grid=dialog->findChild<QTableWidget*>("native-table-fields"); assert(grid && grid->columnCount()==5);
+            auto* grid=dialog->findChild<QTableWidget*>("native-table-fields"); assert(grid && grid->columnCount()==6);
             grid->item(0,0)->setText("qty"); qobject_cast<QComboBox*>(grid->cellWidget(0,1))->setCurrentText("INTEGER");
             grid->item(0,2)->setText("ja"); grid->item(0,3)->setText("Now()");
             auto* buttons=dialog->findChild<QDialogButtonBox*>(); assert(buttons);
@@ -2799,7 +2799,7 @@ int main(int argc,char** argv) {
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->accept();});
             buttons->button(QDialogButtonBox::Save)->click();
             assert(dialog->isVisible() && !db.tables().contains("authored_defaults") && grid->item(1,3)->text()=="\"ui value\"");
-            grid->item(1,4)->setText("12");buttons->button(QDialogButtonBox::Save)->click();
+            grid->item(1,4)->setText("12");qobject_cast<QCheckBox*>(grid->cellWidget(1,5))->setChecked(false);buttons->button(QDialogButtonBox::Save)->click();
         });
         action(window,"+ Tabelle")->trigger();
         QSqlQuery authored(db); assert(authored.exec("INSERT INTO authored_defaults DEFAULT VALUES"));
@@ -2808,7 +2808,7 @@ int main(int argc,char** argv) {
         assert(linaccess::jetLongAccessColumns(db,"authored_defaults").contains("id"));
         auto definition=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string("authored_defaults")}).object;
         auto labelField=definition->member("Fields",{linaccess::VbaValue::string("label")}).object;
-        assert(labelField->member("Type",{}).asNumber()==10 && labelField->member("Size",{}).asNumber()==12);
+        assert(labelField->member("Type",{}).asNumber()==10 && labelField->member("Size",{}).asNumber()==12);assert(!labelField->member("AllowZeroLength",{}).truthy());
         assert(definition->member("Fields",{linaccess::VbaValue::string("qty")}).object->member("Type",{}).asNumber()==4);
         auto primary=definition->member("Indexes",{linaccess::VbaValue::string("PrimaryKey")}).object;
         assert(primary->member("Primary",{}).truthy());
@@ -2845,16 +2845,16 @@ int main(int argc,char** argv) {
             QSqlQuery values(db);assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE ExtraNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();
             for(int row=0;row<list->rowCount();++row) if(list->item(row,0)->text()=="ExtraNote") list->setCurrentCell(row,0);
             dialog->findChild<QTabWidget*>("native-field-editor-tabs")->setCurrentIndex(1);
-            dialog->findChild<QSpinBox*>("native-field-property-size")->setValue(12);dialog->findChild<QCheckBox*>("native-field-property-required")->setChecked(true);dialog->findChild<QLineEdit*>("native-field-property-default")->setText("\"future\"");
+            dialog->findChild<QCheckBox*>("native-field-property-allow-zero")->setChecked(false);dialog->findChild<QSpinBox*>("native-field-property-size")->setValue(12);dialog->findChild<QCheckBox*>("native-field-property-required")->setChecked(true);dialog->findChild<QLineEdit*>("native-field-property-default")->setText("\"future\"");
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());if(box && box->windowTitle()=="Feld konnte nicht geändert werden") {std::cerr<<"Field property GUI error: "<<box->text().toStdString()<<"\n";box->accept();}});
             dialog->findChild<QPushButton*>("native-field-property-save")->click();
             auto propertyField=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string("authored_defaults")}).object->member("Fields",{linaccess::VbaValue::string("ExtraNote")}).object;
-            assert(propertyField->member("Size",{}).asNumber()==12 && propertyField->member("Required",{}).truthy());
+            assert(propertyField->member("Size",{}).asNumber()==12 && propertyField->member("Required",{}).truthy());assert(!propertyField->member("AllowZeroLength",{}).truthy());
             assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE ExtraNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();
             dialog->findChild<QLineEdit*>("native-field-rename-name")->setText("RenamedNote");
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());if(box && box->windowTitle()=="Feld konnte nicht geändert werden") {std::cerr<<"Field rename GUI error: "<<box->text().toStdString()<<"\n";box->accept();}});
             dialog->findChild<QPushButton*>("native-field-rename")->click();assert(list->item(list->currentRow(),0)->text()=="RenamedNote");
-            assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE RenamedNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();
+            assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE RenamedNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();assert(!values.exec("INSERT INTO authored_defaults(RenamedNote) VALUES('')"));
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});
             dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==4);dialog->reject();
         });

@@ -426,6 +426,16 @@ void roundNumber(sqlite3_context* context,int count,sqlite3_value** args) noexce
       catch(...) { native.error(context,"SQL rounding failed",-1); }
 }
 
+void nonemptyText(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+    auto& native=api();try {
+        if(native.type(args[0])==SQLITE_NULL) {native.integerResult(context,1);return;}
+        if(native.type(args[0])!=SQLITE_TEXT) throw VbaRuntimeError(13,"Text field requires text");
+        if(!native.text(args[0])) throw VbaRuntimeError(7,"SQL text unavailable");
+        if(native.bytes(args[0])==0) throw VbaRuntimeError(3315,"Field cannot contain a zero-length string");
+        native.integerResult(context,1);
+    }catch(const VbaRuntimeError& failure) {functionError(context,failure);}catch(...) {native.error(context,"Text validation failed",-1);}
+}
+
 void textCapacity(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native=api();
     try {
@@ -566,10 +576,11 @@ std::optional<int> jetSqlFunctionErrorNumber(std::string_view foldedMessage) {
     int number=0;
     const auto parsed=std::from_chars(code.data(),code.data()+code.size(),number);
     if (parsed.ec!=std::errc{}) return {};
-    if (number==5 || number==6 || number==7 || number==13 || number==52 || number==53 || number==70 || number==75 || number==76 || number==94 || number==438 || number==450 || number==3035 || number==3113 || number==3146 || number==3162 || number==3163 || number==3061 || number==2450 || number==2451 || number==2455 || number==2465 || number==3251 || number==3420 || number==3085) return number;
+    if (number==5 || number==6 || number==7 || number==13 || number==52 || number==53 || number==70 || number==75 || number==76 || number==94 || number==438 || number==450 || number==3035 || number==3113 || number==3146 || number==3162 || number==3163 || number==3315 || number==3061 || number==2450 || number==2451 || number==2455 || number==2465 || number==3251 || number==3420 || number==3085) return number;
     return {};
 }
 std::string jetSqlFunctionErrorExplanation(std::string_view foldedMessage) {
+    if(foldedMessage.find("linaccess sql function error 3315:")!=std::string_view::npos) return "Field cannot contain a zero-length string";
     if(foldedMessage.find("linaccess sql function error 3163:")!=std::string_view::npos) return "Text is too long for this field";
     if(foldedMessage.find("linaccess sql function error 3251: ambiguous joined update")!=std::string_view::npos)
         return "Joined UPDATE has conflicting source values for one target";
@@ -679,6 +690,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_format",2,&formatVariant,nullptr,nullptr);
     ensure("linaccess_jet_concat",2,&concatenate,nullptr,nullptr);
     ensure("linaccess_jet_len",1,&textLength,nullptr,nullptr);
+    ensure("linaccess_jet_nonempty_text",1,&nonemptyText,nullptr,nullptr,SQLITE_UTF8|SQLITE_DETERMINISTIC|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_text_capacity",2,&textCapacity,nullptr,nullptr,SQLITE_UTF8|SQLITE_DETERMINISTIC|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_lenb",-1,&stringLenB,nullptr,nullptr);
     ensure("linaccess_jet_like_pattern",1,&likePattern,nullptr,nullptr);

@@ -1778,8 +1778,8 @@ void MainWindow::newTable() {
     auto* outer=new QVBoxLayout(&dialog);
     auto* name=new QLineEdit(&dialog); name->setObjectName("native-table-name"); name->setPlaceholderText("Tabellenname"); outer->addWidget(name);
     outer->addWidget(new QLabel("Felder (id wird automatisch als Primärschlüssel angelegt)",&dialog));
-    auto* grid=new QTableWidget(0,5,&dialog); grid->setObjectName("native-table-fields");
-    grid->setHorizontalHeaderLabels({"Feldname","Datentyp","Pflichtfeld (ja/nein)","Standardwert (optional)","Textgröße (1–255)"});
+    auto* grid=new QTableWidget(0,6,&dialog); grid->setObjectName("native-table-fields");
+    grid->setHorizontalHeaderLabels({"Feldname","Datentyp","Pflichtfeld (ja/nein)","Standardwert (optional)","Textgröße (1–255)","Leere Zeichenfolge zulassen"});
     grid->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch); outer->addWidget(grid);
     outer->addWidget(new QLabel("TEXT: wählbare Feldgröße bis 255 Zeichen; MEMO: längerer Text.",&dialog));
     outer->addWidget(new QLabel("Standardwerte als Literal: Zahl, True/False, \"Text\" oder Null.",&dialog));
@@ -1788,8 +1788,9 @@ void MainWindow::newTable() {
         grid->setItem(row,0,new QTableWidgetItem());
         auto* type=new QComboBox(grid); type->addItems({"TEXT","MEMO","BYTE","SMALLINT","INTEGER","REAL","DATE","BOOLEAN","BLOB"}); grid->setCellWidget(row,1,type);
         grid->setItem(row,2,new QTableWidgetItem("nein")); grid->setItem(row,3,new QTableWidgetItem());
+        auto* allowZero=new QCheckBox(grid);allowZero->setChecked(true);grid->setCellWidget(row,5,allowZero);
         auto* size=new QTableWidgetItem("255");grid->setItem(row,4,size);
-        connect(type,&QComboBox::currentTextChanged,grid,[size](const QString& value) {size->setFlags(value=="TEXT" ? Qt::ItemIsEnabled|Qt::ItemIsSelectable|Qt::ItemIsEditable : Qt::ItemFlags{});});
+        connect(type,&QComboBox::currentTextChanged,grid,[size,allowZero](const QString& value) {allowZero->setEnabled(value=="TEXT" || value=="MEMO");size->setFlags(value=="TEXT" ? Qt::ItemIsEnabled|Qt::ItemIsSelectable|Qt::ItemIsEditable : Qt::ItemFlags{});});
     };
     auto* plus=addButton(outer,"+ Feld"); plus->setObjectName("native-table-add-field"); connect(plus,&QPushButton::clicked,&dialog,addRow); addRow();
     auto* buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,&dialog); outer->addWidget(buttons);
@@ -1799,7 +1800,7 @@ void MainWindow::newTable() {
         if(tableName.isEmpty() || tableName.startsWith("_la_",Qt::CaseInsensitive) || tableName.startsWith("sqlite_",Qt::CaseInsensitive)) {
             messageError(&dialog,"Ungültiger/reservierter Tabellenname"); return;
         }
-        struct FieldSpec {QString name,type,defaultValue;bool required;int size;};QVector<FieldSpec> fields;std::set<QString> seen={"id"};
+        struct FieldSpec {QString name,type,defaultValue;bool required;int size;bool allowZero;};QVector<FieldSpec> fields;std::set<QString> seen={"id"};
         for(int row=0;row<grid->rowCount();++row) {
             const auto field=grid->item(row,0)->text().trimmed(); if(field.isEmpty()) continue;
             if(field.startsWith("_la_",Qt::CaseInsensitive) || seen.contains(field.toCaseFolded())) {
@@ -1843,7 +1844,7 @@ void MainWindow::newTable() {
                 }
                 defaultSql=" DEFAULT "+defaultSql;
             }
-            fields.append({field,type,defaultSql.isEmpty() ? QString{} : defaultSql.mid(9),required=="ja",size});
+            fields.append({field,type,defaultSql.isEmpty() ? QString{} : defaultSql.mid(9),required=="ja",size,qobject_cast<QCheckBox*>(grid->cellWidget(row,5))->isChecked()});
         }
         if(fields.isEmpty()) { messageError(&dialog,"Mindestens ein Feld anlegen"); return; }
         try {
@@ -1856,7 +1857,7 @@ void MainWindow::newTable() {
             for(const auto& spec:fields) {
                 const int type=spec.type=="TEXT" ? 10 : spec.type=="MEMO" ? 12 : spec.type=="BYTE" ? 2 : spec.type=="SMALLINT" ? 3 : spec.type=="INTEGER" ? 4 : spec.type=="REAL" ? 7 : spec.type=="DATE" ? 8 : spec.type=="BOOLEAN" ? 1 : 11;
                 auto field=table->member("CreateField",{VbaValue::string(spec.name.toStdString()),VbaValue::integer(static_cast<std::int16_t>(type)),VbaValue::longInteger(spec.size)}).object;
-                field->assign("Required",VbaValue::logical(spec.required));
+                field->assign("Required",VbaValue::logical(spec.required));if(type==10 || type==12) field->assign("AllowZeroLength",VbaValue::logical(spec.allowZero));
                 if(!spec.defaultValue.isEmpty()) field->assign("DefaultValue",VbaValue::string(spec.defaultValue.toStdString()));
                 catalog->member("Append",{VbaValue::reference(field)});
             }
