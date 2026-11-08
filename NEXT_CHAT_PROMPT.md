@@ -183,3 +183,9 @@ jetzt implementiert einschließlich echter Primary/Unique/ASC/DESC-Constraints
 und atomarem Kollisions-Rollback/Retry. DAO/Import2/2 (1,22s), App gebaut.
 456/384/72 unverändert. Fortsetzung: sichere Nichtprimär-Indexmutation an
 vorhandenen Tabellen, bestehende vollständige Katalogprüfung beibehalten.
+
+CreateIndex/Indexes.Append/Delete auf vorhandenen vollständig geprüften Tabellen
+für Nichtprimär-Indizes umgesetzt, einschließlich Unique-Fehleratomizität,
+ASC/DESC, Workspace-Rollback und immutable gehaltenen Buildern. DAO/Import2/2
+(1,31s), App gebaut; Details DAO_INDEXES_RUNTIME.md.456/384/72 unverändert.
+Danach grafischen nativen Tabellenentwurf an gemeinsamen DAO-Schemaweg anbinden.

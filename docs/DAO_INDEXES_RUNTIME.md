@@ -86,3 +86,31 @@ catalogs reflect physical definitions, and SQL duplicate insertion is rejected.
 A deliberate physical namespace collision after table/counter creation proves
 complete rollback and corrected retry with first generated ID1. No new target or
 broad suite; no Windows oracle or attached-index mutation claim for this stage.
+
+## Index mutation on an existing checked table
+
+Existing TableDefs with a complete, verified native/imported index catalog now
+support CreateIndex and Indexes.Append/Delete for ordinary indexes. Detached
+builder ownership is tied to the existing table generation/workspace. Final
+field identity, supported type, field order/direction, duplicate name/field and
+Required semantics are checked again at mutation. A Required index on existing
+columns requires their actual NOT NULL declarations; no data-driven guess or
+silent table rebuild is used. Adding/deleting primary indexes remains3251.
+
+DDL and the complete updated index definition share one savepoint. Failed unique
+creation leaves source rows and the stored catalog unchanged. Delete resolves
+actual declared names and removes the matching physical table_index object.
+Unique-index deletion on a referenced table is refused pending full dependency
+analysis, preserving existing foreign-key validity. Unknown, partial, expression,
+collated or incomplete catalogs retain their previous explicit refusals.
+
+Attached builders keep their actual immutable index reader rather than looking
+up a replacement definition by name. Old index objects/fields invalidate after
+schema changes and rollback; reacquire the table's Indexes collection as before.
+This does not implement Access-compatible locks, locale collation, primary-key
+rebuilds, IgnoreNulls or full Refresh/lifetime semantics. F121/F130 remain open.
+
+Validation for existing-table mutation: DAO/import2/2 (1.31s), app build passed.
+Actual existing data, composite ASC/DESC, duplicate-data unique failure, successful
+delete, primary refusal, stale object identity and workspace rollback were checked
+in the existing DAO target. No extra target or broad suite.

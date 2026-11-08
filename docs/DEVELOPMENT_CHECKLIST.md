@@ -1484,3 +1484,8 @@ DAO_TABLEDEF_FIELDS.md; F055/F121 offen,456/384/72 unverändert.
 Detached DAO-Indexbuilder für eigene neue Tabellen samt realen Primär-/Unique-/
 ASC-/DESC-Constraints und Kollisions-Rollback/Retry implementiert. DAO/Import2/2
 (1,22s), App gebaut. DAO_INDEXES_RUNTIME.md; F055/F121/F130 offen,456/384/72 gleich.
+
+DAO CreateIndex/Indexes.Append/Delete für Nichtprimärindizes vorhandener geprüfter
+Tabellen implementiert. Unique-Fehleratomizität, ASC/DESC, Rollback/Identität im
+bestehenden DAO/Import2/2 (1,31s) geprüft, App gebaut. DAO_INDEXES_RUNTIME.md;
+F121/F130 offen,456/384/72 unverändert.

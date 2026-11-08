@@ -3267,3 +3267,9 @@ CreateIndex/Index.CreateField/Indexes.Append. Tatsächliche Kataloge/Constraints
 atomarer Kollisions-Rollback/Retry geprüft; bestehende DAO/Import2/2 (1,22s), App
 gebaut. Details DAO_INDEXES_RUNTIME.md. Keine vollständige F121/F130-Parität;
 456/384/72 unverändert.
+
+DAO-Nichtprimärindizes können auf bereits vorhandenen vollständig geprüften
+Tabellen tatsächlich angelegt/gelöscht werden. Unique-Fehleratomizität, geordnete
+ASC/DESC-Felder, Workspace-Rollback und immutable gehaltene Objekte geprüft;
+DAO/Import2/2 (1,31s), App gebaut. Umfang/Primär-/Fremdschlüsselgrenzen in
+DAO_INDEXES_RUNTIME.md; F121/F130 offen,456/384/72 gleich.

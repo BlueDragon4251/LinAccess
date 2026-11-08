@@ -2369,3 +2369,16 @@ unpassende variable Größen. Bestehende DAO/Import2/2 (1,22s), App gebaut; kein
 breiter Wiederholungslauf. Details DAO_INDEXES_RUNTIME.md. F055/F121/F130 und
 456/384/72 unverändert. Als Nächstes allgemeine sichere Nichtprimär-Indexmutation
 an vorhandenen Tabellen, ohne Tabellenrekonstruktion/Originaldateizugriff.
+
+2026-11-08: Bestehende vollständig geprüfte native/importierte DAO-Tabellen
+unterstützen nun CreateIndex und Indexes.Append/Delete für normale/Unique-Indizes,
+Feldreihenfolge/ASC/DESC, atomare Katalog-/DDL-Mutation und Workspace-Rollback.
+Fehlgeschlagene Unique-Anlage lässt Zeilen/Katalog unverändert. Primärindex-
+Mutation und Unique-Löschung bei referenzierter Tabelle verweigern3251, keine
+implizite Tabellenrekonstruktion. Gehaltene Builder binden echte immutable
+Indexreader; kein Wiederbeleben gleichnamiger Indexobjekte nach DDL/Rollback.
+DAO/Import2/2 (1,31s), App gebaut. Details DAO_INDEXES_RUNTIME.md.
+456/384/72 und offene F121/F130 unverändert. Nächster allgemeiner Zusammenhang:
+nativer grafischer Tabellenentwurf soll denselben DAO-Schemaweg nutzen, damit
+auch über die Oberfläche gebaute Tabellen nachgewiesene Typ-/Indexidentitäten
+besitzen; bestehende GUI-Prüfung gezielt verwenden.

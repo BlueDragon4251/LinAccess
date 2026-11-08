@@ -1681,13 +1681,15 @@ public:
 private:
     NativeIndexReader reader_; NativeIndexData data_; std::weak_ptr<VbaObject> fields_;
 };
+std::shared_ptr<VbaObject> createExistingTableIndex(QSqlDatabase db,const QString& table,const QString& name);
+void mutateExistingTableIndex(QSqlDatabase db,const QString& table,const VbaValue& value,bool erase);
 class NativeIndexes final : public VbaObject {
 public:
-    explicit NativeIndexes(NativeIndexReader reader) : reader_(std::move(reader)) {}
+    NativeIndexes(NativeIndexReader reader,QSqlDatabase db,QString table) : reader_(std::move(reader)),db_(std::move(db)),table_(std::move(table)) {}
     std::string_view className() const override { return "Indexes"; }
     bool isNativeType(std::string_view type) const override { return type=="dao.indexes"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
-        if(lower(name)=="item") return VbaArgumentSignature{{"Index"},1}; return {};
+        const auto key=lower(name);if(key=="item") return VbaArgumentSignature{{"Index"},1};if(key=="append") return VbaArgumentSignature{{"Object"},1};if(key=="delete") return VbaArgumentSignature{{"Name"},1};return {};
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto rows=reader_(); const auto key=lower(name);
@@ -1695,7 +1697,8 @@ public:
             if(!args.empty()) throw VbaRuntimeError(450,"DAO: Index collection property takes no arguments");
             return key=="count" ? integerCount(rows.size()) : VbaValue{};
         }
-        if(key!="item") throw VbaRuntimeError(3251,"DAO: Index catalog mutation unsupported");
+        if(key=="append" || key=="delete") {if(args.size()!=1) throw VbaRuntimeError(450,"DAO: Index/name required");mutateExistingTableIndex(db_,table_,args[0],key=="delete");return {};}
+        if(key!="item") throw VbaRuntimeError(3251,"DAO: Index catalog member unsupported");
         if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"DAO: Index required");
         const auto value=scalarVbaValue(args[0]); if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null index");
         int position=-1;
@@ -1713,7 +1716,7 @@ public:
         for(const auto& row:rows) result.push_back(member("Item",{VbaValue::string(row.source.name.toStdString())})); return result;
     }
 private:
-    NativeIndexReader reader_; QMap<QString,std::weak_ptr<NativeIndex>> objects_;
+    NativeIndexReader reader_; QSqlDatabase db_;QString table_;QMap<QString,std::weak_ptr<NativeIndex>> objects_;
 };
 
 class TableDefinition final : public VbaObject, public std::enable_shared_from_this<TableDefinition> {
@@ -1722,6 +1725,7 @@ public:
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=lower(name);
+        if(key=="createindex") return VbaArgumentSignature{{"Name"},0};
         if (key=="fields" || key=="indexes") return VbaArgumentSignature{{"Index"},0};
         if (key=="openrecordset") return VbaArgumentSignature{{"Type"},0};
         return {};
@@ -1745,6 +1749,11 @@ public:
             if(!count.exec("SELECT COUNT(*) FROM main."+quote(name_)) || !count.next()) queryFailure(count);
             return longCount(count.value(0).toLongLong());
         }
+        if(key=="createindex") {
+            if(args.size()>1) throw VbaRuntimeError(450,"DAO: CreateIndex takes Name only");
+            if(!args.empty() && args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null index name");
+            return VbaValue::reference(createExistingTableIndex(db_,name_,args.empty() ? QString{} : text(args[0].asText())));
+        }
         if(key=="indexes") {
             if(args.size()>1) throw VbaRuntimeError(450,"DAO: TableDef.Indexes takes at most one index");
             const auto version=schemaVersion(),rollback=workspace_->rollbackRevision; auto indexes=indexes_.lock();
@@ -1754,7 +1763,7 @@ public:
                     if(!self->valid() || self->schemaVersion()!=version || self->workspace_->rollbackRevision!=rollback)
                         throw VbaRuntimeError(3420,"DAO: Index metadata invalidated; reacquire TableDef.Indexes");
                     return readNativeIndexCatalog(self->db_,self->name_);
-                }); indexes_=indexes; indexesVersion_=version; indexesRollback_=rollback;
+                },db_,name_); indexes_=indexes; indexesVersion_=version; indexesRollback_=rollback;
             }
             return args.empty() || args[0].kind==VbaValue::Kind::Missing ? VbaValue::reference(indexes) : indexes->member("Item",args);
         }
@@ -1805,7 +1814,7 @@ private:
 QString schemaJetName(QString name) {return '['+name.replace("]","]]")+']';}
 struct DetachedTableState {
     QSqlDatabase db;std::shared_ptr<WorkspaceState> workspace;QString name;
-    std::shared_ptr<TableDefinition> attached;
+    std::shared_ptr<TableDefinition> attached,existing;
 };
 class DetachedField final : public VbaObject {
 public:
@@ -1898,8 +1907,8 @@ public:
     std::shared_ptr<DetachedTableState> owner_;QVector<std::shared_ptr<DetachedField>> fields_;
 };
 struct DetachedIndexState {
-    std::shared_ptr<DetachedTableState> table;AccessSourceIndex data;bool appended{};
-    void check() const {table->workspace->check();if(table->attached && !table->attached->valid()) throw VbaRuntimeError(3420,"DAO: Index table unavailable");}
+    std::shared_ptr<DetachedTableState> table;AccessSourceIndex data;bool appended{};std::shared_ptr<VbaObject> attachedIndex;
+    void check() const {table->workspace->check();if(table->attached && !attachedIndex) throw VbaRuntimeError(3420,"DAO: Detached index was not attached");if(attachedIndex) (void)attachedIndex->member("Name",{});if(table->existing && !table->existing->valid()) throw VbaRuntimeError(3420,"DAO: Index builder table invalidated");if(table->attached && !table->attached->valid()) throw VbaRuntimeError(3420,"DAO: Index table unavailable");}
     void mutableCheck() const {check();if(table->attached) throw VbaRuntimeError(383,"DAO: Attached index is read-only");}
 };
 class DetachedIndexField final : public VbaObject {
@@ -1909,7 +1918,7 @@ public:
     bool isNativeType(std::string_view type) const override {return type=="dao.field";}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         owner_->check();if(!args.empty()) throw VbaRuntimeError(450,"DAO: Index field property takes no arguments");
-        if(owner_->table->attached) return owner_->table->attached->member("Indexes",{VbaValue::string(owner_->data.name.toStdString())}).object->member("Fields",{VbaValue::string(name_.toStdString())}).object->member(name,args);
+        if(owner_->table->attached) return owner_->attachedIndex->member("Fields",{VbaValue::string(name_.toStdString())}).object->member(name,args);
         const auto key=lower(name);if(key=="name") return VbaValue::string(name_.toStdString());if(key=="attributes") return VbaValue::longInteger(descending_ ? 1 : 0);
         throw VbaRuntimeError(3251,"DAO: Index field property unsupported");
     }
@@ -1929,7 +1938,7 @@ public:
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {const auto key=lower(name);if(key=="append") return VbaArgumentSignature{{"Object"},1};if(key=="item") return VbaArgumentSignature{{"Index"},1};return {};}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         owner_->check();const auto key=lower(name);
-        if(owner_->table->attached) return owner_->table->attached->member("Indexes",{VbaValue::string(owner_->data.name.toStdString())}).object->member("Fields",{}).object->member(name,args);
+        if(owner_->table->attached) return owner_->attachedIndex->member("Fields",{}).object->member(name,args);
         if(key=="count" && args.empty()) return integerCount(fields_.size());
         if(key=="refresh" && args.empty()) return {};
         if(key=="append") {
@@ -1947,7 +1956,7 @@ public:
         throw VbaRuntimeError(3265,"DAO: Index field not found");
     }
     VbaValue item(std::string_view name) override {return member("Item",{VbaValue::string(std::string(name))});}
-    std::vector<VbaValue> enumerate() override {owner_->check();if(owner_->table->attached) return owner_->table->attached->member("Indexes",{VbaValue::string(owner_->data.name.toStdString())}).object->member("Fields",{}).object->enumerate();std::vector<VbaValue> result;for(const auto& field:fields_) result.push_back(VbaValue::reference(field));return result;}
+    std::vector<VbaValue> enumerate() override {owner_->check();if(owner_->table->attached) return owner_->attachedIndex->member("Fields",{}).object->enumerate();std::vector<VbaValue> result;for(const auto& field:fields_) result.push_back(VbaValue::reference(field));return result;}
     std::shared_ptr<DetachedIndexState> owner_;QVector<std::shared_ptr<DetachedIndexField>> fields_;
 };
 class DetachedIndex final : public VbaObject {
@@ -1958,7 +1967,7 @@ public:
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {const auto key=lower(name);if(key=="createfield") return VbaArgumentSignature{{"Name"},0};if(key=="fields") return VbaArgumentSignature{{"Index"},0};return {};}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         state_->check();const auto key=lower(name);
-        if(state_->table->attached) return state_->table->attached->member("Indexes",{VbaValue::string(state_->data.name.toStdString())}).object->member(name,args);
+        if(state_->table->attached) return state_->attachedIndex->member(name,args);
         if(key=="fields") return args.empty() ? VbaValue::reference(fields_) : fields_->member("Item",args);
         if(key=="createfield") {if(args.size()>1) throw VbaRuntimeError(450,"DAO: Index.CreateField takes Name only");return VbaValue::reference(std::make_shared<DetachedIndexField>(state_,args.empty() ? QString{} : text(args[0].asText())));}
         if(!args.empty()) throw VbaRuntimeError(450,"DAO: Index property takes no arguments");
@@ -2097,12 +2106,83 @@ public:
         if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_table_schema(table_name TEXT PRIMARY KEY,definition TEXT NOT NULL)")) queryFailure(query);
         query.prepare("INSERT INTO main._la_table_schema(table_name,definition) VALUES(?,?)");query.addBindValue(name);query.addBindValue(QJsonDocument(metadata).toJson(QJsonDocument::Compact));
         if(!query.exec()) queryFailure(query);
+        (void)readNativeIndexCatalog(db,name);
         if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;
         for(int i=0;i<indexes.size();++i) indexes_->indexes_[i]->state_->data=indexes[i];
         state_->attached=std::make_shared<TableDefinition>(db,name);
+        for(const auto& index:indexes_->indexes_) index->state_->attachedIndex=state_->attached->member("Indexes",{VbaValue::string(index->state_->data.name.toStdString())}).object;
     }
 private:std::shared_ptr<DetachedTableState> state_;std::shared_ptr<DetachedFields> fields_;std::shared_ptr<DetachedIndexes> indexes_;
 };
+std::shared_ptr<VbaObject> createExistingTableIndex(QSqlDatabase db,const QString& table,const QString& name) {
+    (void)readNativeIndexCatalog(db,table);
+    auto owner=std::make_shared<DetachedTableState>();owner->db=db;owner->workspace=workspaceState(db);owner->name=table;owner->existing=std::make_shared<TableDefinition>(db,table);
+    return std::make_shared<DetachedIndex>(owner,name);
+}
+void mutateExistingTableIndex(QSqlDatabase db,const QString& table,const VbaValue& value,bool erase) {
+    checkReservedCounterSchemaAction(db);
+    QSqlQuery query(db);const auto savepoint="la_index_mutation_"+QUuid::createUuid().toString(QUuid::Id128);
+    if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
+    bool completed=false;const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
+    const auto current=readNativeIndexCatalog(db,table);
+    QVector<AccessSourceIndex> definitions;for(const auto& row:current) definitions.append(row.source);
+    const auto columns=readTableSchemaColumns(db,table);QStringList columnNames;for(const auto& column:columns) columnNames.append(column.name);
+    std::shared_ptr<DetachedIndex> builder;
+    if(erase) {
+        const auto scalar=scalarVbaValue(value);if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null index name");
+        const auto requested=text(scalar.asText());int position=-1;
+        for(int i=0;i<definitions.size();++i) if(definitions[i].name.compare(requested,Qt::CaseInsensitive)==0) {position=i;break;}
+        if(position<0) throw VbaRuntimeError(3265,"DAO: Index not found");
+        if(definitions[position].kind==1) throw VbaRuntimeError(3251,"DAO: Primary index deletion requires table reconstruction");
+        if(definitions[position].flags&1) for(const auto& child:nativeTableNames(db)) {
+            QSqlQuery references(db);if(!references.exec("PRAGMA main.foreign_key_list("+quote(child)+")")) queryFailure(references);
+            while(references.next()) if(references.value(2).toString().compare(table,Qt::CaseInsensitive)==0)
+                throw VbaRuntimeError(3251,"DAO: Unique index deletion on a referenced table requires dependency analysis");
+        }
+        if(!query.exec("DROP INDEX main."+quote(table+"_"+definitions[position].name))) queryFailure(query);
+        definitions.removeAt(position);
+    } else {
+        if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Index builder required");
+        builder=std::dynamic_pointer_cast<DetachedIndex>(value.object);
+        if(!builder || builder->state_->table->workspace!=workspaceState(db) || !builder->state_->table->existing
+            || builder->state_->table->name.compare(table,Qt::CaseInsensitive)!=0 || builder->state_->appended)
+            throw VbaRuntimeError(3219,"DAO: Index builder belongs to a different or attached table");
+        builder->state_->mutableCheck();auto definition=builder->state_->data;
+        if(definition.name.isEmpty() || definition.name.trimmed()!=definition.name || definition.name.size()>64 || definition.name.contains(QChar(0)) || !definition.name.isValidUtf16()) throw VbaRuntimeError(5,"DAO: Invalid index name");
+        for(const auto& existing:definitions) if(existing.name.compare(definition.name,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3191,"DAO: Duplicate index name");
+        if(definition.kind==1) throw VbaRuntimeError(3251,"DAO: Adding primary index requires table reconstruction");
+        if(builder->fields_->fields_.isEmpty()) throw VbaRuntimeError(3264,"DAO: Index requires fields");
+        QMap<QString,bool> required;
+        if(!query.exec("PRAGMA main.table_info("+quote(table)+")")) queryFailure(query);
+        while(query.next()) required.insert(query.value(1).toString().toCaseFolded(),query.value(3).toBool());query.finish();
+        QSet<QString> seen;QStringList expressions;
+        for(const auto& field:builder->fields_->fields_) {
+            QString canonical;int type=0;
+            for(const auto& column:columns) if(column.name.compare(field->name_,Qt::CaseInsensitive)==0) {canonical=column.name;type=column.sourceType ? column.sourceType : provenDaoFieldType(column.type);break;}
+            if(canonical.isEmpty()) throw VbaRuntimeError(3265,"DAO: Index field absent from table");
+            if(type<=0 || type==11 || type==12 || type==15) throw VbaRuntimeError(3251,"DAO: Index field type unsupported");
+            if(seen.contains(canonical.toCaseFolded())) throw VbaRuntimeError(3191,"DAO: Duplicate index field");seen.insert(canonical.toCaseFolded());
+            if((definition.flags&8) && !required.value(canonical.toCaseFolded())) throw VbaRuntimeError(3251,"DAO: Required index needs existing NOT NULL columns");
+            definition.columns.append(canonical);definition.descending.append(field->descending_);
+            expressions.append(quote(canonical)+(field->descending_ ? " DESC" : " ASC"));
+        }
+        if(!query.exec(QString("CREATE ")+((definition.flags&1) ? "UNIQUE " : "")+"INDEX main."+quote(table+"_"+definition.name)+" ON "+quote(table)+" ("+expressions.join(',')+")")) queryFailure(query);
+        definitions.append(definition);
+    }
+    QJsonArray entries,names;for(const auto& column:columnNames) names.append(column);
+    for(const auto& definition:definitions) {
+        QJsonArray fields;for(int i=0;i<definition.columns.size();++i) fields.append(QJsonObject{{"name",definition.columns[i]},{"descending",definition.descending[i]}});
+        entries.append(QJsonObject{{"name",definition.name},{"kind",definition.kind},{"flags",definition.flags},{"fields",fields}});
+    }
+    const auto encoded=QJsonDocument(QJsonObject{{"version",1},{"source_table",table},{"columns",names},{"indexes",entries}}).toJson(QJsonDocument::Compact);
+    (void)checkedAccessSourceIndexes(encoded,columnNames);
+    query.prepare("UPDATE main._la_access_indexes SET definition=? WHERE table_name=? COLLATE NOCASE");query.addBindValue(QString::fromUtf8(encoded));query.addBindValue(table);
+    if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Index catalog changed during mutation");
+    (void)readNativeIndexCatalog(db,table);
+    if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;
+    if(builder) {builder->state_->data=definitions.last();builder->state_->appended=true;builder->state_->table->attached=std::make_shared<TableDefinition>(db,table);builder->state_->attachedIndex=builder->state_->table->attached->member("Indexes",{VbaValue::string(definitions.last().name.toStdString())}).object;}
+}
+
 class TableDefinitions final : public VbaObject {
 public:
     std::string_view className() const override { return "TableDefs"; }
