@@ -1,3 +1,5 @@
+#include "native_datasheet_page_store.hpp"
+#include <QInputDialog>
 #include "mainwindow.hpp"
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
@@ -2868,6 +2870,11 @@ int main(int argc,char** argv) {
         });
         auto* editFields=window.findChild<QAction*>("native-table-fields-edit");assert(editFields);editFields->trigger();
         assert(authored.exec("SELECT COUNT(*) FROM authored_defaults WHERE qty=7 AND label='ui value'") && authored.next() && authored.value(0).toInt()==2);authored.finish();
+        const auto pageBefore=linaccess::datasheet_page_store::read(db,"table","authored_defaults");linaccess::datasheet_page_store::save(db,"table","authored_defaults",pageBefore,linaccess::datasheet_page_store::defaults());
+        assert(authored.exec("SELECT value FROM _la_counter32_sequences WHERE table_name='authored_defaults'") && authored.next());const auto beforeRenameCounter=authored.value(0).toInt();authored.finish();
+        QTimer::singleShot(0,&window,[] {auto* input=qobject_cast<QInputDialog*>(QApplication::activeModalWidget());assert(input && input->objectName()=="native-table-rename");input->setTextValue("authored_renamed");input->accept();});window.findChild<QAction*>("native-table-rename")->trigger();
+        assert(db.tables().contains("authored_renamed") && !db.tables().contains("authored_defaults"));assert(linaccess::datasheet_page_store::read(db,"table","authored_renamed").present && !linaccess::datasheet_page_store::read(db,"table","authored_defaults").present);
+        assert(authored.exec("INSERT INTO authored_renamed DEFAULT VALUES"));assert(authored.exec("SELECT COUNT(*),MAX(id) FROM authored_renamed") && authored.next() && authored.value(0).toInt()==3 && authored.value(1).toInt()==beforeRenameCounter+1);authored.finish();
     }
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

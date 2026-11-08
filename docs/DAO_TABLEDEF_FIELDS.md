@@ -358,3 +358,32 @@ and triple shadows/WITHOUT ROWID/forbidden alias ALTER refuse safely. Temporary
 debug instrumentation stayed outside Git and was used only on these in-memory
 technical cases. No broad rerun; latest GUI/DAO before this change2/2 (5.73s).
 F054/F121 and fixed456/384/72 remain open/unchanged.
+
+## Rename own native tables
+
+Existing TableDef.Name (including an attached builder) and View → Rename Table
+now perform an atomic native rename. A checked rebuild first rebinds counter
+defaults to the destination; source metadata, counter frontier/step rows, index
+catalog/physical index prefixes, native relationship names and stored table
+page settings follow. SQLite propagates physical FK/view/trigger table
+references. Every rowid/value is digest-checked; deleted highest counter values
+and custom positive increments are preserved. Readers/recordsets for the former
+physical identity cannot revive under its old name. The assigning TableDef
+publishes its new name/generation without postcommit database reads.
+
+Original/mixed/unknown schemas or original relation identities remain protected.
+Case-only renames, shadowed row identities and named-index SQL hints in physical
+views/triggers are refused pending dedicated reconstruction. Saved Access query
+artifacts/VBA/form bindings are not refactored; the dialog says to update them.
+Matching native table/editable-query documents must close first. This is no
+full Access Name AutoCorrect, linked-table or original-format writer claim.
+
+Existing GUI/DAO2/2 (5.82s), app built. DAO verifies actual rename/old-reader
+invalidation, a late physical index-name collision rolling back the entire
+operation, comment-separated index-hint refusal while a string literal is
+allowed, source BLOB/max-Double/Unicode values, parent FK/name/cascade updates,
+view/trigger preservation and next counter114 after deleted107 with step7. GUI
+renames a real authored table, retains page settings and inserts the next
+counter value. The page-store header now includes its required geometry types
+explicitly. Uploaded original3/3 and repository fixture4/4 SHA256 checks passed;
+no private sources changed. Fixed456/384/72 and F015/F055/F121/F155 stay open.

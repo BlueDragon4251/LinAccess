@@ -655,3 +655,9 @@ Pflichtfeld und Literalstandard gemeinsam ändern sowie normale Felder umbenenne
 Datenwerte bleiben bei Eigenschaftsänderungen erhalten; unzulässige Änderungen
 werden zurückgerollt. Umbenennungen erfordern das Anpassen gespeicherter
 Access-Abfragen und Formularbindungen. [Umfang und Grenzen](docs/DAO_TABLEDEF_FIELDS.md).
+
+Eigene native Tabellen lassen sich unter Ansicht → Tabelle umbenennen auch mit
+AutoNumber, Indizes und Beziehungen tatsächlich umbenennen; Counterstände und
+gespeicherte Seiteneinstellungen bleiben erhalten. Gespeicherte Access-Abfragen
+und Formularbindungen müssen anschließend auf den neuen Namen angepasst werden.
+[Umfang und Grenzen](docs/DAO_TABLEDEF_FIELDS.md).

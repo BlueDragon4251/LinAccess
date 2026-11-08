@@ -10,6 +10,7 @@
 namespace linaccess {
 // Strict native-token comparison for guarded schema reconstruction; no SQL execution.
 bool equivalentNativeSchemaSql(const QString& left,const QString& right);
+bool nativeSchemaUsesIndexHints(const QString& sql);
 struct AccessQueryParameter {
     QString name;
     QString type;

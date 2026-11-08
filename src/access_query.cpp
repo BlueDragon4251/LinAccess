@@ -971,6 +971,9 @@ AccessQueryPlan compileJoinedUpdate(const QVector<Token>& tokens,qsizetype start
     return plan;
 }
 }
+bool nativeSchemaUsesIndexHints(const QString& sql) {
+    const auto tokens=tokenize(sql,true);for(qsizetype i=0;i+1<tokens.size();++i) if(tokens[i].kind==Token::Word && tokens[i+1].kind==Token::Word && tokens[i].value.compare("INDEXED",Qt::CaseInsensitive)==0 && tokens[i+1].value.compare("BY",Qt::CaseInsensitive)==0) return true;return false;
+}
 bool equivalentNativeSchemaSql(const QString& left,const QString& right) {
     const auto canonical=[](QVector<Token> tokens) {
         // SQLite appends ADD COLUMN after existing table constraints. Preserve

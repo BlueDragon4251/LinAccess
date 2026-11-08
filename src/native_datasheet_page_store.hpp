@@ -1,4 +1,6 @@
 #pragma once
+#include <QSizeF>
+#include <QRectF>
 #include "vba_runtime.hpp"
 #include <QSqlDatabase>
 #include <QSqlQuery>

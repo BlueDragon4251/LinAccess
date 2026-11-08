@@ -29,6 +29,7 @@
 #include "vba_analyzer.hpp"
 #include "vba_runtime.hpp"
 #include "dao_database.hpp"
+#include "dao_schema_change.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
 #include "jet_sql_functions.hpp"
@@ -342,6 +343,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
     menuBar()->removeAction(viewMenu->menuAction()); menuBar()->insertMenu(objectMenu->menuAction(),viewMenu);
     for (int i=5;i<9;++i) objectMenu->addAction(projectActions[i]);
+    auto* renameTable=viewMenu->addAction("Tabelle &umbenennen...");renameTable->setObjectName("native-table-rename");
+    connect(renameTable,&QAction::triggered,this,[this] {
+        const auto* item=explorer_->currentItem();if(!item || item->data(0,Qt::UserRole).toString()!="table" || QApplication::activeModalWidget() || !db_.isOpen()) return;const auto oldName=item->text(0);
+        for(auto* model:findChildren<linaccess::AccessTableModel*>()) if(model->tableName().compare(oldName,Qt::CaseInsensitive)==0) {messageError(this,"Schließen Sie die Tabelle und zugehörige bearbeitbare Abfragen vor dem Umbenennen.");return;}
+        QInputDialog input(this);input.setObjectName("native-table-rename");input.setWindowTitle("Tabelle umbenennen");input.setLabelText("Neuer Tabellenname. Gespeicherte Access-Abfragen und Formularbindungen müssen anschließend angepasst werden.");input.setTextValue(oldName);if(auto* editor=input.findChild<QLineEdit*>()) editor->setMaxLength(64);if(input.exec()!=QDialog::Accepted) return;const auto newName=input.textValue().trimmed();if(newName==oldName) return;
+        try {linaccess::makeDaoDatabase(db_)->member("TableDefs",{linaccess::VbaValue::string(oldName.toStdString())}).object->assign("Name",linaccess::VbaValue::string(newName.toStdString()));}
+        catch(const linaccess::DaoStoredSchemaChange& error) {refreshExplorer();messageError(this,"Tabelle wurde umbenannt. Bitte das Projekt neu öffnen.\n"+QString::fromUtf8(error.what()));return;}catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));return;}
+        refreshExplorer();for(auto* entry:explorer_->findItems(newName,Qt::MatchExactly|Qt::MatchRecursive,0)) if(entry->data(0,Qt::UserRole).toString()=="table") {explorer_->setCurrentItem(entry);break;}statusBar()->showMessage("Tabelle umbenannt: "+newName);
+    });
+    connect(viewMenu,&QMenu::aboutToShow,this,[this,renameTable] {const auto* item=explorer_->currentItem();renameTable->setEnabled(db_.isOpen() && item && item->data(0,Qt::UserRole).toString()=="table" && !QApplication::activeModalWidget());});
     auto* editRelations=viewMenu->addAction("&Beziehungen bearbeiten...");editRelations->setObjectName("native-relations-edit");
     connect(editRelations,&QAction::triggered,this,[this] {
         if(!db_.isOpen() || QApplication::activeModalWidget()) return;

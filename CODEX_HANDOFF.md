@@ -2593,3 +2593,13 @@ keine vollständige Schemaunterstützung behaupten. Final DAO1/1 (1,58s), App
 gebaut, DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert. Nächste größere native
 Katalogaufgabe: TableDef.Name für vorhandene eigene Tabellen samt tatsächlicher
 Counterdefault-/Index-/Beziehungsmetadaten-Umbindung; dann weiter ohne Zwischenfinal.
+
+TableDef.Name und grafische Tabellenumbenennung für eigene native Tabellen
+implementiert: tatsächliche Counterdefault-/Frontier-/Schritt-/Index-/
+Beziehungs-/Seiteneinstellungs-Umbindung, physische FK/View/Trigger-Verweise,
+Digest-/Generations-/Rollbackschutz. Gespeicherte Access-Abfragen/VBA/Formulare
+werden nicht refaktoriert; weitere Grenzen DAO_TABLEDEF_FIELDS.md. GUI/DAO2/2
+(5,82s), App gebaut. Originaluploads3/3 und Fixtures4/4 Hashes unverändert.
+456/384/72 unverändert. Nächste Aufgabe: echte Verbindungs-Schreibfähigkeit und
+readonly DAO-Fehler/Metadaten sowie nachgewiesene lokale TableDef-Metadaten;
+dann weitere offene Anforderungen fortlaufend, kein Zwischenabschluss.

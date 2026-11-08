@@ -1803,6 +1803,7 @@ private:
     NativeIndexReader reader_; QSqlDatabase db_;QString table_;std::function<NativeIndexReader()> refresher_;QMap<QString,std::weak_ptr<NativeIndex>> objects_;
 };
 
+quint64 renameExistingNativeTable(QSqlDatabase db,const QString& table,const QString& renamed);
 class TableDefinition final : public VbaObject, public std::enable_shared_from_this<TableDefinition> {
 public:
     std::string_view className() const override { return "TableDef"; }
@@ -1891,6 +1892,9 @@ public:
     }
     void assign(std::string_view name,const VbaValue& value) override {
         if(!valid()) throw VbaRuntimeError(3420,"DAO: TableDef is unavailable");
+        if(lower(name)=="name") {
+            const auto scalar=scalarVbaValue(value);if(!valid()) throw VbaRuntimeError(3420,"DAO: Table identity changed while evaluating its new name");if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null table name");auto renamed=text(scalar.asText());const auto generation=renameExistingNativeTable(db_,name_,renamed);name_=std::move(renamed);generation_=generation;fields_.reset();indexes_.reset();return;
+        }
         if(lower(name)=="recordcount") throw VbaRuntimeError(383,"DAO: TableDef.RecordCount is read-only");
         VbaObject::assign(name,value);
     }
@@ -2162,7 +2166,7 @@ public:
         throw VbaRuntimeError(3251,"DAO: Detached TableDef member unsupported");
     }
     void assign(std::string_view name,const VbaValue& raw) override {
-        state_->workspace->check();if(state_->attached || lower(name)!="name") throw VbaRuntimeError(383,"DAO: TableDef property is read-only");
+        state_->workspace->check();if(state_->attached) {state_->attached->assign(name,raw);return;}if(lower(name)!="name") throw VbaRuntimeError(383,"DAO: TableDef property is read-only");
         const auto value=scalarVbaValue(raw);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null table name");state_->name=text(value.asText());
     }
     void append(QSqlDatabase db) {
@@ -2719,7 +2723,7 @@ void checkNativeForeignKeys(QSqlDatabase db) {
     QSqlQuery query(db);if(!query.exec("PRAGMA main.foreign_key_check")) queryFailure(query);
     if(query.next()) throw VbaRuntimeError(3251,"DAO: Existing rows violate a foreign-key constraint");if(query.lastError().isValid()) queryFailure(query);
 }
-void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVector<NativeRelationData>& before,const QVector<NativeRelationData>& after,const QMap<QString,NativeFieldChange>& changes={},const std::optional<QVector<AccessSourceIndex>>& replacementIndexes={}) {
+void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVector<NativeRelationData>& before,const QVector<NativeRelationData>& after,const QMap<QString,NativeFieldChange>& changes={},const std::optional<QVector<AccessSourceIndex>>& replacementIndexes={},const QString& counterDestination={}) {
     SqliteExecutionBudget budget(db,100000000,30000);
     checkNativeForeignKeys(db);
     const auto columns=readTableSchemaColumns(db,table);const auto indexes=readNativeIndexCatalog(db,table);
@@ -2745,7 +2749,7 @@ void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVect
         const auto definition=[&](const DetachedField& value,const QSet<QString>& mandatory) {auto result=value.attributes_&16 ? schemaJetName(column.name)+" INT NOT NULL DEFAULT ("+accessCounterDefault(table,column.name)+")" : value.definition();if(mandatory.contains(column.name.toCaseFolded()) && !value.required_ && !(value.attributes_&16)) result+=" NOT NULL";return result;};
         definitions.append(definition(field,required));
         if(changes.contains(column.name.toCaseFolded())) {const auto change=changes.value(column.name.toCaseFolded());if(change.required) field.required_=*change.required;if(change.allowZeroLength) field.allowZeroLength_=*change.allowZeroLength;if(change.size) field.size_=*change.size;if(change.defaultValue) field.default_=*change.defaultValue;}
-        modifiedDefinitions.append(definition(field,nextRequired));names.append(column.name);
+        auto modified=definition(field,nextRequired);if((field.attributes_&16) && !counterDestination.isEmpty()) modified=schemaJetName(column.name)+" INT NOT NULL DEFAULT ("+accessCounterDefault(counterDestination,column.name)+")";modifiedDefinitions.append(modified);names.append(column.name);
     }
     const auto primaryClause=[](const AccessSourceIndex& index) {QStringList fields;for(int i=0;i<index.columns.size();++i) fields.append(schemaJetName(index.columns[i])+(index.descending[i] ? " DESC" : " ASC"));return "PRIMARY KEY ("+fields.join(',')+")";};
     for(const auto& index:indexes) if(index.source.kind==1) definitions.append(primaryClause(index.source));
@@ -2773,7 +2777,7 @@ void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVect
     if(!query.exec("DROP TABLE main."+quote(table)) || !query.exec("ALTER TABLE main."+quote(temporary)+" RENAME TO "+quote(table))) queryFailure(query);
     for(const auto& sql:objects) if(!query.exec(sql)) queryFailure(query);
     if(nativeTableValueDigest(db,table,names)!=original) throw VbaRuntimeError(3251,"DAO: Relation migration final value verification failed");
-    if(!replacementIndexes) (void)readNativeIndexCatalog(db,table);if(changes.isEmpty()) (void)readTableSchemaColumns(db,table);checkNativeForeignKeys(db);
+    if(counterDestination.isEmpty()) {if(!replacementIndexes) (void)readNativeIndexCatalog(db,table);if(changes.isEmpty()) (void)readTableSchemaColumns(db,table);}checkNativeForeignKeys(db);
 }
 
 quint64 nativeSchemaVersion(QSqlDatabase db) {
@@ -2828,6 +2832,46 @@ bool mutateNativeSchemaIndex(QSqlDatabase db,const QString& table,const VbaValue
     if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++workspace->tableFieldRevisions[table.toCaseFolded()];
     if(builder) {builder->state_->data=added;builder->state_->appended=true;builder->state_->table->attached=std::move(attached);builder->state_->attachedIndex=std::move(binding);}
     if(!settings.restore()) throw DaoStoredSchemaChange("DAO: Schema index change stored; connection settings failed to restore, reopen the project");return true;
+}
+
+quint64 renameExistingNativeTable(QSqlDatabase db,const QString& table,const QString& renamed) {
+    const auto workspace=workspaceState(db);workspace->check();
+    if(renamed.isEmpty() || renamed.trimmed()!=renamed || renamed.size()>64 || renamed.contains(QChar(0)) || !renamed.isValidUtf16() || renamed.startsWith("_la_",Qt::CaseInsensitive) || renamed.startsWith("sqlite_",Qt::CaseInsensitive)) throw VbaRuntimeError(5,"DAO: Invalid table name");
+    if(renamed==table) return workspace->tableGenerations.value(table.toCaseFolded());if(renamed.compare(table,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3251,"DAO: Case-only table renaming requires separate reconstruction");
+    checkReservedCounterSchemaAction(db);NativeSchemaSettings settings(db);settings.begin(false);
+    QSqlQuery query(db);const auto savepoint="la_table_rename_"+QUuid::createUuid().toString(QUuid::Id128);if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);bool completed=false;
+    const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
+    query.prepare("SELECT 1 FROM main.sqlite_schema WHERE name=? COLLATE NOCASE");query.addBindValue(renamed);if(!query.exec()) queryFailure(query);if(query.next()) throw VbaRuntimeError(3010,"DAO: Table name already exists");query.finish();
+    const auto columns=readTableSchemaColumns(db,table);QStringList names;for(const auto& column:columns) {if(!column.nativeAttributes || !column.required) throw VbaRuntimeError(3251,"DAO: Table rename requires complete native declarations");names.append(column.name);}
+    const auto indexes=readNativeIndexCatalog(db,table);auto catalog=std::make_shared<NativeRelationCatalog>(db);const auto relations=catalog->read(table);
+    for(const auto& relation:relations) if((relation.parent==table || relation.child==table) && relation.source!="DAO_NATIVE") throw VbaRuntimeError(3251,"DAO: Original relationship table names remain protected");
+    if(!query.exec("SELECT sql FROM main.sqlite_schema WHERE type IN ('view','trigger') AND sql IS NOT NULL")) queryFailure(query);
+    while(query.next()) if(nativeSchemaUsesIndexHints(query.value(0).toString())) throw VbaRuntimeError(3251,"DAO: Named-index SQL dependencies require explicit reconstruction");query.finish();
+    const auto oldKey=table.toCaseFolded(),newKey=renamed.toCaseFolded();auto& oldGeneration=workspace->tableGenerations[oldKey];auto& newGeneration=workspace->tableGenerations[newKey];if(oldGeneration==std::numeric_limits<quint64>::max() || newGeneration==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Table generation overflow");
+    const auto digest=nativeTableValueDigest(db,table,names);
+    query.prepare("SELECT definition FROM main._la_access_indexes WHERE table_name=? COLLATE NOCASE");query.addBindValue(table);if(!query.exec() || !query.next()) throw VbaRuntimeError(3251,"DAO: Rename index catalog unavailable");const auto previousIndexes=query.value(0);if(query.next()) throw VbaRuntimeError(3251,"DAO: Rename index catalog ambiguous");query.finish();
+    auto indexMetadata=QJsonDocument::fromJson(previousIndexes.toByteArray()).object();indexMetadata.insert("source_table",renamed);const auto nextIndexes=QJsonDocument(indexMetadata).toJson(QJsonDocument::Compact);(void)checkedAccessSourceIndexes(nextIndexes,names);
+    // Explicit column copying consumes no counters; only new defaults use the
+    // destination name. Metadata are rebound before any generator is exposed.
+    rebuildNativeRelationTable(db,table,relations,relations,{},{},renamed);
+    if(!query.exec("PRAGMA legacy_alter_table=OFF") || !query.exec("PRAGMA legacy_alter_table") || !query.next() || query.value(0).toInt()!=0) throw VbaRuntimeError(3251,"DAO: Table reference propagation unavailable");query.finish();
+    if(!query.exec("ALTER TABLE main."+quote(table)+" RENAME TO "+quote(renamed))) queryFailure(query);
+    for(const auto& item:indexes) if(item.source.kind!=1) {
+        const auto& index=item.source;QStringList fields;for(int i=0;i<index.columns.size();++i) fields.append(quote(index.columns[i])+(index.descending[i] ? " DESC" : " ASC"));
+        if(!query.exec("DROP INDEX main."+quote(table+"_"+index.name)) || !query.exec(QString("CREATE ")+((index.flags&1) ? "UNIQUE " : "")+"INDEX main."+quote(renamed+"_"+index.name)+" ON "+quote(renamed)+" ("+fields.join(',')+")")) queryFailure(query);
+    }
+    for(const auto& storage:{QString("_la_table_schema"),QString("_la_counter32_sequences"),QString("_la_counter32_steps"),QString("_la_counter_sequences")}) if(db.tables().contains(storage)) {
+        query.prepare("UPDATE main."+quote(storage)+" SET table_name=? WHERE table_name=? COLLATE NOCASE");query.addBindValue(renamed);query.addBindValue(table);if(!query.exec()) queryFailure(query);if(storage=="_la_table_schema" && query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Native table declaration changed during rename");
+    }
+    query.prepare("UPDATE main._la_access_indexes SET table_name=?,definition=? WHERE table_name=? COLLATE NOCASE AND definition=?");query.addBindValue(renamed);query.addBindValue(QString::fromUtf8(nextIndexes));query.addBindValue(table);query.addBindValue(previousIndexes);if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Index metadata changed during rename");
+    if(db.tables().contains("_la_access_relations")) for(const auto& side:{QString("parent"),QString("child")}) {query.prepare("UPDATE main._la_access_relations SET "+side+"_table=? WHERE "+side+"_table=? COLLATE NOCASE");query.addBindValue(renamed);query.addBindValue(table);if(!query.exec()) queryFailure(query);}
+    if(db.tables().contains("_la_datasheet_page_setup")) {
+        if(!query.exec("PRAGMA main.table_info('_la_datasheet_page_setup')")) queryFailure(query);const QStringList shape{"kind","name","layout"};int count=0;while(query.next()) {if(count>=3 || query.value(1).toString()!=shape[count] || query.value(2).toString().toUpper()!="TEXT" || query.value(3).toInt()!=1 || query.value(5).toInt()!=(count<2 ? count+1 : 0)) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog shape invalid");++count;}if(count!=3) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog shape invalid");query.finish();
+        query.prepare("UPDATE main._la_datasheet_page_setup SET name=? WHERE kind='table' AND name=?");query.addBindValue(newKey);query.addBindValue(oldKey);if(!query.exec()) queryFailure(query);
+    }
+    if(nativeTableValueDigest(db,renamed,names)!=digest) throw VbaRuntimeError(3251,"DAO: Rename changed stored values/row identities");(void)readTableSchemaColumns(db,renamed);(void)readNativeIndexCatalog(db,renamed);(void)catalog->read(renamed);checkNativeForeignKeys(db);
+    if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++oldGeneration;++newGeneration;
+    if(!settings.restore()) throw DaoStoredSchemaChange("DAO: Table rename stored; connection settings failed to restore, reopen the project");return newGeneration;
 }
 
 TableSchemaReader renameNativeField(QSqlDatabase db,const QString& table,const TableSchemaColumn& column,const QString& renamed) {
