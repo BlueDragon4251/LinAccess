@@ -2316,3 +2316,31 @@ Workspace-Rollback erhalten ->8, fehlgeschlagener zweizeiliger Datenblatt-Batch
 verbraucht9/10 ->11. Alle Tests bestanden; kein zusätzlicher Testziel-/Katalogpunkt.
 App gebaut; private Logs /workspace/work/counter-sql-failure-{build,tests}.log.
 F171 bleibt für die ausdrücklich offenen Restanforderungen offen,456/384/72 gleich.
+
+
+## Nach093fcb8 — atomarer Empty-Counter-Reseed und native readonly-Steuerungen
+
+ALTER TABLE t ALTER COLUMN c COUNTER(seed,increment) ist im Tokencompiler für
+bereits verwaltete leere32-Bit-Zähler umgesetzt, ohne Umbau/Überschreiben von
+Tabellen. Existenz/Generatoridentität werden vor dem internen DDL-Noop validiert;
+Tabellen-/Feldnamen kanonisch aufgelöst. Nichtleere Tabellen, Nichtcounter-Felder
+und physische SQLite-rowid-Aliase werden explizit3251 verweigert. Startwert und
+Schrittweite werden im DDL-Savepoint geändert; Rollback stellt beide wieder her.
+Native Fälle im vorhandenen Importziel:50/53, unveränderte nichtleere Tabelle nach
+abgewiesenem Reseed, zurückgerolltes800/9 gefolgt56 mit alter3er-Schrittweite,
+negativer Start-100, Nichtcounter-/rowid-Alias-Verweigerung. DAO/Import2/2 in1,35s,
+gezielt nachgezogene Typgrenzen1/1 in0,24s. Keine pauschale Access-ALTER-Parität.
+
+Synchronisationsfehler-Markierung aus AccessCounterSqlScope blockiert weitere
+Anwendungsschreib-Scopes/DAO-Reservierung explizit; native Workspace-Verbindungs-
+Destruktion löscht den Marker. Keine stille weitere Vergabe nach fehlgeschlagener
+Metadatensynchronisierung.
+
+Gebundene native Formularsteuerungen erhalten Generator-readonly bereits in
+applyControlStates, nicht erst beim Speichern. Echte Feldauflösung berücksichtigt
+gebundene Spaltennamen; andere Felder bleiben beschreibbar. Fehlende belegbare
+Generatormetadaten sperren gebundene Eingabe. Bestehende MainWindow-/Layout-Prüfung
+2/2 in14,89s mit tatsächlichem readonly-Countereditor bestanden. App gebaut.
+Private Logs counter-reseed-{build,tests}, counter-reseed-guards-{build,tests},
+counter-readonly-controls-{build,tests} unter /workspace/work/. F171 und456/384/72
+bleiben für ausdrücklich dokumentierte Restanforderungen offen/unverändert.

@@ -975,6 +975,29 @@ QString accessLikePattern(const QString& value) { return pattern(value); }
 namespace {
 void adaptCounterDdl(QVector<Token>& tokens,qsizetype pos,AccessQueryPlan& plan) {
     const auto word=[&](qsizetype at,const char* text){return at<tokens.size() && tokens[at].kind==Token::Word && tokens[at].value.compare(text,Qt::CaseInsensitive)==0;};
+    if(word(pos,"ALTER") && word(pos+1,"TABLE")) {
+        if(pos+6>=tokens.size() || !word(pos+3,"ALTER") || !word(pos+4,"COLUMN") || !word(pos+6,"COUNTER")) return;
+        const auto fail=[] {throw VbaRuntimeError(3251,"Jet SQL: counter reseed requires a local table/column and literal signed-Long seed/positive increment");};
+        if((tokens[pos+2].kind!=Token::Word && tokens[pos+2].kind!=Token::Identifier)
+            || (tokens[pos+5].kind!=Token::Word && tokens[pos+5].kind!=Token::Identifier)) fail();
+        auto at=pos+7;qint32 seed=1,increment=1;
+        const auto integer=[&]() -> qint32 {
+            bool negative=false;
+            if(at<tokens.size() && (symbol(tokens[at],"-") || symbol(tokens[at],"+"))) {negative=symbol(tokens[at],"-");++at;}
+            if(at>=tokens.size() || tokens[at].kind!=Token::Other) fail();
+            bool valid=false;auto value=tokens[at++].value.toLongLong(&valid);if(!valid || value<0) fail();if(negative) value=-value;
+            if(value<std::numeric_limits<qint32>::min() || value>std::numeric_limits<qint32>::max()) fail();return static_cast<qint32>(value);
+        };
+        if(at>=tokens.size() || !symbol(tokens[at++],"(")) fail();
+        seed=integer();if(at>=tokens.size() || !symbol(tokens[at++],",")) fail();increment=integer();
+        if(at>=tokens.size() || !symbol(tokens[at++],")") || increment<=0) fail();
+        if(at<tokens.size() && symbol(tokens[at],";")) ++at;if(at!=tokens.size()) fail();
+        plan.counters.append({tokens[pos+2].value,tokens[pos+5].value,seed,increment,true});
+        // Physical storage and values stay intact; the executor changes only the
+        // managed generator inside its DDL savepoint after capability checks.
+        tokens.resize(pos);tokens.append({Token::Other,"UPDATE main._la_counter32_sequences SET value=value WHERE 0"});
+        return;
+    }
     if(!word(pos,"CREATE") || !word(pos+1,"TABLE")) return;
     const auto fail=[] {throw VbaRuntimeError(3251,"Jet SQL: COUNTER requires a local CREATE TABLE and literal signed-Long seed/positive increment");};
     if(pos+3>=tokens.size() || (tokens[pos+2].kind!=Token::Word && tokens[pos+2].kind!=Token::Identifier) || !symbol(tokens[pos+3],"(")) {

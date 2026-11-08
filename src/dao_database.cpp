@@ -102,6 +102,11 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
     const bool schemaAction=plan.daoQueryType==96; // Checked compiler dbQDDL classification, including whitespace/comments.
     if(schemaAction || makeTable) checkReservedCounterSchemaAction(db);
     const auto before=(schemaAction || makeTable) ? nativeTableNames(db) : QStringList{};
+    for(const auto& counter:plan.counters) if(counter.reseed) {
+        if(!before.contains(counter.table,Qt::CaseInsensitive)) throw VbaRuntimeError(3078,"Counter table unavailable");
+        QString canonical;for(const auto& name:before) if(name.compare(counter.table,Qt::CaseInsensitive)==0) {canonical=name;break;}
+        if(!jetLongAccessColumns(db,canonical).contains(counter.column.toCaseFolded())) throw VbaRuntimeError(3251,"ALTER COUNTER requires an existing managed generator");
+    }
     AccessCounterSqlScope counterScope(db);
     QSqlQuery guard(db);
     const bool schemaScope=makeTable || schemaAction;
@@ -155,8 +160,14 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
             const bool removed=std::any_of(before.cbegin(),before.cend(),[&](const QString& name){return !after.contains(name,Qt::CaseInsensitive);});
             if(schemaAction && !removed) for(const auto& table:after) if(!before.contains(table,Qt::CaseInsensitive)) configureNewAccessCounters(db,table);
             for(const auto& counter:plan.counters) {
-                if(before.contains(counter.table,Qt::CaseInsensitive) || !after.contains(counter.table,Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Counter DDL requires a new local table");
-                configureNewAccessCounterStep(db,counter.table,counter.column,counter.seed,counter.increment);
+                if(!after.contains(counter.table,Qt::CaseInsensitive) || (before.contains(counter.table,Qt::CaseInsensitive)!=counter.reseed)) throw VbaRuntimeError(3251,"Counter DDL table state is unsupported");
+                QString canonical;
+                for(const auto& name:after) if(name.compare(counter.table,Qt::CaseInsensitive)==0) {canonical=name;break;}
+                QString column;
+                QSqlQuery fields(db);if(!fields.exec("PRAGMA main.table_info("+quote(canonical)+")")) queryFailure(fields);
+                while(fields.next()) if(fields.value(1).toString().compare(counter.column,Qt::CaseInsensitive)==0) {column=fields.value(1).toString();break;}fields.finish();
+                if(column.isEmpty()) throw VbaRuntimeError(3265,"Counter DDL field unavailable");
+                configureNewAccessCounterStep(db,canonical,column,counter.seed,counter.increment,counter.reseed);
             }
             observeNativeTableCatalog(db,before);
         }
@@ -257,7 +268,7 @@ std::shared_ptr<WorkspaceState> workspaceState(QSqlDatabase db) {
     auto* token=new std::shared_ptr<WorkspaceState>(state);
     if (sqlite3_create_function_v2(native,"linaccess_dao_connection_generation",0,SQLITE_UTF8|SQLITE_DIRECTONLY,token,
         [](sqlite3_context* context,int,sqlite3_value**) { sqlite3_result_int(context,1); },nullptr,nullptr,
-        [](void* data) { auto* holder=static_cast<std::shared_ptr<WorkspaceState>*>(data); (*holder)->alive=false; (*holder)->connection=nullptr; delete holder; })!=SQLITE_OK)
+        [](void* data) { auto* holder=static_cast<std::shared_ptr<WorkspaceState>*>(data); if((*holder)->driver) (*holder)->driver->setProperty("la_counter_sql_sync_failed",QVariant{}); (*holder)->alive=false; (*holder)->connection=nullptr; delete holder; })!=SQLITE_OK)
         throw VbaRuntimeError(3146,"DAO: Workspace lifetime tracking unavailable");
     db.driver()->setProperty("la_dao_workspace_state",QVariant::fromValue(state)); return state;
 }

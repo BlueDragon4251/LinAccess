@@ -49,7 +49,10 @@ writable direct-table Long generators expose recordset Field.Attributes49 and
 DataUpdatable=True. Proven TableDef Long-generator fields expose Attributes17
 and DataUpdatable=False (catalog field, not a record buffer); catalog assignment
 remains read-only383. Bound form controls reject existing counter assignment2448;
-normal form updates omit unchanged generated fields. These properties are not
+normal form updates omit unchanged generated fields. Native bound editors also
+receive the generated-field readonly state, including new-record controls; other
+fields stay editable. Missing generator metadata locks bound input rather than
+allowing unverified writes. These properties are not
 inferred for unsupported contexts.
 
 Persisted32-bit generator metadata supplies Long typing to native field readers
@@ -82,6 +85,13 @@ values and both step/frontier survive project reopen. Default increments remain1
 including existing32-bit project state without the optional steps table. DROP
 also removes step metadata. This does not decode custom increments from arbitrary
 original Jet binaries or provide all ALTER/field-property/reseed operations.
+
+ALTER TABLE t ALTER COLUMN c COUNTER(seed,increment) can reseed an existing empty
+managed32-bit generator atomically. It preserves storage, constraints and data;
+nonempty tables, ordinary fields and physical SQLite rowid aliases are explicitly
+refused. Case-insensitive catalog references resolve to canonical identities.
+Workspace rollback restores the prior step/frontier. Nonempty-table and arbitrary
+field-conversion semantics still require separate implementation/reference proof.
 
 ## Actual Microsoft Access 2003 reference
 

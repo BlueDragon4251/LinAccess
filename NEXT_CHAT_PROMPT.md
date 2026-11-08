@@ -1,3 +1,12 @@
+Neueste Ergänzung nach093fcb8: atomarer ALTER-COLUMN-COUNTER-Reseed für
+bestehende LEERE verwaltete32-Bit-Zähler; Namen kanonisch, Nichtcounter/nonempty/
+rowid-Alias explizit verweigert, Rollback stellt bisherigen Stand/Schritt wieder
+her. Native Generatorsteuerungen sind schon im Formular readonly; normale Felder
+weiter editierbar. Bestehende Ziele2/2 (1,35s) plus betroffene Grenzen1/1 (0,24s),
+MainWindow/Layout2/2 (14,89s), App gebaut. Details Handoff-Ende. Keine vollständige
+ALTER-/Mode-/Random-/Replikationsparität; F171 und456/384/72 unverändert.
+Nutzer verlangt ausdrücklich KEINE Zwischenabschlüsse; kontinuierlich arbeiten.
+
 Neuester Stand nachfa9c41a: Anwendungsschreibwege erfassen Generatoraufrufe
 in geschachtelten AccessCounterSqlScope-Operationen. Bei SQL-/Batchfehlern werden
 verbrauchte Nummern per Compare-and-Set erhalten (kein Zurücksetzen fremder

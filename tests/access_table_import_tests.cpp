@@ -161,6 +161,30 @@ void verifyJetCounterStateReference(const QString& path) {
     }
     execute("INSERT INTO sql_failed_counter(label) VALUES('after-model')");
     assert(query.exec("SELECT n FROM sql_failed_counter WHERE label='after-model'") && query.next() && query.value(0).toInt()==11);query.finish();
+    database->member("Execute",{VbaValue::string("CREATE TABLE reseed_counter(n COUNTER(100,7), payload TEXT)")});
+    execute("ALTER TABLE RESEED_COUNTER ALTER COLUMN N COUNTER(50,3)");
+    execute("INSERT INTO reseed_counter(payload) VALUES('retained')");
+    assert(query.exec("SELECT n FROM reseed_counter") && query.next() && query.value(0).toInt()==50);query.finish();
+    bool nonemptyReseed=false;
+    try {execute("ALTER TABLE reseed_counter ALTER COLUMN n COUNTER(1,1)");}catch(const VbaRuntimeError& error){nonemptyReseed=error.number==3251;}
+    assert(nonemptyReseed);
+    execute("INSERT INTO reseed_counter(payload) VALUES('second')");
+    assert(query.exec("SELECT n FROM reseed_counter WHERE payload='second'") && query.next() && query.value(0).toInt()==53);query.finish();
+    execute("DELETE FROM reseed_counter");
+    reserveEngine->member("BeginTrans",{});execute("ALTER TABLE reseed_counter ALTER COLUMN n COUNTER(800,9)");reserveEngine->member("Rollback",{});
+    execute("INSERT INTO reseed_counter(payload) VALUES('after-reseed-rollback')");
+    assert(query.exec("SELECT n FROM reseed_counter") && query.next() && query.value(0).toInt()==56);query.finish();
+    execute("DELETE FROM reseed_counter");execute("ALTER TABLE reseed_counter ALTER COLUMN n COUNTER(-100,2)");
+    execute("INSERT INTO reseed_counter(payload) VALUES('negative-seed')");
+    assert(query.exec("SELECT n FROM reseed_counter") && query.next() && query.value(0).toInt()==-100);query.finish();
+    database->member("Execute",{VbaValue::string("CREATE TABLE ordinary_for_reseed(n INTEGER)")});
+    bool unsupportedReseed=false;
+    try {execute("ALTER TABLE ordinary_for_reseed ALTER COLUMN n COUNTER(10,2)");}catch(const VbaRuntimeError& error){unsupportedReseed=error.number==3251;}
+    assert(unsupportedReseed);
+    database->member("Execute",{VbaValue::string("CREATE TABLE alias_for_reseed(n INTEGER PRIMARY KEY AUTOINCREMENT)")});
+    unsupportedReseed=false;
+    try {execute("ALTER TABLE alias_for_reseed ALTER COLUMN n COUNTER(10,2)");}catch(const VbaRuntimeError& error){unsupportedReseed=error.number==3251;}
+    assert(unsupportedReseed);
     bool invalidStep=false;
     try {database->member("Execute",{VbaValue::string("CREATE TABLE [bad_step] ([n] COUNTER(1,0))")});}catch(const VbaRuntimeError& error){invalidStep=error.number==3251;}
     assert(invalidStep && !db.tables().contains("bad_step"));

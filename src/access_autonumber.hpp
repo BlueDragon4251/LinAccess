@@ -28,7 +28,7 @@ private:
 void trackAccessCounterReservations(QSqlDatabase db,const QVector<AccessCounterReservation>& reservations);
 AccessCounterReservation reserveAccessCounter(QSqlDatabase db,const QString& table,const QString& column);
 AccessCounterReservation currentAccessCounterReservation(QSqlDatabase db,AccessCounterReservation reservation);
-void configureNewAccessCounterStep(QSqlDatabase db,const QString& table,const QString& column,qint32 seed,qint32 increment);
+void configureNewAccessCounterStep(QSqlDatabase db,const QString& table,const QString& column,qint32 seed,qint32 increment,bool reseed=false);
 void configureNewAccessCounters(QSqlDatabase db,const QString& table);
 QSet<QString> jetLongAccessColumns(QSqlDatabase db,const QString& table);
 void createJetLongCounter(QSqlDatabase db,const QString& table,const QString& column);

@@ -1928,14 +1928,21 @@ void AccessFormPreview::initializeControlDefaults(bool unbound) {
 }
 
 void AccessFormPreview::applyControlStates() {
+    QSet<QString> generators;bool generatorMetadataFailed=false;
+    if(directTable_ && dataSourceAvailable_) {
+        try {generators=linaccess::generatedAccessColumns(db_,layout_.recordSource.trimmed());}
+        catch(const linaccess::VbaRuntimeError&) {generatorMetadataFailed=true;}
+    }
     QVector<int> tabOrder;
     for (int index=0;index<layout_.controls.size();++index) {
         const auto& control=layout_.controls[index]; auto* widget=controls_.value(control.name.toCaseFolded()).data();
         if (!widget) continue;
         widget->setVisible(control.visible); widget->setEnabled(control.enabled);
         const bool bound=!control.controlSource.isEmpty();
+        const auto boundColumn=columnIndex(control.controlSource,dataColumns_);
+        const bool generated=boundColumn>=0 && generators.contains(dataColumns_[boundColumn].toCaseFolded());
         const bool parentReadOnly=control.optionGroupIndex>=0 && controls_.value(layout_.controls[control.optionGroupIndex].name.toCaseFolded()) && controls_.value(layout_.controls[control.optionGroupIndex].name.toCaseFolded())->property("la_access_input_readonly").toBool();
-        const bool readOnly=parentReadOnly || layout_.kind==linaccess::AccessDocumentKind::Report || control.locked || control.controlSource.startsWith('=') || (bound && (!directTable_ || (currentRecordIndex_==0 && !layout_.allowAdditions) || (currentRecordIndex_>0 && !layout_.allowEdits && !dirty_)));
+        const bool readOnly=parentReadOnly || generated || (bound && generatorMetadataFailed) || layout_.kind==linaccess::AccessDocumentKind::Report || control.locked || control.controlSource.startsWith('=') || (bound && (!directTable_ || (currentRecordIndex_==0 && !layout_.allowAdditions) || (currentRecordIndex_>0 && !layout_.allowEdits && !dirty_)));
         widget->setProperty("la_access_input_readonly",readOnly);
         if (auto* line=qobject_cast<QLineEdit*>(widget)) {
             const bool password=control.inputMask.compare("Password",Qt::CaseInsensitive)==0;

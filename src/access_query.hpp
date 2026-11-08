@@ -18,6 +18,7 @@ struct AccessQueryParameter {
 struct AccessCounterDeclaration {
     QString table,column;
     qint32 seed{1},increment{1};
+    bool reseed{};
 };
 struct AccessQueryPlan {
     QString sql;

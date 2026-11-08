@@ -45,6 +45,7 @@ void captureCounterSql(sqlite3* connection,sqlite3_value** names,qlonglong value
 }
 AccessCounterSqlScope::AccessCounterSqlScope(QSqlDatabase db):state_(std::make_unique<State>()) {
     if(!db.isOpen() || !db.driver()) throw VbaRuntimeError(3420,"Counter SQL connection unavailable");
+    if(db.driver()->property("la_counter_sql_sync_failed").toBool()) throw VbaRuntimeError(3251,"Counter synchronization failed; restart the project connection before writing");
     const auto handle=db.driver()->handle();
     if(!handle.isValid() || QByteArray(handle.typeName())!="sqlite3*") throw VbaRuntimeError(3251,"Counter SQL backend unavailable");
     state_->db=db;state_->connection=*static_cast<sqlite3* const*>(handle.constData());
@@ -185,15 +186,18 @@ QSet<QString> jetLongAccessColumns(QSqlDatabase db,const QString& table) {
     }
     return result;
 }
-void configureNewAccessCounterStep(QSqlDatabase db,const QString& table,const QString& column,qint32 seed,qint32 increment) {
+void configureNewAccessCounterStep(QSqlDatabase db,const QString& table,const QString& column,qint32 seed,qint32 increment,bool reseed) {
     if(increment<=0 || !jetLongAccessColumns(db,table).contains(column.toCaseFolded())) throw VbaRuntimeError(3251,"Counter step configuration unavailable");
+    const auto handle=db.driver()->handle();auto* connection=*static_cast<sqlite3* const*>(handle.constData());int native=0;
+    if(sqlite3_table_column_metadata(connection,"main",table.toUtf8().constData(),column.toUtf8().constData(),nullptr,nullptr,nullptr,nullptr,&native)!=SQLITE_OK || native)
+        throw VbaRuntimeError(3251,"Counter seed configuration requires managed storage without a rowid alias");
     QSqlQuery query(db);
     if(!query.exec("SELECT COUNT(*) FROM main."+identifier(table)) || !query.next() || query.value(0).toLongLong()!=0)
         throw VbaRuntimeError(3251,"Counter seed configuration requires a new empty table");
     query.finish();
     if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_counter32_steps(table_name TEXT NOT NULL,column_name TEXT NOT NULL,increment INTEGER NOT NULL CHECK(typeof(increment)='integer' AND increment BETWEEN 1 AND 2147483647),PRIMARY KEY(table_name,column_name))"))
         throw VbaRuntimeError(3146,"Counter step storage unavailable");
-    query.prepare("INSERT INTO main._la_counter32_steps VALUES(?,?,?)");query.addBindValue(table);query.addBindValue(column);query.addBindValue(increment);
+    query.prepare(reseed ? "INSERT INTO main._la_counter32_steps VALUES(?,?,?) ON CONFLICT(table_name,column_name) DO UPDATE SET increment=excluded.increment" : "INSERT INTO main._la_counter32_steps VALUES(?,?,?)");query.addBindValue(table);query.addBindValue(column);query.addBindValue(increment);
     if(!query.exec()) throw VbaRuntimeError(3146,"Counter step initialization failed");
     qlonglong previous=static_cast<qlonglong>(seed)-increment;
     if(previous<std::numeric_limits<qint32>::min()) previous+=4294967296LL;
@@ -246,6 +250,7 @@ AccessCounterReservation currentAccessCounterReservation(QSqlDatabase db,AccessC
     return reservation;
 }
 AccessCounterReservation reserveAccessCounter(QSqlDatabase db,const QString& requestedTable,const QString& column) {
+    if(db.driver() && db.driver()->property("la_counter_sql_sync_failed").toBool()) throw VbaRuntimeError(3251,"Counter synchronization is incomplete");
     QString table;
     for(const auto& name:db.tables()) if(name.compare(requestedTable,Qt::CaseInsensitive)==0) {table=name;break;}
     if(table.isEmpty()) throw VbaRuntimeError(3078,"Counter table unavailable");

@@ -122,6 +122,8 @@ End Sub
     const auto managedCode=code+"Sub AddManaged()\nDoCmd.GoToRecord , , acNewRec\nMe.label=\"from form\"\nMe.Dirty=False\nEnd Sub\n";
     AccessFormPreview managedForm("managed counter form",managedLayout,managedCode,db); managedForm.show(); managedForm.activateWindow(); QApplication::processEvents();
     auto managedRoot=makePreviewFormObject(managedForm);
+    auto* counterEdit=managedForm.findChild<QLineEdit*>("access-control-id");
+    assert(counterEdit && counterEdit->isReadOnly());
     result=managedForm.executeProcedure("AddManaged",arguments); assert(result.status==VbaExecutionStatus::Completed && managedRoot->item("id").asNumber()==13);
     result=managedForm.executeProcedure("Duplicate",arguments); assert(result.status==VbaExecutionStatus::Completed && managedRoot->item("id").asNumber()==14);
     assert(sql.exec("SELECT rowid,id,label FROM managed_counter WHERE id=14") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==14 && sql.value(2).toString()=="from form"); sql.finish();
