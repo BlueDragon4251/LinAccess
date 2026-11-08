@@ -661,3 +661,7 @@ AutoNumber, Indizes und Beziehungen tatsächlich umbenennen; Counterstände und
 gespeicherte Seiteneinstellungen bleiben erhalten. Gespeicherte Access-Abfragen
 und Formularbindungen müssen anschließend auf den neuen Namen angepasst werden.
 [Umfang und Grenzen](docs/DAO_TABLEDEF_FIELDS.md).
+
+Neue native Tabellen und Felder unterstützen auch Single (32-Bit-Gleitkomma),
+einschließlich quantisierter Datenblatt-/DAO-Werte und Literalstandardwerte.
+[Unterstützte Schreibpfade und Grenzen](docs/DAO_TABLEDEF_FIELDS.md).

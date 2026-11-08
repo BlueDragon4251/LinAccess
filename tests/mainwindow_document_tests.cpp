@@ -2797,6 +2797,7 @@ int main(int argc,char** argv) {
             grid->item(1,0)->setText("label"); grid->item(1,3)->setText("\"ui value\"");grid->item(1,4)->setText("12");
             dialog->findChild<QPushButton*>("native-table-add-field")->click();
             grid->item(2,0)->setText("enabled"); qobject_cast<QComboBox*>(grid->cellWidget(2,1))->setCurrentText("BOOLEAN"); grid->item(2,3)->setText("True");
+            dialog->findChild<QPushButton*>("native-table-add-field")->click();grid->item(3,0)->setText("sample");qobject_cast<QComboBox*>(grid->cellWidget(3,1))->setCurrentText("SINGLE");grid->item(3,3)->setText("0.1");
             grid->item(1,4)->setText("0");
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->accept();});
             buttons->button(QDialogButtonBox::Save)->click();
@@ -2808,6 +2809,9 @@ int main(int argc,char** argv) {
         assert(authored.exec("SELECT qty,label,enabled FROM authored_defaults") && authored.next());
         assert(authored.value(0).toInt()==7 && authored.value(1).toString()=="ui value" && authored.value(2).toInt()==-1); authored.finish();
         assert(linaccess::jetLongAccessColumns(db,"authored_defaults").contains("id"));
+        assert(authored.exec("SELECT sample FROM authored_defaults") && authored.next() && authored.value(0).toDouble()==static_cast<double>(0.1f));authored.finish();
+        {linaccess::AccessTableModel model(nullptr,db);model.setTable("authored_defaults");model.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(model.select());const auto cell=model.index(0,model.fieldIndex("sample"));assert(model.setData(cell,"0.2") && !model.setData(cell,"1e40"));assert(model.submitTransactionally());}
+        assert(authored.exec("SELECT sample FROM authored_defaults") && authored.next() && authored.value(0).toDouble()==static_cast<double>(0.2f));authored.finish();
         auto definition=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string("authored_defaults")}).object;
         auto labelField=definition->member("Fields",{linaccess::VbaValue::string("label")}).object;
         assert(labelField->member("Type",{}).asNumber()==10 && labelField->member("Size",{}).asNumber()==12);assert(!labelField->member("AllowZeroLength",{}).truthy());
@@ -2847,11 +2851,11 @@ int main(int argc,char** argv) {
         assert(authored.exec("SELECT COUNT(*) FROM authored_defaults") && authored.next() && authored.value(0).toInt()==2);authored.finish();
         QTimer::singleShot(0,&window,[&] {
             auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-field-designer");
-            auto* list=dialog->findChild<QTableWidget*>("native-field-list");assert(list && list->rowCount()==4);
+            auto* list=dialog->findChild<QTableWidget*>("native-field-list");assert(list && list->rowCount()==5);
             dialog->findChild<QLineEdit*>("native-field-name")->setText("ExtraNote");
             dialog->findChild<QSpinBox*>("native-field-size")->setValue(8);
             dialog->findChild<QLineEdit*>("native-field-default")->setText("\"note\"");
-            dialog->findChild<QPushButton*>("native-field-create")->click();assert(list->rowCount()==5);
+            dialog->findChild<QPushButton*>("native-field-create")->click();assert(list->rowCount()==6);
             QSqlQuery values(db);assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE ExtraNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();
             for(int row=0;row<list->rowCount();++row) if(list->item(row,0)->text()=="ExtraNote") list->setCurrentCell(row,0);
             dialog->findChild<QTabWidget*>("native-field-editor-tabs")->setCurrentIndex(1);
@@ -2866,7 +2870,7 @@ int main(int argc,char** argv) {
             dialog->findChild<QPushButton*>("native-field-rename")->click();assert(list->item(list->currentRow(),0)->text()=="RenamedNote");
             assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE RenamedNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();assert(!values.exec("INSERT INTO authored_defaults(RenamedNote) VALUES('')"));
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});
-            dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==4);dialog->reject();
+            dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==5);dialog->reject();
         });
         auto* editFields=window.findChild<QAction*>("native-table-fields-edit");assert(editFields);editFields->trigger();
         assert(authored.exec("SELECT COUNT(*) FROM authored_defaults WHERE qty=7 AND label='ui value'") && authored.next() && authored.value(0).toInt()==2);authored.finish();

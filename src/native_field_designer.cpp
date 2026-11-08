@@ -28,8 +28,8 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
     auto* createPage=new QWidget(tabs);auto* createLayout=new QVBoxLayout(createPage);auto* form=new QFormLayout;
     auto* name=new QLineEdit(createPage);name->setObjectName("native-field-name");name->setMaxLength(64);form->addRow("Neues Feld",name);
     auto* type=new QComboBox(createPage);type->setObjectName("native-field-type");
-    const QMap<int,QString> typeNames{{1,"Ja/Nein"},{2,"Byte"},{3,"Ganzzahl (16 Bit)"},{4,"Lange Ganzzahl (32 Bit)"},{7,"Gleitkommazahl (Double)"},{8,"Datum/Uhrzeit"},{10,"Text"},{11,"Binärdaten"},{12,"Langer Text (Memo)"}};
-    for(const int code:{10,12,2,3,4,7,8,1,11}) type->addItem(typeNames.value(code),code);form->addRow("Datentyp",type);
+    const QMap<int,QString> typeNames{{1,"Ja/Nein"},{2,"Byte"},{3,"Ganzzahl (16 Bit)"},{4,"Lange Ganzzahl (32 Bit)"},{6,"Gleitkommazahl (Single)"},{7,"Gleitkommazahl (Double)"},{8,"Datum/Uhrzeit"},{10,"Text"},{11,"Binärdaten"},{12,"Langer Text (Memo)"}};
+    for(const int code:{10,12,2,3,4,6,7,8,1,11}) type->addItem(typeNames.value(code),code);form->addRow("Datentyp",type);
     auto* size=new QSpinBox(createPage);size->setObjectName("native-field-size");size->setRange(1,255);size->setValue(255);form->addRow("Textgröße",size);
     auto* required=new QCheckBox("Eingabe erforderlich",createPage);required->setObjectName("native-field-required");form->addRow(QString{},required);
     auto* allowZero=new QCheckBox("Leere Zeichenfolge zulassen",createPage);allowZero->setObjectName("native-field-allow-zero");allowZero->setChecked(true);form->addRow(QString{},allowZero);

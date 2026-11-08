@@ -3406,3 +3406,13 @@ SourceTableName=""; keine erfundenen importierten Linkdaten oder externen Provid
 Final DAO1/1 (1,66s), App gebaut, technischer Readonly-Dateivergleich unverändert.
 DAO_TABLEDEF_FIELDS.md;456/384/72 gleich. Weitere offene DAO-/Schemaanforderungen
 fortlaufend implementieren; keine Zwischen-Finals/Abschlussanrufe.
+
+Native Single-Felder6/Size4 jetzt im DAO-/Tabellen-/Feldbau verfügbar, mit echter
+quantisierter REAL-Speicherung/Prüfung. Gemeinsame Single-Konvertierung für DAO,
+Datenblatt und begrenzte direkte SQL-Schreibpfade/physische Append-Selects,
+Literaldefaults/ältere Defaultinserts und direkte Query-Typweitergabe. Negative
+Null/Unterlauf bleiben3251 statt stiller Normalisierung. Final GUI/DAO2/2
+(6,12s), App gebaut; vorher Import1/1 (0,06s), kein frischer3/3-Lauf. Grenzen
+DAO_TABLEDEF_FIELDS.md/SOURCE_SINGLE_PRECISION.md; insb. komplexe/joined Writes,
+Arithmetik/Locale/Access-Oracle und erzwungene Single-FKs noch offen.456/384/72
+unverändert. Andere offene Anforderungen fortlaufend weiterprogrammieren.

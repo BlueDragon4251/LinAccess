@@ -1,5 +1,6 @@
 #include "access_query.hpp"
 #include "access_autonumber.hpp"
+#include "access_table_import.hpp"
 #include <functional>
 #include <algorithm>
 #include "vba_qt_value.hpp"
@@ -1337,7 +1338,7 @@ static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPla
     auto resolved=compileCurrencyQuery(source.source,fields,functions); resolved.currencyContextResolved=true; return resolved;
 }
 static bool checkedSqlStorageType(const QString& type) {
-    static const QSet<QString> types{"CURRENCY_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DATE","DATETIME"};
+    static const QSet<QString> types{"CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DATE","DATETIME"};
     return types.contains(type);
 }
 static QString checkedSqlStorageValue(const QString& type,const QString& value) {
@@ -1383,7 +1384,18 @@ static QString checkedInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
         const auto record=db.record(table);
         for(int i=0;i<record.count();++i) columns.append(record.fieldName(i));
     }
-    const auto types=sqliteColumnTypes(db,table); bool checked=false;
+    const auto types=sqliteColumnTypes(db,table);const bool defaultOnly=word(pos,"DEFAULT") && word(pos+1,"VALUES");QStringList defaultTargets,defaultValues;
+    if(types.values().contains("SINGLE_REAL")) {
+        QSqlQuery defaults(db);if(!defaults.exec("PRAGMA table_info("+identifier(table)+")")) throw VbaRuntimeError(3146,"Single defaults unavailable");
+        while(defaults.next()) if(types.value(defaults.value(1).toString().toCaseFolded())=="SINGLE_REAL" && !defaults.value(4).isNull() && (defaultOnly || !columns.contains(defaults.value(1).toString(),Qt::CaseInsensitive))) {
+            auto declaration=defaults.value(4).toString().trimmed();if(declaration.startsWith('+') || declaration.startsWith('-')) declaration=declaration.left(1)+declaration.mid(1).trimmed();const auto literal=declaration.compare("TRUE",Qt::CaseInsensitive)==0 ? std::optional<QString>{"1"} : accessLiteralDefaultSql(declaration);if(!literal) throw VbaRuntimeError(3251,"Nonliteral Single defaults are unsupported");
+            QSqlQuery value(db);if(!value.exec("SELECT "+*literal) || !value.next()) throw VbaRuntimeError(3146,"Single default unavailable");const auto raw=value.value(0);const auto stored=sqlFieldValue(qtFieldValue(raw,{}),"SINGLE_REAL");bool numeric=false;const auto number=raw.toDouble(&numeric);
+            if((raw.isNull() && stored.isNull()) || (numeric && number==stored.toDouble())) continue;defaultTargets.append(identifier(defaults.value(1).toString()));defaultValues.append(checkedSqlStorageValue("SINGLE_REAL",*literal));
+        }
+        if(defaults.lastError().isValid()) throw VbaRuntimeError(3146,"Single defaults unavailable");
+    }
+    if(defaultOnly && !defaultTargets.isEmpty()) {installJetSqlFunctions(db);return "INSERT INTO "+identifier(table)+'('+defaultTargets.join(',')+") VALUES ("+defaultValues.join(',')+')';}
+    bool checked=false;
     for(const auto& column:columns) checked|=checkedSqlStorageType(types.value(column.toCaseFolded()));
     if(!checked) return plan.sql;
     if(word(pos,"SELECT")) {
@@ -1418,6 +1430,7 @@ static QString checkedInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
             values.append(checkedSqlStorageValue(types.value(columns[i].toCaseFolded()),label));
         }
         installJetSqlFunctions(db);
+        targets+=defaultTargets;values+=defaultValues;
         return "WITH "+identifier(cte)+'('+labels.join(',')+") AS MATERIALIZED ("+source+") INSERT INTO "+identifier(table)+'('+targets.join(',')+") SELECT "+values.join(',')+" FROM "+identifier(cte);
     }
     if(!word(pos,"VALUES") || pos+1>=tokens.size() || !symbol(tokens[pos+1],"(")) return plan.sql;
@@ -1442,6 +1455,7 @@ static QString checkedInsertSql(QSqlDatabase db,const AccessQueryPlan& plan) {
         values.append(value);
     }
     installJetSqlFunctions(db);
+    targets+=defaultTargets;values+=defaultValues;
     return "INSERT INTO "+identifier(table)+'('+targets.join(',')+") VALUES ("+values.join(',')+')';
 }
 
@@ -1876,7 +1890,7 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
                 const auto name=QString::fromUtf8(table);
                 if(!tables.contains(name)) tables.insert(name,sqliteColumnTypes(db,name));
                 const auto type=tables.value(name).value(QString::fromUtf8(column).toCaseFolded()).toUpper();
-                if(type=="DATE" || type=="DATETIME") types[index]=type;
+                if(type=="DATE" || type=="DATETIME" || type=="SINGLE_REAL") types[index]=type;
                 if(type=="INTEGER4") {
                     if(!counter32.contains(name)) counter32.insert(name,jetLongAccessColumns(db,name));
                     if(counter32.value(name).contains(QString::fromUtf8(column).toCaseFolded())) types[index]=type;

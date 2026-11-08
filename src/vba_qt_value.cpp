@@ -29,6 +29,7 @@ QMap<QString,QString> sqliteColumnTypes(QSqlDatabase db,const QString& table) {
                 if(types.value(name)!="REAL") throw VbaRuntimeError(3251,"Currency source requires the supported REAL backing");
                 types[name]="CURRENCY_REAL";
             }
+            else if(source=="SINGLE") {const auto name=column["name"].toString().toCaseFolded();if(types.value(name)!="REAL" && types.value(name)!="SINGLE_REAL") throw VbaRuntimeError(3251,"Single source requires proven REAL backing");types[name]="SINGLE_REAL";}
             else if (source == "TINYINT") types[column["name"].toString().toCaseFolded()] = "INTEGER1";
             else if (source == "SMALLINT") types[column["name"].toString().toCaseFolded()] = "INTEGER2";
             else if (source == "INT") types[column["name"].toString().toCaseFolded()] = "INTEGER4";
@@ -85,6 +86,11 @@ bool boolean(const QVariant& value) {
 VbaValue qtFieldValue(const QVariant& value,const QString& type) {
     if (value.isNull()) return {};
     if ((integerType(type) || realType(type) || type.contains("BOOL",Qt::CaseInsensitive)) && value.toString().isEmpty()) return {};
+    if(type=="SINGLE_REAL") {
+        if(value.metaType().id()==QMetaType::Bool) return coerceVbaModuleValue(VbaValue::logical(value.toBool()),"single");
+        if(value.metaType().id()==QMetaType::QByteArray) throw VbaRuntimeError(13,"Binary Single field storage is unsupported");
+        bool numeric=false;const auto number=value.toDouble(&numeric);if(!numeric) throw VbaRuntimeError(13,"Single field type mismatch");if(number==0 && std::signbit(number)) throw VbaRuntimeError(3251,"Negative-zero Single storage is not validated");return coerceVbaModuleValue(VbaValue::numeric(number),"single");
+    }
     if(type=="CURRENCY_REAL") {
         if(value.metaType().id()==QMetaType::QString) {
             const auto exact=convertCurrency(VbaValue::string(value.toString().toUtf8().toStdString()));
@@ -131,6 +137,7 @@ QString qtFieldText(const QVariant& value,const QString& type) {
 }
 QVariant sqlFieldValue(const VbaValue& value,const QString& type) {
     if (value.kind == VbaValue::Kind::Null) return {};
+    if(type=="SINGLE_REAL") {const auto converted=coerceVbaModuleValue(value,"single");if(converted.number==0 && std::signbit(converted.number)) throw VbaRuntimeError(3251,"Negative-zero Single storage is not validated");return converted.number;}
     if(type=="CURRENCY_REAL") return currencyToRealStorage(value);
     if (type.contains("DATE",Qt::CaseInsensitive)) {
         const auto converted=value.kind==VbaValue::Kind::Text ? value : vbaDateValue(value);

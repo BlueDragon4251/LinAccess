@@ -98,12 +98,12 @@ the physical table. Field names, duplicate names (including subsequent renames),
 object ownership and reserved table names are checked before creation. A table
 without fields is refused. `TableDefs.Delete` uses the existing guarded DDL path.
 
-Supported creation types are Boolean, Byte, Integer, Long, Double, Date, bounded
+Supported creation types are Boolean, Byte, Integer, Long, Single, Double, Date, bounded
 Text, LongBinary and Memo. Text requires an explicit size1..255 and gets the shared
 Jet text-capacity check. Detached Required and supported literal DefaultValue
 setters affect actual SQL constraints/defaults. Long plus dbAutoIncrField uses the
 managed signed32 generator. Native field-attribute constants are available in VBA.
-Currency, Single, Decimal, GUID, linked definitions and nonzero table attributes
+Currency, Decimal, GUID, linked definitions and nonzero table attributes
 remain explicitly unsupported here. This is not an original MDB format writer.
 
 Physical DDL, counter initialization and explicitly declared native type/size
@@ -414,3 +414,35 @@ pending, CancelUpdate, metadata refresh, file reopening with QSQLITE_OPEN_READON
 readonly counter fields, schema/DML/query-catalog refusal, no lost/allocated
 records and byte-for-byte unchanged technical database file passed. No GUI/broad
 rerun; latest GUI/DAO before this change2/2 (5.82s).456/384/72 unchanged.
+
+## Native Single creation and consistent supported writes
+
+DAO/new-table/field designers now create Single6/Size4 fields. A REAL-affinity
+SINGLE_REAL declaration retains explicit Single provenance and an actual check
+that rejects unquantized/invalid values. Shared field conversion rounds to
+binary32 before SQL storage; DAO, Qt datasheet editors, checked direct SQL
+VALUES/UPDATE and the supported physical INSERT SELECT path share it. The SQL
+field callback returns a Double expansion of the rounded float rather than
+truncating it to an integer. Source SINGLE metadata also selects this converter
+on proven REAL backing. Direct physical-column query lineage preserves Single
+type/value identity; compound/unproven expressions are not guessed.
+
+Native literal defaults are stored after quantization, including post-creation
+DefaultValue changes/rebuilds. Shared record defaults and supported omitted-
+column/DEFAULT VALUES SQL inserts also normalize literal defaults from older
+Single-declared tables. Null stays Null; Boolean conversion retains True=-1.
+Overflow6, invalid input13, existing unvalidated underflow3251 and negative
+zero3251 do not silently damage a prior value. Raw native SQLite statements on
+new constrained fields can refuse an unquantized value instead of coercing it.
+Legacy unconstrained/raw SQLite and unsupported complex/joined write shapes,
+full arithmetic/coercion/locales/rendering and Access reference parity remain
+open. Enforced Single relationship keys remain explicitly unsupported.
+
+Final existing GUI/DAO2/2 (6.12s), app built; preceding import target1/1 (0.06s),
+not rerun after the lineage fix. Actual cases verify default0.1, 16777217→
+16777216, update refusal/retained data, Null, negative zero/underflow, typed
+projection, bounded append, post-creation defaults and omitted legacy defaults.
+GUI creates Single, stores a rounded data-sheet edit and rejects overflow, then
+retains the field through index/field/table schema edits. The test model now
+uses its required manual-submit mode. No fresh3/3/full-suite/Access oracle claim.
+F014/F015/F041/F055/F105/F121/F122/F175 and fixed456/384/72 remain open/unchanged.

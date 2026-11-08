@@ -58,3 +58,11 @@ The shared codec now also handles Double; see SOURCE_DOUBLE_PRECISION.md.
 Classic-locale C++ significant formatting verifies CSV without mutating locale.
 
 Unveränderliche a11b95e-Folgeprüfung: Debian12/GCC12/Qt6.4 und Ubuntu24.04/GCC13/Qt6.4 jeweils5/5 (28,31 s /27,15 s), Paketinstallation, Originalhashes/Backend und tatsächlich installierter --single-values-Helfer mit unabhängig bekannten Originalbits/SHA bestanden. Diese Snapshots schließen DAO.Indexes und Single-Rohpräzision ein, noch keine spätere Double-Korrektur. Keine GitHub-CI-/Vollsuitebehauptung für diese Matrix.
+
+Native Single creation and supported DAO/SQL/data-sheet writes now use a shared
+binary32 converter and explicit Single declaration. Native literal defaults,
+older literal default insertion and direct-column query type identity are
+covered. Final GUI/DAO2/2 (6.12s), preceding import1/1 (0.06s). This preserves
+the original raw-bit import scope above and does not prove unsupported complex
+writes, full arithmetic/locale/rendering or Windows parity. Details and current
+limits: DAO_TABLEDEF_FIELDS.md. Fixed456/384/72 unchanged.

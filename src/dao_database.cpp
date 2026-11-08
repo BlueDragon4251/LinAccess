@@ -44,7 +44,7 @@ VbaValue integerCount(qlonglong value) {
 }
 int provenDaoFieldType(const QString& declaration) {
     const auto type=declaration.toUpper();
-    return type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : type=="CURRENCY_REAL" ? 5 : (type=="DATE" || type=="DATETIME") ? 8 : type=="BLOB" ? 11 : 0;
+    return type=="SINGLE_REAL" ? 6 : type=="INTEGER1" ? 2 : type=="INTEGER2" ? 3 : type=="INTEGER4" ? 4 : type=="CURRENCY_REAL" ? 5 : (type=="DATE" || type=="DATETIME") ? 8 : type=="BLOB" ? 11 : 0;
 }
 VbaValue fixedDaoFieldSize(int type) {
     const int size=(type==1 || type==2) ? 1 : type==3 ? 2 : (type==4 || type==6) ? 4
@@ -421,7 +421,7 @@ QMap<QString,QVariant> literalDefaultValues(QSqlDatabase db,const QVector<TableS
     if(expressions.isEmpty()) return result;
     QSqlQuery values(db);
     if(!values.exec("SELECT "+expressions.join(',')) || !values.next()) queryFailure(values);
-    for(int i=0;i<keys.size();++i) result.insert(keys[i],values.value(i));
+    for(int i=0;i<keys.size();++i) {auto value=values.value(i);for(const auto& field:columns) if(field.name.toCaseFolded()==keys[i] && field.type=="SINGLE_REAL") {value=sqlFieldValue(fromSql(value),"SINGLE_REAL");break;}result.insert(keys[i],value);}
     return result;
 }
 class Recordset;
@@ -1980,7 +1980,7 @@ public:
         throw VbaRuntimeError(3251,"DAO: Detached field assignment unsupported");
     }
     QJsonObject metadata() const {
-        const auto source=type_==1 ? "BOOLEAN" : type_==2 ? "TINYINT" : type_==3 ? "SMALLINT" : type_==4 ? "INT" : type_==7 ? "DOUBLE" : type_==8 ? "DATETIME" : type_==10 ? "VARCHAR" : type_==11 ? "BLOB" : "MEMO";
+        const auto source=type_==1 ? "BOOLEAN" : type_==2 ? "TINYINT" : type_==3 ? "SMALLINT" : type_==4 ? "INT" : type_==6 ? "SINGLE" : type_==7 ? "DOUBLE" : type_==8 ? "DATETIME" : type_==10 ? "VARCHAR" : type_==11 ? "BLOB" : "MEMO";
         auto object=QJsonObject{{"name",name_},{"source_type",source},{"source_origin","DAO_NATIVE"},{"source_size",type_==10 ? size_ : 0},{"native_attributes",attributes_},{"native_required",required_}};if(type_==10 || type_==12) object.insert("native_allow_zero_length",allowZeroLength_);return object;
     }
     QString definition() const {
@@ -1992,7 +1992,7 @@ public:
         QString type;
         switch(type_) {
         case 1:type="BOOLEAN";break;case 2:type="INTEGER1";break;case 3:type="INTEGER2";break;case 4:type="INTEGER4";break;
-        case 6:throw VbaRuntimeError(3251,"DAO: Single schema creation requires exact backing");
+        case 6:type="SINGLE_REAL";break;
         case 7:type="DOUBLE";break;case 8:type="DATETIME";break;case 10:
             if(size_<1 || size_>255) throw VbaRuntimeError(3251,"DAO: Text field requires an explicit supported size");
             type="VARCHAR("+QString::number(size_)+")";break;
@@ -2000,7 +2000,8 @@ public:
         default:throw VbaRuntimeError(3251,"DAO: Field type is not supported for native creation");
         }
         auto result=schemaJetName(name_)+" "+type+(required_ ? " NOT NULL" : "");
-        if(!default_.isEmpty()) result+=" DEFAULT "+*accessLiteralDefaultSql(default_);
+        if(!default_.isEmpty()) {auto literal=*accessLiteralDefaultSql(default_);if(type_==6) {QSqlQuery query(owner_->db);if(!query.exec("SELECT "+literal) || !query.next()) queryFailure(query);const auto stored=sqlFieldValue(fromSql(query.value(0)),"SINGLE_REAL");literal=stored.isNull() ? "NULL" : QString::number(stored.toDouble(),'g',17);}result+=" DEFAULT "+literal;}
+        if(type_==6) result+=" CHECK ("+schemaJetName(name_)+" IS NULL OR (typeof("+schemaJetName(name_)+") IN ('integer','real') AND "+schemaJetName(name_)+"=linaccess_jet_field_store('SINGLE_REAL',"+schemaJetName(name_)+")))";
         if(type_==10) result+=" CHECK (linaccess_jet_text_capacity("+schemaJetName(name_)+","+QString::number(size_)+"))";
         const auto column=schemaJetName(name_);
         if((type_==10 || type_==12) && !allowZeroLength_) result+=" CHECK (linaccess_jet_nonempty_text("+column+"))";

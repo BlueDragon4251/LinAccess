@@ -1797,7 +1797,7 @@ void MainWindow::newTable() {
     const auto addRow=[grid] {
         const int row=grid->rowCount(); grid->insertRow(row);
         grid->setItem(row,0,new QTableWidgetItem());
-        auto* type=new QComboBox(grid); type->addItems({"TEXT","MEMO","BYTE","SMALLINT","INTEGER","REAL","DATE","BOOLEAN","BLOB"}); grid->setCellWidget(row,1,type);
+        auto* type=new QComboBox(grid); type->addItems({"TEXT","MEMO","BYTE","SMALLINT","INTEGER","SINGLE","REAL","DATE","BOOLEAN","BLOB"}); grid->setCellWidget(row,1,type);
         grid->setItem(row,2,new QTableWidgetItem("nein")); grid->setItem(row,3,new QTableWidgetItem());
         auto* allowZero=new QCheckBox(grid);allowZero->setChecked(true);grid->setCellWidget(row,5,allowZero);
         auto* size=new QTableWidgetItem("255");grid->setItem(row,4,size);
@@ -1842,7 +1842,8 @@ void MainWindow::newTable() {
                         catch(const linaccess::VbaRuntimeError&) {messageError(&dialog,"Standardwert liegt außerhalb des gewählten Ganzzahltyps.");return;}
                         defaultSql=QString::number(scalar.toLongLong());
                     }
-                    if(type=="REAL" && !numeric) { messageError(&dialog,"Numerischen Standardwert eingeben."); return; }
+                    if((type=="SINGLE" || type=="REAL") && !numeric) { messageError(&dialog,"Numerischen Standardwert eingeben."); return; }
+                    if(type=="SINGLE") {try {(void)linaccess::sqlFieldValue(linaccess::qtFieldValue(scalar,{}),"SINGLE_REAL");}catch(const linaccess::VbaRuntimeError&) {messageError(&dialog,"Standardwert liegt außerhalb des unterstützten Single-Bereichs.");return;}}
                     if(type=="BOOLEAN") {
                         if(!numeric) { messageError(&dialog,"Boolean-Standardwert als True, False oder Zahl eingeben."); return; }
                         defaultSql=scalar.toDouble()==0 ? "0" : "-1";
@@ -1866,7 +1867,7 @@ void MainWindow::newTable() {
             auto id=table->member("CreateField",{VbaValue::string("id"),VbaValue::integer(4)}).object;
             id->assign("Attributes",VbaValue::longInteger(16));catalog->member("Append",{VbaValue::reference(id)});
             for(const auto& spec:fields) {
-                const int type=spec.type=="TEXT" ? 10 : spec.type=="MEMO" ? 12 : spec.type=="BYTE" ? 2 : spec.type=="SMALLINT" ? 3 : spec.type=="INTEGER" ? 4 : spec.type=="REAL" ? 7 : spec.type=="DATE" ? 8 : spec.type=="BOOLEAN" ? 1 : 11;
+                const int type=spec.type=="TEXT" ? 10 : spec.type=="MEMO" ? 12 : spec.type=="BYTE" ? 2 : spec.type=="SMALLINT" ? 3 : spec.type=="INTEGER" ? 4 : spec.type=="SINGLE" ? 6 : spec.type=="REAL" ? 7 : spec.type=="DATE" ? 8 : spec.type=="BOOLEAN" ? 1 : 11;
                 auto field=table->member("CreateField",{VbaValue::string(spec.name.toStdString()),VbaValue::integer(static_cast<std::int16_t>(type)),VbaValue::longInteger(spec.size)}).object;
                 field->assign("Required",VbaValue::logical(spec.required));if(type==10 || type==12) field->assign("AllowZeroLength",VbaValue::logical(spec.allowZero));
                 if(!spec.defaultValue.isEmpty()) field->assign("DefaultValue",VbaValue::string(spec.defaultValue.toStdString()));
