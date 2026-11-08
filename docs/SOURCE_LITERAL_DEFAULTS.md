@@ -115,3 +115,11 @@ F014 and the existing DAO/form requirements). This does not establish full parit
 
 Gezielte bestehende GUI-/DAO-Ziele2/2 bestanden (6,24s), App gebaut. Keine neue
 Vollsuite-/Windows-Referenzbehauptung; Katalog456/384/72 unverändert.
+
+Native Date defaults also accept bounded ISO #date# constants (optional 24-hour
+time, whole seconds), with an optional leading=. Native literal defaults in
+general accept leading= and outer whitespace; quoted contents remain intact.
+The shared Date literal reader is also used by field rules. Invalid dates refuse
+before schema mutation; table-dialog errors retain input. This does not change
+the MDB import default parser or claim Windows lexical/locale equivalence.
+GUI/DAO2/2 (7.98s), app built; no new target or full-suite claim.

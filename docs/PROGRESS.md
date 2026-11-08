@@ -6041,3 +6041,13 @@ GUI-freier Kern1/1 (1,93s), App mit SQLite3.54.1/JOIN-/Null-/Counter-Backendchec
 bestanden; kein frischer Vollsuite-/Distributionslauf.456/384/72 unverändert.
 Fortsetzung: ISO-#Datum#-Defaults und führendes= bei begrenzten Literaldefaults
 im Tabellen-/Feldentwurf und DAO; danach weitere offene Anforderungen fortlaufend.
+
+Native Datum-Standardwerte akzeptieren jetzt eindeutige ISO-#Datum#-Literale
+(optional Uhrzeit mit ganzen Sekunden) und führendes=. Begrenzte allgemeine
+Literaldefaults akzeptieren ebenfalls= und äußeren Leerraum; Textinhalt bleibt
+unverändert. DAO-Anlage/Bearbeitung, Tabellen-/Feldentwurf und Datumsregeln nutzen
+gemeinsamen Date-Parser; ungültige Tage/regionale Formen verweigern3251. GUI/DAO2/2
+(7,98s), App gebaut; erster Compilefehler war fehlender Prüfcode-Include und ist
+behoben. Kein Importparser-/Windowslexik-/Vollsuiteclaim;456/384/72 unverändert.
+Fortsetzung: Table-Recordsets/Index/Seek für belegte native numerische Indizes,
+mit tatsächlicher Indexreihenfolge und klaren unbewiesenen Grenzen.

@@ -54,7 +54,7 @@ std::runtime_error fail(const QString& error) {
 }
 }
 
-std::optional<QString> accessLiteralDefaultSql(const QString& token) { return nativeDefaultLiteral(token); }
+std::optional<QString> accessLiteralDefaultSql(const QString& token) {auto literal=token.trimmed();if(literal.startsWith('=')) literal=literal.mid(1).trimmed();return nativeDefaultLiteral(literal); }
 
 AccessTableSchema parseMdbSchema(const QString& schema) {
     const QRegularExpression column(R"(^\s*`((?:``|[^`])+)`\s+([A-Za-z][A-Za-z0-9_]*)(.*)$)");

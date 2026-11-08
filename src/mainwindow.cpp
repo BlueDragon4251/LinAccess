@@ -1794,7 +1794,7 @@ void MainWindow::newTable() {
     grid->setHorizontalHeaderLabels({"Feldname","Datentyp","Pflichtfeld (ja/nein)","Standardwert (optional)","Textgröße (1–255)","Leere Zeichenfolge zulassen"});
     grid->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch); outer->addWidget(grid);
     outer->addWidget(new QLabel("TEXT: wählbare Feldgröße bis 255 Zeichen; MEMO: längerer Text.",&dialog));
-    outer->addWidget(new QLabel("Standardwerte: Literal; bei Datum auch Date(), Now() oder Time().",&dialog));
+    outer->addWidget(new QLabel("Standardwerte: Literal, optional mit =; Datum auch #ISO-Datum#, Date(), Now() oder Time().",&dialog));
     const auto addRow=[grid] {
         const int row=grid->rowCount(); grid->insertRow(row);
         grid->setItem(row,0,new QTableWidgetItem());
@@ -1827,7 +1827,7 @@ void MainWindow::newTable() {
             const auto token=grid->item(row,3)->text().trimmed(); QString defaultSql;
             if(type=="DATE" && linaccess::nativeDateDefaultSql(token)) defaultSql=" DEFAULT "+token;
             else if(!token.isEmpty()) {
-                const auto literal=linaccess::accessLiteralDefaultSql(token);
+                std::optional<QString> literal;try {if(type=="DATE") literal=linaccess::nativeDateLiteralSql(token);if(!literal) literal=linaccess::accessLiteralDefaultSql(token);}catch(const linaccess::VbaRuntimeError&) {messageError(&dialog,"Datum-Standardwert als gültiges ISO-Datum eingeben, beispielsweise #2026-11-08#.");return;}
                 if(!literal || token.size()>255) { messageError(&dialog,"Standardwert: Literal mit höchstens 255 Zeichen eingeben; allgemeine Ausdrücke sind noch nicht unterstützt."); return; }
                 QSqlQuery value(db_);
                 if(!value.exec("SELECT "+*literal) || !value.next()) { messageError(&dialog,"Standardwert konnte nicht gelesen werden."); return; }

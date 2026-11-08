@@ -14,6 +14,8 @@ inline std::optional<QString> nativeDateDefaultExpression(QString sql) {
     QString token;for(const auto character:sql) if(!character.isSpace()) token+=character;token=token.toLower();while(token.startsWith('(') && token.endsWith(')')) token=token.mid(1,token.size()-2);
     if(token=="linaccess_jet_default_date()") return "Date()";if(token=="linaccess_jet_default_now()") return "Now()";if(token=="linaccess_jet_default_time()") return "Time()";return {};
 }
+// Bounded ISO #date# literal, optionally prefixed by =; canonical SQL string.
+std::optional<QString> nativeDateLiteralSql(const QString& expression);
 // Evaluates only literal Date defaults and the three owned native clock defaults.
 // Never executes counter generators, VBA or an arbitrary SQL default expression.
 QMap<QString,QVariant> nativeTableDateDefaults(QSqlDatabase database,const QString& table);

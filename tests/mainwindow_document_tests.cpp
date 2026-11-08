@@ -2817,11 +2817,11 @@ int main(int argc,char** argv) {
             QTimer::singleShot(0,dialog,[] { auto* error=qobject_cast<QMessageBox*>(QApplication::activeModalWidget()); assert(error); error->accept(); });
             buttons->button(QDialogButtonBox::Save)->click();
             assert(dialog->isVisible() && grid->item(0,0)->text()=="qty" && !db.tables().contains("authored_defaults"));
-            grid->item(0,3)->setText("7"); dialog->findChild<QPushButton*>("native-table-add-field")->click();
+            grid->item(0,3)->setText("=7"); dialog->findChild<QPushButton*>("native-table-add-field")->click();
             grid->item(1,0)->setText("label"); grid->item(1,3)->setText("\"ui value\"");grid->item(1,4)->setText("12");
             dialog->findChild<QPushButton*>("native-table-add-field")->click();
             grid->item(2,0)->setText("enabled"); qobject_cast<QComboBox*>(grid->cellWidget(2,1))->setCurrentText("BOOLEAN"); grid->item(2,3)->setText("True");
-            dialog->findChild<QPushButton*>("native-table-add-field")->click();grid->item(3,0)->setText("sample");qobject_cast<QComboBox*>(grid->cellWidget(3,1))->setCurrentText("SINGLE");grid->item(3,3)->setText("0.1");dialog->findChild<QPushButton*>("native-table-add-field")->click();grid->item(4,0)->setText("moment");qobject_cast<QComboBox*>(grid->cellWidget(4,1))->setCurrentText("DATE");grid->item(4,3)->setText("Now()");
+            dialog->findChild<QPushButton*>("native-table-add-field")->click();grid->item(3,0)->setText("sample");qobject_cast<QComboBox*>(grid->cellWidget(3,1))->setCurrentText("SINGLE");grid->item(3,3)->setText("0.1");dialog->findChild<QPushButton*>("native-table-add-field")->click();grid->item(4,0)->setText("moment");qobject_cast<QComboBox*>(grid->cellWidget(4,1))->setCurrentText("DATE");grid->item(4,3)->setText("=#2026-11-08#");
             grid->item(1,4)->setText("0");
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->accept();});
             buttons->button(QDialogButtonBox::Save)->click();
@@ -2833,7 +2833,7 @@ int main(int argc,char** argv) {
         assert(authored.exec("SELECT qty,label,enabled FROM authored_defaults") && authored.next());
         assert(authored.value(0).toInt()==7 && authored.value(1).toString()=="ui value" && authored.value(2).toInt()==-1); authored.finish();
         assert(linaccess::jetLongAccessColumns(db,"authored_defaults").contains("id"));
-        assert(authored.exec("SELECT sample FROM authored_defaults") && authored.next() && authored.value(0).toDouble()==static_cast<double>(0.1f));authored.finish();
+        assert(authored.exec("SELECT sample FROM authored_defaults") && authored.next() && authored.value(0).toDouble()==static_cast<double>(0.1f));authored.finish();assert(authored.exec("SELECT moment FROM authored_defaults") && authored.next() && authored.value(0).toString()=="2026-11-08 00:00:00");authored.finish();
         {linaccess::AccessTableModel model(nullptr,db);model.setTable("authored_defaults");model.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(model.select());const auto cell=model.index(0,model.fieldIndex("sample"));assert(model.setData(cell,"0.2") && !model.setData(cell,"1e40"));assert(model.submitTransactionally());}
         assert(authored.exec("SELECT sample FROM authored_defaults") && authored.next() && authored.value(0).toDouble()==static_cast<double>(0.2f));authored.finish();
         auto definition=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string("authored_defaults")}).object;

@@ -33,7 +33,7 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
     auto* size=new QSpinBox(createPage);size->setObjectName("native-field-size");size->setRange(1,255);size->setValue(255);form->addRow("Textgröße",size);
     auto* required=new QCheckBox("Eingabe erforderlich",createPage);required->setObjectName("native-field-required");form->addRow(QString{},required);
     auto* allowZero=new QCheckBox("Leere Zeichenfolge zulassen",createPage);allowZero->setObjectName("native-field-allow-zero");allowZero->setChecked(true);form->addRow(QString{},allowZero);
-    auto* defaultValue=new QLineEdit(createPage);defaultValue->setObjectName("native-field-default");defaultValue->setMaxLength(255);defaultValue->setPlaceholderText("Literal; Datum auch Date(), Now() oder Time()");form->addRow("Standardwert",defaultValue);createLayout->addLayout(form);
+    auto* defaultValue=new QLineEdit(createPage);defaultValue->setObjectName("native-field-default");defaultValue->setMaxLength(255);defaultValue->setPlaceholderText("Literal (auch mit =); Datum: #ISO-Datum# oder Date()/Now()/Time()");form->addRow("Standardwert",defaultValue);createLayout->addLayout(form);
     auto* validation=new QLineEdit(createPage);validation->setObjectName("native-field-validation");validation->setMaxLength(255);validation->setPlaceholderText(">=0 And <=100; Datum: <=Date()");validation->setEnabled(false);form->addRow("Gültigkeitsregel (Zahl/Datum)",validation);
     auto* validationText=new QLineEdit(createPage);validationText->setObjectName("native-field-validation-text");validationText->setMaxLength(255);validationText->setEnabled(false);form->addRow("Fehlermeldung zur Gültigkeitsregel",validationText);
     auto* append=new QPushButton("Feld anlegen",createPage);append->setObjectName("native-field-create");createLayout->addWidget(append);tabs->addTab(createPage,"Neues Feld");
@@ -51,7 +51,7 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
     auto* move=new QPushButton("Feld verschieben",propertyPage);move->setObjectName("native-field-move");propertyLayout->addWidget(move);
     auto* renameName=new QLineEdit(propertyPage);renameName->setObjectName("native-field-rename-name");renameName->setMaxLength(64);propertyForm->addRow("Neuer Feldname",renameName);
     auto* renameButton=new QPushButton("Feld umbenennen",propertyPage);renameButton->setObjectName("native-field-rename");propertyLayout->addWidget(renameButton);
-    propertyLayout->addWidget(new QLabel("Datum/Uhrzeit: auch Date(), Now() oder Time() als Standardwert.",propertyPage));
+    propertyLayout->addWidget(new QLabel("Datum/Uhrzeit: #ISO-Datum#, Date(), Now() oder Time() als Standardwert.",propertyPage));
     propertyLayout->addWidget(new QLabel("Neue Standardwerte gelten für neue Datensätze; vorhandene Werte werden nicht ersetzt.",propertyPage));
     auto* apply=new QPushButton("Eigenschaften speichern",propertyPage);apply->setObjectName("native-field-property-save");propertyLayout->addWidget(apply);tabs->addTab(propertyPage,"Eigenschaften");
     auto* status=new QLabel(&dialog);status->setWordWrap(true);layout->addWidget(status);

@@ -27,10 +27,8 @@ inline QString nativeDateValidationPredicate(QString rule,const QString& column)
     const QString atom=QStringLiteral(R"((?:#[^#]+#|(?:Date|Now|Time)\s*\(\s*\)))");
     const auto value=[](QString token) {
         if(const auto clock=nativeDateDefaultSql(token)) return *clock;
-        static const QRegularExpression iso(R"(^#[0-9]{4}-[0-9]{2}-[0-9]{2}(?:[ T][0-9]{2}:[0-9]{2}(?::[0-9]{2})?)?#$)");
-        if(!iso.match(token).hasMatch()) throw VbaRuntimeError(3251,"Date ValidationRule requires an ISO Date literal or Date/Now/Time clock");
-        try {token=token.mid(1,token.size()-2);const auto stored=sqlFieldValue(qtFieldValue(token,"DATETIME"),"DATETIME").toString();return "'"+stored+"'";}
-        catch(const VbaRuntimeError&) {throw VbaRuntimeError(3251,"Date ValidationRule literal is not a supported whole-second Date");}
+        if(const auto literal=nativeDateLiteralSql(token)) return *literal;
+        throw VbaRuntimeError(3251,"Date ValidationRule requires an ISO Date literal or Date/Now/Time clock");
     };
     const QRegularExpression between("^\\s*Between\\s+("+atom+")\\s+And\\s+("+atom+")\\s*$",QRegularExpression::CaseInsensitiveOption);
     const auto bounds=between.match(rule);if(bounds.hasMatch()) return "("+column+">="+value(bounds.captured(1))+" AND "+column+"<="+value(bounds.captured(2))+")";

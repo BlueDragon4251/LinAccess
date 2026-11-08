@@ -3493,3 +3493,13 @@ Append weiter383. GUI/DAO2/2 (6,94s), App gebaut; DAO_TABLEDEF_FIELDS.md.
 456/384/72 unverändert. Fortsetzung: doppelte Hauptfenster-Kompilierung von App
 und GUI-Ziel über gemeinsame statische Desktopimplementierung beseitigen, dann
 weitere offene Entwurfs-/Access-Anforderungen ohne Zwischenabschluss.
+
+Native Datum-Standardwerte akzeptieren jetzt eindeutige ISO-#Datum#-Literale
+(optional Uhrzeit mit ganzen Sekunden) und führendes=. Begrenzte allgemeine
+Literaldefaults akzeptieren ebenfalls= und äußeren Leerraum; Textinhalt bleibt
+unverändert. DAO-Anlage/Bearbeitung, Tabellen-/Feldentwurf und Datumsregeln nutzen
+gemeinsamen Date-Parser; ungültige Tage/regionale Formen verweigern3251. GUI/DAO2/2
+(7,98s), App gebaut; erster Compilefehler war fehlender Prüfcode-Include und ist
+behoben. Kein Importparser-/Windowslexik-/Vollsuiteclaim;456/384/72 unverändert.
+Fortsetzung: Table-Recordsets/Index/Seek für belegte native numerische Indizes,
+mit tatsächlicher Indexreihenfolge und klaren unbewiesenen Grenzen.
