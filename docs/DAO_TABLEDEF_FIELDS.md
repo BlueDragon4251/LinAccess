@@ -204,3 +204,34 @@ values and metadata are checked. Indexed deletion refusal, safe subsequent delet
 Required-without-default failure on existing rows, counter-add refusal, last-field
 protection, old object invalidation and workspace schema rollback all pass in the
 existing target. No new test target/broad suite;456/384/72 unchanged.
+
+## Graphic editing of ordinary fields
+
+Select a closed table in the explorer and choose **Ansicht → Tabellenfelder
+bearbeiten**. The real field list shows available declared types/sizes/defaults
+and Required properties; unproven original properties are shown as unavailable,
+not inferred. The dialog adds supported ordinary fields with Text1..255, Required
+and literal defaults through the same DAO builder. A normal field can be deleted
+with explicit confirmation, including a warning about saved-artifact references.
+Primary/counter/last-field deletion is disabled or refused by actual dependencies.
+Open table models must be closed before structure editing.
+
+Successful mutations are reported as stored before refreshing the catalog. A
+subsequent refresh failure disables further mutations and reports the already
+stored result, rather than offering a blind repeated operation. The ordinary
+index dialog uses the same separation. No property alteration, primary/counter
+rebuild, automatic artifact repair or complete Access designer parity is claimed.
+
+Own Fields.Append/Delete operations advance a connection-owned table-field
+revision. Existing physical DAO recordsets, fields and clones refuse3420 until
+explicit Requery; they cannot use old cached column layouts for updates. A
+successful Requery reloads metadata/data, retires stale bookmarks and clears
+invalid edit/chunk buffers across the clone family. TableDef generation identity
+is preserved. Raw/external schema changes and full Jet locking remain open.
+
+Graphic editing/cursor validation: existing mainwindow/DAO2/2 (5.11s), app built.
+Actual GUI adds Text8/default to two existing rows, verifies both values, deletes
+the field after confirmation and preserves the remaining values/row count. An
+open DAO cursor/Field/edited Clone refuses3420 after field addition; explicit
+Requery reloads three fields and clears the stale clone edit without persisting
+its pending text. No new target or broad suite.456/384/72 unchanged.

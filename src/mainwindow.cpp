@@ -6,6 +6,7 @@
 #include "native_query_view.hpp"
 #include "native_input_box.hpp"
 #include "native_index_designer.hpp"
+#include "native_field_designer.hpp"
 #include "native_edit_menu.hpp"
 #include "native_classic_style.hpp"
 #include "native_options_dialog.hpp"
@@ -340,6 +341,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
     menuBar()->removeAction(viewMenu->menuAction()); menuBar()->insertMenu(objectMenu->menuAction(),viewMenu);
     for (int i=5;i<9;++i) objectMenu->addAction(projectActions[i]);
+    auto* editFields=viewMenu->addAction("Tabellen&felder bearbeiten...");editFields->setObjectName("native-table-fields-edit");
+    connect(editFields,&QAction::triggered,this,[this] {
+        const auto* item=explorer_->currentItem();if(!item || item->data(0,Qt::UserRole).toString()!="table" || QApplication::activeModalWidget() || !db_.isOpen()) return;
+        const auto table=item->text(0);
+        for(auto* model:findChildren<linaccess::AccessTableModel*>()) if(model->tableName().compare(table,Qt::CaseInsensitive)==0) {messageError(this,"Schließen Sie die Tabelle und zugehörige bearbeitbare Abfragen vor der Strukturänderung.");return;}
+        linaccess::editNativeFields(this,db_,table);
+    });
+    connect(viewMenu,&QMenu::aboutToShow,this,[this,editFields] {const auto* item=explorer_->currentItem();editFields->setEnabled(db_.isOpen() && item && item->data(0,Qt::UserRole).toString()=="table" && !QApplication::activeModalWidget());});
     auto* editIndexes=viewMenu->addAction("Tabellen&indizes bearbeiten...");editIndexes->setObjectName("native-table-indexes");
     connect(editIndexes,&QAction::triggered,this,[this] {
         const auto* item=explorer_->currentItem();if(!item || item->data(0,Qt::UserRole).toString()!="table" || QApplication::activeModalWidget() || !db_.isOpen()) return;

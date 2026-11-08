@@ -144,6 +144,7 @@ keine nachgewiesene pixelgenaue Access-2003-Oberfläche. Details: [Darstellung](
 
 - Neue `.linaccess`-Datei als SQLite-Projekt, oder bestehendes SQLite-Projekt öffnen
 - Tabellen mit einfachen Datentypen erstellen, Datenansicht mit manueller Speicherung
+- Auf geschlossenen Tabellen über **Ansicht → Tabellenfelder bearbeiten** normale Felder mit Typ, Textgröße und Standardwert ergänzen oder nach Bestätigung löschen; [Umfang und Grenzen](docs/DAO_TABLEDEF_FIELDS.md)
 - Auf ausgewählten Tabellen über **Ansicht → Tabellenindizes bearbeiten** normale/Unique-Indizes mit geordneten ASC-/DESC-Feldern anlegen und löschen; [Umfang und Grenzen](docs/DAO_INDEXES_RUNTIME.md)
 - Gespeicherte SQL-SELECT-Abfragen
 - Einfache tabellengebundene Formulare definieren und Datensätze damit bearbeiten

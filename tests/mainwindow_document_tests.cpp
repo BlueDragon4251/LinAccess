@@ -2797,6 +2797,20 @@ int main(int argc,char** argv) {
         });
         auto* editIndexes=window.findChild<QAction*>("native-table-indexes");assert(editIndexes);editIndexes->trigger();
         assert(authored.exec("SELECT COUNT(*) FROM authored_defaults") && authored.next() && authored.value(0).toInt()==2);authored.finish();
+        QTimer::singleShot(0,&window,[&] {
+            auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-field-designer");
+            auto* list=dialog->findChild<QTableWidget*>("native-field-list");assert(list && list->rowCount()==4);
+            dialog->findChild<QLineEdit*>("native-field-name")->setText("ExtraNote");
+            dialog->findChild<QSpinBox*>("native-field-size")->setValue(8);
+            dialog->findChild<QLineEdit*>("native-field-default")->setText("\"note\"");
+            dialog->findChild<QPushButton*>("native-field-create")->click();assert(list->rowCount()==5);
+            QSqlQuery values(db);assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE ExtraNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();
+            for(int row=0;row<list->rowCount();++row) if(list->item(row,0)->text()=="ExtraNote") list->setCurrentCell(row,0);
+            QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});
+            dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==4);dialog->reject();
+        });
+        auto* editFields=window.findChild<QAction*>("native-table-fields-edit");assert(editFields);editFields->trigger();
+        assert(authored.exec("SELECT COUNT(*) FROM authored_defaults WHERE qty=7 AND label='ui value'") && authored.next() && authored.value(0).toInt()==2);authored.finish();
     }
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

@@ -28,7 +28,7 @@ if(LINACCESS_BUILD_GUI)
     # Compile these large translation units once, without adding a runtime DSO.
     add_library(linaccess_forms STATIC
         src/access_form_preview.cpp src/access_form_record_commands.cpp src/access_record_clipboard.cpp src/native_send_keys.cpp src/access_form_objects.cpp src/access_layout_print.cpp
-        src/native_input_box.cpp src/native_index_designer.cpp src/access_form_preview.hpp)
+        src/native_input_box.cpp src/native_field_designer.cpp src/native_index_designer.cpp src/access_form_preview.hpp)
     target_link_libraries(linaccess_forms PUBLIC linaccess_data Qt6::Widgets Qt6::PrintSupport)
     target_include_directories(linaccess_forms PUBLIC src)
     add_executable(linaccess

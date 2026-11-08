@@ -2434,3 +2434,19 @@ Durchlauf mit benannten CreateField-Argumenten, erforderliche Fehleratomizität,
 Löschung/Metadaten und Workspace-Rollback im bestehenden Mainwindow/DAO2/2 (5,38s)
 passed, App gebaut. DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert.
 Nächster Umfang: diese normalen Feldoperationen grafisch verfügbar machen.
+
+2026-11-08: Reale grafische Feldbearbeitung ergänzt: Explorer/Ansicht →
+Tabellenfelder bearbeiten, normaler Typ/Textgröße/Required/literaler Default,
+tatsächliche Anlage/Löschung mit Bestandszeilen und expliziter Löschbestätigung.
+Nicht belegte Originaleigenschaften werden als nicht verfügbar angezeigt;
+Primär/Counter/letztes Feld geschützt, offene Tabellenmodelle vor Strukturänderung
+schließen. Eigene Fields.Append/Delete invalidieren physische DAO-Datensätze/
+Fields/Clones über O(1)-Feldrevision bis explizitem Requery; ungültige gepufferte
+Clone-Änderungen werden dabei verworfen, nicht auf neue Spalten geschrieben.
+Index-/Felddialog unterscheiden gespeicherte Änderung von nachfolgendem
+Katalogladefehler und sperren dann weitere Mutationen. Tatsächlicher GUI-
+Create/Delete-Durchlauf erhält zwei Original-Testzeilen, Backend alterCursor/
+Clone/Edit/Requery-Schutz im bestehenden Mainwindow/DAO2/2 (5,11s), App gebaut.
+Details DAO_TABLEDEF_FIELDS.md/README;456/384/72 unverändert. Nächste kleine
+Implementierungsprüfung: gebundene native Rückgabeobjekte noch innerhalb des
+DDL-Savepoints auflösen, um spätere Readerfehler von Speichererfolg zu trennen.

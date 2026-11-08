@@ -217,3 +217,10 @@ atomar angelegt/gelöscht werden, inklusive Typ-/Indexmetadaten und geprüften
 Abhängigkeitsgrenzen. Reales VBA/named args/Bestandswerte/Fehleratomizität/Rollback,
 Mainwindow/DAO2/2 (5,38s), App gebaut. DAO_TABLEDEF_FIELDS.md;456/384/72 gleich.
 Fortsetzung: echte grafische Feldanlage/-löschung über denselben DAO-Weg.
+
+Grafische Feldanlage/-löschung über Ansicht → Tabellenfelder bearbeiten umgesetzt;
+echter GUI-Durchlauf/Bestandswerte und DAO-Invalidierung alter Cursor/Clones bis
+Requery im bestehenden Mainwindow/DAO2/2 (5,11s), App gebaut. Index-/Felddialog
+melden gespeicherte Änderungen getrennt von Refreshfehlern. README/DAO_TABLEDEF_FIELDS.md.
+456/384/72 gleich. Rückgabe-Reader der Schemaoperationen vor Savepoint-Release
+binden; anschließend andere offene Anforderungen fortlaufend umsetzen.

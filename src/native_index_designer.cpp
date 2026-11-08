@@ -62,10 +62,17 @@ void editNativeIndexes(QWidget* parent,QSqlDatabase database,const QString& tabl
     };
     QObject::connect(addField,&QPushButton::clicked,&dialog,addRow);addRow();
     QObject::connect(removeField,&QPushButton::clicked,&dialog,[&] {if(grid->currentRow()>=0) grid->removeRow(grid->currentRow());});
-    QObject::connect(list,&QListWidget::currentRowChanged,&dialog,[&] {const auto* item=list->currentItem();remove->setEnabled(item && !item->data(Qt::UserRole+1).toBool());});
+    bool catalogValid=true;
+    QObject::connect(list,&QListWidget::currentRowChanged,&dialog,[&] {const auto* item=list->currentItem();remove->setEnabled(catalogValid && item && !item->data(Qt::UserRole+1).toBool());});
     remove->setEnabled(list->currentItem() && !list->currentItem()->data(Qt::UserRole+1).toBool());
     append->setEnabled(!fields.isEmpty());addField->setEnabled(!fields.isEmpty());
+    const auto refreshAfterCommit=[&](const QString& message) {
+        status->setText(message);
+        try {reload();}
+        catch(const std::exception& error) {catalogValid=false;append->setEnabled(false);remove->setEnabled(false);QMessageBox::warning(&dialog,"Änderung gespeichert",message+"\nDie Indexliste konnte nicht neu geladen werden: "+QString::fromUtf8(error.what()));}
+    };
     QObject::connect(append,&QPushButton::clicked,&dialog,[&] {
+        if(!catalogValid) return;
         try {
             auto index=table->member("CreateIndex",{VbaValue::string(name->text().toStdString())}).object;
             index->assign("Unique",VbaValue::logical(unique->isChecked()));index->assign("Required",VbaValue::logical(required->isChecked()));
@@ -76,15 +83,17 @@ void editNativeIndexes(QWidget* parent,QSqlDatabase database,const QString& tabl
                 field->assign("Attributes",VbaValue::longInteger(qobject_cast<QComboBox*>(grid->cellWidget(row,1))->currentIndex()==1 ? 1 : 0));columns->member("Append",{VbaValue::reference(field)});
             }
             table->member("Indexes",{}).object->member("Append",{VbaValue::reference(index)});
-            status->setText("Index angelegt: "+name->text());reload();
-        } catch(const std::exception& error) {failure(error);}
+        } catch(const std::exception& error) {failure(error);return;}
+        refreshAfterCommit("Index angelegt: "+name->text());
     });
     QObject::connect(remove,&QPushButton::clicked,&dialog,[&] {
+        if(!catalogValid) return;
         const auto* item=list->currentItem();if(!item || item->data(Qt::UserRole+1).toBool()) return;
         const auto indexName=item->data(Qt::UserRole).toString();
         if(QMessageBox::question(&dialog,"Index löschen","Index „"+indexName+"“ löschen? Gespeicherte Datensätze bleiben erhalten.",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
-        try {table->member("Indexes",{}).object->member("Delete",{VbaValue::string(indexName.toStdString())});status->setText("Index gelöscht: "+indexName);reload();}
-        catch(const std::exception& error) {failure(error);}
+        try {table->member("Indexes",{}).object->member("Delete",{VbaValue::string(indexName.toStdString())});}
+        catch(const std::exception& error) {failure(error);return;}
+        refreshAfterCommit("Index gelöscht: "+indexName);
     });
     dialog.exec();
 }

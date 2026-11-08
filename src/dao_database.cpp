@@ -207,7 +207,7 @@ struct WorkspaceState {
     sqlite3* connection{};
     bool alive{true};
     quint64 rollbackRevision{};
-    QMap<QString,quint64> queryGenerations,tableGenerations;
+    QMap<QString,quint64> queryGenerations,tableGenerations,tableFieldRevisions;
     QVariantMap queryViewSnapshot;
     static constexpr const char* queryViewProperties[]{"la_query_database","la_query_views","la_query_internal_views","la_query_rank_pending","la_query_revision"};
     int clones{};
@@ -394,7 +394,7 @@ QMap<QString,QVariant> literalDefaultValues(QSqlDatabase db,const QVector<TableS
 class Recordset;
 struct RecordsetData {
     std::shared_ptr<WorkspaceState> workspace;
-    quint64 rollbackRevision{};
+    quint64 rollbackRevision{},fieldRevision{};
     QStringList columns;
     QMap<QString,QString> types;
     QMap<QString,int> daoTypes,definitionSizes;
@@ -472,6 +472,7 @@ public:
     void checkTransaction() const {
         checkTableGeneration();
         if (data_->rollbackRevision!=data_->workspace->rollbackRevision) throw VbaRuntimeError(3420,"DAO: Recordset requires Requery after Rollback");
+        if(table_ && data_->fieldRevision!=data_->workspace->tableFieldRevisions.value(source_.toCaseFolded())) throw VbaRuntimeError(3420,"DAO: Recordset requires Requery after field schema changes");
     }
     void refreshSnapshot(const QStringList& columns,const QMap<QString,QString>& types,
                          const QVector<QVariantList>& rows,const QVector<QVariant>& ids,
@@ -687,7 +688,7 @@ public:
         }
         if (key == "requery") {
             checkTableGeneration();
-            if (data_->rollbackRevision!=data_->workspace->rollbackRevision) { mode_=Mode::Browse; pending_.clear(); changed_.clear(); chunkFields_.clear(); }
+            if (data_->rollbackRevision!=data_->workspace->rollbackRevision || (table_ && data_->fieldRevision!=data_->workspace->tableFieldRevisions.value(source_.toCaseFolded()))) { mode_=Mode::Browse; pending_.clear(); changed_.clear(); chunkFields_.clear(); }
             require(mode_ == Mode::Browse, "DAO: Pending edit");
             reload(); return {};
         }
@@ -901,6 +902,8 @@ private:
     void reload(bool invalidate=true) {
         if (frozen_) throw VbaRuntimeError(3251,"DAO: Form snapshot requires form Requery");
         const auto original=*data_;
+        const auto fieldRevision=table_ ? data_->workspace->tableFieldRevisions.value(source_.toCaseFolded()) : 0;
+        const bool schemaChanged=table_ && data_->fieldRevision!=fieldRevision;
         std::vector<std::shared_ptr<Recordset>> leases;
         for (auto* cursor:data_->cursors)
             if (auto lease=cursor->weak_from_this().lock()) leases.push_back(std::move(lease));
@@ -922,14 +925,15 @@ private:
                 if (cursor->position_>=0 && cursor->position_<data_->ids.size()) previousRows.insert(cursor,data_->ids[cursor->position_]);
         }
         const auto finalize=[&] {
-            if (data_->rollbackRevision!=data_->workspace->rollbackRevision) data_->family=QUuid::createUuid().toRfc4122();
-            data_->rollbackRevision=data_->workspace->rollbackRevision;
+            if (schemaChanged || data_->rollbackRevision!=data_->workspace->rollbackRevision) data_->family=QUuid::createUuid().toRfc4122();
+            data_->rollbackRevision=data_->workspace->rollbackRevision;data_->fieldRevision=fieldRevision;
             data_->bookmarks.clear();
             for (qsizetype i=0;i<data_->rows.size();++i) {
                 const auto old=table_ ? previousTokens.value(data_->ids[i].toLongLong()) : 0;
                 data_->bookmarks.append(old ? old : data_->nextBookmark++);
             }
             for (auto* cursor:data_->cursors) {
+                if(schemaChanged) {cursor->mode_=Mode::Browse;cursor->pending_.clear();cursor->changed_.clear();cursor->chunkFields_.clear();cursor->lastModified_.reset();}
                 if (invalidate) cursor->position_=-1;
                 else if (previousRows.contains(cursor)) cursor->position_=data_->ids.indexOf(previousRows.value(cursor));
                 else if (cursor->position_>=0) cursor->position_=data_->rows.size();
@@ -2166,6 +2170,8 @@ std::shared_ptr<VbaObject> createExistingTableField(QSqlDatabase db,const QStrin
 }
 void mutateExistingTableField(QSqlDatabase db,const QString& table,const VbaValue& value,bool erase) {
     checkReservedCounterSchemaAction(db);
+    auto& fieldRevision=workspaceState(db)->tableFieldRevisions[table.toCaseFolded()];
+    if(fieldRevision==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Field schema revision overflow");
     QSqlQuery query(db);const auto savepoint="la_field_mutation_"+QUuid::createUuid().toString(QUuid::Id128);
     if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
     bool completed=false;const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
@@ -2225,7 +2231,7 @@ void mutateExistingTableField(QSqlDatabase db,const QString& table,const VbaValu
         (void)readNativeIndexCatalog(db,table);
     }
     (void)readTableSchemaColumns(db,table);
-    if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;
+    if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++fieldRevision;
     if(builder) {builder->appended_=true;builder->owner_->attached=std::make_shared<TableDefinition>(db,table);builder->attachedField_=builder->owner_->attached->member("Fields",{VbaValue::string(fieldName.toStdString())}).object;}
 }
 

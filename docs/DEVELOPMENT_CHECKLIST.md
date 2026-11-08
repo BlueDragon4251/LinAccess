@@ -1513,3 +1513,8 @@ Normale DAO-Feldanlage/-löschung an vorhandenen Tabellen umgesetzt; tatsächlic
 VBA/named args/Bestandswerte/Metadaten/Fehleratomizität/Abhängigkeiten/Rollback im
 bestehenden Mainwindow/DAO2/2 (5,38s) geprüft, App gebaut. DAO_TABLEDEF_FIELDS.md;
 456/384/72 unverändert.
+
+Grafische Feldbearbeitung samt Bestandswerten/Defaults/Bestätigung/Abhängigkeiten
+und O(1)-DAO-Cursorinvalidierung bis Requery umgesetzt; reale GUI/Clone-Puffer-
+Prüfung Mainwindow/DAO2/2 (5,11s), App gebaut. Details DAO_TABLEDEF_FIELDS.md.
+456/384/72 unverändert.

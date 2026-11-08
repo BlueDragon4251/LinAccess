@@ -3300,3 +3300,9 @@ DAO-Normalfelder vorhandener Tabellen: echte atomare CreateField/Fields.Append/
 Delete-Operationen mit Feld-/Indexmetadaten, Bestandswerten/Defaults und Dependency-
 Schutz. Mainwindow/DAO2/2 (5,38s), App gebaut; genauer Umfang und offene Counter-/
 Primär-/Linked-/Artefaktgrenzen DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert.
+
+Grafische normale Feldanlage/-löschung für bestehende Tabellen mit echten
+Bestandswerten/Defaults, Bestätigung und Abhängigkeitsgrenzen; eigene Struktur-
+änderungen invalidieren alte DAO-Cursor/Fields/Clones bis Requery. Tatsächlicher
+GUI-Durchlauf und Clone-Pufferschutz: Mainwindow/DAO2/2 (5,11s), App gebaut.
+DAO_TABLEDEF_FIELDS.md/README;456/384/72 unverändert.
