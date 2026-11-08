@@ -1605,6 +1605,11 @@ End Sub)VBA","BuildSchema",host);
     auto table=tables->member("Item",{VbaValue::string("OwnTable")}).object;
     auto field=table->member("Fields",{VbaValue::string("Label")}).object;
     assert(field->member("Size",{}).asNumber()==12);
+    assert(field->member("Required",{}).truthy() && field->member("Attributes",{}).asNumber()==2);
+    assert(!field->member("DataUpdatable",{}).truthy());
+    assert(table->member("Fields",{VbaValue::string("Enabled")}).object->member("Attributes",{}).asNumber()==1);
+    assert(!table->member("Fields",{VbaValue::string("Enabled")}).object->member("Required",{}).truthy());
+    assert(!table->member("Fields",{VbaValue::string("ID")}).object->member("Required",{}).truthy());
     auto indexes=table->member("Indexes",{}).object;
     assert(indexes->member("Count",{}).asNumber()==2);
     auto primary=indexes->member("Item",{VbaValue::string("PrimaryKey")}).object;
@@ -1679,6 +1684,26 @@ End Sub)VBA","BuildSchema",host);
     assert(collision->member("Indexes",{}).object->member("Count",{}).asNumber()==1);
     database->member("Execute",{VbaValue::string("INSERT INTO Collision DEFAULT VALUES")});
     assert(query.exec("SELECT ID FROM Collision") && query.next() && query.value(0).toInt()==1);query.finish();
+    auto ranges=database->member("CreateTableDef",{VbaValue::string("Ranges")}).object;
+    auto rangeFields=ranges->member("Fields",{}).object;
+    for(const auto& definition:std::vector<std::pair<std::string,int>>{{"SmallByte",2},{"SmallInteger",3},{"LargeInteger",4},{"Magnitude",7},{"Moment",8},{"Notes",12},{"Payload",11}}) rangeFields->member("Append",{ranges->member("CreateField",{VbaValue::string(definition.first),VbaValue::integer(static_cast<std::int16_t>(definition.second))})});
+    tables->member("Append",{VbaValue::reference(ranges)});
+    // INSERT SELECT bypasses the bounded VALUES-conversion path: real column
+    // constraints must still prevent unrepresentable primitive storage.
+    error([&] {database->member("Execute",{VbaValue::string("INSERT INTO Ranges(SmallByte) SELECT 256")});},6);
+    error([&] {database->member("Execute",{VbaValue::string("INSERT INTO Ranges(SmallInteger) SELECT 32768")});},6);
+    error([&] {database->member("Execute",{VbaValue::string("INSERT INTO Ranges(LargeInteger) SELECT 2147483648")});},6);
+    database->member("Execute",{VbaValue::string("INSERT INTO Ranges(SmallByte,SmallInteger,LargeInteger) SELECT 255,-32768,2147483647")});
+    assert(query.exec("SELECT SmallByte,SmallInteger,LargeInteger FROM Ranges") && query.next());assert(query.value(0).toInt()==255 && query.value(1).toInt()==-32768 && query.value(2).toInt()==2147483647);query.finish();
+    query.prepare("INSERT INTO Ranges(Magnitude,Moment,Notes,Payload) VALUES(?,?,?,?)");
+    query.addBindValue(std::numeric_limits<double>::max());query.addBindValue(QString("2026-11-08 00:00:00"));query.addBindValue(QString::fromUtf8("Technische Notiz\nÄÖÜ"));query.addBindValue(QByteArray::fromHex("0001ff"));assert(query.exec());
+    assert(query.exec("SELECT Magnitude,Moment,Notes,Payload FROM Ranges WHERE Payload IS NOT NULL") && query.next());
+    assert(query.value(0).toDouble()==std::numeric_limits<double>::max() && query.value(1).toString()=="2026-11-08 00:00:00" && query.value(2).toString()==QString::fromUtf8("Technische Notiz\nÄÖÜ") && query.value(3).toByteArray()==QByteArray::fromHex("0001ff"));query.finish();
+    assert(!query.exec("INSERT INTO Ranges(Magnitude) VALUES('invalid')"));
+    assert(!query.exec("INSERT INTO Ranges(Moment) VALUES('invalid')"));
+    assert(!query.exec("INSERT INTO Ranges(Payload) VALUES('invalid')"));
+    assert(!query.exec("INSERT INTO Ranges(Notes) VALUES(X'ff')"));
+    assert(query.exec("SELECT COUNT(*) FROM Ranges") && query.next() && query.value(0).toInt()==2);query.finish();
 }
 
 int main(int argc, char** argv) {

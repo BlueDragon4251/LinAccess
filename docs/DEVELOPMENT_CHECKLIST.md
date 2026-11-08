@@ -1499,3 +1499,8 @@ Grafische Indexverwaltung auf gemeinsamem DAO-Weg umgesetzt. Tatsächliche modal
 Anlage/Löschung mit Richtungen und unveränderten Datensätzen im bestehenden
 Mainwindow/DAO2/2 (5,11s) geprüft, App gebaut. DAO_INDEXES_RUNTIME.md;
 456/384/72 unverändert.
+
+Native primitive Speichergrenzen und deklarierte Required-/Attributes-Eigenschaften
+umgesetzt. GUI/DAO2/2 (5,00s), abschließende kombinierte primitive DAO-Prüfung1/1
+(1,21s), App gebaut. Vier Fixture-/drei Uploadhashes unverändert; Herkunfts- und
+Konvertierungsgrenzen DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert.

@@ -295,7 +295,7 @@ QString sqliteLiteralDefaultSql(const QVariant& declaration) {
     // Raw SQLite TRUE is1; imported Access TRUE is already normalized to-1.
     return token.compare("TRUE",Qt::CaseInsensitive)==0 ? QString("1") : literal.value_or(QString{});
 }
-struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1},generatorAttributes{-1}; };
+struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1},generatorAttributes{-1}; std::optional<bool> required;std::optional<int> nativeAttributes; };
 std::optional<QString> nativeFieldDefaultExpression(const TableSchemaColumn& field) {
     if(provenDaoFieldType(field.type)==11 || field.sourceType==11) return {};
     if(!field.hasDefault) return QString{};
@@ -321,10 +321,11 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
     const auto types=sqliteColumnTypes(db,tableName);
     QSqlQuery query(db);
     if(!query.exec("PRAGMA main.table_info("+quote(tableName)+")")) queryFailure(query);
-    QVector<TableSchemaColumn> columns;
+    QVector<TableSchemaColumn> columns;QMap<QString,bool> notNull;
     while(query.next()) {
         const auto name=query.value(1).toString();
         columns.push_back({name,types.value(name.toCaseFolded()),0,0,sqliteLiteralDefaultSql(query.value(4)),!query.value(4).isNull()});
+        notNull.insert(name.toCaseFolded(),query.value(3).toBool());
     }
     if(query.lastError().isValid()) queryFailure(query);
     if(columns.isEmpty()) throw VbaRuntimeError(3420,"DAO main-schema table unavailable");
@@ -354,14 +355,30 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
                     : source=="VARCHAR" ? 10 : source=="BLOB" ? 11 : (source=="MEMO" || (source=="TEXT" && origin=="MDBTOOLS_MYSQL")) ? 12 : source=="GUID" ? 15 : -1;
                 bool found=false;
                 if(size>0 && (code!=10 || (origin!="MDBTOOLS_MYSQL" && origin!="DAO_NATIVE"))) throw VbaRuntimeError(3251,"DAO source field capacity provenance unavailable");
-                for(auto& column:columns) if(column.name.toCaseFolded()==name) { column.sourceType=code; column.sourceSize=static_cast<int>(size); found=true; break; }
+                for(auto& column:columns) if(column.name.toCaseFolded()==name) {
+                    column.sourceType=code;column.sourceSize=static_cast<int>(size);
+                    if(origin=="DAO_NATIVE" && object.contains("native_required")) {
+                        const auto required=object.value("native_required");
+                        if(!required.isBool() || (required.toBool() && !notNull.value(name))) throw VbaRuntimeError(3251,"DAO native Required definition is not enforced");
+                        column.required=required.toBool();
+                    }
+                    if(origin=="DAO_NATIVE" && object.contains("native_attributes")) {
+                        const auto attribute=object.value("native_attributes");const auto expected=(code==10 || code==11 || code==12) ? 2 : 1;
+                        if(!attribute.isDouble() || (attribute.toDouble()!=expected && !(code==4 && attribute.toDouble()==17))) throw VbaRuntimeError(3251,"DAO native field attributes invalid");
+                        column.nativeAttributes=static_cast<int>(attribute.toDouble());
+                    }
+                    found=true;break;
+                }
                 if(!found) throw VbaRuntimeError(3251,"DAO source schema field unavailable");
             }
         }
         if(query.lastError().isValid()) queryFailure(query);
     }
     const auto counter32=jetLongAccessColumns(db,tableName);
-    for(auto& column:columns) if(counter32.contains(column.name.toCaseFolded())) {column.type="INTEGER4";column.sourceType=4;column.generatorAttributes=17;}
+    for(auto& column:columns) {
+        if(column.nativeAttributes && (*column.nativeAttributes&16) && !counter32.contains(column.name.toCaseFolded())) throw VbaRuntimeError(3251,"DAO native AutoNumber attribute lacks a generator");
+        if(counter32.contains(column.name.toCaseFolded())) {column.type="INTEGER4";column.sourceType=4;column.generatorAttributes=17;}
+    }
     return columns;
 }
 QMap<QString,QVariant> literalDefaultValues(QSqlDatabase db,const QVector<TableSchemaColumn>& columns) {
@@ -1484,6 +1501,11 @@ public:
         if(position<0) throw VbaRuntimeError(3420,"DAO schema field unavailable");
         const auto key=lower(name);
         if(key=="name") return VbaValue::string(columns[position].name.toStdString());
+        if(defaults_ && key=="required" && columns[position].required) return VbaValue::logical(*columns[position].required);
+        if(defaults_ && columns[position].nativeAttributes) {
+            if(key=="attributes") return VbaValue::longInteger(*columns[position].nativeAttributes);
+            if(key=="dataupdatable") return VbaValue::logical(false);
+        }
         if(key=="attributes" && columns[position].indexAttributes>=0) return VbaValue::longInteger(columns[position].indexAttributes);
         if(defaults_ && columns[position].generatorAttributes>=0) {
             if(key=="attributes") return VbaValue::longInteger(columns[position].generatorAttributes);
@@ -1845,7 +1867,9 @@ public:
             if(type_!=10) {const DetachedField intrinsic(owner_,name_,type_,0);size_=intrinsic.size_;}
             attributes_=(type_==10 || type_==11 || type_==12) ? 2 : 1;return;}
         if(key=="size") {const auto size=static_cast<int>(coerceVbaModuleValue(value,"long").number);if(type_==10) size_=size;return;}
-        if(key=="attributes") {const auto attributes=coerceVbaModuleValue(value,"long").number;if(attributes!=0 && attributes!=1 && attributes!=2 && attributes!=16 && attributes!=17) throw VbaRuntimeError(3251,"DAO: Unsupported field attributes");attributes_=static_cast<int>(attributes);if(type_==4 && (attributes_&16)) attributes_|=1;return;}
+        if(key=="attributes") {const auto attributes=coerceVbaModuleValue(value,"long").number;if(attributes!=0 && attributes!=1 && attributes!=2 && attributes!=16 && attributes!=17) throw VbaRuntimeError(3251,"DAO: Unsupported field attributes");const int intrinsic=(type_==10 || type_==11 || type_==12) ? 2 : 1;
+            if(((static_cast<int>(attributes)&3) && (static_cast<int>(attributes)&3)!=intrinsic) || ((static_cast<int>(attributes)&16) && type_!=4)) throw VbaRuntimeError(3251,"DAO: Attributes conflict with the field type");
+            attributes_=(static_cast<int>(attributes)&16)|intrinsic;return;}
         if(key=="required") {required_=coerceVbaModuleValue(value,"boolean").truthy();return;}
         if(key=="defaultvalue") {const auto token=text(value.asText());if(!token.isEmpty() && !accessLiteralDefaultSql(token)) throw VbaRuntimeError(3251,"DAO: Field default requires a supported literal");default_=token;return;}
         throw VbaRuntimeError(3251,"DAO: Detached field assignment unsupported");
@@ -1869,6 +1893,11 @@ public:
         auto result=schemaJetName(name_)+" "+type+(required_ ? " NOT NULL" : "");
         if(!default_.isEmpty()) result+=" DEFAULT "+*accessLiteralDefaultSql(default_);
         if(type_==10) result+=" CHECK (linaccess_jet_text_capacity("+schemaJetName(name_)+","+QString::number(size_)+"))";
+        const auto column=schemaJetName(name_);
+        if(type_==2 || type_==3 || type_==4 || type_==1) result+=" CHECK ("+column+" IS NULL OR (typeof("+column+")='integer' AND "+column+"=linaccess_jet_field_store('"+type+"',"+column+")))";
+        if(type_==7) result+=" CHECK ("+column+" IS NULL OR (typeof("+column+") IN ('integer','real') AND abs("+column+")<=1.7976931348623157e308))";
+        if(type_==8) result+=" CHECK ("+column+" IS NULL OR (typeof("+column+")='text' AND linaccess_jet_field_store('DATETIME',"+column+") IS NOT NULL))";
+        if(type_==11 || type_==12) result+=" CHECK ("+column+" IS NULL OR typeof("+column+")='"+QString(type_==11 ? "blob" : "text")+"')";
         return result;
     }
     std::shared_ptr<DetachedTableState> owner_;QString name_;int type_{},size_{},attributes_{};bool required_{},appended_{};QString default_;
@@ -1889,6 +1918,7 @@ public:
             if(args.size()!=1 || args[0].kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Fields.Append requires a field");
             auto field=std::dynamic_pointer_cast<DetachedField>(args[0].object);
             if(!field || field->owner_!=owner_ || field->appended_) throw VbaRuntimeError(3219,"DAO: Field belongs to a different or attached schema");
+            if(fields_.size()>=255) throw VbaRuntimeError(3190,"DAO: Too many fields defined");
             (void)field->definition();for(const auto& existing:fields_) if(existing->name_.compare(field->name_,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3191,"DAO: Duplicate field name");
             field->appended_=true;fields_.append(field);return {};
         }
@@ -2101,7 +2131,7 @@ public:
         QJsonArray metadata;
         for(const auto& field:fields_->fields_) {
             const auto source=field->type_==1 ? "BOOLEAN" : field->type_==2 ? "TINYINT" : field->type_==3 ? "SMALLINT" : field->type_==4 ? "INT" : field->type_==7 ? "DOUBLE" : field->type_==8 ? "DATETIME" : field->type_==10 ? "VARCHAR" : field->type_==11 ? "BLOB" : "MEMO";
-            metadata.append(QJsonObject{{"name",field->name_},{"source_type",source},{"source_origin","DAO_NATIVE"},{"source_size",field->type_==10 ? field->size_ : 0}});
+            metadata.append(QJsonObject{{"name",field->name_},{"source_type",source},{"source_origin","DAO_NATIVE"},{"source_size",field->type_==10 ? field->size_ : 0},{"native_attributes",field->attributes_},{"native_required",field->required_}});
         }
         if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_table_schema(table_name TEXT PRIMARY KEY,definition TEXT NOT NULL)")) queryFailure(query);
         query.prepare("INSERT INTO main._la_table_schema(table_name,definition) VALUES(?,?)");query.addBindValue(name);query.addBindValue(QJsonDocument(metadata).toJson(QJsonDocument::Compact));

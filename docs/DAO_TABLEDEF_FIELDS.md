@@ -136,3 +136,34 @@ Validation of designer integration: existing mainwindow/DAO2/2 (4.95s), app
 build passed. Actual modal UI creates the table, existing defaults/pending counter
 checks pass, DAO observes Text255/Long/PrimaryKey, and a subsequent ordinary index
 is created on that exact UI-authored table. No new target/broad suite.
+
+## Native primitive storage and declared properties
+
+New native schema fields retain explicitly declared Required and intrinsic
+Attributes metadata. TableDef.Fields exposes their Boolean Required, Long
+Attributes and False DataUpdatable. Required is read from the native declaration;
+it is not guessed from an imported NOT NULL/primary constraint. A declared True
+requires an actual NOT NULL constraint. Intrinsic fixed/variable flags are
+normalized and conflicting attribute/type combinations are refused. Native
+AutoNumber attributes additionally require a proven managed generator. Older
+schemas without these explicit properties remain unsupported for those reads.
+
+New Byte/Integer/Long and Boolean fields receive actual typed storage checks,
+including the existing conversion UDF's overflow transport. Out-of-range values
+cannot bypass the limits through INSERT SELECT. Double fields reject nonnumeric
+or nonfinite storage; Date fields validate textual Date storage using the shared
+codec. Memo and LongBinary reject mismatched physical storage kinds. Text keeps
+its shared UTF16 capacity check. Detached table fields are limited to255.
+
+Supported DAO and checked SQL writes keep their existing coercion path. These
+constraints protect declared native storage; raw/complex SQL coercion differences
+can still be refused, and no complete Access conversion/error/Boolean-null or
+original MDB property parity is claimed. No existing tables are migrated.
+
+Validation: existing mainwindow/DAO2/2 (5.00s) for storage bounds and UI; subsequent
+DAO1/1 (1.12s) for exact native Required declaration provenance; final combined
+primitive boundary/storage case DAO1/1 (1.21s), app built. Byte255/Integer-32768/
+Long2147483647 and rejected overflows through INSERT SELECT; actual maximum
+Double, valid Date, Unicode/newline Memo and exact binary bytes; rejected wrong
+storage kinds leave the two valid rows intact. Four fixture and three uploaded
+original hashes match. No new target/broad suite/Windows execution claim.

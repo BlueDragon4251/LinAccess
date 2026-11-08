@@ -200,3 +200,9 @@ Grafische Indexverwaltung über Ansicht → Tabellenindizes bearbeiten implement
 Realer GUI-Create/Delete-Durchlauf über gemeinsamen DAO-Weg, unveränderte Zeilen;
 Mainwindow/DAO2/2 (5,11s), App gebaut. DAO_INDEXES_RUNTIME.md/README.456/384/72 gleich.
 Grundlegende native Felddefinitionen/Eigenschaften/Speichergrenzen weiterführen.
+
+Native primitive Speichergrenzen und explizite Feld.Required/Attributes ergänzt;
+INSERT SELECT kann Byte/Integer/Long nicht überlaufen. Tatsächliche Double-Date-
+Memo-BLOB-Werte/Speicherarten geprüft; letztes DAO1/1 (1,21s), davor GUI/DAO2/2
+(5,00s), App gebaut. Alle vier Fixture-/drei Uploadhashes unverändert, Repo privat.
+DAO_TABLEDEF_FIELDS.md,456/384/72 gleich. Fortsetzung: grafische Textgröße1..255.

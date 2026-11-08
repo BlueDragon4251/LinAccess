@@ -2403,3 +2403,16 @@ DAO2/2 (5,11s), App gebaut. Keine neue Testziel-/Vollsuiteflut. Grenzen in
 DAO_INDEXES_RUNTIME.md, README-Navigation ergänzt.456/384/72 unverändert.
 Fortsetzung: grundlegende native Felddefinitionen/lesbare Eigenschaften und
 Speichergrenzen weiter vervollständigen; keine Gesamtparität behaupten.
+
+2026-11-08: Native primitive Felddefinitionen erweitert: echte Byte/Integer/Long/
+Boolean-Speicherprüfungen (auch INSERT SELECT), gültige Double-/Date-/Memo-/BLOB-
+Speicherarten, maximal255 Felder. Explizit deklarierte native Required/Attributes
+werden gespeichert/geprüft und als Boolean/Long/False DataUpdatable lesbar;
+Required wird NICHT aus Original-NOT-NULL/Primärschlüsseln geraten. Intrinsische
+Attributkonflikte abgewiesen. Native AutoNumber-Flags verlangen echte Generatoren.
+Bereichs-/GUI-Bündel2/2 (5,00s); danach präziser Required-Metadatenabgleich DAO1/1
+(1,12s), abschließende gemeinsame primitive Speicherarten-/Grenzwertprüfung DAO1/1
+(1,21s). App gebaut; vier Originalfixture- und drei Uploadhashes unverändert,
+Repo privat. Keine neuen Testziele/Vollsuite/Windows-Paritätsbehauptung.
+Details DAO_TABLEDEF_FIELDS.md,456/384/72 unverändert. Nächster allgemeiner
+Umfang: Textfeldgröße1..255 auch grafisch beim Tabellenbau wählbar machen.

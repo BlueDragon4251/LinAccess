@@ -3285,3 +3285,9 @@ vollständiger geprüfter Katalog, geordnete ASC/DESC-Felder, Unique/Required, A
 und bestätigte Löschung über DAO. Realer GUI-Create/Delete-Durchlauf mit
 unveränderten Datensätzen; Mainwindow/DAO2/2 (5,11s), App gebaut. Grenzen in
 DAO_INDEXES_RUNTIME.md.456/384/72 unverändert.
+
+Native Felddefinitionen schützen primitive Speichergrenzen auch bei INSERT SELECT
+und bewahren explizite Required-/Attributes-Deklarationen. Kombinierte Wertebereichs-
+und GUI-Prüfung2/2 (5,00s); abschließender primitiver DAO-Fall1/1 (1,21s), App
+gebaut. Details/Coercion-Grenzen DAO_TABLEDEF_FIELDS.md. Vier Fixture-/drei Upload-
+hashes unverändert, Repo privat;456/384/72 gleich, keine Gesamtparität.
