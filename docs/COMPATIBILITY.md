@@ -3377,3 +3377,13 @@ Entfernte physische Indizes werden nicht versehentlich wiederhergestellt. GUI/
 DAO2/2 (5,73s), App gebaut; DAO_INDEXES_RUNTIME.md.456/384/72 unverändert.
 Nächste Arbeit: sichere physische DAO-Zeilenidentität bei normalen Nutzerfeldern
 namens rowid/_rowid_/oid; danach andere offene Anforderungen ohne Zwischenfinal.
+
+Physische DAO-Recordsets verwenden jetzt einen nachgewiesenen unverschatteten
+rowid/_rowid_/oid-Alias für Lesen, Update/RETURNING und Löschen; normale gleich
+benannte Nutzerfelder können keine falschen Zeilen mehr adressieren. Familie/
+Clone/Requery übernehmen den Alias. Alle drei Aliasnamen oder WITHOUT ROWID
+verweigern3251. SQLite3.54.1-Alias-ALTER-Grenze wird ebenfalls ausdrücklich3251,
+keine vollständige Schemaunterstützung behaupten. Final DAO1/1 (1,58s), App
+gebaut, DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert. Nächste größere native
+Katalogaufgabe: TableDef.Name für vorhandene eigene Tabellen samt tatsächlicher
+Counterdefault-/Index-/Beziehungsmetadaten-Umbindung; dann weiter ohne Zwischenfinal.

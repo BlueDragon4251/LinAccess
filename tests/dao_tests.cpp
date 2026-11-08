@@ -2080,8 +2080,38 @@ void testExistingNativePrimaryIndexes() {
     assert(sql.exec("PRAGMA foreign_keys") && sql.next() && sql.value(0).toInt()==0);sql.finish();
 }
 
+void testShadowedDaoRowIdentity() {
+    const char* phase="schema";try {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-shadowed-row-identity");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);
+    auto database=linaccess::makeDaoDatabase(db),tables=database->member("TableDefs",{}).object;
+    auto table=database->member("CreateTableDef",{VbaValue::string("Aliases")}).object;
+    for(const auto& item:std::vector<std::pair<const char*,int>>{{"ID",4},{"rowid",10},{"_ROWID_",10},{"Value",4}}) {auto field=table->member("CreateField",{VbaValue::string(item.first),VbaValue::integer(static_cast<std::int16_t>(item.second)),VbaValue::longInteger(item.second==10 ? 8 : 0)}).object;if(std::string(item.first)=="ID") field->assign("Attributes",VbaValue::longInteger(16));if(item.second==10) field->assign("DefaultValue",VbaValue::string("'same'"));table->member("Fields",{}).object->member("Append",{VbaValue::reference(field)});}tables->member("Append",{VbaValue::reference(table)});
+    phase="insert";
+    database->member("Execute",{VbaValue::string("INSERT INTO Aliases(Value) VALUES(10)")});database->member("Execute",{VbaValue::string("INSERT INTO Aliases(Value) VALUES(11)")});
+    phase="cursor update";
+    auto cursor=database->member("OpenRecordset",{VbaValue::string("Aliases")}).object;cursor->member("MoveLast",{});assert(cursor->item("ID").asNumber()==2 && cursor->item("rowid").asText()=="same");cursor->member("Edit",{});cursor->assign("Value",VbaValue::longInteger(20));cursor->member("Update",{});
+    assert(sql.exec("SELECT Value FROM Aliases ORDER BY ID") && sql.next() && sql.value(0).toInt()==10 && sql.next() && sql.value(0).toInt()==20);sql.finish();cursor->member("Delete",{});assert(sql.exec("SELECT COUNT(*) FROM Aliases") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+    phase="append second alias";
+    const auto append=[&](const char* name) {auto field=table->member("CreateField",{VbaValue::string(name),VbaValue::integer(10),VbaValue::longInteger(8)}).object;field->assign("DefaultValue",VbaValue::string("'also'"));table->member("Fields",{}).object->member("Append",{VbaValue::reference(field)});};append("Extra");cursor->member("Requery",{});auto clone=cursor->member("Clone",{}).object;
+    phase="add new";
+    cursor->member("AddNew",{});cursor->assign("Value",VbaValue::longInteger(30));cursor->member("Update",{});assert(cursor->item("ID").asNumber()==3 && cursor->item("rowid").asText()=="same" && cursor->item("_rowid_").asText()=="same");
+    phase="edit user alias";
+    cursor->member("Edit",{});cursor->assign("rowid",VbaValue::string("renamed"));cursor->member("Update",{});assert(cursor->item("ID").asNumber()==3 && cursor->item("rowid").asText()=="renamed");assert(clone->member("RecordCount",{}).asNumber()==2);cursor->member("Delete",{});
+    assert(sql.exec("SELECT ID,Value,rowid FROM Aliases") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toInt()==10 && sql.value(2).toString()=="same" && !sql.next());sql.finish();
+    phase="all shadowed";
+    append("More");const auto error=[](const std::function<void()>& operation,int expected) {int number=0;try {operation();}catch(const linaccess::VbaRuntimeError& failure) {number=failure.number;}assert(number==expected);};error([&] {cursor->member("Edit",{});},3420);cursor->member("Requery",{});assert(cursor->member("RecordCount",{}).asNumber()==1);
+    auto blocked=database->member("CreateTableDef",{VbaValue::string("AllAliases")}).object;for(const auto* name:{"rowid","_rowid_","oid"}) blocked->member("Fields",{}).object->member("Append",{blocked->member("CreateField",{VbaValue::string(name),VbaValue::integer(10),VbaValue::longInteger(8)})});tables->member("Append",{VbaValue::reference(blocked)});error([&] {database->member("OpenRecordset",{VbaValue::string("AllAliases")});},3251);
+    error([&] {append("oid");},3251);
+    assert(sql.exec("SELECT COUNT(*) FROM Aliases WHERE ID=1 AND Value=10") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+    assert(sql.exec("CREATE TABLE SingleAlias(rowid TEXT,Value INTEGER)"));assert(sql.exec("INSERT INTO SingleAlias VALUES('same',1),('same',2)"));auto single=database->member("OpenRecordset",{VbaValue::string("SingleAlias")}).object;single->member("MoveLast",{});single->member("Edit",{});single->assign("Value",VbaValue::longInteger(7));single->member("Update",{});single->member("Delete",{});assert(sql.exec("SELECT Value FROM SingleAlias") && sql.next() && sql.value(0).toInt()==1 && !sql.next());sql.finish();
+    assert(sql.exec("CREATE TABLE NoRowIdentity(ID INTEGER PRIMARY KEY) WITHOUT ROWID"));error([&] {database->member("OpenRecordset",{VbaValue::string("NoRowIdentity")});},3251);
+    }catch(const std::exception& failure) {std::cerr<<"Row identity phase: "<<phase<<"; "<<failure.what()<<"\n";throw;}
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testShadowedDaoRowIdentity();
     testExistingNativePrimaryIndexes();
     testNativeFieldPropertyChanges();
     testOneToOneNativeRelations();

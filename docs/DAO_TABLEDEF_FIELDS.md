@@ -333,3 +333,28 @@ clone/readonly metadata, and actual graphic create/edit/rename constraints
 passed. The GUI expectation was updated for the real sixth designer column.
 No extra test target/broad suite. Full field validation/Access oracle and
 F015/F121 remain open;456/384/72 unchanged.
+
+## Physical DAO row identity with user rowid fields
+
+Physical recordsets now select an actually unshadowed SQLite identity alias
+(rowid, _rowid_ or oid) from table_xinfo, prove it by an unquoted LIMIT0 probe
+and retain it in their shared data family. Read/update/RETURNING/delete use
+that identity; user fields with those names remain ordinary data. Requery
+refreshes the identity with metadata, including clones. All three names occupied
+or a WITHOUT ROWID physical source refuse3251 before an ambiguous recordset is
+created; readonly SQL projections remain a separate supported path.
+
+The pinned SQLite3.54.1 deliberately forbids ALTER ADD/DROP/RENAME of its rowid
+alias names, even where CREATE TABLE accepted ordinary columns with those names.
+The native backend now reports this unsupported reconstruction boundary3251
+instead of generic3146. Existing native schema reconstruction still refuses
+shadowed row identities; no complete arbitrary-schema support is claimed.
+
+Final existing DAO1/1 (1.58s), app built. Real duplicate user-rowid values with
+one and two shadowed aliases update/delete only the intended row; native
+AddNew/counter identity differs correctly from a reused physical rowid, user
+rowid editing is ordinary data, clone/Requery survive other field additions,
+and triple shadows/WITHOUT ROWID/forbidden alias ALTER refuse safely. Temporary
+debug instrumentation stayed outside Git and was used only on these in-memory
+technical cases. No broad rerun; latest GUI/DAO before this change2/2 (5.73s).
+F054/F121 and fixed456/384/72 remain open/unchanged.

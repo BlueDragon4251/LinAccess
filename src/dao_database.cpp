@@ -72,8 +72,18 @@ void exec(QSqlQuery& query, const QString& sql) {
     if (message.contains("no such function")) throw VbaRuntimeError(3085,"DAO: SQL function unsupported");
     if (message.contains("no such table")) throw VbaRuntimeError(3078,"DAO: SQL dependency unavailable");
     if ((message.contains("syntax error") || message.contains("incomplete input")) || message.contains("circularly defined")) throw VbaRuntimeError(3075,"DAO: SQL grammar unsupported");
+    if(message.contains("rowid alias")) throw VbaRuntimeError(3251,"DAO: Altering rowid-named fields requires supported table reconstruction");
     if (message.contains("interrupted")) throw VbaRuntimeError(3035,"DAO: query execution budget exceeded");
     throw VbaRuntimeError(3146,"DAO: SQL operation failed");
+}
+QString physicalRowIdentity(QSqlDatabase db,const QString& table) {
+    QSqlQuery query(db);if(!query.exec("PRAGMA table_xinfo("+quote(table)+")")) queryFailure(query);QSet<QString> names;while(query.next()) names.insert(query.value(1).toString().toCaseFolded());if(query.lastError().isValid()) queryFailure(query);query.finish();
+    for(const auto& alias:{QString("rowid"),QString("_rowid_"),QString("oid")}) if(!names.contains(alias)) {
+        // Keep the fixed alias unquoted: SQLite must resolve an actual hidden
+        // identity, never a double-quoted fallback string on WITHOUT ROWID.
+        if(!query.exec("SELECT "+alias+" FROM "+quote(table)+" LIMIT 0")) throw VbaRuntimeError(3251,"DAO: Physical row identity unavailable");return alias;
+    }
+    throw VbaRuntimeError(3251,"DAO: All physical row identity aliases are shadowed");
 }
 QStringList nativeTableNames(QSqlDatabase db);
 void observeNativeTableCatalog(QSqlDatabase db,const QStringList& before);
@@ -411,6 +421,7 @@ struct RecordsetData {
     std::shared_ptr<WorkspaceState> workspace;
     quint64 rollbackRevision{},fieldRevision{};
     QStringList columns;
+    QString rowIdentity{"rowid"};
     QMap<QString,QString> types;
     QMap<QString,int> daoTypes,definitionSizes;
     QMap<QString,QVariant> literalDefaults;
@@ -696,7 +707,7 @@ public:
             require(!readOnly_ && mode_ == Mode::Browse, "DAO: Cannot delete this Recordset");
             current();
             QSqlQuery query(db_);
-            require(query.prepare("DELETE FROM " + quote(source_) + " WHERE rowid=?"), "DAO: Delete prepare failed");
+            require(query.prepare("DELETE FROM " + quote(source_) + " WHERE "+data_->rowIdentity+"=?"), "DAO: Delete prepare failed");
             query.addBindValue(data_->ids[position_]);
             require(query.exec() && query.numRowsAffected() == 1, "DAO: Delete failed or record changed");
             reload(false);
@@ -994,7 +1005,8 @@ private:
         }
         SqliteExecutionBudget budget(db_);
         QSqlQuery query(db_);
-        exec(query,"SELECT rowid,* FROM " + quote(source_));
+        data_->rowIdentity=physicalRowIdentity(db_,source_);
+        exec(query,"SELECT "+data_->rowIdentity+",* FROM " + quote(source_));
         const int offset = table_ ? 1 : 0;
         data_->columns.clear(); data_->rows.clear(); data_->ids.clear(); position_ = 0;
         const int end = query.record().count();
@@ -1027,7 +1039,7 @@ private:
         else if (!columns.empty()) {
             require(query.prepare(adding ? "INSERT INTO " + quote(source_) + " (" + columns.join(',')
                         + ") VALUES (" + values.join(',') + ")"
-                    : "UPDATE " + quote(source_) + " SET " + assignments.join(',') + " WHERE rowid=? RETURNING rowid"),
+                    : "UPDATE " + quote(source_) + " SET " + assignments.join(',') + " WHERE "+data_->rowIdentity+"=? RETURNING "+data_->rowIdentity),
                     "DAO: Update prepare failed");
             for (const int i : indices) query.addBindValue(pending_[i]);
             if (!adding) query.addBindValue(id);
