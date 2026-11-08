@@ -1,3 +1,4 @@
+#include "native_schema_editor.hpp"
 #include "native_relation_designer.hpp"
 #include "dao_database.hpp"
 #include "dao_schema_change.hpp"
@@ -24,7 +25,7 @@ void editNativeRelations(QWidget* parent,QSqlDatabase database,const QString& su
     auto* name=new QLineEdit(&dialog);name->setObjectName("native-relation-name");name->setMaxLength(64);form->addRow("Neue Beziehung",name);
     auto* source=new QComboBox(&dialog);source->setObjectName("native-relation-parent");form->addRow("Elterntabelle",source);
     auto* target=new QComboBox(&dialog);target->setObjectName("native-relation-child");form->addRow("Kindtabelle",target);layout->addLayout(form);
-    auto* integrity=new QCheckBox("Referenzielle Integrität (numerische Schlüssel)",&dialog);integrity->setObjectName("native-relation-integrity");integrity->setChecked(true);layout->addWidget(integrity);
+    auto* integrity=new QCheckBox("Referenzielle Integrität (Zahlen- oder Datumsschlüssel)",&dialog);integrity->setObjectName("native-relation-integrity");integrity->setChecked(true);layout->addWidget(integrity);
     auto* oneToOne=new QCheckBox("Ein-eindeutig (1:1; eindeutige Indizes erforderlich)",&dialog);oneToOne->setObjectName("native-relation-unique");layout->addWidget(oneToOne);
     auto* options=new QHBoxLayout;
     auto* update=new QCheckBox("Aktualisierungen weitergeben",&dialog);update->setObjectName("native-relation-update-cascade");options->addWidget(update);
@@ -34,7 +35,7 @@ void editNativeRelations(QWidget* parent,QSqlDatabase database,const QString& su
     auto* addField=new QPushButton("+ Feldzuordnung",&dialog);addField->setObjectName("native-relation-add-field");rowButtons->addWidget(addField);
     auto* removeField=new QPushButton("Feldzuordnung entfernen",&dialog);rowButtons->addWidget(removeField);layout->addLayout(rowButtons);
     auto* append=new QPushButton("Beziehung anlegen",&dialog);append->setObjectName("native-relation-create");layout->addWidget(append);
-    layout->addWidget(new QLabel("Integrität und Kaskaden benötigen numerische Schlüssel und eine in LinAccess angelegte Kindtabelle. Single-Schlüssel benötigen eigene Single-Felder auf beiden Seiten.",&dialog));
+    layout->addWidget(new QLabel("Integrität und Kaskaden benötigen unterstützte Zahlen- oder Datumsschlüssel und eine in LinAccess angelegte Kindtabelle. Single benötigt eigene Single-Felder, Datum eigene kanonische Date-Felder auf beiden Seiten.",&dialog));
     auto* status=new QLabel(&dialog);status->setWordWrap(true);layout->addWidget(status);
     auto* close=new QDialogButtonBox(QDialogButtonBox::Close,&dialog);layout->addWidget(close);QObject::connect(close,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
     const auto db=makeDaoDatabase(database);bool catalogValid=true;
@@ -62,7 +63,7 @@ void editNativeRelations(QWidget* parent,QSqlDatabase database,const QString& su
         QStringList result;if(tableName.isEmpty()) return result;
         const auto table=db->member("TableDefs",{VbaValue::string(tableName.toStdString())}).object;
         for(const auto& field:table->member("Fields",{}).object->enumerate()) {
-            try {const auto type=field.object->member("Type",{}).asNumber();bool nativeSingle=false;if(type==6) {try {nativeSingle=field.object->member("Attributes",{}).asNumber()==1 && field.object->member("Required",{}).kind==VbaValue::Kind::Boolean;}catch(const VbaRuntimeError& problem) {if(problem.number!=3251) throw;}}const bool numeric=type==1 || type==2 || type==3 || type==4 || nativeSingle || type==7;
+            try {const auto type=field.object->member("Type",{}).asNumber();bool nativeSingle=false;if(type==6) {try {nativeSingle=field.object->member("Attributes",{}).asNumber()==1 && field.object->member("Required",{}).kind==VbaValue::Kind::Boolean;}catch(const VbaRuntimeError& problem) {if(problem.number!=3251) throw;}}const bool numeric=type==1 || type==2 || type==3 || type==4 || nativeSingle || type==7 || (type==8 && nativeFieldHasCanonicalDateStorage(database,tableName,QString::fromStdString(field.object->member("Name",{}).asText())));
                 if(numeric || (!integrity->isChecked() && !oneToOne->isChecked() && (type==5 || type==6 || type==8 || type==10))) result.append(QString::fromStdString(field.object->member("Name",{}).asText()));}
             catch(const VbaRuntimeError& problem) {if(problem.number!=3251) throw;}
         }

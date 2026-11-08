@@ -187,3 +187,12 @@ The real modal designer also creates/exercises both cascades on its own technica
 database. Its delayed error helper is now limited to its own warning title; no
 production change after the successful check. Full Jet collation/key/lifetime
 semantics and fixed456/384/72 remain open/unchanged.
+
+Eigene kanonische Date-Schlüssel jetzt für tatsächliche referenzielle Integrität,
+Änderungs-/Löschkaskaden und Beziehungsdialog freigegeben. Beide Seiten benötigen
+nachgewiesene eigene Date-Metadaten und DATETIME-Speicherung; ältere/importierte
+Date-Schlüssel bleiben3251. Bestehende Uhrdefaults und binäre Nutzwerte bleiben
+bei der Migration erhalten. GUI/DAO2/2 (6,11s), App gebaut. Keine vollständige
+Jet-Datums-/Locale-/Untersekundenparität;456/384/72 unverändert. Fortsetzung:
+native numerische Gültigkeitsregeln im DAO/Feldentwurf mit tatsächlicher
+Speicherprüfung und atomarer Bearbeitung, danach weitere offene Anforderungen.
