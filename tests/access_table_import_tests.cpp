@@ -1,5 +1,6 @@
 #include "access_table_import.hpp"
 #include "access_catalog.hpp"
+#include "access_index_metadata.hpp"
 #include "access_autonumber.hpp"
 #include "jet_sql_functions.hpp"
 #include "dao_database.hpp"
@@ -67,6 +68,49 @@ void verifyJetBinaryReference(const QString& path) {
     assert(bounded && failure.tables()==tables && check.exec("SELECT value FROM untouched") && check.next() && check.value(0).toInt()==17); check.finish();
     failure.close(); assert(digest(oversize)==largeBefore);
     std::cout<<"Actual technical Jet binary import: exact inline/multi-page bytes, DAO chunks, NULL, bounded oversized rollback and source hashes verified\n";
+}
+
+void verifyJetIndexCatalogReference(const QString& path) {
+    using namespace linaccess;
+    QFile input(path); assert(input.open(QIODevice::ReadOnly));
+    const auto before=QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256); input.close();
+    const auto schema=parseMdbSchema(AccessCatalog(path).tableSchema("catalog_probe"));
+    assert(schema.columns.size()==3 && schema.indexes.size()==1 && schema.indexes[0].name=="ActualSecondary");
+    const QStringList names{"primary_a","primary_b","other_key"};
+    const auto source=checkedAccessSourceIndexes(schema.sourceIndexMetadata,names);
+    assert(source.size()==2); int primaries=0;
+    for(const auto& index:source) if(index.kind==1) { assert(index.name=="DeliberatelyNamedPrimary" && index.columns==QStringList({"primary_a","primary_b"}) && index.descending==QVector<bool>({true,false})); ++primaries; }
+    assert(primaries==1);
+    auto db=QSqlDatabase::addDatabase("QSQLITE","jet-index-catalog-reference"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery query(db); assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)")); query.finish();
+    assert(importAccessDatabase(db,path)==2);
+    assert(query.exec("SELECT definition FROM main._la_access_indexes WHERE table_name='catalog_probe'") && query.next());
+    const auto stored=checkedAccessSourceIndexes(query.value(0).toString().toUtf8(),names); assert(stored.size()==2); query.finish();
+    assert(query.exec("PRAGMA main.index_list('catalog_probe')")); int indexes=0;
+    while(query.next()) {
+        const bool primary=query.value(3).toString()=="pk"; assert(primary || query.value(3).toString()=="c");
+        assert(query.value(2).toBool()==primary); auto name=query.value(1).toString(); name.replace('\"',"\"\"");
+        QSqlQuery fields(db); assert(fields.exec("PRAGMA main.index_xinfo(\""+name+"\")")); int ordinal=0;
+        while(fields.next()) if(fields.value(5).toBool()) {
+            assert(ordinal<2 && fields.value(2).toString()==(ordinal==0 ? primary ? "primary_a" : "other_key" : "primary_b"));
+            assert(fields.value(3).toBool()==(primary ? ordinal==0 : ordinal==1)); ++ordinal;
+        }
+        assert(ordinal==2); ++indexes;
+    }
+    assert(indexes==2); query.finish();
+    assert(query.exec("PRAGMA main.index_list('single_primary_probe')") && query.next() && query.value(3).toString()=="pk");
+    auto singleName=query.value(1).toString(); singleName.replace('\"',"\"\""); query.finish();
+    assert(query.exec("PRAGMA main.index_xinfo(\""+singleName+"\")") && query.next() && query.value(2).toString()=="primary_key" && query.value(3).toBool()); query.finish();
+    assert(query.exec("SELECT definition FROM main._la_access_indexes WHERE table_name='single_primary_probe'") && query.next());
+    const auto singleIndexes=checkedAccessSourceIndexes(query.value(0).toString().toUtf8(),{"primary_key"});
+    assert(singleIndexes.size()==1 && singleIndexes[0].name=="NamedDescendingSingle" && singleIndexes[0].descending==QVector<bool>({true})); query.finish();
+    auto malformed=QJsonDocument::fromJson(schema.sourceIndexMetadata).object(); auto entries=malformed["indexes"].toArray(); auto duplicate=entries[0].toObject();
+    auto second=entries[1].toObject(); second["name"]=duplicate["name"]; entries[1]=second; malformed["indexes"]=entries;
+    auto bad=schema; bad.sourceIndexMetadata=QJsonDocument(malformed).toJson(QJsonDocument::Compact); bool refused=false;
+    try { importAccessTable(db,"technical","invalid_catalog",bad,parseCsvDetailed("primary_a,primary_b,other_key\n")); } catch(const std::exception&) { refused=true; }
+    assert(refused && !db.tables().contains("invalid_catalog"));
+    db.close(); assert(input.open(QIODevice::ReadOnly)); assert(QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256)==before);
+    std::cout<<"Actual Jet index catalog: original primary/secondary names, flags, mixed primary directions, persistence, refusal and source hash verified\n";
 }
 
 void verifyJetSingleReference(const QString& path) {
@@ -379,6 +423,7 @@ CREATE INDEX `label` ON `source` (`a``b`);
     for(const auto* malformed:{"0","0x00","GG","00 1","00\n00"}) {
         bool rejected=false; try { (void)decodeMdbBinaryHex(malformed); } catch(const std::exception&) { rejected=true; } assert(rejected);
     }
+    const auto catalogReference=qEnvironmentVariable("LINACCESS_JET_INDEX_CATALOG_REFERENCE"); if(!catalogReference.isEmpty()) verifyJetIndexCatalogReference(catalogReference);
     const auto singleReference=qEnvironmentVariable("LINACCESS_JET_SINGLE_REFERENCE"); if(!singleReference.isEmpty()) verifyJetSingleReference(singleReference);
     const auto indexReference=qEnvironmentVariable("LINACCESS_JET_INDEX_REFERENCE"); if(!indexReference.isEmpty()) verifyJetIndexReference(indexReference);
     const auto reference=qEnvironmentVariable("LINACCESS_JET_BINARY_REFERENCE"); if(!reference.isEmpty()) verifyJetBinaryReference(reference);

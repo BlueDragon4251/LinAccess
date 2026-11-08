@@ -2,6 +2,10 @@
 #include "csv.hpp"
 
 #include <QProcess>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QJsonDocument>
 #include <QElapsedTimer>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
@@ -15,7 +19,12 @@ AccessCatalog::AccessCatalog(QString file) : file_(std::move(file)) {}
 
 QByteArray AccessCatalog::tool(const QString& name, const QStringList& args,
                                 const QByteArray& input) {
-    const auto path = QStandardPaths::findExecutable(name);
+    auto path = QStandardPaths::findExecutable(name);
+    if(name=="linaccess-mdb-metadata") {
+        path.clear(); const auto root=QCoreApplication::applicationDirPath();
+        for(const auto& candidate:{root+"/linaccess-mdb-metadata",QDir(root).absoluteFilePath("../lib/linaccess/linaccess-mdb-metadata")})
+            if(QFileInfo(candidate).isFile() && QFileInfo(candidate).isExecutable()) { path=candidate; break; }
+    }
     if (path.isEmpty())
         throw std::runtime_error((name + " fehlt. Installiere mdbtools.").toStdString());
     QProcess process;
@@ -212,6 +221,10 @@ QString AccessCatalog::tableSchema(const QString& name) const {
         }
         if(!floatingColumns.isEmpty()) throw std::runtime_error("Access floating source metadata is unavailable");
     }
+    const auto indexes=tool("linaccess-mdb-metadata",{file_,name});
+    if(indexes.isEmpty() || indexes.size()>1024*1024 || !QJsonDocument::fromJson(indexes).isObject())
+        throw std::runtime_error("Originale Indexmetadaten konnten nicht gelesen werden");
+    schema+="\n-- LINACCESS_INDEX_METADATA "+QString::fromLatin1(indexes.toHex())+"\n";
     return schema;
 }
 }

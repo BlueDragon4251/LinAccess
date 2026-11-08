@@ -41,7 +41,7 @@ Abhängigkeiten (je nach Distribution können die Paketnamen abweichen):
 
 ```bash
 sudo apt update
-sudo apt install build-essential cmake qt6-base-dev libqt6sql6-sqlite mdbtools dpkg-dev file
+sudo apt install build-essential cmake qt6-base-dev libqt6sql6-sqlite mdbtools mdbtools-dev pkg-config dpkg-dev file
 
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
@@ -632,3 +632,6 @@ vollständige Access-Druck-/Formatparität bleibt offen.
 Die Datenblatt-Seiteneinrichtung verwendet echte Papier-/Randgeometrie für Vorschau, Druck und PDF. Einstellungen gelten je geöffnetem Dokument und lassen sich ausdrücklich im nativen Projekt speichern; Details und Grenzen stehen in der verlinkten Druckdokumentation.
 
 [Begrenzter Jet-Rohbinärimport](docs/JET_BINARY_IMPORT.md) kopiert ausdrücklich hexexportierte Binärwerte als echte SQLite-BLOBs. OLE-Anzeige, ACE-Anhänge und Originalformat-Roundtrip bleiben offen; Java/Jackcess dienen ausschließlich der optionalen technischen Referenzerzeugung.
+
+Originale Indexnamen und Feldrichtungen werden bei neuen MDB-Importen über einen
+lesenden nativen Helfer geprüft; Umfang und Grenzen: [Indexmetadaten](docs/SOURCE_INDEX_METADATA.md).

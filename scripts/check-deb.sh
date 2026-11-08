@@ -16,11 +16,12 @@ awk '
         next
     }
     $6 == "./usr/bin/linaccess" { if ($1 != "-rwxr-xr-x" || $3 == 0) exit 1; app++; next }
+    $6 == "./usr/lib/linaccess/linaccess-mdb-metadata" { if ($1 != "-rwxr-xr-x" || $3 == 0) exit 1; metadata++; next }
     $6 == "./usr/share/applications/linaccess.desktop" { if ($1 != "-rw-r--r--" || $3 == 0) exit 1; desktop++; next }
     $6 == "./usr/lib/linaccess/libsqlite3.so.0" { if ($1 != "-rw-r--r--" && $1 != "-rwxr-xr-x") exit 1; if ($3 == 0) exit 1; sqlite++; next }
     $6 == "./usr/share/doc/linaccess/sqlite.txt" { if ($1 != "-rw-r--r--" || $3 == 0) exit 1; notice++; next }
     { exit 1 }
-    END { if (app != 1 || desktop != 1 || sqlite != 1 || notice != 1) exit 1 }
+    END { if (app != 1 || desktop != 1 || sqlite != 1 || notice != 1 || metadata != 1) exit 1 }
 ' "$listing" || { echo 'Package content or permissions check failed' >&2; exit 1; }
 if (( $# == 2 )); then
     dpkg-deb --extract "$1" "$staging"
@@ -30,6 +31,14 @@ if (( $# == 2 )); then
         echo 'Package binary does not match the reference build ID' >&2
         exit 1
     fi
+    reference_metadata="$(dirname "$2")/linaccess-mdb-metadata"
+    reference_metadata_id=$(LC_ALL=C readelf -n "$reference_metadata" | awk '$1 == "Build" && $2 == "ID:" { print $3 }')
+    package_metadata_id=$(LC_ALL=C readelf -n "$staging/usr/lib/linaccess/linaccess-mdb-metadata" | awk '$1 == "Build" && $2 == "ID:" { print $3 }')
+    if [[ -z "$reference_metadata_id" || "$reference_metadata_id" != "$package_metadata_id" ]]; then
+        echo 'Package metadata helper does not match the reference build ID' >&2
+        exit 1
+    fi
+    "$staging/usr/lib/linaccess/linaccess-mdb-metadata" --version
     reference_sqlite="$(dirname "$2")/third_party/sqlite/libsqlite3.so.0"
     if ! cmp -s "$reference_sqlite" "$staging/usr/lib/linaccess/libsqlite3.so.0"; then
         echo 'Package SQLite backend does not match the reference build' >&2

@@ -11,13 +11,19 @@ if(LINACCESS_BUILD_GUI)
     set(CMAKE_AUTOMOC ON)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Sql PrintSupport)
     enable_language(C)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(MDB REQUIRED IMPORTED_TARGET libmdb>=1.0)
+    add_executable(linaccess_mdb_metadata src/mdb_metadata_main.cpp)
+    set_target_properties(linaccess_mdb_metadata PROPERTIES OUTPUT_NAME linaccess-mdb-metadata)
+    target_link_libraries(linaccess_mdb_metadata PRIVATE Qt6::Core PkgConfig::MDB)
     add_subdirectory(third_party/sqlite)
     add_library(linaccess_data STATIC
-        src/access_catalog.cpp src/access_table_model.cpp src/access_autonumber.cpp src/access_table_import.cpp src/access_query.cpp src/access_value_list.cpp src/access_format.cpp
+        src/access_catalog.cpp src/access_index_metadata.cpp src/access_table_model.cpp src/access_autonumber.cpp src/access_table_import.cpp src/access_query.cpp src/access_value_list.cpp src/access_format.cpp
         src/dao_database.cpp src/sqlite_execution.cpp src/jet_sql_functions.cpp src/vba_source_codec.cpp
         src/vba_qt_value.cpp src/vba_module_context.cpp src/access_form_import.cpp)
     target_link_libraries(linaccess_data PUBLIC linaccess_runtime Qt6::Core Qt6::Sql linaccess_sqlite)
     target_include_directories(linaccess_data PUBLIC src)
+    add_dependencies(linaccess_data linaccess_mdb_metadata)
     # The app and integration tests execute the same native form implementation.
     # Compile these large translation units once, without adding a runtime DSO.
     add_library(linaccess_forms STATIC
@@ -65,6 +71,7 @@ if(LINACCESS_BUILD_GUI)
             OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
     endforeach()
     install(TARGETS linaccess RUNTIME DESTINATION bin)
+    install(TARGETS linaccess_mdb_metadata RUNTIME DESTINATION lib/linaccess)
     install(FILES packaging/linaccess.desktop DESTINATION share/applications)
 
     set(CPACK_PACKAGE_NAME "linaccess")

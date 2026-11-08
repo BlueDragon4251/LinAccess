@@ -1,5 +1,6 @@
 #include "access_table_import.hpp"
 #include "access_catalog.hpp"
+#include "access_index_metadata.hpp"
 #include "access_autonumber.hpp"
 #include "jet_sql_functions.hpp"
 #include <QMap>
@@ -90,6 +91,13 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
     bool inTable = false;
     for (const auto& raw : schema.split('\n')) {
         const auto text = raw.trimmed();
+        if(text.startsWith("-- LINACCESS_INDEX_METADATA ")) {
+            if(!result.sourceIndexMetadata.isEmpty()) return {};
+            const auto encoded=text.mid(QString("-- LINACCESS_INDEX_METADATA ").size()).toLatin1();
+            if(encoded.isEmpty() || encoded.size()>2*1024*1024 || encoded.size()%2) return {};
+            for(const auto ch:encoded) if(!((ch>='0' && ch<='9') || (ch>='a' && ch<='f') || (ch>='A' && ch<='F'))) return {};
+            result.sourceIndexMetadata=QByteArray::fromHex(encoded); continue;
+        }
         static const QRegularExpression sourceType(R"(^-- LINACCESS_SOURCE_TYPE ([0-9a-fA-F]+) ([A-Z][A-Z0-9_]*)$)");
         const auto source = sourceType.match(text);
         const auto origin=QRegularExpression(R"(^-- LINACCESS_SOURCE_ORIGIN ([0-9a-fA-F]+) (MDBTOOLS_MYSQL|MDBTOOLS_ACCESS)$)").match(text);
@@ -194,6 +202,19 @@ AccessTableSchema parseMdbSchema(const QString& schema) {
     }
     if (!counters.isEmpty()) return {};
     if(!sourceOrigins.isEmpty() || !sourceSizes.isEmpty()) return {};
+    if(!result.sourceIndexMetadata.isEmpty()) {
+        try {
+            QStringList columnNames,primary; for(const auto& column:result.columns) columnNames.append(column.name);
+            for(int order=1;order<=result.columns.size();++order) for(const auto& column:result.columns) if(column.primaryKeyOrder==order) primary.append(column.name);
+            const auto indexes=checkedAccessSourceIndexes(result.sourceIndexMetadata,columnNames);
+            int primaryCount=0; result.indexes.clear();
+            for(const auto& index:indexes) {
+                if(index.kind==1) { ++primaryCount; if(index.columns!=primary) return {}; }
+                if(index.kind==0) result.indexes.append({index.name,index.columns,(index.flags&1)!=0,index.descending});
+            }
+            if(primaryCount!=(primary.isEmpty() ? 0 : 1)) return {};
+        } catch(...) { return {}; }
+    }
     return result;
 }
 
@@ -224,7 +245,29 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
     std::set<QString> seen;
     QStringList definitions;
     int primaryCount=0;
-    for (const auto& column:columns) if (column.primaryKeyOrder) ++primaryCount;
+    QStringList actualNames,declaredPrimary;
+    for (const auto& column:columns) { actualNames.append(column.name); if (column.primaryKeyOrder) ++primaryCount; }
+    for(int order=1;order<=columns.size();++order) for(const auto& column:columns) if(column.primaryKeyOrder==order) declaredPrimary.append(column.name);
+    const auto sourceIndexes=schema.sourceIndexMetadata.isEmpty() ? QVector<AccessSourceIndex>{} : checkedAccessSourceIndexes(schema.sourceIndexMetadata,actualNames);
+    QMap<QString,bool> primaryDirections; int storedPrimary=0,storedOrdinary=0;
+    for(const auto& index:sourceIndexes) {
+        if(index.kind==1) {
+            ++storedPrimary; if(index.columns!=declaredPrimary) throw fail("Primärindex und Tabellenschlüssel widersprechen sich");
+            for(int i=0;i<index.columns.size();++i) primaryDirections.insert(index.columns[i],index.descending[i]);
+        }
+        if(index.kind==0) {
+            ++storedOrdinary; int matches=0;
+            for(const auto& native:schema.indexes) if(native.name==index.name && native.columns==index.columns && native.unique==((index.flags&1)!=0) && native.descending==index.descending) ++matches;
+            if(matches!=1 || (index.flags&2)) throw fail("Indexdefinition oder IgnoreNulls ist nicht nachgewiesen");
+            if(index.flags&8) for(const auto& name:index.columns) {
+                bool required=false; for(const auto& column:columns) if(column.name==name) required=column.required || column.primaryKeyOrder>0;
+                if(!required) throw fail("Index.Required kann nativ nicht nachgewiesen werden");
+            }
+        }
+    }
+    if(!schema.sourceIndexMetadata.isEmpty() && (storedPrimary!=(declaredPrimary.isEmpty() ? 0 : 1) || storedOrdinary!=schema.indexes.size()))
+        throw fail("Originaler Indexkatalog ist unvollständig");
+    const bool descendingSinglePrimary=primaryCount==1 && !declaredPrimary.isEmpty() && primaryDirections.value(declaredPrimary.front());
     const auto nativeCounter=[&](const AccessColumn& column) { return column.autoNumber && column.sqliteType=="INTEGER" && column.primaryKeyOrder==1 && primaryCount==1; };
     for (int i = 0; i < columns.size(); ++i) {
         const auto& column = columns[i];
@@ -240,9 +283,10 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             const auto literal=nativeDefaultLiteral(column.sourceDefault);
             if(!literal || *literal!=column.sqlDefault) throw fail("Nicht unterstützter oder widersprüchlicher Standardwert");
         } else if(!column.sourceDefault.isEmpty() || !column.sqlDefault.isEmpty()) throw fail("Standardwert-Metadaten widersprüchlich");
+        if(nativeCounter(column) && primaryDirections.value(column.name)) throw fail("Absteigender AutoNumber-Primärindex ist nicht nachgewiesen");
         seen.insert(column.name.toCaseFolded());
         definitions << sqlQuote(column.name) + ' ' + column.sqliteType
-            + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : column.autoNumber ? " DEFAULT ("+accessCounterDefault(tableName,column.name)+")" : QString{})
+            + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : descendingSinglePrimary && column.primaryKeyOrder ? " PRIMARY KEY DESC" : column.autoNumber ? " DEFAULT ("+accessCounterDefault(tableName,column.name)+")" : QString{})
             + (!column.autoNumber && column.hasDefault ? " DEFAULT "+column.sqlDefault : QString{})
             + (column.required || column.primaryKeyOrder || column.autoNumber ? " NOT NULL" : "")
             + (column.sourceSize>0 ? " CHECK (linaccess_jet_text_capacity("+sqlQuote(column.name)+","+QString::number(column.sourceSize)+"))" : QString{});
@@ -251,8 +295,8 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
     QStringList primary;
     for (int order = 1; order <= columns.size(); ++order)
         for (const auto& col : columns)
-            if (col.primaryKeyOrder == order) primary << sqlQuote(col.name);
-    const bool inlineKey=std::any_of(columns.cbegin(),columns.cend(),nativeCounter);
+            if (col.primaryKeyOrder == order) primary << sqlQuote(col.name)+(primaryDirections.value(col.name) ? " DESC" : " ASC");
+    const bool inlineKey=descendingSinglePrimary || std::any_of(columns.cbegin(),columns.cend(),nativeCounter);
     if (!primary.empty() && !inlineKey) definitions << "PRIMARY KEY (" + primary.join(',') + ")";
     for (const auto& key : schema.foreignKeys) {
         QStringList child, parent;
@@ -342,6 +386,11 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
             query.addBindValue(tableName);
             query.addBindValue(QString::fromUtf8(QJsonDocument(metadata).toJson(QJsonDocument::Compact)));
             if (!query.exec()) throw fail(query.lastError().text());
+            if(!schema.sourceIndexMetadata.isEmpty()) {
+                if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_access_indexes(table_name TEXT PRIMARY KEY,definition TEXT NOT NULL)")) throw fail(query.lastError().text());
+                query.prepare("INSERT INTO main._la_access_indexes VALUES(?,?)"); query.addBindValue(tableName); query.addBindValue(QString::fromUtf8(schema.sourceIndexMetadata));
+                if(!query.exec()) throw fail(query.lastError().text());
+            }
             QSqlQuery log(db);
             if (!log.prepare("INSERT INTO _la_import_log(source_file,kind,name,status,details) "
                              "VALUES (?,?,?,?,?)"))

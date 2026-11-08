@@ -45,6 +45,7 @@ struct AccessTableSchema {
     QVector<AccessColumn> columns;
     QVector<AccessIndex> indexes;
     QVector<AccessForeignKey> foreignKeys;
+    QByteArray sourceIndexMetadata;
 };
 // Atomic full-database copy, including enforced relationships between copied tables.
 // Existing tables are not overwritten; any failure rolls back the complete copy.

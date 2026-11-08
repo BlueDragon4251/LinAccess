@@ -1,4 +1,5 @@
 #include "access_catalog.hpp"
+#include "access_index_metadata.hpp"
 #include "access_query.hpp"
 #include "dao_database.hpp"
 #include <QSet>
@@ -59,6 +60,7 @@ int main(int argc, char** argv) {
     const auto tables = QString::fromUtf8(linaccess::AccessCatalog::tool(
         "mdb-tables", {"-1", source})).split('\n', Qt::SkipEmptyParts);
     int imported = 0;
+    int originalPrimaryNames=0,originalOtherNames=0;
     int booleanColumns = 0;
     int trueBooleans = 0;
     int typedBooleans = 0;
@@ -76,6 +78,10 @@ int main(int argc, char** argv) {
             const auto csv = linaccess::AccessCatalog::exportTable(source,table);
             const auto rows = linaccess::parseCsvDetailed(std::string_view(csv.constData(), csv.size()));
             const auto schema = linaccess::parseMdbSchema(catalog.tableSchema(table));
+            QStringList originalColumns; for(const auto& column:schema.columns) originalColumns.append(column.name);
+            const auto originalIndexes=linaccess::checkedAccessSourceIndexes(schema.sourceIndexMetadata,originalColumns);
+            for(const auto& index:originalIndexes) { if(index.kind==1) ++originalPrimaryNames; else if(index.kind==0) ++originalOtherNames; }
+
             for (const auto& column : schema.columns)
                 if (column.sourceType == "BOOLEAN" || column.sourceType == "BIT") ++booleanColumns;
             for (const auto& column:schema.columns) {
@@ -84,6 +90,8 @@ int main(int argc, char** argv) {
                 if(column.hasDefault) { ++sourceDefaults; if(!column.autoNumber) ++nativeDefaults; }
             }
             linaccess::importAccessTable(db, source, table, schema, rows);
+            QSqlQuery storedIndexes(db); storedIndexes.prepare("SELECT definition FROM main._la_access_indexes WHERE table_name=?"); storedIndexes.addBindValue(table);
+            assert(storedIndexes.exec() && storedIndexes.next() && storedIndexes.value(0).toString().toUtf8()==schema.sourceIndexMetadata); storedIndexes.finish();
             {
                 const auto fields=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string(table.toStdString())}).object->member("Fields",{}).object;
                 const auto records=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{linaccess::VbaValue::string(table.toStdString())}).object;
@@ -354,6 +362,8 @@ End Function
     std::cout << "Original date columns formatted through native SQL: " << formattedDates << '\n';
     assert(tables.size() == 29);
     assert(imported == 29 && failures.empty());
+    assert(originalPrimaryNames==20 && originalOtherNames==48);
+    std::cout<<"Verified original index identities: "<<originalPrimaryNames<<" primary, "<<originalOtherNames<<" non-primary\n";
     assert(sourceDefaults==96 && nativeDefaults>0);
     assert(pendingDefaults==nativeDefaults);
     std::cout<<"Source literal defaults: "<<sourceDefaults<<", applied outside AutoNumber: "<<nativeDefaults<<", verified pending defaults: "<<pendingDefaults<<'\n';
