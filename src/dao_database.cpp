@@ -1612,7 +1612,7 @@ public:
     }
     void assign(std::string_view name,const VbaValue& value) override {
         (void)reader_();const auto key=lower(name);
-        if(!setter_ || (key!="required" && key!="defaultvalue" && key!="size" && key!="name" && key!="allowzerolength" && key!="validationrule" && key!="validationtext")) throw VbaRuntimeError(383,"DAO schema field property is read-only");
+        if(!setter_ || (key!="required" && key!="defaultvalue" && key!="size" && key!="name" && key!="allowzerolength" && key!="validationrule" && key!="validationtext" && key!="ordinalposition")) throw VbaRuntimeError(383,"DAO schema field property is read-only");
         bool native=false;for(const auto& column:reader_()) if(column.name.compare(name_,Qt::CaseInsensitive)==0) native=column.nativeAttributes.has_value() && column.required.has_value();
         if(!native) throw VbaRuntimeError(383,"DAO: Original/unproven schema fields remain read-only");
         const auto scalar=scalarVbaValue(value);(void)reader_();auto next=setter_(name_,key,scalar);reader_=std::move(next);if(key=="name") name_=text(scalar.asText());
@@ -2776,7 +2776,7 @@ void checkNativeForeignKeys(QSqlDatabase db) {
     QSqlQuery query(db);if(!query.exec("PRAGMA main.foreign_key_check")) queryFailure(query);
     if(query.next()) throw VbaRuntimeError(3251,"DAO: Existing rows violate a foreign-key constraint");if(query.lastError().isValid()) queryFailure(query);
 }
-void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVector<NativeRelationData>& before,const QVector<NativeRelationData>& after,const QMap<QString,NativeFieldChange>& changes={},const std::optional<QVector<AccessSourceIndex>>& replacementIndexes={},const QString& counterDestination={}) {
+void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVector<NativeRelationData>& before,const QVector<NativeRelationData>& after,const QMap<QString,NativeFieldChange>& changes={},const std::optional<QVector<AccessSourceIndex>>& replacementIndexes={},const QString& counterDestination={},const QStringList& reorderedColumns={}) {
     SqliteExecutionBudget budget(db,100000000,30000);
     checkNativeForeignKeys(db);
     const auto columns=readTableSchemaColumns(db,table);const auto indexes=readNativeIndexCatalog(db,table);
@@ -2804,6 +2804,7 @@ void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVect
         if(changes.contains(column.name.toCaseFolded())) {const auto change=changes.value(column.name.toCaseFolded());if(change.required) field.required_=*change.required;if(change.allowZeroLength) field.allowZeroLength_=*change.allowZeroLength;if(change.size) field.size_=*change.size;if(change.defaultValue) field.default_=*change.defaultValue;if(change.validationRule) field.validationRule_=*change.validationRule;if(change.validationText) field.validationText_=*change.validationText;}
         auto modified=definition(field,nextRequired);if((field.attributes_&16) && !counterDestination.isEmpty()) modified=schemaJetName(column.name)+" INT NOT NULL DEFAULT ("+accessCounterDefault(counterDestination,column.name)+")";modifiedDefinitions.append(modified);names.append(column.name);
     }
+    if(!reorderedColumns.isEmpty()) {if(reorderedColumns.size()!=names.size()) throw VbaRuntimeError(3251,"DAO: Incomplete field reorder");QStringList ordered;QSet<QString> seen;for(const auto& name:reorderedColumns) {const int index=names.indexOf(name);if(index<0 || seen.contains(name.toCaseFolded())) throw VbaRuntimeError(3251,"DAO: Invalid field reorder");seen.insert(name.toCaseFolded());ordered.append(modifiedDefinitions[index]);}modifiedDefinitions=ordered;}
     const auto primaryClause=[](const AccessSourceIndex& index) {QStringList fields;for(int i=0;i<index.columns.size();++i) fields.append(schemaJetName(index.columns[i])+(index.descending[i] ? " DESC" : " ASC"));return "PRIMARY KEY ("+fields.join(',')+")";};
     for(const auto& index:indexes) if(index.source.kind==1) definitions.append(primaryClause(index.source));
     for(const auto& index:following) if(index.kind==1) modifiedDefinitions.append(primaryClause(index));
@@ -2830,7 +2831,7 @@ void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVect
     if(!query.exec("DROP TABLE main."+quote(table)) || !query.exec("ALTER TABLE main."+quote(temporary)+" RENAME TO "+quote(table))) queryFailure(query);
     for(const auto& sql:objects) if(!query.exec(sql)) queryFailure(query);
     if(nativeTableValueDigest(db,table,names)!=original) throw VbaRuntimeError(3251,"DAO: Relation migration final value verification failed");
-    if(counterDestination.isEmpty()) {if(!replacementIndexes) (void)readNativeIndexCatalog(db,table);if(changes.isEmpty()) (void)readTableSchemaColumns(db,table);}checkNativeForeignKeys(db);
+    if(counterDestination.isEmpty() && reorderedColumns.isEmpty()) {if(!replacementIndexes) (void)readNativeIndexCatalog(db,table);if(changes.isEmpty()) (void)readTableSchemaColumns(db,table);}checkNativeForeignKeys(db);
 }
 
 quint64 nativeSchemaVersion(QSqlDatabase db) {
@@ -2971,19 +2972,46 @@ TableSchemaReader renameNativeField(QSqlDatabase db,const QString& table,const T
     if(!settings.restore()) throw DaoStoredSchemaChange("DAO: Field rename stored; connection settings failed to restore, reopen the project");return reader;
 }
 
+TableSchemaReader reorderNativeField(QSqlDatabase db,const QString& table,const QString& field,int destination) {
+    const auto workspace=workspaceState(db);const auto columns=readTableSchemaColumns(db,table);QStringList names;int source=-1;
+    for(const auto& column:columns) {if(column.name.compare(field,Qt::CaseInsensitive)==0) source=names.size();names.append(column.name);}
+    if(source<0) throw VbaRuntimeError(3265,"DAO: Field unavailable");
+    if(destination<0 || destination>=names.size()) throw VbaRuntimeError(3251,"DAO: Native OrdinalPosition requires an existing zero-based field position");
+    if(source==destination) return currentNativeFieldReader(db,table);
+    const auto version=nativeSchemaVersion(db),generation=workspace->tableGenerations.value(table.toCaseFolded());
+    auto& revision=workspace->tableFieldRevisions[table.toCaseFolded()];if(revision==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Field revision overflow");
+    const auto moved=names.takeAt(source);names.insert(destination,moved);
+    checkReservedCounterSchemaAction(db);NativeSchemaSettings settings(db);settings.begin(false);
+    QSqlQuery query(db);const auto savepoint="la_field_order_"+QUuid::createUuid().toString(QUuid::Id128);
+    if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);bool completed=false;const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
+    if(version!=nativeSchemaVersion(db) || generation!=workspace->tableGenerations.value(table.toCaseFolded())) throw VbaRuntimeError(3420,"DAO: Field schema changed before reorder");
+    auto catalog=std::make_shared<NativeRelationCatalog>(db);const auto relations=catalog->read(table);(void)readNativeIndexCatalog(db,table);
+    query.prepare("SELECT definition FROM main._la_table_schema WHERE table_name=? COLLATE NOCASE");query.addBindValue(table);if(!query.exec() || !query.next()) throw VbaRuntimeError(3251,"DAO: Native field metadata unavailable");const auto previousFields=query.value(0);if(query.next()) throw VbaRuntimeError(3251,"DAO: Native field metadata ambiguous");query.finish();
+    const auto metadata=QJsonDocument::fromJson(previousFields.toByteArray()).array();QJsonArray ordered,columnNames;for(const auto& name:names) {bool found=false;for(const auto& item:metadata) if(item.toObject().value("name").toString()==name) {if(found) throw VbaRuntimeError(3251,"DAO: Duplicate field declaration");ordered.append(item);found=true;}if(!found) throw VbaRuntimeError(3251,"DAO: Missing field declaration");columnNames.append(name);}
+    query.prepare("SELECT definition FROM main._la_access_indexes WHERE table_name=? COLLATE NOCASE");query.addBindValue(table);if(!query.exec() || !query.next()) throw VbaRuntimeError(3251,"DAO: Native index metadata unavailable");const auto previousIndexes=query.value(0);if(query.next()) throw VbaRuntimeError(3251,"DAO: Native index metadata ambiguous");query.finish();
+    auto indexMetadata=QJsonDocument::fromJson(previousIndexes.toByteArray()).object();indexMetadata.insert("columns",columnNames);const auto encodedIndexes=QJsonDocument(indexMetadata).toJson(QJsonDocument::Compact);(void)checkedAccessSourceIndexes(encodedIndexes,names);
+    rebuildNativeRelationTable(db,table,relations,relations,{}, {}, {},names);
+    query.prepare("UPDATE main._la_table_schema SET definition=? WHERE table_name=? COLLATE NOCASE AND definition=?");query.addBindValue(QJsonDocument(ordered).toJson(QJsonDocument::Compact));query.addBindValue(table);query.addBindValue(previousFields);if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Field metadata changed during reorder");
+    query.prepare("UPDATE main._la_access_indexes SET definition=? WHERE table_name=? COLLATE NOCASE AND definition=?");query.addBindValue(QString::fromUtf8(encodedIndexes));query.addBindValue(table);query.addBindValue(previousIndexes);if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Index metadata changed during reorder");
+    (void)readTableSchemaColumns(db,table);(void)readNativeIndexCatalog(db,table);(void)catalog->read(table);checkNativeForeignKeys(db);auto reader=currentNativeFieldReader(db,table);(void)reader();
+    if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++revision;
+    if(!settings.restore()) throw DaoStoredSchemaChange("DAO: Field order stored; connection settings failed to restore, reopen the project");return reader;
+}
+
 TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString& requestedTable,const QString& requestedField,const QMap<QString,VbaValue>& properties) {
     const auto workspace=workspaceState(db);QString table;
     for(const auto& name:nativeTableNames(db)) if(name.compare(requestedTable,Qt::CaseInsensitive)==0) {table=name;break;}
     if(table.isEmpty()) throw VbaRuntimeError(3265,"DAO: Field table unavailable");
     const auto version=nativeSchemaVersion(db),generation=workspace->tableGenerations.value(table.toCaseFolded());
     QMap<QString,VbaValue> evaluated;
-    for(auto it=properties.cbegin();it!=properties.cend();++it) {const auto key=it.key().toCaseFolded();if(key!="required" && key!="defaultvalue" && key!="size" && key!="name" && key!="allowzerolength" && key!="validationrule" && key!="validationtext") throw VbaRuntimeError(383,"DAO: Field property is read-only");if(evaluated.contains(key)) throw VbaRuntimeError(450,"DAO: Duplicate field property");evaluated.insert(key,scalarVbaValue(it.value()));}
+    for(auto it=properties.cbegin();it!=properties.cend();++it) {const auto key=it.key().toCaseFolded();if(key!="required" && key!="defaultvalue" && key!="size" && key!="name" && key!="allowzerolength" && key!="validationrule" && key!="validationtext" && key!="ordinalposition") throw VbaRuntimeError(383,"DAO: Field property is read-only");if(evaluated.contains(key)) throw VbaRuntimeError(450,"DAO: Duplicate field property");evaluated.insert(key,scalarVbaValue(it.value()));}
     workspace->check();if(version!=nativeSchemaVersion(db) || generation!=workspace->tableGenerations.value(table.toCaseFolded())) throw VbaRuntimeError(3420,"DAO: Field identity changed while evaluating properties");
     const auto columns=readTableSchemaColumns(db,table);std::optional<TableSchemaColumn> selected;
     for(const auto& column:columns) if(column.name.compare(requestedField,Qt::CaseInsensitive)==0) {selected=column;break;}
     if(!selected) throw VbaRuntimeError(3265,"DAO: Field not found");
     const auto& column=*selected;
     if(!column.nativeAttributes || !column.required || column.sourceType<=0) throw VbaRuntimeError(3251,"DAO: Only explicitly declared native field properties can be changed");
+    if(evaluated.contains("ordinalposition")) {if(evaluated.size()!=1) throw VbaRuntimeError(3251,"DAO: OrdinalPosition must be a separate field operation");const auto value=coerceVbaModuleValue(evaluated.value("ordinalposition"),"long");return reorderNativeField(db,table,column.name,static_cast<int>(value.asNumber()));}
     if(*column.nativeAttributes&16) throw VbaRuntimeError(3251,"DAO: Counter property alteration requires dedicated migration");
     if(evaluated.contains("name")) {if(evaluated.size()!=1) throw VbaRuntimeError(3251,"DAO: Rename must be a separate field operation");if(evaluated.value("name").kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null field name");return renameNativeField(db,table,column,text(evaluated.value("name").asText()));}
     auto owner=std::make_shared<DetachedTableState>();owner->db=db;owner->workspace=workspace;owner->name=table;

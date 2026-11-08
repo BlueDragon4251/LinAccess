@@ -6003,3 +6003,13 @@ schreibgeschützt, mit bestehenden Clone/Requery-/Generationsguards. GUI/DAO2/2
 (7,32s), App gebaut. Allgemeine Ausdrücke und genaue Windows-Formular-/Fehler-
 Ereignissemantik weiterhin offen.456/384/72 unverändert. Fortsetzung: tatsächliche
 Feldreihenfolge/OrdinalPosition im DAO und Feldentwurf mit atomarem Werterhalt.
+
+Native TableDef.Field.OrdinalPosition verschiebt jetzt echte physische Spalten,
+auch Counter, atomar mit Feld-/Indexkatalog und GUI-Positionssteuerung. Vorhandene
+Werte/Rowids, Counterfrontier, Single-/Uhrdefaults, Regeln/Texte, Indizes, FK,
+Trigger und Views bleiben erhalten; physische DAO-Puffer/Clones3420 bis Requery.
+Unveränderte Position ohne Schemaänderung, außerhalb vorhandener Positionen3251;
+keine ursprünglichen/unklaren Schemas oder aktiven Aufrufertransaktionen umbauen.
+GUI/DAO2/2 (7,15s), App gebaut. DAO_TABLEDEF_FIELDS.md;456/384/72 unverändert.
+Fortsetzung: Gültigkeitsregeln für eigene kanonische Date-Felder einschließlich
+Uhrgrenzen im DAO/Feldentwurf, dann übrige offene Anforderungen fortlaufend.

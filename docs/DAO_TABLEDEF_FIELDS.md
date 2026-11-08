@@ -492,3 +492,23 @@ existing field revision checks govern snapshots/clones. Forms/datasheets retain
 the actual SQLite message on a rejected save; form command cancellation remains
 the existing2501 boundary, not a claim of full Access form error-event parity.
 GUI/DAO2/2 (7.32s), app built; no new CTest target or full-suite claim.
+
+## Native physical field order
+
+Own native TableDef fields can change OrdinalPosition within the current
+zero-based collection bounds, as a separate operation. The field designer has
+a matching position control and move action. This reconstructs the actual
+physical table column order, not only the displayed list. Field metadata and
+index catalog column declarations are reordered atomically. Named index fields,
+primary keys, relations, triggers and views remain attached to their real names.
+
+The existing schema-copy guards retain typed values, row identities, counter
+frontiers, literal/clock defaults, native storage checks and numeric validation
+rules/messages. Existing physical DAO buffers/clones become stale3420 and must
+Requery. Counter fields may move without editing their generated values.
+Unchanged positions do not rewrite schema. Active caller transactions,
+original/mixed/unknown schemas, incomplete metadata and unsupported constraints
+retain the existing explicit refusal boundaries. Detached pre-append position
+assignment and full Access collection/event/error equivalence remain open.
+
+Existing GUI/DAO2/2 passed (7.15s), app built; no new target/full-suite claim.
