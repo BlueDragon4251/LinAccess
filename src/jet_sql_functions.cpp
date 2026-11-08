@@ -1,3 +1,4 @@
+#include <QDateTime>
 #include "jet_sql_functions.hpp"
 #include "access_autonumber.hpp"
 #include "access_format.hpp"
@@ -427,6 +428,10 @@ void roundNumber(sqlite3_context* context,int count,sqlite3_value** args) noexce
       catch(...) { native.error(context,"SQL rounding failed",-1); }
 }
 
+template<int Mode> void dateFieldDefault(sqlite3_context* context,int,sqlite3_value**) noexcept {
+    try {const auto now=QDateTime::currentDateTime();if(!now.isValid()) throw VbaRuntimeError(3251,"Native clock unavailable");const auto date=Mode==2 ? QString("1899-12-30") : now.date().toString(Qt::ISODate);const auto time=Mode==0 ? QString("00:00:00") : now.time().toString("HH:mm:ss");returnText(context,date+" "+time);}catch(const VbaRuntimeError& failure) {functionError(context,failure);}catch(...) {api().error(context,"Native clock unavailable",-1);}
+}
+
 void nonemptyText(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native=api();try {
         if(native.type(args[0])==SQLITE_NULL) {native.integerResult(context,1);return;}
@@ -691,6 +696,9 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_format",2,&formatVariant,nullptr,nullptr);
     ensure("linaccess_jet_concat",2,&concatenate,nullptr,nullptr);
     ensure("linaccess_jet_len",1,&textLength,nullptr,nullptr);
+    ensure("linaccess_jet_default_date",0,&dateFieldDefault<0>,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_default_now",0,&dateFieldDefault<1>,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_default_time",0,&dateFieldDefault<2>,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_nonempty_text",1,&nonemptyText,nullptr,nullptr,SQLITE_UTF8|SQLITE_DETERMINISTIC|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_text_capacity",2,&textCapacity,nullptr,nullptr,SQLITE_UTF8|SQLITE_DETERMINISTIC|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_lenb",-1,&stringLenB,nullptr,nullptr);

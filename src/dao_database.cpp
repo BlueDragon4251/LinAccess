@@ -1,6 +1,7 @@
 #include "dao_database.hpp"
 #include "dao_schema_change.hpp"
 #include "native_schema_editor.hpp"
+#include "native_field_defaults.hpp"
 #include "vba_array.hpp"
 #include "access_autonumber.hpp"
 #include "access_index_metadata.hpp"
@@ -325,10 +326,11 @@ QString sqliteLiteralDefaultSql(const QVariant& declaration) {
     // Raw SQLite TRUE is1; imported Access TRUE is already normalized to-1.
     return token.compare("TRUE",Qt::CaseInsensitive)==0 ? QString("1") : literal.value_or(QString{});
 }
-struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1},generatorAttributes{-1}; std::optional<bool> required;std::optional<int> nativeAttributes;std::optional<bool> allowZeroLength; };
+struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1},generatorAttributes{-1}; std::optional<bool> required;std::optional<int> nativeAttributes;std::optional<bool> allowZeroLength;QString storedDefault;std::optional<bool> canonicalDate; };
 std::optional<QString> nativeFieldDefaultExpression(const TableSchemaColumn& field) {
     if(provenDaoFieldType(field.type)==11 || field.sourceType==11) return {};
     if(!field.hasDefault) return QString{};
+    if(field.sourceType==8 && field.nativeAttributes) if(const auto clock=nativeDateDefaultExpression(field.storedDefault)) return *clock;
     auto expression=field.literalDefault;
     if(expression.isEmpty() || expression.size()>512) return {};
     if(expression=="NULL") expression="Null";
@@ -355,6 +357,7 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
     while(query.next()) {
         const auto name=query.value(1).toString();
         columns.push_back({name,types.value(name.toCaseFolded()),0,0,sqliteLiteralDefaultSql(query.value(4)),!query.value(4).isNull()});
+        columns.last().storedDefault=query.value(4).toString();
         notNull.insert(name.toCaseFolded(),query.value(3).toBool());
     }
     if(query.lastError().isValid()) queryFailure(query);
@@ -397,6 +400,7 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
                         if(!attribute.isDouble() || (attribute.toDouble()!=expected && !(code==4 && attribute.toDouble()==17))) throw VbaRuntimeError(3251,"DAO native field attributes invalid");
                         column.nativeAttributes=static_cast<int>(attribute.toDouble());
                     }
+                    if(origin=="DAO_NATIVE" && object.contains("native_date_canonical")) {const auto canonical=object.value("native_date_canonical");if(!canonical.isBool() || code!=8) throw VbaRuntimeError(3251,"DAO: Native Date storage declaration invalid");column.canonicalDate=canonical.toBool();}
                     if(origin=="DAO_NATIVE" && object.contains("native_allow_zero_length")) {
                         const auto allowed=object.value("native_allow_zero_length");if(!allowed.isBool() || (code!=10 && code!=12)) throw VbaRuntimeError(3251,"DAO: Native AllowZeroLength declaration invalid");column.allowZeroLength=allowed.toBool();
                     }
@@ -414,14 +418,15 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
     }
     return columns;
 }
-QMap<QString,QVariant> literalDefaultValues(QSqlDatabase db,const QVector<TableSchemaColumn>& columns) {
+QMap<QString,QVariant> literalDefaultValues(QSqlDatabase db,const QVector<TableSchemaColumn>& columns,bool clocks=false) {
     QStringList keys,expressions;
-    for(const auto& field:columns) if(!field.literalDefault.isEmpty()) { keys.append(field.name.toCaseFolded()); expressions.append(field.literalDefault); }
+    for(const auto& field:columns) {auto expression=field.literalDefault;if(expression.isEmpty() && clocks && field.sourceType==8 && field.nativeAttributes) if(const auto clock=nativeDateDefaultExpression(field.storedDefault)) expression=*nativeDateDefaultSql(*clock);if(!expression.isEmpty()) {keys.append(field.name.toCaseFolded());expressions.append(expression);}}
     QMap<QString,QVariant> result;
     if(expressions.isEmpty()) return result;
+    if(clocks) installJetSqlFunctions(db);
     QSqlQuery values(db);
     if(!values.exec("SELECT "+expressions.join(',')) || !values.next()) queryFailure(values);
-    for(int i=0;i<keys.size();++i) {auto value=values.value(i);for(const auto& field:columns) if(field.name.toCaseFolded()==keys[i] && field.type=="SINGLE_REAL") {value=sqlFieldValue(fromSql(value),"SINGLE_REAL");break;}result.insert(keys[i],value);}
+    for(int i=0;i<keys.size();++i) {auto value=values.value(i);for(const auto& field:columns) if(field.name.toCaseFolded()==keys[i] && (field.type=="SINGLE_REAL" || field.type.contains("DATE",Qt::CaseInsensitive))) {value=sqlFieldValue(fromSql(value),field.type);break;}result.insert(keys[i],value);}
     return result;
 }
 class Recordset;
@@ -696,6 +701,8 @@ public:
                     const auto key=data_->columns[i].toCaseFolded();
                     if(data_->literalDefaults.contains(key)) pending_[i]=data_->literalDefaults.value(key);
                 }
+                QStringList expressions,names;for(auto it=data_->defaultExpressions.cbegin();it!=data_->defaultExpressions.cend();++it) if(data_->daoTypes.value(it.key())==8) if(const auto expression=nativeDateDefaultSql(it.value())) {names.append(it.key());expressions.append(*expression);}
+                if(!expressions.isEmpty()) {installJetSqlFunctions(db_);QSqlQuery defaults(db_);if(!defaults.exec("SELECT "+expressions.join(',')) || !defaults.next()) queryFailure(defaults);for(int i=0;i<names.size();++i) {const auto index=column(names[i]);pending_[index]=defaults.value(i);changed_.insert(index);}}
                 const auto generators=generatedAccessColumns(db_,source_);
                 for(int i=0;i<data_->columns.size();++i) if(generators.contains(data_->columns[i].toCaseFolded())) {
                     const auto reservation=reserveAccessCounter(db_,source_,data_->columns[i]);
@@ -1976,14 +1983,14 @@ public:
             attributes_=(static_cast<int>(attributes)&16)|intrinsic;return;}
         if(key=="required") {required_=coerceVbaModuleValue(value,"boolean").truthy();return;}
         if(key=="allowzerolength") {if(type_!=10 && type_!=12) throw VbaRuntimeError(3251,"DAO: AllowZeroLength requires Text or Memo");allowZeroLength_=coerceVbaModuleValue(value,"boolean").truthy();return;}
-        if(key=="defaultvalue") {const auto token=text(value.asText());if(!token.isEmpty() && !accessLiteralDefaultSql(token)) throw VbaRuntimeError(3251,"DAO: Field default requires a supported literal");default_=token;return;}
+        if(key=="defaultvalue") {const auto token=text(value.asText());if(!token.isEmpty() && !accessLiteralDefaultSql(token) && !(type_==8 && nativeDateDefaultSql(token))) throw VbaRuntimeError(3251,"DAO: Field default requires a supported literal or Date clock expression");default_=token;return;}
         throw VbaRuntimeError(3251,"DAO: Detached field assignment unsupported");
     }
     QJsonObject metadata() const {
         const auto source=type_==1 ? "BOOLEAN" : type_==2 ? "TINYINT" : type_==3 ? "SMALLINT" : type_==4 ? "INT" : type_==6 ? "SINGLE" : type_==7 ? "DOUBLE" : type_==8 ? "DATETIME" : type_==10 ? "VARCHAR" : type_==11 ? "BLOB" : "MEMO";
-        auto object=QJsonObject{{"name",name_},{"source_type",source},{"source_origin","DAO_NATIVE"},{"source_size",type_==10 ? size_ : 0},{"native_attributes",attributes_},{"native_required",required_}};if(type_==10 || type_==12) object.insert("native_allow_zero_length",allowZeroLength_);return object;
+        auto object=QJsonObject{{"name",name_},{"source_type",source},{"source_origin","DAO_NATIVE"},{"source_size",type_==10 ? size_ : 0},{"native_attributes",attributes_},{"native_required",required_}};if(type_==10 || type_==12) object.insert("native_allow_zero_length",allowZeroLength_);if(type_==8) object.insert("native_date_canonical",canonicalDate_);return object;
     }
-    QString definition() const {
+    QString definition(bool storedDateLiteral=false) const {
         if(name_.isEmpty() || name_.trimmed()!=name_ || name_.size()>64 || name_.contains(QChar(0)) || !name_.isValidUtf16()) throw VbaRuntimeError(5,"DAO: Invalid field name");
         if(attributes_&16) {
             if(type_!=4 || !default_.isEmpty()) throw VbaRuntimeError(3251,"DAO: AutoNumber requires a Long field without a scalar default");
@@ -2000,18 +2007,19 @@ public:
         default:throw VbaRuntimeError(3251,"DAO: Field type is not supported for native creation");
         }
         auto result=schemaJetName(name_)+" "+type+(required_ ? " NOT NULL" : "");
-        if(!default_.isEmpty()) {auto literal=*accessLiteralDefaultSql(default_);if(type_==6) {QSqlQuery query(owner_->db);if(!query.exec("SELECT "+literal) || !query.next()) queryFailure(query);const auto stored=sqlFieldValue(fromSql(query.value(0)),"SINGLE_REAL");literal=stored.isNull() ? "NULL" : QString::number(stored.toDouble(),'g',17);}result+=" DEFAULT "+literal;}
+        if(type_==8 && nativeDateDefaultSql(default_)) result+=" DEFAULT ("+*nativeDateDefaultSql(default_)+")";
+        else if(!default_.isEmpty()) {auto literal=*accessLiteralDefaultSql(default_);if(type_==8 && !storedDateLiteral) {QSqlQuery query(owner_->db);if(!query.exec("SELECT "+literal) || !query.next()) queryFailure(query);const auto stored=sqlFieldValue(fromSql(query.value(0)),"DATETIME");if(stored.isNull()) literal="NULL";else {auto value=stored.toString();literal="'"+value.replace("'","''")+"'";}}if(type_==6) {QSqlQuery query(owner_->db);if(!query.exec("SELECT "+literal) || !query.next()) queryFailure(query);const auto stored=sqlFieldValue(fromSql(query.value(0)),"SINGLE_REAL");literal=stored.isNull() ? "NULL" : QString::number(stored.toDouble(),'g',17);}result+=" DEFAULT "+literal;}
         if(type_==6) result+=" CHECK ("+schemaJetName(name_)+" IS NULL OR (typeof("+schemaJetName(name_)+") IN ('integer','real') AND "+schemaJetName(name_)+"=linaccess_jet_field_store('SINGLE_REAL',"+schemaJetName(name_)+")))";
         if(type_==10) result+=" CHECK (linaccess_jet_text_capacity("+schemaJetName(name_)+","+QString::number(size_)+"))";
         const auto column=schemaJetName(name_);
         if((type_==10 || type_==12) && !allowZeroLength_) result+=" CHECK (linaccess_jet_nonempty_text("+column+"))";
         if(type_==2 || type_==3 || type_==4 || type_==1) result+=" CHECK ("+column+" IS NULL OR (typeof("+column+")='integer' AND "+column+"=linaccess_jet_field_store('"+type+"',"+column+")))";
         if(type_==7) result+=" CHECK ("+column+" IS NULL OR (typeof("+column+") IN ('integer','real') AND abs("+column+")<=1.7976931348623157e308))";
-        if(type_==8) result+=" CHECK ("+column+" IS NULL OR (typeof("+column+")='text' AND linaccess_jet_field_store('DATETIME',"+column+") IS NOT NULL))";
+        if(type_==8) result+=" CHECK ("+column+" IS NULL OR (typeof("+column+")='text' AND "+(canonicalDate_ ? column+"=linaccess_jet_field_store('DATETIME',"+column+")" : "linaccess_jet_field_store('DATETIME',"+column+") IS NOT NULL")+"))";
         if(type_==11 || type_==12) result+=" CHECK ("+column+" IS NULL OR typeof("+column+")='"+QString(type_==11 ? "blob" : "text")+"')";
         return result;
     }
-    std::shared_ptr<VbaObject> attachedField_;std::shared_ptr<DetachedTableState> owner_;QString name_;int type_{},size_{},attributes_{};bool required_{},appended_{},allowZeroLength_{true};QString default_;
+    std::shared_ptr<VbaObject> attachedField_;std::shared_ptr<DetachedTableState> owner_;QString name_;int type_{},size_{},attributes_{};bool required_{},appended_{},allowZeroLength_{true},canonicalDate_{true};QString default_;
 };
 class DetachedFields final : public VbaObject {
 public:
@@ -2767,9 +2775,9 @@ void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVect
     for(const auto& column:columns) {
         if(column.name.compare("rowid",Qt::CaseInsensitive)==0 || column.name.compare("_rowid_",Qt::CaseInsensitive)==0 || column.name.compare("oid",Qt::CaseInsensitive)==0) throw VbaRuntimeError(3251,"DAO: Shadowed row identity migration unsupported");
         if(!declarations.contains(column.name.toCaseFolded()) || !column.nativeAttributes || !column.required) throw VbaRuntimeError(3251,"DAO: Native field properties incomplete for migration");
-        DetachedField field(owner,column.name,column.sourceType,column.sourceSize);field.attributes_=*column.nativeAttributes;field.required_=*column.required;field.allowZeroLength_=column.allowZeroLength.value_or(true);
-        if(!(field.attributes_&16) && column.hasDefault) {if(column.literalDefault.isEmpty()) throw VbaRuntimeError(3251,"DAO: Nonliteral default migration unsupported");field.default_=column.literalDefault;}
-        const auto definition=[&](const DetachedField& value,const QSet<QString>& mandatory) {auto result=value.attributes_&16 ? schemaJetName(column.name)+" INT NOT NULL DEFAULT ("+accessCounterDefault(table,column.name)+")" : value.definition();if(mandatory.contains(column.name.toCaseFolded()) && !value.required_ && !(value.attributes_&16)) result+=" NOT NULL";return result;};
+        DetachedField field(owner,column.name,column.sourceType,column.sourceSize);field.attributes_=*column.nativeAttributes;field.required_=*column.required;field.allowZeroLength_=column.allowZeroLength.value_or(true);field.canonicalDate_=column.canonicalDate.value_or(false);
+        if(!(field.attributes_&16) && column.hasDefault) {if(column.sourceType==8 && nativeDateDefaultExpression(column.storedDefault)) field.default_=*nativeDateDefaultExpression(column.storedDefault);else {if(column.literalDefault.isEmpty()) throw VbaRuntimeError(3251,"DAO: Nonliteral default migration unsupported");field.default_=column.literalDefault;}}
+        const auto definition=[&](const DetachedField& value,const QSet<QString>& mandatory) {auto result=value.attributes_&16 ? schemaJetName(column.name)+" INT NOT NULL DEFAULT ("+accessCounterDefault(table,column.name)+")" : value.definition(true);if(mandatory.contains(column.name.toCaseFolded()) && !value.required_ && !(value.attributes_&16)) result+=" NOT NULL";return result;};
         definitions.append(definition(field,required));
         if(changes.contains(column.name.toCaseFolded())) {const auto change=changes.value(column.name.toCaseFolded());if(change.required) field.required_=*change.required;if(change.allowZeroLength) field.allowZeroLength_=*change.allowZeroLength;if(change.size) field.size_=*change.size;if(change.defaultValue) field.default_=*change.defaultValue;}
         auto modified=definition(field,nextRequired);if((field.attributes_&16) && !counterDestination.isEmpty()) modified=schemaJetName(column.name)+" INT NOT NULL DEFAULT ("+accessCounterDefault(counterDestination,column.name)+")";modifiedDefinitions.append(modified);names.append(column.name);
@@ -2957,14 +2965,14 @@ TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString&
     if(*column.nativeAttributes&16) throw VbaRuntimeError(3251,"DAO: Counter property alteration requires dedicated migration");
     if(evaluated.contains("name")) {if(evaluated.size()!=1) throw VbaRuntimeError(3251,"DAO: Rename must be a separate field operation");if(evaluated.value("name").kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null field name");return renameNativeField(db,table,column,text(evaluated.value("name").asText()));}
     auto owner=std::make_shared<DetachedTableState>();owner->db=db;owner->workspace=workspace;owner->name=table;
-    DetachedField field(owner,column.name,column.sourceType,column.sourceSize);field.attributes_=*column.nativeAttributes;field.required_=*column.required;field.allowZeroLength_=column.allowZeroLength.value_or(true);
-    if(column.hasDefault) {if(column.literalDefault.isEmpty()) throw VbaRuntimeError(3251,"DAO: Nonliteral default alteration unsupported");field.default_=column.literalDefault;}
+    DetachedField field(owner,column.name,column.sourceType,column.sourceSize);field.attributes_=*column.nativeAttributes;field.required_=*column.required;field.allowZeroLength_=column.allowZeroLength.value_or(true);field.canonicalDate_=column.canonicalDate.value_or(false);
+    if(column.hasDefault) {if(column.sourceType==8 && nativeDateDefaultExpression(column.storedDefault)) field.default_=*nativeDateDefaultExpression(column.storedDefault);else {if(column.literalDefault.isEmpty()) throw VbaRuntimeError(3251,"DAO: Nonliteral default alteration unsupported");field.default_=column.literalDefault;}}
     for(auto it=evaluated.cbegin();it!=evaluated.cend();++it) {
         if(it.key()=="size" && field.type_!=10) throw VbaRuntimeError(3251,"DAO: Only Text capacities can be changed");
         field.assign(it.key().toStdString(),it.value());
     }
     (void)field.definition();
-    if(evaluated.contains("defaultvalue") && !field.default_.isEmpty()) {
+    if(evaluated.contains("defaultvalue") && !field.default_.isEmpty() && !(field.type_==8 && nativeDateDefaultSql(field.default_))) {
         QSqlQuery literal(db);if(!literal.exec("SELECT "+*accessLiteralDefaultSql(field.default_)) || !literal.next()) queryFailure(literal);const auto scalar=literal.value(0);literal.finish();
         if(field.type_==11 && !scalar.isNull()) throw VbaRuntimeError(3251,"DAO: Binary fields support only Null defaults");
         const auto stored=sqlFieldValue(fromSql(scalar),column.type);
@@ -2974,7 +2982,7 @@ TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString&
         else field.default_=QString::number(stored.toLongLong());
     }
     if(field.type_==10 && !field.default_.isEmpty()) {QSqlQuery literal(db);if(!literal.exec("SELECT "+*accessLiteralDefaultSql(field.default_)) || !literal.next()) queryFailure(literal);if(!literal.value(0).isNull() && literal.value(0).toString().size()>field.size_) throw VbaRuntimeError(3163,"DAO: Existing default exceeds new Text capacity");}
-    const auto oldDefault=column.hasDefault ? column.literalDefault : QString{};
+    const auto oldDefault=column.hasDefault ? (column.sourceType==8 && nativeDateDefaultExpression(column.storedDefault) ? *nativeDateDefaultExpression(column.storedDefault) : column.literalDefault) : QString{};
     if(field.required_==*column.required && field.size_==(field.type_==10 ? column.sourceSize : static_cast<int>(fixedDaoFieldSize(field.type_).number)) && field.default_==oldDefault && field.allowZeroLength_==column.allowZeroLength.value_or(true) && (!evaluated.contains("allowzerolength") || column.allowZeroLength.has_value())) return currentNativeFieldReader(db,table);
     checkReservedCounterSchemaAction(db);
     NativeSchemaSettings settings(db);settings.begin(false);
@@ -3347,12 +3355,12 @@ QMap<QString,QVariant> nativeTableLiteralDefaults(QSqlDatabase database,const QS
     shadow.prepare("SELECT 1 FROM temp.sqlite_schema WHERE type IN ('table','view') AND (name=? COLLATE NOCASE OR name='_la_table_schema' COLLATE NOCASE)"); shadow.addBindValue(canonical);
     if(!shadow.exec()) queryFailure(shadow);
     if(shadow.next()) throw VbaRuntimeError(3251,"Native defaults have a TEMP shadow"); shadow.finish();
-    QSqlQuery columns(database);
-    if(!columns.exec("PRAGMA main.table_info("+quote(canonical)+")")) queryFailure(columns);
-    QVector<TableSchemaColumn> schema;
-    while(columns.next()) schema.push_back({columns.value(1).toString(),QString{},0,0,sqliteLiteralDefaultSql(columns.value(4))});
-    if(columns.lastError().isValid()) queryFailure(columns); columns.finish();
-    return literalDefaultValues(database,schema);
+    return literalDefaultValues(database,readTableSchemaColumns(database,canonical));
+}
+QMap<QString,QVariant> nativeTableDateDefaults(QSqlDatabase database,const QString& table) {
+    workspaceState(database)->check();if(!nativeTableNames(database).contains(table,Qt::CaseInsensitive)) return {};
+    QSqlQuery shadow(database);shadow.prepare("SELECT 1 FROM temp.sqlite_schema WHERE type IN ('table','view') AND (name=? COLLATE NOCASE OR name='_la_table_schema' COLLATE NOCASE)");shadow.addBindValue(table);if(!shadow.exec()) queryFailure(shadow);if(shadow.next()) throw VbaRuntimeError(3251,"Native Date defaults have a TEMP shadow");shadow.finish();
+    const auto columns=readTableSchemaColumns(database,table);QVector<TableSchemaColumn> dates;for(const auto& column:columns) if(column.sourceType==8 || column.type.contains("DATE",Qt::CaseInsensitive)) dates.append(column);return literalDefaultValues(database,dates,true);
 }
 std::shared_ptr<VbaObject> makeDaoEngine(QSqlDatabase database) {
     const auto state=workspaceState(database); auto value=state->engine.lock();

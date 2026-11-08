@@ -1,3 +1,5 @@
+#include "native_field_defaults.hpp"
+#include <QDateTime>
 #include <QFile>
 #include "dao_database.hpp"
 #include "native_schema_editor.hpp"
@@ -2182,8 +2184,22 @@ void testNativeSingleRelations() {
     assert(sql.exec("CREATE TABLE LegacySingleParent(KeyValue REAL NOT NULL UNIQUE)"));const QJsonArray metadata{QJsonObject{{"name","KeyValue"},{"source_type","SINGLE"}}};sql.prepare("INSERT INTO _la_table_schema VALUES('LegacySingleParent',?)");sql.addBindValue(QJsonDocument(metadata).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();auto unsupported=relation("LegacySingleMapping","LegacySingleParent");error([&] {database->member("Relations",{}).object->member("Append",{VbaValue::reference(unsupported)});},3251);assert(database->member("Relations",{}).object->member("Count",{}).asNumber()==0);
 }
 
+void testNativeDateDefaults() {
+    using linaccess::VbaValue;auto db=QSqlDatabase::addDatabase("QSQLITE","dao-native-date-defaults");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);auto database=linaccess::makeDaoDatabase(db);auto table=database->member("CreateTableDef",{VbaValue::string("DateRows")}).object;
+    auto id=table->member("CreateField",{VbaValue::string("ID"),VbaValue::integer(4)}).object;id->assign("Attributes",VbaValue::longInteger(16));table->member("Fields",{}).object->member("Append",{VbaValue::reference(id)});
+    for(const auto& item:std::vector<std::pair<const char*,const char*>>{{"Today","Date()"},{"Moment","= Now ( )"},{"Clock","Time()"},{"Fixed","'2026-11-08'"}}) {auto field=table->member("CreateField",{VbaValue::string(item.first),VbaValue::integer(8)}).object;field->assign("DefaultValue",VbaValue::string(item.second));table->member("Fields",{}).object->member("Append",{VbaValue::reference(field)});}database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
+    assert(table->member("Fields",{VbaValue::string("Moment")}).object->member("DefaultValue",{}).asText()=="Now()");const auto before=QDateTime::currentDateTime();database->member("Execute",{VbaValue::string("INSERT INTO DateRows DEFAULT VALUES")});const auto after=QDateTime::currentDateTime();
+    assert(sql.exec("SELECT Today,Moment,Clock,Fixed FROM DateRows") && sql.next());const auto today=sql.value(0).toString();const auto moment=QDateTime::fromString(sql.value(1).toString(),"yyyy-MM-dd HH:mm:ss");const auto clock=sql.value(2).toString();assert(today==before.date().toString(Qt::ISODate)+" 00:00:00" || today==after.date().toString(Qt::ISODate)+" 00:00:00");assert(moment.isValid() && moment.toSecsSinceEpoch()>=before.toSecsSinceEpoch() && moment.toSecsSinceEpoch()<=after.toSecsSinceEpoch());assert(clock.startsWith("1899-12-30 ") && QTime::fromString(clock.mid(11),"HH:mm:ss").isValid());assert(sql.value(3).toString()=="2026-11-08 00:00:00");sql.finish();
+    auto rows=database->member("OpenRecordset",{VbaValue::string("DateRows")}).object;rows->member("AddNew",{});assert(rows->item("Today").kind==VbaValue::Kind::Date && rows->item("Moment").kind==VbaValue::Kind::Date && rows->item("Clock").kind==VbaValue::Kind::Date);const auto frozen=linaccess::sqlFieldValue(rows->item("Moment"),"DATETIME").toString();rows->member("Update",{});assert(sql.exec("SELECT Moment FROM DateRows WHERE ID=2") && sql.next() && sql.value(0).toString()==frozen);sql.finish();rows->member("AddNew",{});rows->assign("Moment",VbaValue{});rows->member("Update",{});assert(sql.exec("SELECT Moment FROM DateRows WHERE ID=3") && sql.next() && sql.value(0).isNull());sql.finish();
+    const auto literals=linaccess::nativeTableLiteralDefaults(db,"DateRows");assert(!literals.contains("moment") && literals.value("fixed").toString()=="2026-11-08 00:00:00");const auto dates=linaccess::nativeTableDateDefaults(db,"DateRows");assert(dates.size()==4 && !dates.contains("id"));assert(sql.exec("SELECT value FROM _la_counter32_sequences WHERE table_name='DateRows'") && sql.next() && sql.value(0).toInt()==3);sql.finish();
+    auto field=table->member("Fields",{VbaValue::string("Moment")}).object;field->assign("DefaultValue",VbaValue::string("Date()"));assert(field->member("DefaultValue",{}).asText()=="Date()");int number=0;try {field->assign("DefaultValue",VbaValue::string("UnsupportedClock()"));}catch(const linaccess::VbaRuntimeError& failure) {number=failure.number;}assert(number==3251 && field->member("DefaultValue",{}).asText()=="Date()");
+    rows->member("Requery",{});rows->member("AddNew",{});assert(linaccess::sqlFieldValue(rows->item("Moment"),"DATETIME").toString().endsWith(" 00:00:00"));rows->member("CancelUpdate",{});table->assign("Name",VbaValue::string("RenamedDates"));database->member("Execute",{VbaValue::string("INSERT INTO RenamedDates DEFAULT VALUES")});assert(sql.exec("SELECT Moment FROM RenamedDates WHERE ID=5") && sql.next() && sql.value(0).toString().endsWith(" 00:00:00"));sql.finish();
+    assert(!sql.exec("INSERT INTO RenamedDates(Fixed) VALUES('2026-11-08')"));assert(sql.exec("SELECT Moment FROM RenamedDates WHERE ID=2") && sql.next() && sql.value(0).toString()==frozen);sql.finish();
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testNativeDateDefaults();
     testNativeSingleRelations();
     testNativeSingleSchemaAndWrites();
     testNativeDaoWriteCapability();

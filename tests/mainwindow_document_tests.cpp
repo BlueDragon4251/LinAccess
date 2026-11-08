@@ -1,3 +1,5 @@
+#include "native_stored_form.hpp"
+#include <QDateTime>
 #include "native_relation_designer.hpp"
 #include "native_datasheet_page_store.hpp"
 #include <QInputDialog>
@@ -2382,6 +2384,16 @@ void exerciseSingleRelationDesigner(QWidget& owner) {
     linaccess::editNativeRelations(&owner,db,"Single UI parent");assert(sql.exec("PRAGMA foreign_key_list('Single UI child')") && sql.next() && sql.value(2).toString()=="Single UI parent");sql.finish();database->member("Execute",{VbaValue::string("UPDATE [Single UI parent] SET KeyValue=0.2")});assert(sql.exec("SELECT KeyValue FROM [Single UI child]") && sql.next() && sql.value(0).toDouble()==static_cast<double>(0.2f));sql.finish();database->member("Execute",{VbaValue::string("DELETE FROM [Single UI parent]")});assert(sql.exec("SELECT COUNT(*) FROM [Single UI child]") && sql.next() && sql.value(0).toInt()==0);sql.finish();
 }
 
+void exerciseDateDefaultBuffers() {
+    using linaccess::VbaValue;auto db=QSqlDatabase::addDatabase("QSQLITE","date-default-buffers");db.setDatabaseName(":memory:");assert(db.open());auto database=linaccess::makeDaoDatabase(db);auto table=database->member("CreateTableDef",{VbaValue::string("Date UI rows")}).object;
+    auto id=table->member("CreateField",{VbaValue::string("ID"),VbaValue::integer(4)}).object;id->assign("Attributes",VbaValue::longInteger(16));table->member("Fields",{}).object->member("Append",{VbaValue::reference(id)});auto stamp=table->member("CreateField",{VbaValue::string("Moment"),VbaValue::integer(8)}).object;stamp->assign("DefaultValue",VbaValue::string("Now()"));table->member("Fields",{}).object->member("Append",{VbaValue::reference(stamp)});table->member("Fields",{}).object->member("Append",{table->member("CreateField",{VbaValue::string("Label"),VbaValue::integer(10),VbaValue::longInteger(8)})});auto primary=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;primary->assign("Primary",VbaValue::logical(true));primary->member("Fields",{}).object->member("Append",{primary->member("CreateField",{VbaValue::string("ID")})});table->member("Indexes",{}).object->member("Append",{VbaValue::reference(primary)});database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
+    QSqlQuery sql(db);QString frozen;
+    {linaccess::AccessTableModel model(nullptr,db);model.setTable("Date UI rows");model.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(model.select() && model.insertRow(0));const int moment=model.fieldIndex("Moment");frozen=model.record(0).value(moment).toString();assert(QDateTime::fromString(frozen,"yyyy-MM-dd HH:mm:ss").isValid() && model.record(0).isGenerated(moment));assert(model.setData(model.index(0,model.fieldIndex("Label")),"sheet"));assert(model.submitTransactionally());}
+    assert(sql.exec("SELECT Moment FROM [Date UI rows] WHERE ID=1") && sql.next() && sql.value(0).toString()==frozen);sql.finish();
+    const QJsonObject definition{{"table","Date UI rows"},{"fields",QJsonArray{"Moment","Label"}},{"vba","Sub StoreDate()\nIf IsNull(Me!Moment) Then Err.Raise 5\nIf VarType(Me!Moment)<>vbDate Then Err.Raise 5\nMe!Label=\"form\"\nDoCmd.RunCommand acCmdSaveRecord\nEnd Sub\n"}};const auto stored=linaccess::nativeStoredForm("Date buffer form",definition,db);
+    AccessFormPreview form(stored.name,stored.layout,stored.code,db,nullptr,false,{},std::nullopt,0,0);form.show();QApplication::processEvents();assert(form.hasDataSource());auto* moment=form.findChild<QLineEdit*>("access-control-Moment");assert(moment && !moment->text().isEmpty());const auto formDefault=moment->text();std::vector<VbaValue> arguments;const auto result=form.executeProcedure("StoreDate",arguments);if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Date form: "<<result.explanation<<"\n";assert(result.status==linaccess::VbaExecutionStatus::Completed);assert(sql.exec("SELECT Moment FROM [Date UI rows] WHERE ID=2") && sql.next() && sql.value(0).toString()==formDefault);sql.finish();assert(form.close());
+}
+
 int main(int argc,char** argv) {
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication app(argc,argv); app.setQuitOnLastWindowClosed(false); app.setApplicationName("LinAccessSyntheticGuiTest"); app.setOrganizationName("LinAccessSyntheticTests");
@@ -2789,6 +2801,7 @@ int main(int argc,char** argv) {
     exerciseTableMultiDelete(window,db);
     exerciseRecordEscape(window,db);
     exercisePageNavigation(window,db);
+    exerciseDateDefaultBuffers();
     exerciseSingleRelationDesigner(window);
     exerciseStoredForm(window,db);
     exerciseStoredReport(window,db);
@@ -2807,7 +2820,7 @@ int main(int argc,char** argv) {
             grid->item(1,0)->setText("label"); grid->item(1,3)->setText("\"ui value\"");grid->item(1,4)->setText("12");
             dialog->findChild<QPushButton*>("native-table-add-field")->click();
             grid->item(2,0)->setText("enabled"); qobject_cast<QComboBox*>(grid->cellWidget(2,1))->setCurrentText("BOOLEAN"); grid->item(2,3)->setText("True");
-            dialog->findChild<QPushButton*>("native-table-add-field")->click();grid->item(3,0)->setText("sample");qobject_cast<QComboBox*>(grid->cellWidget(3,1))->setCurrentText("SINGLE");grid->item(3,3)->setText("0.1");
+            dialog->findChild<QPushButton*>("native-table-add-field")->click();grid->item(3,0)->setText("sample");qobject_cast<QComboBox*>(grid->cellWidget(3,1))->setCurrentText("SINGLE");grid->item(3,3)->setText("0.1");dialog->findChild<QPushButton*>("native-table-add-field")->click();grid->item(4,0)->setText("moment");qobject_cast<QComboBox*>(grid->cellWidget(4,1))->setCurrentText("DATE");grid->item(4,3)->setText("Now()");
             grid->item(1,4)->setText("0");
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->accept();});
             buttons->button(QDialogButtonBox::Save)->click();
@@ -2861,11 +2874,11 @@ int main(int argc,char** argv) {
         assert(authored.exec("SELECT COUNT(*) FROM authored_defaults") && authored.next() && authored.value(0).toInt()==2);authored.finish();
         QTimer::singleShot(0,&window,[&] {
             auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-field-designer");
-            auto* list=dialog->findChild<QTableWidget*>("native-field-list");assert(list && list->rowCount()==5);
+            auto* list=dialog->findChild<QTableWidget*>("native-field-list");assert(list && list->rowCount()==6);
             dialog->findChild<QLineEdit*>("native-field-name")->setText("ExtraNote");
             dialog->findChild<QSpinBox*>("native-field-size")->setValue(8);
             dialog->findChild<QLineEdit*>("native-field-default")->setText("\"note\"");
-            dialog->findChild<QPushButton*>("native-field-create")->click();assert(list->rowCount()==6);
+            dialog->findChild<QPushButton*>("native-field-create")->click();assert(list->rowCount()==7);
             QSqlQuery values(db);assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE ExtraNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();
             for(int row=0;row<list->rowCount();++row) if(list->item(row,0)->text()=="ExtraNote") list->setCurrentCell(row,0);
             dialog->findChild<QTabWidget*>("native-field-editor-tabs")->setCurrentIndex(1);
@@ -2880,7 +2893,7 @@ int main(int argc,char** argv) {
             dialog->findChild<QPushButton*>("native-field-rename")->click();assert(list->item(list->currentRow(),0)->text()=="RenamedNote");
             assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE RenamedNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();assert(!values.exec("INSERT INTO authored_defaults(RenamedNote) VALUES('')"));
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});
-            dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==5);dialog->reject();
+            dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==6);dialog->reject();
         });
         auto* editFields=window.findChild<QAction*>("native-table-fields-edit");assert(editFields);editFields->trigger();
         assert(authored.exec("SELECT COUNT(*) FROM authored_defaults WHERE qty=7 AND label='ui value'") && authored.next() && authored.value(0).toInt()==2);authored.finish();

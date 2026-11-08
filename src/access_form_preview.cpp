@@ -1,3 +1,4 @@
+#include "native_field_defaults.hpp"
 #include "native_stored_form.hpp"
 #include "native_stored_report.hpp"
 #include "native_report_text_layout.hpp"
@@ -2252,6 +2253,10 @@ void AccessFormPreview::setFilterState(const QString& filter,bool enabled) {
 
 void AccessFormPreview::loadRecord() {
     clearRecordSelection(); bufferedTextControls_.clear();
+    if(currentRecordIndex_==0 && directTable_ && dataSourceAvailable_ && layout_.allowAdditions) {
+        try {const auto dates=linaccess::nativeTableDateDefaults(db_,layout_.recordSource.trimmed());for(auto it=dates.cbegin();it!=dates.cend();++it) tableLiteralDefaults_.insert(it.key(),it.value());}
+        catch(const linaccess::VbaRuntimeError& error) {dataSourceAvailable_=false;dataSourceErrorNumber_=error.number;tableLiteralDefaults_.clear();if(status_) status_->setText("Tabellenstandardwerte nicht verfügbar ("+QString::number(error.number)+")");}
+    }
     QScopedValueRollback<bool> loading(loading_,true);
     for (const auto& control : layout_.controls) {
         if (control.controlSource.isEmpty() || (control.type=="ListBox" && control.multiSelect)) continue;
@@ -2401,6 +2406,9 @@ bool AccessFormPreview::saveRecord() {
             columns << column; placeholders << "?";
             values << linaccess::sqlFieldValue(value,widget->property("la_sql_type").toString());
         } catch (const std::exception& error) { status_->setText(QString::fromUtf8(error.what())); return false; }
+    }
+    if(currentRecordIndex_==0) for(auto it=tableLiteralDefaults_.cbegin();it!=tableLiteralDefaults_.cend();++it) if(dataTypes_.value(it.key()).contains("DATE",Qt::CaseInsensitive)) {
+        const int index=columnIndex(it.key(),dataColumns_);if(index<0) continue;const auto column=sqlIdentifier(dataColumns_[index]);if(columns.contains(column)) continue;columns.append(column);placeholders.append("?");values.append(it.value());
     }
     if (columns.empty() && currentRecordIndex_>0) return false;
     linaccess::AccessCounterSqlScope counterScope(db_);

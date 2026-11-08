@@ -1,3 +1,4 @@
+#include "native_field_defaults.hpp"
 #include "access_table_model.hpp"
 #include "access_autonumber.hpp"
 #include "vba_qt_value.hpp"
@@ -92,8 +93,10 @@ bool AccessTableModel::insertRows(int row,int count,const QModelIndex& parent) {
     if(saving_ || changing_) return reject(2501);
     if(readOnly_) return reject(2448);
     const QScopedValueRollback<bool> changing(changing_,true);
+    QMap<QString,QVariant> dateDefaults;if(count>0 && editStrategy()==OnManualSubmit) {try {dateDefaults=nativeTableDateDefaults(database(),tableName());}catch(const VbaRuntimeError& error) {return reject(error.number);}}
     const auto dirtyAnchors=rowAnchors(dirtyRows_),deleteAnchors=rowAnchors(deletedRows_);
     const bool accepted=QSqlTableModel::insertRows(row,count,parent);
+    if(accepted && !dateDefaults.isEmpty()) for(int inserted=row;inserted<row+count;++inserted) for(auto it=dateDefaults.cbegin();it!=dateDefaults.cend();++it) {const int column=fieldIndex(it.key());if(column>=0) QSqlTableModel::setData(index(inserted,column),it.value(),Qt::EditRole);}
     dirtyRows_=anchoredRows(dirtyAnchors); deletedRows_=anchoredRows(deleteAnchors);
     if(accepted && editStrategy()==OnManualSubmit) for(int i=0;i<count;++i) dirtyRows_.insert(row+i);
     return accepted;

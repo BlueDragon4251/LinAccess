@@ -5964,3 +5964,14 @@ Auswahldruck: vollständige markierte sichtbare Datensätze als eingefrorener ei
 DAO-DDL-Identität: beobachtete eigene Database/QueryDef.Execute CREATE/DROP und SELECT INTO führen monotone Main-Tabellengenerationen; alte TableDefs/Fields/physische Recordsets/Clones verweigern3420 statt neu erstellte gleichnamige Daten zu ändern. Gleiches SQL/Rootpage/Rowid, alter Schreibpuffer, frische Wrapper, No-op/Fehl-DDL, ALTER und Workspace-Rollback unabhängig geprüft. Externes/unbeobachtetes SQL, TEMP-only und volle Jet-Locks/Lebensdauer bleiben offen. Vollständiger aktueller Desktop48/48 (89,70 s), App/Paket/Build-ID/SQLite/vier Originalhashes bestanden; schließt Kopien/Auswahldruck und Originalrezepte ein. Details docs/DAO_RUNTIME.md.456/384/72 unverändert.
 
 Jet-Rohbinärimport: ausdrücklich gewählter MDBTools-Hexcodec (kein Raten aus CSV), exakte BLOB-/NULL-Werte und Byteanzahl-Vorschau im realen Teil-/Gesamtimport. Laufend begrenzte Child-Ausgabe20MiB/Diagnostik64KiB,30s; großer Export bricht atomar ohne Quelldateiänderung ab. Technische echte Jet4-MDBs mit Jackcess5.0.4 unabhängig geschrieben/zurückgelesen, keine Geschäftsdaten und keine neue App-Java-Abhängigkeit. Decoder-/GUI-/DAO-Bytes/Typ/Chunks/Hash/Rollback geprüft. Ziel2/2 (12,26 s), vollständiger aktueller Desktop48/48 (91,47 s), neue Kassa-Kopie Import/Zellwerte und78/100 Abfragen, App/Paket/Build-ID/SQLite/vier Originalhashes bestanden. Details docs/JET_BINARY_IMPORT.md; keine OLE-Anzeige/Anhänge/Originalformat-Schreib- oder Windows-Parität behaupten.456/384/72 unverändert; kein neuer CTest.
+
+Native Datumsdefaults Date()/Now()/Time() jetzt für eigene Date-Felder im DAO-,
+Tabellen-/Feldentwurf, manuellen Datenblatt und direkten Tabellenformular.
+Neue Puffer speichern den initialisierten Uhrwert; explizit Null überschreibt,
+ungebundene Datumsdefaults werden mitgespeichert. Neue Date-Felder erzwingen
+kanonische ISO-Speicherung; alte Definitionen bleiben bei Migration erhalten.
+Nur begrenzte eigene Uhrfunktionen, keine beliebigen SQL-/VBA-Defaults. App
+gebaut, GUI/DAO2/2 (6,24s). SOURCE_LITERAL_DEFAULTS.md/DATE_RUNTIME.md;
+F014/F015/DAO-/Formular-Vollanforderungen bleiben offen,456/384/72 unverändert.
+Fortsetzung: eigene kanonische Date-Beziehungsschlüssel samt GUI und tatsächlichen
+FK-/Kaskadenwirkungen; danach weitere offene Anforderungen, kein Zwischen-Final.

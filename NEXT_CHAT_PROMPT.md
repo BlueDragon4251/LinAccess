@@ -350,3 +350,14 @@ gebaut; DAO_RELATIONS_RUNTIME.md. Nur der Titelguard des GUI-Fehlerhelfers wurde
 danach eingeengt, keine Produktionsänderung nach Prüfung.456/384/72 unverändert.
 Fortsetzung: native Date-/Now-/Time-Defaults und Datumsnormalisierung prüfen/
 implementieren, danach weitere offene Anforderungen ohne Zwischen-Final.
+
+Native Datumsdefaults Date()/Now()/Time() jetzt für eigene Date-Felder im DAO-,
+Tabellen-/Feldentwurf, manuellen Datenblatt und direkten Tabellenformular.
+Neue Puffer speichern den initialisierten Uhrwert; explizit Null überschreibt,
+ungebundene Datumsdefaults werden mitgespeichert. Neue Date-Felder erzwingen
+kanonische ISO-Speicherung; alte Definitionen bleiben bei Migration erhalten.
+Nur begrenzte eigene Uhrfunktionen, keine beliebigen SQL-/VBA-Defaults. App
+gebaut, GUI/DAO2/2 (6,24s). SOURCE_LITERAL_DEFAULTS.md/DATE_RUNTIME.md;
+F014/F015/DAO-/Formular-Vollanforderungen bleiben offen,456/384/72 unverändert.
+Fortsetzung: eigene kanonische Date-Beziehungsschlüssel samt GUI und tatsächlichen
+FK-/Kaskadenwirkungen; danach weitere offene Anforderungen, kein Zwischen-Final.

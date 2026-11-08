@@ -73,3 +73,10 @@ is shared for its whole/fractional components. Like a wall clock, it wraps at
 midnight and can change with system-clock adjustments; it is not a monotonic
 stopwatch. Windows tick-resolution equivalence and native SQL Timer translation
 are not claimed. Arguments are rejected with error 450.
+
+Eigene native Date-Felder unterstützen jetzt Date()/Now()/Time() als begrenzte
+Tabellenstandardwerte. Neue DAO-/Datenblatt-/Formularpuffer erhalten tatsächliche
+Uhrwerte und speichern den initialisierten Wert, auch bei ungebundenen
+Datumsfeldern im Formular. Neue Date-Schemas erzwingen kanonische Zeitstempel;
+ältere Definitionen werden bei Migration nicht still verändert. Einzelheiten
+und weiterhin offene Grenzen: SOURCE_LITERAL_DEFAULTS.md, Abschnitt vom2026-11-08.

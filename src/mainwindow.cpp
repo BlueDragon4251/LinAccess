@@ -1,3 +1,4 @@
+#include "native_field_defaults.hpp"
 #include "mainwindow.hpp"
 #include "native_grid_clipboard.hpp"
 #include "native_datasheet_print.hpp"
@@ -1793,7 +1794,7 @@ void MainWindow::newTable() {
     grid->setHorizontalHeaderLabels({"Feldname","Datentyp","Pflichtfeld (ja/nein)","Standardwert (optional)","Textgröße (1–255)","Leere Zeichenfolge zulassen"});
     grid->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch); outer->addWidget(grid);
     outer->addWidget(new QLabel("TEXT: wählbare Feldgröße bis 255 Zeichen; MEMO: längerer Text.",&dialog));
-    outer->addWidget(new QLabel("Standardwerte als Literal: Zahl, True/False, \"Text\" oder Null.",&dialog));
+    outer->addWidget(new QLabel("Standardwerte: Literal; bei Datum auch Date(), Now() oder Time().",&dialog));
     const auto addRow=[grid] {
         const int row=grid->rowCount(); grid->insertRow(row);
         grid->setItem(row,0,new QTableWidgetItem());
@@ -1824,7 +1825,8 @@ void MainWindow::newTable() {
             const auto required=grid->item(row,2)->text().trimmed().toLower();
             if(required!="ja" && required!="nein" && !required.isEmpty()) { messageError(&dialog,"Pflichtfeld muss ja oder nein sein"); return; }
             const auto token=grid->item(row,3)->text().trimmed(); QString defaultSql;
-            if(!token.isEmpty()) {
+            if(type=="DATE" && linaccess::nativeDateDefaultSql(token)) defaultSql=" DEFAULT "+token;
+            else if(!token.isEmpty()) {
                 const auto literal=linaccess::accessLiteralDefaultSql(token);
                 if(!literal || token.size()>255) { messageError(&dialog,"Standardwert: Literal mit höchstens 255 Zeichen eingeben; allgemeine Ausdrücke sind noch nicht unterstützt."); return; }
                 QSqlQuery value(db_);

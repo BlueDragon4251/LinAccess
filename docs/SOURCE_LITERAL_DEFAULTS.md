@@ -87,3 +87,31 @@ default expressions while independently checking their pending values.
 Focused DAO/import/original3/3 (10.48 s), latest Debian/build ID/SQLite/four fixture
 hashes passed. Last full baseline48/48 (85.12 s); headless runtime unchanged1/1
 (1.66 s). Catalog456/384/72 remains fixed; no extra CTest target.
+
+## Native Date/Now/Time defaults (2026-11-08)
+
+Own native Date fields now accept the bounded zero-argument expressions `Date()`,
+`Now()` and `Time()` in DAO and the table/field designers. Case, whitespace and a
+leading `=` are accepted. Stored defaults call private native SQLite functions;
+reading Field.DefaultValue returns the canonical Access expression without
+executing it. No arbitrary SQL/VBA default is evaluated by these readers.
+
+DAO AddNew, manual-submit datasheet inserts and direct-table form additions
+initialize these defaults in the new record buffer. The frozen values are
+written at save, including Date defaults without a bound form control. Explicit
+Null and later field edits take precedence. SQL DEFAULT VALUES evaluates the
+actual local system clock at insertion. Date uses midnight; Time uses the OLE
+base date 1899-12-30. Storage retains the existing whole-second limitation.
+No counter is consumed by reading Date defaults.
+
+New native Date fields require canonical ISO timestamps through an actual CHECK;
+literal Date defaults use the same conversion as field writes. Existing native
+Date definitions retain their older constraint during field/index/relation/table
+migrations; metadata does not silently upgrade their stored data. The supported
+clock defaults survive these migrations and table renaming. General expressions,
+imported default-expression evaluation, writable-query defaults, regional text
+identity, subsecond storage and exact Windows event timing remain open (F015,
+F014 and the existing DAO/form requirements). This does not establish full parity.
+
+Gezielte bestehende GUI-/DAO-Ziele2/2 bestanden (6,24s), App gebaut. Keine neue
+Vollsuite-/Windows-Referenzbehauptung; Katalog456/384/72 unverändert.
