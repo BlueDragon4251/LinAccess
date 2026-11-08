@@ -1,3 +1,4 @@
+#include "native_relation_designer.hpp"
 #include "native_datasheet_page_store.hpp"
 #include <QInputDialog>
 #include "mainwindow.hpp"
@@ -2373,6 +2374,14 @@ void exerciseNativeRelationDesigner() {
     db.close();
 }
 
+void exerciseSingleRelationDesigner(QWidget& owner) {
+    using linaccess::VbaValue;auto db=QSqlDatabase::addDatabase("QSQLITE","single-relation-designer");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);assert(sql.exec("PRAGMA foreign_keys=ON"));auto database=linaccess::makeDaoDatabase(db);
+    for(const auto* name:{"Single UI parent","Single UI child"}) {auto table=database->member("CreateTableDef",{VbaValue::string(name)}).object;table->member("Fields",{}).object->member("Append",{table->member("CreateField",{VbaValue::string("KeyValue"),VbaValue::integer(6)})});if(QString(name).endsWith("parent")) {auto index=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;index->assign("Primary",VbaValue::logical(true));index->member("Fields",{}).object->member("Append",{index->member("CreateField",{VbaValue::string("KeyValue")})});table->member("Indexes",{}).object->member("Append",{VbaValue::reference(index)});}database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});database->member("Execute",{VbaValue::string((QString("INSERT INTO [")+name+"] VALUES(0.1)").toStdString())});}
+    QTimer::singleShot(0,&owner,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-relation-designer");dialog->findChild<QComboBox*>("native-relation-parent")->setCurrentText("Single UI parent");dialog->findChild<QComboBox*>("native-relation-child")->setCurrentText("Single UI child");dialog->findChild<QLineEdit*>("native-relation-name")->setText("Single UI mapping");dialog->findChild<QCheckBox*>("native-relation-update-cascade")->setChecked(true);dialog->findChild<QCheckBox*>("native-relation-delete-cascade")->setChecked(true);auto* fields=dialog->findChild<QTableWidget*>("native-relation-fields");assert(fields && fields->rowCount()==1);for(int column=0;column<2;++column) qobject_cast<QComboBox*>(fields->cellWidget(0,column))->setCurrentText("KeyValue");
+        QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());if(box && box->windowTitle()=="Beziehung konnte nicht geändert werden") {std::cerr<<"Single relation GUI error: "<<box->text().toStdString()<<"\n";box->accept();}});dialog->findChild<QPushButton*>("native-relation-create")->click();assert(dialog->findChild<QTableWidget*>("native-relation-list")->rowCount()==1);dialog->reject();});
+    linaccess::editNativeRelations(&owner,db,"Single UI parent");assert(sql.exec("PRAGMA foreign_key_list('Single UI child')") && sql.next() && sql.value(2).toString()=="Single UI parent");sql.finish();database->member("Execute",{VbaValue::string("UPDATE [Single UI parent] SET KeyValue=0.2")});assert(sql.exec("SELECT KeyValue FROM [Single UI child]") && sql.next() && sql.value(0).toDouble()==static_cast<double>(0.2f));sql.finish();database->member("Execute",{VbaValue::string("DELETE FROM [Single UI parent]")});assert(sql.exec("SELECT COUNT(*) FROM [Single UI child]") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+}
+
 int main(int argc,char** argv) {
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication app(argc,argv); app.setQuitOnLastWindowClosed(false); app.setApplicationName("LinAccessSyntheticGuiTest"); app.setOrganizationName("LinAccessSyntheticTests");
@@ -2780,6 +2789,7 @@ int main(int argc,char** argv) {
     exerciseTableMultiDelete(window,db);
     exerciseRecordEscape(window,db);
     exercisePageNavigation(window,db);
+    exerciseSingleRelationDesigner(window);
     exerciseStoredForm(window,db);
     exerciseStoredReport(window,db);
     {

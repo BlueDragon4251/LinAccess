@@ -167,3 +167,23 @@ missing child uniqueness refusal, actual duplicate/orphan failures, dependency
 protection, enforced and DontEnforce3 lifecycle, and real modal1:1/cascade creation/
 removal passed. No new target/broad suite, exact Jet null/index/flag inference
 semantics remain open.456/384/72 unchanged.
+
+## Native Single keys
+
+Enforced and one-to-one relationship validation now accepts matching Single
+keys only when both sides have explicit own native properties and the actual
+SINGLE_REAL declaration. Ordinary imported/legacy REAL fields labelled Single
+are refused here: their declared type alone cannot prove quantized future keys.
+Checked parent uniqueness/NOT NULL and known-child reconstruction requirements
+remain in force. The graphic relationship editor offers proven native Single
+fields and creates real foreign keys/cascades, not metadata-only flags.
+
+Existing GUI/DAO2/2 (6.26s), app built. Actual native Single parent/child keys
+retain their binary32 expansions and BLOBs through relation creation. Orphans
+fail, values rounding to the same parent key remain duplicate keys, update
+cascade stores0.2f in the child, delete cascade removes linked rows while Null
+children survive, removal succeeds, and unproven legacy Single parents refuse.
+The real modal designer also creates/exercises both cascades on its own technical
+database. Its delayed error helper is now limited to its own warning title; no
+production change after the successful check. Full Jet collation/key/lifetime
+semantics and fixed456/384/72 remain open/unchanged.

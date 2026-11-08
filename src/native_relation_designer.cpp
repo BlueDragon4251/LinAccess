@@ -34,7 +34,7 @@ void editNativeRelations(QWidget* parent,QSqlDatabase database,const QString& su
     auto* addField=new QPushButton("+ Feldzuordnung",&dialog);addField->setObjectName("native-relation-add-field");rowButtons->addWidget(addField);
     auto* removeField=new QPushButton("Feldzuordnung entfernen",&dialog);rowButtons->addWidget(removeField);layout->addLayout(rowButtons);
     auto* append=new QPushButton("Beziehung anlegen",&dialog);append->setObjectName("native-relation-create");layout->addWidget(append);
-    layout->addWidget(new QLabel("Integrität und Kaskaden benötigen numerische Schlüssel und eine in LinAccess angelegte Kindtabelle.",&dialog));
+    layout->addWidget(new QLabel("Integrität und Kaskaden benötigen numerische Schlüssel und eine in LinAccess angelegte Kindtabelle. Single-Schlüssel benötigen eigene Single-Felder auf beiden Seiten.",&dialog));
     auto* status=new QLabel(&dialog);status->setWordWrap(true);layout->addWidget(status);
     auto* close=new QDialogButtonBox(QDialogButtonBox::Close,&dialog);layout->addWidget(close);QObject::connect(close,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
     const auto db=makeDaoDatabase(database);bool catalogValid=true;
@@ -62,7 +62,7 @@ void editNativeRelations(QWidget* parent,QSqlDatabase database,const QString& su
         QStringList result;if(tableName.isEmpty()) return result;
         const auto table=db->member("TableDefs",{VbaValue::string(tableName.toStdString())}).object;
         for(const auto& field:table->member("Fields",{}).object->enumerate()) {
-            try {const auto type=field.object->member("Type",{}).asNumber();const bool numeric=type==1 || type==2 || type==3 || type==4 || type==7;
+            try {const auto type=field.object->member("Type",{}).asNumber();bool nativeSingle=false;if(type==6) {try {nativeSingle=field.object->member("Attributes",{}).asNumber()==1 && field.object->member("Required",{}).kind==VbaValue::Kind::Boolean;}catch(const VbaRuntimeError& problem) {if(problem.number!=3251) throw;}}const bool numeric=type==1 || type==2 || type==3 || type==4 || nativeSingle || type==7;
                 if(numeric || (!integrity->isChecked() && !oneToOne->isChecked() && (type==5 || type==6 || type==8 || type==10))) result.append(QString::fromStdString(field.object->member("Name",{}).asText()));}
             catch(const VbaRuntimeError& problem) {if(problem.number!=3251) throw;}
         }

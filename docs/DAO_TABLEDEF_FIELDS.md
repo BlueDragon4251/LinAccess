@@ -446,3 +446,8 @@ GUI creates Single, stores a rounded data-sheet edit and rejects overflow, then
 retains the field through index/field/table schema edits. The test model now
 uses its required manual-submit mode. No fresh3/3/full-suite/Access oracle claim.
 F014/F015/F041/F055/F105/F121/F122/F175 and fixed456/384/72 remain open/unchanged.
+
+Own native quantized Single keys now also support real relationship enforcement
+and cascades when both sides have proven native SINGLE_REAL declarations.
+Imported/legacy REAL declarations remain refused for this purpose. Current
+GUI/DAO2/2 (6.26s), app built; see DAO_RELATIONS_RUNTIME.md.456/384/72 unchanged.

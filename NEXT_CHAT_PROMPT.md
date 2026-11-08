@@ -342,3 +342,11 @@ Null/Unterlauf bleiben3251 statt stiller Normalisierung. Final GUI/DAO2/2
 DAO_TABLEDEF_FIELDS.md/SOURCE_SINGLE_PRECISION.md; insb. komplexe/joined Writes,
 Arithmetik/Locale/Access-Oracle und erzwungene Single-FKs noch offen.456/384/72
 unverändert. Andere offene Anforderungen fortlaufend weiterprogrammieren.
+
+Echte Single-Fremdschlüssel/Cascades jetzt für nachgewiesene eigene SINGLE_REAL-
+Felder beider Seiten, einschließlich GUI-Auswahl. Nicht nachgewiesene Legacy-/
+importierte REAL-Single-Schlüssel bleiben verweigert. GUI/DAO2/2 (6,26s), App
+gebaut; DAO_RELATIONS_RUNTIME.md. Nur der Titelguard des GUI-Fehlerhelfers wurde
+danach eingeengt, keine Produktionsänderung nach Prüfung.456/384/72 unverändert.
+Fortsetzung: native Date-/Now-/Time-Defaults und Datumsnormalisierung prüfen/
+implementieren, danach weitere offene Anforderungen ohne Zwischen-Final.
