@@ -641,3 +641,6 @@ und prüft Felder, Richtungen und Schlüssel gegen den vollständigen nativen In
 
 Bei tatsächlichen MDB-Importen werden bestätigte endliche Single-Werte direkt aus
 den ursprünglichen Bits übernommen: [Präzisionsumfang und Grenzen](docs/SOURCE_SINGLE_PRECISION.md).
+
+Auch ursprüngliche Double-Bitmuster werden bei tatsächlichen MDB-Kopien erhalten;
+Umfang, unabhängiger Originaldatenvergleich und Grenzen: [Double-Präzision](docs/SOURCE_DOUBLE_PRECISION.md).

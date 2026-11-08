@@ -1,5 +1,8 @@
 #include "access_catalog.hpp"
 #include "access_index_metadata.hpp"
+#include "access_floating_metadata.hpp"
+#include <bit>
+#include <QDir>
 #include "access_query.hpp"
 #include "dao_database.hpp"
 #include <QSet>
@@ -61,6 +64,7 @@ int main(int argc, char** argv) {
         "mdb-tables", {"-1", source})).split('\n', Qt::SkipEmptyParts);
     int imported = 0;
     int originalPrimaryNames=0,originalOtherNames=0;
+    int independentDoubleTables=0,independentDoubleColumns=0,independentDoubleValues=0,independentDoubleNulls=0;
     int booleanColumns = 0;
     int trueBooleans = 0;
     int typedBooleans = 0;
@@ -78,6 +82,12 @@ int main(int argc, char** argv) {
             const auto csv = linaccess::AccessCatalog::exportTable(source,table);
             const auto rows = linaccess::parseCsvDetailed(std::string_view(csv.constData(), csv.size()));
             const auto schema = linaccess::parseMdbSchema(catalog.tableSchema(table));
+            QStringList doubleNames; for(const auto& column:schema.columns) if(column.sourceType=="DOUBLE") doubleNames.append(column.name);
+            std::optional<linaccess::AccessDoubleValues> originalDoubles;
+            if(!doubleNames.isEmpty()) {
+                originalDoubles=linaccess::checkedAccessDoubleValues(catalog.doubleValues(table),doubleNames,table);
+                assert(originalDoubles->sourceDigest==before.toHex() && originalDoubles->rowCount==static_cast<qsizetype>(rows.size()-1));
+            }
             QStringList originalColumns; for(const auto& column:schema.columns) originalColumns.append(column.name);
             const auto originalIndexes=linaccess::checkedAccessSourceIndexes(schema.sourceIndexMetadata,originalColumns);
             for(const auto& index:originalIndexes) { if(index.kind==1) ++originalPrimaryNames; else if(index.kind==0) ++originalOtherNames; }
@@ -89,7 +99,7 @@ int main(int argc, char** argv) {
                 if(column.sourceType=="DOUBLE") ++doubleColumns;
                 if(column.hasDefault) { ++sourceDefaults; if(!column.autoNumber) ++nativeDefaults; }
             }
-            linaccess::importAccessTable(db, source, table, schema, rows);
+            linaccess::importAccessTable(db, source, table, schema, rows,linaccess::AccessBinaryEncoding::Unsupported,linaccess::AccessFloatingSource::NativeMdbBits);
             QSqlQuery storedIndexes(db); storedIndexes.prepare("SELECT definition FROM main._la_access_indexes WHERE table_name=?"); storedIndexes.addBindValue(table);
             assert(storedIndexes.exec() && storedIndexes.next() && storedIndexes.value(0).toString().toUtf8()==schema.sourceIndexMetadata); storedIndexes.finish();
             const auto indexTable=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string(table.toStdString())}).object;
@@ -325,6 +335,7 @@ End Function
                         values.append(truth ? "-1" : "0"); if (truth) ++trueBooleans;
                     }
                     else if (schema.columns[col].sqliteType == "INTEGER") values.append(QString::number(text.toLongLong()));
+                    else if(schema.columns[col].sourceType=="DOUBLE" && originalDoubles) values.append(QString::number(originalDoubles->columns.value(schema.columns[col].name.toCaseFolded())[static_cast<qsizetype>(row-1)].value(),'g',17));
                     else if (schema.columns[col].sqliteType == "REAL") values.append(QString::number(text.toDouble(), 'g', 17));
                     else values.append(text);
                 }
@@ -342,6 +353,30 @@ End Function
                 actualRows.insert(QJsonDocument(values).toJson(QJsonDocument::Compact));
             }
             assert(expectedRows == actualRows);
+            const auto oracleRoot=qEnvironmentVariable("LINACCESS_DOUBLE_ORACLE_ROOT");
+            if(!doubleNames.isEmpty() && !oracleRoot.isEmpty()) {
+                const QDir directory(QDir(oracleRoot).filePath(QString::fromLatin1(before.toHex())));
+                QFile marker(directory.filePath("SOURCE_SHA256")); assert(marker.open(QIODevice::ReadOnly) && marker.readAll().trimmed()==before.toHex());
+                QFile proof(directory.filePath(QString::fromLatin1(QCryptographicHash::hash(table.toUtf8(),QCryptographicHash::Sha256).toHex())+".rows")); assert(proof.open(QIODevice::ReadOnly));
+                auto lines=proof.readAll().split('\n'); if(!lines.isEmpty() && lines.back().isEmpty()) lines.removeLast();
+                assert(!lines.isEmpty()); auto header=lines.takeFirst().split('\t'); assert(header.takeFirst()=="COLUMNS" && header.size()==doubleNames.size());
+                QStringList selected; QSet<QString> seen;
+                for(const auto& encoded:header) {
+                    const auto field=QString::fromUtf8(QByteArray::fromHex(encoded)); assert(doubleNames.contains(field) && !seen.contains(field)); seen.insert(field); selected.append(quote(field));
+                }
+                std::multiset<QByteArray> oracleRows,storedRows; for(auto line:lines) { if(line.endsWith('\r')) line.chop(1); oracleRows.insert(line); }
+                QSqlQuery actual(db); assert(actual.exec("SELECT "+selected.join(',')+" FROM main."+quote(table)));
+                while(actual.next()) {
+                    QByteArray tuple;
+                    for(int i=0;i<selected.size();++i) {
+                        if(i) tuple+='\t';
+                        if(actual.value(i).isNull()) { tuple+='N'; ++independentDoubleNulls; }
+                        else { tuple+=QString("%1").arg(std::bit_cast<quint64>(actual.value(i).toDouble()),16,16,QChar('0')).toLatin1(); ++independentDoubleValues; }
+                    }
+                    storedRows.insert(tuple);
+                }
+                assert(oracleRows==storedRows); ++independentDoubleTables; independentDoubleColumns+=selected.size();
+            }
             assert(copied.exec("PRAGMA table_info(" + quote(table) + ")"));
             int col = 0;
             while (copied.next()) {
@@ -380,6 +415,10 @@ End Function
     assert(imported == 29 && failures.empty());
     assert(originalPrimaryNames==20 && originalOtherNames==48);
     std::cout<<"Verified original index identities: "<<originalPrimaryNames<<" primary, "<<originalOtherNames<<" non-primary\n";
+    if(!qEnvironmentVariable("LINACCESS_DOUBLE_ORACLE_ROOT").isEmpty()) {
+        assert(independentDoubleTables==13 && independentDoubleColumns==57 && independentDoubleValues==69405 && independentDoubleNulls==514);
+        std::cout<<"Independent Jackcess Double oracle: "<<independentDoubleTables<<" tables, "<<independentDoubleColumns<<" columns, "<<independentDoubleValues<<" non-NULL values and "<<independentDoubleNulls<<" NULLs exactly matched\n";
+    }
     assert(sourceDefaults==96 && nativeDefaults>0);
     assert(pendingDefaults==nativeDefaults);
     std::cout<<"Source literal defaults: "<<sourceDefaults<<", applied outside AutoNumber: "<<nativeDefaults<<", verified pending defaults: "<<pendingDefaults<<'\n';

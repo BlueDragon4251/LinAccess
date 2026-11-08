@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
         assert(!schema.columns.isEmpty());
         const auto csv = linaccess::AccessCatalog::exportTable(path,table);
         const auto rows = linaccess::parseCsvDetailed(std::string_view(csv.constData(), csv.size()));
-        linaccess::importAccessTable(db, path, table, schema, rows);
+        linaccess::importAccessTable(db, path, table, schema, rows,linaccess::AccessBinaryEncoding::Unsupported,linaccess::AccessFloatingSource::NativeMdbBits);
     }
     assert(scalar(db, "SELECT COUNT(*) FROM \"3_tbl_Rezepte\"") == 4);
     assert(scalar(db, "SELECT COUNT(*) FROM \"33_tbl_ZutatenRezept\"") == 35);
@@ -88,7 +88,7 @@ int main(int argc, char** argv) {
         const auto csv = linaccess::AccessCatalog::exportTable(path,"3_tbl_Rezepte");
         linaccess::importAccessTable(db, path, "3_tbl_Rezepte",
             linaccess::parseMdbSchema(source.tableSchema("3_tbl_Rezepte")),
-            linaccess::parseCsvDetailed(std::string_view(csv.constData(), csv.size())));
+            linaccess::parseCsvDetailed(std::string_view(csv.constData(), csv.size())),linaccess::AccessBinaryEncoding::Unsupported,linaccess::AccessFloatingSource::NativeMdbBits);
     } catch (...) { refusedDuplicate = true; }
     assert(refusedDuplicate);
     assert(scalar(db, "SELECT COUNT(*) FROM _la_import_log") == 2);

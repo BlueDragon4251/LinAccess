@@ -34,6 +34,7 @@ public:
     QStringList missingQuerySources(const QString& sql) const;
     QString tableSchema(const QString& name) const;
     QByteArray singleValues(const QString& name) const;
+    QByteArray doubleValues(const QString& name) const;
     // Decode exact Currency/Single/Double labels; storage/coercion remains separate.
     static QMap<QString,QString> floatingSourceTypes(const QString& accessSchema);
     // Explicit unprefixed hexadecimal MDBTools binary serialization when requested.

@@ -1,7 +1,7 @@
 #include "access_table_import.hpp"
 #include "access_catalog.hpp"
 #include "access_index_metadata.hpp"
-#include "access_single_metadata.hpp"
+#include "access_floating_metadata.hpp"
 #include <bit>
 #include <limits>
 #include "access_autonumber.hpp"
@@ -73,6 +73,53 @@ void verifyJetBinaryReference(const QString& path) {
     std::cout<<"Actual technical Jet binary import: exact inline/multi-page bytes, DAO chunks, NULL, bounded oversized rollback and source hashes verified\n";
 }
 
+void verifyJetDoublePrecisionReference(const QString& path) {
+    using namespace linaccess;
+    const auto before=accessSourceDigest(path);
+    const auto schema=parseMdbSchema(AccessCatalog(path).tableSchema("double_precision_probe"));
+    const auto csv=AccessCatalog::exportTable(path,"double_precision_probe"); const auto exported=parseCsvDetailed(std::string_view(csv.constData(),csv.size()));
+    assert(exported.size()==9 && QString::fromStdString(exported[1][1].value).toDouble()==1.0);
+    auto db=QSqlDatabase::addDatabase("QSQLITE","jet-double-precision-reference"); db.setDatabaseName(":memory:"); assert(db.open());
+    QSqlQuery query(db); assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)")); query.finish();
+    assert(importAccessDatabase(db,path)==1);
+    const quint64 expected[]{0x3ff0000000000001ULL,std::bit_cast<quint64>(0.1),1ULL,0x7fefffffffffffffULL,std::bit_cast<quint64>(-123.456),0ULL,0x4340000000000000ULL};
+    assert(query.exec("SELECT id,sample FROM double_precision_probe ORDER BY id")); int count=0;
+    while(query.next()) { const int id=query.value(0).toInt(); assert(id==++count); if(id==8) assert(query.value(1).isNull()); else assert(std::bit_cast<quint64>(query.value(1).toDouble())==expected[id-1]); }
+    assert(count==8); query.finish();
+    const auto rows=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("double_precision_probe")}).object; count=0;
+    while(!rows->member("EOF",{}).truthy()) {
+        const auto value=rows->item("sample");
+        if(count==7) assert(value.kind==VbaValue::Kind::Null);
+        else assert(value.numericType==VbaValue::NumericType::Double && std::bit_cast<quint64>(value.asNumber())==expected[count]);
+        const auto field=rows->member("Fields",{VbaValue::string("sample")}).object; assert(field->member("Type",{}).asNumber()==7 && field->member("Size",{}).asNumber()==8);
+        ++count; rows->member("MoveNext",{});
+    }
+    assert(count==8); rows->member("Close",{});
+    importAccessTable(db,path,"partial_double_precision",schema,exported,AccessBinaryEncoding::Unsupported,AccessFloatingSource::NativeMdbBits);
+    assert(query.exec("SELECT sample FROM partial_double_precision WHERE id=1") && query.next() && std::bit_cast<quint64>(query.value(0).toDouble())==expected[0]); query.finish();
+    auto changed=exported; changed[1][1].value="0.25"; bool refused=false;
+    try { importAccessTable(db,path,"wrong_double_values",schema,changed,AccessBinaryEncoding::Unsupported,AccessFloatingSource::NativeMdbBits); } catch(const std::exception&) { refused=true; }
+    assert(refused && !db.tables().contains("wrong_double_values"));
+    changed=exported; changed.back()[1].value="0"; refused=false;
+    try { importAccessTable(db,path,"wrong_double_nulls",schema,changed,AccessBinaryEncoding::Unsupported,AccessFloatingSource::NativeMdbBits); } catch(const std::exception&) { refused=true; }
+    assert(refused && !db.tables().contains("wrong_double_nulls"));
+    auto callerCsv=exported; callerCsv.resize(2); callerCsv[1][1].value="0.25";
+    importAccessTable(db,"caller-owned-technical-csv","caller_csv",schema,callerCsv);
+    assert(query.exec("SELECT sample FROM caller_csv") && query.next() && query.value(0).toDouble()==0.25); query.finish();
+    refused=false;
+    try { importAccessTable(db,"missing-native-source","unproven_native",schema,callerCsv,AccessBinaryEncoding::Unsupported,AccessFloatingSource::NativeMdbBits); } catch(const std::exception&) { refused=true; }
+    assert(refused && !db.tables().contains("unproven_native")); db.close(); assert(accessSourceDigest(path)==before);
+    const auto negative=QFileInfo(path).dir().filePath("double-negative-zero.mdb"); const auto negativeBefore=accessSourceDigest(negative);
+    auto rejected=QSqlDatabase::addDatabase("QSQLITE","jet-double-negative-zero"); rejected.setDatabaseName(":memory:"); assert(rejected.open());
+    QSqlQuery untouched(rejected); assert(untouched.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
+    assert(untouched.exec("CREATE TABLE untouched(value INTEGER)")); assert(untouched.exec("INSERT INTO untouched VALUES(17)")); untouched.finish();
+    const auto tables=rejected.tables(); refused=false;
+    try { (void)importAccessDatabase(rejected,negative); } catch(const std::exception&) { refused=true; }
+    assert(refused && rejected.tables()==tables && untouched.exec("SELECT value FROM untouched") && untouched.next() && untouched.value(0).toInt()==17); untouched.finish();
+    rejected.close(); assert(accessSourceDigest(negative)==negativeBefore);
+    std::cout<<"Actual Jet Double precision: original bits despite16-digit CSV loss/overflow, finite extremes, NULL, full/direct import, DAO and atomic refusal verified\n";
+}
+
 void verifyJetSinglePrecisionReference(const QString& path) {
     using namespace linaccess;
     const auto before=accessSourceDigest(path);
@@ -100,19 +147,19 @@ void verifyJetSinglePrecisionReference(const QString& path) {
         ++count; rows->member("MoveNext",{});
     }
     assert(count==8); rows->member("Close",{});
-    importAccessTable(db,path,"partial_precision",schema,exported);
+    importAccessTable(db,path,"partial_precision",schema,exported,AccessBinaryEncoding::Unsupported,AccessFloatingSource::NativeMdbBits);
     assert(query.exec("SELECT sample FROM partial_precision WHERE id=1") && query.next() && query.value(0).toDouble()==static_cast<double>(std::bit_cast<float>(expected[0]))); query.finish();
     auto mismatched=exported; mismatched[1][1].value="0.25"; bool refused=false;
-    try { importAccessTable(db,path,"wrong_values",schema,mismatched); } catch(const std::exception&) { refused=true; }
+    try { importAccessTable(db,path,"wrong_values",schema,mismatched,AccessBinaryEncoding::Unsupported,AccessFloatingSource::NativeMdbBits); } catch(const std::exception&) { refused=true; }
     assert(refused && !db.tables().contains("wrong_values"));
     mismatched=exported; mismatched.back()[1].value="0"; refused=false;
-    try { importAccessTable(db,path,"wrong_nulls",schema,mismatched); } catch(const std::exception&) { refused=true; }
+    try { importAccessTable(db,path,"wrong_nulls",schema,mismatched,AccessBinaryEncoding::Unsupported,AccessFloatingSource::NativeMdbBits); } catch(const std::exception&) { refused=true; }
     assert(refused && !db.tables().contains("wrong_nulls"));
     mismatched=exported; mismatched.pop_back(); refused=false;
-    try { importAccessTable(db,path,"wrong_count",schema,mismatched); } catch(const std::exception&) { refused=true; }
+    try { importAccessTable(db,path,"wrong_count",schema,mismatched,AccessBinaryEncoding::Unsupported,AccessFloatingSource::NativeMdbBits); } catch(const std::exception&) { refused=true; }
     assert(refused && !db.tables().contains("wrong_count"));
     auto wrongAffinity=schema; wrongAffinity.columns[1].sqliteType="TEXT"; refused=false;
-    try { importAccessTable(db,path,"wrong_affinity",wrongAffinity,exported); } catch(const std::exception&) { refused=true; }
+    try { importAccessTable(db,path,"wrong_affinity",wrongAffinity,exported,AccessBinaryEncoding::Unsupported,AccessFloatingSource::NativeMdbBits); } catch(const std::exception&) { refused=true; }
     assert(refused && !db.tables().contains("wrong_affinity")); db.close(); assert(accessSourceDigest(path)==before);
     const auto negative=QFileInfo(path).dir().filePath("single-negative-zero.mdb");
     const auto negativeBefore=accessSourceDigest(negative);
@@ -245,6 +292,19 @@ int main(int argc, char** argv) {
     for(const auto* bits:{"80000000","7f800000","ff800000","7fc00000","GG000000","0000000"}) {
         auto invalid=rawSingles; invalid["rows"]=QJsonArray{QJsonArray{bits}}; bool refused=false;
         try { (void)checkedAccessSingleValues(QJsonDocument(invalid).toJson(QJsonDocument::Compact),{"sample"},"technical"); } catch(const std::exception&) { refused=true; }
+        assert(refused);
+    }
+    assert(mdbFloatingExportMatches("1",std::bit_cast<double>(quint64{0x3ff0000000000001ULL}),16));
+    assert(mdbFloatingExportMatches("1.797693134862316e+308",std::numeric_limits<double>::max(),16));
+    assert(mdbFloatingExportMatches("4.940656458412465e-324",std::numeric_limits<double>::denorm_min(),16));
+    assert(mdbFloatingExportMatches("1.0039062",1.00390625,8) && !mdbFloatingExportMatches("1.0039063",1.00390625,8));
+    assert(!mdbFloatingExportMatches("1e999999",1.0,16) && !mdbFloatingExportMatches("1,0",1.0,16));
+    auto rawDoubles=rawSingles; rawDoubles["rows"]=QJsonArray{QJsonArray{"3ff0000000000001"}};
+    const auto decodedDouble=checkedAccessDoubleValues(QJsonDocument(rawDoubles).toJson(QJsonDocument::Compact),{"sample"},"technical");
+    assert(std::bit_cast<quint64>(decodedDouble.columns.value("sample")[0].value())==0x3ff0000000000001ULL);
+    for(const auto* bits:{"8000000000000000","7ff0000000000000","fff0000000000000","7ff8000000000000","GG00000000000000","000000000000000"}) {
+        auto invalid=rawDoubles; invalid["rows"]=QJsonArray{QJsonArray{bits}}; bool refused=false;
+        try { (void)checkedAccessDoubleValues(QJsonDocument(invalid).toJson(QJsonDocument::Compact),{"sample"},"technical"); } catch(const std::exception&) { refused=true; }
         assert(refused);
     }
     const auto floating=AccessCatalog::floatingSourceTypes("CREATE TABLE [values]\n(\n[price] Currency,\n[ö] Single,\n[odd] Currency] Single NOT NULL,\n[other] Double,\n-- [comment] Currency\n);\n");
@@ -494,6 +554,7 @@ CREATE INDEX `label` ON `source` (`a``b`);
     for(const auto* malformed:{"0","0x00","GG","00 1","00\n00"}) {
         bool rejected=false; try { (void)decodeMdbBinaryHex(malformed); } catch(const std::exception&) { rejected=true; } assert(rejected);
     }
+    const auto doubleReference=qEnvironmentVariable("LINACCESS_JET_DOUBLE_PRECISION_REFERENCE"); if(!doubleReference.isEmpty()) verifyJetDoublePrecisionReference(doubleReference);
     const auto precisionReference=qEnvironmentVariable("LINACCESS_JET_SINGLE_PRECISION_REFERENCE"); if(!precisionReference.isEmpty()) verifyJetSinglePrecisionReference(precisionReference);
     const auto catalogReference=qEnvironmentVariable("LINACCESS_JET_INDEX_CATALOG_REFERENCE"); if(!catalogReference.isEmpty()) verifyJetIndexCatalogReference(catalogReference);
     const auto singleReference=qEnvironmentVariable("LINACCESS_JET_SINGLE_REFERENCE"); if(!singleReference.isEmpty()) verifyJetSingleReference(singleReference);

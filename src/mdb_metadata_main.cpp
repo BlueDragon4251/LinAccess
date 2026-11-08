@@ -35,12 +35,14 @@ int main(int argc,char** argv) {
     QCoreApplication app(argc,argv);
     if(argc==2 && app.arguments()[1]=="--version") { printf("LinAccess MDB metadata1; MDBTools%s\n",mdb_get_version()); return 0; }
     const bool singles=argc==4 && app.arguments()[1]=="--single-values";
-    if(argc!=3 && !singles) return 2;
+    const bool doubles=argc==4 && app.arguments()[1]=="--double-values";
+    const bool floating=singles || doubles;
+    if(argc!=3 && !floating) return 2;
     try {
-        const auto args=app.arguments(); const int filePosition=singles ? 2 : 1,tablePosition=singles ? 3 : 2;
+        const auto args=app.arguments(); const int filePosition=floating ? 2 : 1,tablePosition=floating ? 3 : 2;
         const auto file=QFile::encodeName(args[filePosition]); auto requested=args[tablePosition].toUtf8();
         if(args[filePosition].contains(QChar(0)) || args[tablePosition].contains(QChar(0))) throw 1;
-        const auto before=singles ? digest(args[filePosition]) : QByteArray{};
+        const auto before=floating ? digest(args[filePosition]) : QByteArray{};
         std::unique_ptr<MdbHandle,decltype(&mdb_close)> mdb(mdb_open(file.constData(),MDB_NOFLAGS),&mdb_close);
         if(!mdb) throw 1;
         std::unique_ptr<MdbTableDef,decltype(&mdb_free_tabledef)> table(mdb_read_table_by_name(mdb.get(),requested.data(),MDB_TABLE),&mdb_free_tabledef);
@@ -50,30 +52,38 @@ int main(int argc,char** argv) {
         // the actual populated array, never use that return value as success.
         mdb_read_indices(table.get());
         if(!table->indices || table->indices->len!=table->num_idxs) throw 1;
-        QJsonArray columns,indexes,singleColumns; QVector<const MdbColumn*> singleFields; QSet<QString> columnNames,indexNames;
+        QJsonArray columns,indexes,singleColumns,doubleColumns; QVector<const MdbColumn*> singleFields,doubleFields; QSet<QString> columnNames,indexNames;
         for(unsigned i=0;i<table->columns->len;++i) {
             const auto* column=static_cast<MdbColumn*>(g_ptr_array_index(table->columns,i)); if(!column) throw 1;
             const auto name=checkedName(column->name,sizeof(column->name));
             if(columnNames.contains(name.toCaseFolded())) throw 1;
             columnNames.insert(name.toCaseFolded()); columns.append(name);
             if(column->col_type==MDB_FLOAT) { singleColumns.append(name); singleFields.append(column); }
+            if(column->col_type==MDB_DOUBLE) { doubleColumns.append(name); doubleFields.append(column); }
         }
-        if(singles) {
+        if(floating) {
+            const auto& selected=doubles ? doubleFields : singleFields;
+            const int width=doubles ? 8 : 4;
             static_assert(sizeof(float)==4 && std::numeric_limits<float>::is_iec559);
             QJsonArray rows; qsizetype cells=0; mdb_rewind_table(table.get());
-            if(!singleFields.isEmpty()) while(mdb_fetch_row(table.get())) {
-                if(singleFields.size()>1000000-cells) throw 1; cells+=singleFields.size(); QJsonArray values;
-                for(const auto* column:singleFields) {
+            if(!selected.isEmpty()) while(mdb_fetch_row(table.get())) {
+                if(selected.size()>1000000-cells) throw 1; cells+=selected.size(); QJsonArray values;
+                for(const auto* column:selected) {
                     if(!column->cur_value_len) { values.append(QJsonValue::Null); continue; }
-                    if(column->cur_value_len!=4 || column->cur_value_start<0 || column->cur_value_start>mdb->fmt->pg_size-4) throw 1;
-                    const auto value=mdb_get_single(mdb->pg_buf,column->cur_value_start);
-                    values.append(QString("%1").arg(std::bit_cast<quint32>(value),8,16,QChar('0')));
+                    if(column->cur_value_len!=width || column->cur_value_start<0 || column->cur_value_start>mdb->fmt->pg_size-width) throw 1;
+                    if(doubles) {
+                        const auto value=mdb_get_double(mdb->pg_buf,column->cur_value_start);
+                        values.append(QString("%1").arg(std::bit_cast<quint64>(value),16,16,QChar('0')));
+                    } else {
+                        const auto value=mdb_get_single(mdb->pg_buf,column->cur_value_start);
+                        values.append(QString("%1").arg(std::bit_cast<quint32>(value),8,16,QChar('0')));
+                    }
                 }
                 rows.append(values);
             }
             if(digest(args[filePosition])!=before) throw 1;
             output({{"version",1},{"source_table",args[tablePosition]},{"source_sha256",QString::fromLatin1(before)},
-                {"columns",singleColumns},{"rows",rows}},16*1024*1024);
+                {"columns",doubles ? doubleColumns : singleColumns},{"rows",rows}},16*1024*1024);
             return 0;
         }
         for(unsigned i=0;i<table->indices->len;++i) {
@@ -90,7 +100,7 @@ int main(int argc,char** argv) {
             }
             indexes.append(QJsonObject{{"name",name},{"kind",index->index_type},{"flags",index->flags},{"fields",fields}});
         }
-        const QJsonObject root{{"version",1},{"source_table",args[tablePosition]},{"library",QString::fromUtf8(mdb_get_version())},{"columns",columns},{"indexes",indexes},{"single_columns",singleColumns}};
+        const QJsonObject root{{"version",1},{"source_table",args[tablePosition]},{"library",QString::fromUtf8(mdb_get_version())},{"columns",columns},{"indexes",indexes},{"single_columns",singleColumns},{"double_columns",doubleColumns}};
         output(root,1024*1024);
         return 0;
     } catch(...) {

@@ -21,8 +21,11 @@ NULL markers must agree. Each finite raw value must reproduce the actual current
 MDBTools %.8g CSV numeric value before its exact binary32-to-binary64 expansion
 is bound into SQLite REAL. This guards mismatched export snapshots without using
 the decimal representation as stored source truth. Full import's initial empty
-schema-creation phase validates source data but inserts no rows; the later copy
-phase enforces the actual count. Direct/inspector imports use the same path.
+schema-creation phase validates declarations without scanning row data; the later
+copy phase enforces the actual count, including zero-row copies. Whole import
+reads its protected MDB snapshot. Inspector imports use the same guarded path.
+The low-level API selects NativeMdbBits explicitly for actual MDB copies; its
+caller-owned Csv mode does not consult a diagnostic source filename.
 Caller-owned transactions and existing savepoints retain atomic rollback.
 
 Finite binary32 values, including the smallest positive subnormal and maximum
@@ -50,3 +53,8 @@ affinity guard/import target1/1 (1.05 s). App/package/helper Build-IDs, actual
 packaged --single-values output against known independent Jet bits/source hash,
 SQLite3.54.1 and all four original/three upload hashes passed. Last full suite
 74d75c7:48/48 (85.91 s), preceding this increment.
+
+The shared codec now also handles Double; see SOURCE_DOUBLE_PRECISION.md.
+Classic-locale C++ significant formatting verifies CSV without mutating locale.
+
+Unveränderliche a11b95e-Folgeprüfung: Debian12/GCC12/Qt6.4 und Ubuntu24.04/GCC13/Qt6.4 jeweils5/5 (28,31 s /27,15 s), Paketinstallation, Originalhashes/Backend und tatsächlich installierter --single-values-Helfer mit unabhängig bekannten Originalbits/SHA bestanden. Diese Snapshots schließen DAO.Indexes und Single-Rohpräzision ein, noch keine spätere Double-Korrektur. Keine GitHub-CI-/Vollsuitebehauptung für diese Matrix.

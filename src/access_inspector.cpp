@@ -187,7 +187,7 @@ void AccessInspector::importTable() {
     try {
         linaccess::AccessCatalog catalog(sourceFile_);
         const auto columns = linaccess::parseMdbSchema(catalog.tableSchema(selectedTable_));
-        linaccess::importAccessTable(projectDb_, sourceFile_, selectedTable_, columns, csvRows_,linaccess::AccessBinaryEncoding::MdbToolsHex);
+        linaccess::importAccessTable(projectDb_, sourceFile_, selectedTable_, columns, csvRows_,linaccess::AccessBinaryEncoding::MdbToolsHex,linaccess::AccessFloatingSource::NativeMdbBits);
         importButton_->setEnabled(false);
         QMessageBox::information(this, "Importiert", "Tabelle mit Datentypen und NULLs kopiert. "
             "Primärschlüssel und Indizes erhalten. Beziehungen nur beim Gesamtimport. Original unverändert.");
