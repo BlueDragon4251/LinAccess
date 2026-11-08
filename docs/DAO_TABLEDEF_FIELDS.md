@@ -115,3 +115,24 @@ refused; complete post-creation Fields/Indexes/Relations mutation is still open.
 
 This extends F055/F121 within the fixed456/384/72 catalog. Full DAO schema parity
 and a Windows Access2003 execution oracle for this new creation flow remain open.
+
+## Graphic designer uses the same schema construction
+
+The native New Table dialog now builds its schema through the DAO builders above
+instead of a separate raw SQLite CREATE TABLE. Automatic id/PrimaryKey, field
+constraints/defaults, counter state and native field/index metadata therefore
+share the same checked transaction. DAO immediately sees the real declared
+PrimaryKey and can add ordinary indexes to the resulting table.
+
+New TEXT fields have explicit capacity255; MEMO provides long text. BYTE,
+SMALLINT and INTEGER map to DAO Byte/Integer/Long (8/16/32-bit), REAL to Double,
+DATE to Date, BOOLEAN to Boolean and BLOB to LongBinary. Integer defaults are
+checked against the chosen range before creation. Existing tables are unchanged;
+this is a new-schema behavior, not a migration of legacy SQLite integers/text.
+The GUI displays the TEXT/MEMO distinction. General expressions, custom Text
+capacities and full Access table-design property editing remain open.
+
+Validation of designer integration: existing mainwindow/DAO2/2 (4.95s), app
+build passed. Actual modal UI creates the table, existing defaults/pending counter
+checks pass, DAO observes Text255/Long/PrimaryKey, and a subsequent ordinary index
+is created on that exact UI-authored table. No new target/broad suite.

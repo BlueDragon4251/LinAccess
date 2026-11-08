@@ -2764,6 +2764,16 @@ int main(int argc,char** argv) {
         assert(authored.exec("SELECT qty,label,enabled FROM authored_defaults") && authored.next());
         assert(authored.value(0).toInt()==7 && authored.value(1).toString()=="ui value" && authored.value(2).toInt()==-1); authored.finish();
         assert(linaccess::jetLongAccessColumns(db,"authored_defaults").contains("id"));
+        auto definition=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string("authored_defaults")}).object;
+        auto labelField=definition->member("Fields",{linaccess::VbaValue::string("label")}).object;
+        assert(labelField->member("Type",{}).asNumber()==10 && labelField->member("Size",{}).asNumber()==255);
+        assert(definition->member("Fields",{linaccess::VbaValue::string("qty")}).object->member("Type",{}).asNumber()==4);
+        auto primary=definition->member("Indexes",{linaccess::VbaValue::string("PrimaryKey")}).object;
+        assert(primary->member("Primary",{}).truthy());
+        auto extraIndex=definition->member("CreateIndex",{linaccess::VbaValue::string("LabelIndex")}).object;
+        extraIndex->member("Fields",{}).object->member("Append",{extraIndex->member("CreateField",{linaccess::VbaValue::string("label")})});
+        definition->member("Indexes",{}).object->member("Append",{linaccess::VbaValue::reference(extraIndex)});
+        assert(definition->member("Indexes",{}).object->member("Count",{}).asNumber()==2);
         auto cursor=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{linaccess::VbaValue::string("authored_defaults")}).object;
         cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==2 && cursor->item("id").numericType==linaccess::VbaValue::NumericType::Long);cursor->member("CancelUpdate",{});
         cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==3);cursor->member("Update",{});cursor->member("Close",{});

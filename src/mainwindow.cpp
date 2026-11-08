@@ -1753,11 +1753,12 @@ void MainWindow::newTable() {
     auto* grid=new QTableWidget(0,4,&dialog); grid->setObjectName("native-table-fields");
     grid->setHorizontalHeaderLabels({"Feldname","Datentyp","Pflichtfeld (ja/nein)","Standardwert (optional)"});
     grid->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch); outer->addWidget(grid);
+    outer->addWidget(new QLabel("TEXT: bis zu 255 Zeichen; MEMO: längerer Text.",&dialog));
     outer->addWidget(new QLabel("Standardwerte als Literal: Zahl, True/False, \"Text\" oder Null.",&dialog));
     const auto addRow=[grid] {
         const int row=grid->rowCount(); grid->insertRow(row);
         grid->setItem(row,0,new QTableWidgetItem());
-        auto* type=new QComboBox(grid); type->addItems({"TEXT","INTEGER","REAL","DATE","BOOLEAN","BLOB"}); grid->setCellWidget(row,1,type);
+        auto* type=new QComboBox(grid); type->addItems({"TEXT","MEMO","BYTE","SMALLINT","INTEGER","REAL","DATE","BOOLEAN","BLOB"}); grid->setCellWidget(row,1,type);
         grid->setItem(row,2,new QTableWidgetItem("nein")); grid->setItem(row,3,new QTableWidgetItem());
     };
     auto* plus=addButton(outer,"+ Feld"); plus->setObjectName("native-table-add-field"); connect(plus,&QPushButton::clicked,&dialog,addRow); addRow();
@@ -1768,7 +1769,7 @@ void MainWindow::newTable() {
         if(tableName.isEmpty() || tableName.startsWith("_la_",Qt::CaseInsensitive) || tableName.startsWith("sqlite_",Qt::CaseInsensitive)) {
             messageError(&dialog,"Ungültiger/reservierter Tabellenname"); return;
         }
-        QStringList columns={"\"id\" INT PRIMARY KEY NOT NULL DEFAULT ("+linaccess::accessCounterDefault(tableName,"id")+")"}; std::set<QString> seen={"id"};
+        struct FieldSpec {QString name,type,defaultValue;bool required;};QVector<FieldSpec> fields;std::set<QString> seen={"id"};
         for(int row=0;row<grid->rowCount();++row) {
             const auto field=grid->item(row,0)->text().trimmed(); if(field.isEmpty()) continue;
             if(field.startsWith("_la_",Qt::CaseInsensitive) || seen.contains(field.toCaseFolded())) {
@@ -1787,11 +1788,13 @@ void MainWindow::newTable() {
                 const auto scalar=value.value(0); defaultSql=*literal;
                 if(!scalar.isNull()) {
                     const auto kind=scalar.metaType().id(); const bool numeric=kind==QMetaType::Int || kind==QMetaType::LongLong || kind==QMetaType::Double;
-                    if(type=="TEXT" && kind!=QMetaType::QString) { messageError(&dialog,"Text-Standardwert in Anführungszeichen eingeben."); return; }
-                    if(type=="INTEGER") {
+                    if((type=="TEXT" || type=="MEMO") && kind!=QMetaType::QString) { messageError(&dialog,"Text-Standardwert in Anführungszeichen eingeben."); return; }
+                    if(type=="INTEGER" || type=="SMALLINT" || type=="BYTE") {
                         if(!numeric || (kind==QMetaType::Double && (std::floor(scalar.toDouble())!=scalar.toDouble() || std::abs(scalar.toDouble())>9007199254740991.0))) {
                             messageError(&dialog,"Ganzzahligen Standardwert eingeben."); return;
                         }
+                        try {(void)linaccess::qtFieldValue(scalar,type=="INTEGER" ? "INTEGER4" : type=="SMALLINT" ? "INTEGER2" : "INTEGER1");}
+                        catch(const linaccess::VbaRuntimeError&) {messageError(&dialog,"Standardwert liegt außerhalb des gewählten Ganzzahltyps.");return;}
                         defaultSql=QString::number(scalar.toLongLong());
                     }
                     if(type=="REAL" && !numeric) { messageError(&dialog,"Numerischen Standardwert eingeben."); return; }
@@ -1807,17 +1810,28 @@ void MainWindow::newTable() {
                 }
                 defaultSql=" DEFAULT "+defaultSql;
             }
-            columns << quoteSql(field)+" "+type+defaultSql+(required=="ja" ? " NOT NULL" : "");
+            fields.append({field,type,defaultSql.isEmpty() ? QString{} : defaultSql.mid(9),required=="ja"});
         }
-        if(columns.size()==1) { messageError(&dialog,"Mindestens ein Feld anlegen"); return; }
-        QSqlQuery query(db_);
-        if(!query.exec("SAVEPOINT la_new_table")) {messageError(&dialog,query.lastError().text());return;}
+        if(fields.isEmpty()) { messageError(&dialog,"Mindestens ein Feld anlegen"); return; }
         try {
-            if(!query.exec("CREATE TABLE "+quoteSql(tableName)+" ("+columns.join(',')+")")) throw std::runtime_error(query.lastError().text().toStdString());
-            linaccess::configureNewAccessCounters(db_,tableName);
-            if(!query.exec("RELEASE la_new_table")) throw std::runtime_error(query.lastError().text().toStdString());
+            using linaccess::VbaValue;
+            auto database=linaccess::makeDaoDatabase(db_);
+            auto table=database->member("CreateTableDef",{VbaValue::string(tableName.toStdString())}).object;
+            auto catalog=table->member("Fields",{}).object;
+            auto id=table->member("CreateField",{VbaValue::string("id"),VbaValue::integer(4)}).object;
+            id->assign("Attributes",VbaValue::longInteger(16));catalog->member("Append",{VbaValue::reference(id)});
+            for(const auto& spec:fields) {
+                const int type=spec.type=="TEXT" ? 10 : spec.type=="MEMO" ? 12 : spec.type=="BYTE" ? 2 : spec.type=="SMALLINT" ? 3 : spec.type=="INTEGER" ? 4 : spec.type=="REAL" ? 7 : spec.type=="DATE" ? 8 : spec.type=="BOOLEAN" ? 1 : 11;
+                auto field=table->member("CreateField",{VbaValue::string(spec.name.toStdString()),VbaValue::integer(static_cast<std::int16_t>(type)),VbaValue::longInteger(type==10 ? 255 : 0)}).object;
+                field->assign("Required",VbaValue::logical(spec.required));
+                if(!spec.defaultValue.isEmpty()) field->assign("DefaultValue",VbaValue::string(spec.defaultValue.toStdString()));
+                catalog->member("Append",{VbaValue::reference(field)});
+            }
+            auto primary=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;primary->assign("Primary",VbaValue::logical(true));
+            primary->member("Fields",{}).object->member("Append",{primary->member("CreateField",{VbaValue::string("id")})});
+            table->member("Indexes",{}).object->member("Append",{VbaValue::reference(primary)});
+            database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
         } catch(const std::exception& error) {
-            query.exec("ROLLBACK TO la_new_table");query.exec("RELEASE la_new_table");
             messageError(&dialog,QString::fromUtf8(error.what()));return;
         }
         dialog.accept();

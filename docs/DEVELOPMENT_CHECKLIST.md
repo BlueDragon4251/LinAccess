@@ -1489,3 +1489,8 @@ DAO CreateIndex/Indexes.Append/Delete für Nichtprimärindizes vorhandener gepr�
 Tabellen implementiert. Unique-Fehleratomizität, ASC/DESC, Rollback/Identität im
 bestehenden DAO/Import2/2 (1,31s) geprüft, App gebaut. DAO_INDEXES_RUNTIME.md;
 F121/F130 offen,456/384/72 unverändert.
+
+Grafische Tabellenanlage auf gemeinsamen DAO-Schemaweg umgestellt; native Typen,
+Text255/Memo, Primärindex und anschließende Indexanlage auf tatsächlicher UI-
+Tabelle im bestehenden Mainwindow/DAO2/2 (4,95s) geprüft. App gebaut; Grenzen in
+DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert.

@@ -3273,3 +3273,9 @@ Tabellen tatsächlich angelegt/gelöscht werden. Unique-Fehleratomizität, geord
 ASC/DESC-Felder, Workspace-Rollback und immutable gehaltene Objekte geprüft;
 DAO/Import2/2 (1,31s), App gebaut. Umfang/Primär-/Fremdschlüsselgrenzen in
 DAO_INDEXES_RUNTIME.md; F121/F130 offen,456/384/72 gleich.
+
+Grafischer Tabellenentwurf verwendet gemeinsamen DAO-Schemaweg einschließlich
+nativer Text-/Integer-Typgrenzen und vollständiger neu deklarierter Primärindex-
+Identität. Eigene UI-Tabelle und anschließende DAO-Indexanlage im bestehenden
+Mainwindow/DAO2/2 (4,95s) geprüft, App gebaut. DAO_TABLEDEF_FIELDS.md;
+keine Bestandsmigration,456/384/72 unverändert.

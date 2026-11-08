@@ -189,3 +189,9 @@ für Nichtprimär-Indizes umgesetzt, einschließlich Unique-Fehleratomizität,
 ASC/DESC, Workspace-Rollback und immutable gehaltenen Buildern. DAO/Import2/2
 (1,31s), App gebaut; Details DAO_INDEXES_RUNTIME.md.456/384/72 unverändert.
 Danach grafischen nativen Tabellenentwurf an gemeinsamen DAO-Schemaweg anbinden.
+
+Grafischer Tabellenentwurf nutzt jetzt denselben atomaren DAO-Schemaweg. Neue
+TEXT255/MEMO/Byte/16-/32-Bit-Felder, tatsächliche Typ-/Indexidentitäten; aus UI
+gebaute Tabelle anschließend über DAO indexiert. Mainwindow/DAO2/2 (4,95s), App
+gebaut. Keine Bestandsmigration.456/384/72 gleich. Fortsetzung: grafische normale
+Indexverwaltung auf Basis der vorhandenen geprüften DAO-Operationen.

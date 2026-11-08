@@ -2382,3 +2382,13 @@ DAO/Import2/2 (1,31s), App gebaut. Details DAO_INDEXES_RUNTIME.md.
 nativer grafischer Tabellenentwurf soll denselben DAO-Schemaweg nutzen, damit
 auch über die Oberfläche gebaute Tabellen nachgewiesene Typ-/Indexidentitäten
 besitzen; bestehende GUI-Prüfung gezielt verwenden.
+
+2026-11-08: Grafischer Neue-Tabelle-Entwurf nutzt gemeinsamen DAO-Schemaweg
+statt separater Raw-SQL-Anlage. Native Typ-/Textgrößen-/Primärindexidentitäten
+und Counter atomar; anschließende allgemeine DAO-Indexanlage funktioniert auf
+einer tatsächlich über die Oberfläche erstellten Tabelle. Neue TEXT=255 Zeichen,
+MEMO=Langtext; Byte/SMALLINT/INTEGER entsprechen DAO8/16/32-Bit, Defaults vorher
+bereichsgeprüft. Keine Bestandsmigration. Bestehende Mainwindow/DAO2/2 (4,95s),
+App gebaut; Details DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert.
+Als Nächstes reale grafische Nichtprimär-Indexverwaltung über denselben DAO-Weg,
+damit Anwender selbst Datenbanken ohne VBA aufbauen können.
