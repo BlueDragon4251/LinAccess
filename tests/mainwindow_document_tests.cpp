@@ -2844,6 +2844,13 @@ int main(int argc,char** argv) {
             dialog->findChild<QPushButton*>("native-field-create")->click();assert(list->rowCount()==5);
             QSqlQuery values(db);assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE ExtraNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();
             for(int row=0;row<list->rowCount();++row) if(list->item(row,0)->text()=="ExtraNote") list->setCurrentCell(row,0);
+            dialog->findChild<QTabWidget*>("native-field-editor-tabs")->setCurrentIndex(1);
+            dialog->findChild<QSpinBox*>("native-field-property-size")->setValue(12);dialog->findChild<QCheckBox*>("native-field-property-required")->setChecked(true);dialog->findChild<QLineEdit*>("native-field-property-default")->setText("\"future\"");
+            QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());if(box && box->windowTitle()=="Feld konnte nicht geändert werden") {std::cerr<<"Field property GUI error: "<<box->text().toStdString()<<"\n";box->accept();}});
+            dialog->findChild<QPushButton*>("native-field-property-save")->click();
+            auto propertyField=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string("authored_defaults")}).object->member("Fields",{linaccess::VbaValue::string("ExtraNote")}).object;
+            assert(propertyField->member("Size",{}).asNumber()==12 && propertyField->member("Required",{}).truthy());
+            assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE ExtraNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});
             dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==4);dialog->reject();
         });

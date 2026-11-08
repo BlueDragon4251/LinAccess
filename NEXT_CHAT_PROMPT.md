@@ -262,3 +262,12 @@ DontEnforce3, Indexabhängigkeitsschutz und GUI umgesetzt. Mainwindow/DAO2/2
 (5,64s), App gebaut. DAO_RELATIONS_RUNTIME.md;456/384/72 gleich. Fortsetzung:
 Required/DefaultValue/Text.Size vorhandener nativer Felder atomar ändern, Schema-
 und Bestandswertschutz beibehalten; anschließend weiter ohne Zwischen-Final.
+
+Vorhandene native Feldproperties Required/DefaultValue/Text.Size jetzt über DAO
+und grafischen atomaren Batch-Save änderbar. Geprüfter Schema-/Bestandswert-/
+Countererhalt, Fehlerrollback und Cursorinvalidierung bis Requery; Original-/
+Counter-/unbekannte Schemaänderungen bleiben begrenzt. Unabhängige unbenannte
+Fremdschlüssel blockieren den Feldumbau nicht; betroffene unbekannte Schlüssel
+bleiben geschützt. Bestehendes GUI/DAO2/2 (5,92s), App gebaut. Details/Grenzen
+DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert. Weitere offene Anforderungen
+fortlaufend implementieren; kein Zwischenabschluss oder Abschlussanruf.

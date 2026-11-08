@@ -1,4 +1,5 @@
 #include "dao_database.hpp"
+#include "native_schema_editor.hpp"
 #include "vba_array.hpp"
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
@@ -1944,8 +1945,66 @@ void testOneToOneNativeRelations() {
     assert(sql.exec("SELECT COUNT(*) FROM UniqueChild") && sql.next() && sql.value(0).toInt()==2);sql.finish();
 }
 
+void testNativeFieldPropertyChanges() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-native-field-properties");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);
+    auto database=linaccess::makeDaoDatabase(db),tables=database->member("TableDefs",{}).object;
+    auto table=database->member("CreateTableDef",{VbaValue::string("PropertyRows")}).object;
+    for(const auto& definition:std::vector<std::pair<const char*,int>>{{"ID",4},{"Label",10},{"Optional",4},{"Payload",11},{"Magnitude",7},{"Moment",8},{"Enabled",1}}) {
+        auto field=table->member("CreateField",{VbaValue::string(definition.first),VbaValue::integer(static_cast<std::int16_t>(definition.second)),VbaValue::longInteger(definition.second==10 ? 12 : 0)}).object;
+        if(std::string(definition.first)=="ID") field->assign("Attributes",VbaValue::longInteger(16));
+        if(definition.second==10) field->assign("DefaultValue",VbaValue::string("'old'"));if(definition.second==7) field->assign("DefaultValue",VbaValue::string("1.25"));if(definition.second==8) field->assign("DefaultValue",VbaValue::string("'2026-11-08 00:00:00'"));
+        table->member("Fields",{}).object->member("Append",{VbaValue::reference(field)});
+    }
+    auto primary=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;primary->assign("Primary",VbaValue::logical(true));primary->member("Fields",{}).object->member("Append",{primary->member("CreateField",{VbaValue::string("ID")})});table->member("Indexes",{}).object->member("Append",{VbaValue::reference(primary)});tables->member("Append",{VbaValue::reference(table)});
+    sql.prepare("INSERT INTO PropertyRows(Label,Payload,Magnitude) VALUES(?,?,?)");for(const auto& value:{"keep","long value"}) {sql.bindValue(0,QString(value));sql.bindValue(1,QByteArray::fromHex("0001ff"));sql.bindValue(2,std::numeric_limits<double>::max());assert(sql.exec());}sql.finish();
+    const auto error=[](const std::function<void()>& operation,int expected) {int number=0;try {operation();}catch(const linaccess::VbaRuntimeError& failure) {number=failure.number;if(number!=expected) std::cerr<<"Field edit error="<<number<<", reason="<<failure.what()<<"\n";}assert(number==expected);};
+    auto definition=tables->member("Item",{VbaValue::string("PropertyRows")}).object;
+    auto label=definition->member("Fields",{VbaValue::string("Label")}).object;
+    error([&] {label->assign("Size",VbaValue::longInteger(4));},3163);assert(label->member("Size",{}).asNumber()==12);
+    linaccess::updateNativeFieldProperties(db,"PropertyRows","Optional",{{"Required",VbaValue::logical(false)}});
+    error([&] {linaccess::updateNativeFieldProperties(db,"PropertyRows","Optional",{{"Required",VbaValue::logical(true)},{"DefaultValue",VbaValue::string("7")}});},3314);
+    auto rows=database->member("OpenRecordset",{VbaValue::string("PropertyRows")}).object;auto clone=rows->member("Clone",{}).object;clone->member("MoveFirst",{});clone->member("Edit",{});clone->assignItem("Label",VbaValue::string("pending"));
+    Host host(db);const auto changed=linaccess::executeVbaProcedure(R"VBA(Sub EditProperties()
+Dim field As DAO.Field
+Set field=CurrentDb.TableDefs("PropertyRows").Fields("Label")
+field.Size=20
+If field.Size<>20 Then Err.Raise 5
+field.DefaultValue="'new'"
+field.Required=True
+If Not field.Required Then Err.Raise 5
+End Sub)VBA","EditProperties",host);
+    if(changed.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"VBA field properties="<<changed.errorNumber<<", line="<<changed.line<<", reason="<<changed.explanation<<"\n";
+    assert(changed.status==linaccess::VbaExecutionStatus::Completed);
+    error([&] {rows->member("RecordCount",{});},3420);error([&] {clone->member("Update",{});},3420);rows->member("Requery",{});assert(clone->member("EditMode",{}).asNumber()==0 && rows->item("Label").asText()=="keep");clone->member("Close",{});rows->member("Close",{});
+    assert(definition->member("Fields",{VbaValue::string("Label")}).object->member("Size",{}).asNumber()==20);
+    assert(sql.exec("SELECT Label,Payload,Magnitude FROM PropertyRows ORDER BY ID") && sql.next());assert(sql.value(0).toString()=="keep" && sql.value(1).toByteArray()==QByteArray::fromHex("0001ff") && sql.value(2).toDouble()==std::numeric_limits<double>::max());assert(sql.next() && sql.value(0).toString()=="long value");sql.finish();
+    database->member("Execute",{VbaValue::string("INSERT INTO PropertyRows DEFAULT VALUES")});assert(sql.exec("SELECT ID,Label FROM PropertyRows WHERE ID=3") && sql.next() && sql.value(1).toString()=="new");sql.finish();
+    linaccess::updateNativeFieldProperties(db,"PropertyRows","Label",{{"Size",VbaValue::longInteger(10)},{"DefaultValue",VbaValue::string("'future'")},{"Required",VbaValue::logical(true)}});
+    error([&] {linaccess::updateNativeFieldProperties(db,"PropertyRows","Label",{{"Size",VbaValue::longInteger(4)},{"DefaultValue",VbaValue::string("'x'")}});},3163);
+    assert(definition->member("Fields",{VbaValue::string("Label")}).object->member("Size",{}).asNumber()==10);
+    database->member("Execute",{VbaValue::string("INSERT INTO PropertyRows DEFAULT VALUES")});assert(sql.exec("SELECT Label FROM PropertyRows WHERE ID=4") && sql.next() && sql.value(0).toString()=="future");sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM PropertyRows WHERE Optional IS NULL") && sql.next() && sql.value(0).toInt()==4);sql.finish();
+    auto optional=definition->member("Fields",{VbaValue::string("Optional")}).object;assert(!optional->member("Required",{}).truthy() && optional->member("DefaultValue",{}).asText().empty());error([&] {optional->assign("DefaultValue",VbaValue::string("2147483648"));},6);
+    definition->member("Fields",{VbaValue::string("Enabled")}).object->assign("DefaultValue",VbaValue::string("1"));definition->member("Fields",{VbaValue::string("Moment")}).object->assign("DefaultValue",VbaValue::string("'2027-01-02'"));
+    database->member("Execute",{VbaValue::string("INSERT INTO PropertyRows DEFAULT VALUES")});assert(sql.exec("SELECT ID,Enabled,Moment FROM PropertyRows WHERE ID=5") && sql.next() && sql.value(1).toInt()==-1 && sql.value(2).toString()=="2027-01-02 00:00:00");sql.finish();
+    auto workspace=linaccess::makeDaoEngine(db)->defaultMember({VbaValue::integer(0)},true).object;workspace->member("BeginTrans",{});error([&] {definition->member("Fields",{VbaValue::string("Label")}).object->assign("Size",VbaValue::longInteger(11));},3251);workspace->member("Rollback",{});
+    auto keyParent=database->member("CreateTableDef",{VbaValue::string("PropertyParent")}).object;keyParent->member("Fields",{}).object->member("Append",{keyParent->member("CreateField",{VbaValue::string("Label"),VbaValue::integer(10),VbaValue::longInteger(10)})});tables->member("Append",{VbaValue::reference(keyParent)});
+    auto relation=database->member("CreateRelation",{VbaValue::string("PropertyMapping"),VbaValue::string("PropertyParent"),VbaValue::string("PropertyRows"),VbaValue::longInteger(2)}).object;auto link=relation->member("CreateField",{VbaValue::string("Label")}).object;link->assign("ForeignName",VbaValue::string("Label"));relation->member("Fields",{}).object->member("Append",{VbaValue::reference(link)});database->member("Relations",{}).object->member("Append",{VbaValue::reference(relation)});
+    label=definition->member("Fields",{VbaValue::string("Label")}).object;error([&] {label->assign("Size",VbaValue::longInteger(11));},3251);error([&] {label->assign("Required",VbaValue::logical(false));},3251);
+    database->member("Relations",{}).object->member("Delete",{VbaValue::string("PropertyMapping")});label->assign("Required",VbaValue::logical(false));assert(!label->member("Required",{}).truthy());
+    assert(sql.exec("PRAGMA foreign_keys") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    assert(sql.exec("SELECT value FROM _la_counter32_sequences WHERE table_name='PropertyRows'") && sql.next() && sql.value(0).toInt()==5);sql.finish();
+    const auto buildReentry=[&] {auto object=database->member("CreateTableDef",{VbaValue::string("FieldReentry")}).object;object->member("Fields",{}).object->member("Append",{object->member("CreateField",{VbaValue::string("Label"),VbaValue::integer(10),VbaValue::longInteger(8)})});tables->member("Append",{VbaValue::reference(object)});};buildReentry();
+    auto held=tables->member("Item",{VbaValue::string("FieldReentry")}).object->member("Fields",{VbaValue::string("Label")}).object;
+    class ReplacingValue final:public linaccess::VbaObject {public:std::function<void()> callback;bool hasScalarDefault() const override {return true;}VbaValue scalarValue() override {callback();return VbaValue::longInteger(16);}VbaValue member(std::string_view,const std::vector<VbaValue>&) override {throw linaccess::VbaRuntimeError(438,"No member");}};
+    auto replacing=std::make_shared<ReplacingValue>();replacing->callback=[&] {tables->member("Delete",{VbaValue::string("FieldReentry")});buildReentry();};error([&] {held->assign("Size",VbaValue::reference(replacing));},3420);
+    assert(tables->member("Item",{VbaValue::string("FieldReentry")}).object->member("Fields",{VbaValue::string("Label")}).object->member("Size",{}).asNumber()==8);
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testNativeFieldPropertyChanges();
     testOneToOneNativeRelations();
     testEnforcedNativeRelations();
     testDetachedRelationCreation();

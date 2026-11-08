@@ -257,3 +257,32 @@ exact COM collection identity/Refresh timing is not claimed.
 Existing DAO1/1 (1.23s), app built: held collections refresh after field/index
 append/delete and rollback; old items remain3420, and equal-name table replacement
 cannot revive old collections. No new target/broad suite;456/384/72 unchanged.
+
+## Editing existing native field properties
+
+TableDef.Field.Required, DefaultValue and Text.Size can now be changed for
+explicitly declared native fields. The graphic field editor saves these three
+properties together through one atomic schema rebuild. Same-type edits preserve
+rowids, every stored value (verified by a streamed typed digest), indexes,
+triggers, views, supported foreign keys and counter allocation state. Defaults
+apply to future inserts; existing Nulls are never filled to satisfy Required.
+Invalid shrink/Required/default changes roll back both schema and metadata.
+Signed numeric defaults tolerate the SQL compiler's separated unary sign.
+
+Existing cursors/clones refuse3420 until Requery; the edited DAO Field publishes
+a checked fresh reader only after commit. Original/imported/mixed schemas,
+Counter properties, unsupported types/nonliteral defaults and unknown custom
+constraints remain refused. Relation key capacity changes or relaxing Required
+require removing the dependent relation first. Unlabelled foreign keys on
+unrelated tables do not block an otherwise proven independent edit; unknown
+keys involving the edited table remain refused. Original foreign_keys (0 or1)
+and legacy_alter_table settings are restored and verified. Failed restoration
+after commit reports a stored change and requires reopening.
+
+Existing GUI/DAO2/2 passed (5.92s), application built. Actual GUI edits an
+appended Text field, preserves both old values and reads back its new properties;
+DAO checks rejected truncation/Null constraints, atomic batch rollback, defaults,
+Byte/Long bounds, Date/Boolean normalization, binary/max-Double preservation,
+cursor/clone invalidation, relation dependencies, reentrant identity and
+transaction restrictions. No new target or broad suite. F015/F121 remain open;
+456/384/72 unchanged.

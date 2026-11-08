@@ -2542,3 +2542,12 @@ Modi, reale modale1:1-Cascade-Anlage/-Entfernung im bestehenden Mainwindow/DAO2/
 Nächster allgemeiner Zusammenhang: lesbare native Tabellenfeld-Eigenschaften
 Required/DefaultValue/Text.Size auch an vorhandenen Tabellen atomar änderbar machen,
 mit echtem Schema-/Wertschutz, ohne Original-/VBA-Quellen oder Geschäftsdatenerfindung.
+
+Vorhandene native Feldproperties Required/DefaultValue/Text.Size jetzt über DAO
+und grafischen atomaren Batch-Save änderbar. Geprüfter Schema-/Bestandswert-/
+Countererhalt, Fehlerrollback und Cursorinvalidierung bis Requery; Original-/
+Counter-/unbekannte Schemaänderungen bleiben begrenzt. Unabhängige unbenannte
+Fremdschlüssel blockieren den Feldumbau nicht; betroffene unbekannte Schlüssel
+bleiben geschützt. Bestehendes GUI/DAO2/2 (5,92s), App gebaut. Details/Grenzen
+DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert. Weitere offene Anforderungen
+fortlaufend implementieren; kein Zwischenabschluss oder Abschlussanruf.

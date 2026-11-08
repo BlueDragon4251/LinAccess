@@ -1,5 +1,6 @@
 #include "dao_database.hpp"
 #include "dao_schema_change.hpp"
+#include "native_schema_editor.hpp"
 #include "vba_array.hpp"
 #include "access_autonumber.hpp"
 #include "access_index_metadata.hpp"
@@ -299,7 +300,10 @@ void observeNativeTableCatalog(QSqlDatabase db,const QStringList& before) {
 }
 QString sqliteLiteralDefaultSql(const QVariant& declaration) {
     if(declaration.isNull()) return {};
-    const auto token=declaration.toString().trimmed(); const auto literal=accessLiteralDefaultSql(token);
+    auto token=declaration.toString().trimmed();
+    // The SQL compiler separates a unary sign from its numeric token.
+    if(token.startsWith('+') || token.startsWith('-')) token=token.left(1)+token.mid(1).trimmed();
+    const auto literal=accessLiteralDefaultSql(token);
     // Raw SQLite TRUE is1; imported Access TRUE is already normalized to-1.
     return token.compare("TRUE",Qt::CaseInsensitive)==0 ? QString("1") : literal.value_or(QString{});
 }
@@ -1498,9 +1502,11 @@ private:
 };
 
 using TableSchemaReader=std::function<QVector<TableSchemaColumn>()>;
+using NativeFieldSetter=std::function<TableSchemaReader(const QString&,std::string_view,const VbaValue&)>;
+TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString& table,const QString& field,const QMap<QString,VbaValue>& properties);
 class TableSchemaField final : public VbaObject {
 public:
-    TableSchemaField(TableSchemaReader reader,QString name,bool defaults=true) : reader_(std::move(reader)),name_(std::move(name)),defaults_(defaults) {}
+    TableSchemaField(TableSchemaReader reader,QString name,bool defaults=true,NativeFieldSetter setter={}) : reader_(std::move(reader)),name_(std::move(name)),defaults_(defaults),setter_(std::move(setter)) {}
     std::string_view className() const override { return "Field"; }
     bool isNativeType(std::string_view type) const override { return type=="dao.field"; }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
@@ -1543,14 +1549,20 @@ public:
         }
         throw VbaRuntimeError(3251,"DAO schema field property is unsupported");
     }
-    void assign(std::string_view,const VbaValue&) override { (void)reader_(); throw VbaRuntimeError(383,"DAO schema fields are read-only"); }
-private: TableSchemaReader reader_; QString name_; bool defaults_{};
+    void assign(std::string_view name,const VbaValue& value) override {
+        (void)reader_();const auto key=lower(name);
+        if(!setter_ || (key!="required" && key!="defaultvalue" && key!="size")) throw VbaRuntimeError(383,"DAO schema field property is read-only");
+        bool native=false;for(const auto& column:reader_()) if(column.name.compare(name_,Qt::CaseInsensitive)==0) native=column.nativeAttributes.has_value() && column.required.has_value();
+        if(!native) throw VbaRuntimeError(383,"DAO: Original/unproven schema fields remain read-only");
+        const auto scalar=scalarVbaValue(value);(void)reader_();auto next=setter_(name_,key,scalar);reader_=std::move(next);
+    }
+private: TableSchemaReader reader_; QString name_; bool defaults_{};NativeFieldSetter setter_;
 };
 std::shared_ptr<VbaObject> createExistingTableField(QSqlDatabase db,const QString& table,const std::vector<VbaValue>& args);
 void mutateExistingTableField(QSqlDatabase db,const QString& table,const VbaValue& value,bool erase);
 class TableSchemaFields final : public VbaObject {
 public:
-    explicit TableSchemaFields(TableSchemaReader reader,bool defaults=true,std::function<void(const VbaValue&,bool)> mutation={},std::function<TableSchemaReader()> refresher={}) : reader_(std::move(reader)),defaults_(defaults),mutation_(std::move(mutation)),refresher_(std::move(refresher)) {}
+    explicit TableSchemaFields(TableSchemaReader reader,bool defaults=true,std::function<void(const VbaValue&,bool)> mutation={},std::function<TableSchemaReader()> refresher={},NativeFieldSetter setter={}) : reader_(std::move(reader)),defaults_(defaults),mutation_(std::move(mutation)),refresher_(std::move(refresher)),setter_(std::move(setter)) {}
     std::string_view className() const override { return "Fields"; }
     bool isNativeType(std::string_view type) const override { return type=="dao.fields"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
@@ -1585,7 +1597,7 @@ public:
         const auto column=columns[position].name;
         auto& cached=fields_[column.toCaseFolded()]; auto field=cached.lock();
         if(!field) {const auto reader=reader_;const auto epoch=epoch_;const auto generation=*epoch;
-            field=std::make_shared<TableSchemaField>([reader,epoch,generation] {if(*epoch!=generation) throw VbaRuntimeError(3420,"DAO: Field object predates collection refresh");return reader();},column,defaults_);cached=field;}
+            field=std::make_shared<TableSchemaField>([reader,epoch,generation] {if(*epoch!=generation) throw VbaRuntimeError(3420,"DAO: Field object predates collection refresh");return reader();},column,defaults_,setter_);cached=field;}
         return VbaValue::reference(field);
     }
     VbaValue item(std::string_view name) override { return member("Item",{VbaValue::string(std::string(name))}); }
@@ -1594,7 +1606,7 @@ public:
         for(const auto& column:columns) result.push_back(member("Item",{VbaValue::string(column.name.toStdString())}));
         return result;
     }
-private: TableSchemaReader reader_; QMap<QString,std::weak_ptr<TableSchemaField>> fields_; bool defaults_{};std::function<void(const VbaValue&,bool)> mutation_;std::function<TableSchemaReader()> refresher_;std::shared_ptr<quint64> epoch_{std::make_shared<quint64>(0)};
+private: TableSchemaReader reader_; QMap<QString,std::weak_ptr<TableSchemaField>> fields_; bool defaults_{};std::function<void(const VbaValue&,bool)> mutation_;std::function<TableSchemaReader()> refresher_;std::shared_ptr<quint64> epoch_{std::make_shared<quint64>(0)};NativeFieldSetter setter_;
 };
 bool sameQueryFieldColumns(const QVector<TableSchemaColumn>& left,const QVector<TableSchemaColumn>& right) {
     if(left.size()!=right.size()) return false;
@@ -1836,6 +1848,9 @@ public:
                     if(!self->valid()) throw VbaRuntimeError(3420,"DAO: Field table unavailable");
                     const auto version=self->schemaVersion(),rollback=self->workspace_->rollbackRevision;self->fields_.reset();
                     return [self,version,rollback] {if(!self->valid() || self->schemaVersion()!=version || self->workspace_->rollbackRevision!=rollback) throw VbaRuntimeError(3420,"DAO: Refreshed field metadata invalidated");return readTableSchemaColumns(self->db_,self->name_);};
+                },[self](const QString& field,std::string_view property,const VbaValue& value) -> TableSchemaReader {
+                    if(!self->valid()) throw VbaRuntimeError(3420,"DAO: Field table unavailable");
+                    return updateNativeFieldPropertiesImpl(self->db_,self->name_,field,{{text(property),value}});
                 });
                 fields_=fields; fieldsVersion_=version; fieldsRollback_=rollback;
             }
@@ -2420,7 +2435,7 @@ struct NativeRelationCatalog {
         if(!query.exec("PRAGMA main.schema_version") || !query.next()) queryFailure(query);
         return query.value(0).toULongLong();
     }
-    QVector<NativeRelationData> read() const {
+    QVector<NativeRelationData> read(const QString& independentlyEditedTable={}) const {
         workspace->check();
         QMap<QString,QString> tables;
         for(const auto& name:nativeTableNames(db)) {
@@ -2504,7 +2519,7 @@ struct NativeRelationCatalog {
             }
             result.append(item);
         }
-        if(!actual.isEmpty()) throw VbaRuntimeError(3251,"DAO: Native foreign keys without proven relation names are unsupported");
+        for(const auto& key:actual) if(independentlyEditedTable.isEmpty() || key.child.compare(independentlyEditedTable,Qt::CaseInsensitive)==0 || key.parent.compare(independentlyEditedTable,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3251,"DAO: Native foreign keys without proven relation names are unsupported");
         return result;
     }
 };
@@ -2624,6 +2639,31 @@ public:
     }
     std::shared_ptr<DetachedRelationState> state_;std::shared_ptr<DetachedRelationFields> fields_;
 };
+class NativeSchemaSettings {
+public:
+    explicit NativeSchemaSettings(QSqlDatabase db):db_(std::move(db)),query_(db_) {}
+    ~NativeSchemaSettings() {if(changed_) (void)restore();}
+    void begin(bool requireForeignKeys) {
+        const auto workspace=workspaceState(db_);workspace->check();
+        if(!sqlite3_get_autocommit(workspace->connection)) throw VbaRuntimeError(3251,"DAO: Native schema reconstruction requires no active transaction");
+        foreignKeys_=pragma("foreign_keys");legacy_=pragma("legacy_alter_table");
+        if(requireForeignKeys && foreignKeys_!=1) throw VbaRuntimeError(3251,"DAO: Enforced relation migration requires foreign_keys enabled");
+        changed_=true;
+        if(!query_.exec("PRAGMA foreign_keys=OFF") || !query_.exec("PRAGMA legacy_alter_table=ON") || pragma("foreign_keys")!=0 || pragma("legacy_alter_table")!=1) throw VbaRuntimeError(3251,"DAO: Native schema migration settings unavailable");
+    }
+    bool restore() noexcept {
+        if(!changed_) return true;
+        query_.finish();const bool first=query_.exec("PRAGMA legacy_alter_table="+QString::number(legacy_));const bool second=query_.exec("PRAGMA foreign_keys="+QString::number(foreignKeys_));
+        bool checked=false;if(first && second && query_.exec("PRAGMA foreign_keys") && query_.next()) checked=query_.value(0).toInt()==foreignKeys_;query_.finish();
+        if(checked && query_.exec("PRAGMA legacy_alter_table") && query_.next()) checked=query_.value(0).toInt()==legacy_;else checked=false;query_.finish();
+        changed_=false;if(!checked && db_.driver()) db_.driver()->setProperty("la_schema_restore_failed",true);return checked;
+    }
+private:
+    int pragma(const QString& name) {if(!query_.exec("PRAGMA "+name) || !query_.next()) queryFailure(query_);const int result=query_.value(0).toInt();query_.finish();return result;}
+    QSqlDatabase db_;QSqlQuery query_;int foreignKeys_{},legacy_{};bool changed_{};
+};
+struct NativeFieldChange {std::optional<bool> required;std::optional<int> size;std::optional<QString> defaultValue;};
+
 QPair<qint64,QByteArray> nativeTableValueDigest(QSqlDatabase db,const QString& table,const QStringList& columns) {
     QCryptographicHash hash(QCryptographicHash::Sha256);QSqlQuery query(db);QStringList projection{"rowid"};for(const auto& column:columns) projection.append(quote(column));
     if(!query.exec("SELECT "+projection.join(',')+" FROM main."+quote(table)+" ORDER BY rowid")) queryFailure(query);
@@ -2647,7 +2687,7 @@ void checkNativeForeignKeys(QSqlDatabase db) {
     QSqlQuery query(db);if(!query.exec("PRAGMA main.foreign_key_check")) queryFailure(query);
     if(query.next()) throw VbaRuntimeError(3251,"DAO: Existing rows violate a foreign-key constraint");if(query.lastError().isValid()) queryFailure(query);
 }
-void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVector<NativeRelationData>& before,const QVector<NativeRelationData>& after) {
+void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVector<NativeRelationData>& before,const QVector<NativeRelationData>& after,const QMap<QString,NativeFieldChange>& changes={}) {
     SqliteExecutionBudget budget(db,100000000,30000);
     checkNativeForeignKeys(db);
     const auto columns=readTableSchemaColumns(db,table);const auto indexes=readNativeIndexCatalog(db,table);
@@ -2661,20 +2701,21 @@ void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVect
     QMap<QString,QJsonObject> declarations;for(const auto& value:metadata) {const auto object=value.toObject();if(object.value("source_origin").toString()!="DAO_NATIVE") throw VbaRuntimeError(3251,"DAO: Original/unknown field migration is not yet supported");declarations.insert(object.value("name").toString().toCaseFolded(),object);}
     QSet<QString> required;
     for(const auto& index:indexes) if(index.source.kind==1 || (index.source.flags&8)) for(const auto& field:index.source.columns) required.insert(field.toCaseFolded());
-    QStringList definitions,names;
+    QStringList definitions,modifiedDefinitions,names;
     auto owner=std::make_shared<DetachedTableState>();owner->db=db;owner->workspace=workspaceState(db);owner->name=table;
     for(const auto& column:columns) {
         if(column.name.compare("rowid",Qt::CaseInsensitive)==0 || column.name.compare("_rowid_",Qt::CaseInsensitive)==0 || column.name.compare("oid",Qt::CaseInsensitive)==0) throw VbaRuntimeError(3251,"DAO: Shadowed row identity migration unsupported");
         if(!declarations.contains(column.name.toCaseFolded()) || !column.nativeAttributes || !column.required) throw VbaRuntimeError(3251,"DAO: Native field properties incomplete for migration");
         DetachedField field(owner,column.name,column.sourceType,column.sourceSize);field.attributes_=*column.nativeAttributes;field.required_=*column.required;
         if(!(field.attributes_&16) && column.hasDefault) {if(column.literalDefault.isEmpty()) throw VbaRuntimeError(3251,"DAO: Nonliteral default migration unsupported");field.default_=column.literalDefault;}
-        auto definition=field.attributes_&16 ? schemaJetName(column.name)+" INT NOT NULL DEFAULT ("+accessCounterDefault(table,column.name)+")" : field.definition();
-        if(required.contains(column.name.toCaseFolded()) && !field.required_ && !(field.attributes_&16)) definition+=" NOT NULL";
-        definitions.append(definition);names.append(column.name);
+        const auto definition=[&](const DetachedField& value) {auto result=value.attributes_&16 ? schemaJetName(column.name)+" INT NOT NULL DEFAULT ("+accessCounterDefault(table,column.name)+")" : value.definition();if(required.contains(column.name.toCaseFolded()) && !value.required_ && !(value.attributes_&16)) result+=" NOT NULL";return result;};
+        definitions.append(definition(field));
+        if(changes.contains(column.name.toCaseFolded())) {const auto change=changes.value(column.name.toCaseFolded());if(change.required) field.required_=*change.required;if(change.size) field.size_=*change.size;if(change.defaultValue) field.default_=*change.defaultValue;}
+        modifiedDefinitions.append(definition(field));names.append(column.name);
     }
-    for(const auto& index:indexes) if(index.source.kind==1) {QStringList fields;for(int i=0;i<index.source.columns.size();++i) fields.append(schemaJetName(index.source.columns[i])+(index.source.descending[i] ? " DESC" : " ASC"));definitions.append("PRIMARY KEY ("+fields.join(',')+")");}
-    const auto makeSql=[&](const QString& target,const QVector<NativeRelationData>& relations) {
-        auto parts=definitions;
+    for(const auto& index:indexes) if(index.source.kind==1) {QStringList fields;for(int i=0;i<index.source.columns.size();++i) fields.append(schemaJetName(index.source.columns[i])+(index.source.descending[i] ? " DESC" : " ASC"));const auto primary="PRIMARY KEY ("+fields.join(',')+")";definitions.append(primary);modifiedDefinitions.append(primary);}
+    const auto makeSql=[&](const QString& target,const QVector<NativeRelationData>& relations,const QStringList& columns) {
+        auto parts=columns;
         for(const auto& relation:relations) if(relation.child.compare(table,Qt::CaseInsensitive)==0 && !(relation.attributes&2)) {
             if(relation.attributes&~(1u|256u|4096u)) throw VbaRuntimeError(3251,"DAO: Relation attributes require unsupported migration");
             QStringList parentFields,childFields;for(const auto& pair:relation.columns) {parentFields.append(schemaJetName(pair.first));childFields.append(schemaJetName(pair.second));}
@@ -2682,20 +2723,85 @@ void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVect
         }
         return compileAccessQuery("CREATE TABLE "+schemaJetName(target)+" ("+parts.join(',')+")").sql;
     };
-    if(!equivalentNativeSchemaSql(originalSql,makeSql(table,before))) throw VbaRuntimeError(3251,"DAO: Unknown/custom table constraints prevent safe reconstruction");
+    if(!equivalentNativeSchemaSql(originalSql,makeSql(table,before,definitions))) throw VbaRuntimeError(3251,"DAO: Unknown/custom table constraints prevent safe reconstruction");
     QVector<QString> objects;query.prepare("SELECT sql FROM main.sqlite_schema WHERE tbl_name=? AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type,name");query.addBindValue(table);
     if(!query.exec()) queryFailure(query);qint64 objectBytes=0;
     while(query.next()) {const auto sql=query.value(0).toString();objectBytes+=sql.size();if(objects.size()>=4096 || objectBytes>4*1024*1024) throw VbaRuntimeError(3251,"DAO: Relation schema object bound exceeded");objects.append(sql);}query.finish();
     const auto original=nativeTableValueDigest(db,table,names);
     const auto temporary="_la_relation_rebuild_"+QUuid::createUuid().toString(QUuid::Id128);
-    if(!query.exec(makeSql(temporary,after))) queryFailure(query);
+    if(!query.exec(makeSql(temporary,after,modifiedDefinitions))) queryFailure(query);
     QStringList quoted{"rowid"};for(const auto& name:names) quoted.append(quote(name));
     if(!query.exec("INSERT INTO main."+quote(temporary)+" ("+quoted.join(',')+") SELECT "+quoted.join(',')+" FROM main."+quote(table))) queryFailure(query);
     if(nativeTableValueDigest(db,temporary,names)!=original) throw VbaRuntimeError(3251,"DAO: Relation migration changed row identities or values");
     if(!query.exec("DROP TABLE main."+quote(table)) || !query.exec("ALTER TABLE main."+quote(temporary)+" RENAME TO "+quote(table))) queryFailure(query);
     for(const auto& sql:objects) if(!query.exec(sql)) queryFailure(query);
     if(nativeTableValueDigest(db,table,names)!=original) throw VbaRuntimeError(3251,"DAO: Relation migration final value verification failed");
-    (void)readNativeIndexCatalog(db,table);(void)readTableSchemaColumns(db,table);checkNativeForeignKeys(db);
+    (void)readNativeIndexCatalog(db,table);if(changes.isEmpty()) (void)readTableSchemaColumns(db,table);checkNativeForeignKeys(db);
+}
+
+quint64 nativeSchemaVersion(QSqlDatabase db) {
+    QSqlQuery query(db);if(!query.exec("PRAGMA main.schema_version") || !query.next()) queryFailure(query);return query.value(0).toULongLong();
+}
+TableSchemaReader currentNativeFieldReader(QSqlDatabase db,const QString& table) {
+    const auto workspace=workspaceState(db);const auto version=nativeSchemaVersion(db),rollback=workspace->rollbackRevision,generation=workspace->tableGenerations.value(table.toCaseFolded());
+    return [db,table,workspace,version,rollback,generation] {workspace->check();if(workspace->rollbackRevision!=rollback || workspace->tableGenerations.value(table.toCaseFolded())!=generation || nativeSchemaVersion(db)!=version) throw VbaRuntimeError(3420,"DAO: Edited field metadata invalidated");return readTableSchemaColumns(db,table);};
+}
+TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString& requestedTable,const QString& requestedField,const QMap<QString,VbaValue>& properties) {
+    const auto workspace=workspaceState(db);QString table;
+    for(const auto& name:nativeTableNames(db)) if(name.compare(requestedTable,Qt::CaseInsensitive)==0) {table=name;break;}
+    if(table.isEmpty()) throw VbaRuntimeError(3265,"DAO: Field table unavailable");
+    const auto version=nativeSchemaVersion(db),generation=workspace->tableGenerations.value(table.toCaseFolded());
+    QMap<QString,VbaValue> evaluated;
+    for(auto it=properties.cbegin();it!=properties.cend();++it) {const auto key=it.key().toCaseFolded();if(key!="required" && key!="defaultvalue" && key!="size") throw VbaRuntimeError(383,"DAO: Field property is read-only");if(evaluated.contains(key)) throw VbaRuntimeError(450,"DAO: Duplicate field property");evaluated.insert(key,scalarVbaValue(it.value()));}
+    workspace->check();if(version!=nativeSchemaVersion(db) || generation!=workspace->tableGenerations.value(table.toCaseFolded())) throw VbaRuntimeError(3420,"DAO: Field identity changed while evaluating properties");
+    const auto columns=readTableSchemaColumns(db,table);std::optional<TableSchemaColumn> selected;
+    for(const auto& column:columns) if(column.name.compare(requestedField,Qt::CaseInsensitive)==0) {selected=column;break;}
+    if(!selected) throw VbaRuntimeError(3265,"DAO: Field not found");
+    const auto& column=*selected;
+    if(!column.nativeAttributes || !column.required || column.sourceType<=0) throw VbaRuntimeError(3251,"DAO: Only explicitly declared native field properties can be changed");
+    if(*column.nativeAttributes&16) throw VbaRuntimeError(3251,"DAO: Counter property alteration requires dedicated migration");
+    auto owner=std::make_shared<DetachedTableState>();owner->db=db;owner->workspace=workspace;owner->name=table;
+    DetachedField field(owner,column.name,column.sourceType,column.sourceSize);field.attributes_=*column.nativeAttributes;field.required_=*column.required;
+    if(column.hasDefault) {if(column.literalDefault.isEmpty()) throw VbaRuntimeError(3251,"DAO: Nonliteral default alteration unsupported");field.default_=column.literalDefault;}
+    for(auto it=evaluated.cbegin();it!=evaluated.cend();++it) {
+        if(it.key()=="size" && field.type_!=10) throw VbaRuntimeError(3251,"DAO: Only Text capacities can be changed");
+        field.assign(it.key().toStdString(),it.value());
+    }
+    (void)field.definition();
+    if(evaluated.contains("defaultvalue") && !field.default_.isEmpty()) {
+        QSqlQuery literal(db);if(!literal.exec("SELECT "+*accessLiteralDefaultSql(field.default_)) || !literal.next()) queryFailure(literal);const auto scalar=literal.value(0);literal.finish();
+        if(field.type_==11 && !scalar.isNull()) throw VbaRuntimeError(3251,"DAO: Binary fields support only Null defaults");
+        const auto stored=sqlFieldValue(fromSql(scalar),column.type);
+        if(stored.isNull()) field.default_="NULL";
+        else if(stored.metaType().id()==QMetaType::QString) {auto value=stored.toString();if(field.type_==10 && value.size()>field.size_) throw VbaRuntimeError(3163,"DAO: Default exceeds Text capacity");field.default_="'"+value.replace("'","''")+"'";}
+        else if(stored.metaType().id()==QMetaType::Double) field.default_=QString::number(stored.toDouble(),'g',17);
+        else field.default_=QString::number(stored.toLongLong());
+    }
+    if(field.type_==10 && !field.default_.isEmpty()) {QSqlQuery literal(db);if(!literal.exec("SELECT "+*accessLiteralDefaultSql(field.default_)) || !literal.next()) queryFailure(literal);if(!literal.value(0).isNull() && literal.value(0).toString().size()>field.size_) throw VbaRuntimeError(3163,"DAO: Existing default exceeds new Text capacity");}
+    const auto oldDefault=column.hasDefault ? column.literalDefault : QString{};
+    if(field.required_==*column.required && field.size_==(field.type_==10 ? column.sourceSize : static_cast<int>(fixedDaoFieldSize(field.type_).number)) && field.default_==oldDefault) return currentNativeFieldReader(db,table);
+    checkReservedCounterSchemaAction(db);
+    NativeSchemaSettings settings(db);settings.begin(false);
+    QSqlQuery query(db);const auto savepoint="la_field_properties_"+QUuid::createUuid().toString(QUuid::Id128);
+    if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);bool completed=false;
+    const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
+    if(version!=nativeSchemaVersion(db) || generation!=workspace->tableGenerations.value(table.toCaseFolded())) throw VbaRuntimeError(3420,"DAO: Field schema changed before edit");
+    auto catalog=std::make_shared<NativeRelationCatalog>(db);const auto relations=catalog->read(table);
+    if((field.type_==10 && field.size_!=column.sourceSize) || (*column.required && !field.required_)) for(const auto& relation:relations) for(const auto& pair:relation.columns)
+        if((relation.parent==table && pair.first==column.name) || (relation.child==table && pair.second==column.name)) throw VbaRuntimeError(3251,"DAO: Remove dependent relations before changing key capacity/relaxing Required");
+    query.prepare("SELECT definition FROM main._la_table_schema WHERE table_name=? COLLATE NOCASE");query.addBindValue(table);if(!query.exec() || !query.next()) throw VbaRuntimeError(3251,"DAO: Native field metadata unavailable");
+    const auto originalMetadataValue=query.value(0);const auto originalMetadata=originalMetadataValue.toByteArray();if(query.next()) throw VbaRuntimeError(3251,"DAO: Native field metadata ambiguous");query.finish();
+    auto metadata=QJsonDocument::fromJson(originalMetadata).array();bool found=false;
+    for(int i=0;i<metadata.size();++i) {auto object=metadata[i].toObject();if(object.value("name").toString().compare(column.name,Qt::CaseInsensitive)==0) {if(object.value("source_origin").toString()!="DAO_NATIVE") throw VbaRuntimeError(3251,"DAO: Original field alteration unsupported");object.insert("native_required",field.required_);if(field.type_==10) object.insert("source_size",field.size_);metadata[i]=object;found=true;break;}}
+    if(!found) throw VbaRuntimeError(3251,"DAO: Native field declaration missing");
+    NativeFieldChange change;change.required=field.required_;if(field.type_==10) change.size=field.size_;change.defaultValue=field.default_;
+    if(workspace->tableFieldRevisions.value(table.toCaseFolded())==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Field schema revision overflow");
+    rebuildNativeRelationTable(db,table,relations,relations,{{column.name.toCaseFolded(),change}});
+    query.prepare("UPDATE main._la_table_schema SET definition=? WHERE table_name=? COLLATE NOCASE AND definition=?");query.addBindValue(QJsonDocument(metadata).toJson(QJsonDocument::Compact));query.addBindValue(table);query.addBindValue(originalMetadataValue);if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Field metadata changed during edit");
+    (void)readTableSchemaColumns(db,table);(void)readNativeIndexCatalog(db,table);(void)catalog->read(table);auto reader=currentNativeFieldReader(db,table);(void)reader();
+    if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++workspace->tableFieldRevisions[table.toCaseFolded()];
+    if(!settings.restore()) throw DaoStoredSchemaChange("DAO: Field changes stored; connection settings failed to restore, reopen the project");
+    return reader;
 }
 
 void mutateNativeRelation(std::shared_ptr<NativeRelationCatalog> catalog,const VbaValue& value,bool erase) {
@@ -2711,22 +2817,8 @@ void mutateNativeRelation(std::shared_ptr<NativeRelationCatalog> catalog,const V
         if((attributes&2) ? (attributes!=2 && attributes!=3) : (attributes&~(1u|256u|4096u))) throw VbaRuntimeError(3251,"DAO: Relation attributes unsupported");
         rebuild=!(attributes&2);
     }
-    QSqlQuery query(db);int legacy=0;bool settingsChanged=false;
-    const auto pragma=[&](const QString& name) {if(!query.exec("PRAGMA "+name) || !query.next()) queryFailure(query);const int result=query.value(0).toInt();query.finish();return result;};
-    const auto restoreSettings=[&] {
-        if(!settingsChanged) return true;
-        query.finish();const bool first=query.exec("PRAGMA legacy_alter_table="+QString::number(legacy));const bool second=query.exec("PRAGMA foreign_keys=ON");
-        bool checked=false;if(first && second && query.exec("PRAGMA foreign_keys") && query.next()) checked=query.value(0).toInt()==1;query.finish();
-        if(checked && query.exec("PRAGMA legacy_alter_table") && query.next()) checked=query.value(0).toInt()==legacy;else checked=false;query.finish();
-        settingsChanged=false;if(!checked && db.driver()) db.driver()->setProperty("la_schema_restore_failed",true);return checked;
-    };
-    const auto restore=qScopeGuard([&] {if(settingsChanged) (void)restoreSettings();});
-    if(rebuild) {
-        if(!sqlite3_get_autocommit(catalog->workspace->connection)) throw VbaRuntimeError(3251,"DAO: Enforced relation migration requires no active transaction");
-        if(pragma("foreign_keys")!=1) throw VbaRuntimeError(3251,"DAO: Enforced relation migration requires foreign_keys enabled");
-        legacy=pragma("legacy_alter_table");settingsChanged=true;
-        if(!query.exec("PRAGMA foreign_keys=OFF") || !query.exec("PRAGMA legacy_alter_table=ON") || pragma("foreign_keys")!=0 || pragma("legacy_alter_table")!=1) throw VbaRuntimeError(3251,"DAO: Relation migration settings unavailable");
-    }
+    NativeSchemaSettings settings(db);if(rebuild) settings.begin(true);
+    QSqlQuery query(db);
     const auto savepoint="la_relation_mutation_"+QUuid::createUuid().toString(QUuid::Id128);
     if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
     bool completed=false;const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
@@ -2776,7 +2868,7 @@ void mutateNativeRelation(std::shared_ptr<NativeRelationCatalog> catalog,const V
     if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++generation;
     if(!rebuiltTable.isEmpty()) ++catalog->workspace->tableGenerations[rebuiltTable.toCaseFolded()];
     if(builder) {attached->publishGeneration(generation);builder->state_->attached=std::move(attached);}
-    if(!restoreSettings()) throw DaoStoredSchemaChange("DAO: Relation change stored; connection settings failed to restore, reopen the project");
+    if(!settings.restore()) throw DaoStoredSchemaChange("DAO: Relation change stored; connection settings failed to restore, reopen the project");
 }
 
 class NativeRelations final : public VbaObject {
@@ -3030,6 +3122,9 @@ private:
     std::shared_ptr<WorkspaceState> state_;
     std::weak_ptr<VbaObject> workspaces_;
 };
+}
+void updateNativeFieldProperties(QSqlDatabase db,const QString& table,const QString& field,const QMap<QString,VbaValue>& properties) {
+    (void)updateNativeFieldPropertiesImpl(db,table,field,properties);
 }
 void trackAccessCounterReservations(QSqlDatabase db,const QVector<AccessCounterReservation>& reservations) {
     const auto state=workspaceState(db);

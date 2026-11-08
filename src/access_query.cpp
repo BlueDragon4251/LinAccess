@@ -972,7 +972,20 @@ AccessQueryPlan compileJoinedUpdate(const QVector<Token>& tokens,qsizetype start
 }
 }
 bool equivalentNativeSchemaSql(const QString& left,const QString& right) {
-    const auto first=tokenize(left,true),second=tokenize(right,true);
+    const auto canonical=[](QVector<Token> tokens) {
+        // SQLite appends ADD COLUMN after existing table constraints. Preserve
+        // every clause and column order while comparing that harmless placement.
+        if(tokens.size()<5 || tokens[0].kind!=Token::Word || tokens[0].value.compare("CREATE",Qt::CaseInsensitive)!=0
+            || tokens[1].kind!=Token::Word || tokens[1].value.compare("TABLE",Qt::CaseInsensitive)!=0 || !symbol(tokens[3],"(")) return tokens;
+        QVector<QVector<Token>> columns,constraints;qsizetype start=4,close=-1;int depth=0;
+        const auto append=[&](qsizetype end) {const auto part=tokens.mid(start,end-start);if(part.isEmpty()) return;const auto key=part.front().kind==Token::Word ? part.front().value.toUpper() : QString{};
+            if(key=="PRIMARY" || key=="FOREIGN" || key=="UNIQUE" || key=="CHECK" || key=="CONSTRAINT") constraints.append(part);else columns.append(part);};
+        for(qsizetype i=4;i<tokens.size();++i) {if(symbol(tokens[i],"(")) ++depth;else if(symbol(tokens[i],")")) {if(depth==0) {append(i);close=i;break;}--depth;}else if(depth==0 && symbol(tokens[i],",")) {append(i);start=i+1;}}
+        if(close<0) return tokens;auto result=tokens.mid(0,4);bool first=true;
+        for(const auto& group:{columns,constraints}) for(const auto& part:group) {if(!first) result.append({Token::Other,","});first=false;result+=part;}
+        result+=tokens.mid(close);return result;
+    };
+    const auto first=canonical(tokenize(left,true)),second=canonical(tokenize(right,true));
     if(first.size()!=second.size()) return false;
     const auto asciiWord=[](QString value) {for(qsizetype i=0;i<value.size();++i) if(value[i].unicode()>='A' && value[i].unicode()<='Z') value[i]=QChar(value[i].unicode()+32);return value;};
     for(int i=0;i<first.size();++i) if(first[i].kind!=second[i].kind || (first[i].kind==Token::Word ? asciiWord(first[i].value)!=asciiWord(second[i].value) : first[i].value!=second[i].value)) return false;
