@@ -2679,3 +2679,12 @@ keine ursprünglichen/unklaren Schemas oder aktiven Aufrufertransaktionen umbaue
 GUI/DAO2/2 (7,15s), App gebaut. DAO_TABLEDEF_FIELDS.md;456/384/72 unverändert.
 Fortsetzung: Gültigkeitsregeln für eigene kanonische Date-Felder einschließlich
 Uhrgrenzen im DAO/Feldentwurf, dann übrige offene Anforderungen fortlaufend.
+
+Gültigkeitsregeln jetzt auch für eigene kanonische Date-Felder: ISO-#Datum#-
+Konstanten (ganze Sekunden) und Date()/Now()/Time() mit Vergleichen, And/Or,
+Between. Tatsächliche CHECK-Durchsetzung/3317 und ValidationText, atomare
+Bestandsprüfung, Rename/Migration/GUI; alte/importierte Date-Speicherung bleibt
+verweigert. Regionale Konstanten, Untersekunden/allgemeine Ausdrücke offen.
+GUI/DAO2/2 (7,08s), App gebaut;456/384/72 unverändert. Fortsetzung: verlustfreie
+numerische Datentypänderungen im Feldentwurf mit Bestands-/Defaultprüfung;
+DAO Field.Type nach Append bleibt readonly. Danach offene Anforderungen weiter.

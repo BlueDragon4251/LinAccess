@@ -512,3 +512,16 @@ retain the existing explicit refusal boundaries. Detached pre-append position
 assignment and full Access collection/event/error equivalence remain open.
 
 Existing GUI/DAO2/2 passed (7.15s), app built; no new target/full-suite claim.
+
+## Canonical native Date validation rules
+
+The same bounded rule operators now support own canonical Date fields. Operands
+are four-digit ISO #date# literals (optional 24-hour time, whole seconds), or
+Date()/Now()/Time(). Constants use the shared Date parser/storage conversion;
+clock limits evaluate at the actual validation operation. Canonical timestamp
+storage supplies calendar order for these comparisons. Old/imported Date storage
+is not silently upgraded. Date ValidationText, property changes, rename and the
+field designer use the same constraint path. Null remains independent of Required.
+Regional/two-digit literals, subsecond values, general functions/expressions and
+exact Access event/timing equivalence remain open. GUI/DAO2/2 (7.08s), app built;
+no new CTest target/full-suite claim;456/384/72 unchanged.
