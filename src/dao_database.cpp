@@ -82,6 +82,10 @@ void removeDroppedTableMetadata(QSqlDatabase db,const QStringList& before) {
     // A rename needs rebinding of defaults, index identities and source metadata.
     // Refuse it atomically for managed/imported tables until that is implemented.
     for(const auto& name:removed) {
+        if(catalog.contains("_la_access_relations",Qt::CaseInsensitive)) {
+            QSqlQuery relations(db);relations.prepare("SELECT 1 FROM main._la_access_relations WHERE child_table=? COLLATE NOCASE OR parent_table=? COLLATE NOCASE");relations.addBindValue(name);relations.addBindValue(name);
+            if(!relations.exec()) queryFailure(relations);if(relations.next()) throw VbaRuntimeError(3251,"DAO: Remove dependent relations before dropping/renaming a table");
+        }
         for(const auto& metadata:{QString("_la_counter_sequences"),QString("_la_counter32_sequences"),QString("_la_counter32_steps"),QString("_la_table_schema"),QString("_la_access_indexes")}) {
             if(!catalog.contains(metadata,Qt::CaseInsensitive)) continue;
             QSqlQuery query(db);
@@ -207,7 +211,7 @@ struct WorkspaceState {
     sqlite3* connection{};
     bool alive{true};
     quint64 rollbackRevision{};
-    QMap<QString,quint64> queryGenerations,tableGenerations,tableFieldRevisions;
+    QMap<QString,quint64> queryGenerations,tableGenerations,tableFieldRevisions,relationGenerations;
     QVariantMap queryViewSnapshot;
     static constexpr const char* queryViewProperties[]{"la_query_database","la_query_views","la_query_internal_views","la_query_rank_pending","la_query_revision"};
     int clones{};
@@ -2230,6 +2234,10 @@ void mutateExistingTableField(QSqlDatabase db,const QString& table,const VbaValu
             while(keys.next()) if((child.compare(table,Qt::CaseInsensitive)==0 && keys.value(3).toString().compare(fieldName,Qt::CaseInsensitive)==0)
                 || (keys.value(2).toString().compare(table,Qt::CaseInsensitive)==0 && keys.value(4).toString().compare(fieldName,Qt::CaseInsensitive)==0)) throw VbaRuntimeError(3251,"DAO: Field participates in a relation");
         }
+        if(db.tables().contains("_la_access_relations")) {
+            QSqlQuery relations(db);relations.prepare("SELECT 1 FROM main._la_access_relations WHERE (child_table=? COLLATE NOCASE AND child_column=? COLLATE NOCASE) OR (parent_table=? COLLATE NOCASE AND parent_column=? COLLATE NOCASE)");relations.addBindValue(table);relations.addBindValue(fieldName);relations.addBindValue(table);relations.addBindValue(fieldName);
+            if(!relations.exec()) queryFailure(relations);if(relations.next()) throw VbaRuntimeError(3251,"DAO: Field participates in a declared relation");
+        }
         executeAction(db,compileAccessQuery("ALTER TABLE "+schemaJetName(table)+" DROP COLUMN "+schemaJetName(fieldName)),{});
         names.removeAll(fieldName);QJsonArray retained;for(const auto& entry:metadata) if(entry.toObject().value("name").toString().compare(fieldName,Qt::CaseInsensitive)!=0) retained.append(entry);metadata=retained;
     } else {
@@ -2487,17 +2495,18 @@ struct NativeRelationCatalog {
 class NativeRelation final : public VbaObject, public std::enable_shared_from_this<NativeRelation> {
 public:
     NativeRelation(std::shared_ptr<NativeRelationCatalog> catalog,NativeRelationData data,quint64 version,quint64 rollback)
-        : catalog_(std::move(catalog)),data_(std::move(data)),version_(version),rollback_(rollback) {}
+        : catalog_(std::move(catalog)),data_(std::move(data)),version_(version),rollback_(rollback),generation_(catalog_->workspace->relationGenerations.value(data_.name.toCaseFolded())) {}
     std::string_view className() const override { return "Relation"; }
     bool isNativeType(std::string_view type) const override { return type=="dao.relation"; }
-    bool matches(const NativeRelationData& data,quint64 version,quint64 rollback) const { return data_==data && version_==version && rollback_==rollback; }
+    bool matches(const NativeRelationData& data,quint64 version,quint64 rollback) const { return data_==data && version_==version && rollback_==rollback && generation_==catalog_->workspace->relationGenerations.value(data_.name.toCaseFolded()); }
     void check() const {
-        if(catalog_->version()!=version_ || catalog_->workspace->rollbackRevision!=rollback_) throw VbaRuntimeError(3420,"DAO: Relation metadata invalidated");
+        if(catalog_->version()!=version_ || catalog_->workspace->rollbackRevision!=rollback_ || generation_!=catalog_->workspace->relationGenerations.value(data_.name.toCaseFolded())) throw VbaRuntimeError(3420,"DAO: Relation metadata invalidated");
         for(const auto& current:catalog_->read()) if(current.name.compare(data_.name,Qt::CaseInsensitive)==0) {
             if(current==data_) return; break;
         }
         throw VbaRuntimeError(3420,"DAO: Relation definition changed");
     }
+    void publishGeneration(quint64 value) {generation_=value;}
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         if(lower(name)=="fields") return VbaArgumentSignature{{"Index"},0}; return {};
     }
@@ -2525,16 +2534,131 @@ public:
     }
     void assign(std::string_view,const VbaValue&) override { check(); throw VbaRuntimeError(383,"DAO: Imported relation metadata is read-only"); }
 private:
-    std::shared_ptr<NativeRelationCatalog> catalog_; NativeRelationData data_; quint64 version_{},rollback_{};
+    std::shared_ptr<NativeRelationCatalog> catalog_; NativeRelationData data_; quint64 version_{},rollback_{},generation_{};
     std::weak_ptr<VbaObject> fields_;
 };
+struct DetachedRelationState {
+    QSqlDatabase db;std::shared_ptr<WorkspaceState> workspace;QString name,parent,child;quint32 attributes{};std::shared_ptr<NativeRelation> attached;
+    void check() const {workspace->check();if(attached) (void)attached->member("Name",{});}
+    void mutableCheck() const {check();if(attached) throw VbaRuntimeError(383,"DAO: Attached relation is read-only");}
+};
+class DetachedRelationField final : public VbaObject {
+public:
+    DetachedRelationField(std::shared_ptr<DetachedRelationState> owner,QString name):owner_(std::move(owner)),name_(std::move(name)) {}
+    std::string_view className() const override {return "Field";}
+    bool isNativeType(std::string_view type) const override {return type=="dao.field";}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        owner_->check();if(owner_->attached) return owner_->attached->member("Fields",{VbaValue::string(name_.toStdString())}).object->member(name,args);
+        if(!args.empty()) throw VbaRuntimeError(450,"DAO: Relation field property takes no arguments");
+        const auto key=lower(name);if(key=="name") return VbaValue::string(name_.toStdString());if(key=="foreignname") return VbaValue::string(foreign_.toStdString());
+        throw VbaRuntimeError(3251,"DAO: Relation field property unsupported");
+    }
+    void assign(std::string_view name,const VbaValue& raw) override {
+        owner_->mutableCheck();const auto value=scalarVbaValue(raw);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null relation field property");
+        if(lower(name)=="name") {name_=text(value.asText());return;}if(lower(name)=="foreignname") {foreign_=text(value.asText());return;}
+        throw VbaRuntimeError(3251,"DAO: Relation field assignment unsupported");
+    }
+    std::shared_ptr<DetachedRelationState> owner_;QString name_,foreign_;bool appended_{};
+};
+class DetachedRelationFields final : public VbaObject {
+public:
+    explicit DetachedRelationFields(std::shared_ptr<DetachedRelationState> owner):owner_(std::move(owner)) {}
+    std::string_view className() const override {return "Fields";}
+    bool isNativeType(std::string_view type) const override {return type=="dao.fields";}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {const auto key=lower(name);if(key=="append") return VbaArgumentSignature{{"Object"},1};if(key=="item") return VbaArgumentSignature{{"Index"},1};return {};}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        owner_->check();if(owner_->attached) return owner_->attached->member("Fields",{}).object->member(name,args);
+        const auto key=lower(name);if(key=="count" && args.empty()) return integerCount(fields_.size());if(key=="refresh" && args.empty()) return {};
+        if(key=="append") {
+            if(args.size()!=1 || args[0].kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Relation field required");
+            auto field=std::dynamic_pointer_cast<DetachedRelationField>(args[0].object);
+            if(!field || field->owner_!=owner_ || field->appended_) throw VbaRuntimeError(3219,"DAO: Foreign/attached relation field");
+            if(fields_.size()>=10) throw VbaRuntimeError(3251,"DAO: Relation field bound exceeded");
+            for(const auto& existing:fields_) if(existing->name_.compare(field->name_,Qt::CaseInsensitive)==0 || existing->foreign_.compare(field->foreign_,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3191,"DAO: Duplicate relation field");
+            field->appended_=true;fields_.append(field);return {};
+        }
+        if(key!="item" || args.size()!=1) throw VbaRuntimeError(450,"DAO: Relation field name/index required");
+        const auto value=scalarVbaValue(args[0]);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null relation field index");
+        if(value.kind==VbaValue::Kind::Text) {for(const auto& field:fields_) if(field->name_.compare(text(value.asText()),Qt::CaseInsensitive)==0) return VbaValue::reference(field);}
+        else {const auto index=coerceVbaModuleValue(value,"long").number;if(index>=0 && index<fields_.size()) return VbaValue::reference(fields_[static_cast<int>(index)]);}
+        throw VbaRuntimeError(3265,"DAO: Relation field not found");
+    }
+    VbaValue item(std::string_view name) override {return member("Item",{VbaValue::string(std::string(name))});}
+    std::vector<VbaValue> enumerate() override {owner_->check();if(owner_->attached) return owner_->attached->member("Fields",{}).object->enumerate();std::vector<VbaValue> result;for(const auto& field:fields_) result.push_back(VbaValue::reference(field));return result;}
+    std::shared_ptr<DetachedRelationState> owner_;QVector<std::shared_ptr<DetachedRelationField>> fields_;
+};
+class DetachedRelation final : public VbaObject {
+public:
+    DetachedRelation(QSqlDatabase db,QString name,QString parent,QString child,quint32 attributes):state_(std::make_shared<DetachedRelationState>()) {state_->db=db;state_->workspace=workspaceState(db);state_->name=std::move(name);state_->parent=std::move(parent);state_->child=std::move(child);state_->attributes=attributes;fields_=std::make_shared<DetachedRelationFields>(state_);}
+    std::string_view className() const override {return "Relation";}
+    bool isNativeType(std::string_view type) const override {return type=="dao.relation";}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {const auto key=lower(name);if(key=="createfield") return VbaArgumentSignature{{"Name"},0};if(key=="fields") return VbaArgumentSignature{{"Index"},0};return {};}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        state_->check();if(state_->attached) return state_->attached->member(name,args);const auto key=lower(name);
+        if(key=="fields") return args.empty() ? VbaValue::reference(fields_) : fields_->member("Item",args);
+        if(key=="createfield") {if(args.size()>1) throw VbaRuntimeError(450,"DAO: Relation.CreateField takes Name only");if(!args.empty() && args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null relation field name");return VbaValue::reference(std::make_shared<DetachedRelationField>(state_,args.empty() ? QString{} : text(args[0].asText())));}
+        if(!args.empty()) throw VbaRuntimeError(450,"DAO: Relation property takes no arguments");
+        if(key=="name") return VbaValue::string(state_->name.toStdString());if(key=="table") return VbaValue::string(state_->parent.toStdString());if(key=="foreigntable") return VbaValue::string(state_->child.toStdString());if(key=="attributes") return VbaValue::longInteger(static_cast<std::int32_t>(state_->attributes));
+        throw VbaRuntimeError(3251,"DAO: Relation member unsupported");
+    }
+    void assign(std::string_view name,const VbaValue& raw) override {
+        state_->mutableCheck();const auto value=scalarVbaValue(raw);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null relation property");
+        const auto key=lower(name);if(key=="name") {state_->name=text(value.asText());return;}if(key=="table") {state_->parent=text(value.asText());return;}if(key=="foreigntable") {state_->child=text(value.asText());return;}if(key=="attributes") {state_->attributes=static_cast<quint32>(static_cast<qint32>(coerceVbaModuleValue(value,"long").number));return;}
+        throw VbaRuntimeError(3251,"DAO: Relation property assignment unsupported");
+    }
+    std::shared_ptr<DetachedRelationState> state_;std::shared_ptr<DetachedRelationFields> fields_;
+};
+void mutateNativeRelation(std::shared_ptr<NativeRelationCatalog> catalog,const VbaValue& value,bool erase) {
+    const auto db=catalog->db;checkReservedCounterSchemaAction(db);
+    QSqlQuery query(db);const auto savepoint="la_relation_mutation_"+QUuid::createUuid().toString(QUuid::Id128);
+    if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
+    bool completed=false;const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
+    const auto existing=catalog->read();QString name;std::shared_ptr<DetachedRelation> builder;
+    if(erase) {
+        const auto scalar=scalarVbaValue(value);if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null relation name");
+        const auto requested=text(scalar.asText());std::optional<NativeRelationData> selected;for(const auto& relation:existing) if(relation.name.compare(requested,Qt::CaseInsensitive)==0) {selected=relation;break;}
+        if(!selected) throw VbaRuntimeError(3265,"DAO: Relation not found");
+        if(!(selected->attributes&2)) throw VbaRuntimeError(3251,"DAO: Enforced relation deletion requires constraint migration");
+        name=selected->name;
+        query.prepare("DELETE FROM main._la_access_relations WHERE name=? COLLATE NOCASE");query.addBindValue(name);if(!query.exec() || query.numRowsAffected()!=selected->columns.size()) throw VbaRuntimeError(3251,"DAO: Relation changed during deletion");
+    } else {
+        if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Detached relation required");builder=std::dynamic_pointer_cast<DetachedRelation>(value.object);
+        if(!builder || builder->state_->workspace!=catalog->workspace || builder->state_->attached) throw VbaRuntimeError(3219,"DAO: Relation belongs to a different or attached database");
+        builder->state_->mutableCheck();name=builder->state_->name;
+        if(name.isEmpty() || name.trimmed()!=name || name.size()>64 || name.contains(QChar(0)) || !name.isValidUtf16()) throw VbaRuntimeError(5,"DAO: Invalid relation name");
+        if(builder->state_->attributes!=2) throw VbaRuntimeError(3251,"DAO: Relation creation currently requires explicit dbRelationDontEnforce");
+        for(const auto& relation:existing) if(relation.name.compare(name,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3251,"DAO: Relation name already exists");
+        const auto canonicalTable=[&](const QString& requested) {for(const auto& table:nativeTableNames(db)) if(table.compare(requested,Qt::CaseInsensitive)==0) return table;throw VbaRuntimeError(3265,"DAO: Relation table not found");};
+        const auto parent=canonicalTable(builder->state_->parent),child=canonicalTable(builder->state_->child);
+        const auto parentFields=readTableSchemaColumns(db,parent),childFields=readTableSchemaColumns(db,child);
+        const auto findField=[](const QVector<TableSchemaColumn>& columns,const QString& requested) {for(const auto& column:columns) if(column.name.compare(requested,Qt::CaseInsensitive)==0) return column;throw VbaRuntimeError(3265,"DAO: Relation field not found");};
+        if(builder->fields_->fields_.isEmpty()) throw VbaRuntimeError(3264,"DAO: Relation requires fields");
+        QVector<QPair<QString,QString>> pairs;QSet<QString> primaryNames,foreignNames;
+        for(const auto& field:builder->fields_->fields_) {
+            const auto p=findField(parentFields,field->name_),c=findField(childFields,field->foreign_);
+            const auto pType=p.sourceType ? p.sourceType : provenDaoFieldType(p.type),cType=c.sourceType ? c.sourceType : provenDaoFieldType(c.type);
+            if(pType<=0 || pType!=cType || pType==11 || pType==12 || pType==15 || (pType==10 && (p.sourceSize<=0 || p.sourceSize!=c.sourceSize))) throw VbaRuntimeError(3251,"DAO: Relation field types/capacities are not compatible and proven");
+            if(primaryNames.contains(p.name.toCaseFolded()) || foreignNames.contains(c.name.toCaseFolded())) throw VbaRuntimeError(3191,"DAO: Duplicate relation field");primaryNames.insert(p.name.toCaseFolded());foreignNames.insert(c.name.toCaseFolded());pairs.append({p.name,c.name});
+        }
+        for(const auto& relation:existing) if(relation.parent==parent && relation.child==child && relation.columns==pairs) throw VbaRuntimeError(3251,"DAO: Relation field mapping already exists");
+        if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_access_relations(source_file TEXT NOT NULL,name TEXT NOT NULL,flags INTEGER NOT NULL,ordinal INTEGER NOT NULL,child_table TEXT NOT NULL,child_column TEXT NOT NULL,parent_table TEXT NOT NULL,parent_column TEXT NOT NULL,PRIMARY KEY(name,ordinal))")) queryFailure(query);
+        query.prepare("INSERT INTO main._la_access_relations(source_file,name,flags,ordinal,child_table,child_column,parent_table,parent_column) VALUES(?,?,2,?,?,?,?,?)");
+        for(int i=0;i<pairs.size();++i) {query.bindValue(0,QStringLiteral("DAO_NATIVE"));query.bindValue(1,name);query.bindValue(2,i);query.bindValue(3,child);query.bindValue(4,pairs[i].second);query.bindValue(5,parent);query.bindValue(6,pairs[i].first);if(!query.exec()) queryFailure(query);}
+    }
+    auto& generation=catalog->workspace->relationGenerations[name.toCaseFolded()];if(generation==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Relation generation overflow");
+    const auto rows=catalog->read();std::shared_ptr<NativeRelation> attached;
+    if(builder) {for(const auto& relation:rows) if(relation.name==name) {attached=std::make_shared<NativeRelation>(catalog,relation,catalog->version(),catalog->workspace->rollbackRevision);break;}if(!attached) throw VbaRuntimeError(3251,"DAO: Appended relation missing");(void)attached->member("Name",{});}
+    if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++generation;
+    if(builder) {attached->publishGeneration(generation);builder->state_->attached=std::move(attached);}
+}
+
 class NativeRelations final : public VbaObject {
 public:
     explicit NativeRelations(QSqlDatabase db) : catalog_(std::make_shared<NativeRelationCatalog>(std::move(db))) {}
     std::string_view className() const override { return "Relations"; }
     bool isNativeType(std::string_view type) const override { return type=="dao.relations"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
-        if(lower(name)=="item") return VbaArgumentSignature{{"Index"},1}; return {};
+        const auto key=lower(name);if(key=="item") return VbaArgumentSignature{{"Index"},1};if(key=="append") return VbaArgumentSignature{{"Object"},1};if(key=="delete") return VbaArgumentSignature{{"Name"},1};return {};
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         const auto rows=catalog_->read(); const auto key=lower(name);
@@ -2542,7 +2666,8 @@ public:
             if(!args.empty()) throw VbaRuntimeError(450,"DAO: Relation collection property takes no arguments");
             return key=="count" ? integerCount(rows.size()) : VbaValue{};
         }
-        if(key!="item") throw VbaRuntimeError(3251,"DAO: Relation catalog mutation unsupported");
+        if(key=="append" || key=="delete") {if(args.size()!=1) throw VbaRuntimeError(450,"DAO: Relation/name required");mutateNativeRelation(catalog_,args[0],key=="delete");return {};}
+        if(key!="item") throw VbaRuntimeError(3251,"DAO: Relation catalog member unsupported");
         if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"DAO: Relation index required");
         const auto value=scalarVbaValue(args[0]); if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null relation index");
         int position=-1;
@@ -2573,6 +2698,7 @@ public:
         if (key=="openrecordset") return VbaArgumentSignature{{"Name","Type"},1};
         if (key=="execute") return VbaArgumentSignature{{"Query","Options"},1};
         if (key=="createquerydef") return VbaArgumentSignature{{"Name","SQLText"},1};
+        if(key=="createrelation") return VbaArgumentSignature{{"Name","Table","ForeignTable","Attributes"},0};
         if(key=="createtabledef") return VbaArgumentSignature{{"Name","Attributes","SourceTableName","Connect"},0};
         if (key=="tabledefs" || key=="relations") return VbaArgumentSignature{{"Index"},0};
         if (key=="querydefs") return VbaArgumentSignature{{"Index"},0};
@@ -2598,6 +2724,12 @@ public:
             if(!queryDefinitions_) queryDefinitions_=std::make_shared<QueryDefinitions>(db_);
             return args.empty() || (args.size()==1 && args[0].kind==VbaValue::Kind::Missing)
                 ? VbaValue::reference(queryDefinitions_) : queryDefinitions_->member("Item",args);
+        }
+        if(key=="createrelation") {
+            if(args.size()>4) throw VbaRuntimeError(450,"DAO: CreateRelation argument count");
+            QString values[3];quint32 attributes=0;
+            for(std::size_t i=0;i<args.size();++i) if(args[i].kind!=VbaValue::Kind::Missing) {const auto value=scalarVbaValue(args[i]);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null relation argument");if(i<3) values[i]=text(value.asText());else attributes=static_cast<quint32>(static_cast<qint32>(coerceVbaModuleValue(value,"long").number));}
+            return VbaValue::reference(std::make_shared<DetachedRelation>(db_,values[0],values[1],values[2],attributes));
         }
         if(key=="createtabledef") {
             if(args.size()>4) throw VbaRuntimeError(450,"DAO: CreateTableDef argument count");

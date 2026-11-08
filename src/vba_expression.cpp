@@ -1058,6 +1058,7 @@ private:
             {"dbupdatablefield",32},{"dbsystemfield",8192},{"dbhyperlinkfield",32768},
             {"dbdescending",1}};
         if(const auto attribute=fieldAttributes.find(word);attribute!=fieldAttributes.end()) return VbaValue::longInteger(attribute->second);
+        if(word=="dbrelationdontenforce") return VbaValue::longInteger(2);
         static const std::unordered_map<std::string,int> queryTypes{
             {"dbqselect",0},{"dbqcrosstab",16},{"dbqdelete",32},{"dbqupdate",48},
             {"dbqappend",64},{"dbqmaketable",80},{"dbqddl",96},{"dbqsqlpassthrough",112},

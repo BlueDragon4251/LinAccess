@@ -1777,8 +1777,68 @@ End Sub)VBA","AlterSchema",host);
     error([&] {heldFields->member("Refresh",{});},3420);error([&] {heldIndexes->member("Refresh",{});},3420);
 }
 
+void testDetachedRelationCreation() {
+    using linaccess::VbaValue;
+    QTemporaryDir directory;assert(directory.isValid());
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-created-relations");db.setDatabaseName(directory.filePath("relations.linaccess"));assert(db.open());
+    Host host(db);
+    const auto result=linaccess::executeVbaProcedure(R"VBA(Sub BuildRelations()
+Dim table As DAO.TableDef, relation As DAO.Relation, field As DAO.Field
+Set table=CurrentDb.CreateTableDef("RelParent")
+table.Fields.Append table.CreateField("ID",dbLong)
+CurrentDb.TableDefs.Append table
+Set table=CurrentDb.CreateTableDef("RelChild")
+table.Fields.Append table.CreateField("ID",dbLong)
+table.Fields.Append table.CreateField("ParentID",dbLong)
+CurrentDb.TableDefs.Append table
+Set relation=CurrentDb.CreateRelation(Name:="ParentChild",Table:="RelParent",ForeignTable:="RelChild",Attributes:=dbRelationDontEnforce)
+Set field=relation.CreateField("ID")
+field.ForeignName="ParentID"
+relation.Fields.Append field
+CurrentDb.Relations.Append relation
+If relation.Attributes<>dbRelationDontEnforce Or relation.Fields(0).ForeignName<>"ParentID" Then Err.Raise 5
+CurrentDb.Execute "INSERT INTO RelParent VALUES (1)"
+CurrentDb.Execute "INSERT INTO RelChild VALUES (1,999)"
+End Sub)VBA","BuildRelations",host);
+    if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Relation builder error="<<result.errorNumber<<", line="<<result.line<<", reason="<<result.explanation<<"\n";
+    assert(result.status==linaccess::VbaExecutionStatus::Completed);
+    auto database=linaccess::makeDaoDatabase(db),relations=database->member("Relations",{}).object;
+    assert(relations->member("Count",{}).asNumber()==1);
+    auto original=relations->member("Item",{VbaValue::string("ParentChild")}).object;
+    auto oldField=original->member("Fields",{VbaValue::string("ID")}).object;
+    assert(oldField->member("ForeignName",{}).asText()=="ParentID");
+    QSqlQuery sql(db);assert(sql.exec("PRAGMA foreign_key_list(RelChild)") && !sql.next());sql.finish();
+    assert(sql.exec("SELECT ParentID FROM RelChild") && sql.next() && sql.value(0).toInt()==999);sql.finish();
+    const auto error=[](const std::function<void()>& operation,int expected) {int number=0;try {operation();}catch(const linaccess::VbaRuntimeError& failure) {number=failure.number;}assert(number==expected);};
+    error([&] {database->member("Execute",{VbaValue::string("DROP TABLE RelParent")});},3251);
+    auto child=database->member("TableDefs",{VbaValue::string("RelChild")}).object;
+    error([&] {child->member("Fields",{}).object->member("Delete",{VbaValue::string("ParentID")});},3251);
+    const auto build=[&](const std::string& name,const std::string& foreign,int attributes) {
+        auto relation=database->member("CreateRelation",{VbaValue::string(name),VbaValue::string("RelParent"),VbaValue::string("RelChild"),VbaValue::longInteger(attributes)}).object;
+        auto field=relation->member("CreateField",{VbaValue::string("ID")}).object;field->assign("ForeignName",VbaValue::string(foreign));relation->member("Fields",{}).object->member("Append",{VbaValue::reference(field)});return relation;
+    };
+    auto unimplemented=build("Enforced","ParentID",0);error([&] {relations->member("Append",{VbaValue::reference(unimplemented)});},3251);
+    auto missing=build("MissingField","Absent",2);error([&] {relations->member("Append",{VbaValue::reference(missing)});},3265);
+    assert(relations->member("Count",{}).asNumber()==1);
+    relations->member("Delete",{VbaValue::string("ParentChild")});error([&] {original->member("Name",{});},3420);error([&] {oldField->member("Name",{});},3420);
+    auto replacement=build("ParentChild","ParentID",2);relations->member("Append",{VbaValue::reference(replacement)});
+    auto fresh=relations->member("Item",{VbaValue::string("ParentChild")}).object;assert(fresh!=original);
+    error([&] {original->member("Name",{});},3420);error([&] {oldField->member("Name",{});},3420);
+    auto workspace=linaccess::makeDaoEngine(db)->defaultMember({VbaValue::integer(0)},true).object;
+    workspace->member("BeginTrans",{});relations->member("Delete",{VbaValue::string("ParentChild")});workspace->member("Rollback",{});
+    assert(relations->member("Count",{}).asNumber()==1);error([&] {fresh->member("Name",{});},3420);
+    auto independent=QSqlDatabase::addDatabase("QSQLITE","dao-created-relations-reader");independent.setDatabaseName(db.databaseName());assert(independent.open());
+    QSqlQuery observed(independent);assert(observed.exec("SELECT name,flags,parent_table,child_table,parent_column,child_column FROM _la_access_relations") && observed.next());
+    assert(observed.value(0).toString()=="ParentChild" && observed.value(1).toInt()==2 && observed.value(2).toString()=="RelParent" && observed.value(3).toString()=="RelChild" && observed.value(4).toString()=="ID" && observed.value(5).toString()=="ParentID");observed.finish();independent.close();
+    relations->member("Delete",{VbaValue::string("ParentChild")});
+    child=database->member("TableDefs",{VbaValue::string("RelChild")}).object;child->member("Fields",{}).object->member("Delete",{VbaValue::string("ParentID")});
+    database->member("TableDefs",{}).object->member("Delete",{VbaValue::string("RelParent")});
+    assert(sql.exec("SELECT ID FROM RelChild") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testDetachedRelationCreation();
     testDetachedTableCreation();
     testVariantArraysDao();
     testDaoGetRows();

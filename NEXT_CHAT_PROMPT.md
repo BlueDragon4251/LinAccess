@@ -235,3 +235,9 @@ Kontrolliertes TableDef.Fields/Indexes.Refresh nach eigener DDL/Rollback umgeset
 alte Items/gelöschte oder ersetzte Tabellen bleiben invalid. DAO1/1 (1,23s),
 App gebaut. DAO_TABLEDEF_FIELDS.md;456/384/72 unverändert. Allgemeine Relation-
 Builder/Katalogmutation fortsetzen, keine vorgetäuschte referenzielle Integrität.
+
+Detached CreateRelation/CreateField/ForeignName/Fields.Append/Relations.Append/
+Delete für explizite dbRelationDontEnforce2-Beziehungen implementiert. Persistenz,
+Generationsschutz/Abhängigkeiten/Rollback: DAO/Import2/2 (1,33s), App gebaut.
+DAO_RELATIONS_RUNTIME.md;456/384/72 gleich. Reale FK-/Cascade-Migration noch nicht
+implementiert; nächste tatsächliche Aufgabe erzwungene native Beziehungen.

@@ -3311,3 +3311,9 @@ TableDef.Fields/Indexes.Refresh lädt gehaltene Sammlungen nach eigener DDL oder
 Rollback kontrolliert neu; alte Items und gleichnamig ersetzte Tabellen bleiben
 invalid. DAO1/1 (1,23s), App gebaut; COM-/readonly-Kontextgrenzen in
 DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert.
+
+Native DAO-Beziehungsbuilder und atomare Katalogmutation für ausdrücklich
+nicht erzwungene Beziehungen umgesetzt; Persistenz, Abhängigkeiten, Same-name-
+Generation/Rollback im bestehenden DAO/Import2/2 (1,33s) geprüft, App gebaut.
+Keine physische RI behauptet; erzwungene/cascade Mutation bleibt offen. Umfang
+DAO_RELATIONS_RUNTIME.md.456/384/72 unverändert.

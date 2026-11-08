@@ -2470,3 +2470,15 @@ bisherigen readonly-Refreshumfang, exakte COM-Identität bleibt offen. DAO1/1
 (1,23s), App gebaut, keine Vollsuite. DAO_TABLEDEF_FIELDS.md;456/384/72 gleich.
 Nächste allgemeine DAO-Ergänzung: tatsächliche Relation-Builder/-Katalogmutation;
 RI erst behaupten, wenn reale Constraints/Cascades implementiert/nachgewiesen sind.
+
+2026-11-08: Allgemeine detached Relation-Builder umgesetzt: CreateRelation/
+Relation.CreateField/Field.ForeignName/Fields.Append und Relations.Append/Delete
+für ausdrücklich dbRelationDontEnforce2. Echte persistierte Strukturmetadaten,
+kompatible belegte Typen/Textgrößen, keine erfundenen MDB-Quellen und KEINE RI-
+Behauptung ohne Constraints. Eigene Relation-Generationen schützen gleichnamigen
+Wiederaufbau, Rollback invalidiert alte Objekte. Tabellen-/Feldlöschung und Rename
+refuse bei deklarierten Relationen. Reales VBA/named args, unabhängiger Dateileser,
+explizite Orphan-Akzeptanz/keine physischen FKs, Fehleratomizität/Identität/Rollback/
+Abhängigkeiten im bestehenden DAO/Import2/2 (1,33s), App gebaut. Alle Änderungen
+weiter privat.456/384/72 gleich. Nächster tatsächlicher Umfang: erzwungene native
+FK-Beziehungen mit sicherem Schemaumbau/Datenerhalt, nicht bloß Katalogflags.

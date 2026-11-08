@@ -1522,3 +1522,8 @@ Prüfung Mainwindow/DAO2/2 (5,11s), App gebaut. Details DAO_TABLEDEF_FIELDS.md.
 Kontrolliertes Refresh gehaltener TableDef.Fields/Indexes nach eigener DDL/
 Rollback implementiert; Iteminvalidierung und gleichnamiger Tabellenersatz im
 bestehenden DAO1/1 (1,23s) geprüft, App gebaut.456/384/72 unverändert.
+
+Detached DAO-Relationbuilder für explizite DontEnforce2-Beziehungen samt
+Persistenz/Abhängigkeits-/Generations-/Rollbackschutz umgesetzt. Bestehendes
+DAO/Import2/2 (1,33s), App gebaut; tatsächliche RI-Migration weiterhin offen.
+DAO_RELATIONS_RUNTIME.md,456/384/72 unverändert.

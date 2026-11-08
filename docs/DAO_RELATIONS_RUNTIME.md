@@ -59,3 +59,27 @@ Count subtype increment and this Relations implementation.
 Aktuelle App/Debian-Paketprüfung einschließlich Build-ID/SQLite3.54.1 und vier Originalfixture-Hashes bestanden. Letzte Vollsuite bleibt6cd40d1:48/48 (91,47 s); kein neuer Vollsuite-/Distributionsnachweis für Relations.
 
 Indexrichtungsnachweis: vollständiger aktueller Debian13-Desktop48/48 (89,51 s) bestanden, einschließlich tatsächlicher Jet-Binär-/Indexreferenzen, Originalrezepte für Datenblatt-PDF, Originalkassenhandler und aller originalen Kassa-Indexfeldreihenfolgen/-richtungen. Schließt DAO.Relations und Integer-Count ein. Keine neue Distributionsmatrix/GitHub-CI für diese Inkremente;456/384/72 unverändert.
+
+## Detached native relation authoring
+
+Database.CreateRelation, Relation.CreateField, Field.ForeignName, Fields.Append
+and Relations.Append/Delete now support explicitly non-enforced native
+relationships (dbRelationDontEnforce2). Names/table/column ownership, compatible
+proven types/Text capacities, duplicate fields/mappings and field bounds are
+checked before an atomic catalog mutation. Native definitions carry DAO_NATIVE
+provenance, not fabricated MDB source identity. No foreign-key constraint is
+created for this explicitly selected non-enforcing mode. Default/enforcing or
+cascade creation/deletion remains3251 until actual constraint migration exists.
+
+Own relation generations prevent old Relation/Field objects from reviving after
+same-name/same-definition delete/recreate, even without schema DDL. Workspace
+rollback invalidates old wrappers and restores the actual catalog. Table/field
+schema deletion/rename refuses declared relationship dependencies until those
+relationships are explicitly removed; original files are untouched.
+
+Existing DAO/import2/2 (1.33s), app built: real typed/named VBA relation creation,
+persisted mapping observed by an independent file connection, explicit orphan
+acceptance and empty physical FK list for DontEnforce, unsupported enforcement
+refusal, invalid-field atomicity, deletion, same-name identity and rollback.
+Dependency refusals preserve source rows, and removal permits later schema
+changes. No new test target/broad suite;456/384/72 unchanged, F121 still open.
