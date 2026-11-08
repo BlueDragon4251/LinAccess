@@ -3324,3 +3324,9 @@ Zählererhalt, geschützte PRAGMA-Wiederherstellung. Finales bestehendes DAO1/1
 (1,33s), App gebaut; weiterer Kindverweis und unbekannte CHECK-Regel geschützt.
 DAO_RELATIONS_RUNTIME.md enthält Herkunfts-/Typ-/Transaktionsgrenzen; keine
 vollständige Jet-/Original-MDB-Parität.456/384/72 unverändert.
+
+Grafische Beziehungen auf gemeinsamem DAO-Weg: echte numerische Integritätsprüfung/
+Kaskaden oder explizites DontEnforce, geordnete Feldzuordnung und bestätigte
+Entfernung bei erhaltenen Daten. Reale modale GUI-Anlage/physische FK-Klauseln/
+Entfernung Mainwindow/DAO2/2 (5,33s), App gebaut. DAO_RELATIONS_RUNTIME.md;
+Quell-/Typ-/Transaktions-/1:1-Grenzen bleiben offen,456/384/72 unverändert.

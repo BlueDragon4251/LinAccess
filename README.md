@@ -146,6 +146,7 @@ keine nachgewiesene pixelgenaue Access-2003-Oberfläche. Details: [Darstellung](
 - Tabellen mit einfachen Datentypen erstellen, Datenansicht mit manueller Speicherung
 - Auf geschlossenen Tabellen über **Ansicht → Tabellenfelder bearbeiten** normale Felder mit Typ, Textgröße und Standardwert ergänzen oder nach Bestätigung löschen; [Umfang und Grenzen](docs/DAO_TABLEDEF_FIELDS.md)
 - Auf ausgewählten Tabellen über **Ansicht → Tabellenindizes bearbeiten** normale/Unique-Indizes mit geordneten ASC-/DESC-Feldern anlegen und löschen; [Umfang und Grenzen](docs/DAO_INDEXES_RUNTIME.md)
+- Über **Ansicht → Beziehungen bearbeiten** numerische Beziehungen mit echter Integritätsprüfung/Kaskaden oder ausdrücklich ohne Integritätsprüfung verwalten; [Umfang und Grenzen](docs/DAO_RELATIONS_RUNTIME.md)
 - Gespeicherte SQL-SELECT-Abfragen
 - Einfache tabellengebundene Formulare definieren und Datensätze damit bearbeiten
 - Pro Formular VBA-Quelltext speichern; `.bas`/`.cls`-Textdateien laden und auf

@@ -125,3 +125,26 @@ Unknown additional CHECK remains enforced after refused migration. Actual VBA
 cascade-flag OR and active-transaction/settings guards pass. Initial GUI/import
 parts passed before the focused fix (3.99s/0.06s); no fresh combined/full-suite
 claim. Four original fixture hashes match. Fixed456/384/72 remains unchanged.
+
+## Graphic relationship management
+
+**Ansicht → Beziehungen bearbeiten** opens the actual project relationship
+catalog and a checked parent/child field mapping editor. Integrity is enabled by
+default and creates real numeric foreign keys; update/delete cascade choices use
+the same DAO migration. Unchecking integrity explicitly selects DontEnforce2 and
+disables cascade choices. Removing a relationship requires confirmation and keeps
+saved rows. Table documents/editable queries must be closed before opening the
+editor. Imported/unproven child reconstruction and nonnumeric enforced keys
+retain the explicit backend boundaries described above.
+
+Stored schema changes followed by connection-restoration failure have a distinct
+native exception subtype. The dialog reports the already stored result and
+requires reopening, rather than classifying it as a repeatable failed creation.
+Catalog-refresh failure likewise disables further mutation after reporting the
+stored result. No recovery failure or fault-injection success is invented.
+
+Existing mainwindow/DAO2/2 (5.33s), app built: real modal create/remove workflow
+on an independent technical database, actual FK/cascade clauses inspected, original
+row preserved, removed constraint permits a later orphan insert. No new target or
+broad suite;456/384/72 unchanged. This is not a complete Access relationship UI,
+source-format writer or demonstrated Jet/Windows parity.

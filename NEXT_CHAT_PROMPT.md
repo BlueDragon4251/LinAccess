@@ -250,3 +250,9 @@ keinen frischen3/3-Nachweis erfinden. Scope/Grenzen DAO_RELATIONS_RUNTIME.md und
 vollständiger jüngster Handoffabschnitt;456/384/72 gleich. Fortsetzung: grafische
 Beziehungsverwaltung (echte RI/Cascades vs explizites DontEnforce), dann weitere
 offene Anforderungen autonom weiterprogrammieren, keine Zwischen-Finals/Anrufe.
+
+Grafische Beziehungen (echte RI/Cascades vs explizites DontEnforce) samt bestätigter
+Entfernung und korrektem gespeicherten Fehlerstatus implementiert. Reales modales
+Create/Delete/physischer FK-/Werte-Nachweis Mainwindow/DAO2/2 (5,33s), App gebaut.
+DAO_RELATIONS_RUNTIME.md/README;456/384/72 unverändert. Fortsetzung: native 1:1-
+Relationen über dbRelationUnique und tatsächlichen eindeutigen Kindindex.

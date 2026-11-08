@@ -2516,3 +2516,16 @@ One-to-one, volle Jet-Locks/Crash-/Fehlernummern-/Kollationsparität weiter offe
 456/384/72 unverändert. Nächster tatsächlicher Umfang: grafische Beziehungsverwaltung
 mit realem Integritäts-/Cascade-Modus auf gemeinsamem DAO-Weg, bestehende gezielte
 GUI-/DAO-Prüfungen gebündelt verwenden. Keine Abschlussmeldung/Telefonie-Stufencalls.
+
+2026-11-08: Grafische Beziehungsverwaltung implementiert: Ansicht → Beziehungen
+bearbeiten, tatsächlicher vollständiger Katalog, Eltern-/Kindtabellen und geordnete
+Feldzuordnungen, standardmäßig echte numerische RI, Update/Delete-Cascade, explizites
+DontEnforce ohne Cascade; bestätigte Entfernung erhält Daten. Offene Tabellen-
+modelle vorher schließen. Gespeicherte Schemaänderung mit folgendem Einstellungs-
+Restorefehler hat eigenen VbaRuntimeError-Untertyp DaoStoredSchemaChange; UI meldet
+Gespeichert/Neustart statt Wiederholen. Echte modale Create/Delete-Anlage an
+unabhängiger technischer DB/physische FK-Cascade-Klauseln/Bestandszeilen erhalten,
+anschließender Orphan-Insert nach echter Entfernung: Mainwindow/DAO2/2 (5,33s),
+App gebaut. Details DAO_RELATIONS_RUNTIME.md/README.456/384/72 gleich.
+Nächster Zusammenhang: 1:1-Relationflag dbRelationUnique mit tatsächlich geprüftem
+Unique-Kindschlüssel ergänzen, bevor breitere Typ-/Quellmigration beansprucht wird.

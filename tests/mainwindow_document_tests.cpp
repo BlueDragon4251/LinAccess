@@ -7,6 +7,7 @@
 #include "access_table_import.hpp"
 #include "access_autonumber.hpp"
 #include "dao_database.hpp"
+#include "native_relation_designer.hpp"
 #include "access_catalog.hpp"
 #include <QProcess>
 #include <QPrintDialog>
@@ -2334,6 +2335,40 @@ void exerciseQueryEditor(MainWindow& window,QSqlDatabase db) {
 void dispose() { QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QApplication::processEvents(); }
 }
 
+void exerciseNativeRelationDesigner() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","native-relation-designer-test");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery query(db);assert(query.exec("PRAGMA foreign_keys=ON"));query.finish();
+    const auto database=linaccess::makeDaoDatabase(db);
+    for(const auto& name:{"GuiParent","GuiChild"}) {
+        auto table=database->member("CreateTableDef",{VbaValue::string(name)}).object;
+        table->member("Fields",{}).object->member("Append",{table->member("CreateField",{VbaValue::string("ID"),VbaValue::integer(4)})});
+        if(std::string(name)=="GuiChild") table->member("Fields",{}).object->member("Append",{table->member("CreateField",{VbaValue::string("ParentID"),VbaValue::integer(4)})});
+        auto key=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;key->assign("Primary",VbaValue::logical(true));key->member("Fields",{}).object->member("Append",{key->member("CreateField",{VbaValue::string("ID")})});table->member("Indexes",{}).object->member("Append",{VbaValue::reference(key)});
+        database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
+    }
+    database->member("Execute",{VbaValue::string("INSERT INTO GuiParent VALUES(7)")});database->member("Execute",{VbaValue::string("INSERT INTO GuiChild VALUES(1,7)")});
+    QTimer::singleShot(0,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-relation-designer");
+        auto* list=dialog->findChild<QTableWidget*>("native-relation-list");assert(list && list->rowCount()==0);
+        dialog->findChild<QLineEdit*>("native-relation-name")->setText("GuiForeignKey");
+        dialog->findChild<QComboBox*>("native-relation-parent")->setCurrentText("GuiParent");dialog->findChild<QComboBox*>("native-relation-child")->setCurrentText("GuiChild");
+        auto* fields=dialog->findChild<QTableWidget*>("native-relation-fields");assert(fields && fields->rowCount()==1);
+        qobject_cast<QComboBox*>(fields->cellWidget(0,0))->setCurrentText("ID");qobject_cast<QComboBox*>(fields->cellWidget(0,1))->setCurrentText("ParentID");
+        assert(dialog->findChild<QCheckBox*>("native-relation-integrity")->isChecked());dialog->findChild<QCheckBox*>("native-relation-update-cascade")->setChecked(true);dialog->findChild<QCheckBox*>("native-relation-delete-cascade")->setChecked(true);
+        QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());if(box && box->windowTitle()=="Beziehung konnte nicht geändert werden") {std::cerr<<"Relation GUI error: "<<box->text().toStdString()<<"\n";box->accept();}});
+        dialog->findChild<QPushButton*>("native-relation-create")->click();assert(list->rowCount()==1 && list->item(0,4)->text()=="ja" && list->item(0,5)->text()=="ja" && list->item(0,6)->text()=="ja");
+        assert(query.exec("PRAGMA foreign_key_list(GuiChild)") && query.next() && query.value(2).toString()=="GuiParent" && query.value(5).toString()=="CASCADE" && query.value(6).toString()=="CASCADE");query.finish();
+        assert(query.exec("SELECT ID,ParentID FROM GuiChild") && query.next() && query.value(0).toInt()==1 && query.value(1).toInt()==7);query.finish();
+        QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});
+        dialog->findChild<QPushButton*>("native-relation-delete")->click();assert(list->rowCount()==0);dialog->reject();
+    });
+    linaccess::editNativeRelations(nullptr,db,"GuiParent");
+    assert(query.exec("PRAGMA foreign_key_list(GuiChild)") && !query.next());query.finish();
+    assert(query.exec("SELECT ID,ParentID FROM GuiChild") && query.next() && query.value(0).toInt()==1 && query.value(1).toInt()==7);query.finish();
+    database->member("Execute",{VbaValue::string("INSERT INTO GuiChild VALUES(2,999)")});
+    db.close();
+}
+
 int main(int argc,char** argv) {
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication app(argc,argv); app.setQuitOnLastWindowClosed(false); app.setApplicationName("LinAccessSyntheticGuiTest"); app.setOrganizationName("LinAccessSyntheticTests");
@@ -2343,6 +2378,7 @@ int main(int argc,char** argv) {
     QTemporaryDir temporary; assert(temporary.isValid());
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,temporary.path());
+    exerciseNativeRelationDesigner();
     const auto first=temporary.filePath("first.linaccess"),second=temporary.filePath("second.linaccess");
     auto seed=QSqlDatabase::addDatabase("QSQLITE","mainwindow-seed"); seed.setDatabaseName(first); assert(seed.open());
     QSqlQuery initial(seed); assert(initial.exec("CREATE TABLE records(id INTEGER PRIMARY KEY,value TEXT)"));

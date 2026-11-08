@@ -1,4 +1,5 @@
 #include "dao_database.hpp"
+#include "dao_schema_change.hpp"
 #include "vba_array.hpp"
 #include "access_autonumber.hpp"
 #include "access_index_metadata.hpp"
@@ -2761,7 +2762,7 @@ void mutateNativeRelation(std::shared_ptr<NativeRelationCatalog> catalog,const V
     if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++generation;
     if(!rebuiltTable.isEmpty()) ++catalog->workspace->tableGenerations[rebuiltTable.toCaseFolded()];
     if(builder) {attached->publishGeneration(generation);builder->state_->attached=std::move(attached);}
-    if(!restoreSettings()) throw VbaRuntimeError(3251,"DAO: Relation change stored; connection settings failed to restore, reopen the project");
+    if(!restoreSettings()) throw DaoStoredSchemaChange("DAO: Relation change stored; connection settings failed to restore, reopen the project");
 }
 
 class NativeRelations final : public VbaObject {

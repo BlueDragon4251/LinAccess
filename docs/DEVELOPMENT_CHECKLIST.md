@@ -1532,3 +1532,8 @@ Echte native numerische Fremdschlüssel/Cascades und Entfernung mit verifizierte
 Schemaumbau/Datenerhalt implementiert. Bestehendes finales DAO1/1 (1,33s), App
 gebaut; Counter-/View-/Trigger-/Index-/Kindtabellen-/Regelerhalt geprüft. Grenzen
 DAO_RELATIONS_RUNTIME.md.456/384/72 unverändert.
+
+Echte grafische Beziehungsverwaltung mit RI/Cascade-/DontEnforce-Modus und
+bestätigter Entfernung umgesetzt. Reale modale FK-/Bestandswerte-Prüfung im
+bestehenden Mainwindow/DAO2/2 (5,33s), App gebaut. DAO_RELATIONS_RUNTIME.md;
+456/384/72 unverändert.
