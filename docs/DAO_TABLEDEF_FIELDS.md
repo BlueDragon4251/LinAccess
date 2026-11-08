@@ -241,3 +241,19 @@ savepoint. Only successful release publishes the TableDef/Field/Index bindings;
 no post-release database read can turn their binding into a falsely reported
 mutation failure. Existing DAO target1/1 (1.25s), app built; previous GUI/DAO2/2
 (5.11s) remains the latest GUI check. No broad suite or concurrency-oracle claim.
+
+## Refresh of held TableDef collections
+
+Held TableDef.Fields and TableDef.Indexes collections now support explicit
+Refresh after own schema DDL or workspace rollback. A fresh checked reader must
+succeed before replacing the collection's reader/cache. Fields.Refresh advances
+its item epoch, so old field items from that collection cannot revive. Index
+items retain immutable prior readers/definitions; refresh clears item reuse.
+A missing/replaced table or closed workspace remains3420 even if its old name
+is recreated. QueryDef/Index/Relation field collections keep their existing
+narrow readonly Refresh contract. Parent reacquisition can return a new collection;
+exact COM collection identity/Refresh timing is not claimed.
+
+Existing DAO1/1 (1.23s), app built: held collections refresh after field/index
+append/delete and rollback; old items remain3420, and equal-name table replacement
+cannot revive old collections. No new target/broad suite;456/384/72 unchanged.

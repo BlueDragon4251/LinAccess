@@ -2460,3 +2460,13 @@ letzter GUI/DAO-Verbund zuvor2/2 (5,11s), kein neuer breiter Lauf.
 456/384/72 unverändert. Nächste allgemeine DAO-Ergänzung: Fields/Indexes.Refresh
 nach eigener Schemaänderung kontrolliert nutzbar machen, ohne alte Itemobjekte
 wiederzubeleben. Gelöschte/ersetzte Tabellen bleiben3420.
+
+2026-11-08: Gehaltene TableDef.Fields/Indexes können jetzt nach eigener DDL und
+Workspace-Rollback explizit Refresh ausführen. Neuer vollständig geprüfter
+Reader erst nach erfolgreicher Prüfung übernommen, alte Field-Items perEpoch/
+Index-Items perimmutableReader weiterhin3420. Gelöschte/gleichnamig ersetzte
+Tabellen werden nicht wiederbelebt. QueryDef/Index/Relation-Fields behalten
+bisherigen readonly-Refreshumfang, exakte COM-Identität bleibt offen. DAO1/1
+(1,23s), App gebaut, keine Vollsuite. DAO_TABLEDEF_FIELDS.md;456/384/72 gleich.
+Nächste allgemeine DAO-Ergänzung: tatsächliche Relation-Builder/-Katalogmutation;
+RI erst behaupten, wenn reale Constraints/Cascades implementiert/nachgewiesen sind.

@@ -1518,3 +1518,7 @@ Grafische Feldbearbeitung samt Bestandswerten/Defaults/Bestätigung/Abhängigkei
 und O(1)-DAO-Cursorinvalidierung bis Requery umgesetzt; reale GUI/Clone-Puffer-
 Prüfung Mainwindow/DAO2/2 (5,11s), App gebaut. Details DAO_TABLEDEF_FIELDS.md.
 456/384/72 unverändert.
+
+Kontrolliertes Refresh gehaltener TableDef.Fields/Indexes nach eigener DDL/
+Rollback implementiert; Iteminvalidierung und gleichnamiger Tabellenersatz im
+bestehenden DAO1/1 (1,23s) geprüft, App gebaut.456/384/72 unverändert.

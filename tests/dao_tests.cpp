@@ -1750,6 +1750,31 @@ End Sub)VBA","AlterSchema",host);
     assert(alterable->member("Fields",{}).object->member("Count",{}).asNumber()==1);
     error([&] {alterable->member("Fields",{}).object->member("Delete",{VbaValue::string("Original")});},3251);
     assert(query.exec("SELECT Original FROM Alterable") && query.next() && query.value(0).toInt()==41);query.finish();
+    auto heldFields=alterable->member("Fields",{}).object;
+    auto heldOriginal=heldFields->member("Item",{VbaValue::string("Original")}).object;
+    auto heldIndexes=alterable->member("Indexes",{}).object;
+    auto refreshField=alterable->member("CreateField",{VbaValue::string("RefreshField"),VbaValue::integer(4)}).object;
+    heldFields->member("Append",{VbaValue::reference(refreshField)});
+    error([&] {heldFields->member("Count",{});},3420);heldFields->member("Refresh",{});
+    assert(heldFields->member("Count",{}).asNumber()==2);error([&] {heldOriginal->member("Name",{});},3420);
+    heldIndexes->member("Refresh",{});assert(heldIndexes->member("Count",{}).asNumber()==0);
+    auto refreshIndex=alterable->member("CreateIndex",{VbaValue::string("RefreshIndex")}).object;
+    refreshIndex->member("Fields",{}).object->member("Append",{refreshIndex->member("CreateField",{VbaValue::string("Original")})});
+    heldIndexes->member("Append",{VbaValue::reference(refreshIndex)});
+    error([&] {heldIndexes->member("Count",{});},3420);heldIndexes->member("Refresh",{});
+    auto oldIndex=heldIndexes->member("Item",{VbaValue::string("RefreshIndex")}).object;
+    assert(heldIndexes->member("Count",{}).asNumber()==1);
+    heldIndexes->member("Delete",{VbaValue::string("RefreshIndex")});heldIndexes->member("Refresh",{});
+    assert(heldIndexes->member("Count",{}).asNumber()==0);error([&] {oldIndex->member("Name",{});},3420);
+    heldFields->member("Refresh",{});
+    auto temporaryField=alterable->member("CreateField",{VbaValue::string("Temporary"),VbaValue::integer(2)}).object;
+    workspace->member("BeginTrans",{});heldFields->member("Append",{VbaValue::reference(temporaryField)});heldFields->member("Refresh",{});
+    auto oldTemporary=heldFields->member("Item",{VbaValue::string("Temporary")}).object;assert(heldFields->member("Count",{}).asNumber()==3);
+    workspace->member("Rollback",{});heldFields->member("Refresh",{});assert(heldFields->member("Count",{}).asNumber()==2);error([&] {oldTemporary->member("Name",{});},3420);
+    tables->member("Delete",{VbaValue::string("Alterable")});
+    auto replacement=database->member("CreateTableDef",{VbaValue::string("Alterable")}).object;
+    replacement->member("Fields",{}).object->member("Append",{replacement->member("CreateField",{VbaValue::string("Original"),VbaValue::integer(4)})});tables->member("Append",{VbaValue::reference(replacement)});
+    error([&] {heldFields->member("Refresh",{});},3420);error([&] {heldIndexes->member("Refresh",{});},3420);
 }
 
 int main(int argc, char** argv) {

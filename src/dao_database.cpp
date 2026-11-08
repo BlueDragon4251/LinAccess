@@ -1542,14 +1542,20 @@ std::shared_ptr<VbaObject> createExistingTableField(QSqlDatabase db,const QStrin
 void mutateExistingTableField(QSqlDatabase db,const QString& table,const VbaValue& value,bool erase);
 class TableSchemaFields final : public VbaObject {
 public:
-    explicit TableSchemaFields(TableSchemaReader reader,bool defaults=true,std::function<void(const VbaValue&,bool)> mutation={}) : reader_(std::move(reader)),defaults_(defaults),mutation_(std::move(mutation)) {}
+    explicit TableSchemaFields(TableSchemaReader reader,bool defaults=true,std::function<void(const VbaValue&,bool)> mutation={},std::function<TableSchemaReader()> refresher={}) : reader_(std::move(reader)),defaults_(defaults),mutation_(std::move(mutation)),refresher_(std::move(refresher)) {}
     std::string_view className() const override { return "Fields"; }
     bool isNativeType(std::string_view type) const override { return type=="dao.fields"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=lower(name);if(key=="item") return VbaArgumentSignature{{"Index"},1};if(mutation_ && key=="append") return VbaArgumentSignature{{"Object"},1};if(mutation_ && key=="delete") return VbaArgumentSignature{{"Name"},1};return {};
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
-        const auto columns=reader_(); const auto key=lower(name);
+        const auto key=lower(name);
+        if(key=="refresh" && refresher_) {
+            if(!args.empty()) throw VbaRuntimeError(450,"DAO: Fields.Refresh takes no arguments");
+            if(*epoch_==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Field collection generation overflow");
+            auto candidate=refresher_();(void)candidate();reader_=std::move(candidate);++*epoch_;fields_.clear();return {};
+        }
+        const auto columns=reader_();
         if(mutation_ && (key=="append" || key=="delete")) {if(args.size()!=1) throw VbaRuntimeError(450,"DAO: Field/name required");mutation_(args[0],key=="delete");return {};}
         if(key=="count" && args.empty()) return integerCount(columns.size());
         if(key=="refresh" && args.empty()) return {};
@@ -1570,7 +1576,8 @@ public:
         if(position<0) throw VbaRuntimeError(3265,"DAO schema field index not found");
         const auto column=columns[position].name;
         auto& cached=fields_[column.toCaseFolded()]; auto field=cached.lock();
-        if(!field) { field=std::make_shared<TableSchemaField>(reader_,column,defaults_); cached=field; }
+        if(!field) {const auto reader=reader_;const auto epoch=epoch_;const auto generation=*epoch;
+            field=std::make_shared<TableSchemaField>([reader,epoch,generation] {if(*epoch!=generation) throw VbaRuntimeError(3420,"DAO: Field object predates collection refresh");return reader();},column,defaults_);cached=field;}
         return VbaValue::reference(field);
     }
     VbaValue item(std::string_view name) override { return member("Item",{VbaValue::string(std::string(name))}); }
@@ -1579,7 +1586,7 @@ public:
         for(const auto& column:columns) result.push_back(member("Item",{VbaValue::string(column.name.toStdString())}));
         return result;
     }
-private: TableSchemaReader reader_; QMap<QString,std::weak_ptr<TableSchemaField>> fields_; bool defaults_{};std::function<void(const VbaValue&,bool)> mutation_;
+private: TableSchemaReader reader_; QMap<QString,std::weak_ptr<TableSchemaField>> fields_; bool defaults_{};std::function<void(const VbaValue&,bool)> mutation_;std::function<TableSchemaReader()> refresher_;std::shared_ptr<quint64> epoch_{std::make_shared<quint64>(0)};
 };
 bool sameQueryFieldColumns(const QVector<TableSchemaColumn>& left,const QVector<TableSchemaColumn>& right) {
     if(left.size()!=right.size()) return false;
@@ -1714,14 +1721,16 @@ std::shared_ptr<VbaObject> createExistingTableIndex(QSqlDatabase db,const QStrin
 void mutateExistingTableIndex(QSqlDatabase db,const QString& table,const VbaValue& value,bool erase);
 class NativeIndexes final : public VbaObject {
 public:
-    NativeIndexes(NativeIndexReader reader,QSqlDatabase db,QString table) : reader_(std::move(reader)),db_(std::move(db)),table_(std::move(table)) {}
+    NativeIndexes(NativeIndexReader reader,QSqlDatabase db,QString table,std::function<NativeIndexReader()> refresher={}) : reader_(std::move(reader)),db_(std::move(db)),table_(std::move(table)),refresher_(std::move(refresher)) {}
     std::string_view className() const override { return "Indexes"; }
     bool isNativeType(std::string_view type) const override { return type=="dao.indexes"; }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=lower(name);if(key=="item") return VbaArgumentSignature{{"Index"},1};if(key=="append") return VbaArgumentSignature{{"Object"},1};if(key=="delete") return VbaArgumentSignature{{"Name"},1};return {};
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
-        const auto rows=reader_(); const auto key=lower(name);
+        const auto key=lower(name);
+        if(key=="refresh" && refresher_) {if(!args.empty()) throw VbaRuntimeError(450,"DAO: Indexes.Refresh takes no arguments");auto candidate=refresher_();(void)candidate();reader_=std::move(candidate);objects_.clear();return {};}
+        const auto rows=reader_();
         if(key=="count" || key=="refresh") {
             if(!args.empty()) throw VbaRuntimeError(450,"DAO: Index collection property takes no arguments");
             return key=="count" ? integerCount(rows.size()) : VbaValue{};
@@ -1745,7 +1754,7 @@ public:
         for(const auto& row:rows) result.push_back(member("Item",{VbaValue::string(row.source.name.toStdString())})); return result;
     }
 private:
-    NativeIndexReader reader_; QSqlDatabase db_;QString table_;QMap<QString,std::weak_ptr<NativeIndex>> objects_;
+    NativeIndexReader reader_; QSqlDatabase db_;QString table_;std::function<NativeIndexReader()> refresher_;QMap<QString,std::weak_ptr<NativeIndex>> objects_;
 };
 
 class TableDefinition final : public VbaObject, public std::enable_shared_from_this<TableDefinition> {
@@ -1794,7 +1803,11 @@ public:
                     if(!self->valid() || self->schemaVersion()!=version || self->workspace_->rollbackRevision!=rollback)
                         throw VbaRuntimeError(3420,"DAO: Index metadata invalidated; reacquire TableDef.Indexes");
                     return readNativeIndexCatalog(self->db_,self->name_);
-                },db_,name_); indexes_=indexes; indexesVersion_=version; indexesRollback_=rollback;
+                },db_,name_,[self]() -> NativeIndexReader {
+                    if(!self->valid()) throw VbaRuntimeError(3420,"DAO: Index table unavailable");
+                    const auto version=self->schemaVersion(),rollback=self->workspace_->rollbackRevision;self->indexes_.reset();
+                    return [self,version,rollback] {if(!self->valid() || self->schemaVersion()!=version || self->workspace_->rollbackRevision!=rollback) throw VbaRuntimeError(3420,"DAO: Refreshed index metadata invalidated");return readNativeIndexCatalog(self->db_,self->name_);};
+                }); indexes_=indexes; indexesVersion_=version; indexesRollback_=rollback;
             }
             return args.empty() || args[0].kind==VbaValue::Kind::Missing ? VbaValue::reference(indexes) : indexes->member("Item",args);
         }
@@ -1811,6 +1824,10 @@ public:
                 },true,[self](const VbaValue& value,bool erase) {
                     if(!self->valid()) throw VbaRuntimeError(3420,"DAO: Field table unavailable");
                     mutateExistingTableField(self->db_,self->name_,value,erase);
+                },[self]() -> TableSchemaReader {
+                    if(!self->valid()) throw VbaRuntimeError(3420,"DAO: Field table unavailable");
+                    const auto version=self->schemaVersion(),rollback=self->workspace_->rollbackRevision;self->fields_.reset();
+                    return [self,version,rollback] {if(!self->valid() || self->schemaVersion()!=version || self->workspace_->rollbackRevision!=rollback) throw VbaRuntimeError(3420,"DAO: Refreshed field metadata invalidated");return readTableSchemaColumns(self->db_,self->name_);};
                 });
                 fields_=fields; fieldsVersion_=version; fieldsRollback_=rollback;
             }

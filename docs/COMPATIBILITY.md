@@ -3306,3 +3306,8 @@ Bestandswerten/Defaults, Bestätigung und Abhängigkeitsgrenzen; eigene Struktur
 änderungen invalidieren alte DAO-Cursor/Fields/Clones bis Requery. Tatsächlicher
 GUI-Durchlauf und Clone-Pufferschutz: Mainwindow/DAO2/2 (5,11s), App gebaut.
 DAO_TABLEDEF_FIELDS.md/README;456/384/72 unverändert.
+
+TableDef.Fields/Indexes.Refresh lädt gehaltene Sammlungen nach eigener DDL oder
+Rollback kontrolliert neu; alte Items und gleichnamig ersetzte Tabellen bleiben
+invalid. DAO1/1 (1,23s), App gebaut; COM-/readonly-Kontextgrenzen in
+DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert.

@@ -230,3 +230,8 @@ anschließend nur Veröffentlichung, kein nachträglicher DB-Lesefehler als
 Mutationsfehler. DAO1/1 (1,25s), App gebaut; letzte GUI/DAO2/2 (5,11s).
 456/384/72 gleich. Als Nächstes kontrolliertes Fields/Indexes.Refresh nach
 eigener Schemaänderung, alte Items weiterhin immutable/invalid.
+
+Kontrolliertes TableDef.Fields/Indexes.Refresh nach eigener DDL/Rollback umgesetzt;
+alte Items/gelöschte oder ersetzte Tabellen bleiben invalid. DAO1/1 (1,23s),
+App gebaut. DAO_TABLEDEF_FIELDS.md;456/384/72 unverändert. Allgemeine Relation-
+Builder/Katalogmutation fortsetzen, keine vorgetäuschte referenzielle Integrität.
