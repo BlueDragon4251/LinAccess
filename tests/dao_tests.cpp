@@ -1915,8 +1915,38 @@ void testEnforcedNativeRelations() {
     assert(sql.exec("PRAGMA foreign_keys") && sql.next() && sql.value(0).toInt()==1);sql.finish();
 }
 
+void testOneToOneNativeRelations() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-native-one-to-one");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);assert(sql.exec("PRAGMA foreign_keys=ON"));
+    auto database=linaccess::makeDaoDatabase(db),tables=database->member("TableDefs",{}).object;
+    for(const auto& name:{"UniqueParent","UniqueChild"}) {
+        auto table=database->member("CreateTableDef",{VbaValue::string(name)}).object;
+        table->member("Fields",{}).object->member("Append",{table->member("CreateField",{VbaValue::string("ID"),VbaValue::integer(4)})});
+        if(std::string(name)=="UniqueChild") table->member("Fields",{}).object->member("Append",{table->member("CreateField",{VbaValue::string("ParentID"),VbaValue::integer(4)})});
+        auto key=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;key->assign("Primary",VbaValue::logical(true));key->member("Fields",{}).object->member("Append",{key->member("CreateField",{VbaValue::string("ID")})});table->member("Indexes",{}).object->member("Append",{VbaValue::reference(key)});tables->member("Append",{VbaValue::reference(table)});
+    }
+    auto relations=database->member("Relations",{}).object;
+    const auto build=[&](const std::string& name,int flags) {auto relation=database->member("CreateRelation",{VbaValue::string(name),VbaValue::string("UniqueParent"),VbaValue::string("UniqueChild"),VbaValue::longInteger(flags)}).object;auto field=relation->member("CreateField",{VbaValue::string("ID")}).object;field->assign("ForeignName",VbaValue::string("ParentID"));relation->member("Fields",{}).object->member("Append",{VbaValue::reference(field)});return relation;};
+    const auto error=[](const std::function<void()>& operation,int expected) {int number=0;try {operation();}catch(const linaccess::VbaRuntimeError& failure) {number=failure.number;}assert(number==expected);};
+    auto relation=build("UniqueMapping",1);error([&] {relations->member("Append",{VbaValue::reference(relation)});},3251);
+    assert(relations->member("Count",{}).asNumber()==0);
+    auto child=tables->member("Item",{VbaValue::string("UniqueChild")}).object;
+    auto unique=child->member("CreateIndex",{VbaValue::string("ParentUnique")}).object;unique->assign("Unique",VbaValue::logical(true));unique->member("Fields",{}).object->member("Append",{unique->member("CreateField",{VbaValue::string("ParentID")})});child->member("Indexes",{}).object->member("Append",{VbaValue::reference(unique)});
+    relations->member("Append",{VbaValue::reference(relation)});assert(relation->member("Attributes",{}).asNumber()==1);
+    database->member("Execute",{VbaValue::string("INSERT INTO UniqueParent VALUES(10)")});database->member("Execute",{VbaValue::string("INSERT INTO UniqueChild VALUES(1,10)")});
+    error([&] {database->member("Execute",{VbaValue::string("INSERT INTO UniqueChild VALUES(2,10)")});},3022);
+    error([&] {database->member("Execute",{VbaValue::string("INSERT INTO UniqueChild VALUES(2,999)")});},3146);
+    child=tables->member("Item",{VbaValue::string("UniqueChild")}).object;error([&] {child->member("Indexes",{}).object->member("Delete",{VbaValue::string("ParentUnique")});},3251);
+    relations->member("Delete",{VbaValue::string("UniqueMapping")});database->member("Execute",{VbaValue::string("INSERT INTO UniqueChild VALUES(2,999)")});
+    auto logical=build("LogicalUnique",3);relations->member("Append",{VbaValue::reference(logical)});assert(logical->member("Attributes",{}).asNumber()==3);
+    child=tables->member("Item",{VbaValue::string("UniqueChild")}).object;error([&] {child->member("Indexes",{}).object->member("Delete",{VbaValue::string("ParentUnique")});},3251);
+    relations->member("Delete",{VbaValue::string("LogicalUnique")});child->member("Indexes",{}).object->member("Delete",{VbaValue::string("ParentUnique")});
+    assert(sql.exec("SELECT COUNT(*) FROM UniqueChild") && sql.next() && sql.value(0).toInt()==2);sql.finish();
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testOneToOneNativeRelations();
     testEnforcedNativeRelations();
     testDetachedRelationCreation();
     testDetachedTableCreation();

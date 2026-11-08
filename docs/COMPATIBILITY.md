@@ -3330,3 +3330,9 @@ Kaskaden oder explizites DontEnforce, geordnete Feldzuordnung und bestätigte
 Entfernung bei erhaltenen Daten. Reale modale GUI-Anlage/physische FK-Klauseln/
 Entfernung Mainwindow/DAO2/2 (5,33s), App gebaut. DAO_RELATIONS_RUNTIME.md;
 Quell-/Typ-/Transaktions-/1:1-Grenzen bleiben offen,456/384/72 unverändert.
+
+Native dbRelationUnique1: echte geprüfte Unique-Schlüssel beider Seiten und
+Indexabhängigkeitsschutz, kombinierbar mit FK/Cascades oder DontEnforce3.
+Backend-/reale GUI-Prüfung Mainwindow/DAO2/2 (5,64s), App gebaut.
+DAO_RELATIONS_RUNTIME.md; keine Jet-NULL-/automatische Flag-Inferenz-Parität,
+456/384/72 unverändert.

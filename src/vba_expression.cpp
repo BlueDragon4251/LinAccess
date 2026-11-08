@@ -1058,6 +1058,7 @@ private:
             {"dbupdatablefield",32},{"dbsystemfield",8192},{"dbhyperlinkfield",32768},
             {"dbdescending",1}};
         if(const auto attribute=fieldAttributes.find(word);attribute!=fieldAttributes.end()) return VbaValue::longInteger(attribute->second);
+        if(word=="dbrelationunique") return VbaValue::longInteger(1);
         if(word=="dbrelationdontenforce") return VbaValue::longInteger(2);
         if(word=="dbrelationupdatecascade") return VbaValue::longInteger(256);
         if(word=="dbrelationdeletecascade") return VbaValue::longInteger(4096);

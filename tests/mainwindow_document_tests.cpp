@@ -2346,6 +2346,7 @@ void exerciseNativeRelationDesigner() {
         auto key=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;key->assign("Primary",VbaValue::logical(true));key->member("Fields",{}).object->member("Append",{key->member("CreateField",{VbaValue::string("ID")})});table->member("Indexes",{}).object->member("Append",{VbaValue::reference(key)});
         database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
     }
+    auto child=database->member("TableDefs",{VbaValue::string("GuiChild")}).object;auto unique=child->member("CreateIndex",{VbaValue::string("ParentUnique")}).object;unique->assign("Unique",VbaValue::logical(true));unique->member("Fields",{}).object->member("Append",{unique->member("CreateField",{VbaValue::string("ParentID")})});child->member("Indexes",{}).object->member("Append",{VbaValue::reference(unique)});
     database->member("Execute",{VbaValue::string("INSERT INTO GuiParent VALUES(7)")});database->member("Execute",{VbaValue::string("INSERT INTO GuiChild VALUES(1,7)")});
     QTimer::singleShot(0,[&] {
         auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-relation-designer");
@@ -2354,9 +2355,10 @@ void exerciseNativeRelationDesigner() {
         dialog->findChild<QComboBox*>("native-relation-parent")->setCurrentText("GuiParent");dialog->findChild<QComboBox*>("native-relation-child")->setCurrentText("GuiChild");
         auto* fields=dialog->findChild<QTableWidget*>("native-relation-fields");assert(fields && fields->rowCount()==1);
         qobject_cast<QComboBox*>(fields->cellWidget(0,0))->setCurrentText("ID");qobject_cast<QComboBox*>(fields->cellWidget(0,1))->setCurrentText("ParentID");
+        dialog->findChild<QCheckBox*>("native-relation-unique")->setChecked(true);
         assert(dialog->findChild<QCheckBox*>("native-relation-integrity")->isChecked());dialog->findChild<QCheckBox*>("native-relation-update-cascade")->setChecked(true);dialog->findChild<QCheckBox*>("native-relation-delete-cascade")->setChecked(true);
         QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());if(box && box->windowTitle()=="Beziehung konnte nicht geändert werden") {std::cerr<<"Relation GUI error: "<<box->text().toStdString()<<"\n";box->accept();}});
-        dialog->findChild<QPushButton*>("native-relation-create")->click();assert(list->rowCount()==1 && list->item(0,4)->text()=="ja" && list->item(0,5)->text()=="ja" && list->item(0,6)->text()=="ja");
+        dialog->findChild<QPushButton*>("native-relation-create")->click();assert(list->rowCount()==1 && list->item(0,4)->text()=="ja" && list->item(0,5)->text()=="ja" && list->item(0,6)->text()=="ja" && list->item(0,7)->text()=="ja");
         assert(query.exec("PRAGMA foreign_key_list(GuiChild)") && query.next() && query.value(2).toString()=="GuiParent" && query.value(5).toString()=="CASCADE" && query.value(6).toString()=="CASCADE");query.finish();
         assert(query.exec("SELECT ID,ParentID FROM GuiChild") && query.next() && query.value(0).toInt()==1 && query.value(1).toInt()==7);query.finish();
         QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});

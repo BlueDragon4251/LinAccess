@@ -2289,6 +2289,10 @@ void mutateExistingTableIndex(QSqlDatabase db,const QString& table,const VbaValu
         for(int i=0;i<definitions.size();++i) if(definitions[i].name.compare(requested,Qt::CaseInsensitive)==0) {position=i;break;}
         if(position<0) throw VbaRuntimeError(3265,"DAO: Index not found");
         if(definitions[position].kind==1) throw VbaRuntimeError(3251,"DAO: Primary index deletion requires table reconstruction");
+        if((definitions[position].flags&1) && db.tables().contains("_la_access_relations")) {
+            QSqlQuery relations(db);relations.prepare("SELECT 1 FROM main._la_access_relations WHERE (flags & 1)!=0 AND (child_table=? COLLATE NOCASE OR parent_table=? COLLATE NOCASE)");relations.addBindValue(table);relations.addBindValue(table);
+            if(!relations.exec()) queryFailure(relations);if(relations.next()) throw VbaRuntimeError(3251,"DAO: Remove one-to-one relations before deleting unique indexes");
+        }
         if(definitions[position].flags&1) for(const auto& child:nativeTableNames(db)) {
             QSqlQuery references(db);if(!references.exec("PRAGMA main.foreign_key_list("+quote(child)+")")) queryFailure(references);
             while(references.next()) if(references.value(2).toString().compare(table,Qt::CaseInsensitive)==0)
@@ -2404,6 +2408,10 @@ struct NativeRelationData {
     QVector<QPair<QString,QString>> columns; // primary Name, foreign ForeignName
     bool operator==(const NativeRelationData&) const = default;
 };
+bool checkedRelationKey(QSqlDatabase db,const QString& table,const QStringList& fields) {
+    for(const auto& index:readNativeIndexCatalog(db,table)) if((index.source.flags&1) && index.source.columns==fields) return true;
+    return false;
+}
 struct NativeRelationCatalog {
     QSqlDatabase db; std::shared_ptr<WorkspaceState> workspace;
     explicit NativeRelationCatalog(QSqlDatabase database) : db(std::move(database)),workspace(workspaceState(db)) {}
@@ -2480,6 +2488,10 @@ struct NativeRelationCatalog {
         }
         QVector<NativeRelationData> result;
         for(const auto& item:definitions) {
+            if(item.source=="DAO_NATIVE" && (item.attributes&1)) {
+                QStringList parentFields,childFields;for(const auto& pair:item.columns) {parentFields.append(pair.first);childFields.append(pair.second);}
+                if(!checkedRelationKey(db,item.parent,parentFields) || !checkedRelationKey(db,item.child,childFields)) throw VbaRuntimeError(3251,"DAO: Native one-to-one relation lacks checked unique keys");
+            }
             if(!(item.attributes&2)) {
                 int found=-1;
                 for(int i=0;i<actual.size();++i) {
@@ -2664,7 +2676,7 @@ void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVect
     const auto makeSql=[&](const QString& target,const QVector<NativeRelationData>& relations) {
         auto parts=definitions;
         for(const auto& relation:relations) if(relation.child.compare(table,Qt::CaseInsensitive)==0 && !(relation.attributes&2)) {
-            if(relation.attributes&~(256u|4096u)) throw VbaRuntimeError(3251,"DAO: Relation attributes require unsupported migration");
+            if(relation.attributes&~(1u|256u|4096u)) throw VbaRuntimeError(3251,"DAO: Relation attributes require unsupported migration");
             QStringList parentFields,childFields;for(const auto& pair:relation.columns) {parentFields.append(schemaJetName(pair.first));childFields.append(schemaJetName(pair.second));}
             parts.append("FOREIGN KEY ("+childFields.join(',')+") REFERENCES "+schemaJetName(relation.parent)+" ("+parentFields.join(',')+") ON UPDATE "+((relation.attributes&256) ? "CASCADE" : "NO ACTION")+" ON DELETE "+((relation.attributes&4096) ? "CASCADE" : "NO ACTION"));
         }
@@ -2695,8 +2707,9 @@ void mutateNativeRelation(std::shared_ptr<NativeRelationCatalog> catalog,const V
     } else {
         if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Detached relation required");candidate=std::dynamic_pointer_cast<DetachedRelation>(value.object);
         if(!candidate || candidate->state_->workspace!=catalog->workspace || candidate->state_->attached) throw VbaRuntimeError(3219,"DAO: Relation belongs to a different or attached database");
-        if(candidate->state_->attributes!=2 && (candidate->state_->attributes&~(256u|4096u))) throw VbaRuntimeError(3251,"DAO: Relation attributes unsupported");
-        rebuild=candidate->state_->attributes!=2;
+        const auto attributes=candidate->state_->attributes;
+        if((attributes&2) ? (attributes!=2 && attributes!=3) : (attributes&~(1u|256u|4096u))) throw VbaRuntimeError(3251,"DAO: Relation attributes unsupported");
+        rebuild=!(attributes&2);
     }
     QSqlQuery query(db);int legacy=0;bool settingsChanged=false;
     const auto pragma=[&](const QString& name) {if(!query.exec("PRAGMA "+name) || !query.next()) queryFailure(query);const int result=query.value(0).toInt();query.finish();return result;};
@@ -2738,10 +2751,11 @@ void mutateNativeRelation(std::shared_ptr<NativeRelationCatalog> catalog,const V
             const auto p=findField(parentFields,field->name_),c=findField(childFields,field->foreign_);
             const auto pType=p.sourceType ? p.sourceType : provenDaoFieldType(p.type),cType=c.sourceType ? c.sourceType : provenDaoFieldType(c.type);
             if(pType<=0 || pType!=cType || pType==11 || pType==12 || pType==15 || (pType==10 && (p.sourceSize<=0 || p.sourceSize!=c.sourceSize))) throw VbaRuntimeError(3251,"DAO: Relation field types/capacities are not compatible and proven");
-            if(rebuild && pType!=1 && pType!=2 && pType!=3 && pType!=4 && pType!=7) throw VbaRuntimeError(3251,"DAO: Enforced relation currently requires matching native numeric fields");
+            if((rebuild || (builder->state_->attributes&1)) && pType!=1 && pType!=2 && pType!=3 && pType!=4 && pType!=7) throw VbaRuntimeError(3251,"DAO: Enforced relation currently requires matching native numeric fields");
             if(primaryNames.contains(p.name.toCaseFolded()) || foreignNames.contains(c.name.toCaseFolded())) throw VbaRuntimeError(3191,"DAO: Duplicate relation field");primaryNames.insert(p.name.toCaseFolded());foreignNames.insert(c.name.toCaseFolded());pairs.append({p.name,c.name});parentNames.append(p.name);
         }
         for(const auto& relation:existing) if(relation.parent==parent && relation.child==child && relation.columns==pairs) throw VbaRuntimeError(3251,"DAO: Relation field mapping already exists");
+        if(builder->state_->attributes&1) {QStringList childNames;for(const auto& pair:pairs) childNames.append(pair.second);if(!checkedRelationKey(db,parent,parentNames) || !checkedRelationKey(db,child,childNames)) throw VbaRuntimeError(3251,"DAO: One-to-one relation requires checked unique parent and child keys");}
         if(rebuild) {
             bool unique=false;for(const auto& index:readNativeIndexCatalog(db,parent)) if((index.source.flags&1) && index.source.columns==parentNames) unique=true;
             if(!unique) throw VbaRuntimeError(3251,"DAO: Enforced relation requires a checked unique parent key");

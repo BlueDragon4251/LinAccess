@@ -2529,3 +2529,16 @@ anschließender Orphan-Insert nach echter Entfernung: Mainwindow/DAO2/2 (5,33s),
 App gebaut. Details DAO_RELATIONS_RUNTIME.md/README.456/384/72 gleich.
 Nächster Zusammenhang: 1:1-Relationflag dbRelationUnique mit tatsächlich geprüftem
 Unique-Kindschlüssel ergänzen, bevor breitere Typ-/Quellmigration beansprucht wird.
+
+2026-11-08: Explizite native 1:1-Beziehungen dbRelationUnique1 implementiert,
+kombinierbar mit erzwungenem/Cascade-Modus oder DontEnforce3. Tatsächliche
+vollständig geprüfte Unique-Eltern-/Kindindizes für passende numerische Felder
+verlangt/bei nativen Katalogzugriffen revalidiert; benötigte Unique-Indizes gegen
+Löschung geschützt. Keine automatische Indexerfindung. UI bietet 1:1 und erhält
+ungültig gewordene Feldauswahl als notwendige Neuauswahl statt stillem Schlüssel-
+wechsel. Fehlender Unique-Kindindex/echte Duplikate/Orphans/Abhängigkeiten, beide
+Modi, reale modale1:1-Cascade-Anlage/-Entfernung im bestehenden Mainwindow/DAO2/2
+(5,64s) grün, App gebaut. DAO_RELATIONS_RUNTIME.md;456/384/72 unverändert.
+Nächster allgemeiner Zusammenhang: lesbare native Tabellenfeld-Eigenschaften
+Required/DefaultValue/Text.Size auch an vorhandenen Tabellen atomar änderbar machen,
+mit echtem Schema-/Wertschutz, ohne Original-/VBA-Quellen oder Geschäftsdatenerfindung.

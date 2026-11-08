@@ -256,3 +256,9 @@ Entfernung und korrektem gespeicherten Fehlerstatus implementiert. Reales modale
 Create/Delete/physischer FK-/Werte-Nachweis Mainwindow/DAO2/2 (5,33s), App gebaut.
 DAO_RELATIONS_RUNTIME.md/README;456/384/72 unverändert. Fortsetzung: native 1:1-
 Relationen über dbRelationUnique und tatsächlichen eindeutigen Kindindex.
+
+Native explizite1:1-Beziehungen inkl. echter Unique-Kindprüfung, FK/Cascades oder
+DontEnforce3, Indexabhängigkeitsschutz und GUI umgesetzt. Mainwindow/DAO2/2
+(5,64s), App gebaut. DAO_RELATIONS_RUNTIME.md;456/384/72 gleich. Fortsetzung:
+Required/DefaultValue/Text.Size vorhandener nativer Felder atomar ändern, Schema-
+und Bestandswertschutz beibehalten; anschließend weiter ohne Zwischen-Final.

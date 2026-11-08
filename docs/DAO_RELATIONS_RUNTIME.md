@@ -148,3 +148,22 @@ on an independent technical database, actual FK/cascade clauses inspected, origi
 row preserved, removed constraint permits a later orphan insert. No new target or
 broad suite;456/384/72 unchanged. This is not a complete Access relationship UI,
 source-format writer or demonstrated Jet/Windows parity.
+
+## Explicit native one-to-one relationships
+
+Native dbRelationUnique1 now requires complete checked unique parent and child
+keys for matching proven numeric fields. It combines with enforced/cascade modes
+or DontEnforce (3). Actual unique indexes enforce the one-child-per-key constraint;
+FK mode additionally enforces parent existence. Native catalog reads revalidate
+both unique keys. Unique-index deletion on a table participating in a declared
+one-to-one relationship is refused until the relationship is removed. No unique
+index is fabricated or silently created. Imported source flags retain their prior
+readonly source-observation contract.
+
+The relationship dialog exposes explicit1:1 and displays the declared mode. Mode
+changes do not silently replace an unsupported field choice with another key;
+selection must be made explicitly. Existing mainwindow/DAO2/2 (5.64s), app built:
+missing child uniqueness refusal, actual duplicate/orphan failures, dependency
+protection, enforced and DontEnforce3 lifecycle, and real modal1:1/cascade creation/
+removal passed. No new target/broad suite, exact Jet null/index/flag inference
+semantics remain open.456/384/72 unchanged.

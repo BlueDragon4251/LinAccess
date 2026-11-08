@@ -1537,3 +1537,7 @@ Echte grafische Beziehungsverwaltung mit RI/Cascade-/DontEnforce-Modus und
 bestätigter Entfernung umgesetzt. Reale modale FK-/Bestandswerte-Prüfung im
 bestehenden Mainwindow/DAO2/2 (5,33s), App gebaut. DAO_RELATIONS_RUNTIME.md;
 456/384/72 unverändert.
+
+Explizite native1:1-Relationen mit echten Unique-Schlüsseln und Löschabhängigkeits-
+schutz sowie GUI implementiert. Bestehendes Mainwindow/DAO2/2 (5,64s), App gebaut.
+DAO_RELATIONS_RUNTIME.md;456/384/72 unverändert.
