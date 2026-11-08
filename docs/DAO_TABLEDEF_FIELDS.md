@@ -525,3 +525,24 @@ field designer use the same constraint path. Null remains independent of Require
 Regional/two-digit literals, subsecond values, general functions/expressions and
 exact Access event/timing equivalence remain open. GUI/DAO2/2 (7.08s), app built;
 no new CTest target/full-suite claim;456/384/72 unchanged.
+
+## Lossless numeric type changes in the field designer
+
+The field designer can change own numeric non-counter fields between Boolean,
+Byte, Integer, Long, Single and Double as a separate atomic operation. DAO
+Field.Type remains readonly after append. Existing values and the default are
+checked through the shared target conversion before schema replacement; changes
+that round, truncate, overflow or change numeric bits refuse. Null remains Null.
+Boolean conversion therefore accepts only values whose stored0/-1 identity is
+preserved; Single narrowing requires already representable values.
+
+The protected copy compares identical numeric values for the intentionally
+changed field and exact typed bytes for every other field/row identity. The
+actual target storage class/type/constraints and native metadata change together.
+Rules/messages, defaults, indices, counter frontiers and unrelated fields remain
+protected. Relation keys require dependent relations to be removed first.
+Original/mixed/unproven schemas, counters, nonnumeric families, lossy conversions
+and general Access ALTER COLUMN semantics remain unsupported. This is a native
+designer operation within F014/F080/F121, not general Jet DDL/type parity.
+
+Existing GUI/DAO2/2 passed (6.94s), app built; no new CTest target/full-suite claim.

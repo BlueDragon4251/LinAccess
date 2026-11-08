@@ -408,3 +408,14 @@ verweigert. Regionale Konstanten, Untersekunden/allgemeine Ausdrücke offen.
 GUI/DAO2/2 (7,08s), App gebaut;456/384/72 unverändert. Fortsetzung: verlustfreie
 numerische Datentypänderungen im Feldentwurf mit Bestands-/Defaultprüfung;
 DAO Field.Type nach Append bleibt readonly. Danach offene Anforderungen weiter.
+
+Feldentwurf unterstützt jetzt verlustfreie numerische Typänderung für eigene
+Nicht-Counter: Boolean/Byte/Integer/Long/Single/Double mit Bestands-/Default-
+Konvertierungsprüfung vor Umbau. Verlust/Rundung verweigert3251, Überlauf6;
+Null, Indizes, Regeln/Texte und Counterfrontier geschützt. Numerische Werte
+werden bei beabsichtigtem Speicherklassenwechsel bitgenau verglichen; andere
+Werte/Rowids bleiben typgenau. Relationkeys vorher lösen; DAO Field.Type nach
+Append weiter383. GUI/DAO2/2 (6,94s), App gebaut; DAO_TABLEDEF_FIELDS.md.
+456/384/72 unverändert. Fortsetzung: doppelte Hauptfenster-Kompilierung von App
+und GUI-Ziel über gemeinsame statische Desktopimplementierung beseitigen, dann
+weitere offene Entwurfs-/Access-Anforderungen ohne Zwischenabschluss.

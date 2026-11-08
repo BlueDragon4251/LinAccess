@@ -45,6 +45,8 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
     auto* propertyDefault=new QLineEdit(propertyPage);propertyDefault->setObjectName("native-field-property-default");propertyDefault->setMaxLength(255);propertyForm->addRow("Standardwert",propertyDefault);propertyLayout->addLayout(propertyForm);
     auto* propertyValidation=new QLineEdit(propertyPage);propertyValidation->setObjectName("native-field-property-validation");propertyValidation->setMaxLength(255);propertyValidation->setPlaceholderText("Vergleiche mit And/Or oder Between; Datum: <=Date()");propertyForm->addRow("Gültigkeitsregel (Zahl/Datum)",propertyValidation);
     auto* propertyValidationText=new QLineEdit(propertyPage);propertyValidationText->setObjectName("native-field-property-validation-text");propertyValidationText->setMaxLength(255);propertyForm->addRow("Fehlermeldung zur Gültigkeitsregel",propertyValidationText);
+    auto* targetType=new QComboBox(propertyPage);targetType->setObjectName("native-field-property-type");for(const int code:{1,2,3,4,6,7}) targetType->addItem(typeNames.value(code),code);propertyForm->addRow("Numerischer Zieldatentyp",targetType);
+    auto* changeType=new QPushButton("Datentyp verlustfrei ändern",propertyPage);changeType->setObjectName("native-field-change-type");propertyLayout->addWidget(changeType);
     auto* position=new QSpinBox(propertyPage);position->setObjectName("native-field-property-position");position->setRange(0,0);propertyForm->addRow("Feldposition (ab 0)",position);
     auto* move=new QPushButton("Feld verschieben",propertyPage);move->setObjectName("native-field-move");propertyLayout->addWidget(move);
     auto* renameName=new QLineEdit(propertyPage);renameName->setObjectName("native-field-rename-name");renameName->setMaxLength(64);propertyForm->addRow("Neuer Feldname",renameName);
@@ -56,7 +58,7 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
     auto* close=new QDialogButtonBox(QDialogButtonBox::Close,&dialog);layout->addWidget(close);QObject::connect(close,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
     std::shared_ptr<VbaObject> table,selectedField;bool catalogValid=true,allNative=false;int selectedType=0;
     const auto error=[&](const std::exception& problem) {QMessageBox::warning(&dialog,"Feld konnte nicht geändert werden",QString::fromUtf8(problem.what()));};
-    const auto disable=[&] {catalogValid=false;append->setEnabled(false);remove->setEnabled(false);apply->setEnabled(false);renameButton->setEnabled(false);move->setEnabled(false);position->setEnabled(false);list->setEnabled(false);};
+    const auto disable=[&] {catalogValid=false;append->setEnabled(false);remove->setEnabled(false);apply->setEnabled(false);renameButton->setEnabled(false);move->setEnabled(false);position->setEnabled(false);changeType->setEnabled(false);targetType->setEnabled(false);list->setEnabled(false);};
     const auto property=[](const std::shared_ptr<VbaObject>& field,const char* member) {try {return field->member(member,{});}catch(const VbaRuntimeError& problem) {if(problem.number!=3251) throw;return VbaValue::empty();}};
     const auto reload=[&] {
         const auto previous=list->currentRow()>=0 && list->item(list->currentRow(),0) ? list->item(list->currentRow(),0)->text() : QString{};
@@ -78,7 +80,7 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
     };
     const auto updateDelete=[&] {const int row=list->currentRow();remove->setEnabled(catalogValid && row>=0 && row<list->rowCount() && list->rowCount()>1 && list->item(row,0) && !list->item(row,0)->data(Qt::UserRole).toBool());};
     const auto loadProperties=[&] {
-        selectedField.reset();move->setEnabled(false);position->setEnabled(false);apply->setEnabled(false);renameButton->setEnabled(false);propertySize->setEnabled(false);propertyRequired->setEnabled(false);propertyZero->setEnabled(false);propertyDefault->setEnabled(false);propertyValidation->setEnabled(false);propertyValidation->clear();propertyValidationText->setEnabled(false);propertyValidationText->clear();const int row=list->currentRow();
+        selectedField.reset();changeType->setEnabled(false);targetType->setEnabled(false);move->setEnabled(false);position->setEnabled(false);apply->setEnabled(false);renameButton->setEnabled(false);propertySize->setEnabled(false);propertyRequired->setEnabled(false);propertyZero->setEnabled(false);propertyDefault->setEnabled(false);propertyValidation->setEnabled(false);propertyValidation->clear();propertyValidationText->setEnabled(false);propertyValidationText->clear();const int row=list->currentRow();
         if(!catalogValid || row<0 || !list->item(row,0)) {selectedName->clear();return;}
         selectedName->setText(list->item(row,0)->text());renameName->setText(selectedName->text());
         try {
@@ -87,6 +89,7 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
             selectedType=kind.kind==VbaValue::Kind::Number ? static_cast<int>(kind.number) : 0;
             const bool movable=allNative && mandatory.kind==VbaValue::Kind::Boolean && attributes.kind==VbaValue::Kind::Number && list->rowCount()>1;position->setRange(0,qMax(0,list->rowCount()-1));position->setValue(row);position->setEnabled(movable);move->setEnabled(movable);
             const bool eligible=allNative && mandatory.kind==VbaValue::Kind::Boolean && attributes.kind==VbaValue::Kind::Number && !(static_cast<int>(attributes.number)&16) && (selectedType!=10 || capacity.kind==VbaValue::Kind::Number);
+            const int numeric=targetType->findData(selectedType);targetType->setCurrentIndex(numeric);targetType->setEnabled(eligible && numeric>=0);changeType->setEnabled(eligible && numeric>=0);
             propertyRequired->setChecked(mandatory.kind==VbaValue::Kind::Boolean && mandatory.boolean);propertyRequired->setEnabled(eligible);
             if(selectedType==10 && capacity.kind==VbaValue::Kind::Number) propertySize->setValue(static_cast<int>(capacity.number));propertySize->setEnabled(eligible && selectedType==10);
             propertyDefault->setText(initial.kind==VbaValue::Kind::Text ? QString::fromStdString(initial.text) : QString{});propertyDefault->setEnabled(eligible && initial.kind==VbaValue::Kind::Text);
@@ -113,6 +116,11 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
         try {fieldName=QString::fromStdString(selectedField->member("Name",{}).asText());QMap<QString,VbaValue> changes{{"Required",VbaValue::logical(propertyRequired->isChecked())}};
             if(propertyValidationText->isEnabled()) changes.insert("ValidationText",VbaValue::string(propertyValidationText->text().toStdString()));if(propertyValidation->isEnabled()) changes.insert("ValidationRule",VbaValue::string(propertyValidation->text().trimmed().toStdString()));if(propertyZero->isEnabled()) changes.insert("AllowZeroLength",VbaValue::logical(propertyZero->isChecked()));if(selectedType==10) changes.insert("Size",VbaValue::longInteger(propertySize->value()));if(propertyDefault->isEnabled()) changes.insert("DefaultValue",VbaValue::string(propertyDefault->text().trimmed().toStdString()));updateNativeFieldProperties(database,tableName,fieldName,changes);
         } catch(const DaoStoredSchemaChange& problem) {storedFailure(problem);return;}catch(const std::exception& problem) {error(problem);return;}refreshAfterCommit("Feldeigenschaften gespeichert: "+fieldName);
+    });
+    QObject::connect(changeType,&QPushButton::clicked,&dialog,[&] {
+        if(!catalogValid || !changeType->isEnabled()) return;const auto fieldName=selectedName->text();
+        try {changeNativeNumericFieldType(database,tableName,fieldName,targetType->currentData().toInt());}
+        catch(const DaoStoredSchemaChange& problem) {storedFailure(problem);return;}catch(const std::exception& problem) {error(problem);return;}refreshAfterCommit("Datentyp verlustfrei geändert: "+fieldName);
     });
     QObject::connect(move,&QPushButton::clicked,&dialog,[&] {
         if(!catalogValid || !move->isEnabled()) return;const auto fieldName=selectedName->text();
