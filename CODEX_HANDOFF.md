@@ -2450,3 +2450,13 @@ Clone/Edit/Requery-Schutz im bestehenden Mainwindow/DAO2/2 (5,11s), App gebaut.
 Details DAO_TABLEDEF_FIELDS.md/README;456/384/72 unverändert. Nächste kleine
 Implementierungsprüfung: gebundene native Rückgabeobjekte noch innerhalb des
 DDL-Savepoints auflösen, um spätere Readerfehler von Speichererfolg zu trennen.
+
+2026-11-08: Schema-Rückgabeobjekte werden nun vor Savepoint-Release unter der
+noch gehaltenen Schreibsperre gebunden/geprüft. Tabellen-/Feld-/Indexbuilder
+veröffentlichen diese Reader erst nach erfolgreichem Release; danach laufen
+keine DB-Leseoperationen mehr für die Bindung, die einen gespeicherten Erfolg
+als fehlgeschlagene Mutation ausgeben könnten. DAO1/1 (1,25s), App gebaut;
+letzter GUI/DAO-Verbund zuvor2/2 (5,11s), kein neuer breiter Lauf.
+456/384/72 unverändert. Nächste allgemeine DAO-Ergänzung: Fields/Indexes.Refresh
+nach eigener Schemaänderung kontrolliert nutzbar machen, ohne alte Itemobjekte
+wiederzubeleben. Gelöschte/ersetzte Tabellen bleiben3420.

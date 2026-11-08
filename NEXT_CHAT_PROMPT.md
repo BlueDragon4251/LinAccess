@@ -224,3 +224,9 @@ Requery im bestehenden Mainwindow/DAO2/2 (5,11s), App gebaut. Index-/Felddialog
 melden gespeicherte Änderungen getrennt von Refreshfehlern. README/DAO_TABLEDEF_FIELDS.md.
 456/384/72 gleich. Rückgabe-Reader der Schemaoperationen vor Savepoint-Release
 binden; anschließend andere offene Anforderungen fortlaufend umsetzen.
+
+Tabellen-/Feld-/Index-Rückgabe-Reader jetzt vor Savepoint-Release gebunden;
+anschließend nur Veröffentlichung, kein nachträglicher DB-Lesefehler als
+Mutationsfehler. DAO1/1 (1,25s), App gebaut; letzte GUI/DAO2/2 (5,11s).
+456/384/72 gleich. Als Nächstes kontrolliertes Fields/Indexes.Refresh nach
+eigener Schemaänderung, alte Items weiterhin immutable/invalid.

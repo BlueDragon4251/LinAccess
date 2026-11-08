@@ -235,3 +235,9 @@ the field after confirmation and preserves the remaining values/row count. An
 open DAO cursor/Field/edited Clone refuses3420 after field addition; explicit
 Requery reloads three fields and clears the stale clone edit without persisting
 its pending text. No new target or broad suite.456/384/72 unchanged.
+
+Schema result readers are now bound and validated before releasing the write
+savepoint. Only successful release publishes the TableDef/Field/Index bindings;
+no post-release database read can turn their binding into a falsely reported
+mutation failure. Existing DAO target1/1 (1.25s), app built; previous GUI/DAO2/2
+(5.11s) remains the latest GUI check. No broad suite or concurrency-oracle claim.

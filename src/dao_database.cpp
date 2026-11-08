@@ -2151,11 +2151,14 @@ public:
         query.prepare("INSERT INTO main._la_table_schema(table_name,definition) VALUES(?,?)");query.addBindValue(name);query.addBindValue(QJsonDocument(metadata).toJson(QJsonDocument::Compact));
         if(!query.exec()) queryFailure(query);
         (void)readNativeIndexCatalog(db,name);
+        const auto attached=std::make_shared<TableDefinition>(db,name);
+        QVector<std::shared_ptr<VbaObject>> fieldBindings,indexBindings;
+        for(const auto& field:fields_->fields_) fieldBindings.append(attached->member("Fields",{VbaValue::string(field->name_.toStdString())}).object);
+        for(const auto& index:indexes) indexBindings.append(attached->member("Indexes",{VbaValue::string(index.name.toStdString())}).object);
         if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;
-        for(int i=0;i<indexes.size();++i) indexes_->indexes_[i]->state_->data=indexes[i];
-        state_->attached=std::make_shared<TableDefinition>(db,name);
-        for(const auto& field:fields_->fields_) field->attachedField_=state_->attached->member("Fields",{VbaValue::string(field->name_.toStdString())}).object;
-        for(const auto& index:indexes_->indexes_) index->state_->attachedIndex=state_->attached->member("Indexes",{VbaValue::string(index->state_->data.name.toStdString())}).object;
+        state_->attached=attached;
+        for(int i=0;i<fields_->fields_.size();++i) fields_->fields_[i]->attachedField_=fieldBindings[i];
+        for(int i=0;i<indexes.size();++i) {indexes_->indexes_[i]->state_->data=indexes[i];indexes_->indexes_[i]->state_->attachedIndex=indexBindings[i];}
     }
 private:std::shared_ptr<DetachedTableState> state_;std::shared_ptr<DetachedFields> fields_;std::shared_ptr<DetachedIndexes> indexes_;
 };
@@ -2231,8 +2234,10 @@ void mutateExistingTableField(QSqlDatabase db,const QString& table,const VbaValu
         (void)readNativeIndexCatalog(db,table);
     }
     (void)readTableSchemaColumns(db,table);
+    std::shared_ptr<TableDefinition> attached;std::shared_ptr<VbaObject> fieldBinding;
+    if(builder) {attached=std::make_shared<TableDefinition>(db,table);fieldBinding=attached->member("Fields",{VbaValue::string(fieldName.toStdString())}).object;}
     if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++fieldRevision;
-    if(builder) {builder->appended_=true;builder->owner_->attached=std::make_shared<TableDefinition>(db,table);builder->attachedField_=builder->owner_->attached->member("Fields",{VbaValue::string(fieldName.toStdString())}).object;}
+    if(builder) {builder->appended_=true;builder->owner_->attached=std::move(attached);builder->attachedField_=std::move(fieldBinding);}
 }
 
 std::shared_ptr<VbaObject> createExistingTableIndex(QSqlDatabase db,const QString& table,const QString& name) {
@@ -2300,8 +2305,10 @@ void mutateExistingTableIndex(QSqlDatabase db,const QString& table,const VbaValu
     query.prepare("UPDATE main._la_access_indexes SET definition=? WHERE table_name=? COLLATE NOCASE");query.addBindValue(QString::fromUtf8(encoded));query.addBindValue(table);
     if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Index catalog changed during mutation");
     (void)readNativeIndexCatalog(db,table);
+    std::shared_ptr<TableDefinition> attached;std::shared_ptr<VbaObject> indexBinding;
+    if(builder) {attached=std::make_shared<TableDefinition>(db,table);indexBinding=attached->member("Indexes",{VbaValue::string(definitions.last().name.toStdString())}).object;}
     if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;
-    if(builder) {builder->state_->data=definitions.last();builder->state_->appended=true;builder->state_->table->attached=std::make_shared<TableDefinition>(db,table);builder->state_->attachedIndex=builder->state_->table->attached->member("Indexes",{VbaValue::string(definitions.last().name.toStdString())}).object;}
+    if(builder) {builder->state_->data=definitions.last();builder->state_->appended=true;builder->state_->table->attached=std::move(attached);builder->state_->attachedIndex=std::move(indexBinding);}
 }
 
 class TableDefinitions final : public VbaObject {
