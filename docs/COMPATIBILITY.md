@@ -3317,3 +3317,10 @@ nicht erzwungene Beziehungen umgesetzt; Persistenz, Abhängigkeiten, Same-name-
 Generation/Rollback im bestehenden DAO/Import2/2 (1,33s) geprüft, App gebaut.
 Keine physische RI behauptet; erzwungene/cascade Mutation bleibt offen. Umfang
 DAO_RELATIONS_RUNTIME.md.456/384/72 unverändert.
+
+Reale native numerische FK-/Cascade-Migration einschließlich Entfernung umgesetzt:
+FK-Checks, strenger Schemanachweis, rowid-/Wertdigest, Index-/Trigger-/View- und
+Zählererhalt, geschützte PRAGMA-Wiederherstellung. Finales bestehendes DAO1/1
+(1,33s), App gebaut; weiterer Kindverweis und unbekannte CHECK-Regel geschützt.
+DAO_RELATIONS_RUNTIME.md enthält Herkunfts-/Typ-/Transaktionsgrenzen; keine
+vollständige Jet-/Original-MDB-Parität.456/384/72 unverändert.

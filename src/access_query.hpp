@@ -8,6 +8,8 @@
 #include <QVector>
 
 namespace linaccess {
+// Strict native-token comparison for guarded schema reconstruction; no SQL execution.
+bool equivalentNativeSchemaSql(const QString& left,const QString& right);
 struct AccessQueryParameter {
     QString name;
     QString type;

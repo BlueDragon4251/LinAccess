@@ -971,6 +971,13 @@ AccessQueryPlan compileJoinedUpdate(const QVector<Token>& tokens,qsizetype start
     return plan;
 }
 }
+bool equivalentNativeSchemaSql(const QString& left,const QString& right) {
+    const auto first=tokenize(left,true),second=tokenize(right,true);
+    if(first.size()!=second.size()) return false;
+    const auto asciiWord=[](QString value) {for(qsizetype i=0;i<value.size();++i) if(value[i].unicode()>='A' && value[i].unicode()<='Z') value[i]=QChar(value[i].unicode()+32);return value;};
+    for(int i=0;i<first.size();++i) if(first[i].kind!=second[i].kind || (first[i].kind==Token::Word ? asciiWord(first[i].value)!=asciiWord(second[i].value) : first[i].value!=second[i].value)) return false;
+    return true;
+}
 QString accessLikePattern(const QString& value) { return pattern(value); }
 namespace {
 void adaptCounterDdl(QVector<Token>& tokens,qsizetype pos,AccessQueryPlan& plan) {

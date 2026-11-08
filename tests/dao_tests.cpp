@@ -1836,8 +1836,88 @@ End Sub)VBA","BuildRelations",host);
     assert(sql.exec("SELECT ID FROM RelChild") && sql.next() && sql.value(0).toInt()==1);sql.finish();
 }
 
+void testEnforcedNativeRelations() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-native-foreign-key-migration");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);assert(sql.exec("PRAGMA foreign_keys=ON"));
+    auto database=linaccess::makeDaoDatabase(db),tables=database->member("TableDefs",{}).object;
+    const auto field=[&](const std::shared_ptr<linaccess::VbaObject>& table,const char* name,int type,int size=0) {return table->member("CreateField",{VbaValue::string(name),VbaValue::integer(static_cast<std::int16_t>(type)),VbaValue::longInteger(size)}).object;};
+    const auto primary=[&](const std::shared_ptr<linaccess::VbaObject>& table) {auto key=table->member("CreateIndex",{VbaValue::string("PrimaryKey")}).object;key->assign("Primary",VbaValue::logical(true));key->member("Fields",{}).object->member("Append",{key->member("CreateField",{VbaValue::string("ID")})});table->member("Indexes",{}).object->member("Append",{VbaValue::reference(key)});};
+    auto parent=database->member("CreateTableDef",{VbaValue::string("RIParent")}).object;parent->member("Fields",{}).object->member("Append",{VbaValue::reference(field(parent,"ID",4))});primary(parent);tables->member("Append",{VbaValue::reference(parent)});
+    auto child=database->member("CreateTableDef",{VbaValue::string("RIChild")}).object;
+    auto id=field(child,"ID",4);id->assign("Attributes",VbaValue::longInteger(16));child->member("Fields",{}).object->member("Append",{VbaValue::reference(id)});
+    for(const auto& definition:std::vector<std::pair<const char*,int>>{{"ParentID",4},{"Payload",11},{"Note",10},{"Magnitude",7},{"Moment",8}}) {
+        auto item=field(child,definition.first,definition.second,definition.second==10 ? 20 : 0);
+        if(definition.second==7) item->assign("DefaultValue",VbaValue::string("1.25"));if(definition.second==8) item->assign("DefaultValue",VbaValue::string("'2026-11-08 00:00:00'"));
+        child->member("Fields",{}).object->member("Append",{VbaValue::reference(item)});
+    }
+    primary(child);tables->member("Append",{VbaValue::reference(child)});
+    auto lookup=child->member("CreateIndex",{VbaValue::string("ParentLookup")}).object;
+    auto parentKey=lookup->member("CreateField",{VbaValue::string("ParentID")}).object;parentKey->assign("Attributes",VbaValue::longInteger(1));lookup->member("Fields",{}).object->member("Append",{VbaValue::reference(parentKey)});lookup->member("Fields",{}).object->member("Append",{lookup->member("CreateField",{VbaValue::string("ID")})});child->member("Indexes",{}).object->member("Append",{VbaValue::reference(lookup)});
+    database->member("Execute",{VbaValue::string("ALTER TABLE RIChild ALTER COLUMN ID COUNTER(100,7)")});
+    assert(sql.exec("CREATE TABLE migration_audit(value INTEGER)"));assert(sql.exec("CREATE TRIGGER migration_child_audit AFTER INSERT ON RIChild BEGIN INSERT INTO migration_audit VALUES(NEW.ID);END"));
+    assert(sql.exec("CREATE VIEW migration_child_view AS SELECT rowid AS source_rowid,ID,ParentID,Payload,Note,Magnitude,Moment FROM RIChild"));
+    database->member("Execute",{VbaValue::string("INSERT INTO RIParent VALUES (7)")});
+    sql.prepare("INSERT INTO RIChild(ParentID,Payload,Note,Magnitude,Moment) VALUES(?,?,?,?,?)");
+    for(int i=0;i<3;++i) {sql.bindValue(0,i==1 ? 999 : 7);sql.bindValue(1,QByteArray::fromHex("0001ff"));sql.bindValue(2,QString::fromUtf8("Prüfwert %1").arg(i));sql.bindValue(3,i==1 ? std::numeric_limits<double>::max() : 3.141592653589793);sql.bindValue(4,QString("2026-11-08 00:00:00"));assert(sql.exec());}sql.finish();
+    database->member("Execute",{VbaValue::string("DELETE FROM RIChild WHERE ID=114")});
+    auto oldRows=database->member("OpenRecordset",{VbaValue::string("RIChild")}).object;
+    auto relations=database->member("Relations",{}).object;Host host(db);
+    const auto cascadeFlags=linaccess::evaluateVbaExpression("dbRelationUpdateCascade Or dbRelationDeleteCascade",host,{});assert(cascadeFlags.asNumber()==4352);
+    auto relation=database->member("CreateRelation",{VbaValue::string("RealForeignKey"),VbaValue::string("RIParent"),VbaValue::string("RIChild"),cascadeFlags}).object;
+    auto link=relation->member("CreateField",{VbaValue::string("ID")}).object;link->assign("ForeignName",VbaValue::string("ParentID"));relation->member("Fields",{}).object->member("Append",{VbaValue::reference(link)});
+    const auto error=[](const std::function<void()>& operation,int expected) {int number=0;try {operation();}catch(const linaccess::VbaRuntimeError& failure) {number=failure.number;if(number!=expected) std::cerr<<"Unexpected migration error="<<number<<", reason="<<failure.what()<<"\n";}assert(number==expected);};
+    error([&] {relations->member("Append",{VbaValue::reference(relation)});},3251);
+    assert(oldRows->member("RecordCount",{}).asNumber()==2 && relations->member("Count",{}).asNumber()==0);
+    assert(sql.exec("PRAGMA foreign_keys") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+    assert(sql.exec("PRAGMA legacy_alter_table") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM migration_audit") && sql.next() && sql.value(0).toInt()==3);sql.finish();
+    database->member("Execute",{VbaValue::string("UPDATE RIChild SET ParentID=7 WHERE ID=107")});
+    try {relations->member("Append",{VbaValue::reference(relation)});}catch(const linaccess::VbaRuntimeError& failure) {std::cerr<<"Native FK migration failed="<<failure.number<<", reason="<<failure.what()<<"\n";throw;}
+    error([&] {oldRows->member("RecordCount",{});},3420);oldRows->member("Close",{});
+    assert(sql.exec("PRAGMA foreign_key_list(RIChild)") && sql.next());assert(sql.value(2).toString()=="RIParent" && sql.value(5).toString()=="CASCADE" && sql.value(6).toString()=="CASCADE");sql.finish();
+    assert(sql.exec("SELECT source_rowid,ID,Payload,Note,Magnitude FROM migration_child_view ORDER BY ID") && sql.next());
+    assert(sql.value(0).toInt()==1 && sql.value(1).toInt()==100 && sql.value(2).toByteArray()==QByteArray::fromHex("0001ff") && sql.value(3).toString()==QString::fromUtf8("Prüfwert 0") && sql.value(4).toDouble()==3.141592653589793);
+    assert(sql.next() && sql.value(0).toInt()==2 && sql.value(1).toInt()==107 && sql.value(4).toDouble()==std::numeric_limits<double>::max());sql.finish();
+    assert(sql.exec("SELECT value FROM _la_counter32_sequences WHERE table_name='RIChild'") && sql.next() && sql.value(0).toInt()==114);sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM migration_audit") && sql.next() && sql.value(0).toInt()==3);sql.finish();
+    child=tables->member("Item",{VbaValue::string("RIChild")}).object;
+    assert(child->member("Indexes",{VbaValue::string("ParentLookup")}).object->member("Fields",{VbaValue::string("ParentID")}).object->member("Attributes",{}).asNumber()==1);
+    database->member("Execute",{VbaValue::string("UPDATE RIParent SET ID=8 WHERE ID=7")});assert(sql.exec("SELECT COUNT(*) FROM RIChild WHERE ParentID=8") && sql.next() && sql.value(0).toInt()==2);sql.finish();
+    database->member("Execute",{VbaValue::string("DELETE FROM RIParent WHERE ID=8")});assert(sql.exec("SELECT COUNT(*) FROM RIChild") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    database->member("Execute",{VbaValue::string("INSERT INTO RIParent VALUES(9)")});
+    error([&] {database->member("Execute",{VbaValue::string("INSERT INTO RIChild(ParentID) VALUES(999)")});},3146);
+    database->member("Execute",{VbaValue::string("INSERT INTO RIChild(ParentID) VALUES(9)")});assert(sql.exec("SELECT ID FROM RIChild") && sql.next() && sql.value(0).toInt()==128);sql.finish();
+    auto grandchild=database->member("CreateTableDef",{VbaValue::string("RIGrandChild")}).object;
+    grandchild->member("Fields",{}).object->member("Append",{VbaValue::reference(field(grandchild,"ID",4))});grandchild->member("Fields",{}).object->member("Append",{VbaValue::reference(field(grandchild,"ChildID",4))});primary(grandchild);tables->member("Append",{VbaValue::reference(grandchild)});
+    database->member("Execute",{VbaValue::string("INSERT INTO RIGrandChild VALUES(1,128)")});
+    auto descendant=database->member("CreateRelation",{VbaValue::string("ChildGrandChild"),VbaValue::string("RIChild"),VbaValue::string("RIGrandChild"),VbaValue::longInteger(4096)}).object;
+    auto descendantField=descendant->member("CreateField",{VbaValue::string("ID")}).object;descendantField->assign("ForeignName",VbaValue::string("ChildID"));descendant->member("Fields",{}).object->member("Append",{VbaValue::reference(descendantField)});relations->member("Append",{VbaValue::reference(descendant)});
+    assert(relations->member("Count",{}).asNumber()==2);
+    relations->member("Delete",{VbaValue::string("RealForeignKey")});
+    assert(sql.exec("SELECT ChildID FROM RIGrandChild") && sql.next() && sql.value(0).toInt()==128);sql.finish();
+    assert(sql.exec("PRAGMA foreign_key_list(RIChild)") && !sql.next());sql.finish();
+    database->member("Execute",{VbaValue::string("INSERT INTO RIChild(ParentID) VALUES(999)")});assert(sql.exec("SELECT ID FROM RIChild WHERE ParentID=999") && sql.next() && sql.value(0).toInt()==135);sql.finish();
+    assert(sql.exec("PRAGMA foreign_keys") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+    auto workspace=linaccess::makeDaoEngine(db)->defaultMember({VbaValue::integer(0)},true).object;
+    workspace->member("BeginTrans",{});error([&] {relations->member("Delete",{VbaValue::string("ChildGrandChild")});},3251);workspace->member("Rollback",{});
+    assert(relations->member("Count",{}).asNumber()==1);
+    // Model a native table customized outside the supported schema writer.
+    // Its extra validation must survive refusal rather than disappear in rebuild.
+    assert(sql.exec("CREATE TABLE CustomChild(ParentID INTEGER4 CHECK(ParentID>0))"));assert(sql.exec("INSERT INTO CustomChild VALUES(9)"));
+    const QJsonArray customFields{QJsonObject{{"name","ParentID"},{"source_type","INT"},{"source_origin","DAO_NATIVE"},{"source_size",0},{"native_attributes",1},{"native_required",false}}};
+    sql.prepare("INSERT INTO _la_table_schema VALUES('CustomChild',?)");sql.addBindValue(QJsonDocument(customFields).toJson(QJsonDocument::Compact));assert(sql.exec());
+    const QJsonObject customIndexes{{"version",1},{"source_table","CustomChild"},{"columns",QJsonArray{"ParentID"}},{"indexes",QJsonArray{}}};
+    sql.prepare("INSERT INTO _la_access_indexes VALUES('CustomChild',?)");sql.addBindValue(QString::fromUtf8(QJsonDocument(customIndexes).toJson(QJsonDocument::Compact)));assert(sql.exec());sql.finish();
+    auto custom=database->member("CreateRelation",{VbaValue::string("CustomGuard"),VbaValue::string("RIParent"),VbaValue::string("CustomChild")}).object;
+    auto customField=custom->member("CreateField",{VbaValue::string("ID")}).object;customField->assign("ForeignName",VbaValue::string("ParentID"));custom->member("Fields",{}).object->member("Append",{VbaValue::reference(customField)});
+    error([&] {relations->member("Append",{VbaValue::reference(custom)});},3251);
+    assert(!sql.exec("INSERT INTO CustomChild VALUES(-1)"));assert(sql.exec("SELECT ParentID FROM CustomChild") && sql.next() && sql.value(0).toInt()==9);sql.finish();
+    assert(sql.exec("PRAGMA foreign_keys") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testEnforcedNativeRelations();
     testDetachedRelationCreation();
     testDetachedTableCreation();
     testVariantArraysDao();

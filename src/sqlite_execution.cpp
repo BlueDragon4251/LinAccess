@@ -31,6 +31,7 @@ struct SqliteExecutionBudget::Impl {
 };
 SqliteExecutionBudget::SqliteExecutionBudget(QSqlDatabase db, qint64 operations, int milliseconds)
     : impl_(std::make_unique<Impl>()) {
+    if(db.driver() && db.driver()->property("la_schema_restore_failed").toBool()) throw VbaRuntimeError(3251,"Schema connection settings failed; reopen the project");
     static QLibrary library("sqlite3",0);
     library.setLoadHints(QLibrary::PreventUnloadHint);
     const auto function = reinterpret_cast<Impl::Progress>(library.resolve("sqlite3_progress_handler"));

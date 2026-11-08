@@ -241,3 +241,12 @@ Delete für explizite dbRelationDontEnforce2-Beziehungen implementiert. Persiste
 Generationsschutz/Abhängigkeiten/Rollback: DAO/Import2/2 (1,33s), App gebaut.
 DAO_RELATIONS_RUNTIME.md;456/384/72 gleich. Reale FK-/Cascade-Migration noch nicht
 implementiert; nächste tatsächliche Aufgabe erzwungene native Beziehungen.
+
+Reale native numerische FK-/Cascade-Anlage und -Entfernung implementiert, nicht
+bloß Flags. Streng bekannter nativer Kind-Schemaumbau, Digestprüfung aller Werte/
+rowids, Index-/Trigger-/View-/Countererhalt, echte Fremdschlüssel und verifizierte
+PRAGMA-Wiederherstellung. Final DAO1/1 (1,33s), App gebaut; vorher GUI/Import grün,
+keinen frischen3/3-Nachweis erfinden. Scope/Grenzen DAO_RELATIONS_RUNTIME.md und
+vollständiger jüngster Handoffabschnitt;456/384/72 gleich. Fortsetzung: grafische
+Beziehungsverwaltung (echte RI/Cascades vs explizites DontEnforce), dann weitere
+offene Anforderungen autonom weiterprogrammieren, keine Zwischen-Finals/Anrufe.

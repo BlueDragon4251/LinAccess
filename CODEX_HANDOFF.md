@@ -2482,3 +2482,37 @@ explizite Orphan-Akzeptanz/keine physischen FKs, Fehleratomizität/Identität/Ro
 Abhängigkeiten im bestehenden DAO/Import2/2 (1,33s), App gebaut. Alle Änderungen
 weiter privat.456/384/72 gleich. Nächster tatsächlicher Umfang: erzwungene native
 FK-Beziehungen mit sicherem Schemaumbau/Datenerhalt, nicht bloß Katalogflags.
+
+2026-11-08: Tatsächliche native numerische FK-/Cascade-Migration implementiert:
+Relation.Attributes0/256/4096/4352 erzeugt echte SQLite-FKs; Delete entfernt sie
+mittels sicherem eigenem Savepoint-/Schemaumbau. Nur aktuelle vollständige
+DAO_NATIVE-Kindtabellen, passende belegte bool/numerische Schlüssel, vollständiger
+nichtnulliger Unique-Elternschlüssel; aktive Transaktionen/FK-off/unbekannte
+Original-/Zusatzregeln kontrolliert verweigert. Originalschema wird mittels
+vorhandenem nativen SQL-Lexer streng mit rekonstruierbarem Schema verglichen.
+Explizite rowid/alle Werte werden kopiert und streamend inkl. Double-Bits/BLOBs
+gehasht; Indizes/Trigger unverändert wiederhergestellt, FK-Checks vorher/nachher,
+Zählerfrontier/Inkrement nicht neu initialisiert. PRAGMA-Zustände außerhalb des
+Savepoints verifiziert wiederhergestellt; nicht wiederherstellbare Verbindung
+bis Reopen gesperrt, gespeicherter Erfolg ausdrücklich kenntlich gemacht.
+Alte Child-TableDefs/physische Cursor nach Umbau perGeneration ungültig.
+
+Ein echter Defekt im ersten Lauf (Spacing des Zählerdefaults) wurde gezielt mit
+SQL-Tokenvergleich korrigiert; Funktionsname nur ASCII-casefold, Tabellen-/Feld-
+Stringliterale exakt, keine Identitätsannahme aus Zeilenwerten. Finales bestehendes
+DAO-Ziel1/1 (1,33s), App gebaut: ungültige Bestandsverweise vollständiger Rollback,
+Retry, echte Update/Delete-Cascades, Rowids/Unicode/BLOBs/maxDouble/Ansicht/Audit-
+Trigger/Indexrichtungen erhalten, gelöschter Counterhöchststand114/Step7 bleibt,
+FK-fehlgeschlagene ID121 verbraucht, nächste ID128; FK-Entfernung nächste ID135.
+Weitere darauf verweisende Kindtabelle bleibt beim Umbau erhalten. Unbekanntes
+zusätzliches CHECK bleibt nach verweigerter Migration wirksam. VBA-OR der echten
+Cascade-Konstanten, aktive-Transaktionsverweigerung und FK-on/Legacy-Wiederherstellung
+geprüft. GUI/Import im anfänglichen Bündel bereits grün (3,99s/0,06s), nicht als
+frischer3/3-Lauf nach Korrektur behaupten. Vier Fixturehashes erneut korrekt aus
+fixtures/SHA256SUMS geprüft (Log native-schema-fixture-hashes.log).
+
+Details DAO_RELATIONS_RUNTIME.md; Source-MDB-Kindmigration/Text-/Date-/Currency-Keys,
+One-to-one, volle Jet-Locks/Crash-/Fehlernummern-/Kollationsparität weiter offen.
+456/384/72 unverändert. Nächster tatsächlicher Umfang: grafische Beziehungsverwaltung
+mit realem Integritäts-/Cascade-Modus auf gemeinsamem DAO-Weg, bestehende gezielte
+GUI-/DAO-Prüfungen gebündelt verwenden. Keine Abschlussmeldung/Telefonie-Stufencalls.

@@ -83,3 +83,45 @@ acceptance and empty physical FK list for DontEnforce, unsupported enforcement
 refusal, invalid-field atomicity, deletion, same-name identity and rollback.
 Dependency refusals preserve source rows, and removal permits later schema
 changes. No new test target/broad suite;456/384/72 unchanged, F121 still open.
+
+## Enforced native numeric relationships
+
+The subsequent native migration path implements actual foreign-key creation and
+removal for ordinary numeric relationships, including update256/delete4096
+cascade actions. Supported key identities are matching proven Boolean, Byte,
+Integer, Long or Double fields and a complete checked non-null unique parent
+key. The child must have complete current DAO_NATIVE declarations. Text/Date/
+Currency/Single keys, one-to-one flags and original/unknown child reconstruction
+remain explicitly unsupported. DontEnforce2 remains a separate metadata-only
+mode; default Attributes0 now requests an actual enforced constraint.
+
+Enforced migration requires an enabled foreign-key connection and no active
+transaction. It temporarily controls foreign_keys/legacy_alter_table around its
+own savepoint, reconstructs only a strictly matching known native table definition,
+and restores the connection settings with verification. Unknown/custom table
+constraints are refused before reconstruction rather than dropped. A failure to
+restore settings marks the connection for reopening; a committed change is
+explicitly reported as stored, and native write scopes refuse that connection.
+
+The reconstruction copies explicit rowids and every column, verifies streamed
+row/value digests including Double bits and BLOB bytes, restores the original
+index/trigger SQL, revalidates the complete index/type catalogs and executes actual
+foreign_key_check. Counter frontiers/increments are kept, and copy does not execute
+old insert triggers or allocate replacement counters. Invalid existing references
+roll the entire schema/catalog change back. Physical table generations invalidate
+old DAO cursors/TableDefs after successful reconstruction. Foreign-key removal
+uses the same path and preserves rows rather than executing cascade deletion.
+
+This is bounded native enforcement, not full Jet collation, lock, transaction,
+crash-recovery, original-MDB migration or Access error-number parity.
+
+Enforcement validation: final existing DAO1/1 (1.33s), app built. Invalid existing
+references roll back; corrected retry creates real update/delete cascades. Rowids,
+Unicode text, exact BLOBs, maximum Double, view, audit trigger and index directions
+survive reconstruction. Deleted maximum counter114/step7 survives; rejected FK
+insert consumes121, next successful128; constraint removal permits next135. A
+further referencing child table survives the rebuild without cascade deletion.
+Unknown additional CHECK remains enforced after refused migration. Actual VBA
+cascade-flag OR and active-transaction/settings guards pass. Initial GUI/import
+parts passed before the focused fix (3.99s/0.06s); no fresh combined/full-suite
+claim. Four original fixture hashes match. Fixed456/384/72 remains unchanged.

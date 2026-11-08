@@ -19,6 +19,8 @@
 #include <QVariant>
 #include <QUuid>
 #include <QElapsedTimer>
+#include <QCryptographicHash>
+#include <bit>
 #include <QScopeGuard>
 #include <QPointer>
 #include <QThread>
@@ -222,6 +224,7 @@ struct WorkspaceState {
     std::weak_ptr<VbaObject> engine,workspace,database;
     void check() const {
         if (!alive || !driver || !driver->isOpen() || !connection) throw VbaRuntimeError(3420,"DAO: Workspace connection unavailable");
+        if(driver->property("la_schema_restore_failed").toBool()) throw VbaRuntimeError(3251,"DAO: Schema connection settings failed; reopen the project");
         if (driver->thread()!=QThread::currentThread()) throw VbaRuntimeError(3251,"DAO: Cross-thread workspace unsupported");
         const auto handle=driver->handle();
         if (!handle.isValid() || QByteArray(handle.typeName())!="sqlite3*" || *static_cast<sqlite3* const*>(handle.constData())!=connection)
@@ -272,7 +275,7 @@ std::shared_ptr<WorkspaceState> workspaceState(QSqlDatabase db) {
     auto* token=new std::shared_ptr<WorkspaceState>(state);
     if (sqlite3_create_function_v2(native,"linaccess_dao_connection_generation",0,SQLITE_UTF8|SQLITE_DIRECTONLY,token,
         [](sqlite3_context* context,int,sqlite3_value**) { sqlite3_result_int(context,1); },nullptr,nullptr,
-        [](void* data) { auto* holder=static_cast<std::shared_ptr<WorkspaceState>*>(data); if((*holder)->driver) (*holder)->driver->setProperty("la_counter_sql_sync_failed",QVariant{}); (*holder)->alive=false; (*holder)->connection=nullptr; delete holder; })!=SQLITE_OK)
+        [](void* data) { auto* holder=static_cast<std::shared_ptr<WorkspaceState>*>(data); if((*holder)->driver) {(*holder)->driver->setProperty("la_counter_sql_sync_failed",QVariant{});(*holder)->driver->setProperty("la_schema_restore_failed",QVariant{});} (*holder)->alive=false; (*holder)->connection=nullptr; delete holder; })!=SQLITE_OK)
         throw VbaRuntimeError(3146,"DAO: Workspace lifetime tracking unavailable");
     db.driver()->setProperty("la_dao_workspace_state",QVariant::fromValue(state)); return state;
 }
@@ -2608,48 +2611,157 @@ public:
     }
     std::shared_ptr<DetachedRelationState> state_;std::shared_ptr<DetachedRelationFields> fields_;
 };
+QPair<qint64,QByteArray> nativeTableValueDigest(QSqlDatabase db,const QString& table,const QStringList& columns) {
+    QCryptographicHash hash(QCryptographicHash::Sha256);QSqlQuery query(db);QStringList projection{"rowid"};for(const auto& column:columns) projection.append(quote(column));
+    if(!query.exec("SELECT "+projection.join(',')+" FROM main."+quote(table)+" ORDER BY rowid")) queryFailure(query);
+    qint64 count=0;
+    const auto add=[&](char kind,const QByteArray& bytes) {hash.addData(QByteArray(1,kind));hash.addData(QByteArray::number(bytes.size()));hash.addData(":");hash.addData(bytes);};
+    while(query.next()) {
+        if(++count>1000000) throw VbaRuntimeError(3251,"DAO: Relation migration row bound exceeded");
+        for(int column=0;column<projection.size();++column) {
+            const auto value=query.value(column);const auto type=value.metaType().id();
+            if(value.isNull()) add('N',{});
+            else if(type==QMetaType::Double || type==QMetaType::Float) add('R',QByteArray::number(std::bit_cast<quint64>(value.toDouble()),16));
+            else if(type==QMetaType::QByteArray) add('B',value.toByteArray());
+            else if(type==QMetaType::QString) add('T',value.toString().toUtf8());
+            else if(type==QMetaType::Int || type==QMetaType::LongLong || type==QMetaType::Bool) add('I',QByteArray::number(value.toLongLong()));
+            else throw VbaRuntimeError(3251,"DAO: Relation migration value encoding unproven");
+        }
+    }
+    if(query.lastError().isValid()) queryFailure(query);return {count,hash.result()};
+}
+void checkNativeForeignKeys(QSqlDatabase db) {
+    QSqlQuery query(db);if(!query.exec("PRAGMA main.foreign_key_check")) queryFailure(query);
+    if(query.next()) throw VbaRuntimeError(3251,"DAO: Existing rows violate a foreign-key constraint");if(query.lastError().isValid()) queryFailure(query);
+}
+void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVector<NativeRelationData>& before,const QVector<NativeRelationData>& after) {
+    SqliteExecutionBudget budget(db,100000000,30000);
+    checkNativeForeignKeys(db);
+    const auto columns=readTableSchemaColumns(db,table);const auto indexes=readNativeIndexCatalog(db,table);
+    QSqlQuery query(db);query.prepare("SELECT sql FROM main.sqlite_schema WHERE type='table' AND name=?");query.addBindValue(table);
+    if(!query.exec() || !query.next()) throw VbaRuntimeError(3251,"DAO: Relation table definition unavailable");const auto originalSql=query.value(0).toString();query.finish();
+    if(originalSql.size()>1024*1024) throw VbaRuntimeError(3251,"DAO: Relation table definition bound exceeded");
+    QJsonArray metadata;query.prepare("SELECT definition FROM main._la_table_schema WHERE table_name=? COLLATE NOCASE");query.addBindValue(table);
+    if(!query.exec() || !query.next()) throw VbaRuntimeError(3251,"DAO: Relation migration requires native declared field metadata");
+    const auto document=QJsonDocument::fromJson(query.value(0).toByteArray());if(!document.isArray() || query.next()) throw VbaRuntimeError(3251,"DAO: Relation field metadata ambiguous");metadata=document.array();query.finish();
+    if(metadata.size()!=columns.size()) throw VbaRuntimeError(3251,"DAO: Relation migration requires complete native metadata");
+    QMap<QString,QJsonObject> declarations;for(const auto& value:metadata) {const auto object=value.toObject();if(object.value("source_origin").toString()!="DAO_NATIVE") throw VbaRuntimeError(3251,"DAO: Original/unknown field migration is not yet supported");declarations.insert(object.value("name").toString().toCaseFolded(),object);}
+    QSet<QString> required;
+    for(const auto& index:indexes) if(index.source.kind==1 || (index.source.flags&8)) for(const auto& field:index.source.columns) required.insert(field.toCaseFolded());
+    QStringList definitions,names;
+    auto owner=std::make_shared<DetachedTableState>();owner->db=db;owner->workspace=workspaceState(db);owner->name=table;
+    for(const auto& column:columns) {
+        if(column.name.compare("rowid",Qt::CaseInsensitive)==0 || column.name.compare("_rowid_",Qt::CaseInsensitive)==0 || column.name.compare("oid",Qt::CaseInsensitive)==0) throw VbaRuntimeError(3251,"DAO: Shadowed row identity migration unsupported");
+        if(!declarations.contains(column.name.toCaseFolded()) || !column.nativeAttributes || !column.required) throw VbaRuntimeError(3251,"DAO: Native field properties incomplete for migration");
+        DetachedField field(owner,column.name,column.sourceType,column.sourceSize);field.attributes_=*column.nativeAttributes;field.required_=*column.required;
+        if(!(field.attributes_&16) && column.hasDefault) {if(column.literalDefault.isEmpty()) throw VbaRuntimeError(3251,"DAO: Nonliteral default migration unsupported");field.default_=column.literalDefault;}
+        auto definition=field.attributes_&16 ? schemaJetName(column.name)+" INT NOT NULL DEFAULT ("+accessCounterDefault(table,column.name)+")" : field.definition();
+        if(required.contains(column.name.toCaseFolded()) && !field.required_ && !(field.attributes_&16)) definition+=" NOT NULL";
+        definitions.append(definition);names.append(column.name);
+    }
+    for(const auto& index:indexes) if(index.source.kind==1) {QStringList fields;for(int i=0;i<index.source.columns.size();++i) fields.append(schemaJetName(index.source.columns[i])+(index.source.descending[i] ? " DESC" : " ASC"));definitions.append("PRIMARY KEY ("+fields.join(',')+")");}
+    const auto makeSql=[&](const QString& target,const QVector<NativeRelationData>& relations) {
+        auto parts=definitions;
+        for(const auto& relation:relations) if(relation.child.compare(table,Qt::CaseInsensitive)==0 && !(relation.attributes&2)) {
+            if(relation.attributes&~(256u|4096u)) throw VbaRuntimeError(3251,"DAO: Relation attributes require unsupported migration");
+            QStringList parentFields,childFields;for(const auto& pair:relation.columns) {parentFields.append(schemaJetName(pair.first));childFields.append(schemaJetName(pair.second));}
+            parts.append("FOREIGN KEY ("+childFields.join(',')+") REFERENCES "+schemaJetName(relation.parent)+" ("+parentFields.join(',')+") ON UPDATE "+((relation.attributes&256) ? "CASCADE" : "NO ACTION")+" ON DELETE "+((relation.attributes&4096) ? "CASCADE" : "NO ACTION"));
+        }
+        return compileAccessQuery("CREATE TABLE "+schemaJetName(target)+" ("+parts.join(',')+")").sql;
+    };
+    if(!equivalentNativeSchemaSql(originalSql,makeSql(table,before))) throw VbaRuntimeError(3251,"DAO: Unknown/custom table constraints prevent safe reconstruction");
+    QVector<QString> objects;query.prepare("SELECT sql FROM main.sqlite_schema WHERE tbl_name=? AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type,name");query.addBindValue(table);
+    if(!query.exec()) queryFailure(query);qint64 objectBytes=0;
+    while(query.next()) {const auto sql=query.value(0).toString();objectBytes+=sql.size();if(objects.size()>=4096 || objectBytes>4*1024*1024) throw VbaRuntimeError(3251,"DAO: Relation schema object bound exceeded");objects.append(sql);}query.finish();
+    const auto original=nativeTableValueDigest(db,table,names);
+    const auto temporary="_la_relation_rebuild_"+QUuid::createUuid().toString(QUuid::Id128);
+    if(!query.exec(makeSql(temporary,after))) queryFailure(query);
+    QStringList quoted{"rowid"};for(const auto& name:names) quoted.append(quote(name));
+    if(!query.exec("INSERT INTO main."+quote(temporary)+" ("+quoted.join(',')+") SELECT "+quoted.join(',')+" FROM main."+quote(table))) queryFailure(query);
+    if(nativeTableValueDigest(db,temporary,names)!=original) throw VbaRuntimeError(3251,"DAO: Relation migration changed row identities or values");
+    if(!query.exec("DROP TABLE main."+quote(table)) || !query.exec("ALTER TABLE main."+quote(temporary)+" RENAME TO "+quote(table))) queryFailure(query);
+    for(const auto& sql:objects) if(!query.exec(sql)) queryFailure(query);
+    if(nativeTableValueDigest(db,table,names)!=original) throw VbaRuntimeError(3251,"DAO: Relation migration final value verification failed");
+    (void)readNativeIndexCatalog(db,table);(void)readTableSchemaColumns(db,table);checkNativeForeignKeys(db);
+}
+
 void mutateNativeRelation(std::shared_ptr<NativeRelationCatalog> catalog,const VbaValue& value,bool erase) {
     const auto db=catalog->db;checkReservedCounterSchemaAction(db);
-    QSqlQuery query(db);const auto savepoint="la_relation_mutation_"+QUuid::createUuid().toString(QUuid::Id128);
-    if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
-    bool completed=false;const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
-    const auto existing=catalog->read();QString name;std::shared_ptr<DetachedRelation> builder;
+    const auto preliminary=catalog->read();std::shared_ptr<DetachedRelation> candidate;bool rebuild=false;
     if(erase) {
         const auto scalar=scalarVbaValue(value);if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null relation name");
-        const auto requested=text(scalar.asText());std::optional<NativeRelationData> selected;for(const auto& relation:existing) if(relation.name.compare(requested,Qt::CaseInsensitive)==0) {selected=relation;break;}
-        if(!selected) throw VbaRuntimeError(3265,"DAO: Relation not found");
-        if(!(selected->attributes&2)) throw VbaRuntimeError(3251,"DAO: Enforced relation deletion requires constraint migration");
+        const auto requested=text(scalar.asText());bool found=false;for(const auto& relation:preliminary) if(relation.name.compare(requested,Qt::CaseInsensitive)==0) {rebuild=!(relation.attributes&2);found=true;break;}if(!found) throw VbaRuntimeError(3265,"DAO: Relation not found");
+    } else {
+        if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Detached relation required");candidate=std::dynamic_pointer_cast<DetachedRelation>(value.object);
+        if(!candidate || candidate->state_->workspace!=catalog->workspace || candidate->state_->attached) throw VbaRuntimeError(3219,"DAO: Relation belongs to a different or attached database");
+        if(candidate->state_->attributes!=2 && (candidate->state_->attributes&~(256u|4096u))) throw VbaRuntimeError(3251,"DAO: Relation attributes unsupported");
+        rebuild=candidate->state_->attributes!=2;
+    }
+    QSqlQuery query(db);int legacy=0;bool settingsChanged=false;
+    const auto pragma=[&](const QString& name) {if(!query.exec("PRAGMA "+name) || !query.next()) queryFailure(query);const int result=query.value(0).toInt();query.finish();return result;};
+    const auto restoreSettings=[&] {
+        if(!settingsChanged) return true;
+        query.finish();const bool first=query.exec("PRAGMA legacy_alter_table="+QString::number(legacy));const bool second=query.exec("PRAGMA foreign_keys=ON");
+        bool checked=false;if(first && second && query.exec("PRAGMA foreign_keys") && query.next()) checked=query.value(0).toInt()==1;query.finish();
+        if(checked && query.exec("PRAGMA legacy_alter_table") && query.next()) checked=query.value(0).toInt()==legacy;else checked=false;query.finish();
+        settingsChanged=false;if(!checked && db.driver()) db.driver()->setProperty("la_schema_restore_failed",true);return checked;
+    };
+    const auto restore=qScopeGuard([&] {if(settingsChanged) (void)restoreSettings();});
+    if(rebuild) {
+        if(!sqlite3_get_autocommit(catalog->workspace->connection)) throw VbaRuntimeError(3251,"DAO: Enforced relation migration requires no active transaction");
+        if(pragma("foreign_keys")!=1) throw VbaRuntimeError(3251,"DAO: Enforced relation migration requires foreign_keys enabled");
+        legacy=pragma("legacy_alter_table");settingsChanged=true;
+        if(!query.exec("PRAGMA foreign_keys=OFF") || !query.exec("PRAGMA legacy_alter_table=ON") || pragma("foreign_keys")!=0 || pragma("legacy_alter_table")!=1) throw VbaRuntimeError(3251,"DAO: Relation migration settings unavailable");
+    }
+    const auto savepoint="la_relation_mutation_"+QUuid::createUuid().toString(QUuid::Id128);
+    if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
+    bool completed=false;const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
+    const auto existing=catalog->read();QString name,rebuiltTable;std::shared_ptr<DetachedRelation> builder;
+    if(erase) {
+        const auto requested=text(scalarVbaValue(value).asText());std::optional<NativeRelationData> selected;for(const auto& relation:existing) if(relation.name.compare(requested,Qt::CaseInsensitive)==0) {selected=relation;break;}
+        if(!selected || rebuild==static_cast<bool>(selected->attributes&2)) throw VbaRuntimeError(3251,"DAO: Relation changed before deletion");
         name=selected->name;
+        if(rebuild) {auto desired=existing;for(int i=0;i<desired.size();++i) if(desired[i].name==name) {desired.removeAt(i);break;}rebuiltTable=selected->child;rebuildNativeRelationTable(db,rebuiltTable,existing,desired);}
         query.prepare("DELETE FROM main._la_access_relations WHERE name=? COLLATE NOCASE");query.addBindValue(name);if(!query.exec() || query.numRowsAffected()!=selected->columns.size()) throw VbaRuntimeError(3251,"DAO: Relation changed during deletion");
     } else {
-        if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Detached relation required");builder=std::dynamic_pointer_cast<DetachedRelation>(value.object);
-        if(!builder || builder->state_->workspace!=catalog->workspace || builder->state_->attached) throw VbaRuntimeError(3219,"DAO: Relation belongs to a different or attached database");
-        builder->state_->mutableCheck();name=builder->state_->name;
+        builder=candidate;builder->state_->mutableCheck();name=builder->state_->name;
         if(name.isEmpty() || name.trimmed()!=name || name.size()>64 || name.contains(QChar(0)) || !name.isValidUtf16()) throw VbaRuntimeError(5,"DAO: Invalid relation name");
-        if(builder->state_->attributes!=2) throw VbaRuntimeError(3251,"DAO: Relation creation currently requires explicit dbRelationDontEnforce");
         for(const auto& relation:existing) if(relation.name.compare(name,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3251,"DAO: Relation name already exists");
         const auto canonicalTable=[&](const QString& requested) {for(const auto& table:nativeTableNames(db)) if(table.compare(requested,Qt::CaseInsensitive)==0) return table;throw VbaRuntimeError(3265,"DAO: Relation table not found");};
         const auto parent=canonicalTable(builder->state_->parent),child=canonicalTable(builder->state_->child);
         const auto parentFields=readTableSchemaColumns(db,parent),childFields=readTableSchemaColumns(db,child);
         const auto findField=[](const QVector<TableSchemaColumn>& columns,const QString& requested) {for(const auto& column:columns) if(column.name.compare(requested,Qt::CaseInsensitive)==0) return column;throw VbaRuntimeError(3265,"DAO: Relation field not found");};
         if(builder->fields_->fields_.isEmpty()) throw VbaRuntimeError(3264,"DAO: Relation requires fields");
-        QVector<QPair<QString,QString>> pairs;QSet<QString> primaryNames,foreignNames;
+        QVector<QPair<QString,QString>> pairs;QSet<QString> primaryNames,foreignNames;QStringList parentNames;
         for(const auto& field:builder->fields_->fields_) {
             const auto p=findField(parentFields,field->name_),c=findField(childFields,field->foreign_);
             const auto pType=p.sourceType ? p.sourceType : provenDaoFieldType(p.type),cType=c.sourceType ? c.sourceType : provenDaoFieldType(c.type);
             if(pType<=0 || pType!=cType || pType==11 || pType==12 || pType==15 || (pType==10 && (p.sourceSize<=0 || p.sourceSize!=c.sourceSize))) throw VbaRuntimeError(3251,"DAO: Relation field types/capacities are not compatible and proven");
-            if(primaryNames.contains(p.name.toCaseFolded()) || foreignNames.contains(c.name.toCaseFolded())) throw VbaRuntimeError(3191,"DAO: Duplicate relation field");primaryNames.insert(p.name.toCaseFolded());foreignNames.insert(c.name.toCaseFolded());pairs.append({p.name,c.name});
+            if(rebuild && pType!=1 && pType!=2 && pType!=3 && pType!=4 && pType!=7) throw VbaRuntimeError(3251,"DAO: Enforced relation currently requires matching native numeric fields");
+            if(primaryNames.contains(p.name.toCaseFolded()) || foreignNames.contains(c.name.toCaseFolded())) throw VbaRuntimeError(3191,"DAO: Duplicate relation field");primaryNames.insert(p.name.toCaseFolded());foreignNames.insert(c.name.toCaseFolded());pairs.append({p.name,c.name});parentNames.append(p.name);
         }
         for(const auto& relation:existing) if(relation.parent==parent && relation.child==child && relation.columns==pairs) throw VbaRuntimeError(3251,"DAO: Relation field mapping already exists");
+        if(rebuild) {
+            bool unique=false;for(const auto& index:readNativeIndexCatalog(db,parent)) if((index.source.flags&1) && index.source.columns==parentNames) unique=true;
+            if(!unique) throw VbaRuntimeError(3251,"DAO: Enforced relation requires a checked unique parent key");
+            if(!query.exec("PRAGMA main.table_info("+quote(parent)+")")) queryFailure(query);QSet<QString> required;while(query.next()) if(query.value(3).toBool()) required.insert(query.value(1).toString().toCaseFolded());query.finish();
+            for(const auto& field:parentNames) if(!required.contains(field.toCaseFolded())) throw VbaRuntimeError(3251,"DAO: Enforced parent key must be structurally non-null");
+            auto desired=existing;desired.append({name,"DAO_NATIVE",parent,child,builder->state_->attributes,pairs});
+            std::sort(desired.begin(),desired.end(),[](const auto& a,const auto& b) {return a.name.toCaseFolded()<b.name.toCaseFolded();});
+            rebuiltTable=child;rebuildNativeRelationTable(db,child,existing,desired);
+        }
         if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_access_relations(source_file TEXT NOT NULL,name TEXT NOT NULL,flags INTEGER NOT NULL,ordinal INTEGER NOT NULL,child_table TEXT NOT NULL,child_column TEXT NOT NULL,parent_table TEXT NOT NULL,parent_column TEXT NOT NULL,PRIMARY KEY(name,ordinal))")) queryFailure(query);
-        query.prepare("INSERT INTO main._la_access_relations(source_file,name,flags,ordinal,child_table,child_column,parent_table,parent_column) VALUES(?,?,2,?,?,?,?,?)");
-        for(int i=0;i<pairs.size();++i) {query.bindValue(0,QStringLiteral("DAO_NATIVE"));query.bindValue(1,name);query.bindValue(2,i);query.bindValue(3,child);query.bindValue(4,pairs[i].second);query.bindValue(5,parent);query.bindValue(6,pairs[i].first);if(!query.exec()) queryFailure(query);}
+        query.prepare("INSERT INTO main._la_access_relations(source_file,name,flags,ordinal,child_table,child_column,parent_table,parent_column) VALUES(?,?,?,?,?,?,?,?)");
+        for(int i=0;i<pairs.size();++i) {query.bindValue(0,QStringLiteral("DAO_NATIVE"));query.bindValue(1,name);query.bindValue(2,static_cast<qlonglong>(builder->state_->attributes));query.bindValue(3,i);query.bindValue(4,child);query.bindValue(5,pairs[i].second);query.bindValue(6,parent);query.bindValue(7,pairs[i].first);if(!query.exec()) queryFailure(query);}
     }
     auto& generation=catalog->workspace->relationGenerations[name.toCaseFolded()];if(generation==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Relation generation overflow");
+    if(!rebuiltTable.isEmpty() && catalog->workspace->tableGenerations.value(rebuiltTable.toCaseFolded())==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Table generation overflow");
     const auto rows=catalog->read();std::shared_ptr<NativeRelation> attached;
     if(builder) {for(const auto& relation:rows) if(relation.name==name) {attached=std::make_shared<NativeRelation>(catalog,relation,catalog->version(),catalog->workspace->rollbackRevision);break;}if(!attached) throw VbaRuntimeError(3251,"DAO: Appended relation missing");(void)attached->member("Name",{});}
     if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++generation;
+    if(!rebuiltTable.isEmpty()) ++catalog->workspace->tableGenerations[rebuiltTable.toCaseFolded()];
     if(builder) {attached->publishGeneration(generation);builder->state_->attached=std::move(attached);}
+    if(!restoreSettings()) throw VbaRuntimeError(3251,"DAO: Relation change stored; connection settings failed to restore, reopen the project");
 }
 
 class NativeRelations final : public VbaObject {

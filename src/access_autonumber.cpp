@@ -1,4 +1,5 @@
 #include "access_autonumber.hpp"
+#include "access_query.hpp"
 #include "jet_sql_functions.hpp"
 #include "vba_runtime.hpp"
 #include <QCryptographicHash>
@@ -45,6 +46,7 @@ void captureCounterSql(sqlite3* connection,sqlite3_value** names,qlonglong value
 }
 AccessCounterSqlScope::AccessCounterSqlScope(QSqlDatabase db):state_(std::make_unique<State>()) {
     if(!db.isOpen() || !db.driver()) throw VbaRuntimeError(3420,"Counter SQL connection unavailable");
+    if(db.driver()->property("la_schema_restore_failed").toBool()) throw VbaRuntimeError(3251,"Schema connection settings failed; reopen the project before writing");
     if(db.driver()->property("la_counter_sql_sync_failed").toBool()) throw VbaRuntimeError(3251,"Counter synchronization failed; restart the project connection before writing");
     const auto handle=db.driver()->handle();
     if(!handle.isValid() || QByteArray(handle.typeName())!="sqlite3*") throw VbaRuntimeError(3251,"Counter SQL backend unavailable");
@@ -250,6 +252,7 @@ AccessCounterReservation currentAccessCounterReservation(QSqlDatabase db,AccessC
     return reservation;
 }
 AccessCounterReservation reserveAccessCounter(QSqlDatabase db,const QString& requestedTable,const QString& column) {
+    if(db.driver() && db.driver()->property("la_schema_restore_failed").toBool()) throw VbaRuntimeError(3251,"Schema connection settings failed; reopen the project");
     if(db.driver() && db.driver()->property("la_counter_sql_sync_failed").toBool()) throw VbaRuntimeError(3251,"Counter synchronization is incomplete");
     QString table;
     for(const auto& name:db.tables()) if(name.compare(requestedTable,Qt::CaseInsensitive)==0) {table=name;break;}
@@ -382,7 +385,12 @@ QSet<QString> generatedAccessColumns(QSqlDatabase db,const QString& requested) {
         if (sqlite3_table_column_metadata(connection,"main",table.toUtf8().constData(),name.toUtf8().constData(),nullptr,nullptr,nullptr,nullptr,&generated)!=SQLITE_OK)
             throw VbaRuntimeError(3146,"Counter column metadata unavailable");
         const auto expected=accessCounterDefault(table,name);
-        if (generated || initial==expected || initial=='('+expected+')') result.insert(name.toCaseFolded());
+        bool managed=initial==expected || initial=='('+expected+')';
+        if(!managed && initial.contains("linaccess_next_counter",Qt::CaseInsensitive)) {
+            try {managed=equivalentNativeSchemaSql(initial,expected) || equivalentNativeSchemaSql(initial,'('+expected+')');}
+            catch(const VbaRuntimeError&) {managed=false;} // An unproven default is never a generator.
+        }
+        if(generated || managed) result.insert(name.toCaseFolded());
     }
     return result;
 }
