@@ -3291,3 +3291,7 @@ und bewahren explizite Required-/Attributes-Deklarationen. Kombinierte Wertebere
 und GUI-Prüfung2/2 (5,00s); abschließender primitiver DAO-Fall1/1 (1,21s), App
 gebaut. Details/Coercion-Grenzen DAO_TABLEDEF_FIELDS.md. Vier Fixture-/drei Upload-
 hashes unverändert, Repo privat;456/384/72 gleich, keine Gesamtparität.
+
+Grafischer Tabellenentwurf: Textgröße1..255 wählbar, Defaultgrößenprüfung vor DDL,
+retinierter fehlerhafter Entwurf und tatsächliche korrigierte Größe12 geprüft.
+Mainwindow1/1 (3,91s), App gebaut. DAO_TABLEDEF_FIELDS.md;456/384/72 unverändert.

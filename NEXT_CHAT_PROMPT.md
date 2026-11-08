@@ -206,3 +206,8 @@ INSERT SELECT kann Byte/Integer/Long nicht überlaufen. Tatsächliche Double-Dat
 Memo-BLOB-Werte/Speicherarten geprüft; letztes DAO1/1 (1,21s), davor GUI/DAO2/2
 (5,00s), App gebaut. Alle vier Fixture-/drei Uploadhashes unverändert, Repo privat.
 DAO_TABLEDEF_FIELDS.md,456/384/72 gleich. Fortsetzung: grafische Textgröße1..255.
+
+Grafische Textgröße1..255 umgesetzt, ungültige Größe lässt gesamten Entwurf stehen,
+korrigierte Größe12 wird tatsächlich gespeichert. Mainwindow1/1 (3,91s), App
+gebaut. DAO_TABLEDEF_FIELDS.md;456/384/72 gleich. Fortsetzung: sichere normale
+Feldanlage/-löschung auf bestehenden Tabellen über DAO.

@@ -167,3 +167,10 @@ Long2147483647 and rejected overflows through INSERT SELECT; actual maximum
 Double, valid Date, Unicode/newline Memo and exact binary bytes; rejected wrong
 storage kinds leave the two valid rows intact. Four fixture and three uploaded
 original hashes match. No new target/broad suite/Windows execution claim.
+
+The graphic New Table dialog now exposes a Text size column1..255 (initial255).
+Non-text fields keep their fixed/native sizes. Invalid lengths and literal text
+defaults exceeding the chosen length are refused before schema mutation, retaining
+the complete dialog draft. Actual GUI invalid/corrected-save and native Size12
+readback passed in the existing mainwindow target1/1 (3.91s); app built. No broad
+suite or new target. Existing table sizes remain unchanged.

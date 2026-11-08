@@ -1761,16 +1761,18 @@ void MainWindow::newTable() {
     auto* outer=new QVBoxLayout(&dialog);
     auto* name=new QLineEdit(&dialog); name->setObjectName("native-table-name"); name->setPlaceholderText("Tabellenname"); outer->addWidget(name);
     outer->addWidget(new QLabel("Felder (id wird automatisch als Primärschlüssel angelegt)",&dialog));
-    auto* grid=new QTableWidget(0,4,&dialog); grid->setObjectName("native-table-fields");
-    grid->setHorizontalHeaderLabels({"Feldname","Datentyp","Pflichtfeld (ja/nein)","Standardwert (optional)"});
+    auto* grid=new QTableWidget(0,5,&dialog); grid->setObjectName("native-table-fields");
+    grid->setHorizontalHeaderLabels({"Feldname","Datentyp","Pflichtfeld (ja/nein)","Standardwert (optional)","Textgröße (1–255)"});
     grid->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch); outer->addWidget(grid);
-    outer->addWidget(new QLabel("TEXT: bis zu 255 Zeichen; MEMO: längerer Text.",&dialog));
+    outer->addWidget(new QLabel("TEXT: wählbare Feldgröße bis 255 Zeichen; MEMO: längerer Text.",&dialog));
     outer->addWidget(new QLabel("Standardwerte als Literal: Zahl, True/False, \"Text\" oder Null.",&dialog));
     const auto addRow=[grid] {
         const int row=grid->rowCount(); grid->insertRow(row);
         grid->setItem(row,0,new QTableWidgetItem());
         auto* type=new QComboBox(grid); type->addItems({"TEXT","MEMO","BYTE","SMALLINT","INTEGER","REAL","DATE","BOOLEAN","BLOB"}); grid->setCellWidget(row,1,type);
         grid->setItem(row,2,new QTableWidgetItem("nein")); grid->setItem(row,3,new QTableWidgetItem());
+        auto* size=new QTableWidgetItem("255");grid->setItem(row,4,size);
+        connect(type,&QComboBox::currentTextChanged,grid,[size](const QString& value) {size->setFlags(value=="TEXT" ? Qt::ItemIsEnabled|Qt::ItemIsSelectable|Qt::ItemIsEditable : Qt::ItemFlags{});});
     };
     auto* plus=addButton(outer,"+ Feld"); plus->setObjectName("native-table-add-field"); connect(plus,&QPushButton::clicked,&dialog,addRow); addRow();
     auto* buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,&dialog); outer->addWidget(buttons);
@@ -1780,7 +1782,7 @@ void MainWindow::newTable() {
         if(tableName.isEmpty() || tableName.startsWith("_la_",Qt::CaseInsensitive) || tableName.startsWith("sqlite_",Qt::CaseInsensitive)) {
             messageError(&dialog,"Ungültiger/reservierter Tabellenname"); return;
         }
-        struct FieldSpec {QString name,type,defaultValue;bool required;};QVector<FieldSpec> fields;std::set<QString> seen={"id"};
+        struct FieldSpec {QString name,type,defaultValue;bool required;int size;};QVector<FieldSpec> fields;std::set<QString> seen={"id"};
         for(int row=0;row<grid->rowCount();++row) {
             const auto field=grid->item(row,0)->text().trimmed(); if(field.isEmpty()) continue;
             if(field.startsWith("_la_",Qt::CaseInsensitive) || seen.contains(field.toCaseFolded())) {
@@ -1788,6 +1790,8 @@ void MainWindow::newTable() {
             }
             seen.insert(field.toCaseFolded());
             const auto type=qobject_cast<QComboBox*>(grid->cellWidget(row,1))->currentText();
+            int size=0;
+            if(type=="TEXT") {bool valid=false;size=grid->item(row,4)->text().trimmed().toInt(&valid);if(!valid || size<1 || size>255) {messageError(&dialog,"Für Textfelder eine Feldgröße von 1 bis 255 eingeben.");return;}}
             const auto required=grid->item(row,2)->text().trimmed().toLower();
             if(required!="ja" && required!="nein" && !required.isEmpty()) { messageError(&dialog,"Pflichtfeld muss ja oder nein sein"); return; }
             const auto token=grid->item(row,3)->text().trimmed(); QString defaultSql;
@@ -1800,6 +1804,7 @@ void MainWindow::newTable() {
                 if(!scalar.isNull()) {
                     const auto kind=scalar.metaType().id(); const bool numeric=kind==QMetaType::Int || kind==QMetaType::LongLong || kind==QMetaType::Double;
                     if((type=="TEXT" || type=="MEMO") && kind!=QMetaType::QString) { messageError(&dialog,"Text-Standardwert in Anführungszeichen eingeben."); return; }
+                    if(type=="TEXT" && scalar.toString().size()>size) {messageError(&dialog,"Text-Standardwert überschreitet die gewählte Feldgröße.");return;}
                     if(type=="INTEGER" || type=="SMALLINT" || type=="BYTE") {
                         if(!numeric || (kind==QMetaType::Double && (std::floor(scalar.toDouble())!=scalar.toDouble() || std::abs(scalar.toDouble())>9007199254740991.0))) {
                             messageError(&dialog,"Ganzzahligen Standardwert eingeben."); return;
@@ -1821,7 +1826,7 @@ void MainWindow::newTable() {
                 }
                 defaultSql=" DEFAULT "+defaultSql;
             }
-            fields.append({field,type,defaultSql.isEmpty() ? QString{} : defaultSql.mid(9),required=="ja"});
+            fields.append({field,type,defaultSql.isEmpty() ? QString{} : defaultSql.mid(9),required=="ja",size});
         }
         if(fields.isEmpty()) { messageError(&dialog,"Mindestens ein Feld anlegen"); return; }
         try {
@@ -1833,7 +1838,7 @@ void MainWindow::newTable() {
             id->assign("Attributes",VbaValue::longInteger(16));catalog->member("Append",{VbaValue::reference(id)});
             for(const auto& spec:fields) {
                 const int type=spec.type=="TEXT" ? 10 : spec.type=="MEMO" ? 12 : spec.type=="BYTE" ? 2 : spec.type=="SMALLINT" ? 3 : spec.type=="INTEGER" ? 4 : spec.type=="REAL" ? 7 : spec.type=="DATE" ? 8 : spec.type=="BOOLEAN" ? 1 : 11;
-                auto field=table->member("CreateField",{VbaValue::string(spec.name.toStdString()),VbaValue::integer(static_cast<std::int16_t>(type)),VbaValue::longInteger(type==10 ? 255 : 0)}).object;
+                auto field=table->member("CreateField",{VbaValue::string(spec.name.toStdString()),VbaValue::integer(static_cast<std::int16_t>(type)),VbaValue::longInteger(spec.size)}).object;
                 field->assign("Required",VbaValue::logical(spec.required));
                 if(!spec.defaultValue.isEmpty()) field->assign("DefaultValue",VbaValue::string(spec.defaultValue.toStdString()));
                 catalog->member("Append",{VbaValue::reference(field)});

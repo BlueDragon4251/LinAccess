@@ -1504,3 +1504,7 @@ Native primitive Speichergrenzen und deklarierte Required-/Attributes-Eigenschaf
 umgesetzt. GUI/DAO2/2 (5,00s), abschließende kombinierte primitive DAO-Prüfung1/1
 (1,21s), App gebaut. Vier Fixture-/drei Uploadhashes unverändert; Herkunfts- und
 Konvertierungsgrenzen DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert.
+
+Grafische Textgröße1..255 mit vorgeschalteter Größen-/Defaultprüfung und
+Entwurfserhalt umgesetzt; tatsächlicher GUI-Save/DAO-Größenrücklesen im
+bestehenden Mainwindow1/1 (3,91s), App gebaut.456/384/72 unverändert.

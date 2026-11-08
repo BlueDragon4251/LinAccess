@@ -2746,7 +2746,7 @@ int main(int argc,char** argv) {
         QTimer::singleShot(0,&window,[&] {
             auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName()=="native-table-designer");
             dialog->findChild<QLineEdit*>("native-table-name")->setText("authored_defaults");
-            auto* grid=dialog->findChild<QTableWidget*>("native-table-fields"); assert(grid && grid->columnCount()==4);
+            auto* grid=dialog->findChild<QTableWidget*>("native-table-fields"); assert(grid && grid->columnCount()==5);
             grid->item(0,0)->setText("qty"); qobject_cast<QComboBox*>(grid->cellWidget(0,1))->setCurrentText("INTEGER");
             grid->item(0,2)->setText("ja"); grid->item(0,3)->setText("Now()");
             auto* buttons=dialog->findChild<QDialogButtonBox*>(); assert(buttons);
@@ -2754,10 +2754,14 @@ int main(int argc,char** argv) {
             buttons->button(QDialogButtonBox::Save)->click();
             assert(dialog->isVisible() && grid->item(0,0)->text()=="qty" && !db.tables().contains("authored_defaults"));
             grid->item(0,3)->setText("7"); dialog->findChild<QPushButton*>("native-table-add-field")->click();
-            grid->item(1,0)->setText("label"); grid->item(1,3)->setText("\"ui value\"");
+            grid->item(1,0)->setText("label"); grid->item(1,3)->setText("\"ui value\"");grid->item(1,4)->setText("12");
             dialog->findChild<QPushButton*>("native-table-add-field")->click();
             grid->item(2,0)->setText("enabled"); qobject_cast<QComboBox*>(grid->cellWidget(2,1))->setCurrentText("BOOLEAN"); grid->item(2,3)->setText("True");
+            grid->item(1,4)->setText("0");
+            QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->accept();});
             buttons->button(QDialogButtonBox::Save)->click();
+            assert(dialog->isVisible() && !db.tables().contains("authored_defaults") && grid->item(1,3)->text()=="\"ui value\"");
+            grid->item(1,4)->setText("12");buttons->button(QDialogButtonBox::Save)->click();
         });
         action(window,"+ Tabelle")->trigger();
         QSqlQuery authored(db); assert(authored.exec("INSERT INTO authored_defaults DEFAULT VALUES"));
@@ -2766,7 +2770,7 @@ int main(int argc,char** argv) {
         assert(linaccess::jetLongAccessColumns(db,"authored_defaults").contains("id"));
         auto definition=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string("authored_defaults")}).object;
         auto labelField=definition->member("Fields",{linaccess::VbaValue::string("label")}).object;
-        assert(labelField->member("Type",{}).asNumber()==10 && labelField->member("Size",{}).asNumber()==255);
+        assert(labelField->member("Type",{}).asNumber()==10 && labelField->member("Size",{}).asNumber()==12);
         assert(definition->member("Fields",{linaccess::VbaValue::string("qty")}).object->member("Type",{}).asNumber()==4);
         auto primary=definition->member("Indexes",{linaccess::VbaValue::string("PrimaryKey")}).object;
         assert(primary->member("Primary",{}).truthy());

@@ -2416,3 +2416,11 @@ Bereichs-/GUI-Bündel2/2 (5,00s); danach präziser Required-Metadatenabgleich DA
 Repo privat. Keine neuen Testziele/Vollsuite/Windows-Paritätsbehauptung.
 Details DAO_TABLEDEF_FIELDS.md,456/384/72 unverändert. Nächster allgemeiner
 Umfang: Textfeldgröße1..255 auch grafisch beim Tabellenbau wählbar machen.
+
+2026-11-08: Grafischer neuer Tabellenentwurf bietet echte Textfeldgröße1..255,
+Vorgabe255; unzulässige Größen/überlange Textdefaults verweigert vor Änderung,
+Entwurf bleibt erhalten. Native Größe12 nach tatsächlichem UI-Save unabhängig
+über DAO gelesen; Mainwindow1/1 (3,91s), App gebaut. DAO_TABLEDEF_FIELDS.md.
+456/384/72 unverändert. Nächster allgemeiner zusammenhängender Umfang: normales
+Feld an bestehende Tabelle anfügen/löschen über CreateField/Fields.Append/Delete,
+atomare native Typ-/Indexmetadaten, Abhängigkeiten/Countergrenzen schützen.
