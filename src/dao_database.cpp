@@ -73,13 +73,37 @@ void exec(QSqlQuery& query, const QString& sql) {
 }
 QStringList nativeTableNames(QSqlDatabase db);
 void observeNativeTableCatalog(QSqlDatabase db,const QStringList& before);
+void removeDroppedTableMetadata(QSqlDatabase db,const QStringList& before) {
+    const auto after=nativeTableNames(db); const auto catalog=db.tables();
+    QStringList removed,added;
+    for(const auto& name:before) if(!after.contains(name,Qt::CaseInsensitive)) removed.append(name);
+    for(const auto& name:after) if(!before.contains(name,Qt::CaseInsensitive)) added.append(name);
+    // A rename needs rebinding of defaults, index identities and source metadata.
+    // Refuse it atomically for managed/imported tables until that is implemented.
+    for(const auto& name:removed) {
+        for(const auto& metadata:{QString("_la_counter_sequences"),QString("_la_table_schema"),QString("_la_access_indexes")}) {
+            if(!catalog.contains(metadata,Qt::CaseInsensitive)) continue;
+            QSqlQuery query(db);
+            if(!added.isEmpty()) {
+                query.prepare("SELECT 1 FROM main."+quote(metadata)+" WHERE table_name=?");query.addBindValue(name);
+                if(!query.exec()) queryFailure(query);
+                if(query.next()) throw VbaRuntimeError(3251,"DAO: Rename requires counter/source metadata rebinding");
+                continue;
+            }
+            query.prepare("DELETE FROM main."+quote(metadata)+" WHERE table_name=?");query.addBindValue(name);
+            if(!query.exec()) queryFailure(query);
+        }
+    }
+}
 qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<QString,QVariant>& bindings) {
     if (plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");
     const bool makeTable=!plan.makeTable.isEmpty();
     const bool schemaAction=plan.daoQueryType==96; // Checked compiler dbQDDL classification, including whitespace/comments.
     const auto before=(schemaAction || makeTable) ? nativeTableNames(db) : QStringList{};
     QSqlQuery guard(db);
-    if (makeTable && !guard.exec("SAVEPOINT la_make_table")) queryFailure(guard);
+    const bool schemaScope=makeTable || schemaAction;
+    const auto schemaSavepoint="la_schema_"+QUuid::createUuid().toString(QUuid::Id128);
+    if(schemaScope && !guard.exec("SAVEPOINT "+schemaSavepoint)) queryFailure(guard);
     try {
         qlonglong affected{};
         {
@@ -122,11 +146,11 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
                 affected=query.value(0).toLongLong(); query.finish();
             }
         }
-        if(schemaAction || makeTable) observeNativeTableCatalog(db,before);
-        if (makeTable && !guard.exec("RELEASE la_make_table")) queryFailure(guard);
+        if(schemaScope) { removeDroppedTableMetadata(db,before); observeNativeTableCatalog(db,before); }
+        if(schemaScope && !guard.exec("RELEASE "+schemaSavepoint)) queryFailure(guard);
         return affected;
     } catch (...) {
-        if (makeTable) { guard.exec("ROLLBACK TO la_make_table"); guard.exec("RELEASE la_make_table"); }
+        if(schemaScope) { guard.exec("ROLLBACK TO "+schemaSavepoint); guard.exec("RELEASE "+schemaSavepoint); }
         throw;
     }
 }

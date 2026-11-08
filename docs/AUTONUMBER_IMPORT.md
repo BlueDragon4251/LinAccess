@@ -80,3 +80,13 @@ increments, random/replication, full property/lifecycle semantics and schema
 rename/drop cleanup. The old SQLite64-bit transactional allocator is not claimed
 to match the newly collected Jet observations. The fixed456/384/72 catalog is
 unchanged.
+
+
+DAO DDL now wraps the schema action and counter/schema/index metadata cleanup in
+one savepoint. DROP removes the corresponding managed sequence and original-field/
+index metadata, allowing a new import under the same name. Workspace rollback
+restores both table and metadata. Historical import logs and saved query definitions
+remain historical; this is not a rewrite of dependent relationship constraints.
+Managed/imported table renames are refused atomically with3251 until default/index/
+source metadata rebinding is implemented; silently retaining the old sequence key
+is not accepted. General rename support and relationship lifecycle remain open.

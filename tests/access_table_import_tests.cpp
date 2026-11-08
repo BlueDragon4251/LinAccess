@@ -59,6 +59,25 @@ void verifyJetCounterStateReference(const QString& path) {
     catch(const std::exception&) { rejected=true; }
     assert(rejected && !db.tables().contains("invalid_counter"));
     assert(query.exec("SELECT seq FROM sqlite_sequence WHERE name='native_counter'") && query.next() && query.value(0).toInt()==4); query.finish();
+    const auto database=makeDaoDatabase(db);
+    const auto engine=makeDaoEngine(db);
+    engine->member("BeginTrans",{});
+    database->member("Execute",{VbaValue::string("DROP TABLE [managed_counter]")});
+    assert(!db.tables().contains("managed_counter"));
+    assert(query.exec("SELECT COUNT(*) FROM _la_counter_sequences WHERE table_name='managed_counter'") && query.next() && query.value(0).toInt()==0);query.finish();
+    engine->member("Rollback",{});
+    assert(db.tables().contains("managed_counter"));
+    assert(query.exec("SELECT value FROM _la_counter_sequences WHERE table_name='managed_counter'") && query.next() && query.value(0).toInt()==4);query.finish();
+    database->member("Execute",{VbaValue::string("DROP TABLE [managed_counter]")});
+    const auto managedSchema=parseMdbSchema(catalog.tableSchema("managed_counter"));
+    const auto managedRows=parseCsvDetailed(AccessCatalog::exportTable(path,"managed_counter",true).toStdString());
+    importAccessTable(db,path,"managed_counter",managedSchema,managedRows,AccessBinaryEncoding::MdbToolsHex,AccessFloatingSource::NativeMdbBits);
+    assert(query.exec("INSERT INTO managed_counter DEFAULT VALUES"));
+    assert(query.exec("SELECT id FROM managed_counter") && query.next() && query.value(0).toInt()==4);query.finish();
+    bool renameRejected=false;
+    try { database->member("Execute",{VbaValue::string("ALTER TABLE [managed_counter] RENAME TO [renamed_counter]")}); }
+    catch(const VbaRuntimeError& error) {renameRejected=error.number==3251;}
+    assert(renameRejected && db.tables().contains("managed_counter") && !db.tables().contains("renamed_counter"));
     assert(digest()==before);
     std::cout<<"Actual Jet stored counters: deleted-highest native/deleted-all managed next4, contradictory state atomic rollback and original hash verified\n";
 }

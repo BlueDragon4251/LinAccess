@@ -2181,3 +2181,17 @@ Kassa-Version erfolgreich; alle4 Fixture- und3 Upload-SHAs unverändert. App und
 nativer Helfer neu gebaut. Keine neue48/48-Vollsuite oder grüne GitHub-CI behaupten.
 Logs privat: /workspace/work/counter-batch-{build,tests,upload,hashes}.log,
 /workspace/work/counter-{app-build,upload-hashes}.log.
+
+
+Nach e37de78: DAO-DDL umfasst nun Schemaaktion und Bereinigung der Zähler-/Feld-/
+Index-Metadaten in einem Savepoint. DROP entfernt _la_counter_sequences,
+_la_table_schema und _la_access_indexes für die tatsächlich entfernte Tabelle;
+Rollback stellt Tabelle und Zustand wieder her, Wiederimport unter demselben
+Namen startet korrekt mit dem Quellstand. Historische Importlogs/Abfragen bleiben.
+Unbewiesene Umbenennung mit gebundenen Zähler-/Quellmetadaten wird atomar3251
+verweigert; kein stiller kaputter Defaultverweis. Allgemeine Umbenennung und
+Relation-Lifecycle bleiben offen. Bestehendes dao_execution1,18s bestanden;
+table_import_contracts mit Jet-Zustandsfixture0,13s bestanden. Im neuen Prüffall
+war BeginTrans/Rollback zunächst fälschlich am Database- statt Engine-Objekt
+aufgerufen; ausschließlich diesen Prüffehler korrigiert und das betroffene Ziel
+erneut ausgeführt. Kein erneuter großer Originaldaten-/Vollsuite-Lauf nötig.
