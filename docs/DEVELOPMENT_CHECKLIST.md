@@ -1508,3 +1508,8 @@ Konvertierungsgrenzen DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert.
 Grafische Textgröße1..255 mit vorgeschalteter Größen-/Defaultprüfung und
 Entwurfserhalt umgesetzt; tatsächlicher GUI-Save/DAO-Größenrücklesen im
 bestehenden Mainwindow1/1 (3,91s), App gebaut.456/384/72 unverändert.
+
+Normale DAO-Feldanlage/-löschung an vorhandenen Tabellen umgesetzt; tatsächliches
+VBA/named args/Bestandswerte/Metadaten/Fehleratomizität/Abhängigkeiten/Rollback im
+bestehenden Mainwindow/DAO2/2 (5,38s) geprüft, App gebaut. DAO_TABLEDEF_FIELDS.md;
+456/384/72 unverändert.

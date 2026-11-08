@@ -2424,3 +2424,13 @@ Entwurf bleibt erhalten. Native Größe12 nach tatsächlichem UI-Save unabhängi
 456/384/72 unverändert. Nächster allgemeiner zusammenhängender Umfang: normales
 Feld an bestehende Tabelle anfügen/löschen über CreateField/Fields.Append/Delete,
 atomare native Typ-/Indexmetadaten, Abhängigkeiten/Countergrenzen schützen.
+
+2026-11-08: CreateField/Fields.Append/Delete auf vorhandenen Tabellen für normale
+unterstützte Felder umgesetzt. Reale ALTER-Anlage/Löschung, gemeinsame Feld-/
+Indexmetadaten, vorhandene Zeilen/Defaults, Index-/Primär-/Counter-/FK-Abhängigkeiten,
+letztes Feld und immutable gehaltene Builder geschützt. Kein automatischer
+Artefakt-/Abfrageumbau, keine Counter-/Primärrekonstruktion. Tatsächlicher VBA-
+Durchlauf mit benannten CreateField-Argumenten, erforderliche Fehleratomizität,
+Löschung/Metadaten und Workspace-Rollback im bestehenden Mainwindow/DAO2/2 (5,38s)
+passed, App gebaut. DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert.
+Nächster Umfang: diese normalen Feldoperationen grafisch verfügbar machen.

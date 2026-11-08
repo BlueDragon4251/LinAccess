@@ -3295,3 +3295,8 @@ hashes unverändert, Repo privat;456/384/72 gleich, keine Gesamtparität.
 Grafischer Tabellenentwurf: Textgröße1..255 wählbar, Defaultgrößenprüfung vor DDL,
 retinierter fehlerhafter Entwurf und tatsächliche korrigierte Größe12 geprüft.
 Mainwindow1/1 (3,91s), App gebaut. DAO_TABLEDEF_FIELDS.md;456/384/72 unverändert.
+
+DAO-Normalfelder vorhandener Tabellen: echte atomare CreateField/Fields.Append/
+Delete-Operationen mit Feld-/Indexmetadaten, Bestandswerten/Defaults und Dependency-
+Schutz. Mainwindow/DAO2/2 (5,38s), App gebaut; genauer Umfang und offene Counter-/
+Primär-/Linked-/Artefaktgrenzen DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert.

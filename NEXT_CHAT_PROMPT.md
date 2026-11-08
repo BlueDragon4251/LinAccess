@@ -211,3 +211,9 @@ Grafische Textgröße1..255 umgesetzt, ungültige Größe lässt gesamten Entwur
 korrigierte Größe12 wird tatsächlich gespeichert. Mainwindow1/1 (3,91s), App
 gebaut. DAO_TABLEDEF_FIELDS.md;456/384/72 gleich. Fortsetzung: sichere normale
 Feldanlage/-löschung auf bestehenden Tabellen über DAO.
+
+Normale Felder vorhandener Tabellen können über CreateField/Fields.Append/Delete
+atomar angelegt/gelöscht werden, inklusive Typ-/Indexmetadaten und geprüften
+Abhängigkeitsgrenzen. Reales VBA/named args/Bestandswerte/Fehleratomizität/Rollback,
+Mainwindow/DAO2/2 (5,38s), App gebaut. DAO_TABLEDEF_FIELDS.md;456/384/72 gleich.
+Fortsetzung: echte grafische Feldanlage/-löschung über denselben DAO-Weg.

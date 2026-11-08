@@ -174,3 +174,33 @@ defaults exceeding the chosen length are refused before schema mutation, retaini
 the complete dialog draft. Actual GUI invalid/corrected-save and native Size12
 readback passed in the existing mainwindow target1/1 (3.91s); app built. No broad
 suite or new target. Existing table sizes remain unchanged.
+
+## Ordinary fields on existing tables
+
+Existing TableDefs now support CreateField and Fields.Append/Delete for the
+supported ordinary native field types. The builder is bound to the original
+table/workspace generation. Append checks ownership, final names, maximum255
+fields and the complete native definition; adding AutoNumber remains refused.
+SQLite performs the actual ALTER ADD inside a shared savepoint, including real
+validation of existing rows against defaults, Required and storage constraints.
+
+Field metadata are extended/removed without fabricating unknown original types.
+When an explicit checked index catalog exists, its complete table-column list
+is updated in the same transaction and revalidated. Existing index identities
+and directions are preserved. Delete refuses the last field, counters, primary
+fields, indexed fields, unresolved expression/partial-index dependencies and
+foreign-key fields. SQLite additionally validates remaining schema dependencies.
+Dependent saved artifacts are not rewritten or promised repaired.
+
+Attached field builders keep their actual immutable schema reader, so later DDL
+or rollback does not rebind them to a new same-named field. Old field collections
+retain the existing conservative3420/reacquire behavior. Full Access Refresh,
+locking, linked-field mutation, property alteration, source-format writing and
+counter/primary reconstruction remain open. This does not close F121.
+
+Validation: existing mainwindow/DAO2/2 (5.38s), app built. Actual VBA with named
+CreateField arguments adds Text8/default to an existing row; physical/default
+values and metadata are checked. Indexed deletion refusal, safe subsequent delete,
+Required-without-default failure on existing rows, counter-add refusal, last-field
+protection, old object invalidation and workspace schema rollback all pass in the
+existing target. No new test target/broad suite;456/384/72 unchanged.

@@ -1704,6 +1704,43 @@ End Sub)VBA","BuildSchema",host);
     assert(!query.exec("INSERT INTO Ranges(Payload) VALUES('invalid')"));
     assert(!query.exec("INSERT INTO Ranges(Notes) VALUES(X'ff')"));
     assert(query.exec("SELECT COUNT(*) FROM Ranges") && query.next() && query.value(0).toInt()==2);query.finish();
+    const auto altered=linaccess::executeVbaProcedure(R"VBA(Sub AlterSchema()
+Dim table As DAO.TableDef
+Dim field As DAO.Field
+Set table=CurrentDb.CreateTableDef("Alterable")
+table.Fields.Append table.CreateField("Original",dbLong)
+CurrentDb.TableDefs.Append table
+CurrentDb.Execute "INSERT INTO Alterable VALUES (41)"
+Set table=CurrentDb.TableDefs("Alterable")
+Set field=table.CreateField(Name:="Added",Type:=dbText,Size:=8)
+field.DefaultValue="'initial'"
+table.Fields.Append field
+End Sub)VBA","AlterSchema",host);
+    if(altered.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Alter builder error="<<altered.errorNumber<<", line="<<altered.line<<", reason="<<altered.explanation<<"\n";
+    assert(altered.status==linaccess::VbaExecutionStatus::Completed);
+    assert(query.exec("SELECT Original,Added FROM Alterable") && query.next() && query.value(0).toInt()==41 && query.value(1).toString()=="initial");query.finish();
+    auto alterable=tables->member("Item",{VbaValue::string("Alterable")}).object;
+    assert(alterable->member("Fields",{VbaValue::string("Added")}).object->member("Size",{}).asNumber()==8);
+    assert(alterable->member("Indexes",{}).object->member("Count",{}).asNumber()==0);
+    auto dependency=alterable->member("CreateIndex",{VbaValue::string("AddedIndex")}).object;
+    dependency->member("Fields",{}).object->member("Append",{dependency->member("CreateField",{VbaValue::string("Added")})});
+    alterable->member("Indexes",{}).object->member("Append",{VbaValue::reference(dependency)});
+    error([&] {alterable->member("Fields",{}).object->member("Delete",{VbaValue::string("Added")});},3251);
+    alterable->member("Indexes",{}).object->member("Delete",{VbaValue::string("AddedIndex")});
+    auto heldAdded=alterable->member("Fields",{VbaValue::string("Added")}).object;
+    alterable->member("Fields",{}).object->member("Delete",{VbaValue::string("Added")});
+    error([&] {heldAdded->member("Name",{});},3420);
+    assert(alterable->member("Fields",{}).object->member("Count",{}).asNumber()==1 && alterable->member("Indexes",{}).object->member("Count",{}).asNumber()==0);
+    auto requiredField=alterable->member("CreateField",{VbaValue::string("RequiredNoDefault"),VbaValue::integer(4)}).object;requiredField->assign("Required",VbaValue::logical(true));
+    error([&] {alterable->member("Fields",{}).object->member("Append",{VbaValue::reference(requiredField)});},3314);
+    auto counterField=alterable->member("CreateField",{VbaValue::string("Counter"),VbaValue::integer(4)}).object;counterField->assign("Attributes",VbaValue::longInteger(16));
+    error([&] {alterable->member("Fields",{}).object->member("Append",{VbaValue::reference(counterField)});},3251);
+    auto reversible=alterable->member("CreateField",{VbaValue::string("Reverted"),VbaValue::integer(2)}).object;
+    workspace->member("BeginTrans",{});alterable->member("Fields",{}).object->member("Append",{VbaValue::reference(reversible)});workspace->member("Rollback",{});
+    error([&] {reversible->member("Size",{});},3420);
+    assert(alterable->member("Fields",{}).object->member("Count",{}).asNumber()==1);
+    error([&] {alterable->member("Fields",{}).object->member("Delete",{VbaValue::string("Original")});},3251);
+    assert(query.exec("SELECT Original FROM Alterable") && query.next() && query.value(0).toInt()==41);query.finish();
 }
 
 int main(int argc, char** argv) {
