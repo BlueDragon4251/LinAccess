@@ -2396,6 +2396,7 @@ bool AccessFormPreview::saveRecord() {
         } catch (const std::exception& error) { status_->setText(QString::fromUtf8(error.what())); return false; }
     }
     if (columns.empty() && currentRecordIndex_>0) return false;
+    linaccess::AccessCounterSqlScope counterScope(db_);
     QSqlQuery query(db_);
     const int row = currentRecordIndex_-1;
     const bool updating=row>=0 && row<recordRows_.size();
@@ -2418,6 +2419,8 @@ bool AccessFormPreview::saveRecord() {
         status_->setText("Der Datensatz wurde nicht gespeichert; er wurde möglicherweise extern entfernt."); return false;
     }
     if (savedId.isNull()) savedId = query.lastInsertId();
+    query.finish();
+    try {counterScope.complete(true);} catch(const std::exception& error) {status_->setText(QString::fromUtf8(error.what()));return false;}
     QVariantMap oldRecord;
     for (int column=0;column<dataColumns_.size();++column)
         oldRecord.insert(dataColumns_[column].toCaseFolded(),row>=0 && row<recordRows_.size() ? recordRows_[row][column] : QVariant{});

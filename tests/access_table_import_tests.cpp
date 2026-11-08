@@ -1,4 +1,5 @@
 #include "access_table_import.hpp"
+#include "access_table_model.hpp"
 #include "access_catalog.hpp"
 #include "access_index_metadata.hpp"
 #include "access_floating_metadata.hpp"
@@ -136,6 +137,30 @@ void verifyJetCounterStateReference(const QString& path) {
     database->member("Execute",{VbaValue::string("CREATE TABLE [seed_without_pk] ([n] COUNTER(5,2))")});
     assert(query.exec("INSERT INTO [seed_without_pk] DEFAULT VALUES"));assert(query.exec("INSERT INTO [seed_without_pk] DEFAULT VALUES"));
     assert(query.exec("SELECT [n] FROM [seed_without_pk] ORDER BY [n]") && query.next() && query.value(0).toInt()==5 && query.next() && query.value(0).toInt()==7);query.finish();
+    database->member("Execute",{VbaValue::string("CREATE TABLE sql_failed_counter(n COUNTER PRIMARY KEY, label TEXT NOT NULL UNIQUE)")});
+    const auto execute=[&](const char* statement){database->member("Execute",{VbaValue::string(statement)});};
+    execute("INSERT INTO sql_failed_counter(label) VALUES('first')");
+    bool rejectedDuplicate=false;
+    try {execute("INSERT INTO sql_failed_counter(label) VALUES('first')");}catch(const VbaRuntimeError& error){rejectedDuplicate=error.number==3022;}
+    assert(rejectedDuplicate);execute("INSERT INTO sql_failed_counter(label) VALUES('second')");
+    assert(query.exec("SELECT n FROM sql_failed_counter WHERE label='second'") && query.next() && query.value(0).toInt()==3);query.finish();
+    rejectedDuplicate=false;
+    try {execute("INSERT INTO sql_failed_counter(label) SELECT 'bulk-new' UNION ALL SELECT 'first'");}catch(const VbaRuntimeError& error){rejectedDuplicate=error.number==3022;}
+    assert(rejectedDuplicate);execute("INSERT INTO sql_failed_counter(label) VALUES('after-bulk')");
+    assert(query.exec("SELECT n FROM sql_failed_counter WHERE label='after-bulk'") && query.next() && query.value(0).toInt()==6);query.finish();
+    reserveEngine->member("BeginTrans",{});bool missingRequired=false;
+    try {execute("INSERT INTO sql_failed_counter(label) VALUES(NULL)");}catch(const VbaRuntimeError& error){missingRequired=error.number==3314;}
+    assert(missingRequired);reserveEngine->member("Rollback",{});
+    execute("INSERT INTO sql_failed_counter(label) VALUES('after-rollback')");
+    assert(query.exec("SELECT n FROM sql_failed_counter WHERE label='after-rollback'") && query.next() && query.value(0).toInt()==8);query.finish();
+    {
+        AccessTableModel model(nullptr,db);model.setTable("sql_failed_counter");model.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(model.select());
+        const int row=model.rowCount();assert(model.insertRows(row,2));
+        assert(model.setData(model.index(row,1),"model-first") && model.setData(model.index(row+1,1),"first"));
+        assert(!model.submitTransactionally());model.revertAll();
+    }
+    execute("INSERT INTO sql_failed_counter(label) VALUES('after-model')");
+    assert(query.exec("SELECT n FROM sql_failed_counter WHERE label='after-model'") && query.next() && query.value(0).toInt()==11);query.finish();
     bool invalidStep=false;
     try {database->member("Execute",{VbaValue::string("CREATE TABLE [bad_step] ([n] COUNTER(1,0))")});}catch(const VbaRuntimeError& error){invalidStep=error.number==3251;}
     assert(invalidStep && !db.tables().contains("bad_step"));

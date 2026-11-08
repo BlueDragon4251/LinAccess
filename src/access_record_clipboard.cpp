@@ -139,6 +139,7 @@ void AccessFormPreview::pasteAppendRecord() {
     QScopedValueRollback<bool> running(recordCommandRunning_,true);
     const auto snapshot=recordsetSnapshot_; const auto oldId=currentRecordIndex_>0 ? rowIds_.value(currentRecordIndex_-1) : QVariant{};
     static unsigned long long sequence=0; const auto savepoint="linaccess_append_"+QString::number(++sequence);
+    linaccess::AccessCounterSqlScope counterScope(db_);
     QSqlQuery sql(db_); if (!sql.exec("SAVEPOINT "+savepoint)) throw VbaRuntimeError(3146,"Append transaction unavailable");
     bool released=false,displayed=false;
     const auto rollback=qScopeGuard([&] {
@@ -169,6 +170,7 @@ void AccessFormPreview::pasteAppendRecord() {
     if (index<1) throw VbaRuntimeError(3251,"Appended record excluded by current form filter");
     if (!sql.exec("RELEASE "+savepoint)) throw VbaRuntimeError(3146,"Append commit failed");
     released=true;
+    counterScope.complete(true);
     if (snapshot) { linaccess::refreshDaoSnapshot(snapshot,dataColumns_,dataTypes_,recordRows_,rowIds_); recordsetSnapshot_=snapshot; }
     { const QSignalBlocker blocked(recordSelector_); recordSelector_->setCurrentIndex(index); currentRecordIndex_=index; loadRecord(); }
     if (opened_ && initialCurrentDispatched_) (void)formEvent("OnCurrent","Form_Current");

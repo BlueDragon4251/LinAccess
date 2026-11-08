@@ -102,6 +102,7 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
     const bool schemaAction=plan.daoQueryType==96; // Checked compiler dbQDDL classification, including whitespace/comments.
     if(schemaAction || makeTable) checkReservedCounterSchemaAction(db);
     const auto before=(schemaAction || makeTable) ? nativeTableNames(db) : QStringList{};
+    AccessCounterSqlScope counterScope(db);
     QSqlQuery guard(db);
     const bool schemaScope=makeTable || schemaAction;
     const auto schemaSavepoint="la_schema_"+QUuid::createUuid().toString(QUuid::Id128);
@@ -160,9 +161,11 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
             observeNativeTableCatalog(db,before);
         }
         if(schemaScope && !guard.exec("RELEASE "+schemaSavepoint)) queryFailure(guard);
+        counterScope.complete(true);
         return affected;
     } catch (...) {
         if(schemaScope) { guard.exec("ROLLBACK TO "+schemaSavepoint); guard.exec("RELEASE "+schemaSavepoint); }
+        counterScope.complete(false);
         throw;
     }
 }
@@ -2210,6 +2213,15 @@ private:
     std::shared_ptr<WorkspaceState> state_;
     std::weak_ptr<VbaObject> workspaces_;
 };
+}
+void trackAccessCounterReservations(QSqlDatabase db,const QVector<AccessCounterReservation>& reservations) {
+    const auto state=workspaceState(db);
+    if(state->savepoints.isEmpty()) return;
+    for(const auto& reservation:reservations) {
+        const auto key=reservation.table+QChar(0)+reservation.column;
+        auto& retained=state->counterReservations[key];
+        if(reservation.jetLong || retained.table.isEmpty() || reservation.value>retained.value) retained=reservation;
+    }
 }
 QMap<QString,QVariant> nativeTableLiteralDefaults(QSqlDatabase database,const QString& table) {
     workspaceState(database)->check();

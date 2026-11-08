@@ -109,16 +109,21 @@ reopen, typed query projection and atomic lifecycle behavior in existing targets
 
 Full source binary mode/property decoding, ALTER/reseed/field-property semantics, Random and
 replication generators, negative source-state import, complete field properties,
-form/event allocation timing, raw SQL statement-failure allocation gaps, external
+form/event allocation timing, unwrapped/external SQL allocation gaps, external
 transaction/crash behavior, concurrent application/locking semantics, general
 schema rename and relationship lifecycle remain open. The current source decoder
 refuses negative state, UUID generators, multiple Long generators and exposed
 NewValues/Seed/Increment settings. Absent DAO/MDBTools properties do not prove every
 possible counter mode; do not claim generic custom-step/random source support.
 
-Managed SQL defaults are allocated within the inserting statement; failed raw SQL
-can still roll back their allocation. DAO reserves in a preceding statement, so its
-failed-Update/cancel/workspace-rollback cases have the implemented consumed-number
-behavior. Do not transfer that claim to all SQL/form/clipboard event paths.
+Application SQL actions, form saves, datasheet inserts/batches and record append
+now capture generator allocations for the operation. On statement/batch rollback,
+the consumed frontier is restored only if the stored frontier still equals its
+pre-operation value. A competing completed allocation is never overwritten.
+Nested operations merge their captures; native Workspace rollback retains the
+recorded consumed frontier. DAO AddNew continues reserving in a preceding statement.
+These are application-managed operations, not hooks for arbitrary external/raw Qt
+SQL. Exact Jet behavior under concurrent applications, crashes and all event/
+reentrant paths still requires independent proof.
 
 The fixed456/384/72 catalog is unchanged. No full AutoNumber or Access parity claim.

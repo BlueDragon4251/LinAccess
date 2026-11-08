@@ -158,6 +158,7 @@ bool AccessTableModel::submitTransactionally() {
     {
         const QScopedValueRollback<bool> saving(saving_,true);
         auto db=database();
+        AccessCounterSqlScope counterScope(db);
         if(!db.transaction()) { setLastError(db.lastError()); return false; }
         for(const auto& item:pending) {
             const bool accepted=item.kind==Pending::Insert ? insertRowIntoTable(item.values)
@@ -166,6 +167,7 @@ bool AccessTableModel::submitTransactionally() {
             if(item.kind==Pending::Insert && !insertedKey_.isEmpty()) committedKeys.insert(item.row,insertedKey_);
         }
         if(!db.commit()) { const auto problem=db.lastError(); db.rollback(); setLastError(problem); return false; }
+        try {counterScope.complete(true);} catch(const VbaRuntimeError& error) {return reject(error.number);}
     }
     submittedKeys_=std::move(committedKeys);
     // No Qt cache entry is marked submitted before the database commit succeeds.
@@ -396,7 +398,12 @@ bool AccessTableModel::insertRowIntoTable(const QSqlRecord& row) {
     insertedKey_.clear();
     auto values=row;
     for(int i=0;i<values.count();++i) if(generated_.contains(values.fieldName(i).toCaseFolded())) values.setGenerated(i,false);
-    if(!QSqlTableModel::insertRowIntoTable(values)) return false;
+    AccessCounterSqlScope counterScope(database());
+    try {
+        const bool inserted=QSqlTableModel::insertRowIntoTable(values);
+        counterScope.complete(inserted);
+        if(!inserted) return false;
+    } catch(const VbaRuntimeError& error) {return reject(error.number);}
     // Capture actual generated keys on this connection inside the transaction.
     // SQLite restores last_insert_rowid after triggers; another connection
     // cannot change it. Never infer a key from MAX(), row order or draft text.

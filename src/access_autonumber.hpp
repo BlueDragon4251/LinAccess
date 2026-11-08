@@ -3,6 +3,7 @@
 #include <QSet>
 #include <QVector>
 #include <QString>
+#include <memory>
 struct sqlite3_context;
 struct sqlite3_value;
 namespace linaccess {
@@ -11,6 +12,20 @@ struct AccessCounterReservation {
     qlonglong value{};
     bool native{},jetLong{};
 };
+// Captures generator calls made by a single application SQL operation. Failed
+// statements restore consumed frontiers without overwriting a competing writer.
+class AccessCounterSqlScope {
+public:
+    explicit AccessCounterSqlScope(QSqlDatabase db);
+    ~AccessCounterSqlScope();
+    AccessCounterSqlScope(const AccessCounterSqlScope&)=delete;
+    AccessCounterSqlScope& operator=(const AccessCounterSqlScope&)=delete;
+    void complete(bool succeeded);
+    struct State;
+private:
+    std::unique_ptr<State> state_;
+};
+void trackAccessCounterReservations(QSqlDatabase db,const QVector<AccessCounterReservation>& reservations);
 AccessCounterReservation reserveAccessCounter(QSqlDatabase db,const QString& table,const QString& column);
 AccessCounterReservation currentAccessCounterReservation(QSqlDatabase db,AccessCounterReservation reservation);
 void configureNewAccessCounterStep(QSqlDatabase db,const QString& table,const QString& column,qint32 seed,qint32 increment);

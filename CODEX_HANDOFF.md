@@ -2284,3 +2284,35 @@ Expression-/Nichtcounter-Kontexte. Katalogzuweisung bleibt383, Indexfeld-
 Attributes (Descending1) bleiben getrennt. Vorhandenes Importziel mit tatsächlicher
 Jet-Counterreferenz1/1 (0,26s), App gebaut. Private Logs counter-catalog-properties-
 {build,tests}.log. Keine Aussage vollständiger Field.Properties-Semantik.
+
+
+## SQL-Fehler verbrauchen Generatornummern — nachfa9c41a
+
+Gemeinsamer AccessCounterSqlScope erfasst erfolgreiche Generatoraufrufe innerhalb
+eines Anwendungsschreibvorgangs (pro Verbindung/Thread, geschachtelt). Bei Statement-
+oder Batch-Rollback wird die letzte verbrauchte Frontier nur per Compare-and-Set
+wiederhergestellt, wenn der gespeicherte Stand noch dem vorigen Stand entspricht;
+keine inzwischen abgeschlossene fremde Allokation wird zurückgesetzt. Kinder
+übertragen ihre Allokationen an den Elternvorgang. Aktive native Workspaces
+übernehmen sie in die vorhandene Rollback-Retention. Keine SQLite-Trace-Hooks,
+kein Sidecar/Service, keine Registry-/Telefonieänderungen.
+
+Eingebunden: DAO/QueryDef-Aktionen (damit SQL-Editor), gebundene Formularspeicherung,
+Datenblatt-Einfügen plus gesamter mehrzeiliger Speichervorgang, Record-PasteAppend.
+Rollback-Wächter werden vor dem äußeren Capture abgebaut; Fehler-Frontiers bleiben
+auch erhalten, wenn ein vorher erfolgreich eingefügter Batchteil mit zurückrollt.
+Scope-Destruktor ist noexcept; Synchronisationsfehler markieren den Driver mit
+la_counter_sql_sync_failed. Beliebige externe/raw-Qt-Schreibwege sind nicht damit
+abgefangen; Crash-/konkurrierende-Anwendungs-/vollständige Ereignisparität nicht
+behaupten. Direkte Access-SQL-Failure-Oracles fehlen weiterhin; vorhandene Access-
+DAO-Referenz zeigt verbrauchte fehlgeschlagene Updates.
+
+Implementierung vollständig gebündelt, danach bestehende Integration5/5 in15,81s:
+mainwindow_documents, sqlite_backend_identity, dao_execution,
+table_import_contracts mit echter Jet-Zustandsreferenz und access_2003_layouts.
+Neue fachliche Fälle im vorhandenen Importziel: Unique-Fehler verbraucht2 ->3,
+fehlgeschlagenes mehrzeiliges Append verbraucht4/5 ->6, Required-Fehler7 über
+Workspace-Rollback erhalten ->8, fehlgeschlagener zweizeiliger Datenblatt-Batch
+verbraucht9/10 ->11. Alle Tests bestanden; kein zusätzlicher Testziel-/Katalogpunkt.
+App gebaut; private Logs /workspace/work/counter-sql-failure-{build,tests}.log.
+F171 bleibt für die ausdrücklich offenen Restanforderungen offen,456/384/72 gleich.

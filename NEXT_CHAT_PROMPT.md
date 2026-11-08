@@ -1,3 +1,13 @@
+Neuester Stand nachfa9c41a: Anwendungsschreibwege erfassen Generatoraufrufe
+in geschachtelten AccessCounterSqlScope-Operationen. Bei SQL-/Batchfehlern werden
+verbrauchte Nummern per Compare-and-Set erhalten (kein Zurücksetzen fremder
+Fortschritte); aktive Workspaces übernehmen sie für Rollback. Eingebunden sind
+DAO/QueryDef/SQL-Editor, Formularsave, Datenblattinsert/batch und Recordappend.
+Gebündelte bestehende Integration5/5 (15,81s), App gebaut; Handoff-Ende beachten.
+Externe/raw-Qt-Queries, Crash-/Concurrent-App-/vollständige Event-Parität sind damit
+nicht belegt. F171/456/384/72 bleiben offen/unverändert. Nicht erneut breit testen,
+sondern verbleibende vollständige Anforderungen weiter implementieren.
+
 Neueste Ergänzung: normales lokales CREATE TABLE mit COUNTER und
 COUNTER(seed,increment) ist implementiert: tatsächlicher Spaltentyp-Token,
 signed-Long-Literalseed/positive Long-Schrittweite, SQL+DAO und Reopen, optionale

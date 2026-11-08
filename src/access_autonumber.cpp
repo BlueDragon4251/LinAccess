@@ -5,6 +5,7 @@
 #include <QSqlDriver>
 #include <QSqlQuery>
 #include <QSqlError>
+#include <QMap>
 #include <QUuid>
 #include <sqlite3.h>
 #include <limits>
@@ -21,6 +22,65 @@ void counterError(sqlite3_context* context,int number) noexcept {
     const auto message=number==6 ? "LinAccess SQL function error 6" : number==94 ? "LinAccess SQL function error 94" : number==3035 ? "LinAccess SQL function error 3035" : "LinAccess SQL function error 3251";
     sqlite3_result_error(context,message,-1);
 }
+}
+struct AccessCounterSqlScope::State {
+    struct Capture {AccessCounterReservation reservation;qlonglong previous{};};
+    QSqlDatabase db;sqlite3* connection{};State* parent{};bool completed{};
+    QMap<QString,Capture> captures;
+};
+namespace {
+thread_local AccessCounterSqlScope::State* activeCounterSql=nullptr;
+void captureCounterSql(sqlite3* connection,sqlite3_value** names,qlonglong value,qlonglong increment,bool jetLong) {
+    auto* frame=activeCounterSql;
+    while(frame && frame->connection!=connection) frame=frame->parent;
+    if(!frame) return;
+    const auto table=QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_value_text(names[0])),sqlite3_value_bytes(names[0]));
+    const auto column=QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_value_text(names[1])),sqlite3_value_bytes(names[1]));
+    const auto key=table+QChar(0)+column;
+    auto previous=value-increment;if(jetLong && previous<std::numeric_limits<qint32>::min()) previous+=4294967296LL;
+    auto it=frame->captures.find(key);
+    if(it==frame->captures.end()) frame->captures.insert(key,{{table,column,value,false,jetLong},previous});
+    else it->reservation.value=value;
+}
+}
+AccessCounterSqlScope::AccessCounterSqlScope(QSqlDatabase db):state_(std::make_unique<State>()) {
+    if(!db.isOpen() || !db.driver()) throw VbaRuntimeError(3420,"Counter SQL connection unavailable");
+    const auto handle=db.driver()->handle();
+    if(!handle.isValid() || QByteArray(handle.typeName())!="sqlite3*") throw VbaRuntimeError(3251,"Counter SQL backend unavailable");
+    state_->db=db;state_->connection=*static_cast<sqlite3* const*>(handle.constData());
+    state_->parent=activeCounterSql;activeCounterSql=state_.get();
+}
+AccessCounterSqlScope::~AccessCounterSqlScope() {
+    if(!state_->completed) {
+        try {complete(false);} catch(...) {if(state_->db.driver()) state_->db.driver()->setProperty("la_counter_sql_sync_failed",true);}
+    }
+    activeCounterSql=state_->parent;
+}
+void AccessCounterSqlScope::complete(bool succeeded) {
+    if(state_->completed) return;
+    QVector<AccessCounterReservation> consumed;
+    for(const auto& capture:state_->captures) {
+        const auto& reservation=capture.reservation;
+        if(!succeeded) {
+            QSqlQuery query(state_->db);
+            const auto storage=reservation.jetLong ? QString("_la_counter32_sequences") : QString("_la_counter_sequences");
+            query.prepare("UPDATE main."+identifier(storage)+" SET value=? WHERE table_name=? AND column_name=? AND value=?");
+            query.addBindValue(reservation.value);query.addBindValue(reservation.table);query.addBindValue(reservation.column);query.addBindValue(capture.previous);
+            if(!query.exec()) throw VbaRuntimeError(3146,"Consumed SQL counter persistence failed");
+            // A changed frontier belongs to another completed allocation. Never
+            // rewind it after a failed statement releases its SQLite lock.
+        }
+        consumed.append(reservation);
+        auto* parent=state_->parent;while(parent && parent->connection!=state_->connection) parent=parent->parent;
+        if(parent) {
+            const auto key=reservation.table+QChar(0)+reservation.column;
+            auto it=parent->captures.find(key);
+            if(it==parent->captures.end()) parent->captures.insert(key,capture);else it->reservation.value=reservation.value;
+        }
+    }
+    if(!consumed.isEmpty()) trackAccessCounterReservations(state_->db,consumed);
+    state_->completed=true;
+    if(activeCounterSql==state_.get()) activeCounterSql=state_->parent;
 }
 QString accessCounterDefault(const QString& table,const QString& column) {
     return "linaccess_next_counter("+literal(table)+','+literal(column)+')';
@@ -60,6 +120,7 @@ void nextAccessCounter(sqlite3_context* context,int count,sqlite3_value** values
             if(result==SQLITE_ROW) {
                 const auto value=sqlite3_column_int64(jet.get(),0);
                 if(sqlite3_step(jet.get())!=SQLITE_DONE) {counterError(context,3251);return;}
+                captureCounterSql(connection,values,value,increment,true);
                 sqlite3_result_int64(context,value);return;
             }
             if(result!=SQLITE_DONE) {counterError(context,result==SQLITE_INTERRUPT ? 3035 : 3251);return;}
@@ -79,6 +140,7 @@ void nextAccessCounter(sqlite3_context* context,int count,sqlite3_value** values
             const auto next=sqlite3_column_int64(statement.get(),0);
             result=sqlite3_step(statement.get());
             if (result!=SQLITE_DONE) { counterError(context,result==SQLITE_INTERRUPT ? 3035 : 3251); return; }
+            captureCounterSql(connection,values,next,1,false);
             sqlite3_result_int64(context,next); return;
         }
         if (result!=SQLITE_DONE) { counterError(context,result==SQLITE_INTERRUPT ? 3035 : 3251); return; }
