@@ -5,6 +5,8 @@
 #include "access_query.hpp"
 #include "native_datasheet_print.hpp"
 #include "access_table_import.hpp"
+#include "access_autonumber.hpp"
+#include "dao_database.hpp"
 #include "access_catalog.hpp"
 #include <QProcess>
 #include <QPrintDialog>
@@ -2761,6 +2763,11 @@ int main(int argc,char** argv) {
         QSqlQuery authored(db); assert(authored.exec("INSERT INTO authored_defaults DEFAULT VALUES"));
         assert(authored.exec("SELECT qty,label,enabled FROM authored_defaults") && authored.next());
         assert(authored.value(0).toInt()==7 && authored.value(1).toString()=="ui value" && authored.value(2).toInt()==-1); authored.finish();
+        assert(linaccess::jetLongAccessColumns(db,"authored_defaults").contains("id"));
+        auto cursor=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{linaccess::VbaValue::string("authored_defaults")}).object;
+        cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==2 && cursor->item("id").numericType==linaccess::VbaValue::NumericType::Long);cursor->member("CancelUpdate",{});
+        cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==3);cursor->member("Update",{});cursor->member("Close",{});
+        assert(authored.exec("SELECT COUNT(*) FROM authored_defaults WHERE id=2") && authored.next() && authored.value(0).toInt()==0);authored.finish();
     }
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

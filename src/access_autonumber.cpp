@@ -4,9 +4,12 @@
 #include <QCryptographicHash>
 #include <QSqlDriver>
 #include <QSqlQuery>
+#include <QSqlError>
+#include <QUuid>
 #include <sqlite3.h>
 #include <limits>
 #include <memory>
+#include <algorithm>
 
 namespace linaccess {
 namespace {
@@ -29,6 +32,26 @@ void nextAccessCounter(sqlite3_context* context,int count,sqlite3_value** values
             if (sqlite3_value_type(values[i])!=SQLITE_TEXT || sqlite3_value_bytes(values[i])>1024) { counterError(context,3251); return; }
         }
         auto* connection=sqlite3_context_db_handle(context); sqlite3_stmt* raw=nullptr;
+        // Source-backed Jet Long counters wrap in signed32; legacy SQLite-only
+        // generators keep their existing64-bit contract.
+        const auto jetPrepare=sqlite3_prepare_v2(connection,"UPDATE main._la_counter32_sequences SET value=CASE WHEN value=2147483647 THEN -2147483648 ELSE value+1 END WHERE table_name=? AND column_name=? RETURNING value",-1,&raw,nullptr);
+        Statement jet(raw,&sqlite3_finalize);
+        if(jetPrepare==SQLITE_OK) {
+            for(int i=0;i<2;++i) if(sqlite3_bind_text(jet.get(),i+1,reinterpret_cast<const char*>(sqlite3_value_text(values[i])),sqlite3_value_bytes(values[i]),SQLITE_TRANSIENT)!=SQLITE_OK) {counterError(context,3251);return;}
+            const auto result=sqlite3_step(jet.get());
+            if(result==SQLITE_ROW) {
+                const auto value=sqlite3_column_int64(jet.get(),0);
+                if(sqlite3_step(jet.get())!=SQLITE_DONE) {counterError(context,3251);return;}
+                sqlite3_result_int64(context,value);return;
+            }
+            if(result!=SQLITE_DONE) {counterError(context,result==SQLITE_INTERRUPT ? 3035 : 3251);return;}
+        } else {
+            jet.reset();raw=nullptr;
+            if(sqlite3_prepare_v2(connection,"SELECT 1 FROM main.sqlite_schema WHERE name='_la_counter32_sequences'",-1,&raw,nullptr)!=SQLITE_OK) {counterError(context,3251);return;}
+            Statement exists(raw,&sqlite3_finalize);
+            if(sqlite3_step(exists.get())==SQLITE_ROW) {counterError(context,3251);return;}
+        }
+        jet.reset();raw=nullptr;
         const auto prepare=sqlite3_prepare_v2(connection,"UPDATE _la_counter_sequences SET value=value+1 WHERE table_name=? AND column_name=? AND value<9223372036854775807 RETURNING value",-1,&raw,nullptr);
         Statement statement(raw,&sqlite3_finalize);
         if (prepare!=SQLITE_OK) { counterError(context,prepare==SQLITE_INTERRUPT ? 3035 : 3251); return; }
@@ -63,6 +86,147 @@ void createAccessCounter(QSqlDatabase db,const QString& table,const QString& col
         || !query.exec("CREATE TRIGGER "+identifier(prefix+"_update")+" AFTER UPDATE OF "+identifier(column)+" ON "+identifier(table)+body))
         throw VbaRuntimeError(3146,"Counter seed trigger creation failed");
 }
+QSet<QString> jetLongAccessColumns(QSqlDatabase db,const QString& table) {
+    QSet<QString> result;
+    if(!db.tables().contains("_la_counter32_sequences",Qt::CaseInsensitive)) return result;
+    QSqlQuery query(db);
+    query.prepare("SELECT column_name,value,typeof(value) FROM main._la_counter32_sequences WHERE table_name=? COLLATE NOCASE");query.addBindValue(table);
+    if(!query.exec()) throw VbaRuntimeError(3146,"Jet Long counter catalog unavailable");
+    while(query.next()) {
+        const auto name=query.value(0).toString().toCaseFolded();const auto value=query.value(1).toLongLong();
+        if(name.isEmpty() || result.contains(name) || query.value(2).toString()!="integer" || value<std::numeric_limits<qint32>::min() || value>std::numeric_limits<qint32>::max())
+            throw VbaRuntimeError(3251,"Jet Long counter catalog is not proven");
+        result.insert(name);
+    }
+    query.finish();
+    if(!result.isEmpty()) {
+        const auto generators=generatedAccessColumns(db,table);
+        for(const auto& name:result) if(!generators.contains(name)) throw VbaRuntimeError(3251,"Jet Long generator identity changed");
+    }
+    return result;
+}
+void configureNewAccessCounters(QSqlDatabase db,const QString& table) {
+    const auto generators=generatedAccessColumns(db,table);
+    if(generators.isEmpty()) return;
+    QSqlQuery query(db);
+    if(!query.exec("SELECT COUNT(*) FROM main."+identifier(table)) || !query.next() || query.value(0).toLongLong()!=0)
+        throw VbaRuntimeError(3251,"Counter setup requires a newly created empty table");
+    query.finish();
+    if(!query.exec("PRAGMA main.table_info("+identifier(table)+")")) throw VbaRuntimeError(3146,"New counter fields unavailable");
+    QStringList names;
+    while(query.next()) if(generators.contains(query.value(1).toString().toCaseFolded())) names.append(query.value(1).toString());
+    query.finish();
+    for(const auto& column:names) {createJetLongCounter(db,table,column);protectAccessCounterUpdates(db,table,column);}
+}
+void createJetLongCounter(QSqlDatabase db,const QString& table,const QString& column) {
+    QSqlQuery query(db);
+    if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_counter32_sequences(table_name TEXT NOT NULL,column_name TEXT NOT NULL,value INTEGER NOT NULL CHECK(typeof(value)='integer' AND value BETWEEN -2147483648 AND 2147483647),PRIMARY KEY(table_name,column_name))"))
+        throw VbaRuntimeError(3146,"Jet Long counter storage unavailable");
+    query.prepare("INSERT INTO main._la_counter32_sequences VALUES(?,?,0)");query.addBindValue(table);query.addBindValue(column);
+    if(!query.exec()) throw VbaRuntimeError(3146,"Jet Long counter initialization failed");
+    QByteArray identity=table.toUtf8();identity.append('\0');identity+=column.toUtf8();
+    const auto name="_la_counter32_"+QString::fromLatin1(QCryptographicHash::hash(identity,QCryptographicHash::Sha256).toHex());
+    if(!query.exec("CREATE TRIGGER "+identifier(name)+" AFTER INSERT ON "+identifier(table)
+        +" BEGIN SELECT CASE WHEN typeof(NEW."+identifier(column)+")!='integer' OR NEW."+identifier(column)+" NOT BETWEEN -2147483648 AND 2147483647 THEN RAISE(ABORT,'LinAccess SQL function error 3251: native counter SQL wrap requires explicit Jet allocation') END; UPDATE _la_counter32_sequences SET value=MAX(value,NEW."
+        +identifier(column)+") WHERE table_name="+literal(table)+" AND column_name="+literal(column)+"; END"))
+        throw VbaRuntimeError(3146,"Jet Long counter observation unavailable");
+    const auto handle=db.driver()->handle();auto* connection=*static_cast<sqlite3* const*>(handle.constData());int native=0;
+    if(sqlite3_table_column_metadata(connection,"main",table.toUtf8().constData(),column.toUtf8().constData(),nullptr,nullptr,nullptr,nullptr,&native)!=SQLITE_OK)
+        throw VbaRuntimeError(3251,"Jet Long field identity unavailable");
+    if(!native && !query.exec("CREATE TRIGGER "+identifier(name+"_null")+" BEFORE INSERT ON "+identifier(table)
+        +" WHEN NEW."+identifier(column)+" IS NULL BEGIN SELECT RAISE(ABORT,'LinAccess SQL function error 3162'); END"))
+        throw VbaRuntimeError(3146,"Jet Long Null guard unavailable");
+}
+AccessCounterReservation currentAccessCounterReservation(QSqlDatabase db,AccessCounterReservation reservation) {
+    QSqlQuery query(db);
+    if(reservation.jetLong) query.prepare("SELECT value FROM main._la_counter32_sequences WHERE table_name=? AND column_name=?");
+    else if(reservation.native) query.prepare("SELECT seq FROM main.sqlite_sequence WHERE name=?");
+    else query.prepare("SELECT value FROM main._la_counter_sequences WHERE table_name=? AND column_name=?");
+    query.addBindValue(reservation.table);if(!reservation.native || reservation.jetLong) query.addBindValue(reservation.column);
+    if(!query.exec() || !query.next()) throw VbaRuntimeError(3146,"Current reserved counter state unavailable");
+    const auto value=query.value(0).toLongLong();
+    reservation.value=reservation.jetLong ? value : std::max(value,reservation.value);
+    return reservation;
+}
+AccessCounterReservation reserveAccessCounter(QSqlDatabase db,const QString& requestedTable,const QString& column) {
+    QString table;
+    for(const auto& name:db.tables()) if(name.compare(requestedTable,Qt::CaseInsensitive)==0) {table=name;break;}
+    if(table.isEmpty()) throw VbaRuntimeError(3078,"Counter table unavailable");
+    if(!generatedAccessColumns(db,table).contains(column.toCaseFolded())) throw VbaRuntimeError(3251,"Counter generator unavailable");
+    auto handle=db.driver()->handle();
+    auto* connection=*static_cast<sqlite3**>(handle.data());int native=0;
+    if(sqlite3_table_column_metadata(connection,"main",table.toUtf8().constData(),column.toUtf8().constData(),nullptr,nullptr,nullptr,nullptr,&native)!=SQLITE_OK)
+        throw VbaRuntimeError(3251,"Counter generator identity unavailable");
+    const auto scope="la_counter_reserve_"+QUuid::createUuid().toString(QUuid::Id128);
+    QSqlQuery guard(db),query(db);
+    if(!guard.exec("SAVEPOINT "+scope)) throw VbaRuntimeError(3146,"Counter reservation unavailable");
+    try {
+        qlonglong value{};bool jetLong=false;
+        if(db.tables().contains("_la_counter32_sequences",Qt::CaseInsensitive)) {
+            query.prepare("SELECT 1 FROM main._la_counter32_sequences WHERE table_name=? AND column_name=?");query.addBindValue(table);query.addBindValue(column);
+            if(!query.exec()) throw VbaRuntimeError(3146,"Jet Long counter metadata unavailable");
+            jetLong=query.next();query.finish();
+        }
+        if(jetLong) {
+            query.prepare("SELECT linaccess_next_counter(?,?)");query.addBindValue(table);query.addBindValue(column);
+            if(!query.exec() || !query.next()) throw VbaRuntimeError(3146,"Jet Long counter reservation failed");
+            value=query.value(0).toLongLong();query.finish();
+            retainAccessCounterReservation(db,{table,column,value,native!=0,true});
+        } else if(native) {
+            query.prepare("SELECT seq,typeof(seq) FROM main.sqlite_sequence WHERE name=?");query.addBindValue(table);
+            if(!query.exec()) throw VbaRuntimeError(3146,"Native counter state unavailable");
+            const bool stored=query.next();
+            if(stored) {
+                bool valid=false;value=query.value(0).toLongLong(&valid);
+                if(!valid || query.value(1).toString()!="integer" || value<0 || query.next()) throw VbaRuntimeError(3251,"Native counter state is not proven");
+            }
+            query.finish();
+            if(!query.exec("SELECT MAX("+identifier(column)+") FROM main."+identifier(table)) || !query.next())
+                throw VbaRuntimeError(3146,"Native counter row state unavailable");
+            if(!query.value(0).isNull()) value=std::max(value,query.value(0).toLongLong());
+            query.finish();
+            if(value==std::numeric_limits<qlonglong>::max()) throw VbaRuntimeError(6,"Native counter exhausted");
+            ++value;
+            query.prepare(stored ? "UPDATE main.sqlite_sequence SET seq=? WHERE name=?" : "INSERT INTO main.sqlite_sequence(seq,name) VALUES(?,?)");
+            query.addBindValue(value);query.addBindValue(table);
+            if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3146,"Native counter reservation failed");
+        } else {
+            query.prepare("SELECT linaccess_next_counter(?,?)");query.addBindValue(table);query.addBindValue(column);
+            if(!query.exec() || !query.next()) {
+                const auto error=jetSqlFunctionErrorNumber(query.lastError().text().toLower().toStdString());
+                throw VbaRuntimeError(error.value_or(3146),"Managed counter reservation failed");
+            }
+            value=query.value(0).toLongLong();query.finish();
+        }
+        if(!guard.exec("RELEASE "+scope)) throw VbaRuntimeError(3146,"Counter reservation commit failed");
+        return {table,column,value,native!=0,jetLong};
+    } catch(...) {guard.exec("ROLLBACK TO "+scope);guard.exec("RELEASE "+scope);throw;}
+}
+void retainAccessCounterReservation(QSqlDatabase db,const AccessCounterReservation& reservation) {
+    // Called after ROLLBACK TO but before RELEASE: the original transaction keeps
+    // its write lock while business changes roll back and consumed IDs survive.
+    if(!db.tables().contains(reservation.table,Qt::CaseInsensitive)) return; // Created inside the rolled-back transaction.
+    if(!generatedAccessColumns(db,reservation.table).contains(reservation.column.toCaseFolded()))
+        throw VbaRuntimeError(3251,"Reserved counter identity changed");
+    QSqlQuery query(db);
+    if(reservation.jetLong) {
+        query.prepare("UPDATE main._la_counter32_sequences SET value=? WHERE table_name=? AND column_name=?");
+        query.addBindValue(reservation.value);query.addBindValue(reservation.table);query.addBindValue(reservation.column);
+        if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3146,"Reserved Jet Long counter persistence failed");
+        if(!reservation.native || reservation.value<0) return;
+    }
+    if(reservation.native) {
+        query.prepare("SELECT 1 FROM main.sqlite_sequence WHERE name=?");query.addBindValue(reservation.table);
+        if(!query.exec()) throw VbaRuntimeError(3146,"Reserved native counter unavailable");
+        const bool exists=query.next();query.finish();
+        query.prepare(exists ? "UPDATE main.sqlite_sequence SET seq=MAX(seq,?) WHERE name=?" : "INSERT INTO main.sqlite_sequence(seq,name) VALUES(?,?)");
+        query.addBindValue(reservation.value);query.addBindValue(reservation.table);
+    } else {
+        query.prepare("UPDATE main._la_counter_sequences SET value=MAX(value,?) WHERE table_name=? AND column_name=?");
+        query.addBindValue(reservation.value);query.addBindValue(reservation.table);query.addBindValue(reservation.column);
+    }
+    if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3146,"Consumed counter persistence failed");
+}
 void protectAccessCounterUpdates(QSqlDatabase db,const QString& table,const QString& column) {
     QByteArray identity=table.toUtf8(); identity.append('\0'); identity+=column.toUtf8();
     const auto name="_la_counter_readonly_"+QString::fromLatin1(QCryptographicHash::hash(identity,QCryptographicHash::Sha256).toHex());
@@ -79,6 +243,11 @@ void restoreAccessCounter(QSqlDatabase db,const QString& table,const QString& co
     if(!query.value(0).isNull() && query.value(0).toLongLong()>last)
         throw VbaRuntimeError(3251,"Source counter state contradicts active rows");
     query.finish();
+    if(db.tables().contains("_la_counter32_sequences",Qt::CaseInsensitive)) {
+        query.prepare("UPDATE main._la_counter32_sequences SET value=? WHERE table_name=? AND column_name=?");
+        query.addBindValue(last);query.addBindValue(table);query.addBindValue(column);
+        if(!query.exec()) throw VbaRuntimeError(3146,"Source Jet Long counter restoration failed");
+    }
     if(native) {
         query.prepare("UPDATE main.sqlite_sequence SET seq=? WHERE name=?");
         query.addBindValue(last); query.addBindValue(table);

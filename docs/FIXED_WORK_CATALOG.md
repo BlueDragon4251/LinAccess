@@ -58,7 +58,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [ ] **F014** — Preserve original Jet column types, precision/scale, Currency and Decimal exactly.
 - [ ] **F015** — Preserve AutoNumber seeds, defaults, validation, lookups and collations exactly. Native literal SQL/DAO/bound-form defaults are implemented in SOURCE_LITERAL_DEFAULTS.md; the complete requirement remains open.
 - [ ] **F130** — Full Jet/locale collation, comparison-aware Like/StrComp/InStr and complete SELECT INTO metadata/AutoNumber/index/default/validation propagation.
-- [x] **F169** — Preserve 21 original AutoNumber flags and native AUTOINCREMENT generation for the 16 single-primary-key counters, retaining actual imported values and verifying no-reuse on isolated copies (AUTONUMBER_IMPORT.md).
+- [x] **F169** — Preserve 21 original AutoNumber flags and native managed generation for the 16 single-primary-key counters, retaining actual imported values and verifying no-reuse on isolated copies (AUTONUMBER_IMPORT.md).
 - [x] **F170** — Generate the five non-primary-key counters with persistent atomic defaults, native form/DAO/clipboard use, reopen and concurrent-connection regression.
 - [x] **F347** — REAL/FLOAT/DOUBLE text editors preserve supported Double precision; untouched nullable REAL/Currency/Date cells remain SQL NULL.
 - [x] **F369** — Native table RunCommand SortAscending/SortDescending sorts the actual field, preserves primary-key/current-column identity and readonly access, saves a sole current update and protects unrelated drafts.

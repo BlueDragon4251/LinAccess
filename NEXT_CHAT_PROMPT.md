@@ -2,9 +2,14 @@ Aktuelle Ergänzung 2026-11-08: Nutzer will größere zusammenhängende Implemen
 danach eine gebündelte gezielte Prüfung; keine Zwischenabschluss-/Testflut. Allgemeiner
 Access-Ersatz, keine Kassa-Spezialisierung. Access2003/DAO3.6-v3/v4-Referenzen sind
 vorhanden; Details und Grenzen vollständig am Ende von CODEX_HANDOFF.md lesen.
-F171 bleibt offen; Quelle-Seed/Änderungsschutz sind umgesetzt, AddNew-Allokation,
-Rollback-Lücken, signed32-Wrap, Random/Replikation usw. müssen weiterprogrammiert
-werden. Technische Original-Counter-Oracles: tests/access2003_reference/.
+F171 bleibt offen, aber der neue Stand umfasst gespeicherte Quellstände,
+DAO-Reservierung vor AddNew-Rückgabe, verbrauchte Abbruch-/Updatefehler-/Workspace-
+Rollback-Nummern, signed32-Übergang und verwaltete Vergabe für alle21 Original-
+Zähler sowie neue Designertabellen. Long-Typweitergabe, NULL-/Änderungsschutz und
+atomare Lifecycle-Grenzen sind implementiert. Kein Legacy-Autoumbau. Noch offen:
+vollständige Schrittweiten/Seed-Syntax und Quellmodi, Random/Replikation, allgemeine
+Properties, SQL-Statementfehler-/Formevent-Allokation und weitere Lifecycle-Grenzen.
+Technische Access-Counter-Oracles: tests/access2003_reference/.
 Private v4-SQL-/DAO-Setupfehler nicht als Ergebnisparität interpretieren. Keine
 erneute pauschale Referenzanforderung und kein Abschlussanruf für diese Teiletappe.
 Tatsächlichen Remote/HEAD sowie nachfolgende Prüfergebnisse zuerst prüfen.

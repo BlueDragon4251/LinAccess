@@ -1,4 +1,5 @@
 #include "vba_qt_value.hpp"
+#include "access_autonumber.hpp"
 #include "vba_currency.hpp"
 #include "vba_calendar.hpp"
 #include <QJsonArray>
@@ -32,6 +33,13 @@ QMap<QString,QString> sqliteColumnTypes(QSqlDatabase db,const QString& table) {
             else if (source == "SMALLINT") types[column["name"].toString().toCaseFolded()] = "INTEGER2";
             else if (source == "INT") types[column["name"].toString().toCaseFolded()] = "INTEGER4";
         }
+    }
+    query.finish();
+    const auto counters=jetLongAccessColumns(db,table);
+    for(const auto& column:counters) {
+        if(!types.contains(column) || (types.value(column)!="INTEGER" && types.value(column)!="INT" && types.value(column)!="INTEGER4"))
+            throw VbaRuntimeError(3251,"Jet Long generator requires integer storage");
+        types[column]="INTEGER4";
     }
     return types;
 }

@@ -332,7 +332,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
     if(!schema.sourceIndexMetadata.isEmpty() && (storedPrimary!=(declaredPrimary.isEmpty() ? 0 : 1) || storedOrdinary!=schema.indexes.size()))
         throw fail("Originaler Indexkatalog ist unvollständig");
     const bool descendingSinglePrimary=primaryCount==1 && !declaredPrimary.isEmpty() && primaryDirections.value(declaredPrimary.front());
-    const auto nativeCounter=[&](const AccessColumn& column) { return column.autoNumber && column.sqliteType=="INTEGER" && column.primaryKeyOrder==1 && primaryCount==1; };
+    const auto nativeCounter=[&](const AccessColumn& column) { return !sourceCounterStates.contains(column.name) && column.autoNumber && column.sqliteType=="INTEGER" && column.primaryKeyOrder==1 && primaryCount==1; };
     for (int i = 0; i < columns.size(); ++i) {
         const auto& column = columns[i];
         if (column.name.isEmpty() || seen.contains(column.name.toCaseFolded())
@@ -349,8 +349,10 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
         } else if(!column.sourceDefault.isEmpty() || !column.sqlDefault.isEmpty()) throw fail("Standardwert-Metadaten widersprüchlich");
         if(nativeCounter(column) && primaryDirections.value(column.name)) throw fail("Absteigender AutoNumber-Primärindex ist nicht nachgewiesen");
         seen.insert(column.name.toCaseFolded());
-        definitions << sqlQuote(column.name) + ' ' + column.sqliteType
-            + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : descendingSinglePrimary && column.primaryKeyOrder ? " PRIMARY KEY DESC" : column.autoNumber ? " DEFAULT ("+accessCounterDefault(tableName,column.name)+")" : QString{})
+        const bool jetManaged=sourceCounterStates.contains(column.name);
+        definitions << sqlQuote(column.name) + ' ' + (jetManaged ? QString("INT") : column.sqliteType)
+            + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : descendingSinglePrimary && column.primaryKeyOrder ? " PRIMARY KEY DESC" : QString{})
+            + (!nativeCounter(column) && column.autoNumber ? " DEFAULT ("+accessCounterDefault(tableName,column.name)+")" : QString{})
             + (!column.autoNumber && column.hasDefault ? " DEFAULT "+column.sqlDefault : QString{})
             + (column.required || column.primaryKeyOrder || column.autoNumber ? " NOT NULL" : "")
             + (column.sourceSize>0 ? " CHECK (linaccess_jet_text_capacity("+sqlQuote(column.name)+","+QString::number(column.sourceSize)+"))" : QString{});
@@ -379,8 +381,10 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
         if (!insertOnly && !query.exec("CREATE TABLE " + sqlQuote(tableName) + " (" + definitions.join(",") + ")"))
             throw fail("CREATE TABLE: " + query.lastError().text());
         if (!insertOnly) for (const auto& column:columns) if (column.autoNumber && !nativeCounter(column)) createAccessCounter(db,tableName,column.name);
-        if(!insertOnly) for(const auto& column:columns) if(sourceCounterStates.contains(column.name))
+        if(!insertOnly) for(const auto& column:columns) if(sourceCounterStates.contains(column.name)) {
+            createJetLongCounter(db,tableName,column.name);
             protectAccessCounterUpdates(db,tableName,column.name);
+        }
         QStringList placeholders;
         for (int i = 0; i < columns.size(); ++i) placeholders << "?";
         if (rows.size() > 1 && !query.prepare("INSERT INTO " + sqlQuote(tableName) + " VALUES ("

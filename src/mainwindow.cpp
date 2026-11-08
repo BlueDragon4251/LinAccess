@@ -15,6 +15,7 @@
 
 #include "access_inspector.hpp"
 #include "access_table_import.hpp"
+#include "access_autonumber.hpp"
 #include "access_form_import.hpp"
 #include "access_form_preview.hpp"
 #include "native_stored_form.hpp"
@@ -1767,7 +1768,7 @@ void MainWindow::newTable() {
         if(tableName.isEmpty() || tableName.startsWith("_la_",Qt::CaseInsensitive) || tableName.startsWith("sqlite_",Qt::CaseInsensitive)) {
             messageError(&dialog,"Ungültiger/reservierter Tabellenname"); return;
         }
-        QStringList columns={"\"id\" INTEGER PRIMARY KEY AUTOINCREMENT"}; std::set<QString> seen={"id"};
+        QStringList columns={"\"id\" INT PRIMARY KEY NOT NULL DEFAULT ("+linaccess::accessCounterDefault(tableName,"id")+")"}; std::set<QString> seen={"id"};
         for(int row=0;row<grid->rowCount();++row) {
             const auto field=grid->item(row,0)->text().trimmed(); if(field.isEmpty()) continue;
             if(field.startsWith("_la_",Qt::CaseInsensitive) || seen.contains(field.toCaseFolded())) {
@@ -1810,7 +1811,15 @@ void MainWindow::newTable() {
         }
         if(columns.size()==1) { messageError(&dialog,"Mindestens ein Feld anlegen"); return; }
         QSqlQuery query(db_);
-        if(!query.exec("CREATE TABLE "+quoteSql(tableName)+" ("+columns.join(',')+")")) { messageError(&dialog,query.lastError().text()); return; }
+        if(!query.exec("SAVEPOINT la_new_table")) {messageError(&dialog,query.lastError().text());return;}
+        try {
+            if(!query.exec("CREATE TABLE "+quoteSql(tableName)+" ("+columns.join(',')+")")) throw std::runtime_error(query.lastError().text().toStdString());
+            linaccess::configureNewAccessCounters(db_,tableName);
+            if(!query.exec("RELEASE la_new_table")) throw std::runtime_error(query.lastError().text().toStdString());
+        } catch(const std::exception& error) {
+            query.exec("ROLLBACK TO la_new_table");query.exec("RELEASE la_new_table");
+            messageError(&dialog,QString::fromUtf8(error.what()));return;
+        }
         dialog.accept();
     });
     if(dialog.exec()!=QDialog::Accepted) return;

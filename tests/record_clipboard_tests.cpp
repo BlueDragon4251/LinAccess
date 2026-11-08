@@ -2,6 +2,7 @@
 #include "access_form_objects.hpp"
 #include "access_catalog.hpp"
 #include "access_table_import.hpp"
+#include "access_autonumber.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_source_codec.hpp"
 #include <QApplication>
@@ -116,6 +117,7 @@ End Sub
     const auto managedSchema=parseMdbSchema("CREATE TABLE `x`\n(\n`id` INTEGER NOT NULL,\n`label` TEXT\n);\n-- LINACCESS_AUTO_NUMBER 6964\n");
     assert(sql.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));
     importAccessTable(db,"synthetic","managed_counter",managedSchema,parseCsvDetailed("id,label\n12,seed\n"));
+    createJetLongCounter(db,"managed_counter","id");restoreAccessCounter(db,"managed_counter","id",12,false);protectAccessCounterUpdates(db,"managed_counter","id");
     const QByteArray managedLayout="Begin Form\nRecordSource =\"managed_counter\"\nBegin Section\nBegin TextBox\nName =\"id\"\nControlSource =\"id\"\nEnd\nBegin TextBox\nName =\"label\"\nControlSource =\"label\"\nTop =400\nEnd\nEnd\nEnd\n";
     const auto managedCode=code+"Sub AddManaged()\nDoCmd.GoToRecord , , acNewRec\nMe.label=\"from form\"\nMe.Dirty=False\nEnd Sub\n";
     AccessFormPreview managedForm("managed counter form",managedLayout,managedCode,db); managedForm.show(); managedForm.activateWindow(); QApplication::processEvents();
@@ -123,6 +125,11 @@ End Sub
     result=managedForm.executeProcedure("AddManaged",arguments); assert(result.status==VbaExecutionStatus::Completed && managedRoot->item("id").asNumber()==13);
     result=managedForm.executeProcedure("Duplicate",arguments); assert(result.status==VbaExecutionStatus::Completed && managedRoot->item("id").asNumber()==14);
     assert(sql.exec("SELECT rowid,id,label FROM managed_counter WHERE id=14") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==14 && sql.value(2).toString()=="from form"); sql.finish();
+    managedRoot->member("Controls",{VbaValue::string("label")}).object->assign("Value",VbaValue::string("updated ordinary field"));managedRoot->assign("Dirty",VbaValue::logical(false));
+    assert(sql.exec("SELECT label FROM managed_counter WHERE id=14") && sql.next() && sql.value(0).toString()=="updated ordinary field");sql.finish();
+    bool counterReadonly=false;
+    try {managedRoot->member("Controls",{VbaValue::string("id")}).object->assign("Value",VbaValue::longInteger(100));}catch(const VbaRuntimeError& error){counterReadonly=error.number==2448;}
+    assert(counterReadonly && managedRoot->item("id").asNumber()==14);
     assert(managedForm.close());
     const auto onlySchema=parseMdbSchema("CREATE TABLE `x`\n(\n`id` INTEGER NOT NULL\n);\n-- LINACCESS_AUTO_NUMBER 6964\n");
     importAccessTable(db,"synthetic","only_counter",onlySchema,parseCsvDetailed("id\n"));

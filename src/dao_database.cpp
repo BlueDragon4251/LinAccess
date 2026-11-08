@@ -73,6 +73,7 @@ void exec(QSqlQuery& query, const QString& sql) {
 }
 QStringList nativeTableNames(QSqlDatabase db);
 void observeNativeTableCatalog(QSqlDatabase db,const QStringList& before);
+void checkReservedCounterSchemaAction(QSqlDatabase db);
 void removeDroppedTableMetadata(QSqlDatabase db,const QStringList& before) {
     const auto after=nativeTableNames(db); const auto catalog=db.tables();
     QStringList removed,added;
@@ -81,7 +82,7 @@ void removeDroppedTableMetadata(QSqlDatabase db,const QStringList& before) {
     // A rename needs rebinding of defaults, index identities and source metadata.
     // Refuse it atomically for managed/imported tables until that is implemented.
     for(const auto& name:removed) {
-        for(const auto& metadata:{QString("_la_counter_sequences"),QString("_la_table_schema"),QString("_la_access_indexes")}) {
+        for(const auto& metadata:{QString("_la_counter_sequences"),QString("_la_counter32_sequences"),QString("_la_table_schema"),QString("_la_access_indexes")}) {
             if(!catalog.contains(metadata,Qt::CaseInsensitive)) continue;
             QSqlQuery query(db);
             if(!added.isEmpty()) {
@@ -99,6 +100,7 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
     if (plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");
     const bool makeTable=!plan.makeTable.isEmpty();
     const bool schemaAction=plan.daoQueryType==96; // Checked compiler dbQDDL classification, including whitespace/comments.
+    if(schemaAction || makeTable) checkReservedCounterSchemaAction(db);
     const auto before=(schemaAction || makeTable) ? nativeTableNames(db) : QStringList{};
     QSqlQuery guard(db);
     const bool schemaScope=makeTable || schemaAction;
@@ -146,7 +148,13 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
                 affected=query.value(0).toLongLong(); query.finish();
             }
         }
-        if(schemaScope) { removeDroppedTableMetadata(db,before); observeNativeTableCatalog(db,before); }
+        if(schemaScope) {
+            removeDroppedTableMetadata(db,before);
+            const auto after=nativeTableNames(db);
+            const bool removed=std::any_of(before.cbegin(),before.cend(),[&](const QString& name){return !after.contains(name,Qt::CaseInsensitive);});
+            if(schemaAction && !removed) for(const auto& table:after) if(!before.contains(table,Qt::CaseInsensitive)) configureNewAccessCounters(db,table);
+            observeNativeTableCatalog(db,before);
+        }
         if(schemaScope && !guard.exec("RELEASE "+schemaSavepoint)) queryFailure(guard);
         return affected;
     } catch (...) {
@@ -186,6 +194,8 @@ struct WorkspaceState {
     static constexpr const char* queryViewProperties[]{"la_query_database","la_query_views","la_query_internal_views","la_query_rank_pending","la_query_revision"};
     int clones{};
     QStringList savepoints;
+    QString connectionName;
+    QMap<QString,AccessCounterReservation> counterReservations;
     QString prefix=QString("la_dao_")+QUuid::createUuid().toString(QUuid::Id128);
     std::weak_ptr<VbaObject> engine,workspace,database;
     void check() const {
@@ -214,13 +224,16 @@ struct WorkspaceState {
     void commit() {
         check(); if (savepoints.isEmpty()) throw VbaRuntimeError(3034,"DAO: BeginTrans required");
         sql("RELEASE "+savepoints.last()); savepoints.removeLast();
-        if(savepoints.isEmpty()) queryViewSnapshot.clear();
+        if(savepoints.isEmpty()) { queryViewSnapshot.clear(); counterReservations.clear(); }
     }
     void rollback() {
         check(); if (savepoints.isEmpty()) throw VbaRuntimeError(3034,"DAO: BeginTrans required");
         if (savepoints.size()!=1) throw VbaRuntimeError(3251,"DAO: Nested rollback unsupported");
+        const auto db=QSqlDatabase::database(connectionName,false);
+        for(auto& reservation:counterReservations) reservation=currentAccessCounterReservation(db,reservation);
         sql("ROLLBACK TO "+savepoints.first()); ++rollbackRevision;
-        sql("RELEASE "+savepoints.first()); savepoints.clear();
+        for(const auto& reservation:counterReservations) retainAccessCounterReservation(db,reservation);
+        sql("RELEASE "+savepoints.first()); savepoints.clear();counterReservations.clear();
         for(const auto property:queryViewProperties) driver->setProperty(property,queryViewSnapshot.value(QString::fromLatin1(property)));
         queryViewSnapshot.clear();
     }
@@ -232,7 +245,7 @@ std::shared_ptr<WorkspaceState> workspaceState(QSqlDatabase db) {
     auto* native=*static_cast<sqlite3* const*>(handle.constData());
     auto state=db.driver()->property("la_dao_workspace_state").value<std::shared_ptr<WorkspaceState>>();
     if (state && state->alive && state->connection==native) { state->check(); return state; }
-    state=std::make_shared<WorkspaceState>(); state->driver=db.driver(); state->connection=native;
+    state=std::make_shared<WorkspaceState>(); state->driver=db.driver(); state->connection=native; state->connectionName=db.connectionName();
     // The SQLite destructor invalidates wrappers even if the Qt driver is reopened.
     auto* token=new std::shared_ptr<WorkspaceState>(state);
     if (sqlite3_create_function_v2(native,"linaccess_dao_connection_generation",0,SQLITE_UTF8|SQLITE_DIRECTONLY,token,
@@ -240,6 +253,11 @@ std::shared_ptr<WorkspaceState> workspaceState(QSqlDatabase db) {
         [](void* data) { auto* holder=static_cast<std::shared_ptr<WorkspaceState>*>(data); (*holder)->alive=false; (*holder)->connection=nullptr; delete holder; })!=SQLITE_OK)
         throw VbaRuntimeError(3146,"DAO: Workspace lifetime tracking unavailable");
     db.driver()->setProperty("la_dao_workspace_state",QVariant::fromValue(state)); return state;
+}
+void checkReservedCounterSchemaAction(QSqlDatabase db) {
+    const auto state=workspaceState(db);
+    if(!state->savepoints.isEmpty() && !state->counterReservations.isEmpty())
+        throw VbaRuntimeError(3251,"DAO: Schema changes after counter allocation require transaction completion");
 }
 void observeNativeTableCatalog(QSqlDatabase db,const QStringList& before) {
     const auto after=nativeTableNames(db); const auto state=workspaceState(db);
@@ -324,6 +342,8 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
         }
         if(query.lastError().isValid()) queryFailure(query);
     }
+    const auto counter32=jetLongAccessColumns(db,tableName);
+    for(auto& column:columns) if(counter32.contains(column.name.toCaseFolded())) {column.type="INTEGER4";column.sourceType=4;}
     return columns;
 }
 QMap<QString,QVariant> literalDefaultValues(QSqlDatabase db,const QVector<TableSchemaColumn>& columns) {
@@ -596,6 +616,7 @@ public:
         if (key == "edit" || key == "addnew") {
             require(!readOnly_, "DAO: Recordset is read-only");
             require(mode_ == Mode::Browse, "DAO: Edit already in progress");
+            changed_.clear();chunkFields_.clear();
             if (key == "edit") { current(); pending_ = data_->rows[position_]; mode_ = Mode::Edit; }
             else {
                 pending_=QVariantList(data_->columns.size());
@@ -603,9 +624,18 @@ public:
                     const auto key=data_->columns[i].toCaseFolded();
                     if(data_->literalDefaults.contains(key)) pending_[i]=data_->literalDefaults.value(key);
                 }
+                const auto generators=generatedAccessColumns(db_,source_);
+                for(int i=0;i<data_->columns.size();++i) if(generators.contains(data_->columns[i].toCaseFolded())) {
+                    const auto reservation=reserveAccessCounter(db_,source_,data_->columns[i]);
+                    pending_[i]=reservation.value;changed_.insert(i);
+                    if(!data_->workspace->savepoints.isEmpty()) {
+                        const auto key=reservation.table+QChar(0)+reservation.column;
+                        auto& retained=data_->workspace->counterReservations[key];
+                        if(reservation.jetLong || retained.table.isEmpty() || reservation.value>retained.value) retained=reservation;
+                    }
+                }
                 mode_=Mode::Add;
             }
-            changed_.clear(); chunkFields_.clear();
             return {};
         }
         if (key == "cancelupdate") { pending_.clear(); changed_.clear(); chunkFields_.clear(); mode_ = Mode::Browse; return {}; }
@@ -757,6 +787,8 @@ public:
         if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         require(mode_ != Mode::Browse, "DAO: Edit or AddNew required");
         const auto index = column(name);
+        if(mode_==Mode::Add && value.kind==VbaValue::Kind::Null && !pending_[index].isNull()
+            && generatedAccessColumns(db_,source_).contains(name.toCaseFolded())) return;
         if(mode_==Mode::Edit && table_ && generatedAccessColumns(db_,source_).contains(name.toCaseFolded()))
             throw VbaRuntimeError(3164,"DAO: AutoNumber field cannot be updated");
         const auto type=data_->types.value(name.toCaseFolded());

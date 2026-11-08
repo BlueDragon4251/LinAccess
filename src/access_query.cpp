@@ -1,4 +1,5 @@
 #include "access_query.hpp"
+#include "access_autonumber.hpp"
 #include <functional>
 #include <algorithm>
 #include "vba_qt_value.hpp"
@@ -1767,6 +1768,7 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
             if(types.size()!=count) types=QVector<QString>(count);
             columnTypes.resize(count);
             QMap<QString,QMap<QString,QString>> tables;
+            QMap<QString,QSet<QString>> counter32;
             for(int index=0;index<count;++index) {
                 if(!types[index].isEmpty()) continue;
                 const auto* database=databaseName(statement,index); const auto* table=tableName(statement,index); const auto* column=columnName(statement,index);
@@ -1775,6 +1777,10 @@ PreparedAccessQuery prepareAccessQuery(QSqlDatabase db,const AccessQueryPlan& un
                 if(!tables.contains(name)) tables.insert(name,sqliteColumnTypes(db,name));
                 const auto type=tables.value(name).value(QString::fromUtf8(column).toCaseFolded()).toUpper();
                 if(type=="DATE" || type=="DATETIME") types[index]=type;
+                if(type=="INTEGER4") {
+                    if(!counter32.contains(name)) counter32.insert(name,jetLongAccessColumns(db,name));
+                    if(counter32.value(name).contains(QString::fromUtf8(column).toCaseFolded())) types[index]=type;
+                }
                 if(type.contains("DATE") || type.contains("TEXT") || type.contains("CHAR") || type.contains("CLOB")
                     || type.contains("INT") || type.contains("REAL") || type.contains("FLOA") || type.contains("DOUB") || type.contains("BOOL")) columnTypes[index]=type;
             }

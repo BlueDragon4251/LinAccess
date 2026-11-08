@@ -2195,3 +2195,56 @@ table_import_contracts mit Jet-Zustandsfixture0,13s bestanden. Im neuen Prüffal
 war BeginTrans/Rollback zunächst fälschlich am Database- statt Engine-Objekt
 aufgerufen; ausschließlich diesen Prüffehler korrigiert und das betroffene Ziel
 erneut ausgeführt. Kein erneuter großer Originaldaten-/Vollsuite-Lauf nötig.
+
+
+## Neuer Counter-Kern nach e70d5d6 — allgemeine Datenbankfunktion
+
+Native neue MDB-Importe verwenden für ALLE AutoNumber-Felder INT plus verwalteten
+DEFAULT, einschließlich der16 einzelnen Primärschlüssel; keine INTEGER-rowid-
+Aliasabhängigkeit. Das ist keine Kassa-Sonderregel. Neue Designer-Tabellen verwenden
+denselben Kern; native DAO-DDL konfiguriert erkannte neue Generatoren ebenfalls.
+Persistente _la_counter32_sequences mit signed32-Werten, SQL/DAO-Übergang
+2147483647 -> -2147483648 -> -2147483647, Quellenzustand unverändert übernommen.
+Legacy-/caller-owned-CSV bleibt64-Bit und wird nicht still migriert. Explizit
+SQLite-AUTOINCREMENT-DDL behält den rowid-Alias: DAO kann über den32-Bit-Katalog
+reservieren, automatisches RAW-SQL-Wrap dieses Alias bleibt unbewiesen/verweigert.
+
+DAO AddNew reserviert vor Rückgabe, füllt den Puffer als Long und schreibt die
+reservierten Felder beim Update explizit. Cancel/Close/fehlgeschlagenes Update
+verbrauchen die Nummer. Workspace merkt Transaktionsreservierungen; vor Rollback
+wird die aktuelle Frontier gelesen, ROLLBACK TO setzt Geschäftsdaten zurück,
+verbrauchte Sequenzwerte werden VOR RELEASE unter derselben Transaktionssperre
+persistiert. Kein Sidecar/neuer Dienst. Schemaaktionen nach reservierten Nummern
+in derselben DAO-Transaktion werden3251 verweigert, bis die Transaktion beendet ist.
+Bei Neu-Puffer-NULL bleibt eine bereits reservierte Nummer erhalten; keine darüber
+hinausgehende DAO-NULL-Assignment-Parität behaupten. Counteridentität wird für DAO-
+Tabellenreferenzen kanonisiert; ASCII-Groß-/Kleinschreibung ist im bestehenden Test
+abgedeckt. Bookmarks/rowids bleiben von sichtbaren AutoWerten getrennt.
+
+Neue importierte verwaltete Zähler verweigern SQL-NULL3162 und SQL-UPDATE3113,
+DAO-Änderung3164; gebundene Formularsteuerungen verweigern bestehende Änderungen
+2448. Normale Formularupdates lassen unveränderte Generatorfelder aus, sonst würde
+die neue SQL-Sperre gültige Updates anderer Felder verhindern.32-Bit-Generatorkatalog
+liefert Long-Feld-/UI-Typen; nichtzusammengesetzte Query-Projektionen mit geprüfter
+physischer main-Spaltenherkunft behalten Long. Keine Typableitung aus Zelltext,
+keine unbewiesene Expression-/UNION-/writable-Query-Lineage.
+
+Gezielte gemeinsame Integration6/6 in101,55s: mainwindow_documents,
+sqlite_backend_identity, dao_execution, table_import_contracts (mit tatsächlichem
+Jet-Zustandsfixture), access_2003_layouts und complex_real_mdb_table_copy mit
+unabhängigem Double-Oracle.29/29 Originaltabellen,20 Primär-/48 andere Indexnamen,
+8 Relationen und57 Original-Double-Spalten unverändert geprüft. Anschließend nur
+betroffene Fälle: Formular-Generator/gewöhnliches Feld-Update im bestehenden Layout-
+Ziel1/1 (11,02s), kanonische Generatoridentität im bestehenden Import-Ziel1/1
+(0,23s). App neu gebaut. Kein neuer48/48- oder GitHub-CI-Erfolg behaupten.
+Prüflogs privat unter /workspace/work/counter-complete-batch-{build,tests}.log,
+counter-form-guard-{build,tests}.log und counter-identity-{build,tests}.log.
+
+F171 weiterhin offen: COUNTER(100,7) ist als echte Access-Referenz vorhanden,
+aber vollständige native Seed-/Schrittweiten-Syntax/Quellmodi fehlen noch.
+Random/Replikation, negative MDB-Quellstände, komplette Properties, Form-/Event-
+Allokationszeitpunkt, RAW-SQL-Statementfehler-Lücken, externe Transaktionen/Crash,
+konkurrierende Anwendungen, allgemeine Umbenennung und Relation-Lifecycle bleiben
+zu bearbeiten. Vorhandene SQL-/DAO-v4-Setupfehler bleiben KEIN belastbares Ergebnis-
+Oracle. Details/autoritative aktuelle Grenzen in docs/AUTONUMBER_IMPORT.md.
+Fester Katalog weiterhin456/384/72; keine neue F-ID, kein F171-Häkchen.

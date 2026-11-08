@@ -86,10 +86,12 @@ Bestätigungs-/Abbruchereignisse und `AllowDeletions`. Ein unveränderter
 Original-Löschhandler ist auf synthetischen Zeilen direkt und per Button geprüft:
 [Datensatz-Löschlaufzeit](docs/RECORD_DELETE_RUNTIME.md).
 
-Der Import erhält AutoNumber-Markierungen und verwendet für einzelne
-INTEGER-Primärschlüssel native Generierung ohne Wiederverwendung gelöschter
-Höchstwerte. Auch die fünf Zähler ohne Primärschlüssel haben eine native
-Generierung. Genaue Grenzen und verbleibende Jet-Abweichungen:
+Neue Access-Importe erhalten AutoNumber-Markierungen und gespeicherte
+Quellzählerstände auch nach gelöschten Zeilen. Neue Tabellen im Designer verwenden
+dieselbe verwaltete 32-Bit-Vergabe. DAO reserviert die Nummer bei `AddNew`;
+Abbruch und Workspace-Rollback geben sie nicht wieder frei. Der nachgewiesene
+signed-Long-Übergang ins Negative ist implementiert. Genaue Grenzen und verbleibende
+Jet-Abweichungen:
 [AutoNumber-Import](docs/AUTONUMBER_IMPORT.md).
 
 Begrenztes natives Datensatz-Kopieren/Anfügen verwendet die echte Zwischenablage

@@ -39,6 +39,21 @@ void verifyJetCounterStateReference(const QString& path) {
         assert(query.exec("INSERT INTO "+table+" DEFAULT VALUES"));
         assert(query.exec("SELECT MAX(id) FROM "+table) && query.next() && query.value(0).toInt()==4); query.finish();
     }
+    const auto reserveEngine=makeDaoEngine(db);
+    for(const auto& table:{QString("native_counter"),QString("managed_counter")}) {
+        const auto cursor=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string(table.toStdString())}).object;
+        cursor->member("AddNew",{}); assert(cursor->item("id").asNumber()==5); cursor->member("CancelUpdate",{});
+        cursor->member("AddNew",{}); assert(cursor->item("id").asNumber()==6); cursor->member("Update",{});
+        reserveEngine->member("BeginTrans",{});
+        cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==7);cursor->member("Update",{});
+        bool ddlRejected=false;
+        try {makeDaoDatabase(db)->member("Execute",{VbaValue::string("CREATE TABLE allocation_ddl_probe (id INTEGER)")});}
+        catch(const VbaRuntimeError& error){ddlRejected=error.number==3251;}
+        assert(ddlRejected && !db.tables().contains("allocation_ddl_probe"));
+        reserveEngine->member("Rollback",{});cursor->member("Requery",{});
+        cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==8);cursor->member("CancelUpdate",{});cursor->member("Close",{});
+        assert(query.exec("SELECT COUNT(*) FROM "+table+" WHERE id IN (5,7,8)") && query.next() && query.value(0).toInt()==0);query.finish();
+    }
     const auto records=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("native_counter")}).object;
     const auto field=records->member("Fields",{VbaValue::string("id")}).object;
     assert(field->member("Attributes",{}).asNumber()==49 && field->member("DataUpdatable",{}).truthy());
@@ -58,7 +73,7 @@ void verifyJetCounterStateReference(const QString& path) {
     try { importAccessTable(db,path,"invalid_counter",schema,rows,AccessBinaryEncoding::MdbToolsHex,AccessFloatingSource::NativeMdbBits); }
     catch(const std::exception&) { rejected=true; }
     assert(rejected && !db.tables().contains("invalid_counter"));
-    assert(query.exec("SELECT seq FROM sqlite_sequence WHERE name='native_counter'") && query.next() && query.value(0).toInt()==4); query.finish();
+    assert(query.exec("SELECT value FROM _la_counter32_sequences WHERE table_name='native_counter'") && query.next() && query.value(0).toInt()==8); query.finish();
     const auto database=makeDaoDatabase(db);
     const auto engine=makeDaoEngine(db);
     engine->member("BeginTrans",{});
@@ -67,7 +82,7 @@ void verifyJetCounterStateReference(const QString& path) {
     assert(query.exec("SELECT COUNT(*) FROM _la_counter_sequences WHERE table_name='managed_counter'") && query.next() && query.value(0).toInt()==0);query.finish();
     engine->member("Rollback",{});
     assert(db.tables().contains("managed_counter"));
-    assert(query.exec("SELECT value FROM _la_counter_sequences WHERE table_name='managed_counter'") && query.next() && query.value(0).toInt()==4);query.finish();
+    assert(query.exec("SELECT value FROM _la_counter32_sequences WHERE table_name='managed_counter'") && query.next() && query.value(0).toInt()==8);query.finish();
     database->member("Execute",{VbaValue::string("DROP TABLE [managed_counter]")});
     const auto managedSchema=parseMdbSchema(catalog.tableSchema("managed_counter"));
     const auto managedRows=parseCsvDetailed(AccessCatalog::exportTable(path,"managed_counter",true).toStdString());
@@ -78,8 +93,31 @@ void verifyJetCounterStateReference(const QString& path) {
     try { database->member("Execute",{VbaValue::string("ALTER TABLE [managed_counter] RENAME TO [renamed_counter]")}); }
     catch(const VbaRuntimeError& error) {renameRejected=error.number==3251;}
     assert(renameRejected && db.tables().contains("managed_counter") && !db.tables().contains("renamed_counter"));
+    for(const auto& table:{QString("native_counter"),QString("managed_counter")}) {
+        assert(query.exec("INSERT INTO "+table+"(id) VALUES(2147483646)"));
+        const auto cursor=makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string(table.toStdString())}).object;
+        cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==2147483647);cursor->member("Update",{});
+        cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==-2147483648.0);cursor->member("Update",{});
+        cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==-2147483647);cursor->member("CancelUpdate",{});
+        reserveEngine->member("BeginTrans",{});
+        cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==-2147483646);cursor->member("Update",{});
+        reserveEngine->member("Rollback",{});cursor->member("Requery",{});
+        cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==-2147483645);cursor->member("CancelUpdate",{});cursor->member("Close",{});
+        assert(query.exec("SELECT COUNT(*) FROM "+table+" WHERE id IN (-2147483647,-2147483646,-2147483645)") && query.next() && query.value(0).toInt()==0);query.finish();
+        assert(query.exec("INSERT INTO "+table+" DEFAULT VALUES"));
+        assert(query.exec("SELECT id FROM "+table+" WHERE rowid=last_insert_rowid()") && query.next() && query.value(0).toInt()==-2147483644);query.finish();
+        assert(!query.exec("INSERT INTO "+table+"(id) VALUES(NULL)"));
+        assert(jetSqlFunctionErrorNumber(query.lastError().text().toLower().toStdString())==3162);query.finish();
+    }
+    database->member("Execute",{VbaValue::string("CREATE TABLE [user_created_counter] ([number] INTEGER PRIMARY KEY AUTOINCREMENT,[payload] TEXT)")});
+    const auto own=database->member("OpenRecordset",{VbaValue::string("USER_CREATED_COUNTER")}).object;
+    own->member("AddNew",{});assert(own->item("number").asNumber()==1 && own->item("number").numericType==VbaValue::NumericType::Long);own->member("CancelUpdate",{});
+    own->member("AddNew",{});assert(own->item("number").asNumber()==2);own->member("Update",{});own->member("Close",{});
+    assert(jetLongAccessColumns(db,"user_created_counter").contains("number"));
+    const auto ownQuery=database->member("OpenRecordset",{VbaValue::string("SELECT [number] FROM [user_created_counter]")}).object;
+    assert(ownQuery->item("number").numericType==VbaValue::NumericType::Long && ownQuery->item("number").asNumber()==2);ownQuery->member("Close",{});
     assert(digest()==before);
-    std::cout<<"Actual Jet stored counters: deleted-highest native/deleted-all managed next4, contradictory state atomic rollback and original hash verified\n";
+    std::cout<<"Actual Jet stored counters: deleted-highest native/deleted-all managed next4, AddNew timing, signed32 wrap, consumed cancellation/rollback IDs, protected DDL, contradictory state atomic rollback and original hash verified\n";
 }
 
 void verifyJetBinaryReference(const QString& path) {
@@ -566,11 +604,17 @@ CREATE INDEX `label` ON `source` (`a``b`);
     };
     std::thread first(worker,1),second(worker,2); first.join(); second.join(); assert(good);
     assert(write.exec("SELECT count(*),count(DISTINCT id),max(id) FROM persistent WHERE id>95") && write.next());
-    assert(write.value(0).toInt()==40 && write.value(1).toInt()==40 && write.value(2).toInt()==135); write.finish();
+    assert(write.value(0).toInt()==40 && write.value(1).toInt()==40 && write.value(2).toInt()==136); write.finish();
     assert(!write.exec("SELECT linaccess_next_counter(NULL,'id')"));
     assert(jetSqlFunctionErrorNumber(write.lastError().text().toCaseFolded().toStdString())==94);
     assert(!write.exec("SELECT linaccess_next_counter('missing','id')"));
     assert(jetSqlFunctionErrorNumber(write.lastError().text().toCaseFolded().toStdString())==3251);
+    makeDaoDatabase(file)->member("Execute",{VbaValue::string("CREATE TABLE durable_jet_counter(id INTEGER PRIMARY KEY AUTOINCREMENT)")});
+    auto durable=makeDaoDatabase(file)->member("OpenRecordset",{VbaValue::string("durable_jet_counter")}).object;
+    durable->member("AddNew",{});assert(durable->item("id").asNumber()==1);durable->member("CancelUpdate",{});durable->member("Close",{});durable.reset();
+    write.clear();file.close();assert(file.open());installJetSqlFunctions(file);write=QSqlQuery(file);
+    durable=makeDaoDatabase(file)->member("OpenRecordset",{VbaValue::string("durable_jet_counter")}).object;
+    durable->member("AddNew",{});assert(durable->item("id").asNumber()==2);durable->member("Update",{});durable->member("Close",{});
     assert(write.exec("UPDATE _la_counter_sequences SET value=9223372036854775807 WHERE table_name='persistent'"));
     assert(!write.exec("INSERT INTO persistent(label)VALUES('overflow')"));
     assert(jetSqlFunctionErrorNumber(write.lastError().text().toCaseFolded().toStdString())==6);

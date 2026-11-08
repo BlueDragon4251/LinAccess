@@ -2369,7 +2369,7 @@ bool AccessFormPreview::saveRecord() {
     if (before.cancelled || failed(before)) return false;
     const bool userInsertion=currentRecordIndex_==0 && insertionStarted_;
     QSet<QString> generated;
-    try { if (currentRecordIndex_==0) generated=linaccess::generatedAccessColumns(db_,table); }
+    try { generated=linaccess::generatedAccessColumns(db_,table); }
     catch (const std::exception& error) { status_->setText(QString::fromUtf8(error.what())); return false; }
     QStringList columns,placeholders;
     QVariantList values;
@@ -2382,7 +2382,15 @@ bool AccessFormPreview::saveRecord() {
         if (columns.contains(column)) continue;
         try {
             const auto value=getFieldValue(control.name.toUtf8().toStdString());
-            if (generated.contains(dataColumns_[fieldIndex].toCaseFolded()) && value.kind==linaccess::VbaValue::Kind::Null) continue;
+            if(generated.contains(dataColumns_[fieldIndex].toCaseFolded())) {
+                if(currentRecordIndex_>0) {
+                    if(currentRecordIndex_>recordRows_.size()) {status_->setText("Der Datensatz ist nicht mehr verfügbar.");return false;}
+                    const auto converted=linaccess::sqlFieldValue(value,widget->property("la_sql_type").toString());
+                    if(converted!=recordRows_[currentRecordIndex_-1][fieldIndex]) {status_->setText("AutoWert-Feld ist schreibgeschützt.");return false;}
+                    continue;
+                }
+                if(value.kind==linaccess::VbaValue::Kind::Null) continue;
+            }
             columns << column; placeholders << "?";
             values << linaccess::sqlFieldValue(value,widget->property("la_sql_type").toString());
         } catch (const std::exception& error) { status_->setText(QString::fromUtf8(error.what())); return false; }
@@ -2574,6 +2582,14 @@ void AccessFormPreview::ensureWritableControl(std::string_view name) const {
         if (control.name.compare(key,Qt::CaseInsensitive)==0 &&
             (control.controlSource.startsWith('=') || (!control.controlSource.isEmpty() && (!directTable_ || (currentRecordIndex_==0 && !layout_.allowAdditions)))))
             throw linaccess::VbaRuntimeError(2448,"Bound control is read-only");
+    if(!loading_ && directTable_ && currentRecordIndex_>0) {
+        const auto generators=linaccess::generatedAccessColumns(db_,layout_.recordSource.trimmed());
+        for(const auto& control:layout_.controls) if(control.name.compare(key,Qt::CaseInsensitive)==0) {
+            const auto column=columnIndex(control.controlSource,dataColumns_);
+            if(column>=0 && generators.contains(dataColumns_[column].toCaseFolded()))
+                throw linaccess::VbaRuntimeError(2448,"AutoNumber control is read-only");
+        }
+    }
 }
 void AccessFormPreview::setField(std::string_view name, std::optional<std::string> value) {
     ensureWritableControl(name);

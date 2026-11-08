@@ -1465,3 +1465,13 @@ Double-Import bitgenau: vorhandener lesender Helfer --double-values, binäre64-B
 Unabhängiger Jackcess-Auszug beider Kassa-Testkopien:13 Tabellen/57 Double-Spalten,69405 Nicht-NULLwerte/514 NULLs, kein negatives Null/NaN/Infinity. Der bisherige Dezimalexport reproduzierte2404 numerische Zeilentupel in zwei Tabellen nicht exakt; neue native Kopien stimmen bitgenau mit allen unabhängigen Tupeln überein. Echte Jet-Extremwertreferenz, Gesamt-/Teilimport, DAO Type7/Size8, Herkunfts-/CSV-Guards und atomare Negativnull-Verweigerung geprüft. Aktueller korrigierter Debian13-Desktop48/48 (143,10 s), aktuelle neue Uploadkopie erneut29/29 und unabhängiger Auszug exakt; dort weiterhin78/100 Originalabfragen ohne Windows-Ergebnisorakel. App/Paket/Build-IDs/SQLite3.54.1/vier Originalfixture-/drei Uploadhashes und tatsächlich entpackter --double-values-Helfer mit bekannten Originalbits/SHA bestanden. Details docs/SOURCE_DOUBLE_PRECISION.md. Zuvor entdeckte technische CSV-Herkunftsfehler behoben, keine Schutzprüfung für Originale entfernt.456/384/72 unverändert; keine neue Matrix für Double behaupten.
 
 Nach einmaligem lesendem Resume derselben Codex-Call-Anfrage3ea2a1b8-75c6-411c-8f85-3cb76c4f3571 wurde status=unresolved und eine normale finale LiveKit-Teilantwort „Genau“ zur Windows-Referenzfrage geliefert; keine konkrete Umgebung/Protokolle/Zugriffsinformation und keine confirmed_decisions. CI-Frage bleibt unbeantwortet. Beide externen Blocker bleiben offen, keine Freigabe erfinden oder neue Anrufanforderung daraus ableiten. Privates Ergebnis resumed-result.json im bestehenden Call-Verzeichnis.
+
+
+AutoNumber-Kern, 2026-11-08: Quellstände und verwaltete signed32-Vergabe für neue
+Importe/neue Designertabellen, DAO-AddNew-Reservierung vor Rückgabe, verbrauchte
+Cancel-/Updatefehler-/Workspace-Rollback-Nummern, negatives Wrap, tatsächliche Long-
+Typen, NULL-/Änderungsschutz und atomare Lifecycle-Grenzen implementiert. Gemeinsame
+bestehende Integration6/6 in101,55s; nachgezogene betroffene Layout-/Identitätsfälle
+1/1 in11,02s und1/1 in0,23s. Kein Vollsuite-/GitHub-CI-Nachweis. F171 bleibt für die
+in AUTONUMBER_IMPORT.md ausdrücklich beschriebenen breiten Restanforderungen offen;
+456/384/72 unverändert.

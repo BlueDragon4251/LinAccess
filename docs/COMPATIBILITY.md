@@ -14,9 +14,12 @@ Ein Original-Löschhandler ist direkt und per gebundenem Klick auf synthetischen
 Zeilen geprüft. Copy/PasteAppend und vollständige Access-Ereignisgleichheit bleiben
 offen: [Umfang und Grenzen](RECORD_DELETE_RUNTIME.md).
 
-21 originale AutoNumber-Markierungen bleiben erhalten; 16 einzelne INTEGER-
-Primärschlüssel verwenden AUTOINCREMENT, fünf Zähler ohne Primärschlüssel
-persistente native Standardwert-Generatoren. Das ist weiterhin keine vollständige
+21 originale AutoNumber-Markierungen bleiben erhalten. Neue Access-Importe
+verwenden für alle21 Zähler dieselbe verwaltete signed32-Vergabe, einschließlich
+16 einzelner Primärschlüssel und fünf Zähler ohne Primärschlüssel. Quellstände,
+DAO-AddNew-Reservierung, verbrauchte Cancel-/Rollback-Nummern und der Übergang
+ins Negative sind umgesetzt; neue Designertabellen nutzen denselben Kern.
+Legacy-/CSV-Projekte werden nicht still migriert. Das ist keine vollständige
 Jet-Zählersemantik: [AutoNumber-Grenzen](AUTONUMBER_IMPORT.md).
 
 Begrenztes Copy/PasteAppend verwendet die echte Zwischenablage und erhält

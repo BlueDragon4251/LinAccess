@@ -1,92 +1,104 @@
-# Imported AutoNumber metadata and bounded generation
+# AutoNumber generation and original counter state
 
-MDBTools' MySQL schema exposes auto_increment modifiers that its SQLite schema
-can omit. Encoded structural comments preserve the separate AutoNumber flag;
-quoted keyword text is not a counter and unknown/noninteger targets are rejected.
-Metadata records auto_number/auto_number_native. Original imported values remain
-unchanged. These rules apply to new imports; existing tables are not rebuilt or
-assigned guessed flags/seeds.
+LinAccess is a general database application. Counter identities and state are
+bound to actual tables/columns, not to Kassa names or workflows. The original
+Kassa file is one regression corpus; technical Jet references and newly authored
+native tables exercise the same implementation.
 
-The original Kassa schema has 21 counters. Sixteen single INTEGER primary keys
-use SQLite AUTOINCREMENT. Five without a primary key now use a managed DEFAULT
-function and persistent _la_counter_sequences state. Allocation belongs to the
-inserting SQL statement and rolls back on failure. Seed triggers advance after
-explicit integer inserts/updates. All 21 new-import counters report generation;
-this is bounded sequential allocation, not full Jet semantics.
+## Current implementation
 
-Managed defaults require LinAccess SQL functions on each connection; application/
-DAO initialization registers them, also after reopen. Form and DAO inserts omit
-unset generated fields, including NULL new-record buffers. PasteAppend uses live
-column/default metadata to omit generated values; manual keys are retained.
-Direct SQL explicitly supplying NULL to a managed counter currently fails NOT
-NULL instead of allocating. Counter values differ from SQLite rowid/bookmarks.
+New native MDB imports preserve the separate AutoNumber flag and original values.
+The readonly helper reads the Jet3/4 table-definition last-allocated Long at
+offset16/20, checks source SHA256 before/after, and reports exact counter-column
+identities. Restoration uses the verified source state, not MAX(remaining rows).
+Empty tables and deleted highest IDs retain their last allocation. Source state,
+active values and hashes must agree; an import failure rolls back atomically.
+Caller-owned CSV does not inspect its diagnostic source filename or infer seeds.
 
-Tests cover explicit/generated/no-reuse/higher-key inserts, malformed metadata,
-quoted names, failed-import rollback, missing/exhausted sequences, native form
-save/Copy/PasteAppend, a counter-only form, DAO AddNew/NULL buffers and reopen
-persistence. Two simultaneous connections allocate 40 distinct values. The real
-29-table copy checks all 21 flags/generators and separate savepoint-isolated
-insert/delete/insert probes on copied single-PK and non-PK tables. All source
-cells remain equal; the original MDB is read-only and hash-checked. The installed
-backend self-check executes fixture-free managed-counter allocation, constraint
-rollback and deleted-highest-value no-reuse checks.
+New source-backed counters use INT storage with a managed DEFAULT, including
+single-column primary keys. INT avoids SQLite's INTEGER PRIMARY KEY rowid alias.
+`_la_counter32_sequences` stores signed32 state. SQL defaults and DAO reservations
+advance2147483647 to -2147483648 and then -2147483647. The21 original counters
+(16 single-PK, five without a PK) use this same mechanism. The original primary
+keys/index directions and relationships remain independently checked. Counter
+values and opaque rowid/bookmark identities are separate.
 
-Open: stored source seeds above remaining data, Random/Replication IDs, exact Jet
-signed-Long overflow, gaps after failed/rolled-back allocations, assignment timing
-before form save, complete counter read-only/DAO Attributes behavior, composite
-edge cases, table rename/drop metadata cleanup, direct-SQL explicit NULL and an
-independent Access 2003 runtime oracle. Native generation is no blanket AutoNumber
-compatibility claim.
+The native table designer creates the same managed32-bit counter. Newly created
+native generators through DAO DDL are also configured. Explicit SQLite-style
+INTEGER PRIMARY KEY AUTOINCREMENT tables retain their physical rowid alias;
+DAO uses the32-bit state there, but raw SQLite automatic SQL cannot wrap that
+alias. An explicit unsupported error prevents an out-of-range stored value.
+Existing projects and legacy caller-owned CSV generators are not silently migrated;
+their previous64-bit SQL allocation remains a bounded legacy contract.
 
+DAO AddNew reserves each generated value before returning, so the new-record
+buffer exposes it immediately. CancelUpdate, Close and a failed Update do not
+return the reserved value to the sequence. Reservations made inside a native
+Workspace transaction survive Rollback: capture the current generator frontier,
+ROLLBACK TO the workspace savepoint, restore consumed values while retaining the
+transaction lock, then RELEASE. Business rows roll back; consumed numbers persist
+in the same project file. No counter sidecar, service or Java dependency is used.
+Schema actions after reserved allocations in that transaction are refused3251
+until transaction completion; arbitrary reentrant/external transaction changes
+are not claimed to match Jet. Existing new-buffer NULL assignments preserve an
+already reserved generated value; this is not proof of every DAO assignment case.
 
-## Actual Access 2003 reference and stored source state (2026-11-08)
+Imported managed counters reject explicit SQL NULL with3162. Source-backed
+counter UPDATEs raise3113; DAO existing-record assignment raises3164. Proven
+writable direct-table Long generators expose recordset Field.Attributes49 and
+DataUpdatable=True. Bound form controls reject existing counter assignment2448;
+normal form updates omit unchanged generated fields. These properties are not
+inferred for unsupported contexts.
 
-The user executed the standalone technical probes under Access11.0 / DAO3.6.
-Only the technical counter observations are retained in
-`tests/access2003_reference/counter-observations.json`, with collector/archive
-hashes. No original schema, business rows, original query SQL or VBA is included.
-The reference shows allocation at AddNew before Update, consumed values after
-CancelUpdate, failed Required validation and transaction rollback; generated
-recordset Fields.Attributes=49, DataUpdatable=True, assignment error3164 and
-SQL update error3113. COUNTER(100,7) returns100/107/114. A counter advanced by an
-explicit2147483646 append generates2147483647, -2147483648, -2147483647.
-These findings are a reference, not a statement that LinAccess implements them all.
+Persisted32-bit generator metadata supplies Long typing to native field readers
+and UI models. Noncompound query projections with verified main-database physical
+column lineage preserve the Long subtype for these generators. Expressions,
+compound queries and unproven origins receive no guessed counter type.
 
-The native readonly metadata helper now reads the Jet3/Jet4 table-definition
-last-allocated Long (offset16/20 respectively), binds its result to before/after
-source SHA256, and returns counter-column identities. New native MDB imports
-restore both sqlite_sequence and managed counter state instead of deriving the
-last allocation from remaining rows. Empty tables and deleted highest IDs retain
-the source state. Negative state, UUID generators, multiple Long generators and
-exposed NewValues/Seed/Increment settings are refused by this bounded decoder;
-source random/custom-step identification and complete property decoding remain
-open. In particular, absent DAO/MDBTools properties alone are not proof of all
-possible counter modes. No full increment/mode claim is made.
+DAO DDL wraps the schema action and counter/schema/index metadata cleanup in one
+savepoint. DROP removes the managed sequence catalogs and original-field/index
+metadata for the removed table. Workspace rollback restores both table and state;
+a new import under the same name can start from its source seed. Historical logs
+and saved query definitions remain. Managed/imported renames are refused atomically
+until default/index/source metadata rebinding is implemented. This is not complete
+relationship-constraint lifecycle handling.
 
-Restoration checks active imported values against the declared source state and
-runs in the import savepoint/whole-database transaction. Hash/identity/state
-contradictions roll back; caller-owned CSV mode does not inspect its diagnostic
-source filename or pretend to recover a stored source state. Existing projects
-are not assigned reconstructed metadata.
+## Actual Microsoft Access 2003 reference
 
-Native-source counters also receive an UPDATE guard carrying the observed SQL
-error3113. DAO editing an existing generated field raises3164. For the proven
-writable direct-table Long-generator context, recordset Field.Attributes and
-DataUpdatable expose49/True; unsupported contexts still fail explicitly.
+The user ran the technical probes with Access11.0 / DAO3.6. Only technical counter
+observations are retained in `tests/access2003_reference/counter-observations.json`,
+with collector/archive hashes. No original schema, business rows, query SQL or VBA
+is included. The reference shows:
 
-Still open in F171: allocation before AddNew returns, durable consumed numbers
-across rollback/failure and concurrent applications, signed-Long wrap, custom
-increments, random/replication, full property/lifecycle semantics and schema
-rename/drop cleanup. The old SQLite64-bit transactional allocator is not claimed
-to match the newly collected Jet observations. The fixed456/384/72 catalog is
-unchanged.
+- Deleted highest/all rows still allocate4 after allocating1/2/3.
+- AddNew allocates before Update; cancellation, failed Required validation and
+  rollback consume2/4/6, followed by3/5/7.
+- Recordset Attributes49, DataUpdatable=True; existing field assignment3164,
+  SQL update3113, explicit SQL NULL3162.
+- COUNTER(100,7) produces100/107/114.
+- After explicit2147483646, allocation produces2147483647, -2147483648,
+  -2147483647.
 
+The reference is not an implementation verdict. Optional Jackcess-generated actual
+Jet4 files independently cover deleted-highest/empty-table stored state. Regression
+checks exercise new native tables, source imports, immediate AddNew values,
+cancellation/failure/rollback, positive/negative wrap, NULL/update errors, persistent
+reopen, typed query projection and atomic lifecycle behavior in existing targets.
 
-DAO DDL now wraps the schema action and counter/schema/index metadata cleanup in
-one savepoint. DROP removes the corresponding managed sequence and original-field/
-index metadata, allowing a new import under the same name. Workspace rollback
-restores both table and metadata. Historical import logs and saved query definitions
-remain historical; this is not a rewrite of dependent relationship constraints.
-Managed/imported table renames are refused atomically with3251 until default/index/
-source metadata rebinding is implemented; silently retaining the old sequence key
-is not accepted. General rename support and relationship lifecycle remain open.
+## Remaining F171 requirements
+
+Full custom increments/seeds and source binary mode/property decoding, Random and
+replication generators, negative source-state import, complete field properties,
+form/event allocation timing, raw SQL statement-failure allocation gaps, external
+transaction/crash behavior, concurrent application/locking semantics, general
+schema rename and relationship lifecycle remain open. The current source decoder
+refuses negative state, UUID generators, multiple Long generators and exposed
+NewValues/Seed/Increment settings. Absent DAO/MDBTools properties do not prove every
+possible counter mode; do not claim generic custom-step/random source support.
+
+Managed SQL defaults are allocated within the inserting statement; failed raw SQL
+can still roll back their allocation. DAO reserves in a preceding statement, so its
+failed-Update/cancel/workspace-rollback cases have the implemented consumed-number
+behavior. Do not transfer that claim to all SQL/form/clipboard event paths.
+
+The fixed456/384/72 catalog is unchanged. No full AutoNumber or Access parity claim.
