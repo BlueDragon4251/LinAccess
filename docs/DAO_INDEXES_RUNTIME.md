@@ -166,3 +166,23 @@ existing-key removal/recreation, dependent relation refusal, counter frontier,
 BLOBs, views/triggers, zero-length rules and cursor/clone guards. GUI deletes
 and recreates the actual id primary key without changing rows. No fresh broad
 suite or additional target; fixed456/384/72 unchanged.
+
+## Required indexes on existing nullable native fields
+
+Existing native Index.Required=True now builds actual NOT NULL rules through
+the same checked schema rebuild, even when the fields were previously nullable.
+Existing Nulls refuse3314 atomically; data are not filled. Nonunique Required
+indexes remain nonunique. Removing such an index removes only its implicit null
+restrictions; explicit Required, primary keys and other Required indexes keep
+their rules. Deleted physical indexes are omitted from reconstruction rather
+than inadvertently restored. Ordinary index field order/directions, other schema
+objects, field validation, values and counter state are preserved. Declared
+relations must be removed before deleting a constraint-bearing index. Complete
+Access locking/foreign index flags and in-place property mutation remain open.
+
+Existing GUI/DAO2/2 passed (5.73s), app built. Actual GUI observes label NOT NULL
+appear/disappear with Required index create/delete while keeping its primary
+key. DAO proves nullable-data refusal, retry after explicit data correction,
+nonunique duplicate acceptance, separate Field.Required=False metadata, physical
+Null rejection/removal, original zero-length checks and unchanged counter state.
+No new target/broad suite; fixed456/384/72 unchanged, F121 remains open.

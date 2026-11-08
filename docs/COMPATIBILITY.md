@@ -3369,3 +3369,11 @@ DAO1/1 (1,64s), App gebaut; keinen frischen2/2-/Gesamtlauf behaupten. Details
 DAO_INDEXES_RUNTIME.md.456/384/72 unverändert. Als Nächstes Required-Indizes
 vorhandener nativer Tabellen mit echten Nullregeln auch auf bisher nullable
 Feldern sowie korrekter Regelentfernung umsetzen; danach fortlaufend weiter.
+
+Required-Indizes vorhandener nativer Tabellen erzwingen jetzt echte NOT-NULL-
+Regeln auch auf bisher nullable Feldern. Vorhandene Nulls verweigern atomar3314;
+Löschen entfernt nur implizite Indexregeln, andere Pflichtregeln bleiben erhalten.
+Entfernte physische Indizes werden nicht versehentlich wiederhergestellt. GUI/
+DAO2/2 (5,73s), App gebaut; DAO_INDEXES_RUNTIME.md.456/384/72 unverändert.
+Nächste Arbeit: sichere physische DAO-Zeilenidentität bei normalen Nutzerfeldern
+namens rowid/_rowid_/oid; danach andere offene Anforderungen ohne Zwischenfinal.

@@ -2306,10 +2306,10 @@ std::shared_ptr<VbaObject> createExistingTableIndex(QSqlDatabase db,const QStrin
     auto owner=std::make_shared<DetachedTableState>();owner->db=db;owner->workspace=workspaceState(db);owner->name=table;owner->existing=std::make_shared<TableDefinition>(db,table);
     return std::make_shared<DetachedIndex>(owner,name);
 }
-bool mutateNativePrimaryIndex(QSqlDatabase db,const QString& table,const VbaValue& value,bool erase);
+bool mutateNativeSchemaIndex(QSqlDatabase db,const QString& table,const VbaValue& value,bool erase);
 void mutateExistingTableIndex(QSqlDatabase db,const QString& table,const VbaValue& raw,bool erase) {
     const auto value=erase ? scalarVbaValue(raw) : raw;
-    if(mutateNativePrimaryIndex(db,table,value,erase)) return;
+    if(mutateNativeSchemaIndex(db,table,value,erase)) return;
     checkReservedCounterSchemaAction(db);
     QSqlQuery query(db);const auto savepoint="la_index_mutation_"+QUuid::createUuid().toString(QUuid::Id128);
     if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
@@ -2748,9 +2748,10 @@ void rebuildNativeRelationTable(QSqlDatabase db,const QString& table,const QVect
         return compileAccessQuery("CREATE TABLE "+schemaJetName(target)+" ("+parts.join(',')+")").sql;
     };
     if(!equivalentNativeSchemaSql(originalSql,makeSql(table,before,definitions))) throw VbaRuntimeError(3251,"DAO: Unknown/custom table constraints prevent safe reconstruction");
-    QVector<QString> objects;query.prepare("SELECT sql FROM main.sqlite_schema WHERE tbl_name=? AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type,name");query.addBindValue(table);
+    QSet<QString> retainedIndexes;for(const auto& index:following) if(index.kind!=1) retainedIndexes.insert(table+"_"+index.name);
+    QVector<QString> objects;query.prepare("SELECT name,type,sql FROM main.sqlite_schema WHERE tbl_name=? AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type,name");query.addBindValue(table);
     if(!query.exec()) queryFailure(query);qint64 objectBytes=0;
-    while(query.next()) {const auto sql=query.value(0).toString();objectBytes+=sql.size();if(objects.size()>=4096 || objectBytes>4*1024*1024) throw VbaRuntimeError(3251,"DAO: Relation schema object bound exceeded");objects.append(sql);}query.finish();
+    while(query.next()) {if(replacementIndexes && query.value(1).toString()=="index" && !retainedIndexes.contains(query.value(0).toString())) continue;const auto sql=query.value(2).toString();objectBytes+=sql.size();if(objects.size()>=4096 || objectBytes>4*1024*1024) throw VbaRuntimeError(3251,"DAO: Relation schema object bound exceeded");objects.append(sql);}query.finish();
     const auto original=nativeTableValueDigest(db,table,names);
     const auto temporary="_la_relation_rebuild_"+QUuid::createUuid().toString(QUuid::Id128);
     if(!query.exec(makeSql(temporary,after,modifiedDefinitions))) queryFailure(query);
@@ -2770,50 +2771,51 @@ TableSchemaReader currentNativeFieldReader(QSqlDatabase db,const QString& table)
     const auto workspace=workspaceState(db);const auto version=nativeSchemaVersion(db),rollback=workspace->rollbackRevision,generation=workspace->tableGenerations.value(table.toCaseFolded());
     return [db,table,workspace,version,rollback,generation] {workspace->check();if(workspace->rollbackRevision!=rollback || workspace->tableGenerations.value(table.toCaseFolded())!=generation || nativeSchemaVersion(db)!=version) throw VbaRuntimeError(3420,"DAO: Edited field metadata invalidated");return readTableSchemaColumns(db,table);};
 }
-bool mutateNativePrimaryIndex(QSqlDatabase db,const QString& table,const VbaValue& value,bool erase) {
+bool mutateNativeSchemaIndex(QSqlDatabase db,const QString& table,const VbaValue& value,bool erase) {
     const auto current=readNativeIndexCatalog(db,table);std::shared_ptr<DetachedIndex> builder;int removed=-1;
     if(erase) {
         if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null index name");const auto name=text(value.asText());
-        for(int i=0;i<current.size();++i) if(current[i].source.name.compare(name,Qt::CaseInsensitive)==0 && current[i].source.kind==1) removed=i;
+        for(int i=0;i<current.size();++i) if(current[i].source.name.compare(name,Qt::CaseInsensitive)==0 && (current[i].source.kind==1 || (current[i].source.flags&8))) removed=i;
         if(removed<0) return false;
     } else {
-        if(value.kind!=VbaValue::Kind::Object || !(builder=std::dynamic_pointer_cast<DetachedIndex>(value.object)) || builder->state_->data.kind!=1) return false;
-        if(builder->state_->table->workspace!=workspaceState(db) || !builder->state_->table->existing || builder->state_->table->name.compare(table,Qt::CaseInsensitive)!=0 || builder->state_->appended) throw VbaRuntimeError(3219,"DAO: Primary index builder belongs to a different or attached table");builder->state_->mutableCheck();
+        if(value.kind!=VbaValue::Kind::Object || !(builder=std::dynamic_pointer_cast<DetachedIndex>(value.object)) || (builder->state_->data.kind!=1 && !(builder->state_->data.flags&8))) return false;
+        if(builder->state_->table->workspace!=workspaceState(db) || !builder->state_->table->existing || builder->state_->table->name.compare(table,Qt::CaseInsensitive)!=0 || builder->state_->appended) throw VbaRuntimeError(3219,"DAO: Schema index builder belongs to a different or attached table");builder->state_->mutableCheck();
     }
     const auto workspace=workspaceState(db);checkReservedCounterSchemaAction(db);NativeSchemaSettings settings(db);settings.begin(false);
     QSqlQuery query(db);const auto savepoint="la_primary_mutation_"+QUuid::createUuid().toString(QUuid::Id128);
     if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);bool completed=false;const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
-    const auto checked=readNativeIndexCatalog(db,table);if(checked!=current) throw VbaRuntimeError(3420,"DAO: Index catalog changed before primary mutation");
+    const auto checked=readNativeIndexCatalog(db,table);if(checked!=current) throw VbaRuntimeError(3420,"DAO: Index catalog changed before schema index mutation");
     auto catalog=std::make_shared<NativeRelationCatalog>(db);const auto relations=catalog->read(table);
-    if(erase) for(const auto& relation:relations) if(relation.parent==table || relation.child==table) throw VbaRuntimeError(3251,"DAO: Remove dependent relations before removing the primary key");
+    if(erase) for(const auto& relation:relations) if(relation.parent==table || relation.child==table) throw VbaRuntimeError(3251,"DAO: Remove dependent relations before removing a constraint-bearing index");
     const auto columns=readTableSchemaColumns(db,table);QStringList names;for(const auto& column:columns) names.append(column.name);
     QVector<AccessSourceIndex> definitions;for(int i=0;i<current.size();++i) if(i!=removed) definitions.append(current[i].source);
     AccessSourceIndex added;
     if(builder) {
         added=builder->state_->data;
-        if(added.name.isEmpty() || added.name.trimmed()!=added.name || added.name.size()>64 || added.name.contains(QChar(0)) || !added.name.isValidUtf16()) throw VbaRuntimeError(5,"DAO: Invalid primary index name");
-        for(const auto& existing:definitions) {if(existing.name.compare(added.name,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3191,"DAO: Duplicate index name");if(existing.kind==1) throw VbaRuntimeError(3283,"DAO: Table already has a primary key");}
-        if(builder->fields_->fields_.isEmpty()) throw VbaRuntimeError(3264,"DAO: Primary index requires fields");
-        if(builder->fields_->fields_.size()>10) throw VbaRuntimeError(3251,"DAO: Primary index field bound exceeded");QSet<QString> seen;added.columns.clear();added.descending.clear();
+        if(added.name.isEmpty() || added.name.trimmed()!=added.name || added.name.size()>64 || added.name.contains(QChar(0)) || !added.name.isValidUtf16()) throw VbaRuntimeError(5,"DAO: Invalid schema index name");
+        for(const auto& existing:definitions) {if(existing.name.compare(added.name,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3191,"DAO: Duplicate index name");if(added.kind==1 && existing.kind==1) throw VbaRuntimeError(3283,"DAO: Table already has a primary key");}
+        if(builder->fields_->fields_.isEmpty()) throw VbaRuntimeError(3264,"DAO: Schema index requires fields");
+        if(builder->fields_->fields_.size()>10) throw VbaRuntimeError(3251,"DAO: Schema index field bound exceeded");QSet<QString> seen;added.columns.clear();added.descending.clear();
         for(const auto& field:builder->fields_->fields_) {
             QString canonical;int type=0;for(const auto& column:columns) if(column.name.compare(field->name_,Qt::CaseInsensitive)==0) {canonical=column.name;type=column.sourceType;break;}
-            if(canonical.isEmpty()) throw VbaRuntimeError(3265,"DAO: Primary index field missing");if(type<=0 || type==11 || type==12 || type==15) throw VbaRuntimeError(3251,"DAO: Primary index field type unsupported");
-            if(seen.contains(canonical.toCaseFolded())) throw VbaRuntimeError(3191,"DAO: Duplicate primary index field");seen.insert(canonical.toCaseFolded());added.columns.append(canonical);added.descending.append(field->descending_);
+            if(canonical.isEmpty()) throw VbaRuntimeError(3265,"DAO: Schema index field missing");if(type<=0 || type==11 || type==12 || type==15) throw VbaRuntimeError(3251,"DAO: Schema index field type unsupported");
+            if(seen.contains(canonical.toCaseFolded())) throw VbaRuntimeError(3191,"DAO: Duplicate schema index field");seen.insert(canonical.toCaseFolded());added.columns.append(canonical);added.descending.append(field->descending_);
         }
-        added.flags|=1;definitions.append(added);
+        if(added.kind==1) added.flags|=1;definitions.append(added);
     }
-    query.prepare("SELECT definition FROM main._la_access_indexes WHERE table_name=? COLLATE NOCASE");query.addBindValue(table);if(!query.exec() || !query.next()) throw VbaRuntimeError(3251,"DAO: Primary index metadata unavailable");const auto previous=query.value(0);if(query.next()) throw VbaRuntimeError(3251,"DAO: Primary index metadata ambiguous");query.finish();
+    query.prepare("SELECT definition FROM main._la_access_indexes WHERE table_name=? COLLATE NOCASE");query.addBindValue(table);if(!query.exec() || !query.next()) throw VbaRuntimeError(3251,"DAO: Schema index metadata unavailable");const auto previous=query.value(0);if(query.next()) throw VbaRuntimeError(3251,"DAO: Schema index metadata ambiguous");query.finish();
     QJsonArray entries,columnNames;for(const auto& name:names) columnNames.append(name);
     for(const auto& index:definitions) {QJsonArray fields;for(int i=0;i<index.columns.size();++i) fields.append(QJsonObject{{"name",index.columns[i]},{"descending",index.descending[i]}});entries.append(QJsonObject{{"name",index.name},{"kind",index.kind},{"flags",index.flags},{"fields",fields}});}
     const auto encoded=QJsonDocument(QJsonObject{{"version",1},{"source_table",table},{"columns",columnNames},{"indexes",entries}}).toJson(QJsonDocument::Compact);(void)checkedAccessSourceIndexes(encoded,names);
     if(workspace->tableFieldRevisions.value(table.toCaseFolded())==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Field schema revision overflow");
     rebuildNativeRelationTable(db,table,relations,relations,{},definitions);
-    query.prepare("UPDATE main._la_access_indexes SET definition=? WHERE table_name=? COLLATE NOCASE AND definition=?");query.addBindValue(QString::fromUtf8(encoded));query.addBindValue(table);query.addBindValue(previous);if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Primary index metadata changed during write");
+    if(builder && added.kind!=1) {QStringList fields;for(int i=0;i<added.columns.size();++i) fields.append(quote(added.columns[i])+(added.descending[i] ? " DESC" : " ASC"));if(!query.exec(QString("CREATE ")+((added.flags&1) ? "UNIQUE " : "")+"INDEX main."+quote(table+"_"+added.name)+" ON "+quote(table)+" ("+fields.join(',')+")")) queryFailure(query);}
+    query.prepare("UPDATE main._la_access_indexes SET definition=? WHERE table_name=? COLLATE NOCASE AND definition=?");query.addBindValue(QString::fromUtf8(encoded));query.addBindValue(table);query.addBindValue(previous);if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Schema index metadata changed during write");
     (void)readNativeIndexCatalog(db,table);(void)readTableSchemaColumns(db,table);(void)catalog->read(table);
     std::shared_ptr<TableDefinition> attached;std::shared_ptr<VbaObject> binding;if(builder) {attached=std::make_shared<TableDefinition>(db,table);binding=attached->member("Indexes",{VbaValue::string(added.name.toStdString())}).object;}
     if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++workspace->tableFieldRevisions[table.toCaseFolded()];
     if(builder) {builder->state_->data=added;builder->state_->appended=true;builder->state_->table->attached=std::move(attached);builder->state_->attachedIndex=std::move(binding);}
-    if(!settings.restore()) throw DaoStoredSchemaChange("DAO: Primary index change stored; connection settings failed to restore, reopen the project");return true;
+    if(!settings.restore()) throw DaoStoredSchemaChange("DAO: Schema index change stored; connection settings failed to restore, reopen the project");return true;
 }
 
 TableSchemaReader renameNativeField(QSqlDatabase db,const QString& table,const TableSchemaColumn& column,const QString& renamed) {
