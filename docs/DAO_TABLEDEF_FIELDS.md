@@ -89,3 +89,29 @@ Supported native literal Field.DefaultValue is now readable as a String on
 checked TableDef fields and direct-table Recordset fields. Canonical expression,
 limits and unsupported setters/projections: [default scope](SOURCE_LITERAL_DEFAULTS.md).
 This does not close the complete F121 metadata/schema contract.
+
+## Native detached table creation
+
+`Database.CreateTableDef` and `TableDef.CreateField` now construct detached native
+DAO objects. `Fields.Append` assembles the schema; only `TableDefs.Append` creates
+the physical table. Field names, duplicate names (including subsequent renames),
+object ownership and reserved table names are checked before creation. A table
+without fields is refused. `TableDefs.Delete` uses the existing guarded DDL path.
+
+Supported creation types are Boolean, Byte, Integer, Long, Double, Date, bounded
+Text, LongBinary and Memo. Text requires an explicit size1..255 and gets the shared
+Jet text-capacity check. Detached Required and supported literal DefaultValue
+setters affect actual SQL constraints/defaults. Long plus dbAutoIncrField uses the
+managed signed32 generator. Native field-attribute constants are available in VBA.
+Currency, Single, Decimal, GUID, linked definitions and nonzero table attributes
+remain explicitly unsupported here. This is not an original MDB format writer.
+
+Physical DDL, counter initialization and explicitly declared native type/size
+metadata are protected by a common savepoint. Native metadata use DAO_NATIVE
+provenance, never fabricated MDB source identity. Once attached, held builders
+read through the existing live table/field catalog and retain its close,
+generation, schema-change and rollback guards. Attached field mutation remains
+refused; complete post-creation Fields/Indexes/Relations mutation is still open.
+
+This extends F055/F121 within the fixed456/384/72 catalog. Full DAO schema parity
+and a Windows Access2003 execution oracle for this new creation flow remain open.

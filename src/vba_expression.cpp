@@ -1053,6 +1053,11 @@ private:
             {"dbsingle",6},{"dbdouble",7},{"dbdate",8},{"dbbinary",9},{"dbtext",10},
             {"dblongbinary",11},{"dbmemo",12},{"dbguid",15}};
         if (const auto type=daoTypes.find(word);type!=daoTypes.end()) return VbaValue::longInteger(type->second);
+        static const std::unordered_map<std::string,int> fieldAttributes{
+            {"dbfixedfield",1},{"dbvariablefield",2},{"dbautoincrfield",16},
+            {"dbupdatablefield",32},{"dbsystemfield",8192},{"dbhyperlinkfield",32768},
+            {"dbdescending",1}};
+        if(const auto attribute=fieldAttributes.find(word);attribute!=fieldAttributes.end()) return VbaValue::longInteger(attribute->second);
         static const std::unordered_map<std::string,int> queryTypes{
             {"dbqselect",0},{"dbqcrosstab",16},{"dbqdelete",32},{"dbqupdate",48},
             {"dbqappend",64},{"dbqmaketable",80},{"dbqddl",96},{"dbqsqlpassthrough",112},

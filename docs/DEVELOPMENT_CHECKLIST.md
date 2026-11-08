@@ -1475,3 +1475,8 @@ bestehende Integration6/6 in101,55s; nachgezogene betroffene Layout-/Identitäts
 1/1 in11,02s und1/1 in0,23s. Kein Vollsuite-/GitHub-CI-Nachweis. F171 bleibt für die
 in AUTONUMBER_IMPORT.md ausdrücklich beschriebenen breiten Restanforderungen offen;
 456/384/72 unverändert.
+
+Nativer CreateTableDef/CreateField/Fields.Append/TableDefs.Append-Schemaaufbau
+und TableDefs.Delete implementiert; gemeinsame DDL/Counter/Typ-Metadaten-Atomizität,
+echter VBA-Durchlauf und gezielte DAO/Import2/2 (1,25s), App gebaut. Grenzen in
+DAO_TABLEDEF_FIELDS.md; F055/F121 offen,456/384/72 unverändert.

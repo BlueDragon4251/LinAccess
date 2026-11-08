@@ -1564,8 +1564,57 @@ End Function
     assert(!rows.exec("SELECT NativeScale(3)")); assert(linaccess::jetSqlFunctionErrorNumber(rows.lastError().text().toCaseFolded().toStdString())==3251);
 }
 
+void testDetachedTableCreation() {
+    using linaccess::VbaValue;
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-detached-schema");db.setDatabaseName(":memory:");assert(db.open());
+    Host host(db);
+    const auto result=linaccess::executeVbaProcedure(R"VBA(Sub BuildSchema()
+Dim database As DAO.Database
+Dim table As DAO.TableDef
+Dim field As DAO.Field
+Set database=CurrentDb
+Set table=database.CreateTableDef("OwnTable")
+Set field=table.CreateField("ID",dbLong)
+field.Attributes=dbAutoIncrField
+table.Fields.Append field
+Set field=table.CreateField("Label",dbText,12)
+field.Required=True
+field.DefaultValue="'new'"
+table.Fields.Append field
+Set field=table.CreateField("Enabled",dbBoolean)
+table.Fields.Append field
+database.TableDefs.Append table
+database.Execute "INSERT INTO OwnTable (Enabled) VALUES (True)"
+End Sub)VBA","BuildSchema",host);
+    if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Schema builder error="<<result.errorNumber<<", line="<<result.line<<", reason="<<result.explanation<<"\n";
+    assert(result.status==linaccess::VbaExecutionStatus::Completed);
+    QSqlQuery query(db);assert(query.exec("SELECT ID,Label,Enabled FROM OwnTable") && query.next());
+    assert(query.value(0).toInt()==1 && query.value(1).toString()=="new" && query.value(2).toInt()==-1);query.finish();
+    auto database=linaccess::makeDaoDatabase(db),tables=database->member("TableDefs",{}).object;
+    auto table=tables->member("Item",{VbaValue::string("OwnTable")}).object;
+    auto field=table->member("Fields",{VbaValue::string("Label")}).object;
+    assert(field->member("Size",{}).asNumber()==12);
+    const auto error=[&](const std::function<void()>& operation,int expected) {int number=0;try {operation();} catch(const linaccess::VbaRuntimeError& failure) {number=failure.number;}assert(number==expected);};
+    error([&] {database->member("Execute",{VbaValue::string("INSERT INTO OwnTable (Label) VALUES ('1234567890123')")});},3163);
+    auto pending=database->member("CreateTableDef",{VbaValue::string("Pending")}).object;
+    auto fields=pending->member("Fields",{}).object;
+    auto first=pending->member("CreateField",{VbaValue::string("A"),VbaValue::integer(4)}).object;
+    auto second=pending->member("CreateField",{VbaValue::string("B"),VbaValue::integer(4)}).object;
+    fields->member("Append",{VbaValue::reference(first)});fields->member("Append",{VbaValue::reference(second)});
+    second->assign("Name",VbaValue::string("a"));
+    error([&] {tables->member("Append",{VbaValue::reference(pending)});},3191);
+    assert(!db.tables().contains("Pending"));second->assign("Name",VbaValue::string("B"));
+    tables->member("Append",{VbaValue::reference(pending)});
+    assert(fields->enumerate().size()==2);
+    tables->member("Delete",{VbaValue::string("Pending")});
+    error([&] {fields->enumerate();},3420);
+    tables->member("Delete",{VbaValue::string("OwnTable")});
+    error([&] {field->member("Name",{});},3420);
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testDetachedTableCreation();
     testVariantArraysDao();
     testDaoGetRows();
     testOwnedQueryDefs();

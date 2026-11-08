@@ -2344,3 +2344,16 @@ Generatormetadaten sperren gebundene Eingabe. Bestehende MainWindow-/Layout-Prü
 Private Logs counter-reseed-{build,tests}, counter-reseed-guards-{build,tests},
 counter-readonly-controls-{build,tests} unter /workspace/work/. F171 und456/384/72
 bleiben für ausdrücklich dokumentierte Restanforderungen offen/unverändert.
+
+2026-11-08: Allgemeiner nativer DAO-Schemaaufbau umgesetzt: detached
+Database.CreateTableDef / TableDef.CreateField / Fields.Append / TableDefs.Append,
+Required/literale Defaults, Text1..255 mit tatsächlicher Kapazitätsprüfung und
+Long-AutoNumber über dbAutoIncrField. DDL+Generator+DAO_NATIVE-Typmetadaten gemeinsam
+atomar; TableDefs.Delete nutzt bewachten DDL-Weg. Angefügte Builder delegieren an
+live Katalog/Invalidierung. Keine MDB-Schreib-/vollständige DAO-Paritätsbehauptung.
+Bestehende Ziele DAO/Import2/2 (1,25s), App gebaut. VBA legt eigene Tabelle an und
+speichert tatsächliche Standardwerte/Boolean/Counter; Textüberlauf, Namenskollision
+und gehaltene Objekte nach Löschung geprüft. Keine breite Vollsuite wiederholt.
+Details docs/DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert. Nächster zusammenhängender
+Umfang: detached CreateIndex/Index.CreateField/Indexes.Append inklusive realer
+Primär-/Unique-/ASC-/DESC-Anlage, anschließend gebündelter DAO-/Importcheck.

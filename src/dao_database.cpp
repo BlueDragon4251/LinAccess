@@ -353,7 +353,7 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
                     : source=="CURRENCY" ? 5 : source=="SINGLE" ? 6 : source=="DOUBLE" ? 7 : (source=="DATE" || source=="DATETIME") ? 8
                     : source=="VARCHAR" ? 10 : source=="BLOB" ? 11 : (source=="MEMO" || (source=="TEXT" && origin=="MDBTOOLS_MYSQL")) ? 12 : source=="GUID" ? 15 : -1;
                 bool found=false;
-                if(size>0 && (code!=10 || origin!="MDBTOOLS_MYSQL")) throw VbaRuntimeError(3251,"DAO source field capacity provenance unavailable");
+                if(size>0 && (code!=10 || (origin!="MDBTOOLS_MYSQL" && origin!="DAO_NATIVE"))) throw VbaRuntimeError(3251,"DAO source field capacity provenance unavailable");
                 for(auto& column:columns) if(column.name.toCaseFolded()==name) { column.sourceType=code; column.sourceSize=static_cast<int>(size); found=true; break; }
                 if(!found) throw VbaRuntimeError(3251,"DAO source schema field unavailable");
             }
@@ -1801,12 +1801,158 @@ private:
     bool invalidated_{};
     quint64 generation_{};
 };
+// Detached DAO schema objects; mutations become physical only at TableDefs.Append.
+QString schemaJetName(QString name) {return '['+name.replace("]","]]")+']';}
+struct DetachedTableState {
+    QSqlDatabase db;std::shared_ptr<WorkspaceState> workspace;QString name;
+    std::shared_ptr<TableDefinition> attached;
+};
+class DetachedField final : public VbaObject {
+public:
+    DetachedField(std::shared_ptr<DetachedTableState> owner,QString name,int type,int size):owner_(std::move(owner)),name_(std::move(name)),type_(type),size_(size) {
+        attributes_=(type==10 || type==11 || type==12) ? 2 : 1;
+        if(size_==0 && type!=10) {switch(type) {case 1:case 2:size_=1;break;case 3:size_=2;break;case 4:case 6:size_=4;break;case 5:case 7:case 8:size_=8;break;case 15:size_=16;break;default:break;}}
+    }
+    std::string_view className() const override {return "Field";}
+    bool isNativeType(std::string_view type) const override {return type=="dao.field";}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        owner_->workspace->check();if(!args.empty()) throw VbaRuntimeError(450,"DAO: Detached field properties take no arguments");
+        const auto key=lower(name);
+        if(owner_->attached) return owner_->attached->member("Fields",{VbaValue::string(name_.toStdString())}).object->member(name,args);
+        if(key=="name") return VbaValue::string(name_.toStdString());
+        if(key=="type") return VbaValue::integer(static_cast<std::int16_t>(type_));
+        if(key=="size") return VbaValue::longInteger(size_);
+        if(key=="attributes") return VbaValue::longInteger(attributes_);
+        if(key=="required") return VbaValue::logical(required_);
+        if(key=="defaultvalue") return VbaValue::string(default_.toStdString());
+        throw VbaRuntimeError(3251,"DAO: Detached field property unsupported");
+    }
+    void assign(std::string_view name,const VbaValue& raw) override {
+        owner_->workspace->check();if(owner_->attached) throw VbaRuntimeError(383,"DAO: Attached schema field is read-only");
+        const auto value=scalarVbaValue(raw);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null schema field property");
+        const auto key=lower(name);
+        if(key=="name") {name_=text(value.asText());return;}
+        if(key=="type") {type_=static_cast<int>(coerceVbaModuleValue(value,"integer").number);return;}
+        if(key=="size") {size_=static_cast<int>(coerceVbaModuleValue(value,"long").number);return;}
+        if(key=="attributes") {const auto attributes=coerceVbaModuleValue(value,"long").number;if(attributes!=0 && attributes!=1 && attributes!=2 && attributes!=16 && attributes!=17) throw VbaRuntimeError(3251,"DAO: Unsupported field attributes");attributes_=static_cast<int>(attributes);if(type_==4 && (attributes_&16)) attributes_|=1;return;}
+        if(key=="required") {required_=coerceVbaModuleValue(value,"boolean").truthy();return;}
+        if(key=="defaultvalue") {const auto token=text(value.asText());if(!token.isEmpty() && !accessLiteralDefaultSql(token)) throw VbaRuntimeError(3251,"DAO: Field default requires a supported literal");default_=token;return;}
+        throw VbaRuntimeError(3251,"DAO: Detached field assignment unsupported");
+    }
+    QString definition() const {
+        if(name_.isEmpty() || name_.trimmed()!=name_ || name_.size()>64 || name_.contains(QChar(0)) || !name_.isValidUtf16()) throw VbaRuntimeError(5,"DAO: Invalid field name");
+        if(attributes_&16) {
+            if(type_!=4 || !default_.isEmpty()) throw VbaRuntimeError(3251,"DAO: AutoNumber requires a Long field without a scalar default");
+            return schemaJetName(name_)+" COUNTER";
+        }
+        QString type;
+        switch(type_) {
+        case 1:type="BOOLEAN";break;case 2:type="INTEGER1";break;case 3:type="INTEGER2";break;case 4:type="INTEGER4";break;
+        case 6:throw VbaRuntimeError(3251,"DAO: Single schema creation requires exact backing");
+        case 7:type="DOUBLE";break;case 8:type="DATETIME";break;case 10:
+            if(size_<1 || size_>255) throw VbaRuntimeError(3251,"DAO: Text field requires an explicit supported size");
+            type="VARCHAR("+QString::number(size_)+")";break;
+        case 11:type="BLOB";break;case 12:type="TEXT";break;
+        default:throw VbaRuntimeError(3251,"DAO: Field type is not supported for native creation");
+        }
+        auto result=schemaJetName(name_)+" "+type+(required_ ? " NOT NULL" : "");
+        if(!default_.isEmpty()) result+=" DEFAULT "+*accessLiteralDefaultSql(default_);
+        if(type_==10) result+=" CHECK (linaccess_jet_text_capacity("+schemaJetName(name_)+","+QString::number(size_)+"))";
+        return result;
+    }
+    std::shared_ptr<DetachedTableState> owner_;QString name_;int type_{},size_{},attributes_{};bool required_{},appended_{};QString default_;
+};
+class DetachedFields final : public VbaObject {
+public:
+    explicit DetachedFields(std::shared_ptr<DetachedTableState> owner):owner_(std::move(owner)) {}
+    std::string_view className() const override {return "Fields";}
+    bool isNativeType(std::string_view type) const override {return type=="dao.fields";}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        const auto key=lower(name);if(key=="item") return VbaArgumentSignature{{"Index"},1};if(key=="append") return VbaArgumentSignature{{"Object"},1};if(key=="delete") return VbaArgumentSignature{{"Name"},1};return {};
+    }
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        owner_->workspace->check();const auto key=lower(name);
+        if(owner_->attached) return owner_->attached->member("Fields",{}).object->member(name,args);
+        if(key=="count" && args.empty()) return integerCount(fields_.size());
+        if(key=="append") {
+            if(args.size()!=1 || args[0].kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Fields.Append requires a field");
+            auto field=std::dynamic_pointer_cast<DetachedField>(args[0].object);
+            if(!field || field->owner_!=owner_ || field->appended_) throw VbaRuntimeError(3219,"DAO: Field belongs to a different or attached schema");
+            (void)field->definition();for(const auto& existing:fields_) if(existing->name_.compare(field->name_,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3191,"DAO: Duplicate field name");
+            field->appended_=true;fields_.append(field);return {};
+        }
+        if(key=="refresh" && args.empty()) return {};
+        if((key!="item" && key!="delete") || args.size()!=1) throw VbaRuntimeError(450,"DAO: Field name/index required");
+        const auto value=scalarVbaValue(args[0]);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null field index");
+        int position=-1;
+        if(value.kind==VbaValue::Kind::Text) {for(int i=0;i<fields_.size();++i) if(fields_[i]->name_.compare(text(value.asText()),Qt::CaseInsensitive)==0) position=i;}
+        else {const auto index=coerceVbaModuleValue(value,"long").number;if(index>=0 && index<fields_.size()) position=static_cast<int>(index);}
+        if(position<0) throw VbaRuntimeError(3265,"DAO: Field not found");
+        if(key=="delete") {fields_.removeAt(position);return {};}
+        return VbaValue::reference(fields_[position]);
+    }
+    VbaValue item(std::string_view name) override {return member("Item",{VbaValue::string(std::string(name))});}
+    std::vector<VbaValue> enumerate() override {owner_->workspace->check();if(owner_->attached) return owner_->attached->member("Fields",{}).object->enumerate();std::vector<VbaValue> result;for(const auto& field:fields_) result.push_back(VbaValue::reference(field));return result;}
+    std::shared_ptr<DetachedTableState> owner_;QVector<std::shared_ptr<DetachedField>> fields_;
+};
+class DetachedTableDefinition final : public VbaObject {
+public:
+    DetachedTableDefinition(QSqlDatabase db,QString name):state_(std::make_shared<DetachedTableState>()) {state_->db=db;state_->workspace=workspaceState(db);state_->name=std::move(name);fields_=std::make_shared<DetachedFields>(state_);}
+    std::string_view className() const override {return "TableDef";}
+    bool isNativeType(std::string_view type) const override {return type=="dao.tabledef";}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {const auto key=lower(name);if(key=="createfield") return VbaArgumentSignature{{"Name","Type","Size"},0};if(key=="fields") return VbaArgumentSignature{{"Index"},0};return {};}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        state_->workspace->check();const auto key=lower(name);
+        if(state_->attached) return state_->attached->member(name,args);
+        if(key=="name" && args.empty()) return VbaValue::string(state_->name.toStdString());
+        if(key=="fields") return args.empty() ? VbaValue::reference(fields_) : fields_->member("Item",args);
+        if(key=="createfield") {
+            if(args.size()>3) throw VbaRuntimeError(450,"DAO: CreateField accepts Name, Type and Size");
+            QString fieldName;int type=0,size=0;
+            if(!args.empty() && args[0].kind!=VbaValue::Kind::Missing) {if(args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null field name");fieldName=text(args[0].asText());}
+            if(args.size()>1 && args[1].kind!=VbaValue::Kind::Missing) type=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(args[1]),"integer").number);
+            if(args.size()>2 && args[2].kind!=VbaValue::Kind::Missing) size=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(args[2]),"long").number);
+            return VbaValue::reference(std::make_shared<DetachedField>(state_,fieldName,type,size));
+        }
+        throw VbaRuntimeError(3251,"DAO: Detached TableDef member unsupported");
+    }
+    void assign(std::string_view name,const VbaValue& raw) override {
+        state_->workspace->check();if(state_->attached || lower(name)!="name") throw VbaRuntimeError(383,"DAO: TableDef property is read-only");
+        const auto value=scalarVbaValue(raw);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null table name");state_->name=text(value.asText());
+    }
+    void append(QSqlDatabase db) {
+        state_->workspace->check();if(state_->attached || workspaceState(db)!=state_->workspace) throw VbaRuntimeError(3219,"DAO: TableDef belongs to a different or attached database");
+        const auto name=state_->name;
+        if(name.isEmpty() || name.trimmed()!=name || name.size()>64 || name.contains(QChar(0)) || !name.isValidUtf16() || name.startsWith("_la_",Qt::CaseInsensitive) || name.startsWith("sqlite_",Qt::CaseInsensitive)) throw VbaRuntimeError(5,"DAO: Invalid/reserved table name");
+        if(fields_->fields_.isEmpty()) throw VbaRuntimeError(3264,"DAO: Cannot append a table without fields");
+        QStringList definitions;QSet<QString> names;
+        for(const auto& field:fields_->fields_) {
+            if(names.contains(field->name_.toCaseFolded())) throw VbaRuntimeError(3191,"DAO: Duplicate field name");
+            names.insert(field->name_.toCaseFolded());definitions.append(field->definition());
+        }
+        QSqlQuery query(db);const auto savepoint="la_schema_builder_"+QUuid::createUuid().toString(QUuid::Id128);
+        if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
+        bool completed=false;const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
+        executeAction(db,compileAccessQuery("CREATE TABLE "+schemaJetName(name)+" ("+definitions.join(',')+")"),{});
+        QJsonArray metadata;
+        for(const auto& field:fields_->fields_) {
+            const auto source=field->type_==1 ? "BOOLEAN" : field->type_==2 ? "TINYINT" : field->type_==3 ? "SMALLINT" : field->type_==4 ? "INT" : field->type_==7 ? "DOUBLE" : field->type_==8 ? "DATETIME" : field->type_==10 ? "VARCHAR" : field->type_==11 ? "BLOB" : "MEMO";
+            metadata.append(QJsonObject{{"name",field->name_},{"source_type",source},{"source_origin","DAO_NATIVE"},{"source_size",field->type_==10 ? field->size_ : 0}});
+        }
+        if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_table_schema(table_name TEXT PRIMARY KEY,definition TEXT NOT NULL)")) queryFailure(query);
+        query.prepare("INSERT INTO main._la_table_schema(table_name,definition) VALUES(?,?)");query.addBindValue(name);query.addBindValue(QJsonDocument(metadata).toJson(QJsonDocument::Compact));
+        if(!query.exec()) queryFailure(query);
+        if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;
+        state_->attached=std::make_shared<TableDefinition>(db,name);
+    }
+private:std::shared_ptr<DetachedTableState> state_;std::shared_ptr<DetachedFields> fields_;
+};
 class TableDefinitions final : public VbaObject {
 public:
     std::string_view className() const override { return "TableDefs"; }
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
-        if(lower(name)=="item") return VbaArgumentSignature{{"Index"},1}; return {};
+        const auto key=lower(name);if(key=="item") return VbaArgumentSignature{{"Index"},1};if(key=="append") return VbaArgumentSignature{{"Object"},1};if(key=="delete") return VbaArgumentSignature{{"Name"},1};return {};
     }
     explicit TableDefinitions(QSqlDatabase db) : db_(std::move(db)),workspace_(workspaceState(db_)) {}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
@@ -1822,6 +1968,15 @@ public:
                 if(!object || !object->valid()) it=definitions_.erase(it); else ++it;
             }
             return {};
+        }
+        if(key=="append") {
+            if(args.size()!=1 || args[0].kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: TableDefs.Append requires a detached TableDef");
+            const auto table=std::dynamic_pointer_cast<DetachedTableDefinition>(args[0].object);if(!table) throw VbaRuntimeError(3219,"DAO: Detached TableDef required");table->append(db_);return {};
+        }
+        if(key=="delete") {
+            if(args.size()!=1 || args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(450,"DAO: TableDefs.Delete requires a table name");
+            const auto requested=text(args[0].asText());QString canonical;for(const auto& candidate:names) if(candidate.compare(requested,Qt::CaseInsensitive)==0) {canonical=candidate;break;}
+            if(canonical.isEmpty()) throw VbaRuntimeError(3265,"DAO: TableDef not found");executeAction(db_,compileAccessQuery("DROP TABLE "+schemaJetName(canonical)),{});return {};
         }
         if (key!="item") throw VbaRuntimeError(438,"DAO: TableDefs member unsupported");
         if (args.size()!=1) throw VbaRuntimeError(450,"DAO: TableDef name/index required");
@@ -2037,6 +2192,7 @@ public:
         if (key=="openrecordset") return VbaArgumentSignature{{"Name","Type"},1};
         if (key=="execute") return VbaArgumentSignature{{"Query","Options"},1};
         if (key=="createquerydef") return VbaArgumentSignature{{"Name","SQLText"},1};
+        if(key=="createtabledef") return VbaArgumentSignature{{"Name","Attributes","SourceTableName","Connect"},0};
         if (key=="tabledefs" || key=="relations") return VbaArgumentSignature{{"Index"},0};
         if (key=="querydefs") return VbaArgumentSignature{{"Index"},0};
         return {};
@@ -2061,6 +2217,16 @@ public:
             if(!queryDefinitions_) queryDefinitions_=std::make_shared<QueryDefinitions>(db_);
             return args.empty() || (args.size()==1 && args[0].kind==VbaValue::Kind::Missing)
                 ? VbaValue::reference(queryDefinitions_) : queryDefinitions_->member("Item",args);
+        }
+        if(key=="createtabledef") {
+            if(args.size()>4) throw VbaRuntimeError(450,"DAO: CreateTableDef argument count");
+            QString tableName;
+            if(!args.empty() && args[0].kind!=VbaValue::Kind::Missing) {if(args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null table name");tableName=text(args[0].asText());}
+            for(std::size_t i=1;i<args.size();++i) if(args[i].kind!=VbaValue::Kind::Missing) {
+                const auto value=scalarVbaValue(args[i]);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null table definition option");
+                if(i==1 ? coerceVbaModuleValue(value,"long").number!=0 : !value.asText().empty()) throw VbaRuntimeError(3251,"DAO: Linked/attribute TableDef creation unsupported");
+            }
+            return VbaValue::reference(std::make_shared<DetachedTableDefinition>(db_,tableName));
         }
         if (key == "createquerydef") {
             if(args.empty() || args.size()>2) throw VbaRuntimeError(450,"DAO: CreateQueryDef requires Name and optional SQLText");
