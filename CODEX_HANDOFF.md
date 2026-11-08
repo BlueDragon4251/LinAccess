@@ -2357,3 +2357,15 @@ und gehaltene Objekte nach Löschung geprüft. Keine breite Vollsuite wiederholt
 Details docs/DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert. Nächster zusammenhängender
 Umfang: detached CreateIndex/Index.CreateField/Indexes.Append inklusive realer
 Primär-/Unique-/ASC-/DESC-Anlage, anschließend gebündelter DAO-/Importcheck.
+
+2026-11-08: Detached Indexbuilder für neue native DAO-Tabellen ergänzt:
+CreateIndex/Index.CreateField/Index.Fields.Append/TableDef.Indexes.Append,
+Primary/Unique/Required und dbDescending. Tatsächliche Primär-/Unique-/ASC-/DESC-
+Anlage und vollständiger nativer Katalog gemeinsam mit Tabelle/Counter atomar.
+Auch leere Indexkataloge explizit gespeichert, keine erfundenen MDB-Ursprungsnamen.
+Namenskollision nach tatsächlicher Tabellen-/Counteranlage rollt vollständig
+zurück; korrigierter Wiederholungsversuch erzeugt ID1. Fixed Field.Size ignoriert
+unpassende variable Größen. Bestehende DAO/Import2/2 (1,22s), App gebaut; kein
+breiter Wiederholungslauf. Details DAO_INDEXES_RUNTIME.md. F055/F121/F130 und
+456/384/72 unverändert. Als Nächstes allgemeine sichere Nichtprimär-Indexmutation
+an vorhandenen Tabellen, ohne Tabellenrekonstruktion/Originaldateizugriff.

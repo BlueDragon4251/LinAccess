@@ -3261,3 +3261,9 @@ physischen TableDefs.Append-Anlage mit tatsächlich wirksamen Pflichtfeldern,
 literalen Defaults, Textkapazität und Long-AutoNumber. Echter VBA-Durchlauf und
 DAO/Import2/2 (1,25s) bestanden; App gebaut. Umfang/Grenzen:
 [DAO-Felder](DAO_TABLEDEF_FIELDS.md). F055/F121 offen,456/384/72 unverändert.
+
+Eigene DAO-Tabellen erhalten detached Primär-/Unique-/ASC-/DESC-Indizes über
+CreateIndex/Index.CreateField/Indexes.Append. Tatsächliche Kataloge/Constraints und
+atomarer Kollisions-Rollback/Retry geprüft; bestehende DAO/Import2/2 (1,22s), App
+gebaut. Details DAO_INDEXES_RUNTIME.md. Keine vollständige F121/F130-Parität;
+456/384/72 unverändert.

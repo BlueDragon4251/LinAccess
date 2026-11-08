@@ -1572,6 +1572,7 @@ void testDetachedTableCreation() {
 Dim database As DAO.Database
 Dim table As DAO.TableDef
 Dim field As DAO.Field
+Dim index As DAO.Index
 Set database=CurrentDb
 Set table=database.CreateTableDef("OwnTable")
 Set field=table.CreateField("ID",dbLong)
@@ -1583,6 +1584,16 @@ field.DefaultValue="'new'"
 table.Fields.Append field
 Set field=table.CreateField("Enabled",dbBoolean)
 table.Fields.Append field
+Set index=table.CreateIndex("PrimaryKey")
+index.Primary=True
+index.Fields.Append index.CreateField("ID")
+table.Indexes.Append index
+Set index=table.CreateIndex("LabelDescending")
+index.Unique=True
+Set field=index.CreateField("Label")
+field.Attributes=dbDescending
+index.Fields.Append field
+table.Indexes.Append index
 database.TableDefs.Append table
 database.Execute "INSERT INTO OwnTable (Enabled) VALUES (True)"
 End Sub)VBA","BuildSchema",host);
@@ -1594,8 +1605,16 @@ End Sub)VBA","BuildSchema",host);
     auto table=tables->member("Item",{VbaValue::string("OwnTable")}).object;
     auto field=table->member("Fields",{VbaValue::string("Label")}).object;
     assert(field->member("Size",{}).asNumber()==12);
+    auto indexes=table->member("Indexes",{}).object;
+    assert(indexes->member("Count",{}).asNumber()==2);
+    auto primary=indexes->member("Item",{VbaValue::string("PrimaryKey")}).object;
+    assert(primary->member("Primary",{}).truthy() && primary->member("Unique",{}).truthy());
+    auto descending=indexes->member("Item",{VbaValue::string("LabelDescending")}).object;
+    assert(descending->member("Unique",{}).truthy());
+    assert(descending->member("Fields",{VbaValue::string("Label")}).object->member("Attributes",{}).asNumber()==1);
     const auto error=[&](const std::function<void()>& operation,int expected) {int number=0;try {operation();} catch(const linaccess::VbaRuntimeError& failure) {number=failure.number;}assert(number==expected);};
     error([&] {database->member("Execute",{VbaValue::string("INSERT INTO OwnTable (Label) VALUES ('1234567890123')")});},3163);
+    error([&] {database->member("Execute",{VbaValue::string("INSERT INTO OwnTable (Label) VALUES ('new')")});},3022);
     auto pending=database->member("CreateTableDef",{VbaValue::string("Pending")}).object;
     auto fields=pending->member("Fields",{}).object;
     auto first=pending->member("CreateField",{VbaValue::string("A"),VbaValue::integer(4)}).object;
@@ -1610,6 +1629,26 @@ End Sub)VBA","BuildSchema",host);
     error([&] {fields->enumerate();},3420);
     tables->member("Delete",{VbaValue::string("OwnTable")});
     error([&] {field->member("Name",{});},3420);
+    // Force a physical index namespace collision after counter/table creation.
+    // The enclosing schema transaction must remove every partial object.
+    assert(query.exec("CREATE TABLE Occupied(value INTEGER)"));
+    assert(query.exec("CREATE INDEX Collision_Key ON Occupied(value)"));
+    auto collision=database->member("CreateTableDef",{VbaValue::string("Collision")}).object;
+    auto identity=collision->member("CreateField",{VbaValue::string("ID"),VbaValue::integer(4),VbaValue::integer(99)}).object;
+    assert(identity->member("Size",{}).asNumber()==4);
+    identity->assign("Attributes",VbaValue::longInteger(16));
+    collision->member("Fields",{}).object->member("Append",{VbaValue::reference(identity)});
+    auto index=collision->member("CreateIndex",{VbaValue::string("Key")}).object;
+    index->member("Fields",{}).object->member("Append",{index->member("CreateField",{VbaValue::string("ID")})});
+    collision->member("Indexes",{}).object->member("Append",{VbaValue::reference(index)});
+    error([&] {tables->member("Append",{VbaValue::reference(collision)});},3010);
+    assert(!db.tables().contains("Collision"));
+    assert(query.exec("SELECT COUNT(*) FROM _la_counter32_sequences WHERE table_name='Collision'") && query.next() && query.value(0).toInt()==0);query.finish();
+    assert(query.exec("DROP INDEX Collision_Key"));
+    tables->member("Append",{VbaValue::reference(collision)});
+    assert(collision->member("Indexes",{}).object->member("Count",{}).asNumber()==1);
+    database->member("Execute",{VbaValue::string("INSERT INTO Collision DEFAULT VALUES")});
+    assert(query.exec("SELECT ID FROM Collision") && query.next() && query.value(0).toInt()==1);query.finish();
 }
 
 int main(int argc, char** argv) {

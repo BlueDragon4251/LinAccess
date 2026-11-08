@@ -1811,7 +1811,7 @@ class DetachedField final : public VbaObject {
 public:
     DetachedField(std::shared_ptr<DetachedTableState> owner,QString name,int type,int size):owner_(std::move(owner)),name_(std::move(name)),type_(type),size_(size) {
         attributes_=(type==10 || type==11 || type==12) ? 2 : 1;
-        if(size_==0 && type!=10) {switch(type) {case 1:case 2:size_=1;break;case 3:size_=2;break;case 4:case 6:size_=4;break;case 5:case 7:case 8:size_=8;break;case 15:size_=16;break;default:break;}}
+        if(type!=10) {switch(type) {case 1:case 2:size_=1;break;case 3:size_=2;break;case 4:case 6:size_=4;break;case 5:case 7:case 8:size_=8;break;case 15:size_=16;break;case 11:case 12:size_=0;break;default:break;}}
     }
     std::string_view className() const override {return "Field";}
     bool isNativeType(std::string_view type) const override {return type=="dao.field";}
@@ -1832,8 +1832,10 @@ public:
         const auto value=scalarVbaValue(raw);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null schema field property");
         const auto key=lower(name);
         if(key=="name") {name_=text(value.asText());return;}
-        if(key=="type") {type_=static_cast<int>(coerceVbaModuleValue(value,"integer").number);return;}
-        if(key=="size") {size_=static_cast<int>(coerceVbaModuleValue(value,"long").number);return;}
+        if(key=="type") {type_=static_cast<int>(coerceVbaModuleValue(value,"integer").number);
+            if(type_!=10) {const DetachedField intrinsic(owner_,name_,type_,0);size_=intrinsic.size_;}
+            attributes_=(type_==10 || type_==11 || type_==12) ? 2 : 1;return;}
+        if(key=="size") {const auto size=static_cast<int>(coerceVbaModuleValue(value,"long").number);if(type_==10) size_=size;return;}
         if(key=="attributes") {const auto attributes=coerceVbaModuleValue(value,"long").number;if(attributes!=0 && attributes!=1 && attributes!=2 && attributes!=16 && attributes!=17) throw VbaRuntimeError(3251,"DAO: Unsupported field attributes");attributes_=static_cast<int>(attributes);if(type_==4 && (attributes_&16)) attributes_|=1;return;}
         if(key=="required") {required_=coerceVbaModuleValue(value,"boolean").truthy();return;}
         if(key=="defaultvalue") {const auto token=text(value.asText());if(!token.isEmpty() && !accessLiteralDefaultSql(token)) throw VbaRuntimeError(3251,"DAO: Field default requires a supported literal");default_=token;return;}
@@ -1895,17 +1897,135 @@ public:
     std::vector<VbaValue> enumerate() override {owner_->workspace->check();if(owner_->attached) return owner_->attached->member("Fields",{}).object->enumerate();std::vector<VbaValue> result;for(const auto& field:fields_) result.push_back(VbaValue::reference(field));return result;}
     std::shared_ptr<DetachedTableState> owner_;QVector<std::shared_ptr<DetachedField>> fields_;
 };
+struct DetachedIndexState {
+    std::shared_ptr<DetachedTableState> table;AccessSourceIndex data;bool appended{};
+    void check() const {table->workspace->check();if(table->attached && !table->attached->valid()) throw VbaRuntimeError(3420,"DAO: Index table unavailable");}
+    void mutableCheck() const {check();if(table->attached) throw VbaRuntimeError(383,"DAO: Attached index is read-only");}
+};
+class DetachedIndexField final : public VbaObject {
+public:
+    DetachedIndexField(std::shared_ptr<DetachedIndexState> owner,QString name):owner_(std::move(owner)),name_(std::move(name)) {}
+    std::string_view className() const override {return "Field";}
+    bool isNativeType(std::string_view type) const override {return type=="dao.field";}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        owner_->check();if(!args.empty()) throw VbaRuntimeError(450,"DAO: Index field property takes no arguments");
+        if(owner_->table->attached) return owner_->table->attached->member("Indexes",{VbaValue::string(owner_->data.name.toStdString())}).object->member("Fields",{VbaValue::string(name_.toStdString())}).object->member(name,args);
+        const auto key=lower(name);if(key=="name") return VbaValue::string(name_.toStdString());if(key=="attributes") return VbaValue::longInteger(descending_ ? 1 : 0);
+        throw VbaRuntimeError(3251,"DAO: Index field property unsupported");
+    }
+    void assign(std::string_view name,const VbaValue& raw) override {
+        owner_->mutableCheck();const auto value=scalarVbaValue(raw);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null index field property");
+        if(lower(name)=="name") {name_=text(value.asText());return;}
+        if(lower(name)=="attributes") {const auto flag=coerceVbaModuleValue(value,"long").number;if(flag!=0 && flag!=1) throw VbaRuntimeError(3251,"DAO: Only dbDescending index field attribute supported");descending_=flag==1;return;}
+        throw VbaRuntimeError(3251,"DAO: Index field assignment unsupported");
+    }
+    std::shared_ptr<DetachedIndexState> owner_;QString name_;bool descending_{},appended_{};
+};
+class DetachedIndexFields final : public VbaObject {
+public:
+    explicit DetachedIndexFields(std::shared_ptr<DetachedIndexState> owner):owner_(std::move(owner)) {}
+    std::string_view className() const override {return "Fields";}
+    bool isNativeType(std::string_view type) const override {return type=="dao.fields";}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {const auto key=lower(name);if(key=="append") return VbaArgumentSignature{{"Object"},1};if(key=="item") return VbaArgumentSignature{{"Index"},1};return {};}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        owner_->check();const auto key=lower(name);
+        if(owner_->table->attached) return owner_->table->attached->member("Indexes",{VbaValue::string(owner_->data.name.toStdString())}).object->member("Fields",{}).object->member(name,args);
+        if(key=="count" && args.empty()) return integerCount(fields_.size());
+        if(key=="refresh" && args.empty()) return {};
+        if(key=="append") {
+            owner_->mutableCheck();if(args.size()!=1 || args[0].kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Index field required");
+            auto field=std::dynamic_pointer_cast<DetachedIndexField>(args[0].object);
+            if(!field || field->owner_!=owner_ || field->appended_) throw VbaRuntimeError(3219,"DAO: Foreign index field");
+            if(fields_.size()>=10) throw VbaRuntimeError(3251,"DAO: Index field bound exceeded");
+            for(const auto& existing:fields_) if(existing->name_.compare(field->name_,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3191,"DAO: Duplicate index field");
+            field->appended_=true;fields_.append(field);return {};
+        }
+        if(key!="item" || args.size()!=1) throw VbaRuntimeError(450,"DAO: Index field name/index required");
+        const auto value=scalarVbaValue(args[0]);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null index field index");
+        if(value.kind==VbaValue::Kind::Text) {for(const auto& field:fields_) if(field->name_.compare(text(value.asText()),Qt::CaseInsensitive)==0) return VbaValue::reference(field);}
+        else {const auto index=coerceVbaModuleValue(value,"long").number;if(index>=0 && index<fields_.size()) return VbaValue::reference(fields_[static_cast<int>(index)]);}
+        throw VbaRuntimeError(3265,"DAO: Index field not found");
+    }
+    VbaValue item(std::string_view name) override {return member("Item",{VbaValue::string(std::string(name))});}
+    std::vector<VbaValue> enumerate() override {owner_->check();if(owner_->table->attached) return owner_->table->attached->member("Indexes",{VbaValue::string(owner_->data.name.toStdString())}).object->member("Fields",{}).object->enumerate();std::vector<VbaValue> result;for(const auto& field:fields_) result.push_back(VbaValue::reference(field));return result;}
+    std::shared_ptr<DetachedIndexState> owner_;QVector<std::shared_ptr<DetachedIndexField>> fields_;
+};
+class DetachedIndex final : public VbaObject {
+public:
+    DetachedIndex(std::shared_ptr<DetachedTableState> owner,QString name):state_(std::make_shared<DetachedIndexState>()) {state_->table=std::move(owner);state_->data.name=std::move(name);fields_=std::make_shared<DetachedIndexFields>(state_);}
+    std::string_view className() const override {return "Index";}
+    bool isNativeType(std::string_view type) const override {return type=="dao.index";}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {const auto key=lower(name);if(key=="createfield") return VbaArgumentSignature{{"Name"},0};if(key=="fields") return VbaArgumentSignature{{"Index"},0};return {};}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        state_->check();const auto key=lower(name);
+        if(state_->table->attached) return state_->table->attached->member("Indexes",{VbaValue::string(state_->data.name.toStdString())}).object->member(name,args);
+        if(key=="fields") return args.empty() ? VbaValue::reference(fields_) : fields_->member("Item",args);
+        if(key=="createfield") {if(args.size()>1) throw VbaRuntimeError(450,"DAO: Index.CreateField takes Name only");return VbaValue::reference(std::make_shared<DetachedIndexField>(state_,args.empty() ? QString{} : text(args[0].asText())));}
+        if(!args.empty()) throw VbaRuntimeError(450,"DAO: Index property takes no arguments");
+        if(key=="name") return VbaValue::string(state_->data.name.toStdString());
+        if(key=="primary") return VbaValue::logical(state_->data.kind==1);
+        if(key=="unique") return VbaValue::logical(state_->data.flags&1);
+        if(key=="required") return VbaValue::logical(state_->data.flags&8);
+        if(key=="ignorenulls") return VbaValue::logical(false);
+        throw VbaRuntimeError(3251,"DAO: Index member unsupported");
+    }
+    void assign(std::string_view name,const VbaValue& raw) override {
+        state_->mutableCheck();const auto key=lower(name);const auto value=scalarVbaValue(raw);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null index property");
+        if(key=="name") {state_->data.name=text(value.asText());return;}
+        const auto enabled=coerceVbaModuleValue(value,"boolean").truthy();
+        if(key=="primary") {state_->data.kind=enabled ? 1 : 0;if(enabled) state_->data.flags|=1;return;}
+        if(key=="unique") {if(!enabled && state_->data.kind==1) throw VbaRuntimeError(3251,"DAO: Primary index must be unique");state_->data.flags=enabled ? state_->data.flags|1 : state_->data.flags&~1;return;}
+        if(key=="required") {state_->data.flags=enabled ? state_->data.flags|8 : state_->data.flags&~8;return;}
+        if(key=="ignorenulls" && !enabled) return;
+        throw VbaRuntimeError(3251,"DAO: Index option unsupported");
+    }
+    std::shared_ptr<DetachedIndexState> state_;std::shared_ptr<DetachedIndexFields> fields_;
+};
+class DetachedIndexes final : public VbaObject {
+public:
+    explicit DetachedIndexes(std::shared_ptr<DetachedTableState> owner):owner_(std::move(owner)) {}
+    std::string_view className() const override {return "Indexes";}
+    bool isNativeType(std::string_view type) const override {return type=="dao.indexes";}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {const auto key=lower(name);if(key=="append") return VbaArgumentSignature{{"Object"},1};if(key=="item") return VbaArgumentSignature{{"Index"},1};return {};}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        owner_->workspace->check();const auto key=lower(name);
+        if(owner_->attached) return owner_->attached->member("Indexes",{}).object->member(name,args);
+        if(key=="count" && args.empty()) return integerCount(indexes_.size());
+        if(key=="refresh" && args.empty()) return {};
+        if(key=="append") {
+            if(args.size()!=1 || args[0].kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Index required");
+            auto index=std::dynamic_pointer_cast<DetachedIndex>(args[0].object);
+            if(!index || index->state_->table!=owner_ || index->state_->appended) throw VbaRuntimeError(3219,"DAO: Foreign/attached index");
+            for(const auto& existing:indexes_) if(existing->state_->data.name.compare(index->state_->data.name,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3191,"DAO: Duplicate index name");
+            index->state_->appended=true;indexes_.append(index);return {};
+        }
+        if(key!="item" || args.size()!=1) throw VbaRuntimeError(450,"DAO: Index name/index required");
+        const auto value=scalarVbaValue(args[0]);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null index");
+        if(value.kind==VbaValue::Kind::Text) {for(const auto& index:indexes_) if(index->state_->data.name.compare(text(value.asText()),Qt::CaseInsensitive)==0) return VbaValue::reference(index);}
+        else {const auto index=coerceVbaModuleValue(value,"long").number;if(index>=0 && index<indexes_.size()) return VbaValue::reference(indexes_[static_cast<int>(index)]);}
+        throw VbaRuntimeError(3265,"DAO: Index not found");
+    }
+    VbaValue item(std::string_view name) override {return member("Item",{VbaValue::string(std::string(name))});}
+    std::vector<VbaValue> enumerate() override {owner_->workspace->check();if(owner_->attached) return owner_->attached->member("Indexes",{}).object->enumerate();std::vector<VbaValue> result;for(const auto& index:indexes_) result.push_back(VbaValue::reference(index));return result;}
+    std::shared_ptr<DetachedTableState> owner_;QVector<std::shared_ptr<DetachedIndex>> indexes_;
+};
 class DetachedTableDefinition final : public VbaObject {
 public:
-    DetachedTableDefinition(QSqlDatabase db,QString name):state_(std::make_shared<DetachedTableState>()) {state_->db=db;state_->workspace=workspaceState(db);state_->name=std::move(name);fields_=std::make_shared<DetachedFields>(state_);}
+    DetachedTableDefinition(QSqlDatabase db,QString name):state_(std::make_shared<DetachedTableState>()) {state_->db=db;state_->workspace=workspaceState(db);state_->name=std::move(name);fields_=std::make_shared<DetachedFields>(state_);indexes_=std::make_shared<DetachedIndexes>(state_);}
     std::string_view className() const override {return "TableDef";}
     bool isNativeType(std::string_view type) const override {return type=="dao.tabledef";}
-    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {const auto key=lower(name);if(key=="createfield") return VbaArgumentSignature{{"Name","Type","Size"},0};if(key=="fields") return VbaArgumentSignature{{"Index"},0};return {};}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {const auto key=lower(name);if(key=="createfield") return VbaArgumentSignature{{"Name","Type","Size"},0};if(key=="createindex") return VbaArgumentSignature{{"Name"},0};if(key=="fields" || key=="indexes") return VbaArgumentSignature{{"Index"},0};return {};}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         state_->workspace->check();const auto key=lower(name);
         if(state_->attached) return state_->attached->member(name,args);
         if(key=="name" && args.empty()) return VbaValue::string(state_->name.toStdString());
         if(key=="fields") return args.empty() ? VbaValue::reference(fields_) : fields_->member("Item",args);
+        if(key=="indexes") return args.empty() ? VbaValue::reference(indexes_) : indexes_->member("Item",args);
+        if(key=="createindex") {
+            if(args.size()>1) throw VbaRuntimeError(450,"DAO: CreateIndex takes Name only");
+            if(!args.empty() && args[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null index name");
+            return VbaValue::reference(std::make_shared<DetachedIndex>(state_,args.empty() ? QString{} : text(args[0].asText())));
+        }
         if(key=="createfield") {
             if(args.size()>3) throw VbaRuntimeError(450,"DAO: CreateField accepts Name, Type and Size");
             QString fieldName;int type=0,size=0;
@@ -1925,15 +2045,50 @@ public:
         const auto name=state_->name;
         if(name.isEmpty() || name.trimmed()!=name || name.size()>64 || name.contains(QChar(0)) || !name.isValidUtf16() || name.startsWith("_la_",Qt::CaseInsensitive) || name.startsWith("sqlite_",Qt::CaseInsensitive)) throw VbaRuntimeError(5,"DAO: Invalid/reserved table name");
         if(fields_->fields_.isEmpty()) throw VbaRuntimeError(3264,"DAO: Cannot append a table without fields");
+        QVector<AccessSourceIndex> indexes;QSet<QString> indexNames,requiredColumns;int primaryCount=0;
+        for(const auto& index:indexes_->indexes_) {
+            auto data=index->state_->data;
+            if(data.name.isEmpty() || data.name.trimmed()!=data.name || data.name.size()>64 || data.name.contains(QChar(0)) || !data.name.isValidUtf16()) throw VbaRuntimeError(5,"DAO: Invalid index name");
+            if(indexNames.contains(data.name.toCaseFolded())) throw VbaRuntimeError(3191,"DAO: Duplicate index name");indexNames.insert(data.name.toCaseFolded());
+            if(index->fields_->fields_.isEmpty()) throw VbaRuntimeError(3264,"DAO: Index requires fields");
+            if(data.kind==1 && ++primaryCount>1) throw VbaRuntimeError(3283,"DAO: Multiple primary indexes");
+            QSet<QString> seen;
+            for(const auto& indexField:index->fields_->fields_) {
+                QString canonical;int type=0;
+                for(const auto& field:fields_->fields_) if(field->name_.compare(indexField->name_,Qt::CaseInsensitive)==0) {canonical=field->name_;type=field->type_;break;}
+                if(canonical.isEmpty()) throw VbaRuntimeError(3265,"DAO: Index field absent from table");
+                if(type==11 || type==12) throw VbaRuntimeError(3251,"DAO: Binary/Memo indexes unsupported");
+                if(seen.contains(canonical.toCaseFolded())) throw VbaRuntimeError(3191,"DAO: Duplicate index field");seen.insert(canonical.toCaseFolded());
+                data.columns.append(canonical);data.descending.append(indexField->descending_);
+                if(data.kind==1 || (data.flags&8)) requiredColumns.insert(canonical.toCaseFolded());
+            }
+            indexes.append(data);
+        }
         QStringList definitions;QSet<QString> names;
         for(const auto& field:fields_->fields_) {
             if(names.contains(field->name_.toCaseFolded())) throw VbaRuntimeError(3191,"DAO: Duplicate field name");
-            names.insert(field->name_.toCaseFolded());definitions.append(field->definition());
+            names.insert(field->name_.toCaseFolded());auto definition=field->definition();
+            if(requiredColumns.contains(field->name_.toCaseFolded()) && !field->required_ && !(field->attributes_&16)) definition+=" NOT NULL";
+            definitions.append(definition);
+        }
+        for(const auto& index:indexes) if(index.kind==1) {
+            QStringList columns;for(int i=0;i<index.columns.size();++i) columns.append(schemaJetName(index.columns[i])+(index.descending[i] ? " DESC" : " ASC"));
+            definitions.append("PRIMARY KEY ("+columns.join(',')+")");
         }
         QSqlQuery query(db);const auto savepoint="la_schema_builder_"+QUuid::createUuid().toString(QUuid::Id128);
         if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);
         bool completed=false;const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
         executeAction(db,compileAccessQuery("CREATE TABLE "+schemaJetName(name)+" ("+definitions.join(',')+")"),{});
+        QJsonArray indexMetadata,indexColumns;for(const auto& field:fields_->fields_) indexColumns.append(field->name_);
+        for(int position=0;position<indexes.size();++position) {
+            const auto& index=indexes[position];QStringList columns;QJsonArray entries;
+            for(int i=0;i<index.columns.size();++i) {columns.append(quote(index.columns[i])+(index.descending[i] ? " DESC" : " ASC"));entries.append(QJsonObject{{"name",index.columns[i]},{"descending",index.descending[i]}});}
+            if(index.kind!=1 && !query.exec(QString("CREATE ")+((index.flags&1) ? "UNIQUE " : "")+"INDEX "+quote(name+"_"+index.name)+" ON "+quote(name)+" ("+columns.join(',')+")")) queryFailure(query);
+            indexMetadata.append(QJsonObject{{"name",index.name},{"kind",index.kind},{"flags",index.flags},{"fields",entries}});
+        }
+        const auto indexDefinition=QJsonDocument(QJsonObject{{"version",1},{"source_table",name},{"columns",indexColumns},{"indexes",indexMetadata}}).toJson(QJsonDocument::Compact);
+        if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_access_indexes(table_name TEXT PRIMARY KEY,definition TEXT NOT NULL)")) queryFailure(query);
+        query.prepare("INSERT INTO main._la_access_indexes(table_name,definition) VALUES(?,?)");query.addBindValue(name);query.addBindValue(QString::fromUtf8(indexDefinition));if(!query.exec()) queryFailure(query);
         QJsonArray metadata;
         for(const auto& field:fields_->fields_) {
             const auto source=field->type_==1 ? "BOOLEAN" : field->type_==2 ? "TINYINT" : field->type_==3 ? "SMALLINT" : field->type_==4 ? "INT" : field->type_==7 ? "DOUBLE" : field->type_==8 ? "DATETIME" : field->type_==10 ? "VARCHAR" : field->type_==11 ? "BLOB" : "MEMO";
@@ -1943,9 +2098,10 @@ public:
         query.prepare("INSERT INTO main._la_table_schema(table_name,definition) VALUES(?,?)");query.addBindValue(name);query.addBindValue(QJsonDocument(metadata).toJson(QJsonDocument::Compact));
         if(!query.exec()) queryFailure(query);
         if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;
+        for(int i=0;i<indexes.size();++i) indexes_->indexes_[i]->state_->data=indexes[i];
         state_->attached=std::make_shared<TableDefinition>(db,name);
     }
-private:std::shared_ptr<DetachedTableState> state_;std::shared_ptr<DetachedFields> fields_;
+private:std::shared_ptr<DetachedTableState> state_;std::shared_ptr<DetachedFields> fields_;std::shared_ptr<DetachedIndexes> indexes_;
 };
 class TableDefinitions final : public VbaObject {
 public:

@@ -1480,3 +1480,7 @@ Nativer CreateTableDef/CreateField/Fields.Append/TableDefs.Append-Schemaaufbau
 und TableDefs.Delete implementiert; gemeinsame DDL/Counter/Typ-Metadaten-Atomizität,
 echter VBA-Durchlauf und gezielte DAO/Import2/2 (1,25s), App gebaut. Grenzen in
 DAO_TABLEDEF_FIELDS.md; F055/F121 offen,456/384/72 unverändert.
+
+Detached DAO-Indexbuilder für eigene neue Tabellen samt realen Primär-/Unique-/
+ASC-/DESC-Constraints und Kollisions-Rollback/Retry implementiert. DAO/Import2/2
+(1,22s), App gebaut. DAO_INDEXES_RUNTIME.md; F055/F121/F130 offen,456/384/72 gleich.

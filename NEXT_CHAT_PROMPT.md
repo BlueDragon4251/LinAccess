@@ -177,3 +177,9 @@ TableDefs.Append + Delete implementiert, gemeinsame atomare native Typ-/Counter-
 Metadaten; DAO/Import2/2 (1,25s), App gebaut. Details/Herkunftsgrenzen in
 DAO_TABLEDEF_FIELDS.md und Handoff.456/384/72 unverändert. Allgemeine Indexbuilder
 als nächste zusammenhängende Ergänzung, keine erneute Referenzanforderung.
+
+Detached CreateIndex/Index.CreateField/Indexes.Append für eigene neue Tabellen
+jetzt implementiert einschließlich echter Primary/Unique/ASC/DESC-Constraints
+und atomarem Kollisions-Rollback/Retry. DAO/Import2/2 (1,22s), App gebaut.
+456/384/72 unverändert. Fortsetzung: sichere Nichtprimär-Indexmutation an
+vorhandenen Tabellen, bestehende vollständige Katalogprüfung beibehalten.
