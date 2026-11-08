@@ -39,13 +39,15 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
     auto* propertySize=new QSpinBox(propertyPage);propertySize->setObjectName("native-field-property-size");propertySize->setRange(1,255);propertyForm->addRow("Textgröße",propertySize);
     auto* propertyRequired=new QCheckBox("Eingabe erforderlich",propertyPage);propertyRequired->setObjectName("native-field-property-required");propertyForm->addRow(QString{},propertyRequired);
     auto* propertyDefault=new QLineEdit(propertyPage);propertyDefault->setObjectName("native-field-property-default");propertyDefault->setMaxLength(255);propertyForm->addRow("Standardwert",propertyDefault);propertyLayout->addLayout(propertyForm);
+    auto* renameName=new QLineEdit(propertyPage);renameName->setObjectName("native-field-rename-name");renameName->setMaxLength(64);propertyForm->addRow("Neuer Feldname",renameName);
+    auto* renameButton=new QPushButton("Feld umbenennen",propertyPage);renameButton->setObjectName("native-field-rename");propertyLayout->addWidget(renameButton);
     propertyLayout->addWidget(new QLabel("Neue Standardwerte gelten für neue Datensätze; vorhandene Werte werden nicht ersetzt.",propertyPage));
     auto* apply=new QPushButton("Eigenschaften speichern",propertyPage);apply->setObjectName("native-field-property-save");propertyLayout->addWidget(apply);tabs->addTab(propertyPage,"Eigenschaften");
     auto* status=new QLabel(&dialog);status->setWordWrap(true);layout->addWidget(status);
     auto* close=new QDialogButtonBox(QDialogButtonBox::Close,&dialog);layout->addWidget(close);QObject::connect(close,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
     std::shared_ptr<VbaObject> table,selectedField;bool catalogValid=true,allNative=false;int selectedType=0;
     const auto error=[&](const std::exception& problem) {QMessageBox::warning(&dialog,"Feld konnte nicht geändert werden",QString::fromUtf8(problem.what()));};
-    const auto disable=[&] {catalogValid=false;append->setEnabled(false);remove->setEnabled(false);apply->setEnabled(false);list->setEnabled(false);};
+    const auto disable=[&] {catalogValid=false;append->setEnabled(false);remove->setEnabled(false);apply->setEnabled(false);renameButton->setEnabled(false);list->setEnabled(false);};
     const auto property=[](const std::shared_ptr<VbaObject>& field,const char* member) {try {return field->member(member,{});}catch(const VbaRuntimeError& problem) {if(problem.number!=3251) throw;return VbaValue::empty();}};
     const auto reload=[&] {
         const auto previous=list->currentRow()>=0 && list->item(list->currentRow(),0) ? list->item(list->currentRow(),0)->text() : QString{};
@@ -67,9 +69,9 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
     };
     const auto updateDelete=[&] {const int row=list->currentRow();remove->setEnabled(catalogValid && row>=0 && row<list->rowCount() && list->rowCount()>1 && list->item(row,0) && !list->item(row,0)->data(Qt::UserRole).toBool());};
     const auto loadProperties=[&] {
-        selectedField.reset();apply->setEnabled(false);propertySize->setEnabled(false);propertyRequired->setEnabled(false);propertyDefault->setEnabled(false);const int row=list->currentRow();
+        selectedField.reset();apply->setEnabled(false);renameButton->setEnabled(false);propertySize->setEnabled(false);propertyRequired->setEnabled(false);propertyDefault->setEnabled(false);const int row=list->currentRow();
         if(!catalogValid || row<0 || !list->item(row,0)) {selectedName->clear();return;}
-        selectedName->setText(list->item(row,0)->text());
+        selectedName->setText(list->item(row,0)->text());renameName->setText(selectedName->text());
         try {
             auto field=table->member("Fields",{VbaValue::string(selectedName->text().toStdString())}).object;
             const auto kind=property(field,"Type"),capacity=property(field,"Size"),mandatory=property(field,"Required"),initial=property(field,"DefaultValue"),attributes=property(field,"Attributes");
@@ -78,7 +80,7 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
             propertyRequired->setChecked(mandatory.kind==VbaValue::Kind::Boolean && mandatory.boolean);propertyRequired->setEnabled(eligible);
             if(selectedType==10 && capacity.kind==VbaValue::Kind::Number) propertySize->setValue(static_cast<int>(capacity.number));propertySize->setEnabled(eligible && selectedType==10);
             propertyDefault->setText(initial.kind==VbaValue::Kind::Text ? QString::fromStdString(initial.text) : QString{});propertyDefault->setEnabled(eligible && initial.kind==VbaValue::Kind::Text);
-            if(eligible) {selectedField=std::move(field);apply->setEnabled(true);}
+            if(eligible) {selectedField=std::move(field);apply->setEnabled(true);renameButton->setEnabled(true);}
         } catch(const std::exception& problem) {disable();error(problem);}
     };
     try {table=makeDaoDatabase(database)->member("TableDefs",{VbaValue::string(tableName.toStdString())}).object;reload();}
@@ -98,6 +100,13 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
         try {fieldName=QString::fromStdString(selectedField->member("Name",{}).asText());QMap<QString,VbaValue> changes{{"Required",VbaValue::logical(propertyRequired->isChecked())}};
             if(selectedType==10) changes.insert("Size",VbaValue::longInteger(propertySize->value()));if(propertyDefault->isEnabled()) changes.insert("DefaultValue",VbaValue::string(propertyDefault->text().trimmed().toStdString()));updateNativeFieldProperties(database,tableName,fieldName,changes);
         } catch(const DaoStoredSchemaChange& problem) {storedFailure(problem);return;}catch(const std::exception& problem) {error(problem);return;}refreshAfterCommit("Feldeigenschaften gespeichert: "+fieldName);
+    });
+    QObject::connect(renameButton,&QPushButton::clicked,&dialog,[&] {
+        if(!catalogValid || !selectedField) return;const auto newName=renameName->text().trimmed();
+        try {const auto oldName=QString::fromStdString(selectedField->member("Name",{}).asText());updateNativeFieldProperties(database,tableName,oldName,{{"Name",VbaValue::string(newName.toStdString())}});}
+        catch(const DaoStoredSchemaChange& problem) {storedFailure(problem);return;}catch(const std::exception& problem) {error(problem);return;}
+        refreshAfterCommit("Feld umbenannt: "+newName+". Gespeicherte Access-Abfragen und Formularbindungen bitte auf den neuen Feldnamen anpassen.");
+        for(int row=0;row<list->rowCount();++row) if(list->item(row,0)->text()==newName) list->setCurrentCell(row,0);
     });
     QObject::connect(remove,&QPushButton::clicked,&dialog,[&] {
         if(!catalogValid) return;const int row=list->currentRow();if(row<0 || list->item(row,0)->data(Qt::UserRole).toBool()) return;const auto fieldName=list->item(row,0)->text();

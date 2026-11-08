@@ -1551,10 +1551,10 @@ public:
     }
     void assign(std::string_view name,const VbaValue& value) override {
         (void)reader_();const auto key=lower(name);
-        if(!setter_ || (key!="required" && key!="defaultvalue" && key!="size")) throw VbaRuntimeError(383,"DAO schema field property is read-only");
+        if(!setter_ || (key!="required" && key!="defaultvalue" && key!="size" && key!="name")) throw VbaRuntimeError(383,"DAO schema field property is read-only");
         bool native=false;for(const auto& column:reader_()) if(column.name.compare(name_,Qt::CaseInsensitive)==0) native=column.nativeAttributes.has_value() && column.required.has_value();
         if(!native) throw VbaRuntimeError(383,"DAO: Original/unproven schema fields remain read-only");
-        const auto scalar=scalarVbaValue(value);(void)reader_();auto next=setter_(name_,key,scalar);reader_=std::move(next);
+        const auto scalar=scalarVbaValue(value);(void)reader_();auto next=setter_(name_,key,scalar);reader_=std::move(next);if(key=="name") name_=text(scalar.asText());
     }
 private: TableSchemaReader reader_; QString name_; bool defaults_{};NativeFieldSetter setter_;
 };
@@ -2746,13 +2746,57 @@ TableSchemaReader currentNativeFieldReader(QSqlDatabase db,const QString& table)
     const auto workspace=workspaceState(db);const auto version=nativeSchemaVersion(db),rollback=workspace->rollbackRevision,generation=workspace->tableGenerations.value(table.toCaseFolded());
     return [db,table,workspace,version,rollback,generation] {workspace->check();if(workspace->rollbackRevision!=rollback || workspace->tableGenerations.value(table.toCaseFolded())!=generation || nativeSchemaVersion(db)!=version) throw VbaRuntimeError(3420,"DAO: Edited field metadata invalidated");return readTableSchemaColumns(db,table);};
 }
+TableSchemaReader renameNativeField(QSqlDatabase db,const QString& table,const TableSchemaColumn& column,const QString& renamed) {
+    const auto workspace=workspaceState(db);const auto columns=readTableSchemaColumns(db,table);
+    if(renamed.isEmpty() || renamed.trimmed()!=renamed || renamed.size()>64 || renamed.contains(QChar(0)) || !renamed.isValidUtf16()) throw VbaRuntimeError(5,"DAO: Invalid field name");
+    for(const auto& item:columns) {
+        if(!item.nativeAttributes || !item.required) throw VbaRuntimeError(3251,"DAO: Field rename requires complete native declarations");
+        if(item.name!=column.name && item.name.compare(renamed,Qt::CaseInsensitive)==0) throw VbaRuntimeError(3191,"DAO: Field name already exists");
+        if(item.name.compare("rowid",Qt::CaseInsensitive)==0 || item.name.compare("_rowid_",Qt::CaseInsensitive)==0 || item.name.compare("oid",Qt::CaseInsensitive)==0) throw VbaRuntimeError(3251,"DAO: Shadowed row identity rename unsupported");
+    }
+    if(renamed.compare("rowid",Qt::CaseInsensitive)==0 || renamed.compare("_rowid_",Qt::CaseInsensitive)==0 || renamed.compare("oid",Qt::CaseInsensitive)==0) throw VbaRuntimeError(3251,"DAO: Rename cannot shadow row identity");
+    if(renamed==column.name) return currentNativeFieldReader(db,table);
+    checkReservedCounterSchemaAction(db);NativeSchemaSettings settings(db);settings.begin(false);
+    QSqlQuery query(db);const auto savepoint="la_field_rename_"+QUuid::createUuid().toString(QUuid::Id128);
+    if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);bool completed=false;const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
+    auto catalog=std::make_shared<NativeRelationCatalog>(db);const auto relations=catalog->read(table);(void)readNativeIndexCatalog(db,table);checkNativeForeignKeys(db);
+    for(const auto& relation:relations) for(const auto& pair:relation.columns) if(((relation.parent==table && pair.first==column.name) || (relation.child==table && pair.second==column.name)) && relation.source!="DAO_NATIVE") throw VbaRuntimeError(3251,"DAO: Original relation field names remain protected");
+    QStringList previousNames,nextNames;for(const auto& item:columns) {previousNames.append(item.name);nextNames.append(item.name==column.name ? renamed : item.name);}
+    const auto digest=nativeTableValueDigest(db,table,previousNames);
+    struct Metadata {QString table;QVariant previous;QByteArray replacement;};QVector<Metadata> metadata;
+    for(const auto& name:{QString("_la_table_schema"),QString("_la_access_indexes")}) {
+        query.prepare("SELECT definition FROM main."+quote(name)+" WHERE table_name=? COLLATE NOCASE");query.addBindValue(table);if(!query.exec() || !query.next()) throw VbaRuntimeError(3251,"DAO: Rename metadata unavailable");
+        const auto previous=query.value(0);auto document=QJsonDocument::fromJson(previous.toByteArray());if(query.next()) throw VbaRuntimeError(3251,"DAO: Rename metadata ambiguous");query.finish();
+        if(name=="_la_table_schema") {
+            if(!document.isArray()) throw VbaRuntimeError(3251,"DAO: Rename field metadata invalid");auto fields=document.array();bool found=false;
+            for(int i=0;i<fields.size();++i) {auto field=fields[i].toObject();if(field.value("source_origin").toString()!="DAO_NATIVE") throw VbaRuntimeError(3251,"DAO: Original field names remain protected");if(field.value("name").toString()==column.name) {field.insert("name",renamed);fields[i]=field;found=true;}}
+            if(!found) throw VbaRuntimeError(3251,"DAO: Rename field declaration missing");document=QJsonDocument(fields);
+        } else {
+            auto root=document.object();auto names=root.value("columns").toArray();for(int i=0;i<names.size();++i) if(names[i].toString()==column.name) names[i]=renamed;root.insert("columns",names);
+            auto indexes=root.value("indexes").toArray();for(int i=0;i<indexes.size();++i) {auto index=indexes[i].toObject();auto fields=index.value("fields").toArray();for(int j=0;j<fields.size();++j) {auto field=fields[j].toObject();if(field.value("name").toString()==column.name) {field.insert("name",renamed);fields[j]=field;}}index.insert("fields",fields);indexes[i]=index;}root.insert("indexes",indexes);document=QJsonDocument(root);
+            (void)checkedAccessSourceIndexes(document.toJson(QJsonDocument::Compact),nextNames);
+        }
+        metadata.append({name,previous,document.toJson(QJsonDocument::Compact)});
+    }
+    if(workspace->tableFieldRevisions.value(table.toCaseFolded())==std::numeric_limits<quint64>::max()) throw VbaRuntimeError(6,"DAO: Field schema revision overflow");
+    if(!query.exec("ALTER TABLE main."+quote(table)+" RENAME COLUMN "+quote(column.name)+" TO "+quote(renamed))) queryFailure(query);
+    for(const auto& item:metadata) {query.prepare("UPDATE main."+quote(item.table)+" SET definition=? WHERE table_name=? COLLATE NOCASE AND definition=?");query.addBindValue(item.replacement);query.addBindValue(table);query.addBindValue(item.previous);if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Rename metadata changed during write");}
+    if(db.tables().contains("_la_access_relations")) for(const auto& side:{QString("parent"),QString("child")}) {
+        query.prepare("UPDATE main._la_access_relations SET "+side+"_column=? WHERE "+side+"_table=? COLLATE NOCASE AND "+side+"_column=? COLLATE NOCASE");query.addBindValue(renamed);query.addBindValue(table);query.addBindValue(column.name);if(!query.exec()) queryFailure(query);
+    }
+    if(nativeTableValueDigest(db,table,nextNames)!=digest) throw VbaRuntimeError(3251,"DAO: Rename changed stored values/row identity");
+    (void)readTableSchemaColumns(db,table);(void)readNativeIndexCatalog(db,table);(void)catalog->read(table);checkNativeForeignKeys(db);auto reader=currentNativeFieldReader(db,table);(void)reader();
+    if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++workspace->tableFieldRevisions[table.toCaseFolded()];
+    if(!settings.restore()) throw DaoStoredSchemaChange("DAO: Field rename stored; connection settings failed to restore, reopen the project");return reader;
+}
+
 TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString& requestedTable,const QString& requestedField,const QMap<QString,VbaValue>& properties) {
     const auto workspace=workspaceState(db);QString table;
     for(const auto& name:nativeTableNames(db)) if(name.compare(requestedTable,Qt::CaseInsensitive)==0) {table=name;break;}
     if(table.isEmpty()) throw VbaRuntimeError(3265,"DAO: Field table unavailable");
     const auto version=nativeSchemaVersion(db),generation=workspace->tableGenerations.value(table.toCaseFolded());
     QMap<QString,VbaValue> evaluated;
-    for(auto it=properties.cbegin();it!=properties.cend();++it) {const auto key=it.key().toCaseFolded();if(key!="required" && key!="defaultvalue" && key!="size") throw VbaRuntimeError(383,"DAO: Field property is read-only");if(evaluated.contains(key)) throw VbaRuntimeError(450,"DAO: Duplicate field property");evaluated.insert(key,scalarVbaValue(it.value()));}
+    for(auto it=properties.cbegin();it!=properties.cend();++it) {const auto key=it.key().toCaseFolded();if(key!="required" && key!="defaultvalue" && key!="size" && key!="name") throw VbaRuntimeError(383,"DAO: Field property is read-only");if(evaluated.contains(key)) throw VbaRuntimeError(450,"DAO: Duplicate field property");evaluated.insert(key,scalarVbaValue(it.value()));}
     workspace->check();if(version!=nativeSchemaVersion(db) || generation!=workspace->tableGenerations.value(table.toCaseFolded())) throw VbaRuntimeError(3420,"DAO: Field identity changed while evaluating properties");
     const auto columns=readTableSchemaColumns(db,table);std::optional<TableSchemaColumn> selected;
     for(const auto& column:columns) if(column.name.compare(requestedField,Qt::CaseInsensitive)==0) {selected=column;break;}
@@ -2760,6 +2804,7 @@ TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString&
     const auto& column=*selected;
     if(!column.nativeAttributes || !column.required || column.sourceType<=0) throw VbaRuntimeError(3251,"DAO: Only explicitly declared native field properties can be changed");
     if(*column.nativeAttributes&16) throw VbaRuntimeError(3251,"DAO: Counter property alteration requires dedicated migration");
+    if(evaluated.contains("name")) {if(evaluated.size()!=1) throw VbaRuntimeError(3251,"DAO: Rename must be a separate field operation");if(evaluated.value("name").kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null field name");return renameNativeField(db,table,column,text(evaluated.value("name").asText()));}
     auto owner=std::make_shared<DetachedTableState>();owner->db=db;owner->workspace=workspace;owner->name=table;
     DetachedField field(owner,column.name,column.sourceType,column.sourceSize);field.attributes_=*column.nativeAttributes;field.required_=*column.required;
     if(column.hasDefault) {if(column.literalDefault.isEmpty()) throw VbaRuntimeError(3251,"DAO: Nonliteral default alteration unsupported");field.default_=column.literalDefault;}

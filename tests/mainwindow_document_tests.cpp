@@ -2851,6 +2851,10 @@ int main(int argc,char** argv) {
             auto propertyField=linaccess::makeDaoDatabase(db)->member("TableDefs",{linaccess::VbaValue::string("authored_defaults")}).object->member("Fields",{linaccess::VbaValue::string("ExtraNote")}).object;
             assert(propertyField->member("Size",{}).asNumber()==12 && propertyField->member("Required",{}).truthy());
             assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE ExtraNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();
+            dialog->findChild<QLineEdit*>("native-field-rename-name")->setText("RenamedNote");
+            QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());if(box && box->windowTitle()=="Feld konnte nicht geändert werden") {std::cerr<<"Field rename GUI error: "<<box->text().toStdString()<<"\n";box->accept();}});
+            dialog->findChild<QPushButton*>("native-field-rename")->click();assert(list->item(list->currentRow(),0)->text()=="RenamedNote");
+            assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE RenamedNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});
             dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==4);dialog->reject();
         });

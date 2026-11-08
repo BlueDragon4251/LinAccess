@@ -286,3 +286,24 @@ Byte/Long bounds, Date/Boolean normalization, binary/max-Double preservation,
 cursor/clone invalidation, relation dependencies, reentrant identity and
 transaction restrictions. No new target or broad suite. F015/F121 remain open;
 456/384/72 unchanged.
+
+## Rename existing native fields
+
+DAO Field.Name and the graphic field editor now rename a declared native
+non-counter column in one savepoint. Field/index catalog names and native
+relationship column pairs follow the physical ALTER TABLE RENAME COLUMN.
+SQLite rewrites actual indexes, views, triggers and foreign-key references;
+saved Access query artifacts, VBA and form bindings are not refactored.
+All rowids and typed values are digest-checked. Duplicate/reserved/invalid
+names, original/mixed declarations, Counter renames and unknown dependent
+foreign-key identities are refused. The edited field publishes its fresh name
+and reader after commit; other metadata readers become stale, and recordsets
+need Requery. No original-format write or full Access Name AutoCorrect claim.
+
+Existing GUI/DAO2/2 (5.66s), application built. Actual GUI rename retains two
+values; DAO verifies Unicode/case changes, index direction/field mapping, real
+parent and child FK renames, relation catalog pairs, rejection of an orphan,
+view/trigger behavior, cursor refresh, binary/max-Double values and next counter
+allocation. Two initial test sequencing errors were corrected (stale field
+reacquisition and a delayed popup helper); no new target or broad suite.
+F015/F121/F155 and fixed456/384/72 remain unchanged.

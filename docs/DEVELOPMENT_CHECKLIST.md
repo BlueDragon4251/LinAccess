@@ -1550,3 +1550,10 @@ Fremdschlüssel blockieren den Feldumbau nicht; betroffene unbekannte Schlüssel
 bleiben geschützt. Bestehendes GUI/DAO2/2 (5,92s), App gebaut. Details/Grenzen
 DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert. Weitere offene Anforderungen
 fortlaufend implementieren; kein Zwischenabschluss oder Abschlussanruf.
+
+Native Nicht-Counter-Felder sind jetzt per DAO Field.Name und grafisch atomar
+umbenennbar, einschließlich Index-/Beziehungsmetadaten, echten FK-Verweisen und
+Digestprüfung der Werte/rowids. Access-Abfrageartefakte/VBA/Formularbindungen
+werden nicht refaktoriert. Echtes GUI/DAO2/2 (5,66s), App gebaut. Umfang/Grenzen
+DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert. Weiter native Feldvalidierung
+und weitere offene Anforderungen implementieren, keine Zwischen-Finals.

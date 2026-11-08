@@ -649,3 +649,9 @@ den ursprünglichen Bits übernommen: [Präzisionsumfang und Grenzen](docs/SOURC
 
 Auch ursprüngliche Double-Bitmuster werden bei tatsächlichen MDB-Kopien erhalten;
 Umfang, unabhängiger Originaldatenvergleich und Grenzen: [Double-Präzision](docs/SOURCE_DOUBLE_PRECISION.md).
+
+Der native Tabellenfeld-Editor kann bestehende Felder anlegen/löschen, Textgröße,
+Pflichtfeld und Literalstandard gemeinsam ändern sowie normale Felder umbenennen.
+Datenwerte bleiben bei Eigenschaftsänderungen erhalten; unzulässige Änderungen
+werden zurückgerollt. Umbenennungen erfordern das Anpassen gespeicherter
+Access-Abfragen und Formularbindungen. [Umfang und Grenzen](docs/DAO_TABLEDEF_FIELDS.md).
