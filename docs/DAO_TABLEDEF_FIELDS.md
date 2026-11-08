@@ -387,3 +387,30 @@ renames a real authored table, retains page settings and inserts the next
 counter value. The page-store header now includes its required geometry types
 explicitly. Uploaded original3/3 and repository fixture4/4 SHA256 checks passed;
 no private sources changed. Fixed456/384/72 and F015/F055/F121/F155 stay open.
+
+## Connection write capability and local metadata
+
+Database.Updatable, physical TableDef.Updatable and Recordset.Updatable now
+reflect SQLite main-database readonly mode and the actual query_only connection
+flag. Opening a physical recordset on a readonly connection retains its readonly
+mode. Write attempts through Execute, schema changes, Edit/AddNew/Update/Delete
+and field/chunk setters refuse3027 before counter allocation or data mutation.
+Actual SQLite READONLY errors in direct catalog persistence also map3027 by
+native error code. A pending edit cannot save while query_only is set;
+CancelUpdate remains available. Counter fields expose readonly17/False or
+writable49/True attributes/data capability, with their existing value-write
+restrictions unchanged. This extends the documented native contract, without
+a fresh Windows readonly/locking oracle.
+
+Detached and explicitly owned native TableDefs expose local Attributes0 and
+empty Connect/SourceTableName. Same-value assignments are harmless; nonzero
+attributes/nonempty external connections refuse3251. Imported/unproven source
+metadata are not guessed. Attached-builder delegation and reentrant attachment
+checks retain the actual table identity. External link providers/system flags
+remain open. Database/TableDef.Updatable setters are readonly383.
+
+Existing DAO1/1 (1.66s), app built. Actual query_only changes while an edit is
+pending, CancelUpdate, metadata refresh, file reopening with QSQLITE_OPEN_READONLY,
+readonly counter fields, schema/DML/query-catalog refusal, no lost/allocated
+records and byte-for-byte unchanged technical database file passed. No GUI/broad
+rerun; latest GUI/DAO before this change2/2 (5.82s).456/384/72 unchanged.

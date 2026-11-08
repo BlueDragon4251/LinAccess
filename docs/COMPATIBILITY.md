@@ -3397,3 +3397,12 @@ werden nicht refaktoriert; weitere Grenzen DAO_TABLEDEF_FIELDS.md. GUI/DAO2/2
 456/384/72 unverändert. Nächste Aufgabe: echte Verbindungs-Schreibfähigkeit und
 readonly DAO-Fehler/Metadaten sowie nachgewiesene lokale TableDef-Metadaten;
 dann weitere offene Anforderungen fortlaufend, kein Zwischenabschluss.
+
+DAO-Schreibfähigkeit prüft jetzt echtes SQLite-readonly und query_only statt
+lediglich Recordsettyp. Database/TableDef/Recordset.Updatable, readonly Counter-
+Metadaten und3027-Verweigerung vor Daten-/Countermutation implementiert; Cancel
+bleibt möglich. Explizit eigene lokale TableDefs haben Attributes0/Connect=""/
+SourceTableName=""; keine erfundenen importierten Linkdaten oder externen Provider.
+Final DAO1/1 (1,66s), App gebaut, technischer Readonly-Dateivergleich unverändert.
+DAO_TABLEDEF_FIELDS.md;456/384/72 gleich. Weitere offene DAO-/Schemaanforderungen
+fortlaufend implementieren; keine Zwischen-Finals/Abschlussanrufe.

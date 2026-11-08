@@ -1,3 +1,4 @@
+#include <QFile>
 #include "dao_database.hpp"
 #include "native_schema_editor.hpp"
 #include "vba_array.hpp"
@@ -2135,8 +2136,28 @@ void testExistingNativeTableRename() {
     assert(sql.exec("SELECT COUNT(*) FROM _la_counter32_sequences WHERE table_name='RenameParent'") && sql.next() && sql.value(0).toInt()==0);sql.finish();database->member("Execute",{VbaValue::string("DELETE FROM [Renamed parent] WHERE ID=100")});assert(sql.exec("SELECT COUNT(*) FROM RenameChild") && sql.next() && sql.value(0).toInt()==0);sql.finish();assert(sql.exec("PRAGMA foreign_keys") && sql.next() && sql.value(0).toInt()==1);sql.finish();
 }
 
+void testNativeDaoWriteCapability() {
+    using linaccess::VbaValue;QTemporaryDir directory;assert(directory.isValid());const auto path=directory.filePath("readonly.linaccess");
+    auto db=QSqlDatabase::addDatabase("QSQLITE","dao-native-write-capability");db.setDatabaseName(path);assert(db.open());QSqlQuery sql(db);auto database=linaccess::makeDaoDatabase(db),tables=database->member("TableDefs",{}).object;
+    const auto error=[](const std::function<void()>& operation,int expected) {int number=0;try {operation();}catch(const linaccess::VbaRuntimeError& failure) {number=failure.number;if(number!=expected) std::cerr<<"Writability error="<<number<<", reason="<<failure.what()<<"\n";}assert(number==expected);};
+    auto table=database->member("CreateTableDef",{VbaValue::string("LocalRows")}).object;assert(table->member("Attributes",{}).asNumber()==0 && table->member("Connect",{}).asText().empty() && table->member("SourceTableName",{}).asText().empty());table->assign("Attributes",VbaValue::longInteger(0));table->assign("Connect",VbaValue::string(""));error([&] {table->assign("Connect",VbaValue::string("unsupported-provider"));},3251);
+    auto id=table->member("CreateField",{VbaValue::string("ID"),VbaValue::integer(4)}).object;id->assign("Attributes",VbaValue::longInteger(16));table->member("Fields",{}).object->member("Append",{VbaValue::reference(id)});
+    auto label=table->member("CreateField",{VbaValue::string("Label"),VbaValue::integer(10),VbaValue::longInteger(12)}).object;label->assign("DefaultValue",VbaValue::string("'kept'"));table->member("Fields",{}).object->member("Append",{VbaValue::reference(label)});tables->member("Append",{VbaValue::reference(table)});database->member("Execute",{VbaValue::string("INSERT INTO LocalRows DEFAULT VALUES")});
+    assert(database->member("Updatable",{}).truthy() && table->member("Updatable",{}).truthy() && table->member("Attributes",{}).asNumber()==0);table->assign("SourceTableName",VbaValue::string(""));error([&] {table->assign("Attributes",VbaValue::longInteger(1));},3251);error([&] {database->assign("Updatable",VbaValue::logical(false));},383);
+    assert(sql.exec("CREATE TABLE UnknownLocal(value INTEGER)"));error([&] {tables->member("Item",{VbaValue::string("UnknownLocal")}).object->member("Connect",{});},3251);
+    auto cursor=database->member("OpenRecordset",{VbaValue::string("LocalRows")}).object;cursor->member("Edit",{});cursor->assign("Label",VbaValue::string("pending"));assert(sql.exec("PRAGMA query_only=ON"));assert(!database->member("Updatable",{}).truthy() && !table->member("Updatable",{}).truthy() && !cursor->member("Updatable",{}).truthy());
+    error([&] {cursor->member("Update",{});},3027);cursor->member("CancelUpdate",{});assert(cursor->item("Label").asText()=="kept");error([&] {database->member("Execute",{VbaValue::string("DELETE FROM LocalRows")});},3027);error([&] {table->assign("Name",VbaValue::string("Changed"));},3027);assert(!db.tables().contains("Changed"));
+    assert(cursor->member("Fields",{VbaValue::string("ID")}).object->member("Attributes",{}).asNumber()==17 && !cursor->member("Fields",{VbaValue::string("ID")}).object->member("DataUpdatable",{}).truthy());
+    auto readonlyAtOpen=database->member("OpenRecordset",{VbaValue::string("LocalRows")}).object;assert(!readonlyAtOpen->member("Updatable",{}).truthy());assert(sql.exec("PRAGMA query_only=OFF"));assert(database->member("Updatable",{}).truthy() && cursor->member("Updatable",{}).truthy() && !readonlyAtOpen->member("Updatable",{}).truthy());cursor->member("Close",{});readonlyAtOpen->member("Close",{});
+    sql.clear();db.close();QFile original(path);assert(original.open(QIODevice::ReadOnly));const auto before=original.readAll();original.close();db.setConnectOptions("QSQLITE_OPEN_READONLY");assert(db.open());database=linaccess::makeDaoDatabase(db);tables=database->member("TableDefs",{}).object;table=tables->member("Item",{VbaValue::string("LocalRows")}).object;cursor=database->member("OpenRecordset",{VbaValue::string("LocalRows")}).object;
+    assert(!database->member("Updatable",{}).truthy() && !table->member("Updatable",{}).truthy() && !cursor->member("Updatable",{}).truthy() && cursor->item("ID").asNumber()==1);assert(table->member("Connect",{}).asText().empty());
+    error([&] {cursor->member("AddNew",{});},3027);error([&] {cursor->member("Edit",{});},3027);error([&] {cursor->assign("Label",VbaValue::string("lost"));},3027);error([&] {database->member("Execute",{VbaValue::string("INSERT INTO LocalRows DEFAULT VALUES")});},3027);error([&] {table->member("Fields",{VbaValue::string("Label")}).object->assign("Required",VbaValue::logical(true));},3027);error([&] {database->member("CreateQueryDef",{VbaValue::string("ReadonlyQuery"),VbaValue::string("SELECT * FROM LocalRows")});},3027);
+    sql=QSqlQuery(db);assert(sql.exec("SELECT COUNT(*),MAX(ID),MIN(Label) FROM LocalRows") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toInt()==1 && sql.value(2).toString()=="kept");sql.finish();assert(sql.exec("SELECT value FROM _la_counter32_sequences WHERE table_name='LocalRows'") && sql.next() && sql.value(0).toInt()==1);sql.clear();db.close();assert(original.open(QIODevice::ReadOnly) && original.readAll()==before);original.close();
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testNativeDaoWriteCapability();
     testExistingNativeTableRename();
     testShadowedDaoRowIdentity();
     testExistingNativePrimaryIndexes();

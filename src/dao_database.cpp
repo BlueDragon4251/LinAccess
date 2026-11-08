@@ -67,6 +67,7 @@ void exec(QSqlQuery& query, const QString& sql) {
     if (const auto code=jetSqlFunctionErrorNumber(message.toUtf8().toStdString()))
         throw VbaRuntimeError(*code,jetSqlFunctionErrorExplanation(message.toUtf8().toStdString()));
     if (message.contains("unique constraint") || message.contains("primary key")) throw VbaRuntimeError(3022,"DAO: Duplicate key");
+    bool nativeOk=false;const int nativeCode=query.lastError().nativeErrorCode().toInt(&nativeOk);if((nativeOk && (nativeCode&255)==SQLITE_READONLY) || message.contains("attempt to write a readonly database")) throw VbaRuntimeError(3027,"DAO: Database or object is read-only");
     if (message.contains("not null")) throw VbaRuntimeError(3314,"DAO: Required value missing");
     if (message.contains("already exists")) throw VbaRuntimeError(3010,"DAO: destination table already exists");
     if (message.contains("no such function")) throw VbaRuntimeError(3085,"DAO: SQL function unsupported");
@@ -76,6 +77,7 @@ void exec(QSqlQuery& query, const QString& sql) {
     if (message.contains("interrupted")) throw VbaRuntimeError(3035,"DAO: query execution budget exceeded");
     throw VbaRuntimeError(3146,"DAO: SQL operation failed");
 }
+bool connectionUpdatable(QSqlDatabase db);
 QString physicalRowIdentity(QSqlDatabase db,const QString& table) {
     QSqlQuery query(db);if(!query.exec("PRAGMA table_xinfo("+quote(table)+")")) queryFailure(query);QSet<QString> names;while(query.next()) names.insert(query.value(1).toString().toCaseFolded());if(query.lastError().isValid()) queryFailure(query);query.finish();
     for(const auto& alias:{QString("rowid"),QString("_rowid_"),QString("oid")}) if(!names.contains(alias)) {
@@ -116,6 +118,7 @@ void removeDroppedTableMetadata(QSqlDatabase db,const QStringList& before) {
 }
 qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<QString,QVariant>& bindings) {
     if (plan.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) throw VbaRuntimeError(3065,"DAO: Execute cannot run a SELECT query");
+    if(!connectionUpdatable(db)) throw VbaRuntimeError(3027,"DAO: Database or object is read-only");
     const bool makeTable=!plan.makeTable.isEmpty();
     const bool schemaAction=plan.daoQueryType==96; // Checked compiler dbQDDL classification, including whitespace/comments.
     if(schemaAction || makeTable) checkReservedCounterSchemaAction(db);
@@ -291,7 +294,12 @@ std::shared_ptr<WorkspaceState> workspaceState(QSqlDatabase db) {
         throw VbaRuntimeError(3146,"DAO: Workspace lifetime tracking unavailable");
     db.driver()->setProperty("la_dao_workspace_state",QVariant::fromValue(state)); return state;
 }
+bool connectionUpdatable(QSqlDatabase db) {
+    const auto workspace=workspaceState(db);workspace->check();const int readonly=sqlite3_db_readonly(workspace->connection,"main");if(readonly<0) throw VbaRuntimeError(3251,"DAO: Database write capability unavailable");
+    QSqlQuery query(db);if(!query.exec("PRAGMA query_only") || !query.next()) queryFailure(query);const auto queryOnly=query.value(0).toInt();if(queryOnly!=0 && queryOnly!=1) throw VbaRuntimeError(3251,"DAO: Connection write mode unknown");return readonly==0 && queryOnly==0;
+}
 void checkReservedCounterSchemaAction(QSqlDatabase db) {
+    if(!connectionUpdatable(db)) throw VbaRuntimeError(3027,"DAO: Database or object is read-only");
     const auto state=workspaceState(db);
     if(!state->savepoints.isEmpty() && !state->counterReservations.isEmpty())
         throw VbaRuntimeError(3251,"DAO: Schema changes after counter allocation require transaction completion");
@@ -479,7 +487,7 @@ public:
         data_->workspace=workspaceState(db_); data_->rollbackRevision=data_->workspace->rollbackRevision;
         table_ = db_.tables().contains(source_, Qt::CaseInsensitive);
         if(table_ && nativeTableNames(db_).contains(source_,Qt::CaseInsensitive)) tableGeneration_=data_->workspace->tableGenerations.value(source_.toCaseFolded());
-        readOnly_ |= !table_;
+        readOnly_ |= !table_ || !connectionUpdatable(db_);
         reload();
         data_->cursors.insert(this);
     }
@@ -574,6 +582,7 @@ public:
         if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         const auto key = lower(name);
         if (key!="close" && key!="requery") checkTransaction();
+        if((key=="edit" || key=="addnew" || key=="update" || key=="delete") && !connectionUpdatable(db_)) throw VbaRuntimeError(3027,"DAO: Database or object is read-only");
         if (key=="transactions" && args.empty()) return VbaValue::logical(true);
         if(key=="getrows") {
             if(args.size()>1) throw VbaRuntimeError(450,"DAO: GetRows accepts one row count");
@@ -660,7 +669,7 @@ public:
             (void)bookmarkPosition(*lastModified_); return *lastModified_;
         }
         if (key=="bookmarkable") return VbaValue::logical(true);
-        if (key=="updatable") return VbaValue::logical(!readOnly_);
+        if (key=="updatable") return VbaValue::logical(!readOnly_ && connectionUpdatable(db_));
         if (key=="editmode") return VbaValue::integer(mode_==Mode::Browse ? 0 : mode_==Mode::Edit ? 1 : 2);
         if (key=="nomatch") return VbaValue::logical(noMatch_);
         if (key == "eof") return VbaValue::logical(data_->rows.empty() || position_ >= data_->rows.size());
@@ -760,11 +769,11 @@ public:
     }
     VbaValue generatedFieldProperty(const QString& name,bool attributes) const {
         (void)fieldType(name);
-        if(!table_ || readOnly_ || declaredFieldType(name).asNumber()!=4
+        if(!table_ || declaredFieldType(name).asNumber()!=4
             || !generatedAccessColumns(db_,source_).contains(name.toCaseFolded()))
             throw VbaRuntimeError(3251,"DAO: Field generator property is not proven in this context");
         // Access2003/DAO3.6 writable Long counter observation: Fixed|AutoIncr|Updatable.
-        return attributes ? VbaValue::longInteger(49) : VbaValue::logical(true);
+        const bool writable=!readOnly_ && connectionUpdatable(db_);return attributes ? VbaValue::longInteger(writable ? 49 : 17) : VbaValue::logical(writable);
     }
     VbaValue schemaFieldBoolean(const QString& name,bool allowZeroLength) const {
         (void)fieldType(name);const auto& properties=allowZeroLength ? data_->allowZeroLengthFields : data_->requiredFields;const auto key=name.toCaseFolded();
@@ -834,6 +843,7 @@ public:
             ? coerceVbaModuleValue(value,"single") : value;
     }
     void appendBinaryChunk(const QString& name,const VbaValue& argument) {
+        if(!connectionUpdatable(db_)) throw VbaRuntimeError(3027,"DAO: Database or object is read-only");
         const auto type=fieldType(name);
         if(!binaryFieldType(type) || mode_==Mode::Browse)
             throw VbaRuntimeError(3251,"AppendChunk requires a native binary Edit/AddNew buffer");
@@ -851,6 +861,7 @@ public:
     }
     void set(const QString& name, const VbaValue& value) {
         checkTransaction();
+        if(!connectionUpdatable(db_)) throw VbaRuntimeError(3027,"DAO: Database or object is read-only");
         if (closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
         require(mode_ != Mode::Browse, "DAO: Edit or AddNew required");
         const auto index = column(name);
@@ -1829,6 +1840,10 @@ public:
             if (!args.empty()) throw VbaRuntimeError(450,"DAO: Name takes no arguments");
             return VbaValue::string(name_.toStdString());
         }
+        if(key=="updatable") {if(!args.empty()) throw VbaRuntimeError(450,"DAO: Updatable takes no arguments");return VbaValue::logical(connectionUpdatable(db_));}
+        if(key=="attributes" || key=="connect" || key=="sourcetablename") {
+            if(!args.empty()) throw VbaRuntimeError(450,"DAO: Local TableDef property takes no arguments");for(const auto& column:readTableSchemaColumns(db_,name_)) if(!column.nativeAttributes || !column.required) throw VbaRuntimeError(3251,"DAO: Local TableDef declaration not proven");return key=="attributes" ? VbaValue::longInteger(0) : VbaValue::string("");
+        }
         if(key=="recordcount") {
             if(!args.empty()) throw VbaRuntimeError(450,"DAO: RecordCount takes no arguments");
             SqliteExecutionBudget budget(db_); QSqlQuery count(db_);
@@ -1892,6 +1907,11 @@ public:
     }
     void assign(std::string_view name,const VbaValue& value) override {
         if(!valid()) throw VbaRuntimeError(3420,"DAO: TableDef is unavailable");
+        if(lower(name)=="updatable") throw VbaRuntimeError(383,"DAO: TableDef.Updatable is read-only");
+        if(lower(name)=="attributes" || lower(name)=="connect" || lower(name)=="sourcetablename") {
+            (void)member(name,{});const auto scalar=scalarVbaValue(value);if(!valid()) throw VbaRuntimeError(3420,"DAO: Table identity changed during property evaluation");(void)member(name,{});if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null local TableDef property");
+            if(lower(name)=="attributes" ? coerceVbaModuleValue(scalar,"long").number!=0 : !scalar.asText().empty()) throw VbaRuntimeError(3251,"DAO: Linked/system TableDef changes are not implemented");return;
+        }
         if(lower(name)=="name") {
             const auto scalar=scalarVbaValue(value);if(!valid()) throw VbaRuntimeError(3420,"DAO: Table identity changed while evaluating its new name");if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null table name");auto renamed=text(scalar.asText());const auto generation=renameExistingNativeTable(db_,name_,renamed);name_=std::move(renamed);generation_=generation;fields_.reset();indexes_.reset();return;
         }
@@ -2147,6 +2167,7 @@ public:
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         state_->workspace->check();const auto key=lower(name);
         if(state_->attached) return state_->attached->member(name,args);
+        if(args.empty() && (key=="attributes" || key=="connect" || key=="sourcetablename")) return key=="attributes" ? VbaValue::longInteger(0) : VbaValue::string("");
         if(key=="name" && args.empty()) return VbaValue::string(state_->name.toStdString());
         if(key=="fields") return args.empty() ? VbaValue::reference(fields_) : fields_->member("Item",args);
         if(key=="indexes") return args.empty() ? VbaValue::reference(indexes_) : indexes_->member("Item",args);
@@ -2166,8 +2187,9 @@ public:
         throw VbaRuntimeError(3251,"DAO: Detached TableDef member unsupported");
     }
     void assign(std::string_view name,const VbaValue& raw) override {
-        state_->workspace->check();if(state_->attached) {state_->attached->assign(name,raw);return;}if(lower(name)!="name") throw VbaRuntimeError(383,"DAO: TableDef property is read-only");
-        const auto value=scalarVbaValue(raw);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null table name");state_->name=text(value.asText());
+        state_->workspace->check();if(state_->attached) {state_->attached->assign(name,raw);return;}const auto key=lower(name);if(key!="name" && key!="attributes" && key!="connect" && key!="sourcetablename") throw VbaRuntimeError(383,"DAO: TableDef property is read-only");
+        const auto value=scalarVbaValue(raw);state_->workspace->check();if(state_->attached) {state_->attached->assign(name,value);return;}if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null TableDef property");if(key=="name") {state_->name=text(value.asText());return;}
+        if(key=="attributes" ? coerceVbaModuleValue(value,"long").number!=0 : !value.asText().empty()) throw VbaRuntimeError(3251,"DAO: Linked/system TableDef creation is not implemented");
     }
     void append(QSqlDatabase db) {
         state_->workspace->check();if(state_->attached || workspaceState(db)!=state_->workspace) throw VbaRuntimeError(3219,"DAO: TableDef belongs to a different or attached database");
@@ -3100,6 +3122,7 @@ public:
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
         workspace_->check(); require(db_.isOpen(), "DAO: Database is closed");
         const auto key = lower(name);
+        if(key=="updatable") {if(!args.empty()) throw VbaRuntimeError(450,"DAO: Database.Updatable takes no arguments");return VbaValue::logical(connectionUpdatable(db_));}
         if (key=="transactions" && args.empty()) return VbaValue::logical(true);
         if (key=="name" && args.empty()) return VbaValue::string(db_.databaseName().toUtf8().toStdString());
         if(key=="relations") {
@@ -3192,6 +3215,7 @@ public:
         if (key=="recordsaffected" && args.empty()) return longCount(affected_);
         throw std::runtime_error("DAO: Database member unsupported");
     }
+    void assign(std::string_view name,const VbaValue& value) override {workspace_->check();if(lower(name)=="updatable") throw VbaRuntimeError(383,"DAO: Database.Updatable is read-only");VbaObject::assign(name,value);}
 private:
     QSqlDatabase db_;
     std::weak_ptr<TableDefinitions> tableDefinitions_;
