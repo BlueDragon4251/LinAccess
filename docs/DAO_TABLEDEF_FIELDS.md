@@ -451,3 +451,29 @@ Own native quantized Single keys now also support real relationship enforcement
 and cascades when both sides have proven native SINGLE_REAL declarations.
 Imported/legacy REAL declarations remain refused for this purpose. Current
 GUI/DAO2/2 (6.26s), app built; see DAO_RELATIONS_RUNTIME.md.456/384/72 unchanged.
+
+## Native numeric field ValidationRule
+
+Own numeric non-counter fields support a bounded ValidationRule in DAO and the
+field designer, on creation and through atomic existing-field property changes.
+The accepted grammar is explicit numeric comparisons (=, <>, <, <=, >, >=)
+joined by And/Or, or Between lower And upper. And has higher precedence than Or.
+Up to16 comparison terms and255 UTF-16 units are accepted; finite invariant
+numeric constants only. Functions, field references, subqueries, arbitrary SQL,
+locale-dependent text, date/text rules and parentheses refuse3251.
+
+Rules become real SQLite CHECK constraints through an owned deterministic
+validation function. Null satisfies this field rule; Required is independent.
+SQL, DAO, datasheet and form saves therefore share storage enforcement rather
+than relying on a designer-only warning. Violations report3317. A failed
+multirow SQL statement remains atomic. Editing a rule checks existing rows during
+the protected table rebuild, and failure retains the old definition and values.
+Clearing a rule removes its constraint. Supported field/table renames preserve
+rules; unknown CHECK constraints still block unsupported migrations.
+
+ValidationText, arbitrary Access expression rules, table-level rules, imported
+validation extraction and exact Windows diagnostics/timing remain open. This is
+an implementation within F015/F121, not completion of either full requirement.
+
+Existing GUI/DAO2/2 passed (7.08s), app built. No new CTest target or full-suite
+claim; fixed catalog456/384/72 unchanged.

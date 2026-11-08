@@ -27,6 +27,7 @@ QString editMessage(int number) {
     if(number==13) return QStringLiteral("Der Wert passt nicht zum Spaltentyp.");
     if(number==2501) return QStringLiteral("Zuerst die Zelleingabe abschließen und Änderungen speichern oder verwerfen.");
     if(number==2448) return QStringLiteral("Dieses Feld ist schreibgeschützt.");
+    if(number==3317) return QStringLiteral("Der Wert verletzt die Gültigkeitsregel des Feldes.");
     if(number==3251) return QStringLiteral("Dieser Wert wird für den Spaltentyp noch nicht unterstützt.");
     return QStringLiteral("Der Wert kann nicht übernommen werden.");
 }

@@ -370,3 +370,13 @@ bei der Migration erhalten. GUI/DAO2/2 (6,11s), App gebaut. Keine vollständige
 Jet-Datums-/Locale-/Untersekundenparität;456/384/72 unverändert. Fortsetzung:
 native numerische Gültigkeitsregeln im DAO/Feldentwurf mit tatsächlicher
 Speicherprüfung und atomarer Bearbeitung, danach weitere offene Anforderungen.
+
+Numerische native Field.ValidationRule im DAO/Feldentwurf mit echten CHECKs
+implementiert: explizite Vergleiche mit And/Or oder Between, Null separat von
+Required,3317 bei Verletzung. Atomare Regeländerung prüft vorhandene Werte;
+Rollback, fehlerhafte Mehrzeilenänderung, erhaltene DAO-Puffer, Löschen der Regel,
+Feld-/Tabellenrename und Byte/Integer/Long/Single/Double/Boolean geprüft.
+GUI/DAO2/2 (7,08s), App gebaut; DAO_TABLEDEF_FIELDS.md. Allgemeine Expressions,
+ValidationText und volle Referenzsemantik bleiben offen;456/384/72 unverändert.
+Fortsetzung: eigene Validierungstexte und physische Recordset-Feldmetadaten,
+danach übrige offene Anforderungen ohne Zwischenabschluss.

@@ -2894,7 +2894,8 @@ int main(int argc,char** argv) {
             dialog->findChild<QPushButton*>("native-field-rename")->click();assert(list->item(list->currentRow(),0)->text()=="RenamedNote");
             assert(values.exec("SELECT COUNT(*) FROM authored_defaults WHERE RenamedNote='note'") && values.next() && values.value(0).toInt()==2);values.finish();assert(!values.exec("INSERT INTO authored_defaults(RenamedNote) VALUES('')"));
             QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});
-            dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==6);dialog->reject();
+            dialog->findChild<QPushButton*>("native-field-delete")->click();assert(list->rowCount()==6);
+            for(int row=0;row<list->rowCount();++row) if(list->item(row,0)->text()=="qty") list->setCurrentCell(row,0);auto* rule=dialog->findChild<QLineEdit*>("native-field-property-validation");assert(rule && rule->isEnabled());rule->setText("Between 0 And 10");dialog->findChild<QPushButton*>("native-field-property-save")->click();assert(list->item(list->currentRow(),5)->text()=="Between 0 And 10");assert(!values.exec("UPDATE authored_defaults SET qty=11"));assert(values.exec("SELECT SUM(qty) FROM authored_defaults") && values.next() && values.value(0).toInt()==14);values.finish();dialog->reject();
         });
         auto* editFields=window.findChild<QAction*>("native-table-fields-edit");assert(editFields);editFields->trigger();
         assert(authored.exec("SELECT COUNT(*) FROM authored_defaults WHERE qty=7 AND label='ui value'") && authored.next() && authored.value(0).toInt()==2);authored.finish();
