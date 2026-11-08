@@ -477,3 +477,18 @@ an implementation within F015/F121, not completion of either full requirement.
 
 Existing GUI/DAO2/2 passed (7.08s), app built. No new CTest target or full-suite
 claim; fixed catalog456/384/72 unchanged.
+
+### Own validation messages and Recordset metadata
+
+Native numeric fields now also expose editable ValidationText (up to255 UTF-16
+units, valid text without NUL). The actual SQLite validation error includes this
+message; DAO and native SQL preserve case and Unicode in the3317 description.
+The empty text retains the generic3317 error. Existing one-argument validation
+constraints remain readable/rebuildable; a nonempty message uses the checked
+second argument. Field/table renames preserve text and actual enforcement.
+Physical direct-table Recordset fields expose both validation properties readonly
+(383 on assignment); query/imported metadata is not guessed. Reload/Requery and
+existing field revision checks govern snapshots/clones. Forms/datasheets retain
+the actual SQLite message on a rejected save; form command cancellation remains
+the existing2501 boundary, not a claim of full Access form error-event parity.
+GUI/DAO2/2 (7.32s), app built; no new CTest target or full-suite claim.

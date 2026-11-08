@@ -442,8 +442,12 @@ void nonemptyText(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     }catch(const VbaRuntimeError& failure) {functionError(context,failure);}catch(...) {native.error(context,"Text validation failed",-1);}
 }
 
-void fieldValidation(sqlite3_context* context,int,sqlite3_value** args) noexcept {
-    auto& native=api();try {if(native.type(args[0])!=SQLITE_NULL && native.integer(args[0])==0) throw VbaRuntimeError(3317,"Field value violates its ValidationRule");native.integerResult(context,1);}catch(const VbaRuntimeError& failure) {functionError(context,failure);}catch(...) {native.error(context,"Field validation failed",-1);}
+void fieldValidation(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
+    auto& native=api();try {
+        if(native.type(args[0])==SQLITE_NULL || native.integer(args[0])!=0) {native.integerResult(context,1);return;}
+        if(count==2) {if(native.type(args[1])!=SQLITE_TEXT || native.bytes(args[1])>1020) throw VbaRuntimeError(3251,"Invalid ValidationText");const auto text=scalarText(args[1]);if(text.size()>255 || text.contains(QChar(0)) || !text.isValidUtf16()) throw VbaRuntimeError(3251,"Invalid ValidationText");if(!text.isEmpty()) {const auto message=QByteArray("LinAccess SQL function error 3317: ")+text.toUtf8();native.error(context,message.constData(),message.size());return;}}
+        throw VbaRuntimeError(3317,"Field value violates its ValidationRule");
+    }catch(const VbaRuntimeError& failure) {functionError(context,failure);}catch(...) {native.error(context,"Field validation failed",-1);}
 }
 
 void textCapacity(sqlite3_context* context,int,sqlite3_value** args) noexcept {
@@ -589,7 +593,9 @@ std::optional<int> jetSqlFunctionErrorNumber(std::string_view foldedMessage) {
     if (number==5 || number==6 || number==7 || number==13 || number==52 || number==53 || number==70 || number==75 || number==76 || number==94 || number==438 || number==450 || number==3035 || number==3113 || number==3146 || number==3162 || number==3163 || number==3315 || number==3317 || number==3061 || number==2450 || number==2451 || number==2455 || number==2465 || number==3251 || number==3420 || number==3085) return number;
     return {};
 }
-std::string jetSqlFunctionErrorExplanation(std::string_view foldedMessage) {
+std::string jetSqlFunctionErrorExplanation(std::string_view message) {
+    const auto original=QString::fromUtf8(message.data(),message.size());const QString marker="LinAccess SQL function error 3317: ";if(original.startsWith(marker)) {const auto text=original.mid(marker.size());if(!text.isEmpty() && text.size()<=255 && !text.contains(QChar(0)) && text.isValidUtf16()) return text.toStdString();}
+    const auto storage=original.toCaseFolded().toStdString();const std::string_view foldedMessage(storage);
     if(foldedMessage.find("linaccess sql function error 3317")!=std::string_view::npos) return "Field value violates its ValidationRule";
     if(foldedMessage.find("linaccess sql function error 3315:")!=std::string_view::npos) return "Field cannot contain a zero-length string";
     if(foldedMessage.find("linaccess sql function error 3163:")!=std::string_view::npos) return "Text is too long for this field";
@@ -705,6 +711,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_default_now",0,&dateFieldDefault<1>,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_default_time",0,&dateFieldDefault<2>,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_nonempty_text",1,&nonemptyText,nullptr,nullptr,SQLITE_UTF8|SQLITE_DETERMINISTIC|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_validation",2,&fieldValidation,nullptr,nullptr,SQLITE_UTF8|SQLITE_DETERMINISTIC|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_validation",1,&fieldValidation,nullptr,nullptr,SQLITE_UTF8|SQLITE_DETERMINISTIC|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_text_capacity",2,&textCapacity,nullptr,nullptr,SQLITE_UTF8|SQLITE_DETERMINISTIC|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_lenb",-1,&stringLenB,nullptr,nullptr);

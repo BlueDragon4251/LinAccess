@@ -380,3 +380,12 @@ GUI/DAO2/2 (7,08s), App gebaut; DAO_TABLEDEF_FIELDS.md. Allgemeine Expressions,
 ValidationText und volle Referenzsemantik bleiben offen;456/384/72 unverändert.
 Fortsetzung: eigene Validierungstexte und physische Recordset-Feldmetadaten,
 danach übrige offene Anforderungen ohne Zwischenabschluss.
+
+Native ValidationText jetzt im DAO/Feldentwurf für unterstützte numerische Regeln,
+mit wirklichem3317-SQL-Fehlertext; UTF-8/Umlaute, Großschreibung und Quotes bleiben
+erhalten. Leeren/Bearbeiten/Migration unterstützt; Begrenzung255 UTF-16-Einheiten,
+kein NUL. Physische Recordset.Fields lesen eigene ValidationRule/ValidationText
+schreibgeschützt, mit bestehenden Clone/Requery-/Generationsguards. GUI/DAO2/2
+(7,32s), App gebaut. Allgemeine Ausdrücke und genaue Windows-Formular-/Fehler-
+Ereignissemantik weiterhin offen.456/384/72 unverändert. Fortsetzung: tatsächliche
+Feldreihenfolge/OrdinalPosition im DAO und Feldentwurf mit atomarem Werterhalt.

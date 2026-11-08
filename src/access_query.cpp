@@ -1845,7 +1845,7 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
 [[noreturn]] static void failAccessQuery(const QSqlQuery& query) {
         const auto error = query.lastError().text().toCaseFolded();
         if (const auto code=jetSqlFunctionErrorNumber(error.toUtf8().toStdString()))
-            throw VbaRuntimeError(*code,jetSqlFunctionErrorExplanation(error.toUtf8().toStdString()));
+            throw VbaRuntimeError(*code,jetSqlFunctionErrorExplanation(query.lastError().databaseText().toUtf8().toStdString()));
         if (error.contains("no such function")) throw VbaRuntimeError(3085,"SQL function unsupported");
         if (error.contains("no such table")) throw VbaRuntimeError(3078,"SQL dependency unavailable");
         if (error.contains("interrupted")) throw VbaRuntimeError(3035,"Query execution budget exceeded");
