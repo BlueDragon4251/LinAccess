@@ -15,6 +15,10 @@ struct AccessQueryParameter {
     bool likePattern{};
     bool direct{};
 };
+struct AccessCounterDeclaration {
+    QString table,column;
+    qint32 seed{1},increment{1};
+};
 struct AccessQueryPlan {
     QString sql;
     QString makeTable;
@@ -34,6 +38,7 @@ struct AccessQueryPlan {
     QString source;
     QString compiledSql;
     bool currencyContextResolved{};
+    QVector<AccessCounterDeclaration> counters;
     int daoQueryType{-1}; // Native DAO source kind, unknown until classified by the compiler.
 };
 struct AccessQueryResult {

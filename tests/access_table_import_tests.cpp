@@ -116,6 +116,25 @@ void verifyJetCounterStateReference(const QString& path) {
     assert(jetLongAccessColumns(db,"user_created_counter").contains("number"));
     const auto ownQuery=database->member("OpenRecordset",{VbaValue::string("SELECT [number] FROM [user_created_counter]")}).object;
     assert(ownQuery->item("number").numericType==VbaValue::NumericType::Long && ownQuery->item("number").asNumber()==2);ownQuery->member("Close",{});
+    database->member("Execute",{VbaValue::string("CREATE TABLE [seeded counter] ([key] COUNTER(100,7) PRIMARY KEY, [note] TEXT DEFAULT 'COUNTER(0,0)')")});
+    assert(query.exec("INSERT INTO [seeded counter] DEFAULT VALUES"));
+    const auto seeded=database->member("OpenRecordset",{VbaValue::string("seeded counter")}).object;
+    for(const int expected:{107,114}) {seeded->member("AddNew",{});assert(seeded->item("key").asNumber()==expected);seeded->member("Update",{});}
+    assert(query.exec("SELECT [key],[note] FROM [seeded counter] ORDER BY [key]"));
+    for(const int expected:{100,107,114}) {assert(query.next() && query.value(0).toInt()==expected && query.value(1).toString()=="COUNTER(0,0)");}query.finish();
+    seeded->member("AddNew",{});assert(seeded->item("key").asNumber()==121);seeded->member("CancelUpdate",{});
+    assert(query.exec("INSERT INTO [seeded counter] DEFAULT VALUES"));
+    assert(query.exec("SELECT MAX([key]) FROM [seeded counter]") && query.next() && query.value(0).toInt()==128);query.finish();
+    reserveEngine->member("BeginTrans",{});seeded->member("AddNew",{});assert(seeded->item("key").asNumber()==135);seeded->member("Update",{});
+    reserveEngine->member("Rollback",{});seeded->member("Requery",{});seeded->member("AddNew",{});assert(seeded->item("key").asNumber()==142);seeded->member("CancelUpdate",{});seeded->member("Close",{});
+    database->member("Execute",{VbaValue::string("CREATE TABLE [seed_without_pk] ([n] COUNTER(5,2))")});
+    assert(query.exec("INSERT INTO [seed_without_pk] DEFAULT VALUES"));assert(query.exec("INSERT INTO [seed_without_pk] DEFAULT VALUES"));
+    assert(query.exec("SELECT [n] FROM [seed_without_pk] ORDER BY [n]") && query.next() && query.value(0).toInt()==5 && query.next() && query.value(0).toInt()==7);query.finish();
+    bool invalidStep=false;
+    try {database->member("Execute",{VbaValue::string("CREATE TABLE [bad_step] ([n] COUNTER(1,0))")});}catch(const VbaRuntimeError& error){invalidStep=error.number==3251;}
+    assert(invalidStep && !db.tables().contains("bad_step"));
+    database->member("Execute",{VbaValue::string("DROP TABLE [seed_without_pk]")});
+    assert(query.exec("SELECT COUNT(*) FROM _la_counter32_steps WHERE table_name='seed_without_pk'") && query.next() && query.value(0).toInt()==0);query.finish();
     assert(digest()==before);
     std::cout<<"Actual Jet stored counters: deleted-highest native/deleted-all managed next4, AddNew timing, signed32 wrap, consumed cancellation/rollback IDs, protected DDL, contradictory state atomic rollback and original hash verified\n";
 }
@@ -612,7 +631,12 @@ CREATE INDEX `label` ON `source` (`a``b`);
     makeDaoDatabase(file)->member("Execute",{VbaValue::string("CREATE TABLE durable_jet_counter(id INTEGER PRIMARY KEY AUTOINCREMENT)")});
     auto durable=makeDaoDatabase(file)->member("OpenRecordset",{VbaValue::string("durable_jet_counter")}).object;
     durable->member("AddNew",{});assert(durable->item("id").asNumber()==1);durable->member("CancelUpdate",{});durable->member("Close",{});durable.reset();
+    makeDaoDatabase(file)->member("Execute",{VbaValue::string("CREATE TABLE durable_step(n COUNTER(100,7))")});
+    auto durableStep=makeDaoDatabase(file)->member("OpenRecordset",{VbaValue::string("durable_step")}).object;
+    durableStep->member("AddNew",{});assert(durableStep->item("n").asNumber()==100);durableStep->member("CancelUpdate",{});durableStep->member("Close",{});durableStep.reset();
     write.clear();file.close();assert(file.open());installJetSqlFunctions(file);write=QSqlQuery(file);
+    durableStep=makeDaoDatabase(file)->member("OpenRecordset",{VbaValue::string("durable_step")}).object;
+    durableStep->member("AddNew",{});assert(durableStep->item("n").asNumber()==107);durableStep->member("Update",{});durableStep->member("Close",{});
     durable=makeDaoDatabase(file)->member("OpenRecordset",{VbaValue::string("durable_jet_counter")}).object;
     durable->member("AddNew",{});assert(durable->item("id").asNumber()==2);durable->member("Update",{});durable->member("Close",{});
     assert(write.exec("UPDATE _la_counter_sequences SET value=9223372036854775807 WHERE table_name='persistent'"));

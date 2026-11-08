@@ -972,6 +972,59 @@ AccessQueryPlan compileJoinedUpdate(const QVector<Token>& tokens,qsizetype start
 }
 }
 QString accessLikePattern(const QString& value) { return pattern(value); }
+namespace {
+void adaptCounterDdl(QVector<Token>& tokens,qsizetype pos,AccessQueryPlan& plan) {
+    const auto word=[&](qsizetype at,const char* text){return at<tokens.size() && tokens[at].kind==Token::Word && tokens[at].value.compare(text,Qt::CaseInsensitive)==0;};
+    if(!word(pos,"CREATE") || !word(pos+1,"TABLE")) return;
+    const auto fail=[] {throw VbaRuntimeError(3251,"Jet SQL: COUNTER requires a local CREATE TABLE and literal signed-Long seed/positive increment");};
+    if(pos+3>=tokens.size() || (tokens[pos+2].kind!=Token::Word && tokens[pos+2].kind!=Token::Identifier) || !symbol(tokens[pos+3],"(")) {
+        for(auto i=pos+2;i<tokens.size();++i) if(word(i,"COUNTER")) fail();
+        return;
+    }
+    const auto table=tokens[pos+2].value;
+    struct Rewrite {qsizetype begin,length;QVector<Token> replacement;};
+    QVector<Rewrite> rewrites;
+    const auto part=[&](qsizetype begin,qsizetype end) {
+        if(begin+1>=end || !word(begin+1,"COUNTER")) return;
+        if(tokens[begin].kind!=Token::Word && tokens[begin].kind!=Token::Identifier) fail();
+        if(word(begin,"CONSTRAINT") || word(begin,"PRIMARY") || word(begin,"UNIQUE") || word(begin,"FOREIGN") || word(begin,"CHECK")) return;
+        const auto column=tokens[begin].value;auto at=begin+2;
+        qint32 seed=1,increment=1;
+        const auto integer=[&]() -> qint32 {
+            bool negative=false;
+            if(at<end && (symbol(tokens[at],"-") || symbol(tokens[at],"+"))) {negative=symbol(tokens[at],"-");++at;}
+            if(at>=end || tokens[at].kind!=Token::Other) fail();
+            bool valid=false;auto value=tokens[at++].value.toLongLong(&valid);
+            if(!valid || value<0) fail();if(negative) value=-value;
+            if(value<std::numeric_limits<qint32>::min() || value>std::numeric_limits<qint32>::max()) fail();
+            return static_cast<qint32>(value);
+        };
+        if(at<end && symbol(tokens[at],"(")) {
+            ++at;seed=integer();if(at>=end || !symbol(tokens[at++],",")) fail();increment=integer();
+            if(at>=end || !symbol(tokens[at++],")") || increment<=0) fail();
+        }
+        for(auto i=at;i<end;++i) if(word(i,"DEFAULT") || word(i,"AUTOINCREMENT")) fail();
+        if(table.isEmpty() || column.isEmpty() || !plan.counters.isEmpty()) fail();
+        plan.counters.append({table,column,seed,increment});
+        // Keep the trusted DEFAULT as one emitted token. In particular its
+        // literal identifiers must not be rewritten as parameters/functions.
+        rewrites.append({begin+1,at-begin-1,{{Token::Word,"INT"},{Token::Word,"NOT"},{Token::Word,"NULL"},
+            {Token::Other,"DEFAULT ("+accessCounterDefault(table,column)+")"}}});
+    };
+    qsizetype begin=pos+4,closing=-1;int depth=0;
+    for(auto i=begin;i<tokens.size();++i) {
+        if(symbol(tokens[i],"(")) ++depth;
+        else if(symbol(tokens[i],")")) {if(depth==0) {part(begin,i);closing=i;break;}--depth;}
+        else if(depth==0 && symbol(tokens[i],",")) {part(begin,i);begin=i+1;}
+    }
+    if(rewrites.isEmpty()) return;
+    if(closing<0 || (closing+1<tokens.size() && (closing+2!=tokens.size() || !symbol(tokens[closing+1],";")))) fail();
+    for(auto it=rewrites.crbegin();it!=rewrites.crend();++it) {
+        tokens.remove(it->begin,it->length);
+        for(auto i=it->replacement.size();i>0;--i) tokens.insert(it->begin,it->replacement[i-1]);
+    }
+}
+}
 static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions={});
 AccessQueryPlan compileAccessQuery(const QString& source) { return compileCurrencyQuery(source,{}); }
 static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions) {
@@ -1031,6 +1084,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         else if(command=="CREATE" || command=="ALTER" || command=="DROP") plan.daoQueryType=96;
     }
 
+    if(plan.daoQueryType==96) adaptCounterDdl(tokens,pos,plan);
     preserveComputedProjectionNames(tokens,pos);
     plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields,functions);
     if (tokens[pos].kind==Token::Word && tokens[pos].value.compare("UPDATE",Qt::CaseInsensitive)==0) {

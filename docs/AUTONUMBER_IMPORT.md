@@ -63,6 +63,24 @@ and saved query definitions remain. Managed/imported renames are refused atomica
 until default/index/source metadata rebinding is implemented. This is not complete
 relationship-constraint lifecycle handling.
 
+## Native COUNTER declarations with seed and increment
+
+Local CREATE TABLE supports COUNTER and COUNTER(seed,increment) in actual column
+type positions through the existing SQL token stream. Seeds are signed-Long
+integer literals; increments are positive Long integer literals. At most one
+COUNTER declaration per table is accepted. The compiler emits INT, NOT NULL and a
+trusted managed DEFAULT; text literals, identifier text and table constraints are
+not scanned as counter declarations. Unsupported/nonliteral/zero increments are
+refused before mutation. General CREATE/ALTER/DDL compatibility is not implied.
+
+The new table, generator and optional `_la_counter32_steps` configuration commit
+in the existing DDL savepoint. Seed100/increment7 generates100/107/114 as observed
+under Access2003; SQL/DAO use the same step, cancellation/rollback retain consumed
+values and both step/frontier survive project reopen. Default increments remain1,
+including existing32-bit project state without the optional steps table. DROP
+also removes step metadata. This does not decode custom increments from arbitrary
+original Jet binaries or provide all ALTER/field-property/reseed operations.
+
 ## Actual Microsoft Access 2003 reference
 
 The user ran the technical probes with Access11.0 / DAO3.6. Only technical counter
@@ -87,7 +105,7 @@ reopen, typed query projection and atomic lifecycle behavior in existing targets
 
 ## Remaining F171 requirements
 
-Full custom increments/seeds and source binary mode/property decoding, Random and
+Full source binary mode/property decoding, ALTER/reseed/field-property semantics, Random and
 replication generators, negative source-state import, complete field properties,
 form/event allocation timing, raw SQL statement-failure allocation gaps, external
 transaction/crash behavior, concurrent application/locking semantics, general

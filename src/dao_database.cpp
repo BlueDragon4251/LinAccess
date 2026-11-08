@@ -82,7 +82,7 @@ void removeDroppedTableMetadata(QSqlDatabase db,const QStringList& before) {
     // A rename needs rebinding of defaults, index identities and source metadata.
     // Refuse it atomically for managed/imported tables until that is implemented.
     for(const auto& name:removed) {
-        for(const auto& metadata:{QString("_la_counter_sequences"),QString("_la_counter32_sequences"),QString("_la_table_schema"),QString("_la_access_indexes")}) {
+        for(const auto& metadata:{QString("_la_counter_sequences"),QString("_la_counter32_sequences"),QString("_la_counter32_steps"),QString("_la_table_schema"),QString("_la_access_indexes")}) {
             if(!catalog.contains(metadata,Qt::CaseInsensitive)) continue;
             QSqlQuery query(db);
             if(!added.isEmpty()) {
@@ -153,6 +153,10 @@ qlonglong executeAction(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<Q
             const auto after=nativeTableNames(db);
             const bool removed=std::any_of(before.cbegin(),before.cend(),[&](const QString& name){return !after.contains(name,Qt::CaseInsensitive);});
             if(schemaAction && !removed) for(const auto& table:after) if(!before.contains(table,Qt::CaseInsensitive)) configureNewAccessCounters(db,table);
+            for(const auto& counter:plan.counters) {
+                if(before.contains(counter.table,Qt::CaseInsensitive) || !after.contains(counter.table,Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Counter DDL requires a new local table");
+                configureNewAccessCounterStep(db,counter.table,counter.column,counter.seed,counter.increment);
+            }
             observeNativeTableCatalog(db,before);
         }
         if(schemaScope && !guard.exec("RELEASE "+schemaSavepoint)) queryFailure(guard);

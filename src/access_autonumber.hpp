@@ -13,6 +13,7 @@ struct AccessCounterReservation {
 };
 AccessCounterReservation reserveAccessCounter(QSqlDatabase db,const QString& table,const QString& column);
 AccessCounterReservation currentAccessCounterReservation(QSqlDatabase db,AccessCounterReservation reservation);
+void configureNewAccessCounterStep(QSqlDatabase db,const QString& table,const QString& column,qint32 seed,qint32 increment);
 void configureNewAccessCounters(QSqlDatabase db,const QString& table);
 QSet<QString> jetLongAccessColumns(QSqlDatabase db,const QString& table);
 void createJetLongCounter(QSqlDatabase db,const QString& table,const QString& column);

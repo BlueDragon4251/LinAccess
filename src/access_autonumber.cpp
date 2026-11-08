@@ -10,6 +10,7 @@
 #include <limits>
 #include <memory>
 #include <algorithm>
+#include <cstring>
 
 namespace linaccess {
 namespace {
@@ -32,12 +33,29 @@ void nextAccessCounter(sqlite3_context* context,int count,sqlite3_value** values
             if (sqlite3_value_type(values[i])!=SQLITE_TEXT || sqlite3_value_bytes(values[i])>1024) { counterError(context,3251); return; }
         }
         auto* connection=sqlite3_context_db_handle(context); sqlite3_stmt* raw=nullptr;
+        sqlite3_int64 increment=1;
+        const auto stepPrepare=sqlite3_prepare_v2(connection,"SELECT increment,typeof(increment) FROM main._la_counter32_steps WHERE table_name=? AND column_name=?",-1,&raw,nullptr);
+        Statement step(raw,&sqlite3_finalize);
+        if(stepPrepare==SQLITE_OK) {
+            for(int i=0;i<2;++i) if(sqlite3_bind_text(step.get(),i+1,reinterpret_cast<const char*>(sqlite3_value_text(values[i])),sqlite3_value_bytes(values[i]),SQLITE_TRANSIENT)!=SQLITE_OK) {counterError(context,3251);return;}
+            const auto result=sqlite3_step(step.get());
+            if(result==SQLITE_ROW) {
+                const auto* storage=sqlite3_column_text(step.get(),1);increment=sqlite3_column_int64(step.get(),0);
+                if(!storage || strcmp(reinterpret_cast<const char*>(storage),"integer") || increment<1 || increment>2147483647 || sqlite3_step(step.get())!=SQLITE_DONE) {counterError(context,3251);return;}
+            } else if(result!=SQLITE_DONE) {counterError(context,3251);return;}
+        } else {
+            step.reset();raw=nullptr;
+            if(sqlite3_prepare_v2(connection,"SELECT 1 FROM main.sqlite_schema WHERE name='_la_counter32_steps'",-1,&raw,nullptr)!=SQLITE_OK) {counterError(context,3251);return;}
+            Statement exists(raw,&sqlite3_finalize);if(sqlite3_step(exists.get())==SQLITE_ROW) {counterError(context,3251);return;}
+        }
+        step.reset();raw=nullptr;
         // Source-backed Jet Long counters wrap in signed32; legacy SQLite-only
         // generators keep their existing64-bit contract.
-        const auto jetPrepare=sqlite3_prepare_v2(connection,"UPDATE main._la_counter32_sequences SET value=CASE WHEN value=2147483647 THEN -2147483648 ELSE value+1 END WHERE table_name=? AND column_name=? RETURNING value",-1,&raw,nullptr);
+        const auto jetPrepare=sqlite3_prepare_v2(connection,"UPDATE main._la_counter32_sequences SET value=CASE WHEN value+?3>2147483647 THEN value+?3-4294967296 ELSE value+?3 END WHERE table_name=?1 AND column_name=?2 RETURNING value",-1,&raw,nullptr);
         Statement jet(raw,&sqlite3_finalize);
         if(jetPrepare==SQLITE_OK) {
             for(int i=0;i<2;++i) if(sqlite3_bind_text(jet.get(),i+1,reinterpret_cast<const char*>(sqlite3_value_text(values[i])),sqlite3_value_bytes(values[i]),SQLITE_TRANSIENT)!=SQLITE_OK) {counterError(context,3251);return;}
+            if(sqlite3_bind_int64(jet.get(),3,increment)!=SQLITE_OK) {counterError(context,3251);return;}
             const auto result=sqlite3_step(jet.get());
             if(result==SQLITE_ROW) {
                 const auto value=sqlite3_column_int64(jet.get(),0);
@@ -104,6 +122,23 @@ QSet<QString> jetLongAccessColumns(QSqlDatabase db,const QString& table) {
         for(const auto& name:result) if(!generators.contains(name)) throw VbaRuntimeError(3251,"Jet Long generator identity changed");
     }
     return result;
+}
+void configureNewAccessCounterStep(QSqlDatabase db,const QString& table,const QString& column,qint32 seed,qint32 increment) {
+    if(increment<=0 || !jetLongAccessColumns(db,table).contains(column.toCaseFolded())) throw VbaRuntimeError(3251,"Counter step configuration unavailable");
+    QSqlQuery query(db);
+    if(!query.exec("SELECT COUNT(*) FROM main."+identifier(table)) || !query.next() || query.value(0).toLongLong()!=0)
+        throw VbaRuntimeError(3251,"Counter seed configuration requires a new empty table");
+    query.finish();
+    if(!query.exec("CREATE TABLE IF NOT EXISTS main._la_counter32_steps(table_name TEXT NOT NULL,column_name TEXT NOT NULL,increment INTEGER NOT NULL CHECK(typeof(increment)='integer' AND increment BETWEEN 1 AND 2147483647),PRIMARY KEY(table_name,column_name))"))
+        throw VbaRuntimeError(3146,"Counter step storage unavailable");
+    query.prepare("INSERT INTO main._la_counter32_steps VALUES(?,?,?)");query.addBindValue(table);query.addBindValue(column);query.addBindValue(increment);
+    if(!query.exec()) throw VbaRuntimeError(3146,"Counter step initialization failed");
+    qlonglong previous=static_cast<qlonglong>(seed)-increment;
+    if(previous<std::numeric_limits<qint32>::min()) previous+=4294967296LL;
+    if(previous>std::numeric_limits<qint32>::max()) previous-=4294967296LL;
+    query.prepare("UPDATE main._la_counter32_sequences SET value=? WHERE table_name=? AND column_name=?");
+    query.addBindValue(previous);query.addBindValue(table);query.addBindValue(column);
+    if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3146,"Counter seed initialization failed");
 }
 void configureNewAccessCounters(QSqlDatabase db,const QString& table) {
     const auto generators=generatedAccessColumns(db,table);

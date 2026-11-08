@@ -2248,3 +2248,29 @@ konkurrierende Anwendungen, allgemeine Umbenennung und Relation-Lifecycle bleibe
 zu bearbeiten. Vorhandene SQL-/DAO-v4-Setupfehler bleiben KEIN belastbares Ergebnis-
 Oracle. Details/autoritative aktuelle Grenzen in docs/AUTONUMBER_IMPORT.md.
 Fester Katalog weiterhin456/384/72; keine neue F-ID, kein F171-Häkchen.
+
+
+## Native SQL COUNTER(seed,increment) nach0b795da
+
+CREATE TABLE unterstützt jetzt COUNTER sowie COUNTER(seed,increment) in echten
+Spaltentyp-Positionen über den bestehenden SQL-Tokenstrom, ohne Regex-Dispatch.
+Lokaler Tabellenname, eine Counterdeklaration, signed-Long-Literalseed und positive
+Long-Literal-Schrittweite; unbekannte/nichtliterale/Nullschritt-Fälle3251 vor
+Mutation. INT NOTNULL plus vertrauenswürdiger DEFAULT ohne rowid-Alias; Literaltext
+COUNTER(0,0) wird nicht als Deklaration interpretiert. AccessQueryPlan trägt die
+geprüften Counterdeklarationen; DAO-DDL initialisiert sie im selben Savepoint.
+Optionales main._la_counter32_steps speichert die Schrittweite, ohne das bestehende
+32-Bit-Sequenzschema umzubauen. Fehlende Schritttabelle/-zeile bedeutet1, defekte
+vorhandene Schrittspeicherung wird nicht als gültig behandelt. Allocation rechnet
+mit signed32-Wrap und der gespeicherten positiven Schrittweite. DROP bereinigt
+auch Schrittmetadaten. Keine Wiederinitialisierung existierender Tabellen.
+
+Echte Access-Referenz100/107/114 über normalen SQL-/DAO-Neuerstellungsweg umgesetzt.
+Bestehende Import-/DAO-Ziele2/2 (1,30s): SQL+DAO-Werte100/107/114, Cancel121 gefolgt
+von128, Rollback135 gefolgt142, NoPK5/7, unverändertes Textliteral, Nullschritt-
+Abbruch ohne Tabelle, Dropbereinigung und Projekt-Reopen mit weiterhin7er-Schritt.
+Keine neue Testziel-/Punktvermehrung. Private Logs counter-step-{build,tests}.log
+und counter-step-app-build.log unter /workspace/work/. Binäre MDB-Schrittweiten/
+Moduserkennung, negative Source-Seeds, Random/Replikation und vollständige
+Property-/ALTER-/Transaktions-/Event-Regeln bleiben F171 offen. Katalog456/384/72
+unverändert; kein Abschlussanruf/kein Gesamtabschluss für diese Ergänzung.

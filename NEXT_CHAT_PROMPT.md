@@ -1,3 +1,11 @@
+Neueste Ergänzung: normales lokales CREATE TABLE mit COUNTER und
+COUNTER(seed,increment) ist implementiert: tatsächlicher Spaltentyp-Token,
+signed-Long-Literalseed/positive Long-Schrittweite, SQL+DAO und Reopen, optionale
+_la_counter32_steps, atomare Initialisierung/Drop. Access-Referenz100/107/114 und
+Cancel/Rollback/NoPK/ungültige Schrittweite im vorhandenen Import-/DAO-Ziel2/2
+(1,30s) geprüft. Das ist KEINE vollständige binäre MDB-Modus-/Schrittweitenerkennung,
+keine Random/Replikations-/ALTER-/Property-Gleichheit. Handoff-Ende lesen.
+
 Aktuelle Ergänzung 2026-11-08: Nutzer will größere zusammenhängende Implementierung,
 danach eine gebündelte gezielte Prüfung; keine Zwischenabschluss-/Testflut. Allgemeiner
 Access-Ersatz, keine Kassa-Spezialisierung. Access2003/DAO3.6-v3/v4-Referenzen sind
@@ -7,7 +15,7 @@ DAO-Reservierung vor AddNew-Rückgabe, verbrauchte Abbruch-/Updatefehler-/Worksp
 Rollback-Nummern, signed32-Übergang und verwaltete Vergabe für alle21 Original-
 Zähler sowie neue Designertabellen. Long-Typweitergabe, NULL-/Änderungsschutz und
 atomare Lifecycle-Grenzen sind implementiert. Kein Legacy-Autoumbau. Noch offen:
-vollständige Schrittweiten/Seed-Syntax und Quellmodi, Random/Replikation, allgemeine
+vollständige Quellmodi, Random/Replikation, ALTER/Reseed/allgemeine
 Properties, SQL-Statementfehler-/Formevent-Allokation und weitere Lifecycle-Grenzen.
 Technische Access-Counter-Oracles: tests/access2003_reference/.
 Private v4-SQL-/DAO-Setupfehler nicht als Ergebnisparität interpretieren. Keine
