@@ -195,3 +195,8 @@ TEXT255/MEMO/Byte/16-/32-Bit-Felder, tatsächliche Typ-/Indexidentitäten; aus U
 gebaute Tabelle anschließend über DAO indexiert. Mainwindow/DAO2/2 (4,95s), App
 gebaut. Keine Bestandsmigration.456/384/72 gleich. Fortsetzung: grafische normale
 Indexverwaltung auf Basis der vorhandenen geprüften DAO-Operationen.
+
+Grafische Indexverwaltung über Ansicht → Tabellenindizes bearbeiten implementiert.
+Realer GUI-Create/Delete-Durchlauf über gemeinsamen DAO-Weg, unveränderte Zeilen;
+Mainwindow/DAO2/2 (5,11s), App gebaut. DAO_INDEXES_RUNTIME.md/README.456/384/72 gleich.
+Grundlegende native Felddefinitionen/Eigenschaften/Speichergrenzen weiterführen.

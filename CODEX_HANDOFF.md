@@ -2392,3 +2392,14 @@ bereichsgeprüft. Keine Bestandsmigration. Bestehende Mainwindow/DAO2/2 (4,95s),
 App gebaut; Details DAO_TABLEDEF_FIELDS.md.456/384/72 unverändert.
 Als Nächstes reale grafische Nichtprimär-Indexverwaltung über denselben DAO-Weg,
 damit Anwender selbst Datenbanken ohne VBA aufbauen können.
+
+2026-11-08: Tatsächliche grafische Nichtprimär-Indexverwaltung ergänzt:
+Explorer-Tabelle auswählen, Ansicht → Tabellenindizes bearbeiten. Vollständiger
+geprüfter Katalog, Namen, geordnete1..10 Feldliste/ASC/DESC, Unique/Required,
+Anlage und bestätigte Löschung über denselben DAO-Weg. Primärlöschung deaktiviert,
+Dirty-Tabellenentwürfe geschützt, unbekannte Kataloge nicht als Teilmenge angezeigt.
+Realer modaler GUI-Create/Delete-Durchlauf erhält Datensätze; bestehende Mainwindow/
+DAO2/2 (5,11s), App gebaut. Keine neue Testziel-/Vollsuiteflut. Grenzen in
+DAO_INDEXES_RUNTIME.md, README-Navigation ergänzt.456/384/72 unverändert.
+Fortsetzung: grundlegende native Felddefinitionen/lesbare Eigenschaften und
+Speichergrenzen weiter vervollständigen; keine Gesamtparität behaupten.

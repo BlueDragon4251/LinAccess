@@ -114,3 +114,25 @@ Validation for existing-table mutation: DAO/import2/2 (1.31s), app build passed.
 Actual existing data, composite ASC/DESC, duplicate-data unique failure, successful
 delete, primary refusal, stale object identity and workspace rollback were checked
 in the existing DAO target. No extra target or broad suite.
+
+## Graphic index management
+
+Select a native table in the project explorer and choose **Ansicht →
+Tabellenindizes bearbeiten**. The actual modal dialog lists the complete checked
+index catalog with field directions, primary and uniqueness information. New
+ordinary/unique indexes accept an ordered1..10-field list, ascending/descending
+per field and the existing Required constraint option. Normal indexes can be
+deleted after explicit confirmation; primary deletion is disabled. Actual DAO
+refusals still protect dependent unique indexes and unsupported catalogs.
+
+All changes use the same DAO mutation functions; there is no second schema
+writer. Failed operations retain the entered draft and show the real failure.
+Dirty table-model drafts must be saved/discarded first. The dialog does not
+edit primary keys, rebuild table constraints or pretend unsupported source
+indexes are available. Its scope is ordinary index management, not a complete
+Access table designer or original-MDB writer.
+
+Graphic-flow validation: existing mainwindow/DAO2/2 (5.11s), app build passed.
+The real modal dialog creates a descending index on the UI-authored table,
+reloads its actual catalog, deletes that index through confirmation and preserves
+both existing rows. No new test target or broad suite.

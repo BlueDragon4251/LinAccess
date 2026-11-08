@@ -5,6 +5,7 @@
 #include "native_report_page_setup.hpp"
 #include "native_query_view.hpp"
 #include "native_input_box.hpp"
+#include "native_index_designer.hpp"
 #include "native_edit_menu.hpp"
 #include "native_classic_style.hpp"
 #include "native_options_dialog.hpp"
@@ -339,6 +340,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
     menuBar()->removeAction(viewMenu->menuAction()); menuBar()->insertMenu(objectMenu->menuAction(),viewMenu);
     for (int i=5;i<9;++i) objectMenu->addAction(projectActions[i]);
+    auto* editIndexes=viewMenu->addAction("Tabellen&indizes bearbeiten...");editIndexes->setObjectName("native-table-indexes");
+    connect(editIndexes,&QAction::triggered,this,[this] {
+        const auto* item=explorer_->currentItem();if(!item || item->data(0,Qt::UserRole).toString()!="table" || QApplication::activeModalWidget() || !db_.isOpen()) return;
+        const auto table=item->text(0);
+        for(auto* model:findChildren<linaccess::AccessTableModel*>()) if(model->tableName().compare(table,Qt::CaseInsensitive)==0 && model->isDirty()) {messageError(this,"Bitte Änderungen an der Tabelle vor der Indexbearbeitung speichern oder verwerfen.");return;}
+        linaccess::editNativeIndexes(this,db_,table);
+    });
+    connect(viewMenu,&QMenu::aboutToShow,this,[this,editIndexes] {
+        const auto* item=explorer_->currentItem();editIndexes->setEnabled(db_.isOpen() && item && item->data(0,Qt::UserRole).toString()=="table" && !QApplication::activeModalWidget());
+    });
     auto* editStoredForm=viewMenu->addAction("Formular&entwurf bearbeiten..."); editStoredForm->setObjectName("native-form-edit");
     connect(editStoredForm,&QAction::triggered,this,[this] {
         const auto* item=explorer_->currentItem(); if(item && item->data(0,Qt::UserRole).toString()=="form") editForm(item->text(0));

@@ -2778,6 +2778,21 @@ int main(int argc,char** argv) {
         cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==2 && cursor->item("id").numericType==linaccess::VbaValue::NumericType::Long);cursor->member("CancelUpdate",{});
         cursor->member("AddNew",{});assert(cursor->item("id").asNumber()==3);cursor->member("Update",{});cursor->member("Close",{});
         assert(authored.exec("SELECT COUNT(*) FROM authored_defaults WHERE id=2") && authored.next() && authored.value(0).toInt()==0);authored.finish();
+        const auto matching=explorer->findItems("authored_defaults",Qt::MatchExactly|Qt::MatchRecursive,0);assert(matching.size()==1);explorer->setCurrentItem(matching.front());
+        QTimer::singleShot(0,&window,[&] {
+            auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-index-designer");
+            auto* list=dialog->findChild<QListWidget*>("native-index-list");assert(list && list->count()==2);
+            dialog->findChild<QLineEdit*>("native-index-name")->setText("QtyDescending");
+            auto* grid=dialog->findChild<QTableWidget*>("native-index-fields");assert(grid && grid->rowCount()==1);
+            qobject_cast<QComboBox*>(grid->cellWidget(0,0))->setCurrentText("qty");qobject_cast<QComboBox*>(grid->cellWidget(0,1))->setCurrentIndex(1);
+            dialog->findChild<QPushButton*>("native-index-create")->click();assert(list->count()==3);
+            for(int row=0;row<list->count();++row) if(list->item(row)->data(Qt::UserRole).toString()=="QtyDescending") list->setCurrentRow(row);
+            QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});
+            dialog->findChild<QPushButton*>("native-index-delete")->click();assert(list->count()==2);
+            dialog->reject();
+        });
+        auto* editIndexes=window.findChild<QAction*>("native-table-indexes");assert(editIndexes);editIndexes->trigger();
+        assert(authored.exec("SELECT COUNT(*) FROM authored_defaults") && authored.next() && authored.value(0).toInt()==2);authored.finish();
     }
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

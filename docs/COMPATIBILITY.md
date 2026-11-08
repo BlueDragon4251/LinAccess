@@ -3279,3 +3279,9 @@ nativer Text-/Integer-Typgrenzen und vollständiger neu deklarierter Primärinde
 Identität. Eigene UI-Tabelle und anschließende DAO-Indexanlage im bestehenden
 Mainwindow/DAO2/2 (4,95s) geprüft, App gebaut. DAO_TABLEDEF_FIELDS.md;
 keine Bestandsmigration,456/384/72 unverändert.
+
+Grafische Nichtprimär-Indexverwaltung über Ansicht → Tabellenindizes bearbeiten:
+vollständiger geprüfter Katalog, geordnete ASC/DESC-Felder, Unique/Required, Anlage
+und bestätigte Löschung über DAO. Realer GUI-Create/Delete-Durchlauf mit
+unveränderten Datensätzen; Mainwindow/DAO2/2 (5,11s), App gebaut. Grenzen in
+DAO_INDEXES_RUNTIME.md.456/384/72 unverändert.
