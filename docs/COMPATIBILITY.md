@@ -3827,3 +3827,18 @@ gezielt durch echten Schleifenlauf mit zwei SQL-Schreibwirkungen und exaktem
 Currency-Endzähler ersetzt. Keine neue CTest-Registrierung, keine frische gesamte
 Suite/Windows-Gleichheit. App gebaut;456/384/72 unverändert. Ohne Zwischenfinal
 weiter an den allgemeinen offenen Anforderungen programmieren.
+
+General Number und Scientific sind jetzt native benannte Zahlenformate. General
+Number behält Currency-/Decimal-Text exakt, trimmt überflüssige Nachkommastellen
+und gruppiert nicht. Double/Single verwenden native15/7-signifikante Stellen.
+Wissenschaftliche Einzelmasken 0.00E+00 bzw. e/E und +/- unterstützen optionale
+Nachkommastellen, Exponentenpolsterung und exakte halbe Decimal-Rundung samt
+Mantissenübertrag. Auch endliche Double-Werte außerhalb Decimal96 (1e100 und
+Subnormale) können so formatiert werden. Vorhandene Formatter/GUI gemeinsam2/2
+(5,79s), App gebaut; Max-Currency ohne Double-Umweg, größter Decimal, sehr kleine/
+große Double, Rundung, Locale und echte SQL-Integer geprüft. Bisherige gezielte
+Ausgabefehlerfälle verwenden weiterhin unsupported Farbmasken statt nun gültiger
+wissenschaftlicher Masken. Keine neue Windows-Beobachtung/CTest-ID; kombinierte
+wissenschaftliche Abschnitts-/Literal-/Engineering-Masken, vollständige regionale
+Coercion und Access-Gleichheit bleiben offen. NATIVE_FORMAT_RUNTIME.md;456/384/72
+unverändert. Ohne Zwischenabschluss direkt weiterimplementieren.

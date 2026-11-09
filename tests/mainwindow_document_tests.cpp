@@ -2919,7 +2919,7 @@ int main(int argc,char** argv) {
             assert(snapshot.rows[0][moment]==date && model.data(model.index(0,moment)).toString()==date);
             QTemporaryDir output;assert(output.isValid());const auto path=output.filePath("formatted.pdf");linaccess::exportNativeDatasheetPdf(snapshot,path);
             const auto reader=QStandardPaths::findExecutable("pdftotext");if(!reader.isEmpty()) {QProcess text;text.start(reader,{"-layout",path,"-"});assert(text.waitForFinished(10000) && text.exitCode()==0);assert(QString::fromUtf8(text.readAllStandardOutput()).contains(expected));}
-            linaccess::updateNativeFieldProperties(db,"authored_defaults","qty",{{"Format",linaccess::VbaValue::string("0.00E+00")}});assert(model.select());
+            linaccess::updateNativeFieldProperties(db,"authored_defaults","qty",{{"Format",linaccess::VbaValue::string("[Red]0.00")}});assert(model.select());
             assert(model.data(model.index(0,quantity)).toString()=="#Fehler (5)" && model.clipboardText(model.index(0,quantity))=="7");
             int error=0;try {(void)linaccess::nativeDatasheetSnapshot(grid,"Unsupported format");}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
             linaccess::updateNativeFieldProperties(db,"authored_defaults","qty",{{"Format",linaccess::VbaValue::string("0.00\" units\"")}});
@@ -2954,7 +2954,7 @@ int main(int argc,char** argv) {
         typed->assign("Format",linaccess::VbaValue::string(""));assert(typed->scalarValue().kind==linaccess::VbaValue::Kind::Currency && typed->scalarValue().currencyUnits==std::numeric_limits<std::int64_t>::max());assert(variants.close());
 
         auto invalid=linaccess::parseAccessFormLayout(QString::fromUtf8(stored->layout));assert(!invalid.controls.isEmpty());
-        auto badSource=stored->layout;badSource.replace("Format =\"0.00\"\" units\"\"\"","Format =\"0.00E+00\"");
+        auto badSource=stored->layout;badSource.replace("Format =\"0.00\"\" units\"\"\"","Format =\"[Red]0.00\"");
         AccessFormPreview bad("Unsupported report format",badSource,{},db,&window,false,{},std::nullopt,0,-1,stored->recordSource);
         assert(bad.findChild<QLineEdit*>("access-control-qty")->property("la_format_error").toInt()==5 && !bad.exportReportPdf(path));
         assert(makePreviewFormObject(bad)->member("Controls",{linaccess::VbaValue::string("qty")}).object->scalarValue().number==7);
@@ -3066,7 +3066,7 @@ End
 Begin TextBox
 Name ="Invalid"
 ControlSource ="=1"
-Format ="0.00E+00"
+Format ="[Red]0.00"
 Top =400
 Width =3000
 Height =300
@@ -3098,7 +3098,7 @@ End Sub
         std::vector<VbaValue> arguments;assert(form.executeProcedure("ChangeMask",arguments).status==linaccess::VbaExecutionStatus::Completed);
         assert(line->text()==QLocale().toString(1.234,'f',3) && amount->scalarValue().currencyUnits==12345);
         const auto expect=[](auto action,int wanted) {int actual=0;try {action();}catch(const linaccess::VbaRuntimeError& failure) {actual=failure.number;}assert(actual==wanted);};
-        expect([&] {amount->assign("Format",VbaValue::string("0.00E+00"));},5);assert(amount->member("Format",{}).asText()=="0.000");
+        expect([&] {amount->assign("Format",VbaValue::string("[Red]0.00"));},5);assert(amount->member("Format",{}).asText()=="0.000");
         expect([&] {amount->assign("Format",{});},94);expect([&] {controls->item("Writable").object->assign("Format",VbaValue::string("0.000"));},3251);
         assert(form.findChild<QLineEdit*>("access-control-Writable")->toolTip().contains("3251"));
         amount->assign("Format",VbaValue::string(""));assert(line->text()=="1.2345" && amount->scalarValue().currencyUnits==12345);

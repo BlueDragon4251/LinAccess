@@ -9,6 +9,9 @@
 #include <cmath>
 #include <algorithm>
 #include <optional>
+#include <sstream>
+#include <iomanip>
+#include <locale>
 namespace linaccess {
 namespace {
 QString localDigits(QString value,const QLocale& locale) {
@@ -41,6 +44,46 @@ QString numberText(const VbaValue& input,int minimumInteger,int minimumFraction,
     QString result=localDigits(whole,locale);if(!fraction.isEmpty()) result+=locale.decimalPoint()+localDigits(fraction,locale);
     if(currency) {const auto style=currencyStyle(locale);result=style.before+result+style.after;}if(percent) result+=locale.percent();
     if(negative) result=parens ? "("+result+")" : locale.negativeSign()+result;return result;
+}
+QString generalNumberText(const VbaValue& input,const QLocale& locale) {
+    const auto value=scalarVbaValue(input);
+    if(value.kind==VbaValue::Kind::Number || value.kind==VbaValue::Kind::Date) {
+        if(!std::isfinite(value.number)) throw VbaRuntimeError(6,"General Number is not finite");
+        auto ungrouped=locale;ungrouped.setNumberOptions(ungrouped.numberOptions()|QLocale::OmitGroupSeparator);
+        return ungrouped.toString(value.number==0 ? 0.0 : value.number,'g',value.numericType==VbaValue::NumericType::Single ? 7 : 15).replace(ungrouped.exponential(),"E");
+    }
+    auto text=QString::fromStdString(numericValue(value,locale).asText());
+    if(text.contains('.')) {while(text.endsWith('0')) text.chop(1);if(text.endsWith('.')) text.chop(1);}
+    const bool negative=text.startsWith('-');if(negative) text.remove(0,1);
+    text.replace('.',locale.decimalPoint());
+    return (negative ? locale.negativeSign() : QString{})+localDigits(text,locale);
+}
+struct ScientificParts {VbaValue mantissa;int exponent{};};
+ScientificParts scientificParts(const VbaValue& input,const QLocale& locale) {
+    const auto value=scalarVbaValue(input);
+    if(value.kind==VbaValue::Kind::Number || value.kind==VbaValue::Kind::Date) {
+        if(!std::isfinite(value.number)) throw VbaRuntimeError(6,"Scientific value is not finite");
+        std::ostringstream stream;stream.imbue(std::locale::classic());
+        stream<<std::scientific<<std::setprecision(value.numericType==VbaValue::NumericType::Single ? 6 : 14)<<value.number;
+        const auto text=stream.str();const auto marker=text.find('e');
+        if(marker==std::string::npos) throw VbaRuntimeError(5,"Scientific conversion failed");
+        return {decimalLiteral(text.substr(0,marker)),std::stoi(text.substr(marker+1))};
+    }
+    auto text=QString::fromStdString(numericValue(value,locale).asText());const bool negative=text.startsWith('-');if(negative) text.remove(0,1);
+    int point=text.indexOf('.');if(point<0) point=text.size();text.remove('.');
+    int first=0;while(first<text.size() && text[first]=='0') ++first;
+    if(first==text.size()) return {decimalLiteral("0"),0};
+    const int exponent=point-first-1;const auto digits=text.mid(first);
+    const auto normalized=(negative ? QString("-") : QString{})+digits.left(1)+(digits.size()>1 ? "."+digits.mid(1) : QString{});
+    return {decimalLiteral(normalized.toStdString()),exponent};
+}
+QString scientificText(const VbaValue& value,const QString& fraction,QChar marker,QChar sign,int width,const QLocale& locale) {
+    if(fraction.size()>28 || width<1 || width>255) throw VbaRuntimeError(5,"Scientific mask precision unsupported");
+    auto parts=scientificParts(value,locale);parts.mantissa=decimalRound(parts.mantissa,fraction.size());
+    if(decimalCompare(decimalUnary("abs",parts.mantissa),decimalLiteral("10"))>=0) {parts.mantissa=decimalBinary("/",parts.mantissa,decimalLiteral("10"));++parts.exponent;}
+    const auto mantissa=numberText(parts.mantissa,1,fraction.lastIndexOf('0')+1,fraction.size(),false,true,false,false,false,locale);
+    const auto exponentSign=parts.exponent<0 ? locale.negativeSign() : sign=='+' ? locale.positiveSign() : QString{};
+    return mantissa+marker+exponentSign+localDigits(QString::number(std::abs(parts.exponent)).rightJustified(width,'0'),locale);
 }
 struct NumericMaskPiece {QChar character;bool literal{};};
 std::optional<QString> customNumericText(const VbaValue& input,const QString& pattern,const QLocale& locale) {
@@ -184,6 +227,10 @@ VbaValue formatAccessValue(const VbaValue& input,std::string_view mask,bool stri
     if(lower=="yes/no" || lower=="true/false" || lower=="on/off") {
         const bool on=decimalCompare(numericValue(value,locale),decimalLiteral("0"))!=0;QString result;if(locale.language()==QLocale::German) result=lower=="yes/no" ? (on ? "Ja" : "Nein") : lower=="true/false" ? (on ? "Wahr" : "Falsch") : (on ? "Ein" : "Aus");else if(locale.language()==QLocale::English || locale.language()==QLocale::C) result=lower=="yes/no" ? (on ? "Yes" : "No") : lower=="true/false" ? (on ? "True" : "False") : (on ? "On" : "Off");else throw VbaRuntimeError(3251,"Boolean format language unsupported");return VbaValue::string(result.toStdString());
     }
+    if(lower=="general number") return VbaValue::string(generalNumberText(value,locale).toUtf8().toStdString());
+    if(lower=="scientific") return VbaValue::string(scientificText(value,"00",'E','+',2,locale).toUtf8().toStdString());
+    static const QRegularExpression scientific("^0(?:\\.([0#]+))?([Ee])([+-])(0+)$");
+    if(const auto match=scientific.match(pattern);match.hasMatch()) return VbaValue::string(scientificText(value,match.captured(1),match.captured(2)[0],match.captured(3)[0],match.captured(4).size(),locale).toUtf8().toStdString());
     if(lower=="percent") return VbaValue::string(numberText(value,1,2,2,false,true,false,false,true,locale).toUtf8().toStdString());
     if(lower=="currency" || lower=="standard" || lower=="fixed") {VbaNumericFormatOptions options;if(lower!="currency") {options.digits=2;options.group=lower=="standard";}return formatAccessNumericValue(value,lower=="currency",options);}
     if(const auto numeric=customNumericText(value,pattern,locale)) return VbaValue::string(numeric->toUtf8().toStdString());

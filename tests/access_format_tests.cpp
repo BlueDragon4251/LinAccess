@@ -34,7 +34,7 @@ int main(int argc,char** argv) {
     rejects(VbaValue::string("2003-12-31 suffix"),"yyyy",13);
     rejects(VbaValue::numeric(std::numeric_limits<double>::infinity()),"yyyy",6);
     rejects(VbaValue::numeric(1e100),"yyyy",6);
-    rejects(VbaValue::numeric(1),"0.00E+00",5);
+    rejects(VbaValue::numeric(1),"[Red]0.00",5);
     const auto original=QLocale();
     QLocale::setDefault(QLocale(QLocale::German,QLocale::Germany));
     assert(format(date,"Long Date").text=="Mittwoch, 31. Dezember 2003");
@@ -54,6 +54,17 @@ int main(int argc,char** argv) {
     rejects(decimalLiteral("1"),"0.00;0.00;0.00;0.00",5);
     rejects(decimalLiteral("1"),"0.00[Red]",5);
     rejects(decimalLiteral("1e-28"),"0,.00",3251);
+    assert(format(decimalLiteral("9.995"),"0.00E+00").asText()=="1,00E+01");
+    assert(format(decimalLiteral("9.985"),"0.00E+00").asText()=="9,98E+00");
+    assert(format(decimalLiteral("-0.00012345"),"0.000E-00").asText()=="-1,234E-04");
+    assert(format(decimalLiteral("12.5"),"0.0e-000").asText()=="1,2e001");
+    assert(format(decimalLiteral("0"),"Scientific").asText()=="0,00E+00");
+    assert(format(VbaValue::numeric(1e100),"Scientific").asText()=="1,00E+100");
+    assert(format(VbaValue::numeric(std::numeric_limits<double>::denorm_min()),"0.00E+00").asText()=="4,94E-324");
+    assert(format(VbaValue::currency(std::numeric_limits<std::int64_t>::max()),"0.000000000000000000E+00").asText()=="9,223372036854775807E+14");
+    assert(format(decimalLiteral("79228162514264337593543950335"),"General Number").asText()=="79228162514264337593543950335");
+    assert(format(decimalLiteral("1.2300"),"General Number").asText()=="1,23");
+    assert(format(VbaValue::numeric(1e100),"General Number").asText()=="1E+100");
     const auto options=parseVbaNumericFormatOptions({decimalLiteral("-0.5"),VbaValue::integer(2),VbaValue::integer(0),VbaValue::integer(-1),VbaValue::integer(0)});assert(formatAccessNumericValue(decimalLiteral("-0.5"),false,options).asText()=="(,50)");
 
     auto db=QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());
@@ -62,6 +73,9 @@ int main(int argc,char** argv) {
     assert(model.data(model.index(0,0)).toString()=="2003" && model.data(model.index(0,1)).toString()=="12" && model.data(model.index(0,2)).toString()=="31");
     assert(model.data(model.index(0,1)).metaType().id()==QMetaType::QString);
     assert(format(decimalLiteral("0.125"),"Percent").asText()=="12,50%");
+    model.execute(db,"SELECT Format(1e100,'Scientific'),Format(9007199254740993,'General Number')");
+    assert(model.data(model.index(0,0)).toString()=="1,00E+100" && model.data(model.index(0,1)).toString()=="9007199254740993");
+
     assert(format(VbaValue::numeric(0.75),"General Date").asText()=="18:00:00");
     model.execute(db,"SELECT FormatDateTime('2003-12-31 18:05:06',1),FormatDateTime('2003-12-31 18:05:06',3),FormatDateTime('2003-12-31 18:05:06',4),FormatDateTime(0.75)");
     assert(model.data(model.index(0,0)).toString()=="Mittwoch, 31. Dezember 2003" && model.data(model.index(0,1)).toString()=="18:05:06" && model.data(model.index(0,2)).toString()=="18:05" && model.data(model.index(0,3)).toString()=="18:00:00");
