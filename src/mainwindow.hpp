@@ -51,6 +51,7 @@ private:
     QTabWidget* tabs_{};
     QPointer<QWidget> activeDataPage_;
     int queryExecutionDepth_{};
+    int macroExecutionDepth_{};
     bool datasheetOutputActive_{};
     QSet<QString> executingQueries_;
 

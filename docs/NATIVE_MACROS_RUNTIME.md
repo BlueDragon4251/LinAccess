@@ -19,6 +19,9 @@ transaction, document, modal and error guards:
 | OpenForm | FormName, optional numeric View |
 | OpenReport | ReportName, optional numeric View |
 | RunCommand | numeric Command |
+| Close | optional numeric ObjectType, ObjectName, numeric Save |
+| DeleteObject | explicit numeric ObjectType and ObjectName |
+| Rename | NewName, explicit numeric ObjectType and OldName |
 | Requery | optional ControlName |
 | RunCode | one supported Function call, including parentheses; return ignored |
 | StopMacro | none; terminates this RunMacro invocation, including repetitions |
@@ -293,3 +296,6 @@ preflight/duplicate refusal without SQL effects are exercised. No new test targe
 [Macro storage/deletion](NATIVE_MACRO_STORAGE.md) now guards names, revisions
 and active invocations; native names are fixed after save. Imported archives
 remain outside write/delete ownership.
+
+[Native macro project commands](NATIVE_MACRO_PROJECT_COMMANDS.md) provide real
+Close/DeleteObject/Rename operations under project and document execution guards.

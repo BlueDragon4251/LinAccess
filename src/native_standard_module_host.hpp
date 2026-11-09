@@ -8,6 +8,7 @@
 #include "dao_database.hpp"
 #include "native_input_box.hpp"
 #include "native_public_procedure_run.hpp"
+#include "native_application_run.hpp"
 #include "native_domain_lookup.hpp"
 #include "native_macro_runner.hpp"
 #include "native_stored_form.hpp"
@@ -77,6 +78,8 @@ public:
     bool isNativeType(std::string_view type) const override {return type=="access.docmd";}
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if(key=="close") return VbaArgumentSignature{{"ObjectType","ObjectName","Save"},0};
+        if(key=="rename") return VbaArgumentSignature{{"NewName","ObjectType","OldName"},1};
         if(key=="deleteobject") return VbaArgumentSignature{{"ObjectType","ObjectName"},0};
         if(key=="runmacro") return VbaArgumentSignature{{"MacroName","RepeatCount","RepeatExpression"},1};
         if(key=="runsql") return VbaArgumentSignature{{"SQLStatement","UseTransaction"},1};
@@ -103,6 +106,24 @@ public:
         std::vector<VbaValue> values;for(const auto& argument:args) {values.push_back(scalarVbaValue(argument));host.check();}
         const auto number=[&](std::size_t index,int fallback) {return index>=values.size() || values[index].kind==VbaValue::Kind::Missing ? fallback : static_cast<int>(coerceVbaModuleValue(values[index],"long").number);};
         const auto target=[&] {if(values.empty() || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Object name is required");return QString::fromStdString(coerceVbaModuleValue(values[0],"string").asText());};
+        if(key=="rename") {
+            if(values.size()!=3 || values[0].kind==VbaValue::Kind::Missing || values[1].kind==VbaValue::Kind::Missing || values[2].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(3251,"Rename requires explicit new name, type and old name");
+            const auto newName=target(),oldName=QString::fromStdString(coerceVbaModuleValue(values[2],"string").asText());const int type=number(1,0);QVariantMap result;
+            if(!QMetaObject::invokeMethod(owner_,"renameDatabaseObject",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QString,newName),Q_ARG(int,type),Q_ARG(QString,oldName))) throw VbaRuntimeError(3251,"Native object rename is unavailable");resultError(result);host.check();return VbaValue::empty();
+        }
+        if(key=="close") {
+            if(values.size()>3) throw VbaRuntimeError(450,"Close accepts at most three arguments");
+            const int type=number(0,-1),save=number(2,0);if(type!=-1 && type!=0 && type!=1 && type!=2 && type!=3) throw VbaRuntimeError(3251,"Closing this object type is not implemented");if(save<0 || save>2) throw VbaRuntimeError(5,"Invalid Close save option");
+            const auto object=values.size()>1 && values[1].kind!=VbaValue::Kind::Missing ? QString::fromStdString(coerceVbaModuleValue(values[1],"string").asText()) : QString{};
+            if(type==0 || type==1 || type==-1) for(const auto* method:{"closeQueryDocument","closeTableDocument"}) {QVariantMap result;if(!QMetaObject::invokeMethod(owner_,method,Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,type),Q_ARG(QString,object),Q_ARG(int,save))) throw VbaRuntimeError(3251,"Data document close is unavailable");if(result.value("handled").toBool()) {resultError(result);host.check();return VbaValue::empty();}}
+            QPointer<AccessFormPreview> selected;
+            for(const auto& document:AccessFormPreview::projectDocuments(db_)) if(document && (type==-1 || type==(document->documentKind()==AccessDocumentKind::Form ? 2 : 3))) {
+                if(object.isEmpty()) {if(document==activePreviewDocument() && !document->isHidden()) selected=document;}
+                else if(document->documentName().compare(object,Qt::CaseInsensitive)==0) {if(selected) throw VbaRuntimeError(5,"Close target is ambiguous");selected=document;}
+            }
+            if(!selected) throw VbaRuntimeError(type==3 ? 2451 : type==2 ? 2450 : 2046,"Close target is unavailable");
+            auto forwarded=values;for(auto& value:forwarded) if(value.kind==VbaValue::Kind::Missing) value=VbaValue::empty();return invokeNativePreviewCommand(*selected,"Close",forwarded);
+        }
         if(key=="deleteobject") {
             if(values.size()!=2 || values[0].kind==VbaValue::Kind::Missing || values[1].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(3251,"DeleteObject requires explicit type and name");
             const int type=number(0,0);const auto object=QString::fromStdString(coerceVbaModuleValue(values[1],"string").asText());QVariantMap result;
@@ -140,14 +161,14 @@ public:
             QPointer<AccessFormPreview> document=AccessFormPreview::showDocument(kind,canonical,layout,code,db_,owner_,report ? std::optional<QString>(storedReport->recordSource) : std::nullopt);
             if(!document) throw VbaRuntimeError(2501,"Document opening was cancelled");
             try {
-                for(const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent","OnNoData"}) if(const auto outcome=document->eventResult(event);outcome && outcome->status!=VbaExecutionStatus::Completed && outcome->status!=VbaExecutionStatus::ProcedureMissing) throw VbaRuntimeError(outcome->errorNumber ? outcome->errorNumber : 3251,outcome->explanation,outcome->errorSource,outcome->errorHelpFile,outcome->errorHelpContext);
-                if((report ? !storedReport->recordSource.isEmpty() : !parseAccessFormLayout(QString::fromUtf8(layout)).recordSource.isEmpty()) && !document->hasDataSource()) throw VbaRuntimeError(3078,"Document record source is unavailable");
+                if(!existed) for(const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent","OnNoData"}) if(const auto outcome=document->eventResult(event);outcome && outcome->status!=VbaExecutionStatus::Completed && outcome->status!=VbaExecutionStatus::ProcedureMissing) throw VbaRuntimeError(outcome->errorNumber ? outcome->errorNumber : 3251,outcome->explanation,outcome->errorSource,outcome->errorHelpFile,outcome->errorHelpContext);
+                if(!existed && (report ? !storedReport->recordSource.isEmpty() : !parseAccessFormLayout(QString::fromUtf8(layout)).recordSource.isEmpty()) && !document->hasDataSource()) throw VbaRuntimeError(3078,"Document record source is unavailable");
                 host.check();
             }catch(...) {if(!existed && document) delete document.data();throw;}
             return VbaValue::empty();
         }
         if(key=="runcommand" || key=="requery") {
-            if(auto* active=activePreviewDocument()) for(const auto& document:AccessFormPreview::projectDocuments(db_)) if(document==active) return makePreviewApplicationObject(*active)->member("DoCmd",{}).object->member(name,args);
+            if(auto* active=activePreviewDocument()) for(const auto& document:AccessFormPreview::projectDocuments(db_)) if(document==active) return invokeNativePreviewCommand(*active,name,args);
             QVariantMap result;
             if(key=="runcommand") {if(values.size()!=1) throw VbaRuntimeError(450,"RunCommand requires one command");const int command=number(0,0);if(!QMetaObject::invokeMethod(owner_,"dispatchTableCommand",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,command))) throw VbaRuntimeError(3251,"Table command is unavailable");}
             else {if(values.size()>1) throw VbaRuntimeError(450,"Requery accepts one control name");if(!values.empty() && values[0].kind!=VbaValue::Kind::Missing && !coerceVbaModuleValue(values[0],"string").asText().empty()) throw VbaRuntimeError(3251,"Named control Requery requires a form");if(!QMetaObject::invokeMethod(owner_,"requeryTableDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result))) throw VbaRuntimeError(3251,"Requery is unavailable");}

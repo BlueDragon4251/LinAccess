@@ -394,7 +394,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     connect(viewMenu,&QMenu::aboutToShow,this,[deleteObject,selectedOwned] {deleteObject->setEnabled(selectedOwned());});
     auto* runMacro=viewMenu->addAction("Ausgewähltes Makro ausführen");runMacro->setObjectName("native-macro-run");
-    const auto canRunMacro=[this] {const auto* item=explorer_->currentItem();return db_.isOpen() && !QApplication::activeModalWidget() && queryExecutionDepth_==0 && item && item->data(0,Qt::UserRole).toString()=="macro";};
+    const auto canRunMacro=[this] {const auto* item=explorer_->currentItem();return db_.isOpen() && !QApplication::activeModalWidget() && queryExecutionDepth_==0 && macroExecutionDepth_==0 && !linaccess::nativeProjectMacrosActive(db_) && item && item->data(0,Qt::UserRole).toString()=="macro";};
     const auto updateRunMacro=[runMacro,canRunMacro] {runMacro->setEnabled(canRunMacro());};updateRunMacro();
     connect(viewMenu,&QMenu::aboutToShow,this,updateRunMacro);connect(explorer_,&QTreeWidget::currentItemChanged,this,updateRunMacro);
     connect(runMacro,&QAction::triggered,this,[this,canRunMacro] {
@@ -599,10 +599,10 @@ QVariantMap MainWindow::saveDataPage(QWidget* page,bool interactive,bool current
 
 QVariantMap MainWindow::runProjectMacro(const QString& name) {
     if(!db_.isOpen()) return tableCommandFailure(3420,"Projekt ist geschlossen.");
-    if(QApplication::activeModalWidget() || queryExecutionDepth_>0) return tableCommandFailure(2046,"Makro kann in diesem Kontext nicht gestartet werden.");
+    if(QApplication::activeModalWidget() || queryExecutionDepth_>0 || macroExecutionDepth_>0 || linaccess::nativeProjectMacrosActive(db_)) return tableCommandFailure(2046,"Makro kann in diesem Kontext nicht gestartet werden.");
     const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName(),connection=db_.connectionName();const auto generation=property("la_project_generation");
     const auto check=[owner,identity,connection,generation] {if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->db_.connectionName()!=connection || owner->property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Makro gehört nicht mehr zum aktuellen Projekt.");};
-    QScopedValueRollback<int> execution(queryExecutionDepth_,queryExecutionDepth_+1);
+    QScopedValueRollback<int> execution(macroExecutionDepth_,macroExecutionDepth_+1);
     const auto refresh=qScopeGuard([owner] {if(owner && owner->db_.isOpen()) owner->refreshExplorer();});
     try {linaccess::NativeStandardModuleHost host(this,db_,check);(void)host.applicationObject()->member("DoCmd",{}).object->member("RunMacro",{linaccess::VbaValue::string(name.toStdString())});check();return {{"handled",true},{"error",0}};}
     catch(const linaccess::VbaExecutionStopped&) {return {{"handled",true},{"error",0},{"stopped",true}};}
@@ -2661,6 +2661,7 @@ bool MainWindow::canCloseDataPage(QWidget* page) {
 bool MainWindow::allowProjectClose(const QString& connection) {
     if(!connection.isEmpty() && connection!=db_.connectionName()) return true;
     if(queryExecutionDepth_>0) { statusBar()->showMessage("Projektwechsel während einer laufenden Abfrage ist noch nicht verfügbar.",10000); return false; }
+    if(macroExecutionDepth_>0 || linaccess::nativeProjectMacrosActive(db_)) {statusBar()->showMessage("Projektwechsel während eines laufenden Makros ist nicht verfügbar.",10000);return false;}
     for(int i=0;i<tabs_->count();++i) if(!canCloseDataPage(tabs_->widget(i))) return false;
     return true;
 }

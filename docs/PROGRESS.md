@@ -7021,3 +7021,28 @@ Uploads3/3 sowie Fixtures4/4 erneut hashgleich. Keine neue CTest-ID/Gesamtsuite/
 Windows-Beobachtung/Paketprüfung; DEB gehört9c80f00. NATIVE_MACRO_STORAGE.md;
 F088/F050/F121/F148/F155 und456/384/72 unverändert. Direkt weiter mit allgemeinen
 Makro-Projektbefehlen und getrenntem Projekt-Ausführungsschutz.
+
+
+Native Makroaktionen Close/DeleteObject/Rename ergänzt über reale bestehende
+Projekt-APIs: eigene geschlossene Tabellen/Abfragen umbenennen/löschen, eigene
+Makroobjekte löschen, offene Datenblätter sowie reale Form-/Berichtsdokumente
+schließen. Keine Save=acSaveNo-Verwechslung mit Datensatz-Undo; bestehende
+validierte Close-Pfade committen Recorddrafts und geben SQL-Modelle frei.
+Macro-Projektstarter erhält eigene Ausführungstiefe statt SQL-Tiefe; legitime
+Objektbefehle bleiben nutzbar. Projekt-/Anwendungsschließen und neue UI-Makro-
+Reentry bleiben bei aktiven Frames blockiert, auch im direkten Formularhost.
+Gemeinsamer Preview-Dispatch hält NativeExecutionDepth bis Befehlsende, damit
+Close/Requery/RunCommand keine laufenden Dokumentaufrufe vorzeitig entsorgen.
+Wiederverwendete gespeicherte Fenster wiederholen keine historischen Initfehler;
+neue fehlgeschlagene Initialisierungen bleiben echte Fehler mit neuerDoc-Bereinigung.
+App gebaut; bestehende GUI/Layout2/2 (18,92s) ohne Korrekturlauf bestanden:
+Menü-Makrokette mit realem Table/Query-Rename, Open/Close/Drop und Makrolöschung,
+aktuellem Query-DefaultClose, Pending-Draft43 trotz acSaveNo, echtem Form_Unload/
+Report_Close und anschließendem SQL. Während MsgBox ist tatsächliches Window.close
+abgewiesen bei gleicher Projektgeneration/offener DB; danach Weiterlauf. Bestehende
+Form mit altem Load7003 nur aktiviert, neue Init7003 abgewiesen/bereinigt. Grenzen
+bleiben explizite Objekttypen/Modi, native Ownership, aktive Model-/Makro-Leases,
+keine automatische Verweisrefaktorierung oder vollständige Access-Close-Parität.
+Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; DEB gehört9c80f00.
+NATIVE_MACRO_PROJECT_COMMANDS.md; F088/F050/F057/F114/F121/F135/F140/F148/F155
+und456/384/72 unverändert. Kontinuierlich weiter.

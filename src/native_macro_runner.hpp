@@ -5,6 +5,9 @@
 namespace linaccess {
 struct NativeMacroFrame {QString connection,database,name;};
 inline QVector<NativeMacroFrame>& nativeMacroFrames() {static thread_local QVector<NativeMacroFrame> frames;return frames;}
+inline bool nativeProjectMacrosActive(QSqlDatabase db) {
+    for(const auto& frame:nativeMacroFrames()) if(frame.connection==db.connectionName() && frame.database==db.databaseName()) return true;return false;
+}
 inline bool nativeMacroObjectActive(QSqlDatabase db,const QString& name) {
     for(const auto& frame:nativeMacroFrames()) if(frame.connection==db.connectionName() && frame.database==db.databaseName() && frame.name.compare(name,Qt::CaseInsensitive)==0) return true;return false;
 }

@@ -20,7 +20,7 @@ inline const QVector<NativeMacroSignature>& nativeMacroSignatures() {
         {"RunSQL",{"text","boolean"},1},{"OpenTable",{"text","long","long"},1},
         {"OpenQuery",{"text","long","long"},1},{"OpenForm",{"text","long"},1},
         {"OpenReport",{"text","long"},1},{"RunCommand",{"long"},1},
-        {"RunCode",{"text"},1},{"Requery",{"text"},0},{"StopMacro",{},0},{"CancelEvent",{},0},{"RunMacro",{"text","long","text"},1}};
+        {"Close",{"long","text","long"},0},{"DeleteObject",{"long","text"},2},{"Rename",{"text","long","text"},3},{"RunCode",{"text"},1},{"Requery",{"text"},0},{"StopMacro",{},0},{"CancelEvent",{},0},{"RunMacro",{"text","long","text"},1}};
     return signatures;
 }
 inline bool nativeMacroNameValid(const QString& name) {

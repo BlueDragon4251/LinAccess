@@ -1095,6 +1095,11 @@ private:
     std::optional<int> aggregateRow_;
 };
 
+linaccess::VbaValue invokeNativePreviewCommand(AccessFormPreview& preview,std::string_view name,const std::vector<linaccess::VbaValue>& arguments) {
+    ++nativeExecutionDepth();const auto unwind=qScopeGuard([] {--nativeExecutionDepth();disposeClosedForms();});
+    return makePreviewApplicationObject(preview)->member("DoCmd",{}).object->member(name,arguments);
+}
+
 void runNativeMacroFunction(AccessFormPreview& preview,const std::string& expression) {
     ++nativeExecutionDepth();
     const auto unwind=qScopeGuard([] {--nativeExecutionDepth();disposeClosedForms();});
