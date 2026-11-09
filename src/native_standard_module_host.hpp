@@ -24,6 +24,8 @@ public:
     void message(std::string_view) override;
     int messageBox(std::string_view,int,const std::optional<std::string>&) override;
     std::string inputBox(const VbaInputBoxArguments&) override;
+    std::shared_ptr<VbaObject> formsCollection() override;
+    std::shared_ptr<VbaObject> reportsCollection() override;
     std::shared_ptr<VbaObject> currentDatabase() override;
     std::shared_ptr<VbaObject> databaseEngine() override;
     std::shared_ptr<VbaObject> applicationObject() override;

@@ -1569,3 +1569,23 @@ im vorhandenen AutoExec-Ablauf. Keine neue CTest-ID/Gesamtsuite/Windows-Beobacht
 Paketprüfung; zuletzt geprüftes DEB gehört69ac1b9. NATIVE_STANDARD_MODULES_RUNTIME.md;
 F052/F042/F059/F135 und456/384/72 unverändert. Direkt weiter: echte Forms-/Reports-
 Sammlungen und Screen aus dem formularfreien Host, ohne Platzhalterformular.
+
+
+## Fortschreibung 2026-11-09: tatsächliche Forms/Reports/Screen aus Standardmodulen
+Formularfreier Host unterstützt Forms/Reports und Application.Forms/Reports mit
+realen Dokumentobjekten, Count/Name/Index/ForEach, einschließlich nach Öffnen
+versteckter Formulare. Application.Screen/bare Screen liefern tatsächliches
+ActiveForm/ActiveControl/MousePointer; vorhandene Cursor-/Fokusgrenzen bleiben.
+Gemeinsame Implementierung statt Platzhalterformular. Neue Projektobjekte sind
+via echtem CurrentProject-Lebenszyklus geschützt; alte formulargebundene Handles
+behalten ihren bestehenden Caller-Lebenszyklus. Screen-Suche zusätzlich an DB-
+Identität gebunden und nach skalarer Wertauswertung erneut geprüft.
+App gebaut; vorhandene GUI/Layout2/2 (20,16s) ohne Korrekturlauf bestanden:
+echte sichtbare/versteckte Formulare und Bericht, index-/namensbasierte identische
+Dokumentreferenzen, native VBA-ForEach über beide Sammlungen, reale aktive Form/
+Control, VBA-MousePointer mit Rücksetzung, live Schließen/alte Dokumentreferenz,
+3420 für gehaltene Sammlung/Screen nach tatsächlichem Projektwechsel.
+Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; DEB69ac1b9.
+NATIVE_STANDARD_MODULES_RUNTIME.md; F052/F042/F059/F135 und456/384/72 unverändert.
+Direkt weiter: globale projektgebundene Sammlungsidentität und tatsächlich
+geöffnete/versteckte Formulare als benannte Navigations-/Schließziele.

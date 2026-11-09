@@ -106,3 +106,31 @@ project-property implementation is implied.
 Validation: matching app built; existing GUI/layout2/2 passed (19.49s), no test
 correction. Actual VBA counts, shared identity, caller-form closure, live module
 removal and3420 after actual project switching are covered.
+
+## Actual Forms, Reports and Screen from standard modules
+
+Bare Forms/Reports and Application.Forms/Reports in the standalone host expose
+actual native project document objects. Count, numeric/name Item access, direct
+Application collection indexing and For Each reuse the existing form/report
+collection implementation and real per-document references. A document hidden
+after opening remains addressable; closing it removes it from subsequent live
+lookups. A held document reference still fails when that actual document closes.
+No hidden placeholder form is created to supply the collection.
+
+Application.Screen and bare Screen expose the existing actual ActiveForm,
+ActiveControl and MousePointer implementation, with its current documented bounds.
+MousePointer assignment uses the owned cursor contract and rechecks context after
+scalar-default evaluation. Active lookups are isolated by connection and database
+identity. Native project-owned collections/Screen survive caller-form closure and
+reject stale generations3420 after actual project switching. Existing form-owned
+collection/Screen handles retain their prior caller-lifetime behavior.
+
+This is not a complete Access Application/Screen surface: ActiveReport,
+PreviousControl and arbitrary screen properties remain unsupported. Global object
+identity across independently created Application handles and full original
+hidden/modal/new-instance ordering still require broader implementation/oracle.
+
+Validation: matching app built; existing GUI/layout2/2 passed (20.16s), no test
+correction. Real visible/hidden forms/report, collection identity of document
+references, VBA enumeration/active screen/cursor, live closure and stale3420
+after actual project switching are covered.

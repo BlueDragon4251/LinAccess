@@ -4,6 +4,7 @@
 #include "native_macro_message_box.hpp"
 #include "native_application_run.hpp"
 #include "native_project_context.hpp"
+#include "native_project_documents.hpp"
 #include "native_public_procedure_run.hpp"
 #include "vba_module_context.hpp"
 #include "vba_source_codec.hpp"
@@ -75,6 +76,7 @@ qsizetype ordinal(const linaccess::VbaValue& value,qsizetype count) {
 }
 class PreviewObjectBase {
 protected:
+    PreviewObjectBase()=default;
     explicit PreviewObjectBase(AccessFormPreview& preview) : preview_(&preview) {}
     AccessFormPreview& checked() const {
         if (!preview_ || preview_->closed_ || preview_->openCancelled_)
@@ -1144,6 +1146,7 @@ private:
 class PreviewFormsObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewFormsObject(AccessFormPreview& preview,bool reports=false) : PreviewObjectBase(preview),reports_(reports) {}
+    PreviewFormsObject(QSqlDatabase database,std::function<void()> guard,bool reports):reports_(reports),database_(std::move(database)),projectGuard_(std::move(guard)) {}
     bool isNativeType(std::string_view type) const override { return type==(reports_ ? "access.reports" : "access.forms"); }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto forms = openForms(); const auto key = text(name).toCaseFolded();
@@ -1167,11 +1170,13 @@ public:
     }
 private:
     bool reports_{};
+    QSqlDatabase database_;std::function<void()> projectGuard_;
     QVector<AccessFormPreview*> openForms() const {
-        const auto& owner = checked(); QVector<AccessFormPreview*> forms;
+        if(projectGuard_) projectGuard_();
+        const auto database=projectGuard_ ? database_ : checked().db_;QVector<AccessFormPreview*> forms;
         for (auto* widget : QApplication::topLevelWidgets())
             if (auto* form = dynamic_cast<AccessFormPreview*>(widget); form && !form->closed_ && !form->openCancelled_
-                && form->db_.connectionName()==owner.db_.connectionName()
+                && form->db_.connectionName()==database.connectionName() && form->db_.databaseName()==database.databaseName()
                 && (form->layout_.kind==linaccess::AccessDocumentKind::Report)==reports_) forms.append(form);
         std::sort(forms.begin(),forms.end(),[](auto* left,auto* right) {
             return left->property("la_form_open_order").toLongLong() < right->property("la_form_open_order").toLongLong();
@@ -1343,8 +1348,9 @@ private:
 class PreviewScreenObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewScreenObject(AccessFormPreview& preview):PreviewObjectBase(preview) {}
+    PreviewScreenObject(QSqlDatabase database,std::function<void()> guard):database_(std::move(database)),projectGuard_(std::move(guard)) {}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
-        auto& owner=checked(); const auto key=text(name).toCaseFolded();
+        const auto database=contextDatabase(); const auto key=text(name).toCaseFolded();
         if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected Screen arguments");
         if(key=="mousepointer") return linaccess::nativeMousePointer();
         if (key=="activeform") {
@@ -1352,8 +1358,8 @@ public:
             auto* form=activePreviewDocument();
             if (!form) for (auto* widget=QApplication::activeWindow();widget;widget=widget->parentWidget())
                 if (auto* candidate=dynamic_cast<AccessFormPreview*>(widget)) { form=candidate; break; }
-            if (form && !form->closed_ && !form->openCancelled_ && form->db_.connectionName()==owner.db_.connectionName()
-                && form->db_.databaseName()==owner.db_.databaseName() && form->layout_.kind==linaccess::AccessDocumentKind::Form)
+            if (form && !form->closed_ && !form->openCancelled_ && form->db_.connectionName()==database.connectionName()
+                && form->db_.databaseName()==database.databaseName() && form->layout_.kind==linaccess::AccessDocumentKind::Form)
                 return linaccess::VbaValue::reference(makePreviewFormObject(*form));
             throw linaccess::VbaRuntimeError(2450,"Active form unavailable");
         }
@@ -1361,12 +1367,12 @@ public:
             if(AccessFormPreview::databaseWindowActive()) throw linaccess::VbaRuntimeError(2474,"Active control unavailable in database window");
             QWidget* focus=QApplication::focusWidget();
             if (auto* document=activePreviewDocument();document && !document->closed_ && !document->openCancelled_
-                && document->db_.connectionName()==owner.db_.connectionName() && document->db_.databaseName()==owner.db_.databaseName())
+                && document->db_.connectionName()==database.connectionName() && document->db_.databaseName()==database.databaseName())
                 focus=document->focusWidget();
             for (auto* focused=focus;focused;focused=focused->parentWidget())
                 for (auto* widget:QApplication::allWidgets()) {
                     auto* form=dynamic_cast<AccessFormPreview*>(widget);
-                    if (!form || form->closed_ || form->openCancelled_ || form->db_.connectionName()!=owner.db_.connectionName()) continue;
+                    if (!form || form->closed_ || form->openCancelled_ || form->db_.connectionName()!=database.connectionName() || form->db_.databaseName()!=database.databaseName()) continue;
                     for (auto it=form->controls_.cbegin();it!=form->controls_.cend();++it)
                         if (it.value()==focused) return linaccess::VbaValue::reference(makePreviewControlObject(*form,it.key()));
                 }
@@ -1375,13 +1381,15 @@ public:
         throw linaccess::VbaRuntimeError(438,"Screen member unsupported");
     }
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
-        (void)checked();
+        (void)contextDatabase();
         if(text(name).compare("MousePointer",Qt::CaseInsensitive)!=0) throw linaccess::VbaRuntimeError(383,"Screen property is read-only");
         const auto pointer=linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(value),"long").number;
         if(pointer!=0 && pointer!=11) throw linaccess::VbaRuntimeError(3251,"Screen mouse pointer shape is unsupported");
-        linaccess::nativeHourglass(pointer==11);
+        (void)contextDatabase();linaccess::nativeHourglass(pointer==11);
     }
-
+private:
+    QSqlDatabase database_;std::function<void()> projectGuard_;
+    QSqlDatabase contextDatabase() const {if(projectGuard_) {projectGuard_();return database_;}return checked().db_;}
 };
 class PreviewDoCmdObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
@@ -1965,4 +1973,18 @@ std::shared_ptr<linaccess::VbaObject> nativeProjectContext(QSqlDatabase database
     if(!project) {project=std::make_shared<NativeCurrentProjectObject>(database,owner);if(owner) {projects.insert(identity,QVariant::fromValue(std::weak_ptr<linaccess::VbaObject>(project)));owner->setProperty("la_native_current_projects",projects);}}
     auto native=std::dynamic_pointer_cast<NativeCurrentProjectObject>(project);if(!native) throw linaccess::VbaRuntimeError(3420,"Native project context unavailable");native->check();
     return data ? native->currentData() : project;
+}
+
+namespace {
+std::function<void()> nativeDocumentProjectGuard(QSqlDatabase database,QObject* context) {
+    auto project=std::dynamic_pointer_cast<NativeCurrentProjectObject>(nativeProjectContext(database,context,false));
+    if(!project) throw linaccess::VbaRuntimeError(3420,"Native document project context unavailable");
+    return [project] {if(!QApplication::instance() || QThread::currentThread()!=QApplication::instance()->thread()) throw linaccess::VbaRuntimeError(3251,"Project documents require their GUI thread");project->check();};
+}
+}
+std::shared_ptr<linaccess::VbaObject> nativeProjectDocuments(QSqlDatabase database,QObject* context,bool reports) {
+    auto guard=nativeDocumentProjectGuard(database,context);return std::make_shared<PreviewFormsObject>(std::move(database),std::move(guard),reports);
+}
+std::shared_ptr<linaccess::VbaObject> nativeProjectScreen(QSqlDatabase database,QObject* context) {
+    auto guard=nativeDocumentProjectGuard(database,context);return std::make_shared<PreviewScreenObject>(std::move(database),std::move(guard));
 }

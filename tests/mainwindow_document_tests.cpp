@@ -2651,6 +2651,31 @@ void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
     unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
 }
 
+void testStandaloneDocuments(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;linaccess::NativeStandardModuleHost host(&window,db,[] {});auto application=host.applicationObject();auto forms=application->member("Forms",{}).object;auto reports=application->member("Reports",{}).object;auto screen=application->member("Screen",{}).object;const auto formCount=forms->member("Count",{}).number,reportCount=reports->member("Count",{}).number;
+    AccessFormPreview first("StandaloneFirstForm","Begin Form\nWidth =2400\nBegin Section\nHeight =600\nBegin TextBox\nName =\"Value\"\nWidth =1800\nHeight =300\nEnd\nEnd\nEnd",{},db,&window);first.show();AccessFormPreview hidden("StandaloneHiddenForm","Begin Form\nBegin Section\nEnd\nEnd",{},db,&window);hidden.show();QApplication::processEvents();hidden.hide();AccessFormPreview report("StandaloneReport","Begin Report\nBegin Section\nEnd\nEnd",{},db,&window);report.show();QApplication::processEvents();assert(forms->member("Count",{}).number==formCount+2 && reports->member("Count",{}).number==reportCount+1);auto firstObject=makePreviewFormObject(first);assert(application->member("Forms",{VbaValue::string("standalonefirstform")}).object==firstObject && forms->member("Item",{VbaValue::string("StandaloneHiddenForm")}).object==makePreviewFormObject(hidden));assert(forms->member("Item",{VbaValue::numeric(formCount)}).object==firstObject);assert(reports->member("Item",{VbaValue::string("StandaloneReport")}).object==makePreviewFormObject(report));
+    auto commands=application->member("DoCmd",{}).object;commands->member("SelectObject",{VbaValue::integer(2),VbaValue::string("StandaloneFirstForm"),VbaValue::logical(false)});commands->member("GoToControl",{VbaValue::string("Value")});assert(screen->member("ActiveForm",{}).object==firstObject && screen->member("ActiveControl",{}).object->member("Name",{}).asText()=="Value");
+    QSqlQuery sql(db);sql.prepare("INSERT INTO _la_objects VALUES('module','StandaloneDocumentCode',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",R"VBA(Public Function StandaloneDocumentsCount() As Long
+Dim document As Object
+Dim count As Long
+For Each document In Forms
+count=count+1
+Next document
+For Each document In Reports
+count=count+1
+Next document
+StandaloneDocumentsCount=count
+End Function
+Public Function StandaloneScreenName() As String
+StandaloneScreenName=Screen.ActiveForm.Name & ":" & Screen.ActiveControl.Name
+End Function
+Public Function StandaloneMousePointer() As Long
+Screen.MousePointer=vbHourglass
+StandaloneMousePointer=Screen.MousePointer
+End Function)VBA"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();assert(application->member("Run",{VbaValue::string("StandaloneDocumentsCount")}).number==formCount+reportCount+3);assert(application->member("Run",{VbaValue::string("StandaloneScreenName")}).asText()=="StandaloneFirstForm:Value");assert(application->member("Run",{VbaValue::string("StandaloneMousePointer")}).number==11 && !QApplication::overrideCursor());
+    assert(first.close());int error=0;try {(void)firstObject->member("Name",{});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2450 && forms->member("Count",{}).number==formCount+1);assert(hidden.close() && report.close());assert(forms->member("Count",{}).number==formCount && reports->member("Count",{}).number==reportCount);window.focusDatabaseWindow();error=0;try {(void)screen->member("ActiveForm",{});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2450);assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='StandaloneDocumentCode'"));
+}
+
 void testStandaloneProjectCatalog(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;QSqlQuery sql(db);sql.prepare("INSERT INTO _la_objects VALUES('module','StandaloneCatalogCode',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba","Public Function StandaloneCatalogProbe() As Long\nDim project As Object\nSet project=CurrentProject\nStandaloneCatalogProbe=CurrentData.AllTables.Count+project.AllModules.Count\nEnd Function"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();linaccess::NativeStandardModuleHost host(&window,db,[] {});auto application=host.applicationObject();auto project=application->member("CurrentProject",{}).object;auto data=application->member("CurrentData",{}).object;assert(project && data && project==application->member("CurrentProject",{}).object && data==application->member("CurrentData",{}).object);auto modules=project->member("AllModules",{}).object;auto tables=data->member("AllTables",{}).object;const auto count=modules->member("Count",{}).number+tables->member("Count",{}).number;assert(count>0 && application->member("Run",{VbaValue::string("StandaloneCatalogProbe")}).number==count);auto descriptor=modules->member("Item",{VbaValue::string("standalonecatalogcode")}).object;assert(descriptor->member("Name",{}).asText()=="StandaloneCatalogCode");assert(tables->member("Item",{VbaValue::string("module_find_rows")}).object->member("Name",{}).asText()=="module_find_rows");
     {AccessFormPreview form("StandaloneCatalogIdentity","Begin Form\nBegin Section\nEnd\nEnd",{},db,&window);form.show();QApplication::processEvents();auto formApplication=makePreviewApplicationObject(form);assert(formApplication->member("CurrentProject",{}).object==project && formApplication->member("CurrentData",{}).object==data);assert(form.close());}assert(modules->member("Count",{}).number+tables->member("Count",{}).number==count);
@@ -2890,10 +2915,11 @@ End Function)VBA"}});
         store("macro","aUtOeXeC",{{"version",1},{"actions",QJsonArray{QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{"INSERT INTO startup_effects(n) VALUES(1)"}}},QJsonObject{{"action","RunCode"},{"arguments",QJsonArray{"StartupFunction()"}}},QJsonObject{{"action","OpenTable"},{"arguments",QJsonArray{"startup_effects",0,1}}}}}});}
         setup.close();
     }QSqlDatabase::removeDatabase("native-autoexec-setup");
-    const auto generation=window.property("la_project_generation");linaccess::NativeStandardModuleHost host(&window,db,[&] {if(window.property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Project changed");});auto heldApplication=host.applicationObject();auto heldProject=heldApplication->member("CurrentProject",{}).object;auto heldTables=heldApplication->member("CurrentData",{}).object->member("AllTables",{}).object;
+    const auto generation=window.property("la_project_generation");linaccess::NativeStandardModuleHost host(&window,db,[&] {if(window.property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Project changed");});auto heldApplication=host.applicationObject();auto heldProject=heldApplication->member("CurrentProject",{}).object;auto heldForms=heldApplication->member("Forms",{}).object;auto heldScreen=heldApplication->member("Screen",{}).object;auto heldTables=heldApplication->member("CurrentData",{}).object->member("AllTables",{}).object;
     openProject(window,path);assert(window.property("la_startup_macro_status").toString()=="completed");
     const auto count=[&] {QSqlQuery query(db);assert(query.exec("SELECT COUNT(*) FROM startup_effects") && query.next());return query.value(0).toInt();};assert(count()==2);
     int stale=0;try {(void)heldApplication->member("Eval",{VbaValue::string("1")});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);stale=0;try {(void)heldProject->member("AllModules",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);stale=0;try {(void)heldTables->member("Count",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);
+    stale=0;try {(void)heldForms->member("Count",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);stale=0;try {(void)heldScreen->member("MousePointer",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);
     openProject(window,path);assert(window.property("la_startup_macro_status").toString()=="completed" && count()==4);
     openProject(window,path,nullptr,true);QTest::keyRelease(&window,Qt::Key_Shift);assert(window.property("la_startup_macro_status").toString()=="bypassed" && count()==4);
     {QSqlQuery sql(db);assert(sql.exec("DELETE FROM _la_objects WHERE kind='macro'"));}
@@ -4027,6 +4053,7 @@ End Sub
     testModuleFindRecord(window,db);
     testModuleUiCommands(window,db);
     testStandaloneProjectCatalog(window,db);
+    testStandaloneDocuments(window,db);
     testNativeAutoExec(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

@@ -13,6 +13,7 @@
 #include "native_public_procedure_run.hpp"
 #include "native_application_run.hpp"
 #include "native_project_context.hpp"
+#include "native_project_documents.hpp"
 #include "native_domain_lookup.hpp"
 #include "native_macro_runner.hpp"
 #include "native_macro_message_box.hpp"
@@ -53,6 +54,8 @@ VbaValue NativeStandardModuleHost::formatNumericValue(const VbaValue& value,bool
 void NativeStandardModuleHost::message(std::string_view value){(void)messageBox(value,0,std::nullopt);}
 int NativeStandardModuleHost::messageBox(std::string_view prompt,int buttons,const std::optional<std::string>& title){check();const auto result=nativeModuleMessageBox(owner_,prompt,buttons,title);check();return result;}
 std::string NativeStandardModuleHost::inputBox(const VbaInputBoxArguments& arguments){check();auto result=nativeInputBox(owner_,arguments);check();return result;}
+std::shared_ptr<VbaObject> NativeStandardModuleHost::formsCollection(){check();return applicationObject()->member("Forms",{}).object;}
+std::shared_ptr<VbaObject> NativeStandardModuleHost::reportsCollection(){check();return applicationObject()->member("Reports",{}).object;}
 std::shared_ptr<VbaObject> NativeStandardModuleHost::currentDatabase(){check();return makeDaoDatabase(db_);}
 std::shared_ptr<VbaObject> NativeStandardModuleHost::databaseEngine(){check();return makeDaoEngine(db_);}
 VbaValue NativeStandardModuleHost::domainAggregate(std::string_view function,const std::vector<VbaValue>& args){check();return nativeDomainValue(db_,args,function);}
@@ -243,6 +246,7 @@ public:
     std::string_view className() const override {return "Application";}
     bool isNativeType(std::string_view type) const override {return type=="access.application";}
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();if(key=="forms" || key=="reports") return VbaArgumentSignature{{"Index"},0};
         if(QString::fromUtf8(name.data(),name.size()).compare("Echo",Qt::CaseInsensitive)==0) return VbaArgumentSignature{{"EchoOn","bstrStatusBarText"},1};
         if(QString::fromUtf8(name.data(),name.size()).compare("Run",Qt::CaseInsensitive)==0) return nativeApplicationRunSignature();return {};
     }
@@ -250,6 +254,10 @@ public:
         NativeStandardModuleHost host(owner_,db_,guard_);host.check();const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if(key=="echo") {auto result=nativeEcho(*owner_,args);host.check();return result;}
         if(key=="docmd") {if(!args.empty()) throw VbaRuntimeError(450,"DoCmd requires no arguments");if(auto command=commands_.lock()) return VbaValue::reference(command);auto command=std::make_shared<NativeModuleDoCmd>(owner_,db_,guard_);commands_=command;return VbaValue::reference(command);}
+        if(key=="forms" || key=="reports") {
+            if(args.size()>1) throw VbaRuntimeError(450,"Document collection accepts one optional index");auto& cache=key=="forms" ? forms_ : reports_;auto documents=cache.lock();if(!documents) {documents=nativeProjectDocuments(db_,owner_,key=="reports");cache=documents;}return args.empty() ? VbaValue::reference(documents) : documents->member("Item",args);
+        }
+        if(key=="screen") {if(!args.empty()) throw VbaRuntimeError(450,"Screen requires no arguments");auto screen=screen_.lock();if(!screen) {screen=nativeProjectScreen(db_,owner_);screen_=screen;}return VbaValue::reference(screen);}
         if(key=="run") return runPublicStandardProcedure(host,args);
         if(key=="eval") {
             if(args.size()!=1) throw VbaRuntimeError(450,"Eval requires one expression");
@@ -260,7 +268,7 @@ public:
         throw VbaRuntimeError(438,"Application member is unavailable in the module execution host");
     }
 private:
-    QPointer<QWidget> owner_;QSqlDatabase db_;std::function<void()> guard_;std::weak_ptr<VbaObject> commands_;
+    QPointer<QWidget> owner_;QSqlDatabase db_;std::function<void()> guard_;std::weak_ptr<VbaObject> commands_,forms_,reports_,screen_;
 };
 std::shared_ptr<VbaObject> NativeStandardModuleHost::applicationObject() {
     check();QWidget* project=owner_;
