@@ -19,7 +19,7 @@ QString quote(QString name) {
     if(name.isEmpty() || name.size()>64 || !name.isValidUtf16() || name.contains(QChar(0)))throw VbaRuntimeError(5,"Ungültiger Zielname.");
     name.replace(']',"]]");return '['+name+']';
 }
-bool internal(const QString& name){return name.startsWith("_la_",Qt::CaseInsensitive) || name.startsWith("sqlite_",Qt::CaseInsensitive);}
+bool internal(const QString& name){return name.startsWith("_la_",Qt::CaseInsensitive) || name.startsWith("__la_top_",Qt::CaseInsensitive) || name.startsWith("sqlite_",Qt::CaseInsensitive);}
 QStringList targetFields(QSqlDatabase database,const QString& target) {
     if(internal(target) || !database.tables(QSql::Tables).contains(target))throw VbaRuntimeError(3078,"Anfügeziel ist keine verfügbare Projekttabelle.");
     const auto fields=accessQueryColumns(database,compileAccessQuery("SELECT * FROM "+quote(target)));if(fields.size()>255)throw VbaRuntimeError(3251,"Anfügeziel hat mehr als255 Felder.");return fields;

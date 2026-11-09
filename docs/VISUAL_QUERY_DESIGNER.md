@@ -296,7 +296,8 @@ saved-query updates and more general expressions retain their existing manual
 SQL/DAO support boundaries; this is not full Access updateability.
 
 The action mode, target/mapping or update expressions persist under the exact-SQL
-hash. Visual metadata writes version3 and reads versions1/2/3. Older designers
+hash. The action stage introduced version3; the current TOP stage writes version4
+and reads versions1/2/3/4. Older designers
 will not silently reinterpret the new action format. Form/report source entries
 remain selection-only and hide the action chooser as well as parameter declarations.
 Saving and reopening action designs does not execute them. SQL text undo keeps
@@ -315,3 +316,30 @@ executes a declared Long update parameter, checks only matching rows change,
 reopens its expression metadata and executes a criterion-limited delete. These
 are existing targets, not new CTest IDs. No new core/original/Windows/full-suite
 or package proof is attributed to the actions.
+
+
+## TOP selection
+
+The TOP control selects a positive signed32-bit integer, or Alle Datensätze (0)
+for no TOP clause. Ordered queries retain the native RANK tie semantics: TOP2 can
+return three actual rows when the second value is tied. Unordered TOP retains the
+existing native LIMIT behavior. Hidden rank columns are not user output fields.
+Raw __la_top_ helper views are excluded from source/join/target choices; the
+public saved query remains a normal selectable source.
+
+TOP is currently selection-only in this visual entry; action mode cannot silently
+ignore the limit. Action selection is disabled while TOP is set, and non-selection
+metadata with TOP is refused. PERCENT, ordered DISTINCT and other existing native
+TOP grammar/type/budget boundaries remain explicitly unsupported here. No larger
+result materialization or Access oracle scope is claimed.
+
+Saved designs write version4 with the exact integer top value; versions1/2/3/4
+are read. Fractional, negative or out-of-range persisted values are refused rather
+than silently clamped. Manual SQL changes retain the exact-hash invalidation rule.
+
+Validation: application built; only existing affected GUI1/1 passed (16.14s).
+Real editor Run includes boundary ties and removes the hidden column, compared
+with independent SQL using the nth sort-value boundary. Saving/reopening, clearing
+the limit to return all rows, helper-view exclusion, invalid metadata and callback
+non-execution are covered. No new CTest ID or additional core/original/Windows/
+full-suite/package proof.

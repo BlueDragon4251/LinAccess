@@ -23,7 +23,7 @@ QString quote(QString name) {
 }
 QStringList sourceNames(QSqlDatabase database) {
     auto names=database.tables(static_cast<QSql::TableType>(QSql::Tables|QSql::Views));
-    names.removeDuplicates();names.removeIf([](const auto& name){return name.startsWith("_la_",Qt::CaseInsensitive) || name.startsWith("sqlite_",Qt::CaseInsensitive);});names.sort(Qt::CaseInsensitive);return names;
+    names.removeDuplicates();names.removeIf([](const auto& name){return name.startsWith("_la_",Qt::CaseInsensitive) || name.startsWith("__la_top_",Qt::CaseInsensitive) || name.startsWith("sqlite_",Qt::CaseInsensitive);});names.sort(Qt::CaseInsensitive);return names;
 }
 }
 NativeQuerySources nativeQuerySources(QSqlDatabase database,const QString& main,const QJsonArray& joins) {

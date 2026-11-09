@@ -2476,3 +2476,20 @@ Build-ID, MDBTools1.0.1/SQLite3.54.1, Payload/Berechtigungen/keine Fixtures best
 dieses Paket enthält noch nicht die anschließenden Aktionsentwürfe. F067/F068/
 F080/F148 und fester Katalog456/386/70 unverändert. Weiter mit nativer TOP-Auswahl
 im visuellen Entwurf; kein Gesamtabschluss, kein Abschlussanruf.
+
+
+Native TOP-Steuerung im visuellen Auswahlentwurf: positive32-Bit-Zahl oder Alle
+Datensätze(0), tatsächlicher nativer RANK-/LIMIT-Pfad einschließlich Grenzwert-
+Gleichständen und ohne sichtbare Rangspalte. Gespeicherter Wert öffnet wieder,
+Bruch-/negative/überlaufende Metadaten werden abgelehnt. Rohansichten __la_top_
+werden aus Quellen-/Join-/Ziellisten ausgeschlossen; öffentliche gespeicherte
+Abfrage bleibt verfügbar. TOP in diesem visuellen Pfad nur Auswahl; Aktionsmodus
+darf den Wert nicht stillschweigend ignorieren. Native PERCENT-/DISTINCT-/Budget-
+Grenzen bleiben. EntwurfsformatVersion4 schreibt, Version1/2/3/4 liest.
+Anwendung gebaut; nur bestehendes betroffenes GUI1/1 (16,14s) bestanden. Tatsächliche
+TOP2-Ergebnisse mit3 Grenzwert-Zeilen gegen unabhängige nth-Wert-SQL verglichen,
+Ausgabe/Metadaten/Begrenzungslöschung/Callback-Nichtauswertung geprüft. Keine neuen
+CTests oder zusätzliche Kern-/Original-/Windows-/Gesamtsuiten-/Paketnachweise.
+Aktionsstufe als1481810 veröffentlicht/verifiziert; letzte geprüfteDEB44b1f70
+vor Aktions-/TOP-Erweiterung. Details VISUAL_QUERY_DESIGNER.md. F067/F068/F080/
+F148 und fester Katalog456/386/70 unverändert; Arbeit fortsetzen.
