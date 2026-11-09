@@ -20,7 +20,7 @@ inline QMap<QString,QString> nativeEventOverrides(const QJsonValue& value,const 
         auto binding=it.value().toString().trimmed();
         if(binding.size()>4096 || !binding.isValidUtf16() || binding.contains(QChar(0))) throw VbaRuntimeError(5,"Invalid native event binding text");
         if(binding.compare("[Event Procedure]",Qt::CaseInsensitive)==0) binding="[Event Procedure]";
-        else if(!binding.isEmpty() && !binding.startsWith('=') && !nativeMacroNameValid(binding)) throw VbaRuntimeError(3251,"Unsupported native event macro name");
+        else if(!binding.isEmpty() && !binding.startsWith('=') && !nativeMacroCallNameValid(binding)) throw VbaRuntimeError(3251,"Unsupported native event macro name");
         if(binding.startsWith('=') && binding.mid(1).trimmed().isEmpty()) throw VbaRuntimeError(5,"Native event expression cannot be empty");
         result.insert(name,binding);
     }

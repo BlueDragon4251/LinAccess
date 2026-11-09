@@ -26,6 +26,10 @@ inline const QVector<NativeMacroSignature>& nativeMacroSignatures() {
 inline bool nativeMacroNameValid(const QString& name) {
     return !name.trimmed().isEmpty() && name.size()<=64 && name.isValidUtf16() && !name.contains(QChar(0)) && !name.contains('.') && !name.trimmed().startsWith('=') && !name.trimmed().startsWith('[');
 }
+inline bool nativeMacroCallNameValid(const QString& name) {
+    const auto parts=name.split('.');if(parts.isEmpty() || parts.size()>2) return false;
+    for(const auto& part:parts) if(!nativeMacroNameValid(part)) return false;return true;
+}
 inline std::optional<QString> nativeMacroRepeatExpression(const QString& value) {
     const auto expression=value.trimmed();
     if(expression.size()>4096 || !expression.isValidUtf16() || expression.contains(QChar(0))) throw VbaRuntimeError(5,"Invalid RunMacro repeat expression text");
@@ -34,10 +38,25 @@ inline std::optional<QString> nativeMacroRepeatExpression(const QString& value) 
     return expression;
 }
 struct NativeMacroAction {QString name;std::vector<VbaValue> arguments;std::optional<QString> condition;};
-inline QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition) {
+inline QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition,const QString& requestedGroup={}) {
     if(definition.size()!=2) throw VbaRuntimeError(3251,"Unknown native macro attributes are not supported");
-    if(definition.value("version")!=QJsonValue(1) || !definition.value("actions").isArray()) throw VbaRuntimeError(3251,"Unsupported native macro definition");
     if(QJsonDocument(definition).toJson(QJsonDocument::Compact).size()>1024*1024) throw VbaRuntimeError(3035,"Native macro size limit exceeded");
+    if(definition.value("version")==QJsonValue(2)) {
+        if(!definition.value("groups").isArray()) throw VbaRuntimeError(3251,"Native macro groups require an ordered list");
+        const auto groups=definition.value("groups").toArray();if(groups.isEmpty() || groups.size()>64) throw VbaRuntimeError(3251,"Native macro group count requires 1 to 64");
+        QStringList names;QVector<NativeMacroAction> selected;int total=0;
+        for(const auto& value:groups) {
+            if(!value.isObject()) throw VbaRuntimeError(13,"Invalid native submacro");const auto group=value.toObject();const auto name=group.value("name").toString();
+            if(group.size()!=2 || name!=name.trimmed() || !nativeMacroNameValid(name) || !group.value("actions").isArray()) throw VbaRuntimeError(3251,"Invalid native submacro definition");
+            if(names.contains(name,Qt::CaseInsensitive)) throw VbaRuntimeError(3251,"Duplicate native submacro name");
+            QVector<NativeMacroAction> actions;try {actions=parseNativeMacro(QJsonObject{{"version",1},{"actions",group.value("actions")}});}catch(const VbaRuntimeError& error) {throw VbaRuntimeError(error.number,"Teilmakro "+name.toStdString()+": "+error.what(),error.source,error.helpFile,error.helpContext);}total+=actions.size();if(total>256) throw VbaRuntimeError(3251,"Native macro groups exceed 256 total actions");
+            if((requestedGroup.isEmpty() && names.isEmpty()) || name.compare(requestedGroup,Qt::CaseInsensitive)==0) selected=actions;
+            names.append(name);
+        }
+        if(selected.isEmpty()) throw VbaRuntimeError(2485,"Native submacro not found");return selected;
+    }
+    if(!requestedGroup.isEmpty()) throw VbaRuntimeError(2485,"Native macro has no named submacros");
+    if(definition.value("version")!=QJsonValue(1) || !definition.value("actions").isArray()) throw VbaRuntimeError(3251,"Unsupported native macro definition");
     const auto entries=definition.value("actions").toArray();
     if(entries.isEmpty() || entries.size()>256) throw VbaRuntimeError(3251,"Native macros require 1 to 256 actions");
     QVector<NativeMacroAction> actions;
@@ -87,8 +106,8 @@ inline QString nativeMacroCatalogName(QSqlDatabase database,const QString& reque
     if(names.lastError().isValid()) throw VbaRuntimeError(3146,"Native macro catalog read failed");return found;
 }
 inline QVector<NativeMacroAction> loadNativeMacro(QSqlDatabase database,const QString& name) {
-    if(!nativeMacroNameValid(name)) throw VbaRuntimeError(3251,"Macro groups or invalid native macro names are not supported");
-    const auto canonical=nativeMacroCatalogName(database,name);if(canonical.isEmpty()) throw VbaRuntimeError(2485,"Native macro not found");
+    if(!nativeMacroCallNameValid(name)) throw VbaRuntimeError(3251,"Invalid native macro call name");
+    const auto parts=name.split('.');const auto canonical=nativeMacroCatalogName(database,parts[0]);if(canonical.isEmpty()) throw VbaRuntimeError(2485,"Native macro not found");
     QSqlQuery query(database);query.prepare("SELECT definition FROM main._la_objects WHERE kind='macro' AND name=? COLLATE BINARY LIMIT 2");query.addBindValue(canonical);
     if(!query.exec()) throw VbaRuntimeError(3146,"Native macro catalog unavailable");
     if(!query.next()) throw VbaRuntimeError(2485,"Native macro not found");
@@ -98,6 +117,6 @@ inline QVector<NativeMacroAction> loadNativeMacro(QSqlDatabase database,const QS
     if(bytes.size()>1024*1024) throw VbaRuntimeError(3035,"Native macro size limit exceeded");
     QJsonParseError error;const auto document=QJsonDocument::fromJson(bytes,&error);
     if(error.error!=QJsonParseError::NoError || !document.isObject()) throw VbaRuntimeError(13,"Invalid native macro document");
-    return parseNativeMacro(document.object());
+    return parseNativeMacro(document.object(),parts.size()==2 ? parts[1] : QString{});
 }
 }

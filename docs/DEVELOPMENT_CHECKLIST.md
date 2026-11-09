@@ -2638,3 +2638,27 @@ False-RepeatExpression-Verweigerung auf tatsächlichen erfolgreichen Null-Durchl
 umgestellt. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung;
 aktuelles DEB gehört db892cc. NATIVE_MACROS_RUNTIME.md; F088/F041/F051/F118/F148
 und456/384/72 unverändert. Direkt weiter mit nativen Makrogruppen.
+
+
+Native Makrogruppen implementiert: eigenes Formatversion2 mit geordneten groups,
+1..64 eindeutig CI benannten Teilmakros, insgesamt max256 Aktionen/1MiB; Version1
+bleibt kompatibel. Gruppe startet erstes Teilmakro, Gruppe.Teilmakro gezielt;
+Namens-/Callvalidierung und Formular-/Feldereignisdesigner akzeptieren diese Form.
+Alle Teilmakros strukturell geprüft, bevor ausgewählter Teil Effekte ausführt;
+fehlerhafte inaktive Gruppe blockiert, doppelte Unicode-CI-Namen3251, fehlender
+Teil2485. Bestehender Runner hält Wiederholung/Stop/übergreifende Budgets.
+Realer Editor ergänzt Gruppenmodus, Name/Auswahl/Hinzufügen/Entfernen/Umordnen,
+behält rohe auch ungültige Zell-Drafts beim Wechsel; Auswahl/Render markieren
+Quelle nicht dirty. Mehrteilige Gruppe wird nicht still in Einzelmakro verwandelt.
+Projektgeneration vor Save geprüft, aktive Zellbearbeitung vor CtrlS-Serialisierung
+committed; neue Draft-Serialisierung bewahrt RepeatCount-Missing-Hole. Keine
+automatische Verweisrefaktorierung oder Access-SaveAsText-/Binär-Makroimport.
+App gebaut; bestehende GUI/Layout2/2 (20,10s) ohne Korrekturlauf bestanden: echte
+Gruppenerstellung/CtrlS/Wechsel/Wiederöffnen/Umordnung mit geänderter Default-
+Ausführung, Unicode-Teilaufruf, verschachtelter Parent/StopMacro/Repeat, reales
+Form_Load, ungültige inaktive Gruppe und doppelte Labels ohne Effekte. Aktuelles
+DEB gebaut/geprüft:5-Datei-Payload, Rechte, App-/Helper-BuildIDs, MDBTools1.0.1,
+bytegleiches SQLite3.54.1 mit tatsächlichem JOIN/NULL-/Counter-Backendcheck.
+Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung. NATIVE_MACROS_RUNTIME.md;
+F088/F050/F057/F118/F148/F155 und456/384/72 unverändert. Direkt weiter mit
+Speicher-/Löschschutz für eigene Makroobjekte.

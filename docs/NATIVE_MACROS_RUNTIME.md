@@ -3,8 +3,8 @@
 Native projects can create and reopen macros through **+ Makro** and the Makros
 explorer group. The real action editor adds/removes/reorders actions and saves
 its definition in the project's `_la_objects` catalog. It has no prefilled
-business records or SQL. Names are limited to64 UTF16 units; macro-group names
-containing a dot are outside this implementation.
+business records or SQL. Stored object names are limited to64 UTF16 units and
+contain no dot; grouped calls use ObjectName.SubmacroName.
 
 `DoCmd.RunMacro(MacroName, RepeatCount)` loads the actual saved definition on the
 current project connection. Named arguments use the existing VBA binder. Supported
@@ -39,7 +39,7 @@ size. Unknown actions/attributes refuse3251; malformed values refuse
 13/450/5 as appropriate. Duplicate case-insensitive catalog names refuse3251.
 Runtime RepeatCount uses existing Long coercion, then requires1..1000 and at most
 10000 planned actions per count-only call. Predicate-driven calls enforce the actual visited-action limit. Nested calls share a10000-visited-action limit
-(including skipped conditions) and a16-active-call limit. Macro groups remain unsupported. Stops/lifetime checks run before each action.
+(including skipped conditions) and a16-active-call limit. Native macro groups are described below. Stops/lifetime checks run before each action.
 
 A macro is a sequence of actions, not a single database transaction. Each RunSQL
 keeps its existing UseTransaction contract. If a later action fails, earlier
@@ -55,7 +55,7 @@ SysCmd GetObjectState accepts acMacro4 for real tagged native designer state.
 Enumeration of a stored source is metadata, not proof that its content executes.
 
 This is the native project format, not an Access2003 SaveAsText/binary macro
-importer or an MS Access execution oracle. Complete Access condition/continuation semantics, macro groups,
+importer or an MS Access execution oracle. Complete Access condition/continuation semantics,
 embedded/data macros, full action vocabulary/expressions,
 complete macro-bound event dispatch, AutoExec, library lookup, a macro debugger and complete
 Access timing/error identity remain open under F088/F050/F057/F148. Catalog456 /
@@ -254,3 +254,38 @@ error-metadata defect, core/GUI2/2 passed (9.32s), matching app build. Predicate
 SQL effects/evaluation count, argument combinations, false-first, iteration bound,
 preflight without prefix effects, error/help metadata and actual editor save/reopen
 with omitted count are exercised. No new CTest target or Windows oracle.
+
+
+## Native macro groups
+
+Version1/actions remains the single-macro format. Version2/groups is an ordered
+array of objects with name/actions. It permits1..64 submacros, at most256 total
+actions and1MiB serialized program. Names are valid UTF16, nonempty/trimmed,
+at most64 units and contain no dot. Case-insensitive duplicate labels refuse3251.
+The entire group, including inactive submacros, is structurally preflighted before
+any selected actions execute. A malformed later submacro cannot allow a prefix
+SQL effect from an earlier selected submacro.
+
+RunMacro ObjectName starts only the first ordered submacro. ObjectName.SubmacroName
+selects it case-insensitively; a missing submacro reports2485. Nested calls, StopMacro,
+RepeatCount/RepeatExpression and shared action/depth budgets retain their existing
+contracts. Native form/control event bindings and their designer accept these
+qualified macro calls. Group members do not become separate stored project objects.
+
+The actual editor adds a group mode, submacro name/selection, add/remove and ordering.
+It preserves raw drafts across switches, including invalid not-yet-saved cells.
+Selection/rendering is transient and does not mark saved source dirty. Converting
+a multi-submacro draft to a single macro is refused until the user reduces it to
+one submacro. Save validates all groups. Active table-cell editing is committed
+before serialization. Renamed labels do not automatically refactor callers,
+VBA strings or event bindings. This remains a native project format, not an Access
+binary/SaveAsText macro importer or full macro compatibility claim.
+
+The RunMacro action documentation linked above specifies group-qualified calls
+and first-submacro execution when only the group name is supplied. No fresh
+Windows Access2003 oracle has been added.
+
+Validation: existing GUI/layout2/2 passed (20.10s), app and matching DEB checked.
+Actual editor/CtrlS/reopen/switch/reorder with changed default execution, Unicode
+selection, nested parent/StopMacro/repeat, real Form_Load binding and whole-group
+preflight/duplicate refusal without SQL effects are exercised. No new test target.

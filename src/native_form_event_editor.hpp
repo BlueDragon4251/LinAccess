@@ -34,7 +34,7 @@ inline bool editNativeFormEvents(QWidget* parent,QJsonObject& formEvents,QMap<QS
             if(type==0) object.remove(name);
             else if(type==3) object.insert(name,"[Event Procedure]");
             else if(type==4) object.insert(name,QStringLiteral(""));
-            else {auto text=target->currentText().trimmed();if(text.isEmpty() || (type==1 && !nativeMacroNameValid(text))) text=QString(QChar(0));else if(type==2 && !text.startsWith('=')) text.prepend('=');object.insert(name,text);}
+            else {auto text=target->currentText().trimmed();if(text.isEmpty() || (type==1 && !nativeMacroCallNameValid(text))) text=QString(QChar(0));else if(type==2 && !text.startsWith('=')) text.prepend('=');object.insert(name,text);}
             write(object);enabled();
         };
         QObject::connect(mode,&QComboBox::currentIndexChanged,&dialog,store);QObject::connect(target,&QComboBox::currentTextChanged,&dialog,store);QObject::connect(event,&QComboBox::currentIndexChanged,&dialog,refresh);refresh();return refresh;
