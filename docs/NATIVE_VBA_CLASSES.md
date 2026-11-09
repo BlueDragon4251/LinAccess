@@ -70,3 +70,37 @@ outliving caller windows, sticky revision invalidation and TEMP/deletion guards.
 The Original event path retains its known missing-macro boundary, not a positive
 initialized sale proof. No Windows oracle or fresh class package proof. Last
 checked Debian3fe7245 precedes this scope.
+
+## Ordinary classes in the imported source archive
+
+New also resolves a checked ordinary class from the latest actual archived VBA
+revision. A CLASS header and matching VB_Name must agree with its canonical
+archive name. VB_Base document classes and Form_/Report_ classes associated with
+actual archived document names are excluded. A mere Form_ prefix without a document
+association is not guessed to be CodeBehind. The same source-only classification
+feeds AllModules; ordinary imported classes join authored classes, while actual
+form/report modules remain excluded. Native/imported namespace collisions fail5.
+
+Raw UTF8/BOM, UTF16LE and the existing CP1252 fallback remain archived unchanged;
+only the execution view is decoded. Undefined fallback bytes that would produce
+replacement characters refuse3251. Runtime instances retain the actual origin,
+archive ID and raw revision bytes, not just decoded text. A newer revision with
+equivalent decoded text but different raw encoding still invalidates the old
+instance. Owned/imported origin changes, TEMP catalog shadows, project/database
+lifetime and observed-source deletion retain explicit guards. No source is renamed,
+rewritten or automatically promoted from document CodeBehind.
+
+First existing GUI/DAO bundle2/2 passed20.44s (17.74/2.70s), app built. Actual New,
+methods/properties/CurrentDb SQL writes, ANSI umlauts, UTF16 revision replacement,
+raw-byte retention, AllModules, associated CodeBehind and VB_Base exclusions,
+unassociated prefix classes, name/encoding failures, TEMP shadows and ambiguous
+owned/imported names are exercised in separate technical archive records. The
+pre-existing archive hash is identical after retiring only those test records.
+These technical sources are not claimed as a Windows class-export oracle.
+The existing Kassa Bridge contains28 class files, all28 declared document-module
+names and no ordinary class candidate; it was only inspected as aggregate metadata.
+No new CTest or additional Original/Windows/full-suite run. Class core is unchanged
+from the preceding verified scope; complete F042/F043/F050 remain open. The prior
+"imported generic class construction" boundary above is superseded for this checked
+ordinary-class path. Other typed/default/reference/lifetime boundaries remain.
+Latest checked Debian7f40893 includes authored classes, before this import extension.

@@ -45,9 +45,9 @@ std::shared_ptr<VbaModuleState> standardVbaModuleState(QSqlDatabase db,std::stri
     if (auto found=frames.find(key);found!=frames.end()) return found->second;
     auto state=createVbaModuleState(source); frames.emplace(key,state); return state;
 }
-QMap<QString,QByteArray> standardVbaModuleSources(QSqlDatabase db,QMap<QString,QString>* canonicalNames,QSet<QString>* ownedClasses) {
+QMap<QString,QByteArray> standardVbaModuleSources(QSqlDatabase db,QMap<QString,QString>* canonicalNames,QSet<QString>* standaloneClasses) {
     (void)context(db);QElapsedTimer timer;timer.start();
-    QMap<QString,QByteArray> sources;QMap<QString,QString> names;QSet<QString> classes;
+    QMap<QString,QByteArray> sources;QMap<QString,QString> names;QSet<QString> classes,documents;
     QSqlQuery table(db);
     if(!table.exec("SELECT type FROM main.sqlite_schema WHERE name='_la_access_artifacts' COLLATE NOCASE")) throw VbaRuntimeError(3251,"VBA SQL metadata unavailable");
     if(table.next()) {
@@ -74,6 +74,13 @@ QMap<QString,QByteArray> standardVbaModuleSources(QSqlDatabase db,QMap<QString,Q
                 names.insert(key,name);sources.insert(key,std::move(source));
             }
             if(rows.lastError().isValid()) throw VbaRuntimeError(3146,"VBA SQL archive fetch failed");
+            rows.finish();
+            if(!rows.exec("SELECT kind,name FROM main._la_access_artifacts WHERE kind IN ('form','report')")) throw VbaRuntimeError(3146,"Class document association metadata unavailable");
+            count=0;while(rows.next()) {
+                if(++count>1000000 || timer.hasExpired(5000)) throw VbaRuntimeError(3251,"Class document association scan limit exceeded");
+                documents.insert((rows.value(0).toString()+"_"+rows.value(1).toString()).toCaseFolded());
+            }
+            if(rows.lastError().isValid()) throw VbaRuntimeError(3146,"Class document association fetch failed");
         }
     }
 
@@ -99,7 +106,8 @@ QMap<QString,QByteArray> standardVbaModuleSources(QSqlDatabase db,QMap<QString,Q
             if(rows.lastError().isValid()) throw VbaRuntimeError(3146,"Native module catalog fetch failed");
         }
     }
-    if(canonicalNames) *canonicalNames=std::move(names);if(ownedClasses) *ownedClasses=std::move(classes);return sources;
+    for(auto it=sources.begin();it!=sources.end();++it) if(!classes.contains(it.key()) && !documents.contains(it.key()) && standaloneVbaClassHeader(names.value(it.key()),it.value())) classes.insert(it.key());
+    if(canonicalNames) *canonicalNames=std::move(names);if(standaloneClasses) *standaloneClasses=std::move(classes);return sources;
 }
 std::vector<std::shared_ptr<VbaModuleState>> publicVbaModuleStates(QSqlDatabase db) {
     (void)context(db);

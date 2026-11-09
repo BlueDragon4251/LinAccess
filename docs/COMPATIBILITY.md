@@ -5800,3 +5800,24 @@ bekannten fehlenden Makroquelltext statt positiver Verkaufsausführung begrenzt.
 Vorstufe3fe7245 privat veröffentlicht/Remote-Baum verifiziert; frischeDEB3fe7245 mit
 beiden Datenblatt-Erweiterungen vollständig geprüft, liegt vor Klassen-Erweiterung.
 Katalog456/386/70 unverändert; ohne Zwischenabschluss weitere offene Umfänge umsetzen.
+
+
+Eindeutig gewöhnliche importierte Klassen können jetzt mit New aus der neuesten
+wirklichen VBA-Archivrevision konstruiert werden. CLASS/VB_Name und kanonischer
+Archivname müssen passen; VB_Base und tatsächlich zugeordnete Form_/Report_-Module
+bleiben Dokument-CodeBehind. Unbelegter Präfix allein wird nicht zum Dokumenttyp
+geraten. AllModules enthält nachgewiesene gewöhnliche Importklassen. UTF8/BOM,
+UTF16LE und vorhandener CP1252-Ausführungsview ohne Änderung der Rohbytes;
+verlustbehaftete undefinierte Fallbackbytes3251. Herkunft, Archiv-ID und rohe
+Revision dauerhaft gebunden, auch semantisch gleiche anders kodierte Neuversion
+invalidiert alte Instanz. Namespacekollisionen, TEMP-/Lösch-/Kontextguards bleiben.
+Details NATIVE_VBA_CLASSES.md. Erstes bestehendes GUI/DAO-Bündel2/2 (20,44s:
+17,74/2,70s), App gebaut: tatsächliche Konstruktion/Methoden/SQL, Kodierung/
+Versionen, Metadaten, Dokumentausschlüsse und Originalarchivhash auf Testkopie.
+Keine neuen CTests/Original-/Windows-/Gesamtsuitennachweise. Original-Bridge nur
+aggregiert geprüft:28 Klassendateien/28 deklarierte Dokumentmodulnamen/0 gewöhnliche
+Kandidaten; technische Quellen sind kein Windows-Exportoracle. Klassenkern bleibt
+auf voriger geprüfter Umsetzung. Vorstufe7f40893 privat veröffentlicht/Baum geprüft,
+frischeDEB7f40893 samt Payload/Rechten/Build-ID/gepinnten SQLite/MDBTools bestanden.
+Katalog456/386/70 unverändert. Ohne Zwischenabschluss mit benannten Klassen-
+Typbindungen und weiteren offenen Anforderungen fortfahren.
