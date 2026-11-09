@@ -4195,3 +4195,22 @@ Debugger-Skip geprüft. Finales DEB/Build-ID/MDBTools1.0.1/SQLite3.54.1 sowie
 vier Fixture-/drei Uploadhashes bestanden. Kein neuer CTest, kein aktueller
 Gesamtsuite-/Windows-/Distributionsmatrix-Nachweis. F129/3075 bleibt erwartet.
 F045/F041/F051/F088 und456/386/70 bleiben offen/unverändert; kein Gesamtabschluss.
+
+
+## 2026-11-09: fehlerhafte Schleifen-/With-Einstiege
+
+Native Resume-Next-/Debugger-Skip-Fortsetzung überspringt fehlgeschlagene
+While/Do-/For-/For-Each-Einstiege bis zur tatsächlichen Blockgrenze. Kein
+Rumpflauf ohne gültigen Schleifenrahmen; äußere Schleifen/If bleiben erhalten.
+With hält die äußere Aktivierung getrennt vom ausstehenden Objektkopf, damit
+sein fehlgeschlagener Rumpf inaktiv bleibt und End With den äußeren Zustand
+wiederherstellt. Wiederholendes Resume versucht den wirklichen Kopf erneut.
+Scope und Grenzen in docs/VBA_BOOLEAN_CONDITIONS.md.
+
+Ein gebündelter bestehender Kern-/GUI-Lauf2/2 (13,20s; Kern2,13s/GUI13,20s)
+ohne Korrekturlauf bestanden. Aktuelle App und DEB/Build-ID/MDBTools1.0.1/
+SQLite3.54.1 geprüft. Letzter Original- und GUI-freier Kernnachweis bleibt der
+unveränderliche vorherige dae6681 (Original113,95s/Kern2,00s), kein neuer
+Original-/Qt-frei-/Gesamtsuite-/Windows-/Distributionslauf behaupten.
+Keine neue CTest-ID oder Katalog-ID; F045/F051 und456/386/70 bleiben offen/
+unverändert. Kein Gesamtabschluss; weitere Arbeit läuft fort.

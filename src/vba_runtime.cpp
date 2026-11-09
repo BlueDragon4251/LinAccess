@@ -74,6 +74,7 @@ struct Statement {
     std::vector<BranchDestination> destinations;
 };
 
+bool loopEntryStatement(Statement::Type type) {return type==Statement::Type::While || type==Statement::Type::For || type==Statement::Type::ForEach;}
 bool debugExecutable(const Statement& statement) {
     switch(statement.type) {
     case Statement::Type::Dim:case Statement::Type::Label:case Statement::Type::EndIf:case Statement::Type::EndSelect:case Statement::Type::EndWith:case Statement::Type::Else:return false;
@@ -1745,7 +1746,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     };
     std::vector<Frame> frames;
     std::vector<LoopFrame> loops;
-    struct WithFrame { std::size_t instruction; VbaValue value; bool pending{}; };
+    struct WithFrame { std::size_t instruction; VbaValue value; bool pending{}; bool parentActive{}; };
     std::vector<WithFrame> withFrames,faultWithFrames;
     struct SubroutineFrame { std::size_t instruction,frameDepth,loopDepth,withDepth; bool active; };
     std::vector<SubroutineFrame> subroutines,faultSubroutines;
@@ -2203,6 +2204,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             refreshAliases();
             if(debugger) {
                 bool executable=active && debugExecutable(instruction);
+                if(instruction.type==Statement::Type::With && !withFrames.empty() && withFrames.back().pending && withFrames.back().instruction==ip) executable=withFrames.back().parentActive;
                 if(instruction.type==Statement::Type::If && !frames.empty() && !frames.back().select && frames.back().pending && frames.back().instruction==ip) executable=frames.back().parent;
                 if(instruction.type==Statement::Type::ElseIf || instruction.type==Statement::Type::Case) executable=!frames.empty() && frames.back().parent && !frames.back().condition && (!frames.back().pending || (instruction.type==Statement::Type::ElseIf && frames.back().instruction==ip));
                 debugger->checkpoint(currentLine,executingIp,executable);
@@ -2210,17 +2212,17 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             try {
             switch (instruction.type) {
             case Statement::Type::With:
-                if (!withFrames.empty() && withFrames.back().instruction==ip && withFrames.back().pending) withFrames.pop_back();
-                if (!active) { withFrames.push_back({ip,VbaValue::reference(nullptr),false}); break; }
+                if (!withFrames.empty() && withFrames.back().instruction==ip && withFrames.back().pending) {active=withFrames.back().parentActive;withFrames.pop_back();}
+                if (!active) { withFrames.push_back({ip,VbaValue::reference(nullptr),false,false}); break; }
                 try {
                     const auto value=evaluateObject(instruction.expression);
                     if (value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(424,"With requires an object");
-                    withFrames.push_back({ip,value,false});
-                } catch (...) { withFrames.push_back({ip,VbaValue::reference(nullptr),true}); throw; }
+                    withFrames.push_back({ip,value,false,true});
+                } catch (...) { withFrames.push_back({ip,VbaValue::reference(nullptr),true,true});active=false;throw; }
                 break;
             case Statement::Type::EndWith:
                 if (withFrames.empty()) throw VbaRuntimeError(5,"With stack invalid");
-                withFrames.pop_back(); break;
+                active=withFrames.back().parentActive;withFrames.pop_back();break;
             case Statement::Type::FileKill:
                 if(active) nativeFileKill(scalarVbaValue(evaluate(instruction.expression)));
                 break;
@@ -2361,7 +2363,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                         } else if(groupEnd>=0) {
                             leaveFailedNextGroup(faultInstruction);
                             ip=static_cast<std::size_t>(groupEnd);
-                        } else ip=faultInstruction;
+                        } else if(loopEntryStatement(instructions[faultInstruction].type)) ip=static_cast<std::size_t>(instructions[faultInstruction].partner);
+                        else ip=faultInstruction;
                     }
                 }
                 break;
@@ -2863,6 +2866,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     faultSubroutines=subroutines;
                     frames.clear(); loops.clear(); withFrames.clear(); subroutines.clear(); active = true;
                     ip = static_cast<std::size_t>(handler);
+                } else if(loopEntryStatement(instruction.type)) {
+                    ip=static_cast<std::size_t>(instruction.partner);
                 } else if(instruction.sourceStatementEnd>=0) {
                     leaveFailedNextGroup(executingIp);
                     ip=static_cast<std::size_t>(instruction.sourceStatementEnd);

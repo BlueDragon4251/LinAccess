@@ -43,3 +43,25 @@ keinen äußeren If-Rahmen. Wiederholendes Resume wertet denselben Kopf erneut a
 der Rahmen wird dabei nicht dupliziert. Err bleibt bei impliziter Fortsetzung
 sichtbar; explizites Resume behält die vorhandene Err-Rücksetzung. Das ist der
 nachgewiesene native Umfang, kein vollständiger Fehlerreihenfolge-Oracle.
+
+## Fehlgeschlagene weitere Blockeinstiege
+
+Bei Fehlern im Einstieg von While/Do While/Do Until, For und For Each springen
+On Error Resume Next, explizites Resume Next und Debugger-Skip hinter die
+zugehörige Loop/Wend/Next-Grenze. Es wird kein Rumpf ohne erfolgreich aufgebauten
+Schleifenrahmen ausgeführt. Äußere For-/If-Rahmen bleiben erhalten. Wiederholendes
+Resume versucht denselben Einstieg erneut. Fehler einer nachgestellten
+Loop-Bedingung bleiben an dieser Bedingung; ein wiederholender Einstieg in den
+bereits ausgeführten Rumpf wird dadurch nicht eingeführt.
+
+Ein fehlgeschlagener With-Kopf hält seinen ausstehenden Rahmen und die äußere
+Aktivierung getrennt fest. Sein Rumpf bleibt bei Fortsetzung inaktiv; End With
+stellt die äußere Aktivierung wieder her. Resume kann den With-Kopf erneut
+bewerten. Fehler innerhalb eines erfolgreich betretenen With behalten dagegen
+den vorhandenen Objektkontext. Bereits ausgeführte Anweisungen werden nicht
+rückgängig gemacht oder zum Wiederherstellen des Debuggers erneut ausgeführt.
+
+Nachgewiesen im bestehenden Kern-/GUI-Lauf: For-/For-Each-/While-Einstiegsfehler,
+übersprungene Rümpfe, erhaltene äußere Schleife/If, With-Fehler, Resume/Resume Next
+und tatsächlicher Debugger-Skip. Die vollständige Access-Fehlerreihenfolge und
+Randsemantik bleiben in F045/F051 offen.

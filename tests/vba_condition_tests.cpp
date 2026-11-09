@@ -58,6 +58,17 @@ void testVbaConditions() {
     number("On Error GoTo recovered\nIf False Then\nProbe=90\nElseIf v Then\nProbe=7\nEnd If\nExit Function\nrecovered:\nv=\"True\"\nResume",VbaValue::string("invalid"),7);
     number("On Error GoTo recovered\nIf v Then Probe=90 Else Probe=99\nProbe=3\nExit Function\nrecovered:\nResume Next",VbaValue::string("invalid"),3);
     {int errors=0;VbaDebuggerSession debugger([&](const VbaDebugPause& pause) {if(pause.reason!=VbaDebugReason::Error) return VbaDebugAction::Continue;assert(pause.error->number==13 && pause.recoverable);++errors;return VbaDebugAction::SkipError;});number("If v Then Probe=90 Else Probe=99\nProbe=Err.Number",VbaValue::string("invalid"),13);assert(errors==1);}
+    for(const auto& opening:std::vector<std::string>{"While v","Do While v","Do Until v"}) {const auto closing=opening=="While v" ? "Wend" : "Loop";number("On Error Resume Next\n"+opening+"\nProbe=99\n"+closing+"\nProbe=Probe+Err.Number",VbaValue::string("invalid"),13);}
+    number("On Error Resume Next\nFor n=v To 2\nProbe=99\nNext n\nProbe=Probe+Err.Number",VbaValue::string("invalid"),13);
+    number("On Error Resume Next\nDim item As Variant\nFor Each item In v\nProbe=99\nNext\nProbe=Probe+Err.Number",VbaValue::string("invalid"),424);
+    number("On Error Resume Next\nWith v\nProbe=99\nEnd With\nProbe=Probe+Err.Number",VbaValue::integer(1),424);
+    number("On Error Resume Next\nIf True Then\nWith v\nProbe=99\nEnd With\nProbe=Probe+7\nEnd If\nProbe=Probe+Err.Number",VbaValue::integer(1),431);
+    number("On Error GoTo recovered\nWith v\nProbe=7\nEnd With\nExit Function\nrecovered:\nSet v=New Collection\nResume",VbaValue::integer(1),7);
+    number("On Error GoTo recovered\nWith v\nProbe=99\nEnd With\nProbe=3\nExit Function\nrecovered:\nResume Next",VbaValue::integer(1),3);
+    number("On Error GoTo recovered\nDo While v\nProbe=99\nLoop\nProbe=3\nExit Function\nrecovered:\nResume Next",VbaValue::string("invalid"),3);
+    number("On Error Resume Next\nDim i As Long\nFor i=1 To 2\nFor n=1 To v\nProbe=99\nNext n\nProbe=Probe+1\nNext i\nProbe=Probe+Err.Number",VbaValue::string("invalid"),15);
+    number("On Error GoTo recovered\nFor n=1 To v\nProbe=Probe+1\nNext n\nExit Function\nrecovered:\nv=2\nResume",VbaValue::string("invalid"),2);
+    {int errors=0;VbaDebuggerSession debugger([&](const VbaDebugPause& pause) {if(pause.reason!=VbaDebugReason::Error) return VbaDebugAction::Continue;assert(pause.error->number==13 && pause.recoverable);++errors;return VbaDebugAction::SkipError;});number("Do While v\nProbe=99\nLoop\nProbe=Probe+Err.Number",VbaValue::string("invalid"),13);assert(errors==1);}
     const auto expression=[&](const char* text) {return evaluateVbaExpression(text,host,{});};assert(expression("CBool(\"#TRUE#\")").boolean && !expression("CBool(\"#FALSE#\")").boolean);
     for(const auto& ending:std::vector<std::string>{"EndIf","End   If","End\tIf","EndIf: Probe=9"}) number("If v Then\nProbe=9\n"+ending,VbaValue::logical(true),9);
 }
