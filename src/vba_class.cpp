@@ -15,7 +15,7 @@ std::string folded(std::string_view input) {std::string value(input);for(auto& c
 void failed(const VbaExecutionResult& result) {if(result.status!=VbaExecutionStatus::Completed) throw VbaRuntimeError(result.errorNumber ? result.errorNumber : 3251,result.explanation,result.errorSource,result.errorHelpFile,result.errorHelpContext);}
 }
 struct NativeVbaClassDefinition {
-    std::string name,source;
+    std::string name,source,defaultName;
     std::shared_ptr<VbaModuleState> initial;
     std::unordered_map<std::string,bool> visible;
     bool initialize{};
@@ -29,15 +29,21 @@ std::shared_ptr<const NativeVbaClassDefinition> compileNativeVbaClass(std::strin
     static const std::regex attribute(R"VBA(^\s*Attribute\s+VB_Name\s*=\s*"([^"]+)"\s*$)VBA",std::regex::icase);
     static const std::regex document(R"(^\s*Attribute\s+VB_Base\b)",std::regex::icase);
     static const std::regex privateScope(R"(^\s*(?:Private|Friend)\b)",std::regex::icase);
+    static const std::regex memberAttribute(R"(^\s*Attribute\s+([A-Za-z_][A-Za-z0-9_]*)\.VB_UserMemId\s*=\s*(-?[0-9]+)\s*(?:\'.*)?$)",std::regex::icase);
+    std::string defaultName;
     int versions=0,names=0;
     while(std::getline(stream,line)) {
         lines.push_back(line);std::smatch match;
         versions+=std::regex_match(line,version);
+        if(std::regex_match(line,match,memberAttribute)) {
+            if(match[2].str()!="0") throw VbaRuntimeError(3251,"Native nondefault member IDs/enumerators are not implemented");
+            const auto candidate=folded(match[1].str());if(!defaultName.empty() && defaultName!=candidate) throw VbaRuntimeError(5,"Ambiguous native class default member");defaultName=candidate;
+        }
         if(std::regex_search(line,document)) throw VbaRuntimeError(3251,"Document CodeBehind is not a standalone native class");
         if(std::regex_match(line,match,attribute)) {++names;if(folded(match[1].str())!=folded(name)) throw VbaRuntimeError(5,"Native class source name does not match its catalog name");}
     }
     if(versions!=1 || names!=1) throw VbaRuntimeError(3251,"Native class requires one CLASS version and matching VB_Name attribute");
-    auto definition=std::make_shared<NativeVbaClassDefinition>();definition->name=std::move(name);definition->source=std::move(source);
+    auto definition=std::make_shared<NativeVbaClassDefinition>();definition->name=std::move(name);definition->source=std::move(source);definition->defaultName=std::move(defaultName);
     definition->initial=createVbaModuleState(definition->source);
     const auto analysis=analyzeVba(active);
     for(const auto& procedure:analysis.procedures) {
@@ -53,6 +59,12 @@ std::shared_ptr<const NativeVbaClassDefinition> compileNativeVbaClass(std::strin
             if(visible || !signature || signature->function || !signature->names.empty()) throw VbaRuntimeError(3251,"Class_Initialize requires a private parameterless Sub");
             definition->initialize=true;
         }
+    }
+    if(!definition->defaultName.empty()) {
+        const auto& name=definition->defaultName;auto shape=nativeVbaPropertySignature(definition->source,name,VbaPropertyAccess::Get,true);
+        const auto found=definition->visible.find(name);
+        if(!shape && found!=definition->visible.end() && found->second) shape=nativeVbaProcedureSignature(definition->source,name);
+        if(!shape || !shape->function) throw VbaRuntimeError(3251,"Default member requires a public Function or Property Get");
     }
     for(const auto& [name,type]:definition->initial->types) if(isProjectClassType(type)) definition->classTypes.insert(std::string(projectClassTypeName(type)));
     for(const auto& [name,value]:definition->initial->values)
@@ -141,6 +153,21 @@ public:
             return indexed(run(name,{},property ? std::optional<VbaPropertyAccess>(VbaPropertyAccess::Get) : std::nullopt),arguments);
         return run(name,arguments,property ? std::optional<VbaPropertyAccess>(VbaPropertyAccess::Get) : std::nullopt);
     }
+    std::optional<VbaArgumentSignature> defaultArgumentSignature() const override {
+        check();if(definition_->defaultName.empty()) return {};
+        if(auto shape=signature(definition_->defaultName,VbaPropertyAccess::Get)) return shape;
+        return method(definition_->defaultName);
+    }
+    bool hasScalarDefault() const override {const auto shape=defaultArgumentSignature();return shape && shape->required==0;}
+    VbaValue scalarValue() override {return defaultMember({},false);}
+    VbaValue defaultMember(const std::vector<VbaValue>& arguments,bool) override {
+        check();if(definition_->defaultName.empty()) throw VbaRuntimeError(438,"Native class has no declared default member");
+        return invokeMember(definition_->defaultName,arguments,true);
+    }
+    void assignDefaultMember(const std::vector<VbaValue>& indices,const VbaValue& value) override {
+        check();if(definition_->defaultName.empty()) throw VbaRuntimeError(438,"Native class has no declared default member");
+        write(definition_->defaultName,indices,value,value.kind==VbaValue::Kind::Object);
+    }
     VbaValue indexed(const VbaValue& value,const std::vector<VbaValue>& arguments) {
         if(arguments.empty()) return value;
         if(isVbaArray(value)) return vbaArrayElement(value,arguments);
@@ -186,7 +213,6 @@ public:
     void assignIndexedMember(std::string_view name,const std::vector<VbaValue>& indices,const VbaValue& value) override {write(name,indices,value,false);}
     void assignIndexedObject(std::string_view name,const std::vector<VbaValue>& indices,const VbaValue& value) override {write(name,indices,value,true);}
     VbaValue item(std::string_view) override {throw VbaRuntimeError(3251,"Native class default/bang members require unsupported attribute binding");}
-    VbaValue defaultMember(const std::vector<VbaValue>&,bool) override {throw VbaRuntimeError(3251,"Native class default members require unsupported attribute binding");}
     std::shared_ptr<const NativeVbaClassDefinition> definition_;VbaClassContext context_;std::shared_ptr<VbaModuleState> state_;
 };
 bool ClassHost::hasClassInstance() const {return owner_.ownScope();}

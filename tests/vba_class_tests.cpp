@@ -1,3 +1,4 @@
+#include "vba_default_class_fixture.hpp"
 #include "vba_typed_class_fixture.hpp"
 #include "vba_class.hpp"
 #include "vba_class_fixture.hpp"
@@ -29,7 +30,7 @@ public:
     std::shared_ptr<VbaObject> constructClass(std::string_view name) override {auto key=std::string(name);for(auto& ch:key) ch=static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));const auto found=state->classes.find(key);if(found==state->classes.end()) throw VbaRuntimeError(3251,"Unknown technical class");VbaClassContext context;context.check=[state=state]{if(!state->alive) throw VbaRuntimeError(3420,"Class technical context closed");};context.host=[state=state]{return std::make_unique<ClassServices>(state);};return constructNativeVbaClass(compileNativeVbaClass(key=="nativecounter" ? "NativeCounter" : key,found->second),std::move(context));}
 };
 }
-void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<ClassState>();ClassServices host(state);
+void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<ClassState>();ClassServices host(state);state->classes["nativedefault"]=nativeDefaultClassFixture;
     const auto run=[&](const char* name){auto result=executeVbaProcedure(nativeClassConsumer,name,host);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Class "<<name<<": "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue);return *result.typedReturnValue;};
     assert(run("ClassProbe").number==911);assert(run("ArrayProbe").number==25);assert(run("MethodProbe").text=="x18:20");assert(run("IdentityProbe").boolean);assert(run("ValueGuard").number==325101);assert(run("RefGuard").number==325101);
     auto first=host.constructClass("NativeCounter"),second=host.constructClass("NativeCounter");assert(first->className()=="NativeCounter" && first->member("Calls",{}).number==1 && first->member("ReadCount",{}).number==0);
@@ -61,5 +62,12 @@ void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<Cla
     }
     state->classes["selflink"]="VERSION 1.0 CLASS\nAttribute VB_Name = \"SelfLink\"\nPublic NextLink As SelfLink\nPublic Function Identity As SelfLink\nSet Identity=Me\nEnd Function\n";
     auto self=host.constructClass("SelfLink");assert(self->member("Identity",{}).object==self && !self->member("NextLink",{}).object);
+    result=executeVbaProcedure(nativeDefaultClassConsumer,"DefaultClassProbe",host);if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Default class: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==1058);
+    auto defaultValue=host.constructClass("NativeDefault");assert(defaultValue->hasScalarDefault() && scalarVbaValue(VbaValue::reference(defaultValue)).number==4 && defaultValue->member("Reads",{}).number==1);
+    defaultValue->assignDefaultMember({VbaValue::longInteger(2)},VbaValue::longInteger(17));assert(defaultValue->defaultMember({},false).number==15);
+    error=0;try{(void)first->defaultMember({},true);}catch(const VbaRuntimeError& e){error=e.number;}assert(error==438);
+    for(const auto& invalid:std::vector<std::string>{nativeDefaultClassFixture+"Attribute Item.VB_UserMemId = 0\n",nativeDefaultClassFixture+"Attribute Item.VB_UserMemId = -4\n"}) {
+        error=0;try{(void)compileNativeVbaClass("NativeDefault",invalid);}catch(const VbaRuntimeError& e){error=e.number;}assert(error==5 || error==3251);
+    }
     state->alive=false;error=0;try{first->member("Calls",{});}catch(const VbaRuntimeError& e){error=e.number;}assert(error==3420);
 }

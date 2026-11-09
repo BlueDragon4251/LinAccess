@@ -784,6 +784,9 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         auto source = withoutComment(raw);
         if (source.empty()) continue;
         if(within) {
+            static const std::regex defaultAttribute(R"(^Attribute\s+([A-Za-z_][A-Za-z0-9_]*)\.VB_UserMemId\s*=\s*0\s*$)",std::regex::icase);
+            std::smatch attribute;
+            if(std::regex_match(source,attribute,defaultAttribute) && lower(attribute[1].str())==lower(requestedName)) continue;
             if(physicalLine && std::isdigit(static_cast<unsigned char>(source.front()))) {
                 std::size_t digits=0; while(digits<source.size() && std::isdigit(static_cast<unsigned char>(source[digits]))) ++digits;
                 if(digits==source.size() || source[digits]==':' || std::isspace(static_cast<unsigned char>(source[digits]))) {

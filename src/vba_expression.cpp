@@ -827,13 +827,32 @@ private:
             }
             const auto suffixStart=index_;
             if (take("(")) {
-                std::vector<VbaValue> arguments;
+                std::vector<VbaValue> arguments;std::vector<std::string> names;std::vector<bool> omitted;
+                const auto shape=host_ && value.kind==VbaValue::Kind::Object && value.object ? value.object->defaultArgumentSignature() : std::nullopt;
                 if (!take(")")) {
-                    do { arguments.push_back(nextSymbol(",") || nextSymbol(")") ? VbaValue::missing() : expression(1)); } while (take(",") || (accessExpression_ && take(";")));
+                    do {
+                        std::string name;if(peek().type==Token::Type::Word && index_+1<tokens_.size() && tokens_[index_+1].value==":=") {name=lower(consume().value);consume();}
+                        const bool missing=nextSymbol(",") || nextSymbol(")");
+                        if(missing && !name.empty()) throw error("Named default argument requires a value",450);
+                        arguments.push_back(missing ? VbaValue::missing() : expression(1,shape && shape->objectArgument(arguments.size(),name)));
+                        names.push_back(std::move(name));omitted.push_back(missing);
+                    } while (take(",") || (accessExpression_ && take(";")));
                     require(")");
                 }
                 if (host_) {
                     try {
+                        if(std::any_of(names.begin(),names.end(),[](const auto& name){return !name.empty();})) {
+                            if(!shape || shape->variadic) throw error("Named default member arguments are unavailable",3251);
+                            std::vector<VbaValue> ordered(shape->names.size(),VbaValue::missing());std::vector<bool> assigned(shape->names.size()),provided(shape->names.size());bool named=false;std::size_t last=0;
+                            for(std::size_t i=0;i<arguments.size();++i) {
+                                std::size_t target=i;if(!names[i].empty()) {named=true;target=shape->names.size();for(std::size_t j=0;j<shape->names.size();++j) if(lower(shape->names[j])==names[i]) {target=j;break;}if(target==shape->names.size()) throw error("Named default argument not found",448);}
+                                else if(named) throw error("Positional argument after named argument",450);
+                                if(target>=ordered.size() || assigned[target]) throw error("Default argument supplied more than once or too many arguments",450);
+                                ordered[target]=arguments[i];assigned[target]=true;provided[target]=!omitted[i];last=std::max(last,target);
+                            }
+                            for(std::size_t i=0;i<shape->required;++i) if(!provided[i]) throw error("Required default argument omitted",450);
+                            ordered.resize(last+1);arguments=std::move(ordered);
+                        }
                         if(isVbaArray(value)) {
                             if(!arguments.empty() || accessExpression_) {
                                 const bool root=!accessExpression_ && suffixStart==primaryStart+1 && tokens_[primaryStart].type==Token::Type::Word;

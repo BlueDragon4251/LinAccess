@@ -5114,3 +5114,37 @@ solchem Arrayfeld und erhält den ursprünglichen Archivhash. Kein neuer DEB-Nac
 F042/F043 bleiben offen; Katalog456/386/70 unverändert. Ohne Zwischenabschluss an
 nachgewiesenen benutzerdefinierten Klassen-Standardmitgliedern und weiteren offenen
 Anforderungen weiterarbeiten.
+
+
+## Deklarierte Klassen-Standardmitglieder (2026-11-09)
+
+Ein tatsächlich vorhandenes Memberattribut VB_UserMemId=0 bindet jetzt einen
+öffentlichen Property Get oder eine öffentliche Function als Klassenstandard.
+Die ursprünglichen Attributzeilen/Zeilennummern bleiben erhalten; der Parser
+überspringt nur den passenden geschlossenen0-Attributsatz der gewählten Prozedur.
+Unbekannte/private/nicht lesbare Standardmitglieder, widersprüchliche Namen und
+nicht implementierte andere Member-IDs/Enumeratoren werden vor Konstruktion
+abgewiesen. Ein unannotiertes Item wird nicht zum Klassenstandard erfunden.
+Ohne deklarierten Standard schlägt ein direkter Standardzugriff438 fehl.
+
+Implizite skalare Auswertung verwendet nur einen Standardleser, der ohne
+Pflichtargument aufrufbar ist. Getterfehler und die vorhandene16-stufige Grenze
+rekursiver Standardwerte bleiben erhalten. Explizite Positions-/Namensargumente,
+Missing/optionale Indizes und vorhandene Property-Schreibbinder werden verwendet;
+Standardargumente bekommen die echte Signatur, unabhängig von einem anderen
+öffentlichen Item-Member. Namensfehler448 werden vor Getteraufruf erkannt.
+Standard-Schreiben verwendet tatsächliche Let/Set-Accessoren beziehungsweise
+vorhandene geprüfte Rückgabeweiterleitung. Benannte Setterindizes, Klassen-Bang-
+Syntax, vollständiges externes ByRef, allgemeine COM-Attribute/-IDs und
+Enumeratoren bleiben offen; objektwertige Standard-Set-Kombinationen sind kein
+separater Windows-Nachweis. Diese Umsetzung ersetzt die frühere pauschale
+Standardmitglied-Attributgrenze nur für den beschriebenen0-Pfad.
+
+App gebaut, erstes Laufzeitbündel der vorhandenen Kern-/GUI-Ziele2/2 bestanden
+(22,36s:4,07/18,29s). Gemeinsame technische Quellen prüfen Default-Get/Let,
+impliziten Skalarwert, optionale/namentliche Indizes, unverwechselbares Item,
+private Zustände und widersprüchliche/andereIDs. Der echte Projektpfad sowie eine
+gewöhnliche archivierte Defaultklasse und die unveränderte ursprüngliche
+Archivsignatur sind geprüft. Keine neue CTest-ID/Original-/Windows-/Vollsuite.
+Katalog456/386/70 unverändert, F042/F043 bleiben offen. Nach privater Veröffentlichung
+aktuelles Paket prüfen und ohne Zwischenabschluss weitere Anforderungen bearbeiten.

@@ -1,3 +1,4 @@
+#include "vba_default_class_fixture.hpp"
 #include "access_form_objects.hpp"
 #include "vba_typed_class_fixture.hpp"
 #include <QCryptographicHash>
@@ -45,6 +46,9 @@ void exerciseNativeClasses(MainWindow& window,QSqlDatabase db) {using namespace 
             assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue && result.typedReturnValue->number==probe.second);
         }
     }
+    sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('class','NativeDefault',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromStdString(nativeDefaultClassFixture)}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
+    {NativeStandardModuleHost defaultHost(&window,db,[]{});const auto probe=executeVbaProcedure(nativeDefaultClassConsumer,"DefaultClassProbe",defaultHost);if(probe.status!=VbaExecutionStatus::Completed) std::cerr<<"Project default class: "<<probe.explanation<<" line "<<probe.line<<" error "<<probe.errorNumber<<"\n";assert(probe.status==VbaExecutionStatus::Completed && probe.typedReturnValue->number==1058);}
+    assert(sql.exec("DELETE FROM main._la_objects WHERE kind='class' AND name='NativeDefault'"));
     std::shared_ptr<VbaObject> retained;
     {QDialog editor(&window);NativeStandardModuleHost host(&editor,db,[]{});retained=evaluateVbaObjectExpression("New NativeCounter",host,{}).object;assert(retained && retained->member("Value",{}).number==1);}
     assert(retained->member("Value",{}).number==1); // Project lifetime, not the caller editor's lifetime.
@@ -69,6 +73,7 @@ void exerciseNativeClasses(MainWindow& window,QSqlDatabase db) {using namespace 
     const auto archiveHash=[&] {QSqlQuery rows(db);assert(rows.exec("SELECT id,name,source_bytes FROM main._la_access_artifacts ORDER BY id"));QCryptographicHash hash(QCryptographicHash::Sha256);while(rows.next()) {const auto name=rows.value(1).toString().toUtf8(),raw=rows.value(2).toByteArray();hash.addData(QByteArray::number(rows.value(0).toLongLong())+":"+QByteArray::number(name.size())+":"+name+":"+QByteArray::number(raw.size())+":"+raw);}return hash.result();};
     const auto beforeArchive=archiveHash();QVector<qint64> introduced;
     const auto archiveClass=[&](const QString& kind,const QString& name,const QByteArray& raw) {QSqlQuery add(db);add.prepare("INSERT INTO main._la_access_artifacts(source_sha256,source_filename,kind,name,status,format,detail,source_bytes) VALUES(?,'technical.class',?,?,'source_only','technical-class-scope','',?)");add.addBindValue(QString::fromLatin1(QCryptographicHash::hash(raw,QCryptographicHash::Sha256).toHex()));add.addBindValue(kind);add.addBindValue(name);add.addBindValue(raw);assert(add.exec());const auto id=add.lastInsertId().toLongLong();introduced.push_back(id);return id;};
+    {auto source=QString::fromStdString(nativeDefaultClassFixture);source.replace("NativeDefault","ImportedDefault");archiveClass("vba","ImportedDefault",source.toUtf8());auto object=constructNativeProjectClass(db,&window,"ImportedDefault");assert(object->defaultMember({VbaValue::longInteger(3)},false).number==7 && object->member("Item",{VbaValue::longInteger(3)}).number==1002);}
     const auto readBytes=[&](qint64 id){QSqlQuery read(db);read.prepare("SELECT source_bytes FROM main._la_access_artifacts WHERE id=?");read.addBindValue(id);assert(read.exec() && read.next());return read.value(0).toByteArray();};
     auto importedText=QString::fromStdString(nativeClassFixture);importedText.replace("NativeCounter","ImportedCounter");importedText+="Public Function Caption As String\nCaption=\"ä\"\nEnd Function\n";const auto ansi=importedText.toLatin1();const auto ansiId=archiveClass("vba","ImportedCounter",ansi);assert(ansi.contains(char(0xe4)) && nativeProjectClassAvailable(db,"ImportedCounter"));
     auto imported=constructNativeProjectClass(db,&window,"ImportedCounter");assert(imported->member("Caption",{}).text=="ä" && imported->member("Value",{}).number==1);(void)imported->invokeMember("Add",{VbaValue::longInteger(2)},false);assert(imported->member("Value",{}).number==3 && readBytes(ansiId)==ansi);
