@@ -4,6 +4,7 @@
 #include <functional>
 class QWidget;
 namespace linaccess {
+std::string nativeProjectClassName(QSqlDatabase database,std::string_view name);
 bool nativeProjectClassTypeKnown(QSqlDatabase database,std::string_view name);
 void validateNativeProjectClassFields(QSqlDatabase database,const VbaModuleState& state);
 bool nativeProjectClassAvailable(QSqlDatabase database,std::string_view name);

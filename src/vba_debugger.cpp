@@ -14,7 +14,7 @@ std::string shorten(std::string_view value,bool* shortened) {
     *shortened=end<value.size();std::string result;for(char ch:value.substr(0,end)) {if(ch=='\n') result+="\\n";else if(ch=='\r') result+="\\r";else if(ch=='\t') result+="\\t";else if(ch=='\0') result+="\\0";else result+=ch;}if(*shortened) result+="…";return result;
 }
 VbaDebugVariable describe(const std::string& name,const std::string& declared,const VbaValue& value) {
-    VbaDebugVariable item;item.name=name;item.declaredType=isProjectClassType(declared) ? std::string(projectClassTypeName(declared)) : declared;
+    VbaDebugVariable item;item.name=name;item.declaredType=isProjectClassType(declared) ? std::string(declared.substr(projectClassPrefix.size())) : declared;
     try {
         switch(value.kind) {
         case VbaValue::Kind::Null:item.valueType="Null";item.value="Null";break;

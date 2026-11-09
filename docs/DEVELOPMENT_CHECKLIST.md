@@ -4052,3 +4052,34 @@ und fanden den fehlenden echten Formularfeld-Set-Pfad. Betroffene Ziele gezielt
 wiederholt; keine neue CTest-ID oder Vollsuite. Sieben Upload-/Fixturehashes
 unverändert. Kein neuer Windows-/Distributions-/DEB-Nachweis; letzter geprüfter
 DEB-Stand7f40893 liegt vor archivierten und typisierten Klassenerweiterungen.
+
+
+## Benannte Projektklassen-Arrays (2026-11-09)
+
+Feste/dynamische lokale und Modul-/Klassenfelder, ReDim/Preserve, geprüfte Set-
+Elementzuweisungen, gleiche ByRef-Arrayparameter und Function-/Get-Rückgaben
+verwenden jetzt die reale gebundene Projektklasse als Elementtyp. Initialisierte
+und durch Erase zurückgesetzte Plätze enthalten Nothing; falsche Objekt- oder
+Arraytypen scheitern13. Kopien behalten getrennte Arraywerte und gemeinsame reale
+Objektreferenzen. Klassenname/Enum-Grenzen werden einschließlich expliziter ReDim-
+Typangaben vor Effekten gebunden. Ein Array wird nicht als skalares Klassenobjekt
+behandelt. VarType ist8201; VBA-TypeName löst den kanonischen tatsächlichen Namen
+im Projekt auf, auch für undimensionierte Rückgaben. Debugger-/C++-Typanzeigen
+behalten die normalisierte Deklarationsschreibweise, ohne interne Typpräfixe.
+
+For Each behält die normativ erforderliche Variant-Schleifenvariable für Arrays;
+die Klassentypisierung der Elemente hebt diese Regel nicht auf (MS-VBAL5.4.2.4).
+Reale Rückgabearrays werden einmal enumeriert. Bestehende Rang-/Bounds-/Preserve-/
+Speicher-/ByRef-Element- und Mutationsgrenzen bleiben erhalten. Keine allgemeinen
+Collection-/DAO-Typarrays, AsNew, Interfaces oder vollständige Referenzparität.
+Dies ersetzt die vorherige Klassenarray-Grenze für den beschriebenen Umfang.
+
+App gebaut; vorhandenes Kern-/GUI-Bündel nach Fixture-/Binderkorrektur2/2 bestanden
+(22,53s:4,01/18,52s). Erste Prüfung fand die falsche ForEach-Fixture-Deklaration;
+danach war der skalare Objektbindungszweig für ganze Klassenarrays zu korrigieren.
+Nur betroffene bestehende Ziele wiederholt, keine neue CTest-ID/Original-/Windows-
+oder Vollsuite. Der GUI-Archivtest umfasst gewöhnliche importierte Klassen mit
+solchem Arrayfeld und erhält den ursprünglichen Archivhash. Kein neuer DEB-Nachweis.
+F042/F043 bleiben offen; Katalog456/386/70 unverändert. Ohne Zwischenabschluss an
+nachgewiesenen benutzerdefinierten Klassen-Standardmitgliedern und weiteren offenen
+Anforderungen weiterarbeiten.

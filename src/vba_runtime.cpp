@@ -704,7 +704,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     const std::regex ifThen(R"(^If\b\s*(.+)\bThen\s*$)", std::regex::icase);
     const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
     const std::regex variableAssignment(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
-    const std::regex arrayElementType(R"(^([A-Za-z]+)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?$)",std::regex::icase);
+    const std::regex arrayElementType(R"(^([A-Za-z_][A-Za-z0-9_]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?$)",std::regex::icase);
     const std::regex midDollarTarget(R"(^Mid\$\s*\((.*)\)$)",std::regex::icase);
     const std::regex stringAlignment(R"(^(LSet|RSet)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)",std::regex::icase);
     const std::regex message(R"(^MsgBox(?:\s+(.+)|\((.*)\))$)", std::regex::icase);
@@ -853,7 +853,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 hasCancel = accessor.empty() && std::regex_match(params, cancelParam);
                 bool optionalSeen=false,paramArraySeen=false;
                 const std::regex paramArray(R"(^ParamArray\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+Variant)?$)",std::regex::icase);
-                const std::regex arrayParameter(R"(^(?:ByRef\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+(Byte|Integer|Long|Single|Double|Currency|Date|Boolean|String|Object|Variant))?$)",std::regex::icase);
+                const std::regex arrayParameter(R"(^(?:ByRef\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*))?$)",std::regex::icase);
                 const auto declarations=splitArguments(params);
                 for (std::size_t parameterIndex=0;parameterIndex<declarations.size();++parameterIndex) {
                     const auto& declaration=declarations[parameterIndex];
@@ -869,7 +869,9 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     }
                     if(std::regex_match(declaration,declared,arrayParameter)) {
                         if(optionalSeen && !setterValue) return {VbaExecutionStatus::Unsupported,"Required array parameter after Optional is not implemented",line};
-                        auto type=lower(declared[2].str()); if(type.empty()) type=implicitTypes.forName(declared[1].str()); if(type.empty()) type="variant";
+                        auto type=nativeDeclaredType(lower(declared[2].str())); if(type.empty()) type=implicitTypes.forName(declared[1].str()); if(type.empty()) type="variant";
+                        static const std::unordered_set<std::string> allowed{"variant","byte","integer","long","single","double","currency","date","boolean","string","object"};
+                        if(!allowed.contains(type) && !isProjectClassType(type)) return {VbaExecutionStatus::Unsupported,"Array parameter element type unsupported",line};
                         if(parameters) parameters->push_back({declared[1].str(),true,type+"()",false,{}});
                         continue;
                     }
@@ -913,7 +915,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 const bool arrayResult=match[5].matched;
                 if(arrayResult) {
                     static const std::unordered_set<std::string> elementTypes{"variant","byte","integer","long","single","double","currency","date","boolean","string","object"};
-                    if(!elementTypes.contains(declaredResult)) return {VbaExecutionStatus::Unsupported,"Array result element type unsupported",line};
+                    if(!elementTypes.contains(declaredResult) && !isProjectClassType(declaredResult)) return {VbaExecutionStatus::Unsupported,"Array result element type unsupported",line};
                 }
                 if(!isFunction && !declaredResult.empty()) return {VbaExecutionStatus::Unsupported,"Sub and Property setters cannot declare a result type",line};
                 if (isFunction && !declaredResult.empty() && declaredResult!="variant" && declaredResult!="boolean" && declaredResult!="string" && declaredResult!="integer" && declaredResult!="long" && declaredResult!="single" && declaredResult!="double" && declaredResult!="currency" && declaredResult!="date" && declaredResult!="byte" && declaredResult!="object" && declaredResult!="collection" && nativeScriptingObjectType(declaredResult).empty() && !nativeDaoType(declaredResult) && nativeAccessObjectType(declaredResult).empty() && !isProjectClassType(declaredResult))
@@ -1404,7 +1406,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"ReDim fixed String specification unsupported",line};result.errorNumber=error.number;return result;}
                     entry=trim(entry.substr(0,as));
                     if(elementType!="variant" && elementType!="byte" && elementType!="integer" && elementType!="long" && elementType!="single"
-                        && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string" && !elementType.starts_with("string*") && elementType!="object")
+                        && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string" && !elementType.starts_with("string*") && elementType!="object" && !isProjectClassType(elementType))
                         return {VbaExecutionStatus::Unsupported,"ReDim element type unsupported",line};
                 }
                 const auto target=memberTarget(entry);
@@ -1443,7 +1445,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             } catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Const declaration unsupported",line}; result.errorNumber=error.number; return result; }
         } else if (std::regex_match(source, match, dim)) {
             const bool persistent=lower(source.substr(0,6))=="static";
-            const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z]+)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
+            const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
             for (auto entry:splitArguments(match[1].str())) {
                 std::smatch declared;
                 entry = trim(entry);
@@ -1453,7 +1455,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Fixed array element declaration unsupported",line};result.errorNumber=error.number;return result;}
                     if(type.empty()) type=implicitTypes.forName(declared[1].str()); if(type.empty()) type="variant";
                     if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
-                        && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object")
+                        && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object" && !isProjectClassType(type))
                         return {VbaExecutionStatus::Unsupported,"Dynamic array element type unsupported",line};
                     const auto bounds=trim(declared[2].str());
                     const auto dimensions=bounds.empty() ? std::optional<std::vector<VbaArrayDimension>>{} : literalArrayBounds(bounds,moduleArrayBase(module),declarationConstants,constantMode);
@@ -1608,7 +1610,7 @@ std::vector<std::string> procedureClassTypes(std::string_view module,const std::
         expression(instruction.expression);expression(instruction.endExpression);expression(instruction.stepExpression);
         for(const auto& item:instruction.outputItems) expression(item.expression);
         if(instruction.type==Statement::Type::ObjectAssign || instruction.type==Statement::Type::IndexedAssign || instruction.type==Statement::Type::If) expression(instruction.argument);
-        for(const auto& target:instruction.resizeTargets) expression(target.bounds);
+        for(const auto& target:instruction.resizeTargets) {declared(target.elementType);expression(target.bounds);}
     }
     const auto enums=moduleEnumNames(module);for(const auto& name:names) if(enums.contains(name)) throw VbaRuntimeError(3251,"Enum type aliases are not project class references");
     return {names.begin(),names.end()};
@@ -1624,7 +1626,7 @@ std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view mod
         signature.declaredTypes.push_back(parameter.type);
         signature.required+=!parameter.optional && !parameter.paramArray;
         const auto& type=parameter.type;
-        signature.objectArguments.push_back(!parameter.paramArray && (type=="object" || type=="collection" || isProjectClassType(type)
+        signature.objectArguments.push_back(!parameter.paramArray && (type=="object" || type=="collection" || (isProjectClassType(type) && !type.ends_with("()"))
             || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()));
     }
     return signature;
@@ -1745,7 +1747,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
     const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
     const std::regex declaration(R"(^\s*(Dim|Private|Public|Global)\s+(.+)$)",std::regex::icase);
     const std::regex variable(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
-    const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z]+)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
+    const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
     const auto scalarConstants=moduleConstantDeclarations(module); std::size_t constantIndex=0; int sourceLine=0;
     VbaVariables knownConstants; const auto constantMode=moduleCompareMode(module);
     const auto lengthConstants=moduleConstantValues(module);
@@ -1780,8 +1782,9 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
             if(std::regex_match(entry,field,dynamicArray)) {
                 const auto name=lower(field[1].str());auto type=declaredScalarType(field[3].str(),field[4].str(),lengthConstants);if(type.empty()) type=implicitTypes.forName(name);if(type.empty()) type="variant";
                 if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
-                    && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object")
+                    && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object" && !isProjectClassType(type))
                     throw VbaRuntimeError(3251,"Module dynamic array element type unsupported");
+                if(isProjectClassType(type) && enumNames.contains(std::string(projectClassTypeName(type)))) throw VbaRuntimeError(3251,"Module Enum arrays are not project class references");
                 if(state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
                 const auto bounds=trim(field[2].str()); auto value=makeUnallocatedVbaArray(type);
                 if(!bounds.empty()) {
@@ -2091,7 +2094,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     const auto integralType=[](std::string_view type) { return type=="integer" || type=="long"; };
     const auto checkedType=[&](std::string_view type) { return type.ends_with("()") || integralType(type) || type=="boolean" || type=="string" || type.starts_with("string*") || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection" || type=="object" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty(); };
     const auto scalarType=[&](std::string_view type) { return checkedType(type) && !isProjectClassType(type) && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !type.ends_with("()"); };
-    const auto objectType=[](std::string_view type) { return type=="object" || type=="collection" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || type.starts_with("dao.") || type.starts_with("access.") || !nativeAccessObjectType(type).empty(); };
+    const auto objectType=[](std::string_view type) { return type=="object" || type=="collection" || (isProjectClassType(type) && !type.ends_with("()")) || !nativeScriptingObjectType(type).empty() || type.starts_with("dao.") || type.starts_with("access.") || !nativeAccessObjectType(type).empty(); };
     auto errorState = std::make_shared<ErrorObject>();
     locals["err"] = VbaValue::reference(errorState);
     bool resumeNext = false;

@@ -84,6 +84,7 @@ public:
     virtual void leaveModule() noexcept {}
     virtual bool hasInstanceIdentifier(std::string_view) { return false; }
     virtual bool hasClassInstance() const { return false; }
+    virtual std::string projectClassName(std::string_view name) {if(!knowsClassType(name)) throw VbaRuntimeError(3251,"Project class type is unavailable");return std::string(name);}
     virtual bool knowsClassType(std::string_view) { return false; }
     virtual bool canConstructClass(std::string_view) { return false; }
     virtual std::shared_ptr<VbaObject> constructClass(std::string_view) { throw VbaRuntimeError(3251,"Native class construction requires a project class context"); }

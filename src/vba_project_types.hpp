@@ -4,8 +4,8 @@
 namespace linaccess {
 inline constexpr std::string_view projectClassPrefix="projectclass:";
 inline bool isProjectClassType(std::string_view type) {return type.starts_with(projectClassPrefix);}
-inline std::string_view projectClassTypeName(std::string_view type) {return isProjectClassType(type) ? type.substr(projectClassPrefix.size()) : std::string_view{};}
-inline bool isDeclaredObjectType(std::string_view type) {return isProjectClassType(type) || !nativeObjectType(type).empty();}
+inline std::string_view projectClassTypeName(std::string_view type) {if(!isProjectClassType(type)) return {};type.remove_prefix(projectClassPrefix.size());if(type.ends_with("()")) type.remove_suffix(2);return type;}
+inline bool isDeclaredObjectType(std::string_view type) {return !type.ends_with("()") && (isProjectClassType(type) || !nativeObjectType(type).empty());}
 }
 namespace linaccess {
 inline bool isProjectClassIdentifier(std::string_view name) {

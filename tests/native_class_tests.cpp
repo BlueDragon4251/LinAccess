@@ -39,7 +39,7 @@ void exerciseNativeClasses(MainWindow& window,QSqlDatabase db) {using namespace 
     bool found=false;for(auto* tree:window.findChildren<QTreeWidget*>()) for(auto* item:tree->findItems("NativeCounter",Qt::MatchExactly|Qt::MatchRecursive)) if(item->data(0,Qt::UserRole).toString()=="class") found=true;assert(found);
     assert(nativeProjectClassAvailable(db,"nativecounter"));
     {NativeStandardModuleHost typedHost(&window,db,[]{});
-        for(const auto& probe:std::vector<std::pair<const char*,int>>{{"TypedProbe",33},{"TypedMismatch",13},{"TypedRefMismatch",13}}) {
+        for(const auto& probe:std::vector<std::pair<const char*,int>>{{"TypedProbe",33},{"TypedMismatch",13},{"TypedRefMismatch",13},{"ClassArrayProbe",28},{"ClassArrayMismatch",13},{"ClassArrayRefMismatch",13}}) {
             const auto result=executeVbaProcedure(typedClassConsumer,probe.first,typedHost);
             if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Project typed class "<<probe.first<<": "<<result.explanation<<" error "<<result.errorNumber<<"\n";
             assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue && result.typedReturnValue->number==probe.second);

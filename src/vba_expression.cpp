@@ -848,7 +848,7 @@ private:
                                     value=source->second;
                                 }
                                 if(referenceCapture_ && referenceCapture_->start==primaryStart && source!=locals_.end()) {
-                                    auto type=lower(vbaArrayTypeName(value)); type.resize(type.size()-2);
+                                    auto type=vbaArrayElementType(value);if(type.starts_with("string*")) type="string";
                                     referenceCapture_->element=VbaArrayElementReference{source->first,std::move(type),element,vbaArrayAllocation(value)};
                                     referenceCapture_->end=index_;
                                 }
@@ -1669,7 +1669,7 @@ private:
                     : value.kind==VbaValue::Kind::Decimal ? 14 : value.kind==VbaValue::Kind::Date ? 7 : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
                     : (value.kind==VbaValue::Kind::Error || value.kind==VbaValue::Kind::Missing) ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : value.kind==VbaValue::Kind::Array ? vbaArrayType(value) : 11;
                 if (word=="vartype") return jetEval_ ? VbaValue::longInteger(type) : VbaValue::integer(static_cast<std::int16_t>(type));
-                if(isVbaArray(value)) return VbaValue::string(vbaArrayTypeName(value));
+                if(isVbaArray(value)) {const auto element=vbaArrayElementType(value);return VbaValue::string(isProjectClassType(element) ? host_->projectClassName(projectClassTypeName(element))+"()" : vbaArrayTypeName(value));}
                 if (type==9) {
                     if (!value.object) return VbaValue::string("Nothing");
                     if(!value.object->className().empty()) return VbaValue::string(std::string(value.object->className()));

@@ -60,6 +60,7 @@ std::shared_ptr<const NativeVbaClassDefinition> compiled(QSqlDatabase db,const C
     return result;
 }
 }
+std::string nativeProjectClassName(QSqlDatabase db,std::string_view name) {const auto row=revision(db,QString::fromUtf8(name.data(),name.size()));if(!row) throw VbaRuntimeError(3251,"Project class type is unavailable");proveNamespace(db,*row);return row->name.toStdString();}
 bool nativeProjectClassTypeKnown(QSqlDatabase db,std::string_view name) {const auto row=revision(db,QString::fromUtf8(name.data(),name.size()));if(!row) return false;proveNamespace(db,*row);return true;}
 void validateNativeProjectClassFields(QSqlDatabase db,const VbaModuleState& state) {for(const auto& [name,type]:state.types) if(isProjectClassType(type) && !nativeProjectClassTypeKnown(db,projectClassTypeName(type))) throw VbaRuntimeError(3251,"Module declaration type is unavailable");}
 bool nativeProjectClassAvailable(QSqlDatabase db,std::string_view name) {const auto row=revision(db,QString::fromUtf8(name.data(),name.size()));if(!row) return false;(void)compiled(db,*row);return true;}

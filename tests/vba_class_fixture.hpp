@@ -8,6 +8,7 @@ Private reads As Long
 Private storedBag As Object
 Public Calls As Long
 Public Child As NativeCounter
+Public Children() As NativeCounter
 Public Cells() As Long
 Public Const ConstantValue=4
 Private Sub Class_Initialize()

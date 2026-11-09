@@ -79,6 +79,7 @@ public:
     void executionObserved(std::string_view source,std::string_view name,const VbaExecutionResult& result,bool event) override {services_->executionObserved(source,name,result,event);}
     std::vector<std::shared_ptr<VbaModuleState>> globalModuleStates() override {return services_->globalModuleStates();}
     std::optional<std::string> moduleForProcedure(std::string_view name) override {return services_->moduleForProcedure(name);}
+    std::string projectClassName(std::string_view name) override {return services_->projectClassName(name);}
     bool knowsClassType(std::string_view name) override {return services_->knowsClassType(name);}
     bool canConstructClass(std::string_view name) override {return services_->canConstructClass(name);}
     std::shared_ptr<VbaObject> constructClass(std::string_view name) override {return services_->constructClass(name);}

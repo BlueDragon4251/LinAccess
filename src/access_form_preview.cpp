@@ -518,6 +518,7 @@ class PreviewVbaHost final : public linaccess::VbaHost {
 public:
     static void openProjectDocument(QSqlDatabase,QWidget*,linaccess::AccessDocumentKind,const QString&,const QString&,std::optional<QString>,int,int,QPointer<AccessFormPreview> caller={});
     explicit PreviewVbaHost(AccessFormPreview& preview) : preview_(preview),observationDatabase_(preview.db_.databaseName()) {}
+    std::string projectClassName(std::string_view name) override {requireInstance();return linaccess::nativeProjectClassName(preview_.db_,name);}
     bool knowsClassType(std::string_view name) override {requireInstance();return linaccess::nativeProjectClassTypeKnown(preview_.db_,name);}
     bool canConstructClass(std::string_view name) override {requireInstance();return linaccess::nativeProjectClassAvailable(preview_.db_,name);}
     std::shared_ptr<linaccess::VbaObject> constructClass(std::string_view name) override {
