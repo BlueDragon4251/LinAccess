@@ -55,3 +55,24 @@ mit 26 Quellobjekten wurde erfolgreich in LinAccess importiert. Das beweist
 **keine** Access-2003-COM-Exportfunktion und keine allgemeine VBA-Kompatibilität.
 Für neue Exporte stehen Version und ProgID im Manifest. Maßgeblich bleiben
 die tatsächlichen `manifest.json`-Statusangaben.
+
+## Macro sources and read-only query metadata
+
+The regular exporter now includes actual `AllMacros` / `SaveAsText(acMacro=4)`
+artifacts. `-MacrosOnly` excludes form/report/module/query SQL and VBIDE source
+exports. `-IncludeQueryMetadata` adds existing local SELECT/crosstab/UNION
+QueryDef field/parameter types and source relationships, with individual failures
+and SQL fingerprints. It never opens recordsets or executes action queries;
+projects with attached tables and nonlocal/action query types are classified as
+uninspected. Connection strings and record values are not exported.
+
+`START.cmd` / `Start-Makroexport.ps1` offer an Access 2003 file picker, force the
+registered version 11 and disabled automation macros, operate on a temporary
+copy, compare original SHA-256, and package results even after export failures.
+The returned macro definitions contain private actions/conditions/arguments;
+keep them outside Git. No MDB or VBA source is included in this mode. Native
+execution of imported Access macro text is not yet claimed.
+
+Both scripts passed the official PowerShell 7.4.6 syntax parser on Linux.
+Windows PowerShell 5.1 / Access 2003 COM execution remains to be observed from
+the actual returned result; syntax validation is not that execution proof.

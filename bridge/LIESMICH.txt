@@ -1,0 +1,21 @@
+LinAccess: Makros und Abfragemetadaten aus Access 2003
+
+1. ZIP vollstaendig entpacken.
+2. START.cmd doppelklicken.
+3. Die aktuelle Kassa_CSE_V2.0.mdb auswaehlen.
+4. Danach nur das erzeugte Ergebnis-ZIP aus Ergebnisse im Chat hochladen.
+
+Das Skript verwendet die vorhandene Access-2003-COM-Registrierung und SaveAsText
+auf einer frischen temporaeren Kopie. Der SHA-256 der Originaldatei wird vor und
+nach dem Export verglichen. Die Makrodefinitionen enthalten Aktionsnamen,
+Bedingungen und Argumente; diese sind private Projektinformationen.
+
+Zusaetzlich werden die vorhandenen DAO-Abfragefeldnamen, Typen, Parameter und
+Quellbeziehungen lesend erfasst. Es werden keine Abfragen als Recordset oder
+Aktionsabfragen ausgefuehrt. Externe Quellen und Aktionsabfragen werden explizit
+als nicht untersucht klassifiziert. Einzelne Metadatenfehler bleiben im JSON.
+
+Das Ergebnis enthaelt keine MDB-Datei, keine VBA-Quellen und keine Datensatzwerte.
+Bei Fehlern bitte das gesamte Ergebnis-ZIP hochladen. Die Collector-Syntax wird
+unter Linux geprueft; die tatsaechliche Access-2003-Ausfuehrung wird erst durch
+das Ergebnis vom Windows-Rechner nachgewiesen.

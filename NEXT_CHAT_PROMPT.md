@@ -1950,3 +1950,16 @@ bestanden. Originale Keyboard-Grenze jetzt3146/1023; echter getaggter Klick
 reicht bis2485 (fehlende exportierte Makroquelle). Beide MDB-Kataloge enthalten
 vier Makros, bisheriges Brückenarchiv null. Kein neuer Gesamtsuite-/Windowslauf,
 keine vollständige F129-Erfüllung. Katalog456/386/70 bleibt unverändert.
+
+
+## 2026-11-09: fehlende Makroquellen gezielt exportierbar
+
+Vorhandene Windows-Brücke exportiert nun AllMacros/SaveAsText acMacro4. Optional
+-MacrosOnly schließt MDB/VBA-/Form-/Bericht-/SQL-Quellenexport aus;
+-IncludeQueryMetadata liest vorhandene lokale QueryDef-Feld-/Parametermetadaten
+ohne Recordsets/Aktionsabfragen. Externe Quellen werden ausgelassen, Fehler
+einzeln ausgewiesen. START.cmd bietet Access2003-Dateiauswahl, Testkopie,
+Originalhashvergleich und Ergebnis-ZIP auch bei Fehlern. Makrodefinitionen bleiben
+private Projektquellen außerhalb Git. Beide Skripte syntaktisch mit offiziellem
+PowerShell7.4.6-Parser geprüft; tatsächlicher Windows/Access-COM-Lauf ausstehend.
+Kein Makrotext-Laufzeitparitätsnachweis, Katalog456/386/70 unverändert.

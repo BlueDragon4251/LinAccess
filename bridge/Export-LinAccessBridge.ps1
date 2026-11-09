@@ -17,7 +17,9 @@ param(
     [Parameter(Mandatory = $true)][string]$DatabasePath,
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
     [ValidatePattern('^Access\.Application(\.\d+)?$')][string]$AccessProgId = 'Access.Application',
-    [ValidateRange(0, 99)][int]$RequiredAccessMajorVersion = 0
+    [ValidateRange(0, 99)][int]$RequiredAccessMajorVersion = 0,
+    [switch]$MacrosOnly,
+    [switch]$IncludeQueryMetadata
 )
 
 Set-StrictMode -Version Latest
@@ -81,14 +83,14 @@ function Add-Entry([string]$kind, [string]$name, [string]$status,
 function Export-SaveAsText([string]$kind, [int]$accessType, [string]$name) {
     $target = New-ArtifactPath $kind '.txt'
     try {
-        # Access object type constants: acQuery=1, acForm=2, acReport=3, acModule=5.
+        # Access object type constants: acQuery=1, acForm=2, acReport=3, acMacro=4, acModule=5.
         $script:access.SaveAsText($accessType, $name, $target.absolute)
         if (-not (Test-Path -LiteralPath $target.absolute -PathType Leaf)) {
             throw 'SaveAsText returned without producing a file.'
         }
         Add-Entry $kind $name 'source_only' 'access-saveastext' $target.relative ''
     } catch {
-        Add-Entry $kind $name 'failed' 'access-saveastext' '' $_.Exception.Message
+        Add-Entry $kind $name 'failed' 'access-saveastext' '' ('HRESULT ' + [string]$_.Exception.HResult)
     }
 }
 
@@ -100,6 +102,98 @@ function Export-Query([string]$name, [string]$sql) {
     } catch {
         Add-Entry 'query' $name 'failed' 'access-query-sql' '' $_.Exception.Message
     }
+}
+
+
+# Read existing metadata only. No recordset, action query or VBA is invoked.
+function Get-MetadataFailure($record, [string]$stage) {
+    $exception = $record.Exception
+    while ($null -ne $exception.InnerException) { $exception = $exception.InnerException }
+    return [pscustomobject]@{
+        stage = $stage
+        hresult = [int]$exception.HResult
+        exception_type = $exception.GetType().FullName
+    }
+}
+
+function Export-QueryMetadata {
+    $records = New-Object 'System.Collections.Generic.List[object]'
+    $externalTables = $false
+    foreach ($table in $script:database.TableDefs) {
+        # dbAttachedTable/dbAttachedODBC; never read/export connection strings.
+        if (([long]$table.Attributes -band 1610612736) -ne 0) { $externalTables = $true }
+    }
+    foreach ($query in $script:database.QueryDefs) {
+        $failures = New-Object 'System.Collections.Generic.List[object]'
+        $fields = New-Object 'System.Collections.Generic.List[object]'
+        $parameters = New-Object 'System.Collections.Generic.List[object]'
+        $entry = [ordered]@{
+            name = [string]$query.Name
+            status = 'metadata_only'
+            query_type = $null
+            sql_sha256 = ''
+            fields = @()
+            parameters = @()
+            failures = @()
+        }
+        try {
+            $entry.query_type = [int]$query.Type
+            $sqlBytes = [Text.Encoding]::UTF8.GetBytes([string]$query.SQL)
+            $hash = [Security.Cryptography.SHA256]::Create()
+            try { $entry.sql_sha256 = ([BitConverter]::ToString($hash.ComputeHash($sqlBytes))).Replace('-', '').ToLowerInvariant() }
+            finally { $hash.Dispose() }
+            # Action queries and external sources are classified without opening
+            # them. Field/parameter inspection remains metadata only.
+            if ($externalTables -or $entry.query_type -notin @(0, 16, 128)) {
+                $entry.status = 'not_inspected_nonlocal_or_action'
+            } else {
+                for ($parameterIndex = 0; $parameterIndex -lt [int]$query.Parameters.Count; $parameterIndex++) {
+                    $parameter = $query.Parameters.Item($parameterIndex)
+                    try {
+                        $parameters.Add([pscustomobject]@{
+                            name = [string]$parameter.Name
+                            dao_type = [int]$parameter.Type
+                        })
+                    } catch { $failures.Add((Get-MetadataFailure $_ 'parameter')) }
+                }
+                for ($fieldIndex = 0; $fieldIndex -lt [int]$query.Fields.Count; $fieldIndex++) {
+                    $field = $query.Fields.Item($fieldIndex)
+                    try {
+                        $item = [ordered]@{
+                            name = [string]$field.Name
+                            dao_type = [int]$field.Type
+                            size = [int]$field.Size
+                            source_table = $null
+                            source_field = $null
+                        }
+                        try { $item.source_table = [string]$field.SourceTable }
+                        catch { $failures.Add((Get-MetadataFailure $_ 'field_source_table')) }
+                        try { $item.source_field = [string]$field.SourceField }
+                        catch { $failures.Add((Get-MetadataFailure $_ 'field_source_field')) }
+                        $fields.Add([pscustomobject]$item)
+                    } catch { $failures.Add((Get-MetadataFailure $_ 'field')) }
+                }
+                if ($failures.Count -gt 0) { $entry.status = 'partial_metadata' }
+            }
+        } catch {
+            $entry.status = 'failed'
+            $failures.Add((Get-MetadataFailure $_ 'query'))
+        }
+        $entry.fields = @($fields.ToArray())
+        $entry.parameters = @($parameters.ToArray())
+        $entry.failures = @($failures.ToArray())
+        $records.Add([pscustomobject]$entry)
+    }
+    $target = New-ArtifactPath 'query_metadata' '.json'
+    $payload = [ordered]@{
+        format = 'linaccess-access-query-fields-v1'
+        records_executed = $false
+        original_vba_requested = $false
+        queries = @($records.ToArray())
+    }
+    [IO.File]::WriteAllText($target.absolute, (ConvertTo-Json -InputObject $payload -Depth 10),
+        (New-Object Text.UTF8Encoding($false)))
+    Add-Entry 'query_metadata' '(DAO query fields)' 'metadata_only' 'access-dao-field-metadata' $target.relative ''
 }
 
 try {
@@ -136,6 +230,7 @@ try {
     $access.OpenCurrentDatabase($workingCopy, $false)
     $database = $access.CurrentDb()
 
+    if (-not $MacrosOnly) {
     foreach ($form in $access.CurrentProject.AllForms) {
         Export-SaveAsText 'form' 2 ([string]$form.Name)
     }
@@ -149,6 +244,18 @@ try {
         Export-Query ([string]$query.Name) ([string]$query.SQL)
     }
 
+    }
+    foreach ($macro in $access.CurrentProject.AllMacros) {
+        Export-SaveAsText 'macro' 4 ([string]$macro.Name)
+    }
+    if ($IncludeQueryMetadata) {
+        try { Export-QueryMetadata }
+        catch {
+            Add-Entry 'query_metadata' '(DAO query fields)' 'failed' 'access-dao-field-metadata' '' ('HRESULT ' + [string]$_.Exception.HResult)
+        }
+    }
+
+    if (-not $MacrosOnly) {
     # VBProject access may be disabled by Office Trust Center. Explicitly record
     # that failure; never change security settings automatically.
     try {
@@ -186,6 +293,7 @@ try {
     } catch {
         Add-Entry 'vba' '(VBProject)' 'unavailable' 'vbide-export' '' (
             'VBA project access unavailable (Office Trust Center, project lock, or COM error): ' + $_.Exception.Message)
+    }
     }
 } finally {
     if ($null -ne $database) {
