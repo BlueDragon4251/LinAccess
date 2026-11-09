@@ -1,3 +1,4 @@
+#include "vba_error_text.hpp"
 #include "vba_project_types.hpp"
 #include "vba_condition.hpp"
 #include "native_utf.hpp"
@@ -294,7 +295,7 @@ class ErrorObject final : public VbaObject {
     void check() const {if(guard_) guard_();}
 public:
     explicit ErrorObject(std::function<void()> guard={}):guard_(std::move(guard)) {}
-    int number{}, helpContext{};
+    int number{}, helpContext{}, lastRaisedNumber{};
     std::string_view className() const override { return "ErrObject"; }
     bool isNativeType(std::string_view type) const override { return type=="vba.errobject"; }
     std::string description, source, helpFile;
@@ -330,7 +331,7 @@ public:
             };
             const auto context=args.size()>4 && args[4].kind!=VbaValue::Kind::Missing
                 ? static_cast<int>(coerceVbaModuleValue(scalarVbaValue(args[4]),"long").asNumber()) : helpContext;
-            throw VbaRuntimeError(code,textArgument(2,description.empty() ? "VBA: explicit error" : description),
+            throw VbaRuntimeError(code,textArgument(2,description.empty() ? vbaErrorText(code) : description),
                 textArgument(1,source),textArgument(3,helpFile),context);
         }
         if (!args.empty()) throw VbaRuntimeError(450, "Unexpected Err arguments");
@@ -1847,6 +1848,12 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
     return state;
 }
 std::shared_ptr<VbaObject> makeVbaErrorObject(std::function<void()> guard) {return std::make_shared<ErrorObject>(std::move(guard));}
+int lastRaisedVbaError(VbaHost& host) {
+    const auto state=std::dynamic_pointer_cast<ErrorObject>(host.errorObject());
+    if(!state) throw VbaRuntimeError(3251,"Native error history is unavailable");
+    (void)state->member("Number",{});
+    return state->lastRaisedNumber;
+}
 std::shared_ptr<VbaObject> VbaHost::errorObject() {if(!errorObject_) errorObject_=makeVbaErrorObject();return errorObject_;}
 std::shared_ptr<VbaModuleState> VbaHost::moduleState(std::string_view module) {
     const auto key=std::string(module);
@@ -3420,6 +3427,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 storeAliases();
                 const auto* typed = dynamic_cast<const VbaRuntimeError*>(&exception);
                 errorState->number = typed ? typed->number : 5;
+                errorState->lastRaisedNumber=errorState->number;
                 errorState->description = exception.what();
                 errorState->source=typed ? typed->source : std::string{};
                 errorState->helpFile=typed ? typed->helpFile : std::string{};

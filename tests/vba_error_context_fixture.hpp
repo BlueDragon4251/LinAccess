@@ -64,9 +64,67 @@ value=CVErr(Nothing)
 code=code+Err.Number
 ErrorVariantConversionProbe=code
 End Function
+Private Sub ExitWithRecentError
+On Error Resume Next
+Err.Raise 9
+Exit Sub
+End Sub
+Public Function ErrorTextProbe As Long
+Dim text As String, remembered As String, code As Long
+If Error(0)<>"" Or Error$(0)<>"" Then Err.Raise 5
+If VBA.Error(13)<>"Type mismatch" Or VBA.Error$(ErrorNumber:=9)<>"Subscript out of range" Then Err.Raise 5
+If Error(60000)<>"Application-defined or object-defined error." Or Error(-1)<>Error(60000) Then Err.Raise 5
+If Error(13.5)<>Error(14) Then Err.Raise 5
+On Error Resume Next
+Err.Raise 7011,"native.source","custom.description"
+remembered=Error()
+If remembered<>Error(7011) Then ErrorTextProbe=-1: Exit Function
+Err.Number=13
+If Error()<>remembered Then ErrorTextProbe=-2: Exit Function
+Err.Clear
+If Error$<>remembered Then ErrorTextProbe=-3: Exit Function
+On Error GoTo 0
+If VBA.Error<>remembered Then Err.Raise 5
+On Error Resume Next
+Err.Raise 11
+If Error()<>Error(11) Or Err.Description<>Error(11) Then ErrorTextProbe=-4: Exit Function
+On Error GoTo 0
+ExitWithRecentError
+If Err.Number<>0 Or Error()<>Error(9) Then Err.Raise 5
+On Error Resume Next
+text=Error(65536)
+code=Err.Number
+Err.Clear
+text=Error(Null)
+code=code+Err.Number
+Err.Clear
+text=Error(CVErr(13))
+code=code+Err.Number
+Err.Clear
+text=Error(Nothing)
+code=code+Err.Number
+ErrorTextProbe=code
+End Function
 )VBA";
 inline const std::string nativeFormErrorContextFixture=R"VBA(Option Explicit
 Public Function FormEnvironmentError(ByVal expected As VBA.ErrObject) As Boolean
 FormEnvironmentError=Err Is expected
+End Function
+)VBA";
+
+inline const std::string nativeErrorShadowFixture=R"VBA(Option Explicit
+Public Function Error As String
+Error="own"
+End Function
+Public Function ErrorProcedureShadow As Long
+If Error<>"own" Then Err.Raise 5
+If VBA.Error(13)<>"Type mismatch" Then Err.Raise 5
+ErrorProcedureShadow=17
+End Function
+Public Function ErrorArrayShadow As Long
+Dim Error(0 To 0) As Long
+Error(0)=19
+If VBA.Error(0)<>"" Then Err.Raise 5
+ErrorArrayShadow=Error(0)
 End Function
 )VBA";

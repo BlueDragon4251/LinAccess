@@ -298,7 +298,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F044** — Native For Each/Next, Exit For, nested loops and DAO Fields enumeration; real 29-table structure regression.
 - [ ] **F045** — Complete With/Select Case/Do/While/Exit grammar, type/error and conditional semantics.
 - [x] **F049** — Bounded Error Variants, CVErr/IsError, ByRef/function return and calculated-control error handling. Native Error-value conversion is documented in CVERR_CONVERSION.md.
-- [ ] **F051** — On Error/Err/Resume, nested handlers and source-mapped diagnostics/debugger. Automatic native Err.Clear boundaries are documented in VBA_ERROR_CLEAR_BOUNDARIES.md and project Err identity in VBA_ERROR_ENVIRONMENT.md; the complete requirement remains open.
+- [ ] **F051** — On Error/Err/Resume, nested handlers and source-mapped diagnostics/debugger. Automatic native Err.Clear boundaries are documented in VBA_ERROR_CLEAR_BOUNDARIES.md and project Err identity in VBA_ERROR_ENVIRONMENT.md, with native Error/Error$ and body error history in VBA_ERROR_TEXT.md; the complete requirement remains open.
 - [ ] **F088** — Macros/action representation and native execution with error diagnostics.
 - [ ] **F105** — Access oracle for the remaining initial calculated error, full Currency coercions/locales, exact Jet MONEY storage and Decimal semantics.
 - [x] **F119** — Bounded native TableDefs Count/Item/For Each, TableDef.Name and real OpenRecordset; original standard-module function checks all 29 tables and an absent name with typed Boolean results and independent record counts.

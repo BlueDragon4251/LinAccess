@@ -1,3 +1,4 @@
+#include "vba_error_text.hpp"
 #include "vba_project_types.hpp"
 #include "vba_conditional.hpp"
 #include "vba_condition.hpp"
@@ -725,7 +726,7 @@ public:
 
 bool vbaIntrinsicName(const std::string& name) {
     static const std::unordered_set<std::string> intrinsics{
-                "array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
+                "error","error$","array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
                 "createobject","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
                 "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdec","cdate","cstr","str","str$","format","format$","formatnumber","formatcurrency","formatpercent","formatdatetime",
                 "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
@@ -1298,6 +1299,16 @@ private:
             if(accessExpression_) throw error("DoEvents is unavailable in calculated expressions",3251);
             return VbaValue::integer(host_->doEvents());
         }
+        if(!accessExpression_ && (word=="error" || word=="error$") && !nextSymbol("(")) {
+            if(!host_) return {};
+            if(!qualifiedIntrinsic && !accessExpression_) {
+                if(const auto local=locals_.find(word);local!=locals_.end()) return readLocal(word,local->second);
+                if(resolver_.argumentSignature) if(const auto signature=resolver_.argumentSignature(tok.value);signature && signature->localProcedure && signature->function) {
+                    std::vector<VbaValue> arguments;return resolver_(tok.value,arguments,VbaArgumentReferences{});
+                }
+            }
+            return VbaValue::string(vbaErrorText(lastRaisedVbaError(*host_)));
+        }
         if ((word=="now" || word=="date" || word=="time" || word=="timer") && !nextSymbol("("))
             return host_ ? clockValue(word) : VbaValue{};
         if (accessExpression_ && (word=="sum" || word=="count" || word=="avg" || word=="min" || word=="max" || word=="first" || word=="last" || word=="var" || word=="stdev") && take("(")) {
@@ -1322,7 +1333,7 @@ private:
         }
         if (nextSymbol("(")) {
             const auto variable=locals_.find(word);
-            if (variable!=locals_.end() && (variable->second.kind==VbaValue::Kind::Object || isVbaArray(variable->second))) return readLocal(word,variable->second);
+            if (!qualifiedIntrinsic && variable!=locals_.end() && (variable->second.kind==VbaValue::Kind::Object || isVbaArray(variable->second))) return readLocal(word,variable->second);
         }
         if (take("(")) {
             std::optional<VbaArgumentSignature> signature;
@@ -1377,6 +1388,7 @@ private:
                 if(qualifiedArray) throw error("Named qualified Array arguments are not implemented",3251);
                 if(accessExpression_) throw error("Named arguments are not implemented in Access expression context",3251);
                 static const std::unordered_map<std::string,VbaArgumentSignature> signatures{
+                    {"error",{{"ErrorNumber"},0}}, {"error$",{{"ErrorNumber"},0}},
                     {"syscmd",{{"Action","Argument2","Argument3"},1}},
                     {"msgbox",{{"Prompt","Buttons","Title","HelpFile","Context"},1}},
                     {"inputbox",{{"Prompt","Title","Default","XPos","YPos","HelpFile","Context"},1}},
@@ -1708,6 +1720,14 @@ private:
                 if(!host_) return {};
                 if(args.size()!=1) throw error("IsMissing requires one argument",450);
                 return VbaValue::logical(args[0].kind==VbaValue::Kind::Missing);
+            }
+            if(word=="error" || word=="error$") {
+                if(args.size()>1) throw error("Error requires at most one argument",450);
+                if(!host_) return {};
+                const bool supplied=!args.empty() && args[0].kind!=VbaValue::Kind::Missing;
+                const auto code=supplied ? static_cast<int>(coerceVbaModuleValue(scalarVbaValue(args[0]),"long").number) : lastRaisedVbaError(*host_);
+                if(supplied && code>65535) throw error("Error number overflow",6);
+                return VbaValue::string(vbaErrorText(code));
             }
             if (word=="iserror" || word=="cverr") {
                 if (!host_) return {};

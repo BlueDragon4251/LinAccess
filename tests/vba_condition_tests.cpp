@@ -10,6 +10,7 @@
 namespace {
 struct Host final:linaccess::VbaHost {
     std::optional<std::string> field(std::string_view) override {return {};}
+    linaccess::VbaValue expressionValue(std::string_view name,bool) override {if(name=="Error") return linaccess::VbaValue::longInteger(17);throw linaccess::VbaRuntimeError(438,"Unknown technical expression field");}
     void setField(std::string_view,std::optional<std::string>) override {assert(false);}
     void saveRecord() override {assert(false);}
     void message(std::string_view) override {assert(false);}
@@ -69,6 +70,7 @@ void testVbaConditions() {
     number("On Error Resume Next\nDim i As Long\nFor i=1 To 2\nFor n=1 To v\nProbe=99\nNext n\nProbe=Probe+1\nNext i\nProbe=Probe+Err.Number",VbaValue::string("invalid"),15);
     number("On Error GoTo recovered\nFor n=1 To v\nProbe=Probe+1\nNext n\nExit Function\nrecovered:\nv=2\nResume",VbaValue::string("invalid"),2);
     {int errors=0;VbaDebuggerSession debugger([&](const VbaDebugPause& pause) {if(pause.reason!=VbaDebugReason::Error) return VbaDebugAction::Continue;assert(pause.error->number==13 && pause.recoverable);++errors;return VbaDebugAction::SkipError;});number("Do While v\nProbe=99\nLoop\nProbe=Probe+Err.Number",VbaValue::string("invalid"),13);assert(errors==1);}
+    assert(evaluateAccessExpression("Error",host).number==17 && evaluateAccessExpression("Error(0)",host).text.empty());
     const auto expression=[&](const char* text) {return evaluateVbaExpression(text,host,{});};assert(expression("CBool(\"#TRUE#\")").boolean && !expression("CBool(\"#FALSE#\")").boolean);
     for(const auto& ending:std::vector<std::string>{"EndIf","End   If","End\tIf","EndIf: Probe=9"}) number("If v Then\nProbe=9\n"+ending,VbaValue::logical(true),9);
 }

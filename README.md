@@ -1040,3 +1040,18 @@ Paketbehauptung;456/386/70 unverändert. Vorstufe725b4bd privat remote/Baum gepr
 Aktuell geprüftes DEB55096a7 liegt vor Projekt-Err/CVErr. Ohne Zwischenabschluss
 mit nativen Error/Error$-Funktionen und getrennter zuletzt-ausgelöster Fehlernummer
 nach MS-VBAL6.1.2.3.1.15 weiterprogrammieren.
+
+
+Native Error/Error$: VBA_ERROR_TEXT.md beschreibt optionale/benannte/qualifizierte
+und nackte Aufrufe, Long-Konvertierung, begrenzte invariante englische Meldungen
+und getrennte zuletzt-ausgelöste Fehlernummer. Err.Number-Zuweisung und Clear/
+OnError/Exit ersetzen diese Historie nicht. Echte SQL-VBA-Funktionen unterscheiden
+Err.Number907 von zuvor ausgelöstem91. Projektfunktion/lokales Array Error haben
+unqualifiziert Vorrang; VBA.Error bleibt Intrinsik, Access-Feld Error bleibt Feld.
+App; initial bestehendes Kern-/GUI-Bündel2/2 (23,15s:4,81/18,33). Nach Feldnamens-
+Schutz nur betroffenes Kernziel wiederholt1/1 (4,87s). Keine neue CTest-ID/Windows-/
+Vollsuitenbehauptung;456/386/70 unverändert. Vorstufe2d3e8db privat remote/Baum
+geprüft. Letztes Original118,10s/Hashes vor CVErr/Errortext; DEB55096a7 vor Projekt-
+Err/CVErr/Errortext. Ohne Zwischenabschluss aktuelles Paket prüfen, danach echte
+ByRef-Arraysperren nach MS-VBAL5.4.3.3 weiterbearbeiten; Erase-/ForEach-Grenzen
+nicht ungeprüft als vollständige native Semantik deklarieren.
