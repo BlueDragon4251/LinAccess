@@ -722,6 +722,8 @@ void testNativeDecimalVariants() {
     assert(eval("VarType(CDec(1))=vbDecimal").truthy() && eval("TypeName(CDec(1))").asText()=="Decimal");
     assert(eval("VBA.CDec(Expression:=\"1.25\")").asText()=="1.25");
     assert(eval("CStr(CDec(\""+maximum+"\"))").asText()==maximum);
+    assert(eval("Str(CDec(\""+maximum+"\"))").asText()==" "+maximum);assert(eval("Str$(-CDec(\""+maximum+"\"))").asText()=="-"+maximum);assert(eval("Str(CDec(\"0.0000000000000000000000000001\"))").asText()==" .0000000000000000000000000001");
+
     assert(eval("CDec(\""+maximum+"\")-CDec(1)").asText()=="79228162514264337593543950334");
     assert(eval("CDec(\"0.1\")+CDec(\"0.2\")").asText()=="0.3");
     assert(eval("CDec(\"12345678901234567890\")*CDec(\"0.00000001\")=CDec(\"123456789012.3456789\")").truthy());
@@ -734,7 +736,11 @@ void testNativeDecimalVariants() {
     assert(eval("CCur(CDec(\"1.23445\"))").asText()=="1.2344" && eval("CCur(CDec(\"1.23455\"))").asText()=="1.2346");
     assert(eval("Abs(-CDec(\""+maximum+"\"))").asText()==maximum);
     for(const auto& [source,wanted]:std::vector<std::pair<std::string,int>>{{"CDec(Null)",94},{"CDec(\"invalid\")",13},{"CDec(\"79228162514264337593543950336\")",6},{"CDec(\""+maximum+"\")+CDec(1)",6},{"CDec(1)/CDec(0)",11},{"Round(CDec(1),29)",3251},{"CLng(CDec(\"2147483647.5000000001\"))",6}}) {int error=0;try {(void)eval(source);}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==wanted);}
+    const auto tie=1.0/32;assert(convertCurrency(VbaValue::numeric(tie)).currencyUnits==312);assert(convertCurrency(VbaValue::numeric(std::nextafter(tie,1.0))).currencyUnits==313);assert(convertCurrency(VbaValue::numeric(std::nextafter(tie,0.0))).currencyUnits==312);assert(convertCurrency(VbaValue::numeric(3.0/32)).currencyUnits==938);assert(convertCurrency(VbaValue::numeric(std::nextafter(-tie,-1.0))).currencyUnits==-313);
+    const double edge=922337203685477.5;assert(convertCurrency(VbaValue::numeric(edge)).currencyUnits==9223372036854775000LL && convertCurrency(VbaValue::numeric(-edge)).currencyUnits==-9223372036854775000LL);assert(convertCurrency(VbaValue::numeric(std::numeric_limits<double>::denorm_min())).currencyUnits==0);
+    for(const auto number:{std::nextafter(edge,std::numeric_limits<double>::infinity()),std::nextafter(-edge,-std::numeric_limits<double>::infinity()),std::numeric_limits<double>::infinity(),std::numeric_limits<double>::quiet_NaN()}) {int error=0;try {(void)convertCurrency(VbaValue::numeric(number));}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==6);}
     auto probe=std::make_shared<ScalarProbe>();probe->value=VbaValue::string(maximum);assert(evaluateVbaExpression("CDec(probe)",host,{{"probe",VbaValue::reference(probe)}}).asText()==maximum && probe->reads==1);
+    probe->value=decimalLiteral(maximum);probe->reads=0;assert(evaluateVbaExpression("Str(probe)",host,{{"probe",VbaValue::reference(probe)}}).asText()==" "+maximum && probe->reads==1);
     const auto result=executeVbaProcedure(R"VBA(Sub DecimalValues()
 Dim value As Variant, entries(0 To 0) As Variant
 value=CDec("79228162514264337593543950335")

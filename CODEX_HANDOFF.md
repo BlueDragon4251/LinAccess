@@ -2900,3 +2900,18 @@ Stringmasken, volleWindowsRegionaleinstellungen, negativeCurrencyprofile,
 Originalfeld-Formatproperties und exakteNativeDecimal-/Currency-Datenbankfelder
 weiteroffen. F014/F041/F068/F071/F118/F164;456/384/72 unverändert.
 Kontinuierlich an allgemeinenDatenbankanforderungen weiterarbeiten, keinZwischenfinal.
+
+Präzisionslücke in Str/Str$ geschlossen: Decimal-/Currency-Skalare werden einmal
+aufgelöst und ohne Double-Zwischentext ausgegeben, einschließlich maximalem
+96-Bit-Decimalwert und kleinster28erNachkommastelle. Currency-Konvertierung aus
+Double wertet nun53-Bit-Mantisse/Exponent über ganzzahlige625/2er-Skalierung aus;
+keine Abhängigkeit von plattformspezifischerlong-double-Präzision. Geprüft sind
+exakte Halbwerte, direkt benachbarte IEEE-Werte, Vorzeichen, Subnormale sowie
+signed64-Grenze/Nichtfinite/Überlauf. Die nachgewiesene REAL-Speichergrenze bleibt
+unverändert; nativevolleCurrency-Datenbankfelder werden damit nicht vorgetäuscht.
+Core/DAO/GUI/CurrencySQL/-Felder5/5 (10,03s), Appgebaut; bestehende112Ausdrucksfälle
+weiterimDAO-/GUI-Prüfverbund. KeineOriginalkopie ohnebetroffeneImportänderung
+wiederholt. Core-Prüfharness jetztwieDAO/GUI unterGNU/ClangRelease -O1; Runtime
+lautflags.make weiter-O3. Keine neueTestregistrierung/F-ID;456/384/72 gleich.
+Fortsetzung: Currency-Parameterwerte von begrenzterSQL-REAL-Kodierung trennen und
+an allgemeinenexaktenDatenbanktypen fortlaufendweiterarbeiten.

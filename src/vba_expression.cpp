@@ -1491,13 +1491,13 @@ private:
             if (word=="str" || word=="str$") {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Str requires one argument",450);
-                const auto& value=args[0];
+                const auto value=scalarObjectValue(args[0]);
                 if (value.kind==VbaValue::Kind::Null) throw error("Invalid Null Str argument",94);
                 double number;
                 try { number=value.asNumber(); }
                 catch (const VbaRuntimeError& failure) { if (failure.number==5) throw error("Str type mismatch",13); throw; }
                 if (!std::isfinite(number)) throw error("Str numeric overflow",6);
-                auto result=value.kind==VbaValue::Kind::Currency ? value.asText() : VbaValue::numeric(number==0 ? 0 : number).asText();
+                auto result=(value.kind==VbaValue::Kind::Currency || value.kind==VbaValue::Kind::Decimal) ? value.asText() : VbaValue::numeric(number==0 ? 0 : number).asText();
                 if (result.starts_with("0.")) result.erase(0,1);
                 else if (result.starts_with("-0.")) result.erase(1,1);
                 std::replace(result.begin(),result.end(),'e','E');

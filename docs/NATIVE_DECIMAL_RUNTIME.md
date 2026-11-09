@@ -57,3 +57,9 @@ resolution, arrays, aggregates and real unbound control readback. Transcendental
 and financial Double observations use an explicit relative tolerance2e-12; this
 is not bit-for-bit financial/libm identity. Full F014/F041/F068/F118/F164 and
 Access2003 parity remain open. Fixed catalog456/384/72 is unchanged.
+
+Str/Str$ now retain native Decimal/Currency invariant text without an intermediate
+Double and resolve scalar defaults once. Native Double→Currency conversion uses
+checked integer mantissa/exponent scaling and ties-to-even, independent of the
+platform long-double width. Five existing core/DAO/window/Currency targets passed
+(10.03s), app built; full Currency SQL/storage/original-format scope remains open.

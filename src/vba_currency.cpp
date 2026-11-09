@@ -8,6 +8,18 @@ VbaValue checked(__int128 units) {
         throw VbaRuntimeError(6,"Currency overflow");
     return VbaValue::currency(static_cast<std::int64_t>(units));
 }
+VbaValue binaryCurrency(double number) {
+    static_assert(std::numeric_limits<double>::is_iec559 && std::numeric_limits<double>::digits==53);
+    if(!std::isfinite(number)) throw VbaRuntimeError(6,"Currency overflow");if(number==0) return VbaValue::currency(0);
+    int exponent=0;const auto fraction=std::frexp(std::abs(number),&exponent);const auto mantissa=static_cast<std::uint64_t>(std::ldexp(fraction,53));
+    // number*10000 = (53-bit mantissa*625) / 2^(49-exponent).
+    // The product has at most63bits, including cases immediately next to ties.
+    const auto product=mantissa*625ULL;const int shift=49-exponent;unsigned __int128 magnitude=0;
+    if(shift>=64) magnitude=0;
+    else if(shift>0) {auto units=product>>shift;const auto remainder=product&((1ULL<<shift)-1),half=1ULL<<(shift-1);if(remainder>half || (remainder==half && (units&1))) ++units;magnitude=units;}
+    else {if(shift<=-64) throw VbaRuntimeError(6,"Currency overflow");magnitude=static_cast<unsigned __int128>(product)<<(-shift);}
+    const auto limit=static_cast<unsigned __int128>(1)<<63;if(magnitude>limit || (number>0 && magnitude==limit)) throw VbaRuntimeError(6,"Currency overflow");return checked(number<0 ? -static_cast<__int128>(magnitude) : static_cast<__int128>(magnitude));
+}
 VbaValue decimalCurrency(std::string_view input) {
     const auto first=input.find_first_not_of(" \t\r\n");
     if (first==std::string_view::npos) throw VbaRuntimeError(13,"Currency type mismatch");
@@ -60,13 +72,7 @@ VbaValue convertCurrency(const VbaValue& value) {
     if (value.kind==VbaValue::Kind::Empty) return VbaValue::currency(0);
     if (value.kind==VbaValue::Kind::Boolean) return VbaValue::currency(value.boolean ? -10000 : 0);
     if (value.kind!=VbaValue::Kind::Number) throw VbaRuntimeError(13,"Currency type mismatch");
-    const long double scaled=static_cast<long double>(value.number)*10000;
-    if (!std::isfinite(scaled)) throw VbaRuntimeError(6,"Currency overflow");
-    const auto floor=std::floor(scaled), fraction=scaled-floor;
-    const auto rounded=fraction<0.5L ? floor : fraction>0.5L ? floor+1 : std::fmod(std::abs(floor),2.L)==0 ? floor : floor+1;
-    if (rounded<std::numeric_limits<std::int64_t>::min() || rounded>std::numeric_limits<std::int64_t>::max())
-        throw VbaRuntimeError(6,"Currency overflow");
-    return VbaValue::currency(static_cast<std::int64_t>(rounded));
+    return binaryCurrency(value.number);
 }
 VbaValue currencyFromRealStorage(double value) {
     static_assert(std::numeric_limits<double>::is_iec559 && std::numeric_limits<double>::digits==53);
