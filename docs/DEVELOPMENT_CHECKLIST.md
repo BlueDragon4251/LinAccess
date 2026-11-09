@@ -3213,3 +3213,19 @@ unveränderliche vorherige dae6681 (Original113,95s/Kern2,00s), kein neuer
 Original-/Qt-frei-/Gesamtsuite-/Windows-/Distributionslauf behaupten.
 Keine neue CTest-ID oder Katalog-ID; F045/F051 und456/386/70 bleiben offen/
 unverändert. Kein Gesamtabschluss; weitere Arbeit läuft fort.
+
+
+## 2026-11-09: Datensatzcursor und übergeordnete Requery-Berechnung
+
+Schreibgeschützte Abfrageformulare wählen nach leer→gefüllt den ersten echten
+Datensatz. Nur zulässige direkte Tabellenformulare behalten eine neue Leerzeile.
+Geänderte tatsächliche Kind-Snapshots aktualisieren berechnete Elternwerte, ohne
+Elterneingaben zu speichern; unveränderte Snapshots bleiben zwischengespeichert.
+Details und Grenzen: docs/READONLY_FORM_REQUERY_RUNTIME.md.
+
+Gebündelt Layout/GUI2/2 (14,90s), originales Kassa-Ziel1/1 (118,10s), finales
+DEB/Build-ID/MDBTools1.0.1/SQLite3.54.1 und vier Fixture-/drei Uploadhashes
+bestanden. Originale Keyboard-Grenze jetzt3146/1023; echter getaggter Klick
+reicht bis2485 (fehlende exportierte Makroquelle). Beide MDB-Kataloge enthalten
+vier Makros, bisheriges Brückenarchiv null. Kein neuer Gesamtsuite-/Windowslauf,
+keine vollständige F129-Erfüllung. Katalog456/386/70 bleibt unverändert.

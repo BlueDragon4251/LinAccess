@@ -2109,7 +2109,7 @@ void AccessFormPreview::loadRecords() {
     reportAggregateValues_.clear();
     if (reportPageView_) reportPageView_->setProperty("la_report_pages_valid",false);
     recordsetSnapshot_.reset();
-    const bool wasNew = initialized_ && currentRecordIndex_ == 0;
+    const bool wasNew = initialized_ && currentRecordIndex_ == 0 && directTable_ && dataSourceAvailable_ && layout_.kind==linaccess::AccessDocumentKind::Form && layout_.allowAdditions;
     const auto oldId = currentRecordIndex_ > 0 && currentRecordIndex_ <= rowIds_.size()
         ? rowIds_[currentRecordIndex_-1] : QVariant{};
     const int oldIndex = currentRecordIndex_;
@@ -2548,7 +2548,7 @@ void AccessFormPreview::selectRecord(int target) {
     }
     if (opened_ && initialCurrentDispatched_) (void)formEvent("OnCurrent","Form_Current");
     // Record navigation is an observable change in an embedded form. Requery
-    // itself preserves the parent's displayed snapshot until an explicit recalc.
+    // also notifies ancestors when its displayed record snapshot changes.
     for (auto* ancestor=parentWidget();ancestor;ancestor=ancestor->parentWidget())
         if (auto* parent=dynamic_cast<AccessFormPreview*>(ancestor);parent && parent->initialized_ && !parent->loading_) parent->refreshCalculatedControls();
 }

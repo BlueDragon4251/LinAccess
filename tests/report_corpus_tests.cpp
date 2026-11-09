@@ -1,3 +1,4 @@
+#include "vba_debugger.hpp"
 #include "access_form_preview.hpp"
 #include "original_bound_value.hpp"
 #include "access_format.hpp"
@@ -673,7 +674,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                 assert(guard.exec("ROLLBACK TO original_make_table_probe") && guard.exec("RELEASE original_make_table_probe"));
                 std::cout<<"Original make-table statement: 14 columns, empty-workflow snapshot; "<<expected.size()<<" rows independently compared\n";
             }
-            int keyboardHandlers=0,plainTextChecks=0,emptyWorkflowFailures=0;
+            int keyboardHandlers=0,plainTextChecks=0,sourceWorkflowFailures=0;
             for (const int line:{229,244,1943}) {
                 QString procedure;
                 for (const auto& candidate:originalAnalysis.procedures) if (candidate.line<=line) procedure=QString::fromStdString(candidate.name);
@@ -681,6 +682,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                 const auto input=QRegularExpression(R"(^\s*SendKeys\s+\.([\p{L}\p{N}_]+),\s*False\s*$)",QRegularExpression::CaseInsensitiveOption).match(originalLines[line-1].trimmed());
                 const auto target=QRegularExpression(R"rx(DoCmd\.GoToControl\s+"([^"]+)")rx",QRegularExpression::CaseInsensitiveOption).match(originalLines[line-2]);
                 assert(input.hasMatch() && target.hasMatch());
+                QSqlQuery keyboardScope(db);const auto keyboardSavepoint="original_keyboard_"+QString::number(line);assert(keyboardScope.exec("SAVEPOINT "+keyboardSavepoint));
                 auto keyValue=makePreviewFormObject(initialized)->item(input.captured(1).toStdString());
                 if (keyValue.kind==linaccess::VbaValue::Kind::Null) {
                     QString expression;
@@ -722,8 +724,21 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                 QVector<QPair<QPointer<QLineEdit>,QString>> before;
                 for (auto* editor:initialized.findChildren<QLineEdit*>()) if (editor->objectName().startsWith("access-control-")) before.append({editor,editor->text()});
                 const QPointer<QWidget> previousFocus=QApplication::focusWidget();
-                OriginalKeyDelivery delivery(initialized); std::vector<linaccess::VbaValue> args;
-                const auto result=initialized.executeProcedure(procedure,args);
+                OriginalKeyDelivery delivery(initialized);std::vector<linaccess::VbaValue> args;
+                // Requery may update the source control during this original
+                // handler. Observe its actual value at SendKeys, before queued
+                // keys are delivered, rather than using the earlier snapshot.
+                std::optional<QString> sentText;linaccess::VbaExecutionResult result;
+                {
+                    linaccess::VbaDebuggerSession observer([&](const linaccess::VbaDebugPause& pause) {
+                        if(pause.reason==linaccess::VbaDebugReason::Breakpoint && !pause.frames.empty() && pause.frames.back().line==line)
+                            sentText=QString::fromStdString(makePreviewFormObject(initialized)->item(input.captured(1).toStdString()).asText());
+                        return linaccess::VbaDebugAction::Continue;
+                    });
+                    observer.setBreakpoint(linaccess::decodeVbaSource(code).toStdString(),line);
+                    result=initialized.executeProcedure(procedure,args);
+                }
+                assert(sentText && !sentText->isEmpty());
                 if (result.status!=linaccess::VbaExecutionStatus::Completed)
                     std::cerr<<"Original keyboard handler: status="<<static_cast<int>(result.status)<<", error="<<result.errorNumber<<", line="<<result.line<<'\n';
                 assert(result.status==linaccess::VbaExecutionStatus::Completed);
@@ -736,7 +751,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                     assert(queuedEditor);
                     expectedEntry=queuedEditor->text();
                     const auto start=queuedEditor->hasSelectedText() ? queuedEditor->selectionStart() : queuedEditor->cursorPosition();
-                    expectedEntry.replace(start,queuedEditor->selectedText().size(),keyText);
+                    expectedEntry.replace(start,queuedEditor->selectedText().size(),*sentText);
                 }
                 QApplication::processEvents();
                 // Wait=False queues the entire sequence. Yield as DoEvents
@@ -747,7 +762,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                 assert(changed>0 || QApplication::focusWidget()!=previousFocus || QApplication::activePopupWidget());
                 if (plain) {
                     const auto entered=delivery.sawReturn ? delivery.beforeReturn : queuedEditor->text();
-                    if (entered!=expectedEntry) std::cerr<<"Original keyboard entry boundary: receiver matches="<<(delivery.firstReceiver==targetLine)<<", whole selection="<<delivery.initialWholeSelection<<", Return observed="<<delivery.sawReturn<<'\n';
+                    if (entered!=expectedEntry) std::cerr<<"Original keyboard entry boundary: receiver matches="<<(delivery.firstReceiver==targetLine)<<", whole selection="<<delivery.initialWholeSelection<<", Return observed="<<delivery.sawReturn<<", source line="<<line<<", expected length="<<expectedEntry.size()<<", entered length="<<entered.size()<<'\n';
                     assert(delivery.firstReceiver==queuedEditor && entered==expectedEntry); ++plainTextChecks;
                     for (const auto& control:layout.controls) if (control.name.compare(QString::fromStdString(canonical),Qt::CaseInsensitive)==0 && !control.afterUpdate.isEmpty()) {
                         const auto updated=initialized.eventResult("control:"+control.name+":AfterUpdate");
@@ -755,19 +770,26 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                             std::cerr<<"Original keyboard AfterUpdate: status="<<(updated ? static_cast<int>(updated->status) : -1)<<", error="<<(updated ? updated->errorNumber : 0)<<", line="<<(updated ? updated->line : 0)<<", source-error="<<initialized.property("la_document_source_error").toInt()<<'\n';
                         assert(updated);
                         if (updated->status!=linaccess::VbaExecutionStatus::Completed) {
-                            // These keyboard probes deliberately have no active
-                            // sale. The unchanged subsequent event builds an
-                            // empty-ID filter; record its real error explicitly.
-                            assert(updated->status==linaccess::VbaExecutionStatus::Error && updated->errorNumber==3075 && updated->line==1023);
-                            ++emptyWorkflowFailures;
+                            // The refreshed readonly child now provides its real
+                            // key. Opening the original target still reaches the
+                            // explicit unresolved SQL operation boundary.
+                            assert(updated->status==linaccess::VbaExecutionStatus::Error && updated->errorNumber==3146 && updated->line==1023);
+                            ++sourceWorkflowFailures;
                         }
                     }
                 }
                 if (auto* popup=QApplication::activePopupWidget()) popup->close();
+                assert(keyboardScope.exec("ROLLBACK TO "+keyboardSavepoint) && keyboardScope.exec("RELEASE "+keyboardSavepoint));
+                // Each unchanged handler starts from the original database state;
+                // successful prefixes of a failed later event must not make the
+                // next independent keyboard probe enter a checkout branch.
+                for(auto* widget:initialized.findChildren<QWidget*>())
+                    if(auto* child=dynamic_cast<AccessFormPreview*>(widget);child && child->hasDataSource()) (void)makePreviewFormObject(*child)->member("Requery",{});
+                (void)makePreviewFormObject(initialized)->member("Recalc",{});
                 ++keyboardHandlers;
             }
-            assert(keyboardHandlers==3 && plainTextChecks==3 && emptyWorkflowFailures==2);
-            std::cout<<"Original With/GoToControl/SendKeys handlers: "<<keyboardHandlers<<", independent plain-text checks: "<<plainTextChecks<<", subsequent empty-workflow errors: "<<emptyWorkflowFailures<<'\n';
+            assert(keyboardHandlers==3 && plainTextChecks==3 && sourceWorkflowFailures==2);
+            std::cout<<"Original With/GoToControl/SendKeys handlers: "<<keyboardHandlers<<", independent plain-text checks: "<<plainTextChecks<<", subsequent unresolved SQL workflow errors: "<<sourceWorkflowFailures<<'\n';
             // Execute the unchanged four-position wizard handler, rather than
             // deriving execution success from syntax recognition.
             QString originalOpenProcedure,targetName; bool targetModal=false;

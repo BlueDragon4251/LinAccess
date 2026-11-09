@@ -60,6 +60,8 @@ End
     object->assignItem("amount",VbaValue::numeric(2));
     assert(form.close());
 
+    assert(query.exec("CREATE TABLE owner_record(id INTEGER PRIMARY KEY,pending TEXT)"));
+    assert(query.exec("INSERT INTO owner_record VALUES(1,'original')"));
     assert(query.exec("CREATE TABLE _la_access_artifacts(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,source_bytes BLOB)"));
     const QByteArray child=R"FORM(Begin Form
 RecordSource ="SELECT id,label FROM items WHERE Forms!parent!selected=-1 OR id=Forms!parent!selected"
@@ -73,7 +75,12 @@ End
 )FORM";
     query.prepare("INSERT INTO _la_access_artifacts(kind,name,source_bytes) VALUES('form','detailform',?)"); query.addBindValue(child); assert(query.exec()); query.finish();
     const QByteArray parent=R"FORM(Begin Form
+RecordSource ="owner_record"
 Begin Section
+Begin TextBox
+Name ="pending"
+ControlSource ="pending"
+End
 Begin TextBox
 Name ="selected"
 End
@@ -94,16 +101,20 @@ End
     auto detail=model->member("Controls",{VbaValue::string("detail")}).object->member("Form",{}).object;
     auto* embedded=dynamic_cast<AccessFormPreview*>(owner.findChild<QWidget*>("access-control-detail")); assert(embedded);
     auto* selector=embedded->findChild<QComboBox*>("access-record-selector",Qt::FindDirectChildrenOnly); assert(selector);
-    model->assignItem("selected",VbaValue::numeric(1)); detail->member("Requery",{});
-    assert(selector->count()==2); selector->setCurrentIndex(1);
+    model->assignItem("pending",VbaValue::string("unsaved draft"));assert(owner.hasUnsavedChanges());
+    model->assignItem("selected",VbaValue::numeric(1));detail->member("Requery",{});
+    assert(selector->count()==2 && selector->currentIndex()==1);assert(model->item("copied").asText()=="one");
+    assert(owner.hasUnsavedChanges() && model->item("pending").asText()=="unsaved draft");
+    assert(query.exec("SELECT pending FROM owner_record") && query.next() && query.value(0).toString()=="original");query.finish();
     assert(owner.executeProcedure("RefreshCopy",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(model->item("copied").asText()=="one");
     model->assignItem("selected",VbaValue::numeric(0)); detail->member("Requery",{});
-    assert(model->item("copied").asText()=="one");
+    assert(model->item("copied").kind==VbaValue::Kind::Null);
     assert(owner.executeProcedure("RefreshCopy",none).status==linaccess::VbaExecutionStatus::Completed);
     assert(model->item("copied").kind==VbaValue::Kind::Null);
     model->assignItem("selected",VbaValue::numeric(-1)); detail->member("Requery",{});
-    assert(selector->count()==3);
+    assert(selector->count()==3 && selector->currentIndex()==1);assert(model->item("copied").asText()=="one");
+    assert(query.exec("UPDATE items SET label='changed' WHERE id=1"));detail->member("Requery",{});assert(model->item("copied").asText()=="changed");
     selector->setCurrentIndex(2); assert(model->item("copied").asText()=="two");
     assert(owner.close());
 }

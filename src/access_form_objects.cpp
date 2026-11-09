@@ -1030,11 +1030,24 @@ public:
         if (key == "dirty") return linaccess::VbaValue::logical(preview.dirty_);
         if (key == "newrecord") return linaccess::VbaValue::integer(preview.currentRecordIndex_==0 && preview.directTable_ && preview.dataSourceAvailable_ && preview.layout_.allowAdditions ? -1 : 0);
         if (key == "requery") {
+            enterNativeUiExecution();const auto execution=qScopeGuard([] {leaveNativeUiExecution();});
             if (!preview.saveRecord()) throw linaccess::VbaRuntimeError(2501,"Requery cancelled");
+            const int previousIndex=preview.currentRecordIndex_;
+            const auto previousColumns=preview.dataColumns_;const auto previousTypes=preview.dataTypes_;
+            const auto previousId=previousIndex>0 && previousIndex<=preview.rowIds_.size() ? preview.rowIds_[previousIndex-1] : QVariant{};
+            const auto previousRow=previousIndex>0 && previousIndex<=preview.recordRows_.size() ? preview.recordRows_[previousIndex-1] : QVariantList{};
             preview.loadRecords();
             if (!preview.layout_.recordSource.trimmed().isEmpty() && !preview.dataSourceAvailable_)
                 throw linaccess::VbaRuntimeError(preview.dataSourceErrorNumber_ ? preview.dataSourceErrorNumber_ : 3146,"Form record source unavailable after Requery");
             if (preview.opened_ && preview.initialCurrentDispatched_ && !preview.layout_.recordSource.trimmed().isEmpty()) (void)preview.formEvent("OnCurrent","Form_Current");
+            if(!preview.closed_ && !preview.openCancelled_) {
+                const int current=preview.currentRecordIndex_;
+                const auto id=current>0 && current<=preview.rowIds_.size() ? preview.rowIds_[current-1] : QVariant{};
+                const auto row=current>0 && current<=preview.recordRows_.size() ? preview.recordRows_[current-1] : QVariantList{};
+                if(previousIndex!=current || previousId!=id || previousRow!=row || previousColumns!=preview.dataColumns_ || previousTypes!=preview.dataTypes_)
+                    for(auto* ancestor=preview.parentWidget();ancestor;ancestor=ancestor->parentWidget())
+                        if(auto* parent=dynamic_cast<AccessFormPreview*>(ancestor);parent && parent->initialized_ && !parent->loading_ && !parent->closed_ && !parent->openCancelled_) parent->refreshCalculatedControls();
+            }
             return {};
         }
         if(key=="repaint") {

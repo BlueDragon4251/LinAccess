@@ -21,8 +21,9 @@ Original MDB/Bridge bytes remain unchanged; actions use disposable database copi
 - Calculated controls retain their displayed typed result, including Currency,
   instead of rerunning an expression on every read. Input changes, record
   navigation and explicit calculated-control Requery recalculate. Parent values
-  retain their displayed snapshot across a child Requery until invalidated.
-  Full Access dependency/event scheduling and Recalc are not implemented.
+  refresh after a changed child Requery snapshot; unchanged snapshots stay cached.
+  Native Recalc is available; full Access dependency/event scheduling remains open.
+  See READONLY_FORM_REQUERY_RUNTIME.md.
 - Dotted generated control names resolve a unique punctuation-to-underscore
   spelling; exact names win and collisions fail. Bang/Controls.Item remain literal.
   Standard-module Me.Requery/SetFocus cannot bypass the instance scope guard.
