@@ -2730,3 +2730,12 @@ Ereignis4/4 (122,64s; davon Originalimport113,62s), App gebaut. Originaluploads3
 Fixtures4/4 Hashes unverändert. Keine erneute breite Originalprüfung ohne neuen
 betroffenen Umfang.456/384/72 gleich. Fortsetzung: eigene kanonische Date-Index-
 Schlüssel und typed Seek, danach offene Anforderungen ohne Zwischenabschluss.
+
+Index/Seek jetzt auch für eigene kanonische nichtnullable Date-Felder und gemischte
+Date-/Zahlenschlüssel. Gebundene Date-Variants und VBA-#Datum# bleiben typisiert;
+String-Datekeys verweigern13. Datebereiche vergleichen kanonische ganze Sekunden
+entsprechend tatsächlicher Indexreihenfolge. DAO1/1 (2,20s), App gebaut; keine
+Wiederholung des unverändert betroffenen Originalimports. Voller Jet-/OLE-/Locale-
+Oracle bleibt offen,456/384/72 gleich. Fortsetzung: dokumentierte zusammengesetzte
+Teilschlüssel-Suche mit fehlenden hinteren Schlüsseln als Null für die bereits
+strukturell nichtnullen unterstützten Indizes; danach weitere offene Anforderungen.

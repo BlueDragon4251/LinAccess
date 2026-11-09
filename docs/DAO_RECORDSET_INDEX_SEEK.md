@@ -44,3 +44,11 @@ Public behavioral references (current documentation, not a2003 execution oracle)
 Existing Core/UI/DAO/original-event4/4 passed (122.64s; actual original import
 113.62s), app built. Original uploads3/3 and fixtures4/4 SHA256 unchanged.
 No new CTest target, full-suite, Access2003 differential or CI claim.
+
+Canonical own non-null Date keys are now also accepted, including mixed numeric/
+Date indices. Date keys require actual Date Variants and use shared whole-second
+storage conversion; string keys refuse13. Comparison follows canonical timestamp
+order. Old/imported/noncanonical Date backing remains unsupported. Existing
+Date/OLE/precision limits apply; no full Jet date-identity oracle is implied.
+Focused DAO1/1 passed (2.20s), app built; the preceding original-event run is not
+claimed as freshly repeated for this additional key family.
