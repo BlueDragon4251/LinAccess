@@ -1,5 +1,7 @@
 #include "native_schema_editor.hpp"
 #include "native_macro.hpp"
+#include "native_module_definition.hpp"
+#include "vba_module_context.hpp"
 #include "native_stored_form.hpp"
 #include "native_stored_report.hpp"
 #include <QDateTime>
@@ -2643,6 +2645,47 @@ void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
     unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
 }
 
+void testNativeModuleEditor(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;
+    const auto archive=[&] {QSqlQuery query(db);assert(query.exec("SELECT id,name,source_bytes FROM _la_access_artifacts ORDER BY id"));QCryptographicHash hash(QCryptographicHash::Sha256);while(query.next()) {const auto name=query.value(1).toString().toUtf8(),bytes=query.value(2).toByteArray();hash.addData(QByteArray::number(query.value(0).toLongLong())+":"+QByteArray::number(name.size())+":"+name+":"+QByteArray::number(bytes.size())+":"+bytes);}return hash.result();};const auto originalArchive=archive();
+    const QByteArray body=R"VBA(Public Counter As Long
+Private Function NativeAdjust(value As Long) As Long
+NativeAdjust=value+3
+End Function
+Public Function NativeAdd(value As Long) As Long
+Counter=Counter+1
+NativeAdd=NativeAdjust(value)
+End Function
+Public Function NativeCounter() As Long
+NativeCounter=Counter
+End Function)VBA";
+    AccessFormPreview context("owned_module_context","Begin Form\nBegin Section\nEnd\nEnd",R"VBA(Sub UseOwnedModule()
+Me.Tag=NativeAdd(4)
+End Sub)VBA",db,&window);context.show();QApplication::processEvents();
+    auto application=makePreviewApplicationObject(context);auto modules=application->member("CurrentProject",{}).object->member("AllModules",{}).object;const auto baseline=modules->member("Count",{}).number;
+    std::shared_ptr<linaccess::VbaObject> descriptor;
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-module-editor");auto* name=dialog->findChild<QLineEdit*>("native-module-name");auto* editor=dialog->findChild<QPlainTextEdit*>("native-module-source");assert(name && editor);name->setText("NativeMath");editor->setPlainText(QString::fromUtf8(body));QApplication::setActiveWindow(dialog);dialog->activateWindow();editor->setFocus();QApplication::processEvents();QTest::keyClick(editor,Qt::Key_S,Qt::ControlModifier);QApplication::processEvents();
+        assert(dialog->isVisible() && name->isReadOnly() && modules->member("Count",{}).number==baseline+1);descriptor=modules->member("Item",{VbaValue::string("nativemath")}).object;assert(descriptor->member("Name",{}).asText()=="NativeMath" && descriptor->member("IsLoaded",{}).truthy());assert(application->member("SysCmd",{VbaValue::integer(10),VbaValue::integer(5),VbaValue::string("NativeMath")}).number==1);dialog->reject();
+    });action(window,"+ Modul")->trigger();assert(descriptor && !descriptor->member("IsLoaded",{}).truthy() && archive()==originalArchive);
+    std::vector<VbaValue> arguments;assert(context.executeProcedure("UseOwnedModule",arguments).status==linaccess::VbaExecutionStatus::Completed && makePreviewFormObject(context)->member("Tag",{}).asText()=="7");
+    const auto first=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("SELECT NativeAdd(5) AS computed,NativeCounter() AS total"),{});assert(first.rows.size()==1 && first.rows[0][0].toInt()==8 && first.rows[0][1].toInt()==2);
+    QSqlQuery sql(db);assert(!sql.exec("SELECT NativeAdjust(1)"));
+    QSqlQuery prepared(db);assert(prepared.prepare("SELECT NativeAdd(5)"));
+    const auto open=[&](const std::function<void(QDialog*)>& callback) {auto* explorer=window.findChild<QTreeWidget*>("database-explorer");QTreeWidgetItem* module=nullptr;for(int group=0;group<explorer->topLevelItemCount();++group) for(int row=0;row<explorer->topLevelItem(group)->childCount();++row) {auto* item=explorer->topLevelItem(group)->child(row);if(item->data(0,Qt::UserRole).toString()=="module" && item->text(0)=="NativeMath") module=item;}assert(module);QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-module-editor");callback(dialog);});QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,module),Q_ARG(int,0));};
+    auto changed=body;changed.replace("value+3","value+10");
+    open([&](QDialog* dialog) {auto* editor=dialog->findChild<QPlainTextEdit*>("native-module-source");assert(editor && editor->toPlainText()==QString::fromUtf8(body));editor->setPlainText(QString::fromUtf8(changed));dialog->findChild<QPushButton*>("native-module-save")->click();});
+    assert(prepared.exec() && prepared.next() && prepared.value(0).toInt()==15);prepared.finish();assert(context.executeProcedure("UseOwnedModule",arguments).status==linaccess::VbaExecutionStatus::Completed && makePreviewFormObject(context)->member("Tag",{}).asText()=="14");
+    assert(sql.exec("SELECT NativeCounter()") && sql.next() && sql.value(0).toInt()==2);sql.finish();
+    assert(sql.exec("SAVEPOINT owned_module_revision"));auto temporary=changed;temporary.replace("value+10","value+20");sql.prepare("UPDATE _la_objects SET definition=? WHERE kind='module' AND name='NativeMath'");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromUtf8(temporary)}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();assert(prepared.exec() && prepared.next() && prepared.value(0).toInt()==25);prepared.finish();assert(sql.exec("ROLLBACK TO owned_module_revision") && sql.exec("RELEASE owned_module_revision"));assert(prepared.exec() && prepared.next() && prepared.value(0).toInt()==15);prepared.finish();
+    assert(sql.exec("CREATE TEMP TABLE _la_objects(kind,name,definition)"));int error=0;try {(void)linaccess::standardVbaModuleSources(db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251 && !sql.exec("SELECT NativeAdd(5)"));assert(sql.exec("DROP TABLE temp._la_objects"));
+    const int collision=artifact(db,"vba","NATIVEMATH",body);error=0;try {(void)linaccess::standardVbaModuleSources(db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5 && !sql.exec("SELECT NativeAdd(5)"));sql.prepare("DELETE FROM _la_access_artifacts WHERE id=?");sql.addBindValue(collision);assert(sql.exec());sql.finish();assert(archive()==originalArchive);
+    QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-module-editor");dialog->findChild<QLineEdit*>("native-module-name")->setText("MacroConditions");dialog->findChild<QPlainTextEdit*>("native-module-source")->setPlainText(QString::fromUtf8(body));QTimer::singleShot(0,&window,[&] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message);message->accept();});dialog->findChild<QPushButton*>("native-module-save")->click();assert(dialog->isVisible());dialog->reject();});action(window,"+ Modul")->trigger();assert(archive()==originalArchive);
+    error=0;try {(void)linaccess::nativeModuleSource(QJsonObject{{"version",1},{"vba","VERSION 1.0 CLASS\n"}});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    open([&](QDialog* dialog) {QTimer::singleShot(0,&window,[&] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message);message->button(QMessageBox::Yes)->click();});dialog->findChild<QPushButton*>("native-module-delete")->click();});
+    assert(modules->member("Count",{}).number==baseline && !descriptor->member("IsLoaded",{}).truthy() && archive()==originalArchive);assert(!prepared.exec());assert(context.close());
+}
+
 void testEditableControlFormats(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;
     auto database=linaccess::makeDaoDatabase(db);auto table=database->member("CreateTableDef",{VbaValue::string("format_edit")}).object;
@@ -3547,6 +3590,7 @@ End Sub
     testEditableControlFormats(window,db);
     testNativeMacros(window,db);
     testNativeMacroDesigner(window,db);
+    testNativeModuleEditor(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

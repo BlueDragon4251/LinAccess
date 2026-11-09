@@ -67,33 +67,7 @@ inline void refresh(QSqlDatabase db,sqlite3* native,Registry& registry) {
     const auto changes=sqlite3_total_changes64(native);
     const auto data=pragma(db,"PRAGMA main.data_version"),schema=pragma(db,"PRAGMA main.schema_version"),temporary=pragma(db,"PRAGMA temp.schema_version");
     if(registry.changes==changes && registry.dataVersion==data && registry.schemaVersion==schema && registry.tempSchemaVersion==temporary && registry.observedEpoch==epoch) return;
-    QMap<QString,QByteArray> sources;
-    QSqlQuery table(db);
-    if(!table.exec("SELECT type FROM main.sqlite_schema WHERE name='_la_access_artifacts' COLLATE NOCASE")) throw VbaRuntimeError(3251,"VBA SQL metadata unavailable");
-    if(table.next()) {
-        if(table.value(0).toString()!="table") throw VbaRuntimeError(3251,"VBA SQL requires a physical source archive");
-        table.finish();
-        QSqlQuery any(db);
-        if(!any.exec("SELECT 1 FROM main._la_access_artifacts WHERE kind='vba' LIMIT 1")) throw VbaRuntimeError(3251,"VBA SQL archive shape unsupported");
-        const bool hasCode=any.next(); any.finish();
-        if(hasCode) {
-            QSqlQuery shadow(db);
-            if(!shadow.exec("SELECT 1 FROM temp.sqlite_schema WHERE name='_la_access_artifacts' COLLATE NOCASE AND type IN ('table','view')")) throw VbaRuntimeError(3251,"VBA SQL shadow check failed");
-            if(shadow.next()) throw VbaRuntimeError(3251,"VBA SQL archive shadow is unsupported");
-            shadow.finish();
-            QSqlQuery rows(db);
-            if(!rows.exec("SELECT name,source_bytes FROM main._la_access_artifacts WHERE kind='vba' ORDER BY id DESC")) throw VbaRuntimeError(3251,"VBA SQL archive ordering unavailable");
-            qsizetype bytes=0;
-            while(rows.next()) {
-                const auto key=rows.value(0).toString().toCaseFolded();
-                if(sources.contains(key)) continue;
-                auto source=rows.value(1).toByteArray(); bytes+=source.size();
-                if(sources.size()>=256 || bytes>16*1024*1024) throw VbaRuntimeError(3251,"VBA SQL module inventory limit exceeded");
-                sources.insert(key,std::move(source));
-            }
-            if(rows.lastError().isValid()) throw VbaRuntimeError(3146,"VBA SQL archive fetch failed");
-        }
-    }
+    auto sources=standardVbaModuleSources(db);
     if(sources!=registry.sources) {
         QMap<QString,Procedure> procedures;
         static const QRegularExpression privateDeclaration("^\\s*(?:(?:Public|Static)\\s+)*(?:Private|Friend)\\b",QRegularExpression::CaseInsensitiveOption);

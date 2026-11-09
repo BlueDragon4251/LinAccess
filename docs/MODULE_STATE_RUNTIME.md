@@ -62,3 +62,9 @@ This is local validation, not a remote distro CI or Microsoft Access reference r
 The subsequent [calendar stage](CALENDAR_RUNTIME.md) now executes the unchanged
 standard helper against these globals through native Screen and date selection;
 its evidence and remaining ActiveX/default-member boundaries are documented there.
+
+
+The common source catalog now includes separately stored native standard modules.
+The real editor and current proof/limits are in
+[NATIVE_STANDARD_MODULES_RUNTIME.md](NATIVE_STANDARD_MODULES_RUNTIME.md). Imported
+archive bytes remain unchanged; native/imported collisions refuse explicitly.

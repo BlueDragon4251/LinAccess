@@ -2,6 +2,7 @@
 #include "native_field_defaults.hpp"
 #include "mainwindow.hpp"
 #include "native_macro.hpp"
+#include "native_module_definition.hpp"
 #include "native_form_event_editor.hpp"
 #include "native_grid_clipboard.hpp"
 #include "native_datasheet_print.hpp"
@@ -289,6 +290,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     action("+ Formular", [this] { editForm(); });
     action("+ Bericht", [this] { editReport(); });
     action("+ Makro", [this] { editMacro(); });
+    action("+ Modul", [this] { editModule(); });
     action("Aktualisieren", [this] { refreshExplorer(); });
     auto* fileMenu=menuBar()->addMenu("&Datei");
     const auto projectActions=toolbar->actions();
@@ -347,7 +349,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* objectMenu=menuBar()->addMenu("&Einfügen");
     auto* viewMenu=menuBar()->addMenu("&Ansicht");
     menuBar()->removeAction(viewMenu->menuAction()); menuBar()->insertMenu(objectMenu->menuAction(),viewMenu);
-    for (int i=5;i<10;++i) objectMenu->addAction(projectActions[i]);
+    for (int i=5;i<11;++i) objectMenu->addAction(projectActions[i]);
     auto* renameTable=viewMenu->addAction("Tabelle &umbenennen...");renameTable->setObjectName("native-table-rename");
     connect(renameTable,&QAction::triggered,this,[this] {
         const auto* item=explorer_->currentItem();if(!item || item->data(0,Qt::UserRole).toString()!="table" || QApplication::activeModalWidget() || !db_.isOpen()) return;const auto oldName=item->text(0);
@@ -1561,6 +1563,7 @@ void MainWindow::refreshExplorer() {
     group("Formulare", "form", objectNames("form"));
     group("Berichte", "report", objectNames("report"));
     group("Makros", "macro", objectNames("macro"));
+    group("Module", "module", objectNames("module"));
     QSqlQuery artifacts(db_);
     if (artifacts.exec("SELECT id,kind,name,status FROM _la_access_artifacts "
                        "ORDER BY kind,name COLLATE NOCASE")) {
@@ -1588,6 +1591,7 @@ void MainWindow::openExplorerItem(QTreeWidgetItem* item, int) {
     else if (kind == "form") runForm(name);
     else if (kind == "report") runReport(name);
     else if (kind == "macro") editMacro(name);
+    else if (kind == "module") editModule(name);
     else if (kind == "access_artifact") showAccessArtifact(
         item->data(0, Qt::UserRole + 1).toInt());
 }
@@ -2094,6 +2098,43 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     if(!alive() || !registered) return 2501;
     if(!activated) { const int index=tabs_->indexOf(registered); if(index>=0) tabs_->removeTab(index); registered->deleteLater(); return 2501; }
     return 0;
+}
+
+void MainWindow::editModule(const QString& existingName) {
+    if(!hasProject()) return;const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("module",existingName);
+    try {if(!existingName.isEmpty()) (void)linaccess::nativeModuleSource(old);}catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));return;}
+    QDialog dialog(this);dialog.setObjectName("native-module-editor");dialog.setWindowTitle("Standardmodul bearbeiten");dialog.resize(900,650);tagProjectObject(&dialog,this,db_,"module",existingName);auto* layout=new QVBoxLayout(&dialog);
+    const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
+    const auto checkProject=[owner,identity,generation] {if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Das Modul gehört nicht mehr zum aktuellen Projekt.");};
+
+    auto* name=new QLineEdit(existingName,&dialog);name->setObjectName("native-module-name");name->setMaxLength(64);name->setReadOnly(!existingName.isEmpty());name->setPlaceholderText("Name des Standardmoduls");layout->addWidget(name);
+    auto* source=new QPlainTextEdit(&dialog);source->setObjectName("native-module-source");source->setPlainText(old.value("vba").toString());source->setPlaceholderText("VBA-Quelltext für ein Standardmodul");layout->addWidget(source,1);
+    auto* note=new QLabel("Öffentliche Funktionen stehen unterstützten VBA-, Eval- und SQL-Aufrufen zur Verfügung. Die native VBA-Sprache ist eingeschränkt; Klassenmodule werden hier nicht unterstützt.",&dialog);note->setWordWrap(true);layout->addWidget(note);
+    auto* row=new QHBoxLayout;auto* analyze=addButton(row,"Analysieren");auto* save=addButton(row,"Speichern");save->setObjectName("native-module-save");auto* remove=addButton(row,"Modul löschen");remove->setObjectName("native-module-delete");remove->setEnabled(!existingName.isEmpty());layout->addLayout(row);installDesignerSaveShortcut(dialog,save);
+    auto* result=new QTextBrowser(&dialog);result->setMaximumHeight(140);layout->addWidget(result);
+    connect(analyze,&QPushButton::clicked,&dialog,[&] {const auto analysis=linaccess::analyzeVba(source->toPlainText().toUtf8().toStdString());QStringList lines{QString("Syntaxinventar: %1 Prozeduren; kein Ausführungsnachweis.").arg(analysis.procedures.size())};for(const auto& flag:analysis.compatibilityFlags) lines.append(QString::fromStdString(flag));result->setPlainText(lines.join('\n'));});
+    connect(save,&QPushButton::clicked,&dialog,[&] {
+        try {
+            checkProject();
+            const auto moduleName=name->text().trimmed();if(!linaccess::nativeModuleNameValid(moduleName)) throw linaccess::VbaRuntimeError(5,"Ungültiger Standardmodulname.");
+            const QJsonObject definition{{"version",1},{"vba",source->toPlainText()}};(void)linaccess::nativeModuleSource(definition);
+            const auto saved=dialog.property("la_editor_saved_name").toString();const auto current=saved.isEmpty() ? existingName : saved;
+            const auto modules=linaccess::standardVbaModuleSources(db_);if(current.isEmpty() && modules.contains(moduleName.toCaseFolded())) throw linaccess::VbaRuntimeError(3010,"Modulname ist bereits vorhanden. Öffnen Sie das vorhandene native Modul oder wählen Sie einen anderen Namen.");
+            if(!current.isEmpty() && current!=moduleName) throw linaccess::VbaRuntimeError(3251,"Modulumbenennung ist hier nicht implementiert.");
+            if(saveObject("module",moduleName,definition)) {name->setText(moduleName);name->setReadOnly(true);remove->setEnabled(true);tagProjectObject(&dialog,this,db_,"module",moduleName);completeDesignerSave(dialog,moduleName);}
+        }catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));}
+    });
+    connect(remove,&QPushButton::clicked,&dialog,[&] {
+        try {checkProject();
+        const auto saved=dialog.property("la_editor_saved_name").toString();const auto moduleName=saved.isEmpty() ? existingName : saved;if(moduleName.isEmpty()) return;
+        QSqlQuery snapshot(db_);snapshot.prepare("SELECT definition FROM main._la_objects WHERE kind='module' AND name=? COLLATE BINARY");snapshot.addBindValue(moduleName);if(!snapshot.exec() || !snapshot.next()) {messageError(&dialog,"Gespeichertes Modul ist nicht verfügbar.");return;}const auto previous=snapshot.value(0);snapshot.finish();
+        if(QMessageBox::question(&dialog,"Modul löschen","Gespeichertes Modul und ungespeicherten Text wirklich verwerfen?",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
+        checkProject();
+        QSqlQuery query(db_);query.prepare("DELETE FROM main._la_objects WHERE kind='module' AND name=? COLLATE BINARY AND definition=?");query.addBindValue(moduleName);query.addBindValue(previous);
+        if(!query.exec() || query.numRowsAffected()!=1) {messageError(&dialog,"Modul wurde zwischenzeitlich geändert oder konnte nicht gelöscht werden.");return;}refreshExplorer();dialog.accept();
+        }catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));}
+    });
+    trackDesignerChanges(dialog);dialog.exec();
 }
 
 void MainWindow::editMacro(const QString& existingName) {

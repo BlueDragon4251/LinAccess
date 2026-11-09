@@ -81,6 +81,7 @@ private:
     int showTable(const QString& name,bool readOnly=false,bool interactive=true,const QString& queryName={},const QString& querySource={});
     void editQuery(const QString& name = {});
     void editMacro(const QString& name = {});
+    void editModule(const QString& name = {});
     void editForm(const QString& name = {});
     void runForm(const QString& name);
     void runReport(const QString& name);

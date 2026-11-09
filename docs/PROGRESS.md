@@ -6811,3 +6811,26 @@ bytegleichen SQLite3.54.1-Backend, tatsächlichen Backend-Selbstcheck und erlaub
 Payload ohne Referenzdaten/Quellen. CPack-Preinstall-Build einmal mit Parallelität4
 abgeschlossen, keine zusätzliche Gesamttestsuite ausgeführt. NATIVE_MACROS_RUNTIME.md;
 F088/F041/F050/F057/F148 und456/384/72 unverändert. Direkt weiter programmieren.
+
+
+Eigene Standardmodule sind jetzt echte native Projektobjekte: +Modul/Texteditor,
+Ctrl+S ohne Schließen, Wiederöffnen/Bearbeiten, Syntaxinventar ohne Ausführungsclaim,
+AllModules-/SysCmd-Metadaten und bestätigte Löschung nur eigener Module. Namen
+werden nach Save gesperrt; Umbenennen/Classes/VBE/volle Sprache bleiben offen.
+Version1/vba-Definitionen liegen getrennt in _la_objects, importierte VBA-Zeilen
+werden nicht geändert. Gemeinsamer Sources-Leser versorgt native Aufrufe/Eval,
+öffentliche Variablen und bestehende SQL-Registry, erhält Archiv-Latest-/Shadow-
+Prüfungen und Quellenrevision/ROLLBACK-Kohärenz und verweigert Kollisionen statt
+Auswahl. Bounds256 Module/16MiB Quellen/1M Katalogzeilen/5s Scan, eigene Quelle1MiB.
+Löschen prüft Projektdentität/-generation nach Modalinteraktion und gespeicherte
+Revision. Fehlende direkte Includes und gemischte auto-Typdeklaration korrigiert.
+DAO1/1 (2,55s), Layout1/1 (11,36s) im Bündel bestanden. Nach tatsächlicher
+Qt-Fokussetzung für Ctrl+S und normalem LinAccess-Abfragepfad zur initialen UDF-
+Registrierung nur betroffene GUI-Prüfung erneut1/1 (6,23s), App gebaut: echte
+Editor-/VBA-/SQL-Aufrufe, gemeinsamer Counter/Private-Helper, SQL-Private-Sperre,
+vorbereitete Quellenänderung/Savepoint-Rücknahme, native/importierte Namens- und
+TEMP-Schattenfehler, Löschung/alte Prepared-Verweigerung sowie unveränderte
+vorhandene Archivbytes. Keine neue CTest-ID/Windows-Beobachtung, kein neuer
+Gesamtsuite-/Plattformnachweis. Paketprüfung gehört zum vorherigen64abd69-Stand,
+kein frisch paketierter Modulstand behauptet. NATIVE_STANDARD_MODULES_RUNTIME.md;
+F042/F050/F068/F118/F130/F155 und456/384/72 unverändert. Direkt weiter.

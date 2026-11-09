@@ -953,13 +953,11 @@ public:
         makePreviewControlObject(preview_,QString::fromUtf8(name.data(),name.size()))->assign("Visible",linaccess::VbaValue::logical(value));
     }
     std::optional<std::string> moduleForProcedure(std::string_view procedure) override {
-        QSqlQuery query(preview_.db_);
-        if (!query.exec("SELECT name,source_bytes FROM _la_access_artifacts WHERE kind='vba' ORDER BY id DESC")) return std::nullopt;
-        QSet<QString> names; std::optional<std::string> found;
+        const auto sources=linaccess::standardVbaModuleSources(preview_.db_);
+        std::optional<std::string> found;
         const auto target=QString::fromUtf8(procedure.data(),procedure.size());
-        while (query.next()) {
-            const auto name=query.value(0).toString().toCaseFolded(); if (names.contains(name)) continue; names.insert(name);
-            const auto source=linaccess::decodeVbaSource(query.value(1).toByteArray());
+        for (const auto& bytes:sources) {
+            const auto source=linaccess::decodeVbaSource(bytes);
             const auto code=source.toUtf8().toStdString();
             if (linaccess::isVbaClassModule(code)) continue;
             const auto analysis=linaccess::analyzeVba(code); const auto lines=source.split('\n');

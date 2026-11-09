@@ -1,5 +1,7 @@
 #include "access_form_objects.hpp"
 #include "native_macro.hpp"
+#include "vba_module_context.hpp"
+#include "vba_source_codec.hpp"
 #include <QScopeGuard>
 #include "access_list_box.hpp"
 #include "access_value_list.hpp"
@@ -1612,16 +1614,16 @@ public:
     std::string_view className() const override { return "CurrentProject"; }
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=text(name).toCaseFolded();
-        if(key=="allforms" || key=="allreports" || key=="allmacros") return linaccess::VbaArgumentSignature{{"Index"},0};
+        if(key=="allforms" || key=="allreports" || key=="allmacros" || key=="allmodules") return linaccess::VbaArgumentSignature{{"Index"},0};
         return {};
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         check();
         const auto key=text(name).toCaseFolded();
-        if(key=="allforms" || key=="allreports" || key=="allmacros") {
-            auto& cache=key=="allforms" ? forms_ : key=="allreports" ? reports_ : macros_;
+        if(key=="allforms" || key=="allreports" || key=="allmacros" || key=="allmodules") {
+            auto& cache=key=="allforms" ? forms_ : key=="allreports" ? reports_ : key=="allmacros" ? macros_ : modules_;
             auto catalog=cache.lock();
-            if(!catalog) { catalog=makeNativeProjectCatalog(shared_from_this(),key=="allforms" ? "form" : key=="allreports" ? "report" : "macro"); cache=catalog; }
+            if(!catalog) { catalog=makeNativeProjectCatalog(shared_from_this(),key=="allforms" ? "form" : key=="allreports" ? "report" : key=="allmacros" ? "macro" : "module"); cache=catalog; }
             return args.empty() ? linaccess::VbaValue::reference(catalog) : catalog->member("Item",args);
         }
         if(!args.empty()) throw linaccess::VbaRuntimeError(450,"CurrentProject property requires no arguments");
@@ -1641,7 +1643,9 @@ public:
         return data;
     }
     QStringList catalogNames(const QString& kind) const {
-        check(); QMap<QString,QString> names,imported;
+        check();
+        if(kind=="module") {QMap<QString,QString> names;const auto sources=linaccess::standardVbaModuleSources(database_,&names);QStringList result;for(auto it=sources.begin();it!=sources.end();++it) if(!linaccess::isVbaClassModule(linaccess::decodeVbaSource(it.value()).toUtf8().toStdString())) result.append(names.value(it.key()));return result;}
+        QMap<QString,QString> names,imported;
         if(database_.driverName()!="QSQLITE") throw linaccess::VbaRuntimeError(3251,"Native project catalogs require SQLite storage");
         if(kind=="table") {
             QSqlQuery query(database_);
@@ -1729,7 +1733,7 @@ private:
     QPointer<QObject> owner_;
     bool hasOwner_{};
     qulonglong generation_{};
-    std::weak_ptr<linaccess::VbaObject> forms_,reports_,macros_,data_;
+    std::weak_ptr<linaccess::VbaObject> forms_,reports_,macros_,modules_,data_;
 };
 
 class NativeProjectCatalogObject;
@@ -1751,6 +1755,7 @@ public:
         if(kind_=="table") return "AllTables";
         if(kind_=="query") return "AllQueries";
         if(kind_=="macro") return "AllMacros";
+        if(kind_=="module") return "AllModules";
         return kind_=="form" ? "AllForms" : "AllReports";
     }
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
@@ -1852,7 +1857,7 @@ public:
                 const auto type=linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[1]),"long").number;
                 const auto objectName=linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[2]),"string").asText();
                 if(objectName.find('\0')!=std::string::npos) throw linaccess::VbaRuntimeError(5,"Invalid object name");
-                const QStringList kinds{"table","query","form","report","macro"};
+                const QStringList kinds{"table","query","form","report","macro","module"};
                 if(type<0 || type>=kinds.size()) throw linaccess::VbaRuntimeError(3251,"GetObjectState object type is not implemented");
                 auto project=std::dynamic_pointer_cast<NativeCurrentProjectObject>(member("CurrentProject",{}).object);
                 if(!project) throw linaccess::VbaRuntimeError(3420,"Native project context unavailable");

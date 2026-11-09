@@ -149,3 +149,9 @@ the output is not falsely classified as Currency. Existing DAO/query/original
 3/3 (7.79 s), updated Debian/build-ID/SQLite3.54.1/four hashes pass. GUI-free
 runtime unchanged FileCopy1/1 (1.69 s), last broader full48/48 (87.98 s).
 F040/F068 remain open; no added target or catalog ID,456/384/72 unchanged.
+
+
+Native separately stored standard-module sources now enter the same guarded
+registry and revision checks. The current source/editor/prepared-query evidence
+and limits are documented in [NATIVE_STANDARD_MODULES_RUNTIME.md](NATIVE_STANDARD_MODULES_RUNTIME.md).
+This adds native source storage, not a broader SQL execution host or Access oracle.
