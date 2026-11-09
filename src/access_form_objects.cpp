@@ -1147,6 +1147,11 @@ class PreviewFormsObject final : public linaccess::VbaObject, private PreviewObj
 public:
     explicit PreviewFormsObject(AccessFormPreview& preview,bool reports=false) : PreviewObjectBase(preview),reports_(reports) {}
     PreviewFormsObject(QSqlDatabase database,std::function<void()> guard,bool reports):reports_(reports),database_(std::move(database)),projectGuard_(std::move(guard)) {}
+    static QVector<QPointer<AccessFormPreview>> loadedDocuments(const QSqlDatabase& database) {
+        QVector<QPointer<AccessFormPreview>> documents;
+        for(auto* widget:QApplication::topLevelWidgets()) if(auto* form=dynamic_cast<AccessFormPreview*>(widget);form && form->opened_ && !form->closed_ && !form->closing_ && !form->openCancelled_ && form->db_.connectionName()==database.connectionName() && form->db_.databaseName()==database.databaseName()) documents.push_back(form);
+        std::sort(documents.begin(),documents.end(),[](const auto& left,const auto& right) {return left->property("la_form_open_order").toLongLong()<right->property("la_form_open_order").toLongLong();});return documents;
+    }
     bool isNativeType(std::string_view type) const override { return type==(reports_ ? "access.reports" : "access.forms"); }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto forms = openForms(); const auto key = text(name).toCaseFolded();
@@ -1173,6 +1178,7 @@ private:
     QSqlDatabase database_;std::function<void()> projectGuard_;
     QVector<AccessFormPreview*> openForms() const {
         if(projectGuard_) projectGuard_();
+        if(projectGuard_) {QVector<AccessFormPreview*> forms;for(const auto& form:loadedDocuments(database_)) if(form && (form->layout_.kind==linaccess::AccessDocumentKind::Report)==reports_) forms.push_back(form);return forms;}
         const auto database=projectGuard_ ? database_ : checked().db_;QVector<AccessFormPreview*> forms;
         for (auto* widget : QApplication::topLevelWidgets())
             if (auto* form = dynamic_cast<AccessFormPreview*>(widget); form && !form->closed_ && !form->openCancelled_
@@ -1982,9 +1988,22 @@ std::function<void()> nativeDocumentProjectGuard(QSqlDatabase database,QObject* 
     return [project] {if(!QApplication::instance() || QThread::currentThread()!=QApplication::instance()->thread()) throw linaccess::VbaRuntimeError(3251,"Project documents require their GUI thread");project->check();};
 }
 }
+namespace {
+std::shared_ptr<linaccess::VbaObject> cachedProjectDocumentContext(QSqlDatabase database,QObject* context,const QString& kind,const std::function<std::shared_ptr<linaccess::VbaObject>()>& create) {
+    QObject* owner=nullptr;for(auto* ancestor=context;ancestor;ancestor=ancestor->parent()) if(qobject_cast<QMainWindow*>(ancestor)) {owner=ancestor;break;}
+    if(!owner) return create();
+    const auto connection=database.connectionName();const auto key=QString::number(connection.size())+":"+connection+database.databaseName()+QChar(0)+owner->property("la_project_generation").toString()+":"+kind;
+    auto objects=owner->property("la_native_document_contexts").toMap();auto object=objects.value(key).value<std::weak_ptr<linaccess::VbaObject>>().lock();if(object) return object;
+    for(auto entry=objects.begin();entry!=objects.end();) if(entry->value<std::weak_ptr<linaccess::VbaObject>>().expired()) entry=objects.erase(entry);else ++entry;
+    object=create();objects.insert(key,QVariant::fromValue(std::weak_ptr<linaccess::VbaObject>(object)));owner->setProperty("la_native_document_contexts",objects);return object;
+}
+}
 std::shared_ptr<linaccess::VbaObject> nativeProjectDocuments(QSqlDatabase database,QObject* context,bool reports) {
-    auto guard=nativeDocumentProjectGuard(database,context);return std::make_shared<PreviewFormsObject>(std::move(database),std::move(guard),reports);
+    auto guard=nativeDocumentProjectGuard(database,context);return cachedProjectDocumentContext(database,context,reports ? "reports" : "forms",[&] {return std::make_shared<PreviewFormsObject>(database,guard,reports);});
 }
 std::shared_ptr<linaccess::VbaObject> nativeProjectScreen(QSqlDatabase database,QObject* context) {
-    auto guard=nativeDocumentProjectGuard(database,context);return std::make_shared<PreviewScreenObject>(std::move(database),std::move(guard));
+    auto guard=nativeDocumentProjectGuard(database,context);return cachedProjectDocumentContext(database,context,"screen",[&] {return std::make_shared<PreviewScreenObject>(database,guard);});
+}
+QVector<QPointer<AccessFormPreview>> nativeLoadedProjectDocuments(QSqlDatabase database,QObject* context) {
+    auto guard=nativeDocumentProjectGuard(database,context);guard();return PreviewFormsObject::loadedDocuments(database);
 }

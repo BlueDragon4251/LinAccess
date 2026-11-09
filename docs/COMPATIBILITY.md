@@ -4655,3 +4655,23 @@ Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; DEB69ac1b9.
 NATIVE_STANDARD_MODULES_RUNTIME.md; F052/F042/F059/F135 und456/384/72 unverändert.
 Direkt weiter: globale projektgebundene Sammlungsidentität und tatsächlich
 geöffnete/versteckte Formulare als benannte Navigations-/Schließziele.
+
+
+## Fortschreibung 2026-11-09: globale Projekt-Sammlungsidentität/versteckte Ziele
+Native Forms/Reports/Screen teilen einen schwachen, verbindungs-/datei-/generations-
+gebundenen Cache am echten Projektfenster, auch über kurzlebige Application-
+Wrapper hinweg. Projektwechsel leert den Cache; gehaltene Altobjekte bleiben
+3420-geschützt. Tatsächlich geöffnete lebende Dokumente inkl. versteckter/modaler
+Instanzen werden nach nativer Öffnungsreihenfolge erfasst; Schließen/Abbruch wird
+berücksichtigt. Benanntes GoToRecord und Close erreichen nun echte versteckte
+geöffnete Formulare, ohne sie zur Navigation sichtbar zu machen.
+App gebaut; vorhandene Layout1/1 und korrigierte GUI1/1 (7,96s) bestanden. Der neue
+Prüffall wurde berichtigt: Konstruktor dispatcht bereits Open/Load vor show();
+eine erfolgreich geladene noch nicht angezeigte Instanz zählt deshalb richtig
+als geöffnet. Kein Produktionsfehler verdeckt. Geprüft: direkte native VBA-Is-
+Identität ohne gehaltenen Application-Wrapper, reale unangezeigte/ausgeblendete
+Instanzen, versteckte Navigation ohne Anzeigen, benanntes Close und ungültig
+gewordene Dokumentreferenz. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/
+Paketprüfung; DEB69ac1b9. NATIVE_STANDARD_MODULES_RUNTIME.md;
+F052/F178/F042/F135 und456/384/72 unverändert. Direkt weiter mit echtem FileDialog
+für Standardmodule und zugehöriger Projekt-/Dialogzustandslebensdauer.

@@ -2651,6 +2651,20 @@ void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
     unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
 }
 
+void testProjectDocumentLifetime(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;linaccess::NativeStandardModuleHost host(&window,db,[] {});auto application=host.applicationObject();auto forms=application->member("Forms",{}).object;auto reports=application->member("Reports",{}).object;auto screen=application->member("Screen",{}).object;const auto before=forms->member("Count",{}).number;
+    application.reset();const auto result=linaccess::executeVbaProcedure(R"VBA(Public Function GlobalDocumentIdentity() As Boolean
+Dim first As Object
+Dim second As Object
+Dim display As Object
+Set first=Forms
+Set second=Application.Forms
+Set display=Screen
+GlobalDocumentIdentity=(first Is second) And (display Is Application.Screen)
+End Function)VBA","GlobalDocumentIdentity",host);assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue && result.typedReturnValue->kind==VbaValue::Kind::Boolean && result.typedReturnValue->boolean);application=host.applicationObject();assert(application->member("Forms",{}).object==forms && application->member("Reports",{}).object==reports && application->member("Screen",{}).object==screen);
+    AccessFormPreview pending("LoadedUnshownDocument","Begin Form\nBegin Section\nEnd\nEnd",{},db,&window);assert(pending.isHidden() && forms->member("Count",{}).number==before+1);assert(pending.close() && forms->member("Count",{}).number==before);AccessFormPreview hidden("HiddenNavigationDocument","Begin Form\nRecordSource =\"module_nav_rows\"\nBegin Section\nEnd\nEnd",{},db,&window);hidden.show();QApplication::processEvents();hidden.hide();window.focusDatabaseWindow();assert(hidden.isHidden() && hidden.hasDataSource() && forms->member("Count",{}).number==before+1);auto root=forms->member("Item",{VbaValue::string("HiddenNavigationDocument")}).object;auto commands=application->member("DoCmd",{}).object;commands->member("GoToRecord",{VbaValue::integer(2),VbaValue::string("hiddennavigationdocument"),VbaValue::integer(4),VbaValue::integer(2)});assert(root->member("CurrentRecord",{}).number==2 && hidden.isHidden());commands->member("Close",{VbaValue::integer(2),VbaValue::string("hiddennavigationdocument"),VbaValue::integer(2)});assert(forms->member("Count",{}).number==before);int error=0;try {(void)root->member("CurrentRecord",{});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2450);
+}
+
 void testStandaloneDocuments(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;linaccess::NativeStandardModuleHost host(&window,db,[] {});auto application=host.applicationObject();auto forms=application->member("Forms",{}).object;auto reports=application->member("Reports",{}).object;auto screen=application->member("Screen",{}).object;const auto formCount=forms->member("Count",{}).number,reportCount=reports->member("Count",{}).number;
     AccessFormPreview first("StandaloneFirstForm","Begin Form\nWidth =2400\nBegin Section\nHeight =600\nBegin TextBox\nName =\"Value\"\nWidth =1800\nHeight =300\nEnd\nEnd\nEnd",{},db,&window);first.show();AccessFormPreview hidden("StandaloneHiddenForm","Begin Form\nBegin Section\nEnd\nEnd",{},db,&window);hidden.show();QApplication::processEvents();hidden.hide();AccessFormPreview report("StandaloneReport","Begin Report\nBegin Section\nEnd\nEnd",{},db,&window);report.show();QApplication::processEvents();assert(forms->member("Count",{}).number==formCount+2 && reports->member("Count",{}).number==reportCount+1);auto firstObject=makePreviewFormObject(first);assert(application->member("Forms",{VbaValue::string("standalonefirstform")}).object==firstObject && forms->member("Item",{VbaValue::string("StandaloneHiddenForm")}).object==makePreviewFormObject(hidden));assert(forms->member("Item",{VbaValue::numeric(formCount)}).object==firstObject);assert(reports->member("Item",{VbaValue::string("StandaloneReport")}).object==makePreviewFormObject(report));
@@ -4054,6 +4068,7 @@ End Sub
     testModuleUiCommands(window,db);
     testStandaloneProjectCatalog(window,db);
     testStandaloneDocuments(window,db);
+    testProjectDocumentLifetime(window,db);
     testNativeAutoExec(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

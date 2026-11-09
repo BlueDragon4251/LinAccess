@@ -134,3 +134,30 @@ Validation: matching app built; existing GUI/layout2/2 passed (20.16s), no test
 correction. Real visible/hidden forms/report, collection identity of document
 references, VBA enumeration/active screen/cursor, live closure and stale3420
 after actual project switching are covered.
+
+## Project-owned document identity and hidden targets
+
+Native standalone Forms/Reports/Screen objects now use a project-window weak cache
+keyed by connection, database, generation and surface. Held collections remain
+identical across separate transient Application wrappers and bare module lookups;
+actual project reopen clears the cache and existing generation guards invalidate
+held earlier handles. The form-owned legacy wrappers retain their existing caller
+lifetime; complete cross-host global object identity remains a broader boundary.
+
+Project-owned document collections enumerate actually opened, live top-level
+native documents, including hidden and modal instances. Not-yet-open, closing, closed or cancelled instances are excluded. The native
+constructor already dispatches Open/Load before show(); successful unshown
+instances are therefore already open and included. Instance order remains actual
+native opening order; complete Windows multi-instance ordering is not asserted.
+
+Standalone named GoToRecord(acDataForm, name, ...) and Close(acForm/acReport, name)
+use that actual loaded-document lookup, so a hidden opened form can be navigated
+without showing it and explicitly closed. Default active-document commands still
+require their actual active context. Selecting a hidden document, full modal
+activation semantics and original Access form-instance creation remain separate
+requirements; no synthetic form is introduced.
+
+Validation: matching app built; existing layout1/1 and corrected GUI1/1 (7.96s)
+passed. The test now correctly treats successful constructor Open/Load before
+show as already opened. Bare native VBA Is identity without an Application
+wrapper, hidden navigation without showing and named hidden Close are covered.

@@ -145,7 +145,7 @@ public:
             if(action<0 || action>5) throw VbaRuntimeError(5,"Invalid GoToRecord action");if((action==0 || action==1 || action==4) && offset<1) throw VbaRuntimeError(2105,"Invalid record offset");
             if(type==2 || type==-1) {
                 QPointer<AccessFormPreview> selected;
-                for(const auto& document:AccessFormPreview::projectDocuments(db_)) if(document && document->documentKind()==AccessDocumentKind::Form && (object.isEmpty() ? document==activePreviewDocument() : document->documentName().compare(object,Qt::CaseInsensitive)==0)) {if(selected) throw VbaRuntimeError(5,"GoToRecord form target is ambiguous");selected=document;}
+                for(const auto& document:nativeLoadedProjectDocuments(db_,owner_)) if(document && document->documentKind()==AccessDocumentKind::Form && (object.isEmpty() ? document==activePreviewDocument() : document->documentName().compare(object,Qt::CaseInsensitive)==0)) {if(selected) throw VbaRuntimeError(5,"GoToRecord form target is ambiguous");selected=document;}
                 if(selected) {auto forwarded=values;for(auto& value:forwarded) if(value.kind==VbaValue::Kind::Missing) value=VbaValue::empty();auto result=invokeNativePreviewCommand(*selected,"GoToRecord",forwarded);host.check();return result;}
                 if(type==2) throw VbaRuntimeError(object.isEmpty() ? 2046 : 2450,"GoToRecord form is not open");
             }
@@ -176,7 +176,7 @@ public:
             const auto object=values.size()>1 && values[1].kind!=VbaValue::Kind::Missing ? QString::fromStdString(coerceVbaModuleValue(values[1],"string").asText()) : QString{};
             if(type==0 || type==1 || type==-1) for(const auto* method:{"closeQueryDocument","closeTableDocument"}) {QVariantMap result;if(!QMetaObject::invokeMethod(owner_,method,Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,type),Q_ARG(QString,object),Q_ARG(int,save))) throw VbaRuntimeError(3251,"Data document close is unavailable");if(result.value("handled").toBool()) {resultError(result);host.check();return VbaValue::empty();}}
             QPointer<AccessFormPreview> selected;
-            for(const auto& document:AccessFormPreview::projectDocuments(db_)) if(document && (type==-1 || type==(document->documentKind()==AccessDocumentKind::Form ? 2 : 3))) {
+            for(const auto& document:nativeLoadedProjectDocuments(db_,owner_)) if(document && (type==-1 || type==(document->documentKind()==AccessDocumentKind::Form ? 2 : 3))) {
                 if(object.isEmpty()) {if(document==activePreviewDocument() && !document->isHidden()) selected=document;}
                 else if(document->documentName().compare(object,Qt::CaseInsensitive)==0) {if(selected) throw VbaRuntimeError(5,"Close target is ambiguous");selected=document;}
             }
