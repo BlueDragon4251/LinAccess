@@ -2907,10 +2907,12 @@ int main(int argc,char** argv) {
         {linaccess::AccessTableModel model(nullptr,db);model.setTable("authored_defaults");assert(model.select());const int column=model.fieldIndex("qty");assert(column==0 && model.headerData(column,Qt::Horizontal).toString()=="Anzahl Ä" && model.headerData(column,Qt::Horizontal,Qt::ToolTipRole).toString().contains("Technischer Hinweis") && model.record().fieldName(column)=="qty");}
         {
             linaccess::updateNativeFieldProperties(db,"authored_defaults","moment",{{"Format",linaccess::VbaValue::string("yyyy-mm-dd")}});
+            linaccess::updateNativeFieldProperties(db,"authored_defaults","label",{{"Format",linaccess::VbaValue::string(">")}});
             linaccess::AccessTableModel model(nullptr,db);model.setTable("authored_defaults");assert(model.select());
             const int quantity=model.fieldIndex("qty"),moment=model.fieldIndex("moment");
             const auto expected=QLocale().toString(7.0,'f',2)+" units";
             assert(model.data(model.index(0,quantity)).toString()==expected);
+            const int label=model.fieldIndex("label");assert(model.data(model.index(0,label)).toString()=="UI VALUE" && model.clipboardText(model.index(0,label))=="ui value");
             assert(model.data(model.index(0,quantity),Qt::EditRole).toDouble()==7 && model.clipboardText(model.index(0,quantity))=="7");
             QTableView grid;grid.setModel(&model);
             const auto snapshot=linaccess::nativeDatasheetSnapshot(grid,"Formatted fields");
@@ -2941,6 +2943,7 @@ int main(int argc,char** argv) {
         assert(controls->item("moment").object->scalarValue().kind==linaccess::VbaValue::Kind::Date);
         const auto expected=QLocale().toString(7.0,'f',2)+" units";
         assert(report.findChild<QLineEdit*>("access-control-qty")->text()==expected);
+        assert(report.findChild<QLineEdit*>("access-control-label")->text()=="UI VALUE" && controls->item("label").object->scalarValue().asText()=="ui value");
         QTemporaryDir output;assert(output.isValid());const auto path=output.filePath("formatted-report.pdf");assert(report.exportReportPdf(path));
         QFile pdf(path);assert(pdf.open(QIODevice::ReadOnly));const auto original=pdf.readAll();pdf.close();
         const auto reader=QStandardPaths::findExecutable("pdftotext");if(!reader.isEmpty()) {QProcess text;text.start(reader,{"-layout",path,"-"});assert(text.waitForFinished(10000) && text.exitCode()==0);assert(QString::fromUtf8(text.readAllStandardOutput()).contains(expected));}

@@ -65,6 +65,21 @@ int main(int argc,char** argv) {
     assert(format(decimalLiteral("79228162514264337593543950335"),"General Number").asText()=="79228162514264337593543950335");
     assert(format(decimalLiteral("1.2300"),"General Number").asText()=="1,23");
     assert(format(VbaValue::numeric(1e100),"General Number").asText()=="1E+100");
+    assert(format(VbaValue::string("ab"),"@@@").asText()==" ab");
+    assert(format(VbaValue::string("ab"),"!@@@").asText()=="ab ");
+    assert(format(VbaValue::string("ABCDE"),"@@-@@").asText()=="ABC-DE");
+    assert(format(VbaValue::string("ABCDE"),"!@@-@@").asText()=="AB-CDE");
+    assert(format(VbaValue::string("ab"),">@@-@@").asText()=="  -AB");
+    assert(format(VbaValue::string("äB"),"<@@").asText()=="äb");
+    assert(format(VbaValue::string("xy"),"\"ID:\"@@").asText()=="ID:xy");
+    assert(format(VbaValue::string(""),"@;\"EMPTY\"").asText()=="EMPTY" && format(VbaValue::empty(),"@;\"EMPTY\"").asText()=="EMPTY");
+    assert(format(VbaValue::string("a"),"&&-&&").asText()=="-a");
+    assert(format(VbaValue::string("😀"),"@").asText()=="😀");
+    rejects(VbaValue::string("😀"),"@-@",3251);
+    rejects(VbaValue::string("ß"),">@",3251);
+    rejects(VbaValue::numeric(1),"@",13);
+    rejects(VbaValue::string(std::string("a\0b",3)),"@",3251);
+    rejects(VbaValue::string(std::string(1,char(255))),"@",13);
     const auto options=parseVbaNumericFormatOptions({decimalLiteral("-0.5"),VbaValue::integer(2),VbaValue::integer(0),VbaValue::integer(-1),VbaValue::integer(0)});assert(formatAccessNumericValue(decimalLiteral("-0.5"),false,options).asText()=="(,50)");
 
     auto db=QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());
@@ -73,6 +88,8 @@ int main(int argc,char** argv) {
     assert(model.data(model.index(0,0)).toString()=="2003" && model.data(model.index(0,1)).toString()=="12" && model.data(model.index(0,2)).toString()=="31");
     assert(model.data(model.index(0,1)).metaType().id()==QMetaType::QString);
     assert(format(decimalLiteral("0.125"),"Percent").asText()=="12,50%");
+    model.execute(db,"SELECT Format('ab','!@@@'),Format('xy','>@@'),Format('','@;\"EMPTY\"')");
+    assert(model.data(model.index(0,0)).toString()=="ab " && model.data(model.index(0,1)).toString()=="XY" && model.data(model.index(0,2)).toString()=="EMPTY");
     model.execute(db,"SELECT Format(1e100,'Scientific'),Format(9007199254740993,'General Number')");
     assert(model.data(model.index(0,0)).toString()=="1,00E+100" && model.data(model.index(0,1)).toString()=="9007199254740993");
 

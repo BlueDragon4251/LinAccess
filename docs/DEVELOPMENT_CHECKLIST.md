@@ -2055,3 +2055,17 @@ wissenschaftlicher Masken. Keine neue Windows-Beobachtung/CTest-ID; kombinierte
 wissenschaftliche Abschnitts-/Literal-/Engineering-Masken, vollständige regionale
 Coercion und Access-Gleichheit bleiben offen. NATIVE_FORMAT_RUNTIME.md;456/384/72
 unverändert. Ohne Zwischenabschluss direkt weiterimplementieren.
+
+Textmasken unterstützen jetzt @ (mit Leerstellen), & (ohne Leerstellen), ! für
+Linksfüllung, native Groß-/Kleinschreibung mit >/<, zitierte/escaped Literale und
+einen zweiten Abschnitt für leere Strings/Empty. Null-Konventionen bleiben
+getrennt. Tabellenanzeige und geerbte Berichtsformate verwenden diese Strecke;
+Value und rohe Zwischenablage behalten den gespeicherten Originaltext. Native
+Formatter/GUI gemeinsam2/2 (5,72s), App gebaut; echte SQL-Fälle, Füllrichtungen,
+überzählige Zeichen, Leerwerte, Tabellen-/Berichtsmaske bei unveränderten Daten,
+Unicode und vor unzulässigem Surrogat-Split verweigerte Ausgabe geprüft. NUL/
+überlange Ausgabe sowie längenändernde Case-Konvertierung mit Platzhaltern werden
+explizit verweigert; vollständige Windows-/Unicode-/Maskengleichheit bleibt offen.
+Keine neue Windows-Beobachtung oder CTest-ID. NATIVE_FORMAT_RUNTIME.md;
+456/384/72 unverändert. Nächste Umsetzung: Fokus-/Eingabestrecke formatierter
+bearbeitbarer Formulartextfelder, ohne Anzeigen als Daten zurückzuparsen.

@@ -157,6 +157,65 @@ std::optional<QString> customNumericText(const VbaValue& input,const QString& pa
     const auto rendered=numberText(value,required<0 ? 0 : integer.size()-required,fraction.lastIndexOf('0')+1,fraction.size(),group,true,false,false,false,locale);
     return (automaticNegative ? locale.negativeSign() : QString{})+literal(0,first)+rendered+literal(last+1,pieces.size());
 }
+std::optional<QString> customStringText(const VbaValue& value,const QString& pattern,const QLocale& locale) {
+    QVector<QVector<NumericMaskPiece>> sections(1);
+    bool directive=false,placeholder=false,numeric=false;
+    for(int position=0;position<pattern.size();++position) {
+        const auto ch=pattern[position];
+        if(ch=='\\') {
+            if(++position>=pattern.size()) throw VbaRuntimeError(5,"Incomplete format escape");
+            sections.last().append({pattern[position],true});
+        } else if(ch=='"') {
+            bool closed=false;
+            while(++position<pattern.size()) {if(pattern[position]=='"') {closed=true;break;}sections.last().append({pattern[position],true});}
+            if(!closed) throw VbaRuntimeError(5,"Unterminated format literal");
+        } else if(ch==';') sections.append(QVector<NumericMaskPiece>{});
+        else {
+            sections.last().append({ch,false});
+            placeholder|=ch=='@' || ch=='&';directive|=ch=='@' || ch=='&' || ch=='<' || ch=='>' || ch=='!';numeric|=ch=='0' || ch=='#';
+        }
+    }
+    if(!directive || (numeric && !placeholder)) return {};
+    if(sections.size()>2) throw VbaRuntimeError(5,"String masks support at most two sections");
+    if(value.kind!=VbaValue::Kind::Text && value.kind!=VbaValue::Kind::Empty) throw VbaRuntimeError(13,"String mask requires a String or Empty value");
+    constexpr qsizetype limit=16*1024*1024;
+    if(value.text.size()>static_cast<std::size_t>(limit)*4) throw VbaRuntimeError(3251,"String format input exceeds its native bound");
+    const auto bytes=QByteArray::fromStdString(value.kind==VbaValue::Kind::Empty ? std::string{} : value.text);
+    auto text=QString::fromUtf8(bytes);
+    if(!text.isValidUtf16() || text.toUtf8()!=bytes) throw VbaRuntimeError(13,"Invalid Unicode string format input");
+    if(text.size()>limit || text.contains(QChar(0))) throw VbaRuntimeError(3251,"String format input is not representable");
+    const auto& pieces=sections[text.isEmpty() && sections.size()>1 ? 1 : 0];
+    int casing=0,count=0;bool left=false;
+    QStringList rendered;rendered.resize(pieces.size());
+    for(int index=0;index<pieces.size();++index) {
+        const auto& piece=pieces[index];const auto ch=piece.character;
+        if(!piece.literal && (ch=='<' || ch=='>')) {
+            const int next=ch=='<' ? 1 : 2;if(casing && casing!=next) throw VbaRuntimeError(3251,"Mixed string case directives are not validated");casing=next;
+        } else if(!piece.literal && ch=='!') left=true;
+        else if(!piece.literal && (ch=='@' || ch=='&')) ++count;
+        else rendered[index]=QString(ch);
+    }
+    const auto converted=casing==1 ? locale.toLower(text) : casing==2 ? locale.toUpper(text) : text;
+    if(count && converted.size()!=text.size()) throw VbaRuntimeError(3251,"Length-changing case conversion with string placeholders is not validated");
+    text=converted;
+    if(!count) {
+        const auto literal=rendered.join(QString{});
+        if(text.isEmpty()) return literal;
+        if(!literal.isEmpty()) throw VbaRuntimeError(3251,"Literal-only case masks with nonempty input are not validated");
+        if(text.size()>limit) throw VbaRuntimeError(3251,"String format output exceeds its native bound");
+        return text;
+    }
+    int cursor=left ? 0 : text.size()-1;
+    for(int offset=0;offset<pieces.size();++offset) {
+        const int index=left ? offset : pieces.size()-offset-1;const auto& piece=pieces[index];
+        if(piece.literal || (piece.character!='@' && piece.character!='&')) continue;
+        if(cursor>=0 && cursor<text.size()) {rendered[index]=QString(text[cursor]);cursor+=left ? 1 : -1;}
+        else if(piece.character=='@') rendered[index]=" ";
+    }
+    const auto result=(left ? QString{} : text.left(cursor+1))+rendered.join(QString{})+(left ? text.mid(cursor) : QString{});
+    if(result.size()>limit || !result.isValidUtf16()) throw VbaRuntimeError(3251,"String mask would split Unicode characters or exceed its output bound");
+    return result;
+}
 struct DateParts {QDate date;QTime time;};
 DateParts dateParts(const VbaValue& value) {
     DateParts result;const QDate epoch(1899,12,30);
@@ -233,6 +292,7 @@ VbaValue formatAccessValue(const VbaValue& input,std::string_view mask,bool stri
     if(const auto match=scientific.match(pattern);match.hasMatch()) return VbaValue::string(scientificText(value,match.captured(1),match.captured(2)[0],match.captured(3)[0],match.captured(4).size(),locale).toUtf8().toStdString());
     if(lower=="percent") return VbaValue::string(numberText(value,1,2,2,false,true,false,false,true,locale).toUtf8().toStdString());
     if(lower=="currency" || lower=="standard" || lower=="fixed") {VbaNumericFormatOptions options;if(lower!="currency") {options.digits=2;options.group=lower=="standard";}return formatAccessNumericValue(value,lower=="currency",options);}
+    if(const auto string=customStringText(value,pattern,locale)) return VbaValue::string(string->toUtf8().toStdString());
     if(const auto numeric=customNumericText(value,pattern,locale)) return VbaValue::string(numeric->toUtf8().toStdString());
     return VbaValue::string(dateText(value,pattern,locale).toUtf8().toStdString());
 }
