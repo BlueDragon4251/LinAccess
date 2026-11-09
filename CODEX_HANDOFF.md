@@ -4402,3 +4402,9 @@ Fett/Kursiv-Schnitt korrigiert; Modal-Auswahlwechsel behoben. Abschließend nur
 fehlgeschlagenes GUI-Ziel1/1 (14,70s) wiederholt/bestanden; Layout1/1 (13,09s)
 bereits bestanden. Kein neuer CTest, keine Gesamtsuite/Original/Windows/Kern-
 Ausführung; aktuelle DEB-Prüfung folgt.456/386/70 unverändert; F080/F081/F148 offen.
+
+
+Designer-Paketstand d8ecf41: neue finale DEB-/Build-ID-/MDBTools1.0.1-/
+SQLite3.54.1-Prüfung bestanden. Alle vier Fixture-/drei Uploadhashes unverändert.
+Kein zusätzlicher Testlauf: letzte GUI14,70s, Layout13,09s; Quellen/SQL/Masken/
+Listen/Fonts/Paletten jeweils nur im dokumentierten nativen Umfang nachgewiesen.
