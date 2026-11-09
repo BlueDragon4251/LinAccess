@@ -136,6 +136,7 @@ private:
     linaccess::VbaValue getFieldValue(std::string_view name) const;
     linaccess::VbaValue calculatedControlValue(const QString& name) const;
     void refreshCalculatedControls();
+    void refreshFormattedControl(const QString& name);
     void displayFormattedControl(QWidget* widget,const QString& name,const linaccess::VbaValue& value,const QString& raw) const;
     linaccess::VbaValue controlColumnValue(const QString& name,const std::vector<linaccess::VbaValue>& arguments);
     void setFieldValue(std::string_view name,const linaccess::VbaValue& value,bool initializingDefault=false);

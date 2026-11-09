@@ -1,4 +1,5 @@
 #include "access_form_preview.hpp"
+#include "access_format.hpp"
 #include "native_report_text_layout.hpp"
 #include <QAction>
 #include <QFileDialog>
@@ -288,6 +289,9 @@ void AccessFormPreview::showDocumentPrintDialog() {
 }
 bool AccessFormPreview::renderLayout(QPrinter& printer) {
     for(const auto& widget:controls_) if(widget && widget->property("la_format_error").toInt()) return false;
+    for(const auto& control:layout_.controls) if(control.type=="TextBox" && !control.format.isEmpty()) {
+        try {const auto actual=getFieldValue(control.name.toStdString());if(actual.kind!=linaccess::VbaValue::Kind::Null && actual.kind!=linaccess::VbaValue::Kind::Error) (void)linaccess::formatAccessValue(actual,control.format.toStdString(),true);}catch(const std::exception&) {return false;}
+    }
     auto* canvas = findChild<QWidget*>("access-form-canvas");
     if (!canvas || canvas->width()<=0 || canvas->height()<=0) return false;
     QPainter painter;

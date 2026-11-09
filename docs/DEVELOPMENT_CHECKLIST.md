@@ -2069,3 +2069,22 @@ explizit verweigert; vollständige Windows-/Unicode-/Maskengleichheit bleibt off
 Keine neue Windows-Beobachtung oder CTest-ID. NATIVE_FORMAT_RUNTIME.md;
 456/384/72 unverändert. Nächste Umsetzung: Fokus-/Eingabestrecke formatierter
 bearbeitbarer Formulartextfelder, ohne Anzeigen als Daten zurückzuparsen.
+
+Bearbeitbare Formular-TextBoxen nutzen jetzt echte Formatdarstellung außerhalb
+des Fokus und kanonische, ungerundete Eingabetexte im Fokus. Maßgeblich bleiben
+typisierte Werte; nur tatsächliche Bearbeitung verwirft die Wertkopie. Formate
+werden nicht als Daten zurückgeparst. Reine Darstellungswechsel erzeugen keine
+Change-/Dirty-/SQL-Wirkungen. Doppelte Bindungen erhalten unabhängig ihre Masken;
+verschiedene Werte mit identischer gerundeter Anzeige werden dennoch gespeichert.
+Native Formularerstellung übernimmt proveniente Feldmasken. Bestehende Validierung,
+Value/Text-Puffer, Undo und AfterUpdate bleiben wirksam; Maskenänderungen während
+laufender Eingabe/BeforeUpdate verweigern3251. Skalarstandardwerte werden einmal
+aufgelöst und Owner/Beschreibbarkeit erneut geprüft, geschlossener Owner2450.
+Vorhandene GUI/Layout gemeinsam2/2 (17,22s), App gebaut. Tatsächliche Qt-Eingabe,
+negative Abbruchvalidierung ohne Datenverlust, Undo, präzise SQL-Änderungen,
+Text-Großdarstellung ohne Wertänderung und vollständige Uhrzeit hinter Datumsmaske
+geprüft. Zunächst fehlende explizite Textgröße im technischen DAO-Aufbau gezielt
+korrigiert; keine zusätzliche CTest-Registrierung. Regionale Eingabemasken,
+beliebiges reentrantes Fokus-/IME-/Windows-Verhalten und vollständiger Access-
+Formulardruck bleiben offen. CONTROL_FORMAT_RUNTIME.md;456/384/72 unverändert.
+Ohne Zwischenfinal weitere allgemeine offene Funktionen umsetzen.

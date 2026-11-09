@@ -2326,6 +2326,12 @@ void MainWindow::editForm(const QString& existingName) {
         if(chosen.isEmpty()) { messageError(&dialog,"Mindestens ein Feld auswählen."); return; }
         auto content=old; const auto savedName=dialog.property("la_editor_saved_name").toString();
         if(!savedName.isEmpty()) { const auto latest=objectDefinition("form",savedName); if(!latest.isEmpty()) content=latest; }
+        const bool sameFormatSource=content.value("table").toString()==source->currentText();
+        const auto previousFormats=sameFormatSource ? content.value("field_formats").toObject() : QJsonObject{};
+        QJsonObject formats;QMap<QString,linaccess::NativeFieldDisplayProperties> inherited;
+        try {inherited=linaccess::nativeTableFieldDisplayProperties(db_,source->currentText());}catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));return;}
+        for(const auto& value:chosen) {const auto key=value.toString().toCaseFolded();if(previousFormats.contains(key)) formats.insert(key,previousFormats.value(key));else if(inherited.value(key).format) formats.insert(key,*inherited.value(key).format);}
+        content.insert("field_formats",formats);
         content.insert("table",source->currentText()); content.insert("fields",chosen);
         content.insert("caption",caption->text()); content.insert("field_captions",captions); content.insert("vba",vba->toPlainText());
         content.insert("field_layout",positions);

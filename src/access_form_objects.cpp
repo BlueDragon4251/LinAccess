@@ -640,10 +640,10 @@ public:
             const auto mask=text(scalar.text);
             if(mask.size()>1024 || mask.contains(QChar(0)) || !mask.isValidUtf16()) throw linaccess::VbaRuntimeError(5,"Invalid Format mask");
             for(auto& definition:preview.layout_.controls) if(definition.name.compare(name_,Qt::CaseInsensitive)==0) {
-                if(preview.layout_.kind!=linaccess::AccessDocumentKind::Report && !definition.controlSource.trimmed().startsWith('=')) throw linaccess::VbaRuntimeError(3251,"Writable form Format editing is not implemented");
+                if(preview.pendingControls_.contains(definition.name) || preview.bufferedTextControls_.contains(definition.name) || preview.validatingControl_.compare(definition.name,Qt::CaseInsensitive)==0) throw linaccess::VbaRuntimeError(3251,"Changing Format during a pending control edit is not implemented");
                 const auto actual=preview.getFieldValue(bytes(name_));
                 (void)checked();widget=control();
-                if(!mask.isEmpty()) (void)linaccess::formatAccessValue(actual.kind==linaccess::VbaValue::Kind::Null ? linaccess::VbaValue::numeric(0) : actual,bytes(mask),true);
+                if(!mask.isEmpty() && actual.kind!=linaccess::VbaValue::Kind::Null && actual.kind!=linaccess::VbaValue::Kind::Error) (void)linaccess::formatAccessValue(actual,bytes(mask),true);
                 const auto prior=preview.formattedControlValues_.value(name_.toCaseFolded());
                 const auto raw=prior ? widget->property("la_format_raw_text").toString() : qobject_cast<QLineEdit*>(widget)->text();
                 definition.format=mask;

@@ -106,6 +106,8 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
     }
     lines<<"    Begin Section"<<"        Name = \"Detail\""<<"        Height = "+QString::number(buttonTop+700);
     const auto captions=definition.value("field_captions").toObject();
+    if(definition.contains("field_formats") && !definition.value("field_formats").isObject()) throw VbaRuntimeError(5,"Invalid native field Format catalog");
+    const auto formats=definition.value("field_formats").toObject();
     for(int index=0;index<names.size();++index) {
         const auto& field=names[index]; const auto eventPrefix=prefix(field);
         const auto& rectangle=geometry[index]; const int top=rectangle[1];
@@ -115,6 +117,7 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
         lines<<"        Begin TextBox"<<"            Name = "+quoted(field)<<"            ControlSource = "+quoted(field)
              <<"            EventProcPrefix = "+quoted(eventPrefix)<<"            Left = "+QString::number(rectangle[0])<<"            Top = "+QString::number(top)
              <<"            Width = "+QString::number(rectangle[2])<<"            Height = "+QString::number(rectangle[3])<<"            TabIndex = "+QString::number(index);
+        if(const auto format=formats.value(field.toCaseFolded());!format.isUndefined()) {if(!format.isString()) throw VbaRuntimeError(5,"Invalid native form field Format");lines<<"            Format = "+quoted(format.toString());}
         for(const auto* event:{"OnClick","OnChange","BeforeUpdate","AfterUpdate","OnDblClick","OnKeyDown","OnKeyPress","OnKeyUp","OnMouseDown","OnMouseUp"}) {
             const QString property=QString::fromLatin1(event);
             const auto procedure=property.startsWith("On") ? property.mid(2) : property;

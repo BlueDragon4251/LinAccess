@@ -25,6 +25,7 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     const auto columns=accessQueryColumns(database,plan); // prepare only, never step rows.
     if (columns.isEmpty() || columns.size()>32) throw VbaRuntimeError(3251,"Native report automatic layout supports 1-32 columns");
     const auto captions=definition.value("field_captions").toObject();
+    if(definition.contains("field_formats") && !definition.value("field_formats").isObject()) throw VbaRuntimeError(5,"Invalid native field Format catalog");
     const auto formats=definition.value("field_formats").toObject();
     QSet<QString> used;
     for (const auto& column:columns) {

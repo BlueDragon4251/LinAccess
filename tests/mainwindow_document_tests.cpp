@@ -5,6 +5,7 @@
 #include <QLocale>
 #include <QScopeGuard>
 #include <bit>
+#include <limits>
 #include "native_relation_designer.hpp"
 #include "native_datasheet_page_store.hpp"
 #include <QInputDialog>
@@ -2399,6 +2400,101 @@ void exerciseDateDefaultBuffers() {
     AccessFormPreview form(stored.name,stored.layout,stored.code,db,nullptr,false,{},std::nullopt,0,0);form.show();QApplication::processEvents();assert(form.hasDataSource());auto* moment=form.findChild<QLineEdit*>("access-control-Moment");assert(moment && !moment->text().isEmpty());const auto formDefault=moment->text();std::vector<VbaValue> arguments;const auto result=form.executeProcedure("StoreDate",arguments);if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Date form: "<<result.explanation<<"\n";assert(result.status==linaccess::VbaExecutionStatus::Completed);assert(sql.exec("SELECT Moment FROM [Date UI rows] WHERE ID=2") && sql.next() && sql.value(0).toString()==formDefault);sql.finish();assert(form.close());
 }
 
+void testEditableControlFormats(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;
+    auto database=linaccess::makeDaoDatabase(db);auto table=database->member("CreateTableDef",{VbaValue::string("format_edit")}).object;
+    for(const auto& [name,type]:std::vector<std::pair<const char*,int>>{{"id",4},{"amount",7},{"label",10},{"moment",8}}) table->member("Fields",{}).object->member("Append",{table->member("CreateField",{VbaValue::string(name),VbaValue::integer(type),VbaValue::longInteger(type==10 ? 255 : 0)})});
+    database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
+    database->member("Execute",{VbaValue::string("INSERT INTO format_edit VALUES(1,0.12345678901234567,'before',#2003-12-31 18:05:06#)")});
+    QSqlQuery sql(db);assert(sql.exec("CREATE TABLE format_events(kind TEXT)"));
+    assert(sql.exec("SELECT amount FROM format_edit WHERE id=1") && sql.next());const double initial=sql.value(0).toDouble();sql.finish();
+    const QByteArray source=R"FORM(Begin Form
+RecordSource ="format_edit"
+Width =7000
+Begin Section
+Height =2000
+Begin TextBox
+Name ="Amount"
+ControlSource ="amount"
+Format ="0.00"
+OnChange ="[Event Procedure]"
+BeforeUpdate ="[Event Procedure]"
+AfterUpdate ="[Event Procedure]"
+Width =3000
+Height =300
+End
+Begin TextBox
+Name ="Duplicate"
+ControlSource ="amount"
+Format ="0.0000"
+Top =400
+Width =3000
+Height =300
+End
+Begin TextBox
+Name ="Label"
+ControlSource ="label"
+Format =">"
+Top =800
+Width =3000
+Height =300
+End
+Begin TextBox
+Name ="Moment"
+ControlSource ="moment"
+Format ="yyyy-mm-dd"
+Top =1200
+Width =3000
+Height =300
+End
+End
+End
+)FORM";
+    const QByteArray code=R"VBA(Private Sub Amount_Change()
+CurrentDb.Execute "INSERT INTO format_events VALUES('change')"
+End Sub
+Private Sub Amount_BeforeUpdate(Cancel As Integer)
+If Me!Amount<0 Then Cancel=True
+End Sub
+Private Sub Amount_AfterUpdate()
+Me!Amount.Format="0.00"
+End Sub
+Sub Store()
+DoCmd.RunCommand acCmdSaveRecord
+End Sub
+)VBA";
+    AccessFormPreview form("editable formatted controls",source,code,db,&window);
+    auto root=makePreviewFormObject(form);auto controls=root->member("Controls",{}).object;auto amount=controls->item("Amount").object;
+    auto* input=form.findChild<QLineEdit*>("access-control-Amount");auto* duplicate=form.findChild<QLineEdit*>("access-control-Duplicate");auto* label=form.findChild<QLineEdit*>("access-control-Label");auto* moment=form.findChild<QLineEdit*>("access-control-Moment");assert(input && duplicate && label && moment);
+    assert(input->text()==QLocale().toString(0.12,'f',2) && label->text()=="BEFORE" && moment->text()=="2003-12-31");
+    assert(amount->scalarValue().number==initial && controls->item("Label").object->scalarValue().asText()=="before" && controls->item("Moment").object->scalarValue().kind==VbaValue::Kind::Date);
+    form.show();QApplication::setActiveWindow(&form);input->setFocus();QApplication::processEvents();
+    assert(input->hasFocus() && input->text()==QString::number(initial,'g',std::numeric_limits<double>::max_digits10));
+    label->setFocus();QApplication::processEvents();assert(input->text()==QLocale().toString(0.12,'f',2) && label->text()=="before");
+    moment->setFocus();QApplication::processEvents();assert(moment->text()=="2003-12-31 18:05:06");label->setFocus();QApplication::processEvents();
+    assert(moment->text()=="2003-12-31" && !root->member("Dirty",{}).truthy());
+    assert(sql.exec("SELECT COUNT(*) FROM format_events") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    input->setFocus();input->selectAll();QTest::keyClicks(input,"-1");label->setFocus();QApplication::processEvents();
+    assert(input->hasFocus() && input->text()=="-1" && amount->scalarValue().number==initial);
+    int rejected=0;try {amount->assign("Format",VbaValue::string("0.000"));}catch(const linaccess::VbaRuntimeError& failure) {rejected=failure.number;}assert(rejected==3251 && input->text()=="-1");
+    amount->member("Undo",{});assert(!root->member("Dirty",{}).truthy() && amount->scalarValue().number==initial);
+    input->selectAll();QTest::keyClicks(input,"0.1234");label->setFocus();QApplication::processEvents();
+    assert(!input->hasFocus() && input->text()==QLocale().toString(0.12,'f',2) && duplicate->text()==QLocale().toString(0.1234,'f',4) && amount->scalarValue().number==0.1234);
+    assert(sql.exec("SELECT amount FROM format_edit WHERE id=1") && sql.next() && sql.value(0).toDouble()==initial);sql.finish();
+    std::vector<VbaValue> arguments;auto stored=form.executeProcedure("Store",arguments);if(stored.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Formatted save "<<stored.errorNumber<<" "<<stored.explanation<<"\n";assert(stored.status==linaccess::VbaExecutionStatus::Completed);
+    assert(sql.exec("SELECT amount,moment FROM format_edit WHERE id=1") && sql.next() && sql.value(0).toDouble()==0.1234 && sql.value(1).toString()=="2003-12-31 18:05:06");sql.finish();
+    for(const double next:{0.12345,0.12346}) {
+        amount->assign("Value",VbaValue::numeric(next));assert(root->member("Dirty",{}).truthy() && amount->scalarValue().number==next);
+        assert(form.executeProcedure("Store",arguments).status==linaccess::VbaExecutionStatus::Completed);
+        assert(sql.exec("SELECT amount FROM format_edit WHERE id=1") && sql.next() && sql.value(0).toDouble()==next);sql.finish();
+    }
+    label->setFocus();label->selectAll();QTest::keyClicks(label,"mixed");moment->setFocus();QApplication::processEvents();
+    assert(label->text()=="MIXED" && controls->item("Label").object->scalarValue().asText()=="mixed");
+    assert(form.executeProcedure("Store",arguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(sql.exec("SELECT label,moment FROM format_edit WHERE id=1") && sql.next() && sql.value(0).toString()=="mixed" && sql.value(1).toString()=="2003-12-31 18:05:06");sql.finish();
+    assert(form.close());
+}
+
 int main(int argc,char** argv) {
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication app(argc,argv); app.setQuitOnLastWindowClosed(false); app.setApplicationName("LinAccessSyntheticGuiTest"); app.setOrganizationName("LinAccessSyntheticTests");
@@ -2933,7 +3029,7 @@ int main(int argc,char** argv) {
         assert(authored.exec("INSERT INTO authored_renamed DEFAULT VALUES"));assert(authored.exec("SELECT COUNT(*),MAX(id) FROM authored_renamed") && authored.next() && authored.value(0).toInt()==3 && authored.value(1).toInt()==beforeRenameCounter+1);authored.finish();
     }
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-form-designer");dialog->findChild<QLineEdit*>("native-form-name")->setText("Caption form");dialog->findChild<QComboBox*>("native-form-source")->setCurrentText("authored_renamed");auto* fields=dialog->findChild<QListWidget*>("native-form-fields");bool caption=false;for(int row=0;row<fields->count();++row) if(fields->item(row)->data(Qt::UserRole).toString()=="qty") {caption=fields->item(row)->text()=="Anzahl Ä";}assert(caption);dialog->findChild<QPushButton*>("native-form-save")->click();dialog->reject();});action(window,"+ Formular")->trigger();
-    {const auto stored=linaccess::loadNativeStoredForm(db,"Caption form");assert(stored && stored->layout.contains(QString("Anzahl Ä").toUtf8()));}
+    {const auto stored=linaccess::loadNativeStoredForm(db,"Caption form");assert(stored && stored->layout.contains(QString("Anzahl Ä").toUtf8()) && stored->layout.contains("Format ="));}
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-report-designer");dialog->findChild<QLineEdit*>("native-report-name")->setText("Caption report");dialog->findChild<QPlainTextEdit*>("native-report-sql")->setPlainText("SELECT * FROM authored_renamed");dialog->findChild<QPushButton*>("native-report-save")->click();dialog->reject();});action(window,"+ Bericht")->trigger();
     {
         const auto stored=linaccess::loadNativeStoredReport(db,"Caption report");assert(stored && stored->layout.contains(QString("Anzahl Ä").toUtf8()) && stored->layout.contains("Format ="));
@@ -3102,11 +3198,18 @@ End Sub
         assert(line->text()==QLocale().toString(1.234,'f',3) && amount->scalarValue().currencyUnits==12345);
         const auto expect=[](auto action,int wanted) {int actual=0;try {action();}catch(const linaccess::VbaRuntimeError& failure) {actual=failure.number;}assert(actual==wanted);};
         expect([&] {amount->assign("Format",VbaValue::string("[Red]0.00"));},5);assert(amount->member("Format",{}).asText()=="0.000");
-        expect([&] {amount->assign("Format",{});},94);expect([&] {controls->item("Writable").object->assign("Format",VbaValue::string("0.000"));},3251);
-        assert(form.findChild<QLineEdit*>("access-control-Writable")->toolTip().contains("3251"));
+        expect([&] {amount->assign("Format",{});},94);controls->item("Writable").object->assign("Format",VbaValue::string("0.000"));
+        assert(form.findChild<QLineEdit*>("access-control-Writable")->text()==QLocale().toString(1.25,'f',3));
+        class ScalarFormatValue final:public linaccess::VbaObject {
+        public:int reads{};std::function<void()> callback;VbaValue scalarValue() override {++reads;if(callback) callback();return VbaValue::currency(12345);}VbaValue member(std::string_view,const std::vector<VbaValue>&) override {throw linaccess::VbaRuntimeError(438,"No explicit member");}
+        };
+        const auto probe=std::make_shared<ScalarFormatValue>();auto writable=controls->item("Writable").object;writable->assign("Value",VbaValue::reference(probe));
+        assert(probe->reads==1 && writable->scalarValue().kind==VbaValue::Kind::Currency && writable->scalarValue().currencyUnits==12345);
+
         amount->assign("Format",VbaValue::string(""));assert(line->text()=="1.2345" && amount->scalarValue().currencyUnits==12345);
-        assert(form.close());
+        const auto closing=std::make_shared<ScalarFormatValue>();closing->callback=[&form] {assert(form.close());};expect([&] {writable->assign("Value",VbaValue::reference(closing));},2450);assert(closing->reads==1);
     }
+    testEditableControlFormats(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }
