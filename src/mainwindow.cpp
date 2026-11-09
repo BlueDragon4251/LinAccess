@@ -2,6 +2,8 @@
 #include "native_capability_report.hpp"
 #include "native_designer_history.hpp"
 #include "native_form_controls.hpp"
+#include "native_query_builder.hpp"
+#include <QCryptographicHash>
 #include "native_schema_editor.hpp"
 #include "native_field_defaults.hpp"
 #include "mainwindow.hpp"
@@ -2360,6 +2362,9 @@ void MainWindow::editMacro(const QString& existingName) {
 void MainWindow::editQuery(const QString& existingName) {
     if (!hasProject()) return;
     const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("query",existingName);
+    const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
+    const auto checkProject=[owner,identity,generation]{if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation)throw linaccess::VbaRuntimeError(3420,"Die Abfrage gehört nicht mehr zum aktuellen Projekt.");};
+    auto visual=std::make_shared<QJsonObject>(old.value("visual_query").toObject());
     QDialog dialog(this); dialog.setObjectName("native-query-designer");
     dialog.setWindowTitle("SQL-Abfrage");
     tagProjectObject(&dialog,this,db_,"query",existingName);
@@ -2369,23 +2374,32 @@ void MainWindow::editQuery(const QString& existingName) {
     name->setObjectName("native-query-name"); name->setPlaceholderText("Name der Abfrage");
     outer->addWidget(name);
     auto* sql = new QPlainTextEdit(&dialog);
-    sql->setObjectName("native-query-sql"); sql->setPlaceholderText("SELECT * FROM kunden");
+    sql->setObjectName("native-query-sql"); sql->setPlaceholderText("SQL-Abfrage");
     sql->setMaximumHeight(190);
     if (!existingName.isEmpty()) sql->setPlainText(objectDefinition("query", existingName).value("sql").toString());
     outer->addWidget(sql);
     auto* buttons = new QHBoxLayout();
+    auto* design=addButton(buttons,"Entwurf…");design->setObjectName("native-query-design");
     auto* run = addButton(buttons, "Ausführen"); run->setObjectName("native-query-run");
     auto* save = addButton(buttons, "Speichern");
     outer->addLayout(buttons);
     save->setObjectName("native-query-save"); installDesignerSaveShortcut(dialog,save);
+    const auto hash=[](const QString& value){return QString::fromLatin1(QCryptographicHash::hash(value.toUtf8(),QCryptographicHash::Sha256).toHex());};
+    connect(design,&QPushButton::clicked,&dialog,[this,sql,visual,checkProject,hash,&dialog]{
+        try{checkProject();const auto initial=visual->value("sql_sha256").toString()==hash(sql->toPlainText()) ? visual->value("design").toObject() : QJsonObject{};
+            const auto edited=linaccess::editNativeQueryDesign(&dialog,db_,initial,checkProject);checkProject();if(!edited)return;
+            auto cursor=sql->textCursor();cursor.beginEditBlock();cursor.select(QTextCursor::Document);cursor.insertText(edited->sql);cursor.endEditBlock();
+            *visual=QJsonObject{{"sql_sha256",hash(edited->sql)},{"design",edited->state}};
+        }catch(const std::exception& error){messageError(&dialog,QString::fromUtf8(error.what()));}
+    });
     auto* model = new linaccess::AccessQueryModel(&dialog);
     auto* view = new QTableView(&dialog);
     view->setModel(model);
     outer->addWidget(view);
     auto* feedback=new QLabel(&dialog); outer->addWidget(feedback);
-    connect(run, &QPushButton::clicked, &dialog, [this, sql, model, view, feedback, &dialog] {
+    connect(run, &QPushButton::clicked, &dialog, [this, sql, model, view, feedback, checkProject, &dialog] {
         try {
-            const auto plan=linaccess::compileAccessQuery(sql->toPlainText());
+            checkProject();const auto plan=linaccess::compileAccessQuery(sql->toPlainText());
             QMap<QString,QVariant> parameters;
             for(const auto& parameter:plan.parameters) {
                 bool accepted=false;
@@ -2406,14 +2420,15 @@ void MainWindow::editQuery(const QString& existingName) {
             }
         } catch(const std::exception& error) { feedback->clear(); messageError(&dialog,QString::fromUtf8(error.what())); }
     });
-    connect(save, &QPushButton::clicked, &dialog, [this, name, sql, &dialog,old,existingName] {
+    connect(save, &QPushButton::clicked, &dialog, [this, name, sql, visual, checkProject, hash, &dialog,old,existingName] {
         try {
-            (void)linaccess::compileAccessQuery(sql->toPlainText());
+            checkProject();(void)linaccess::compileAccessQuery(sql->toPlainText());
         } catch(const std::exception& error) { messageError(&dialog,QString::fromUtf8(error.what())); return; }
         auto content=old; auto savedName=dialog.property("la_editor_saved_name").toString();
         if(savedName.isEmpty()) savedName=existingName;
         if(!savedName.isEmpty()) { const auto latest=objectDefinition("query",savedName); if(!latest.isEmpty()) content=latest; }
         content.insert("sql",sql->toPlainText());
+        if(visual->value("sql_sha256").toString()==hash(sql->toPlainText()))content.insert("visual_query",*visual);else content.remove("visual_query");
         if(saveObject("query",name->text(),content)) {
             tagProjectObject(&dialog,this,db_,"query",name->text()); completeDesignerSave(dialog,name->text());
         }

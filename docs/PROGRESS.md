@@ -7893,3 +7893,27 @@ Vorige skalare Etappe als e9ce132 veröffentlicht/verifiziert (gleicher getestet
 Baumce34e6522e2363f234c2ca20c23cca9da0f57395 wie lokaler d053a80). Letzte geprüfte
 DEB weiterhin72b936d, frisches Paket folgt. F040/F041/F042/F043/F122 bleiben offen;
 456/386 bestätigte Teilumfänge/70 offene Vollanforderungen unverändert.
+
+
+## 2026-11-09: Visueller nativer Abfrageentwurf
+
+SQL-Editor hat einen echten Qt-Entwurf für reale Tabellen/Felder: Ausgabeauswahl,
+Alias/Feldreihenfolge, Sortierung, Kriterien und DISTINCT erzeugen tatsächliches
+SELECT. Vorschau bereitet Metadaten ohne Daten-/VBA-Auswertung vor; erst Ausführen
+liest die echten Zeilen. Abbruch ändert SQL nicht. Gespeicherter Entwurf ist an
+exakten SQL-SHA gebunden; manuelle SQL-Änderung entfernt alte visuelle Metadaten.
+Projekt-/Generations-Eingangsprüfungen und Ressourcen-/Namen-/Klauselgrenzen;
+fortgeschrittenes SQL bleibt im SQL-Editor. Kein Kassa-spezifischer Designer.
+Scopegrenzen in VISUAL_QUERY_DESIGNER.md, F067/F068/F080/F148 bleiben offen.
+
+Im bestehenden SQL-/GUI-Bündel bestand SQL; GUI fand einen realen QJsonValueRef-
+Kopierfehler beim Verschieben. Wertkopie korrigiert, danach nur betroffene GUI1/1
+(14,73s) wiederholt/bestanden. Echte verschachtelte Dialoge, unabhängiges SQL,
+Speichern/Wiederherstellen, Abbruch und Callback-Zähler beweisen tatsächlichen
+Pfad ohne Metadaten-Seiteneffekte. Anwendung gebaut; keine neue CTest-ID/Windows-/
+Original-/Gesamtsuitenbehauptung. Fester Katalog456/386/70 unverändert.
+Vorige Stringarray-Etappe als1dafedd veröffentlicht/verifiziert (gleich geprüfter
+Baum023f57fab171cac5324e8853bb2bb7c026c38c01 wie lokaler145786b). Neue1dafedd-DEB
+unter /workspace/work/fixed-vba-string-arrays/package/linaccess-0.7.0-Linux.deb besteht
+Build-ID/Inhalt/Berechtigungen/MDBTools1.0.1/SQLite3.54.1. Aktueller visueller Entwurf
+noch nicht paketiert. Weiterentwicklung läuft; kein Gesamtabschluss.
