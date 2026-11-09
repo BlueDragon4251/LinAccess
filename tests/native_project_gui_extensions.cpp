@@ -21,6 +21,7 @@
 #include <QSqlQuery>
 #include <QSqlRecord>
 #include <QTabWidget>
+#include <QTableWidget>
 #include <QTest>
 #include <QTimer>
 #ifdef NDEBUG
@@ -169,10 +170,37 @@ End)FORM";
     QTimer::singleShot(0,&window,[&] {auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor && editor->objectName()=="native-module-editor");auto* text=editor->findChild<QPlainTextEdit*>("native-module-source");text->setPlainText("Public Sub NativeWindowDraft()\nEnd Sub");const auto draft=text->toPlainText();int failure=0;try {commands->member("Maximize",{});}catch(const linaccess::VbaRuntimeError& result) {failure=result.number;}assert(failure==3251 && editor->isWindowModified() && text->toPlainText()==draft);editor->reject();});action(window,"+ Modul")->trigger();window.showNormal();
 }
 
+void testNativeMacroContinuations(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE macro_continuation_gate(id INTEGER PRIMARY KEY,n INTEGER)"));assert(sql.exec("INSERT INTO macro_continuation_gate VALUES(1,0)"));assert(sql.exec("CREATE TABLE macro_continuation_audit(n INTEGER)"));
+    sql.prepare("INSERT INTO _la_objects VALUES('module','MacroContinuationCode',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba","Public Function MacroContinuationGate() As Boolean\nCurrentDb.Execute \"UPDATE macro_continuation_gate SET n=n+1 WHERE id=1\"\nMacroContinuationGate=(DLookup(\"n\",\"macro_continuation_gate\",\"id=1\") Mod 2)=1\nEnd Function"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
+    QTimer::singleShot(0,&window,[&] {auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor && editor->objectName()=="native-macro-designer");editor->findChild<QLineEdit*>("native-macro-name")->setText("ContinuationEditor");auto* rows=editor->findChild<QTableWidget*>("native-macro-actions");assert(rows);rows->item(0,1)->setText("INSERT INTO macro_continuation_audit VALUES(11)");rows->item(0,4)->setText("MacroContinuationGate()");editor->findChild<QPushButton*>("native-macro-add")->click();rows->item(1,1)->setText("INSERT INTO macro_continuation_audit VALUES(22)");rows->item(1,4)->setText("...");editor->findChild<QPushButton*>("native-macro-add")->click();rows->item(2,1)->setText("INSERT INTO macro_continuation_audit VALUES(33)");editor->findChild<QPushButton*>("native-macro-save")->click();assert(!editor->isWindowModified());});action(window,"+ Makro")->trigger();
+    assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='macro' AND name='ContinuationEditor'") && sql.next());assert(QJsonDocument::fromJson(sql.value(0).toByteArray()).object().value("actions").toArray()[1].toObject().value("condition").toString()=="...");sql.finish();
+    const auto reset=[&](int value=0) {assert(sql.exec("DELETE FROM macro_continuation_audit"));assert(sql.exec("UPDATE macro_continuation_gate SET n="+QString::number(value)));};const auto count=[&](int value) {QSqlQuery query(db);assert(query.exec("SELECT COUNT(*) FROM macro_continuation_audit WHERE n="+QString::number(value)) && query.next());return query.value(0).toInt();};const auto gate=[&] {QSqlQuery query(db);assert(query.exec("SELECT n FROM macro_continuation_gate WHERE id=1") && query.next());return query.value(0).toInt();};
+    linaccess::NativeStandardModuleHost host(&window,db,[] {});auto commands=host.applicationObject()->member("DoCmd",{}).object;commands->member("RunMacro",{VbaValue::string("ContinuationEditor"),VbaValue::integer(2)});assert(gate()==2 && count(11)==1 && count(22)==1 && count(33)==2);
+    const QByteArray source=R"FORM(Begin Form
+RecordSource ="macro_continuation_gate"
+Width =1800
+Begin Section
+Height =500
+Begin TextBox
+Name ="Value"
+ControlSource ="n"
+Width =1500
+Height =300
+End
+End
+End)FORM";
+    reset();AccessFormPreview form("MacroContinuationForm",source,{},db,&window);form.show();QApplication::processEvents();auto bound=makePreviewApplicationObject(form)->member("DoCmd",{}).object;bound->member("RunMacro",{VbaValue::string("ContinuationEditor"),VbaValue::integer(2)});assert(gate()==2 && count(11)==1 && count(22)==1 && count(33)==2);assert(form.close());
+    const auto actionDefinition=[](const QString& name,const QString& argument,const QString& condition=QString{}) {QJsonObject result{{"action",name},{"arguments",QJsonArray{argument}}};if(!condition.isEmpty()) result.insert("condition",condition);return result;};
+    linaccess::storeNativeMacro(db,"ContinuationChild",{{"version",1},{"actions",QJsonArray{actionDefinition("RunSQL","INSERT INTO macro_continuation_audit VALUES(99)","False"),actionDefinition("RunSQL","INSERT INTO macro_continuation_audit VALUES(44)")}}});linaccess::storeNativeMacro(db,"ContinuationParent",{{"version",1},{"actions",QJsonArray{actionDefinition("RunMacro","ContinuationChild","MacroContinuationGate()"),actionDefinition("RunSQL","INSERT INTO macro_continuation_audit VALUES(55)","..."),actionDefinition("RunSQL","INSERT INTO macro_continuation_audit VALUES(66)")}}});reset();commands->member("RunMacro",{VbaValue::string("ContinuationParent")});assert(gate()==1 && count(44)==1 && count(55)==1 && count(66)==1 && count(99)==0);reset(1);commands->member("RunMacro",{VbaValue::string("ContinuationParent")});assert(gate()==2 && count(44)==0 && count(55)==0 && count(66)==1);
+    const auto raw=[&](const QString& name,const QJsonObject& definition) {sql.prepare("INSERT INTO _la_objects VALUES('macro',?,?)");sql.addBindValue(name);sql.addBindValue(QJsonDocument(definition).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();};raw("ContinuationOrphan",{{"version",1},{"actions",QJsonArray{actionDefinition("RunSQL","INSERT INTO macro_continuation_audit VALUES(77)"),actionDefinition("RunSQL","INSERT INTO macro_continuation_audit VALUES(88)","...")}}});raw("ContinuationOtherGroup",{{"version",2},{"groups",QJsonArray{QJsonObject{{"name","First"},{"actions",QJsonArray{actionDefinition("RunSQL","INSERT INTO macro_continuation_audit VALUES(77)")}}},QJsonObject{{"name","Broken"},{"actions",QJsonArray{actionDefinition("RunSQL","INSERT INTO macro_continuation_audit VALUES(88)","...")}}}}}});reset();for(const auto* name:{"ContinuationOrphan","ContinuationOtherGroup"}) {int error=0;try {commands->member("RunMacro",{VbaValue::string(name)});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251 && gate()==0 && count(77)==0 && count(88)==0);}commands->member("RunMacro",{VbaValue::string("ContinuationEditor")});assert(gate()==1 && count(11)==1 && count(22)==1 && count(33)==1);assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='MacroContinuationCode'"));
+}
+
 void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
     testNativeRepaintObject(window,db);
     testNativeSetValueDoubleEvaluation(window,db);
     testNativeFormRecordFields(window,db);
     testNativeProjectFilters(window,db);
     testNativeWindowStateCommands(window,db);
+    testNativeMacroContinuations(window,db);
 }

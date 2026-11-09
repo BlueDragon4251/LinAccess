@@ -3082,3 +3082,25 @@ Volle Access-MDI-/Popup-/Geometrie-/Windows-Ereignisparität bleibt offen. Keine
 Gesamtsuite/Windows-Beobachtung/neue Paketprüfung; DEB073c20a, Originalzuletzt
 073c20a1/1 (124,97s), erwartetes F129/3075 offen. F052/F088/F135 und456/384/72
 unverändert. Direkt weiter mit zusammenhängenden Makro-Bedingungsblöcken.
+
+
+## Fortschreibung 2026-11-09: zusammenhängende Makro-Bedingungsblöcke
+Condition=... übernimmt einmal ausgewertetes Ergebnis des unmittelbar vorigen
+Bedingungsblocks. Leere Zeile beendet Block, neue Bedingung startet neuen;
+Wiederholungen/Unteraufrufe haben eigenen Zustand. Verwaiste Fortsetzungen und
+Gruppenanfänge werden im vollständigen Vorabcheck3251 vor SQL-Präfix abgelehnt.
+Bestehende Aktions-/Tiefenbudgets zählen übersprungene Einträge weiter. Tatsächlicher
+Makroeditor speichert Fortsetzungstext, Standard-/Formhost führen echte SQL-Audits
+aus. Runner/Frame-/Stop-Helfer nach native_macro_runner.cpp im bestehenden
+Daten-Staticlib ausgelagert, UI bleibt Callback, keine neue GUI-Abhängigkeit/DSO.
+App gebaut; bestehende GUI/Layout2/2 (20,25s; 8,89/11,36s) ohne Korrekturlauf
+bestanden: echter Editor, Funktion exakt einmal pro Block, True/False-Repeats,
+Child isoliert Parent, defekte andere Gruppe/Präfix ohne Ausführung, Folgelauf
+sauber. MACRO_CONDITION_BLOCKS_RUNTIME.md; keine neue CTest-ID/Windows-Referenz/
+Gesamtsuite. Frisches DEB native-macro-continuation/package/linaccess-0.7.0-Linux.deb
+mit Payload/Rechten/Build-ID/echtem MDBTools1.0.1 und SQLite3.54.1-JOIN/NULL/Zählern
+geprüft; umfasst auch Filter/Fensterbefehle. Uploads3/3 und Fixtures4/4 hashgleich.
+Originalzuletzt073c20a1/1 (124,97s), erwartetes F129/3075 bleibt offen.
+Vollständige Access-Makro-/Ereignisparität bleibt offen. F088/F052/F135 und
+456/384/72 unverändert. Direkt weiter mit SQL-Zugriff auf tatsächliche skalare
+Formular-/Berichts-/Steuerelementeigenschaften ohne Methodenaufrufe.

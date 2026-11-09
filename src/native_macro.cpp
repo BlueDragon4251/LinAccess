@@ -44,7 +44,7 @@ QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition,const 
     if(definition.value("version")!=QJsonValue(1) || !definition.value("actions").isArray()) throw VbaRuntimeError(3251,"Unsupported native macro definition");
     const auto entries=definition.value("actions").toArray();
     if(entries.isEmpty() || entries.size()>256) throw VbaRuntimeError(3251,"Native macros require 1 to 256 actions");
-    QVector<NativeMacroAction> actions;
+    QVector<NativeMacroAction> actions;bool conditionalBlock=false;
     for(const auto& entry:entries) {
         if(!entry.isObject()) throw VbaRuntimeError(13,"Invalid native macro action");
         const auto object=entry.toObject();if(object.size()<2 || object.size()>3 || (object.size()==3 && !object.contains("condition"))) throw VbaRuntimeError(3251,"Unknown native macro action attributes are not supported");const auto name=object.value("action").toString();
@@ -59,7 +59,11 @@ QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition,const 
             if(!object.value("condition").isString()) throw VbaRuntimeError(13,"Native macro condition requires an expression string");
             const auto condition=object.value("condition").toString().trimmed();
             if(condition.size()>4096 || !condition.isValidUtf16() || condition.contains(QChar(0))) throw VbaRuntimeError(5,"Invalid native macro condition text");
-            if(!condition.isEmpty()) {if(!validVbaExpression(condition.toUtf8().toStdString())) throw VbaRuntimeError(3251,"Native macro condition syntax unsupported");action.condition=condition;}
+            if(!condition.isEmpty()) {
+                if(condition=="...") {if(!conditionalBlock) throw VbaRuntimeError(3251,"Macro condition continuation requires a preceding conditional block");}
+                else if(!validVbaExpression(condition.toUtf8().toStdString())) throw VbaRuntimeError(3251,"Native macro condition syntax unsupported");
+                action.condition=condition;
+            }
         }
         for(int index=0;index<arguments.size();++index) {
             const auto value=arguments[index];const auto type=signature->types[index];
@@ -81,7 +85,7 @@ QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition,const 
                 && value.toDouble()>=std::numeric_limits<qint32>::min() && value.toDouble()<=std::numeric_limits<qint32>::max()) action.arguments.push_back(VbaValue::longInteger(static_cast<qint32>(value.toDouble())));
             else throw VbaRuntimeError(13,"Native macro action argument type invalid");
         }
-        actions.push_back(std::move(action));
+        conditionalBlock=action.condition.has_value();actions.push_back(std::move(action));
     }
     return actions;
 }

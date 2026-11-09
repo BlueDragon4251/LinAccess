@@ -565,3 +565,11 @@ Native Maximize/Minimize/Restore macro actions and standard-module commands now
 address actual checked windows. See [NATIVE_WINDOW_STATE_RUNTIME.md](NATIVE_WINDOW_STATE_RUNTIME.md).
 Macro parsing/catalog loading compiles once in the existing data static library;
 existing GUI/layout checks pass8.69s/11.29s. Full Access MDI semantics remain open.
+
+
+Contiguous `...` condition continuations now share the preceding once-evaluated
+block result. Orphans refuse before execution; invocation/repetition state stays
+local. See [MACRO_CONDITION_BLOCKS_RUNTIME.md](MACRO_CONDITION_BLOCKS_RUNTIME.md).
+Existing GUI/layout2/2 passes20.25s; current native-macro-continuation Debian
+payload and actual MDBTools/SQLite backend checks pass. Full macro parity remains
+open; no new fixed catalog point or Windows observation.
