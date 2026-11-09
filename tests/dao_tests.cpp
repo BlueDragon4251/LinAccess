@@ -2356,8 +2356,58 @@ void testNativeDateDefaults() {
     assert(!sql.exec("INSERT INTO RenamedDates(Fixed) VALUES('2026-11-08')"));assert(sql.exec("SELECT Moment FROM RenamedDates WHERE ID=2") && sql.next() && sql.value(0).toString()==frozen);sql.finish();
 }
 
+void testNativeDaoArrays() {
+    auto db=QSqlDatabase::addDatabase("QSQLITE","native-dao-arrays");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);assert(sql.exec("CREATE TABLE native_array_rows(id INTEGER PRIMARY KEY,value INTEGER)"));assert(sql.exec("INSERT INTO native_array_rows VALUES(1,17),(2,23)"));Host host(db);
+    const std::string source=R"VBA(Option Explicit
+Private Sub GrowDatabases(ByRef items() As DAO.Database)
+ReDim Preserve items(1 To 2)
+Set items(2)=CurrentDb
+End Sub
+Private Function DatabaseArray As DAO.Database()
+Dim items(1 To 1) As DAO.Database
+Set items(1)=CurrentDb
+DatabaseArray=items
+End Function
+Function NativeDaoArrayProbe As Long
+Dim dbs() As DAO.Database, sets(0 To 0) As DAO.Recordset, fields(0 To 0) As DAO.Field, current As DAO.Database, item As Variant
+ReDim dbs(1 To 1)
+Set current=CurrentDb
+Set dbs(1)=current
+If Not dbs(1) Is current Then Err.Raise 5
+Set sets(0)=dbs(1).OpenRecordset("SELECT id,value FROM native_array_rows ORDER BY id",dbOpenSnapshot)
+Set fields(0)=sets(0).Fields("value")
+NativeDaoArrayProbe=fields(0).Value
+sets(0).MoveNext
+NativeDaoArrayProbe=NativeDaoArrayProbe+fields(0).Value
+GrowDatabases dbs
+If TypeName(dbs)<>"Database()" Or TypeName(sets)<>"Recordset()" Or TypeName(fields)<>"Field()" Then Err.Raise 5
+If VarType(dbs)<>8201 Then Err.Raise 5
+NativeDaoArrayProbe=NativeDaoArrayProbe+UBound(dbs)+sets(0).Type
+For Each item In DatabaseArray()
+If Not TypeOf item Is DAO.Database Then Err.Raise 5
+NativeDaoArrayProbe=NativeDaoArrayProbe+1
+Next
+On Error Resume Next
+Set sets(0)=CurrentDb
+NativeDaoArrayProbe=NativeDaoArrayProbe+Err.Number
+On Error GoTo 0
+sets(0).Close
+End Function
+Function ClosedDaoArrayProbe As Long
+Dim sets(0 To 0) As DAO.Recordset, fields(0 To 0) As DAO.Field
+Set sets(0)=CurrentDb.OpenRecordset("native_array_rows")
+Set fields(0)=sets(0).Fields("value")
+sets(0).Close
+On Error Resume Next
+ClosedDaoArrayProbe=fields(0).Value
+ClosedDaoArrayProbe=Err.Number
+End Function
+)VBA";
+    for(const auto& probe:std::vector<std::pair<const char*,int>>{{"NativeDaoArrayProbe",60},{"ClosedDaoArrayProbe",3420}}) {const auto result=linaccess::executeVbaProcedure(source,probe.first,host);if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"DAO array "<<probe.first<<": "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->number==probe.second);}
+}
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testNativeDaoArrays();
     testNativeIntrinsicFieldProperties();
     testNativeFieldDisplayProperties();
     testNativeDateIndexSeek();

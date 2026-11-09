@@ -1216,6 +1216,7 @@ private:
             return host_ ? host_->applicationObject()->member("CommandBars",arguments) : VbaValue{};
         }
         if (word == "forms" || word == "reports") {
+            if(!accessExpression_) if(const auto local=locals_.find(word);local!=locals_.end()) return readLocal(word,local->second);
             std::vector<VbaValue> args;
             const bool item = take("(");
             if (item) { args.push_back(expression(1)); require(")"); }

@@ -86,6 +86,6 @@ End Sub)VBA","ArrayHole",optionalHost);assert(result.status==VbaExecutionStatus:
     const auto beforeBounds=arrayRun("LinArrayCallCount").number;result=executeVbaProcedure(nativeArrayReturnFixture,"LinArrayBoundsProbe",arrayHost);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==9 && arrayRun("LinArrayCallCount").number==beforeBounds+1);
     const auto unallocated=arrayRun("LinArrayUnallocated");assert(isVbaArray(unallocated) && vbaArrayElementType(unallocated)=="long" && vbaArraySize(unallocated)==0);
     result=executeVbaProcedure(nativeArrayReturnFixture,"LinArrayWrong",arrayHost);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==13);
-    result=executeVbaProcedure("Function Bad() As Scripting.Dictionary()\nMsgBox \"unreached\"\nEnd Function","Bad",arrayHost);assert(result.status==VbaExecutionStatus::Unsupported && arrayHost.effects==0);
+    result=executeVbaProcedure("Function Bad() As Unknown.Library()\nMsgBox \"unreached\"\nEnd Function","Bad",arrayHost);assert(result.status==VbaExecutionStatus::Unsupported && arrayHost.effects==0);
 
 }

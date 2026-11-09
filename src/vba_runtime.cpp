@@ -106,6 +106,7 @@ std::string trim(std::string text) {
 }
 std::string nativeDeclaredType(std::string type) {
     if(type=="vba.collection") return "collection";
+    if(type=="errobject" || type=="vba.errobject") return "vba.errobject";
     const auto access=nativeAccessObjectType(type);
     if(!access.empty()) return std::string(access);
     if(isProjectClassIdentifier(type)) return std::string(projectClassPrefix)+type;
@@ -723,7 +724,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     const std::regex ifThen(R"(^If\b\s*(.+)\bThen\s*$)", std::regex::icase);
     const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
     const std::regex variableAssignment(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
-    const std::regex arrayElementType(R"(^([A-Za-z_][A-Za-z0-9_]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?$)",std::regex::icase);
+    const std::regex arrayElementType(R"(^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?$)",std::regex::icase);
     const std::regex midDollarTarget(R"(^Mid\$\s*\((.*)\)$)",std::regex::icase);
     const std::regex stringAlignment(R"(^(LSet|RSet)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)",std::regex::icase);
     const std::regex message(R"(^MsgBox(?:\s+(.+)|\((.*)\))$)", std::regex::icase);
@@ -875,7 +876,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 hasCancel = accessor.empty() && std::regex_match(params, cancelParam);
                 bool optionalSeen=false,paramArraySeen=false;
                 const std::regex paramArray(R"(^ParamArray\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+Variant)?$)",std::regex::icase);
-                const std::regex arrayParameter(R"(^(?:ByRef\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*))?$)",std::regex::icase);
+                const std::regex arrayParameter(R"(^(?:ByRef\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*))?$)",std::regex::icase);
                 const auto declarations=splitArguments(params);
                 for (std::size_t parameterIndex=0;parameterIndex<declarations.size();++parameterIndex) {
                     const auto& declaration=declarations[parameterIndex];
@@ -893,7 +894,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                         if(optionalSeen && !setterValue) return {VbaExecutionStatus::Unsupported,"Required array parameter after Optional is not implemented",line};
                         auto type=bindModuleDeclaredType(nativeDeclaredType(lower(declared[2].str())),enumTypes); if(type.empty()) type=implicitTypes.forName(declared[1].str()); if(type.empty()) type="variant";
                         static const std::unordered_set<std::string> allowed{"variant","byte","integer","long","single","double","currency","date","boolean","string","object"};
-                        if(!allowed.contains(type) && !isProjectClassType(type)) return {VbaExecutionStatus::Unsupported,"Array parameter element type unsupported",line};
+                        if(!allowed.contains(type) && !isDeclaredObjectType(type)) return {VbaExecutionStatus::Unsupported,"Array parameter element type unsupported",line};
                         if(parameters) parameters->push_back({declared[1].str(),true,type+"()",false,{}});
                         continue;
                     }
@@ -907,10 +908,10 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     auto type=bindModuleDeclaredType(nativeDeclaredType(lower(declared[4].str())),enumTypes); if(type.empty()) type=implicitTypes.forName(declared[3].str());
                     if(!type.empty() && type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="string"
                         && type!="boolean" && type!="double" && type!="single" && type!="currency" && type!="date" && type!="object"
-                        && type!="collection" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !isProjectClassType(type))
+                        && type!="collection" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !isDeclaredObjectType(type))
                         return {VbaExecutionStatus::Unsupported,"Declared parameter type is not implemented",line};
-                    const bool objectDefault=(type=="collection" || type=="object" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) && lower(defaultExpression)=="nothing";
-                    if(optional && (type=="collection" || type=="object" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) && !defaultExpression.empty() && !objectDefault)
+                    const bool objectDefault=(type=="collection" || type=="object" || isDeclaredObjectType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) && lower(defaultExpression)=="nothing";
+                    if(optional && (type=="collection" || type=="object" || isDeclaredObjectType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) && !defaultExpression.empty() && !objectDefault)
                         return {VbaExecutionStatus::Unsupported,"Optional native object default must be Nothing",line};
                     if(optional && lower(defaultExpression)=="null" && !type.empty() && type!="variant")
                         return {VbaExecutionStatus::Unsupported,"Null defaults require a Variant parameter",line};
@@ -937,10 +938,10 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 const bool arrayResult=match[5].matched;
                 if(arrayResult) {
                     static const std::unordered_set<std::string> elementTypes{"variant","byte","integer","long","single","double","currency","date","boolean","string","object"};
-                    if(!elementTypes.contains(declaredResult) && !isProjectClassType(declaredResult)) return {VbaExecutionStatus::Unsupported,"Array result element type unsupported",line};
+                    if(!elementTypes.contains(declaredResult) && !isDeclaredObjectType(declaredResult)) return {VbaExecutionStatus::Unsupported,"Array result element type unsupported",line};
                 }
                 if(!isFunction && !declaredResult.empty()) return {VbaExecutionStatus::Unsupported,"Sub and Property setters cannot declare a result type",line};
-                if (isFunction && !declaredResult.empty() && declaredResult!="variant" && declaredResult!="boolean" && declaredResult!="string" && declaredResult!="integer" && declaredResult!="long" && declaredResult!="single" && declaredResult!="double" && declaredResult!="currency" && declaredResult!="date" && declaredResult!="byte" && declaredResult!="object" && declaredResult!="collection" && nativeScriptingObjectType(declaredResult).empty() && !nativeDaoType(declaredResult) && nativeAccessObjectType(declaredResult).empty() && !isProjectClassType(declaredResult))
+                if (isFunction && !declaredResult.empty() && declaredResult!="variant" && declaredResult!="boolean" && declaredResult!="string" && declaredResult!="integer" && declaredResult!="long" && declaredResult!="single" && declaredResult!="double" && declaredResult!="currency" && declaredResult!="date" && declaredResult!="byte" && declaredResult!="object" && declaredResult!="collection" && nativeScriptingObjectType(declaredResult).empty() && !nativeDaoType(declaredResult) && nativeAccessObjectType(declaredResult).empty() && !isDeclaredObjectType(declaredResult))
                     return {VbaExecutionStatus::Unsupported,"Function result type unsupported",line};
                 if (resultType) *resultType=declaredResult+(arrayResult ? "()" : "");
             } else if (std::regex_match(source, match, anyBegin)
@@ -1429,7 +1430,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"ReDim fixed String specification unsupported",line};result.errorNumber=error.number;return result;}
                     entry=trim(entry.substr(0,as));
                     if(elementType!="variant" && elementType!="byte" && elementType!="integer" && elementType!="long" && elementType!="single"
-                        && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string" && !elementType.starts_with("string*") && elementType!="object" && !isProjectClassType(elementType))
+                        && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string" && !elementType.starts_with("string*") && elementType!="object" && !isDeclaredObjectType(elementType))
                         return {VbaExecutionStatus::Unsupported,"ReDim element type unsupported",line};
                 }
                 const auto target=memberTarget(entry);
@@ -1468,7 +1469,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             } catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Const declaration unsupported",line}; result.errorNumber=error.number; return result; }
         } else if (std::regex_match(source, match, dim)) {
             const bool persistent=lower(source.substr(0,6))=="static";
-            const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
+            const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
             for (auto entry:splitArguments(match[1].str())) {
                 std::smatch declared;
                 entry = trim(entry);
@@ -1481,7 +1482,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Fixed array element declaration unsupported",line};result.errorNumber=error.number;return result;}
                     if(type.empty()) type=implicitTypes.forName(declared[1].str()); if(type.empty()) type="variant";
                     if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
-                        && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object" && !isProjectClassType(type))
+                        && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object" && !isDeclaredObjectType(type))
                         return {VbaExecutionStatus::Unsupported,"Dynamic array element type unsupported",line};
                     const auto bounds=trim(declared[2].str());
                     const auto dimensions=bounds.empty() ? std::optional<std::vector<VbaArrayDimension>>{} : literalArrayBounds(bounds,declarationArrayBase,declarationConstants,constantMode);
@@ -1498,7 +1499,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Fixed scalar declaration unsupported",line};result.errorNumber=error.number;return result;}
                 if(type.empty()) type=implicitTypes.forName(declared[1].str());
                 if (!type.empty() && type != "variant" && type != "object" && type != "collection" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type)
-                    && nativeAccessObjectType(type).empty() && !isProjectClassType(type)
+                    && nativeAccessObjectType(type).empty() && !isDeclaredObjectType(type)
                     && type != "string" && !type.starts_with("string*") && type != "boolean"
                     && type != "integer" && type != "long" && type != "single" && type != "double" && type != "currency" && type != "date"
                     && type != "byte") return {VbaExecutionStatus::Unsupported, "Variablentyp: " + type, line};
@@ -1652,8 +1653,7 @@ std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view mod
         signature.declaredTypes.push_back(parameter.type);
         signature.required+=!parameter.optional && !parameter.paramArray;
         const auto& type=parameter.type;
-        signature.objectArguments.push_back(!parameter.paramArray && (type=="object" || type=="collection" || (isProjectClassType(type) && !type.ends_with("()"))
-            || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()));
+        signature.objectArguments.push_back(!parameter.paramArray && isDeclaredObjectType(type));
     }
     return signature;
 }
@@ -1773,7 +1773,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
     const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
     const std::regex declaration(R"(^\s*(Dim|Private|Public|Global)\s+(.+)$)",std::regex::icase);
     const std::regex variable(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
-    const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
+    const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
     const auto scalarConstants=moduleConstantDeclarations(module); std::size_t constantIndex=0; int sourceLine=0;
     VbaVariables knownConstants; const auto constantMode=moduleCompareMode(module);
     const auto lengthConstants=moduleConstantValues(module);
@@ -1814,7 +1814,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
             if(std::regex_match(entry,field,dynamicArray)) {
                 const auto name=lower(field[1].str());auto type=declaredScalarType(field[3].str(),field[4].str(),lengthConstants,enumNames);if(type.empty()) type=implicitTypes.forName(name);if(type.empty()) type="variant";
                 if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
-                    && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object" && !isProjectClassType(type))
+                    && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object" && !isDeclaredObjectType(type))
                     throw VbaRuntimeError(3251,"Module dynamic array element type unsupported");
                 if(isProjectClassType(type) && enumNames.contains(std::string(projectClassTypeName(type)))) throw VbaRuntimeError(3251,"Module Enum arrays are not project class references");
                 if(state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
@@ -1830,11 +1830,11 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
             }
             if (!std::regex_match(entry,field,variable)) throw VbaRuntimeError(3251,"Module declaration unsupported");
             const auto name=lower(field[1].str()); auto type=declaredScalarType(field[2].str(),field[3].str(),lengthConstants,enumNames);if(type.empty()) type=implicitTypes.forName(name);
-            if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency" && type!="date" && type!="byte" && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !isProjectClassType(type))
+            if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency" && type!="date" && type!="byte" && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !isDeclaredObjectType(type))
                 throw VbaRuntimeError(3251,"Module field type unsupported");
             if(isProjectClassType(type) && enumNames.contains(std::string(projectClassTypeName(type)))) throw VbaRuntimeError(3251,"Module Enum type aliases are not project class references");
             if (state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
-            state->values.emplace(name,(type=="collection" || type=="object" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) ? VbaValue::reference(nullptr) : type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type.starts_with("string*") ? VbaValue::string(std::string(*vbaFixedStringWidth(type),'\0')) : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : type=="single" ? VbaValue::single(0) : type=="double" ? VbaValue::numeric(0) : type=="currency" ? VbaValue::currency(0) : type=="date" ? VbaValue::dateSerial(0) : type=="byte" ? VbaValue::byte(0) : VbaValue::empty());
+            state->values.emplace(name,(type=="collection" || type=="object" || isDeclaredObjectType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) ? VbaValue::reference(nullptr) : type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type.starts_with("string*") ? VbaValue::string(std::string(*vbaFixedStringWidth(type),'\0')) : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : type=="single" ? VbaValue::single(0) : type=="double" ? VbaValue::numeric(0) : type=="currency" ? VbaValue::currency(0) : type=="date" ? VbaValue::dateSerial(0) : type=="byte" ? VbaValue::byte(0) : VbaValue::empty());
             state->types.emplace(name,type);
             if (visibility=="public" || visibility=="global") state->publicVariables.insert(name);
         }
@@ -1868,28 +1868,8 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
         if(value.kind!=VbaValue::Kind::Object || (value.object && !value.object->isNativeType(projectClassTypeName(type)))) throw VbaRuntimeError(13,"Declared project class requires a matching real instance");
         return value;
     }
-    if(nativeDaoType(type)) {
-        if(value.kind!=VbaValue::Kind::Object || (value.object && lower(std::string(value.object->className()))!=type.substr(4)))
-            throw VbaRuntimeError(13,"DAO binding requires the declared native object type");
-        return value;
-    }
-    if(const auto access=nativeAccessObjectType(type);!access.empty()) {
-        if(value.kind!=VbaValue::Kind::Object || (value.object && !value.object->isNativeType(access)))
-            throw VbaRuntimeError(13,"Access binding requires the declared native class or interface");
-        return value;
-    }
-    if(!nativeScriptingObjectType(type).empty()) {
-        if(value.kind!=VbaValue::Kind::Object || (value.object && !value.object->isNativeType(nativeScriptingObjectType(type))))
-            throw VbaRuntimeError(13,"Scripting binding requires the declared native object type");
-        return value;
-    }
-    if(type=="object") {
-        if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Object binding requires an object reference");
-        return value;
-    }
-    if(type=="collection") {
-        if(value.kind!=VbaValue::Kind::Object || (value.object && value.object->className()!="Collection"))
-            throw VbaRuntimeError(13,"Collection binding requires a Collection object");
+    if(const auto native=nativeObjectType(type);!native.empty()) {
+        if(value.kind!=VbaValue::Kind::Object || (value.object && native!="object" && !value.object->isNativeType(native))) throw VbaRuntimeError(13,"Native object binding requires its actual declared interface");
         return value;
     }
     if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null module field assignment");
@@ -1986,7 +1966,7 @@ void VbaHost::openFormArguments(const std::vector<VbaValue>& args) {
 namespace {
 VbaValue initialLocalValue(const std::string& type) {
     if(type.ends_with("()")) return makeUnallocatedVbaArray(type.substr(0,type.size()-2));
-    if (type=="object" || type=="collection" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || type=="control" || type=="form" || type.starts_with("access.") || type.starts_with("dao.")) return VbaValue::reference(nullptr);
+    if(isDeclaredObjectType(type)) return VbaValue::reference(nullptr);
     if(const auto width=vbaFixedStringWidth(type)) return VbaValue::string(std::string(*width,'\0'));
     if (type=="string") return VbaValue::string("");
     if (type=="boolean") return VbaValue::logical(false);
@@ -2138,9 +2118,9 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     std::unordered_set<std::string> automaticObjects;
     const int arrayBase=moduleArrayBase(module);
     const auto integralType=[](std::string_view type) { return type=="integer" || type=="long"; };
-    const auto checkedType=[&](std::string_view type) { return type.ends_with("()") || integralType(type) || type=="boolean" || type=="string" || type.starts_with("string*") || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection" || type=="object" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty(); };
-    const auto scalarType=[&](std::string_view type) { return checkedType(type) && !isProjectClassType(type) && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !type.ends_with("()"); };
-    const auto objectType=[](std::string_view type) { return type=="object" || type=="collection" || (isProjectClassType(type) && !type.ends_with("()")) || !nativeScriptingObjectType(type).empty() || type.starts_with("dao.") || type.starts_with("access.") || !nativeAccessObjectType(type).empty(); };
+    const auto checkedType=[&](std::string_view type) { return type.ends_with("()") || integralType(type) || type=="boolean" || type=="string" || type.starts_with("string*") || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection" || type=="object" || isDeclaredObjectType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty(); };
+    const auto scalarType=[&](std::string_view type) { return checkedType(type) && !isDeclaredObjectType(type) && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !type.ends_with("()"); };
+    const auto objectType=[](std::string_view type) {return isDeclaredObjectType(type);};
     auto errorState = std::make_shared<ErrorObject>();
     locals["err"] = VbaValue::reference(errorState);
     bool resumeNext = false;

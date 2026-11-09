@@ -5981,3 +5981,15 @@ CTest-/Original-/Windows-/Vollsuiten-/Paketbehauptungen.456/386/70 unverändert;
 vollständige F079/F340 bleiben offen. Vorstufe2d95062 privat remote/Baum geprüft.
 Ohne Zwischenabschluss den tatsächlichen Makroreferenz-Blocker über die bestehende
 Codex-Call-Schnittstelle prüfen und unabhängig weitere Anforderungen implementieren.
+
+
+Native Objektarrays (2026-11-09): NATIVE_OBJECT_ARRAYS.md beschreibt die geschlossene
+DAO-/Access-/Scripting-/VBA-Typbindung für Deklarationen, ByRef, Rückgaben, Preserve
+und Set-Elemente mit echter Schnittstellenprüfung statt Klassenname. Reale lokale
+Forms-Arraybindung hat Vorrang vor globaler Sammlung. Nach gezielter Korrektur
+bestehendes Kern-/GUI-Bündel2/2 (24,46s:4,85/19,61), DAO zuvor1/1 (2,83s), App.
+Keine neuen CTests/Original-/Windows-/Vollsuiten-/Paketbehauptungen.456/386/70
+unverändert; vollständige F042/F043 offen. Vorstufe9bc07b2 privat remote/Baum geprüft.
+Gespeicherten Makro-Codex-Call einmal ohne neuen Anruf fortgesetzt: failed, keine
+Antwort/Entscheidung; Ende vor Agent-Abschlussverarbeitung. Makroreferenz bleibt
+offen; unabhängig ohne Zwischenabschluss weiterprogrammieren.
