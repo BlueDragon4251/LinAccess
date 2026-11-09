@@ -86,3 +86,23 @@ unsupported procedure syntax must fail preflight before its prefix SQL effects.
 Validation: existing GUI1/1 passed (7.20s), matching app build. Actual F5,
 DAO write and public call into a second module, shared counter, return value,
 MsgBox response and arity/context/preflight/unsaved refusal were exercised.
+
+## Shared CurrentProject and CurrentData
+
+The standalone Application exposes CurrentProject and CurrentData, including bare
+VBA identifiers through the normal evaluator. They use the existing actual native
+catalog implementation rather than a form placeholder or a copied name list.
+AllModules/AllForms/AllReports/AllMacros and AllTables/AllQueries retain their
+existing bounded catalog, descriptor, readonly and IsLoaded contracts.
+
+The form and standalone applications share the same project/catalog object
+identity under the actual project window. The weak cache key includes connection,
+database and project generation. A held catalog survives closure of a caller form;
+closing/reopening or switching the actual project invalidates old project/data
+objects and descendants with3420. Native file Name/Path/FullName retain the existing
+file-backed-project requirement. No native AccessObject export/import or arbitrary
+project-property implementation is implied.
+
+Validation: matching app built; existing GUI/layout2/2 passed (19.49s), no test
+correction. Actual VBA counts, shared identity, caller-form closure, live module
+removal and3420 after actual project switching are covered.

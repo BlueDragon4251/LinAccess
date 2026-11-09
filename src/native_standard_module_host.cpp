@@ -12,6 +12,7 @@
 #include <QScopeGuard>
 #include "native_public_procedure_run.hpp"
 #include "native_application_run.hpp"
+#include "native_project_context.hpp"
 #include "native_domain_lookup.hpp"
 #include "native_macro_runner.hpp"
 #include "native_macro_message_box.hpp"
@@ -254,6 +255,7 @@ public:
             if(args.size()!=1) throw VbaRuntimeError(450,"Eval requires one expression");
             const auto expression=coerceVbaModuleValue(scalarVbaValue(args.front()),"string").asText();host.check();return host.eval(expression);
         }
+        if(key=="currentproject" || key=="currentdata") {if(!args.empty()) throw VbaRuntimeError(450,"Project/data context requires no arguments");return VbaValue::reference(nativeProjectContext(db_,owner_,key=="currentdata"));}
         if(key=="dbengine") {if(!args.empty()) throw VbaRuntimeError(450,"DBEngine requires no arguments");return VbaValue::reference(host.databaseEngine());}
         throw VbaRuntimeError(438,"Application member is unavailable in the module execution host");
     }

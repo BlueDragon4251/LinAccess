@@ -7167,3 +7167,19 @@ Originaluploads3/3 und Fixturehashes4/4 unverändert. Keine neue CTest-ID/Gesamt
 Windows-Beobachtung. NATIVE_MACROS_RUNTIME.md/NATIVE_HOURGLASS.md;
 F088/F052/F068/F135/F148 und456/384/72 unverändert. Direkt weiter mit gemeinsamem
 CurrentProject/CurrentData aus echten Standardmodulen und Projektlebensdauer.
+
+
+## Fortschreibung 2026-11-09: gemeinsame CurrentProject-/CurrentData-Objekte
+Standardmodule können Application.CurrentProject/CurrentData und die unqualifi-
+zierten VBA-Bezeichner verwenden. Formular- und Modulhost nutzen dieselbe echte
+Projektkatalogimplementierung und Objektidentität am tatsächlichen Projektfenster;
+kein kopierter Katalog/kein erfundenes Formular. Cache zusätzlich generations-
+gebunden. Vorhandene Datei-/Readonly-/Deskriptor-/IsLoaded-Grenzen bleiben bestehen.
+App gebaut; vorhandene GUI/Layout2/2 (19,49s) ohne Korrekturlauf bestanden:
+wirklicher VBA-Katalogzugriff/Counts, gemeinsame Identität in beiden Hosts,
+Fortbestand nach Formularschluss, live Modul-Löschung, Argument/Readonly-Fehler,
+3420 für gehaltene Projekt-/Datenkatalogobjekte nach tatsächlichem Projektwechsel
+im vorhandenen AutoExec-Ablauf. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/
+Paketprüfung; zuletzt geprüftes DEB gehört69ac1b9. NATIVE_STANDARD_MODULES_RUNTIME.md;
+F052/F042/F059/F135 und456/384/72 unverändert. Direkt weiter: echte Forms-/Reports-
+Sammlungen und Screen aus dem formularfreien Host, ohne Platzhalterformular.

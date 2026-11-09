@@ -3,6 +3,7 @@
 #include "native_macro_runner.hpp"
 #include "native_macro_message_box.hpp"
 #include "native_application_run.hpp"
+#include "native_project_context.hpp"
 #include "native_public_procedure_run.hpp"
 #include "vba_module_context.hpp"
 #include "vba_source_codec.hpp"
@@ -1866,26 +1867,7 @@ public:
         if (key=="dlookup" || key=="dmin" || key=="dmax" || key=="davg" || key=="dsum" || key=="dcount" || key=="dfirst" || key=="dlast" || key=="dvar" || key=="dstdev") return linaccess::nativeDomainValue(preview.db_,args,key.toStdString());
         if(key=="currentproject" || key=="currentdata") {
             if(!args.empty()) throw linaccess::VbaRuntimeError(450,"Project/data context requires no arguments");
-            QObject* owner=nullptr;
-            for(auto* ancestor=preview.parentWidget();ancestor;ancestor=ancestor->parentWidget())
-                if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
-            const auto connection=preview.db_.connectionName();
-            const auto identity=QString::number(static_cast<qlonglong>(connection.size()))+":"+connection+preview.db_.databaseName();
-            auto projects=owner ? owner->property("la_native_current_projects").toMap() : QVariantMap{};
-            auto project=projects.value(identity).value<std::weak_ptr<linaccess::VbaObject>>().lock();
-            if(!project) {
-                project=std::make_shared<NativeCurrentProjectObject>(preview.db_,owner);
-                if(owner) {
-                    projects.insert(identity,QVariant::fromValue(std::weak_ptr<linaccess::VbaObject>(project)));
-                    owner->setProperty("la_native_current_projects",projects);
-                }
-            }
-            if(key=="currentdata") {
-                auto context=std::dynamic_pointer_cast<NativeCurrentProjectObject>(project);
-                if(!context) throw linaccess::VbaRuntimeError(3420,"Native project context unavailable");
-                return linaccess::VbaValue::reference(context->currentData());
-            }
-            return linaccess::VbaValue::reference(std::move(project));
+            return linaccess::VbaValue::reference(nativeProjectContext(preview.db_,&preview,key=="currentdata"));
         }
         if (key=="eval") {
             if (args.size()!=1) throw linaccess::VbaRuntimeError(450,"Eval requires one argument");
@@ -1970,4 +1952,17 @@ void connectPreviewSqlObjects(QSqlDatabase db) {
         }
         throw linaccess::VbaRuntimeError(report ? 2451 : 2450,"Referenced SQL document is not open");
     });
+}
+
+std::shared_ptr<linaccess::VbaObject> nativeProjectContext(QSqlDatabase database,QObject* context,bool data) {
+    if(!database.isOpen()) throw linaccess::VbaRuntimeError(3420,"Native project is closed");
+    if(!QApplication::instance() || QThread::currentThread()!=QApplication::instance()->thread()) throw linaccess::VbaRuntimeError(3251,"Project context requires its GUI thread");
+    QObject* owner=nullptr;for(auto* ancestor=context;ancestor;ancestor=ancestor->parent()) if(qobject_cast<QMainWindow*>(ancestor)) {owner=ancestor;break;}
+    const auto connection=database.connectionName();const auto generation=owner ? owner->property("la_project_generation").toULongLong() : 0;
+    const auto identity=QString::number(static_cast<qlonglong>(connection.size()))+":"+connection+database.databaseName()+QChar(0)+QString::number(generation);
+    auto projects=owner ? owner->property("la_native_current_projects").toMap() : QVariantMap{};
+    auto project=projects.value(identity).value<std::weak_ptr<linaccess::VbaObject>>().lock();
+    if(!project) {project=std::make_shared<NativeCurrentProjectObject>(database,owner);if(owner) {projects.insert(identity,QVariant::fromValue(std::weak_ptr<linaccess::VbaObject>(project)));owner->setProperty("la_native_current_projects",projects);}}
+    auto native=std::dynamic_pointer_cast<NativeCurrentProjectObject>(project);if(!native) throw linaccess::VbaRuntimeError(3420,"Native project context unavailable");native->check();
+    return data ? native->currentData() : project;
 }
