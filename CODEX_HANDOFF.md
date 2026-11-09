@@ -4643,3 +4643,18 @@ gebaut, bestehendes GUI-/SQL-Bündel2/2 (15,84s) bestanden. Ein Qt-Enum-Baufehle
 wurde vor dem Prüflauf korrigiert. Keine neuen CTests oder Windows-/Original-/
 Gesamtsuiten-/Paketnachweise. Berichtsentwurf als4e20658 veröffentlicht; letzte
 geprüfteDEB weiterhin1dafedd. Details VISUAL_QUERY_DESIGNER.md;456/386/70 unverändert.
+
+
+Visuelle Verknüpfungen: bis8 geordnete INNER-/LEFT-Equijoins auf tatsächlichen
+Tabellen/gespeicherten Auswahlabfragen, pro neuer Quelle vorhandenes Feld = neues
+Feld. Vollqualifizierte Feldidentität und persistierte Quellzuordnung; echte
+Nullwerte bei fehlendem LEFT-Treffer. Entfernen betrifft nur Entwurfsfelder;
+Selbstverknüpfungen/Aliase/zusammengesetzte Vergleichsbedingungen bleiben im
+SQL-Editor mit bestehenden Grenzen. Strikte Metadatenprüfung; fehlgeschlagenes
+Einlesen hinterlässt keine halbfertigen Feldzeilen. Bestehendes GUI-/SQL-Bündel2/2
+(14,92s), nach Metadatenguards nur GUI1/1 (14,90s) wiederholt; Anwendung gebaut.
+Tatsächliche zweistufige LEFT-Verknüpfung gegen unabhängiges SQL verglichen,
+Wiederöffnung/Entfernen/INNER-Wechsel und kaputte Metadaten geprüft. Keine neuen
+CTests oder Windows-/Original-/Gesamtsuiten-/Paketnachweise. Details in
+VISUAL_QUERY_DESIGNER.md. Gespeicherte-Abfragequellen-Etappe28e3302 veröffentlicht;
+letzte geprüfteDEB weiterhin1dafedd. F067/F068/F080/F148 und456/386/70 unverändert.

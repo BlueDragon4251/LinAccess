@@ -28,10 +28,10 @@ run and save for a closed/replaced project; full callback/window scheduling rema
 outside this scope. Imported sources remain outside this
 native-owned authoring path.
 
-Scope is one physical table or installed saved selection-query view, fields/literal
-criteria/native supported functions,
+Scope includes physical tables or installed saved selection-query views, up to
+eight ordered INNER/LEFT equijoins, fields/literal criteria/native supported functions,
 AND/OR field groups, declared parameters, calculated scalar projections, grouped
-aggregates, distinct and ordered output. Joins and arbitrary SQL round-trip parsing and the complete Access QBE/window/locale oracle remain open.
+aggregates, distinct and ordered output. General join syntax and arbitrary SQL round-trip parsing and the complete Access QBE/window/locale oracle remain open.
 The native 255-field/64-character name and criteria/predicate bounds apply. The
 SQL editor retains its broader existing capabilities. No full designer parity is
 claimed; F067/F068/F080/F148 remain open, fixed catalog456/386/70 unchanged.
@@ -159,3 +159,31 @@ conversion build error was fixed before running the bundle. Actual nested query
 results/filter/order and saved design restoration are covered; callback counts
 prove metadata preparation does not execute row values. No new CTest ID or
 Windows/original/full-suite/package proof.
+
+## Joined sources
+
+Quellen verknüpfen builds up to eight ordered INNER/LEFT equijoins across real
+tables or installed saved selection-query views. Each new source joins an already
+present source through explicit field = field. LEFT preserves previous-side rows
+with actual Null values on unmatched new-side fields. The dialog previews the
+actual parenthesized FROM clause; no records execute there. Removing the final
+join also removes its draft field rows; calculated expressions that still refer
+to a removed source must be corrected before Apply. Cancel changes nothing.
+
+Fields carry their source separately from their displayed name, preventing
+ambiguous duplicate physical names from being resolved to the wrong source.
+Joined field labels show source.field; duplicate output names require explicit
+aliases. Criteria, ordering, calculations, parameters, grouping and report source
+reuse go through the existing native SQL compiler and execution semantics.
+
+The draft preserves the ordered joins and source/field identities on reopening.
+Each source may occur once, with at most255 combined source fields; self joins,
+source aliases, composite/non-equality join predicates and other join kinds
+remain available only to the broader manual SQL path within its native bounds.
+No Access SQL reverse parser or complete QBE/window/locale parity is claimed.
+
+Validation: existing GUI/SQL2/2 passed (14.92s); application built. After
+strict metadata/partial-row cleanup guards only GUI1/1 repeated (14.90s). The
+fixture compares two-level LEFT results including Null against independent SQL,
+reopens joins, removes dependent sources, changes to INNER, and rejects malformed
+metadata. No new CTest ID or Windows/original/full-suite/package proof.
