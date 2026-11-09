@@ -37,3 +37,8 @@ No new CTest target or catalog ID. F040/F068 remain open;456/384/72 stays fixed.
 References: [LSet](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/lset-statement),
 [RSet](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/rset-statement),
 [Mid statement](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/mid-statement).
+
+Mid$ statement syntax now shares the existing bounded character-replacement path;
+its intrinsic mode remains distinct from an array/object named Mid. Fixed scalar
+String*n declarations and assignment widths are documented in VBA_FIXED_STRINGS.md.
+No MidB or additional boundary oracle is claimed.

@@ -7852,3 +7852,24 @@ Veröffentlichungshelfer außerhalb Git: /workspace/work/github-connector/publis
 Fast-forward-Lease werden geprüft, lokale identische Remote-Commitobjekte übernommen).
 F040/F045/F051/F060-Status und Katalog456/386/70 unverändert. Letzte geprüfteDEB eaaeb73;
 frisches Paket folgt aus dem aktuellen Quellstand.
+
+
+## 2026-11-09: Feste skalare VBA-Strings
+
+Lokale/statische und modulweite String*n-Variablen mit1..65526 UTF-16-Einheiten,
+bekannten Const-Längen und späteren Modulkonstanten sind implementiert. Initial
+NUL-Zeichen, bei Zuweisung Abschneiden/Leerzeichenauffüllung; echte String8-Werte,
+Metadatenbreite und statischer Zustand bleiben erhalten. LSet/RSet und Mid sind
+eingebunden. Die Kernprüfung fand fehlende Mid$-Zuweisungssyntax; dieser konkrete
+Parserpfad wurde ergänzt, inklusive unverwechselbarem intrinsischem Mid$-Modus.
+Null94 verändert den vorigen Wert nicht; isolierte Surrogatabschneidung bleibt3251.
+Details/Grenzen einschließlich noch fehlender Arrays/UDTs/kompletter ByRef-Parität:
+VBA_FIXED_STRINGS.md. GUI14,77s bereits bestanden; nach Mid$-Fix ausschließlich
+Kern1/1 (2,31s) wiederholt/bestanden, Anwendung neu gebaut. Keine neuen CTests oder
+neuen Windows-/Original-/Gesamtsuiten-/Qt-frei-Belege für diese String-Erweiterung.
+Vorige Stop-Etappe ist als72b936d über Connector veröffentlicht, gleicher geprüfter
+Baumccd6e1f54fcbed0d1b72a5d4ff4cb6416d07c2be wie lokaler633fb98. Frische72b936d-DEB
+unter /workspace/work/native-debug-halts/package/linaccess-0.7.0-Linux.deb besteht
+Build-ID/Inhalt/Berechtigungen/MDBTools1.0.1/SQLite3.54.1-Prüfung. Diese neuen
+String-Quellen sind noch nicht paketiert. F040/F041/F042/F043/F122 und456/386/70
+unverändert. Keine Gesamtparität/Abschlussbehauptung.
