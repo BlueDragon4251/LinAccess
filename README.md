@@ -150,7 +150,7 @@ keine nachgewiesene pixelgenaue Access-2003-Oberfläche. Details: [Darstellung](
 - Auf geschlossenen Tabellen über **Ansicht → Tabellenfelder bearbeiten** normale Felder mit Typ, Textgröße und Standardwert ergänzen oder nach Bestätigung löschen; [Umfang und Grenzen](docs/DAO_TABLEDEF_FIELDS.md)
 - Auf ausgewählten Tabellen über **Ansicht → Tabellenindizes bearbeiten** normale/Unique-Indizes mit geordneten ASC-/DESC-Feldern anlegen und löschen; [Umfang und Grenzen](docs/DAO_INDEXES_RUNTIME.md)
 - Über **Ansicht → Beziehungen bearbeiten** numerische Beziehungen mit echter Integritätsprüfung/Kaskaden oder ausdrücklich ohne Integritätsprüfung verwalten; [Umfang und Grenzen](docs/DAO_RELATIONS_RUNTIME.md)
-- Gespeicherte SQL-SELECT-Abfragen
+- Gespeicherte SQL-SELECT-Abfragen mit [visuellem Datenquellenentwurf](docs/VISUAL_QUERY_DESIGNER.md): echte Tabellen/gespeicherte Auswahlabfragen, Felder und Aliase, Kriterien, Parameter, berechnete Felder, Gruppierung/Aggregate und begrenzte INNER-/LEFT-Verknüpfungen. Derselbe Entwurf erstellt Formular- und Berichtsquellen; Abfrageformulare bleiben im bestehenden schreibgeschützten Umfang.
 - Native Aktionsmakros erstellen, speichern und über `DoCmd.RunMacro` ausführen;
   Umfang und Grenzen: [Makrolaufzeit](docs/NATIVE_MACROS_RUNTIME.md).
   [Formularereignisse zuordnen](docs/NATIVE_FORM_EVENT_DESIGNER.md) geht im nativen Designer.

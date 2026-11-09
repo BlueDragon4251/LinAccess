@@ -187,3 +187,28 @@ strict metadata/partial-row cleanup guards only GUI1/1 repeated (14.90s). The
 fixture compares two-level LEFT results including Null against independent SQL,
 reopens joins, removes dependent sources, changes to INNER, and rejects malformed
 metadata. No new CTest ID or Windows/original/full-suite/package proof.
+
+## Owned form sources
+
+The native form designer also exposes Datenquelle entwerfen. It applies the
+actual generated SELECT to the editable source selector; available bound fields
+come from that query's prepared columns. Query forms retain their existing
+read-only behavior and explicit non-parameter source boundary. This does not
+claim editable joined/aggregate queries. Parameter declarations are hidden and
+refused as for report sources. Physical/unbound form creation remains available.
+
+The form persists optional visual_query metadata only for a matching exact source
+hash. Manual source changes remove stale design metadata on save. Its existing
+form-level undo/redo now snapshots and restores the source design together with
+selected fields, layout, events and other authoring state. Canceling the nested
+designer leaves the source unchanged. Project identity/generation is checked for
+source authoring, saving and history capture/restoration. The source selector has
+a bounded preferred width so long SQL does not force an enormous designer width.
+
+Validation: application built, existing GUI/SQL2/2 passed (15.47s). The fixture
+verifies source/metadata undo/redo, saving/reopening/manual invalidation and opens
+the actual generated query form with a real bound value and AllowEdits=False.
+The callback counter distinguishes schema preparation from execution. No new
+CTest ID, Windows/original/full-suite proof. The checked DEB at fe01e1d predates
+this form integration; its Build-ID/payload/dependency checks and all seven
+fixture/upload original hashes passed.

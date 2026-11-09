@@ -2378,3 +2378,24 @@ Wiederöffnung/Entfernen/INNER-Wechsel und kaputte Metadaten geprüft. Keine neu
 CTests oder Windows-/Original-/Gesamtsuiten-/Paketnachweise. Details in
 VISUAL_QUERY_DESIGNER.md. Gespeicherte-Abfragequellen-Etappe28e3302 veröffentlicht;
 letzte geprüfteDEB weiterhin1dafedd. F067/F068/F080/F148 und456/386/70 unverändert.
+
+
+Visueller Formulardatenquellenentwurf: derselbe echte SQL-Entwurf erzeugt SELECT-
+Quellen mit vorbereiteten Feldmetadaten; keine Parameterbindung und weiterhin
+schreibgeschützte Abfrageformulare. Passende SQL-Hash-/Entwurfsmetadaten werden
+mitgespeichert und im bestehenden Formular-Undo/Redo erfasst/wiederhergestellt.
+Manuelle Quelländerung entfernt veraltete Metadaten. Projektidentitäts-/Generations-
+prüfung bei Entwurf/Speichern/Verlauf. Bestehendes GUI-/SQL-Bündel2/2 bestanden
+(15,47s), Anwendung gebaut; tatsächliches gespeichertes Formular mit echten
+Ergebniswerten/schreibgeschütztem Zustand geöffnet. Callback zählt keine Auswertung
+bei Entwurf/Speichern/Wiederöffnung, erst tatsächliche Formularausführung liest.
+Keine neuen CTests oder Windows-/Original-/Gesamtsuitennachweise.
+
+Verknüpfungs-Etappe alsfe01e1d veröffentlicht/verifiziert. Geprüftes DEB dieses
+Standes unter /workspace/work/visual-query-joins/package/linaccess-0.7.0-Linux.deb:
+Build-ID passt, MDBTools1.0.1/SQLite3.54.1, Payload/Berechtigungen/keine Fixtures
+bestanden. Paket enthält noch nicht die anschließende Formularintegration. Vier
+Fixture- und drei Upload-Originalhashes erneut unverändert geprüft. Details in
+VISUAL_QUERY_DESIGNER.md/NATIVE_QUERY_FORM_DESIGN.md. F050/F080/F148 und fester
+Katalog456/386/70 unverändert. Nächste unabhängige Untersuchung: ursprüngliche
+3146/1023-Grenze beim Öffnen des Originalformulars, keine erneute Makro-Rückfrage.

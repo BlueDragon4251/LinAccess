@@ -2440,6 +2440,10 @@ void MainWindow::editQuery(const QString& existingName) {
 void MainWindow::editForm(const QString& existingName) {
     if (!hasProject()) return;
     const auto old = existingName.isEmpty() ? QJsonObject{} : objectDefinition("form", existingName);
+    const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
+    const auto checkProject=[owner,identity,generation]{if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation)throw linaccess::VbaRuntimeError(3420,"Das Formular gehört nicht mehr zum aktuellen Projekt.");};
+    auto visual=std::make_shared<QJsonObject>(old.value("visual_query").toObject());
+    const auto hash=[](const QString& value){return QString::fromLatin1(QCryptographicHash::hash(value.toUtf8(),QCryptographicHash::Sha256).toHex());};
     QJsonObject formEvents;QMap<QString,QMap<QString,QString>> priorFieldEvents;int formTimerInterval=0;
     QPointer<linaccess::NativeDesignerHistory> history;
     QJsonArray extraControls=old.value("controls").toArray();
@@ -2465,11 +2469,11 @@ void MainWindow::editForm(const QString& existingName) {
     caption->setObjectName("native-form-caption"); caption->setPlaceholderText("Formularüberschrift");
     outer->addWidget(caption);
     auto* source = new QComboBox(&dialog); source->setObjectName("native-form-source");
-    source->setEditable(true);
+    source->setEditable(true);source->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);source->setMinimumContentsLength(24);
     auto sourceNames=tableNames(); sourceNames.append(objectNames("query")); sourceNames.removeDuplicates();
     source->addItem(QString{});source->addItems(sourceNames);
     outer->addWidget(new QLabel("Datenquelle: Tabelle, Abfrage oder SELECT; leer für ein ungebundenes Formular"));
-    outer->addWidget(source);
+    outer->addWidget(source);auto* sourceDesign=new QPushButton("Datenquelle entwerfen…",&dialog);sourceDesign->setObjectName("native-form-source-design");outer->addWidget(sourceDesign);
     auto* sourceStatus=new QLabel(&dialog); sourceStatus->setObjectName("native-form-source-status");
     sourceStatus->setWordWrap(true); outer->addWidget(sourceStatus);
     auto* fields = new QListWidget(&dialog); fields->setObjectName("native-form-fields");
@@ -2629,7 +2633,8 @@ void MainWindow::editForm(const QString& existingName) {
             lines << "Noch nicht implementierte Abhängigkeit: " + QString::fromStdString(issue);
         findings->setPlainText(lines.join('\n'));
     });
-    connect(save, &QPushButton::clicked, &dialog, [this, &dialog, name, caption, source, fields, vba, importedBytes,old,&formEvents,&formTimerInterval,&history,&extraControls] {
+    connect(save, &QPushButton::clicked, &dialog, [this, &dialog, name, caption, source, fields, vba, importedBytes,old,&formEvents,&formTimerInterval,&history,&extraControls,visual,hash,checkProject] {
+        try{checkProject();}catch(const std::exception& error){messageError(&dialog,QString::fromUtf8(error.what()));return;}
         QJsonArray chosen; QJsonObject captions,positions,eventBindings;
         for(int index=0;index<fields->count();++index) if(fields->item(index)->checkState()==Qt::Checked) {
             const auto field=fields->item(index)->data(Qt::UserRole).toString(); chosen.append(field); captions.insert(field,fields->item(index)->text());
@@ -2646,6 +2651,7 @@ void MainWindow::editForm(const QString& existingName) {
         for(const auto& value:chosen) {const auto key=value.toString().toCaseFolded();if(previousFormats.contains(key)) formats.insert(key,previousFormats.value(key));else if(inherited.value(key).format) formats.insert(key,*inherited.value(key).format);}
         content.insert("field_formats",formats);
         content.insert("table",source->currentText()); content.insert("fields",chosen);
+        if(visual->value("sql_sha256").toString()==hash(source->currentText()))content.insert("visual_query",*visual);else content.remove("visual_query");
         content.insert("caption",caption->text()); content.insert("field_captions",captions); content.insert("vba",vba->toPlainText());
         content.insert("field_layout",positions);
         content.insert("controls",extraControls);
@@ -2660,7 +2666,8 @@ void MainWindow::editForm(const QString& existingName) {
     });
     trackDesignerChanges(dialog);
     auto* historyButtons=new QHBoxLayout;outer->insertLayout(2,historyButtons);
-    const auto capture=[name,caption,source,fields,vba,importedBytes,&formEvents,&formTimerInterval,&extraControls] {
+    const auto capture=[name,caption,source,fields,vba,importedBytes,&formEvents,&formTimerInterval,&extraControls,visual,checkProject] {
+        checkProject();
         QJsonArray items;
         for(int row=0;row<fields->count();++row) {
             const auto* item=fields->item(row);
@@ -2670,9 +2677,10 @@ void MainWindow::editForm(const QString& existingName) {
         }
         return QJsonObject{{"name",name->text()},{"caption",caption->text()},{"source",source->currentText()},
             {"fields",items},{"vba",vba->toPlainText()},{"original_vba",QString::fromLatin1(importedBytes->toBase64())},
-            {"events",formEvents},{"timer_interval",formTimerInterval},{"controls",extraControls}};
+            {"events",formEvents},{"timer_interval",formTimerInterval},{"controls",extraControls},{"visual_query",*visual}};
     };
-    const auto restore=[name,caption,source,fields,vba,importedBytes,findings,updateGeometry,populate,&formEvents,&formTimerInterval,&extraControls](const QJsonObject& state) {
+    const auto restore=[name,caption,source,fields,vba,importedBytes,findings,updateGeometry,populate,&formEvents,&formTimerInterval,&extraControls,visual,checkProject](const QJsonObject& state) {
+        checkProject();*visual=state.value("visual_query").toObject();
         const QSignalBlocker blockName(name),blockCaption(caption),blockSource(source),blockFields(fields),blockModel(fields->model()),blockCode(vba);
         const auto current=fields->currentItem() ? fields->currentItem()->data(Qt::UserRole).toString() : QString{};
         name->setText(state.value("name").toString());caption->setText(state.value("caption").toString());
@@ -2696,6 +2704,13 @@ void MainWindow::editForm(const QString& existingName) {
     connect(fields->model(),&QAbstractItemModel::dataChanged,history,record);
     connect(fields->model(),&QAbstractItemModel::rowsInserted,history,record);connect(fields->model(),&QAbstractItemModel::rowsRemoved,history,record);
     connect(fields->model(),&QAbstractItemModel::rowsMoved,history,record);
+    connect(sourceDesign,&QPushButton::clicked,&dialog,[this,source,visual,hash,checkProject,history,&dialog]{
+        try{checkProject();const auto initial=visual->value("sql_sha256").toString()==hash(source->currentText()) ? visual->value("design").toObject() : QJsonObject{};
+            const auto edited=linaccess::editNativeQueryDesign(&dialog,db_,initial,checkProject,false);checkProject();if(!edited)return;
+            const QJsonObject metadata{{"sql_sha256",hash(edited->sql)},{"design",edited->state}};if(*visual==metadata && source->currentText()==edited->sql)return;
+            *visual=metadata;source->setCurrentText(edited->sql);if(history)history->record();
+        }catch(const std::exception& error){messageError(&dialog,QString::fromUtf8(error.what()));}
+    });
     dialog.exec();
 }
 

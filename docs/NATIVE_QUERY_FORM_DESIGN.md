@@ -39,3 +39,9 @@ The existing UI case now uses a two-query chain whose dependency sorts after its
 consumer, reads its real row via Application.Eval/DLookup, changes the base-query
 SQL while the form is open and verifies Requery updates the dependent count to
 zero. No persistent source snapshots or invented fallback rows are used.
+
+The same native visual query designer now authors form SELECT sources, including
+its bounded calculated fields, INNER/LEFT joins and grouping. See
+VISUAL_QUERY_DESIGNER.md for exact limits. Matching design metadata persists with
+the form and participates in form-level undo/redo. It does not add writable
+query forms or parameter binding.
