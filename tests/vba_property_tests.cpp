@@ -76,7 +76,8 @@ End Sub)VBA","ArrayHole",optionalHost);assert(result.status==VbaExecutionStatus:
     const auto mixed=validateVbaProcedure("Property Get Bad(Optional ByVal first As Long,ParamArray rest() As Variant) As Long\nEnd Property","property get Bad");assert(mixed.status==VbaExecutionStatus::Unsupported);
     PropertyHost arrayHost;
     const auto arrayRun=[&](const char* name){auto value=executeVbaProcedure(nativeArrayReturnFixture,name,arrayHost);if(value.status!=VbaExecutionStatus::Completed)std::cerr<<"Array return "<<name<<": "<<value.explanation<<" line "<<value.line<<" error "<<value.errorNumber<<"\n";assert(value.status==VbaExecutionStatus::Completed && value.typedReturnValue);return *value.typedReturnValue;};
-    for(const auto& probe:std::vector<std::pair<const char*,int>>{{"LinArrayReadProbe",297},{"LinArrayCopyProbe",1299},{"LinArrayQueueProbe",14}}) assert(arrayRun(probe.first).number==probe.second);
+    for(const auto& probe:std::vector<std::pair<const char*,int>>{{"LinArrayReadProbe",297},{"LinArrayCopyProbe",1299},{"LinArrayQueueProbe",14},{ "LinArrayEachProbe",3901},{"LinArrayEachObjects",19},{"LinArrayEachCopy",3999},{"LinArrayEachNested",9}}) assert(arrayRun(probe.first).number==probe.second);
+    assert(arrayRun("LinArrayEachMatrix").text=="21:31:20:30:");
     const auto longs=arrayRun("LinArrayReturnLongs");assert(isVbaArray(longs) && vbaArrayElementType(longs)=="long" && (vbaArrayBounds(longs)==std::vector<VbaArrayDimension>{{2,4}}) && vbaArrayElement(longs,{VbaValue::longInteger(4)}).number==14);
     const auto bytes=arrayRun("LinArrayBytes");assert(isVbaArray(bytes) && vbaArrayElementType(bytes)=="byte" && vbaArrayElement(bytes,{VbaValue::longInteger(2)}).number==255);
     const auto strings=arrayRun("LinArrayStrings");assert(vbaArrayElementType(strings)=="string" && vbaArrayElement(strings,{VbaValue::longInteger(2)}).text=="ä");

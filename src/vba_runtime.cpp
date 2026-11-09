@@ -3070,9 +3070,9 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     if(const auto variable=locals.find(source); variable!=locals.end()) {
                         if(source==name) throw VbaRuntimeError(3251,"Array source and For Each control must be distinct");
                         loop.arrayRoot=source;
-                    } else if(!isDetachedVbaArray(collection) && !std::regex_search(source,std::regex(R"(^(array|vba\s*\.\s*array|split|filter)\s*\()"))) {
-                        throw VbaRuntimeError(3251,"Array For Each requires a named variable or Array/VBA.Array/Split/Filter result");
                     }
+                    // Non-variable expressions are evaluated once above and retained as
+                    // array values. Only named roots participate in live mutation guards.
                     loop.frameDepth=frames.size(); loop.withDepth=withFrames.size();
                     if(vbaArraySize(collection)==0) ip=static_cast<std::size_t>(instruction.partner);
                     else {

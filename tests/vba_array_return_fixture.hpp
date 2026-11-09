@@ -80,4 +80,48 @@ End Function
 Public Function LinArrayBoundsProbe As Long
 LinArrayBoundsProbe=LinArrayReturnLongs(9)
 End Function
+Public Function LinArrayEachProbe As Long
+Dim item As Variant
+Dim before As Long
+before=LinArrayCallCount()
+For Each item In LinArrayReturnLongs()
+LinArrayEachProbe=LinArrayEachProbe+item
+Next
+LinArrayEachProbe=LinArrayEachProbe*100+LinArrayCallCount()-before
+End Function
+Public Function LinArrayEachMatrix As String
+Dim item As Variant
+For Each item In LinArrayReturnMatrix
+LinArrayEachMatrix=LinArrayEachMatrix & CStr(item) & ":"
+Next
+End Function
+Public Function LinArrayEachObjects As Long
+Dim item As Variant
+For Each item In LinArrayObjects()
+LinArrayEachObjects=LinArrayEachObjects+item("value")
+Next
+End Function
+Public Function LinArrayIdentity(ByRef source() As Long) As Long()
+LinArrayIdentity=source
+End Function
+Public Function LinArrayEachCopy As Long
+Dim source() As Long
+Dim item As Variant
+source=LinArrayReturnLongs()
+For Each item In LinArrayIdentity(source)
+source(3)=99
+LinArrayEachCopy=LinArrayEachCopy+item
+Next
+LinArrayEachCopy=LinArrayEachCopy*100+source(3)
+End Function
+Public Function LinArrayEachNested As Long
+Dim outerItem As Variant
+Dim innerItem As Variant
+For Each outerItem In LinArraySized(2)
+For Each innerItem In LinArrayBytes()
+LinArrayEachNested=LinArrayEachNested+outerItem+innerItem
+Exit For
+Next
+Next
+End Function
 )VBA";

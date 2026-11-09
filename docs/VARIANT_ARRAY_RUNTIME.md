@@ -576,3 +576,20 @@ Completion: full desktop 48/48 (88.44 s), freshly rebuilt GUI-free core 1/1
 original fixture hashes pass. A transient execution transport disconnect left
 the workspace and running checks intact; no source was edited during checks.
 Fixed 456 work entries and 48 CTest targets remain unchanged.
+
+## Array expressions as For Each sources (2026-11-09)
+
+For Each now accepts actual array-valued expressions, including typed and Variant
+Function/Property Get results and parameterized calls. MS-VBAL5.4.2.4 defines the
+source as an expression evaluated once. The runtime retains that resulting array
+value for the loop; it no longer restricts temporary expressions to a list of
+intrinsic names. Array bounds/types, first-dimension-fast traversal, Variant loop
+control and object-cell identity use the existing implementation. Named roots
+retain their existing live element-update and replacement/resize guards.
+
+The first existing core/GUI bundle passed2/2 (17.83s), covering one producer call,
+multidimensional getter order, Object array contents, returned-array independence
+from a subsequently changed ByRef input, nested loops and Exit For. Application
+built. No new CTest/Original/Windows/full-suite/package proof. This supersedes the
+historical arbitrary-function/property-source refusal above; it does not complete
+array aliasing, custom class/UDT/COM semantics or the full F043 requirement.

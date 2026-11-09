@@ -703,3 +703,16 @@ SQLite/MDBTools geprüft. Aktuelle Array-Erweiterung liegt nach diesem Paket.
 Katalog456/386/70 unverändert; Array-Ergebniszuweisungen/Klassen-/UDT-/COM-Typen
 bleiben begrenzt. Direkt weiter: For Each über tatsächliche Array-Funktions-/Getter-
 ergebnisse mit einmaliger Ausdrucksauswertung und erhaltenen Named-Root-Guards.
+
+
+For Each akzeptiert echte Array-Ausdrücke einschließlich typisierter/Variant-
+Funktions- und Getterergebnisse. Quelle nach MS-VBAL5.4.2.4 genau einmal auswerten,
+Ergebniswert während Schleife halten; bisherige intrinsische Namensliste entfällt.
+Benannte Wurzeln behalten vorhandene Live-Elementänderungen und Austausch-/Resize-
+Guards. Erstes bestehendes Kern-/GUI-Bündel2/2 (17,83s) und Anwendung erfolgreich:
+Erzeugerzähler, Matrix-Reihenfolge, Objektinhalte, ByRef-Input/Wertkopieunabhängigkeit,
+verschachtelte Schleifen/Exit For. Details VARIANT_ARRAY_RUNTIME.md. Keine neuen
+CTests/Original-/Windows-/Gesamtsuiten-/Paketnachweise; letzte geprüfteDEB1313196.
+Arrayrückgabe-Vorstufe2ce6323 privat veröffentlicht/Remote-Baum verifiziert.
+Katalog456/386/70 unverändert. Direkt weiter: native Def-Typdirektiven statt der
+bisherigen pauschalen Verweigerung, mit konsistenter Typauflösung und Grenzen.
