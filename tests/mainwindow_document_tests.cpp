@@ -1,4 +1,5 @@
 #include "native_macro_storage.hpp"
+#include "native_access_cursor.hpp"
 #include <QStatusBar>
 #include "native_standard_module_host.hpp"
 #include <QTextBrowser>
@@ -2650,6 +2651,31 @@ void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
     unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
 }
 
+void testModuleUiCommands(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;QSqlQuery sql(db);sql.prepare("INSERT INTO _la_objects VALUES('module','UiExecutionModule',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",R"VBA(Public Function UiCursorNested() As Long
+UiCursorNested=MsgBox("module cursor",vbOKOnly)
+End Function
+Public Function UiCursor() As Long
+Application.DoCmd.Hourglass HourglassOn:=True
+UiCursor=Application.Run("UiCursorNested")
+End Function
+Public Function UiCursorFail() As Long
+Application.DoCmd.Hourglass True
+Err.Raise 7004,"UiExecutionModule","cursor failure"
+End Function
+Public Function UiCursorCheck() As Long
+UiCursorCheck=MsgBox("macro cursor",vbOKOnly)
+End Function
+Public Sub UiSelectFocus()
+Application.DoCmd.GoToControl ControlName:="[Value]"
+End Sub)VBA"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
+    linaccess::NativeStandardModuleHost host(&window,db,[] {});auto application=host.applicationObject();auto commands=application->member("DoCmd",{}).object;int seen=0;QTimer probe;QObject::connect(&probe,&QTimer::timeout,&window,[&] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());if(!box) return;assert((box->text()=="module cursor" || box->text()=="macro cursor" || box->text()=="macro cursor after") && linaccess::nativeBusyCursorOnTop());++seen;box->accept();});probe.start(1);
+    assert(application->member("Run",{VbaValue::string("UiCursor")}).number==1 && !QApplication::overrideCursor());int error=0;try {application->member("Run",{VbaValue::string("UiCursorFail")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==7004 && !QApplication::overrideCursor());
+    AccessFormPreview form("UiExecutionForm","Begin Form\nWidth =2400\nBegin Section\nHeight =600\nBegin TextBox\nName =\"Value\"\nWidth =1800\nHeight =300\nEnd\nEnd\nEnd",{},db,&window);form.show();QApplication::processEvents();auto* editor=form.findChild<QLineEdit*>("access-control-Value");assert(editor);editor->setText("focus text");application->member("Run",{VbaValue::string("UiSelectFocus")});assert(editor->hasFocus() && editor->selectedText()=="focus text");
+    const auto action=[](QString name,QJsonArray arguments=QJsonArray{}) {return QJsonObject{{"action",name},{"arguments",arguments}};};linaccess::storeNativeMacro(db,"UiCursorMacro",{{"version",1},{"actions",QJsonArray{action("GoToControl",{"[Value]"}),action("Hourglass",{true}),action("RunCode",{"UiCursorCheck()"}),action("MessageBox",{"macro cursor after",false}),action("StopMacro")}}});commands->member("RunMacro",{VbaValue::string("UiCursorMacro")});assert(!QApplication::overrideCursor());makePreviewApplicationObject(form)->member("DoCmd",{}).object->member("RunMacro",{VbaValue::string("UiCursorMacro")});assert(!QApplication::overrideCursor());probe.stop();assert(seen==5);
+    commands->member("Hourglass",{VbaValue::logical(true)});assert(linaccess::nativeBusyCursorOnTop());commands->member("Hourglass",{VbaValue::logical(false)});assert(!QApplication::overrideCursor());QApplication::setOverrideCursor(Qt::CrossCursor);error=0;try {commands->member("Hourglass",{VbaValue::logical(true)});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251 && QApplication::overrideCursor()->shape()==Qt::CrossCursor);QApplication::restoreOverrideCursor();assert(form.close());window.focusDatabaseWindow();error=0;try {commands->member("GoToControl",{VbaValue::string("Value")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2046);assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='UiExecutionModule'"));
+}
+
 void testModuleFindRecord(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE module_find_rows(id INTEGER PRIMARY KEY,value TEXT,money CURRENCY_REAL)"));assert(sql.exec("INSERT INTO module_find_rows VALUES(1,'Alpha',1.2345),(2,'needle',2.0),(3,'needle',3.0)"));sql.finish();
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-macro-designer");dialog->findChild<QLineEdit*>("native-macro-name")->setText("FindArguments");auto* list=dialog->findChild<QTableWidget*>("native-macro-actions");qobject_cast<QComboBox*>(list->cellWidget(0,0))->setCurrentText("FindRecord");QTimer::singleShot(0,dialog,[] {auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor && editor->objectName()=="native-macro-argument-dialog");editor->findChild<QPlainTextEdit*>("native-macro-argument-1")->setPlainText("needle");const QStringList options{"","Nein","2","Nein","0","Nein"};for(int index=0;index<options.size();++index) editor->findChild<QLineEdit*>("native-macro-argument-"+QString::number(index+2))->setText(options[index]);editor->accept();});dialog->findChild<QPushButton*>("native-macro-arguments")->click();dialog->findChild<QPushButton*>("native-macro-save")->click();assert(!dialog->isWindowModified());dialog->reject();});action(window,"+ Makro")->trigger();
@@ -3993,6 +4019,7 @@ End Sub
     testMacroMessageArguments(window,db);
     testModuleRecordNavigation(window,db);
     testModuleFindRecord(window,db);
+    testModuleUiCommands(window,db);
     testNativeAutoExec(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

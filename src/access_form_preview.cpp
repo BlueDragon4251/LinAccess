@@ -1096,6 +1096,9 @@ private:
     std::optional<int> aggregateRow_;
 };
 
+void enterNativeUiExecution() {++nativeExecutionDepth();}
+void leaveNativeUiExecution() noexcept {--nativeExecutionDepth();disposeClosedForms();}
+
 linaccess::VbaValue invokeNativePreviewCommand(AccessFormPreview& preview,std::string_view name,const std::vector<linaccess::VbaValue>& arguments) {
     ++nativeExecutionDepth();const auto unwind=qScopeGuard([] {--nativeExecutionDepth();disposeClosedForms();});
     return makePreviewApplicationObject(preview)->member("DoCmd",{}).object->member(name,arguments);

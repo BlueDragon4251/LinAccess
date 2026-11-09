@@ -1421,6 +1421,7 @@ public:
             preview.setProperty("la_bound_event_cancelled",true);return {};
         }
         if(key=="runmacro") {
+            enterNativeUiExecution();const auto leave=qScopeGuard([] {leaveNativeUiExecution();});
             linaccess::runNativeMacro(preview.db_,args,[&] {(void)checked();},
                 [&](const QString& expression) {return checked().evalExpression(expression.toUtf8().toStdString());},
                 [&](const linaccess::NativeMacroAction& action) {if(action.name=="MessageBox") linaccess::nativeMacroMessageBox(&checked(),action.arguments,[&](const QString& expression) {return checked().evalExpression(expression.toUtf8().toStdString());},[&] {(void)checked();});else if(action.name=="RunCode") runNativeMacroFunction(checked(),action.arguments.front().asText());else (void)member(action.name.toStdString(),action.arguments);},[] {linaccess::restoreNativeEcho();});

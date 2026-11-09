@@ -8,6 +8,8 @@
 #include "dao_database.hpp"
 #include "native_input_box.hpp"
 #include "native_access_echo.hpp"
+#include "native_access_cursor.hpp"
+#include <QScopeGuard>
 #include "native_public_procedure_run.hpp"
 #include "native_application_run.hpp"
 #include "native_domain_lookup.hpp"
@@ -35,7 +37,8 @@ NativeStandardModuleHost::~NativeStandardModuleHost()=default;
 NativeStandardModuleHost::NativeStandardModuleHost(QWidget* owner,QSqlDatabase db,std::function<void()> guard)
         : owner_(owner),db_(std::move(db)),guard_(std::move(guard)){}
 void NativeStandardModuleHost::check() const{if(!owner_ || !db_.isOpen()) throw VbaRuntimeError(3420,"Module execution context is closed");if(owner_->thread()!=QThread::currentThread()) throw VbaRuntimeError(3251,"Module application context requires its GUI thread");guard_();}
-void NativeStandardModuleHost::enterModule(std::string_view){check();}
+void NativeStandardModuleHost::enterModule(std::string_view){check();enterNativeUiExecution();}
+void NativeStandardModuleHost::leaveModule() noexcept {leaveNativeUiExecution();}
 std::optional<std::string> NativeStandardModuleHost::field(std::string_view){throw VbaRuntimeError(438,"Me requires a real form instance");}
 void NativeStandardModuleHost::setField(std::string_view,std::optional<std::string>){throw VbaRuntimeError(438,"Me requires a real form instance");}
 void NativeStandardModuleHost::saveRecord(){throw VbaRuntimeError(3251,"Module editor has no current record");}
@@ -75,6 +78,8 @@ public:
     bool isNativeType(std::string_view type) const override {return type=="access.docmd";}
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if(key=="gotocontrol") return VbaArgumentSignature{{"ControlName"},1};
+        if(key=="hourglass") return VbaArgumentSignature{{"HourglassOn"},1};
         if(key=="echo") return VbaArgumentSignature{{"EchoOn","StatusBarText"},1};
         if(key=="selectobject") return VbaArgumentSignature{{"ObjectType","ObjectName","InDatabaseWindow"},1};
         if(key=="close") return VbaArgumentSignature{{"ObjectType","ObjectName","Save"},0};
@@ -94,6 +99,7 @@ public:
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         NativeStandardModuleHost host(owner_,db_,guard_);host.check();const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if(key=="runmacro") {
+            enterNativeUiExecution();const auto leave=qScopeGuard([] {leaveNativeUiExecution();});
             runNativeMacro(db_,args,[&] {host.check();},[&](const QString& expression) {return host.eval(expression.toUtf8().toStdString());},[&](const NativeMacroAction& action) {
                 if(action.name=="MessageBox") nativeMacroMessageBox(owner_,action.arguments,[&](const QString& expression) {return host.eval(expression.toUtf8().toStdString());},[&] {host.check();});
                 else if(action.name=="RunCode") {
@@ -109,6 +115,16 @@ public:
         std::vector<VbaValue> values;for(const auto& argument:args) {values.push_back(scalarVbaValue(argument));host.check();}
         const auto number=[&](std::size_t index,int fallback) {return index>=values.size() || values[index].kind==VbaValue::Kind::Missing ? fallback : static_cast<int>(coerceVbaModuleValue(values[index],"long").number);};
         const auto target=[&] {if(values.empty() || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Object name is required");return QString::fromStdString(coerceVbaModuleValue(values[0],"string").asText());};
+        if(key=="hourglass") {
+            if(values.size()!=1 || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Hourglass requires one Boolean argument");
+            nativeHourglass(coerceVbaModuleValue(values[0],"boolean").boolean);host.check();return VbaValue::empty();
+        }
+        if(key=="gotocontrol") {
+            if(values.size()!=1 || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"GoToControl requires one control name");
+            if(values[0].kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null control name");
+            if(auto* active=activePreviewDocument()) for(const auto& document:AccessFormPreview::projectDocuments(db_)) if(document==active && document->documentKind()==AccessDocumentKind::Form) {auto result=invokeNativePreviewCommand(*active,"GoToControl",values);host.check();return result;}
+            throw VbaRuntimeError(2046,"GoToControl requires an active project form");
+        }
         if(key=="findrecord") {
             const auto request=nativeFindRecordArguments(values);
             if(auto* active=activePreviewDocument()) for(const auto& document:AccessFormPreview::projectDocuments(db_)) if(document==active) {auto result=invokeNativePreviewCommand(*active,"FindRecord",values);host.check();return result;}

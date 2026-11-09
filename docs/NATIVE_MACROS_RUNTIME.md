@@ -421,3 +421,28 @@ Validation: app built; existing layout1/1 (11.23s) and corrected GUI1/1 (7.91s)
 passed. This also fixed missing initial table current-field selection and made
 whole-record selection independent of the initial Qt selection anchor. The new
 search fixture now specifies its expected ascending order explicitly.
+
+## Actual control focus and shared UI execution lifetime
+
+Native GoToControl and Hourglass actions use the existing actual form control-focus
+and owned Qt cursor implementation. The standalone DoCmd members expose ControlName
+and HourglassOn named arguments. GoToControl requires an active actual project
+form and uses its existing control lookup, focus validation and text selection;
+a datasheet does not acquire an invented control container. Hourglass obeys the
+existing Boolean conversion, owned-override and foreign-cursor refusal contracts.
+
+Standalone module entry/leave and both macro hosts now share the existing native
+Qt execution depth. Nested Functions and RunCode return without prematurely
+resetting the cursor or disposing closed documents while an outer macro/module
+still executes. The outermost actual GUI execution unwind resets the owned busy
+cursor on normal completion, StopMacro/StopAllMacros and errors. Direct API calls
+outside an execution frame can explicitly enable/disable it, as before. Foreign
+Qt overrides are never popped as if owned. Echo's persistence remains separate.
+This does not add a complete Screen object to the standalone Application host or
+claim Windows cursor animation/pixel equivalence. See NATIVE_HOURGLASS.md.
+
+Validation: existing GUI/layout2/2 passed (20.12s), no test correction. Actual
+focus/text selection, nested and post-RunCode cursor observation in both macro
+hosts, outer success/error cleanup and foreign-cursor protection are covered.
+Matching freshly linked app/DEB payload/build-ID/SQLite/backend check passed;
+original upload3/3 and fixture4/4 hashes remain unchanged.

@@ -13,6 +13,7 @@ public:
     ~NativeStandardModuleHost() override;
     void check() const;
     void enterModule(std::string_view) override;
+    void leaveModule() noexcept override;
     std::optional<std::string> field(std::string_view) override;
     void setField(std::string_view,std::optional<std::string>) override;
     void saveRecord() override;

@@ -7146,3 +7146,24 @@ Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; vollständige
 No-Match-/Zeit-/Untertyp-Parität bleibt offen. NATIVE_MACROS_RUNTIME.md;
 F088/F052/F178/F363 und456/384/72 unverändert. Direkt weiter mit tatsächlichen
 Fokus-/Cursorbefehlen und gemeinsamer UI-Ausführungslebensdauer im Modulhost.
+
+
+## Fortschreibung 2026-11-09: Fokus/Cursor und gemeinsame GUI-Ausführungsrahmen
+GoToControl und Hourglass stehen nativen Makros und dem formularfreien DoCmd-Host
+mit namentlichen Argumenten zur Verfügung. Fokus geht an echte Controls eines
+aktiven Projektformulars; ohne Formular2046, kein erfundener Me-Kontext.
+Modul-Eintritt/-Austritt und beide Makrohosts verwenden denselben nativen Qt-
+Ausführungszähler. Wartezeiger bleibt über verschachtelte Funktionen/RunCode bis
+zu späteren Aktionen erhalten und wird bei äußerstem normalem/fehlerhaftem Ende
+zurückgesetzt; fremde Cursor bleiben geschützt. Echo bleibt separat persistent.
+Vorhandene GUI/Layout2/2 (20,12s) bestanden, kein Korrekturlauf: benannter Fokus mit
+Textauswahl, tatsächlicher Cursor in verschachtelten und nachfolgenden Dialogen
+beider Makrohosts, StopMacro-Ende, Fehler7004, direkte Steuerung/fremder CrossCursor,
+fehlender aktiver Formularkontext. App nach finalem Formularhost-Nachlauf über
+CPack neu gelinkt. Frisches DEB native-module-ui/package/linaccess-0.7.0-Linux.deb:
+Payload/Rechte/Build-ID/bytegleicheSQLite und tatsächlicher Backendcheck mit
+MDBTools1.0.1/SQLite3.54.1 JOIN/NULL/Zähler bestanden. Paket ohne MDB/VBA/Fixtures.
+Originaluploads3/3 und Fixturehashes4/4 unverändert. Keine neue CTest-ID/Gesamtsuite/
+Windows-Beobachtung. NATIVE_MACROS_RUNTIME.md/NATIVE_HOURGLASS.md;
+F088/F052/F068/F135/F148 und456/384/72 unverändert. Direkt weiter mit gemeinsamem
+CurrentProject/CurrentData aus echten Standardmodulen und Projektlebensdauer.
