@@ -717,7 +717,7 @@ bool vbaIntrinsicName(const std::string& name) {
     static const std::unordered_set<std::string> intrinsics{
                 "array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
                 "createobject","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
-                "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdec","cdate","cstr","str","str$","format","format$",
+                "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdec","cdate","cstr","str","str$","format","format$","formatnumber","formatcurrency",
                 "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
@@ -1092,6 +1092,9 @@ private:
             {"acsyscmdsetstatus",4},{"acsyscmdclearstatus",5},{"acsyscmdgetobjectstate",10},
             {"acobjstateopen",1},{"acobjstatedirty",2},{"acobjstatenew",4}};
         if(const auto action=statusActions.find(word);action!=statusActions.end()) return VbaValue::longInteger(action->second);
+        if(word=="vbusedefault") return VbaValue::longInteger(-2);
+        if(word=="vbtrue") return VbaValue::longInteger(-1);
+        if(word=="vbfalse") return VbaValue::longInteger(0);
         if(word=="vbdefault") return VbaValue::integer(0);
         if(word=="vbhourglass") return VbaValue::integer(11);
         static const std::unordered_map<std::string,std::int32_t> relationAttributes{{"dbdescending",1},{"dbrelationunique",1},{"dbrelationdontenforce",2},{"dbrelationinherited",4},
@@ -1363,7 +1366,9 @@ private:
                     {"ppmt",{{"Rate","Per","NPer","Pv","Fv","Type"},4}},
                     {"partition",{{"Number","Start","Stop","Interval"},4}},
                     {"rgb",{{"Red","Green","Blue"},3}}, {"qbcolor",{{"Color"},1}},
-                    {"cdate",{{"Expression"},1}},
+                    {"cdate",{{"Expression"},1}}, {"cdec",{{"Expression"},1}},
+                    {"formatnumber",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
+                    {"formatcurrency",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
                     {"datevalue",{{"Date"},1}}, {"timevalue",{{"Time"},1}},
                     {"dateadd",{{"Interval","Number","Date"},3}},
                     {"dateserial",{{"Year","Month","Day"},3}},
@@ -1658,10 +1663,14 @@ private:
                 if (number<0 || number>65535) throw error("CVErr number out of range");
                 return VbaValue::errorValue(number);
             }
+            if(word=="formatnumber" || word=="formatcurrency") {
+                if(!host_) return {};auto values=args;for(std::size_t i=0;i<values.size();++i) if(omitted[i]) values[i]=VbaValue::missing();const auto options=parseVbaNumericFormatOptions(values);return host_->formatNumericValue(values[0],word=="formatcurrency",options);
+            }
             if (word=="format" || word=="format$") {
                 if (args.size()!=2) throw error("Format arguments unsupported",450);
                 if (!host_) return {};
                 if (args[1].kind==VbaValue::Kind::Null) throw error("Format mask is Null",94);
+                if(jetEval_ && word=="format" && args[0].kind==VbaValue::Kind::Null) return VbaValue::string("");
                 return host_->formatValue(args[0],args[1].asText(),word=="format$");
             }
             if(word=="filter") {
@@ -2280,7 +2289,7 @@ private:
                     return VbaValue::string(value.asText());
                 }
                 if (word == "isnumeric") {
-                    try { const auto scalar=scalarObjectValue(value); if(scalar.kind==VbaValue::Kind::Date) return VbaValue::logical(false); (void)scalar.asNumber(); return VbaValue::logical(true); }
+                    try { const auto scalar=scalarObjectValue(value); if(scalar.kind==VbaValue::Kind::Date) return VbaValue::logical(false);if(scalar.kind==VbaValue::Kind::Text) return VbaValue::logical(host_->isNumericText(scalar.text)); (void)scalar.asNumber(); return VbaValue::logical(true); }
                     catch (...) { return VbaValue::logical(false); }
                 }
             }
@@ -2353,6 +2362,13 @@ bool VbaArgumentSignature::objectArgument(std::size_t position,std::string_view 
     return position<objectArguments.size() && objectArguments[position];
 }
 
+VbaNumericFormatOptions parseVbaNumericFormatOptions(const std::vector<VbaValue>& arguments) {
+    if(arguments.empty() || arguments.size()>5 || arguments[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Numeric format requires an expression and at most five arguments");VbaNumericFormatOptions result;
+    for(std::size_t i=1;i<arguments.size();++i) {if(arguments[i].kind==VbaValue::Kind::Missing) continue;const auto value=scalarVbaValue(arguments[i]);const auto number=coerceVbaModuleValue(value,"long").asNumber();if(i==1) {if(number==-1) continue;if(number<0 || number>28) throw VbaRuntimeError(5,"Numeric format decimal places outside0..28");result.digits=static_cast<int>(number);}else {if(number==-2) continue;if(number!=-1 && number!=0) throw VbaRuntimeError(5,"Numeric format requires a TriState flag");if(i==2) result.leading=number==-1;else if(i==3) result.parens=number==-1;else result.group=number==-1;}}
+    return result;
+}
+VbaValue VbaHost::formatNumericValue(const VbaValue&,bool,const VbaNumericFormatOptions&) {throw VbaRuntimeError(3251,"Numeric formatting requires a locale-aware native host");}
+bool VbaHost::isNumericText(std::string_view text) {try {(void)VbaValue::string(std::string(text)).asNumber();return true;}catch(...) {return false;}}
 VbaValue VbaHost::formatValue(const VbaValue&,std::string_view,bool) {
     throw VbaRuntimeError(438,"Format host adapter unavailable");
 }

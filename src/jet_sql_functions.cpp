@@ -16,6 +16,7 @@
 #include "vba_qt_value.hpp"
 #include "native_vba_sql.hpp"
 #include "vba_currency.hpp"
+#include "vba_decimal.hpp"
 #include "vba_qt_value.hpp"
 #include <QSet>
 #include <QLibrary>
@@ -182,6 +183,8 @@ void qbColor(sqlite3_context* context,int count,sqlite3_value** args) noexcept {
 // a form, database-object or UI context. SQL data are bound values, never code.
 class ScalarStringHost final : public VbaHost {
 public:
+    bool isNumericText(std::string_view text) override {return isAccessNumericText(text);}
+    VbaValue formatNumericValue(const VbaValue& value,bool currency,const VbaNumericFormatOptions& options) override {return formatAccessNumericValue(value,currency,options);}
     std::optional<std::string> field(std::string_view) override { throw VbaRuntimeError(3251,"SQL scalar has no form context"); }
     void setField(std::string_view,std::optional<std::string>) override { throw VbaRuntimeError(3251,"SQL scalar cannot assign fields"); }
     void message(std::string_view) override { throw VbaRuntimeError(3251,"SQL scalar has no UI context"); }
@@ -191,13 +194,14 @@ void scalarBuiltinFunction(sqlite3_context* context,int count,sqlite3_value** ar
     auto& native=api();
     try {
         if(count<minimum || count>maximum) throw VbaRuntimeError(450,"Invalid scalar SQL arity");
+        const bool numericFormat=name=="FormatNumber" || name=="FormatCurrency";
         VbaVariables values;
         std::string expression=dateArguments ? std::string{} : std::string(name)+"(";
         for(int index=0;index<count;++index) {
             const auto name="_la_arg"+std::to_string(index);
             VbaValue value;
             const auto type=native.type(args[index]);
-            if(type==1) value=VbaValue::numeric(static_cast<double>(native.integer(args[index])));
+            if(type==1) value=numericFormat ? decimalLiteral(std::to_string(native.integer(args[index]))) : VbaValue::numeric(static_cast<double>(native.integer(args[index])));
             else if(type==2) value=VbaValue::numeric(native.number(args[index]));
             else if(type==3) {
                 const auto* bytes=native.text(args[index]); const auto size=native.bytes(args[index]);
@@ -512,7 +516,8 @@ void formatDate(sqlite3_context* context,sqlite3_value** args,bool stringResult)
         };
         VbaValue input;
         const auto type=native.type(args[0]);
-        if (type==1 || type==2) input=VbaValue::numeric(native.number(args[0]));
+        if(type==1) input=decimalLiteral(std::to_string(native.integer(args[0])));
+        else if(type==2) input=VbaValue::numeric(native.number(args[0]));
         else if (type==3) input=VbaValue::string(readText(args[0]));
         else if (type!=5) throw VbaRuntimeError(13,"Format input type unsupported");
         const auto result=formatAccessValue(input,readText(args[1]),stringResult);
@@ -521,6 +526,8 @@ void formatDate(sqlite3_context* context,sqlite3_value** args,bool stringResult)
     } catch (const VbaRuntimeError& error) { functionError(context,error); }
       catch (...) { native.error(context,"Jet date format failed",-1); }
 }
+void formatNumber(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"FormatNumber",1,5);}
+void formatCurrency(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"FormatCurrency",1,5);}
 void formatString(sqlite3_context* context,int,sqlite3_value** args) noexcept { formatDate(context,args,true); }
 void formatVariant(sqlite3_context* context,int,sqlite3_value** args) noexcept { formatDate(context,args,false); }
 // aggregate_context supplies zeroed storage. Each group retains one copied value;
@@ -705,6 +712,8 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_update_value",1,nullptr,&singleStep,&singleFinal);
     ensure("linaccess_jet_format_string",2,&formatString,nullptr,nullptr);
     ensure("linaccess_jet_format",2,&formatVariant,nullptr,nullptr);
+    ensure("linaccess_jet_formatnumber",-1,&formatNumber,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_formatcurrency",-1,&formatCurrency,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_concat",2,&concatenate,nullptr,nullptr);
     ensure("linaccess_jet_len",1,&textLength,nullptr,nullptr);
     ensure("linaccess_jet_default_date",0,&dateFieldDefault<0>,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);

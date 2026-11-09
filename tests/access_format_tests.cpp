@@ -1,4 +1,5 @@
 #include "access_format.hpp"
+#include "vba_decimal.hpp"
 #include "access_query.hpp"
 #include <QCoreApplication>
 #include <QLocale>
@@ -33,15 +34,21 @@ int main(int argc,char** argv) {
     rejects(VbaValue::string("2003-12-31 suffix"),"yyyy",13);
     rejects(VbaValue::numeric(std::numeric_limits<double>::infinity()),"yyyy",6);
     rejects(VbaValue::numeric(1e100),"yyyy",6);
-    rejects(date,"Currency",5);
+    rejects(VbaValue::numeric(1),"0.00E+00",5);
     const auto original=QLocale();
     QLocale::setDefault(QLocale(QLocale::German,QLocale::Germany));
     assert(format(date,"Long Date").text=="Mittwoch, 31. Dezember 2003");
+    assert(format(date,"yyyy-mm-dd hh:nn:ss").asText()=="2003-12-31 18:05:06");assert(format(date,"hh:mm:ss").asText()=="18:05:06");assert(format(date,"yyyy \"Jahr\" q").asText()=="2003 Jahr 4");
+    assert(format(decimalLiteral("1.245"),"0.00").asText()=="1,24");assert(format(decimalLiteral("0.25"),"0.##%").asText()=="25%");assert(format(decimalLiteral("1.2"),"0.00##").asText()=="1,20");assert(format(decimalLiteral("79228162514264337593543950335"),"0").asText()=="79228162514264337593543950335");
+    const auto options=parseVbaNumericFormatOptions({decimalLiteral("-0.5"),VbaValue::integer(2),VbaValue::integer(0),VbaValue::integer(-1),VbaValue::integer(0)});assert(formatAccessNumericValue(decimalLiteral("-0.5"),false,options).asText()=="(,50)");
+
     auto db=QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());
     AccessQueryModel model;
     model.execute(db,"SELECT Format$(#12/31/2003#,\"yyyy\"),Format$(#12/31/2003#,\"mm\"),Format(#12/31/2003#,\"dd\")");
     assert(model.data(model.index(0,0)).toString()=="2003" && model.data(model.index(0,1)).toString()=="12" && model.data(model.index(0,2)).toString()=="31");
     assert(model.data(model.index(0,1)).metaType().id()==QMetaType::QString);
+    model.execute(db,"SELECT FormatNumber(9007199254740993,0,-1,0,0),FormatCurrency(1.25,2),Format(1.245,\"0.00\")");assert(model.data(model.index(0,0)).toString()=="9007199254740993" && model.data(model.index(0,2)).toString()=="1,24");
+
     model.execute(db,"SELECT Format$(#12/31/2003#,\"Long Date\"),Format(Null,\"yyyy\")");
     assert(model.data(model.index(0,0)).toString()=="Mittwoch, 31. Dezember 2003");
     assert(model.data(model.index(0,1)).isNull());

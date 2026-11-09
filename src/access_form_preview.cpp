@@ -974,6 +974,8 @@ public:
     std::shared_ptr<linaccess::VbaObject> currentForm() override { requireInstance(); return makePreviewFormObject(preview_); }
     std::shared_ptr<linaccess::VbaObject> reportsCollection() override { return makePreviewReportsObject(preview_); }
     std::shared_ptr<linaccess::VbaObject> formsCollection() override { return makePreviewFormsObject(preview_); }
+    bool isNumericText(std::string_view text) override {return linaccess::isAccessNumericText(text);}
+    linaccess::VbaValue formatNumericValue(const linaccess::VbaValue& value,bool currency,const linaccess::VbaNumericFormatOptions& options) override {return linaccess::formatAccessNumericValue(value,currency,options);}
     linaccess::VbaValue formatValue(const linaccess::VbaValue& value,std::string_view mask,bool stringResult) override {
         return linaccess::formatAccessValue(value,mask,stringResult);
     }

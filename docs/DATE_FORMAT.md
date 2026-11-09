@@ -49,3 +49,9 @@ Local wall-clock conversion uses POSIX localtime_r and fixed numeric formatting;
 invalid arguments raise catchable VBA error 450. Core execution tests cover both
 syntaxes, shape of returned values and On Error Resume Next recovery. System
 clock setters, Timer, time formatting masks and full Date arithmetic remain open.
+
+
+The shared formatter has since gained composed date/time tokens and bounded
+numeric masks/FormatNumber/FormatCurrency. Current scope, regional settings and
+separate Eval Null behavior are documented in NATIVE_FORMAT_RUNTIME.md; the
+historical checks above are not a claim about all later masks or locales.

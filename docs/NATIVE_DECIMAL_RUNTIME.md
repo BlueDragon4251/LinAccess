@@ -37,7 +37,7 @@ It contains no database paths, source metadata or private VBA. The missing expre
 SHA256 case-ID matching against all112 expressions in the technical collector;
 the expression-registry hash is retained. The numeric verification group has56
 observations plus those8 actual errors; remaining48 locale/string/date observations
-stay retained for their own work scopes.
+are now covered by the desktop checks documented in NATIVE_FORMAT_RUNTIME.md.
 
 Application/VbaHost Eval now has an explicit numeric context separate from ordinary
 VBA and calculated-control expressions. It uses observed Long integer literals,

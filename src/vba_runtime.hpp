@@ -51,6 +51,12 @@ struct VbaInputBoxArguments {
 };
 VbaOpenFormArguments parseVbaOpenFormArguments(const std::vector<VbaValue>& arguments);
 
+struct VbaNumericFormatOptions {
+    std::optional<int> digits;
+    std::optional<bool> leading,parens,group;
+};
+VbaNumericFormatOptions parseVbaNumericFormatOptions(const std::vector<VbaValue>& arguments);
+
 class VbaHost {
 public:
     virtual ~VbaHost() = default;
@@ -58,6 +64,8 @@ public:
     virtual void setField(std::string_view name, std::optional<std::string> value) = 0;
     virtual int compareStrings(std::string_view left,std::string_view right,VbaCompareMode mode);
     virtual VbaValue formatValue(const VbaValue& value,std::string_view mask,bool stringResult);
+    virtual VbaValue formatNumericValue(const VbaValue& value,bool currency,const VbaNumericFormatOptions& options);
+    virtual bool isNumericText(std::string_view text);
     virtual void enterModule(std::string_view) {}
     virtual void leaveModule() noexcept {}
     virtual bool hasInstanceIdentifier(std::string_view) { return false; }

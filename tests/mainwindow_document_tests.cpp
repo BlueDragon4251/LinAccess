@@ -1,6 +1,9 @@
 #include "native_stored_form.hpp"
 #include "native_stored_report.hpp"
 #include <QDateTime>
+#include <QLocale>
+#include <QScopeGuard>
+#include <bit>
 #include "native_relation_designer.hpp"
 #include "native_datasheet_page_store.hpp"
 #include <QInputDialog>
@@ -2972,6 +2975,25 @@ If CStr(Me!DecimalProbe)<>"79228162514264337593543950335" Then Err.Raise 5
 End Sub
 )VBA";
         AccessFormPreview caller("decimal-control-caller",source,code,db,&window);std::vector<linaccess::VbaValue> arguments;const auto result=caller.executeProcedure("DecimalControl",arguments);if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Decimal control error="<<result.errorNumber<<" "<<result.explanation<<"\n";assert(result.status==linaccess::VbaExecutionStatus::Completed);assert(caller.findChild<QLineEdit*>("access-control-DecimalProbe")->text()=="79228162514264337593543950335");assert(caller.close());
+    }
+    {
+        const auto original=QLocale();QLocale::setDefault(QLocale(QLocale::German,QLocale::Austria));const auto restore=qScopeGuard([original] {QLocale::setDefault(original);});
+        const QByteArray source="Begin Form\nBegin Section\nEnd\nEnd\n";const QByteArray code=R"VBA(Sub NamedNumberFormat()
+Me.Tag=FormatNumber(GroupDigits:=vbFalse,Expression:=CDec("1234.5"),NumDigitsAfterDecimal:=2)
+End Sub
+)VBA";AccessFormPreview caller("format-reference-caller",source,code,db,&window);const auto application=makePreviewApplicationObject(caller);const auto accessEval=[&](const QString& expression) {return application->member("Eval",{linaccess::VbaValue::string(expression.toStdString())});};
+        QFile reference(QFileInfo(QString::fromUtf8(__FILE__)).absoluteDir().filePath("access2003_reference/expression-observations.json"));assert(reference.open(QIODevice::ReadOnly));const auto root=QJsonDocument::fromJson(reference.readAll()).object();int checked=0;
+        for(const auto& entry:root.value("observations").toArray()) {
+            const auto row=entry.toObject();if(row.value("verification_group").toString()!="desktop") continue;const auto expression=row.value("expression").toString();linaccess::VbaValue value;
+            try {value=accessEval(expression);}catch(const linaccess::VbaRuntimeError& failure) {std::cerr<<"Desktop Eval oracle "<<row.value("case").toString().toStdString()<<": error="<<failure.number<<"\n";assert(false);}
+            const auto type=accessEval("VarType("+expression+")").asNumber();if(type!=row.value("vartype").toInt()) std::cerr<<"Desktop Eval oracle "<<row.value("case").toString().toStdString()<<": type="<<type<<"\n";assert(type==row.value("vartype").toInt());const auto expected=row.value("result").toObject();
+            if(type==8) {if(value.asText()!=expected.value("value").toString().toStdString()) std::cerr<<"Desktop Eval oracle "<<row.value("case").toString().toStdString()<<": string differs\n";assert(value.asText()==expected.value("value").toString().toStdString());}
+            else if(type==1) assert(value.kind==linaccess::VbaValue::Kind::Null);
+            else if(type==7) {auto text=expected.value("value").toString();text.replace('T',' ');const auto date=QDate::fromString(text.left(10),Qt::ISODate);const auto time=QTime::fromString(text.mid(11,8),"HH:mm:ss");assert(date.isValid() && time.isValid());const auto serial=QDate(1899,12,30).daysTo(date)+QTime(0,0).secsTo(time)/86400.0;assert(std::abs(value.number-serial)<1e-9);}
+            else if(type==5) {const auto bytes=QByteArray::fromHex(expected.value("bits").toString().toLatin1());assert(bytes.size()==8);std::uint64_t bits=0;for(int i=0;i<8;++i) bits|=static_cast<std::uint64_t>(static_cast<unsigned char>(bytes[i]))<<(8*i);assert(value.asNumber()==std::bit_cast<double>(bits));}
+            else assert(value.asNumber()==expected.value("value").toDouble());++checked;
+        }
+        assert(checked==48);std::vector<linaccess::VbaValue> arguments;const auto named=caller.executeProcedure("NamedNumberFormat",arguments);assert(named.status==linaccess::VbaExecutionStatus::Completed && makePreviewFormObject(caller)->member("Tag",{}).asText()=="1234,50");assert(caller.close());
     }
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

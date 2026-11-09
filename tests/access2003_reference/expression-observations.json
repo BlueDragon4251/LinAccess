@@ -475,7 +475,7 @@
         "kind": "System.String",
         "value": " 1.5"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.5dec8be05ebe",
@@ -487,7 +487,7 @@
         "bits": "000000000000F03F",
         "kind": "System.Double"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.ea9162e3039b",
@@ -499,7 +499,7 @@
         "bits": "0000000000002840",
         "kind": "System.Double"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.314b3981598d",
@@ -509,7 +509,7 @@
         "kind": "System.Int16",
         "value": -1
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.67f25d620ead",
@@ -519,7 +519,7 @@
         "kind": "System.String",
         "value": "a"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.ec4f9c43075b",
@@ -529,7 +529,7 @@
         "kind": "null",
         "value": null
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.e3c95a1275a5",
@@ -539,7 +539,7 @@
         "kind": "System.Int32",
         "value": 0
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.2cf1939e2f6c",
@@ -549,7 +549,7 @@
         "kind": "null",
         "value": null
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.8d16d86049fd",
@@ -559,7 +559,7 @@
         "kind": "System.Int32",
         "value": 3
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.5b5ba38bca51",
@@ -569,7 +569,7 @@
         "kind": "System.String",
         "value": "bcd"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.471f43daf9a5",
@@ -579,7 +579,7 @@
         "kind": "System.String",
         "value": "abc"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.8fd4ea191f70",
@@ -589,7 +589,7 @@
         "kind": "System.String",
         "value": "x"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.49283087cbcf",
@@ -599,7 +599,7 @@
         "kind": "System.String",
         "value": "xAx"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.9d1102e0c628",
@@ -609,7 +609,7 @@
         "kind": "System.String",
         "value": "xxx"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.fc5f7b7269ef",
@@ -619,7 +619,7 @@
         "kind": "System.Int16",
         "value": -1
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.fe1a2c82909f",
@@ -629,7 +629,7 @@
         "kind": "System.Int16",
         "value": 0
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.e3942980348d",
@@ -639,7 +639,7 @@
         "kind": "System.Int16",
         "value": 1
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.41caea9d55e0",
@@ -649,7 +649,7 @@
         "kind": "System.Int32",
         "value": 4
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.021363e8228d",
@@ -659,7 +659,7 @@
         "kind": "System.Int32",
         "value": 1
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.539af7147e62",
@@ -669,7 +669,7 @@
         "kind": "System.Int16",
         "value": -1
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.87f6820908d9",
@@ -679,7 +679,7 @@
         "kind": "System.Int16",
         "value": 0
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.7cb71972eb03",
@@ -689,7 +689,7 @@
         "kind": "System.Int16",
         "value": -1
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.f42796201896",
@@ -699,7 +699,7 @@
         "kind": "System.Int16",
         "value": -1
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.55f4bbfbbf77",
@@ -719,7 +719,7 @@
         "kind": "date",
         "value": "2000-02-29T00:00:00.0000000"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.15cd5167844f",
@@ -729,7 +729,7 @@
         "kind": "date",
         "value": "2001-03-01T00:00:00.0000000"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.8d097a32d6d7",
@@ -739,7 +739,7 @@
         "kind": "date",
         "value": "2001-01-01T00:00:00.0000000"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.8031c405e53d",
@@ -749,7 +749,7 @@
         "kind": "date",
         "value": "1899-12-31T01:00:00.0000000"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.cff9fedf428c",
@@ -759,7 +759,7 @@
         "kind": "date",
         "value": "2000-02-29T00:00:00.0000000"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.8f2aa8119f17",
@@ -769,7 +769,7 @@
         "kind": "System.Int32",
         "value": 2
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.d730dd164b74",
@@ -779,7 +779,7 @@
         "kind": "System.Int32",
         "value": 1
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.ea4eda18e328",
@@ -789,7 +789,7 @@
         "kind": "System.Int16",
         "value": 1
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.f019ca61fd7d",
@@ -799,7 +799,7 @@
         "kind": "System.Int16",
         "value": 2000
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.a2e7db51ee4b",
@@ -809,7 +809,7 @@
         "kind": "date",
         "value": "2000-02-29T00:00:00.0000000"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.fe434b2aae23",
@@ -819,7 +819,7 @@
         "kind": "date",
         "value": "1899-12-30T23:59:59.0000000"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.3dd018c48c57",
@@ -831,7 +831,7 @@
         "bits": "0000000000000000",
         "kind": "System.Double"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.42e99a1f0196",
@@ -841,7 +841,7 @@
         "kind": "System.String",
         "value": "2000-02-29 23:05:06"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.ea46943c0637",
@@ -851,7 +851,7 @@
         "kind": "System.String",
         "value": "1,2345"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.0bf25f40e4af",
@@ -861,7 +861,7 @@
         "kind": "null_or_empty",
         "value": null
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.4229ff733413",
@@ -871,7 +871,7 @@
         "kind": "System.String",
         "value": "Nein"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.41475e2f1596",
@@ -881,7 +881,7 @@
         "kind": "System.String",
         "value": "Ja"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.10162bbc8328",
@@ -891,7 +891,7 @@
         "kind": "System.String",
         "value": "€ 1,25"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.a918b4c51868",
@@ -901,7 +901,7 @@
         "kind": "System.String",
         "value": "1 234,50"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.2af168baf3f3",
@@ -1089,7 +1089,7 @@
         "kind": "System.String",
         "value": "b"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.f0dfda336b81",
@@ -1099,7 +1099,7 @@
         "kind": "System.String",
         "value": " 20: 29"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.3a57db34bc45",
@@ -1109,7 +1109,7 @@
         "kind": "System.String",
         "value": "FF"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.320456afaf7e",
@@ -1119,7 +1119,7 @@
         "kind": "System.String",
         "value": "10"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.d3fb43a44a9b",
@@ -1129,7 +1129,7 @@
         "kind": "System.Int16",
         "value": 65
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     },
     {
       "case": "eval.444f0ea47b82",
@@ -1139,7 +1139,7 @@
         "kind": "System.String",
         "value": "A"
       },
-      "verification_group": "retained_other_scope"
+      "verification_group": "desktop"
     }
   ],
   "errors": [

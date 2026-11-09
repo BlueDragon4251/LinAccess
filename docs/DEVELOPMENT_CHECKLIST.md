@@ -1877,3 +1877,25 @@ NATIVE_DECIMAL_RUNTIME.md; exakte dbDecimal-Felder/Jet-SQL-Speicherung, vollstä
 Locale/IEEE-/Automation-Identität/AST weiteroffen,456/384/72 unverändert.
 Fortsetzung: die48weiteren echten Ausdrucksbeobachtungen und allgemeine
 Sprach-/Datenbankanforderungen fortlaufend umsetzen; keine Zwischenabschlüsse.
+
+Allgemeine Formatfunktionen erweitert: kombinierte Datum-/Zeitmasken, Monats-/
+Wochentagsnamen, AM/PM, Literale/Datum-Escapes, feste/optionale Dezimalstellen,
+Gruppierung/Prozent sowie FormatNumber/FormatCurrency mit benannten/ausgelassenen
+Optionen und TriState. AktuelleQLocale liefert Zahlenkultur/regionale Erkennung;
+Currency-Affixabstände werden als Legacy-Leerzeichen normalisiert, numerische
+Gruppierungszeichen bleiben erhalten. MathematischeZahlenformatierung nutzt
+Decimal, SQLiteINTEGER wird ausdrücklich ohne Double-Umweg gelesen (2^53+1 geprüft).
+NativeSQL und Desktop teilen Formatter; reineCore-Hosts bekommen keinenQt-Zwang.
+VBA.CDec unterstützt jetzt benanntesExpression-Argument. Eval-FormatNull liefert
+beobachteten Leerstring, andere bestehendeVariant-/SQL-Nullregeln bleiben getrennt.
+Gesamte vorhandene Ausdruckssuite abgeglichen:56Zahlen-/Typbeobachtungen+8Fehler
+imDAO-Ziel sowie48weitereString-/Datums-/Locale-Beobachtungen über öffentliche
+Application.Eval-Schnittstelle des tatsächlichenForm-/App-Objektmodells unterde-AT.
+Insgesamt104beobachteteWerte+8Fehler; Doublefinanzwerte weitermitrelativerToleranz,
+KalenderwertemitunabhängigerQt-Tages-/Sekundenberechnung. KeinepauschaleAST-/
+OriginalVBA-/Locale-/Gesamtparität. Core/DAO/GUI/Formatter4/4 (9,49s), Appgebaut.
+NATIVE_FORMAT_RUNTIME.md beschreibt Grenzen: komplexe/skalierende/wissenschaftliche/
+Stringmasken, volleWindowsRegionaleinstellungen, negativeCurrencyprofile,
+Originalfeld-Formatproperties und exakteNativeDecimal-/Currency-Datenbankfelder
+weiteroffen. F014/F041/F068/F071/F118/F164;456/384/72 unverändert.
+Kontinuierlich an allgemeinenDatenbankanforderungen weiterarbeiten, keinZwischenfinal.

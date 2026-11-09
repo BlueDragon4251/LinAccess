@@ -720,6 +720,7 @@ void testNativeDecimalVariants() {
     using namespace linaccess;FakeForm host;const auto eval=[&](const std::string& source) {return evaluateVbaExpression(source,host,{});};
     const std::string maximum="79228162514264337593543950335";
     assert(eval("VarType(CDec(1))=vbDecimal").truthy() && eval("TypeName(CDec(1))").asText()=="Decimal");
+    assert(eval("VBA.CDec(Expression:=\"1.25\")").asText()=="1.25");
     assert(eval("CStr(CDec(\""+maximum+"\"))").asText()==maximum);
     assert(eval("CDec(\""+maximum+"\")-CDec(1)").asText()=="79228162514264337593543950334");
     assert(eval("CDec(\"0.1\")+CDec(\"0.2\")").asText()=="0.3");
