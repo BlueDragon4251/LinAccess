@@ -29,8 +29,8 @@ outside this scope. Imported sources remain outside this
 native-owned authoring path.
 
 Scope is one physical table, fields/literal criteria/native supported functions,
-AND-combined field predicates, distinct and ordered output. Joins, grouped totals,
-OR criteria grids, parameters, calculated projection authoring, arbitrary SQL
+AND/OR field groups, declared parameters, distinct and ordered output. Joins,
+grouped totals, calculated projection authoring, arbitrary SQL
 round-trip parsing and the complete Access QBE/window/locale oracle remain open.
 The native 255-field/64-character name and criteria/predicate bounds apply. The
 SQL editor retains its broader existing capabilities. No full designer parity is
@@ -49,3 +49,28 @@ bundle; the new GUI fixture caught a QJsonValueRef copy error during row movemen
 Using a real value snapshot fixed that defect. Only the affected GUI target was
 repeated afterwards:1/1 passed (14.73s). No new core/original/Windows/full-suite
 or package proof is attributed to this frontend change.
+
+
+## OR groups and declared parameters
+
+Up to8 criteria groups are editable as Kriterium/ODER columns. Fields within a
+nonempty group combine with AND; nonempty groups combine with OR. Empty groups
+are ignored. Moving a field retains all its criteria. Add/remove group actions
+change only the draft; existing SQL changes only on Apply. Old saved designs
+without group metadata retain their original single criterion group.
+
+The parameter dialog declares up to64 unique, quoted names with native Text,
+Long, Integer, Byte, Single, Double, Currency, DateTime or YesNo types. It produces
+an actual PARAMETERS header; criteria use bracketed parameter names. No parameter
+response is persisted in visual metadata. The existing query Run/DAO binding path
+prompts and converts values. Type/range/locale/Currency boundaries are those of
+the existing native binder. Preview/Apply/restore remain schema-only, including
+parameterized queries. Saving preserves group/parameter design metadata under
+the existing exact-SQL hash rule.
+
+The existing GUI fixture drives both parameter declarations and actual successive
+input dialogs, compares the OR query against independent SQL and reopens the design
+with its groups/parameters intact. Cancel and later manual SQL invalidation remain
+covered. The existing GUI/SQL bundle passed2/2 (14.51s) without follow-up reruns.
+No new CTest ID, core/original/Windows/full-suite or new package proof is claimed.
+F067/F068/F080/F148 remain open; the fixed456 catalog is unchanged.

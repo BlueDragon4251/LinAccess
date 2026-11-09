@@ -7,6 +7,7 @@
 #include <QDialog>
 #include <QJsonDocument>
 #include <QJsonArray>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPlainTextEdit>
@@ -53,7 +54,29 @@ void exerciseVisualQueryDesigner(MainWindow& window,QSqlDatabase database) {
     sql.prepare("SELECT definition FROM _la_objects WHERE kind='query' AND name='visual_probe'");assert(sql.exec() && sql.next());const auto storedBytes=sql.value(0).toByteArray();const auto stored=QJsonDocument::fromJson(storedBytes).object();sql.finish();assert(stored.value("sql").toString()==generated && stored.value("visual_query").isObject());
     QTimer::singleShot(0,&window,[&]{auto* dialog=builder();assert(dialog->findChild<QComboBox*>("native-query-builder-source")->currentText()=="builder_input");auto* fields=dialog->findChild<QTableWidget*>("native-query-builder-fields");assert(fields->item(0,1)->text()=="label" && fields->item(0,2)->text()=="shown" && fields->item(fieldRow(fields,"score"),0)->checkState()==Qt::Unchecked);dialog->reject();});
     assert(!linaccess::editNativeQueryDesign(&window,database,stored.value("visual_query").toObject().value("design").toObject(),[]{}));assert(reads==3);
-    QTimer::singleShot(0,&window,[&]{auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor);QTimer::singleShot(0,editor,[]{auto* dialog=builder();dialog->findChild<QComboBox*>("native-query-builder-source")->setCurrentText("builder_input");dialog->findChild<QPushButton*>("native-query-builder-apply")->click();});editor->findChild<QPushButton*>("native-query-design")->click();editor->findChild<QPlainTextEdit*>("native-query-sql")->setPlainText("SELECT id FROM builder_input WHERE id=1");editor->findChild<QLineEdit*>("native-query-name")->setText("visual_manual");editor->findChild<QPushButton*>("native-query-save")->click();});createQuery(window)->trigger();
+    QTimer::singleShot(0,&window,[&]{
+        auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor);
+        QTimer::singleShot(0,editor,[&]{
+            auto* dialog=builder();dialog->findChild<QComboBox*>("native-query-builder-source")->setCurrentText("builder_input");
+            QTimer::singleShot(0,dialog,[]{
+                auto* params=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(params && params->objectName()=="native-query-parameters");auto* fields=params->findChild<QTableWidget*>("native-query-parameter-fields");auto* add=params->findChild<QPushButton*>("native-query-parameter-add");assert(fields && add);
+                add->click();add->click();fields->item(0,0)->setText("floor");fields->item(1,0)->setText("ceiling");
+                qobject_cast<QComboBox*>(fields->cellWidget(0,1))->setCurrentText("Long");qobject_cast<QComboBox*>(fields->cellWidget(1,1))->setCurrentText("Long");params->findChild<QPushButton*>("native-query-parameter-apply")->click();
+            });dialog->findChild<QPushButton*>("native-query-builder-parameters")->click();
+            dialog->findChild<QPushButton*>("native-query-builder-or-add")->click();auto* fields=dialog->findChild<QTableWidget*>("native-query-builder-fields");assert(fields->columnCount()==6);
+            fields->item(fieldRow(fields,"score"),4)->setText(">= [floor]");fields->item(fieldRow(fields,"score"),5)->setText("<= [ceiling]");qobject_cast<QComboBox*>(fields->cellWidget(fieldRow(fields,"id"),3))->setCurrentIndex(2);
+            auto* apply=dialog->findChild<QPushButton*>("native-query-builder-apply");assert(apply->isEnabled() && reads==3);apply->click();
+        });editor->findChild<QPushButton*>("native-query-design")->click();
+        auto* text=editor->findChild<QPlainTextEdit*>("native-query-sql");assert(text->toPlainText().startsWith("PARAMETERS ") && text->toPlainText().contains(" OR "));
+        QTimer::singleShot(0,editor,[&]{
+            auto* dialog=builder();auto* fields=dialog->findChild<QTableWidget*>("native-query-builder-fields");assert(fields->columnCount()==6 && fields->item(fieldRow(fields,"score"),5)->text()=="<= [ceiling]");
+            QTimer::singleShot(0,dialog,[]{auto* params=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(params && params->objectName()=="native-query-parameters");auto* fields=params->findChild<QTableWidget*>("native-query-parameter-fields");assert(fields->rowCount()==2 && fields->item(0,0)->text()=="floor" && fields->item(1,0)->text()=="ceiling");params->reject();});dialog->findChild<QPushButton*>("native-query-builder-parameters")->click();dialog->reject();
+        });editor->findChild<QPushButton*>("native-query-design")->click();assert(reads==3);
+        QTimer::singleShot(0,editor,[&]{auto* prompt=qobject_cast<QInputDialog*>(QApplication::activeModalWidget());assert(prompt);prompt->setTextValue("6");QTimer::singleShot(0,editor,[]{auto* second=qobject_cast<QInputDialog*>(QApplication::activeModalWidget());assert(second);second->setTextValue("2");second->accept();});prompt->accept();});
+        editor->findChild<QPushButton*>("native-query-run")->click();auto* result=editor->findChild<QTableView*>();assert(result && result->model()->rowCount()==2);
+        QSqlQuery reference(database);assert(reference.exec("SELECT id,label,score FROM builder_input WHERE score>=6 OR score<=2 ORDER BY id DESC"));for(int row=0;row<2;++row){assert(reference.next());for(int column=0;column<3;++column)assert(reference.value(column).toString()==result->model()->index(row,column).data().toString());}assert(!reference.next());reference.finish();
+        text->setPlainText("SELECT id FROM builder_input WHERE id=1");editor->findChild<QLineEdit*>("native-query-name")->setText("visual_manual");editor->findChild<QPushButton*>("native-query-save")->click();
+    });createQuery(window)->trigger();
     assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='query' AND name='visual_manual'") && sql.next() && !QJsonDocument::fromJson(sql.value(0).toByteArray()).object().contains("visual_query"));sql.finish();
     assert(sql.exec("SELECT COUNT(*) FROM builder_input") && sql.next() && sql.value(0).toInt()==3);sql.finish();
     assert(sql.exec("DELETE FROM _la_objects WHERE kind='query' AND name IN ('visual_probe','visual_manual')"));assert(linaccess::installAccessQueryViews(database)>=0);assert(sql.exec("DROP TABLE builder_input"));sql.finish();

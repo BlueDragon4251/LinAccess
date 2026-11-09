@@ -7917,3 +7917,19 @@ Baum023f57fab171cac5324e8853bb2bb7c026c38c01 wie lokaler145786b). Neue1dafedd-DE
 unter /workspace/work/fixed-vba-string-arrays/package/linaccess-0.7.0-Linux.deb besteht
 Build-ID/Inhalt/Berechtigungen/MDBTools1.0.1/SQLite3.54.1. Aktueller visueller Entwurf
 noch nicht paketiert. Weiterentwicklung läuft; kein Gesamtabschluss.
+
+
+## 2026-11-09: ODER-Kriterien und typisierte Entwurfsparameter
+
+Visueller Abfrageentwurf unterstützt bis8 UND/ODER-Gruppen und64 deklarierte
+Parameter (Text/Long/Integer/Byte/Single/Double/Currency/DateTime/YesNo). Echte
+PARAMETERS-Deklaration, bestehende Eingabedialoge und SQL-/DAO-Bindung; Antworten
+werden nicht gespeichert. Metadatenvorschau bleibt ohne Zeilenauswertung. Gruppen/
+Parameter öffnen wieder korrekt, Feldverschiebung behält alle Kriterien. Alte
+Ein-Gruppen-Entwürfe bleiben lesbar; genaue Grenzen in VISUAL_QUERY_DESIGNER.md.
+Bestehendes GUI-/SQL-Bündel2/2 (14,51s) bestanden, inklusive tatsächlicher zweier
+Parametereingaben, unabhängigem SQL und späterer manueller Metadateninvalidierung.
+Keine neuen CTests oder Kern-/Original-/Windows-/Gesamtsuiten-/Paketnachweise.
+Voriger visueller Entwurf als33cda14 veröffentlicht/verifiziert; gleicher geprüfter
+Baum6e85a5c233a9ab51f14542cb36e703905789ad12 wie lokaler8e5458f. Letzte geprüfteDEB
+weiterhin1dafedd. F067/F068/F080/F148 und456/386/70 unverändert; Entwicklung läuft.
