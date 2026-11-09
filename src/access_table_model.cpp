@@ -375,17 +375,26 @@ bool AccessTableModel::repeatPreviousValue(const QModelIndex& target) {
     } catch(const VbaRuntimeError& error) { return reject(error.number); }
 }
 bool AccessTableModel::setDataBlock(const QModelIndex& first,const QVector<QVector<QString>>& values) {
+    if(!first.isValid() || first.model()!=this) return reject(5);
+    return setDataBlock(first.row(),first.column(),values);
+}
+bool AccessTableModel::isPasteColumn(int column) const {
+    return !readOnly_ && !metadataError_ && column>=0 && column<columnCount()
+        && !generated_.contains(record().fieldName(column).toCaseFolded())
+        && !columnType(column).contains("BLOB",Qt::CaseInsensitive);
+}
+bool AccessTableModel::setDataBlock(int firstRow,int firstColumn,const QVector<QVector<QString>>& values) {
     if(saving_ || changing_) return reject(2501);
     if(readOnly_) return reject(2448);
     const QScopedValueRollback<bool> changing(changing_,true);
     if(editStrategy()!=QSqlTableModel::OnManualSubmit) return reject(3251);
     if(isDirty()) return reject(2501);
     if(metadataError_) return reject(metadataError_);
-    if(!first.isValid() || first.model()!=this || values.isEmpty() || values.front().isEmpty()) return reject(5);
+    if(firstRow<0 || firstRow>rowCount() || firstColumn<0 || firstColumn>=columnCount() || values.isEmpty() || values.front().isEmpty()) return reject(5);
     const auto columns=values.front().size();
-    const qint64 endRow=static_cast<qint64>(first.row())+values.size();
+    const qint64 endRow=static_cast<qint64>(firstRow)+values.size();
     if(values.size()>1000000/columns || endRow>std::numeric_limits<int>::max()
-        || static_cast<qint64>(first.column())+columns>columnCount()) return reject(5);
+        || static_cast<qint64>(firstColumn)+columns>columnCount()) return reject(5);
     // Exhaust the source before appending: an unfetched record is never a new row.
     while(rowCount()<endRow && canFetchMore()) {
         const int previous=rowCount();fetchMore();if(rowCount()==previous) break;
@@ -400,7 +409,7 @@ bool AccessTableModel::setDataBlock(const QModelIndex& first,const QVector<QVect
         for(qsizetype row=0;row<values.size();++row) {
             if(values[row].size()!=columns) return reject(5);
             for(qsizetype column=0;column<columns;++column) {
-                const int targetRow=first.row()+row,targetColumn=first.column()+column;
+                const int targetRow=firstRow+row,targetColumn=firstColumn+column;
                 const auto type=columnType(targetColumn);
                 if(targetRow<originalRows) {
                     if(!(flags(index(targetRow,targetColumn))&Qt::ItemIsEditable)) return reject(2448);
@@ -428,10 +437,10 @@ bool AccessTableModel::setDataBlock(const QModelIndex& first,const QVector<QVect
     }
     if(failure) {QSqlTableModel::revertAll();dirtyRows_.clear();deletedRows_.clear();return reject(failure);}
     for(int row=originalRows;row<endRow;++row) dirtyRows_.insert(row);
-    const auto last=index(first.row()+values.size()-1,first.column()+columns-1);
+    const auto last=index(firstRow+values.size()-1,firstColumn+columns-1);
     if(!failure) setLastError({});
-    emit dataChanged(first,last,{Qt::DisplayRole,Qt::EditRole,Qt::CheckStateRole});
-    emit headerDataChanged(Qt::Vertical,first.row(),last.row());
+    emit dataChanged(index(firstRow,firstColumn),last,{Qt::DisplayRole,Qt::EditRole,Qt::CheckStateRole});
+    emit headerDataChanged(Qt::Vertical,firstRow,last.row());
     if(failure) return reject(failure);
     return true;
 }

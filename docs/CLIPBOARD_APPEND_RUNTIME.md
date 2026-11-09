@@ -14,7 +14,12 @@ a failed database constraint rolls back the SQL transaction and preserves the
 pending edits for correction or discard. Model structural signals stay active
 when rows are created or removed.
 
-The initial target is an existing editable cell. An empty table or append-only
-clipboard command is not yet covered. Pasting over unrelated drafts, typed binary
-MIME, arbitrary regional input masks and full Access range undo remain open under
+Empty tables start at their first visible writable column. The explicit native
+context-menu append command and acCmdPasteAppend (38) append after all fetched
+records, starting at the selected writable column, or the first writable column
+when no cell exists. Normal paste keeps its current-cell behavior. All of these
+paths leave pending drafts for the existing Save command. Native typed form-record
+MIME is refused explicitly rather than inserting its textual header as data.
+Pasting over unrelated drafts, typed binary MIME, arbitrary regional input masks
+and full Access range undo remain open under
 F340. This does not close F340 or establish Windows clipboard equivalence.

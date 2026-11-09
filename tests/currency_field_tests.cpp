@@ -278,6 +278,12 @@ End Function
         cells.revertAll();assert(cells.select() && cells.rowCount()==3 && !cells.isDirty());
         sheet.setCurrentIndex(cells.index(2,0));QApplication::clipboard()->setText("21\r\n22");
         assert(!sheet.pasteSelection() && cells.rowCount()==3 && !cells.isDirty());
+        assert(sql.exec("DELETE FROM paste_append"));assert(cells.select() && cells.rowCount()==0);sheet.setCurrentIndex({});
+        QApplication::clipboard()->setText("31\r\n32");assert(sheet.canPasteSelection() && sheet.pasteSelection() && cells.rowCount()==2 && sheet.currentIndex().column()==1);
+        assert(cells.submitTransactionally());sheet.setCurrentIndex(cells.index(0,1));
+        QApplication::clipboard()->setText("33\r\n34");assert(sheet.pasteSelection(true) && cells.rowCount()==4 && sheet.currentIndex().row()==2 && cells.clipboardText(cells.index(0,1))=="31");
+        assert(cells.submitTransactionally());assert(sql.exec("SELECT count(*),sum(value) FROM paste_append") && sql.next() && sql.value(0).toInt()==4 && sql.value(1).toInt()==130);sql.finish();
+
 
     }
 

@@ -1501,6 +1501,9 @@ End Sub
 Sub PasteTableSelection()
 DoCmd.RunCommand acCmdPaste
 End Sub
+Sub AppendTableSelection()
+DoCmd.RunCommand acCmdPasteAppend
+End Sub
 Sub RequeryActiveTable()
 DoCmd.Requery
 End Sub
@@ -2249,6 +2252,11 @@ End Sub
     QTest::keyClick(table,Qt::Key_S,Qt::ControlModifier); QApplication::processEvents(); assert(!model->isDirty());
     assert(query.exec("SELECT COUNT(*) FROM shortcut_records WHERE value IN ('first-range','second-range')") && query.next() && query.value(0).toInt()==2); query.finish();
     assert(table->pasteSelection()); if(model->isDirty()) model->revertAll();
+    table->setCurrentIndex(model->index(0,1));QApplication::clipboard()->setText("appended-range");
+    const int beforeAppend=model->rowCount();const auto appended=window.dispatchTableCommand(38);
+    assert(appended.value("handled").toBool() && appended.value("error").toInt()==0 && model->rowCount()==beforeAppend+1 && model->data(model->index(beforeAppend,1),Qt::EditRole).toString()=="appended-range");
+    model->revertAll();
+
     QTest::keyClick(table,Qt::Key_A,Qt::ControlModifier); assert(table->selectionModel()->selectedIndexes().size()==model->rowCount()*model->columnCount());
     table->setCurrentIndex(model->index(1,1));
     const auto previous=model->index(0,1).data().toString();

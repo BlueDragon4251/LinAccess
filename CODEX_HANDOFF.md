@@ -3117,3 +3117,14 @@ manuelle INTEGER-Primärschlüssel sind keine behaupteten AutoWerte. Kein neuer
 CTest. Noch kein Einfügen in leere Tabellen/gesonderter Tabellen-Anfügebefehl;
 weitere F340-Anforderungen bleiben offen. CLIPBOARD_APPEND_RUNTIME.md;
 456/384/72 unverändert. Direkt weiterimplementieren.
+
+Leere native Tabellen akzeptieren jetzt Texteingabe aus der Zwischenablage ab der
+ersten sichtbaren beschreibbaren Spalte. Ein ausdrücklicher Kontextmenübefehl
+und RunCommand acCmdPasteAppend(38) legen neue Datensatzentwürfe nach dem vollständig
+geladenen Tabellenende an. Normales Einfügen behält die aktuelle Zelle als Ziel;
+AutoWerte werden nicht überschrieben. Typisierte Formular-MIME wird ausdrücklich
+verweigert, statt ihren Textkopf als Datensatz einzufügen. Vorhandene GUI/Feld-
+Prüfungen gemeinsam2/2 (6,35s), App gebaut: leere Tabelle, Anfügen ohne Überschreiben,
+SQL-Persistenz und tatsächlicher Hauptfenster-Dispatcher geprüft. F340 bleibt wegen
+weiterer MIME-/Regional-/Undo-/Entwurfsszenarien offen. CLIPBOARD_APPEND_RUNTIME.md;
+456/384/72 unverändert. Direkt weitere Clipboard-Teilanforderungen umsetzen.

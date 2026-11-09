@@ -37,6 +37,8 @@ public:
     QString formattedText(const QModelIndex& index) const;
     bool repeatPreviousValue(const QModelIndex& target);
     bool setDataBlock(const QModelIndex& first,const QVector<QVector<QString>>& values);
+    bool setDataBlock(int firstRow,int firstColumn,const QVector<QVector<QString>>& values);
+    bool isPasteColumn(int column) const;
 signals:
     void editRejected(int number,const QString& message);
     void sortRestored(int column,Qt::SortOrder order);

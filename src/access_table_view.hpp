@@ -438,18 +438,30 @@ public:
     bool canPasteSelection() const {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         return typed && typed->editStrategy()==QSqlTableModel::OnManualSubmit && !typed->isDirty()
-            && !hasPendingEditor() && currentIndex().isValid() && currentIndex().flags().testFlag(Qt::ItemIsEditable);
+            && !hasPendingEditor() && ((currentIndex().isValid() && currentIndex().flags().testFlag(Qt::ItemIsEditable))
+                || (typed->rowCount()==0 && firstPasteColumn(typed)>=0));
     }
-    bool pasteSelection() {
+    int firstPasteColumn(const AccessTableModel* typed) const {
+        for(int column=0;column<typed->columnCount();++column) if(!isColumnHidden(column) && typed->isPasteColumn(column)) return column;
+        return -1;
+    }
+    bool pasteSelection(bool append=false) {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !finishEditing()) return false;
         if(typed->isDirty()) return refuse(2501,"Vor dem Einfügen eines Bereichs Änderungen speichern oder verwerfen.");
         if(typed->editStrategy()!=QSqlTableModel::OnManualSubmit) return refuse(3251,"Bereichseinfügen ist in dieser Ansicht nicht verfügbar.");
-        const auto first=currentIndex();
-        if(!first.isValid()) return false;
-        if(!first.flags().testFlag(Qt::ItemIsEditable)) return refuse(2448,"Die Zielzelle ist schreibgeschützt.");
+        const auto current=currentIndex();
+        const int firstColumn=current.isValid() ? current.column() : firstPasteColumn(typed);
+        if(firstColumn<0 || !typed->isPasteColumn(firstColumn)) return refuse(2448,"Die Zielspalte ist schreibgeschützt.");
+        if(!append && current.isValid() && !current.flags().testFlag(Qt::ItemIsEditable)) return refuse(2448,"Die Zielzelle ist schreibgeschützt.");
+        if(append) while(typed->canFetchMore()) {
+            if(typed->rowCount()>=1000000) return refuse(3251,"Die Tabelle überschreitet die native Anfügegrenze.");
+            const int previous=typed->rowCount();typed->fetchMore();if(previous==typed->rowCount()) return refuse(3251,"Die vorhandenen Datensätze konnten nicht vollständig geladen werden.");
+        }
+        const int firstRow=append ? typed->rowCount() : current.isValid() ? current.row() : 0;
         const auto* mime=QApplication::clipboard()->mimeData();
         if(!mime || !mime->hasText()) return refuse(2046,"Die Zwischenablage enthält keinen einfügbaren Text.");
+        if(mime->hasFormat("application/x-linaccess-record-v1")) return refuse(3251,"Typisierte Formulardatensätze können hier noch nicht eingefügt werden.");
         const auto text=QApplication::clipboard()->text();
         if(text.size()>4*1024*1024 || text.contains(QChar(0))) return refuse(3251,"Dieser Zwischenablageumfang wird noch nicht unterstützt.");
         QVector<QVector<QString>> values;
@@ -471,14 +483,16 @@ public:
         } catch(const std::bad_alloc&) { return refuse(7,"Der Tabellenbereich konnte nicht im Speicher vorbereitet werden."); }
           catch(const std::length_error&) { return refuse(3251,"Die Zwischenablage enthält zu viele Zellen."); }
           catch(const std::exception&) { return refuse(5,"Die Zwischenablage enthält kein gültiges Tabellenformat."); }
-        const auto endRow=static_cast<qint64>(first.row())+values.size();
-        if(endRow>std::numeric_limits<int>::max() || static_cast<qint64>(first.column())+values.front().size()>typed->columnCount())
+        const auto endRow=static_cast<qint64>(firstRow)+values.size();
+        if(endRow>std::numeric_limits<int>::max() || static_cast<qint64>(firstColumn)+values.front().size()>typed->columnCount())
             return refuse(5,"Der einzufügende Bereich passt nicht in die vorhandenen Spalten.");
         while(typed->rowCount()<endRow && typed->canFetchMore()) {
             const auto count=typed->rowCount(); typed->fetchMore(); if(typed->rowCount()==count) break;
         }
-        if(!typed->setDataBlock(first,values)) return false;
-        if(selectionModel()) selectionModel()->select(QItemSelection(first,typed->index(endRow-1,first.column()+values.front().size()-1)),QItemSelectionModel::ClearAndSelect);
+        if(!typed->setDataBlock(firstRow,firstColumn,values)) return false;
+        const auto first=typed->index(firstRow,firstColumn);
+        setCurrentIndex(first);
+        if(selectionModel()) selectionModel()->select(QItemSelection(first,typed->index(endRow-1,firstColumn+values.front().size()-1)),QItemSelectionModel::ClearAndSelect);
         return true;
     }
     void setModel(QAbstractItemModel* model) override {
@@ -505,6 +519,7 @@ protected:
         auto* copy=add("copy","&Kopieren\tStrg+C",native && selectionModel()->hasSelection());
         const auto* clipboard=QApplication::clipboard()->mimeData();
         auto* paste=add("paste","&Einfügen\tStrg+V",canPasteSelection() && clipboard && clipboard->hasText());
+        auto* append=add("paste-append","Datensätze &anfügen",canPasteSelection() && clipboard && clipboard->hasText());
         menu.addSeparator();
         auto* zoom=add("zoom","&Zoom...\tUmschalt+F2",native && currentIndex().isValid());
         auto* undoRecord=add("undo-record","Datensatzänderungen &verwerfen\tEsc",native && currentIndex().isValid() && !activeEditor() && native->hasPendingRecord(currentIndex().row()));
@@ -518,6 +533,7 @@ protected:
         if(!self) return;
         if(chosen==copy) (void)copySelection();
         else if(chosen==paste) (void)pasteSelection();
+        else if(chosen==append) (void)pasteSelection(true);
         else if(chosen==zoom) (void)zoomCurrentCell();
         else if(chosen==undoRecord) (void)undoCurrentRecord();
         else if(chosen==row && currentIndex().isValid()) selectionModel()->select(currentIndex(),QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);
