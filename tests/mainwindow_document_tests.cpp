@@ -2674,7 +2674,22 @@ Public Function NativeFailure() As Long
 Err.Raise 7001, "NativeRun", "deliberate failure"
 End Function
 Public Sub NativeExecute()
-CurrentDb.Execute "INSERT INTO editor_module_effects VALUES(" & NativeSupport(NativeAdd(1)) & ")"
+CurrentDb.Execute "INSERT INTO editor_module_effects VALUES(" & Application.Run("NativeSupport",NativeAdd(1)) & ")"
+End Sub
+Public Function NativeUseField(ByVal value As DAO.Field) As Long
+NativeUseField=value.Value
+End Function
+Public Function NativeApplicationObjectArg() As Long
+Dim rs As DAO.Recordset
+Set rs=CurrentDb.OpenRecordset("SELECT n FROM editor_module_effects")
+NativeApplicationObjectArg=Application.Run("NativeUseField",rs.Fields(0))
+rs.Close
+End Function
+Public Function NativeApplicationEval() As Long
+NativeApplicationEval=Application.Eval("NativeOptional(6)")+Application.Eval("DCount(""*"",""editor_module_effects"")")
+End Function
+Public Sub NativeKeepApplication()
+SaveModuleApplication
 End Sub
 Public Sub NativeInvalidContext()
 Me.Tag=1
@@ -2761,6 +2776,16 @@ End Function)VBA",db,&window);eventCode.show();QApplication::processEvents();
     error=0;try {(void)linaccess::nativeModuleSource(QJsonObject{{"version",1},{"vba","VERSION 1.0 CLASS\n"}});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
     assert(sql.exec("CREATE TABLE editor_module_effects(n INTEGER)"));
     sql.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES('module','NativeSupportModule',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba","Public Function NativeSupport(value As Long) As Long\nNativeSupport=value*2\nEnd Function"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
+    sql.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES('module','NativeApplicationHolder',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",R"VBA(Public SavedApp As Access.Application
+Public Sub SaveModuleApplication()
+Set SavedApp=Application
+End Sub
+Public Function SavedModuleApplication() As Access.Application
+Set SavedModuleApplication=SavedApp
+End Function
+Public Function ModuleApplicationIdentity() As Boolean
+ModuleApplicationIdentity=(SavedApp Is Application)
+End Function)VBA"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
     open([&](QDialog* dialog) {
         auto* choices=dialog->findChild<QComboBox*>("native-module-procedure");auto* run=dialog->findChild<QPushButton*>("native-module-run");auto* result=dialog->findChild<QTextBrowser*>("native-module-result");auto* editor=dialog->findChild<QPlainTextEdit*>("native-module-source");assert(choices && run && result && editor);
         const auto select=[&](const QString& name) {const int index=choices->findData(name);assert(index>=0);choices->setCurrentIndex(index);};
@@ -2768,6 +2793,10 @@ End Function)VBA",db,&window);eventCode.show();QApplication::processEvents();
         assert(sql.exec("SELECT n FROM editor_module_effects") && sql.next() && sql.value(0).toInt()==22 && !sql.next());sql.finish();
         assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==44);
         select("NativeCounter");run->click();assert(result->toPlainText().contains("Rückgabewert: 44"));
+        select("NativeApplicationEval");run->click();assert(result->toPlainText().contains("Rückgabewert: 7"));
+        select("NativeApplicationObjectArg");run->click();assert(result->toPlainText().contains("Rückgabewert: 22"));
+        select("NativeRecursive");run->click();assert(result->toPlainText().startsWith("Fehler 28"));
+        select("NativeKeepApplication");run->click();assert(result->toPlainText().startsWith("Prozedur ausgeführt."));
         select("NativePrompt");QTimer::singleShot(0,dialog,[] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(box);box->button(QMessageBox::Yes)->click();});run->click();assert(result->toPlainText().contains("Rückgabewert: 6"));
         select("NativeAdd");run->click();assert(result->toPlainText().startsWith("Fehler 450"));
         select("NativeInvalidContext");run->click();assert(result->toPlainText().startsWith("Fehler 438"));
@@ -2776,6 +2805,12 @@ End Function)VBA",db,&window);eventCode.show();QApplication::processEvents();
         editor->appendPlainText("'unsaved");assert(!run->isEnabled());dialog->findChild<QPushButton*>("native-module-analyze")->click();select("NativeExecute");run->click();assert(result->toPlainText().startsWith("Fehler 3251"));
         assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==44);dialog->reject();
     });
+    const auto heldApplication=application->member("Run",{VbaValue::string("SavedModuleApplication")}).object;assert(heldApplication);
+    assert(heldApplication->member("Run",{VbaValue::string("NativeOptional"),VbaValue::longInteger(8)}).number==8);
+    assert(heldApplication->member("Run",{VbaValue::string("ModuleApplicationIdentity")}).truthy());
+    try {(void)heldApplication->member("Run",{VbaValue::string("NativeFailure")});assert(false);}catch(const linaccess::VbaRuntimeError& failure) {assert(failure.number==7001 && failure.source=="NativeRun");}
+    const auto generation=window.property("la_project_generation");window.setProperty("la_project_generation",generation.toULongLong()+1);int staleApplication=0;try {(void)heldApplication->member("Run",{VbaValue::string("NativeOptional")});}catch(const linaccess::VbaRuntimeError& failure) {staleApplication=failure.number;}assert(staleApplication==3420);window.setProperty("la_project_generation",generation);
+    assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='NativeApplicationHolder'"));
     assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='NativeSupportModule'"));
     open([&](QDialog* dialog) {QTimer::singleShot(0,&window,[&] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message);message->button(QMessageBox::Yes)->click();});dialog->findChild<QPushButton*>("native-module-delete")->click();});
     assert(modules->member("Count",{}).number==baseline && !descriptor->member("IsLoaded",{}).truthy() && archive()==originalArchive);assert(!prepared.exec());assert(context.close());

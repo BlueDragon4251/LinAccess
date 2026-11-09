@@ -1,4 +1,5 @@
 #include "native_application_run.hpp"
+#include "native_public_procedure_run.hpp"
 #include "native_macro_function.hpp"
 #include "native_field_defaults.hpp"
 #include "native_stored_form.hpp"
@@ -1101,23 +1102,10 @@ void runNativeMacroFunction(AccessFormPreview& preview,const std::string& expres
 }
 
 linaccess::VbaValue runNativeApplicationProcedure(AccessFormPreview& preview,const std::vector<linaccess::VbaValue>& arguments) {
-    using linaccess::VbaRuntimeError;
-    if(arguments.empty() || arguments.size()>31) throw VbaRuntimeError(450,"Run requires a procedure and at most 30 arguments");
-    const auto name=linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(arguments.front()),"string").asText();
-    if(name.empty() || name.size()>255 || name.find('\0')!=std::string::npos) throw VbaRuntimeError(5,"Invalid Run procedure name");
-    if(name.find('.')!=std::string::npos) throw VbaRuntimeError(3251,"Run across referenced projects is not implemented");
-    static thread_local unsigned depth=0;
-    if(depth>=32) throw VbaRuntimeError(28,"Run call depth limit exceeded");
-    ++depth; ++nativeExecutionDepth();
-    const auto unwind=qScopeGuard([] {--depth; --nativeExecutionDepth(); disposeClosedForms();});
+    ++nativeExecutionDepth();
+    const auto unwind=qScopeGuard([] {--nativeExecutionDepth();disposeClosedForms();});
     PreviewVbaHost host(preview);
-    const auto module=host.moduleForProcedure(name);
-    if(!module) throw VbaRuntimeError(2517,"Run public procedure was not found");
-    auto actuals=std::vector<linaccess::VbaValue>(arguments.begin()+1,arguments.end());
-    const auto result=linaccess::executeVbaProcedureWithArguments(*module,name,host,actuals);
-    if(result.status!=linaccess::VbaExecutionStatus::Completed)
-        throw VbaRuntimeError(result.errorNumber ? result.errorNumber : 3251,result.explanation,result.errorSource,result.errorHelpFile,result.errorHelpContext);
-    return result.typedReturnValue ? *result.typedReturnValue : linaccess::VbaValue::empty();
+    return linaccess::runPublicStandardProcedure(host,arguments);
 }
 
 linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,std::string_view command,const std::vector<linaccess::VbaValue>& actuals) {

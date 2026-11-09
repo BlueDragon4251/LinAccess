@@ -2552,3 +2552,22 @@ GoSub-Preflight3251 ohne Präfix-SQL und Unsaved-Sperre. Keine neue CTest-ID ode
 Gesamtsuite/Windows-Beobachtung; aktuelles DEB gehört vorherigem d36ca9f-Stand.
 NATIVE_STANDARD_MODULES_RUNTIME.md; F042/F043/F050/F060/F118/F148 und456/384/72
 unverändert. Direkt weiter mit formularfreiem Application.Run/Eval-Kontext.
+
+
+Formularfreier Modul-Anwendungskontext erweitert: echte projekt-/generations-
+gebundene Application für Run/Eval/DBEngine; Domänenfunktionen lesen tatsächliche
+DB. Gemeinsamer Qt-freier Run-Helfer erhält in beiden Hosts Arity, öffentliche
+Auflösung, typisierte Rückgaben/Fehlerdaten und32-Level-Grenze. Variant-Argumente
+bewahren Objektverweise (DAO.Field); skalare Zielparameter behalten native
+Coercion-Grenzen. Schwacher Projektcache hält keine Editor-/Host-Referenz und
+prüft Projektgeneration/GUI-Thread; gehaltene Application bleibt nach Editorclose
+verwendbar, Generationswechsel3420. Volles Application-Modell/identische Objekt-
+identität zu Formularhosts/implizite Objekt-Skalarkoerzierung bleiben offen.
+App gebaut; vorhandene GUI/Layout2/2 (18,74s) bestanden: dynamischer zweiter
+Modulaufruf mit DAO-Schreiben, Eval/echtes DCount, DAO.Field-Objektargument,
+rekursives Run28, gehaltene Application nach Editorclose, Identität über neuen
+Host, Fehler7001/Source und Generationssperre. Testzugriff auf private Eval-Methode
+vor dem Lauf auf öffentliche Run-Rückgabe eines Access.Application-Funktionstyps
+korrigiert. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung.
+NATIVE_APPLICATION_RUN.md; F042/F043/F050/F118/F148 und456/384/72 unverändert.
+Direkt weiter mit formularfreier nativer Makroausführung.

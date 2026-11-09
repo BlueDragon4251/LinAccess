@@ -28,3 +28,29 @@ Actual native module editor/source, named VBA invocation, Function/Sub/optional
 arguments, shared globals, Private/missing/project/arity guards, preserved raised
 error source and recursive Run failure28 with subsequent successful independent
 call are exercised. No new test target or Windows Access2003 oracle.
+
+## Module editor application context
+
+The saved-module editor host now supplies a project-bound Application object for
+Run, Eval and DBEngine. It uses actual project metadata and DAO; no fake form is
+created. Standard-module lookup, error propagation,32-level Run guard and the
+Procedure/Arg1..Arg30 signature are shared with the real form host. Variant target
+arguments preserve object references, including a DAO.Field; scalar targets still
+follow the existing native parameter coercion limits.
+
+Eval reuses the existing bounded public-function/expression runtime. Domain
+functions use the real native database. It remains distinct from a complete
+Access Eval grammar, implicit form context or unrestricted Automation server.
+
+A held module-host Application survives closure of its editor while its owning
+project/generation remains valid. The project holds only weak cached application
+references, keyed by connection/database/generation; expired entries are removed.
+Callbacks retain no editor or host reference. Closed/replaced projects fail3420;
+wrong-thread calls fail3251. Missing application/UI members remain explicit438.
+This does not establish complete Application identity across form and module
+hosts, Forms/Reports/CurrentProject support in this host, or library resolution.
+
+Validation: existing GUI/layout2/2 passed (18.74s), matching app build.
+Dynamic module/DAO effects, Eval/domain count, DAO.Field argument, recursive Run,
+held Application after editor close and project-generation/error-source guards
+are exercised. No additional Windows Access2003 oracle or complete-model claim.
