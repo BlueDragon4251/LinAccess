@@ -1,3 +1,4 @@
+#include "vba_enum_type_fixture.hpp"
 #include "vba_automatic_class_fixture.hpp"
 #include "vba_default_class_fixture.hpp"
 #include "vba_typed_class_fixture.hpp"
@@ -76,5 +77,7 @@ void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<Cla
     assert(automatic("AutoLocalProbe").text=="0:0:1:1:2:3");assert(automatic("AutoStaticProbe").number==2 && automatic("AutoStaticProbe").number==3);assert(automatic("AutoModuleProbe").number==5 && automatic("AutoModuleProbe").number==5);automatic("ResetAutomaticModule");assert(automatic("AutoModuleProbe").number==6);assert(automatic("AutoDefaultProbe").number==11 && automatic("AutoOwnedProbe").boolean);
     auto parent=host.constructClass("AutoTracked");auto child=parent->member("Child",{}).object;assert(child && parent->member("Child",{}).object==child);const auto childSerial=child->member("Serial",{}).number;parent->assignObject("Child",VbaValue::reference(nullptr));auto replacement=parent->member("Child",{}).object;assert(replacement!=child && replacement->member("Serial",{}).number==childSerial+1);
     const auto beforeAutomaticFailure=state->messages;result=executeVbaProcedure("Sub AutoMissing\nMsgBox \"unreached\"\nDim item As New Missing\nEnd Sub","AutoMissing",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251 && state->messages==beforeAutomaticFailure);
+    for(const auto& probe:std::vector<std::pair<const char*,int>>{{"EnumTypeProbe",64},{"EnumTypeOverflow",6}}) {const auto outcome=executeVbaProcedure(enumTypeFixture,probe.first,host);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Enum type "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);}
+    const auto beforeEnumGuard=state->messages;result=executeVbaProcedure(enumTypeFixture+"Sub RejectEnumClass\nMsgBox \"unreached\"\nDim item As Object\nIf TypeOf item Is NativeState_2 Then Exit Sub\nEnd Sub\n","RejectEnumClass",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251 && state->messages==beforeEnumGuard);
     state->alive=false;error=0;try{first->member("Calls",{});}catch(const VbaRuntimeError& e){error=e.number;}assert(error==3420);
 }

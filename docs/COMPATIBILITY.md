@@ -5943,3 +5943,16 @@ NestedJOIN/NULL-/Counter-Prüfung; bestehendes DAO-Ziel1/1 (2,65s). Dieses Paket
 enthält die zuvor geprüften Klassen-/Array-/Default-Stufen, noch nicht AsNew.
 Ohne Zwischenabschluss mit belegten weiteren Deklarations-/Laufzeitbindungen
 fortfahren; keine pauschale Referenzanforderung oder Etappen-Abschlussanruf.
+
+
+Enum-Typbindungen (2026-11-09): tatsächliche quelllokale Enum-Namen werden gemäß
+MS-VBAL5.2.3.4 in As-Deklarationen als Long gebunden, einschließlich Parametern/
+Rückgaben, Feldern/Static, Arrays, GetLet und typisierten Konstanten. Einzeilige
+If-Pläne erben den echten Deklarations-/Options-/Konstantenkontext; Cache vermischt
+keine fremden Typbindungen. Details VBA_ENUM_TYPE_BINDINGS.md. Bestehendes Kern-/
+GUI-Bündel nach Fixturekorrektur2/2 (23,08s:4,60/18,48), App; Original-Ereignispfad
+1/1 (121,37s), bekannte Makrogrenze beibehalten. Sieben Hashes unverändert. Kein
+neues CTest/Windows-/Vollsuite-/DEB-Orakel. Crossmodule-/qualifizierte Typreferenzen,
+UDTs und vollständige Unicode-/Compilersemantik offen;456/386/70 unverändert.
+Vorstufe455abfa privat remote/Baum geprüft. Ohne Zwischenabschluss mit echten
+editierbaren einzelnen Tabellenfeldprojektionen in Abfragedatenblättern fortfahren.

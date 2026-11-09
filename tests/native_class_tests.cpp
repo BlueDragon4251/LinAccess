@@ -1,3 +1,4 @@
+#include "vba_enum_type_fixture.hpp"
 #include "vba_automatic_class_fixture.hpp"
 #include "vba_default_class_fixture.hpp"
 #include "access_form_objects.hpp"
@@ -56,6 +57,9 @@ void exerciseNativeClasses(MainWindow& window,QSqlDatabase db) {using namespace 
     }
     assert(sql.exec("DELETE FROM main._la_objects WHERE (kind='class' AND name='AutoTracked') OR (kind='module' AND name='AutomaticState')"));
     assert(sql.exec("DELETE FROM main._la_objects WHERE kind='class' AND name='NativeDefault'"));
+    sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('module','EnumTypeScope',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromStdString(enumTypeFixture)}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
+    {NativeStandardModuleHost enumHost(&window,db,[]{});const auto probe=executeVbaProcedure(enumTypeFixture,"EnumTypeProbe",enumHost);if(probe.status!=VbaExecutionStatus::Completed) std::cerr<<"Project enum type: "<<probe.explanation<<" line "<<probe.line<<" error "<<probe.errorNumber<<"\n";assert(probe.status==VbaExecutionStatus::Completed && probe.typedReturnValue->number==64);assert(sql.exec("DELETE FROM main._la_objects WHERE kind='module' AND name='EnumTypeScope'"));sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('module','EnumTypeScope',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromStdString(enumTypeSqlFixture)}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();installJetSqlFunctions(db);assert(nativeVbaSqlFunctionResultTypes(db).value("enumsqlidentity")=="long");assert(sql.exec("SELECT EnumSqlIdentity(1234)") && sql.next() && sql.value(0).toInt()==1234);sql.finish();}
+    assert(sql.exec("DELETE FROM main._la_objects WHERE kind='module' AND name='EnumTypeScope'"));
     std::shared_ptr<VbaObject> retained;
     {QDialog editor(&window);NativeStandardModuleHost host(&editor,db,[]{});retained=evaluateVbaObjectExpression("New NativeCounter",host,{}).object;assert(retained && retained->member("Value",{}).number==1);}
     assert(retained->member("Value",{}).number==1); // Project lifetime, not the caller editor's lifetime.

@@ -160,7 +160,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F037** — Procedure-wide Dim binding, local/control/global lookup precedence and standard-module Me restrictions; complete compiler/class scope remains open.
 - [ ] **F040** — Replace statement regex dispatch with a complete lexer/parser, AST and bound runtime.
 - [ ] **F042** — Modules/classes/CodeBehind, scope/lifetime, static/module variables and references. Bounded native conditional compilation is in VBA_CONDITIONAL_COMPILATION.md and static procedure lifetimes in STATIC_LOCAL_RUNTIME.md and bounded authored class instances in NATIVE_VBA_CLASSES.md; the complete requirement remains open.
-- [ ] **F043** — Calls/returns, ByRef/ByVal, Optional/ParamArray, arrays, properties and collections. Bounded native Property Get/Let/Set is documented in NATIVE_VBA_PROPERTIES.md; the complete requirement remains open.
+- [ ] **F043** — Calls/returns, ByRef/ByVal, Optional/ParamArray, arrays, properties and collections. Bounded native Property Get/Let/Set is documented in NATIVE_VBA_PROPERTIES.md and source-local Enum type aliases in VBA_ENUM_TYPE_BINDINGS.md; the complete requirement remains open.
 - [ ] **F118** — Full Access Eval grammar/scope, Unicode identifier validation and locale case folding; full surrounding original record-copy handlers and Access oracle.
 - [x] **F127** — Per-module Option Compare for relational strings; native Qt folding and explicit generic-host non-ASCII limits; original table-existence case failure fixed.
 - [x] **F131** — Native OpenForm continuation with persistent target, same-project unique instance reuse, canonical catalog Name, actual continuing Forms writes/save; imported Modal blocks UI without blocking VBA (OPEN_FORM_RUNTIME.md).
