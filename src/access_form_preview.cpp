@@ -32,6 +32,7 @@
 #include "access_value_list.hpp"
 #include "access_autonumber.hpp"
 #include "access_format.hpp"
+#include <QElapsedTimer>
 #include "sqlite_execution.hpp"
 #include "jet_sql_functions.hpp"
 #include "vba_analyzer.hpp"
@@ -722,14 +723,14 @@ public:
         if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
         return true;
     }
-    bool findTableRecord(const linaccess::VbaValue& sought,int mode,bool sensitive,bool first,int direction) {
+    bool findTableRecord(const linaccess::VbaValue& sought,int mode,bool sensitive,bool first,int direction,bool formatted,bool all) {
         if(!usesActiveTableContext()) return false;
         QWidget* owner=nullptr;
         for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
             if(qobject_cast<QMainWindow*>(ancestor)) { owner=ancestor; break; }
         if(!owner || owner->metaObject()->indexOfMethod("findTableRecord(QVariantMap)")<0) return false;
         auto request=linaccess::nativeFindValuePayload(sought);
-        request.insert("match",mode); request.insert("sensitive",sensitive); request.insert("first",first); request.insert("direction",direction);
+        request.insert("match",mode); request.insert("sensitive",sensitive); request.insert("first",first); request.insert("direction",direction);request.insert("formatted",formatted);request.insert("allfields",all);
         QVariantMap result;
         if(!QMetaObject::invokeMethod(owner,"findTableRecord",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QVariantMap,request)))
             throw linaccess::VbaRuntimeError(3251,"Native FindRecord dispatch is unavailable");
@@ -738,11 +739,11 @@ public:
         if(error) throw linaccess::VbaRuntimeError(error,result.value("description").toString().toStdString());
         return true;
     }
-    void findFormRecord(const linaccess::VbaValue& sought,int mode,bool sensitive,bool first,int direction) {
+    void findFormRecord(const linaccess::VbaValue& sought,int mode,bool sensitive,bool first,int direction,bool formatted,bool all) {
         auto& document=commandDocument();
         if(auto* modal=QApplication::activeModalWidget(); modal && modal!=document.window())
             throw linaccess::VbaRuntimeError(2046,"FindRecord is blocked by a modal window");
-        QString field;
+        QString field,formatControl;
         const auto* focus=QApplication::focusWidget();
         for(const auto& control:document.layout_.controls) {
             auto* widget=document.controls_.value(control.name.toCaseFolded()).data();
@@ -751,14 +752,15 @@ public:
             const auto column=columnIndex(control.controlSource,document.dataColumns_);
             if(column<0) continue;
             const auto type=document.dataTypes_.value(document.dataColumns_[column].toCaseFolded());
-            if(!linaccess::nativeFindSupports(sought,type))
+            if(formatted && control.type!="TextBox") throw linaccess::VbaRuntimeError(3251,"Formatierte Formularsuche benötigt ein TextBox-Feld");
+            if(!formatted && !linaccess::nativeFindSupports(sought,type))
                 throw linaccess::VbaRuntimeError(3251,"FindRecord value and bound field subtype are not supported together");
-            field=document.dataColumns_[column]; break;
+            field=document.dataColumns_[column];formatControl=control.name;break;
         }
-        if(field.isEmpty()) throw linaccess::VbaRuntimeError(2046,"No active bound field for FindRecord");
+        if(field.isEmpty() && !all) throw linaccess::VbaRuntimeError(2046,"No active bound field for FindRecord");
         const bool textValue=sought.kind==linaccess::VbaValue::Kind::Text;
-        (void)document.findNextRecord(linaccess::nativeFindValueText(sought),field,mode,sensitive,first ? 1 : 2,true,direction,
-            textValue ? std::optional<linaccess::VbaValue>{} : sought);
+        (void)document.findNextRecord(linaccess::nativeFindValueText(sought),all ? QString{} : field,mode,sensitive,first ? 1 : 2,true,direction,
+            textValue ? std::optional<linaccess::VbaValue>{} : sought,formatted,all ? QString{} : formatControl);
     }
     void saveRecord() override {
         if(tableCommand(97)) return;
@@ -1100,14 +1102,15 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         const int match=optionalNumber(1,1),search=optionalNumber(3,2),field=optionalNumber(5,-1);
         const bool sensitive=optionalBoolean(2,false),formatted=optionalBoolean(4,false),first=optionalBoolean(6,true);
         if(match<0 || match>2 || search<0 || search>2 || (field!=0 && field!=-1)) throw VbaRuntimeError(5,"Invalid FindRecord option");
-        if(field!=-1 || formatted) throw VbaRuntimeError(3251,"FindRecord all-field/formatted search is not implemented");
+        if(field!=-1 && !formatted) throw VbaRuntimeError(3251,"Unformatted all-field FindRecord is not implemented");
+        if(formatted && args[0].kind!=VbaValue::Kind::Text) throw VbaRuntimeError(3251,"Formatted FindRecord requires literal String input");
         const auto sought=linaccess::normalizeNativeFindValue(args[0]);
         const bool textValue=sought.kind==VbaValue::Kind::Text;
         const auto text=linaccess::nativeFindValueText(sought);
         if(textValue && (text.isEmpty() || text.contains('*') || text.contains('?') || text.contains('#') || text.contains('[') || text.contains(']')))
             throw VbaRuntimeError(3251,"Empty/wildcard FindRecord is not implemented");
         if(!textValue && match!=1) throw VbaRuntimeError(3251,"Typed FindRecord currently requires whole-field matching");
-        if(!host.findTableRecord(sought,match,sensitive,first,search)) host.findFormRecord(sought,match,sensitive,first,search);
+        if(!host.findTableRecord(sought,match,sensitive,first,search,formatted,field==0)) host.findFormRecord(sought,match,sensitive,first,search,formatted,field==0);
         return {};
     }
     if(command=="selectobject") {
@@ -3231,13 +3234,13 @@ void AccessFormPreview::openFindDialog() {
         if(!linaccess::nativeFindTextType(type)) typedHints.insert(name,linaccess::nativeFindInputHint(type));
     }
     if(searchFields.isEmpty()) throw VbaRuntimeError(3251,"Keine durchsuchbaren Felder vorhanden.");
-    QString initialField,initialText;
+    QString initialField,initialText,initialControl;
     const auto* focus=QApplication::focusWidget();
     for(const auto& control:layout_.controls) {
         auto* widget=controls_.value(control.name.toCaseFolded()).data(); const auto* combo=qobject_cast<QComboBox*>(widget);
         if(widget!=focus && (!combo || combo->lineEdit()!=focus)) continue;
         const auto column=columnIndex(control.controlSource,dataColumns_);
-        if(column>=0 && searchFields.contains(dataColumns_[column])) initialField=dataColumns_[column];
+        if(column>=0 && searchFields.contains(dataColumns_[column])) {initialField=dataColumns_[column];initialControl=control.name;}
         if(const auto* line=qobject_cast<const QLineEdit*>(focus); line && line->echoMode()==QLineEdit::Normal) initialText=line->selectedText();
         break;
     }
@@ -3256,39 +3259,43 @@ void AccessFormPreview::openFindDialog() {
     fields->addRow("Suchen nach:",query); fields->addRow("Suchen in:",scope); fields->addRow("Vergleichen:",match);
     fields->addRow("Suchrichtung:",direction);
     box->addLayout(fields); box->addWidget(sensitive);
+    auto* formatted=new QCheckBox("Formatierte Anzeige durchsuchen",dialog);formatted->setObjectName("access-find-formatted");formatted->setChecked(findState_.formatted);box->addWidget(formatted);
     auto* hint=new QLabel(dialog); hint->setObjectName("access-find-hint"); hint->setWordWrap(true); box->addWidget(hint);
-    const auto updateField=[scope,match,sensitive,hint,typedHints] {
-        const auto field=scope->currentData().toString(); const bool exact=typedHints.contains(field);
+    const auto updateField=[scope,match,sensitive,hint,typedHints,formatted] {
+        const auto field=scope->currentData().toString(); const bool exact=!formatted->isChecked() && typedHints.contains(field);
         if(exact) match->setCurrentIndex(1);
         match->setEnabled(!exact); sensitive->setEnabled(!exact);
-        hint->setText(exact ? typedHints.value(field) : QStringLiteral("Text wird wörtlich gesucht."));
+        hint->setText(formatted->isChecked() ? QStringLiteral("Die Darstellung gebundener Textfelder wird wörtlich durchsucht.") : exact ? typedHints.value(field) : QStringLiteral("Text wird wörtlich gesucht."));
     };
     connect(scope,&QComboBox::currentIndexChanged,dialog,[updateField](int) { updateField(); }); updateField();
+    connect(formatted,&QCheckBox::toggled,dialog,[scope,updateField,hasText=typedHints.size()<searchFields.size()](bool checked) {int all=scope->findData(QString{});if(checked && all<0) {scope->insertItem(0,"Alle dargestellten Felder",QString{});all=0;}if(!checked && !hasText && all>=0) scope->removeItem(all);else if(all>=0) scope->setItemText(all,checked ? "Alle dargestellten Felder" : "Alle Textfelder");updateField();});
     auto* result=new QLabel(dialog); result->setObjectName("access-find-result"); result->setWordWrap(true); box->addWidget(result);
     auto* buttons=new QHBoxLayout; auto* next=new QPushButton("&Weitersuchen",dialog); next->setObjectName("access-find-next"); next->setDefault(true);
     auto* close=new QPushButton("&Schließen",dialog); close->setObjectName("access-find-close"); buttons->addWidget(next); buttons->addWidget(close); box->addLayout(buttons);
     next->setEnabled(!initialText.isEmpty()); connect(query,&QLineEdit::textChanged,next,[next](const QString& text) { next->setEnabled(!text.isEmpty()); });
     connect(close,&QPushButton::clicked,dialog,&QDialog::reject); connect(this,&QDialog::finished,dialog,&QDialog::reject);
     const QPointer<AccessFormPreview> self(this); const QPointer<QDialog> guarded(dialog);
-    connect(next,&QPushButton::clicked,dialog,[self,guarded,query,scope,match,sensitive,direction,result] {
+    connect(next,&QPushButton::clicked,dialog,[self,guarded,query,scope,match,sensitive,direction,formatted,initialField,initialControl,result] {
         if(!self || !guarded || self->closed_ || self->openCancelled_) return;
         try {
             const auto field=scope->currentData().toString(),type=self->dataTypes_.value(field.toCaseFolded());
             std::optional<linaccess::VbaValue> sought;
-            if(!field.isEmpty() && !linaccess::nativeFindTextType(type)) sought=linaccess::nativeFindInput(query->text(),type);
+            if(!formatted->isChecked() && !field.isEmpty() && !linaccess::nativeFindTextType(type)) sought=linaccess::nativeFindInput(query->text(),type);
             const auto text=sought ? linaccess::nativeFindValueText(*sought) : query->text();
-            const auto message=self->findNextRecord(text,field,match->currentIndex(),sensitive->isChecked(),0,false,direction->currentData().toInt(),sought);
+            const auto message=self->findNextRecord(text,field,match->currentIndex(),sensitive->isChecked(),0,false,direction->currentData().toInt(),sought,formatted->isChecked(),field==initialField ? initialControl : QString{});
             if(guarded) result->setText(message);
         } catch(const std::exception& error) { if(guarded) result->setText(QString::fromUtf8(error.what())); }
     });
     dialog->show(); dialog->activateWindow(); query->setFocus(); query->selectAll();
 }
-QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bool caseSensitive,int origin,bool requireValidation,int direction,std::optional<linaccess::VbaValue> sought) {
+QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bool caseSensitive,int origin,bool requireValidation,int direction,std::optional<linaccess::VbaValue> sought,bool formatted,QString formatControl) {
     using linaccess::VbaRuntimeError;
     ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
     if(closed_ || openCancelled_ || layout_.kind!=linaccess::AccessDocumentKind::Form || !directTable_ || !dataSourceAvailable_ || dataTruncated_)
         throw VbaRuntimeError(3251,"Die Suche ist für diese Datenquelle nicht verfügbar.");
     if(origin<0 || origin>2 || direction<0 || direction>2) throw VbaRuntimeError(5,"Ungültiger Suchbeginn oder Suchrichtung.");
+    if(formatted && (text.size()>16*1024*1024 || text.contains(QChar(0)) || !text.isValidUtf16())) throw VbaRuntimeError(3251,"Formatted search text is not representable");
+    if(formatted && sought) throw VbaRuntimeError(3251,"Formatted search requires literal String input");
     if(sought) {
         sought=linaccess::normalizeNativeFindValue(*sought);
         if(mode!=1) throw VbaRuntimeError(3251,"Typed FindRecord requires whole-field matching");
@@ -3302,14 +3309,20 @@ QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bo
         if(requireValidation) throw VbaRuntimeError(2501,"FindRecord validation cancelled");
         return "Suche durch Formularvalidierung abgebrochen.";
     }
-    if(search->text!=text || search->field!=field || search->mode!=mode || search->sensitive!=caseSensitive || search->direction!=direction || !linaccess::sameNativeFindValue(search->value,sought)) {
-        search->text=text; search->field=field; search->mode=mode; search->sensitive=caseSensitive; search->direction=direction; search->value=sought; search->advance=false;
+    if(search->text!=text || search->field!=field || search->mode!=mode || search->sensitive!=caseSensitive || search->direction!=direction || search->formatted!=formatted || search->formatControl!=formatControl || !linaccess::sameNativeFindValue(search->value,sought)) {
+        search->text=text; search->field=field; search->mode=mode; search->sensitive=caseSensitive; search->direction=direction; search->value=sought;search->formatted=formatted;search->formatControl=formatControl;search->advance=false;
     }
-    QVector<int> columns;
-    for(int column=0;column<self->dataColumns_.size();++column) {
-        const auto& name=self->dataColumns_[column]; const auto type=self->dataTypes_.value(name.toCaseFolded());
-        if((field.isEmpty() || name.compare(field,Qt::CaseInsensitive)==0)
-            && (sought ? linaccess::nativeFindSupports(*sought,type) : linaccess::nativeFindTextType(type))) columns<<column;
+    QVector<int> columns,echoes;QStringList masks,controls;QVector<bool> precise;
+    if(formatted) {
+        for(const auto& control:self->layout_.controls) {
+            const int column=columnIndex(control.controlSource,self->dataColumns_);const auto widget=self->controls_.value(control.name.toCaseFolded());
+            if(control.type!="TextBox" || !control.visible || !widget || !widget->isVisibleTo(self.data()) || !qobject_cast<QLineEdit*>(widget.data()) || column<0 || (!field.isEmpty() && self->dataColumns_[column].compare(field,Qt::CaseInsensitive)!=0) || (!formatControl.isEmpty() && control.name.compare(formatControl,Qt::CaseInsensitive)!=0)) continue;
+            if(linaccess::nativeFindFieldKind(self->dataTypes_.value(self->dataColumns_[column].toCaseFolded()))==linaccess::NativeFindFieldKind::Unsupported) continue;
+            columns<<column;masks<<control.format;controls<<control.name;precise<<widget->property("la_format_ever_set").toBool();echoes<<qobject_cast<QLineEdit*>(widget.data())->echoMode();
+        }
+    } else for(int column=0;column<self->dataColumns_.size();++column) {
+        const auto& name=self->dataColumns_[column];const auto type=self->dataTypes_.value(name.toCaseFolded());
+        if((field.isEmpty() || name.compare(field,Qt::CaseInsensitive)==0) && (sought ? linaccess::nativeFindSupports(*sought,type) : linaccess::nativeFindTextType(type))) columns<<column;
     }
     if(columns.isEmpty()) throw VbaRuntimeError(3265,"Das Suchfeld ist nicht mehr verfügbar.");
     const bool virtualRow=self->currentRecordIndex_==0 && self->layout_.allowAdditions;
@@ -3318,24 +3331,40 @@ QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bo
     const int current=self->currentRecordIndex_>0 ? self->currentRecordIndex_-1 : virtualRow ? count-1 : 0;
     const int step=direction==0 ? -1 : 1;
     const int start=origin==1 ? 0 : current+((origin==2 || search->advance) ? step : 0);
+    if(formatted && static_cast<qint64>(count)*columns.size()>1000000) throw VbaRuntimeError(3251,"Formatted search exceeds its native cell bound");
+    QElapsedTimer clock;clock.start();
     int found=-1;
     for(int offset=0;offset<count && found<0;++offset) {
+        if(formatted && clock.hasExpired(5000)) throw VbaRuntimeError(3035,"Formatted search exceeds its native time bound");
         const qint64 candidateRow=static_cast<qint64>(start)+static_cast<qint64>(step)*offset;
         if(direction!=2 && (candidateRow<0 || candidateRow>=count)) break;
         const int row=static_cast<int>((candidateRow%count+count)%count);
-        for(const auto column:columns) {
+        for(int selection=0;selection<columns.size();++selection) {
+            if(formatted && clock.hasExpired(5000)) throw VbaRuntimeError(3035,"Formatted search exceeds its native time bound");
+            const auto column=columns[selection];
             QVariant value=row<self->recordRows_.size() ? self->recordRows_[row][column] : QVariant{};
             std::optional<linaccess::VbaValue> editedValue;
             if(row==current && (self->dirty_ || virtualRow)) {
                 for(const auto& control:self->layout_.controls) {
                     if(control.type=="ListBox" && control.multiSelect) continue;
-                    if(columnIndex(control.controlSource,self->dataColumns_)!=column) continue;
+                    if(columnIndex(control.controlSource,self->dataColumns_)!=column || (formatted && control.name!=controls[selection])) continue;
                     const auto pending=self->getFieldValue(control.name.toStdString()); editedValue=pending;
                     value=pending.kind==linaccess::VbaValue::Kind::Null ? QVariant{} : QVariant(QString::fromStdString(pending.asText())); break;
                 }
             }
             if(value.isNull() || value.metaType().id()==QMetaType::QByteArray) continue;
-            const auto candidate=value.toString(); const auto cs=caseSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
+            auto candidate=value.toString();
+            if(formatted) {
+                const auto type=self->dataTypes_.value(self->dataColumns_[column].toCaseFolded());const auto actual=editedValue ? *editedValue : linaccess::qtFieldValue(value,type);
+                if(actual.kind==linaccess::VbaValue::Kind::Null) continue;
+                candidate=!masks[selection].isEmpty() ? QString::fromStdString(linaccess::formatAccessValue(actual,masks[selection].toStdString(),true).asText()) : precise[selection] && actual.kind==linaccess::VbaValue::Kind::Number ? QString::number(actual.number,'g',std::numeric_limits<double>::max_digits10) : linaccess::qtFieldText(editedValue ? linaccess::sqlFieldValue(actual,type) : value,type);
+            }
+            if(formatted) {
+                if(candidate.contains(QChar(0)) || !candidate.isValidUtf16()) throw VbaRuntimeError(3251,"Formatted search cell is not representable");
+                if(echoes[selection]==QLineEdit::NoEcho) candidate.clear();
+                else if(echoes[selection]!=QLineEdit::Normal) candidate=QString(candidate.size(),QChar('*'));
+            }
+            const auto cs=caseSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
             bool matches=false;
             if(sought) {
                 const auto typed=editedValue ? *editedValue : linaccess::qtFieldValue(value,self->dataTypes_.value(self->dataColumns_[column].toCaseFolded()));
@@ -3368,7 +3397,7 @@ QString AccessFormPreview::findNextRecord(QString text,QString field,int mode,bo
 void AccessFormPreview::repeatFind() {
     ++nativeExecutionDepth(); const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
     if(findState_.text.isEmpty()) throw linaccess::VbaRuntimeError(2046,"Keine vorherige Suche vorhanden.");
-    const auto message=findNextRecord(findState_.text,findState_.field,findState_.mode,findState_.sensitive,0,false,findState_.direction,findState_.value);
+    const auto message=findNextRecord(findState_.text,findState_.field,findState_.mode,findState_.sensitive,0,false,findState_.direction,findState_.value,findState_.formatted,findState_.formatControl);
     if(status_) status_->setText(message);
     if(findDialog_) if(auto* result=findDialog_->findChild<QLabel*>("access-find-result")) result->setText(message);
 }

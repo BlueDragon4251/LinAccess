@@ -69,7 +69,7 @@ public:
             try {
                 auto* result=dynamic_cast<AccessQueryModel*>(self->model());
                 if(!result) throw VbaRuntimeError(2046,"Abfrageergebnis wurde geschlossen.");
-                if(arguments.column>=0 && !nativeFindTextType(result->fieldSqlType(arguments.column))) {
+                if(!arguments.formatted && arguments.column>=0 && !nativeFindTextType(result->fieldSqlType(arguments.column))) {
                     arguments.value=nativeFindInput(arguments.text,result->fieldSqlType(arguments.column));
                     arguments.text=nativeFindValueText(*arguments.value); arguments.mode=1;
                 }
@@ -95,6 +95,8 @@ public:
         if(arguments.text.isEmpty() && !arguments.value) throw VbaRuntimeError(2046,"Keine vorherige Suche vorhanden.");
         if(arguments.mode<0 || arguments.mode>2 || arguments.column< -1 || arguments.column>=result->columnCount()
             || arguments.origin<0 || arguments.origin>2 || arguments.direction<0 || arguments.direction>2) throw VbaRuntimeError(5,"Ungültige Sucheinstellung.");
+        if(arguments.formatted && (arguments.text.size()>16*1024*1024 || arguments.text.contains(QChar(0)) || !arguments.text.isValidUtf16())) throw VbaRuntimeError(3251,"Formatierter Suchtext ist nicht darstellbar.");
+        if(arguments.formatted && arguments.value) throw VbaRuntimeError(3251,"Formatierte Suche benötigt wörtlichen Text.");
         if(arguments.value) {
             arguments.value=normalizeNativeFindValue(*arguments.value);
             if(arguments.mode!=1) throw VbaRuntimeError(3251,"Typisierte Suche erfordert ganze Feldwerte.");
@@ -102,25 +104,29 @@ public:
         QVector<int> columns;
         for(int column=0;column<result->columnCount();++column)
             if((arguments.column<0 || arguments.column==column) && !isColumnHidden(column)
-                && (arguments.value ? nativeFindSupports(*arguments.value,result->fieldSqlType(column)) : nativeFindTextType(result->fieldSqlType(column)))) columns.push_back(column);
+                && (arguments.formatted || (arguments.value ? nativeFindSupports(*arguments.value,result->fieldSqlType(column)) : nativeFindTextType(result->fieldSqlType(column))))) columns.push_back(column);
         if(columns.isEmpty()) throw VbaRuntimeError(3265,"Suchfeld ist nicht verfügbar oder sein Typ nicht nachgewiesen.");
         if(static_cast<qint64>(result->rowCount())*columns.size()>1000000) throw VbaRuntimeError(3251,"Suchumfang überschreitet die native Grenze.");
         if(findArguments_.text!=arguments.text || findArguments_.column!=arguments.column || findArguments_.mode!=arguments.mode
-            || findArguments_.sensitive!=arguments.sensitive || findArguments_.direction!=arguments.direction || !sameNativeFindValue(findArguments_.value,arguments.value)) findAdvance_=false;
+            || findArguments_.sensitive!=arguments.sensitive || findArguments_.direction!=arguments.direction || findArguments_.formatted!=arguments.formatted || !sameNativeFindValue(findArguments_.value,arguments.value)) findAdvance_=false;
         findArguments_=arguments; findArguments_.origin=0;
         const int count=result->rowCount();
         if(!count) { findMessage_="Keine Datensätze vorhanden."; return 0; }
         const int step=arguments.direction==0 ? -1 : 1;
         const int start=arguments.origin==1 ? 0 : currentIndex().isValid() ? currentIndex().row()+((arguments.origin==2 || findAdvance_) ? step : 0) : 0;
         const auto cs=arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
+        QElapsedTimer clock;clock.start();
         for(int offset=0;offset<count;++offset) {
+            if(arguments.formatted && clock.hasExpired(5000)) throw VbaRuntimeError(3035,"Formatierte Suche überschreitet ihr Zeitlimit.");
             const qint64 candidateRow=static_cast<qint64>(start)+static_cast<qint64>(step)*offset;
             if(arguments.direction!=2 && (candidateRow<0 || candidateRow>=count)) break;
             const int row=static_cast<int>((candidateRow%count+count)%count); if(isRowHidden(row)) continue;
             for(int column:columns) {
+                if(arguments.formatted && clock.hasExpired(5000)) throw VbaRuntimeError(3035,"Formatierte Suche überschreitet ihr Zeitlimit.");
                 const auto candidate=result->index(row,column); const auto value=candidate.data(Qt::EditRole);
                 if(value.isNull() || value.metaType().id()==QMetaType::QByteArray) continue;
-                const auto text=value.toString();
+                if(arguments.formatted) (void)result->clipboardText(candidate); // Reject undecodable typed/binary cells.
+                const auto text=arguments.formatted ? nativeVisibleFindText(*this,candidate) : value.toString();
                 const bool matches=arguments.value ? nativeFindEqual(qtFieldValue(value,result->fieldSqlType(column)),*arguments.value)
                     : arguments.mode==1 ? text.compare(arguments.text,cs)==0 : arguments.mode==2 ? text.startsWith(arguments.text,cs) : text.contains(arguments.text,cs);
                 if(matches) {

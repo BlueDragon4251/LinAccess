@@ -809,3 +809,17 @@ korrigiert; keine zusätzliche CTest-Registrierung. Regionale Eingabemasken,
 beliebiges reentrantes Fokus-/IME-/Windows-Verhalten und vollständiger Access-
 Formulardruck bleiben offen. CONTROL_FORMAT_RUNTIME.md;456/384/72 unverändert.
 Ohne Zwischenfinal weitere allgemeine offene Funktionen umsetzen.
+
+Formatierte native Suche ist in Tabellen-, Abfrage- und Formularansichten sowie
+DoCmd.FindRecord integriert. Wörtliche String-Suche verwendet tatsächliche
+Delegate-/TextBox-Darstellung, getrennten Wiederholungszustand und bei doppelten
+Bindungen die gewählte Steuerelementmaske. Formatierte Suche über alle sichtbaren
+gebundenen Textfelder ist möglich; Passwortdarstellung liefert keine Klartext-
+Treffer. Rohwertsuche bleibt getrennt; formatierte Ersetzung verweigert3251.
+Zell-/Zeitgrenzen, Null-/Binärausschluss und vorhandene Validierung gelten.
+Vorhandene GUI/Layout gemeinsam2/2 (16,95s), App gebaut; tatsächliche Navigation,
+Datumsmasken, doppelte Bindungen, Allfeldsuche und Passwortanzeige geprüft.
+Ein veralteter geschlossener Dialogzeiger im Prüffall wurde gezielt korrigiert.
+Keine neue CTest-ID oder Windows-Beobachtung; volle Jet-/Windows-Suchgleichheit
+bleibt offen. FORMATTED_FIND_RUNTIME.md;456/384/72 unverändert.
+Ohne Zwischenabschluss nächste Umsetzung: Bereichseinfügen mit neuen Datensätzen.

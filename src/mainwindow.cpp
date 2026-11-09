@@ -966,9 +966,11 @@ QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
     try {
         const auto sought=linaccess::nativeFindValueFromPayload(request);
         const int mode=request.value("match").toInt(),direction=request.value("direction").toInt();
-        const bool sensitive=request.value("sensitive").toBool(),first=request.value("first").toBool();
+        const bool sensitive=request.value("sensitive").toBool(),first=request.value("first").toBool(),formatted=request.value("formatted").toBool(),all=request.value("allfields").toBool();
         if(mode<0 || mode>2 || direction<0 || direction>2) return tableCommandFailure(5,"Ungültiger FindRecord-Vergleich oder Suchrichtung.");
         const bool textValue=sought.kind==linaccess::VbaValue::Kind::Text;
+        if(all && !formatted) return tableCommandFailure(3251,"Unformatierte Suche über alle Felder ist hier nicht implementiert.");
+        if(formatted && !textValue) return tableCommandFailure(3251,"Formatierte Suche benötigt wörtlichen Text.");
         const auto text=linaccess::nativeFindValueText(sought);
         if(textValue && (text.isEmpty() || text.contains('*') || text.contains('?') || text.contains('#') || text.contains('[') || text.contains(']')))
             return tableCommandFailure(3251,"Leere und Wildcard-FindRecord-Suchen sind noch nicht implementiert.");
@@ -978,9 +980,9 @@ QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
             if(!view || !view->currentIndex().isValid()) return tableCommandFailure(2046,"Kein aktuelles Abfragefeld für FindRecord.");
             const int column=view->currentIndex().column();
             auto* result=dynamic_cast<linaccess::AccessQueryModel*>(view->model());
-            if(!result || view->isColumnHidden(column) || !linaccess::nativeFindSupports(sought,result->fieldSqlType(column)))
+            if(!result || (!all && (view->isColumnHidden(column) || (!formatted && !linaccess::nativeFindSupports(sought,result->fieldSqlType(column))))))
                 return tableCommandFailure(3251,"FindRecord-Suchwert und Abfragefeldtyp passen nicht zum unterstützten Teilumfang.");
-            linaccess::NativeTableFindArguments arguments{text,column,mode,sensitive,first ? 1 : 2,direction};
+            linaccess::NativeTableFindArguments arguments{text,all ? -1 : column,mode,sensitive,first ? 1 : 2,direction};arguments.formatted=formatted;
             if(!textValue) arguments.value=sought;
             view->findText(std::move(arguments));
             return {{"handled",true},{"error",0}};
@@ -990,9 +992,9 @@ QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
         if(!table || !model || !table->currentIndex().isValid()) return tableCommandFailure(2046,"Kein aktuelles Tabellenfeld für FindRecord.");
         const int column=table->currentIndex().column();
-        if(table->isColumnHidden(column) || !linaccess::nativeFindSupports(sought,model->fieldSqlType(column)))
+        if(!all && (table->isColumnHidden(column) || (!formatted && !linaccess::nativeFindSupports(sought,model->fieldSqlType(column)))))
             return tableCommandFailure(3251,"FindRecord-Suchwert und aktueller Feldtyp passen nicht zum unterstützten Teilumfang.");
-        linaccess::NativeTableFindArguments arguments{text,column,mode,sensitive,first ? 1 : 2,direction};
+        linaccess::NativeTableFindArguments arguments{text,all ? -1 : column,mode,sensitive,first ? 1 : 2,direction};arguments.formatted=formatted;
         if(!textValue) arguments.value=sought;
         if(table->findText(std::move(arguments))<0) return tableModelFailure(model,2501);
         return {{"handled",true},{"error",0}};

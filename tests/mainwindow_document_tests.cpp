@@ -13,6 +13,7 @@
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
 #include "access_table_view.hpp"
+#include "native_query_view.hpp"
 #include "access_query.hpp"
 #include "native_datasheet_print.hpp"
 #include "access_table_import.hpp"
@@ -1408,7 +1409,11 @@ Me.Tag="must-not-run"
 End Sub
 Sub FindRecordFormatted()
 DoCmd.FindRecord "row-250",SearchAsFormatted:=True
-Me.Tag="must-not-run"
+Me.Tag="findrecord-formatted"
+End Sub
+Sub FindRecordAllFormatted()
+DoCmd.FindRecord "row-250",SearchAsFormatted:=True,OnlyCurrentField:=acAll
+Me.Tag="findrecord-all-formatted"
 End Sub
 Sub FindRecordUp()
 DoCmd.FindRecord "row-249",Search:=acUp,FindFirst:=False
@@ -1989,8 +1994,12 @@ End Sub
     assert(mixed->executeProcedure("FindRecordNext",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==250);
     assert(mixed->executeProcedure("FindRecordEmptyFirst",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==251);
     assert(mixed->executeProcedure("FindRecordEmptyMatch",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==24);
+    assert(mixed->executeProcedure("FindRecordFormatted",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==249);
+    navigationView->setCurrentIndex(navigationModel->index(24,0));
+    assert(mixed->executeProcedure("FindRecordAllFormatted",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==249 && navigationView->currentIndex().column()==1);
+    assert(mixed->executeProcedure("FindRecordEmptyMatch",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==24);
     assert(mixed->executeProcedure("FindRecordNoMatch",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==24);
-    for(const char* procedure:{"FindRecordAllFields","FindRecordFormatted","FindRecordNumber","FindRecordWildcard"})
+    for(const char* procedure:{"FindRecordAllFields","FindRecordNumber","FindRecordWildcard"})
         assert(mixed->executeProcedure(procedure,selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==24);
     assert(mixed->executeProcedure("FindRecordInvalidDirection",selectArguments).errorNumber==5);
     assert(mixed->executeProcedure("FindRecordNull",selectArguments).errorNumber==94);
@@ -2406,6 +2415,7 @@ void testEditableControlFormats(MainWindow& window,QSqlDatabase db) {
     for(const auto& [name,type]:std::vector<std::pair<const char*,int>>{{"id",4},{"amount",7},{"label",10},{"moment",8}}) table->member("Fields",{}).object->member("Append",{table->member("CreateField",{VbaValue::string(name),VbaValue::integer(type),VbaValue::longInteger(type==10 ? 255 : 0)})});
     database->member("TableDefs",{}).object->member("Append",{VbaValue::reference(table)});
     database->member("Execute",{VbaValue::string("INSERT INTO format_edit VALUES(1,0.12345678901234567,'before',#2003-12-31 18:05:06#)")});
+    database->member("Execute",{VbaValue::string("INSERT INTO format_edit VALUES(2,2.5,'second',#2004-02-29 00:00:00#)")});
     QSqlQuery sql(db);assert(sql.exec("CREATE TABLE format_events(kind TEXT)"));
     assert(sql.exec("SELECT amount FROM format_edit WHERE id=1") && sql.next());const double initial=sql.value(0).toDouble();sql.finish();
     const QByteArray source=R"FORM(Begin Form
@@ -2462,6 +2472,31 @@ End Sub
 Sub Store()
 DoCmd.RunCommand acCmdSaveRecord
 End Sub
+Sub FindDateSecond()
+Me!Moment.SetFocus
+DoCmd.FindRecord FindWhat:="2004-02-29",Match:=1,Search:=2,SearchAsFormatted:=True,OnlyCurrentField:=-1,FindFirst:=True
+End Sub
+Sub FindAllFormatted()
+DoCmd.FindRecord "MIXED",1,True,2,True,0,True
+End Sub
+Sub FindDuplicateFormatted()
+Me!Duplicate.SetFocus
+DoCmd.FindRecord "0.1235",1,False,2,True,-1,True
+End Sub
+Sub OpenSearch()
+Me!Moment.SetFocus
+DoCmd.RunCommand acCmdFind
+End Sub
+Sub FindLabelPlainWhenMasked()
+Me!Label.SetFocus
+DoCmd.FindRecord "mixed",1,False,2,True,-1,True
+End Sub
+Sub OpenLabelSearch()
+Me!Label.SetFocus
+DoCmd.RunCommand acCmdFind
+End Sub
+
+
 )VBA";
     AccessFormPreview form("editable formatted controls",source,code,db,&window);
     auto root=makePreviewFormObject(form);auto controls=root->member("Controls",{}).object;auto amount=controls->item("Amount").object;
@@ -2492,6 +2527,22 @@ End Sub
     assert(label->text()=="MIXED" && controls->item("Label").object->scalarValue().asText()=="mixed");
     assert(form.executeProcedure("Store",arguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(sql.exec("SELECT label,moment FROM format_edit WHERE id=1") && sql.next() && sql.value(0).toString()=="mixed" && sql.value(1).toString()=="2003-12-31 18:05:06");sql.finish();
+    assert(form.executeProcedure("FindDateSecond",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==2);
+    assert(form.executeProcedure("FindAllFormatted",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==1);
+    assert(form.executeProcedure("FindDateSecond",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==2);
+    assert(form.executeProcedure("FindDuplicateFormatted",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==1);
+    assert(form.executeProcedure("FindDateSecond",arguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(form.executeProcedure("OpenSearch",arguments).status==linaccess::VbaExecutionStatus::Completed);auto* search=form.findChild<QDialog*>("access-find-dialog");assert(search);
+    search->findChild<QCheckBox*>("access-find-formatted")->setChecked(true);search->findChild<QLineEdit*>("access-find-text")->setText("2003-12-31");search->findChild<QComboBox*>("access-find-match")->setCurrentIndex(1);search->findChild<QPushButton*>("access-find-next")->click();
+    assert(root->member("CurrentRecord",{}).number==1 && search->findChild<QLabel*>("access-find-result")->text().contains("gefunden"));search->reject();
+    assert(sql.exec("SELECT label,moment FROM format_edit WHERE id=1") && sql.next() && sql.value(0).toString()=="mixed" && sql.value(1).toString()=="2003-12-31 18:05:06");sql.finish();
+    assert(form.executeProcedure("FindDateSecond",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==2);
+    controls->item("Label").object->assign("InputMask",VbaValue::string("Password"));
+    assert(form.executeProcedure("FindLabelPlainWhenMasked",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==2);
+    assert(form.executeProcedure("OpenLabelSearch",arguments).status==linaccess::VbaExecutionStatus::Completed);search=nullptr;for(auto* candidate:form.findChildren<QDialog*>("access-find-dialog")) if(candidate->isVisible()) search=candidate;assert(search);
+    search->findChild<QCheckBox*>("access-find-formatted")->setChecked(true);search->findChild<QLineEdit*>("access-find-text")->setText("*****");search->findChild<QComboBox*>("access-find-match")->setCurrentIndex(1);search->findChild<QPushButton*>("access-find-next")->click();
+    assert(root->member("CurrentRecord",{}).number==1 && controls->item("Label").object->scalarValue().asText()=="mixed");search->reject();
+    controls->item("Label").object->assign("InputMask",VbaValue::string(""));
     assert(form.close());
 }
 
@@ -3013,6 +3064,18 @@ int main(int argc,char** argv) {
             QTableView grid;grid.setModel(&model);
             const auto snapshot=linaccess::nativeDatasheetSnapshot(grid,"Formatted fields");
             assert(snapshot.rows.size()==2 && snapshot.rows[0][quantity]==expected);
+            linaccess::AccessTableView search;search.setModel(&model);search.setCurrentIndex(model.index(0,quantity));
+            linaccess::NativeTableFindArguments find{expected,quantity,1,true,1,2};find.formatted=true;assert(search.findText(find)==1 && search.currentIndex().row()==0);
+            assert(search.repeatFind() && search.currentIndex().row()==1);
+            find={"ui value",label,1,false,1,2};find.formatted=true;assert(search.findText(find)==1 && search.currentIndex().row()==0);
+            find.formatted=false;find.origin=0;assert(search.findText(find)==1 && search.currentIndex().row()==0);
+            assert(search.openFindDialog());auto* dialog=search.findChild<QDialog*>("native-table-find-dialog");assert(dialog);
+            dialog->findChild<QComboBox*>("native-table-find-field")->setCurrentIndex(dialog->findChild<QComboBox*>("native-table-find-field")->findData(quantity));
+            dialog->findChild<QCheckBox*>("native-table-find-formatted")->setChecked(true);dialog->findChild<QLineEdit*>("native-table-find-text")->setText(expected);dialog->findChild<QComboBox*>("native-table-find-match")->setCurrentIndex(1);dialog->findChild<QPushButton*>("native-table-find-next")->click();
+            assert(search.currentIndex().column()==quantity && dialog->findChild<QLabel*>("native-table-find-result")->text().contains("Übereinstimmung"));dialog->reject();
+            linaccess::AccessQueryModel results;results.execute(db,"SELECT 1.2345 AS number, 'shown' AS label UNION ALL SELECT 2.5,'other'");linaccess::NativeQueryView queryView;queryView.setModel(&results);queryView.setCurrentIndex(results.index(0,0));
+            linaccess::NativeTableFindArguments queryFind{"2.5",0,1,false,1,2};queryFind.formatted=true;assert(queryView.findText(queryFind)==1 && queryView.currentIndex().row()==1);
+
             assert(authored.exec("SELECT moment FROM authored_defaults LIMIT 1") && authored.next());const auto date=authored.value(0).toString().left(10);authored.finish();
             assert(snapshot.rows[0][moment]==date && model.data(model.index(0,moment)).toString()==date);
             QTemporaryDir output;assert(output.isValid());const auto path=output.filePath("formatted.pdf");linaccess::exportNativeDatasheetPdf(snapshot,path);
