@@ -531,3 +531,15 @@ zurück. Kollision/ungültiger Name/readonly/aktive äußere Transaktion verweig
 importierte/temporäre Namen und automatische Referenzkorrektur bleiben offen.
 DAO1/1 (2,52s), App gebaut; keine Quellkopie-/Gesamtsuite unnötig wiederholt.
 DAO_QUERYDEFS_CATALOG.md; F055/F121 offen,456/384/72 unverändert. Weiterarbeiten.
+
+Datenbankfenster bietet jetzt Ansicht→Abfrage umbenennen für eigene Abfragen.
+Offene Abfragedatenblätter vorher schließen; importierte Abfragen bleiben
+unverändert/geschützt. Live-QueryDef wird über Namensdialog gehalten, damit
+zwischenzeitliches Löschen/Neuanlegen nicht auf ein anderes Objekt umleitet.
+Explorer/Selektion folgen tatsächlichem Namen. Tabellen-/Abfrageumbenennung
+nutzen gemeinsamen Core-Helfer für vorhandene Druckseiteneinstellungen:
+Schema geprüft, Layout unverändert verschoben, Zielkollision bricht gesamten
+Savepoint ab. Kein QtGui im DAO-Backend. Bestehende DAO/GUI2/2 (7,84s) prüfen
+auch tatsächliches Öffnen/Ausführen, Seitenbindung und atomare Teilfehler-Rücknahme.
+App gebaut; langsame Originalkopie nicht ohne Importänderung wiederholt.
+DAO_QUERYDEFS_CATALOG.md; F055/F080/F121 offen,456/384/72 unverändert. Weiterarbeiten.

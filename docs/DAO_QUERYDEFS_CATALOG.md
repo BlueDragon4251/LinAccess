@@ -64,3 +64,13 @@ reuse the vacated name without returning the renamed query accidentally.
 Other saved SQL, forms, reports and VBA bindings are not automatically refactored.
 This is not Name AutoCorrect, cross-connection generation proof or a complete
 Access2003 QueryDef rename/transaction oracle.
+
+The database window now offers Ansicht → Abfrage umbenennen for owned queries.
+Open query datasheets must be closed first; imported names are disabled/protected.
+The selected live QueryDef is held across the name dialog so deletion/recreation
+cannot silently redirect the action to a different catalog object. Explorer
+selection follows the actual new name. Other stored bindings remain unchanged.
+Table and query rename share a checked core-only datasheet-page catalog move:
+existing settings follow the case-folded identity without changing their bytes,
+unknown catalog shape or a target settings collision aborts the entire rename.
+No QtGui dependency was added to the DAO/data library.

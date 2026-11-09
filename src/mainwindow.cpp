@@ -355,6 +355,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         refreshExplorer();for(auto* entry:explorer_->findItems(newName,Qt::MatchExactly|Qt::MatchRecursive,0)) if(entry->data(0,Qt::UserRole).toString()=="table") {explorer_->setCurrentItem(entry);break;}statusBar()->showMessage("Tabelle umbenannt: "+newName);
     });
     connect(viewMenu,&QMenu::aboutToShow,this,[this,renameTable] {const auto* item=explorer_->currentItem();renameTable->setEnabled(db_.isOpen() && item && item->data(0,Qt::UserRole).toString()=="table" && !QApplication::activeModalWidget());});
+    auto* renameQuery=viewMenu->addAction("Abfrage umbenennen...");renameQuery->setObjectName("native-query-rename");
+    connect(renameQuery,&QAction::triggered,this,[this] {
+        const auto* item=explorer_->currentItem();if(!item || item->data(0,Qt::UserRole).toString()!="query" || QApplication::activeModalWidget() || !db_.isOpen()) return;const auto oldName=item->text(0);
+        if(findOpenQuery(oldName)) {messageError(this,"Schließen Sie die Abfrage vor dem Umbenennen.");return;}
+        try {
+            bool owned=false;(void)linaccess::accessQuerySource(db_,oldName,nullptr,&owned,true);if(!owned) throw linaccess::VbaRuntimeError(3251,"Importierte Abfragen können noch nicht umbenannt werden.");
+            const auto definition=linaccess::makeDaoDatabase(db_)->member("QueryDefs",{linaccess::VbaValue::string(oldName.toStdString())}).object;
+            QInputDialog input(this);input.setObjectName("native-query-rename");input.setWindowTitle("Abfrage umbenennen");input.setLabelText("Neuer Abfragename. Verweise in anderen Abfragen, Formularen, Berichten und VBA müssen anschließend angepasst werden.");input.setTextValue(oldName);if(auto* editor=input.findChild<QLineEdit*>()) editor->setMaxLength(64);if(input.exec()!=QDialog::Accepted) return;const auto newName=input.textValue().trimmed();if(newName==oldName) return;
+            definition->assign("Name",linaccess::VbaValue::string(newName.toStdString()));refreshExplorer();for(auto* entry:explorer_->findItems(newName,Qt::MatchExactly|Qt::MatchRecursive,0)) if(entry->data(0,Qt::UserRole).toString()=="query") {explorer_->setCurrentItem(entry);break;}statusBar()->showMessage("Abfrage umbenannt: "+newName);
+        }catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));}
+    });
+    connect(viewMenu,&QMenu::aboutToShow,this,[this,renameQuery] {const auto* item=explorer_->currentItem();bool owned=false;if(db_.isOpen() && item && item->data(0,Qt::UserRole).toString()=="query" && !QApplication::activeModalWidget()) try {(void)linaccess::accessQuerySource(db_,item->text(0),nullptr,&owned,true);}catch(const std::exception&) {}renameQuery->setEnabled(owned);});
     auto* editRelations=viewMenu->addAction("&Beziehungen bearbeiten...");editRelations->setObjectName("native-relations-edit");
     connect(editRelations,&QAction::triggered,this,[this] {
         if(!db_.isOpen() || QApplication::activeModalWidget()) return;

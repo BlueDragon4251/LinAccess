@@ -1237,6 +1237,14 @@ void Field::assign(std::string_view name, const VbaValue& value) {
     require(lower(name) == "value", "DAO: Field property is read-only");
     owner_->set(name_, value);
 }
+// Caller owns the surrounding rename savepoint. This metadata has no QtGui dependency.
+void renameDatasheetPageCatalog(QSqlDatabase db,const QString& kind,const QString& oldName,const QString& newName) {
+    QSqlQuery query(db);if(!query.exec("SELECT type FROM main.sqlite_schema WHERE name='_la_datasheet_page_setup'")) queryFailure(query);if(!query.next()) return;if(query.value(0).toString()!="table" || query.next()) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog invalid");query.finish();
+    if(!query.exec("PRAGMA main.table_info('_la_datasheet_page_setup')")) queryFailure(query);const QStringList shape{"kind","name","layout"};int count=0;while(query.next()) {if(count>=3 || query.value(1).toString()!=shape[count] || query.value(2).toString().toUpper()!="TEXT" || query.value(3).toInt()!=1 || query.value(5).toInt()!=(count<2 ? count+1 : 0)) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog shape invalid");++count;}if(count!=3) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog shape invalid");query.finish();
+    const auto oldKey=oldName.toCaseFolded(),newKey=newName.toCaseFolded();if(oldKey==newKey) return;
+    query.prepare("SELECT 1 FROM main._la_datasheet_page_setup WHERE kind=? AND name=?");query.addBindValue(kind);query.addBindValue(newKey);if(!query.exec()) queryFailure(query);if(query.next()) throw VbaRuntimeError(3251,"DAO: Target datasheet page settings already exist");query.finish();
+    query.prepare("UPDATE main._la_datasheet_page_setup SET name=? WHERE kind=? AND name=?");query.addBindValue(newKey);query.addBindValue(kind);query.addBindValue(oldKey);if(!query.exec()) queryFailure(query);
+}
 class QueryDefinition;
 class QueryParameter final : public VbaObject {
 public:
@@ -1358,6 +1366,7 @@ public:
         if(!document.isObject() || document.object().value("sql").toString()!=source_) throw VbaRuntimeError(3197,"DAO: Owned query changed concurrently");query.finish();
         query.prepare("UPDATE main._la_objects SET name=? WHERE kind='query' AND name=? AND definition=?");query.addBindValue(next);query.addBindValue(name_);query.addBindValue(previous);
         if(!query.exec()) queryFailure(query);if(query.numRowsAffected()!=1) throw VbaRuntimeError(3197,"DAO: Owned query changed concurrently");query.finish();
+        renameDatasheetPageCatalog(db_,"query",name_,next);
         if(installAccessQueryViews(db_)<0) throw VbaRuntimeError(3251,"DAO: Query views are busy");
         if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;
         ++workspace_->queryGenerations[oldKey];if(newKey!=oldKey) ++workspace_->queryGenerations[newKey];name_=next;namedGeneration_=workspace_->queryGenerations.value(newKey);
@@ -3052,10 +3061,7 @@ quint64 renameExistingNativeTable(QSqlDatabase db,const QString& table,const QSt
     }
     query.prepare("UPDATE main._la_access_indexes SET table_name=?,definition=? WHERE table_name=? COLLATE NOCASE AND definition=?");query.addBindValue(renamed);query.addBindValue(QString::fromUtf8(nextIndexes));query.addBindValue(table);query.addBindValue(previousIndexes);if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Index metadata changed during rename");
     if(db.tables().contains("_la_access_relations")) for(const auto& side:{QString("parent"),QString("child")}) {query.prepare("UPDATE main._la_access_relations SET "+side+"_table=? WHERE "+side+"_table=? COLLATE NOCASE");query.addBindValue(renamed);query.addBindValue(table);if(!query.exec()) queryFailure(query);}
-    if(db.tables().contains("_la_datasheet_page_setup")) {
-        if(!query.exec("PRAGMA main.table_info('_la_datasheet_page_setup')")) queryFailure(query);const QStringList shape{"kind","name","layout"};int count=0;while(query.next()) {if(count>=3 || query.value(1).toString()!=shape[count] || query.value(2).toString().toUpper()!="TEXT" || query.value(3).toInt()!=1 || query.value(5).toInt()!=(count<2 ? count+1 : 0)) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog shape invalid");++count;}if(count!=3) throw VbaRuntimeError(3251,"DAO: Datasheet page catalog shape invalid");query.finish();
-        query.prepare("UPDATE main._la_datasheet_page_setup SET name=? WHERE kind='table' AND name=?");query.addBindValue(newKey);query.addBindValue(oldKey);if(!query.exec()) queryFailure(query);
-    }
+    renameDatasheetPageCatalog(db,"table",table,renamed);
     if(nativeTableValueDigest(db,renamed,names)!=digest) throw VbaRuntimeError(3251,"DAO: Rename changed stored values/row identities");(void)readTableSchemaColumns(db,renamed);(void)readNativeIndexCatalog(db,renamed);(void)catalog->read(renamed);checkNativeForeignKeys(db);
     if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;++oldGeneration;++newGeneration;
     if(!settings.restore()) throw DaoStoredSchemaChange("DAO: Table rename stored; connection settings failed to restore, reopen the project");return newGeneration;
