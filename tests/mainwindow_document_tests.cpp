@@ -2084,7 +2084,8 @@ End Sub
     assert(typedModel->index(0,1).data(Qt::EditRole).toDouble()==2.5 && typedModel->index(1,1).data(Qt::EditRole).toDouble()==3.75);
     assert(unchanged.exec("SELECT value FROM command_typed_find WHERE id=2") && unchanged.next() && unchanged.value(0).toDouble()==1.2345678901234565); unchanged.finish();
     QApplication::clipboard()->setText("9");
-    assert(mixed->executeProcedure("PasteTableSelection",selectArguments).errorNumber==2501 && typedModel->index(0,1).data(Qt::EditRole).toDouble()==2.5);
+    assert(mixed->executeProcedure("PasteTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedModel->index(0,1).data(Qt::EditRole).toDouble()==9 && typedModel->index(1,1).data(Qt::EditRole).toDouble()==3.75);
+    assert(mixed->executeProcedure("UndoTableText",selectArguments).status==linaccess::VbaExecutionStatus::Completed && typedModel->isDirty() && typedModel->index(0,1).data(Qt::EditRole).toDouble()==2.5 && typedModel->index(1,1).data(Qt::EditRole).toDouble()==3.75);
     typedModel->revertAll();
     QApplication::setActiveWindow(&window); typedView->setCurrentIndex(typedModel->index(0,1)); typedView->setFocus(); QApplication::processEvents();
     QApplication::clipboard()->setText("4.5\n6.75"); QTest::keyClick(typedView,Qt::Key_Insert,Qt::ShiftModifier);
@@ -2251,7 +2252,7 @@ End Sub
     table->setCurrentIndex(model->index(0,1)); QApplication::clipboard()->setText("first-range\r\nsecond-range");
     refreshEdit(); assert(editAction("paste")->isEnabled()); editAction("paste")->trigger();
     assert(model->isDirty() && model->index(0,1).data().toString()=="first-range" && model->index(1,1).data().toString()=="second-range");
-    refreshEdit(); assert(!editAction("paste")->isEnabled());
+    refreshEdit(); assert(editAction("paste")->isEnabled());
     query.prepare("SELECT value FROM shortcut_records WHERE id=?"); query.addBindValue(id); assert(query.exec() && query.next() && query.value(0).toString()=="saved-through-shortcut"); query.finish();
     QTest::keyClick(table,Qt::Key_S,Qt::ControlModifier); QApplication::processEvents(); assert(!model->isDirty());
     assert(query.exec("SELECT COUNT(*) FROM shortcut_records WHERE value IN ('first-range','second-range')") && query.next() && query.value(0).toInt()==2); query.finish();

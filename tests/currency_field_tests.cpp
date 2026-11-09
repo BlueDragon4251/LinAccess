@@ -254,7 +254,10 @@ End Function
     assert(grid.clipboardText(grid.index(0,1))==firstMoney && grid.clipboardText(grid.index(1,1))==secondMoney);
     QApplication::clipboard()->setText("1.25\r\n2.5"); QTest::keyClick(&view,Qt::Key_V,Qt::ControlModifier);
     assert(grid.isDirty() && grid.clipboardText(grid.index(0,1))=="1.25" && grid.clipboardText(grid.index(1,1))=="2.5");
-    QApplication::clipboard()->setText("9"); assert(!view.pasteSelection() && grid.clipboardText(grid.index(0,1))=="1.25");
+    QApplication::clipboard()->setText("9"); assert(view.pasteSelection() && grid.clipboardText(grid.index(0,1))=="9" && grid.clipboardText(grid.index(1,1))=="2.5");
+    QApplication::clipboard()->setText("bad");assert(!view.pasteSelection() && grid.isDirty() && grid.clipboardText(grid.index(0,1))=="9" && grid.canUndoBlock());
+    assert(grid.undoBlock() && grid.isDirty() && grid.clipboardText(grid.index(0,1))=="1.25" && grid.clipboardText(grid.index(1,1))=="2.5" && grid.canRedoBlock());
+    assert(grid.redoBlock() && grid.clipboardText(grid.index(0,1))=="9" && grid.undoBlock());
     assert(db.transaction() && grid.submitAll() && db.commit());
     assert(sql.exec("SELECT SUM(amount) FROM grid") && sql.next() && sql.value(0).toDouble()==3.75); sql.finish();
 
@@ -265,6 +268,7 @@ End Function
         linaccess::AccessTableView sheet;sheet.setModel(&cells);sheet.setCurrentIndex(cells.index(0,1));
         QApplication::clipboard()->setText("11\r\n12\r\nbad");assert(!sheet.pasteSelection() && cells.rowCount()==1 && !cells.isDirty());
         QApplication::clipboard()->setText("11\r\n12\r\n13");assert(sheet.pasteSelection() && cells.rowCount()==3 && cells.isDirty());
+        assert(!sheet.canPasteSelection() && !sheet.pasteSelection() && cells.rowCount()==3);
         assert(cells.clipboardText(cells.index(2,1))=="13");
         assert(sql.exec("SELECT count(*),sum(value) FROM paste_append") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toInt()==10);sql.finish();
         assert(cells.undoPendingRecord(2) && cells.rowCount()==2);
@@ -304,7 +308,7 @@ End Function
         QTimer::singleShot(0,&sheet,[&] {
             auto* menu=qobject_cast<QMenu*>(QApplication::activePopupWidget()); assert(menu && menu->objectName()=="native-datasheet-context-menu");
             auto* copy=menu->findChild<QAction*>("datasheet-copy"); auto* paste=menu->findChild<QAction*>("datasheet-paste");
-            assert(copy && copy->isEnabled() && paste && !paste->isEnabled()); menu->setActiveAction(copy); QTest::keyClick(menu,Qt::Key_Return);
+            assert(copy && copy->isEnabled() && paste && paste->isEnabled()); menu->setActiveAction(copy); QTest::keyClick(menu,Qt::Key_Return);
         });
         const auto contextPoint=sheet.visualRect(cells.index(0,1)).center();
         QContextMenuEvent context(QContextMenuEvent::Mouse,contextPoint,sheet.viewport()->mapToGlobal(contextPoint)); QApplication::sendEvent(sheet.viewport(),&context);
@@ -359,6 +363,11 @@ End Function
         assert(cells.isDirty() && cells.QSqlTableModel::data(cells.index(0,3),Qt::EditRole).isNull() && QApplication::clipboard()->text()=="0x0001ff80" && cells.canUndoBlock());
         assert(sql.exec("SELECT hex(payload) FROM typed_grid WHERE id=1") && sql.next() && sql.value(0).toString()=="0001FF80");sql.finish();
         assert(cells.undoBlock() && cells.redoBlock() && cells.undoBlock() && !cells.isDirty());
+        assert(cells.setData(cells.index(0,2),"prior-draft"));sheet.setCurrentIndex(cells.index(3,3));
+        assert(sheet.pasteSelection() && cells.isDirty() && cells.QSqlTableModel::data(cells.index(3,3),Qt::EditRole).toByteArray()==QByteArray::fromHex("0001ff80"));
+        assert(cells.undoBlock() && cells.isDirty() && cells.clipboardText(cells.index(0,2))=="prior-draft" && cells.QSqlTableModel::data(cells.index(3,3),Qt::EditRole).toByteArray().isEmpty() && !cells.QSqlTableModel::data(cells.index(3,3),Qt::EditRole).isNull());
+        assert(cells.redoBlock() && cells.clipboardText(cells.index(0,2))=="prior-draft");cells.revertAll();assert(cells.select());
+
         sheet.setCurrentIndex(cells.index(1,2));sheet.selectionModel()->select(cells.index(1,2),QItemSelectionModel::ClearAndSelect);assert(sheet.cutSelection() && cells.submitTransactionally());
         assert(sql.exec("SELECT note IS NULL FROM typed_grid WHERE id=2") && sql.next() && sql.value(0).toBool());sql.finish();
         sheet.setCurrentIndex(cells.index(0,0));sheet.selectionModel()->select(cells.index(0,0),QItemSelectionModel::ClearAndSelect);QApplication::clipboard()->setText("protected-cut");assert(!sheet.canCutSelection() && !sheet.cutSelection() && !cells.isDirty() && QApplication::clipboard()->text()=="protected-cut");

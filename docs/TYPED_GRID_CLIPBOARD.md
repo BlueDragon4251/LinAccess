@@ -9,7 +9,9 @@ input parser. Existing typed text/Currency/Date clipboard presentations remain.
 
 Paste prefers the native payload when present. It checks version, shape, cell
 kinds, canonical integer/base64 encodings, size limits and target field types
-before changing a clean manual-submit cache. A malformed native payload fails
+before changing a manual-submit cache. Existing pending updates to physical
+records can be preserved, including values outside the target rectangle. Pending
+record insertions/deletions remain an explicit unsupported merge boundary. A malformed native payload fails
 instead of falling back to its text representation. Native binary input is
 permitted only into binary columns; ordinary text cannot write binary fields.
 Generated columns, readonly models, hidden target cells and unknown metadata
@@ -20,8 +22,8 @@ The same pending-range implementation supports existing rows, extra rows,
 empty tables and explicit append. SQL Save keeps the existing transaction and
 counter generation path. This adds no Binary Variant to VBA and no original MDB
 binary extractor. Native form-record MIME remains a separate protocol. Full
-Windows/Access clipboard interoperability, pasting over unrelated drafts,
-regional parsing and complete range undo remain open under F340/F168/F016.
+Windows/Access clipboard interoperability, general pending-record merges, regional parsing and complete range undo remain
+open under F340/F168/F016.
 
 Tables with no SQL defaults do not reconstruct unrelated DAO column definitions
 just to evaluate an empty default set. This allows supplied native grid values
@@ -55,3 +57,12 @@ Generated fields/readonly sources are protected; an unrelated dirty cache is
 refused. SQL remains unchanged until normal transactional Save. The same bounded
 block Undo/Redo restores or reapplies the pending clear. This clears cells; it
 is not record deletion or a claimed full Access Cut/clipboard event protocol.
+
+For range paste over pending physical-record updates, history captures the exact
+preexisting raw values and changed-field positions. Undo restores those pending
+updates rather than discarding them; Redo reapplies the checked range on that
+state. A failed range mutation uses the same cache restoration path. No SQL
+transaction is used to simulate cache changes, and no automatic Save is added.
+The capture is bounded to one million loaded cells; newly inserted or deleted
+pending records refuse3251 until saved/discarded. Cut retains its clean-cache
+requirement. General Access multi-operation undo remains open.

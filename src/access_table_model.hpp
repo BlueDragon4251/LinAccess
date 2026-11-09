@@ -43,6 +43,7 @@ public:
     bool isPasteColumn(int column,bool binary=false) const;
     bool setTypedDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values);
     bool setTypedRecordBlock(int firstRow,const QStringList& fields,const QVector<QVector<QVariant>>& values);
+    bool canPasteOverUpdates() const;
     bool canUndoBlock() const;
     bool canRedoBlock() const;
     bool undoBlock();
@@ -68,9 +69,12 @@ private:
     QSet<int> dirtyRows_,deletedRows_;
     QMap<QString,QVariant> insertedKey_;
     QMap<int,QMap<QString,QVariant>> submittedKeys_;
+    struct CachedUpdate {int row{};QVector<int> columns;QVector<QVariant> values;};
+    QVector<CachedUpdate> captureUpdates() const;
+    bool restoreUpdates(const QVector<CachedUpdate>& updates,int originalRows);
     struct BlockHistory {
         int firstRow{},firstColumn{},originalRows{};bool applied{},skipGenerated{};
-        QVector<QVector<QVariant>> values;QMap<QString,QVariant> dateDefaults;
+        QVector<QVector<QVariant>> values;QMap<QString,QVariant> dateDefaults;QVector<CachedUpdate> before;
     };
     std::optional<BlockHistory> blockHistory_;
     bool blockMutation_{};

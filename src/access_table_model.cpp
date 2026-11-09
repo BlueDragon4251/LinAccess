@@ -408,7 +408,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
     const QScopedValueRollback<bool> changing(changing_,true);
     const QScopedValueRollback<bool> blockMutation(blockMutation_,true);
     if(editStrategy()!=QSqlTableModel::OnManualSubmit) return reject(3251);
-    if(isDirty()) return reject(2501);
+    if(!canPasteOverUpdates()) return rejectEdit(3251,"Bereichseinfügen über neue oder gelöschte Datensatzentwürfe ist noch nicht verfügbar.");
     if(skipGenerated && (!typed || firstColumn!=0 || firstRow!=rowCount() || canFetchMore())) return reject(3251);
     if(metadataError_) return reject(metadataError_);
     if(firstRow<0 || firstRow>rowCount() || firstColumn<0 || firstColumn>=columnCount() || values.isEmpty() || values.front().isEmpty()) return reject(5);
@@ -425,7 +425,9 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
     struct Cell { int row,column; QVariant value; };
     QVector<Cell> checked;QMap<QString,QVariant> dateDefaults;BlockHistory history;
     history.firstRow=firstRow;history.firstColumn=firstColumn;history.originalRows=originalRows;history.applied=true;history.skipGenerated=skipGenerated;
+    const auto previousHistory=blockHistory_;
     try {
+        history.before=captureUpdates();
         if(appended) dateDefaults=restoredDefaults ? *restoredDefaults : nativeTableDateDefaults(database(),tableName());
         history.dateDefaults=dateDefaults;
         checked.reserve(values.size()*columns);
@@ -471,7 +473,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
           catch(const std::exception&) { failure=3251; }
         // The cache was clean on entry; revert inserted rows and changed cells together.
     }
-    if(failure) {QSqlTableModel::revertAll();dirtyRows_.clear();deletedRows_.clear();return reject(failure);}
+    if(failure) {const bool restored=restoreUpdates(history.before,originalRows);blockHistory_=previousHistory;return reject(restored ? failure : 3251);}
     for(int row=originalRows;row<endRow;++row) dirtyRows_.insert(row);
     blockHistory_=std::move(history);
     const auto last=index(firstRow+values.size()-1,firstColumn+columns-1);
@@ -481,19 +483,56 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
     if(failure) return reject(failure);
     return true;
 }
+bool AccessTableModel::canPasteOverUpdates() const {
+    if(!isDirty()) return true;
+    if(!deletedRows_.isEmpty() || static_cast<qint64>(rowCount())*columnCount()>1000000) return false;
+    for(int row=0;row<rowCount();++row) {
+        bool dirty=false;for(int column=0;column<columnCount();++column) dirty|=isDirty(index(row,column));
+        if(dirty && !indexInQuery(index(row,0)).isValid()) return false;
+    }
+    return true;
+}
+QVector<AccessTableModel::CachedUpdate> AccessTableModel::captureUpdates() const {
+    QVector<CachedUpdate> updates;if(!isDirty()) return updates;
+    if(!canPasteOverUpdates()) throw VbaRuntimeError(3251,"Pending record inserts/deletions cannot be merged with a range");
+    for(int row=0;row<rowCount();++row) {
+        CachedUpdate update;update.row=row;
+        for(int column=0;column<columnCount();++column) if(isDirty(index(row,column))) {
+            if(!isPasteColumn(column,true)) throw VbaRuntimeError(3251,"A protected pending field cannot be restored");
+            update.columns.push_back(column);update.values.push_back(QSqlTableModel::data(index(row,column),Qt::EditRole));
+        }
+        if(!update.columns.isEmpty()) updates.push_back(std::move(update));
+    }
+    return updates;
+}
+bool AccessTableModel::restoreUpdates(const QVector<CachedUpdate>& updates,int originalRows) {
+    QSqlTableModel::revertAll();dirtyRows_.clear();deletedRows_.clear();
+    while(rowCount()<originalRows && canFetchMore()) {const auto before=rowCount();fetchMore();if(rowCount()==before) break;}
+    if(rowCount()!=originalRows) return false;
+    {
+        const QSignalBlocker blocked(this);const QScopedValueRollback<bool> binary(binaryWriting_,true);
+        for(const auto& update:updates) {
+            if(update.row<0 || update.row>=rowCount()) return false;
+            for(int cell=0;cell<update.columns.size();++cell) if(!QSqlTableModel::setData(index(update.row,update.columns[cell]),update.values[cell],Qt::EditRole)) return false;
+            dirtyRows_.insert(update.row);
+        }
+    }
+    if(!updates.isEmpty()) emit dataChanged(index(updates.front().row,0),index(updates.back().row,columnCount()-1),{Qt::DisplayRole,Qt::EditRole,Qt::CheckStateRole});
+    return true;
+}
 bool AccessTableModel::canUndoBlock() const {
     return !readOnly_ && !saving_ && !changing_ && blockHistory_ && blockHistory_->applied && isDirty()
         && rowCount()==qMax<qint64>(blockHistory_->originalRows,static_cast<qint64>(blockHistory_->firstRow)+blockHistory_->values.size());
 }
 bool AccessTableModel::canRedoBlock() const {
-    return !readOnly_ && !saving_ && !changing_ && blockHistory_ && !blockHistory_->applied && !isDirty() && rowCount()==blockHistory_->originalRows;
+    return !readOnly_ && !saving_ && !changing_ && blockHistory_ && !blockHistory_->applied && isDirty()==!blockHistory_->before.isEmpty() && rowCount()==blockHistory_->originalRows;
 }
 bool AccessTableModel::undoBlock() {
     if(!canUndoBlock()) return rejectEdit(2046,"Kein unveränderter eingefügter Bereich zum Rückgängigmachen vorhanden.");
     try {
         auto history=*blockHistory_;
         const QScopedValueRollback<bool> changing(changing_,true),blockMutation(blockMutation_,true);
-        QSqlTableModel::revertAll();dirtyRows_.clear();deletedRows_.clear();
+        if(!restoreUpdates(history.before,history.originalRows)) {blockHistory_.reset();return reject(3251);}
         history.applied=false;blockHistory_=std::move(history);setLastError({});return true;
     } catch(const std::bad_alloc&) {return reject(7);}
 }

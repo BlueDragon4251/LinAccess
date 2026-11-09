@@ -921,3 +921,16 @@ unveränderter Zwischenablage geprüft. Keine neue CTest-ID oder Windows-Beobach
 Dies ist Zellbereichsleeren mit Undo, keine Datensatzlöschung oder volle Access-
 Cut-/Ereignisparität. TYPED_GRID_CLIPBOARD.md; F340/F168 und456/384/72 unverändert.
 Ohne Zwischenabschluss weiterimplementieren.
+
+Bereichseinfügen kann jetzt vorhandene ungespeicherte Zelländerungen physischer
+Tabellenzeilen erhalten. Vorprüfung erfasst rohe Werte und geänderte Feldpositionen;
+Undo stellt diese vorherigen Entwürfe wieder her, Redo wendet nur den neuen Bereich
+an. Fehlgeschlagene Bereichsänderungen nutzen dieselbe Cache-Rücknahme, ohne SQL-
+Schreibvorgang oder automatisches Speichern. Vorhandene GUI/Feld-Prüfungen gemeinsam
+2/2 (6,28s), App gebaut: aufeinanderfolgende echte VBA-/UI-Pastes, ungültige Eingabe
+bei erhaltenem vorherigem Entwurf/Undo, Currencywerte, separater Textentwurf und
+Binäränderung mit leerem BLOB vor/nach Undo/Redo geprüft. Veraltete globale Dirty-
+Negativannahmen der bestehenden Prüfungen angepasst. Neue/gelöschte Datensatzentwürfe
+und mehr als1M geladene Zellen bleiben3251; Cut benötigt weiter einen sauberen Cache.
+Keine neue CTest-ID/Windows-Beobachtung. TYPED_GRID_CLIPBOARD.md; F340/F168 und
+456/384/72 unverändert. Ohne Zwischenabschluss weiterimplementieren.

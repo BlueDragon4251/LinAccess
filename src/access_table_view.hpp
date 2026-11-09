@@ -485,13 +485,13 @@ public:
     bool canPasteSelection() const {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         const bool binary=QApplication::clipboard()->mimeData() && QApplication::clipboard()->mimeData()->hasFormat(nativeGridMime);
-        return typed && typed->editStrategy()==QSqlTableModel::OnManualSubmit && !typed->isDirty()
+        return typed && typed->editStrategy()==QSqlTableModel::OnManualSubmit && typed->canPasteOverUpdates()
             && !hasPendingEditor() && ((currentIndex().isValid() && (currentIndex().flags().testFlag(Qt::ItemIsEditable) || (binary && typed->isPasteColumn(currentIndex().column(),true))))
                 || (typed->rowCount()==0 && firstPasteColumn(typed,binary)>=0));
     }
     bool canAppendRecords() const {
         const auto* typed=qobject_cast<AccessTableModel*>(model());const auto* mime=QApplication::clipboard()->mimeData();
-        if(!typed || typed->isReadOnly() || typed->editStrategy()!=QSqlTableModel::OnManualSubmit || typed->isDirty() || hasPendingEditor()) return false;
+        if(!typed || typed->isReadOnly() || typed->editStrategy()!=QSqlTableModel::OnManualSubmit || !typed->canPasteOverUpdates() || hasPendingEditor()) return false;
         if(canPasteSelection()) return true;
         return mime && mime->hasFormat(nativeGridMime) && mime->data(nativeGridMime).size()<=nativeGridMimeLimit && QJsonDocument::fromJson(mime->data(nativeGridMime)).object().value("fields").toArray().size()==typed->columnCount();
     }
@@ -502,7 +502,7 @@ public:
     bool pasteSelection(bool append=false) {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !finishEditing()) return false;
-        if(typed->isDirty()) return refuse(2501,"Vor dem Einfügen eines Bereichs Änderungen speichern oder verwerfen.");
+        if(!typed->canPasteOverUpdates()) return refuse(3251,"Vor dem Einfügen neue oder gelöschte Datensatzentwürfe speichern oder verwerfen.");
         if(typed->editStrategy()!=QSqlTableModel::OnManualSubmit) return refuse(3251,"Bereichseinfügen ist in dieser Ansicht nicht verfügbar.");
         const auto* mime=QApplication::clipboard()->mimeData();
         const bool typedMime=mime && mime->hasFormat(nativeGridMime);
