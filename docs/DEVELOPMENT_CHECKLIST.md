@@ -3255,3 +3255,20 @@ Elterneigenschaften korrigiert, neue technische Unterordner vor dem vorhandenen
 Symlink-Schutzfall entfernt; derselbe abschließende Kern1/1 (2,17s) bestanden.
 App frisch gebaut. Kein neuer CTest, kein neuer vollständiger Desktop-/Windows-/
 Qt-frei-/Installernachweis. F091 und Katalog456/386/70 bleiben offen/unverändert.
+
+
+## 2026-11-09: direkter Formular-Recordset-Feldzugriff
+
+Me.Recordset.Fields unterstützt tatsächliche Felder per Name/Ordinal, Count,
+Item, Standard-/Bang-Zugriff und typisiertes For Each. Gehaltene Felder folgen
+der aktuellen gespeicherten Zeile; Requery ersetzt ihre Identität (3420),
+Formularschluss sperrt weitere Zugriffe (2450). Tatsächliche BLOB-Werte, FieldSize
+und GetChunk; keine impliziten Speicherungen oder Feldschreibrechte. Nicht
+beweisbare eingefrorene Metadaten bleiben Fehler; DataUpdatable=False beschreibt
+den tatsächlich schreibgeschützten Adapter. Details FORM_RECORDSET_FIELDS_RUNTIME.md.
+
+Gebündelt GUI1/1 (14,05s) bestanden. Layoutlauf fand fehlende DataUpdatable-
+Fähigkeitsauskunft; korrigiert und nur dieses fehlgeschlagene Ziel erneut:
+Layout1/1 (12,76s) bestanden. App gebaut, keine neue CTest-ID, kein neuer
+Windows-/Gesamtsuite-/Qt-frei-/Installerlauf. F054/F160 und456/386/70 bleiben
+offen/unverändert. Letzter Kern d2488e0:2,17s; letzte DEB-Prüfung9eae43f.

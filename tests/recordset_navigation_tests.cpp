@@ -73,10 +73,34 @@ End Sub
 Sub Form_BeforeUpdate(Cancel As Integer)
 If Me.label="blocked" Then Cancel=1
 End Sub
+Function RecordLabel() As String
+RecordLabel=Me.Recordset.Fields(Index:="label").Value
+End Function
+Function BangLabel() As String
+BangLabel=Me.Recordset!label
+End Function
+Function FieldTotal() As Long
+Dim entry As DAO.Field
+For Each entry In Me.Recordset.Fields
+FieldTotal=FieldTotal+1
+Next
+End Function
 )VBA";
     AccessFormPreview form("recordset navigation",layout,code,db); form.show(); form.activateWindow(); QApplication::processEvents();
     auto model=makePreviewFormObject(form);
     auto recordset=model->member("Recordset",{}).object;
+    auto liveFields=recordset->member("Fields",{}).object;
+    auto liveLabel=liveFields->member("Item",{VbaValue::string("label")}).object;
+    assert(liveFields->isNativeType("dao.fields") && liveLabel->isNativeType("dao.field"));
+    assert(liveFields->member("Count",{}).asNumber()==2 && liveLabel->scalarValue().asText()=="first");
+    assert(liveLabel->member("Name",{}).asText()=="label" && liveLabel->member("OrdinalPosition",{}).asNumber()==1);
+    assert(!liveLabel->member("DataUpdatable",{}).truthy());
+    std::vector<VbaValue> callArguments;
+    for(const auto* procedure:{"RecordLabel","BangLabel"}) {
+        const auto result=form.executeProcedure(procedure,callArguments);
+        assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue && result.typedReturnValue->asText()=="first");
+    }
+    const auto fieldTotal=form.executeProcedure("FieldTotal",callArguments);assert(fieldTotal.status==VbaExecutionStatus::Completed && fieldTotal.typedReturnValue->asNumber()==2);
     auto clone=model->objectMember("RecordsetClone",{}).object;
     auto other=model->member("RecordsetClone",{}).object;
     assert(other!=clone && other->isNativeType("dao.recordset"));
@@ -99,11 +123,13 @@ End Sub
         std::cerr<<"Synthetic navigation diagnostic: event="<<bool(result)<<", status="<<(result ? static_cast<int>(result->status) : -1)
             <<", code="<<(result ? result->errorNumber : 0)<<", line="<<(result ? result->line : 0)<<", row="<<combo->currentIndex()<<", id="<<model->item("id").asNumber()<<'\n';
     assert(result && result->status==VbaExecutionStatus::Completed && model->item("id").asNumber()==2);
-    assert(clone->item("id").asNumber()==3);
+    assert(clone->item("id").asNumber()==3 && liveLabel->scalarValue().asText()=="second");
     model->assign("Bookmark",third); assert(model->item("label").asText()=="third");
     auto* edit=form.findChild<QLineEdit*>("access-control-label"); assert(edit); edit->setFocus(); edit->selectAll(); QTest::keyClicks(edit,"blocked");
     int number=0; try { model->assign("Bookmark",first); } catch (const VbaRuntimeError& failure) { number=failure.number; }
     assert(number==2501 && form.hasUnsavedChanges() && model->item("id").asNumber()==3);
+    assert(liveLabel->scalarValue().asText()=="third"); // Stored snapshot excludes the blocked form draft.
+    number=0;try {liveLabel->assign("Value",VbaValue::string("forbidden"));} catch(const VbaRuntimeError& error) {number=error.number;}assert(number==3251);
     model->member("Undo",{}); assert(!form.hasUnsavedChanges());
     edit->setFocus(); edit->selectAll(); QTest::keyClicks(edit,"updated");
     model->assign("Bookmark",first);
@@ -112,11 +138,15 @@ End Sub
     model->assign("Bookmark",third); assert(model->item("id").asNumber()==3);
     assert(query.exec("SELECT label FROM records WHERE id=3") && query.next() && query.value(0).toString()=="updated"); query.finish();
     model->member("Requery",{});
+    number=0;try {liveLabel->scalarValue();} catch(const VbaRuntimeError& error) {number=error.number;}assert(number==3420);
+    number=0;try {liveFields->member("Count",{});} catch(const VbaRuntimeError& error) {number=error.number;}assert(number==3420);
+    assert(recordset->member("Fields",{VbaValue::string("label")}).object->scalarValue().asText()=="updated");
     number=0; try { model->assign("Bookmark",first); } catch (const VbaRuntimeError& failure) { number=failure.number; }
     assert(number==3159);
     assert(form.close() && clone->item("id").asNumber()==3);
     number=0; try { recordset->member("Clone",{}); } catch (const VbaRuntimeError& failure) { number=failure.number; }
     assert(number==2450);
+    number=0;try {liveLabel->member("Name",{});} catch(const VbaRuntimeError& error) {number=error.number;}assert(number==2450);
 
     const auto queryLayout=QByteArray("Begin Form\nRecordSource =\"SELECT id,label FROM records WHERE id>=2 ORDER BY id DESC\"\nBegin Section\nEnd\nEnd\n");
     AccessFormPreview queryForm("query clone",queryLayout,{},db);
@@ -128,6 +158,7 @@ End Sub
     assert(queryModel->item("id").asNumber()==3);
     queryModel->assign("Bookmark",queryClone->member("Bookmark",{}));
     assert(queryModel->item("id").asNumber()==2);
+    assert(queryModel->member("Recordset",{}).object->defaultMember({VbaValue::string("id")},false).asNumber()==2);
     const auto oldQueryBookmark=queryClone->member("Bookmark",{});
     assert(!queryClone->member("Updatable",{}).truthy());
     bool writeDenied=false;try {queryClone->member("Edit",{});} catch(const std::runtime_error& error) {writeDenied=std::string(error.what()).find("read-only")!=std::string::npos;}
@@ -141,6 +172,15 @@ End Sub
     assert(queryForm.close() && queryClone->item("id").asNumber()==2);
     number=0;try {queryModel->member("RecordsetClone",{});} catch(const VbaRuntimeError& error) {number=error.number;}
     assert(number==2450);
+
+    assert(query.exec("CREATE TABLE binary_record(id INTEGER PRIMARY KEY,payload BLOB)"));
+    query.prepare("INSERT INTO binary_record VALUES(1,?)");query.addBindValue(QByteArray::fromHex("0001ff"));assert(query.exec());query.finish();
+    AccessFormPreview binaryForm("binary fields","Begin Form\nRecordSource =\"binary_record\"\nBegin Section\nEnd\nEnd\n",{},db);
+    auto binaryModel=makePreviewFormObject(binaryForm);auto binaryField=binaryModel->member("Recordset",{}).object->member("Fields",{VbaValue::string("payload")}).object;
+    assert(binaryField->scalarValue().kind==VbaValue::Kind::ByteArray && binaryField->scalarValue().bytes==std::vector<unsigned char>({0,1,255}));
+    assert(binaryField->member("FieldSize",{}).asNumber()==3);
+    assert(binaryField->member("GetChunk",{VbaValue::numeric(1),VbaValue::numeric(2)}).bytes==std::vector<unsigned char>({1,255}));
+    assert(binaryForm.close());
 }
 
 void testOriginalRecordsetSearch(const QDir& directory,const QJsonArray& objects) {

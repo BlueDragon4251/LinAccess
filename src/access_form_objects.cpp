@@ -814,13 +814,94 @@ private:
     }
 };
 class PreviewRecordsetObject final : public linaccess::VbaObject, private PreviewObjectBase {
+    static void requireSnapshot(AccessFormPreview& preview,const std::shared_ptr<linaccess::VbaObject>& snapshot) {
+        if(preview.recordsetSnapshot()!=snapshot) throw linaccess::VbaRuntimeError(3420,"Form recordset field source was replaced");
+    }
+    static void positionSnapshot(AccessFormPreview& preview,const std::shared_ptr<linaccess::VbaObject>& snapshot) {
+        requireSnapshot(preview,snapshot);
+        if(preview.currentRecordIndex_<1) throw linaccess::VbaRuntimeError(3021,"Form recordset has no current stored record");
+        snapshot->assign("Bookmark",linaccess::daoBookmarkAt(snapshot,preview.currentRecordIndex_-1));
+    }
+    class LiveField final : public linaccess::VbaObject,private PreviewObjectBase {
+        std::shared_ptr<linaccess::VbaObject> snapshot_,field_;
+    public:
+        LiveField(AccessFormPreview& preview,std::shared_ptr<linaccess::VbaObject> snapshot,std::shared_ptr<linaccess::VbaObject> field)
+            :PreviewObjectBase(preview),snapshot_(std::move(snapshot)),field_(std::move(field)) {}
+        std::string_view className() const override {return "Field";}
+        bool isNativeType(std::string_view name) const override {return name=="dao.field";}
+        bool hasScalarDefault() const override {return true;}
+        linaccess::VbaValue scalarValue() override {return member("Value",{});}
+        std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+            return field_->argumentSignature(name);
+        }
+        linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& arguments) override {
+            auto& preview=checked();requireSnapshot(preview,snapshot_);
+            const auto key=text(name).toCaseFolded();
+            auto scalars=arguments;
+            if(key=="getchunk") {
+                if(scalars.size()!=2) throw linaccess::VbaRuntimeError(450,"GetChunk requires Offset and Bytes");
+                for(auto& argument:scalars) argument=linaccess::scalarVbaValue(argument);
+            } else if(!arguments.empty()) throw linaccess::VbaRuntimeError(450,"Field property takes no arguments");
+            requireSnapshot(checked(),snapshot_);
+            if(key=="dataupdatable") return linaccess::VbaValue::logical(false); // This facade deliberately has no field-write path.
+            if(key=="value" || key=="fieldsize" || key=="getchunk") positionSnapshot(checked(),snapshot_);
+            else if(key!="name" && key!="type" && key!="size" && key!="ordinalposition" && key!="attributes" && key!="dataupdatable")
+                throw linaccess::VbaRuntimeError(3251,"Direct form recordset field operation unsupported");
+            return field_->member(name,scalars);
+        }
+        void assign(std::string_view,const linaccess::VbaValue&) override {
+            requireSnapshot(checked(),snapshot_);throw linaccess::VbaRuntimeError(3251,"Direct form recordset fields are read-only");
+        }
+        void assignDefaultMember(const std::vector<linaccess::VbaValue>& args,const linaccess::VbaValue& value) override {
+            if(!args.empty()) throw linaccess::VbaRuntimeError(450,"Field default assignment takes no indices");assign("Value",value);
+        }
+    };
+    class LiveFields final : public linaccess::VbaObject,private PreviewObjectBase {
+        std::shared_ptr<linaccess::VbaObject> snapshot_;
+    public:
+        LiveFields(AccessFormPreview& preview,std::shared_ptr<linaccess::VbaObject> snapshot):PreviewObjectBase(preview),snapshot_(std::move(snapshot)) {}
+        std::string_view className() const override {return "Fields";}
+        bool isNativeType(std::string_view name) const override {return name=="dao.fields";}
+        std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+            if(text(name).compare("Item",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Index"},1};return {};
+        }
+        linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+            auto& preview=checked();requireSnapshot(preview,snapshot_);const auto key=text(name).toCaseFolded();
+            if(key=="count") return snapshot_->member("Fields",{}).object->member(name,args);
+            if(key!="item") throw linaccess::VbaRuntimeError(3251,"Direct form recordset Fields operation unsupported");
+            if(args.size()!=1) throw linaccess::VbaRuntimeError(450,"Fields.Item requires one index");
+            auto field=snapshot_->member("Fields",args).object;
+            requireSnapshot(checked(),snapshot_);
+            return linaccess::VbaValue::reference(std::make_shared<LiveField>(checked(),snapshot_,std::move(field)));
+        }
+        linaccess::VbaValue item(std::string_view name) override {return member("Item",{linaccess::VbaValue::string(std::string(name))});}
+        std::vector<linaccess::VbaValue> enumerate() override {
+            auto& preview=checked();requireSnapshot(preview,snapshot_);std::vector<linaccess::VbaValue> fields;
+            for(auto& field:snapshot_->member("Fields",{}).object->enumerate())
+                fields.push_back(linaccess::VbaValue::reference(std::make_shared<LiveField>(preview,snapshot_,field.object)));
+            return fields;
+        }
+    };
 public:
     std::string_view className() const override { return "Recordset"; }
     explicit PreviewRecordsetObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     bool isNativeType(std::string_view type) const override { return type=="dao.recordset"; }
+    std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(text(name).compare("Fields",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Index"},0};return {};
+    }
+    linaccess::VbaValue defaultMember(const std::vector<linaccess::VbaValue>& args,bool reference) override {
+        if(args.size()!=1) throw linaccess::VbaRuntimeError(450,"Recordset default field requires one index");
+        auto field=member("Fields",args);return reference ? field : field.object->scalarValue();
+    }
+    linaccess::VbaValue item(std::string_view name) override {return member("Fields",{linaccess::VbaValue::string(std::string(name))}).object->scalarValue();}
+    linaccess::VbaValue objectItem(std::string_view name) override {return member("Fields",{linaccess::VbaValue::string(std::string(name))});}
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& arguments) override {
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
         auto snapshot=preview.recordsetSnapshot();
+        if(key=="fields") {
+            auto collection=std::make_shared<LiveFields>(preview,snapshot);
+            return arguments.empty() || (arguments.size()==1 && arguments[0].kind==linaccess::VbaValue::Kind::Missing) ? linaccess::VbaValue::reference(collection) : collection->member("Item",arguments);
+        }
         if (key=="clone" || key=="recordcount" || key=="bookmarkable") return snapshot->member(name,arguments);
         if (key=="bookmark") {
             if (!arguments.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected bookmark arguments");
