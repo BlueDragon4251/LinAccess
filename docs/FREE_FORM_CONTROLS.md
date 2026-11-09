@@ -129,3 +129,26 @@ those specific paths were corrected and only the failed GUI target repeated.
 The live palette/typeface checks are not a Windows rendering or physical desktop
 screenshot proof. No new test target, catalog ID or full-suite/original/core run
 is claimed. F080/F081/F148 remain open.
+
+## Alignment, Tag and long property editing
+
+The state panel stores Tag with the documented 2048-character authoring limit.
+TextBox/Label support native General/Left/Center/Right alignment in the style
+panel; unsupported control contexts and distributed alignment remain refused.
+Tag is independent metadata and does not change Value or save a record.
+Reference: [TextBox.Tag](https://learn.microsoft.com/en-us/office/vba/api/access.textbox.tag).
+This is a documentation reference, not a fresh Windows Access execution oracle.
+
+The actual table delegate permits the generator's bounded 65536-unit property
+texts instead of silently inheriting QLineEdit's 32767-unit edit limit. Existing
+per-property limits (names, defaults, formats, Tag etc.) still apply at acceptance.
+The existing fixture edits a 33000-character caption through the real delegate,
+appends a character, saves/reloads the form and checks all 33001 characters. It
+also checks actual center/right widget alignment and runtime Tag reads. The
+offscreen fixture explicitly activates its modal editor before checking keyboard
+focus; selecting a model cell alone is not an actual focus transition.
+
+Final GUI 1/1 (14.11 s) and prior layout 1/1 (12.81 s) passed. Only the failed GUI
+path was repeated while correcting that test focus setup. No new CTest, Windows/
+physical desktop/original/full-suite/core/installer run is claimed. Full F050/
+F080/F081/F148/F155 remain open; catalog totals do not change.

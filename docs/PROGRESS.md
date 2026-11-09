@@ -7748,3 +7748,17 @@ Designer-Paketstand d8ecf41: neue finale DEB-/Build-ID-/MDBTools1.0.1-/
 SQLite3.54.1-Prüfung bestanden. Alle vier Fixture-/drei Uploadhashes unverändert.
 Kein zusätzlicher Testlauf: letzte GUI14,70s, Layout13,09s; Quellen/SQL/Masken/
 Listen/Fonts/Paletten jeweils nur im dokumentierten nativen Umfang nachgewiesen.
+
+
+## 2026-11-09: Ausrichtung, Tag und lange Eigenschaftstexte
+
+Native Controls speichern 2048-Zeichen-Tag sowie TextBox-/Label-Ausrichtung
+Allgemein/Links/Zentriert/Rechts. Quellen-/Typ-/Bereichsgrenzen bleiben explizit.
+Echter Tabellen-Delegate übernimmt den bestehenden65536-Eigenschaftsrahmen statt
+32.767 stiller Eingabekürzung; kurze Teilpropertygrenzen gelten weiter.
+GUI-Editor bearbeitet33.000 Zeichen+Anhang, Save/Reload prüft33.001, native
+Ausrichtung/Tag ebenfalls. Offscreen-Dialog für echte Eingabe explizit aktiviert;
+abschließend nur GUI1/1 (14,11s) wiederholt/bestanden; Layout1/1 (12,81s) bereits
+bestanden. FREE_FORM_CONTROLS.md samt tatsächlicher Microsoft-Tag-Dokumentation.
+Kein neuer CTest/Windows/Original/Kern/Gesamtsuite/DEB-Nachweis; letzteDEB d8ecf41.
+F050/F080/F081/F148/F155 und456/386/70 unverändert. SQL-Kompatibilität folgt.

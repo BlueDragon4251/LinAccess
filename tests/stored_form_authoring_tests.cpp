@@ -435,6 +435,7 @@ End Sub
             stateRow(8);editor->findChild<QCheckBox*>("native-form-control-visible")->setChecked(false);editor->findChild<QCheckBox*>("native-form-control-enabled")->setChecked(false);
             assert(!editor->findChild<QCheckBox*>("native-form-control-tab-stop")->isEnabled());
             stateRow(0);grid->item(0,7)->setText("420");
+            editor->findChild<QLineEdit*>("native-form-control-tag")->setText("entry metadata");editor->findChild<QComboBox*>("native-form-control-alignment")->setCurrentIndex(2);
             QTimer::singleShot(0,&window,[&] {auto* picker=qobject_cast<QFontDialog*>(QApplication::activeModalWidget());assert(picker);QFont font;bool found=false;for(const auto& family:QFontDatabase::families()) {for(const auto& style:QFontDatabase::styles(family)) if(QFontDatabase::bold(family,style) && QFontDatabase::italic(family,style)) {font=QFontDatabase::font(family,style,12);found=true;break;}if(found) break;}assert(found);font.setUnderline(true);picker->setCurrentFont(font);picker->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();});
             QTest::mouseClick(editor->findChild<QPushButton*>("native-form-control-font"),Qt::LeftButton);assert(grid->currentRow()==0);
             for(const auto& choice:QList<QPair<QString,QColor>>{{"native-form-control-fore-color",QColor(12,34,56)},{"native-form-control-back-color",QColor(230,220,210)}}) {
@@ -443,6 +444,13 @@ End Sub
                 assert(grid->currentRow()==0);
             }
             stateRow(2);editor->findChild<QCheckBox*>("native-form-control-transparent")->setChecked(true);
+            editor->findChild<QComboBox*>("native-form-control-alignment")->setCurrentIndex(3);
+            stateRow(8);const QString longCaption(33000,'x');grid->item(8,2)->setText(longCaption);grid->setCurrentCell(8,2);grid->scrollToItem(grid->item(8,2));QApplication::setActiveWindow(editor);grid->setFocus();grid->editItem(grid->item(8,2));QApplication::processEvents();
+            auto* propertyEditor=qobject_cast<QLineEdit*>(QApplication::focusWidget());
+            if(!propertyEditor || !grid->isAncestorOf(propertyEditor)) {auto* focus=QApplication::focusWidget();std::cerr<<"Property editor focus diagnostic: "<<(focus ? focus->metaObject()->className() : "none")<<" row="<<grid->currentRow()<<" col="<<grid->currentColumn()<<" editors="<<grid->findChildren<QLineEdit*>().size()<<'\n';}
+            assert(propertyEditor && grid->isAncestorOf(propertyEditor));
+            assert(propertyEditor->maxLength()>=33001 && propertyEditor->text()==longCaption);propertyEditor->setCursorPosition(propertyEditor->text().size());QTest::keyClicks(propertyEditor,"z");
+            editor->findChild<QPushButton*>("native-form-control-font")->setFocus();QApplication::processEvents();assert(grid->item(8,2)->text()==longCaption+"z");
             grid->item(1,1)->setText("EntryValue");editor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
             assert(editor->isVisible() && editor->findChild<QLabel*>("native-form-controls-status")->text().contains("(5)"));
             grid->item(1,1)->setText("ComputedValue");editor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
@@ -465,6 +473,8 @@ End Sub
         const auto metadata=freeDefinition.value("controls").toArray().first().toObject().value("font").toObject();
         std::cerr<<"Authored font diagnostic: widget="<<entry->font().pointSize()<<','<<entry->font().weight()<<','<<entry->font().italic()<<','<<entry->font().underline()<<" stored="<<metadata.value("size").toInt()<<','<<metadata.value("weight").toInt()<<','<<metadata.value("italic").toBool()<<','<<metadata.value("underline").toBool()<<'\n';
     }
+    assert(entry->alignment()&Qt::AlignHCenter);
+    assert(freeObject->member("Controls",{linaccess::VbaValue::string("EntryValue")}).object->member("Tag",{}).asText()=="entry metadata");
     assert(entry->font().pointSize()==12 && entry->font().weight()==QFont::Bold && entry->font().italic() && entry->font().underline());
     assert(QFontInfo(entry->font()).weight()>=QFont::Bold && QFontInfo(entry->font()).italic());
     if(entry->palette().color(QPalette::Active,QPalette::Text)!=QColor(12,34,56) || entry->palette().color(QPalette::Active,QPalette::Base)!=QColor(230,220,210)) {
@@ -473,8 +483,10 @@ End Sub
     }
     assert(entry->palette().color(QPalette::Active,QPalette::Text)==QColor(12,34,56) && entry->palette().color(QPalette::Active,QPalette::Base)==QColor(230,220,210));
     auto* resultLabel=freeForm->findChild<QLabel*>("access-control-ResultLabel");assert(resultLabel && !resultLabel->autoFillBackground() && resultLabel->palette().color(QPalette::Active,QPalette::Window).alpha()==0);
+    assert(resultLabel->alignment()&Qt::AlignRight);
     auto* masked=freeForm->findChild<QLineEdit*>("access-control-MaskedValue");assert(masked && masked->isReadOnly() && masked->echoMode()==QLineEdit::Password && masked->text()=="mask-value" && masked->displayText()!=masked->text());
     auto* hiddenLabel=freeForm->findChild<QLabel*>("access-control-HiddenLabel");assert(hiddenLabel && hiddenLabel->isHidden() && !hiddenLabel->isEnabled());
+    assert(hiddenLabel->text().size()==33001 && hiddenLabel->text().endsWith('z'));
     assert(!(computed->focusPolicy()&Qt::TabFocus) && !(masked->focusPolicy()&Qt::TabFocus));
     assert(freeObject->item("MaskedValue").asText()=="mask-value" && entry->text()=="3" && computed->text()=="0006");
     assert(!check->isChecked() && freeObject->item("EnabledFlag").kind==linaccess::VbaValue::Kind::Boolean);
