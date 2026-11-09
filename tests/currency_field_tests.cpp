@@ -268,7 +268,7 @@ End Function
         linaccess::AccessTableView sheet;sheet.setModel(&cells);sheet.setCurrentIndex(cells.index(0,1));
         QApplication::clipboard()->setText("11\r\n12\r\nbad");assert(!sheet.pasteSelection() && cells.rowCount()==1 && !cells.isDirty());
         QApplication::clipboard()->setText("11\r\n12\r\n13");assert(sheet.pasteSelection() && cells.rowCount()==3 && cells.isDirty());
-        assert(!sheet.canPasteSelection() && !sheet.pasteSelection() && cells.rowCount()==3);
+        assert(sheet.canPasteSelection() && sheet.pasteSelection() && cells.rowCount()==3 && cells.undoBlock() && cells.rowCount()==3 && cells.isDirty());
         assert(cells.clipboardText(cells.index(2,1))=="13");
         assert(sql.exec("SELECT count(*),sum(value) FROM paste_append") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toInt()==10);sql.finish();
         assert(cells.undoPendingRecord(2) && cells.rowCount()==2);
@@ -291,6 +291,20 @@ End Function
         assert(cells.submitTransactionally());assert(sql.exec("SELECT count(*),sum(value) FROM paste_append") && sql.next() && sql.value(0).toInt()==4 && sql.value(1).toInt()==130);sql.finish();
 
 
+    }
+
+    {
+        assert(sql.exec("CREATE TABLE draft_records(id INTEGER PRIMARY KEY AUTOINCREMENT,v INTEGER,stamp TEXT DEFAULT '2003-12-31 18:05:06')"));assert(sql.exec("INSERT INTO draft_records(v) VALUES(10),(20),(30)"));
+        linaccess::AccessTableModel cells(nullptr,db);cells.setTable("draft_records");cells.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(cells.select());
+        linaccess::AccessTableView sheet;sheet.setModel(&cells);assert(cells.insertRow(1));assert(cells.setData(cells.index(1,1),40));
+        sheet.setCurrentIndex(cells.index(1,1));QApplication::clipboard()->setText("41");assert(sheet.pasteSelection() && cells.rowCount()==4 && cells.canUndoBlock());
+        QTest::keyClick(&sheet,Qt::Key_Z,Qt::ControlModifier);assert(cells.rowCount()==4 && cells.isDirty() && cells.clipboardText(cells.index(0,1))=="10" && cells.clipboardText(cells.index(1,1))=="40" && sheet.currentIndex()==cells.index(1,1));
+        QTest::keyClick(&sheet,Qt::Key_Y,Qt::ControlModifier);assert(cells.clipboardText(cells.index(1,1))=="41" && sheet.currentIndex()==cells.index(1,1) && cells.submitTransactionally());
+        assert(sql.exec("SELECT count(*),sum(v),min(stamp),count(stamp) FROM draft_records") && sql.next() && sql.value(0).toInt()==4 && sql.value(1).toInt()==101 && sql.value(2).toString()=="2003-12-31 18:05:06" && sql.value(3).toInt()==4);sql.finish();
+        assert(cells.removeRow(1));sheet.setCurrentIndex(cells.index(0,1));QApplication::clipboard()->setText("12");assert(sheet.pasteSelection() && cells.undoBlock() && cells.isDirty() && cells.clipboardText(cells.index(0,1))=="10");
+        sheet.setCurrentIndex(cells.index(1,1));QApplication::clipboard()->setText("99");assert(!sheet.pasteSelection() && cells.isDirty());
+        assert(cells.redoBlock() && cells.submitTransactionally());
+        assert(sql.exec("SELECT count(*),sum(v) FROM draft_records") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==83);sql.finish();
     }
 
     {

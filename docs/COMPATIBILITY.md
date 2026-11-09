@@ -4000,3 +4000,17 @@ Negativannahmen der bestehenden Prüfungen angepasst. Neue/gelöschte Datensatze
 und mehr als1M geladene Zellen bleiben3251; Cut benötigt weiter einen sauberen Cache.
 Keine neue CTest-ID/Windows-Beobachtung. TYPED_GRID_CLIPBOARD.md; F340/F168 und
 456/384/72 unverändert. Ohne Zwischenabschluss weiterimplementieren.
+
+Bereichseinfügen erhält jetzt auch bestehende neue Datensatzentwürfe und vorgemerkte
+Löschungen. Cache-Rücknahme rekonstruiert eingefügte Zeilen an ihren Positionen,
+übernimmt ihre tatsächlich gesetzten Felder, lässt SQL-Defaults ungesetzt und
+stellt Löschmarker wieder her. Direkte Ziele in gelöschten Zeilen bleiben2448.
+Bereichs-Undo/Redo stellt nach dieser Rekonstruktion eine gültige aktuelle Zelle
+wieder her. Vorhandene GUI/Feld-Prüfungen gemeinsam2/2 (6,19s), App gebaut: früherer
+Insert plus nachfolgende Bereichseingabe, Qt-Ctrl+Z/Y bei erhaltenem Zellziel,
+tatsächliche spätere SQL-Neuanlage einschließlich Default, vorgemerkte Löschung,
+verweigerter gelöschter Zielbereich und gemeinsamer SQL-Save geprüft. Erste Strecke
+2/2 (6,36s), danach Zellziel-/Defaultnachweis gezielt ergänzt; keine neue CTest-ID.
+Kein vorzeitiger SQL-Write, keine neue Windows-Beobachtung; beliebige externe
+Index-/Reentranz-/Konkurrenz-/Access-Ereignisgleichheit bleibt offen.
+TYPED_GRID_CLIPBOARD.md; F340/F168 und456/384/72 unverändert. Direkt weiter.

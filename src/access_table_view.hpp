@@ -403,8 +403,14 @@ public:
     }
     bool undoPastedBlock(bool redo=false) {
         if(activeEditor()) return refuse(2501,"Zuerst die aktuelle Zelleingabe abschließen.");
-        auto* typed=qobject_cast<AccessTableModel*>(model());if(!typed) return false;
-        return redo ? typed->redoBlock() : typed->undoBlock();
+        const QPointer<AccessTableView> self=this;QPointer<AccessTableModel> typed=qobject_cast<AccessTableModel*>(model());if(!typed) return false;
+        const int row=currentIndex().row(),column=currentIndex().column();
+        const bool accepted=redo ? typed->redoBlock() : typed->undoBlock();
+        if(accepted && self && typed && model()==typed && typed->rowCount() && typed->columnCount()) {
+            const int target=column>=0 ? qMin(column,typed->columnCount()-1) : qMax(0,firstPasteColumn(typed));
+            setCurrentIndex(typed->index(qBound(0,row,typed->rowCount()-1),target));
+        }
+        return accepted;
     }
     bool canCutSelection() const {
         const auto* typed=qobject_cast<AccessTableModel*>(model());
@@ -502,7 +508,7 @@ public:
     bool pasteSelection(bool append=false) {
         auto* typed=qobject_cast<AccessTableModel*>(model());
         if(!typed || !finishEditing()) return false;
-        if(!typed->canPasteOverUpdates()) return refuse(3251,"Vor dem Einfügen neue oder gelöschte Datensatzentwürfe speichern oder verwerfen.");
+        if(!typed->canPasteOverUpdates()) return refuse(3251,"Der vorhandene Entwurfsumfang überschreitet die native Bereichsgrenze.");
         if(typed->editStrategy()!=QSqlTableModel::OnManualSubmit) return refuse(3251,"Bereichseinfügen ist in dieser Ansicht nicht verfügbar.");
         const auto* mime=QApplication::clipboard()->mimeData();
         const bool typedMime=mime && mime->hasFormat(nativeGridMime);

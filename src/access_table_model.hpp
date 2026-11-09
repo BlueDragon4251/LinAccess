@@ -69,7 +69,7 @@ private:
     QSet<int> dirtyRows_,deletedRows_;
     QMap<QString,QVariant> insertedKey_;
     QMap<int,QMap<QString,QVariant>> submittedKeys_;
-    struct CachedUpdate {int row{};QVector<int> columns;QVector<QVariant> values;};
+    struct CachedUpdate {enum Kind {Update,Insert,Delete};int row{};Kind kind{Update};QVector<int> columns;QVector<QVariant> values;};
     QVector<CachedUpdate> captureUpdates() const;
     bool restoreUpdates(const QVector<CachedUpdate>& updates,int originalRows);
     struct BlockHistory {

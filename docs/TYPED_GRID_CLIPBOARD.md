@@ -10,8 +10,8 @@ input parser. Existing typed text/Currency/Date clipboard presentations remain.
 Paste prefers the native payload when present. It checks version, shape, cell
 kinds, canonical integer/base64 encodings, size limits and target field types
 before changing a manual-submit cache. Existing pending updates to physical
-records can be preserved, including values outside the target rectangle. Pending
-record insertions/deletions remain an explicit unsupported merge boundary. A malformed native payload fails
+records can be preserved, including values outside the target rectangle. Pending record insertions/deletions can also be captured and restored; a deleted
+row itself cannot be a writable range target. A malformed native payload fails
 instead of falling back to its text representation. Native binary input is
 permitted only into binary columns; ordinary text cannot write binary fields.
 Generated columns, readonly models, hidden target cells and unknown metadata
@@ -63,6 +63,13 @@ preexisting raw values and changed-field positions. Undo restores those pending
 updates rather than discarding them; Redo reapplies the checked range on that
 state. A failed range mutation uses the same cache restoration path. No SQL
 transaction is used to simulate cache changes, and no automatic Save is added.
-The capture is bounded to one million loaded cells; newly inserted or deleted
-pending records refuse3251 until saved/discarded. Cut retains its clean-cache
+The capture is bounded to one million loaded cells. It preserves inserted
+records, their supplied/default-field state and prior deletion markers. Cut retains its clean-cache
 requirement. General Access multi-operation undo remains open.
+
+Cache restoration recreates pending inserted rows at their actual positions,
+then restores raw values and reestablishes pending deletions. Proven generated
+fields are regenerated on Save; omitted fields retain their SQL default behavior.
+Undo/Redo restores a valid current cell when row reconstruction invalidates Qt
+indexes. Record events, arbitrary external QModelIndex ownership, concurrency
+and general Windows/Access undo equivalence remain outside this bounded scope.

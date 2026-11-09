@@ -408,7 +408,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
     const QScopedValueRollback<bool> changing(changing_,true);
     const QScopedValueRollback<bool> blockMutation(blockMutation_,true);
     if(editStrategy()!=QSqlTableModel::OnManualSubmit) return reject(3251);
-    if(!canPasteOverUpdates()) return rejectEdit(3251,"Bereichseinfügen über neue oder gelöschte Datensatzentwürfe ist noch nicht verfügbar.");
+    if(!canPasteOverUpdates()) return rejectEdit(3251,"Der vorhandene Entwurfsumfang überschreitet die native Bereichsgrenze.");
     if(skipGenerated && (!typed || firstColumn!=0 || firstRow!=rowCount() || canFetchMore())) return reject(3251);
     if(metadataError_) return reject(metadataError_);
     if(firstRow<0 || firstRow>rowCount() || firstColumn<0 || firstColumn>=columnCount() || values.isEmpty() || values.front().isEmpty()) return reject(5);
@@ -439,6 +439,7 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
                 const auto type=columnType(targetColumn);
                 if(skipGenerated && generated_.contains(record().fieldName(targetColumn).toCaseFolded())) {historyRow.push_back(QVariant{});continue;}
                 if(targetRow<originalRows) {
+                    if(deletedRows_.contains(targetRow)) return reject(2448);
                     if(!(flags(index(targetRow,targetColumn))&Qt::ItemIsEditable) && !(typed && type.contains("BLOB",Qt::CaseInsensitive) && isPasteColumn(targetColumn,true))) return reject(2448);
                 } else if(!isPasteColumn(targetColumn,typed)) return reject(2448);
                 const auto input=values[row][column];QVariant converted;
@@ -484,30 +485,35 @@ bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector
     return true;
 }
 bool AccessTableModel::canPasteOverUpdates() const {
-    if(!isDirty()) return true;
-    if(!deletedRows_.isEmpty() || static_cast<qint64>(rowCount())*columnCount()>1000000) return false;
-    for(int row=0;row<rowCount();++row) {
-        bool dirty=false;for(int column=0;column<columnCount();++column) dirty|=isDirty(index(row,column));
-        if(dirty && !indexInQuery(index(row,0)).isValid()) return false;
-    }
-    return true;
+    return !isDirty() || static_cast<qint64>(rowCount())*columnCount()<=1000000;
 }
 QVector<AccessTableModel::CachedUpdate> AccessTableModel::captureUpdates() const {
     QVector<CachedUpdate> updates;if(!isDirty()) return updates;
-    if(!canPasteOverUpdates()) throw VbaRuntimeError(3251,"Pending record inserts/deletions cannot be merged with a range");
+    if(!canPasteOverUpdates()) throw VbaRuntimeError(3251,"Pending cache exceeds the native range snapshot bound");
     for(int row=0;row<rowCount();++row) {
         CachedUpdate update;update.row=row;
-        for(int column=0;column<columnCount();++column) if(isDirty(index(row,column))) {
-            if(!isPasteColumn(column,true)) throw VbaRuntimeError(3251,"A protected pending field cannot be restored");
+        update.kind=deletedRows_.contains(row) ? CachedUpdate::Delete : !indexInQuery(index(row,0)).isValid() ? CachedUpdate::Insert : CachedUpdate::Update;
+        const auto values=record(row);
+        for(int column=0;column<columnCount();++column) {
+            const bool include=update.kind==CachedUpdate::Insert ? values.isGenerated(column) : update.kind==CachedUpdate::Delete || isDirty(index(row,column));
+            if(!include) continue;
+            if(generated_.contains(record().fieldName(column).toCaseFolded())) {
+                if(update.kind==CachedUpdate::Update) throw VbaRuntimeError(3251,"A protected pending field cannot be restored");
+                continue;
+            }
             update.columns.push_back(column);update.values.push_back(QSqlTableModel::data(index(row,column),Qt::EditRole));
         }
-        if(!update.columns.isEmpty()) updates.push_back(std::move(update));
+        if(update.kind!=CachedUpdate::Update || !update.columns.isEmpty()) updates.push_back(std::move(update));
     }
     return updates;
 }
 bool AccessTableModel::restoreUpdates(const QVector<CachedUpdate>& updates,int originalRows) {
+    const auto inserted=std::count_if(updates.cbegin(),updates.cend(),[](const auto& update) {return update.kind==CachedUpdate::Insert;});
+    if(inserted>originalRows) return false;const int physicalRows=originalRows-inserted;
     QSqlTableModel::revertAll();dirtyRows_.clear();deletedRows_.clear();
-    while(rowCount()<originalRows && canFetchMore()) {const auto before=rowCount();fetchMore();if(rowCount()==before) break;}
+    while(rowCount()<physicalRows && canFetchMore()) {const auto before=rowCount();fetchMore();if(rowCount()==before) break;}
+    if(rowCount()!=physicalRows) return false;
+    for(const auto& update:updates) if(update.kind==CachedUpdate::Insert && !QSqlTableModel::insertRows(update.row,1)) return false;
     if(rowCount()!=originalRows) return false;
     {
         const QSignalBlocker blocked(this);const QScopedValueRollback<bool> binary(binaryWriting_,true);
@@ -516,6 +522,10 @@ bool AccessTableModel::restoreUpdates(const QVector<CachedUpdate>& updates,int o
             for(int cell=0;cell<update.columns.size();++cell) if(!QSqlTableModel::setData(index(update.row,update.columns[cell]),update.values[cell],Qt::EditRole)) return false;
             dirtyRows_.insert(update.row);
         }
+    }
+    for(const auto& update:updates) if(update.kind==CachedUpdate::Delete) {
+        if(!QSqlTableModel::removeRows(update.row,1)) return false;
+        deletedRows_.insert(update.row);
     }
     if(!updates.isEmpty()) emit dataChanged(index(updates.front().row,0),index(updates.back().row,columnCount()-1),{Qt::DisplayRole,Qt::EditRole,Qt::CheckStateRole});
     return true;
