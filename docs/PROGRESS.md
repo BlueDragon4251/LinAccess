@@ -6261,3 +6261,17 @@ Eingabe/Lesen/Überlauf-/SQL-Verweigerung/Null/Rückruf-/CloseundechteDatensätz
 CURRENCY_PARAMETERS_RUNTIME.md. KeinexakterDatenbank-Currency-Speicherbehauptet;
 456/384/72gleich. Fortsetzung: sichere reineCurrency-Parameterprojektionenohne
 REAL-Umweg undallgemeineexakteDatenbanktypenweiterumsetzen.
+
+Reine tabellenfreie Currency/Money-Parameterprojektionen liefern jetzt beide
+signed64-Grenzwerte ohne REAL-Umweg: ganzzahlige Zehntausendstel mit eindeutigem
+privatem Ergebnisdeskriptor. DAO behält Currency/Type5/Size8 und Null; Datenblatt
+und Zwischenablage zeigen den exakten Betrag. Explizite Ausgabenamen verhindern
+Verwechslungen mit SQLite-Parameternamen, auch bei Alias=Parametername.
+SQL-Ausdrücke/FROM/WHERE/mehrdeutige Spaltennamen bleiben an der bisherigen
+REAL-Grenze; veränderte Pläne sowie textuelle Filter/DAO-Find auf Tick-Ergebnissen
+werden vor falschen Einheitenvergleichen verweigert. Bestehende Parameter-/DAO-
+Prüfziele gemeinsam 2/2 bestanden (2,69s), Anwendung gebaut. Keine neue CTest-
+Registrierung, kein neuer Katalogpunkt, keine native Currency-Felderstellung
+oder allgemeine exakte Currency-SQL-Parität behauptet. 456/384/72 unverändert.
+Details: CURRENCY_PARAMETERS_RUNTIME.md. Fortlaufend allgemeine native
+Datenbank-/VBA-Anforderungen umsetzen; kein freiwilliger Zwischenabschluss.

@@ -4,6 +4,7 @@
 #include <functional>
 #include <algorithm>
 #include "vba_qt_value.hpp"
+#include "vba_currency.hpp"
 #include "jet_sql_functions.hpp"
 #include "sqlite_execution.hpp"
 #include <QSqlError>
@@ -1072,6 +1073,41 @@ void adaptCounterDdl(QVector<Token>& tokens,qsizetype pos,AccessQueryPlan& plan)
     }
 }
 }
+// Full-range ticks are valid only when every result is a bare Currency parameter.
+// Render explicit aliases so SQLite's placeholder names never become type identities.
+static int pureCurrencyParameterProjections(const QString& source,const QVector<AccessQueryParameter>& parameters,QString* sql=nullptr) {
+    if(std::none_of(parameters.cbegin(),parameters.cend(),[](const auto& value) {return value.type=="currency";})) return 0;
+    const auto tokens=tokenize(source);
+    qsizetype position=0;
+    const auto word=[&](qsizetype index,const char* text) {return index<tokens.size() && tokens[index].kind==Token::Word && tokens[index].value.compare(text,Qt::CaseInsensitive)==0;};
+    const auto name=[&](qsizetype index) {return index<tokens.size() && (tokens[index].kind==Token::Word || tokens[index].kind==Token::Identifier);};
+    if(word(position,"PARAMETERS")) {
+        while(position<tokens.size() && !symbol(tokens[position],";")) ++position;
+        ++position;
+    }
+    if(!word(position,"SELECT")) return 0;
+    ++position;
+    QSet<QString> columns;
+    QStringList projections;
+    const auto finish=[&] {if(sql) *sql="SELECT "+projections.join(", ");return projections.size();};
+    while(position<tokens.size()) {
+        if(!name(position)) return 0;
+        const auto requested=tokens[position++].value;
+        const AccessQueryParameter* parameter=nullptr;
+        for(const auto& candidate:parameters) if(candidate.name.compare(requested,Qt::CaseInsensitive)==0) parameter=&candidate;
+        if(!parameter || parameter->type!="currency") return 0;
+        QString column=requested;
+        if(word(position,"AS")) {++position;if(!name(position)) return 0;column=tokens[position++].value;}
+        if(columns.contains(column.toCaseFolded())) return 0;
+        columns.insert(column.toCaseFolded());
+        projections.append(parameter->binding+" AS "+identifier(column));
+        if(position==tokens.size()) return finish();
+        if(symbol(tokens[position],";")) return position+1==tokens.size() ? finish() : 0;
+        if(!symbol(tokens[position],",")) return 0;
+        ++position;
+    }
+    return 0;
+}
 static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions={});
 AccessQueryPlan compileAccessQuery(const QString& source) { return compileCurrencyQuery(source,{}); }
 static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QString,QString>& fields,const QMap<QString,QString>& functions) {
@@ -1264,7 +1300,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
             }
         }
         const bool like = i > pos && tokens[i-1].kind == Token::Word && tokens[i-1].value.compare("LIKE",Qt::CaseInsensitive) == 0;
-        const bool qualified = (i > pos && tokens[i-1].value == ".") || (i + 1 < tokens.size() && tokens[i+1].value == ".");
+        const bool qualified = (i > pos && tokens[i-1].kind==Token::Word && tokens[i-1].value.compare("AS",Qt::CaseInsensitive)==0) || (i > pos && tokens[i-1].value == ".") || (i + 1 < tokens.size() && tokens[i+1].value == ".");
         const auto param = parameters.constFind(token.value.toCaseFolded());
         if ((token.kind == Token::Word || token.kind == Token::Identifier) && !qualified && param != parameters.cend()
             && !(i+1<tokens.size() && symbol(tokens[i+1],"("))) {
@@ -1295,6 +1331,8 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         plan.sql="CREATE TABLE "+identifier(plan.makeTable)+" AS "+plan.sql;
         plan.daoQueryType=80;
     }
+    QString exactProjectionSql;
+    if(const int count=pureCurrencyParameterProjections(source,plan.parameters,&exactProjectionSql)) {for(auto& parameter:plan.parameters) if(parameter.type=="currency") parameter.currencyTicks=true;plan.sql=exactProjectionSql;plan.resultTypes=QVector<QString>(count,"CURRENCY_TICKS");}
     plan.source=source; plan.compiledSql=plan.sql;
     return plan;
 }
@@ -1575,6 +1613,7 @@ QString accessActionSql(QSqlDatabase db,const AccessQueryPlan& plan) {
 AccessQueryPlan filterAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& untyped,const QString& criteria) {
     const auto source=resolveCurrencyQuery(db,untyped);
     if (criteria.trimmed().isEmpty()) return source;
+    if(source.resultTypes.contains("CURRENCY_TICKS")) throw VbaRuntimeError(3251,"Textual filtering of exact Currency parameter projections is not implemented");
     if (!source.sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)) throw VbaRuntimeError(3065,"Filter source requires SELECT");
     installJetSqlFunctions(db);
     const bool topOne=useTopOneBoundary(db,source);
@@ -1774,6 +1813,8 @@ QString accessQuerySource(QSqlDatabase db, const QString& name,QString* canonica
 }
 QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, const QMap<QString,QVariant>& values) {
     QMap<QString,QVariant> result;
+    const bool ticks=std::any_of(plan.parameters.cbegin(),plan.parameters.cend(),[](const auto& parameter) {return parameter.currencyTicks;});
+    if(ticks && (plan.source.isEmpty() || plan.resultTypes.isEmpty() || plan.sql!=plan.compiledSql || pureCurrencyParameterProjections(plan.source,plan.parameters)!=plan.resultTypes.size() || std::any_of(plan.resultTypes.cbegin(),plan.resultTypes.cend(),[](const auto& type) {return type!="CURRENCY_TICKS";}))) throw VbaRuntimeError(3251,"Exact Currency parameter projection was modified; recompile it");
     for (const auto& parameter : plan.parameters) {
         const auto found = values.constFind(parameter.name.toCaseFolded());
         if (found == values.cend()) throw VbaRuntimeError(3061,"DAO: required query parameter is unset");
@@ -1787,7 +1828,7 @@ QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, co
         const auto& type = parameter.type;
         if(type=="currency") {
             if(parameter.likePattern) throw VbaRuntimeError(3251,"Currency LIKE parameter conversion is not implemented");
-            converted=sqlFieldValue(qtFieldValue(value,{}),"CURRENCY_REAL");
+            converted=parameter.currencyTicks ? QVariant::fromValue(static_cast<qlonglong>(convertCurrency(qtFieldValue(value,{})).currencyUnits)) : sqlFieldValue(qtFieldValue(value,{}),"CURRENCY_REAL");
         } else if (type=="value") {
             const auto kind=value.metaType().id();
             if (kind==QMetaType::Bool) converted=value.toBool() ? -1 : 0;
@@ -2035,7 +2076,7 @@ QVariant AccessQueryModel::data(const QModelIndex& index, int role) const {
         (role != Qt::DisplayRole && role != Qt::EditRole)) return {};
     const auto value=result_.rows[index.row()][index.column()];
     const auto type=result_.types.value(result_.columns[index.column()].toCaseFolded());
-    if(role==Qt::DisplayRole && type=="CURRENCY_REAL") {
+    if(role==Qt::DisplayRole && (type=="CURRENCY_REAL" || type=="CURRENCY_TICKS")) {
         try { return qtFieldText(value,type); }
         catch(const VbaRuntimeError& error) { return QString("#Fehler (%1)").arg(error.number); }
     }

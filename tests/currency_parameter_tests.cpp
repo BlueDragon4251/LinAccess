@@ -66,6 +66,43 @@ int main(int argc,char** argv) {
         expect([&] { (void)linaccess::bindAccessQueryParameters(plan,{{"p",QString("invalid")}}); },13);
         expect([&] { (void)linaccess::bindAccessQueryParameters(plan,{}); },3061);
     }
+    // Full signed64 values pass through table-free projections without REAL conversion.
+    const QString projection="PARAMETERS p Currency,q Money; SELECT p AS amount,q AS other";
+    const auto exact=linaccess::makeDaoDatabase(db)->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string(projection.toStdString())}).object;
+    auto exactP=exact->member("Parameters",{VbaValue::string("p")}).object;
+    auto exactQ=exact->member("Parameters",{VbaValue::string("q")}).object;
+    const auto maximum=std::numeric_limits<std::int64_t>::max(),minimum=std::numeric_limits<std::int64_t>::min();
+    exactP->assign("Value",VbaValue::currency(maximum));exactQ->assign("Value",VbaValue::currency(minimum));
+    auto exactRows=exact->member("OpenRecordset",{}).object;
+    auto exactField=exactRows->member("Fields",{VbaValue::string("amount")}).object;
+    assert(exactField->member("Value",{}).kind==VbaValue::Kind::Currency && exactField->scalarValue().currencyUnits==maximum);
+    assert(exactField->member("Type",{}).number==5 && exactField->member("Size",{}).number==8);
+    assert(exactRows->member("Fields",{VbaValue::string("other")}).object->scalarValue().currencyUnits==minimum);
+    expect([&] {exactRows->member("FindFirst",{VbaValue::string("amount > 0")});},3251);
+    assert(exactField->scalarValue().currencyUnits==maximum);exactRows->member("Close",{});
+    exactP->assign("Value",{});exactRows=exact->member("OpenRecordset",{}).object;
+    assert(exactRows->member("Fields",{VbaValue::string("amount")}).object->scalarValue().kind==VbaValue::Kind::Null);exactRows->member("Close",{});
+    const QMap<QString,QVariant> exactValues{{"p",QString("922337203685477.5807")},{"q",QString("-922337203685477.5808")}};
+    const auto exactPlan=linaccess::compileAccessQuery(projection);
+    const auto exactBindings=linaccess::bindAccessQueryParameters(exactPlan,exactValues);
+    assert(exactBindings.value(exactPlan.parameters[0].binding).metaType().id()==QMetaType::LongLong);
+    assert(exactBindings.value(exactPlan.parameters[0].binding).toLongLong()==maximum);
+    const auto exactResult=linaccess::executeAccessQueryPlan(db,exactPlan,exactBindings);
+    assert(exactResult.rows[0][1].toLongLong()==minimum && exactResult.types.value("amount")=="CURRENCY_TICKS");
+    linaccess::AccessQueryModel exactModel;exactModel.execute(db,projection,exactValues);
+    assert(exactModel.data(exactModel.index(0,0)).toString()=="922337203685477.5807");
+    assert(exactModel.clipboardText(exactModel.index(0,1))=="-922337203685477.5808");
+    expect([&] {(void)linaccess::filterAccessQueryPlan(db,exactPlan,"amount > 1");},3251);
+    linaccess::AccessQueryModel sameName; sameName.execute(db,"PARAMETERS p Currency; SELECT p AS p",{{"p",exactValues.value("p")}});
+    assert(sameName.clipboardText(sameName.index(0,0))=="922337203685477.5807");
+    auto changedPlan=exactPlan;changedPlan.sql+=" WHERE 1";
+    expect([&] {(void)linaccess::bindAccessQueryParameters(changedPlan,exactValues);},3251);
+    for(const auto* unsafe:{"SELECT p+0 AS amount","SELECT p AS amount WHERE 1","SELECT p AS amount FROM cash","SELECT p AS same,p AS same"}) {
+        const auto bounded=linaccess::compileAccessQuery(QString("PARAMETERS p Currency; ")+unsafe);
+        assert(!bounded.parameters[0].currencyTicks);
+        expect([&] {(void)linaccess::bindAccessQueryParameters(bounded,{{"p",exactValues.value("p")}});},3251);
+    }
+    exact->member("Close",{});
     const auto like=linaccess::compileAccessQuery("PARAMETERS p Currency; SELECT amount FROM cash WHERE amount Like p");
     expect([&] { (void)linaccess::bindAccessQueryParameters(like,{{"p",0.5}}); },3251);
     expect([&] { (void)linaccess::compileAccessQuery("PARAMETERS p Currency(8); SELECT p"); },3085);

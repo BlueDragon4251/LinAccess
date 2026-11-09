@@ -92,6 +92,9 @@ VbaValue qtFieldValue(const QVariant& value,const QString& type) {
         if(value.metaType().id()==QMetaType::QByteArray) throw VbaRuntimeError(13,"Binary Single field storage is unsupported");
         bool numeric=false;const auto number=value.toDouble(&numeric);if(!numeric) throw VbaRuntimeError(13,"Single field type mismatch");if(number==0 && std::signbit(number)) throw VbaRuntimeError(3251,"Negative-zero Single storage is not validated");return coerceVbaModuleValue(VbaValue::numeric(number),"single");
     }
+    if(type=="CURRENCY_TICKS") {
+        const auto kind=value.metaType().id();if(kind==QMetaType::QString) return convertCurrency(VbaValue::string(value.toString().toStdString()));if(kind!=QMetaType::LongLong && kind!=QMetaType::Int) throw VbaRuntimeError(13,"Exact Currency projection requires integer ticks");bool valid=false;const auto units=value.toLongLong(&valid);if(!valid) throw VbaRuntimeError(6,"Currency tick overflow");return VbaValue::currency(units);
+    }
     if(type=="CURRENCY_REAL") {
         if(value.metaType().id()==QMetaType::QString) {
             const auto exact=convertCurrency(VbaValue::string(value.toString().toUtf8().toStdString()));
@@ -134,11 +137,12 @@ VbaValue qtFieldValue(const QVariant& value,const QString& type) {
 }
 QString qtFieldText(const QVariant& value,const QString& type) {
     if(value.isNull()) return {};
-    return type=="CURRENCY_REAL" ? QString::fromStdString(qtFieldValue(value,type).asText()) : value.toString();
+    return (type=="CURRENCY_REAL" || type=="CURRENCY_TICKS") ? QString::fromStdString(qtFieldValue(value,type).asText()) : value.toString();
 }
 QVariant sqlFieldValue(const VbaValue& value,const QString& type) {
     if (value.kind == VbaValue::Kind::Null) return {};
     if(type=="SINGLE_REAL") {const auto converted=coerceVbaModuleValue(value,"single");if(converted.number==0 && std::signbit(converted.number)) throw VbaRuntimeError(3251,"Negative-zero Single storage is not validated");return converted.number;}
+    if(type=="CURRENCY_TICKS") return QVariant::fromValue(static_cast<qlonglong>(convertCurrency(scalarVbaValue(value)).currencyUnits));
     if(type=="CURRENCY_REAL") return currencyToRealStorage(value);
     if (type.contains("DATE",Qt::CaseInsensitive)) {
         const auto converted=value.kind==VbaValue::Kind::Text ? value : vbaDateValue(value);

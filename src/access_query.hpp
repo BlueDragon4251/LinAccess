@@ -17,6 +17,7 @@ struct AccessQueryParameter {
     QString binding;
     bool likePattern{};
     bool direct{};
+    bool currencyTicks{}; // Strict table-free bare Currency-parameter projections only.
 };
 struct AccessCounterDeclaration {
     QString table,column;

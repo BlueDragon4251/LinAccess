@@ -48,3 +48,18 @@ when the current SQL REAL binder cannot encode them. Unsupported Execute retains
 the exact value and writes no rows. Scalar default callbacks are checked against
 the original parameter generation after evaluation. Existing parameter/DAO2/2
 passed (2.40s), app built. This does not establish full-range Currency SQL/storage.
+
+
+Full-range projection follow-up: a table-free SELECT consisting entirely of bare
+Currency/Money parameters now binds signed64 ticks rather than binary64 amounts.
+Each output receives a checked, unique alias and the private CURRENCY_TICKS
+result descriptor. DAO retains Currency Value, Type=5 and Size=8; query display
+and clipboard emit exact logical amounts, including both Currency extrema.
+NULL stays NULL. An alias equal to a parameter name remains an SQL identifier.
+Modified plans and textual filter/DAO Find wrappers refuse with 3251 rather than
+comparing raw ticks with logical currency amounts. Arithmetic, FROM/WHERE,
+ambiguous duplicate labels and all other SQL shapes retain the existing REAL
+conversion boundary. The private result descriptor does not enable creation of
+Currency database fields, arbitrary SQL money operators or MDB write support.
+
+Existing parameter/DAO checks passed together 2/2 (2.69s); application built.
