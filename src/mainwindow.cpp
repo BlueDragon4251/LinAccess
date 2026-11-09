@@ -2722,12 +2722,24 @@ void MainWindow::editReport(const QString& existingName) {
         if (document && document->documentKind()==linaccess::AccessDocumentKind::Report && document->documentName().compare(existingName,Qt::CaseInsensitive)==0)
             if (!document->close()) return;
     const auto old=existingName.isEmpty() ? QJsonObject{} : objectDefinition("report",existingName);
+    const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName();const auto generation=property("la_project_generation");
+    const auto checkProject=[owner,identity,generation]{if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->property("la_project_generation")!=generation)throw linaccess::VbaRuntimeError(3420,"Der Bericht gehört nicht mehr zum aktuellen Projekt.");};
+    auto visual=std::make_shared<QJsonObject>(old.value("visual_query").toObject());
+    const auto hash=[](const QString& value){return QString::fromLatin1(QCryptographicHash::hash(value.toUtf8(),QCryptographicHash::Sha256).toHex());};
     QDialog dialog(this); dialog.setObjectName("native-report-designer");
     dialog.setWindowTitle("Berichtsentwurf"); tagProjectObject(&dialog,this,db_,"report",existingName); dialog.resize(930,720);
     auto* outer=new QVBoxLayout(&dialog);
     auto* name=new QLineEdit(existingName,&dialog); name->setObjectName("native-report-name"); name->setPlaceholderText("Berichtname"); outer->addWidget(name);
     auto* title=new QLineEdit(old.value("title").toString(),&dialog); title->setObjectName("native-report-title"); title->setPlaceholderText("Überschrift"); outer->addWidget(title);
-    auto* sql=new QPlainTextEdit(&dialog); sql->setObjectName("native-report-sql"); sql->setPlaceholderText("SELECT * FROM kunden"); sql->setPlainText(old.value("sql").toString()); outer->addWidget(sql,1);
+    auto* sql=new QPlainTextEdit(&dialog); sql->setObjectName("native-report-sql"); sql->setPlaceholderText("SQL-Datenquelle des Berichts"); sql->setPlainText(old.value("sql").toString()); outer->addWidget(sql,1);
+    auto* design=new QPushButton("Datenquelle entwerfen…",&dialog);design->setObjectName("native-report-source-design");outer->addWidget(design);
+    connect(design,&QPushButton::clicked,&dialog,[this,sql,visual,checkProject,hash,&dialog]{
+        try{checkProject();const auto initial=visual->value("sql_sha256").toString()==hash(sql->toPlainText()) ? visual->value("design").toObject() : QJsonObject{};
+            const auto edited=linaccess::editNativeQueryDesign(&dialog,db_,initial,checkProject,false);checkProject();if(!edited)return;
+            auto cursor=sql->textCursor();cursor.beginEditBlock();cursor.select(QTextCursor::Document);cursor.insertText(edited->sql);cursor.endEditBlock();
+            *visual=QJsonObject{{"sql_sha256",hash(edited->sql)},{"design",edited->state}};
+        }catch(const std::exception& error){messageError(&dialog,QString::fromUtf8(error.what()));}
+    });
     auto* canGrow=new QCheckBox("Text vertikal erweitern (CanGrow)",&dialog); canGrow->setObjectName("native-report-cangrow");
     canGrow->setChecked(old.value("can_grow").toBool());
     canGrow->setToolTip("Ausgerichtete oder untereinanderliegende Textfelder mit begrenztem Seitenumbruch zwischen Textzeilen."); outer->addWidget(canGrow);
@@ -2753,8 +2765,8 @@ void MainWindow::editReport(const QString& existingName) {
     auto* row=new QHBoxLayout; auto* preview=addButton(row,"Vorschau"); preview->setObjectName("native-report-preview");
     auto* pdf=addButton(row,"PDF exportieren"); auto* save=addButton(row,"Speichern"); save->setObjectName("native-report-save"); outer->addLayout(row);
     installDesignerSaveShortcut(dialog,save);
-    const auto definition=[this,&dialog,existingName,old,title,sql,vba,canGrow,pageBreak,headerBreak,footerExpression,footerBreak] {
-        auto content=old;
+    const auto definition=[this,&dialog,existingName,old,title,sql,vba,canGrow,pageBreak,headerBreak,footerExpression,footerBreak,visual,hash,checkProject] {
+        checkProject();auto content=old;
         auto savedName=dialog.property("la_editor_saved_name").toString();
         if(savedName.isEmpty()) savedName=existingName;
         if(!savedName.isEmpty()) {
@@ -2773,6 +2785,7 @@ void MainWindow::editReport(const QString& existingName) {
             content.insert("field_formats",formats);
         }
         content.insert("title",title->text()); content.insert("sql",sql->toPlainText());
+        if(visual->value("sql_sha256").toString()==hash(sql->toPlainText()))content.insert("visual_query",*visual);else content.remove("visual_query");
         content.insert("vba",vba->toPlainText()); content.insert("can_grow",canGrow->isChecked());
         content.insert("detail_force_new_page",pageBreak->currentIndex());
         content.insert("header_force_new_page",headerBreak->currentIndex());

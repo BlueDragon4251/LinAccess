@@ -5374,3 +5374,16 @@ GUI-Prüfung1/1 (14,36s) wiederholt. Anwendung gebaut; keine neuen CTest-IDs ode
 Windows-/Original-/Gesamtsuiten-/Paketnachweise. Berechnete-Felder-Etappe als
 cee05d8 veröffentlicht/verifiziert; letzte geprüfteDEB weiterhin1dafedd.
 F067/F068/F080/F148 sowie fester Katalog456/386/70 bleiben unverändert offen.
+
+
+Visueller Datenquellenentwurf im nativen Berichtseditor: derselbe tatsächliche
+SQL-Entwurf einschließlich berechneter Felder/Gruppierung; Übernahme als ein
+Text-Undo, Abbrechen unverändert, Metadaten nur bei passendem SQL-Hash. Speichern/
+Wiederöffnen und Invalidierung bei manueller SQL-Änderung nachgewiesen. Keine
+Parameterdeklarationen in diesem Berichtsweg, da Berichtsparameterbindung noch
+fehlt. Projektidentität/Generation wird bei Entwurf/Definition/Speichern/Ausgabe
+geprüft. Bestehendes GUI-/SQL-Bündel2/2 (15,31s), Anwendung gebaut. Tatsächlicher
+Callbackzähler: Entwurf und Speichern ohne Auswertung, explizite Ausführung liest
+Zeilen. Keine neuen CTests oder Windows-/Original-/Gesamtsuiten-/Paketnachweise.
+Details: docs/VISUAL_QUERY_DESIGNER.md. Gruppierungs-Etappe als31c50d2 veröffentlicht;
+letzte geprüfteDEB weiterhin1dafedd. F080/F085/F087/F148 und456/386/70 unverändert.

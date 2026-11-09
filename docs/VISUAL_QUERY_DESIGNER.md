@@ -117,3 +117,26 @@ review found that newly hidden columns must not change an existing GROUP BY;
 they now default to Where with no criterion. Only affected GUI1/1 was repeated
 (14.36s), including reopening after an actual added/updated technical column.
 Results of grouping, Count, Sum, WHERE and HAVING match independent SQL.
+
+## Owned report sources
+
+The native report editor exposes the same real visual query designer through
+Datenquelle entwerfen. Applying replaces its SQL source as one text undo edit;
+Cancel leaves it intact. The report stores optional visual_query metadata with
+its exact SQL hash. Matching saved text restores the design; manual SQL changes
+remove stale metadata on save. The existing native report layout/preview/PDF path
+uses this generated SELECT, with its existing32-column and formatting bounds.
+
+Report sources currently have no parameter prompting/binding, so this entry hides
+the parameter declaration dialog and refuses persisted parameter declarations.
+It does not save responses or guess values. Query editor parameter support is
+unchanged. Previewing the design and saving the report definition prepare only;
+explicit report/query execution reads rows. A project identity/generation guard
+also covers report source editing, definition generation, saving and output.
+Full report rendering/event/pagination parity and the Windows oracle remain open.
+
+Validation: application built; existing GUI/SQL2/2 passed (15.31s). The GUI
+fixture authors and saves a report source, verifies undo/redo and Cancel, reopens
+its saved design and invalidates metadata after manual SQL. A callback counter
+proves no values execute during design or save; explicit execution returns the
+actual expected records. No new Windows/original/full-suite/package proof.
