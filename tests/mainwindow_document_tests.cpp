@@ -906,8 +906,10 @@ End Sub
             const QStringList names{"EntryValue","ComputedValue","ResultLabel","ApplyValue","EnabledFlag","Choice","Listing"};
             for(int row=0;row<names.size();++row) {add->click();qobject_cast<QComboBox*>(grid->cellWidget(row,0))->setCurrentText(types[row]);grid->item(row,1)->setText(names[row]);}
             grid->item(1,3)->setText("=[EntryValue]*2");grid->item(2,2)->setText("Bereit");grid->item(3,2)->setText("Übernehmen");grid->item(4,2)->setText("Aktiv");
-            qobject_cast<QComboBox*>(grid->cellWidget(5,8))->setCurrentText("Value List");grid->item(5,9)->setText("alpha;beta");
-            grid->item(6,9)->setText("SELECT value FROM free_control_effects");grid->item(6,7)->setText("700");
+            qobject_cast<QComboBox*>(grid->cellWidget(5,8))->setCurrentText("Value List");grid->item(5,9)->setText("alpha;1;beta;2");
+            grid->item(5,11)->setText("2");grid->item(5,12)->setText("2");grid->item(5,13)->setText("1800;0");
+            grid->item(6,9)->setText("SELECT value,value*2 AS doubled FROM free_control_effects");grid->item(6,7)->setText("700");
+            grid->item(6,11)->setText("2");grid->item(6,12)->setText("2");grid->item(6,13)->setText("0;3cm");
             grid->item(1,1)->setText("EntryValue");editor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
             assert(editor->isVisible() && editor->findChild<QLabel*>("native-form-controls-status")->text().contains("(5)"));
             grid->item(1,1)->setText("ComputedValue");editor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
@@ -927,11 +929,15 @@ End Sub
     auto* button=freeForm->findChild<QPushButton*>("access-control-ApplyValue");auto* check=freeForm->findChild<QCheckBox*>("access-control-EnabledFlag");auto* choice=freeForm->findChild<QComboBox*>("access-control-Choice");
     assert(entry && computed && button && check && choice && !entry->isReadOnly() && computed->isReadOnly() && choice->count()==2);
     QApplication::setActiveWindow(freeForm);entry->setFocus();QTest::keyClicks(entry,"17");entry->clearFocus();QApplication::processEvents();
-    assert(computed->text()=="34");QStyleOptionButton checkboxStyle;checkboxStyle.initFrom(check);const auto indicator=check->style()->subElementRect(QStyle::SE_CheckBoxIndicator,&checkboxStyle,check);QTest::mouseClick(check,Qt::LeftButton,Qt::NoModifier,indicator.center());assert(check->isChecked() && freeObject->item("EnabledFlag").truthy());choice->setCurrentIndex(1);assert(freeObject->item("Choice").asText()=="beta");
+    assert(computed->text()=="34");QStyleOptionButton checkboxStyle;checkboxStyle.initFrom(check);const auto indicator=check->style()->subElementRect(QStyle::SE_CheckBoxIndicator,&checkboxStyle,check);QTest::mouseClick(check,Qt::LeftButton,Qt::NoModifier,indicator.center());assert(check->isChecked() && freeObject->item("EnabledFlag").truthy());choice->setCurrentIndex(1);assert(choice->currentText()=="beta" && freeObject->item("Choice").asText()=="2");
+    auto* choiceView=qobject_cast<QTreeView*>(choice->view());assert(choiceView && choiceView->isColumnHidden(1));
     QTest::mouseClick(button,Qt::LeftButton);QApplication::processEvents();
     const auto clicked=freeForm->eventResult("control:ApplyValue:Click");assert(clicked && clicked->status==linaccess::VbaExecutionStatus::Completed);
     assert(freeForm->findChild<QLabel*>("access-control-ResultLabel")->text()=="17");
     assert(freeObject->member("Controls",{linaccess::VbaValue::string("Listing")}).object->member("ListCount",{}).asNumber()==1);
+    auto* listing=freeForm->findChild<QTreeView*>("access-control-Listing");assert(listing && listing->model()->columnCount()==2 && listing->isColumnHidden(0));
+    QTest::mouseClick(listing->viewport(),Qt::LeftButton,Qt::NoModifier,listing->visualRect(listing->model()->index(0,1)).center());
+    assert(freeObject->item("Listing").asNumber()==34);
     assert(sql.exec("SELECT COUNT(*),MIN(value),MAX(value) FROM free_control_effects") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toInt()==17 && sql.value(2).toInt()==17);sql.finish();
     assert(freeForm->close());dispose();
     const auto blank=linaccess::nativeStoredForm("Blank",QJsonObject{{"table",""},{"fields",QJsonArray{}}},db);

@@ -7,6 +7,7 @@
 #include "native_macro_function.hpp"
 #include "native_field_defaults.hpp"
 #include "native_stored_form.hpp"
+#include "native_column_widths.hpp"
 #include "native_stored_report.hpp"
 #include "native_report_text_layout.hpp"
 #include "native_report_aggregate.hpp"
@@ -3016,21 +3017,7 @@ void AccessFormPreview::requeryControl(std::string_view name) {
             }
         }
         while(headings.size()<control.columnCount) headings.append(QString{});
-        QVector<int> widths;
-        const auto specifications=control.columnWidths.split(';');
-        if (specifications.size()>255) throw linaccess::VbaRuntimeError(5,"Too many column widths");
-        for (auto specification : specifications) {
-            specification=specification.trimmed();
-            if (specification.isEmpty()) { widths.append(-1); continue; }
-            static const QRegularExpression widthPattern(R"(^([0-9]+(?:[.,][0-9]+)?)\s*(cm|mm|in|pt)?$)",QRegularExpression::CaseInsensitiveOption);
-            const auto match=widthPattern.match(specification);
-            if (!match.hasMatch()) throw linaccess::VbaRuntimeError(5,"Invalid column width");
-            auto decimal=match.captured(1); decimal.replace(',','.');
-            const auto amount=decimal.toDouble(); const auto unit=match.captured(2).toLower();
-            const auto scale=unit=="cm" ? 96.0/2.54 : unit=="mm" ? 96.0/25.4 : unit=="in" ? 96.0 : unit=="pt" ? 96.0/72.0 : 1.0/15.0;
-            if (!std::isfinite(amount) || amount*scale>32767) throw linaccess::VbaRuntimeError(5,"Column width out of range");
-            widths.append(qRound(amount*scale));
-        }
+        const auto widths=linaccess::nativeColumnWidths(control.columnWidths);
         const bool editing=combo && combo->isEditable() && combo->lineEdit()->isModified();
         const auto draft=combo ? combo->currentText() : QString{};
         QVariant old;

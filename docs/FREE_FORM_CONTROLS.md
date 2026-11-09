@@ -31,7 +31,7 @@ object, preserving imported-original VBA bytes separately. Existing imported
 SaveAsText and private original databases are not rewritten by this feature.
 
 This is a native property editor, not complete Access WYSIWYG/toolbox, drag/resize,
-container/subform/option-group/custom-control creation, multi-column list editing,
+container/subform/option-group/custom-control creation, full list-header/callback editing,
 font/theme/property inheritance or Windows event/rendering parity. Read-only query
 forms retain the existing bounded write policy; this feature does not make them
 editable. Full F080/F081/F083/F148/F155 requirements remain open.
@@ -45,3 +45,20 @@ Final targeted validation is recorded in handoff/progress, without new CTest IDs
 
 Literal bracket/equals/outer-space field bindings are covered in
 LITERAL_CONTROL_SOURCE_BINDINGS.md.
+
+## Authored multi-column lists
+
+The property editor also stores ColumnCount (1–255), BoundColumn (0–ColumnCount)
+and ColumnWidths. Zero selects the native row index; other bound columns are
+one-based. Widths use semicolon-separated twips or cm/mm/in/pt, including hidden
+zero-width columns. Design-time validation and runtime rendering share the same
+actual parser; the native authoring path rejects excess width specifications and
+non-list controls with nondefault list metadata. Existing definitions without
+these properties retain their one-column defaults.
+
+The existing GUI/layout bundle passed 2/2 (13.83 / 12.51 seconds): an authored
+combo displays beta while returning its separately hidden value 2; an authored
+SQL list hides the first column and selects the actual computed second value 34
+after the real button wrote 17. Save/reload, actual item models and mouse selection
+are used. No new CTest, full Windows/original-workflow/full-suite or refreshed DEB
+proof is claimed. F080/F083/F162 remain broad open requirements.

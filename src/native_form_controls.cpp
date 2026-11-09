@@ -1,5 +1,6 @@
 #include "native_form_controls.hpp"
 #include "native_form_events.hpp"
+#include "native_column_widths.hpp"
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QComboBox>
@@ -14,7 +15,7 @@
 namespace linaccess {
 namespace {
 const QStringList types{"TextBox","Label","CommandButton","CheckBox","ComboBox","ListBox"};
-const QStringList keys{"type","name","caption","control_source","left","top","width","height","row_source_type","row_source","onclick"};
+const QStringList keys{"type","name","caption","control_source","left","top","width","height","row_source_type","row_source","onclick","column_count","bound_column","column_widths"};
 QString quoted(const QString& value) {
     if(value.size()>65536 || !value.isValidUtf16() || value.contains(QChar(0)) || value.contains('\r') || value.contains('\n')) throw VbaRuntimeError(5,"Invalid native control property text");
     auto text=value;text.replace('"',"\"\"");return '"'+text+'"';
@@ -57,6 +58,11 @@ NativeFormControls nativeFormControls(const QJsonValue& definition,const QString
             const auto value=object.value(key);if(value.isUndefined()) return fallback;const auto number=value.toDouble(-1);
             if(!value.isDouble() || !std::isfinite(number) || number!=std::floor(number) || number<minimum || number>30000) throw VbaRuntimeError(5,"Invalid native control twip geometry");return static_cast<int>(number);
         };
+        const int columns=integer("column_count",1,1),bound=integer("bound_column",1,0);const auto columnWidths=string("column_widths");
+        if(columns>255 || bound>columns) throw VbaRuntimeError(5,"Invalid native list column configuration");
+        if(!list && (columns!=1 || bound!=1 || !columnWidths.isEmpty())) throw VbaRuntimeError(5,"Only list controls have column properties");
+        const auto widths=nativeColumnWidths(columnWidths);
+        if(widths.size()>columns) throw VbaRuntimeError(5,"Column widths exceed the configured column count");
         const int left=integer("left",240,0),top=integer("top",240+ordinal*420,0),width=integer("width",2200,1),height=integer("height",300,1);
         if(left+width>30000 || top+height>30000) throw VbaRuntimeError(5,"Native control extends beyond supported geometry");
         result.width=qMax(result.width,left+width+240);result.bottom=qMax(result.bottom,top+height+240);
@@ -64,7 +70,8 @@ NativeFormControls nativeFormControls(const QJsonValue& definition,const QString
             <<"            Left = "+QString::number(left)<<"            Top = "+QString::number(top)<<"            Width = "+QString::number(width)<<"            Height = "+QString::number(height)<<"            TabIndex = "+QString::number(ordinal++);
         if(!caption.isEmpty()) lines<<"            Caption = "+quoted(caption);
         if(!source.isEmpty()) lines<<"            ControlSource = "+quoted(source);
-        if(list) lines<<"            RowSourceType = "+quoted(rowType)<<"            RowSource = "+quoted(rows);
+        if(list) lines<<"            RowSourceType = "+quoted(rowType)<<"            RowSource = "+quoted(rows)
+            <<"            ColumnCount = "+QString::number(columns)<<"            BoundColumn = "+QString::number(bound)<<"            ColumnWidths = "+quoted(columnWidths);
         const auto click=string("onclick");QMap<QString,QString> overrides;
         if(!click.isEmpty()) overrides=nativeEventOverrides(QJsonObject{{"OnClick",click}},nativeFieldMacroEvents());
         for(const auto* event:{"OnClick","OnChange","BeforeUpdate","AfterUpdate","OnDblClick","OnKeyDown","OnKeyPress","OnKeyUp","OnMouseDown","OnMouseUp"}) {
@@ -79,13 +86,13 @@ NativeFormControls nativeFormControls(const QJsonValue& definition,const QString
 bool editNativeFormControls(QWidget* parent,QJsonArray& controls,const QStringList& fields,const QStringList& schema) {
     (void)nativeFormControls(controls,fields,schema,{});
     QDialog dialog(parent);dialog.setObjectName("native-form-controls-editor");dialog.setWindowTitle("Steuerelemente");dialog.resize(1020,540);
-    auto* layout=new QVBoxLayout(&dialog);auto* help=new QLabel("Eigene Steuerelemente anlegen. Position und Größe in Twips. Beschriftungen für Label, Schaltfläche und Checkbox; andere Eingabefelder erhalten bei Bedarf ein separates Label. Leeres Klickereignis verwendet eine vorhandene VBA-Prozedur automatisch.",&dialog);help->setWordWrap(true);layout->addWidget(help);
-    auto* grid=new QTableWidget(0,keys.size(),&dialog);grid->setObjectName("native-form-controls-grid");grid->setHorizontalHeaderLabels({"Typ","Name","Beschriftung","Steuerelementinhalt","Links","Oben","Breite","Höhe","Herkunftsart","Datensatzherkunft","Beim Klicken"});grid->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);layout->addWidget(grid);
+    auto* layout=new QVBoxLayout(&dialog);auto* help=new QLabel("Eigene Steuerelemente anlegen. Position und Größe in Twips. Beschriftungen für Label, Schaltfläche und Checkbox; andere Eingabefelder erhalten bei Bedarf ein separates Label. Spaltenbreiten: Twips oder cm/mm/in/pt, mit Semikolon getrennt; 0 blendet eine Spalte aus. Gebundene Spalte: 1-basiert, 0 für Zeilennummer. Leeres Klickereignis verwendet eine vorhandene VBA-Prozedur automatisch.",&dialog);help->setWordWrap(true);layout->addWidget(help);
+    auto* grid=new QTableWidget(0,keys.size(),&dialog);grid->setObjectName("native-form-controls-grid");grid->setHorizontalHeaderLabels({"Typ","Name","Beschriftung","Steuerelementinhalt","Links","Oben","Breite","Höhe","Herkunftsart","Datensatzherkunft","Beim Klicken","Spaltenanzahl","Gebundene Spalte","Spaltenbreiten"});grid->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);layout->addWidget(grid);
     const auto append=[&](const QJsonObject& object) {
         const int row=grid->rowCount();grid->insertRow(row);
         for(int column=0;column<keys.size();++column) {
             if(column==0 || column==8) {auto* combo=new QComboBox(grid);combo->addItems(column==0 ? types : QStringList{"Table/Query","Value List"});combo->setCurrentText(object.value(keys[column]).toString(column==0 ? "TextBox" : "Table/Query"));grid->setCellWidget(row,column,combo);}
-            else {const int defaults[]{240,240+(static_cast<int>(fields.size())+row)*420,2200,300};const auto value=object.contains(keys[column]) ? object.value(keys[column]) : column>=4 && column<=7 ? QJsonValue(defaults[column-4]) : QJsonValue(QString{});auto* item=new QTableWidgetItem(value.isDouble() ? QString::number(value.toInt()) : value.toString());grid->setItem(row,column,item);}
+            else {const int defaults[]{240,240+(static_cast<int>(fields.size())+row)*420,2200,300};const auto value=object.contains(keys[column]) ? object.value(keys[column]) : column>=4 && column<=7 ? QJsonValue(defaults[column-4]) : column==11 || column==12 ? QJsonValue(1) : QJsonValue(QString{});auto* item=new QTableWidgetItem(value.isDouble() ? QString::number(value.toInt()) : value.toString());grid->setItem(row,column,item);}
         }
     };
     for(const auto& value:controls) append(value.toObject());
@@ -99,7 +106,7 @@ bool editNativeFormControls(QWidget* parent,QJsonArray& controls,const QStringLi
             for(int row=0;row<grid->rowCount();++row) {QJsonObject object;
                 for(int column=0;column<keys.size();++column) {
                     if(column==0 || column==8) object.insert(keys[column],qobject_cast<QComboBox*>(grid->cellWidget(row,column))->currentText());
-                    else if(column>=4 && column<=7) {bool valid=false;const auto number=grid->item(row,column)->text().toInt(&valid);if(!valid) throw VbaRuntimeError(5,"Position und Größe müssen ganze Twip-Werte sein.");object.insert(keys[column],number);}
+                    else if((column>=4 && column<=7) || column==11 || column==12) {bool valid=false;const auto number=grid->item(row,column)->text().toInt(&valid);if(!valid) throw VbaRuntimeError(5,"Position, Größe und Spaltenangaben müssen ganze Werte sein.");object.insert(keys[column],number);}
                     else object.insert(keys[column],grid->item(row,column)->text());
                 }
                 next.append(object);

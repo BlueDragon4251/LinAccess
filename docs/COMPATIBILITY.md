@@ -5111,3 +5111,15 @@ MDBTools1.0.1-/SQLite3.54.1-Prüfung bestanden. Details
 LITERAL_CONTROL_SOURCE_BINDINGS.md. Kein neuer CTest oder Katalogpunkt; keine
 aktuelle Gesamtsuite/Windows/Original-Workflow-Ausführung behauptet. F155/F056/
 F160 und456/386/70 bleiben offen/unverändert. Mehrspaltige native Listen folgen.
+
+
+## 2026-11-09: mehrspaltige eigene Kombinations-/Listenfelder
+
+Steuerelementdialog speichert/geprüft ColumnCount, BoundColumn und ColumnWidths,
+inklusive getrennter Anzeige-/Wertespalte, gebundenem Zeilenindex und versteckten
+Spalten. Gemeinsamer tatsächlicher Twip/cm/mm/in/pt-Parser für Designer und
+Runtime; keine abweichend erfundene Breiteninterpretation. Bestehende Definitionen
+behalten ihre Standardwerte. Native Save/Reload-/ValueList-/SQL-Modelle und echte
+Mausauswahl im bestehenden GUI/Layoutlauf2/2 (13,83/12,51s) bestanden.
+Details FREE_FORM_CONTROLS.md. Kein neuer CTest/Windows-/Original-/Gesamtsuite-/
+DEB-Lauf; letzte DEB15131f0. F080/F083/F162 und456/386/70 bleiben offen/unverändert.
