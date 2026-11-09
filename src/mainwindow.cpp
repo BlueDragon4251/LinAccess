@@ -2,6 +2,7 @@
 #include "native_field_defaults.hpp"
 #include "mainwindow.hpp"
 #include "native_macro.hpp"
+#include "native_form_event_editor.hpp"
 #include "native_grid_clipboard.hpp"
 #include "native_datasheet_print.hpp"
 #include "native_datasheet_page_store.hpp"
@@ -2137,7 +2138,7 @@ void MainWindow::editMacro(const QString& existingName) {
                 actions.append(QJsonObject{{"action",action},{"arguments",arguments}});
             }
             const QJsonObject definition{{"version",1},{"actions",actions}};(void)linaccess::parseNativeMacro(definition);
-            QSqlQuery conflicts(db_);conflicts.prepare("SELECT name FROM main._la_objects WHERE kind='macro' AND name=? COLLATE NOCASE AND name<>?");conflicts.addBindValue(name->text().trimmed());conflicts.addBindValue(name->text().trimmed());if(!conflicts.exec()) throw linaccess::VbaRuntimeError(3146,"Makrokatalog konnte nicht geprüft werden.");if(conflicts.next()) throw linaccess::VbaRuntimeError(3251,"Makroname ist bereits mit anderer Groß-/Kleinschreibung vorhanden.");
+            const auto canonical=linaccess::nativeMacroCatalogName(db_,name->text().trimmed());if(!canonical.isEmpty() && canonical!=name->text().trimmed()) throw linaccess::VbaRuntimeError(3251,"Makroname ist bereits mit anderer Groß-/Kleinschreibung vorhanden.");
             if(saveObject("macro",name->text(),definition)) {tagProjectObject(&dialog,this,db_,"macro",name->text().trimmed());completeDesignerSave(dialog,name->text().trimmed());}
         } catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));}
     });
@@ -2212,6 +2213,12 @@ void MainWindow::editQuery(const QString& existingName) {
 void MainWindow::editForm(const QString& existingName) {
     if (!hasProject()) return;
     const auto old = existingName.isEmpty() ? QJsonObject{} : objectDefinition("form", existingName);
+    QJsonObject formEvents;QMap<QString,QMap<QString,QString>> priorFieldEvents;int formTimerInterval=0;
+    try {
+        formEvents=linaccess::nativeEventObject(linaccess::nativeEventOverrides(old.value("events"),linaccess::nativeFormMacroEvents()));formTimerInterval=linaccess::nativeFormTimerInterval(old.value("timer_interval"));
+        QStringList names;for(const auto& value:old.value("fields").toArray()) names.append(value.toString());priorFieldEvents=linaccess::nativeFieldEventOverrides(old.value("field_events"),names);
+    } catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));return;}
+
     if(!existingName.isEmpty()) for(const auto& document:AccessFormPreview::projectDocuments(db_))
         if(document && document->documentKind()==linaccess::AccessDocumentKind::Form && document->documentName().compare(existingName,Qt::CaseInsensitive)==0)
             if(!document->close()) return;
@@ -2272,7 +2279,7 @@ void MainWindow::editForm(const QString& existingName) {
     connect(fields,&QListWidget::currentItemChanged,&dialog,updateGeometry);
     connect(fields,&QListWidget::itemChanged,&dialog,updateGeometry);
     connect(fields->model(),&QAbstractItemModel::rowsMoved,&dialog,updateGeometry);
-    auto populate = [this, fields, source, old,sourceStatus] {
+    auto populate = [this, fields, source, old,sourceStatus,priorFieldEvents] {
         fields->clear(); sourceStatus->clear(); const auto table=source->currentText(); if(table.isEmpty()) return;
         QStringList available;QMap<QString,linaccess::NativeFieldDisplayProperties> display;
         try {
@@ -2293,10 +2300,21 @@ void MainWindow::editForm(const QString& existingName) {
             auto inherited=display.value(field.toCaseFolded()).caption.value_or(field);if(inherited.isEmpty()) inherited=field;auto* item=new QListWidgetItem(captions.value(field).toString(inherited),fields);
             item->setData(Qt::UserRole,field); item->setToolTip("Gebundenes Feld: "+field+(display.value(field.toCaseFolded()).description ? "\n"+*display.value(field.toCaseFolded()).description : QString{}));
             if(sameSource) item->setData(Qt::UserRole+1,old.value("field_layout").toObject().value(field).toObject());
+            if(sameSource) item->setData(Qt::UserRole+2,linaccess::nativeEventObject(priorFieldEvents.value(field.toCaseFolded())));
             item->setFlags(item->flags()|Qt::ItemIsUserCheckable|Qt::ItemIsEditable);
             item->setCheckState(!sameSource || previous.isEmpty() || previous.contains(field) ? Qt::Checked : Qt::Unchecked);
         }
     };
+    auto* eventEditor=new QPushButton("Ereignisse zuordnen...",&dialog);eventEditor->setObjectName("native-form-event-bindings");outer->addWidget(eventEditor);
+    connect(eventEditor,&QPushButton::clicked,&dialog,[&] {
+        QStringList chosen;QMap<QString,QJsonObject> bindings;
+        for(int row=0;row<fields->count();++row) if(fields->item(row)->checkState()==Qt::Checked) {const auto field=fields->item(row)->data(Qt::UserRole).toString();chosen.append(field);const auto events=fields->item(row)->data(Qt::UserRole+2).toJsonObject();if(!events.isEmpty()) bindings.insert(field.toCaseFolded(),events);}
+        const auto beforeForm=formEvents;const auto beforeFields=bindings;const int beforeInterval=formTimerInterval;
+        try {if(linaccess::editNativeFormEvents(&dialog,formEvents,bindings,formTimerInterval,chosen,objectNames("macro"))) {
+            for(int row=0;row<fields->count();++row) if(fields->item(row)->checkState()==Qt::Checked) {const auto events=bindings.value(fields->item(row)->data(Qt::UserRole).toString().toCaseFolded());if(events!=fields->item(row)->data(Qt::UserRole+2).toJsonObject()) fields->item(row)->setData(Qt::UserRole+2,events);}
+            if(formEvents!=beforeForm || bindings!=beforeFields || formTimerInterval!=beforeInterval) {dialog.setWindowModified(true);if(auto* status=dialog.findChild<QLabel*>("native-designer-save-status")) status->setText("Nicht gespeicherte Änderungen");}
+        }} catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));}
+    });
     connect(source, &QComboBox::currentTextChanged, &dialog, populate);
     if (!old.isEmpty()) source->setCurrentText(old.value("table").toString());
     populate();
@@ -2372,12 +2390,13 @@ void MainWindow::editForm(const QString& existingName) {
             lines << "Noch nicht implementierte Abhängigkeit: " + QString::fromStdString(issue);
         findings->setPlainText(lines.join('\n'));
     });
-    connect(save, &QPushButton::clicked, &dialog, [this, &dialog, name, caption, source, fields, vba, importedBytes,old] {
-        QJsonArray chosen; QJsonObject captions,positions;
+    connect(save, &QPushButton::clicked, &dialog, [this, &dialog, name, caption, source, fields, vba, importedBytes,old,&formEvents,&formTimerInterval] {
+        QJsonArray chosen; QJsonObject captions,positions,eventBindings;
         for(int index=0;index<fields->count();++index) if(fields->item(index)->checkState()==Qt::Checked) {
             const auto field=fields->item(index)->data(Qt::UserRole).toString(); chosen.append(field); captions.insert(field,fields->item(index)->text());
             const auto position=fields->item(index)->data(Qt::UserRole+1).toJsonObject();
             if(!position.isEmpty()) positions.insert(field,position);
+            const auto events=fields->item(index)->data(Qt::UserRole+2).toJsonObject();if(!events.isEmpty()) eventBindings.insert(field.toCaseFolded(),events);
         }
         if(chosen.isEmpty()) { messageError(&dialog,"Mindestens ein Feld auswählen."); return; }
         auto content=old; const auto savedName=dialog.property("la_editor_saved_name").toString();
@@ -2391,6 +2410,7 @@ void MainWindow::editForm(const QString& existingName) {
         content.insert("table",source->currentText()); content.insert("fields",chosen);
         content.insert("caption",caption->text()); content.insert("field_captions",captions); content.insert("vba",vba->toPlainText());
         content.insert("field_layout",positions);
+        content.insert("events",formEvents);content.insert("field_events",eventBindings);content.insert("timer_interval",formTimerInterval);
         content.insert("original_vba_base64",QString::fromLatin1(importedBytes->toBase64())); content.insert("language","vba_subset_experimental");
         try { (void)linaccess::nativeStoredForm(name->text(),content,db_); }
         catch(const std::exception& error) { messageError(&dialog,QString::fromUtf8(error.what())); return; }

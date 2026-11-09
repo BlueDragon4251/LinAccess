@@ -4217,3 +4217,22 @@ Handlerwirkungen. Originalverkaufsworkflow bleibt offen. Uploads3/3 und Fixtures
 erneut hashgleich. Keine neue CTest-ID oder Windows-Beobachtung; kein frischer
 Gesamtsuite-/Plattform-/CI-Nachweis. NATIVE_MACROS_RUNTIME.md; F088/F057/F114/F129/
 F148 und456/384/72 unverändert. Direkt weiter.
+
+
+Native Formulare können Makros jetzt über „Ereignisse zuordnen...“ an unterstützte
+Form-/Feldereignisse binden. Automatisch/Makro/Funktion/[Event Procedure]/Keine
+Bindung sind echte gespeicherte Alternativen; „Keine“ unterdrückt automatische
+VBA-Erkennung. Unterdialog arbeitet auf Kopien, Cancel verwirft, OK validiert,
+Eltern-Save persistiert. NativeStoredForm prüft/emittiert events/field_events/
+timer_interval, unbekannte/doppelte Ereignisse/Felder und ungültige Werte werden
+verweigert; keine Ausführung beim Save. Makronamenauflösung und Save-Konfliktprüfung
+verwenden begrenzten Qt-Case-insensitive-Katalogscan (1M Namen/5s), danach exakten
+Definitionslookup; Ä/ä und mehrdeutige Namen sind tatsächlich geprüft, keine
+Jet-/Locale-Gleichheit behauptet. Eigenständiges VbaValue-Include korrigiert.
+GUI/Layout zusammen2/2 (18,42s), App gebaut: echte verschachtelte Dialoge,
+Cancel/Reopen/OK, gespeicherte Definition/Layout, Load-SQL-Wirkung, per Designer
+gebundener BeforeUpdate-Abbruch mit unverändertem SQL, explizit deaktivierte
+vorhandene Form_Load-Prozedur, unbekanntes Ereignis/Feld und negativer Timer.
+Keine neue CTest-ID/Windows-Beobachtung. Originallauf1/1 (114,46s) ist der zuvor
+geprüfte Stand, kein neuer Gesamtsuite-/Plattformnachweis. NATIVE_FORM_EVENT_DESIGNER.md;
+F080/F088/F050/F057/F130/F148 und456/384/72 unverändert. Direkt weiter.

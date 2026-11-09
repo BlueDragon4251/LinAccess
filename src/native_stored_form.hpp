@@ -1,5 +1,6 @@
 #pragma once
 #include "vba_analyzer.hpp"
+#include "native_form_events.hpp"
 #include "access_query.hpp"
 #include "vba_runtime.hpp"
 #include <QByteArray>
@@ -67,6 +68,9 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
         while(used.contains(candidate.toCaseFolded())) candidate=base+QString::number(suffix++);
         used.insert(candidate.toCaseFolded()); return candidate;
     };
+    const auto formEvents=nativeEventOverrides(definition.value("events"),nativeFormMacroEvents());
+    const auto fieldEvents=nativeFieldEventOverrides(definition.value("field_events"),names);
+    const auto timerInterval=nativeFormTimerInterval(definition.value("timer_interval"));
     auto code=definition.value("vba").toString(); QSet<QString> procedures;
     const auto utf8=code.toUtf8(); const auto analysis=analyzeVba(std::string_view(utf8.constData(),static_cast<std::size_t>(utf8.size())));
     for(const auto& procedure:analysis.procedures) procedures.insert(QString::fromStdString(procedure.name).toCaseFolded());
@@ -98,11 +102,13 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
     }
     QStringList lines{"Begin Form","    Caption = "+quoted(definition.value("caption").toString(name)),
         "    RecordSource = "+quoted(table),"    Width = "+QString::number(formWidth)};
+    if(definition.contains("timer_interval")) lines<<"    TimerInterval = "+QString::number(timerInterval);
     if(!writableTable) lines<<"    AllowAdditions =0"<<"    AllowEdits =0"<<"    AllowDeletions =0";
-    for(const auto* event:{"OnOpen","OnLoad","OnCurrent","OnActivate","OnDeactivate","OnUnload","OnClose","BeforeInsert","AfterInsert","BeforeUpdate","AfterUpdate","OnDirty","OnError"}) {
+    for(const auto* event:{"OnOpen","OnLoad","OnCurrent","OnActivate","OnDeactivate","OnUnload","OnClose","BeforeInsert","AfterInsert","BeforeUpdate","AfterUpdate","OnDirty","OnError","OnTimer"}) {
         const QString property=QString::fromLatin1(event);
         auto procedure=property.startsWith("On") ? property.mid(2) : property;
-        if(procedures.contains(("Form_"+procedure).toCaseFolded())) lines<<"    "+property+" = \"[Event Procedure]\"";
+        if(formEvents.contains(property)) {if(!formEvents.value(property).isEmpty()) lines<<"    "+property+" = "+quoted(formEvents.value(property));}
+        else if(procedures.contains(("Form_"+procedure).toCaseFolded())) lines<<"    "+property+" = \"[Event Procedure]\"";
     }
     lines<<"    Begin Section"<<"        Name = \"Detail\""<<"        Height = "+QString::number(buttonTop+700);
     const auto captions=definition.value("field_captions").toObject();
@@ -118,10 +124,12 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
              <<"            EventProcPrefix = "+quoted(eventPrefix)<<"            Left = "+QString::number(rectangle[0])<<"            Top = "+QString::number(top)
              <<"            Width = "+QString::number(rectangle[2])<<"            Height = "+QString::number(rectangle[3])<<"            TabIndex = "+QString::number(index);
         if(const auto format=formats.value(field.toCaseFolded());!format.isUndefined()) {if(!format.isString()) throw VbaRuntimeError(5,"Invalid native form field Format");lines<<"            Format = "+quoted(format.toString());}
+        const auto bindings=fieldEvents.value(field.toCaseFolded());
         for(const auto* event:{"OnClick","OnChange","BeforeUpdate","AfterUpdate","OnDblClick","OnKeyDown","OnKeyPress","OnKeyUp","OnMouseDown","OnMouseUp"}) {
             const QString property=QString::fromLatin1(event);
             const auto procedure=property.startsWith("On") ? property.mid(2) : property;
-            if(procedures.contains((eventPrefix+"_"+procedure).toCaseFolded())) lines<<"            "+property+" = \"[Event Procedure]\"";
+            if(bindings.contains(property)) {if(!bindings.value(property).isEmpty()) lines<<"            "+property+" = "+quoted(bindings.value(property));}
+            else if(procedures.contains((eventPrefix+"_"+procedure).toCaseFolded())) lines<<"            "+property+" = \"[Event Procedure]\"";
         }
         lines<<"        End";
     }

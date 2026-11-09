@@ -1,6 +1,8 @@
 #pragma once
 #include "vba_runtime.hpp"
+#include "vba_expression.hpp"
 #include <QJsonArray>
+#include <QElapsedTimer>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSqlDatabase>
@@ -56,9 +58,21 @@ inline QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition
     }
     return actions;
 }
+inline QString nativeMacroCatalogName(QSqlDatabase database,const QString& requested) {
+    QSqlQuery names(database);names.setForwardOnly(true);if(!names.exec("SELECT name FROM main._la_objects WHERE kind='macro'")) throw VbaRuntimeError(3146,"Native macro catalog unavailable");
+    QElapsedTimer timer;timer.start();int count=0;QString found;
+    while(names.next()) {
+        if(++count>1000000) throw VbaRuntimeError(3251,"Native macro catalog limit exceeded");
+        if(timer.hasExpired(5000)) throw VbaRuntimeError(3035,"Native macro catalog deadline exceeded");
+        const auto candidate=names.value(0).toString();
+        if(candidate.compare(requested,Qt::CaseInsensitive)==0) {if(!found.isEmpty()) throw VbaRuntimeError(3251,"Native macro name is ambiguous");found=candidate;}
+    }
+    if(names.lastError().isValid()) throw VbaRuntimeError(3146,"Native macro catalog read failed");return found;
+}
 inline QVector<NativeMacroAction> loadNativeMacro(QSqlDatabase database,const QString& name) {
     if(!nativeMacroNameValid(name)) throw VbaRuntimeError(3251,"Macro groups or invalid native macro names are not supported");
-    QSqlQuery query(database);query.prepare("SELECT definition FROM main._la_objects WHERE kind='macro' AND name=? COLLATE NOCASE LIMIT 2");query.addBindValue(name);
+    const auto canonical=nativeMacroCatalogName(database,name);if(canonical.isEmpty()) throw VbaRuntimeError(2485,"Native macro not found");
+    QSqlQuery query(database);query.prepare("SELECT definition FROM main._la_objects WHERE kind='macro' AND name=? COLLATE BINARY LIMIT 2");query.addBindValue(canonical);
     if(!query.exec()) throw VbaRuntimeError(3146,"Native macro catalog unavailable");
     if(!query.next()) throw VbaRuntimeError(2485,"Native macro not found");
     const auto bytes=query.value(0).toByteArray();

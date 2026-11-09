@@ -153,6 +153,7 @@ keine nachgewiesene pixelgenaue Access-2003-Oberfläche. Details: [Darstellung](
 - Gespeicherte SQL-SELECT-Abfragen
 - Native Aktionsmakros erstellen, speichern und über `DoCmd.RunMacro` ausführen;
   Umfang und Grenzen: [Makrolaufzeit](docs/NATIVE_MACROS_RUNTIME.md).
+  [Formularereignisse zuordnen](docs/NATIVE_FORM_EVENT_DESIGNER.md) geht im nativen Designer.
 - Einfache tabellengebundene Formulare definieren und Datensätze damit bearbeiten
 - Pro Formular VBA-Quelltext speichern; `.bas`/`.cls`-Textdateien laden und auf
   Prozeduren bzw. Abhängigkeiten statisch untersuchen. Originalbytes importierter

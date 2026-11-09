@@ -2524,6 +2524,11 @@ End Sub)VBA";
     error=0;QString description;try {commands->member("RunMacro",{VbaValue::string("sql_failure")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;description=QString::fromUtf8(failure.what());}assert(error==3078 && description.contains("Aktion 2 (RunSQL)"));
     assert(sql.exec("SELECT COUNT(*),SUM(n) FROM native_macro_effects") && sql.next() && sql.value(0).toInt()==5 && sql.value(1).toInt()==7);sql.finish();
     error=0;try {commands->member("RunMacro",{VbaValue::string("Native Macro"),VbaValue::longInteger(1001)});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    store(QString::fromUtf8("Änderung"),{QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{"INSERT INTO native_macro_effects VALUES(3)"}}}});
+    commands->member("RunMacro",{VbaValue::string("änderung")});assert(linaccess::nativeMacroCatalogName(db,QString::fromUtf8("ÄNDERUNG"))==QString::fromUtf8("Änderung"));
+    store(QString::fromUtf8("ÄNDERUNG"),{write});error=0;try {commands->member("RunMacro",{VbaValue::string("änderung")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects WHERE n=3") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+    sql.prepare("DELETE FROM _la_objects WHERE kind='macro' AND name=? COLLATE BINARY");sql.addBindValue(QString::fromUtf8("ÄNDERUNG"));assert(sql.exec());sql.finish();
     assert(form.close());
     assert(sql.exec("CREATE TABLE macro_event_rows(id INTEGER PRIMARY KEY,value TEXT)"));assert(sql.exec("INSERT INTO macro_event_rows VALUES(1,'before')"));assert(sql.exec("CREATE TABLE macro_event_audit(kind TEXT)"));
     for(const auto* kind:{"load","current","click","double","change","before","after","timer","close"}) store(QStringLiteral("event_")+kind,{QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{QStringLiteral("INSERT INTO macro_event_audit VALUES('")+kind+"')"}}}});
@@ -2590,6 +2595,32 @@ End)FORM";
     AccessFormPreview cancelledOpen("macro_cancel_open","Begin Form\nOnOpen =\"event_cancel\"\nBegin Section\nEnd\nEnd",{},db,&window);cancelledOpen.show();QApplication::processEvents();assert(cancelledOpen.cancelledByOpen());cancelledOpen.close();
     AccessFormPreview cancelledClose("macro_cancel_close","Begin Form\nOnUnload =\"event_cancel\"\nBegin Section\nEnd\nEnd",{},db,&window);cancelledClose.show();QApplication::processEvents();assert(!cancelledClose.close() && cancelledClose.isVisible());
     assert(cancelledClose.eventResult("OnUnload")->cancelled);cancelledClose.hide();
+}
+
+void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;
+    QTimer::singleShot(0,&window,[&] {
+        auto* parent=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(parent && parent->objectName()=="native-form-designer");parent->findChild<QLineEdit*>("native-form-name")->setText("Authored Macro Form");parent->findChild<QComboBox*>("native-form-source")->setCurrentText("macro_event_rows");
+        auto* edit=parent->findChild<QPushButton*>("native-form-event-bindings");assert(edit);
+        QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-form-event-editor");dialog->findChild<QComboBox*>("native-form-event-event")->setCurrentText("OnLoad");dialog->findChild<QComboBox*>("native-form-event-mode")->setCurrentIndex(1);dialog->findChild<QComboBox*>("native-form-event-target")->setCurrentText("event_cancel");dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel)->click();});edit->click();
+        QTimer::singleShot(0,&window,[&] {
+            auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-form-event-editor");auto* event=dialog->findChild<QComboBox*>("native-form-event-event");event->setCurrentText("OnLoad");assert(dialog->findChild<QComboBox*>("native-form-event-mode")->currentIndex()==0);
+            dialog->findChild<QComboBox*>("native-form-event-mode")->setCurrentIndex(1);dialog->findChild<QComboBox*>("native-form-event-target")->setCurrentText("event_load");
+            dialog->findChild<QComboBox*>("native-field-event-field")->setCurrentText("value");dialog->findChild<QComboBox*>("native-field-event-event")->setCurrentText("BeforeUpdate");dialog->findChild<QComboBox*>("native-field-event-mode")->setCurrentIndex(1);dialog->findChild<QComboBox*>("native-field-event-target")->setCurrentText("event_cancel");dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+        });edit->click();parent->findChild<QPushButton*>("native-form-save")->click();
+    });action(window,"+ Formular")->trigger();
+    QSqlQuery sql(db);assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='form' AND name='Authored Macro Form'") && sql.next());const auto definition=QJsonDocument::fromJson(sql.value(0).toByteArray()).object();sql.finish();
+    assert(definition.value("events").toObject().value("OnLoad")=="event_load" && definition.value("field_events").toObject().value("value").toObject().value("BeforeUpdate")=="event_cancel");
+    const auto stored=linaccess::loadNativeStoredForm(db,"Authored Macro Form");assert(stored);const auto parsed=linaccess::parseAccessFormLayout(QString::fromUtf8(stored->layout));assert(parsed.events.value("onload")=="event_load");
+    assert(sql.exec("SELECT COUNT(*) FROM macro_event_audit WHERE kind='load'") && sql.next());const int before=sql.value(0).toInt();sql.finish();
+    AccessFormPreview authored(stored->name,stored->layout,stored->code,db,&window);authored.show();QApplication::processEvents();assert(sql.exec("SELECT COUNT(*) FROM macro_event_audit WHERE kind='load'") && sql.next() && sql.value(0).toInt()==before+1);sql.finish();
+    auto* editor=authored.findChild<QLineEdit*>("access-control-value");assert(editor);editor->setFocus();QTest::keyClick(editor,Qt::Key_A,Qt::ControlModifier);QTest::keyClicks(editor,"designer-cancel");int error=0;try {makePreviewFormObject(authored)->assign("Dirty",VbaValue::logical(false));}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2501 && authored.eventResult("control:value:BeforeUpdate")->cancelled);
+    assert(sql.exec("SELECT value FROM macro_event_rows WHERE id=1") && sql.next() && sql.value(0).toString()=="after");sql.finish();makePreviewFormObject(authored)->member("Undo",{});assert(authored.close());
+    auto disabled=definition;disabled.insert("events",QJsonObject{{"OnLoad",""}});disabled.insert("field_events",QJsonObject{});disabled.insert("vba","Private Sub Form_Load()\nCurrentDb.Execute \"INSERT INTO macro_event_audit VALUES('automatic')\"\nEnd Sub");
+    const auto without=linaccess::nativeStoredForm("Disabled Auto Event",disabled,db);AccessFormPreview suppressed(without.name,without.layout,without.code,db,&window);suppressed.show();QApplication::processEvents();assert(sql.exec("SELECT COUNT(*) FROM macro_event_audit WHERE kind='automatic'") && sql.next() && sql.value(0).toInt()==0);sql.finish();assert(suppressed.close());
+    auto unknown=definition;unknown.insert("events",QJsonObject{{"UnknownEvent","event_load"}});error=0;try {(void)linaccess::nativeStoredForm("Unknown event",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    unknown=definition;unknown.insert("field_events",QJsonObject{{"missing",QJsonObject{{"OnClick","event_load"}}}});error=0;try {(void)linaccess::nativeStoredForm("Unknown field event",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
 }
 
 void testEditableControlFormats(MainWindow& window,QSqlDatabase db) {
@@ -3495,6 +3526,7 @@ End Sub
     }
     testEditableControlFormats(window,db);
     testNativeMacros(window,db);
+    testNativeMacroDesigner(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

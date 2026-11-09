@@ -102,3 +102,11 @@ derivative initialization failures. No original sale completion or type/renderin
 oracle is implied. Full macros/event/Access equivalence remains open.
 
 Contract consulted: https://learn.microsoft.com/en-us/office/vba/api/access.docmd.cancelevent
+
+
+Native form designers now assign supported event bindings through a real dialog;
+see [NATIVE_FORM_EVENT_DESIGNER.md](NATIVE_FORM_EVENT_DESIGNER.md). Macro name lookup
+and save conflict checks use the existing native Qt case-insensitive convention,
+including Unicode, with a1M-name/5-second forward scan and exact definition lookup.
+Ambiguous names refuse before execution. This does not establish Jet collations.
+GUI/layout2/2 (18.42s); app built; no new target or Windows oracle.
