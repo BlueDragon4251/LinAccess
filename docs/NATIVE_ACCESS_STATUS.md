@@ -182,3 +182,20 @@ keine Zeilenberechnung aus. Anwendung gebaut, bestehendes GUI-/SQL-Bündel2/2
 Original-/Windows-/Gesamtsuiten-/Paketnachweise. Details VISUAL_QUERY_DESIGNER.md;
 F080-Beschreibung aktualisiert, Katalog456/386/70 unverändert. Makrokatalog-Fix
 als657d6b3 veröffentlicht/verifiziert; letzte geprüfteDEB weiterhinfe01e1d.
+
+
+Visuelle Verknüpfungen unterstützen nun INNER/LEFT/RIGHT mit1..16 UND-verknüpften
+Feldvergleichen (=, <>, <, <=, >, >=) pro neuer Quelle, auch von vorhandenen
+Aliasen. Zusammengesetzte Schlüssel werden tatsächlich als ON-Vergleiche erzeugt;
+RIGHT erhält die Zeilen der neuen Quelle mit echten Nullwerten links. Vorgemerkte
+Vergleiche plus vollständiges aktuelles Paar bilden die Bedingung; unvollständige/
+unhinzugefügte Entwürfe müssen ergänzt oder explizit verworfen werden. Visuelle
+Metadaten schreibenVersion2, Version1/alte Einfachvergleiche bleiben lesbar.
+Anwendung gebaut; bestehendes GUI-/SQL-Bündel2/2 (15,54s) ohne Nachlauf bestanden.
+Tatsächlicher nativer executeAccessQueryPlan-Output für zusammengesetzten RIGHT
+JOIN gegen umgekehrten unabhängigen LEFT JOIN inklusive Null verglichen; <=-INNER
+nach Wiederöffnung ebenfalls unabhängig geprüft. Keine neuen CTests oder neue
+Original-/Windows-/Gesamtsuiten-/Paketnachweise. Details VISUAL_QUERY_DESIGNER.md.
+Alias-Etappe9953a83 veröffentlicht; letzte geprüfteDEB weiterhinfe01e1d; jetzt
+aktuelles Paket nach dieser zusammenhängenden Entwurfserweiterung prüfen.
+F067/F068/F080/F148 und fester Katalog456/386/70 unverändert.

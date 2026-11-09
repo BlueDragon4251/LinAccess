@@ -29,7 +29,7 @@ outside this scope. Imported sources remain outside this
 native-owned authoring path.
 
 Scope includes physical tables or installed saved selection-query views, up to
-eight ordered INNER/LEFT equijoins, fields/literal criteria/native supported functions,
+eight ordered INNER/LEFT/RIGHT joins, fields/literal criteria/native supported functions,
 AND/OR field groups, declared parameters, calculated scalar projections, grouped
 aggregates, distinct and ordered output. General join syntax and arbitrary SQL round-trip parsing and the complete Access QBE/window/locale oracle remain open.
 The native 255-field/64-character name and criteria/predicate bounds apply. The
@@ -162,9 +162,9 @@ Windows/original/full-suite/package proof.
 
 ## Joined sources
 
-Quellen verknüpfen builds up to eight ordered INNER/LEFT equijoins across real
+Quellen verknüpfen builds up to eight ordered INNER/LEFT/RIGHT joins across real
 tables or installed saved selection-query views. Each new source joins an already
-present source through explicit field = field. LEFT preserves previous-side rows
+present source through explicit field comparisons. LEFT preserves previous-side rows
 with actual Null values on unmatched new-side fields. The dialog previews the
 actual parenthesized FROM clause; no records execute there. Removing the final
 join also removes its draft field rows; calculated expressions that still refer
@@ -178,8 +178,8 @@ reuse go through the existing native SQL compiler and execution semantics.
 
 The draft preserves the ordered joins and source/field identities on reopening.
 Source aliases permit source reuse as described below, with at most255 combined
-source fields. Composite/non-equality join predicates and other join kinds remain
-available only to the broader manual SQL path within its native bounds.
+source fields. Composite and non-equality comparisons are now supported as described below;
+OR-connected join conditions remain outside this visual entry.
 No Access SQL reverse parser or complete QBE/window/locale parity is claimed.
 
 Validation: existing GUI/SQL2/2 passed (14.92s); application built. After
@@ -229,8 +229,8 @@ including LEFT Null rows. Draft fields retain alias identity across reordering,
 criteria, calculations, grouping, saving/restoring and removing a joined source.
 Duplicate output labels still require output aliases independently of source
 aliases. Eight joins and255 combined source fields remain the bounded scope;
-composite/non-equality join predicates and other join kinds remain outside this
-visual entry. No full Access designer or SQL reverse parsing parity is claimed.
+multiple AND-connected comparison predicates are described below; OR-connected
+join conditions remain outside this visual entry. No full Access designer or SQL reverse parsing parity is claimed.
 
 Validation: application built; existing GUI/SQL2/2 passed (16.45s). An actual
 parent/child LEFT self join matches independent SQL including unmatched Nulls.
@@ -238,3 +238,32 @@ An alias containing spaces persists/restores; alias metadata fields resolve from
 the underlying source. Ambiguous aliasless reuse is refused without adding the
 join. Preview does not execute rows. No new CTest ID or new original/Windows/
 full-suite/package proof.
+
+
+## Composite and directional joins
+
+INNER/LEFT/RIGHT joins now accept1..16 AND-connected field comparisons with =,
+<>, <, <=, > or >=. Comparisons can refer to any previously joined source/alias;
+the other field always belongs to the newly joined actual table/view. RIGHT
+preserves the new-side rows, with actual Null fields on unmatched earlier sources.
+Native SQL type/coercion/updateability boundaries remain unchanged.
+
+Vergleich vormerken retains a comparison and clears the current field pair for
+another. The staged list and any complete current pair form the ON condition.
+Partial pairs, invalid operators, missing fields, duplicate staging and excess
+comparisons are refused. Changing the new physical source clears staged fields;
+Neue Verknüpfung verwerfen discards only the unadded draft. OK refuses an
+unadded source/condition draft. The existing FROM preview contains exactly the
+added joins. Buttons share a compact row and labels wrap within the dialog.
+
+Visual metadata now writes version2 and still reads version1, including its
+legacy single-equality join representation. Older designers that support only
+version1 will not silently reinterpret version2 composite join metadata. Manual
+SQL and its exact hash remain the authoritative stored query/source.
+
+Validation: application built; existing GUI/SQL2/2 passed (15.54s), without a
+follow-up rerun. Actual native executeAccessQueryPlan RIGHT results for compound
+keys match an independent reversed LEFT query including Nulls. Restored INNER
+metadata with <= also matches independent SQL. Earlier version1 designs, aliases,
+query/form/report persistence and preview non-execution remain in the same target.
+No new CTest ID or new original/Windows/full-suite/package proof.
