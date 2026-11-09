@@ -6906,3 +6906,29 @@ vor dem Lauf auf öffentliche Run-Rückgabe eines Access.Application-Funktionsty
 korrigiert. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung.
 NATIVE_APPLICATION_RUN.md; F042/F043/F050/F118/F148 und456/384/72 unverändert.
 Direkt weiter mit formularfreier nativer Makroausführung.
+
+
+Gespeicherte native Makros können über Ansicht/Ausgewähltes Makro ausführen direkt
+vom Datenbankfenster laufen. Reeller Modul-/DAO-Anwendungshost mit DoCmd-Proxy,
+kein verstecktes Formular. Makro-Budget/Repeat/Bedingungen/Stop/Fehlerkontext in
+gemeinsamen Runner extrahiert;16 aktive/10000 besuchte Aktionen gelten auch über
+Hostwechsel, VbaExecutionScope hält Stop über den gesamten Aufruf. RunSQL hat
+geprüfte Savepoint-/UseTransaction-Pfade; RunCode öffentliche Functions. Tatsächliche
+Tabellen/Abfragen über bestehende Dokument-APIs; eigene gespeicherte Normalformulare
+und Berichtsvorschauen über bestehende unabhängige showDocument-Lebensdauer.
+Aktives reales Formular erhält RunCommand/Requery; sonst tatsächliches Datenblatt.
+Projektgeneration/Verbindung/GUI-Thread und Modalgrenzen bleiben geprüft; Menülauf
+schützt laufende Projektoperationen. Formular-/Berichtsfilter/weitere Modi und
+Archiv-only-Dokumente sind in diesem Host noch nicht implementiert. ReportView0
+wird3251 abgewiesen; Vorschau benötigt2. CancelEvent ohne Ereignis3251.
+App gebaut, GUI/Layout zusammen2/2 (19,15s) bestanden: tatsächliche Menüstarter-
+Kette mit SQL/Function/verschachteltem StopMacro/Bedingungen, Table/Query/Form/
+Report/Requery/RunCommand, OnLoad-SQL und Form-RecordCount3, Fehler in Aktion2 mit
+persistiertem Vorläufereffekt, Rekursion3251 mit folgendem unabhängigen Erfolg,
+SELECT-RunSQL2342, nichtgebundenes CancelEvent und echtes abgebrochenes Form_Open.
+Fehlenden QStatusBar-Testinclude vor Lauf korrigiert; keine neue CTest-ID.
+Aktuelles DEB mit4 parallelen Preinstall-Jobs gebaut; Payload/Berechtigungen,
+App-/Helper-BuildIDs, MDBTools1.0.1 und bytegleiches SQLite3.54.1 samt tatsächlichem
+JOIN/NULL-/Counter-Backendcheck bestanden. Keine Gesamtsuite/Windows-Beobachtung.
+NATIVE_MACROS_RUNTIME.md; F088/F042/F050/F057/F114/F148 und456/384/72 unverändert.
+Direkt weiter, keine Gesamtabschlussmeldung.

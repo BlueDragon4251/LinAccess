@@ -178,3 +178,34 @@ Validation: existing GUI/layout checks2/2 passed (18.17s), app and matching
 DEB checked. Actual Function effects, nested macro/event scope, quoted/nested
 arguments, Sub/Private refusal, structural preflight and error source/action
 metadata are covered. Original uploads3/3 and fixtures4/4 hashes unchanged.
+
+
+## Run from the database window
+
+Select a native macro in the explorer and choose **Ansicht → Ausgewähltes Makro
+ausführen**. This uses a real project/database application host without creating
+a hidden form. The same runner as event macros enforces repeat/condition/action
+preflight, nested16-call/10000-action budgets, StopMacro and diagnostic metadata.
+A VBA execution scope covers the complete macro. Earlier successful actions remain
+committed when a later action fails.
+
+The standalone DoCmd proxy provides RunMacro/RunSQL, table/query documents,
+stored native normal forms and report previews (explicit View2), RunCommand and
+Requery. Saved Functions run in the real standard-module/DAO context. Actual
+active forms receive document commands; otherwise existing table/query APIs run.
+RunSQL preserves UseTransaction/savepoint behavior and refuses SELECT2342.
+CancelEvent requires a real event; an unbound standalone action refuses3251.
+
+Opening forms/reports in this host is currently limited to native stored sources
+and the name/view arguments. Imported archive-only documents, named filters,
+WhereCondition/OpenArgs/data/window modes and complete Application identity/model
+remain open here. Modal editors block opening independent UI documents2046.
+Report normal/print View0 remains unsupported3251. New document initialization
+failure or cancellation is surfaced rather than reported as a successful macro.
+This is still not an Access macro importer, AutoExec or complete macro parity.
+
+Validation: existing GUI/layout2/2 passed (19.15s), app and matching DEB checked.
+A real menu invocation exercises SQL/Function effects, nested StopMacro, conditions,
+Table/Query/Form/Report/Requery/RunCommand, event SQL and actual bound row count.
+Later-action persistence, recursion cleanup, SELECT refusal and real cancelled
+Form_Open are exercised. No new test target or Windows Access2003 oracle.

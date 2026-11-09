@@ -1,5 +1,6 @@
 #include "access_form_objects.hpp"
 #include "native_macro.hpp"
+#include "native_macro_runner.hpp"
 #include "native_application_run.hpp"
 #include "native_public_procedure_run.hpp"
 #include "vba_module_context.hpp"
@@ -1419,33 +1420,12 @@ public:
             preview.setProperty("la_bound_event_cancelled",true);return {};
         }
         if(key=="runmacro") {
-            if(args.empty() || args.size()>3) throw linaccess::VbaRuntimeError(450,"RunMacro requires a name and optional repeat count");
-            const auto scalar=[&](const linaccess::VbaValue& value) {const auto result=linaccess::scalarVbaValue(value);(void)checked();return result;};
-            const auto macro=linaccess::coerceVbaModuleValue(scalar(args[0]),"string");
-            const auto count=args.size()>1 && args[1].kind!=linaccess::VbaValue::Kind::Missing ? linaccess::coerceVbaModuleValue(scalar(args[1]),"long").number : 1;
-            if(args.size()>2 && args[2].kind!=linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(3251,"RunMacro RepeatExpression is not implemented");
-            if(count<1 || count>1000) throw linaccess::VbaRuntimeError(3251,"Native macro repeat count requires 1 to 1000");
-            static thread_local int macroDepth=0,macroActions=0;
-            if(macroDepth>=16) throw linaccess::VbaRuntimeError(3251,"Native macro call depth exceeded");
-            if(!macroDepth) macroActions=0;
-            ++macroDepth;
-            const auto budget=qScopeGuard([] {if(--macroDepth==0) macroActions=0;});
-            const auto actions=linaccess::loadNativeMacro(checked().db_,text(macro.asText()));
-            if(count*actions.size()>10000) throw linaccess::VbaRuntimeError(3251,"Native macro action budget exceeded");
-            for(int repeat=0;repeat<count;++repeat) for(int index=0;index<actions.size();++index) {
-                (void)checked();if(linaccess::vbaExecutionStopRequested()) throw linaccess::VbaExecutionStopped{};
-                if(++macroActions>10000) throw linaccess::VbaRuntimeError(3251,"Nested native macro action budget exceeded");
-                const auto& action=actions[index];
-                try {
-                    if(action.condition) {const auto condition=linaccess::scalarVbaValue(checked().evalExpression(action.condition->toUtf8().toStdString()));(void)checked();if(!condition.truthy()) continue;}
-                    if(action.name=="StopMacro") return {};
-                    if(action.name=="RunCode") {runNativeMacroFunction(checked(),action.arguments.front().asText());continue;}
-                    (void)member(action.name.toStdString(),action.arguments);
-                }
-                catch(const linaccess::VbaRuntimeError& error) {throw linaccess::VbaRuntimeError(error.number,"Makro "+macro.asText()+", Aktion "+std::to_string(index+1)+" ("+action.name.toStdString()+"): "+error.what(),error.source,error.helpFile,error.helpContext);}
-            }
+            linaccess::runNativeMacro(preview.db_,args,[&] {(void)checked();},
+                [&](const QString& expression) {return checked().evalExpression(expression.toUtf8().toStdString());},
+                [&](const linaccess::NativeMacroAction& action) {if(action.name=="RunCode") runNativeMacroFunction(checked(),action.arguments.front().asText());else (void)member(action.name.toStdString(),action.arguments);});
             return {};
         }
+
         if(key=="echo") return linaccess::nativeEcho(preview,args);
         if(key=="hourglass") {
             if(args.size()!=1 || args[0].kind==linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(450,"Hourglass requires one Boolean argument");

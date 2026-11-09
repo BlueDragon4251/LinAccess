@@ -1,3 +1,5 @@
+#include <QStatusBar>
+#include "native_standard_module_host.hpp"
 #include <QTextBrowser>
 #include "native_schema_editor.hpp"
 #include "native_macro.hpp"
@@ -2646,6 +2648,42 @@ void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
     unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
 }
 
+void testStandaloneMacroExecution(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE standalone_macro_effects(id INTEGER PRIMARY KEY,n INTEGER)"));
+    const auto store=[&](const QString& kind,const QString& name,const QJsonObject& definition) {QSqlQuery save(db);save.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES(?,?,?)");save.addBindValue(kind);save.addBindValue(name);save.addBindValue(QJsonDocument(definition).toJson(QJsonDocument::Compact));assert(save.exec());};
+    const auto macroAction=[](QString name,QJsonArray arguments=QJsonArray{}) {return QJsonObject{{"action",name},{"arguments",arguments}};};
+    const auto macro=[&](QString name,QJsonArray actions) {store("macro",name,{{"version",1},{"actions",actions}});};
+    store("module","StandaloneCode",{{"version",1},{"vba",R"VBA(Public Function StandaloneMacroCode() As Long
+CurrentDb.Execute "INSERT INTO standalone_macro_effects(n) VALUES(2)"
+StandaloneMacroCode=2
+End Function)VBA"}});
+    macro("StandaloneChild",{macroAction("RunCode",{"StandaloneMacroCode()"}),macroAction("StopMacro"),macroAction("RunSQL",{"INSERT INTO standalone_macro_effects(n) VALUES(999)"})});
+    macro("StandaloneLoad",{macroAction("RunSQL",{"INSERT INTO standalone_macro_effects(n) VALUES(4)"})});
+    store("query","StandaloneQuery",{{"sql","SELECT id,n FROM standalone_macro_effects ORDER BY id"}});
+    store("form","StandaloneForm",{{"table","standalone_macro_effects"},{"fields",QJsonArray{"n"}},{"events",QJsonObject{{"OnLoad","StandaloneLoad"}}}});
+    store("report","StandaloneReport",{{"sql","SELECT n FROM standalone_macro_effects ORDER BY id"},{"title","Module macro output"}});
+    auto first=macroAction("RunSQL",{"INSERT INTO standalone_macro_effects(n) VALUES(1)"});first.insert("condition","DCount(\"*\",\"standalone_macro_effects\")=0");
+    auto skipped=macroAction("RunSQL",{"INSERT INTO standalone_macro_effects(n) VALUES(3)"});skipped.insert("condition","False");
+    macro("StandaloneDispatch",{first,macroAction("RunMacro",{"StandaloneChild"}),skipped,macroAction("OpenTable",{"standalone_macro_effects",0,1}),macroAction("RunCommand",{97}),macroAction("Requery"),macroAction("OpenQuery",{"StandaloneQuery",0,2}),macroAction("Requery"),macroAction("OpenForm",{"StandaloneForm",0}),macroAction("Requery"),macroAction("OpenReport",{"StandaloneReport",2})});
+    action(window,"Aktualisieren")->trigger();auto* explorer=window.findChild<QTreeWidget*>("database-explorer");QTreeWidgetItem* item=nullptr;for(auto* candidate:explorer->findItems("StandaloneDispatch",Qt::MatchExactly|Qt::MatchRecursive,0)) if(candidate->data(0,Qt::UserRole).toString()=="macro") item=candidate;assert(item);explorer->setCurrentItem(item);window.focusDatabaseWindow();
+    auto* run=window.findChild<QAction*>("native-macro-run");assert(run && run->isEnabled());run->trigger();QApplication::processEvents();
+    assert(window.statusBar()->currentMessage()=="Makro ausgeführt: StandaloneDispatch");
+    assert(sql.exec("SELECT n FROM standalone_macro_effects ORDER BY id"));QVector<int> effects;while(sql.next()) effects.push_back(sql.value(0).toInt());assert((effects==QVector<int>{1,2,4}));sql.finish();
+    QPointer<AccessFormPreview> openedForm,openedReport;for(const auto& document:AccessFormPreview::projectDocuments(db)) {if(document->documentName()=="StandaloneForm") openedForm=document;if(document->documentName()=="StandaloneReport") openedReport=document;}assert(openedForm && openedReport && openedForm->hasDataSource() && openedReport->hasDataSource());assert(makePreviewFormObject(*openedForm)->member("Recordset",{}).object->member("RecordCount",{}).number==3);
+    assert(openedReport->close() && openedForm->close());QApplication::processEvents();window.focusDatabaseWindow();
+    const auto generation=window.property("la_project_generation");linaccess::NativeStandardModuleHost host(&window,db,[&] {if(window.property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Project changed");});auto commands=host.applicationObject()->member("DoCmd",{}).object;
+    macro("StandaloneFailure",{macroAction("RunSQL",{"INSERT INTO standalone_macro_effects(n) VALUES(5)"}),macroAction("RunCode",{"MissingStandaloneFunction()"})});int error=0;try {(void)commands->member("RunMacro",{VbaValue::string("StandaloneFailure")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;assert(std::string(failure.what()).find("Aktion 2")!=std::string::npos);}assert(error==2517);
+    assert(sql.exec("SELECT COUNT(*) FROM standalone_macro_effects WHERE n=5") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+    macro("StandaloneRecursive",{macroAction("RunMacro",{"StandaloneRecursive"})});error=0;try {(void)commands->member("RunMacro",{VbaValue::string("StandaloneRecursive")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    macro("StandaloneAfterRecursion",{macroAction("RunSQL",{"INSERT INTO standalone_macro_effects(n) VALUES(6)",false})});commands->member("RunMacro",{VbaValue::string("StandaloneAfterRecursion")});
+    error=0;try {(void)commands->member("RunSQL",{VbaValue::string("SELECT * FROM standalone_macro_effects")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2342);
+    macro("StandaloneCancel",{macroAction("CancelEvent")});error=0;try {(void)commands->member("RunMacro",{VbaValue::string("StandaloneCancel")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    store("form","StandaloneCancelled",{{"table","standalone_macro_effects"},{"fields",QJsonArray{"n"}},{"events",QJsonObject{{"OnOpen","StandaloneCancel"}}}});error=0;try {(void)commands->member("OpenForm",{VbaValue::string("StandaloneCancelled")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2501);
+    for(const auto& document:AccessFormPreview::projectDocuments(db)) assert(document->documentName()!="StandaloneCancelled");
+    assert(sql.exec("SELECT COUNT(*) FROM standalone_macro_effects WHERE n=6") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+    assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='StandaloneCode'"));
+}
+
 void testNativeModuleEditor(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;
     const auto archive=[&] {QSqlQuery query(db);assert(query.exec("SELECT id,name,source_bytes FROM _la_access_artifacts ORDER BY id"));QCryptographicHash hash(QCryptographicHash::Sha256);while(query.next()) {const auto name=query.value(1).toString().toUtf8(),bytes=query.value(2).toByteArray();hash.addData(QByteArray::number(query.value(0).toLongLong())+":"+QByteArray::number(name.size())+":"+name+":"+QByteArray::number(bytes.size())+":"+bytes);}return hash.result();};const auto originalArchive=archive();
@@ -3721,6 +3759,7 @@ End Sub
     testNativeMacros(window,db);
     testNativeMacroDesigner(window,db);
     testNativeModuleEditor(window,db);
+    testStandaloneMacroExecution(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

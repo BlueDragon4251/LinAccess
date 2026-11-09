@@ -21,6 +21,7 @@
 #include <QKeyEvent>
 #include <QShortcut>
 #include <QScopeGuard>
+#include <QScopedValueRollback>
 
 #include "access_inspector.hpp"
 #include "access_table_import.hpp"
@@ -383,6 +384,20 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         }catch(const std::exception& error) {messageError(this,QString::fromUtf8(error.what()));}
     });
     connect(viewMenu,&QMenu::aboutToShow,this,[deleteObject,selectedOwned] {deleteObject->setEnabled(selectedOwned());});
+    auto* runMacro=viewMenu->addAction("Ausgewähltes Makro ausführen");runMacro->setObjectName("native-macro-run");
+    const auto canRunMacro=[this] {const auto* item=explorer_->currentItem();return db_.isOpen() && !QApplication::activeModalWidget() && queryExecutionDepth_==0 && item && item->data(0,Qt::UserRole).toString()=="macro";};
+    const auto updateRunMacro=[runMacro,canRunMacro] {runMacro->setEnabled(canRunMacro());};updateRunMacro();
+    connect(viewMenu,&QMenu::aboutToShow,this,updateRunMacro);connect(explorer_,&QTreeWidget::currentItemChanged,this,updateRunMacro);
+    connect(runMacro,&QAction::triggered,this,[this,canRunMacro] {
+        if(!canRunMacro()) return;const auto name=explorer_->currentItem()->text(0);const QPointer<MainWindow> owner=this;const auto identity=db_.databaseName(),connection=db_.connectionName();const auto generation=property("la_project_generation");
+        const auto check=[owner,identity,connection,generation] {if(!owner || !owner->db_.isOpen() || owner->db_.databaseName()!=identity || owner->db_.connectionName()!=connection || owner->property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Makro gehört nicht mehr zum aktuellen Projekt.");};
+        try {
+            QScopedValueRollback<int> execution(queryExecutionDepth_,queryExecutionDepth_+1);
+            linaccess::NativeStandardModuleHost host(this,db_,check);(void)host.applicationObject()->member("DoCmd",{}).object->member("RunMacro",{linaccess::VbaValue::string(name.toStdString())});check();statusBar()->showMessage("Makro ausgeführt: "+name);
+        }catch(const linaccess::VbaExecutionStopped&) {if(owner) statusBar()->showMessage("Makroausführung beendet.");}
+        catch(const linaccess::VbaRuntimeError& error) {if(owner) messageError(this,QString("Fehler %1: %2").arg(error.number).arg(QString::fromUtf8(error.what())));}
+        catch(const std::exception& error) {if(owner) messageError(this,QString::fromUtf8(error.what()));}
+    });
     auto* editRelations=viewMenu->addAction("&Beziehungen bearbeiten...");editRelations->setObjectName("native-relations-edit");
     connect(editRelations,&QAction::triggered,this,[this] {
         if(!db_.isOpen() || QApplication::activeModalWidget()) return;

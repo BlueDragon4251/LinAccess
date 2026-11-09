@@ -674,3 +674,6 @@ und Formularbindungen müssen anschließend auf den neuen Namen angepasst werden
 Neue native Tabellen und Felder unterstützen auch Single (32-Bit-Gleitkomma),
 einschließlich quantisierter Datenblatt-/DAO-Werte und Literalstandardwerte.
 [Unterstützte Schreibpfade und Grenzen](docs/DAO_TABLEDEF_FIELDS.md).
+
+Gespeicherte native Makros lassen sich im Datenbankfenster auswählen und über
+**Ansicht → Ausgewähltes Makro ausführen** starten; [Umfang](docs/NATIVE_MACROS_RUNTIME.md).
