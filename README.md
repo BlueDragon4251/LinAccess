@@ -681,3 +681,5 @@ Gespeicherte native Makros lassen sich im Datenbankfenster auswählen und über
 Native VBA-Debugger im Modul-Editor: F9-Haltepunkte, F5/F8 und echte lokale Werte/Aufrufrahmen sowie Fehlerfortsetzung; [Umfang und Grenzen](docs/NATIVE_VBA_DEBUGGER_RUNTIME.md).
 
 Unter Extras ist der [Projektbericht zu Fähigkeiten und Ausführungsbeobachtungen](docs/PROJECT_CAPABILITY_REPORT.md) mit geschütztem JSON-Export verfügbar. Syntaxannahme, fehlender Kontext und tatsächliche Aufrufergebnisse bleiben getrennt.
+
+Native [Boolean-Bedingungen und strukturierte If-Fortsetzung](docs/VBA_BOOLEAN_CONDITIONS.md) verwenden gemeinsame geprüfte Konvertierung; vollständige VBA-/Access-Parität bleibt offen.

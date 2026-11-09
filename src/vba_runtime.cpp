@@ -1,3 +1,4 @@
+#include "vba_condition.hpp"
 #include "native_object_types.hpp"
 #include "native_file_operations.hpp"
 #include "vba_array.hpp"
@@ -388,7 +389,7 @@ std::string inlineStatementLines(const std::string& source,bool preserveLabels=f
         else if (ch==':' && depth==0 && (i+1>=result.size() || result[i+1]!='=')) {
             if(preserveLabels) {
                 static const std::regex identifier(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)");
-                static const std::unordered_set<std::string> keywords{"else","do","loop","wend","next","stop","return","end","exit","error","gosub"};
+                static const std::unordered_set<std::string> keywords{"else","endif","do","loop","wend","next","stop","return","end","exit","error","gosub"};
                 const auto segment=trim(result.substr(statementStart,i-statementStart));
                 if(std::regex_match(segment,identifier) && !keywords.contains(lower(segment))) labelColons.push_back(i);
             }
@@ -591,10 +592,10 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\(.*\))?.*$)",
         std::regex::icase);
     const std::regex end(R"(^\s*End\s+(Sub|Function)\s*$)", std::regex::icase);
-    const std::regex selectStart(R"(^Select\s+Case\s+(.+)$)",std::regex::icase);
+    const std::regex selectStart(R"(^Select\s+Case\b\s*(.+)$)",std::regex::icase);
     const std::regex selectEnd(R"(^End\s+Select$)",std::regex::icase);
-    const std::regex elseIfThen(R"(^ElseIf\s+(.+)\s+Then\s*$)",std::regex::icase);
-    const std::regex ifThen(R"(^If\s+(.+)\s+Then\s*$)", std::regex::icase);
+    const std::regex elseIfThen(R"(^ElseIf\b\s*(.+)\bThen\s*$)",std::regex::icase);
+    const std::regex ifThen(R"(^If\b\s*(.+)\bThen\s*$)", std::regex::icase);
     const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
     const std::regex variableAssignment(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
     const std::regex stringAlignment(R"(^(LSet|RSet)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)",std::regex::icase);
@@ -626,8 +627,12 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     const std::regex destinationName(R"(^(?:[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)");
     const std::regex resumeZero(R"(^Resume\s+0+$)",std::regex::icase);
     const std::regex resumeLabel(R"(^Resume\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)", std::regex::icase);
-    const std::regex whileStart(R"(^(Do\s+(While|Until)|While)\s+(.+)$)", std::regex::icase);
-    const std::regex loopEnd(R"(^(Loop|Wend)(?:\s+(While|Until)\s+(.+))?$)",std::regex::icase);
+    const std::regex whileStart(R"(^(Do\s+(While|Until)|While)\b\s*(.+)$)", std::regex::icase);
+    const std::regex loopEnd(R"(^(Loop|Wend)(?:\s+(While|Until)\b\s*(.+))?$)",std::regex::icase);
+    const std::regex endIfKeyword(R"(^(?:End\s+If|EndIf)$)",std::regex::icase);
+    const std::regex endWithKeyword(R"(^End\s+With$)",std::regex::icase);
+    const std::regex withKeyword(R"(^With\b\s*(.+)$)",std::regex::icase);
+    const std::regex exitDoKeyword(R"(^Exit\s+Do$)",std::regex::icase);
     const std::regex dim(R"(^(?:Dim|Static)\s+(.+)$)", std::regex::icase);
     const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*))?$)", std::regex::icase);
     const std::regex forStart(R"(^For\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+?)\s+To\s+(.+?)(?:\s+Step\s+(.+))?$)", std::regex::icase);
@@ -683,12 +688,12 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             const auto expanded=inlineStatementLines(source);
             if(expanded.size()<source.size()) source=trim(source.substr(0,expanded.size()));
             if(source.empty()) continue;
-            const auto folded=lower(source); const auto then=outsideKeyword(source,"then");
-            if((folded.starts_with("if ") || folded.starts_with("elseif ")) && then!=std::string::npos) {
+            const auto then=outsideKeyword(source,"then");
+            if((outsideKeyword(source,"if")==0 || outsideKeyword(source,"elseif")==0) && then!=std::string::npos) {
                 const auto tail=trim(source.substr(then+4));
                 if(!tail.empty() && inlineStatementLines(tail).empty()) source=trim(source.substr(0,then+4));
             }
-            const bool inlineBranch=(folded.starts_with("if ") || folded.starts_with("if(") || folded.starts_with("elseif "))
+            const bool inlineBranch=(outsideKeyword(source,"if")==0 || outsideKeyword(source,"elseif")==0)
                 && then!=std::string::npos && !trim(source.substr(then+4)).empty();
             const auto separator=inlineStatementLines(source).find('\n');
             if(!inlineBranch && separator!=std::string::npos) {
@@ -697,7 +702,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 source=trim(source.substr(0,separator));
                 if(source.empty()) continue;
                 static const std::regex identifier(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|[0-9]+)$)");
-                static const std::unordered_set<std::string> statements{"else","do","loop","wend","next","stop","return","end","exit","error","gosub"};
+                static const std::unordered_set<std::string> statements{"else","endif","do","loop","wend","next","stop","return","end","exit","error","gosub"};
                 if(std::regex_match(source,identifier) && !statements.contains(lower(source))) source+=':';
             }
         }
@@ -857,12 +862,12 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             return {VbaExecutionStatus::Completed, {}, line};
         }
         const auto normalized=lower(source);
-        const bool caseLine=normalized.starts_with("case ") || normalized.starts_with("case\t");
+        const bool caseLine=outsideKeyword(source,"case")==0;
         const bool endSelectLine=std::regex_match(source,selectEnd);
         if (!blocks.empty() && blocks.back()==Statement::Type::Select && !selects.back().hasCase
             && !caseLine && !endSelectLine)
             return {VbaExecutionStatus::Error,"Statement before first Case",line};
-        if (lower(source).starts_with("if ") || lower(source).starts_with("if\t")) {
+        if (outsideKeyword(source,"if")==0) {
             const auto then=outsideKeyword(source,"then",2);
             if (then!=std::string::npos && !trim(source.substr(then+4)).empty()) {
                 static thread_local int inlineDepth=0;
@@ -872,7 +877,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 const auto condition=trim(source.substr(2,then-2));
                 const auto yes=trim(source.substr(then+4,otherwise==std::string::npos ? std::string::npos : otherwise-then-4));
                 const auto no=otherwise==std::string::npos ? std::string{} : trim(source.substr(otherwise+4));
-                if (yes.empty() || (otherwise!=std::string::npos && no.empty())) return {VbaExecutionStatus::Unsupported,"Single-line If branch missing",line};
+                if (yes.empty() && otherwise==std::string::npos) return {VbaExecutionStatus::Unsupported,"Single-line If branch missing",line};
                 const auto wrapper="Sub __la_inline()\nIf "+condition+" Then\n"+inlineStatementLines(yes,true)
                     +(otherwise==std::string::npos ? "" : "\nElse\n"+inlineStatementLines(no,true))+"\nEnd If\nEnd Sub\n";
                 std::vector<Statement> body; bool function=false,cancel=false;
@@ -906,6 +911,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             auto& block=selects.back();
             if (block.hasElse) return {VbaExecutionStatus::Error,"Case after Case Else",line};
             const auto expression=trim(source.substr(4));
+            if(expression.empty()) return {VbaExecutionStatus::Unsupported,"Case requires an expression or Else",line};
             block.hasCase=true;
             if (lower(expression)=="else") block.hasElse=true;
             else {
@@ -930,11 +936,11 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 return {VbaExecutionStatus::Error,"End Select without Select",line};
             blocks.pop_back(); selects.pop_back();
             statements.push_back({Statement::Type::EndSelect,{},{},line});
-        } else if (lower(source).starts_with("with ") || lower(source).starts_with("with\t")) {
-            const auto expression=trim(source.substr(4));
+        } else if (std::regex_match(source,match,withKeyword)) {
+            const auto expression=trim(match[1].str());
             if (!validExpression(expression)) return {VbaExecutionStatus::Unsupported,"With expression unsupported",line};
             statements.push_back({Statement::Type::With,{},expression,line}); blocks.push_back(Statement::Type::With);
-        } else if (lower(source)=="end with") {
+        } else if (std::regex_match(source,endWithKeyword)) {
             if (blocks.empty() || blocks.back()!=Statement::Type::With) return {VbaExecutionStatus::Error,"End With without With",line};
             blocks.pop_back(); statements.push_back({Statement::Type::EndWith,{},{},line});
         } else if (normalized=="error" || normalized.starts_with("error ") || normalized.starts_with("error\t")) {
@@ -1033,7 +1039,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             if (elseSeen.back()) return {VbaExecutionStatus::Error, "Doppeltes Else", line};
             elseSeen.back() = true;
             statements.push_back({Statement::Type::Else, {}, {}, line});
-        } else if (lower(source) == "end if") {
+        } else if (std::regex_match(source,endIfKeyword)) {
             if (blocks.empty() || blocks.back() != Statement::Type::If)
                 return {VbaExecutionStatus::Error, "End If ohne If", line};
             --nesting;
@@ -1085,7 +1091,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             if (!expression.empty() && !validExpression(expression)) return {VbaExecutionStatus::Unsupported,"Loop condition unsupported",line};
             whileStarts.push_back(static_cast<int>(statements.size())); blocks.push_back(Statement::Type::While);
             statements.push_back({Statement::Type::While,mode,expression,line});
-        } else if (normalized=="exit do") {
+        } else if (std::regex_match(source,exitDoKeyword)) {
             statements.push_back({Statement::Type::ExitDo,{},{},line});
         } else if (std::regex_match(source,match,loopEnd)) {
             if (blocks.empty() || blocks.back()!=Statement::Type::While)
@@ -1553,6 +1559,7 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
     if (type=="date") return vbaDateValue(value);
     if (type=="boolean") {
         if (value.kind==VbaValue::Kind::Text) {
+            if(value.text=="#TRUE#" || value.text=="#FALSE#") return VbaValue::logical(value.text=="#TRUE#");
             const auto text=lower(trim(value.text));
             if (text=="true" || text=="false") return VbaValue::logical(text=="true");
             return VbaValue::logical(VbaValue::string(trim(value.text)).asNumber()!=0);
@@ -2196,7 +2203,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             refreshAliases();
             if(debugger) {
                 bool executable=active && debugExecutable(instruction);
-                if(instruction.type==Statement::Type::ElseIf || instruction.type==Statement::Type::Case) executable=!frames.empty() && frames.back().parent && !frames.back().condition && !frames.back().pending;
+                if(instruction.type==Statement::Type::If && !frames.empty() && !frames.back().select && frames.back().pending && frames.back().instruction==ip) executable=frames.back().parent;
+                if(instruction.type==Statement::Type::ElseIf || instruction.type==Statement::Type::Case) executable=!frames.empty() && frames.back().parent && !frames.back().condition && (!frames.back().pending || (instruction.type==Statement::Type::ElseIf && frames.back().instruction==ip));
                 debugger->checkpoint(currentLine,executingIp,executable);
             }
             try {
@@ -2397,19 +2405,21 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 if (frames.empty() || !frames.back().select) throw VbaRuntimeError(5,"End Select stack invalid");
                 active=frames.back().parent; frames.pop_back(); break;
             case Statement::Type::If: {
-                const bool matched = active
-                    ? evaluate(instruction.argument).truthy() : false;
-                frames.push_back({active, matched, false});
-                active = active && matched;
+                if(!frames.empty() && !frames.back().select && frames.back().pending && frames.back().instruction==ip) {active=frames.back().parent;frames.pop_back();}
+                const bool parent=active;frames.push_back({parent,false,false,{},false,parent,ip});active=false;
+                if(parent) frames.back().condition=vbaBooleanCondition(evaluate(instruction.argument));
+                frames.back().pending=false;active=parent && frames.back().condition;
                 break;
             }
             case Statement::Type::ElseIf: {
                 if (frames.empty() || frames.back().select || frames.back().inElse)
                     throw VbaRuntimeError(5,"ElseIf stack invalid");
                 auto& frame=frames.back(); active=false;
-                if (frame.parent && !frame.condition) {
-                    const bool matched=evaluate(instruction.expression).truthy();
-                    frame.condition=matched; active=matched;
+                if(frame.pending && frame.instruction==ip) frame.pending=false;
+                if (frame.parent && !frame.condition && !frame.pending) {
+                    frame.pending=true;frame.instruction=ip;
+                    const bool matched=vbaBooleanCondition(evaluate(instruction.expression));
+                    frame.pending=false;frame.condition=matched;active=matched;
                 }
                 break;
             }
@@ -2417,7 +2427,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 if (frames.empty() || frames.back().inElse)
                     return {VbaExecutionStatus::Error, "Else doppelt oder ohne If", instruction.line};
                 frames.back().inElse = true;
-                active = frames.back().parent && !frames.back().condition;
+                active = frames.back().parent && !frames.back().condition && !frames.back().pending;
                 break;
             case Statement::Type::EndIf:
                 if (frames.empty())
@@ -2549,12 +2559,12 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 break;
             case Statement::Type::While:
                 if (!active || (!instruction.expression.empty()
-                    && evaluate(instruction.expression).truthy()==(instruction.argument=="until")))
+                    && vbaBooleanCondition(evaluate(instruction.expression))==(instruction.argument=="until")))
                     ip=static_cast<std::size_t>(instruction.partner);
                 break;
             case Statement::Type::EndWhile:
                 if (active && (instruction.expression.empty()
-                    || evaluate(instruction.expression).truthy()!=(instruction.argument=="until")))
+                    || vbaBooleanCondition(evaluate(instruction.expression))!=(instruction.argument=="until")))
                     ip=static_cast<std::size_t>(instruction.partner)-1;
                 break;
             case Statement::Type::ExitDo:
@@ -2873,6 +2883,10 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         return failure;
     }
     return completed(0, false);
+}
+bool vbaBooleanCondition(const VbaValue& value) {
+    const auto scalar=scalarVbaValue(value);
+    return scalar.kind==VbaValue::Kind::Null ? false : coerceVbaModuleValue(scalar,"boolean").boolean;
 }
 VbaExecutionResult executeVbaProcedureWithArguments(std::string_view module, std::string_view procedure,
                                                     VbaHost& host, std::vector<VbaValue>& arguments) {

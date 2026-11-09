@@ -1,3 +1,4 @@
+#include "vba_condition.hpp"
 #include "artifact_execution_observer.hpp"
 #include "native_macro_runner.hpp"
 namespace linaccess {
@@ -37,7 +38,7 @@ void runNativeMacro(QSqlDatabase db,const std::vector<VbaValue>& args,
         if((counted || !expression) && repeat>=count) return;
         check();if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
         if(expression) {
-            try {const auto condition=scalarVbaValue(evaluate(*expression));check();if(nativeMacroStopAllPending()) {observedStatus="stopped";return;}if(!condition.truthy()) return;}
+            try {const auto condition=scalarVbaValue(evaluate(*expression));check();if(nativeMacroStopAllPending()) {observedStatus="stopped";return;}if(!vbaBooleanCondition(condition)) return;}
             catch(const VbaRuntimeError& error) {throw VbaRuntimeError(error.number,"Makro "+macro.asText()+", Wiederholung "+std::to_string(repeat+1)+": "+error.what(),error.source,error.helpFile,error.helpContext);}
         }
         if(repeat>=1000) throw VbaRuntimeError(3251,"RunMacro repeat expression iteration budget exceeded");
@@ -50,7 +51,7 @@ void runNativeMacro(QSqlDatabase db,const std::vector<VbaValue>& args,
         try {
             if(action.condition) {
                 if(*action.condition=="...") {if(!blockCondition) throw VbaRuntimeError(3251,"Macro condition continuation has no active block");if(!*blockCondition) continue;}
-                else {const auto condition=scalarVbaValue(evaluate(*action.condition));check();if(nativeMacroStopAllPending()) {observedStatus="stopped";return;}blockCondition=condition.truthy();if(!*blockCondition) continue;}
+                else {const auto condition=scalarVbaValue(evaluate(*action.condition));check();if(nativeMacroStopAllPending()) {observedStatus="stopped";return;}blockCondition=vbaBooleanCondition(condition);if(!*blockCondition) continue;}
             } else blockCondition.reset();
             if(action.name=="StopAllMacros") {observedStatus="stopped";nativeMacroStopAllPending()=true;if(restoreUi) restoreUi();return;}
             if(action.name=="StopMacro") {observedStatus="stopped";return;}

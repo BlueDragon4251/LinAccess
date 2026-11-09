@@ -1,3 +1,4 @@
+void testVbaConditions();
 void testVbaDebugger();
 #include "csv.hpp"
 #include "vba_currency.hpp"
@@ -4887,5 +4888,6 @@ End Function
     assert(evaluate("AscW(String:=ChrW$(CharCode:=937))").asNumber()==937);
     assert(evaluate("Chr$(CharCode:=34)").asText()=="\"");
     testVbaDebugger();
+    testVbaConditions();
     std::cout << "Core tests passed\n";
 }

@@ -91,7 +91,7 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
-    add_executable(linaccess_core_tests tests/core_tests.cpp tests/vba_debugger_tests.cpp)
+    add_executable(linaccess_core_tests tests/core_tests.cpp tests/vba_debugger_tests.cpp tests/vba_condition_tests.cpp)
     target_include_directories(linaccess_core_tests PRIVATE src)
     target_compile_options(linaccess_core_tests PRIVATE "$<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O1>")
     target_link_libraries(linaccess_core_tests PRIVATE linaccess_runtime)

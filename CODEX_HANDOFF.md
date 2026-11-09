@@ -4172,3 +4172,26 @@ keine aktuelle Vollsuite/Distributionsmatrix/GitHub-CI behaupten. Original-F129/
 Klassifizierungsumfang, keine vollständige Ausführungs- oder Access-Parität.
 Fester Katalog456:386 bestätigte Teilumfänge/70 offene Vollanforderungen,
 ausschließlich theoretisch und ungewichtet. Kein Gesamtabschluss.
+
+
+## 2026-11-09: Boolean-Bedingungen und If-Fehlerfortsetzung
+
+Gemeinsame native Let-Boolean-Konvertierung für If/ElseIf, Do-/While-Köpfe und
+Fußbedingungen, IIf sowie Makrobedingungen/Wiederholung: skalare Standardwerte
+einmal, Null als False, True/False-Strings und case-sensitive #TRUE#/#FALSE#.
+CBool(Null) bleibt94; Fehlerwerte/Arrays/Nothing werden nicht als True versteckt.
+Belegte Tokenformen mit angrenzenden Klammern, EndIf/End If/End With mit normalen
+Tokenabständen und leere einzeilige Then-/Else-Teile. EndIf vor Doppelpunkt ist
+kein Label; leeres Case wird vor Effekten verweigert. Fehlgeschlagene If/ElseIf-
+Köpfe behalten ausstehende Rahmen für Resume, Resume Next und Debugger-Skip;
+keine irrtümlichen Then-/Else-Effekte und keine beschädigten äußeren If-Rahmen.
+Scope/Sprachspezifikationsbeleg/Grenzen: docs/VBA_BOOLEAN_CONDITIONS.md.
+
+Gezielte Nachweise nach vollständiger Implementierung/Korrektur der technischen
+Prüfszenarien: Kern1/1 (2,22s), GUI1/1 (13,00s), abschließend aktuelles originales
+Kassa-Ziel1/1 (113,95s), frisch GUI-freier Kern1/1 (2,00s). Tatsächliche Makro-
+SQL-Effekte, Null-Standardwerte/Getterzahl, alle Bedingungspositionen, Resume und
+Debugger-Skip geprüft. Finales DEB/Build-ID/MDBTools1.0.1/SQLite3.54.1 sowie
+vier Fixture-/drei Uploadhashes bestanden. Kein neuer CTest, kein aktueller
+Gesamtsuite-/Windows-/Distributionsmatrix-Nachweis. F129/3075 bleibt erwartet.
+F045/F041/F051/F088 und456/386/70 bleiben offen/unverändert; kein Gesamtabschluss.

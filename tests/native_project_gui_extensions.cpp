@@ -320,6 +320,14 @@ void testNativeCapabilityReport(MainWindow& window,QSqlDatabase db) {
     clearExecutionObservations(db);assert(executionObservations(db).isEmpty());
 }
 
+void testNativeConditionCoercions(MainWindow& window,QSqlDatabase db) {
+    using namespace linaccess;QSqlQuery query(db);assert(query.exec("CREATE TABLE condition_audit(n INTEGER)"));
+    const auto action=[](QString condition,int value) {return QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{QString("INSERT INTO condition_audit VALUES(%1)").arg(value)}},{"condition",condition}};};
+    storeNativeMacro(db,"ConditionCoercion",{{"version",1},{"actions",QJsonArray{action("\"True\"",1),action("\"False\"",99),action("Null",99),action("\"#TRUE#\"",2),action("\"#FALSE#\"",99)}}});NativeStandardModuleHost host(&window,db,[] {});auto commands=host.applicationObject()->member("DoCmd",{}).object;
+    commands->member("RunMacro",{VbaValue::string("ConditionCoercion"),VbaValue::longInteger(2),VbaValue::string("\"True\"")});assert(query.exec("SELECT n FROM condition_audit ORDER BY rowid"));QList<int> values;while(query.next()) values.append(query.value(0).toInt());assert(values==QList<int>({1,2,1,2}));query.finish();
+    commands->member("RunMacro",{VbaValue::string("ConditionCoercion"),VbaValue::longInteger(2),VbaValue::string("\"False\"")});assert(query.exec("SELECT COUNT(*) FROM condition_audit") && query.next() && query.value(0).toInt()==4);query.finish();
+}
+
 void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
     testNativeRepaintObject(window,db);
     testNativeSetValueDoubleEvaluation(window,db);
@@ -330,4 +338,5 @@ void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
     testNativeSqlObjectProperties(window,db);
     testNativeModuleDebugger(window,db);
     testNativeCapabilityReport(window,db);
+    testNativeConditionCoercions(window,db);
 }

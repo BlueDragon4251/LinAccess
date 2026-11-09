@@ -1,3 +1,4 @@
+#include "vba_condition.hpp"
 #include "native_object_types.hpp"
 #include "native_utf.hpp"
 #include "native_file_system_object.hpp"
@@ -2337,7 +2338,7 @@ private:
             }
             if (word == "iif" && args.size() == 3) {
                 if (!host_) return {};
-                return args[0].truthy() ? args[1] : args[2];
+                return vbaBooleanCondition(args[0]) ? args[1] : args[2];
             }
             if (word=="left" || word=="right" || word=="left$" || word=="right$" || word=="mid" || word=="mid$") {
                 if (!host_) return {};
