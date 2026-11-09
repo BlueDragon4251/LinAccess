@@ -11,6 +11,7 @@ struct NativeQuerySources {
     QString sql;
     QStringList order;
     QMap<QString,QStringList> fields;
+    QMap<QString,QString> origins;
 };
 NativeQuerySources nativeQuerySources(QSqlDatabase database,const QString& main,const QJsonArray& joins);
 std::optional<QJsonArray> editNativeQueryJoins(QWidget* parent,QSqlDatabase database,

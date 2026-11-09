@@ -152,7 +152,7 @@ output fields of an existing supported saved selection query. The metadata keeps
 that source's real name. Saved-query dependency, type-lineage and parameter-view
 boundaries are unchanged: sources that cannot be installed as native views are
 not guessed or populated with fallback records. Arbitrary SQL reverse parsing,
-self joins and a full QBE/Access oracle remain outside this scope.
+a full QBE/Access oracle remains outside this scope.
 
 Validation: existing GUI/SQL2/2 passed (15.84s), application built. An enum
 conversion build error was fixed before running the bundle. Actual nested query
@@ -177,9 +177,9 @@ aliases. Criteria, ordering, calculations, parameters, grouping and report sourc
 reuse go through the existing native SQL compiler and execution semantics.
 
 The draft preserves the ordered joins and source/field identities on reopening.
-Each source may occur once, with at most255 combined source fields; self joins,
-source aliases, composite/non-equality join predicates and other join kinds
-remain available only to the broader manual SQL path within its native bounds.
+Source aliases permit source reuse as described below, with at most255 combined
+source fields. Composite/non-equality join predicates and other join kinds remain
+available only to the broader manual SQL path within its native bounds.
 No Access SQL reverse parser or complete QBE/window/locale parity is claimed.
 
 Validation: existing GUI/SQL2/2 passed (14.92s); application built. After
@@ -212,3 +212,29 @@ The callback counter distinguishes schema preparation from execution. No new
 CTest ID, Windows/original/full-suite proof. The checked DEB at fe01e1d predates
 this form integration; its Build-ID/payload/dependency checks and all seven
 fixture/upload original hashes passed.
+
+## Source aliases and self joins
+
+Each newly joined source can now have an explicit alias. Reusing the same physical
+table/view requires a distinct alias; all source identities are unique under the
+existing native case folding. The main source retains its real name. Joins refer
+to source identities, whereas metadata discovery always reads the underlying
+actual table/view. Aliases are quoted, limited to64 characters and persisted with
+the ordered join design. The left-side selector includes existing aliases and
+shows their physical origin as a tooltip. The totals dialog qualifies source
+identities too, so duplicate field names remain distinguishable.
+
+This permits actual parent/child self joins and further joins from an alias,
+including LEFT Null rows. Draft fields retain alias identity across reordering,
+criteria, calculations, grouping, saving/restoring and removing a joined source.
+Duplicate output labels still require output aliases independently of source
+aliases. Eight joins and255 combined source fields remain the bounded scope;
+composite/non-equality join predicates and other join kinds remain outside this
+visual entry. No full Access designer or SQL reverse parsing parity is claimed.
+
+Validation: application built; existing GUI/SQL2/2 passed (16.45s). An actual
+parent/child LEFT self join matches independent SQL including unmatched Nulls.
+An alias containing spaces persists/restores; alias metadata fields resolve from
+the underlying source. Ambiguous aliasless reuse is refused without adding the
+join. Preview does not execute rows. No new CTest ID or new original/Windows/
+full-suite/package proof.

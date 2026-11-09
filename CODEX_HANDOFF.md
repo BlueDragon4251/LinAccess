@@ -4700,3 +4700,17 @@ Formularintegration als3b18277 veröffentlicht; letzte geprüfteDEB fe01e1d vor 
 Integration. Details NATIVE_MACROS_RUNTIME.md/READONLY_FORM_REQUERY_RUNTIME.md.
 F129-Text korrigiert, fester Katalog456/386/70 unverändert. Weiter mit echten
 Quellenaliasen und Selbstverknüpfungen im visuellen Entwurf.
+
+
+Quellenaliase/Selbstverknüpfungen im visuellen Entwurf: wiederholte echte Tabellen/
+Query-Views mit eindeutigem explizitem Alias, getrennte physische Herkunft und
+SQL-Feldidentität, Metadaten immer von der tatsächlichen Quelle. Linker Selektor
+bietet vorhandene Aliase und zugehörige Felder, Tooltip zeigt Herkunft. Summen-
+dialog qualifiziert doppelte Feldnamen. Reale Eltern-Kind-LEFT-Verknüpfung gegen
+unabhängiges SQL verglichen, Nullfälle/Alias mit Leerzeichen/Wiederöffnung und
+Ablehnung mehrdeutiger aliasloser Wiederverwendung geprüft; Metadaten führen
+keine Zeilenberechnung aus. Anwendung gebaut, bestehendes GUI-/SQL-Bündel2/2
+(16,45s) bestanden ohne weitere Wiederholung. Keine neuen CTests oder neue
+Original-/Windows-/Gesamtsuiten-/Paketnachweise. Details VISUAL_QUERY_DESIGNER.md;
+F080-Beschreibung aktualisiert, Katalog456/386/70 unverändert. Makrokatalog-Fix
+als657d6b3 veröffentlicht/verifiziert; letzte geprüfteDEB weiterhinfe01e1d.
