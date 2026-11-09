@@ -3244,3 +3244,19 @@ tatsächliche SQL-Schleifenaufrufe. Bestehende globale Bruchgrenzen-/Single-/Byt
 Negativannahmen gezielt in reale positive Fälle geändert; keine neue CTest-ID.
 Volle gemischte Variant-/Fixedpoint-/Fehler-/Compilerparität bleibt offen.
 TYPED_FOR_RUNTIME.md; F045/F041/F122 und456/384/72 unverändert. Direkt weiter.
+
+Tabellennavigation kann jetzt von einer sauberen aktuellen Zeile wechseln, ohne
+unbeteiligte Cache-Entwürfe zu speichern oder zu verwerfen. Native Pfeiltasten und
+GoToRecord/RunCommand nutzen denselben Pfad. Ein einzelner befüllter neuer Datensatz
+kann vor dem Verlassen über den normalen transaktionalen Save mit echter
+Schlüsselerfassung gespeichert werden; vollständig leere neue Entwürfe bleiben
+begrenzt, neue Zeilen werden bereits für Record-Undo als pending erkannt.
+Der Shared-Find-Guard erlaubt ebenfalls eine saubere aktuelle Zeile bei anderen
+Entwürfen. Andere Guard-Aufrufer behalten ihre bisherigen Insert-Grenzen.
+Vorhandene GUI/Feld gemeinsam2/2 (6,20s), App gebaut: tatsächliche Qt-/VBA-Navigation,
+erhaltene mehrere Entwürfe, unverändertes SQL für unbeteiligte Änderungen,
+verweigerter leerer Insert, echter einzelner Insert beim Wechsel mit neuem
+SQL-Schlüssel; Mehrfach-Save-/Sort-/Requery-Sperren weiterhin geprüft. Keine neue
+CTest-ID oder Windows-Beobachtung; TABLE_NAVIGATION_DRAFTS.md. Aktueller gelöschter
+Datensatz, nötige Teil-Saves mehrerer Entwürfe, allgemeine Addition-Row-/Windows-
+Ereignisse bleiben offen. F368/F168/F080 und456/384/72 unverändert. Direkt weiter.

@@ -1050,10 +1050,10 @@ QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int
     if(action==5) return dispatchTableCommand(28);
     if(!table->finishEditing()) return tableModelFailure(model,2501);
     if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während der Validierung geschlossen.");
-    // Only the current existing record may be saved here. A manual-submit cache
-    // can also contain unrelated drafts, insertions and deletions.
-    if(model->isDirty()) {
-        if(!model->canSubmitCurrentRecordAlone(table->currentIndex().row()))
+    // A clean current record can move without writing unrelated drafts. Save
+    // only a sole current existing/populated inserted record before leaving it.
+    if(model->isDirty() && model->hasPendingRecord(table->currentIndex().row())) {
+        if(!model->canSubmitCurrentRecordAlone(table->currentIndex().row(),true))
             return tableCommandFailure(3251,"Navigation mit mehreren Tabellenentwürfen oder neuen/gelöschten Zeilen ist noch nicht implementiert.");
         const auto saved=saveDataPage(page,false);
         if(saved.value("error").toInt()) return saved;
@@ -2037,7 +2037,7 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
         if((self->tabs_->currentWidget()!=page || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(self)) && !self->activateDataPage(page))
             return model ? model->rejectEdit(2501,"Tabellenaktivierung wurde vor der Suche abgebrochen.") : false;
         if(!self || !page || !table || !model) return false;
-        if(!model->isDirty()) return true;
+        if(!model->isDirty() || !model->hasPendingRecord(table->currentIndex().row())) return true;
         if(!model->canSubmitCurrentRecordAlone(table->currentIndex().row())) return model->rejectEdit(3251,"Suche mit weiteren Tabellenentwürfen ist noch nicht implementiert.");
         const auto saved=self->saveDataPage(page,false);
         if(const int error=saved.value("error").toInt()) {

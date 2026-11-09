@@ -1841,10 +1841,13 @@ End Sub
     assert(mixed->executeProcedure("AddTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditModel->rowCount()==2);
     const int addedRow=recordEditView->currentIndex().row(); assert(addedRow==1);
     assert(mixed->executeProcedure("AddActiveTableRecord",selectArguments).errorNumber==3251 && recordEditModel->rowCount()==2);
+    assert(mixed->executeProcedure("PreviousTableRecord",selectArguments).errorNumber==3251 && recordEditModel->rowCount()==2 && recordEditView->currentIndex().row()==1);
     assert(recordEditModel->setData(recordEditModel->index(addedRow,1),"new-record"));
     assert(mixed->executeProcedure("AddTableRecord",selectArguments).errorNumber==3251 && recordEditModel->rowCount()==2);
     assert(unchanged.exec("SELECT count(*) FROM command_record_edits") && unchanged.next() && unchanged.value(0).toInt()==1); unchanged.finish();
     recordEditView->setCurrentIndex(recordEditModel->index(addedRow,1));
+    assert(mixed->executeProcedure("PreviousTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && recordEditView->currentIndex().row()==0 && !recordEditModel->isDirty());
+    assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(mixed->executeProcedure("SaveActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(recordEditView->currentIndex().column()==1 && recordEditModel->index(recordEditView->currentIndex().row(),0).data().toInt()==2);
     assert(unchanged.exec("SELECT id FROM command_record_edits WHERE value='new-record'") && unchanged.next() && unchanged.value(0).toInt()==2); unchanged.finish();
@@ -1908,6 +1911,11 @@ End Sub
     navigationView->setCurrentIndex(navigationModel->index(0,1));
     assert(navigationModel->setData(navigationModel->index(0,1),"navigation-saved"));
     assert(navigationModel->setData(navigationModel->index(1,1),"other-draft"));
+    navigationView->setCurrentIndex(navigationModel->index(2,1));QTest::keyClick(navigationView,Qt::Key_Down);assert(navigationView->currentIndex().row()==3 && navigationModel->isDirty());
+    assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==299 && navigationModel->isDirty());
+    assert(navigationModel->index(0,1).data(Qt::EditRole).toString()=="navigation-saved" && navigationModel->index(1,1).data(Qt::EditRole).toString()=="other-draft");
+    navigationView->setCurrentIndex(navigationModel->index(0,1));
+
     assert(mixed->executeProcedure("LastTableRecord",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==0 && navigationModel->isDirty());
     assert(mixed->executeProcedure("SortTableDescending",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==0 && navigationModel->isDirty());
     assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==0 && navigationModel->isDirty());

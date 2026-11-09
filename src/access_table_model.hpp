@@ -22,7 +22,7 @@ public:
     bool hasPendingRecord(int row) const;
     bool undoPendingRecord(int row);
     QMap<QString,QVariant> submittedPrimaryKey(int originalRow) const { return submittedKeys_.value(originalRow); }
-    bool canSubmitCurrentRecordAlone(int row) const;
+    bool canSubmitCurrentRecordAlone(int row,bool allowInsert=false) const;
     bool rejectEdit(int number,const QString& message);
     bool isTextColumn(int column) const;
     bool isSearchableColumn(int column) const;

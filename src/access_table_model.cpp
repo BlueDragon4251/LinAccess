@@ -85,7 +85,7 @@ void AccessTableModel::revertRow(int row) {
 }
 bool AccessTableModel::hasPendingRecord(int row) const {
     if(editStrategy()!=OnManualSubmit || row<0 || row>=rowCount()) return false;
-    if(deletedRows_.contains(row)) return true;
+    if(deletedRows_.contains(row) || !indexInQuery(index(row,0)).isValid()) return true;
     for(int column=0;column<columnCount();++column) if(isDirty(index(row,column))) return true;
     return false;
 }
@@ -131,8 +131,15 @@ bool AccessTableModel::setReadOnly(bool value) {
     if(rowCount()>0 && columnCount()>0) emit dataChanged(index(0,0),index(rowCount()-1,columnCount()-1));
     return true;
 }
-bool AccessTableModel::canSubmitCurrentRecordAlone(int row) const {
-    if(row<0 || row>=rowCount() || primaryKey().isEmpty() || deletedRows_.contains(row) || !indexInQuery(index(row,0)).isValid()) return false;
+bool AccessTableModel::canSubmitCurrentRecordAlone(int row,bool allowInsert) const {
+    if(row<0 || row>=rowCount() || primaryKey().isEmpty() || deletedRows_.contains(row)) return false;
+    if(!indexInQuery(index(row,0)).isValid()) {
+        if(!allowInsert) return false;
+        const auto values=record(row);bool supplied=false;
+        for(int column=0;column<columnCount();++column)
+            if(values.isGenerated(column) && !generated_.contains(values.fieldName(column).toCaseFolded()) && !QSqlTableModel::data(index(row,column),Qt::EditRole).isNull()) supplied=true;
+        if(!supplied) return false;
+    }
     bool currentDirty=false;
     for(int column=0;column<columnCount();++column) currentDirty|=isDirty(index(row,column));
     if(!currentDirty) return false;
