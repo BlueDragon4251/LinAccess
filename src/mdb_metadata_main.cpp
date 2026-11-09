@@ -59,7 +59,10 @@ int main(int argc,char** argv) {
             const auto name=checkedName(column->name,sizeof(column->name));
             if(columnNames.contains(name.toCaseFolded())) throw 1;
             columnNames.insert(name.toCaseFolded()); columns.append(name);
-            if(displaySupported) {QJsonObject properties{{"name",name}};for(const auto* key:{"Caption","Description"}) if(const auto* value=mdb_col_get_prop(column,key)) {const auto size=strnlen(value,16385);if(size>16384) throw 1;const QByteArray bytes(value,size);const auto text=QString::fromUtf8(bytes);if(text.size()>4096 || !text.isValidUtf16() || text.toUtf8()!=bytes || text.contains(QChar(0))) throw 1;properties.insert(QString::fromLatin1(key).toLower(),text);}fieldProperties.append(properties);}
+            if(displaySupported) {QJsonObject properties{{"name",name}};for(const auto* key:{"Caption","Description"}) if(const auto* value=mdb_col_get_prop(column,key)) {const auto size=strnlen(value,16385);if(size>16384) throw 1;const QByteArray bytes(value,size);const auto text=QString::fromUtf8(bytes);if(text.size()>4096 || !text.isValidUtf16() || text.toUtf8()!=bytes || text.contains(QChar(0))) throw 1;properties.insert(QString::fromLatin1(key).toLower(),text);}for(const auto* key:{"Required","AllowZeroLength"}) {
+                if(QString::fromLatin1(key)=="AllowZeroLength" && column->col_type!=MDB_TEXT && column->col_type!=MDB_MEMO) continue;
+                if(const auto* value=mdb_col_get_prop(column,key)) {const QByteArray bytes(value);if(bytes!="yes" && bytes!="no") throw 1;properties.insert(QString::fromLatin1(key)=="Required" ? "required" : "allow_zero_length",bytes=="yes");}
+            }fieldProperties.append(properties);}
             if(column->col_type==MDB_FLOAT) { singleColumns.append(name); singleFields.append(column); }
             if(column->col_type==MDB_DOUBLE) { doubleColumns.append(name); doubleFields.append(column); }
         }

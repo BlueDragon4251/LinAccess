@@ -1,6 +1,6 @@
 # Proven Jet4 field captions/descriptions
 
-The existing read-only MDB helper now reads only Caption and Description through
+The existing read-only MDB helper reads Caption and Description through
 the actually available mdb_col_get_prop API. The normal metadata response has
 an optional field_properties array and field_properties_format=JET4. It binds
 every actual ordered column, including proven absence; empty strings remain
@@ -37,3 +37,22 @@ The existing case compares native extraction, real MDB→SQLite import, DAO read
 metadata, actual model headers and unchanged source hash. Existing import/DAO2/2
 passed (2.57s), app/helper built. No new CTest target, full-suite, platform-matrix
 or Windows oracle claim; fixed catalog456/384/72 unchanged.
+
+## Jet4 Required and AllowZeroLength
+
+The same bounded component also preserves explicitly present Required and
+AllowZeroLength booleans. The real MDBTools representation was checked against
+an independently reopened zero-row Jackcess Jet4 file: yes/no, not guessed
+numeric or localized spellings. Unknown representations fail; absent properties
+remain unknown. AllowZeroLength is accepted only for proven text/memo columns.
+Imports enforce Required using actual NOT NULL and disallowed empty strings using
+the existing linaccess_jet_nonempty_text CHECK (NULL remains independent).
+The DAO field and intrinsic Property readers expose the proven booleans readonly.
+Original ownership is explicit in the field-designer metadata, so an imported
+field never becomes editable merely because Required and Attributes are known.
+Older saved projects are not silently assigned these properties or constraints.
+The optional development generator JetFieldConstraintReference.java contains no
+records/VBA and refuses replacement. Set LINACCESS_JET_FIELD_CONSTRAINT_REFERENCE
+to its generated field-constraints-probe.mdb for the existing import target.
+Full property blobs, source mutations, validation expressions, collation and
+Access2003 runtime equivalence remain separate unproven requirements.

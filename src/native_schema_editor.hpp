@@ -5,7 +5,7 @@
 #include <QString>
 #include <optional>
 namespace linaccess {
-struct NativeFieldDisplayProperties {std::optional<QString> caption,description;};
+struct NativeFieldDisplayProperties {std::optional<QString> caption,description;bool nativeOwned{};};
 QMap<QString,NativeFieldDisplayProperties> nativeTableFieldDisplayProperties(QSqlDatabase database,const QString& table);
 // True only for an owned native Date declaration with canonical storage.
 bool nativeFieldHasCanonicalDateStorage(QSqlDatabase database,const QString& table,const QString& field);

@@ -12,7 +12,7 @@ struct AccessSourceIndex {
     QVector<bool> descending;
     bool operator==(const AccessSourceIndex&) const = default;
 };
-struct AccessSourceFieldDisplay {std::optional<QString> caption,description;};
+struct AccessSourceFieldDisplay {std::optional<QString> caption,description;std::optional<bool> required,allowZeroLength;};
 // Missing component means unknown, not a proven empty property catalog.
 std::optional<QMap<QString,AccessSourceFieldDisplay>> checkedAccessSourceFieldDisplayProperties(const QByteArray& json,const QStringList& columns);
 // Strict versioned metadata produced by the read-only native MDB helper.

@@ -6119,3 +6119,17 @@ Import/DAO2/2 (2,57s), App/lesender Helfer gebaut. Java nur Prüfdaten-Erzeugung
 keine Runtime-Abhängigkeit. SOURCE_FIELD_DISPLAY_PROPERTIES.md;456/384/72 gleich.
 Fortsetzung: weitere belegbare Eigenschaften und allgemeine Entwurfsanforderungen
 fortlaufend umsetzen; keine Zwischenabschlüsse oder Fertiganrufe.
+
+Jet4 Required/AllowZeroLength werden jetzt im vorhandenen lesenden Metadatenlauf
+als ausdrücklich vorhandene boolesche Properties übernommen. Tatsächliche
+MDBTools-Repräsentation yes/no gegen unabhängig wieder geöffneten technischen
+Jet4-Behälter geprüft; fehlende Properties bleiben unbekannt. Arbeitskopien
+setzen NOT NULL und Text-/Memo-Leerstring-CHECK tatsächlich durch; DAO liest
+Originalwerte readonly. GUI verwendet ausdrückliches nativeOwned statt aus
+bekannten Getterwerten auf Bearbeitbarkeit zu schließen; eine Metadatenabfrage
+pro Feldliste, importierte Entwurfsänderungen deaktiviert. Keine Originalmutation.
+Technische Importprüfung1/1 (0,16s), anschließend bestehende DAO/GUI/echte
+Kassa-Tabellenkopie3/3 (95,41s; davon Quellkopie87,28s); App/Helfer gebaut.
+SOURCE_FIELD_DISPLAY_PROPERTIES.md. Keine neue Testregistrierung oder F-ID;
+456/384/72 bleiben unverändert. Fortsetzung: eigene DAO-QueryDefs dauerhaft
+umbenennen, Katalog-/View-/Generationseigenschaften mit berücksichtigen.

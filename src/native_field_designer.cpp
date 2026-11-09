@@ -68,20 +68,20 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
         auto quoted=tableName;quoted.replace('"',"\"\"");QSet<QString> protectedFields=generatedAccessColumns(database,tableName);
         QSqlQuery keys(database);if(!keys.exec("PRAGMA main.table_info(\""+quoted+"\")")) throw VbaRuntimeError(3146,"Feldeigenschaften konnten nicht gelesen werden");
         while(keys.next()) if(keys.value(5).toInt()>0) protectedFields.insert(keys.value(1).toString().toCaseFolded());keys.finish();
-        struct Entry {QStringList values;bool protectedField;};QVector<Entry> entries;bool native=true;
+        struct Entry {QStringList values;bool protectedField;};QVector<Entry> entries;bool native=true;const auto fieldOwnership=nativeTableFieldDisplayProperties(database,tableName);
         for(const auto& value:table->member("Fields",{}).object->enumerate()) {
             const auto field=value.object;const auto fieldName=QString::fromStdString(field->member("Name",{}).asText());
             const auto kind=property(field,"Type"),capacity=property(field,"Size"),mandatory=property(field,"Required"),initial=property(field,"DefaultValue"),attributes=property(field,"Attributes"),rule=property(field,"ValidationRule");
-            native=native && mandatory.kind==VbaValue::Kind::Boolean && attributes.kind==VbaValue::Kind::Number;
+            native=native && fieldOwnership.value(fieldName.toCaseFolded()).nativeOwned;
             const auto code=kind.kind==VbaValue::Kind::Number ? static_cast<int>(kind.number) : 0;QString displayedSize="Nicht verfügbar";
             if(code==11 || code==12) displayedSize="Variabel";else if(capacity.kind==VbaValue::Kind::Number) displayedSize=QString::number(static_cast<int>(capacity.number))+(code==10 ? " Zeichen" : " Byte");
             entries.append({{fieldName,typeNames.value(code,"Nicht verfügbar"),displayedSize,mandatory.kind==VbaValue::Kind::Boolean ? (mandatory.boolean ? "ja" : "nein") : "Nicht verfügbar",initial.kind==VbaValue::Kind::Text ? QString::fromStdString(initial.text) : "Nicht verfügbar",rule.kind==VbaValue::Kind::Text ? QString::fromStdString(rule.text) : "Nicht verfügbar"},protectedFields.contains(fieldName.toCaseFolded())});
         }
-        allNative=native;list->setRowCount(0);int selection=0;
+        allNative=native;append->setEnabled(allNative);list->setRowCount(0);int selection=0;
         for(const auto& entry:entries) {const int row=list->rowCount();list->insertRow(row);for(int column=0;column<entry.values.size();++column) list->setItem(row,column,new QTableWidgetItem(entry.values[column]));list->item(row,0)->setData(Qt::UserRole,entry.protectedField);if(entry.values[0]==previous) selection=row;}
         if(list->rowCount()) list->setCurrentCell(selection,0);
     };
-    const auto updateDelete=[&] {const int row=list->currentRow();remove->setEnabled(catalogValid && row>=0 && row<list->rowCount() && list->rowCount()>1 && list->item(row,0) && !list->item(row,0)->data(Qt::UserRole).toBool());};
+    const auto updateDelete=[&] {const int row=list->currentRow();remove->setEnabled(catalogValid && allNative && row>=0 && row<list->rowCount() && list->rowCount()>1 && list->item(row,0) && !list->item(row,0)->data(Qt::UserRole).toBool());};
     const auto loadProperties=[&] {
         selectedField.reset();saveDisplay->setEnabled(false);propertyCaption->setEnabled(false);propertyDescription->setEnabled(false);propertyCaption->clear();propertyDescription->clear();changeType->setEnabled(false);targetType->setEnabled(false);move->setEnabled(false);position->setEnabled(false);apply->setEnabled(false);renameButton->setEnabled(false);propertySize->setEnabled(false);propertyRequired->setEnabled(false);propertyZero->setEnabled(false);propertyDefault->setEnabled(false);propertyValidation->setEnabled(false);propertyValidation->clear();propertyValidationText->setEnabled(false);propertyValidationText->clear();const int row=list->currentRow();
         if(!catalogValid || row<0 || !list->item(row,0)) {selectedName->clear();return;}
@@ -92,7 +92,7 @@ void editNativeFields(QWidget* parent,QSqlDatabase database,const QString& table
             selectedType=kind.kind==VbaValue::Kind::Number ? static_cast<int>(kind.number) : 0;
             const bool movable=allNative && mandatory.kind==VbaValue::Kind::Boolean && attributes.kind==VbaValue::Kind::Number && list->rowCount()>1;position->setRange(0,qMax(0,list->rowCount()-1));position->setValue(row);position->setEnabled(movable);move->setEnabled(movable);
             const bool eligible=allNative && mandatory.kind==VbaValue::Kind::Boolean && attributes.kind==VbaValue::Kind::Number && !(static_cast<int>(attributes.number)&16) && (selectedType!=10 || capacity.kind==VbaValue::Kind::Number);
-            const auto display=nativeTableFieldDisplayProperties(database,tableName).value(selectedName->text().toCaseFolded());propertyCaption->setText(display.caption.value_or(QString{}));propertyDescription->setText(display.description.value_or(QString{}));const bool displayEditable=mandatory.kind==VbaValue::Kind::Boolean && attributes.kind==VbaValue::Kind::Number;propertyCaption->setEnabled(displayEditable);propertyDescription->setEnabled(displayEditable);saveDisplay->setEnabled(displayEditable);
+            const auto display=nativeTableFieldDisplayProperties(database,tableName).value(selectedName->text().toCaseFolded());propertyCaption->setText(display.caption.value_or(QString{}));propertyDescription->setText(display.description.value_or(QString{}));const bool displayEditable=display.nativeOwned;propertyCaption->setEnabled(displayEditable);propertyDescription->setEnabled(displayEditable);saveDisplay->setEnabled(displayEditable);
             const int numeric=targetType->findData(selectedType);targetType->setCurrentIndex(numeric);targetType->setEnabled(eligible && numeric>=0);changeType->setEnabled(eligible && numeric>=0);
             propertyRequired->setChecked(mandatory.kind==VbaValue::Kind::Boolean && mandatory.boolean);propertyRequired->setEnabled(eligible);
             if(selectedType==10 && capacity.kind==VbaValue::Kind::Number) propertySize->setValue(static_cast<int>(capacity.number));propertySize->setEnabled(eligible && selectedType==10);

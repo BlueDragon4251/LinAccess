@@ -252,6 +252,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
     QStringList actualNames,declaredPrimary;
     for (const auto& column:columns) { actualNames.append(column.name); if (column.primaryKeyOrder) ++primaryCount; }
     for(int order=1;order<=columns.size();++order) for(const auto& column:columns) if(column.primaryKeyOrder==order) declaredPrimary.append(column.name);
+    const auto sourceDisplay=checkedAccessSourceFieldDisplayProperties(schema.sourceIndexMetadata,actualNames);
     const auto sourceIndexes=schema.sourceIndexMetadata.isEmpty() ? QVector<AccessSourceIndex>{} : checkedAccessSourceIndexes(schema.sourceIndexMetadata,actualNames);
     std::optional<AccessSingleValues> exactSingles;
     std::optional<AccessDoubleValues> exactDoubles;
@@ -350,12 +351,15 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
         } else if(!column.sourceDefault.isEmpty() || !column.sqlDefault.isEmpty()) throw fail("Standardwert-Metadaten widersprüchlich");
         if(nativeCounter(column) && primaryDirections.value(column.name)) throw fail("Absteigender AutoNumber-Primärindex ist nicht nachgewiesen");
         seen.insert(column.name.toCaseFolded());
+        const auto properties=sourceDisplay ? sourceDisplay->value(column.name.toCaseFolded()) : AccessSourceFieldDisplay{};
+        if(properties.allowZeroLength && (column.sqliteType!="TEXT" || (column.sourceType!="VARCHAR" && column.sourceType!="TEXT" && column.sourceType!="MEMO"))) throw fail("AllowZeroLength benötigt einen nachgewiesenen Text-/Memo-Quelltyp");
         const bool jetManaged=sourceCounterStates.contains(column.name);
         definitions << sqlQuote(column.name) + ' ' + (jetManaged ? QString("INT") : column.sqliteType)
             + (nativeCounter(column) ? " PRIMARY KEY AUTOINCREMENT" : descendingSinglePrimary && column.primaryKeyOrder ? " PRIMARY KEY DESC" : QString{})
             + (!nativeCounter(column) && column.autoNumber ? " DEFAULT ("+accessCounterDefault(tableName,column.name)+")" : QString{})
             + (!column.autoNumber && column.hasDefault ? " DEFAULT "+column.sqlDefault : QString{})
-            + (column.required || column.primaryKeyOrder || column.autoNumber ? " NOT NULL" : "")
+            + (column.required || properties.required.value_or(false) || column.primaryKeyOrder || column.autoNumber ? " NOT NULL" : "")
+            + (properties.allowZeroLength && !*properties.allowZeroLength ? " CHECK (linaccess_jet_nonempty_text("+sqlQuote(column.name)+"))" : QString{})
             + (column.sourceSize>0 ? " CHECK (linaccess_jet_text_capacity("+sqlQuote(column.name)+","+QString::number(column.sourceSize)+"))" : QString{});
     }
 
@@ -463,7 +467,6 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                             "(table_name TEXT PRIMARY KEY, definition TEXT NOT NULL)"))
                 throw fail(query.lastError().text());
             QJsonArray metadata;
-            QStringList displayColumns;for(const auto& column:columns) displayColumns.append(column.name);const auto sourceDisplay=checkedAccessSourceFieldDisplayProperties(schema.sourceIndexMetadata,displayColumns);
             for (const auto& col : columns) {QJsonObject entry{
                 {"name", col.name}, {"source_type", col.sourceType}, {"sqlite_type", col.sqliteType},
                 {"required", col.required}, {"primary_key_order", col.primaryKeyOrder},
@@ -471,7 +474,7 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                 {"source_origin", col.sourceOrigin}, {"source_size", col.sourceSize},
                 {"has_default", col.hasDefault}, {"source_default", col.sourceDefault}, {"default_sql", col.sqlDefault},
                 {"default_native", col.hasDefault && !col.autoNumber}};
-                if(sourceDisplay) {entry.insert("source_display_properties_proven",true);const auto properties=sourceDisplay->value(col.name.toCaseFolded());if(properties.caption) {entry.insert("source_caption",*properties.caption);entry.insert("source_caption_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}if(properties.description) {entry.insert("source_description",*properties.description);entry.insert("source_description_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}}metadata.append(entry);}
+                if(sourceDisplay) {entry.insert("source_display_properties_proven",true);const auto properties=sourceDisplay->value(col.name.toCaseFolded());if(properties.required) entry.insert("source_required",*properties.required);if(properties.allowZeroLength) entry.insert("source_allow_zero_length",*properties.allowZeroLength);if(properties.caption) {entry.insert("source_caption",*properties.caption);entry.insert("source_caption_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}if(properties.description) {entry.insert("source_description",*properties.description);entry.insert("source_description_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}}metadata.append(entry);}
 
             query.prepare("INSERT INTO _la_table_schema VALUES (?,?)");
             query.addBindValue(tableName);

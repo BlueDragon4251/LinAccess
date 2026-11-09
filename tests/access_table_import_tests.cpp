@@ -340,6 +340,24 @@ void verifyJetSinglePrecisionReference(const QString& path) {
     std::cout<<"Actual Jet Single precision: original bits despite lossy CSV, finite extremes, NULL, direct/full import, DAO values, mismatched CSV and negative-zero atomic refusal verified\n";
 }
 
+void verifyJetFieldConstraintReference(const QString& path) {
+    using namespace linaccess;QFile source(path);const auto digest=[&] {assert(source.open(QIODevice::ReadOnly));const auto hash=QCryptographicHash::hash(source.readAll(),QCryptographicHash::Sha256);source.close();return hash;};const auto before=digest();
+    const auto schema=parseMdbSchema(AccessCatalog(path).tableSchema("constraint_probe"));const QStringList names{"text_required","text_optional","memo"};const auto properties=checkedAccessSourceFieldDisplayProperties(schema.sourceIndexMetadata,names);assert(properties && properties->size()==3);
+    for(const auto& name:names) {const auto value=properties->value(name);assert(value.required && *value.required==(name=="text_required") && value.allowZeroLength && *value.allowZeroLength==(name=="text_optional"));}
+    auto db=QSqlDatabase::addDatabase("QSQLITE","jet-field-constraint-reference");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery query(db);assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));query.finish();assert(importAccessDatabase(db,path)==1);
+    const auto display=nativeTableFieldDisplayProperties(db,"constraint_probe");assert(display.size()==3);for(const auto& value:display) assert(!value.nativeOwned);
+    auto database=makeDaoDatabase(db);auto table=database->member("TableDefs",{VbaValue::string("constraint_probe")}).object;
+    for(const auto& name:names) {auto field=table->member("Fields",{VbaValue::string(name.toStdString())}).object;assert(field->member("Required",{}).truthy()==(name=="text_required") && field->member("AllowZeroLength",{}).truthy()==(name=="text_optional"));int error=0;try {field->assign("Required",VbaValue::logical(false));}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==383);}
+    const auto execute=[&](const char* sql,int expected) {int error=0;try {(void)database->member("Execute",{VbaValue::string(sql)});}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==expected);};
+    execute("INSERT INTO constraint_probe DEFAULT VALUES",3314);
+    execute("INSERT INTO constraint_probe(text_required) VALUES ('')",3315);
+    execute("INSERT INTO constraint_probe(text_required,memo) VALUES ('x','')",3315);
+    execute("INSERT INTO constraint_probe(text_required,text_optional) VALUES ('x','')",0);
+    execute("INSERT INTO constraint_probe(text_required,text_optional,memo) VALUES ('y',NULL,NULL)",0);
+    assert(query.exec("SELECT COUNT(*) FROM constraint_probe") && query.next() && query.value(0).toInt()==2);query.finish();
+    auto bad=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();auto entries=bad.value("field_properties").toArray();auto entry=entries[0].toObject();entry.insert("required","yes");entries[0]=entry;bad.insert("field_properties",entries);bool refused=false;try {(void)checkedAccessSourceFieldDisplayProperties(QJsonDocument(bad).toJson(),names);}catch(const std::exception&) {refused=true;}assert(refused && digest()==before);
+}
+
 void verifyJetFieldDisplayReference(const QString& path) {
     using namespace linaccess;QFile input(path);assert(input.open(QIODevice::ReadOnly));const auto before=QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256);input.close();const auto schema=parseMdbSchema(AccessCatalog(path).tableSchema("property_probe"));assert(schema.columns.size()==3);const QStringList names{"named","uncaptioned","empty_caption"};const auto source=checkedAccessSourceFieldDisplayProperties(schema.sourceIndexMetadata,names);assert(source && source->size()==3 && source->value("named").caption==QString("Spaltenkopf \"Ä\"") && source->value("named").description==QString("Technischer Hinweis\nUnicode Ä") && !source->value("uncaptioned").caption && source->value("empty_caption").caption && source->value("empty_caption").caption->isEmpty());
     auto db=QSqlDatabase::addDatabase("QSQLITE","jet-field-display-reference");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery query(db);assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));query.finish();assert(importAccessDatabase(db,path)==1);const auto display=nativeTableFieldDisplayProperties(db,"property_probe");assert(display.value("named").caption==QString("Spaltenkopf \"Ä\"") && display.value("named").description==QString("Technischer Hinweis\nUnicode Ä") && display.value("empty_caption").caption && display.value("empty_caption").caption->isEmpty());
@@ -740,6 +758,7 @@ CREATE INDEX `label` ON `source` (`a``b`);
     for(const auto* malformed:{"0","0x00","GG","00 1","00\n00"}) {
         bool rejected=false; try { (void)decodeMdbBinaryHex(malformed); } catch(const std::exception&) { rejected=true; } assert(rejected);
     }
+    const auto fieldConstraintReference=qEnvironmentVariable("LINACCESS_JET_FIELD_CONSTRAINT_REFERENCE");if(!fieldConstraintReference.isEmpty()) verifyJetFieldConstraintReference(fieldConstraintReference);
     const auto fieldDisplayReference=qEnvironmentVariable("LINACCESS_JET_FIELD_DISPLAY_REFERENCE");if(!fieldDisplayReference.isEmpty()) verifyJetFieldDisplayReference(fieldDisplayReference);
     const auto counterReference=qEnvironmentVariable("LINACCESS_JET_COUNTER_STATE_REFERENCE"); if(!counterReference.isEmpty()) verifyJetCounterStateReference(counterReference);
     const auto doubleReference=qEnvironmentVariable("LINACCESS_JET_DOUBLE_PRECISION_REFERENCE"); if(!doubleReference.isEmpty()) verifyJetDoublePrecisionReference(doubleReference);
