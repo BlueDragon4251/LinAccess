@@ -17,8 +17,8 @@ new local. New ordinary invocations start again with Empty; module fields persis
 
 Option Explicit prevents implicit creation on reads and writes. Its current native
 error5 is a runtime guard, not full Access compile-time binding/diagnostics.
-Def-type directives are refused before procedure effects, and implicit type
-suffixes require explicit native declarations (3251). There are at most4096 new
+Native Def-type directives now apply as documented in VBA_DEF_TYPES.md; implicit
+type suffixes still require explicit native declarations (3251). There are at most4096 new
 implicit bindings per frame; the retained static path keeps its existing budget.
 Complete reference/class/Unicode/default-type/compiler semantics remain open.
 Standalone expression evaluation, calculated expressions and SQL parameter binding

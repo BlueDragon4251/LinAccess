@@ -4962,3 +4962,21 @@ CTests/Original-/Windows-/Gesamtsuiten-/Paketnachweise; letzte geprüfteDEB13131
 Arrayrückgabe-Vorstufe2ce6323 privat veröffentlicht/Remote-Baum verifiziert.
 Katalog456/386/70 unverändert. Direkt weiter: native Def-Typdirektiven statt der
 bisherigen pauschalen Verweigerung, mit konsistenter Typauflösung und Grenzen.
+
+
+Native DefBool/Byte/Cur/Date/Dbl/Int/Lng/Obj/Sng/Str/Var-Typdirektiven sind integriert:
+aktive Moduldeklarationen, ASCII-Einzelbuchstaben/auf- und absteigende Bereiche,
+A-Z als universelle Vorgabe einschließlich Unicode-Identifier. Dieselbe Auflösung
+für Modul-/Lokalskalare und Arrays ohne As, Parameter, Function/Get-Rückgaben,
+Setterwerte und gewöhnliche/statische implizite Locals; explizites As gewinnt,
+Const bleibt aus Ausdruck typisiert. Option Explicit bleibt wirksam. Fehlerhafte/
+überlappende/64-Bit-/prozedurinterne Direktiven vor Bodyeffekten abweisen. Implizite
+Currency-For-Zähler exakt und neue ReDim-Ziele bei Def-Vorgabe typisiert; keine
+Behauptung vollständigen Deklarations-Hoistings oder Suffix-/Klassenparität.
+Details VBA_DEF_TYPES.md. Erste GUI-Prüfung erfolgreich, erster Kernblock fand
+leere DefInt-Spezifikation; genau diesen Parserfehler behoben und fehlende Schleifen-/
+ReDim-Bindung ergänzt. Final bestehendes Kern-/GUI-Bündel2/2 (17,68s; Kern4,33s),
+Anwendung gebaut; alle7 Upload-/Fixturehashes unverändert. Keine neuen CTests,
+Original-/Windows-/Gesamtsuitennachweise. Vorstufe a6b2429 privat veröffentlicht und
+Remote-Baum verifiziert. Letzte geprüfteDEB1313196; Paket jetzt aktualisieren.
+Katalog456/386/70 unverändert; ohne Zwischenabschluss weitere offene Umfänge umsetzen.

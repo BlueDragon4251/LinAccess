@@ -596,6 +596,60 @@ std::optional<std::vector<VbaArrayDimension>> literalArrayBounds(const std::stri
     } } catch(const std::exception&) { return {}; }
     return result;
 }
+struct ImplicitTypes {
+    std::unordered_map<char,std::string> letters;
+    std::string universal;
+    bool explicitVariables{};
+    std::string forName(std::string_view name) const {
+        if(!name.empty()) {
+            auto first=static_cast<unsigned char>(name.front());
+            if(first>='A' && first<='Z') first+=32;
+            if(const auto found=letters.find(static_cast<char>(first));found!=letters.end()) return found->second;
+        }
+        return universal;
+    }
+};
+ImplicitTypes moduleImplicitTypes(std::string_view module) {
+    ImplicitTypes result;
+    static const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
+    static const std::regex directive(R"(^Def(Bool|Byte|Cur|Date|Dbl|Int|Lng(?:Lng|Ptr)?|Obj|Sng|Str|Var)(?:\s+(.*))?$)",std::regex::icase);
+    static const std::regex letter(R"(^([A-Za-z])(?:\s*-\s*([A-Za-z]))?$)");
+    static const std::unordered_map<std::string,std::string> types{{"bool","boolean"},{"byte","byte"},{"cur","currency"},{"date","date"},{"dbl","double"},{"int","integer"},{"lng","long"},{"obj","object"},{"sng","single"},{"str","string"},{"var","variant"}};
+    bool inProcedures=false;
+    std::istringstream source{std::string(module)};std::string line;
+    while(std::getline(source,line)) {
+        line=withoutComment(line);
+        while(line.size()>1 && line.back()=='_' && std::isspace(static_cast<unsigned char>(line[line.size()-2]))) {
+            line.pop_back();std::string following;if(!std::getline(source,following)) break;line+=withoutComment(following);
+        }
+        std::istringstream statements(inlineStatementLines(line));std::string statement;
+        while(std::getline(statements,statement)) {
+            statement=trim(statement);
+            if(!inProcedures && std::regex_search(statement,procedure)) inProcedures=true;
+            if(lower(statement)=="option explicit") result.explicitVariables=true;
+            std::smatch match;
+            if(!std::regex_match(statement,match,directive)) continue;
+            if(inProcedures) throw VbaRuntimeError(3251,"Def directives require the module declaration section");
+            const auto type=types.find(lower(match[1].str()));
+            if(type==types.end()) throw VbaRuntimeError(3251,"64-bit Def types are outside the Access-2003 native runtime");
+            if(trim(match[2].str()).empty()) throw VbaRuntimeError(3251,"Def directive requires a letter specification");
+            for(const auto& range:splitArguments(match[2].str())) {
+                std::smatch bounds;
+                if(!std::regex_match(range,bounds,letter)) throw VbaRuntimeError(3251,"Def directives require native ASCII letters or letter ranges");
+                const auto first=lower(bounds[1].str())[0],last=bounds[2].matched ? lower(bounds[2].str())[0] : first;
+                if(first=='a' && last=='z' && bounds[2].matched) {
+                    if(!result.universal.empty() || !result.letters.empty()) throw VbaRuntimeError(5,"Overlapping Def letter specifications");
+                    result.universal=type->second;
+                } else {
+                    if(!result.universal.empty()) throw VbaRuntimeError(5,"Overlapping Def letter specifications");
+                    for(char current=std::min(first,last);current<=std::max(first,last);++current)
+                        if(!result.letters.emplace(current,type->second).second) throw VbaRuntimeError(5,"Overlapping Def letter specifications");
+                }
+            }
+        }
+    }
+    return result;
+}
 VbaExecutionResult parseProcedure(std::string_view module, std::string_view name,
                                   std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
                                   std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr,bool inheritedWith=false);
@@ -613,6 +667,9 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     std::string activeSource;
     try {activeSource=preprocessVbaConditional(module);module=activeSource;}
     catch(const VbaConditionalError& error) {VbaExecutionResult result{VbaExecutionStatus::Unsupported,error.what(),error.line};result.errorNumber=error.number;return result;}
+    ImplicitTypes implicitTypes;
+    try {implicitTypes=moduleImplicitTypes(module);}
+    catch(const VbaRuntimeError& error) {VbaExecutionResult failure{VbaExecutionStatus::Unsupported,error.what(),0};failure.errorNumber=error.number;return failure;}
     VbaVariables declarationConstants; const auto constantMode=moduleCompareMode(module);
     try { declarationConstants=moduleConstantValues(module); }
     catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Module constant declaration unsupported",0}; result.errorNumber=error.number; return result; }
@@ -795,7 +852,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     }
                     if(std::regex_match(declaration,declared,arrayParameter)) {
                         if(optionalSeen && !setterValue) return {VbaExecutionStatus::Unsupported,"Required array parameter after Optional is not implemented",line};
-                        auto type=lower(declared[2].str()); if(type.empty()) type="variant";
+                        auto type=lower(declared[2].str()); if(type.empty()) type=implicitTypes.forName(declared[1].str()); if(type.empty()) type="variant";
                         if(parameters) parameters->push_back({declared[1].str(),true,type+"()",false,{}});
                         continue;
                     }
@@ -806,7 +863,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     if(setterValue && optional) return {VbaExecutionStatus::Unsupported,"Property value parameter must be required",line};
                     if((optionalSeen && !optional && !setterValue) || (!optional && !defaultExpression.empty()))
                         return {VbaExecutionStatus::Unsupported,"Optional parameters must follow required parameters",line};
-                    const auto type=nativeDeclaredType(lower(declared[4].str()));
+                    auto type=nativeDeclaredType(lower(declared[4].str())); if(type.empty()) type=implicitTypes.forName(declared[3].str());
                     if(!type.empty() && type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="string"
                         && type!="boolean" && type!="double" && type!="single" && type!="currency" && type!="date" && type!="object"
                         && type!="collection" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty())
@@ -835,6 +892,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 within = true;
                 isFunction = lower(match[1].str()) == "function";
                 auto declaredResult=nativeDeclaredType(lower(match[4].str()));
+                if(isFunction && declaredResult.empty()) declaredResult=implicitTypes.forName(match[2].str());
                 const bool arrayResult=match[5].matched;
                 if(arrayResult) {
                     static const std::unordered_set<std::string> elementTypes{"variant","byte","integer","long","single","double","currency","date","boolean","string","object"};
@@ -1376,7 +1434,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     std::string type;
                     try{type=declaredScalarType(declared[3].str(),declared[4].str(),declarationConstants);}
                     catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Fixed array element declaration unsupported",line};result.errorNumber=error.number;return result;}
-                    if(type.empty()) type="variant";
+                    if(type.empty()) type=implicitTypes.forName(declared[1].str()); if(type.empty()) type="variant";
                     if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
                         && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object")
                         return {VbaExecutionStatus::Unsupported,"Dynamic array element type unsupported",line};
@@ -1393,6 +1451,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 std::string type;
                 try{type=declaredScalarType(declared[2].str(),declared[3].str(),declarationConstants);}
                 catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Fixed scalar declaration unsupported",line};result.errorNumber=error.number;return result;}
+                if(type.empty()) type=implicitTypes.forName(declared[1].str());
                 if (!type.empty() && type != "variant" && type != "object" && type != "collection" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type)
                     && nativeAccessObjectType(type).empty()
                     && type != "string" && !type.starts_with("string*") && type != "boolean"
@@ -1640,6 +1699,7 @@ VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_vie
 
 std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
     const auto activeSource=preprocessVbaConditional(module);module=activeSource;
+    const auto implicitTypes=moduleImplicitTypes(module);
     auto state=std::make_shared<VbaModuleState>();
     state->procedures=moduleProcedureNames(module); state->procedureInventoryComplete=true;
     const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
@@ -1678,7 +1738,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
         for (const auto& entry:splitArguments(declarations)) {
             std::smatch field;
             if(std::regex_match(entry,field,dynamicArray)) {
-                const auto name=lower(field[1].str());auto type=declaredScalarType(field[3].str(),field[4].str(),lengthConstants);if(type.empty()) type="variant";
+                const auto name=lower(field[1].str());auto type=declaredScalarType(field[3].str(),field[4].str(),lengthConstants);if(type.empty()) type=implicitTypes.forName(name);if(type.empty()) type="variant";
                 if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
                     && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object")
                     throw VbaRuntimeError(3251,"Module dynamic array element type unsupported");
@@ -1694,7 +1754,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
                 continue;
             }
             if (!std::regex_match(entry,field,variable)) throw VbaRuntimeError(3251,"Module declaration unsupported");
-            const auto name=lower(field[1].str()); const auto type=declaredScalarType(field[2].str(),field[3].str(),lengthConstants);
+            const auto name=lower(field[1].str()); auto type=declaredScalarType(field[2].str(),field[3].str(),lengthConstants);if(type.empty()) type=implicitTypes.forName(name);
             if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency" && type!="date" && type!="byte" && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty())
                 throw VbaRuntimeError(3251,"Module field type unsupported");
             if (state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
@@ -1919,18 +1979,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     }
     auto& arguments=padded ? paddedArguments : suppliedArguments;
     const bool staticProcedure=std::any_of(instructions.begin(),instructions.end(),[](const auto& instruction){return instruction.staticScope;});
-    bool explicitVariables=false;
-    {
-        const auto active=preprocessVbaConditional(module);std::istringstream source(active);std::string line;
-        static const std::regex option(R"(^Option\s+Explicit$)",std::regex::icase);
-        static const std::regex defType(R"(^Def(?:Bool|Byte|Cur|Date|Dbl|Int|Lng(?:Lng|Ptr)?|Obj|Sng|Str|Var)\s+)",std::regex::icase);
-        int sourceLine=0;
-        while(std::getline(source,line)) {
-            ++sourceLine;const auto declaration=withoutComment(line);
-            if(std::regex_search(declaration,defType)) {VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Def-type directives are not implemented for native procedure binding",sourceLine};failure.errorNumber=3251;return failure;}
-            if(std::regex_match(declaration,option)) explicitVariables=true;
-        }
-    }
+    const auto implicitTypes=moduleImplicitTypes(preprocessVbaConditional(module));
+    const bool explicitVariables=implicitTypes.explicitVariables;
     host.enterModule(module);
     struct ModuleScope { VbaHost& host; ~ModuleScope() { host.leaveModule(); } } moduleScope{host};
     // Resolve direct Sub calls before any effects in the calling procedure.
@@ -2177,7 +2227,9 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             || instruction.type==Statement::Type::For || instruction.type==Statement::Type::ForEach)) {
             VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Assignment to a constant is not permitted",instruction.line}; result.errorNumber=3251; return result;
         }
-        const auto type=variableType(lower(instruction.argument));
+        const auto targetName=lower(instruction.argument);
+        auto type=variableType(targetName);
+        if(type.empty() && !explicitVariables && !locals.contains(targetName) && !host.hasInstanceIdentifier(targetName)) type=implicitTypes.forName(targetName);
         if(((instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet) && (scalarType(type) || type=="paramarray"))
             || (instruction.type==Statement::Type::For && (type.ends_with("()") || type=="boolean" || type=="string" || type.starts_with("string*") || type=="date" || objectType(type)))) {
             VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Declared variable type is unsupported for this loop/object target",instruction.line}; failure.errorNumber=3251; return failure;
@@ -2192,7 +2244,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             throw VbaRuntimeError(3251,"Unqualified cross-module properties are not implemented");
         return {};
     };
-    const auto ensureImplicitLocal=[&](const std::string& name,bool externalChecked=false) {
+    const auto ensureImplicitLocal=[&](const std::string& name,bool externalChecked=false,std::string_view arrayElementType={}) {
         if(locals.contains(name)) return;
         if(explicitVariables) throw VbaRuntimeError(5,"Procedure variable is not declared");
         if(!name.empty() && std::string_view("$%&!#@^").find(name.back())!=std::string_view::npos)
@@ -2200,13 +2252,15 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         if(stateOwners.front()->procedures.contains(name) || host.hasInstanceIdentifier(name) || (!externalChecked && externalProcedure(name)))
             throw VbaRuntimeError(3251,"Implicit local would hide a declared instance/procedure member");
         if(implicitLocals>=4096) throw VbaRuntimeError(3035,"Implicit local limit exceeded");
+        auto implicitType=implicitTypes.forName(name);if(implicitType.empty()) implicitType="variant";
+        if(!arrayElementType.empty()) implicitType=std::string(arrayElementType)+"()";
         if(staticProcedure) {
             auto& saved=stateOwners.front()->procedureStatics[lower(std::string(procedure))];
             if(!saved.contains(name) && saved.size()>=4096) throw VbaRuntimeError(3035,"Implicit static local limit exceeded");
-            auto [slot,inserted]=saved.try_emplace(name,VbaValue::empty());
-            locals.emplace(name,slot->second);aliases.push_back({name,&slot->second,slot->second,"variant"});
-        } else locals.emplace(name,VbaValue::empty());
-        localTypes.emplace(name,"variant");++implicitLocals;
+            auto [slot,inserted]=saved.try_emplace(name,initialLocalValue(implicitType));
+            locals.emplace(name,slot->second);aliases.push_back({name,&slot->second,slot->second,implicitType});
+        } else locals.emplace(name,initialLocalValue(implicitType));
+        localTypes.emplace(name,implicitType);++implicitLocals;
     };
     const auto assignVariable=[&](const std::string& name,const VbaValue& value,bool arrayElement=false) {
         ensureImplicitLocal(name);
@@ -2912,7 +2966,12 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 break;
             case Statement::Type::ResizeArray:
                 if(active) for(const auto& target:instruction.resizeTargets) {
-                    const auto name=lower(target.name),type=variableType(name);
+                    const auto name=lower(target.name);
+                    if(!locals.contains(name)) {
+                        const auto inferred=implicitTypes.forName(name);
+                        if(!inferred.empty()) ensureImplicitLocal(name,false,target.elementType.empty() ? inferred : target.elementType);
+                    }
+                    const auto type=variableType(name);
                     if(fixedArrays.contains(name)) throw VbaRuntimeError(3251,"ReDim of a fixed array is not implemented");
                     if(type=="paramarray") throw VbaRuntimeError(3251,"ParamArray resize is not implemented");
                     if(!target.elementType.empty() && type.empty() && !locals.contains(name))
@@ -3062,7 +3121,9 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 const auto collection = evaluate(instruction.expression);
                 if(isVbaArray(collection)) {
                     if(vbaArrayRank(collection)==0) throw VbaRuntimeError(9,"For Each requires an allocated array");
-                    const auto name=lower(instruction.argument),type=variableType(name);
+                    const auto name=lower(instruction.argument);
+                    if(!implicitTypes.forName(name).empty()) ensureImplicitLocal(name);
+                    const auto type=variableType(name);
                     if(!type.empty() && type!="variant") throw VbaRuntimeError(13,"Array For Each control must be Variant");
                     LoopFrame loop{static_cast<int>(ip)};
                     loop.array=collection;
@@ -3109,7 +3170,9 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     ip = static_cast<std::size_t>(instruction.partner);
                     break;
                 }
-                const auto counter=lower(instruction.argument),type=variableType(counter);
+                const auto counter=lower(instruction.argument);
+                if(!implicitTypes.forName(counter).empty()) ensureImplicitLocal(counter);
+                const auto type=variableType(counter);
                 if(type=="currency") {
                     const auto initial=convertCurrency(scalarVbaValue(evaluate(instruction.expression)));
                     const auto end=convertCurrency(scalarVbaValue(evaluate(instruction.endExpression)));

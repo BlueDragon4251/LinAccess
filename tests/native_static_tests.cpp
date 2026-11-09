@@ -1,3 +1,5 @@
+#include "vba_def_type_fixture.hpp"
+#include <iostream>
 #include "access_form_preview.hpp"
 #include "native_standard_module_host.hpp"
 #include "vba_static_fixture.hpp"
@@ -20,4 +22,8 @@ void exerciseNativeStaticProcedures(QSqlDatabase db){using namespace linaccess;
     const QByteArray implicitCode="Public Function ImplicitProbe As Long\ncount=count+1\nActual=count\nImplicitProbe=Actual+count\nEnd Function";
     AccessFormPreview ordinary("Transient locals",implicitLayout,implicitCode,db);ordinary.show();QApplication::processEvents();auto* actual=ordinary.findChild<QLineEdit*>("access-control-Actual");assert(actual);
     for(int call=0;call<2;++call){result=ordinary.executeProcedure("ImplicitProbe",args);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==2 && actual->text()=="1");}assert(ordinary.close());
+    AccessFormPreview typed("Def typed instance",layout,QByteArray::fromStdString(nativeDefTypeFixture),db);typed.show();QApplication::processEvents();
+    for(const auto& probe:std::vector<std::pair<const char*,int>>{{"LValue",7},{"ArrayProbe",819533},{"ImplicitArrayProbe",819509},{"MismatchProbe",1300},{"OverrideProbe",805},{"OverflowProbe",602},{"LStatic",1},{"LStatic",2},{"LOrdinary",1},{"LOrdinary",1}}){args.clear();result=typed.executeProcedure(probe.first,args);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Form Def "<<probe.first<<": "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==probe.second);}
+    args.clear();result=typed.executeProcedure("ParameterProbe",args);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->text=="value:0:2");args.clear();result=typed.executeProcedure("PropertyProbe",args);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->text=="cell");assert(typed.close());
+
 }

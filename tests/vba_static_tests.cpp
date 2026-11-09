@@ -1,3 +1,4 @@
+#include "vba_def_type_fixture.hpp"
 #include "vba_expression.hpp"
 #include "vba_static_fixture.hpp"
 #include "vba_analyzer.hpp"
@@ -41,7 +42,7 @@ void testVbaStaticProcedures(){using namespace linaccess;StaticHost host,other;
     result=executeVbaProcedure("Option Explicit\nPublic Static Function Declared() As Long\nDim count As Long\ncount=count+1\nDeclared=count\nEnd Function","Declared",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==1);
     result=executeVbaProcedure("Option Explicit\nStatic Function Guarded() As Long\nGuarded=missing\nEnd Function","Guarded",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==5);
     result=executeVbaProcedure("Option Explicit\nFunction Ordinary() As Long\nOrdinary=missing\nEnd Function","Ordinary",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==5);
-    result=executeVbaProcedure("DefInt A-Z\nStatic Sub GuardedType()\nMsgBox \"unreached\"\nEnd Sub","GuardedType",host);assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251);
+    result=executeVbaProcedure("DefLngLng A-Z\nStatic Sub GuardedType()\nMsgBox \"unreached\"\nEnd Sub","GuardedType",host);assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251);
     result=executeVbaProcedure("Static Function Suffix() As Long\nSuffix=VarType(undeclared$)\nEnd Function","Suffix",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251);
     const auto inventory=analyzeVba(nativeStaticFixture);assert(!inventory.procedures.empty() && inventory.procedures.front().name=="Retained");
 
@@ -53,10 +54,28 @@ void testVbaStaticProcedures(){using namespace linaccess;StaticHost host,other;
     result=executeVbaProcedure("Function ExternalProbe As Long\nExternalProbe=ExternalZero\nEnd Function","ExternalProbe",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==19);
     result=executeVbaProcedure("Function ExternalGuard As Long\nExternalGuard=ExternalSub\nEnd Function","ExternalGuard",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251);
     result=executeVbaProcedure("Sub ExternalWrite\nExternalZero=1\nEnd Sub","ExternalWrite",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251);
-    result=executeVbaProcedure(R"VBA(DefInt A-Z
+    result=executeVbaProcedure(R"VBA(DefLngLng A-Z
 Sub GuardedOrdinary
 MsgBox "unreached"
 End Sub)VBA","GuardedOrdinary",host);assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251);
     const std::string moduleField="Private known As Long\nFunction KnownProbe As Long\nknown=known+1\nKnownProbe=known\nEnd Function";
     for(int call=1;call<=2;++call){result=executeVbaProcedure(moduleField,"KnownProbe",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==call);}
+    const auto defRun=[&](const char* name){auto outcome=executeVbaProcedure(nativeDefTypeFixture,name,host);if(outcome.status!=VbaExecutionStatus::Completed)std::cerr<<"Def type "<<name<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue);return *outcome.typedReturnValue;};
+    assert(defRun("TypeProbe").text=="2:3:8:11:17:6:7:5:4:9:0");
+    assert(defRun("PropertyProbe").text=="cell");
+    assert(defRun("XTypes").text=="17:2:8:7:0");assert(defRun("SValue").text=="typed" && defRun("LValue").numericType==VbaValue::NumericType::Long);
+    const auto firstObject=defRun("OValue");assert(firstObject.object && defRun("OValue").object==firstObject.object);
+    assert(defRun("ParameterProbe").text=="value:0:2");assert(defRun("ArrayProbe").number==819533);assert(defRun("MismatchProbe").number==1300);assert(defRun("OverrideProbe").number==805);assert(defRun("OverflowProbe").number==602);
+    for(int call=1;call<=2;++call){assert(defRun("LStatic").number==call && defRun("LOrdinary").number==1);assert(defRun("ModuleProbe").text==std::to_string(call)+":"+std::string(call,'x')+":3:8");}
+    assert(defRun("CurrencyLoop").currencyUnits==6 && defRun("ImplicitArrayProbe").number==819509);
+    result=executeVbaProcedure("DefInt I\nSub InvalidLoop\nMsgBox \"unreached\"\nFor Each item In Array(1,2)\nNext\nEnd Sub","InvalidLoop",host);assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251);
+    const auto parameterSignature=nativeVbaProcedureSignature(nativeDefTypeFixture,"Bump");assert(parameterSignature && parameterSignature->names[0]=="index");
+    const auto returnSignature=nativeVbaProcedureSignature(nativeDefTypeFixture,"LValue");assert(returnSignature && returnSignature->resultType=="long");
+    for(const auto& directive:std::vector<std::pair<std::string,int>>{{"DefInt A-C\nDefStr B",5},{"DefInt A-Z\nDefVar Q",5},{"DefInt A,A",5},{"DefInt AB",3251},{"DefInt",3251},{"DefInt 1",3251},{"DefLngPtr A",3251}}){result=executeVbaProcedure(directive.first+"\nSub InvalidDefs\nMsgBox \"unreached\"\nEnd Sub","InvalidDefs",host);assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==directive.second);}
+    result=executeVbaProcedure("DefLng Z-X\nFunction Descending As Long\nDescending=VarType(xValue)*100+VarType(zValue)\nEnd Function","Descending",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==303);
+    result=executeVbaProcedure("DefLng A-Z\nFunction Universal As Long\nDim äValue\nUniversal=VarType(äValue)\nEnd Function","Universal",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==3);
+    result=executeVbaProcedure("Option Explicit\nDefLng A-Z\nFunction Strict As Long\nStrict=missing\nEnd Function","Strict",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==5);
+    result=executeVbaProcedure("DefVar A-Z\nFunction MissingProbe(Optional value) As Boolean\nMissingProbe=IsMissing(value)\nEnd Function","MissingProbe",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->truthy());
+    result=executeVbaProcedure("#If False Then\nDefLngLng A-Z\n#End If\nDefStr S\nFunction Conditional As Long\nConditional=VarType(sValue)\nEnd Function","Conditional",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==8);
+
 }
