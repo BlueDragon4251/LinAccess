@@ -161,3 +161,25 @@ Validation: matching app built; existing layout1/1 and corrected GUI1/1 (7.96s)
 passed. The test now correctly treats successful constructor Open/Load before
 show as already opened. Bare native VBA Is identity without an Application
 wrapper, hidden navigation without showing and named hidden Close are covered.
+
+
+## Actual Application services and shared SysCmd
+
+Standalone Application.CurrentDb returns the same actual DAO adapter used by the
+native global CurrentDb path. Application domain functions delegate to the proven
+native domain implementation: DLookup/DMin/DMax/DAvg/DSum/DCount/DFirst/DLast/DVar/
+DStDev with Expr, Domain and optional Criteria. Missing optional tails are omitted;
+existing source types, Null-criteria, expression and SQL bounds remain unchanged.
+
+SysCmd actions1..5 use the actual project status bar/progress meter; action10 uses
+the actual CurrentProject object-state implementation. Bare and Application.SysCmd
+work from modules. Both application hosts share one parser, scalarizing arguments
+once with context rechecks, then dispatching status or actual object state. A main
+window passed as the owner now uses its own real statusBar rather than adding a
+second child bar. This also corrects standalone Echo status text placement.
+
+Validation: matching app built; existing GUI/layout2/2 passed (19.72s), no test
+correction. Actual module DAO reads/domain aggregates/named calls, status text/
+meter values/removal, real table loaded state, one scalar-default evaluation in
+both hosts and Echo on the actual project bar are covered. No new CTest target,
+Windows observation or complete Application/DAO/domain-function parity claim.

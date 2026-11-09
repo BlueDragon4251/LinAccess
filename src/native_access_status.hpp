@@ -7,6 +7,7 @@
 
 namespace linaccess {
 inline QStatusBar* nativeStatusSurface(QWidget& document) {
+    if(auto* window=qobject_cast<QMainWindow*>(&document)) return window->statusBar();
     QStatusBar* status=nullptr;
     for(auto* ancestor=document.parentWidget();ancestor;ancestor=ancestor->parentWidget())
         if(auto* window=qobject_cast<QMainWindow*>(ancestor)) { status=window->statusBar(); break; }

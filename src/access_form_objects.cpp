@@ -1851,22 +1851,7 @@ public:
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
         if(key=="run") return runNativeApplicationProcedure(preview,args);
         if(key=="echo") return linaccess::nativeEcho(preview,args);
-        if(key=="syscmd") {
-            if(!args.empty() && args[0].kind!=linaccess::VbaValue::Kind::Missing
-               && linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[0]),"long").number==10) {
-                if(args.size()!=3 || args[1].kind==linaccess::VbaValue::Kind::Missing || args[2].kind==linaccess::VbaValue::Kind::Missing)
-                    throw linaccess::VbaRuntimeError(450,"GetObjectState requires object type and name");
-                const auto type=linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[1]),"long").number;
-                const auto objectName=linaccess::coerceVbaModuleValue(linaccess::scalarVbaValue(args[2]),"string").asText();
-                if(objectName.find('\0')!=std::string::npos) throw linaccess::VbaRuntimeError(5,"Invalid object name");
-                const QStringList kinds{"table","query","form","report","macro","module"};
-                if(type<0 || type>=kinds.size()) throw linaccess::VbaRuntimeError(3251,"GetObjectState object type is not implemented");
-                auto project=std::dynamic_pointer_cast<NativeCurrentProjectObject>(member("CurrentProject",{}).object);
-                if(!project) throw linaccess::VbaRuntimeError(3420,"Native project context unavailable");
-                return linaccess::VbaValue::longInteger(project->objectState(kinds[static_cast<int>(type)],text(objectName)));
-            }
-            return linaccess::nativeAccessStatus(preview,args);
-        }
+        if(key=="syscmd") return nativeProjectSysCmd(&preview,preview.db_,args,[&] {(void)checked();});
         if(key=="filedialog") {
             if(args.size()!=1) throw linaccess::VbaRuntimeError(450,"FileDialog requires one type");
             const QPointer<AccessFormPreview> owner=&preview;
@@ -2006,4 +1991,16 @@ std::shared_ptr<linaccess::VbaObject> nativeProjectScreen(QSqlDatabase database,
 }
 QVector<QPointer<AccessFormPreview>> nativeLoadedProjectDocuments(QSqlDatabase database,QObject* context) {
     auto guard=nativeDocumentProjectGuard(database,context);guard();return PreviewFormsObject::loadedDocuments(database);
+}
+
+linaccess::VbaValue nativeProjectSysCmd(QWidget* owner,QSqlDatabase database,const std::vector<linaccess::VbaValue>& arguments,const std::function<void()>& check) {
+    using linaccess::VbaValue;using linaccess::VbaRuntimeError;check();
+    if(arguments.empty() || arguments.size()>3 || arguments[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"SysCmd requires one to three arguments");
+    std::vector<VbaValue> values;for(const auto& argument:arguments) {values.push_back(linaccess::scalarVbaValue(argument));check();}
+    const auto action=linaccess::coerceVbaModuleValue(values[0],"long").number;
+    if(action!=10) return linaccess::nativeAccessStatus(*owner,values);
+    if(values.size()!=3 || values[1].kind==VbaValue::Kind::Missing || values[2].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"GetObjectState requires object type and name");
+    const auto type=linaccess::coerceVbaModuleValue(values[1],"long").number;const auto name=linaccess::coerceVbaModuleValue(values[2],"string").asText();
+    if(name.find('\0')!=std::string::npos) throw VbaRuntimeError(5,"Invalid object name");const QStringList kinds{"table","query","form","report","macro","module"};if(type<0 || type>=kinds.size()) throw VbaRuntimeError(3251,"GetObjectState object type is not implemented");
+    auto project=std::dynamic_pointer_cast<NativeCurrentProjectObject>(nativeProjectContext(database,owner,false));if(!project) throw VbaRuntimeError(3420,"Native project context unavailable");return VbaValue::longInteger(project->objectState(kinds[static_cast<int>(type)],text(name)));
 }

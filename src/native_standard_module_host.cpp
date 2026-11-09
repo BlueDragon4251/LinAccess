@@ -247,12 +247,17 @@ public:
     std::string_view className() const override {return "Application";}
     bool isNativeType(std::string_view type) const override {return type=="access.application";}
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
-        const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();if(key=="forms" || key=="reports") return VbaArgumentSignature{{"Index"},0};if(key=="filedialog") return VbaArgumentSignature{{"DialogType"},1};
+        const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();if(key=="forms" || key=="reports") return VbaArgumentSignature{{"Index"},0};if(key=="filedialog") return VbaArgumentSignature{{"DialogType"},1};if(key=="syscmd") return VbaArgumentSignature{{"Action","Argument2","Argument3"},1};if(QStringList{"dlookup","dmin","dmax","davg","dsum","dcount","dfirst","dlast","dvar","dstdev"}.contains(key)) return VbaArgumentSignature{{"Expr","Domain","Criteria"},2};
         if(QString::fromUtf8(name.data(),name.size()).compare("Echo",Qt::CaseInsensitive)==0) return VbaArgumentSignature{{"EchoOn","bstrStatusBarText"},1};
         if(QString::fromUtf8(name.data(),name.size()).compare("Run",Qt::CaseInsensitive)==0) return nativeApplicationRunSignature();return {};
     }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
         NativeStandardModuleHost host(owner_,db_,guard_);host.check();const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
+        if(key=="syscmd") return nativeProjectSysCmd(owner_,db_,args,[&] {host.check();});
+        if(key=="currentdb") {if(!args.empty()) throw VbaRuntimeError(450,"CurrentDb requires no arguments");return VbaValue::reference(host.currentDatabase());}
+        if(QStringList{"dlookup","dmin","dmax","davg","dsum","dcount","dfirst","dlast","dvar","dstdev"}.contains(key)) {
+            if(args.size()<2 || args.size()>3) throw VbaRuntimeError(450,"Domain function requires two or three arguments");std::vector<VbaValue> values;for(const auto& argument:args) {values.push_back(scalarVbaValue(argument));host.check();}if(values[0].kind==VbaValue::Kind::Missing || values[1].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Domain expression and object are required");while(values.size()>2 && values.back().kind==VbaValue::Kind::Missing) values.pop_back();return nativeDomainValue(db_,values,key.toStdString());
+        }
         if(key=="echo") {auto result=nativeEcho(*owner_,args);host.check();return result;}
         if(key=="docmd") {if(!args.empty()) throw VbaRuntimeError(450,"DoCmd requires no arguments");if(auto command=commands_.lock()) return VbaValue::reference(command);auto command=std::make_shared<NativeModuleDoCmd>(owner_,db_,guard_);commands_=command;return VbaValue::reference(command);}
         if(key=="filedialog") {

@@ -1,6 +1,7 @@
 #include "native_macro_storage.hpp"
 #include "native_access_cursor.hpp"
 #include <QStatusBar>
+#include <QProgressBar>
 #include "native_standard_module_host.hpp"
 #include <QTextBrowser>
 #include "native_schema_editor.hpp"
@@ -2651,6 +2652,24 @@ void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
     unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
 }
 
+void testStandaloneApplicationServices(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;QSqlQuery sql(db);sql.prepare("INSERT INTO _la_objects VALUES('module','StandaloneServicesCode',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",R"VBA(Public Sub StandaloneServices()
+Dim database As DAO.Database
+Set database=Application.CurrentDb()
+If database.OpenRecordset("SELECT Count(*) AS n FROM module_nav_rows").Fields(0).Value<>3 Then Err.Raise 5
+If Application.DSum(Expr:="id",Domain:="module_nav_rows")<>6 Then Err.Raise 5
+If Application.DLookup(Expr:="id",Domain:="module_nav_rows",Criteria:="id=2")<>2 Then Err.Raise 5
+If Application.DCount("*","module_nav_rows")<>3 Then Err.Raise 5
+If Application.DMin("id","module_nav_rows")<>1 Then Err.Raise 5
+If Application.DMax("id","module_nav_rows")<>3 Then Err.Raise 5
+SysCmd Action:=acSysCmdSetStatus,Argument2:="native project status"
+Application.SysCmd Action:=acSysCmdInitMeter,Argument2:="native project meter",Argument3:=4
+Application.SysCmd acSysCmdUpdateMeter,3
+End Sub)VBA"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();linaccess::NativeStandardModuleHost host(&window,db,[] {});auto application=host.applicationObject();application->member("Run",{VbaValue::string("StandaloneServices")});auto* meter=window.statusBar()->findChild<QProgressBar*>("access-syscmd-meter",Qt::FindDirectChildrenOnly);assert(window.statusBar()->currentMessage()=="native project meter" && meter && meter->maximum()==4 && meter->value()==3);assert(!window.findChild<QStatusBar*>("access-status-bar",Qt::FindDirectChildrenOnly));
+    application->member("SysCmd",{VbaValue::integer(3)});assert(window.statusBar()->currentMessage().isEmpty() && !window.statusBar()->findChild<QProgressBar*>("access-syscmd-meter"));assert(application->member("SysCmd",{VbaValue::integer(10),VbaValue::integer(0),VbaValue::string("module_nav_rows")}).number==0);auto commands=application->member("DoCmd",{}).object;commands->member("OpenTable",{VbaValue::string("module_nav_rows")});assert(static_cast<int>(application->member("SysCmd",{VbaValue::integer(10),VbaValue::integer(0),VbaValue::string("module_nav_rows")}).number)&1);commands->member("Close",{VbaValue::integer(0),VbaValue::string("module_nav_rows")});
+    class Action final : public linaccess::VbaObject {public:int reads{};bool hasScalarDefault() const override {return true;}VbaValue scalarValue() override {++reads;return VbaValue::integer(4);}VbaValue member(std::string_view,const std::vector<VbaValue>&) override {throw linaccess::VbaRuntimeError(438,"No explicit member");}};auto action=std::make_shared<Action>();application->member("SysCmd",{VbaValue::reference(action),VbaValue::string("single evaluation")});assert(action->reads==1 && window.statusBar()->currentMessage()=="single evaluation");{AccessFormPreview context("StatusActionContext","Begin Form\nBegin Section\nEnd\nEnd",{},db,&window);action->reads=0;makePreviewApplicationObject(context)->member("SysCmd",{VbaValue::reference(action),VbaValue::string("form single evaluation")});assert(action->reads==1 && window.statusBar()->currentMessage()=="form single evaluation");assert(context.close());}application->member("Echo",{VbaValue::logical(true),VbaValue::string("actual project echo status")});assert(window.statusBar()->currentMessage()=="actual project echo status");application->member("SysCmd",{VbaValue::integer(5)});assert(window.statusBar()->currentMessage().isEmpty());assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='StandaloneServicesCode'"));
+}
+
 void testStandaloneFileDialog(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;QTemporaryDir directory;assert(directory.isValid());const auto path=directory.filePath("native-picker-reference.txt");{QFile file(path);assert(file.open(QIODevice::WriteOnly) && file.write("native picker reference\n")>0);}
     linaccess::NativeStandardModuleHost host(&window,db,[] {});auto application=host.applicationObject();auto picker=application->member("FileDialog",{VbaValue::integer(3)}).object;picker->assign("Title",VbaValue::string("Native module file selection"));picker->assign("InitialFileName",VbaValue::string(path.toStdString()));picker->assign("AllowMultiSelect",VbaValue::logical(false));auto filters=picker->member("Filters",{}).object;filters->member("Clear",{});filters->member("Add",{VbaValue::string("Technical reference"),VbaValue::string("*.txt")});auto selected=picker->member("SelectedItems",{}).object;
@@ -4088,6 +4107,7 @@ End Sub
     testStandaloneDocuments(window,db);
     testProjectDocumentLifetime(window,db);
     testStandaloneFileDialog(window,db);
+    testStandaloneApplicationServices(window,db);
     testNativeAutoExec(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

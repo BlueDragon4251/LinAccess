@@ -4696,3 +4696,20 @@ SQLite3.54.1-Backend (JOIN/NULL/Zähler) bestanden; keine MDB/VBA/Fixtures entha
 Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung. NATIVE_FILE_DIALOG.md;
 F052/F042/F059/F135 und456/384/72 unverändert. Direkt weiter mit SysCmd am echten
 Projekt-Statusbalken/GetObjectState und weiteren vorhandenen Application-Diensten.
+
+
+## Fortschreibung 2026-11-09: wirkliche Application-Dienste/gemeinsames SysCmd
+Standardmodule unterstützen Application.CurrentDb (vorhandener echter DAO-Adapter)
+und Application-Domänenfunktionen mit Expr/Domain/Criteria über die bestehenden
+Implementierungen. SysCmd1..5 verwendet realen Projektstatus/Meter,10 den echten
+CurrentProject-Objektzustand; bare und namentliche Application-Aufrufe unterstützt.
+Beide Hosts teilen Argumentprüfung/einmalige Skalargetter-Auswertung mit erneuter
+Kontextprüfung. Native Statusoberfläche erkennt jetzt Hauptfenster selbst und
+verwendet dessen echten Statusbalken; korrigiert auch Echo-Statustextposition.
+App gebaut; bestehende GUI/Layout2/2 (19,72s) ohne Korrekturlauf bestanden: echte
+VBA-DAO-Lese-/Domänenaufrufe, benannte Parameter, Status/Meter/Entfernen, tatsäch-
+licher Tabellen-Ladezustand, einmaliger Standardwertgetter beider Hosts und Echo
+am Projektbalken. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung;
+DEBf4e9ff8. NATIVE_STANDARD_MODULES_RUNTIME.md; F052/F053/F135 und456/384/72 bleiben
+unverändert. Direkt weiter mit vollständiger tatsächlicher OpenForm-/OpenReport-
+Anbindung (Where/DataMode/OpenArgs/WindowMode) über gemeinsame Dokumentöffnung.
