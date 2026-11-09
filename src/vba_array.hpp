@@ -8,6 +8,7 @@ VbaValue makeVbaStringArray(std::vector<std::string> values);
 bool sameVbaArrayAllocation(const VbaValue& left,const VbaValue& right);
 int vbaArrayType(const VbaValue& value);
 std::string vbaArrayTypeName(const VbaValue& value);
+std::string vbaArrayElementType(const VbaValue& value); // Canonical declaration, including fixed String width.
 std::vector<VbaValue> vbaArrayValues(const VbaValue& value);
 bool isVbaArray(const VbaValue& value);
 VbaValue makeUnallocatedVbaArray(std::string elementType="variant");

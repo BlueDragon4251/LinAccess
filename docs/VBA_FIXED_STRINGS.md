@@ -22,7 +22,7 @@ rather than replacing a character or claiming arbitrary UTF-16 storage support.
 String conversion keeps existing native date/numeric/locale limits. Fixed strings
 are scalar variable types, not new SQLite/MDB field types.
 
-This scope does not add fixed-length string arrays/UDTs, typed parameter/result
+Scalar declarations above do not add UDTs, typed parameter/result
 specifications, project/reference constant lookup or complete ByRef coercion.
 Existing known-ByRef-type guards apply; ByVal String receives the actual padded
 value. MidB/MidB$, complex Mid targets and previous explicit Mid boundary refusals
@@ -40,3 +40,36 @@ Normative basis: MS-VBAL2.3 initialization,5.2.3.1.4 variable type declarations,
 5.5.1.2.5 fixed-string Let conversion and5.4.3.5 Mid/Mid$ statements. No executed
 Access 2003 result oracle is newly available. F040/F041/F042/F043/F122 stay open;
 the fixed catalog remains456/386 confirmed partial scopes/70 open full requirements.
+
+
+## Fixed-length array elements
+
+Fixed and dynamic arrays now retain canonical String*n element declarations in
+native storage. Public TypeName/VarType remain String()/8200; internal canonical
+metadata preserves the width for typed assignments independently of that display
+name. Fixed/module/static arrays and ReDim [Preserve] over typed arrays or an
+existing Variant support the same bounded decimal/known-Const widths.
+
+Every new element is initialized with n NUL characters. Element writes use the
+same scalar conversion, truncation and space padding. Preserve retains prior
+values/width and initializes new elements; changing a declared type or preserving
+with a different element width refuses13 before replacing the previous array.
+Erase deallocates dynamic storage while retaining the declared element type, or
+resets fixed dimensions to NUL-filled elements. Existing last-dimension Preserve,
+active For Each/ByRef, immutable Variant-copy and array-bound guards remain active.
+
+Before allocating fixed-string elements, a16MiB payload budget bounds count*n*3:
+three UTF-8 bytes are sufficient for every UTF-16 unit of a supported value.
+This protects later writes as well as initial NUL data. The existing one-million
+array-element/rank limits remain. Oversized declarations fail3251 before procedure
+body effects. This is a native resource bound, not an Access allocation-limit claim.
+
+This adds no UDT layout, random-access file records, complete typed parameter/
+reference coercion or Windows array interoperability oracle. Native Variant copies
+retain element declarations; general Access interop/copy semantics remain open.
+
+The existing scalar fixture was moved from the large core_tests.cpp into
+vba_fixed_string_tests.cpp within the same CTest target to reduce subsequent build
+costs. It also exercises actual array VBA, NUL/default values, preserved/new values,
+String identity, copies, For Each, module/static state, Erase, typed Variant ReDim,
+failed width changes, failed Null writes and preallocation memory refusal.

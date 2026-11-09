@@ -1,6 +1,6 @@
 #include "vba_condition.hpp"
 #include "native_utf.hpp"
-#include <charconv>
+#include "vba_fixed_string.hpp"
 #include "vba_conditional.hpp"
 #include "native_object_types.hpp"
 #include "native_file_operations.hpp"
@@ -478,14 +478,6 @@ VbaValue constantExpression(const std::string& expression,const VbaVariables& va
     if(value.kind==VbaValue::Kind::Number && !std::isfinite(value.number)) throw VbaRuntimeError(6,"Constant overflow");
     return value;
 }
-std::optional<std::size_t> fixedStringWidth(std::string_view type) {
-    if(!type.starts_with("string*")) return {};
-    const auto digits=type.substr(7);unsigned width=0;
-    const auto converted=std::from_chars(digits.data(),digits.data()+digits.size(),width);
-    if(converted.ec!=std::errc{} || converted.ptr!=digits.data()+digits.size() || width<1 || width>65526)
-        throw VbaRuntimeError(5,"Fixed String length must be1..65526");
-    return width;
-}
 std::string declaredScalarType(const std::string& base,const std::string& length,const VbaVariables& constants) {
     auto type=nativeDeclaredType(lower(base));if(length.empty()) return type;
     if(type!="string") throw VbaRuntimeError(3251,"Only String has a fixed scalar length");
@@ -627,6 +619,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     const std::regex ifThen(R"(^If\b\s*(.+)\bThen\s*$)", std::regex::icase);
     const std::regex assignment(R"(^Me\s*([!.])\s*([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*|\[[^\]]+\])\s*=\s*(.+)$)", std::regex::icase);
     const std::regex variableAssignment(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)", std::regex::icase);
+    const std::regex arrayElementType(R"(^([A-Za-z]+)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?$)",std::regex::icase);
     const std::regex midDollarTarget(R"(^Mid\$\s*\((.*)\)$)",std::regex::icase);
     const std::regex stringAlignment(R"(^(LSet|RSet)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*=\s*(.+)$)",std::regex::icase);
     const std::regex message(R"(^MsgBox(?:\s+(.+)|\((.*)\))$)", std::regex::icase);
@@ -1268,9 +1261,13 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             for(auto entry:splitArguments(declaration)) {
                 std::string elementType;
                 if(const auto as=outsideKeyword(entry,"as");as!=std::string::npos) {
-                    elementType=lower(trim(entry.substr(as+2))); entry=trim(entry.substr(0,as));
+                    const auto spec=trim(entry.substr(as+2));std::smatch declared;
+                    if(!std::regex_match(spec,declared,arrayElementType)) return {VbaExecutionStatus::Unsupported,"ReDim element specification unsupported",line};
+                    try{elementType=declaredScalarType(declared[1].str(),declared[2].str(),declarationConstants);}
+                    catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"ReDim fixed String specification unsupported",line};result.errorNumber=error.number;return result;}
+                    entry=trim(entry.substr(0,as));
                     if(elementType!="variant" && elementType!="byte" && elementType!="integer" && elementType!="long" && elementType!="single"
-                        && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string" && elementType!="object")
+                        && elementType!="double" && elementType!="currency" && elementType!="date" && elementType!="boolean" && elementType!="string" && !elementType.starts_with("string*") && elementType!="object")
                         return {VbaExecutionStatus::Unsupported,"ReDim element type unsupported",line};
                 }
                 const auto target=memberTarget(entry);
@@ -1309,14 +1306,17 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             } catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Const declaration unsupported",line}; result.errorNumber=error.number; return result; }
         } else if (std::regex_match(source, match, dim)) {
             const bool persistent=lower(source.substr(0,6))=="static";
-            const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z]+))?$)",std::regex::icase);
+            const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z]+)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
             for (auto entry:splitArguments(match[1].str())) {
                 std::smatch declared;
                 entry = trim(entry);
                 if(std::regex_match(entry,declared,dynamicArray)) {
-                    auto type=lower(declared[3].str()); if(type.empty()) type="variant";
+                    std::string type;
+                    try{type=declaredScalarType(declared[3].str(),declared[4].str(),declarationConstants);}
+                    catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Fixed array element declaration unsupported",line};result.errorNumber=error.number;return result;}
+                    if(type.empty()) type="variant";
                     if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
-                        && type!="currency" && type!="date" && type!="boolean" && type!="string" && type!="object")
+                        && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object")
                         return {VbaExecutionStatus::Unsupported,"Dynamic array element type unsupported",line};
                     const auto bounds=trim(declared[2].str());
                     const auto dimensions=bounds.empty() ? std::optional<std::vector<VbaArrayDimension>>{} : literalArrayBounds(bounds,moduleArrayBase(module),declarationConstants,constantMode);
@@ -1500,7 +1500,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
     const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend|Static)\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
     const std::regex declaration(R"(^\s*(Dim|Private|Public|Global)\s+(.+)$)",std::regex::icase);
     const std::regex variable(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s+As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_.\x80-\xFF]*)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
-    const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z]+))?$)",std::regex::icase);
+    const std::regex dynamicArray(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*)\s*\)\s*(?:As\s+([A-Za-z]+)(?:\s*\*\s*([0-9]+|[A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*))?)?$)",std::regex::icase);
     const auto scalarConstants=moduleConstantDeclarations(module); std::size_t constantIndex=0; int sourceLine=0;
     VbaVariables knownConstants; const auto constantMode=moduleCompareMode(module);
     const auto lengthConstants=moduleConstantValues(module);
@@ -1533,9 +1533,9 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
         for (const auto& entry:splitArguments(declarations)) {
             std::smatch field;
             if(std::regex_match(entry,field,dynamicArray)) {
-                const auto name=lower(field[1].str()); auto type=lower(field[3].str()); if(type.empty()) type="variant";
+                const auto name=lower(field[1].str());auto type=declaredScalarType(field[3].str(),field[4].str(),lengthConstants);if(type.empty()) type="variant";
                 if(type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="single" && type!="double"
-                    && type!="currency" && type!="date" && type!="boolean" && type!="string" && type!="object")
+                    && type!="currency" && type!="date" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="object")
                     throw VbaRuntimeError(3251,"Module dynamic array element type unsupported");
                 if(state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
                 const auto bounds=trim(field[2].str()); auto value=makeUnallocatedVbaArray(type);
@@ -1553,7 +1553,7 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
             if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency" && type!="date" && type!="byte" && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty())
                 throw VbaRuntimeError(3251,"Module field type unsupported");
             if (state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
-            state->values.emplace(name,(type=="collection" || type=="object" || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) ? VbaValue::reference(nullptr) : type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type.starts_with("string*") ? VbaValue::string(std::string(*fixedStringWidth(type),'\0')) : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : type=="single" ? VbaValue::single(0) : type=="double" ? VbaValue::numeric(0) : type=="currency" ? VbaValue::currency(0) : type=="date" ? VbaValue::dateSerial(0) : type=="byte" ? VbaValue::byte(0) : VbaValue::empty());
+            state->values.emplace(name,(type=="collection" || type=="object" || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) ? VbaValue::reference(nullptr) : type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type.starts_with("string*") ? VbaValue::string(std::string(*vbaFixedStringWidth(type),'\0')) : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : type=="single" ? VbaValue::single(0) : type=="double" ? VbaValue::numeric(0) : type=="currency" ? VbaValue::currency(0) : type=="date" ? VbaValue::dateSerial(0) : type=="byte" ? VbaValue::byte(0) : VbaValue::empty());
             state->types.emplace(name,type);
             if (visibility=="public" || visibility=="global") state->publicVariables.insert(name);
         }
@@ -1567,7 +1567,7 @@ std::shared_ptr<VbaModuleState> VbaHost::moduleState(std::string_view module) {
 }
 VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
     if(type.ends_with("()")) {
-        if(!isVbaArray(value) || lower(vbaArrayTypeName(value))!=type) throw VbaRuntimeError(13,"Dynamic array element type mismatch");
+        if(!isVbaArray(value) || vbaArrayElementType(value)+"()"!=type) throw VbaRuntimeError(13,"Dynamic array element type mismatch");
         return value;
     }
     if (type.empty() || type=="variant") return value;
@@ -1597,7 +1597,7 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
     }
     if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null module field assignment");
     if (value.kind==VbaValue::Kind::Error || value.kind==VbaValue::Kind::Object) throw VbaRuntimeError(13,"Module field type mismatch");
-    if(const auto width=fixedStringWidth(type)) {
+    if(const auto width=vbaFixedStringWidth(type)) {
         auto text=nativeUtf16(coerceVbaModuleValue(value,"string").text);
         text.resize(*width,u' ');return VbaValue::string(nativeUtf8(text));
     }
@@ -1690,7 +1690,7 @@ namespace {
 VbaValue initialLocalValue(const std::string& type) {
     if(type.ends_with("()")) return makeUnallocatedVbaArray(type.substr(0,type.size()-2));
     if (type=="object" || type=="collection" || !nativeScriptingObjectType(type).empty() || type=="control" || type=="form" || type.starts_with("access.") || type.starts_with("dao.")) return VbaValue::reference(nullptr);
-    if(const auto width=fixedStringWidth(type)) return VbaValue::string(std::string(*width,'\0'));
+    if(const auto width=vbaFixedStringWidth(type)) return VbaValue::string(std::string(*width,'\0'));
     if (type=="string") return VbaValue::string("");
     if (type=="boolean") return VbaValue::logical(false);
     if (type=="byte") return VbaValue::byte(0);

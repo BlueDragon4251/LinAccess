@@ -1,3 +1,4 @@
+void testVbaFixedStrings();
 void testVbaConditions();
 void testVbaDebugger();
 #include "csv.hpp"
@@ -1007,63 +1008,7 @@ End Function
         const auto invalid=linaccess::executeVbaProcedure("#If True Then\n#ElseIf 1/0 Then\n#End If\nSub MustNotRun()\nMe.result=999\nEnd Sub\n","MustNotRun",host);
         assert(invalid.status==linaccess::VbaExecutionStatus::Unsupported && invalid.errorNumber==11 && invalid.line==2 && host.fields["result"]=="3");
     }
-    {
-        FakeForm host;
-        const std::string fixed=R"VBA(Const FixedWidth=4
-Public FixedShared As String * FixedWidth
-Sub FixedStrings()
-Dim local As String * 5, other As String * FixedWidth
-Static saved As String * 3
-If Len(local)<>5 Or Len(FixedShared)<>4 Then Err.Raise 7101
-If AscW(Left$(local,1))<>0 Then Err.Raise 7102
-local="ab"
-If local<>"ab   " Or LenB(local)<>10 Then Err.Raise 7103
-local="abcdefg"
-If local<>"abcde" Then Err.Raise 7104
-other=12
-If other<>"12  " Or TypeName(other)<>"String" Or VarType(other)<>8 Then Err.Raise 7105
-local="ä"
-If local<>"ä    " Then Err.Raise 7106
-FixedShared="xy"
-If FixedShared<>"xy  " Then Err.Raise 7107
-LSet local="z"
-If local<>"z    " Then Err.Raise 7108
-RSet local="q"
-If local<>"    q" Then Err.Raise 7109
-Mid$(local,2,2)="ab"
-If local<>" ab q" Then Err.Raise 7110
-If AscW(Left$(saved,1))=0 Then saved=""
-saved=Trim$(saved) & "x"
-Me.FixedSaved=saved
-Me.FixedValue=other
-Dim failureCode As Long
-On Error Resume Next
-local=Null
-failureCode=Err.Number
-On Error GoTo 0
-If failureCode<>94 Then Err.Raise 7111
-If local<>" ab q" Then Err.Raise 7112
-If FixedArgumentSize(local)<>5 Then Err.Raise 7113
-End Sub
-Function FixedArgumentSize(ByVal value As String) As Long
-FixedArgumentSize=Len(value)
-End Function
-)VBA";
-        const auto state=linaccess::createVbaModuleState(fixed);assert(state->types.at("fixedshared")=="string*4" && state->values.at("fixedshared").text==std::string(4,'\0'));
-        auto result=linaccess::executeVbaProcedure(fixed,"FixedStrings",host);
-        if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Fixed String fixture: "<<result.errorNumber<<"/"<<result.line<<" "<<result.explanation<<'\n';
-        assert(result.status==linaccess::VbaExecutionStatus::Completed && host.fields["FixedValue"]=="12  ");
-        assert(host.fields["FixedSaved"]=="x  ");
-        assert(linaccess::executeVbaProcedure(fixed,"FixedStrings",host).status==linaccess::VbaExecutionStatus::Completed && host.fields["FixedSaved"]=="xx ");
-        const auto forward=linaccess::createVbaModuleState("Public item As String * Width\nConst Width=3\nSub ReadWidth()\nEnd Sub\n");assert(forward->values.at("item").text==std::string(3,'\0'));
-        assert(linaccess::coerceVbaModuleValue(linaccess::VbaValue::string("x"),"string*65526").text.size()==65526);
-        for(const auto& invalid:std::vector<std::pair<std::string,int>>{{"0",5},{"65527",5},{"MissingWidth",3251}}) {
-            const auto code="Sub InvalidFixed()\nMsgBox \"wrong\"\nDim s As String * "+invalid.first+"\nEnd Sub";
-            const auto parsed=linaccess::executeVbaProcedure(code,"InvalidFixed",host);assert(parsed.status==linaccess::VbaExecutionStatus::Unsupported && parsed.errorNumber==invalid.second && host.messages.empty());
-        }
-        assert(linaccess::coerceVbaModuleValue(linaccess::VbaValue::string("😀"),"string*2").text=="😀");
-        int splitError=0;try{(void)linaccess::coerceVbaModuleValue(linaccess::VbaValue::string("😀"),"string*1");}catch(const linaccess::VbaRuntimeError& error){splitError=error.number;}assert(splitError==3251);
-    }
+    testVbaFixedStrings();
     testNativeDecimalVariants();
     {
         FakeForm host;

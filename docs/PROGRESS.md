@@ -7873,3 +7873,23 @@ unter /workspace/work/native-debug-halts/package/linaccess-0.7.0-Linux.deb beste
 Build-ID/Inhalt/Berechtigungen/MDBTools1.0.1/SQLite3.54.1-Prüfung. Diese neuen
 String-Quellen sind noch nicht paketiert. F040/F041/F042/F043/F122 und456/386/70
 unverändert. Keine Gesamtparität/Abschlussbehauptung.
+
+
+## 2026-11-09: Feste Stringelemente in VBA-Arrays
+
+Feste/dynamische/modulweite/statische String*n-Arrays unterstützen Initial-NUL,
+Element-Konvertierung, Trunkierung/Leerzeichen, ReDim(Preserve), Erase und begrenzte
+Variant-Kopien. Canonical-Elementmetadaten behalten die Breite unabhängig von
+öffentlichem String()/8200. Fehlende Null-Zuweisung und Breitenänderung lassen
+vorige Werte/Dimensionen unverändert. Neue Elemente/Erase-Festarrays werden NUL,
+dynamisches Erase behält den deklarierten Typ.16MiB-Payloadgrenze prüft vor
+Reservierung count*n*3 (UTF-8-Obergrenze pro UTF-16-Einheit); bestehende Bounds/
+Iterator-/ByRef- und Millionen-Element-Grenzen bleiben aktiv. VBA_FIXED_STRINGS.md.
+Skalare String-Prüfung aus großer core_tests.cpp in kleine vba_fixed_string_tests.cpp
+innerhalb desselben CTest-Ziels verschoben; keine neuen Testsuite-IDs.
+Abschließend Kernel/GUI2/2 (15,24s), Qt-freier Kern1/1 (2,58s) bestanden,
+Anwendung gebaut. Kein neuer Original-/Windows-/Gesamtsuiten-/Paketnachweis.
+Vorige skalare Etappe als e9ce132 veröffentlicht/verifiziert (gleicher getesteter
+Baumce34e6522e2363f234c2ca20c23cca9da0f57395 wie lokaler d053a80). Letzte geprüfte
+DEB weiterhin72b936d, frisches Paket folgt. F040/F041/F042/F043/F122 bleiben offen;
+456/386 bestätigte Teilumfänge/70 offene Vollanforderungen unverändert.
