@@ -57,6 +57,7 @@ struct VbaArgumentSignature {
     bool localProcedure{};
     bool function{};
     std::string resultType{};
+    bool variadic{};
     bool objectArgument(std::size_t position,std::string_view name={}) const;
 };
 

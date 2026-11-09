@@ -824,7 +824,7 @@ private:
             if (take("(")) {
                 std::vector<VbaValue> arguments;
                 if (!take(")")) {
-                    do { arguments.push_back(expression(1)); } while (take(",") || (accessExpression_ && take(";")));
+                    do { arguments.push_back(nextSymbol(",") || nextSymbol(")") ? VbaValue::missing() : expression(1)); } while (take(",") || (accessExpression_ && take(";")));
                     require(")");
                 }
                 if (host_) {
@@ -879,8 +879,9 @@ private:
                         if(peek().type==Token::Type::Word && index_+1<tokens_.size() && tokens_[index_+1].value==":=") {
                             argumentName=lower(consume().value); consume();
                         }
-                        const bool omitted=(missingDefaults || memberKey=="sendkeys" || lower(member.value)=="openform" || lower(member.value)=="openreport" || lower(member.value)=="gotorecord" || lower(member.value)=="domenuitem" || lower(member.value)=="selectobject" || lower(member.value)=="close") && (nextSymbol(",") || nextSymbol(")"));
-                        args.push_back(omitted ? missingDefaults ? VbaValue::missing() : VbaValue::empty()
+                        const bool sourceDefaults=!host_ || (signature && signature->localProcedure);
+                        const bool omitted=(sourceDefaults || missingDefaults || memberKey=="sendkeys" || lower(member.value)=="openform" || lower(member.value)=="openreport" || lower(member.value)=="gotorecord" || lower(member.value)=="domenuitem" || lower(member.value)=="selectobject" || lower(member.value)=="close") && (nextSymbol(",") || nextSymbol(")"));
+                        args.push_back(omitted ? (sourceDefaults || missingDefaults) ? VbaValue::missing() : VbaValue::empty()
                             : expression(1,signature && signature->objectArgument(args.size(),argumentName)));
                         if(!argumentName.empty() && omitted) throw error("Named method argument requires a value",450);
                         argumentNames.push_back(std::move(argumentName)); omittedArguments.push_back(omitted);
@@ -897,7 +898,8 @@ private:
                 if(std::any_of(argumentNames.begin(),argumentNames.end(),[](const std::string& name){ return !name.empty(); })) {
                     const auto signature=value.object->argumentSignature(member.value);
                     if(!signature) throw error("Named method arguments are not implemented for this member",3251);
-                    std::vector<VbaValue> ordered(signature->names.size(),missingDefaults ? VbaValue::missing() : VbaValue::empty());
+                    if(signature->variadic) throw error("Named ParamArray arguments are not implemented",3251);
+                    std::vector<VbaValue> ordered(signature->names.size(),(missingDefaults || signature->localProcedure) ? VbaValue::missing() : VbaValue::empty());
                     std::vector<bool> assigned(signature->names.size()),provided(signature->names.size());
                     bool namedSeen=false; std::size_t last=0;
                     for(std::size_t index=0;index<args.size();++index) {
@@ -1216,7 +1218,7 @@ private:
                 if (take("(")) require(")");
                 return host_ ? host_->currentForm()->member(field.value,{}) : VbaValue{};
             }
-            if (!host_) return {};
+            if (!host_) {if(!item && nextSymbol("(")) index_-=2;return {};}
             if(!item && nextSymbol("(")) {
                 const auto object=host_->currentForm();
                 const auto signature=object->argumentSignature(field.value);

@@ -32,7 +32,7 @@ source recognition alone is still not an execution or compatibility claim.
 This is a bounded F042/F043/F050 extension, not complete class support. Generic
 user class construction/lifecycle, user-defined default-property attributes and
 arbitrary argument/default queues, cross-module property binding and cross-object ByRef index copy-back,
-ParamArray, optional setter indices, named setters and complete visibility/COM
+ParamArray mutation/forwarding, named setters and complete visibility/COM
 semantics remain open. Parameterless Sub/Function/Get declarations now allow omitted parentheses, as
 specified by MS-VBAL5.3.1. Module inventory and actual form/core execution use
 the same source names, including initial/trailing Static. Setters still require
@@ -122,3 +122,38 @@ temporaries, setter-value isolation, object identity, error-side mutations,
 ByRef type mismatch, API argument vectors and a real TextBox default write through
 a ByRef getter. Public facade rejection remains checked. No new CTest IDs or
 Original/Windows/full-suite proof; F042/F043/F050 and456/386/70 remain unchanged.
+
+
+## Optional and ParamArray indices
+
+Property parameter grammar now keeps the final required value parameter separate
+from the index parameter list (MS-VBAL5.3.1.5/5.3.1.7). Optional indices may precede
+that value. Missing positions are inserted before the value, never after it;
+caller-owned argument vectors retain their original length. Provided ByRef indices
+copy back to their original positions; omitted defaults remain local. Matching
+Get/Let declarations can have different default constants as the specification
+allows. The setter value stays ByVal regardless of its source mechanism.
+
+Positional holes and empty index lists work for supported property assignments,
+including `Cell(,8)=7`, `Cell()=7` and the corresponding object-facade calls.
+Named optional getter arguments preserve Missing rather than silently becoming
+Empty/0. Empty/omitted indices in unsupported array contexts are refused by the
+binding preflight before body effects. Syntax acceptance alone remains unproven
+runtime capability, as in the existing capability report.
+
+A property ParamArray gathers only index arguments. Its final setter value is
+bound from the actual last argument, including when the ParamArray is empty or
+has more elements than there are formal parameters. Scalar/object Let/Set values
+remain separate and object identity is preserved. Native signatures advertise
+variadic shape so named ParamArray calls are refused consistently. ParamArray
+holes, named ParamArray arguments and element mutation/forwarding remain explicit
+native limitations; element writes fail3251 before changing even the local input
+collection. Existing native type/default/object, reference and budget limits apply.
+
+Application built; first existing core/GUI bundle2/2 passed (16.60s). It executes
+ordinary/qualified getter and setter calls, distinct Get/Let defaults, partial
+ByRef indices, preserved API vector shape and RHS values, empty/filled scalar and
+object ParamArrays, real public form facade calls, and negative array-hole,
+ParamArray-write and named-variadic cases. No new CTest ID, new Original/Windows/
+full-suite/package proof. The complete F042/F043/F050 requirements remain open;
+the catalog stays456 IDs/386 confirmed partial scopes/70 open requirements.

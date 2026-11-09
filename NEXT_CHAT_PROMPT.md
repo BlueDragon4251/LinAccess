@@ -2636,3 +2636,20 @@ klammerlosen Deklarationen/normaler impliziter Bindung/Default-/ByRef-Erweiterun
 F042/F043/F050 und Katalog456/386/70 unverändert. Nächste Stufe: optionale und
 ParamArray-Indizes in Properties einschließlich besonderem letzten ByVal-Wert-
 parameter korrekt binden; danach Paket aktualisieren. Ohne Zwischenabschluss weiter.
+
+
+Optionale und ParamArray-Property-Indizes sind implementiert: letzter erforderlicher
+Setterwert getrennt von Indexliste, fehlende Positionen vor dem Wert ergänzen,
+API-Argumentvektorlänge und ByRef-Indexrückbindung erhalten. Unterschiedliche
+Get-/Let-Defaults nach MS-VBAL5.3.1.5/5.3.1.7; Cell(,8)/Cell() und benannte optionale
+Getter einschließlich echter Formularfassade. ParamArray enthält nur Indizes,
+RHS stets actual-last/ByVal, auch bei leerem Array oder zusätzlichen Argumenten;
+Objektidentität erhalten. Variadische Signaturen verhindern erfundene benannte
+ParamArray-Bindung; Mutationen/Weiterleitung/Holes explizit begrenzt. Ausgelassene
+Arrayindizes werden vor Bodyeffekten verweigert, nicht0 geraten. Details
+NATIVE_VBA_PROPERTIES.md. Anwendung gebaut; erstes bestehendes Kern-/GUI-Bündel
+2/2 (16,60s) bestanden. Keine neuen CTests, kein zusätzlicher Original-/Windows-/
+Gesamtsuitennachweis. ByRef-Vorstufe bc52b22 privat veröffentlicht/Baum verifiziert.
+Letzte geprüfteDEB46297bf liegt vor mehreren Sprachstufen; jetzt Paket aktualisieren.
+Katalog456/386/70 und F042/F043/F050 unverändert; anschließend typisierte Array-
+Funktions-/Getterrückgaben und echte Leseindizierung ergänzen. Ohne Abschluss weiter.

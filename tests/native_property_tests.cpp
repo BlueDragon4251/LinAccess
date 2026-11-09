@@ -4,6 +4,7 @@
 #include "vba_parameterless_fixture.hpp"
 #include "vba_default_property_fixture.hpp"
 #include "vba_byref_property_fixture.hpp"
+#include "vba_optional_property_fixture.hpp"
 #include <QApplication>
 #include <QLineEdit>
 #include <QSqlDatabase>
@@ -82,4 +83,23 @@ End Function
     AccessFormPreview byref("Owned ByRef property indices",widgetLayout,byrefSource,db);byref.show();QApplication::processEvents();auto* referenceText=byref.findChild<QLineEdit*>("access-control-Actual");assert(referenceText);
     for(const auto& probe:std::vector<std::pair<std::string,int>>{{"LetProbe",277},{"GetProbe",22},{"ArrayProbe",330},{"ObjectProbe",319},{"ErrorProbe",211},{"WidgetRefProbe",24}}){arguments.clear();result=byref.executeProcedure(QString::fromStdString(probe.first),arguments);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Form ByRef property "<<probe.first<<": "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==probe.second);}assert(referenceText->text()=="23");
     failed=false;try{(void)makePreviewFormObject(byref)->member("Counter",{VbaValue::longInteger(1)});}catch(const VbaRuntimeError& e){failed=e.number==3251;}assert(failed && byref.close());
+
+    const auto optionalSource=QByteArray::fromStdString(nativeOptionalPropertyFixture)+R"VBA(
+Public Function QualifiedProbe As Long
+Me.Cell(,8)=7
+QualifiedProbe=Written+Me.Cell(,8)+Me.Cell(col:=8)
+End Function
+Public Function QualifiedManyProbe As Long
+Me.Many(1,2,3)=7
+QualifiedManyProbe=Written+Me.Many(1,2,3)
+End Function
+Public Function NamedManyProbe As Long
+On Error Resume Next
+NamedManyProbe=Me.Many(values:=7)
+NamedManyProbe=Err.Number
+End Function
+)VBA";
+    AccessFormPreview optional("Optional property indices",layout,optionalSource,db);optional.show();QApplication::processEvents();
+    for(const auto& probe:std::vector<std::pair<std::string,int>>{{"DefaultsProbe",487},{"HoleProbe",543},{"EmptyCallProbe",457},{"OwnedProbe",3067},{"ManyProbe",673},{"EmptyManyProbe",7},{"OptionalObjectProbe",439},{"ManyObjectProbe",249},{"GuardedValuesProbe",10251},{"QualifiedProbe",543},{"QualifiedManyProbe",673},{"NamedManyProbe",3251}}){arguments.clear();result=optional.executeProcedure(QString::fromStdString(probe.first),arguments);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Form optional property "<<probe.first<<": "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==probe.second);}
+    auto optionalObject=makePreviewFormObject(optional);optionalObject->assign("Cell",VbaValue::longInteger(7));assert(optionalObject->member("Written",{}).number==457);assert(optionalObject->member("Cell",{VbaValue::missing(),VbaValue::longInteger(8)}).number==28);optionalObject->assignIndexedMember("Many",{VbaValue::longInteger(1),VbaValue::longInteger(2),VbaValue::longInteger(3)},VbaValue::longInteger(7));assert(optionalObject->member("Written",{}).number==367);assert(optional.close());
 }

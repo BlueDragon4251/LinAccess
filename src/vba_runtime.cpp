@@ -780,17 +780,21 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 bool optionalSeen=false,paramArraySeen=false;
                 const std::regex paramArray(R"(^ParamArray\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+Variant)?$)",std::regex::icase);
                 const std::regex arrayParameter(R"(^(?:ByRef\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+(Byte|Integer|Long|Single|Double|Currency|Date|Boolean|String|Object|Variant))?$)",std::regex::icase);
-                for (const auto& declaration : splitArguments(params)) {
+                const auto declarations=splitArguments(params);
+                for (std::size_t parameterIndex=0;parameterIndex<declarations.size();++parameterIndex) {
+                    const auto& declaration=declarations[parameterIndex];
+                    const bool setterValue=!accessor.empty() && accessor!="get" && parameterIndex+1==declarations.size();
                     std::smatch declared;
-                    if(paramArraySeen) return {VbaExecutionStatus::Unsupported,"ParamArray must be the last parameter",line};
+                    if(paramArraySeen && !setterValue) return {VbaExecutionStatus::Unsupported,"ParamArray must be the last parameter",line};
                     if(std::regex_match(declaration,declared,paramArray)) {
+                        if(setterValue) return {VbaExecutionStatus::Unsupported,"Property value cannot be a ParamArray",line};
                         if(optionalSeen) return {VbaExecutionStatus::Unsupported,"Combined Optional and ParamArray declarations are not implemented",line};
                         paramArraySeen=true;
                         if(parameters) parameters->push_back({declared[1].str(),false,"paramarray",false,{},true});
                         continue;
                     }
                     if(std::regex_match(declaration,declared,arrayParameter)) {
-                        if(optionalSeen) return {VbaExecutionStatus::Unsupported,"Required array parameter after Optional is not implemented",line};
+                        if(optionalSeen && !setterValue) return {VbaExecutionStatus::Unsupported,"Required array parameter after Optional is not implemented",line};
                         auto type=lower(declared[2].str()); if(type.empty()) type="variant";
                         if(parameters) parameters->push_back({declared[1].str(),true,type+"()",false,{}});
                         continue;
@@ -799,7 +803,8 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                         return {VbaExecutionStatus::Unsupported, "VBA-Parameterdeklaration nicht unterstützt", line};
                     const bool optional=declared[1].matched;
                     const auto defaultExpression=trim(declared[5].str());
-                    if((optionalSeen && !optional) || (!optional && !defaultExpression.empty()))
+                    if(setterValue && optional) return {VbaExecutionStatus::Unsupported,"Property value parameter must be required",line};
+                    if((optionalSeen && !optional && !setterValue) || (!optional && !defaultExpression.empty()))
                         return {VbaExecutionStatus::Unsupported,"Optional parameters must follow required parameters",line};
                     const auto type=nativeDeclaredType(lower(declared[4].str()));
                     if(!type.empty() && type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="string"
@@ -1190,7 +1195,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         } else if (const auto objectArrayAssignment=topLevelAssignment((lower(source).starts_with("set ") || lower(source).starts_with("set\t")) ? trim(source.substr(3)) : std::string{});
             objectArrayAssignment && memberSeparator(objectArrayAssignment->first)==std::string::npos && memberTarget(objectArrayAssignment->first) && memberTarget(objectArrayAssignment->first)->arguments) {
             const auto target=*memberTarget(objectArrayAssignment->first); const auto indices=splitArguments(*target.arguments);
-            if(indices.empty() || indices.size()>60 || !std::all_of(indices.begin(),indices.end(),[&](const auto& index) { return !trim(index).empty() && validExpression(index); }) || !validExpression(objectArrayAssignment->second))
+            if(indices.size()>60 || !std::all_of(indices.begin(),indices.end(),[&](const auto& index) { return trim(index).empty() || validExpression(index); }) || !validExpression(objectArrayAssignment->second))
                 return {VbaExecutionStatus::Unsupported,"Object array assignment syntax unsupported",line};
             statements.push_back({Statement::Type::IndexedAssign,target.name,objectArrayAssignment->second,line,*target.arguments,"object"});
         } else if (std::regex_match(source, match, objectSet)) {
@@ -1300,7 +1305,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         } else if (const auto assignment=topLevelAssignment(source); assignment && memberSeparator(assignment->first)==std::string::npos && memberTarget(assignment->first) && memberTarget(assignment->first)->arguments) {
             const auto target=*memberTarget(assignment->first);
             const auto indices=splitArguments(*target.arguments);
-            if(indices.empty() || indices.size()>60 || !std::all_of(indices.begin(),indices.end(),[&](const auto& index) { return !trim(index).empty() && validExpression(index); }) || !validExpression(assignment->second))
+            if(indices.size()>60 || !std::all_of(indices.begin(),indices.end(),[&](const auto& index) { return trim(index).empty() || validExpression(index); }) || !validExpression(assignment->second))
                 return {VbaExecutionStatus::Unsupported,"Array assignment syntax unsupported",line};
             statements.push_back({Statement::Type::IndexedAssign,target.name,assignment->second,line,*target.arguments});
         } else if (lower(source).starts_with("redim ") || lower(source).starts_with("redim\t")) {
@@ -1516,6 +1521,7 @@ std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view mod
     std::vector<Statement> statements; std::vector<Parameter> parameters; bool function=false,cancel=false; std::string resultType;
     if(parseProcedure(module,name,statements,function,cancel,&parameters,true,&resultType).status!=VbaExecutionStatus::Completed) return {};
     VbaArgumentSignature signature; signature.localProcedure=true; signature.function=function; signature.resultType=std::move(resultType);
+    signature.variadic=std::any_of(parameters.begin(),parameters.end(),[](const auto& parameter){return parameter.paramArray;});
     for(const auto& parameter:parameters) {
         signature.names.push_back(lower(parameter.name));
         signature.required+=!parameter.optional && !parameter.paramArray;
@@ -1564,7 +1570,6 @@ std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view 
         throw VbaRuntimeError(3251,"Property accessor syntax is unsupported");
     const auto indices=parameters.size()-(access!=VbaPropertyAccess::Get && !parameters.empty() ? 1 : 0);
     for(std::size_t index=0;index<parameters.size();++index) {
-        if(parameters[index].paramArray) throw VbaRuntimeError(3251,"Property ParamArray is not implemented");
         if(publicOnly && index<indices && parameters[index].byReference) throw VbaRuntimeError(3251,"External property indices currently require explicit ByVal");
     }
     const auto normalizedType=[](const std::string& type) {return type.empty() ? std::string("variant") : type;};
@@ -1591,8 +1596,8 @@ std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view 
     auto signature=nativeVbaProcedureSignature(module,selector);
     if(!signature) throw VbaRuntimeError(3251,"Property accessor syntax is unsupported");
     if(access!=VbaPropertyAccess::Get) {
-        if(signature->names.empty() || signature->required!=signature->names.size())
-            throw VbaRuntimeError(3251,"Property setters require explicit required value parameters");
+        if(parameters.empty() || parameters.back().optional || parameters.back().paramArray || parameters.back().type.ends_with("()"))
+            throw VbaRuntimeError(3251,"Property setters require a required scalar/object value parameter");
         if(!signature->resultType.empty()) throw VbaRuntimeError(3251,"Property setters cannot declare a result");
         const bool object=signature->objectArguments.back();
         if(access==VbaPropertyAccess::Set && !object && !parameters.back().type.empty() && parameters.back().type!="variant")
@@ -1865,7 +1870,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,std::string_v
 }
 static VbaExecutionResult executeProcedureImpl(std::string_view module,
                                        std::string_view procedure,
-                                       VbaHost& host, std::vector<VbaValue>& arguments,
+                                       VbaHost& host, std::vector<VbaValue>& suppliedArguments,
                                        const std::vector<ReferenceBinding>* references) {
     if(vbaDebuggerBusy()) {VbaExecutionResult failure{VbaExecutionStatus::Error,"VBA-Ausführung während eines Debugger-Halts nicht verfügbar",0};failure.errorNumber=3251;return failure;}
     VbaExecutionScope executionFrame;
@@ -1894,6 +1899,20 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         const auto validation=validateVbaProcedure(module,procedure);
         if(validation.status!=VbaExecutionStatus::Completed) return validation;
     }
+    const auto selectedName=lower(std::string(procedure));
+    const bool propertySetter=selectedName.starts_with("property let ") || selectedName.starts_with("property set ");
+    const bool variadic=std::any_of(parameters.begin(),parameters.end(),[](const auto& parameter){return parameter.paramArray;});
+    const bool padded=propertySetter && !variadic && !suppliedArguments.empty() && suppliedArguments.size()<parameters.size();
+    std::vector<VbaValue> paddedArguments;std::vector<ReferenceBinding> paddedReferences;
+    if(padded) {
+        const auto count=parameters.size()-suppliedArguments.size();paddedArguments=suppliedArguments;
+        paddedArguments.insert(paddedArguments.end()-1,count,VbaValue::missing());
+        if(references) {
+            if(references->size()!=suppliedArguments.size()) {VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Property reference argument shape mismatch",0};failure.errorNumber=3251;return failure;}
+            paddedReferences=*references;paddedReferences.insert(paddedReferences.end()-1,count,ReferenceBinding{});references=&paddedReferences;
+        }
+    }
+    auto& arguments=padded ? paddedArguments : suppliedArguments;
     const bool staticProcedure=std::any_of(instructions.begin(),instructions.end(),[](const auto& instruction){return instruction.staticScope;});
     bool explicitVariables=false;
     {
@@ -1979,7 +1998,6 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     }
     const bool implicitCancel = hasCancel && !isFunction && arguments.empty();
     const auto required=static_cast<std::size_t>(std::count_if(parameters.begin(),parameters.end(),[](const Parameter& parameter){ return !parameter.optional && !parameter.paramArray; }));
-    const bool variadic=!parameters.empty() && parameters.back().paramArray;
     if (!implicitCancel && (arguments.size()<required || (!variadic && arguments.size()>parameters.size()))) {
         VbaExecutionResult failure{VbaExecutionStatus::Error,"Falsche Argumentanzahl",0};
         failure.errorNumber=450; return failure;
@@ -1989,32 +2007,35 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         for(std::size_t i=0;i<parameters.size();++i) {
             const auto& parameter=parameters[i]; const auto name=lower(parameter.name);
             if(parameter.paramArray) {
-                for(auto position=i;position<arguments.size();++position) if(arguments[position].kind==VbaValue::Kind::Missing)
+                const auto end=arguments.size()-(propertySetter ? 1 : 0);
+                if(i>end) throw VbaRuntimeError(450,"Required arguments before ParamArray are missing");
+                for(auto position=i;position<end;++position) if(arguments[position].kind==VbaValue::Kind::Missing)
                     throw VbaRuntimeError(450,"ParamArray argument holes are not implemented");
-                locals[name]=makeVbaArray(std::vector<VbaValue>(arguments.begin()+static_cast<std::ptrdiff_t>(i),arguments.end()),0);
+                locals[name]=makeVbaArray(std::vector<VbaValue>(arguments.begin()+static_cast<std::ptrdiff_t>(i),arguments.begin()+static_cast<std::ptrdiff_t>(end)),0);
                 localTypes[name]="paramarray";
                 continue;
             }
-            const bool omitted=!implicitCancel && (i>=arguments.size() || arguments[i].kind==VbaValue::Kind::Missing);
+            const auto argumentIndex=propertySetter && i+1==parameters.size() && !arguments.empty() ? arguments.size()-1 : i;
+            const bool omitted=!implicitCancel && (argumentIndex>=arguments.size() || arguments[argumentIndex].kind==VbaValue::Kind::Missing);
             omittedParameters[i]=omitted;
             if(omitted && !parameter.optional) throw VbaRuntimeError(450,"Required argument omitted");
-            if(!omitted && references && i<references->size() && parameter.byReference && (*references)[i].paramArray)
+            if(!omitted && references && argumentIndex<references->size() && parameter.byReference && (*references)[argumentIndex].paramArray)
                 throw VbaRuntimeError(3251,"ByRef ParamArray forwarding is not implemented");
-            if(!omitted && references && i<references->size() && !implicitCancel && parameter.byReference && (*references)[i].indexedArray)
+            if(!omitted && references && argumentIndex<references->size() && !implicitCancel && parameter.byReference && (*references)[argumentIndex].indexedArray)
                 throw VbaRuntimeError(3251,"ByRef array element binding is not implemented");
-            if(!omitted && references && i<references->size() && parameter.byReference && (*references)[i].arrayRoot)
-                activeArrayElementRoots.push_back((*references)[i].arrayRoot);
-            if(!omitted && references && i<references->size() && parameter.byReference && (*references)[i].read)
-                *(*references)[i].source=(*references)[i].read();
+            if(!omitted && references && argumentIndex<references->size() && parameter.byReference && (*references)[argumentIndex].arrayRoot)
+                activeArrayElementRoots.push_back((*references)[argumentIndex].arrayRoot);
+            if(!omitted && references && argumentIndex<references->size() && parameter.byReference && (*references)[argumentIndex].read)
+                *(*references)[argumentIndex].source=(*references)[argumentIndex].read();
             const auto value=implicitCancel ? VbaValue::numeric(0) : !omitted
-                ? parameter.byReference && references && i<references->size() && (*references)[i].source ? *(*references)[i].source : arguments[i]
+                ? parameter.byReference && references && argumentIndex<references->size() && (*references)[argumentIndex].source ? *(*references)[argumentIndex].source : arguments[argumentIndex]
                 : parameter.defaultValue ? *parameter.defaultValue
                 : parameter.type.empty() || parameter.type=="variant" ? VbaValue::missing() : initialLocalValue(parameter.type);
-            if(!omitted && references && i<references->size() && !parameter.byReference && (*references)[i].type.ends_with("()"))
+            if(!omitted && references && argumentIndex<references->size() && !parameter.byReference && (*references)[argumentIndex].type.ends_with("()"))
                 throw VbaRuntimeError(3251,"Declared array arguments require ByRef or an explicit Variant/value copy");
             const auto converted=checkedType(parameter.type) ? coerceVbaModuleValue(value,parameter.type) : value;
-            if(!omitted && references && i<references->size() && !implicitCancel && parameter.byReference && (*references)[i].source) {
-                const auto& sourceType=(*references)[i].type;
+            if(!omitted && references && argumentIndex<references->size() && !implicitCancel && parameter.byReference && (*references)[argumentIndex].source) {
+                const auto& sourceType=(*references)[argumentIndex].type;
                 if(sourceType.ends_with("()") && !parameter.type.ends_with("()")) throw VbaRuntimeError(3251,"Declared arrays require a matching array parameter or explicit Variant copy");
                 if((checkedType(parameter.type) || checkedType(sourceType)) && !sourceType.empty() && sourceType!="variant"
                     && !parameter.type.empty() && parameter.type!="variant" && sourceType!=parameter.type)
@@ -2026,7 +2047,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     throw VbaRuntimeError(13,"ByRef argument requires an unchanged value representation");
             }
             locals[name]=converted; localTypes[name]=parameter.type;
-            if(!omitted && references && i<references->size() && parameter.byReference && (*references)[i].fixedArray) fixedArrays.insert(name);
+            if(!omitted && references && argumentIndex<references->size() && parameter.byReference && (*references)[argumentIndex].fixedArray) fixedArrays.insert(name);
         }
     } catch(const VbaRuntimeError& error) {
         VbaExecutionResult failure{VbaExecutionStatus::Error,"Parameter conversion failed",0}; failure.errorNumber=error.number; return failure;
@@ -2073,6 +2094,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         for(const auto& binding:*references)
             if(binding.temporaryCell && binding.source && !liveSources.contains(binding.source)) *binding.source=VbaValue::empty();
         for(auto& value:arguments) value=VbaValue::empty();
+        if(padded) for(auto& value:suppliedArguments) value=VbaValue::empty();
     }
     std::vector<std::shared_ptr<VbaModuleState>> stateOwners;
     try {
@@ -2113,6 +2135,18 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         return {};
     };
     for(const auto& instruction:instructions) {
+        if(instruction.type==Statement::Type::IndexedAssign && !instruction.argument.empty()) {
+            const auto indices=splitArguments(instruction.endExpression);
+            const bool omitted=indices.empty() || std::any_of(indices.begin(),indices.end(),[](const auto& value){return trim(value).empty();});
+            if(omitted && instruction.argument!="mid$") {
+                const auto name=lower(instruction.argument);
+                const auto access=instruction.stepExpression=="object" ? VbaPropertyAccess::Set : VbaPropertyAccess::Let;
+                if(locals.contains(name) || (!nativeVbaPropertySignature(module,instruction.argument,access,false)
+                    && !nativeVbaPropertySignature(module,instruction.argument,VbaPropertyAccess::Get,false))) {
+                    VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Omitted indices require a supported property",instruction.line};failure.errorNumber=3251;return failure;
+                }
+            }
+        }
         bool constantTarget=constantNames.contains(lower(instruction.argument));
         if(instruction.type==Statement::Type::IndexedAssign && lower(instruction.argument)=="mid" && !locals.contains("mid") && instruction.stepExpression!="object") {
             const auto arguments=splitArguments(instruction.endExpression);
@@ -2215,6 +2249,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         if (!implicitCancel)
             for (std::size_t i = 0; i < parameters.size() && i<arguments.size(); ++i)
                 if (!omittedParameters[i] && parameters[i].byReference) arguments[i] = locals[lower(parameters[i].name)];
+        if(padded) for(std::size_t i=0;i+1<suppliedArguments.size();++i)
+            if(!omittedParameters[i] && parameters[i].byReference) suppliedArguments[i]=arguments[i];
     };
     auto completed = [&](int line, bool exited) {
         VbaExecutionResult outcome{VbaExecutionStatus::Completed, {}, line, exited};
@@ -2827,7 +2863,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     std::vector<VbaValue> indices;
                     if(indexed) {
                         const auto inner=trim(*target->arguments);
-                        if(!inner.empty()) for(const auto& expression:splitArguments(inner)) indices.push_back(evaluate(expression));
+                        if(!inner.empty()) for(const auto& expression:splitArguments(inner)) indices.push_back(trim(expression).empty() ? VbaValue::missing() : evaluate(expression));
                     }
                     const bool reference=instruction.stepExpression=="object";
                     const auto value = reference ? evaluateObject(instruction.expression) : evaluate(instruction.expression);
@@ -2910,6 +2946,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 if(active) {
                     const auto name=lower(instruction.argument);
                     const auto initial=locals.find(name);
+                    if(variableType(name)=="paramarray") throw VbaRuntimeError(3251,"ParamArray element mutation is not implemented");
                     // Mid statements share indexed syntax; actual variables named Mid keep their normal array/object path.
                     if((name=="mid$" || (name=="mid" && initial==locals.end())) && instruction.stepExpression!="object") {
                         const auto parts=splitArguments(instruction.endExpression);
@@ -2948,18 +2985,20 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                         for(const auto& expression:splitArguments(instruction.endExpression)) {
                             const auto parsed=callArgument(expression);
                             if(!parsed.name.empty()) throw VbaRuntimeError(3251,"Named property setter indices are not implemented");
-                            auto argument=evaluateVbaArgumentExpression(parsed.expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase,
-                                signature && signature->objectArgument(arguments.size()));
+                            auto argument=parsed.expression.empty() ? VbaEvaluatedArgument{VbaValue::missing(),{}}
+                                : evaluateVbaArgumentExpression(parsed.expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase,
+                                    signature && signature->objectArgument(arguments.size()));
                             arguments.push_back(std::move(argument.value));references.names.push_back(parsed.expression);references.arrayElements.push_back(std::move(argument.arrayElement));
                         }
                         auto value=propertyAccess==VbaPropertyAccess::Set ? evaluateObject(instruction.expression) : scalarVbaValue(evaluate(instruction.expression));
-                        arguments.push_back(std::move(value));(void)writeProperty(instruction.argument,propertyAccess,std::move(arguments),references);break;
+                        arguments.push_back(std::move(value));if(!writeProperty(instruction.argument,propertyAccess,std::move(arguments),references)) throw VbaRuntimeError(3251,"Property index assignment is unsupported");break;
                     }
                     const bool objectTarget=initial!=locals.end() && initial->second.kind==VbaValue::Kind::Object;
                     const auto target=objectTarget ? initial->second.object : std::shared_ptr<VbaObject>{};
                     if(objectTarget && !target) throw VbaRuntimeError(91,"Object variable is not set");
                     std::vector<VbaValue> indices;
                     for(const auto& expression:splitArguments(instruction.endExpression)) {
+                        if(trim(expression).empty()) throw VbaRuntimeError(450,"Omitted array/default indices are unsupported");
                         const auto value=evaluate(expression);
                         indices.push_back(objectTarget ? value : coerceVbaModuleValue(scalarVbaValue(value),"long"));
                     }

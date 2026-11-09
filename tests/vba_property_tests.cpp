@@ -4,6 +4,7 @@
 #include "vba_parameterless_fixture.hpp"
 #include "vba_default_property_fixture.hpp"
 #include "vba_byref_property_fixture.hpp"
+#include "vba_optional_property_fixture.hpp"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -59,4 +60,16 @@ void testVbaProperties(){using namespace linaccess;PropertyHost host,other;
     for(const auto& probe:std::vector<std::pair<std::string,int>>{{"LetProbe",277},{"GetProbe",22},{"TemporaryProbe",21},{"ArrayProbe",330},{"ObjectProbe",319},{"ErrorProbe",211},{"MismatchProbe",13}}){result=executeVbaProcedure(nativeByRefPropertyFixture,probe.first,byrefHost);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"ByRef property "<<probe.first<<": "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==probe.second);}
     arguments={VbaValue::longInteger(1)};result=executeVbaProperty(nativeByRefPropertyFixture,"Counter",VbaPropertyAccess::Get,byrefHost,arguments,false);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==20 && arguments[0].number==2);
     bool facadeRejected=false;try{(void)nativeVbaPropertySignature(nativeByRefPropertyFixture,"Counter",VbaPropertyAccess::Get,true);}catch(const VbaRuntimeError& e){facadeRejected=e.number==3251;}assert(facadeRejected);
+
+    PropertyHost optionalHost;
+    for(const auto& probe:std::vector<std::pair<std::string,int>>{{"DefaultsProbe",487},{"HoleProbe",543},{"EmptyCallProbe",457},{"OwnedProbe",3067},{"ManyProbe",673},{"EmptyManyProbe",7},{"OptionalObjectProbe",439},{"ManyObjectProbe",249},{"GuardedValuesProbe",10251}}){result=executeVbaProcedure(nativeOptionalPropertyFixture,probe.first,optionalHost);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Optional property "<<probe.first<<": "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==probe.second);}
+    arguments={VbaValue::longInteger(7)};result=executeVbaProperty(nativeOptionalPropertyFixture,"Cell",VbaPropertyAccess::Let,optionalHost,arguments);assert(result.status==VbaExecutionStatus::Completed && arguments.size()==1 && arguments[0].number==7);
+    arguments={VbaValue::longInteger(1),VbaValue::longInteger(7)};result=executeVbaProperty(nativeOptionalPropertyFixture,"Owned",VbaPropertyAccess::Let,optionalHost,arguments,false);assert(result.status==VbaExecutionStatus::Completed && arguments.size()==2 && arguments[0].number==2 && arguments[1].number==7);
+    arguments.clear();result=executeVbaProperty(nativeOptionalPropertyFixture,"Written",VbaPropertyAccess::Get,optionalHost,arguments);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==2707);
+    result=executeVbaProcedure(R"VBA(Sub ArrayHole
+Dim values(1 To 2,1 To 2) As Long
+MsgBox "unreached"
+values(,1)=7
+End Sub)VBA","ArrayHole",optionalHost);assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251 && optionalHost.effects==0);
+    const auto mixed=validateVbaProcedure("Property Get Bad(Optional ByVal first As Long,ParamArray rest() As Variant) As Long\nEnd Property","property get Bad");assert(mixed.status==VbaExecutionStatus::Unsupported);
 }
