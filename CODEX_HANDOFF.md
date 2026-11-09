@@ -5148,3 +5148,42 @@ gewöhnliche archivierte Defaultklasse und die unveränderte ursprüngliche
 Archivsignatur sind geprüft. Keine neue CTest-ID/Original-/Windows-/Vollsuite.
 Katalog456/386/70 unverändert, F042/F043 bleiben offen. Nach privater Veröffentlichung
 aktuelles Paket prüfen und ohne Zwischenabschluss weitere Anforderungen bearbeiten.
+
+
+## Skalare automatische Klassenvariablen As New (2026-11-09)
+
+AsNew ist nun für skalare lokale/statische Variablen, Modul-/Klassenfelder und
+öffentliche Formularfelder gebunden: gewöhnliche tatsächliche Projektklassen
+sowie die schon vorhandenen nativen Collection/Dictionary/FileSystemObject-
+Konstruktoren. Prüfung bindet die reale konstruierbare Klasse vor Effekten,
+führt aber keine Initialisierung aus. Erst tatsächliches Lesen erzeugt eine
+Instanz; Set auf Nothing erzeugt keine Zwischeninstanz, späteres Lesen eine neue.
+Normbasis MS-VBAL5.2.3.1.4/5.3.1.6. Eigene Parameter bleiben normale ByRef-Parameter;
+eine Rücksetzung durch sie erhält die automatische Eigenschaft des Aufrufers.
+
+Statische/Modulzustände und gewöhnliche Felder behalten tatsächliche Referenzen.
+Direkter Me-/öffentlicher Feldzugriff und lokale Aliasansichten werden bei AsNew
+synchronisiert, ohne ausstehenden lokalen Set-Wert zu überschreiben. Metadaten-
+und Debuggeranzeigen lesen den Zustand ohne Erzeugung. Skalare Standardzuweisung
+verwendet den realen Default-Setter. Direkte Formularzugriffe halten den Modulframe
+bei Initialisierungs-Reentry fest und prüfen Schließen; Zielobjekte werden während
+Default-Aufrufen gehalten. Arrays mit AsNew/automatischen Elementen, WithEvents,
+Defaultinstanzen und komplette Terminierung/GC bleiben offen, keine allgemeine
+AsNew- oder Vollklassen-Parität behauptet. Unbekannte/nicht konstruierbare Klassen
+werden nicht als leere Scheinobjekte angelegt.
+
+App gebaut; erstes bestehendes Kern-/GUI-Bündel2/2 (22,90s:4,40/18,49s). Nach
+abschließendem Aliasabgleich ergänzt und geprüft:2/2 (22,46s:4,25/18,20s).
+Gemeinsame technische Quellen zählen tatsächliche Initialisierungen, prüfen
+verzögerten ersten Zugriff/SetNothing/Identität, ByRef-Reset, Static-/Modul-Erhalt,
+Native-Collection/Dictionary-Neuanlage, echte Default-Zuweisung, Me-/unqualifizierte
+Feldsicht und echte öffentliche Formularfelder. Kein neues CTest/Original-/Windows-
+oder Gesamtsuite-Orakel. Katalog456/386/70 unverändert, vollständige F042/F043 offen.
+
+Vorstufe dced5e6 privat remote/Baum geprüft; aktuelles DEB dieses Stands unter
+/workspace/work/class-default-members/package/linaccess-0.7.0-Linux.deb besteht
+Payload/Build-ID/Rechte/keineFixtures, MDBTools1.0.1 und SQLite3.54.1 samt
+NestedJOIN/NULL-/Counter-Prüfung; bestehendes DAO-Ziel1/1 (2,65s). Dieses Paket
+enthält die zuvor geprüften Klassen-/Array-/Default-Stufen, noch nicht AsNew.
+Ohne Zwischenabschluss mit belegten weiteren Deklarations-/Laufzeitbindungen
+fortfahren; keine pauschale Referenzanforderung oder Etappen-Abschlussanruf.

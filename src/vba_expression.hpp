@@ -124,12 +124,15 @@ struct VbaModuleState {
     std::unordered_map<std::string,VbaVariables> procedureStatics;
     std::unordered_map<std::string,std::string> types;
     std::unordered_set<std::string> publicVariables;
+    std::unordered_set<std::string> automaticObjects;
     std::unordered_set<std::string> fixedArrays;
     std::unordered_set<std::string> constants;
     std::unordered_set<std::string> procedures;
     bool procedureInventoryComplete{};
 };
 VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type);
+void validateAutomaticVbaObjectType(std::string_view type,VbaHost& host);
+VbaValue materializeAutomaticVbaObject(VbaValue& value,std::string_view type,VbaHost& host);
 
 struct VbaArrayElementReference {
     std::string root,elementType;
@@ -167,6 +170,7 @@ public:
     std::function<std::optional<VbaArgumentSignature>(std::string_view)> argumentSignature;
     // Used only by a real procedure frame, after normal name resolution.
     std::function<std::optional<VbaValue>(std::string_view)> undeclaredIdentifier;
+    std::function<VbaValue(std::string_view,const VbaValue&)> variableValue;
     VbaFunctionResolver()=default;
     VbaFunctionResolver(std::nullptr_t) {}
     template<class Function> requires (!std::is_same_v<std::remove_cvref_t<Function>,VbaFunctionResolver>

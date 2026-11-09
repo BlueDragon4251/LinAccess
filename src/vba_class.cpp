@@ -145,7 +145,7 @@ public:
     VbaValue member(std::string_view name,const std::vector<VbaValue>& arguments) override {return invokeMember(name,arguments,true);}
     VbaValue invokeMember(std::string_view name,const std::vector<VbaValue>& arguments,bool needsValue) override {
         check();const auto key=folded(name);
-        if(fieldVisible(key)) return indexed(state_->values.at(key),arguments);
+        if(fieldVisible(key)) {if(state_->automaticObjects.contains(key)) {auto host=context_.host();(void)materializeAutomaticVbaObject(state_->values.at(key),state_->types.at(key),*host);check();}return indexed(state_->values.at(key),arguments);}
         auto shape=signature(name,VbaPropertyAccess::Get);const bool property=shape.has_value();if(!shape) shape=method(name);
         if(!shape) throw VbaRuntimeError(438,"Native class member is unavailable");
         if(needsValue && !shape->function) throw VbaRuntimeError(3251,"A class Sub cannot be used as a value");
@@ -180,6 +180,7 @@ public:
         if(fieldVisible(key)) {
             if(state_->constants.contains(key)) throw VbaRuntimeError(383,"Class constant is read-only");
             auto& target=state_->values.at(key);const auto& type=state_->types.at(key);
+            if(state_->automaticObjects.contains(key) && (!object || !indices.empty())) {auto host=context_.host();(void)materializeAutomaticVbaObject(target,type,*host);check();}
             if(!indices.empty()) {
                 if(isVbaArray(target)) {target=withVbaArrayElement(target,indices,input);return;}
                 if(target.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Class member has no indexed target");

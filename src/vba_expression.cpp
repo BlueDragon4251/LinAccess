@@ -761,6 +761,7 @@ public:
         return result;
     }
 private:
+    VbaValue readLocal(std::string_view name,const VbaValue& value) {return host_ && resolver_.variableValue ? resolver_.variableValue(name,value) : value;}
     struct ReferenceCapture { std::size_t start{},end{}; std::optional<VbaArrayElementReference> element; };
     std::optional<ReferenceCapture> referenceCapture_;
     VbaEvaluatedArgument argumentExpression(bool objectContext=false) {
@@ -1061,7 +1062,7 @@ private:
         }
         bool qualifiedArray=false,qualifiedIntrinsic=false;
         if(!accessExpression_ && word=="vba" && nextSymbol(".") && index_+1<tokens_.size() && tokens_[index_+1].type==Token::Type::Word) {
-            if(const auto local=locals_.find(word);local!=locals_.end()) return local->second;
+            if(const auto local=locals_.find(word);local!=locals_.end()) return readLocal(word,local->second);
             if(host_) if(auto resolved=host_->resolveIdentifier(tok.value,true)) return *resolved;
             consume(); word=lower(consume().value);
 
@@ -1202,7 +1203,7 @@ private:
         if (word=="screen") return host_ ? host_->applicationObject()->member("Screen",{}) : VbaValue{};
         if (word=="docmd") return host_ ? host_->applicationObject()->member("DoCmd",{}) : VbaValue{};
         if((word=="currentproject" || word=="currentdata") && !nextSymbol("(")) {
-            if(const auto local=locals_.find(word);local!=locals_.end()) return local->second;
+            if(const auto local=locals_.find(word);local!=locals_.end()) return readLocal(word,local->second);
             if(!host_) return {};
             if(!accessExpression_) if(auto resolved=host_->resolveIdentifier(tok.value,true)) return *resolved;
             return host_->applicationObject()->member(word=="currentproject" ? "CurrentProject" : "CurrentData",{});
@@ -1278,7 +1279,7 @@ private:
         if((word=="curdir" || word=="curdir$") && !nextSymbol("(") && !accessExpression_) {
             if(!host_) return {};
             if(!qualifiedIntrinsic) {
-                if(const auto variable=locals_.find(word); variable!=locals_.end()) return variable->second;
+                if(const auto variable=locals_.find(word); variable!=locals_.end()) return readLocal(word,variable->second);
                 if(resolver_.argumentSignature) {
                     const auto signature=resolver_.argumentSignature(tok.value);
                     if(signature && signature->localProcedure) {
@@ -1320,7 +1321,7 @@ private:
         }
         if (nextSymbol("(")) {
             const auto variable=locals_.find(word);
-            if (variable!=locals_.end() && (variable->second.kind==VbaValue::Kind::Object || isVbaArray(variable->second))) return variable->second;
+            if (variable!=locals_.end() && (variable->second.kind==VbaValue::Kind::Object || isVbaArray(variable->second))) return readLocal(word,variable->second);
         }
         if (take("(")) {
             std::optional<VbaArgumentSignature> signature;
@@ -2417,7 +2418,7 @@ private:
             if(resolver_.undeclaredIdentifier) if(auto value=resolver_.undeclaredIdentifier(tok.value)) return *value;
             throw error("VBA-Variable nicht deklariert: " + tok.value);
         }
-        return variable->second;
+        return readLocal(word,variable->second);
     }
     std::string_view source_;
     std::vector<Token> tokens_;

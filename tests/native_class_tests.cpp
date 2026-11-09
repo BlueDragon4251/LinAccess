@@ -1,3 +1,4 @@
+#include "vba_automatic_class_fixture.hpp"
 #include "vba_default_class_fixture.hpp"
 #include "access_form_objects.hpp"
 #include "vba_typed_class_fixture.hpp"
@@ -48,6 +49,12 @@ void exerciseNativeClasses(MainWindow& window,QSqlDatabase db) {using namespace 
     }
     sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('class','NativeDefault',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromStdString(nativeDefaultClassFixture)}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
     {NativeStandardModuleHost defaultHost(&window,db,[]{});const auto probe=executeVbaProcedure(nativeDefaultClassConsumer,"DefaultClassProbe",defaultHost);if(probe.status!=VbaExecutionStatus::Completed) std::cerr<<"Project default class: "<<probe.explanation<<" line "<<probe.line<<" error "<<probe.errorNumber<<"\n";assert(probe.status==VbaExecutionStatus::Completed && probe.typedReturnValue->number==1058);}
+    const auto storeAutomatic=[&](const QString& kind,const QString& name,const std::string& source) {sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES(?,?,?)");sql.addBindValue(kind);sql.addBindValue(name);sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromStdString(source)}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();};
+    storeAutomatic("class","AutoTracked",automaticClassFixture);storeAutomatic("module","AutomaticState",automaticClassState);
+    {NativeStandardModuleHost automaticHost(&window,db,[]{});const auto invoke=[&](const char* name){const auto outcome=executeVbaProcedure(automaticClassConsumer,name,automaticHost);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Project automatic "<<name<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed);return outcome.typedReturnValue ? *outcome.typedReturnValue : VbaValue::empty();};assert(invoke("AutoLocalProbe").text=="0:0:1:1:2:3");assert(invoke("AutoStaticProbe").number==2 && invoke("AutoStaticProbe").number==3);assert(invoke("AutoModuleProbe").number==5 && invoke("AutoModuleProbe").number==5);invoke("ResetAutomaticModule");assert(invoke("AutoModuleProbe").number==6 && invoke("AutoDefaultProbe").number==11 && invoke("AutoOwnedProbe").boolean);
+        AccessFormPreview automaticForm("Automatic field",QByteArray("Begin Form\nEnd\n"),QByteArray("Public held As New AutoTracked\n"),db,&window);auto facade=makePreviewFormObject(automaticForm);const auto one=facade->member("held",{}).object;assert(one && facade->member("held",{}).object==one);facade->assignObject("held",VbaValue::reference(nullptr));const auto two=facade->member("held",{}).object;assert(two && two!=one && two->member("Serial",{}).number==one->member("Serial",{}).number+1);
+    }
+    assert(sql.exec("DELETE FROM main._la_objects WHERE (kind='class' AND name='AutoTracked') OR (kind='module' AND name='AutomaticState')"));
     assert(sql.exec("DELETE FROM main._la_objects WHERE kind='class' AND name='NativeDefault'"));
     std::shared_ptr<VbaObject> retained;
     {QDialog editor(&window);NativeStandardModuleHost host(&editor,db,[]{});retained=evaluateVbaObjectExpression("New NativeCounter",host,{}).object;assert(retained && retained->member("Value",{}).number==1);}

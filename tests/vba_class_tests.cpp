@@ -1,3 +1,4 @@
+#include "vba_automatic_class_fixture.hpp"
 #include "vba_default_class_fixture.hpp"
 #include "vba_typed_class_fixture.hpp"
 #include "vba_class.hpp"
@@ -12,7 +13,7 @@
 #include <cassert>
 namespace {
 using namespace linaccess;
-struct ClassState {bool alive{true};int messages{};std::function<void()> callback;std::unordered_map<std::string,std::shared_ptr<VbaModuleState>> modules;std::unordered_map<std::string,std::string> classes{{"nativecounter",nativeClassFixture}};};
+struct ClassState {std::shared_ptr<VbaModuleState> automaticState;bool alive{true};int messages{};std::function<void()> callback;std::unordered_map<std::string,std::shared_ptr<VbaModuleState>> modules;std::unordered_map<std::string,std::string> classes{{"nativecounter",nativeClassFixture}};};
 class ClassServices final:public VbaHost {
 public:
     explicit ClassServices(std::shared_ptr<ClassState> state):state(std::move(state)){}
@@ -23,6 +24,7 @@ public:
     std::shared_ptr<VbaObject> currentForm() override {throw VbaRuntimeError(438,"No hidden Me in standard service modules");}
     void message(std::string_view) override {++state->messages;if(state->callback) state->callback();}
     std::shared_ptr<VbaModuleState> moduleState(std::string_view source) override {auto& value=state->modules[std::string(source)];if(!value) value=createVbaModuleState(source);return value;}
+    std::vector<std::shared_ptr<VbaModuleState>> globalModuleStates() override {return state->automaticState ? std::vector<std::shared_ptr<VbaModuleState>>{state->automaticState} : std::vector<std::shared_ptr<VbaModuleState>>{};}
     std::optional<std::string> moduleForProcedure(std::string_view name) override {auto key=std::string(name);for(auto& ch:key) ch=static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));if(key=="projectvalue") return "Public Function ProjectValue As Long\nProjectValue=19\nEnd Function";if(key=="projectme") return "Public Function ProjectMe As Long\nProjectMe=VarType(Me)\nEnd Function";return {};}
     std::string projectClassName(std::string_view name) override {if(!knowsClassType(name)) throw VbaRuntimeError(3251,"Unknown technical class type");return name=="nativecounter" ? "NativeCounter" : std::string(name);}
     bool knowsClassType(std::string_view name) override {auto key=std::string(name);for(auto& ch:key) ch=static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));return state->classes.contains(key);}
@@ -69,5 +71,10 @@ void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<Cla
     for(const auto& invalid:std::vector<std::string>{nativeDefaultClassFixture+"Attribute Item.VB_UserMemId = 0\n",nativeDefaultClassFixture+"Attribute Item.VB_UserMemId = -4\n"}) {
         error=0;try{(void)compileNativeVbaClass("NativeDefault",invalid);}catch(const VbaRuntimeError& e){error=e.number;}assert(error==5 || error==3251);
     }
+    state->classes["autotracked"]=automaticClassFixture;state->automaticState=createVbaModuleState(automaticClassState);
+    const auto automatic=[&](const char* name){const auto outcome=executeVbaProcedure(automaticClassConsumer,name,host);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Automatic "<<name<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed);return outcome.typedReturnValue ? *outcome.typedReturnValue : VbaValue::empty();};
+    assert(automatic("AutoLocalProbe").text=="0:0:1:1:2:3");assert(automatic("AutoStaticProbe").number==2 && automatic("AutoStaticProbe").number==3);assert(automatic("AutoModuleProbe").number==5 && automatic("AutoModuleProbe").number==5);automatic("ResetAutomaticModule");assert(automatic("AutoModuleProbe").number==6);assert(automatic("AutoDefaultProbe").number==11 && automatic("AutoOwnedProbe").boolean);
+    auto parent=host.constructClass("AutoTracked");auto child=parent->member("Child",{}).object;assert(child && parent->member("Child",{}).object==child);const auto childSerial=child->member("Serial",{}).number;parent->assignObject("Child",VbaValue::reference(nullptr));auto replacement=parent->member("Child",{}).object;assert(replacement!=child && replacement->member("Serial",{}).number==childSerial+1);
+    const auto beforeAutomaticFailure=state->messages;result=executeVbaProcedure("Sub AutoMissing\nMsgBox \"unreached\"\nDim item As New Missing\nEnd Sub","AutoMissing",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251 && state->messages==beforeAutomaticFailure);
     state->alive=false;error=0;try{first->member("Calls",{});}catch(const VbaRuntimeError& e){error=e.number;}assert(error==3420);
 }

@@ -87,6 +87,7 @@ struct Statement {
     std::vector<BranchDestination> destinations;
     std::vector<VbaDebugPrintItem> outputItems;
     bool staticScope{};
+    bool automaticObject{};
 };
 
 bool loopEntryStatement(Statement::Type type) {return type==Statement::Type::While || type==Statement::Type::For || type==Statement::Type::ForEach;}
@@ -246,6 +247,14 @@ std::string lower(std::string text) {
     });
     return text;
 }
+std::optional<std::pair<std::string,std::string>> automaticObjectDeclaration(const std::string& text) {
+    static const std::regex declaration(R"(^([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s+As\s+New\s+([A-Za-z_][A-Za-z0-9_.]*)$)",std::regex::icase);
+    std::smatch match;if(!std::regex_match(text,match,declaration)) return {};
+    auto type=nativeDeclaredType(lower(match[2].str()));
+    if(!isProjectClassType(type) && type!="collection" && type!="scripting.dictionary" && type!="scripting.filesystemobject") throw VbaRuntimeError(3251,"Automatic object class is not constructible");
+    return std::pair{lower(match[1].str()),std::move(type)};
+}
+
 std::optional<std::string> canonicalLineLabel(std::string name) {
     name=lower(trim(std::move(name)));
     if(!name.empty() && std::all_of(name.begin(),name.end(),[](unsigned char ch) { return std::isdigit(ch); })) {
@@ -1452,6 +1461,9 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             for (auto entry:splitArguments(match[1].str())) {
                 std::smatch declared;
                 entry = trim(entry);
+                try {if(const auto automatic=automaticObjectDeclaration(entry)) {
+                    Statement declaration{Statement::Type::Dim,automatic->first,automatic->second,line};declaration.persistent=persistent;declaration.automaticObject=true;statements.push_back(std::move(declaration));continue;
+                }} catch(const VbaRuntimeError& error) {VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Automatic object declaration unsupported",line};result.errorNumber=error.number;return result;}
                 if(std::regex_match(entry,declared,dynamicArray)) {
                     std::string type;
                     try{type=declaredScalarType(declared[3].str(),declared[4].str(),declarationConstants);}
@@ -1781,6 +1793,12 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
         const auto start=lower(trim(declarations));
         if (start.starts_with("declare ") || start.starts_with("type ") || start.starts_with("enum ")) continue;
         for (const auto& entry:splitArguments(declarations)) {
+            if(const auto automatic=automaticObjectDeclaration(entry)) {
+                const auto& [name,type]=*automatic;if(state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate automatic module field");
+                if(isProjectClassType(type) && enumNames.contains(std::string(projectClassTypeName(type)))) throw VbaRuntimeError(3251,"Enum aliases are not automatic classes");
+                state->values.emplace(name,VbaValue::reference(nullptr));state->types.emplace(name,type);state->automaticObjects.insert(name);
+                if(visibility=="public" || visibility=="global") state->publicVariables.insert(name);continue;
+            }
             std::smatch field;
             if(std::regex_match(entry,field,dynamicArray)) {
                 const auto name=lower(field[1].str());auto type=declaredScalarType(field[3].str(),field[4].str(),lengthConstants);if(type.empty()) type=implicitTypes.forName(name);if(type.empty()) type="variant";
@@ -1816,6 +1834,18 @@ std::shared_ptr<VbaModuleState> VbaHost::moduleState(std::string_view module) {
     const auto key=std::string(module);
     if (const auto found=moduleStates_.find(key);found!=moduleStates_.end()) return found->second;
     auto state=createVbaModuleState(module); moduleStates_.emplace(key,state); return state;
+}
+void validateAutomaticVbaObjectType(std::string_view type,VbaHost& host) {
+    if(isProjectClassType(type) && !type.ends_with("()")) {if(!host.canConstructClass(projectClassTypeName(type))) throw VbaRuntimeError(3251,"Automatic project class is unavailable");return;}
+    if(type!="collection" && type!="scripting.dictionary" && type!="scripting.filesystemobject") throw VbaRuntimeError(3251,"Automatic class is not constructible");
+}
+VbaValue materializeAutomaticVbaObject(VbaValue& value,std::string_view type,VbaHost& host) {
+    if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Automatic object binding requires an object reference");
+    if(value.object) return value;
+    validateAutomaticVbaObjectType(type,host);
+    const auto name=isProjectClassType(type) ? projectClassTypeName(type) : type;
+    auto created=evaluateVbaObjectExpression("New "+std::string(name),host,{});
+    value=coerceVbaModuleValue(created,type);return value;
 }
 VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
     if(type.ends_with("()")) {
@@ -2041,6 +2071,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         for(const auto& name:procedureClassTypes(module,parameters,resultType,instructions)) if(!host.knowsClassType(name)) throw VbaRuntimeError(3251,"Declared project class type is unavailable");
         std::unordered_set<std::string> checkedClasses;
         for(const auto& instruction:instructions) {
+            if(instruction.automaticObject) validateAutomaticVbaObjectType(instruction.expression,host);
             if(host.hasClassInstance() && instruction.type==Statement::Type::SetField && instruction.endExpression=="!") throw VbaRuntimeError(3251,"Class bang/default writes are not implemented");
             const auto check=[&](std::string_view expression) {for(const auto& name:vbaConstructedClasses(expression)) if(checkedClasses.insert(name).second && !host.canConstructClass(name)) throw VbaRuntimeError(3251,"Native project class is unavailable");};
             if(instruction.type==Statement::Type::ObjectAssign || instruction.type==Statement::Type::IndexedAssign || instruction.type==Statement::Type::FileCopy || instruction.type==Statement::Type::FileRename || instruction.type==Statement::Type::If) check(instruction.argument);
@@ -2093,6 +2124,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     std::unordered_map<std::string,std::string> localTypes;
     std::unordered_set<std::string> fixedArrays;
     std::unordered_set<std::string> constantNames;
+    std::unordered_set<std::string> automaticObjects;
     const int arrayBase=moduleArrayBase(module);
     const auto integralType=[](std::string_view type) { return type=="integer" || type=="long"; };
     const auto checkedType=[&](std::string_view type) { return type.ends_with("()") || integralType(type) || type=="boolean" || type=="string" || type.starts_with("string*") || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection" || type=="object" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty(); };
@@ -2173,7 +2205,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     for (const auto& instruction:instructions) if (instruction.type==Statement::Type::Dim) {
         const auto name=lower(instruction.argument);
         if(locals.contains(name)) {
-            if(instruction.persistent || instruction.constantValue || constantNames.contains(name)) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Duplicate persistent or constant binding",instruction.line}; result.errorNumber=3251; return result; }
+            if(instruction.persistent || instruction.automaticObject || instruction.constantValue || constantNames.contains(name)) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Duplicate persistent or constant binding",instruction.line}; result.errorNumber=3251; return result; }
             continue;
         }
         try {
@@ -2185,6 +2217,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 fixedArrays.insert(name);
             }
             locals.emplace(name,std::move(value)); localTypes[name]=instruction.expression;
+            if(instruction.automaticObject) automaticObjects.insert(name);
         } catch(const VbaRuntimeError& error) {
             VbaExecutionResult failure{VbaExecutionStatus::Error,"Array declaration failed",instruction.line}; failure.errorNumber=error.number; return failure;
         }
@@ -2225,6 +2258,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         }
         for (auto& [name,value]:state->values) if (!locals.contains(name)) {
             locals.emplace(name,value); aliases.push_back({name,&value,value,state->types.at(name)});
+            if(state->automaticObjects.contains(name)) automaticObjects.insert(name);
             if(state->fixedArrays.contains(name)) fixedArrays.insert(name);
             if(state->constants.contains(name)) constantNames.insert(name);
         }
@@ -2239,6 +2273,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 if (!globals.insert(name).second) throw VbaRuntimeError(5,"Ambiguous public module field");
                 auto& value=global->values.at(name);
                 locals.emplace(name,value); aliases.push_back({name,&value,value,global->types.at(name)});
+                if(global->automaticObjects.contains(name)) automaticObjects.insert(name);
                 if(global->fixedArrays.contains(name)) fixedArrays.insert(name);
                 if(global->constants.contains(name)) constantNames.insert(name);
             }
@@ -2249,6 +2284,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     try {
         std::unordered_set<std::string> types;
         for(const auto& owner:stateOwners) for(const auto& [name,type]:owner->types) if(isProjectClassType(type)) types.insert(std::string(projectClassTypeName(type)));
+        for(const auto& owner:stateOwners) for(const auto& name:owner->automaticObjects) validateAutomaticVbaObjectType(owner->types.at(name),host);
         for(const auto& type:types) if(!host.knowsClassType(type)) throw VbaRuntimeError(3251,"Module project class type is unavailable");
     } catch(const VbaRuntimeError& error) {VbaExecutionResult failure{VbaExecutionStatus::Error,"Module project type binding failed",0};failure.errorNumber=error.number;return failure;}
     const auto variableType=[&](const std::string& name) -> std::string {
@@ -2309,6 +2345,18 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Declared variable type is unsupported for this loop/object target",instruction.line}; failure.errorNumber=3251; return failure;
         }
     }
+    const auto readVariable=[&](const std::string& name) -> VbaValue {
+        auto& value=locals.at(name);if(!automaticObjects.contains(name)) return value;
+        // A direct Me/public-field write can update the owned cell while this
+        // frame still holds its previous snapshot. Keep pending local writes.
+        for(auto& alias:aliases) if(alias.name==name && value.kind==VbaValue::Kind::Object && alias.before.kind==VbaValue::Kind::Object && value.object==alias.before.object) {
+            if(alias.read) *alias.source=alias.read();value=*alias.source;alias.before=value;break;
+        }
+        if(value.object) return value;
+        const auto created=materializeAutomaticVbaObject(value,variableType(name),host);
+        for(auto& alias:aliases) if(alias.name==name) {if(alias.write) alias.write(created);else *alias.source=created;alias.before=created;}
+        return created;
+    };
     std::size_t implicitLocals=0;
     const auto externalProcedure=[&](std::string_view name) -> std::optional<VbaArgumentSignature> {
         const auto source=host.moduleForProcedure(name);
@@ -2574,6 +2622,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         if(!signature) throw VbaRuntimeError(3251,"Declared local procedure binding is unsupported");
         return signatureCache.emplace(key,std::move(signature)).first->second;
     };
+    resolver.variableValue=[&](std::string_view name,const VbaValue& value) {const auto key=lower(std::string(name));return automaticObjects.contains(key) ? readVariable(key) : value;};
     resolver.undeclaredIdentifier=[&](std::string_view name) -> std::optional<VbaValue> {
         if(const auto signature=externalProcedure(name)) {
             if(!signature->function) throw VbaRuntimeError(3251,"A Sub cannot be used as a value");
@@ -3084,6 +3133,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             case Statement::Type::IndexedAssign:
                 if(active) {
                     const auto name=lower(instruction.argument);
+                    if(automaticObjects.contains(name)) (void)readVariable(name);
                     const auto initial=locals.find(name);
                     if(variableType(name)=="paramarray") throw VbaRuntimeError(3251,"ParamArray element mutation is not implemented");
                     // Mid statements share indexed syntax; actual variables named Mid keep their normal array/object path.
@@ -3176,6 +3226,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 if (active) {
                     const auto name=lower(instruction.argument);
                     if(objectType(variableType(name))) {
+                        if(automaticObjects.contains(name)) (void)readVariable(name);
                         const auto binding=locals.find(name);
                         if(binding==locals.end() || binding->second.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Object binding required");
                         const auto target=binding->second.object;

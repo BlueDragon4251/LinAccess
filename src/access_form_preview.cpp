@@ -3085,10 +3085,11 @@ std::optional<linaccess::VbaValue> AccessFormPreview::getModuleMember(std::strin
     auto found=moduleStates_.find(source);
     if (found==moduleStates_.end()) found=moduleStates_.emplace(source,linaccess::createVbaModuleState(source)).first;
     const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded().toStdString();
-    const auto& frame=found->second;
+    const auto frame=found->second;
     linaccess::validateNativeProjectClassFields(db_,*frame);
     if ((!publicOnly || frame->publicVariables.contains(key)) && frame->values.contains(key)) {
         if(!arguments.empty()) throw linaccess::VbaRuntimeError(450,"Module variable does not accept property indices");
+        if(frame->automaticObjects.contains(key)) {QPointer<AccessFormPreview> guard(this);PreviewVbaHost host(*this);(void)linaccess::materializeAutomaticVbaObject(frame->values.at(key),frame->types.at(key),host);if(!guard || guard->closed_ || guard->openCancelled_) throw linaccess::VbaRuntimeError(2450,"Field owner closed during automatic construction");}
         return frame->values.at(key);
     }
     const auto signature=linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly);
@@ -3148,6 +3149,12 @@ bool AccessFormPreview::setModuleMember(std::string_view name,const linaccess::V
         if(frame->constants.contains(key)) throw linaccess::VbaRuntimeError(383,"Module constant is read-only");
         const auto& type=frame->types.at(key);
         if(reference && (value.kind!=linaccess::VbaValue::Kind::Object || (!type.empty() && type!="variant" && !linaccess::isDeclaredObjectType(type)))) throw linaccess::VbaRuntimeError(13,"Set requires an object or Variant field");
+        if(!reference && linaccess::isDeclaredObjectType(type)) {
+            auto& target=frame->values.at(key);if(frame->automaticObjects.contains(key)) {QPointer<AccessFormPreview> guard(this);PreviewVbaHost host(*this);(void)linaccess::materializeAutomaticVbaObject(target,type,host);if(!guard || guard->closed_ || guard->openCancelled_) throw linaccess::VbaRuntimeError(2450,"Field owner closed during automatic construction");}
+            if(!target.object) throw linaccess::VbaRuntimeError(91,"Object field is Nothing");
+            if(!target.object->hasScalarDefault()) throw linaccess::VbaRuntimeError(3251,"Object field has no scalar default");
+            QPointer<AccessFormPreview> guard(this);const auto object=target.object;object->assignDefaultMember({},linaccess::scalarVbaValue(value));if(!guard || guard->closed_ || guard->openCancelled_) throw linaccess::VbaRuntimeError(2450,"Field owner closed during default assignment");return true;
+        }
         if(frame->fixedArrays.contains(key)) throw linaccess::VbaRuntimeError(3251,"Whole fixed-array assignment is not implemented");
         frame->values.at(key)=linaccess::coerceVbaModuleValue(value,type);return true;
     }
