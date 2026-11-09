@@ -1,3 +1,4 @@
+#include "vba_named_setter_fixture.hpp"
 #include "vba_paramarray_alias_fixture.hpp"
 #include "vba_array_lock_fixture.hpp"
 #include "vba_error_context_fixture.hpp"
@@ -97,6 +98,15 @@ void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<Cla
     result=executeVbaProcedure(nativeArrayLockFixture,"ArrayLockProbe",host);if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Array lock: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==41);
     for(const auto& probe:std::vector<std::pair<const char*,int>>{{"ParamArrayAliasProbe",3300},{"ParamArrayElementProbe",19},{"ParamArrayEmptyProbe",9}}) {const auto outcome=executeVbaProcedure(nativeParamArrayAliasFixture,probe.first,host);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"ParamArray alias "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);}
     {std::vector<VbaValue> values{VbaValue::longInteger(7)};const auto outcome=executeVbaProcedureWithArguments(nativeParamArrayAliasFixture,"UnboundPack",host,values);assert(outcome.status==VbaExecutionStatus::Error && outcome.errorNumber==3251 && values[0].number==7);}
+    for(const auto& probe:std::vector<std::pair<const char*,int>>{{"NamedSetterProbe",5803},{"NamedSetterPackProbe",264}}) {
+        const auto outcome=executeVbaProcedure(nativeNamedSetterFixture,probe.first,host);
+        if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Named setter "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";
+        assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);
+    }
+    state->classes["namedwriter"]=nativeNamedSetterClassFixture;
+    result=executeVbaProcedure(nativeNamedSetterClassConsumer,"NamedClassSetterProbe",host);
+    if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Named class setter: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";
+    assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==461);
     state->classes["database"]="VERSION 1.0 CLASS\nAttribute VB_Name = \"Database\"\nPublic Value As Long\n";
     result=executeVbaProcedure("Function RejectNominalDao As Long\nDim items(0 To 0) As DAO.Database\nOn Error Resume Next\nSet items(0)=New Database\nRejectNominalDao=Err.Number\nEnd Function","RejectNominalDao",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==13);
     state->alive=false;error=0;try{first->member("Calls",{});}catch(const VbaRuntimeError& e){error=e.number;}assert(error==3420);

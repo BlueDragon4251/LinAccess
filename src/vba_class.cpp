@@ -137,6 +137,12 @@ public:
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         check();if(auto result=signature(name,VbaPropertyAccess::Get)) return result;return method(name);
     }
+    std::optional<VbaArgumentSignature> assignmentSignature(std::string_view name,bool reference) const override {
+        check();return signature(name,reference ? VbaPropertyAccess::Set : VbaPropertyAccess::Let);
+    }
+    std::optional<VbaArgumentSignature> defaultAssignmentSignature(bool reference) const override {
+        check();if(definition_->defaultName.empty()) return {};return assignmentSignature(definition_->defaultName,reference);
+    }
     VbaValue run(std::string_view name,std::vector<VbaValue> arguments,std::optional<VbaPropertyAccess> access={}) {
         check();ClassHost host(*this,context_.host());
         const auto result=access ? executeVbaProperty(definition_->source,name,*access,host,arguments,!ownScope()) : executeVbaProcedureWithArguments(definition_->source,name,host,arguments);

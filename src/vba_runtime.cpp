@@ -379,6 +379,37 @@ CallArgument callArgument(const std::string& source) {
     if(std::regex_match(source,match,named)) return {lower(match[1].str()),trim(match[2].str())};
     return {{},source};
 }
+// A setter signature includes its final, separately supplied RHS value.
+void bindNamedPropertyIndices(const VbaArgumentSignature& shape,std::vector<VbaValue>& values,const std::vector<std::string>& names,VbaArgumentReferences& references) {
+    if(shape.variadic || shape.names.empty() || values.size()!=names.size()) throw VbaRuntimeError(3251,"Named setter metadata is unavailable");
+    const auto count=shape.names.size()-1;
+    std::vector<VbaValue> ordered(count,VbaValue::missing());
+    std::vector<bool> assigned(count),provided(count);VbaArgumentReferences reordered;
+    reordered.names.resize(count);reordered.arrayElements.resize(count);
+    bool named=false;std::size_t last=0;
+    for(std::size_t i=0;i<values.size();++i) {
+        std::size_t target=i;
+        if(!names[i].empty()) {
+            named=true;target=count;
+            for(std::size_t j=0;j<count;++j) if(lower(shape.names[j])==names[i]) {target=j;break;}
+            if(target==count) throw VbaRuntimeError(448,"Named property index not found");
+        } else if(named) throw VbaRuntimeError(450,"Positional property index follows a named index");
+        if(target>=count) throw VbaRuntimeError(450,"Too many property indices");
+        if(assigned[target]) throw VbaRuntimeError(448,"Property index is supplied more than once");
+        ordered[target]=values[i];assigned[target]=true;provided[target]=values[i].kind!=VbaValue::Kind::Missing;
+        if(i<references.names.size()) reordered.names[target]=references.names[i];
+        if(i<references.arrayElements.size()) reordered.arrayElements[target]=references.arrayElements[i];
+        last=std::max(last,target);
+    }
+    const auto required=shape.required ? shape.required-1 : 0;
+    for(std::size_t i=0;i<required;++i) {
+        if(i>=count || !assigned[i]) throw VbaRuntimeError(449,"Required property index is absent");
+        if(!provided[i]) throw VbaRuntimeError(448,"Required property index is omitted");
+    }
+    const auto size=values.empty() ? 0 : last+1;
+    ordered.resize(size);reordered.names.resize(size);reordered.arrayElements.resize(size);
+    values=std::move(ordered);references=std::move(reordered);
+}
 bool assignsBareName(const std::string& source,std::string_view name) {
     const auto assignment=topLevelAssignment(source);
     return assignment && lower(assignment->first)==name;
@@ -1307,7 +1338,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         } else if (const auto objectArrayAssignment=topLevelAssignment((lower(source).starts_with("set ") || lower(source).starts_with("set\t")) ? trim(source.substr(3)) : std::string{});
             objectArrayAssignment && memberSeparator(objectArrayAssignment->first)==std::string::npos && memberTarget(objectArrayAssignment->first) && memberTarget(objectArrayAssignment->first)->arguments) {
             const auto target=*memberTarget(objectArrayAssignment->first); const auto indices=splitArguments(*target.arguments);
-            if(indices.size()>60 || !std::all_of(indices.begin(),indices.end(),[&](const auto& index) { return trim(index).empty() || validExpression(index); }) || !validExpression(objectArrayAssignment->second))
+            if(indices.size()>60 || !std::all_of(indices.begin(),indices.end(),[&](const auto& index) { const auto argument=callArgument(index);return argument.name.empty() ? (trim(argument.expression).empty() || validExpression(argument.expression)) : (!argument.expression.empty() && validExpression(argument.expression)); }) || !validExpression(objectArrayAssignment->second))
                 return {VbaExecutionStatus::Unsupported,"Object array assignment syntax unsupported",line};
             statements.push_back({Statement::Type::IndexedAssign,target.name,objectArrayAssignment->second,line,*target.arguments,"object"});
         } else if (std::regex_match(source, match, objectSet)) {
@@ -1417,7 +1448,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         } else if (const auto assignment=topLevelAssignment(source); assignment && memberSeparator(assignment->first)==std::string::npos && memberTarget(assignment->first) && memberTarget(assignment->first)->arguments) {
             const auto target=*memberTarget(assignment->first);
             const auto indices=splitArguments(*target.arguments);
-            if(indices.size()>60 || !std::all_of(indices.begin(),indices.end(),[&](const auto& index) { return trim(index).empty() || validExpression(index); }) || !validExpression(assignment->second))
+            if(indices.size()>60 || !std::all_of(indices.begin(),indices.end(),[&](const auto& index) { const auto argument=callArgument(index);return argument.name.empty() ? (trim(argument.expression).empty() || validExpression(argument.expression)) : (!argument.expression.empty() && validExpression(argument.expression)); }) || !validExpression(assignment->second))
                 return {VbaExecutionStatus::Unsupported,"Array assignment syntax unsupported",line};
             statements.push_back({Statement::Type::IndexedAssign,target.name,assignment->second,line,*target.arguments});
         } else if (lower(source).starts_with("redim ") || lower(source).starts_with("redim\t")) {
@@ -3127,12 +3158,20 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     const bool indexed=target->arguments.has_value();
                     const auto object = pos==0 && !withFrames.empty() ? withFrames.back().value : evaluateObject(instruction.argument.substr(0, pos));
                     if (!object.object) throw VbaRuntimeError(91,"Objektvariable nicht gesetzt");
-                    std::vector<VbaValue> indices;
-                    if(indexed) {
-                        const auto inner=trim(*target->arguments);
-                        if(!inner.empty()) for(const auto& expression:splitArguments(inner)) indices.push_back(trim(expression).empty() ? VbaValue::missing() : evaluate(expression));
-                    }
+                    std::vector<VbaValue> indices;std::vector<CallArgument> indexArguments;
+                    if(indexed) for(const auto& expression:splitArguments(trim(*target->arguments))) indexArguments.push_back(callArgument(expression));
                     const bool reference=instruction.stepExpression=="object";
+                    const bool named=std::any_of(indexArguments.begin(),indexArguments.end(),[](const auto& argument){return !argument.name.empty();});
+                    const auto shape=named ? object.object->assignmentSignature(name,reference) : std::nullopt;
+                    if(named && !shape) throw VbaRuntimeError(3251,"Named property setter is unavailable");
+                    std::vector<std::string> names;VbaArgumentReferences indexReferences;
+                    for(const auto& argument:indexArguments) {
+                        const auto value=argument.expression.empty() ? VbaValue::missing() : named
+                            ? evaluateVbaArgumentExpression(argument.expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase,shape->objectArgument(indices.size(),argument.name)).value
+                            : evaluate(argument.expression);
+                        indices.push_back(value);names.push_back(argument.name);
+                    }
+                    if(named) bindNamedPropertyIndices(*shape,indices,names,indexReferences);
                     const auto value = reference ? evaluateObject(instruction.expression) : evaluate(instruction.expression);
                     if(reference) {
                         if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set requires an object reference");
@@ -3254,14 +3293,18 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                         && (nativeVbaPropertySignature(module,instruction.argument,propertyAccess,false) || defaultWrite)) {
                         std::vector<VbaValue> arguments;VbaArgumentReferences references;
                         auto signature=nativeVbaPropertySignature(module,instruction.argument,propertyAccess,false);
-                        if(!signature) signature=getter;
+                        const bool setter=signature.has_value();if(!signature) signature=getter;
+                        std::vector<std::string> names;
                         for(const auto& expression:splitArguments(instruction.endExpression)) {
-                            const auto parsed=callArgument(expression);
-                            if(!parsed.name.empty()) throw VbaRuntimeError(3251,"Named property setter indices are not implemented");
+                            const auto parsed=callArgument(expression);names.push_back(parsed.name);
                             auto argument=parsed.expression.empty() ? VbaEvaluatedArgument{VbaValue::missing(),{}}
                                 : evaluateVbaArgumentExpression(parsed.expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase,
-                                    signature && signature->objectArgument(arguments.size()));
+                                    signature && signature->objectArgument(arguments.size(),parsed.name));
                             arguments.push_back(std::move(argument.value));references.names.push_back(parsed.expression);references.arrayElements.push_back(std::move(argument.arrayElement));
+                        }
+                        if(std::any_of(names.begin(),names.end(),[](const auto& name){return !name.empty();})) {
+                            if(!setter) throw VbaRuntimeError(3251,"Named getter-default forwarding is not implemented");
+                            bindNamedPropertyIndices(*signature,arguments,names,references);
                         }
                         auto value=propertyAccess==VbaPropertyAccess::Set ? evaluateObject(instruction.expression) : scalarVbaValue(evaluate(instruction.expression));
                         arguments.push_back(std::move(value));if(!writeProperty(instruction.argument,propertyAccess,std::move(arguments),references)) throw VbaRuntimeError(3251,"Property index assignment is unsupported");break;
@@ -3269,13 +3312,21 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     const bool objectTarget=initial!=locals.end() && initial->second.kind==VbaValue::Kind::Object;
                     const auto target=objectTarget ? initial->second.object : std::shared_ptr<VbaObject>{};
                     if(objectTarget && !target) throw VbaRuntimeError(91,"Object variable is not set");
-                    std::vector<VbaValue> indices;
-                    for(const auto& expression:splitArguments(instruction.endExpression)) {
-                        if(trim(expression).empty()) throw VbaRuntimeError(450,"Omitted array/default indices are unsupported");
-                        const auto value=evaluate(expression);
-                        indices.push_back(objectTarget ? value : coerceVbaModuleValue(scalarVbaValue(value),"long"));
-                    }
+                    std::vector<VbaValue> indices;std::vector<CallArgument> indexArguments;
+                    for(const auto& expression:splitArguments(instruction.endExpression)) indexArguments.push_back(callArgument(expression));
                     const bool object=instruction.stepExpression=="object";
+                    const bool named=std::any_of(indexArguments.begin(),indexArguments.end(),[](const auto& argument){return !argument.name.empty();});
+                    const auto shape=named && objectTarget ? target->defaultAssignmentSignature(object) : std::nullopt;
+                    if(named && !shape) throw VbaRuntimeError(3251,"Named array/default assignment is unavailable");
+                    std::vector<std::string> names;VbaArgumentReferences indexReferences;
+                    for(const auto& argument:indexArguments) {
+                        if(argument.expression.empty() && !named) throw VbaRuntimeError(450,"Omitted array/default indices are unsupported");
+                        const auto value=argument.expression.empty() ? VbaValue::missing() : named
+                            ? evaluateVbaArgumentExpression(argument.expression,host,locals,resolver,withFrames.empty() ? nullptr : &withFrames.back().value,compareMode,arrayBase,shape->objectArgument(indices.size(),argument.name)).value
+                            : evaluate(argument.expression);
+                        indices.push_back(objectTarget ? value : coerceVbaModuleValue(scalarVbaValue(value),"long"));names.push_back(argument.name);
+                    }
+                    if(named) bindNamedPropertyIndices(*shape,indices,names,indexReferences);
                     const auto value=object ? evaluateObject(instruction.expression) : evaluate(instruction.expression);
                     if(object && value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set requires an object reference");
                     refreshAliases();

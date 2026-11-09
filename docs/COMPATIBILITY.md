@@ -6074,3 +6074,20 @@ Build-ID/Payload/Rechte/keineFixtures, MDBTools1.0.1 und SQLite3.54.1 JOIN/NULL/
 Paketintegration DAO2,76s/Original120,25s,2/2 in123,02s. Noch ohne diesen Aliasumfang.
 Ohne Zwischenabschluss mit echten benannten Property-Setter-Indexargumenten
 weiterprogrammieren; keine Getter zur Metadatenentdeckung ausführen.
+
+
+Benannte Property-Setter-Indizes: NAMED_PROPERTY_SETTERS.md beschreibt echte
+Let-/Set-Metadaten (auch ohne Get), optionale/Objektindizes und gemeinsame
+Namens-/ByRef-Adresszuordnung einschließlich ParamArrayzellen. Projektklasse,
+Default-Property und echte Formularfassade geprüft; externe ByRef-Grenze bleibt.
+Getter werden nicht zur Entdeckung ausgeführt. App/Kern5,02s; GUI-Watchdog zeigte
+fehlende Bereinigung der eingeführten NamedWriter-Testklasse vor späterer TEMP-
+Katalogprüfung. Klasse scoped bereinigt, Katalogschutz unverändert; nur GUI
+wiederholt, zuletzt18,54s bestanden. Sprach-Doppelmatrizen bleiben im Kern; GUI
+behält echte Qt-/SQL-/Klassen-/Formularprüfungen und präzise20s-Schranke. Keine
+Nachrichteninhalte in dauerhaftem Watchdoglog, keine neuen CTests/Windows-/
+Vollsuitenbehauptungen;456/386/70 unverändert. Vorstufe859d2ef privat remote/Baum
+geprüft. Letztes Original118,62s/DAO2,90s/Hashes liegen vor diesem Umfang; geprüftes
+DEB9affc5a unter /workspace/work/error-text-functions/package/linaccess-0.7.0-Linux.deb
+liegt vor ParamArray/benannten Settern. Ohne Zwischenabschluss Set-RHS-Auswertung
+nach MS-VBAL5.4.3.9 vor dynamischer Zielauflösung weiterimplementieren.

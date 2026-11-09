@@ -81,6 +81,8 @@ public:
     // Explicit native class/interface identity; never infer it from a scalar default.
     virtual bool isNativeType(std::string_view) const { return false; }
     virtual std::optional<VbaArgumentSignature> argumentSignature(std::string_view) const { return {}; }
+    virtual std::optional<VbaArgumentSignature> assignmentSignature(std::string_view,bool) const {return {};}
+    virtual std::optional<VbaArgumentSignature> defaultAssignmentSignature(bool reference) const {return assignmentSignature("Item",reference);}
     virtual VbaValue member(std::string_view name, const std::vector<VbaValue>& arguments) = 0;
     virtual VbaValue invokeMember(std::string_view name,const std::vector<VbaValue>& arguments,bool needsValue) { return member(name,arguments); }
     // Advertise a zero-argument scalar default explicitly; getter errors propagate.

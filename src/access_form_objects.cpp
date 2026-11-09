@@ -1015,6 +1015,9 @@ public:
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         return linaccess::nativeVbaPropertySignature(checked().vba_.toUtf8().toStdString(),name,linaccess::VbaPropertyAccess::Get,true);
     }
+    std::optional<linaccess::VbaArgumentSignature> assignmentSignature(std::string_view name,bool reference) const override {
+        return linaccess::nativeVbaPropertySignature(checked().vba_.toUtf8().toStdString(),name,reference ? linaccess::VbaPropertyAccess::Set : linaccess::VbaPropertyAccess::Let,true);
+    }
     bool isNativeType(std::string_view type) const override { return type==(report_ ? "access.report" : "access.form"); }
     void applyNativeFilter(const QString& criteria,bool clear) {
         auto& preview=checked();if(report_ && (clear || preview.property("la_bound_event_name").toString().compare("report_open",Qt::CaseInsensitive)!=0)) throw linaccess::VbaRuntimeError(2046,"Report filters require the actual Open event");

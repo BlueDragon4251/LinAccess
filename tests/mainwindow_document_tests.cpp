@@ -3206,8 +3206,12 @@ int main(int argc,char** argv) {
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication app(argc,argv); app.setQuitOnLastWindowClosed(false); app.setApplicationName("LinAccessSyntheticGuiTest"); app.setOrganizationName("LinAccessSyntheticTests");
     QStandardPaths::setTestModeEnabled(true);
-    QTimer watchdog; watchdog.setSingleShot(true);
-    QObject::connect(&watchdog,&QTimer::timeout,[] { std::cerr<<"Synthetic main-window document test timed out\n"; std::abort(); }); watchdog.start(20000);
+    QTimer watchdog; watchdog.setSingleShot(true); watchdog.setTimerType(Qt::PreciseTimer);
+    QObject::connect(&watchdog,&QTimer::timeout,[] {
+        auto* modal=QApplication::activeModalWidget();
+        std::cerr<<"Synthetic main-window document test timed out; modal="<<(modal ? modal->metaObject()->className() : "none")<<"\n";
+        std::abort();
+    }); watchdog.start(20000);
     QTemporaryDir temporary; assert(temporary.isValid());
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,temporary.path());
