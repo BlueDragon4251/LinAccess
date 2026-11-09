@@ -313,22 +313,18 @@ void adaptDynamicLike(QVector<Token>& tokens,qsizetype start,const QMap<QString,
     }
 }
 void adaptObjectReferences(QVector<Token>& tokens,qsizetype start) {
-    const auto name=[](const Token& token) { return token.kind==Token::Word || token.kind==Token::Identifier; };
-    for (qsizetype i=start;i+4<tokens.size();++i) {
-        if (!name(tokens[i])) continue;
-        const auto root=tokens[i].value.toCaseFolded();
-        const bool forms=root=="forms" || root=="formulare";
-        const bool reports=root=="reports" || root=="berichte";
-        if ((!forms && !reports) || !symbol(tokens[i+1],"!") || !name(tokens[i+2]) || !symbol(tokens[i+3],"!") || !name(tokens[i+4])) continue;
+    const auto name=[](const Token& token) {return token.kind==Token::Word || token.kind==Token::Identifier;};
+    for(qsizetype i=start;i+4<tokens.size();++i) {
+        if(!name(tokens[i])) continue;const auto root=tokens[i].value.toCaseFolded();const bool forms=root=="forms" || root=="formulare",reports=root=="reports" || root=="berichte";
+        if((!forms && !reports) || !symbol(tokens[i+1],"!") || !name(tokens[i+2])) continue;
         require(i==start || (!symbol(tokens[i-1],".") && !symbol(tokens[i-1],"!")),"Jet SQL: qualified object context unsupported");
-        auto last=i+5;
-        if (last+1<tokens.size() && symbol(tokens[last],".") && name(tokens[last+1]) && tokens[last+1].value.compare("Value",Qt::CaseInsensitive)==0) last+=2;
+        const bool field=symbol(tokens[i+3],"!");if(!field && !symbol(tokens[i+3],".")) continue;if(!name(tokens[i+4])) continue;
+        qsizetype last=i+5;QString property=field ? QString{} : tokens[i+4].value;
+        if(field && last+1<tokens.size() && symbol(tokens[last],".") && name(tokens[last+1])) {property=tokens[last+1].value;last+=2;}
         require(last==tokens.size() || (!symbol(tokens[last],".") && !symbol(tokens[last],"!") && !symbol(tokens[last],"(")),"Jet SQL: nested object reference unsupported");
-        const QVector<Token> replacement{{Token::Word,"linaccess_jet_object_value"},{Token::Other,"("},
-            {Token::String,forms ? "forms" : "reports"},{Token::Other,","},{Token::String,tokens[i+2].value},
-            {Token::Other,","},{Token::String,tokens[i+4].value},{Token::Other,")"}};
-        replaceTokens(tokens,i,last,replacement);
-        i+=replacement.size()-1;
+        const bool value=field && (property.isEmpty() || property.compare("Value",Qt::CaseInsensitive)==0);
+        QVector<Token> replacement{{Token::Word,value ? "linaccess_jet_object_value" : "linaccess_jet_object_property"},{Token::Other,"("},{Token::String,forms ? "forms" : "reports"},{Token::Other,","},{Token::String,tokens[i+2].value},{Token::Other,","},field ? Token{Token::String,tokens[i+4].value} : Token{Token::Word,"NULL"}};
+        if(!value) {replacement.append({Token::Other,","});replacement.append({Token::String,property});}replacement.append({Token::Other,")"});replaceTokens(tokens,i,last,replacement);i+=replacement.size()-1;
     }
 }
 void preserveComputedProjectionNames(QVector<Token>& tokens,qsizetype start) {

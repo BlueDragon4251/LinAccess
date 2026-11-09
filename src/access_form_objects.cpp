@@ -1949,22 +1949,19 @@ std::shared_ptr<linaccess::VbaObject> makePreviewControlObject(AccessFormPreview
 }
 
 void connectPreviewSqlObjects(QSqlDatabase db) {
-    const auto connection=db.connectionName();
-    const auto database=db.databaseName();
-    linaccess::setJetSqlObjectResolver(db,[connection,database](std::string_view collection,std::string_view object,std::string_view field) {
-        if (!QApplication::instance() || QThread::currentThread()!=QApplication::instance()->thread())
-            throw linaccess::VbaRuntimeError(3251,"SQL GUI object lookup requires its GUI thread");
-        const bool report=collection=="reports";
-        const auto name=text(object);
-        for (auto* widget : QApplication::topLevelWidgets()) {
-            auto* preview=dynamic_cast<AccessFormPreview*>(widget);
-            if (!preview || preview->closed_ || preview->openCancelled_ ||
-                preview->db_.connectionName()!=connection || preview->db_.databaseName()!=database ||
-                (preview->layout_.kind==linaccess::AccessDocumentKind::Report)!=report ||
-                preview->formName_.compare(name,Qt::CaseInsensitive)!=0) continue;
-            return preview->getFieldValue(field);
-        }
-        throw linaccess::VbaRuntimeError(report ? 2451 : 2450,"Referenced SQL document is not open");
+    const auto connection=db.connectionName(),database=db.databaseName();
+    const auto lookup=[connection,database](std::string_view collection,std::string_view object) {
+        if(!QApplication::instance() || QThread::currentThread()!=QApplication::instance()->thread()) throw linaccess::VbaRuntimeError(3251,"SQL GUI object lookup requires its GUI thread");
+        if(collection!="forms" && collection!="reports") throw linaccess::VbaRuntimeError(5,"Unknown SQL object collection");const bool report=collection=="reports";const auto name=text(object);QPointer<AccessFormPreview> found;
+        for(auto* widget:QApplication::topLevelWidgets()) {auto* preview=dynamic_cast<AccessFormPreview*>(widget);if(!preview || preview->closed_ || preview->openCancelled_ || preview->db_.connectionName()!=connection || preview->db_.databaseName()!=database || (preview->layout_.kind==linaccess::AccessDocumentKind::Report)!=report || preview->formName_.compare(name,Qt::CaseInsensitive)!=0) continue;if(found) throw linaccess::VbaRuntimeError(5,"Referenced SQL document is ambiguous");found=preview;}
+        if(!found) throw linaccess::VbaRuntimeError(report ? 2451 : 2450,"Referenced SQL document is not open");return found;
+    };
+    linaccess::setJetSqlObjectResolver(db,[lookup](std::string_view collection,std::string_view object,std::string_view field) {auto document=lookup(collection,object);auto root=makePreviewFormObject(*document);const auto result=document->getFieldValue(field);(void)root->member("Name",{});return result;});
+    linaccess::setJetSqlObjectPropertyResolver(db,[lookup](std::string_view collection,std::string_view object,std::optional<std::string_view> field,std::string_view property) {
+        static const QSet<QString> documentProperties{"name","caption","visible","tag","dirty","newrecord","currentrecord","openargs","dataentry","allowedits","allowadditions","allowdeletions","filter","filteron","orderby","orderbyon","recordsource","keypreview","timerinterval","cycle","modal","popup","page","pages","selheight"};
+        static const QSet<QString> controlProperties{"name","caption","tag","visible","enabled","locked","value","oldvalue","listcount","listindex","controltype"};
+        const auto key=text(property).toCaseFolded();if(!(field ? controlProperties : documentProperties).contains(key)) throw linaccess::VbaRuntimeError(438,"SQL object property is unsupported or not a scalar getter");
+        auto document=lookup(collection,object);auto root=makePreviewFormObject(*document);const auto target=field ? root->objectItem(*field).object : root;if(!target) throw linaccess::VbaRuntimeError(2465,"SQL property target is unavailable");const auto result=target->member(property,{});(void)root->member("Name",{});return result;
     });
 }
 

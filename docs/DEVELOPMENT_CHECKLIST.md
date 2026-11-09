@@ -3104,3 +3104,23 @@ Originalzuletzt073c20a1/1 (124,97s), erwartetes F129/3075 bleibt offen.
 Vollständige Access-Makro-/Ereignisparität bleibt offen. F088/F052/F135 und
 456/384/72 unverändert. Direkt weiter mit SQL-Zugriff auf tatsächliche skalare
 Formular-/Berichts-/Steuerelementeigenschaften ohne Methodenaufrufe.
+
+
+## Fortschreibung 2026-11-09: echte skalare Objekteigenschaften in SQL
+Jet-Tokenadapter unterstützt Forms!Dokument.Eigenschaft und Control.Eigenschaft,
+auch Reports/lokalisierte Namen/Bracket-/Punktnamen. Bestehende Werte/.Value
+bleiben auf alter3er-API, neue4er-Property-API ist driver-/verbindungsgebunden.
+Explizite Getter-Allowlist verwendet tatsächliche Form-/Report-/Control-/
+Datensatzfeldobjekte; Undo/Requery/Objektgetter/Methoden werden nicht ausgeführt
+(438), tiefere/parametrisierte Pfade bleiben offen. Bisherige skalare SQL-
+Konvertierung wiederverwendet, keine neue Typ-/Currency-/Decimal-Vollbehauptung.
+Gemeinsamer Lookup prüft GUI-Thread, Connection/Pfad/Kind/echte Lebensdauer,
+mehrdeutige Namen5 und nach Getter erneut tatsächliche Dokumentgültigkeit.
+SQL_OBJECT_PROPERTIES_RUNTIME.md. App und Ziele gebaut; gebündelt4/4 (115,92s)
+ohne Korrekturlauf bestanden: Layout11,68s, GUI9,01s, SQL-Objekte0,02s, Original
+115,91s. Reale Caption/Tag/Visible/Dirty/OldValue/ListCount, native versteckte
+Feldentwürfe, Live-View nach Änderung, fehlender Kontext, API-Reopen, echte
+Verbindungsisolation/Mehrdeutigkeit, Getterverweigerung ohne Undo, Form-/
+Reportfehler2450/2451. Original-F129/3075 bleibt erwartete Grenze.
+Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; DEB72ed466.
+F067/F068/F118/F164/F050/F052 und456/384/72 unverändert.

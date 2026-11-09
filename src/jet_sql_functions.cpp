@@ -75,6 +75,7 @@ class ObjectContext final : public QObject {
 public:
     explicit ObjectContext(QObject* owner) : QObject(owner) { setObjectName("linaccess-sql-objects"); }
     JetSqlObjectResolver resolver;
+    JetSqlObjectPropertyResolver propertyResolver;
 };
 ObjectContext* objectContext(QSqlDatabase db) {
     auto* driver=db.driver();
@@ -127,17 +128,9 @@ void likePattern(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     } catch (const VbaRuntimeError& error) { functionError(context,error); }
       catch (...) { native.error(context,"Jet LIKE pattern failed",-1); }
 }
-void objectValue(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+void objectResult(sqlite3_context* context,const VbaValue& result) {
     auto& native=api();
-    try {
-        auto* objects=static_cast<ObjectContext*>(native.userData(context));
-        if (!objects || !objects->resolver) throw VbaRuntimeError(3061,"SQL object context unavailable");
-        const auto collection=scalarText(args[0]).toUtf8();
-        const auto object=scalarText(args[1]).toUtf8();
-        const auto field=scalarText(args[2]).toUtf8();
-        const auto result=objects->resolver(
-            std::string_view(collection.constData(),collection.size()),std::string_view(object.constData(),object.size()),std::string_view(field.constData(),field.size()));
-        switch (result.kind) {
+    switch (result.kind) {
         case VbaValue::Kind::Null: native.nullResult(context); break;
         case VbaValue::Kind::Empty: native.integerResult(context,0); break;
         case VbaValue::Kind::Boolean: native.integerResult(context,result.boolean ? -1 : 0); break;
@@ -153,9 +146,30 @@ void objectValue(sqlite3_context* context,int,sqlite3_value** args) noexcept {
             native.textResult(context,result.text.data(),static_cast<int>(result.text.size()),reinterpret_cast<void (*)(void*)>(-1)); break;
         default: throw VbaRuntimeError(13,"SQL object value must be scalar");
         }
+}
+void objectValue(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+    auto& native=api();
+    try {
+        auto* objects=static_cast<ObjectContext*>(native.userData(context));
+        if (!objects || !objects->resolver) throw VbaRuntimeError(3061,"SQL object context unavailable");
+        const auto collection=scalarText(args[0]).toUtf8();
+        const auto object=scalarText(args[1]).toUtf8();
+        const auto field=scalarText(args[2]).toUtf8();
+        const auto result=objects->resolver(
+            std::string_view(collection.constData(),collection.size()),std::string_view(object.constData(),object.size()),std::string_view(field.constData(),field.size()));
+        objectResult(context,result);
     } catch (const VbaRuntimeError& error) { functionError(context,error); }
       catch (...) { native.error(context,"SQL object resolution failed",-1); }
 }
+void objectProperty(sqlite3_context* context,int,sqlite3_value** args) noexcept {
+    auto& native=api();try {
+        auto* objects=static_cast<ObjectContext*>(native.userData(context));if(!objects || !objects->propertyResolver) throw VbaRuntimeError(3061,"SQL object property context unavailable");
+        const auto collection=scalarText(args[0]).toUtf8(),object=scalarText(args[1]).toUtf8(),field=scalarText(args[2]).toUtf8(),property=scalarText(args[3]).toUtf8();
+        const auto view=[](const QByteArray& value) {return std::string_view(value.constData(),value.size());};const std::optional<std::string_view> target=native.type(args[2])==5 ? std::nullopt : std::optional<std::string_view>(view(field));
+        objectResult(context,objects->propertyResolver(view(collection),view(object),target,view(property)));
+    }catch(const VbaRuntimeError& error) {functionError(context,error);}catch(...) {native.error(context,"SQL object property resolution failed",-1);}
+}
+
 void colorFunction(sqlite3_context* context,int count,sqlite3_value** args,bool indexed) noexcept {
     auto& native=api();
     try {
@@ -731,6 +745,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_lenb",-1,&stringLenB,nullptr,nullptr);
     ensure("linaccess_jet_like_pattern",1,&likePattern,nullptr,nullptr);
     ensure("linaccess_jet_object_value",3,&objectValue,nullptr,nullptr);
+    ensure("linaccess_jet_object_property",4,&objectProperty,nullptr,nullptr);
     vba_sql::install(db,connection);
 }
 QMap<QString,QString> nativeVbaSqlFunctionResultTypes(QSqlDatabase db) {
@@ -739,6 +754,9 @@ QMap<QString,QString> nativeVbaSqlFunctionResultTypes(QSqlDatabase db) {
 void setJetSqlObjectResolver(QSqlDatabase db,JetSqlObjectResolver resolver) {
     installJetSqlFunctions(db);
     objectContext(db)->resolver=std::move(resolver);
+}
+void setJetSqlObjectPropertyResolver(QSqlDatabase db,JetSqlObjectPropertyResolver resolver) {
+    installJetSqlFunctions(db);objectContext(db)->propertyResolver=std::move(resolver);
 }
 
 }

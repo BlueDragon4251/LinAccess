@@ -15,6 +15,7 @@ int main(int argc,char** argv) {
     try { model.execute(db,"SELECT Formulare!filter!year"); }
     catch(const linaccess::VbaRuntimeError& error) { missing=error.number==3061; }
     assert(missing && model.rowCount()==0);
+    missing=false;try {model.execute(db,"SELECT Forms!filter.Caption");}catch(const linaccess::VbaRuntimeError& error) {missing=error.number==3061;}assert(missing && model.rowCount()==0);
     auto year=linaccess::VbaValue::numeric(2003);
     linaccess::setJetSqlObjectResolver(db,[&](std::string_view collection,std::string_view object,std::string_view field) {
         assert(collection=="forms" || collection=="reports");
@@ -28,6 +29,10 @@ int main(int argc,char** argv) {
     assert(model.data(model.index(0,0)).toInt()==2003);
     assert(model.data(model.index(0,1)).toInt()==-1);
     assert(model.data(model.index(0,2)).isNull());
+    std::string title="actual resolver text";linaccess::setJetSqlObjectPropertyResolver(db,[&](std::string_view collection,std::string_view object,std::optional<std::string_view> field,std::string_view property) {
+        assert(collection=="forms" || collection=="reports");assert(object=="filter");if(!field && property=="Caption") return linaccess::VbaValue::string(title);if(field && *field=="dot.name" && property=="Tag") return linaccess::VbaValue::string("literal dotted field");if(field && *field=="flag" && property=="Visible") return linaccess::VbaValue::logical(true);throw linaccess::VbaRuntimeError(438,"Unknown property");
+    });
+    model.execute(db,"SELECT [Formulare]![filter].[Caption] AS title, Forms!filter![dot.name].Tag AS dotted, Berichte!filter!flag.Visible AS flag");assert(model.data(model.index(0,0)).toString()==QString::fromStdString(title) && model.data(model.index(0,1)).toString()=="literal dotted field" && model.data(model.index(0,2)).toInt()==-1);
     year=linaccess::VbaValue::string("002004");
     model.execute(db,"SELECT Forms!filter!year & '-x'");
     assert(model.data(model.index(0,0)).toString()=="002004-x");
@@ -61,6 +66,7 @@ int main(int argc,char** argv) {
     try { model.execute(separate,"SELECT Forms!filter!year"); }
     catch(const linaccess::VbaRuntimeError& error) { missing=error.number==3061; }
     assert(missing);
+    missing=false;try {model.execute(separate,"SELECT Forms!filter.Caption");}catch(const linaccess::VbaRuntimeError& error) {missing=error.number==3061;}assert(missing);title="after reconnect";model.execute(db,"SELECT Forms!filter.Caption");assert(model.data(model.index(0,0)).toString()=="after reconnect");
     missing=false;
     try { model.execute(db,"SELECT Forms!filter!missing"); }
     catch(const linaccess::VbaRuntimeError& error) { missing=error.number==2465; }

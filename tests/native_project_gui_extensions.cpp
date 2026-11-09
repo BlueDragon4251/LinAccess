@@ -196,6 +196,67 @@ End)FORM";
     const auto raw=[&](const QString& name,const QJsonObject& definition) {sql.prepare("INSERT INTO _la_objects VALUES('macro',?,?)");sql.addBindValue(name);sql.addBindValue(QJsonDocument(definition).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();};raw("ContinuationOrphan",{{"version",1},{"actions",QJsonArray{actionDefinition("RunSQL","INSERT INTO macro_continuation_audit VALUES(77)"),actionDefinition("RunSQL","INSERT INTO macro_continuation_audit VALUES(88)","...")}}});raw("ContinuationOtherGroup",{{"version",2},{"groups",QJsonArray{QJsonObject{{"name","First"},{"actions",QJsonArray{actionDefinition("RunSQL","INSERT INTO macro_continuation_audit VALUES(77)")}}},QJsonObject{{"name","Broken"},{"actions",QJsonArray{actionDefinition("RunSQL","INSERT INTO macro_continuation_audit VALUES(88)","...")}}}}}});reset();for(const auto* name:{"ContinuationOrphan","ContinuationOtherGroup"}) {int error=0;try {commands->member("RunMacro",{VbaValue::string(name)});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251 && gate()==0 && count(77)==0 && count(88)==0);}commands->member("RunMacro",{VbaValue::string("ContinuationEditor")});assert(gate()==1 && count(11)==1 && count(22)==1 && count(33)==1);assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='MacroContinuationCode'"));
 }
 
+void testNativeSqlObjectProperties(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE sql_property_rows(id INTEGER PRIMARY KEY,n INTEGER,hidden TEXT)"));assert(sql.exec("INSERT INTO sql_property_rows VALUES(1,10,'initial'),(2,20,NULL),(3,30,NULL)"));
+    const QByteArray source=R"FORM(Begin Form
+Caption ="Property header"
+RecordSource ="sql_property_rows"
+Width =3600
+Begin Section
+Height =1400
+Begin TextBox
+Name ="Value"
+ControlSource ="n"
+Width =1500
+Height =300
+End
+Begin TextBox
+Name ="dot.name"
+Top =350
+Width =1500
+Height =300
+End
+Begin Label
+Name ="Label Caption"
+Caption ="Label's caption"
+Top =700
+Width =3000
+Height =300
+End
+Begin ComboBox
+Name ="Choice"
+RowSource ="SELECT id,n FROM sql_property_rows ORDER BY id"
+ColumnCount =2
+BoundColumn =1
+Top =1050
+Width =1800
+Height =300
+End
+End
+End)FORM";
+    AccessFormPreview form("SQL Property Form",source,{},db,&window);form.show();QApplication::processEvents();auto root=makePreviewFormObject(form);root->assign("Tag",VbaValue::string("form's tag"));auto control=root->objectItem("Value").object;control->assign("Tag",VbaValue::string("control tag"));root->objectItem("dot.name").object->assign("Tag",VbaValue::string("dotted tag"));linaccess::AccessQueryModel model;
+    model.execute(db,"SELECT Forms![SQL Property Form].Caption AS title, Forms![SQL Property Form].Visible AS shown, Forms![SQL Property Form].Tag AS tag, Forms![SQL Property Form]!Value.Tag AS control_tag, Formulare![SQL Property Form]![dot.name].Tag AS dotted, Forms![SQL Property Form]![Label Caption].Caption AS label, Forms![SQL Property Form]!Choice.ListCount AS choices, Forms![SQL Property Form].OpenArgs AS args");assert(model.rowCount()==1 && model.columnCount()==8 && model.data(model.index(0,0)).toString()=="Property header" && model.data(model.index(0,1)).toInt()==-1 && model.data(model.index(0,2)).toString()=="form's tag" && model.data(model.index(0,3)).toString()=="control tag" && model.data(model.index(0,4)).toString()=="dotted tag" && model.data(model.index(0,5)).toString()=="Label's caption" && model.data(model.index(0,6)).toInt()==3 && model.data(model.index(0,7)).isNull());assert(!root->member("Dirty",{}).boolean);
+    control->assign("Value",VbaValue::integer(42));root->objectItem("hidden").object->assign("Value",VbaValue::string("draft hidden"));model.execute(db,"SELECT Forms![SQL Property Form].Dirty AS dirty, Forms![SQL Property Form].CurrentRecord AS current_row, Forms![SQL Property Form]!Value.OldValue AS previous, Forms![SQL Property Form]!Value.Value AS current_value, Forms![SQL Property Form]!hidden AS hidden_value, Forms![SQL Property Form]!hidden.Name AS field_name");assert(model.data(model.index(0,0)).toInt()==-1 && model.data(model.index(0,1)).toInt()==1 && model.data(model.index(0,2)).toInt()==10 && model.data(model.index(0,3)).toInt()==42 && model.data(model.index(0,4)).toString()=="draft hidden" && model.data(model.index(0,5)).toString()=="hidden");assert(sql.exec("SELECT n,hidden FROM sql_property_rows WHERE id=1") && sql.next() && sql.value(0).toInt()==10 && sql.value(1).toString()=="initial");sql.finish();
+    const auto reject=[&](const QString& statement,int expected) {int number=0;try {model.execute(db,statement);}catch(const linaccess::VbaRuntimeError& error) {number=error.number;}if(number!=expected) qFatal("SQL property expected=%d actual=%d",expected,number);};reject("SELECT Forms![SQL Property Form].Undo",438);reject("SELECT Forms![SQL Property Form]!Value.Undo",438);reject("SELECT Forms![SQL Property Form]!Value.Parent",438);assert(root->member("Dirty",{}).boolean && control->scalarValue().number==42);
+    assert(sql.exec("CREATE VIEW live_sql_property_view AS "+linaccess::compileAccessQuery("SELECT Forms![SQL Property Form].Caption AS title, Forms![SQL Property Form]!Value.Tag AS tag").sql));root->assign("Caption",VbaValue::string("Changed property header"));control->assign("Tag",VbaValue::string("changed tag"));model.execute(db,"SELECT title,tag FROM live_sql_property_view");assert(model.data(model.index(0,0)).toString()=="Changed property header" && model.data(model.index(0,1)).toString()=="changed tag");
+    {auto other=QSqlDatabase::addDatabase("QSQLITE","foreign-sql-properties");other.setDatabaseName(":memory:");assert(other.open());QSqlQuery otherSql(other);assert(otherSql.exec("CREATE TABLE sql_property_rows(id INTEGER PRIMARY KEY,n INTEGER,hidden TEXT)"));assert(otherSql.exec("INSERT INTO sql_property_rows VALUES(1,99,NULL)"));auto foreignSource=source;foreignSource.replace("Property header","Foreign property header");AccessFormPreview otherForm("SQL Property Form",foreignSource,{},other);linaccess::AccessQueryModel otherModel;otherModel.execute(other,"SELECT Forms![SQL Property Form].Caption AS title");assert(otherModel.data(otherModel.index(0,0)).toString()=="Foreign property header");model.execute(db,"SELECT Forms![SQL Property Form].Caption AS title");assert(model.data(model.index(0,0)).toString()=="Changed property header");assert(otherForm.close());}QSqlDatabase::removeDatabase("foreign-sql-properties");
+    {AccessFormPreview duplicate("SQL Property Form",source,{},db,&window);reject("SELECT Forms![SQL Property Form].Caption",5);reject("SELECT Forms![SQL Property Form]!Value",5);assert(duplicate.close());}model.execute(db,"SELECT Forms![SQL Property Form]!Value AS current_value");assert(model.data(model.index(0,0)).toInt()==42);
+    const QByteArray reportSource=R"FORM(Begin Report
+Caption ="Report property header"
+RecordSource ="sql_property_rows"
+Width =1800
+Begin Section
+Height =500
+Begin TextBox
+Name ="Value"
+ControlSource ="n"
+Width =1500
+Height =300
+End
+End
+End)FORM";AccessFormPreview report("SQL Property Report",reportSource,{},db,&window);model.execute(db,"SELECT Berichte![SQL Property Report].Caption AS title, Reports![SQL Property Report]!Value.Name AS control_name");assert(model.data(model.index(0,0)).toString()=="Report property header" && model.data(model.index(0,1)).toString()=="Value");assert(report.close());reject("SELECT Reports![SQL Property Report].Caption",2451);root->member("Undo",{});assert(form.close());reject("SELECT Forms![SQL Property Form].Caption",2450);
+}
+
 void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
     testNativeRepaintObject(window,db);
     testNativeSetValueDoubleEvaluation(window,db);
@@ -203,4 +264,5 @@ void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
     testNativeProjectFilters(window,db);
     testNativeWindowStateCommands(window,db);
     testNativeMacroContinuations(window,db);
+    testNativeSqlObjectProperties(window,db);
 }

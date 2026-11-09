@@ -144,3 +144,10 @@ are known pure and no actual source column shadows the alias. Three additional
 original queries must return positive, non-NULL results; synthetic regressions
 check independent tax totals, NULL cases and prevention of volatile callback
 duplication. Leading-dot decimal/exponent literals are also tokenized intact.
+
+
+Bounded live scalar document/control properties now use actual native getters;
+default values and explicit .Value retain their original adapter. See
+[SQL_OBJECT_PROPERTIES_RUNTIME.md](SQL_OBJECT_PROPERTIES_RUNTIME.md). Existing
+SQL-object/GUI/layout/original4/4 passes115.92s; arbitrary methods, deeper paths,
+parameterized properties and full Access query parity remain open.

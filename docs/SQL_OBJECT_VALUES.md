@@ -39,3 +39,10 @@ subform/report chains, implicit undeclared parameters, module functions, exact
 Date/Currency Variants and background-thread UI evaluation remain unsupported.
 The remaining three original report sources need their referenced forms open;
 this package does not invent filter values or claim those report workflows run.
+
+
+Bounded live scalar document/control properties now use actual native getters;
+default values and explicit .Value retain their original adapter. See
+[SQL_OBJECT_PROPERTIES_RUNTIME.md](SQL_OBJECT_PROPERTIES_RUNTIME.md). Existing
+SQL-object/GUI/layout/original4/4 passes115.92s; arbitrary methods, deeper paths,
+parameterized properties and full Access query parity remain open.
