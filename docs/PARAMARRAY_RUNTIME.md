@@ -21,3 +21,9 @@ Object argument references retain their existing native object behavior.
 Combined Optional/ParamArray declarations, named arguments, argument holes,
 array expansion and full Windows binder behavior remain open. ParamArray must
 be last; unsupported declarations fail during procedure validation.
+
+
+The subsequent real variable-binding path is documented in PARAMARRAY_ALIASES.md.
+It supersedes the initial blanket slot-write refusal for actual VBA calls with
+resolved argument bindings, preserving explicit guards for unbound facades and
+unsupported array-valued/compound aliases. It does not complete F043.

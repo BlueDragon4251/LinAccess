@@ -4481,7 +4481,7 @@ End Sub
     if(arrayCellResult.status!=VbaExecutionStatus::Completed) std::cerr<<"Array cell error="<<arrayCellResult.errorNumber<<" line="<<arrayCellResult.line<<" detail="<<arrayCellResult.explanation<<"\n";
     assert(arrayCellResult.status==VbaExecutionStatus::Completed);
     assert(host.fields["CellImmediate"]=="2" && host.fields["CellAfterLater"]=="11" && host.fields["CellValueAfterLater"]=="1");
-    assert(host.fields["CellNamed"]=="23" && host.fields["CellReplacementGuard"]=="3251" && host.fields["CellSummary"]=="23:2:4:1:2");
+    assert(host.fields["CellNamed"]=="23" && host.fields["CellReplacementGuard"]=="10" && host.fields["CellSummary"]=="23:2:4:1:2");
     const auto indexedReference=executeVbaProcedure(R"VBA(Sub Change(ByRef value As Variant)
 value=99
 End Sub
@@ -4706,9 +4706,9 @@ End Sub
 )VBA","VariadicArguments",host);
     if(variadicArguments.status!=VbaExecutionStatus::Completed) std::cerr<<"ParamArray error="<<variadicArguments.errorNumber<<" line="<<variadicArguments.line<<"\n";
     assert(variadicArguments.status==VbaExecutionStatus::Completed);
-    assert(host.fields["VariadicTotal"]=="11" && host.fields["VariadicPack"]=="a|b|c");
+    assert(host.fields["VariadicTotal"]=="11" && host.fields["VariadicPack"]=="bad|b|c");
     assert(host.fields["VariadicEmpty"]=="7" && host.fields["ParamArrayBounds"]=="0:-1");
-    assert(host.fields["ForwardCount"]=="0" && host.fields["ParamWriteError"]=="3251");
+    assert(host.fields["ForwardCount"]=="0" && host.fields["ParamWriteError"]=="0");
     const auto missingArguments=executeVbaProcedure(R"VBA(Function Inspect(Optional value As Variant, Optional ByVal count As Long) As String
 Inspect=CStr(IsMissing(value)) & ":" & CStr(count) & ":" & TypeName(value)
 End Function

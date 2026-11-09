@@ -2239,20 +2239,50 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         std::function<VbaValue()> read;
         std::function<void(const VbaValue&)> write;
         VbaValue* arrayRoot{};
+        std::optional<std::size_t> element;
     };
     std::vector<Alias> aliases;
+    std::deque<VbaValue> unresolvedPackCells;
     if (references && !implicitCancel)
         for (std::size_t i = 0; i < parameters.size() && i<references->size(); ++i)
             if (!omittedParameters[i] && parameters[i].byReference && (*references)[i].source)
                 aliases.push_back({lower(parameters[i].name), (*references)[i].source, *(*references)[i].source,(*references)[i].type,
                     (*references)[i].read,(*references)[i].write,(*references)[i].arrayRoot});
+    try {
+    if(references && !implicitCancel) for(std::size_t i=0;i<parameters.size();++i) if(parameters[i].paramArray) {
+        const auto name=lower(parameters[i].name);
+        const auto end=arguments.size()-(propertySetter ? 1 : 0);
+        for(std::size_t position=i;position<end && position<references->size();++position) {
+            const auto& reference=(*references)[position];
+            if(reference.indexedArray) {
+                // No fabricated alias for an address the binder cannot resolve.
+                unresolvedPackCells.push_back(vbaArrayLinearElement(locals.at(name),position-i));
+                auto* cell=&unresolvedPackCells.back();
+                aliases.push_back({name,cell,*cell,"variant",{},[](const VbaValue&){throw VbaRuntimeError(3251,"Compound ParamArray alias writes are not implemented");},{},position-i});
+                continue;
+            }
+            if(!reference.source) continue; // Literal/value expressions own local slots.
+            if(reference.read) *reference.source=reference.read();
+            const auto write=[source=reference.source,read=reference.read,update=reference.write,type=reference.type](const VbaValue& value) {
+                const auto before=read ? read() : *source;
+                if(isVbaArray(before) || isVbaArray(value)) throw VbaRuntimeError(3251,"Array-valued ParamArray alias writes are not implemented");
+                const auto converted=coerceVbaModuleValue(value,type);
+                if(update) update(converted);else *source=converted;
+            };
+            aliases.push_back({name,reference.source,*reference.source,reference.type,reference.read,write,reference.arrayRoot,position-i});
+            locals[name]=withVbaArrayLinearElement(locals.at(name),position-i,*reference.source);
+            if(reference.arrayRoot) activeArrayElementRoots.push_back(reference.arrayRoot);
+        }
+    }
+    } catch(const VbaRuntimeError& error) {
+        VbaExecutionResult failure{VbaExecutionStatus::Error,"ParamArray reference binding failed",0};
+        failure.errorNumber=error.number;failure.errorSource=error.source;failure.errorHelpFile=error.helpFile;failure.errorHelpContext=error.helpContext;return failure;
+    }
     // Locals/aliases now own the semantic arguments. Internal transport copies
     // must not keep replaced objects alive; public API argument vectors remain.
     if(references && !implicitCancel) {
         std::unordered_set<VbaValue*> liveSources;
-        for(std::size_t i=0;i<parameters.size() && i<references->size();++i)
-            if(!omittedParameters[i] && parameters[i].byReference && !parameters[i].paramArray && (*references)[i].source)
-                liveSources.insert((*references)[i].source);
+        for(const auto& alias:aliases) liveSources.insert(alias.source);
         for(const auto& binding:*references)
             if(binding.temporaryCell && binding.source && !liveSources.contains(binding.source)) *binding.source=VbaValue::empty();
         for(auto& value:arguments) value=VbaValue::empty();
@@ -2425,40 +2455,50 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         ensureImplicitLocal(name);
         if(!arrayElement) {
             const auto local=locals.find(name); const VbaValue* source=local==locals.end() ? nullptr : &local->second;
-            for(const auto& alias:aliases) if(alias.name==name) { source=alias.source; break; }
+            for(const auto& alias:aliases) if(alias.name==name && !alias.element) { source=alias.source; break; }
             if(source && std::find(activeArrayElementRoots.begin(),activeArrayElementRoots.end(),source)!=activeArrayElementRoots.end())
-                throw VbaRuntimeError(3251,"Array replacement while a ByRef element is active is not implemented");
+                throw VbaRuntimeError(10,vbaErrorText(10));
         }
         if(!arrayElement) for(const auto& loop:loops) if(!loop.arrayRoot.empty() && loop.arrayRoot==name)
             throw VbaRuntimeError(3251,"Array source replacement during For Each is not implemented");
         if(constantNames.contains(name)) throw VbaRuntimeError(3251,"Assignment to a constant is not permitted");
         if(!arrayElement && fixedArrays.contains(name)) throw VbaRuntimeError(3251,"Whole fixed-array assignment is not implemented");
         const auto type=variableType(name);
-        if(type=="paramarray") throw VbaRuntimeError(3251,"ParamArray slot replacement is not implemented");
+        if(type=="paramarray" && (!arrayElement || !references)) throw VbaRuntimeError(3251,"ParamArray whole-slot or unbound-facade mutation is not implemented");
         locals[name]=checkedType(type) ? coerceVbaModuleValue(value,type) : value;
     };
     const auto equalValue = [](const VbaValue& a, const VbaValue& b) {
         return a.kind == b.kind && a.numericType==b.numericType && a.number == b.number && a.currencyUnits==b.currencyUnits && a.text == b.text
             && a.boolean == b.boolean && a.object == b.object && a.bytes == b.bytes && a.errorNumber==b.errorNumber;
     };
+    const auto setAliasValue=[&](const Alias& alias,const VbaValue& value) {
+        if(alias.element) locals[alias.name]=withVbaArrayLinearElement(locals.at(alias.name),*alias.element,value);
+        else locals[alias.name]=value;
+    };
     const auto refreshAliases = [&] {
         for (auto& alias : aliases) {
             if(alias.read) *alias.source=alias.read();
-            locals[alias.name] = *alias.source; alias.before = *alias.source;
+            setAliasValue(alias,*alias.source); alias.before = *alias.source;
         }
     };
     AliasRefreshScope* aliasFrame=nullptr;
     const auto storeAliases = [&] {
         bool changed=false;
-        for (auto& alias : aliases)
-            if (!equalValue(locals[alias.name], alias.before)) {
+        for (auto& alias : aliases) {
+            // Borrow ordinary variable values; copying a large Byte()/Memo
+            // merely to compare an unchanged alias would be a regression.
+            std::optional<VbaValue> element;
+            if(alias.element) element=vbaArrayLinearElement(locals.at(alias.name),*alias.element);
+            const auto& current=element ? *element : locals.at(alias.name);
+            if (!equalValue(current, alias.before)) {
                 try {
-                    const auto value=coerceVbaModuleValue(locals[alias.name],alias.type);
+                    const auto value=coerceVbaModuleValue(current,alias.type);
                     if(alias.write) alias.write(value);
                     *alias.source=value; changed=true;
                 }
-                catch (...) { locals[alias.name]=*alias.source; alias.before=*alias.source; throw; }
+                catch (...) { setAliasValue(alias,*alias.source); alias.before=*alias.source; throw; }
             }
+        }
         if(changed) for(auto* frame:activeAliasFrames) if(frame!=aliasFrame) frame->refresh();
         refreshAliases();
     };
@@ -2523,7 +2563,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             auto found = locals.find(lower(expression));
             const auto type=variableType(lower(expression));
             ReferenceBinding binding{found==locals.end() ? nullptr : &found->second,checkedType(type) ? type : std::string{}};
-            for (const auto& alias:aliases) if (alias.name==lower(expression))
+            for (const auto& alias:aliases) if (alias.name==lower(expression) && !alias.element)
                 binding={alias.source,alias.type,false,false,false,alias.read,alias.write,alias.arrayRoot};
             binding.paramArray=type=="paramarray";
             binding.fixedArray=fixedArrays.contains(lower(expression));
@@ -2538,8 +2578,15 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 binding.indexedArray=true;
                 const auto root=locals.find(reference.root); VbaValue* source=root==locals.end() ? nullptr : &root->second;
                 bool nested=false;
-                for(const auto& alias:aliases) if(alias.name==reference.root) { source=alias.source; nested=bool(alias.read) || bool(alias.write); break; }
-                if(source && reference.allocation && !nested && variableType(reference.root)!="paramarray" && !constantNames.contains(reference.root)) {
+                if(variableType(reference.root)=="paramarray" && references) {
+                    const auto mapped=std::find_if(aliases.begin(),aliases.end(),[&](const auto& alias){return alias.name==reference.root && alias.element && *alias.element==reference.offset;});
+                    if(mapped!=aliases.end()) {
+                        binding={mapped->source,mapped->type,false,false,false,mapped->read,mapped->write,mapped->arrayRoot};
+                        bindings.push_back(std::move(binding));continue;
+                    }
+                }
+                for(const auto& alias:aliases) if(alias.name==reference.root && !alias.element) { source=alias.source; nested=bool(alias.read) || bool(alias.write); break; }
+                if(source && reference.allocation && !nested && (variableType(reference.root)!="paramarray" || references) && !constantNames.contains(reference.root)) {
                     std::shared_ptr<ArrayCell> cell;
                     for(const auto& candidate:cells) if(candidate->root==source && candidate->offset==reference.offset && candidate->allocation==reference.allocation) { cell=candidate; break; }
                     if(!cell) { cell=std::make_shared<ArrayCell>(ArrayCell{source,reference.offset,reference.allocation,actuals[argument]}); cells.push_back(cell); }
@@ -3172,7 +3219,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     const auto name=lower(instruction.argument);
                     if(automaticObjects.contains(name)) (void)readVariable(name);
                     const auto initial=locals.find(name);
-                    if(variableType(name)=="paramarray") throw VbaRuntimeError(3251,"ParamArray element mutation is not implemented");
+                    if(variableType(name)=="paramarray" && !references) throw VbaRuntimeError(3251,"Writable ParamArray requires actual argument bindings");
                     // Mid statements share indexed syntax; actual variables named Mid keep their normal array/object path.
                     if((name=="mid$" || (name=="mid" && initial==locals.end())) && instruction.stepExpression!="object") {
                         const auto parts=splitArguments(instruction.endExpression);

@@ -3021,3 +3021,20 @@ geprüft. Letztes Original118,10s/Hashes vor CVErr/Errortext; DEB55096a7 vor Pro
 Err/CVErr/Errortext. Ohne Zwischenabschluss aktuelles Paket prüfen, danach echte
 ByRef-Arraysperren nach MS-VBAL5.4.3.3 weiterbearbeiten; Erase-/ForEach-Grenzen
 nicht ungeprüft als vollständige native Semantik deklarieren.
+
+
+Echte ParamArray-Aliase/Arraysperren: PARAMARRAY_ALIASES.md dokumentiert skalare/
+Objektvariablen und unterstützte Arrayzellen, eigene Literal-/Klammerwert-Slots,
+doppelte Aliase, echte ByRef-Weitergabe, typisierte Rückschreibfehler und Schutz
+unaufgelöster/Fassaden-/Arraywertfälle. Aktive ByRef-Arraywurzel liefert10 statt
+3251 und wird nach Aufrufende freigegeben. App; initial GUI18,94s/DAO2,78s/
+Original118,62s bestanden. Alte Literalpack-Erwartung angepasst und gewöhnliche
+Aliaswerte geliehen statt Byte/Memo-Kopie; nur betroffenes Kern-/DAO-Bündel
+wiederholt2/2 (7,97s:5,06/2,90), GUI/Original nicht erneut. Sieben Hashes unverändert;
+bekannte Makrogrenze. Keine neuen CTests/Windows-/Vollsuitenbehauptungen;456/386/70
+unverändert. Vorstufe9affc5a privat remote/Baum geprüft, dessen frisches DEB unter
+/workspace/work/error-text-functions/package/linaccess-0.7.0-Linux.deb besteht
+Build-ID/Payload/Rechte/keineFixtures, MDBTools1.0.1 und SQLite3.54.1 JOIN/NULL/Counter;
+Paketintegration DAO2,76s/Original120,25s,2/2 in123,02s. Noch ohne diesen Aliasumfang.
+Ohne Zwischenabschluss mit echten benannten Property-Setter-Indexargumenten
+weiterprogrammieren; keine Getter zur Metadatenentdeckung ausführen.
