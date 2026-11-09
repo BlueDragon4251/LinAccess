@@ -466,7 +466,7 @@ void exerciseTableReplace(MainWindow& window,QSqlDatabase db) {
     auto* apply=dialog->findChild<QPushButton*>("native-table-replace-current");
     auto* next=dialog->findChild<QPushButton*>("native-table-find-next");
     auto* match=dialog->findChild<QComboBox*>("native-table-find-match");
-    assert(sought && replacement && apply && next && match && match->currentIndex()==1 && !match->isEnabled());
+    assert(sought && replacement && apply && next && match && match->currentIndex()==1 && match->isEnabled());
     sought->setText("alpha"); replacement->setText("gamma"); next->click(); apply->click();
     assert(model->isDirty() && model->index(0,1).data(Qt::EditRole).toString()=="gamma");
     assert(sql.exec("SELECT value FROM command_replace WHERE id=1") && sql.next() && sql.value(0).toString()=="alpha"); sql.finish();
@@ -519,6 +519,27 @@ void exerciseTableReplace(MainWindow& window,QSqlDatabase db) {
     replacement->setText("unintended"); all->click(); assert(model->isDirty() && model->index(draft,1).data(Qt::EditRole).toString()=="unsaved");
     assert(sql.exec("SELECT COUNT(*) FROM command_replace_all WHERE value='Obst'") && sql.next() && sql.value(0).toInt()==2); sql.finish();
     model->revertAll(); assert(window.closeTableDocument(0,"command_replace_all",2).value("error").toInt()==0); dispose(); assert(!dialog);
+    assert(sql.exec("CREATE TABLE command_replace_parts(id INTEGER PRIMARY KEY,value TEXT CHECK(id<>2 OR value<>'blocked2'))"));
+    assert(sql.exec("INSERT INTO command_replace_parts VALUES(1,'prefix-aa-aa-aa'),(2,'prefix-AA'),(3,'other'),(4,NULL)"));
+    assert(window.openTableDocument("command_replace_parts",0,1)==0);view=nullptr;
+    for(auto* candidate:tabs->currentWidget()->findChildren<QTableView*>()) if(auto* typed=dynamic_cast<linaccess::AccessTableView*>(candidate)) view=typed;
+    assert(view);model=qobject_cast<linaccess::AccessTableModel*>(view->model());assert(model);view->sortByColumn(0,Qt::AscendingOrder);view->setCurrentIndex(model->index(0,1));
+    assert(view->openReplaceDialog());dialog=view->findChild<QDialog*>("native-table-replace-dialog");assert(dialog);
+    sought=dialog->findChild<QLineEdit*>("native-table-find-text");replacement=dialog->findChild<QLineEdit*>("native-table-replace-with");match=dialog->findChild<QComboBox*>("native-table-find-match");all=dialog->findChild<QPushButton*>("native-table-replace-all");apply=dialog->findChild<QPushButton*>("native-table-replace-current");
+    match->setCurrentIndex(0);sought->setText("aa");replacement->setText("X");all->click();assert(!model->isDirty());
+    assert(sql.exec("SELECT value FROM command_replace_parts ORDER BY id") && sql.next() && sql.value(0).toString()=="prefix-X-X-X" && sql.next() && sql.value(0).toString()=="prefix-X");sql.finish();
+    match->setCurrentIndex(2);sought->setText("prefix-");replacement->clear();apply->click();assert(model->isDirty() && model->index(0,1).data(Qt::EditRole).toString()=="X-X-X");
+    assert(sql.exec("SELECT value FROM command_replace_parts WHERE id=1") && sql.next() && sql.value(0).toString()=="prefix-X-X-X");sql.finish();assert(window.dispatchTableCommand(97).value("error").toInt()==0);
+    match->setCurrentIndex(0);sought->setText("-");replacement->setText(".");apply->click();assert(model->isDirty() && model->index(0,1).data(Qt::EditRole).toString()=="X.X-X");assert(window.dispatchTableCommand(97).value("error").toInt()==0);
+    match->setCurrentIndex(2);sought->setText("prefix-");replacement->setText("start-");all->click();assert(!model->isDirty());
+    assert(sql.exec("SELECT value FROM command_replace_parts WHERE id=2") && sql.next() && sql.value(0).toString()=="start-X");sql.finish();
+    assert(view->replaceAllText({"other",1,0,false,0,2},QString{}));assert(sql.exec("SELECT value IS NULL,length(value) FROM command_replace_parts WHERE id=3") && sql.next() && !sql.value(0).toBool() && sql.value(1).toInt()==0);sql.finish();
+    assert(sql.exec("UPDATE command_replace_parts SET value='seed'||id WHERE id IN(1,2)"));assert(model->select());view->setCurrentIndex(model->index(0,1));
+    assert(!view->replaceAllText({"seed",1,0,false,0,2},"blocked") && !model->isDirty());
+    assert(sql.exec("SELECT value FROM command_replace_parts WHERE id IN(1,2) ORDER BY id") && sql.next() && sql.value(0).toString()=="seed1" && sql.next() && sql.value(0).toString()=="seed2");sql.finish();
+    assert(!view->replaceAllText({"seed",1,0,false,0,2},QString("x")+QChar(0)+"y") && model->lastError().nativeErrorCode()=="3251" && !model->isDirty());
+    dialog->reject();dispose();assert(window.closeTableDocument(0,"command_replace_parts",2).value("error").toInt()==0);
+
 }
 void exerciseTableMultiDelete(MainWindow& window,QSqlDatabase db) {
     QSqlQuery sql(db); assert(sql.exec("PRAGMA foreign_keys=ON"));

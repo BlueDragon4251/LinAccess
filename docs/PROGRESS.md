@@ -6627,3 +6627,18 @@ Keine neuen CTest-/Windows-Beobachtungen; keine unbekannten Typen aus Zelltext
 erraten. Volle Cross-Type-Coercion, Allfeld-/Spalten-/Fokus-/Ereignis-/Locale-
 Gleichheit bleibt offen. ALL_FIELD_FIND_RUNTIME.md; F373/F071/F130/F050 und456/384/72
 unverändert. Ohne Zwischenabschluss weitere allgemeine Funktionen umsetzen.
+
+Wörtliches Tabellen-Ersetzen unterstützt jetzt Whole-/Teiltext-/Präfixmodus.
+Current ersetzt das erste Vorkommen im Entwurf, Alle ersetzt alle nichtüberlappenden
+Vorkommen jedes passenden Feldes bzw. einen Präfix/Whole-Wert. UI übergibt den
+gewählten Vergleichsmodus tatsächlich; formatierte/wildcard/typisierte Rückersetzung
+bleibt verweigert. Leerer Ersetzungstext ist echte Leerzeichenfolge, kein SQL NULL.
+Batch-Ausgaben werden vor Cache-Änderung vollständig vorbereitet,16Mi UTF16-Units/
+1M Zeilen/5s-Scan begrenzt und gemeinsam transaktional geschrieben; SQL-Fehler rollen
+alle Änderungen zurück und hinterlassen keine Batch-Entwürfe. Vorhandene GUI/Feld
+2/2 (6,26s), App gebaut: echte Dialoge, Case-insensitive Mehrfachvorkommen,
+Prefix/current-erstes-Vorkommen, getrennte SQL-Save-Grenze, leere Textwerte,
+pro Zeile verschiedene Ausgaben, vollständiger Check-Constraint-Rollback und NUL-
+Verweigerung geprüft. Keine neue CTest-ID oder Windows-Beobachtung.
+LITERAL_REPLACE_RUNTIME.md; volle Match-Offset-/Highlight-/Wildcard-/Locale-/Event-
+Gleichheit bleibt offen; F373/F340/F168 und456/384/72 unverändert. Direkt weiter.

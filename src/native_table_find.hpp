@@ -62,9 +62,9 @@ inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString
     auto* hint=new QLabel(dialog); hint->setObjectName("native-table-find-hint"); hint->setWordWrap(true); box->addWidget(hint);
     const auto updateField=[scope,match,sensitive,hint,typedHints,formatted,wildcards,replacing=bool(replace)] {
         const auto column=scope->currentData().toInt(); const bool exact=!formatted->isChecked() && !wildcards->isChecked() && typedHints.contains(column);
-        if(exact || replacing) match->setCurrentIndex(1);
-        match->setEnabled(!exact && !replacing); sensitive->setEnabled(!exact);
-        hint->setText(wildcards->isChecked() ? QStringLiteral("Platzhalter: * beliebig, ? ein Zeichen, # Ziffer, [abc] Zeichenklasse.") : formatted->isChecked() ? QStringLiteral("Die tatsächlich formatierte Zellanzeige wird wörtlich durchsucht.") : exact ? typedHints.value(column) : replacing ? QStringLiteral("Text wird wörtlich als ganzer Feldwert gesucht.") : QStringLiteral("Text wird wörtlich gesucht."));
+        if(exact) match->setCurrentIndex(1);
+        match->setEnabled(!exact); sensitive->setEnabled(!exact);
+        hint->setText(wildcards->isChecked() ? QStringLiteral("Platzhalter: * beliebig, ? ein Zeichen, # Ziffer, [abc] Zeichenklasse.") : formatted->isChecked() ? QStringLiteral("Die tatsächlich formatierte Zellanzeige wird wörtlich durchsucht.") : exact ? typedHints.value(column) : replacing ? QStringLiteral("Text wird wörtlich ersetzt: aktuell erstes Vorkommen, Alle ersetzt jedes Vorkommen.") : QStringLiteral("Text wird wörtlich gesucht."));
     };
     QObject::connect(wildcards,&QCheckBox::toggled,dialog,[updateField] {updateField();});
     QObject::connect(scope,&QComboBox::currentIndexChanged,dialog,[updateField](int) { updateField(); }); updateField();
@@ -87,9 +87,9 @@ inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString
         auto* apply=new QPushButton("&Ersetzen",dialog); apply->setObjectName("native-table-replace-current"); buttons->insertWidget(1,apply);
         apply->setEnabled(!text->text().isEmpty());
         QObject::connect(text,&QLineEdit::textChanged,apply,[apply](const QString& value) { apply->setEnabled(!value.isEmpty()); });
-        QObject::connect(apply,&QPushButton::clicked,dialog,[guarded,text,scope,sensitive,direction,replacement,result,replace] {
+        QObject::connect(apply,&QPushButton::clicked,dialog,[guarded,text,scope,match,sensitive,direction,replacement,result,replace] {
             try {
-                const auto message=replace({text->text(),scope->currentData().toInt(),1,sensitive->isChecked(),0,direction->currentData().toInt()},replacement->text());
+                const auto message=replace({text->text(),scope->currentData().toInt(),match->currentIndex(),sensitive->isChecked(),0,direction->currentData().toInt()},replacement->text());
                 if(guarded) result->setText(message);
             } catch(const std::exception& error) { if(guarded) result->setText(QString::fromUtf8(error.what())); }
         });
@@ -99,9 +99,9 @@ inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString
         const auto enabled=[all,text,direction] { all->setEnabled(!text->text().isEmpty() && direction->currentData().toInt()==2); };
         QObject::connect(text,&QLineEdit::textChanged,dialog,[enabled] { enabled(); });
         QObject::connect(direction,&QComboBox::currentIndexChanged,dialog,[enabled] { enabled(); }); enabled();
-        QObject::connect(all,&QPushButton::clicked,dialog,[guarded,text,scope,sensitive,replacement,result,replaceAll] {
+        QObject::connect(all,&QPushButton::clicked,dialog,[guarded,text,scope,match,sensitive,replacement,result,replaceAll] {
             try {
-                const auto message=replaceAll({text->text(),scope->currentData().toInt(),1,sensitive->isChecked(),0,2},replacement->text());
+                const auto message=replaceAll({text->text(),scope->currentData().toInt(),match->currentIndex(),sensitive->isChecked(),0,2},replacement->text());
                 if(guarded) result->setText(message);
             } catch(const std::exception& error) { if(guarded) result->setText(QString::fromUtf8(error.what())); }
         });

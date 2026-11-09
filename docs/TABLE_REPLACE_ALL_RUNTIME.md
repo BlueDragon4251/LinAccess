@@ -38,3 +38,6 @@ unsaved draft. Final1/1 passes (2.92 s). Updated Debian payload/build-ID/pinned
 SQLite3.54.1 and four original fixture hashes pass. Last broader full suite is
 the preceding label milestone48/48 (86.70 s); core runtime is unchanged from fresh
 GUI-free payment-components1/1 (1.79 s). No new target/ID; fixed456/384/72.
+
+Native literal substring/prefix replacement now extends the earlier whole-field
+boundary; see LITERAL_REPLACE_RUNTIME.md. Full Access semantics remain open.

@@ -2,6 +2,7 @@
 #include "access_table_model.hpp"
 #include "native_grid_clipboard.hpp"
 #include "native_grid_mime.hpp"
+#include "native_text_replace.hpp"
 #include "vba_runtime.hpp"
 #include "csv.hpp"
 #include "native_clock_keys.hpp"
@@ -96,10 +97,11 @@ public:
         if(replacing_ || finding_) return fail(3251,"Eine Such- oder Ersetzungsaktion läuft bereits.");
         replacing_=true; const auto finished=qScopeGuard([self] { if(self) self->replacing_=false; });
         if(typed->isReadOnly()) return fail(2046,"Das Datenblatt ist schreibgeschützt.");
-        if(arguments.formatted || arguments.wildcards || arguments.value || arguments.mode!=1 || arguments.column<0 || arguments.column>=typed->columnCount()
+        if(arguments.formatted || arguments.wildcards || arguments.value || arguments.mode<0 || arguments.mode>2 || arguments.column<0 || arguments.column>=typed->columnCount()
             || isColumnHidden(arguments.column) || !typed->isTextColumn(arguments.column))
-            return fail(3251,"Ersetzen erfordert ein ausgewähltes Textfeld und einen ganzen Feldwert.");
+            return fail(3251,"Ersetzen erfordert ein ausgewähltes Textfeld und einen gültigen Vergleichsmodus.");
         if(arguments.text.isEmpty()) return fail(5,"Der Suchwert darf nicht leer sein.");
+        try {(void)replaceNativeText({},arguments.text,replacement,arguments.mode,arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive,false);}catch(const VbaRuntimeError& error) {return fail(error.number,QString::fromUtf8(error.what()));}
         if(arguments.text.size()>1000000 || replacement.size()>1000000) return fail(3251,"Der Text überschreitet den unterstützten Umfang.");
         if(!finishEditing() || !self || !typed) return false;
         if(!currentIndex().isValid()) return fail(2046,"Kein aktueller Datensatz.");
@@ -126,10 +128,11 @@ public:
         const QPersistentModelIndex target=typed->index(currentIndex().row(),arguments.column);
         if(!target.isValid() || !(typed->flags(target)&Qt::ItemIsEditable)) return fail(2046,"Das Feld kann nicht bearbeitet werden.");
         const auto current=target.data(Qt::EditRole);
-        if(current.isNull() || current.toString().compare(arguments.text,arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive)!=0) {
-            findMessage_="Der aktuelle Feldwert stimmt nicht mit dem Suchwert überein."; return false;
-        }
-        const bool changed=typed->setData(target,replacement,Qt::EditRole);
+        NativeTextReplacement output;
+        try {if(!current.isNull()) output=replaceNativeText(current.toString(),arguments.text,replacement,arguments.mode,arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive,false);}
+        catch(const VbaRuntimeError& error) {return fail(error.number,QString::fromUtf8(error.what()));}
+        if(!output.matched) {findMessage_="Der aktuelle Feldwert stimmt nicht mit dem Suchwert überein.";return false;}
+        const bool changed=typed->setData(target,output.value,Qt::EditRole);
         if(!self || !typed) return false;
         if(!changed) { findMessage_=typed->lastError().text(); return false; }
         findArguments_=std::move(arguments); findArguments_.origin=0; findAdvance_=true;
@@ -144,10 +147,11 @@ public:
         if(replacing_ || finding_) return fail(3251,"Eine Such- oder Ersetzungsaktion läuft bereits.");
         replacing_=true; const auto finished=qScopeGuard([self] { if(self) self->replacing_=false; });
         if(typed->isReadOnly()) return fail(2046,"Das Datenblatt ist schreibgeschützt.");
-        if(arguments.formatted || arguments.wildcards || arguments.value || arguments.mode!=1 || arguments.direction!=2 || arguments.column<0 || arguments.column>=typed->columnCount()
+        if(arguments.formatted || arguments.wildcards || arguments.value || arguments.mode<0 || arguments.mode>2 || arguments.direction!=2 || arguments.column<0 || arguments.column>=typed->columnCount()
             || isColumnHidden(arguments.column) || !typed->isTextColumn(arguments.column))
-            return fail(3251,"Alle ersetzen erfordert ein Textfeld, ganze Feldwerte und die Suchrichtung Alle.");
+            return fail(3251,"Alle ersetzen erfordert ein Textfeld, einen gültigen Vergleichsmodus und die Suchrichtung Alle.");
         if(arguments.text.isEmpty()) return fail(5,"Der Suchwert darf nicht leer sein.");
+        try {(void)replaceNativeText({},arguments.text,replacement,arguments.mode,arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive,false);}catch(const VbaRuntimeError& error) {return fail(error.number,QString::fromUtf8(error.what()));}
         if(!finishEditing() || !self || !typed) return false;
         const auto table=typed->tableName(),field=typed->record().fieldName(arguments.column);
         const auto primary=typed->primaryKey(); QMap<QString,QVariant> key;
@@ -162,7 +166,7 @@ public:
             if(!currentIndex().isValid() || typed->record(currentIndex().row()).value(it.key())!=it.value())
                 return fail(2501,"Der aktuelle Datensatz wurde während der Validierung geändert.");
         int count=0;
-        if(!typed->replaceAllWholeText(arguments.column,arguments.text,replacement,arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive,&count)) {
+        if(!typed->replaceAllLiteralText(arguments.column,arguments.text,replacement,arguments.mode,arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive,&count)) {
             if(self && typed) findMessage_=typed->lastError().text(); return false;
         }
         if(!self || !typed) return false;
