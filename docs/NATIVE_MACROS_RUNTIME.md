@@ -332,3 +332,36 @@ observe suppressed updates, then nested stop/Echo restoration in both hosts. SQL
 order/VBA continuation, omitted parent actions/repetitions, later independent start,
 stop from repeat evaluation, false conditional stop, named Application.Echo and
 invalid status preflight without UI mutation are exercised. No new test target.
+
+## Complete native action arguments and MessageBox
+
+The macro designer retains arguments beyond the three summary columns. Its
+Argumente… dialog edits every argument declared by the selected native action;
+the condition remains separate. Extra values survive group switches and row
+moves. Cancelling the argument dialog preserves the original draft. Changing to
+an action with fewer arguments retains surplus drafts for explicit clearing or
+validation rather than silently discarding them.
+
+Native MessageBox accepts Message, optional Beep (default true), Type and Title.
+The native JSON Type is an explicit text token: None, Critical, Warning?, Warning!
+or Information (case insensitive); this is not an imported Access macro binary
+encoding. A blank Type means None. A blank Title uses LinAccess. The designer
+allows a blank Beep argument before later arguments and serializes its documented
+true default. Message argument source is limited to 255 UTF-16 code units and may
+start with = for actual evaluation in the current form/standard-module context.
+Expression errors propagate with the macro action diagnostic. Result text is
+bounded and validated before GUI display. @ separates a bold heading, body and
+spaced final section; literal markup is escaped. The action shows an actual
+OK-only Qt dialog with the requested icon and optional system beep. It is a macro
+action, not a fabricated DoCmd.MessageBox member or a VBA MsgBox replacement.
+
+Whole-definition preflight checks expression syntax and known Type tokens before
+any action runs. General imported Access macro decoding, exact Access 2003 dialog
+rendering/formatting/localized enum encodings and arbitrary macro expressions
+remain open. Public contract consulted:
+https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/messagebox-macro-action .
+This is documentation, not a new Windows execution observation.
+
+Validation: existing GUI/layout2/2 passed (19.30s), matching application build.
+Actual argument editing/cancel/group persistence and both real host dialogs are
+covered; no new CTest target or Access 2003 rendering oracle.

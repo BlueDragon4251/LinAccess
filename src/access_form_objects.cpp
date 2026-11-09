@@ -1,6 +1,7 @@
 #include "access_form_objects.hpp"
 #include "native_macro.hpp"
 #include "native_macro_runner.hpp"
+#include "native_macro_message_box.hpp"
 #include "native_application_run.hpp"
 #include "native_public_procedure_run.hpp"
 #include "vba_module_context.hpp"
@@ -1422,7 +1423,7 @@ public:
         if(key=="runmacro") {
             linaccess::runNativeMacro(preview.db_,args,[&] {(void)checked();},
                 [&](const QString& expression) {return checked().evalExpression(expression.toUtf8().toStdString());},
-                [&](const linaccess::NativeMacroAction& action) {if(action.name=="RunCode") runNativeMacroFunction(checked(),action.arguments.front().asText());else (void)member(action.name.toStdString(),action.arguments);},[] {linaccess::restoreNativeEcho();});
+                [&](const linaccess::NativeMacroAction& action) {if(action.name=="MessageBox") linaccess::nativeMacroMessageBox(&checked(),action.arguments,[&](const QString& expression) {return checked().evalExpression(expression.toUtf8().toStdString());},[&] {(void)checked();});else if(action.name=="RunCode") runNativeMacroFunction(checked(),action.arguments.front().asText());else (void)member(action.name.toStdString(),action.arguments);},[] {linaccess::restoreNativeEcho();});
             return {};
         }
 

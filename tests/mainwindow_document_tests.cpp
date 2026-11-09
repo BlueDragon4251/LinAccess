@@ -2650,6 +2650,22 @@ void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
     unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
 }
 
+void testMacroMessageArguments(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;
+    QTimer::singleShot(0,&window,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-macro-designer");dialog->findChild<QLineEdit*>("native-macro-name")->setText("MessageArguments");auto* list=dialog->findChild<QTableWidget*>("native-macro-actions");qobject_cast<QComboBox*>(list->cellWidget(0,0))->setCurrentText("MessageBox");
+        QTimer::singleShot(0,dialog,[] {auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor && editor->objectName()=="native-macro-argument-dialog");editor->findChild<QLineEdit*>("native-macro-argument-1")->setText("=\"<Heading>@Body@Tail\"");editor->findChild<QLineEdit*>("native-macro-argument-2")->setText("Nein");editor->findChild<QLineEdit*>("native-macro-argument-3")->setText("Information");editor->findChild<QLineEdit*>("native-macro-argument-4")->setText("Four arguments");editor->accept();});dialog->findChild<QPushButton*>("native-macro-arguments")->click();
+        QTimer::singleShot(0,dialog,[] {auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor->findChild<QLineEdit*>("native-macro-argument-4")->text()=="Four arguments");editor->findChild<QLineEdit*>("native-macro-argument-4")->setText("discarded");editor->reject();});dialog->findChild<QPushButton*>("native-macro-arguments")->click();
+        auto* mode=dialog->findChild<QCheckBox*>("native-macro-group-mode");mode->setChecked(true);dialog->findChild<QLineEdit*>("native-macro-group-name")->setText("Message");dialog->findChild<QPushButton*>("native-macro-group-add")->click();dialog->findChild<QLineEdit*>("native-macro-group-name")->setText("Other");qobject_cast<QComboBox*>(list->cellWidget(0,0))->setCurrentText("StopMacro");dialog->findChild<QComboBox*>("native-macro-group")->setCurrentIndex(0);dialog->findChild<QPushButton*>("native-macro-save")->click();assert(!dialog->isWindowModified());dialog->reject();
+    });action(window,"+ Makro")->trigger();
+    auto revision=linaccess::readNativeMacroRevision(db,"MessageArguments");assert(revision);auto definition=QJsonDocument::fromJson(revision->definition.toByteArray()).object();auto args=definition.value("groups").toArray()[0].toObject().value("actions").toArray()[0].toObject().value("arguments").toArray();assert(args.size()==4 && args[3]=="Four arguments" && args[1]==false);
+    int shown=0;QTimer close;QObject::connect(&close,&QTimer::timeout,&window,[&] {auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());if(!box || box->objectName()!="native-macro-message-box") return;assert(box->windowTitle()=="Four arguments" && box->icon()==QMessageBox::Information && box->textFormat()==Qt::RichText && box->text().contains("&lt;Heading&gt;") && box->text().contains("<br><br>Tail"));++shown;box->accept();});close.start(1);
+    linaccess::NativeStandardModuleHost host(&window,db,[] {});auto commands=host.applicationObject()->member("DoCmd",{}).object;commands->member("RunMacro",{VbaValue::string("MessageArguments")});
+    {AccessFormPreview context("message_argument_context","Begin Form\nBegin Section\nEnd\nEnd",{},db,&window);makePreviewApplicationObject(context)->member("DoCmd",{}).object->member("RunMacro",{VbaValue::string("MessageArguments")});assert(context.close());}close.stop();assert(shown==2);
+    int error=0;try {(void)commands->member("MessageBox",{});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==438);
+    auto invalid=definition;auto groups=invalid.value("groups").toArray();auto group=groups[0].toObject();auto actions=group.value("actions").toArray();auto entry=actions[0].toObject();args[2]="Invented";entry.insert("arguments",args);actions[0]=entry;group.insert("actions",actions);groups[0]=group;invalid.insert("groups",groups);error=0;try {(void)linaccess::parseNativeMacro(invalid);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
+}
+
 void testStopAllMacros(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE stop_all_effects(n INTEGER)"));const auto action=[](QString name,QJsonArray args=QJsonArray{}) {return QJsonObject{{"action",name},{"arguments",args}};};
     const auto macro=[&](QString name,QJsonArray actions) {(void)linaccess::storeNativeMacro(db,name,{{"version",1},{"actions",actions}});};
@@ -3948,6 +3964,7 @@ End Sub
     testMacroProjectCommands(window,db);
     testMacroSelectObject(window,db);
     testStopAllMacros(window,db);
+    testMacroMessageArguments(window,db);
     testNativeAutoExec(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

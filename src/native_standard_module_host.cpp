@@ -12,6 +12,7 @@
 #include "native_application_run.hpp"
 #include "native_domain_lookup.hpp"
 #include "native_macro_runner.hpp"
+#include "native_macro_message_box.hpp"
 #include "native_stored_form.hpp"
 #include "native_stored_report.hpp"
 #include "access_form_preview.hpp"
@@ -91,7 +92,8 @@ public:
         NativeStandardModuleHost host(owner_,db_,guard_);host.check();const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if(key=="runmacro") {
             runNativeMacro(db_,args,[&] {host.check();},[&](const QString& expression) {return host.eval(expression.toUtf8().toStdString());},[&](const NativeMacroAction& action) {
-                if(action.name=="RunCode") {
+                if(action.name=="MessageBox") nativeMacroMessageBox(owner_,action.arguments,[&](const QString& expression) {return host.eval(expression.toUtf8().toStdString());},[&] {host.check();});
+                else if(action.name=="RunCode") {
                     const auto expression=action.arguments.front().asText();const auto target=nativeMacroFunctionName(QString::fromUtf8(expression));
                     QMap<QString,QString> names;(void)standardVbaModuleSources(db_,&names);if(names.contains(target.toCaseFolded())) throw VbaRuntimeError(3251,"RunCode Function/module name conflict");
                     const auto source=host.moduleForProcedure(target.toStdString());if(!source) throw VbaRuntimeError(2517,"RunCode public Function was not found");

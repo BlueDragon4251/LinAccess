@@ -3754,3 +3754,20 @@ Application.Echo, ungültiger Status ohne UI-Mutation, kein DoCmd.StopAllMacros.
 Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; DEB gehört cb8931b.
 NATIVE_MACROS_RUNTIME.md; F088/F050/F051/F059/F135/F148 und456/384/72 unverändert.
 Direkt weiter mit vollständigem Aktionsargument-Editor/weiterer Aktionsausführung.
+
+
+## Fortschreibung 2026-11-09: vollständige native Aktionsargumente / MessageBox
+Argumente… bearbeitet sämtliche deklarierten Aktionsargumente; zusätzliche Werte
+bleiben bei Teilmakrowechseln und Zeilenbewegungen erhalten, Abbrechen verändert
+keinen Entwurf. MessageBox ist eine echte vierargumentige Makroaktion in beiden
+Hosts: kontextgebundene =Auswertung, Signalton, benannter Typ, Titel, escaped
+@-Abschnitte; kein erfundenes DoCmd.MessageBox. Native JSON-Typnamen sind kein
+Access-Binärimport. Quellen-/Ergebnisgrenzen und bekannte Typen werden geprüft.
+App gebaut; vorhandene GUI/Layout2/2 bestanden (19,30s), einschließlich echtem
+Argumentdialog, vierter Titel, Abbruch, Teilmakrowechsel/Speichern, realen Dialogen
+in beiden Hosts und unbekanntem Typ. Build-Include für vollständigen VbaValue
+korrigiert, kein Testfehler/Korrekturlauf. Originaluploads3/3 und Fixturehashes4/4
+unverändert. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung.
+NATIVE_MACROS_RUNTIME.md; F088/F050/F051/F059/F135/F148,456/384/72 unverändert.
+Weiter: GoToRecord aus tatsächlichen Standardmodulen/Makros mit vier Argumenten
+an vorhandene Daten-/Formularnavigation anbinden; mehrzeilige Argumente erhalten.
