@@ -2855,3 +2855,26 @@ wirklich entfernt, Namenswiederverwendung, Teilfehlerrücknahme, andere Daten gl
 DELETE_OBJECT_RUNTIME.md; F052/F055/F080/F121 offen,456/384/72 unverändert.
 Fortsetzung: vorhandene echte Access-Eval-Beobachtungen für allgemeine typisierte
 Ausdrücke nutzen; VBA-/Eval-Kontext unterscheiden, keine pauschale Oracle-Parität.
+
+Native Decimal-Variants (VarType14/CDec) implementiert: geprüfter96-Bit-Koeffizient,
+Skala0..28, exakte Dezimalarithmetik/-Vergleiche, Vorzeichen/Abs/Fix/Int/Round,
+Ganzzahl- und Currencykonvertierung ohne Double-Zwischenrunde; Variant-Arrays,
+einmalige Skalarauflösung, homogene Berichtssummen/-Extrema/-Selektoren sowie
+verlustfreie ungebundene Steuerelemente. Boost.Multiprecision nur Header>=1.74;
+Buildabhängigkeit README/Workflow ergänzt, keine neue Shared-Library/Java.
+Normales VBA, berechnete Controls und tatsächliches Application/Host.Eval bleiben
+getrennte Kontexte. Eval übernimmt beobachtete Long-/Integer-/Decimal-Literale,
+Typen, Präzedenz/Nz und Fehlerresultate. Acht Fehlerausdrücke über exaktenSHA256-
+Fallabgleich mit sämtlichen112 technischen Collector-Ausdrücken wiedergewonnen;
+keine Eingaben erfunden. CDec in beobachtetem Eval-Kontext verweigert2439,
+Switch/Error-Variant6; gewöhnliche VBA-CDec-Konvertierung bleibt verfügbar.
+Bereinigte echte Access11.0/DAO3.6/de-AT-Beobachtungen:104Werte plus8zugeordnete
+Fehler, ohne private Quellmetadaten/Pfade/VBA. Bestehender DAO-Prüflauf bestätigt
+56Zahlen-/Typbeobachtungen und8Fehler;48andere Werte bleiben ausdrücklich offen.
+Core/DAO/GUI3/3 (9,49s), App/Backend3.54.1/JOIN/NULL/Counter geprüft; GUI-freie
+Konfiguration erfolgreich, gelaufener Core-Binärpfad lautldd ohneQt/Boost-DSO.
+Kein neuer CTest-Punkt/Katalogpunkt, keine neue CI-/Matrix-/Vollparitätsbehauptung.
+NATIVE_DECIMAL_RUNTIME.md; exakte dbDecimal-Felder/Jet-SQL-Speicherung, vollständige
+Locale/IEEE-/Automation-Identität/AST weiteroffen,456/384/72 unverändert.
+Fortsetzung: die48weiteren echten Ausdrucksbeobachtungen und allgemeine
+Sprach-/Datenbankanforderungen fortlaufend umsetzen; keine Zwischenabschlüsse.

@@ -1,4 +1,5 @@
 #include "vba_qt_value.hpp"
+#include "vba_decimal.hpp"
 #include "access_autonumber.hpp"
 #include "vba_currency.hpp"
 #include "vba_calendar.hpp"
@@ -156,6 +157,7 @@ QVariant sqlFieldValue(const VbaValue& value,const QString& type) {
         return static_cast<qlonglong>(converted.number);
     }
     if (integerType(type)) {
+        if(value.kind==VbaValue::Kind::Decimal) return static_cast<qlonglong>(decimalInteger(value,std::numeric_limits<qlonglong>::min(),std::numeric_limits<qlonglong>::max()));
         const auto number = value.asNumber();
         const auto lower = std::floor(static_cast<long double>(number));
         const auto fraction = static_cast<long double>(number)-lower;
@@ -177,6 +179,7 @@ QVariant sqlFieldValue(const VbaValue& value,const QString& type) {
     case VbaValue::Kind::Text: return QString::fromUtf8(value.text);
     case VbaValue::Kind::Date: return QString::fromStdString(value.asText());
     case VbaValue::Kind::Currency: return QString::fromStdString(value.asText());
+    case VbaValue::Kind::Decimal: return QString::fromStdString(value.asText());
     case VbaValue::Kind::Number: return value.number;
     case VbaValue::Kind::Boolean: return value.boolean ? -1 : 0;
     default: throw VbaRuntimeError(13,"Object cannot be stored in a field");

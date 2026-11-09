@@ -1,0 +1,1195 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "kind": "user_executed_technical_Access2003_reference",
+    "access_version": "11.0",
+    "engine_version": "3.6",
+    "culture": "de-AT",
+    "collector_sha256": "92455f7a1bf57c924578319200e09da01b4fa465a8c7013aee8e62d42fdc8f50",
+    "input_archive_sha256": "9a78930834b1ad811bb73ab33e4573771e29b06f7d0bff5f321c28a0680c0076",
+    "technical_database_only": true,
+    "source_metadata_included": false,
+    "error_expression_recovery": "exact_SHA256_case_id_match_against_technical_collector_expression_list",
+    "expression_registry_sha256": "96662ddbe447fdc81265b401f574b9c98b7231deeda7011ca4a206e9674a7ce3"
+  },
+  "observations": [
+    {
+      "case": "eval.d3c4ccda4e4c",
+      "expression": "1+2*3",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 7
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.6d52389967eb",
+      "expression": "-2^2",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "4",
+        "bits": "0000000000001040",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.8eaa77af44e9",
+      "expression": "2^3^2",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "64",
+        "bits": "0000000000005040",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.06a89c05b4ea",
+      "expression": "5/2",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "2.5",
+        "bits": "0000000000000440",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.1d3d2b5ee62f",
+      "expression": "5\\2",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 2
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.debfa79b9d76",
+      "expression": "-5\\2",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": -2
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.a22f0e3c6c2a",
+      "expression": "5 Mod 2",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 1
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.6a6b1e7b2bc5",
+      "expression": "-5 Mod 2",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": -1
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.c87f5ab29ffc",
+      "expression": "Null+1",
+      "vartype": 1,
+      "result": {
+        "kind": "null",
+        "value": null
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.204fbeba98c2",
+      "expression": "Null=Null",
+      "vartype": 1,
+      "result": {
+        "kind": "null",
+        "value": null
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.0e9ed947ad3f",
+      "expression": "Null And False",
+      "vartype": 2,
+      "result": {
+        "kind": "System.Int16",
+        "value": 0
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.410c12a38b34",
+      "expression": "Null And True",
+      "vartype": 1,
+      "result": {
+        "kind": "null",
+        "value": null
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.737084e41eb3",
+      "expression": "Null Or True",
+      "vartype": 2,
+      "result": {
+        "kind": "System.Int16",
+        "value": -1
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.b7405dae116e",
+      "expression": "Null Or False",
+      "vartype": 1,
+      "result": {
+        "kind": "null",
+        "value": null
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.f9daccc3e7b7",
+      "expression": "Not Null",
+      "vartype": 1,
+      "result": {
+        "kind": "null",
+        "value": null
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.2c8f04aa97dd",
+      "expression": "IIf(True,1,1/0)",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 1
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.e6e1fc76a510",
+      "expression": "Nz(Null)",
+      "vartype": 0,
+      "result": {
+        "kind": "null_or_empty",
+        "value": null
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.822195136259",
+      "expression": "Nz(Null,7)",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 7
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.5d9384e3871b",
+      "expression": "IsNull(Null)",
+      "vartype": 11,
+      "result": {
+        "kind": "System.Int16",
+        "value": -1
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.f6d232486325",
+      "expression": "IsEmpty(Null)",
+      "vartype": 11,
+      "result": {
+        "kind": "System.Int16",
+        "value": 0
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.7769bc38e33a",
+      "expression": "VarType(Null)",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 1
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.5d538b5c7e49",
+      "expression": "VarType(True)",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 2
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.2523c72f01b6",
+      "expression": "VarType(1)",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 3
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.356ffc948b26",
+      "expression": "VarType(32768)",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 3
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.ecb2b7c10800",
+      "expression": "VarType(1.5)",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 14
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.4b177b1f7ff9",
+      "expression": "VarType(CCur(1.25))",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 6
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.425f039d9970",
+      "expression": "CInt(2.5)",
+      "vartype": 2,
+      "result": {
+        "kind": "System.Int16",
+        "value": 2
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.d45c8897bc18",
+      "expression": "CInt(3.5)",
+      "vartype": 2,
+      "result": {
+        "kind": "System.Int16",
+        "value": 4
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.29c67590b0d0",
+      "expression": "CInt(-2.5)",
+      "vartype": 2,
+      "result": {
+        "kind": "System.Int16",
+        "value": -2
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.ee56a2798160",
+      "expression": "CBool(-1)",
+      "vartype": 11,
+      "result": {
+        "kind": "System.Int16",
+        "value": -1
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.0d30ffcd44a1",
+      "expression": "CCur(1.23445)",
+      "vartype": 6,
+      "result": {
+        "decimal_bits": [
+          12344,
+          0,
+          0,
+          262144
+        ],
+        "invariant": "1.2344",
+        "kind": "System.Decimal"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.16717e7ae80a",
+      "expression": "CCur(1.23455)",
+      "vartype": 6,
+      "result": {
+        "decimal_bits": [
+          12346,
+          0,
+          0,
+          262144
+        ],
+        "invariant": "1.2346",
+        "kind": "System.Decimal"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.4e296b6e665a",
+      "expression": "Round(2.5,0)",
+      "vartype": 14,
+      "result": {
+        "decimal_bits": [
+          2,
+          0,
+          0,
+          0
+        ],
+        "invariant": "2",
+        "kind": "System.Decimal"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.8f3b62185077",
+      "expression": "Round(3.5,0)",
+      "vartype": 14,
+      "result": {
+        "decimal_bits": [
+          4,
+          0,
+          0,
+          0
+        ],
+        "invariant": "4",
+        "kind": "System.Decimal"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.126727c3bae9",
+      "expression": "Round(-2.5,0)",
+      "vartype": 14,
+      "result": {
+        "decimal_bits": [
+          2,
+          0,
+          0,
+          -2147483648
+        ],
+        "invariant": "-2",
+        "kind": "System.Decimal"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.59dfa9dc3224",
+      "expression": "Round(1.245,2)",
+      "vartype": 14,
+      "result": {
+        "decimal_bits": [
+          124,
+          0,
+          0,
+          131072
+        ],
+        "invariant": "1.24",
+        "kind": "System.Decimal"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.eb23b07acbd6",
+      "expression": "Fix(-1.9)",
+      "vartype": 14,
+      "result": {
+        "decimal_bits": [
+          1,
+          0,
+          0,
+          -2147483648
+        ],
+        "invariant": "-1",
+        "kind": "System.Decimal"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.ff0de3545842",
+      "expression": "Int(-1.9)",
+      "vartype": 14,
+      "result": {
+        "decimal_bits": [
+          2,
+          0,
+          0,
+          -2147483648
+        ],
+        "invariant": "-2",
+        "kind": "System.Decimal"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.ef0bc7ea5c04",
+      "expression": "Sgn(0)",
+      "vartype": 2,
+      "result": {
+        "kind": "System.Int16",
+        "value": 0
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.f3139308c52e",
+      "expression": "CStr(True)",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "-1"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.e1ec19269dbd",
+      "expression": "Str(1.5)",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": " 1.5"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.5dec8be05ebe",
+      "expression": "Val(\"1,5\")",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "1",
+        "bits": "000000000000F03F",
+        "kind": "System.Double"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.ea9162e3039b",
+      "expression": "Val(\"12x\")",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "12",
+        "bits": "0000000000002840",
+        "kind": "System.Double"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.314b3981598d",
+      "expression": "IsNumeric(\"1,5\")",
+      "vartype": 11,
+      "result": {
+        "kind": "System.Int16",
+        "value": -1
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.67f25d620ead",
+      "expression": "\"a\" & Null",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "a"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.ec4f9c43075b",
+      "expression": "\"a\" + Null",
+      "vartype": 1,
+      "result": {
+        "kind": "null",
+        "value": null
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.e3c95a1275a5",
+      "expression": "Len(\"\")",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 0
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.2cf1939e2f6c",
+      "expression": "Len(Null)",
+      "vartype": 1,
+      "result": {
+        "kind": "null",
+        "value": null
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.8d16d86049fd",
+      "expression": "Len(\"äÖß\")",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 3
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.5b5ba38bca51",
+      "expression": "Mid(\"abcdef\",2,3)",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "bcd"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.471f43daf9a5",
+      "expression": "Right(\"abc\",9)",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "abc"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.8fd4ea191f70",
+      "expression": "Trim(\"  x  \")",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "x"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.49283087cbcf",
+      "expression": "Replace(\"aAa\",\"a\",\"x\",1,-1,0)",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "xAx"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.9d1102e0c628",
+      "expression": "Replace(\"aAa\",\"a\",\"x\",1,-1,1)",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "xxx"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.fc5f7b7269ef",
+      "expression": "StrComp(\"A\",\"a\",0)",
+      "vartype": 2,
+      "result": {
+        "kind": "System.Int16",
+        "value": -1
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.fe1a2c82909f",
+      "expression": "StrComp(\"A\",\"a\",1)",
+      "vartype": 2,
+      "result": {
+        "kind": "System.Int16",
+        "value": 0
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.e3942980348d",
+      "expression": "StrComp(\"ä\",\"a\",1)",
+      "vartype": 2,
+      "result": {
+        "kind": "System.Int16",
+        "value": 1
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.41caea9d55e0",
+      "expression": "InStr(1,\"Äbcä\",\"ä\",0)",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 4
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.021363e8228d",
+      "expression": "InStr(1,\"Äbcä\",\"ä\",1)",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 1
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.539af7147e62",
+      "expression": "\"abc\" Like \"a*\"",
+      "vartype": 11,
+      "result": {
+        "kind": "System.Int16",
+        "value": -1
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.87f6820908d9",
+      "expression": "\"abc\" Like \"a%\"",
+      "vartype": 11,
+      "result": {
+        "kind": "System.Int16",
+        "value": 0
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.7cb71972eb03",
+      "expression": "\"a1\" Like \"a#\"",
+      "vartype": 11,
+      "result": {
+        "kind": "System.Int16",
+        "value": -1
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.f42796201896",
+      "expression": "\"b\" Like \"[a-c]\"",
+      "vartype": 11,
+      "result": {
+        "kind": "System.Int16",
+        "value": -1
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.55f4bbfbbf77",
+      "expression": "Null Like \"*\"",
+      "vartype": 1,
+      "result": {
+        "kind": "null",
+        "value": null
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.f03a608cf93e",
+      "expression": "DateSerial(2000,2,29)",
+      "vartype": 7,
+      "result": {
+        "kind": "date",
+        "value": "2000-02-29T00:00:00.0000000"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.15cd5167844f",
+      "expression": "DateSerial(2001,2,29)",
+      "vartype": 7,
+      "result": {
+        "kind": "date",
+        "value": "2001-03-01T00:00:00.0000000"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.8d097a32d6d7",
+      "expression": "DateSerial(2000,13,1)",
+      "vartype": 7,
+      "result": {
+        "kind": "date",
+        "value": "2001-01-01T00:00:00.0000000"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.8031c405e53d",
+      "expression": "TimeSerial(25,0,0)",
+      "vartype": 7,
+      "result": {
+        "kind": "date",
+        "value": "1899-12-31T01:00:00.0000000"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.cff9fedf428c",
+      "expression": "DateAdd(\"m\",1,#1/31/2000#)",
+      "vartype": 7,
+      "result": {
+        "kind": "date",
+        "value": "2000-02-29T00:00:00.0000000"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.8f2aa8119f17",
+      "expression": "DateDiff(\"d\",#2/28/2000#,#3/1/2000#)",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 2
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.d730dd164b74",
+      "expression": "DateDiff(\"ww\",#1/1/2000#,#1/8/2000#)",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 1
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.ea4eda18e328",
+      "expression": "Weekday(#1/2/2000#)",
+      "vartype": 2,
+      "result": {
+        "kind": "System.Int16",
+        "value": 1
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.f019ca61fd7d",
+      "expression": "Year(#2/29/2000#)",
+      "vartype": 2,
+      "result": {
+        "kind": "System.Int16",
+        "value": 2000
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.a2e7db51ee4b",
+      "expression": "DateValue(\"2000-02-29\")",
+      "vartype": 7,
+      "result": {
+        "kind": "date",
+        "value": "2000-02-29T00:00:00.0000000"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.fe434b2aae23",
+      "expression": "TimeValue(\"23:59:59\")",
+      "vartype": 7,
+      "result": {
+        "kind": "date",
+        "value": "1899-12-30T23:59:59.0000000"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.3dd018c48c57",
+      "expression": "CDbl(#12/30/1899#)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "0",
+        "bits": "0000000000000000",
+        "kind": "System.Double"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.42e99a1f0196",
+      "expression": "Format(#2/29/2000 23:05:06#,\"yyyy-mm-dd hh:nn:ss\")",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "2000-02-29 23:05:06"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.ea46943c0637",
+      "expression": "Format(1.2345,\"0.0000\")",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "1,2345"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.0bf25f40e4af",
+      "expression": "Format(Null,\"0.00\")",
+      "vartype": 8,
+      "result": {
+        "kind": "null_or_empty",
+        "value": null
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.4229ff733413",
+      "expression": "Format(0,\"Yes/No\")",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "Nein"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.41475e2f1596",
+      "expression": "Format(-1,\"Yes/No\")",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "Ja"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.10162bbc8328",
+      "expression": "FormatCurrency(1.25,2)",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "€ 1,25"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.a918b4c51868",
+      "expression": "FormatNumber(1234.5,2)",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "1 234,50"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.2af168baf3f3",
+      "expression": "Abs(-5)",
+      "vartype": 3,
+      "result": {
+        "kind": "System.Int32",
+        "value": 5
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.2e16cc4ab685",
+      "expression": "Sqr(4)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "2",
+        "bits": "0000000000000040",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.b732ef1c9baf",
+      "expression": "Log(1)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "0",
+        "bits": "0000000000000000",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.f57fa6e799e0",
+      "expression": "Exp(0)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "1",
+        "bits": "000000000000F03F",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.54364f33ffe2",
+      "expression": "Sin(0)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "0",
+        "bits": "0000000000000000",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.a94e686c6e0e",
+      "expression": "Cos(0)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "1",
+        "bits": "000000000000F03F",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.2347d7edbd62",
+      "expression": "Atn(1)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "0.78539816339744828",
+        "bits": "182D4454FB21E93F",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.89463313322e",
+      "expression": "PV(0.01,12,-100)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "1125.5077473484635",
+        "bits": "20C1EBEE07969140",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.6a295e28a0a2",
+      "expression": "FV(0.01,12,-100)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "1268.2503013196977",
+        "bits": "FD38FD4E00D19340",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.98c36202a80e",
+      "expression": "Pmt(0.01,12,1000)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "-88.848788678341677",
+        "bits": "53ACBF8D523656C0",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.17bb3829c3be",
+      "expression": "NPer(0.01,-100,1000)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "10.588644459423275",
+        "bits": "9E637CCE622D2540",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.254453f5846b",
+      "expression": "Rate(12,-100,1000)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "0.029228540769133997",
+        "bits": "CE59DA2A16EE9D3F",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.e96f2a3673cc",
+      "expression": "DDB(1000,100,5,1)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "400",
+        "bits": "0000000000007940",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.36f39fd07614",
+      "expression": "SLN(1000,100,5)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "180",
+        "bits": "0000000000806640",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.aa0c4dc9c914",
+      "expression": "SYD(1000,100,5,1)",
+      "vartype": 5,
+      "result": {
+        "bit_order": "little_endian",
+        "invariant": "300",
+        "bits": "0000000000C07240",
+        "kind": "System.Double"
+      },
+      "verification_group": "numeric"
+    },
+    {
+      "case": "eval.ae7c08658834",
+      "expression": "Choose(2,\"a\",\"b\")",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "b"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.f0dfda336b81",
+      "expression": "Partition(25,0,100,10)",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": " 20: 29"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.3a57db34bc45",
+      "expression": "Hex(255)",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "FF"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.320456afaf7e",
+      "expression": "Oct(8)",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "10"
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.d3fb43a44a9b",
+      "expression": "Asc(\"A\")",
+      "vartype": 2,
+      "result": {
+        "kind": "System.Int16",
+        "value": 65
+      },
+      "verification_group": "retained_other_scope"
+    },
+    {
+      "case": "eval.444f0ea47b82",
+      "expression": "Chr(65)",
+      "vartype": 8,
+      "result": {
+        "kind": "System.String",
+        "value": "A"
+      },
+      "verification_group": "retained_other_scope"
+    }
+  ],
+  "errors": [
+    {
+      "case": "eval.3e597d9fdca3",
+      "expression": "Switch(True,1,False,1/0)",
+      "hresult": "0x800A0006",
+      "error_number": 6
+    },
+    {
+      "case": "eval.c7cd2cff3eba",
+      "expression": "VarType(CDec(1.25))",
+      "hresult": "0x800A0987",
+      "error_number": 2439
+    },
+    {
+      "case": "eval.836c82c43afb",
+      "expression": "CInt(32768)",
+      "hresult": "0x800A0006",
+      "error_number": 6
+    },
+    {
+      "case": "eval.cfc4a6f44c54",
+      "expression": "CLng(2147483648)",
+      "hresult": "0x800A0006",
+      "error_number": 6
+    },
+    {
+      "case": "eval.f216fafebe6d",
+      "expression": "CStr(Null)",
+      "hresult": "0x800A005E",
+      "error_number": 94
+    },
+    {
+      "case": "eval.6b5a339614ca",
+      "expression": "Mid(\"abc\",0,1)",
+      "hresult": "0x800A0005",
+      "error_number": 5
+    },
+    {
+      "case": "eval.3b2fcf976c13",
+      "expression": "Left(\"abc\",-1)",
+      "hresult": "0x800A0005",
+      "error_number": 5
+    },
+    {
+      "case": "eval.c25e5d2774cf",
+      "expression": "Sqr(-1)",
+      "hresult": "0x800A0005",
+      "error_number": 5
+    }
+  ]
+}

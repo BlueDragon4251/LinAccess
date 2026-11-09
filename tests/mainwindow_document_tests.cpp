@@ -2960,6 +2960,19 @@ End Sub
     QTimer::singleShot(0,&window,[] {auto* question=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(question && question->objectName()=="native-object-delete-confirm");question->done(QMessageBox::No);});window.findChild<QAction*>("native-object-delete")->trigger();assert(db.tables().contains("renamed_command_table"));
     QTimer::singleShot(0,&window,[] {auto* question=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(question && question->objectName()=="native-object-delete-confirm");question->done(QMessageBox::Yes);});window.findChild<QAction*>("native-object-delete")->trigger();assert(!db.tables().contains("renamed_command_table") && !linaccess::datasheet_page_store::read(db,"table","renamed_command_table").present);
     {QSqlQuery unchanged(db);assert(unchanged.exec("SELECT COUNT(*) FROM authored_renamed") && unchanged.next() && unchanged.value(0).toInt()==3);}
+    {
+        const QByteArray source="Begin Form\nBegin Section\nBegin TextBox\nName =\"DecimalProbe\"\nEnd\nEnd\nEnd\n";
+        const QByteArray code=R"VBA(Sub DecimalControl()
+Me!DecimalProbe=Application.Eval("0.1+0.2")
+If VarType(Me!DecimalProbe)<>vbDecimal Then Err.Raise 5
+If CStr(Me!DecimalProbe)<>"0.3" Then Err.Raise 5
+Me!DecimalProbe=CDec("79228162514264337593543950335")
+If VarType(Me!DecimalProbe)<>vbDecimal Then Err.Raise 5
+If CStr(Me!DecimalProbe)<>"79228162514264337593543950335" Then Err.Raise 5
+End Sub
+)VBA";
+        AccessFormPreview caller("decimal-control-caller",source,code,db,&window);std::vector<linaccess::VbaValue> arguments;const auto result=caller.executeProcedure("DecimalControl",arguments);if(result.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Decimal control error="<<result.errorNumber<<" "<<result.explanation<<"\n";assert(result.status==linaccess::VbaExecutionStatus::Completed);assert(caller.findChild<QLineEdit*>("access-control-DecimalProbe")->text()=="79228162514264337593543950335");assert(caller.close());
+    }
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";
 }

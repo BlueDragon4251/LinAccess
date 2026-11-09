@@ -5,6 +5,9 @@
 #include "dao_database.hpp"
 #include "native_schema_editor.hpp"
 #include "vba_array.hpp"
+#include "vba_decimal.hpp"
+#include <QFileInfo>
+#include <bit>
 #include "vba_qt_value.hpp"
 #include "access_query.hpp"
 #include "sqlite_execution.hpp"
@@ -1167,6 +1170,25 @@ End Sub
     assert(sql.exec("SELECT COUNT(*) FROM records") && sql.next() && sql.value(0).toInt()==3); sql.finish();
 }
 
+void testAccessEvalNumericOracle() {
+    using namespace linaccess;QFile file(QFileInfo(QString::fromUtf8(__FILE__)).absoluteDir().filePath("access2003_reference/expression-observations.json"));assert(file.open(QIODevice::ReadOnly));const auto root=QJsonDocument::fromJson(file.readAll()).object();assert(root.value("schema_version").toInt()==1 && root.value("provenance").toObject().value("access_version").toString()=="11.0");
+    auto db=QSqlDatabase::addDatabase("QSQLITE","access-eval-numeric-oracle");db.setDatabaseName(":memory:");assert(db.open());Host host(db);int checked=0;
+    for(const auto& entry:root.value("observations").toArray()) {
+        const auto row=entry.toObject();if(row.value("verification_group").toString()!="numeric") continue;const auto expression=row.value("expression").toString();VbaValue actual;
+        try {actual=host.eval(expression.toStdString());}catch(const VbaRuntimeError& failure) {std::cerr<<"Access Eval numeric oracle "<<row.value("case").toString().toStdString()<<": error="<<failure.number<<"\n";assert(false);}
+        const auto expectedType=row.value("vartype").toInt();const auto actualType=evaluateVbaExpression("VarType(value)",host,{{"value",actual}}).asNumber();if(actualType!=expectedType) std::cerr<<"Access Eval oracle "<<row.value("case").toString().toStdString()<<": type "<<actualType<<" expected "<<expectedType<<"\n";assert(actualType==expectedType);
+        const auto expected=row.value("result").toObject();
+        if(expectedType==0 || expectedType==1) {assert(actual.kind==(expectedType==0 ? VbaValue::Kind::Empty : VbaValue::Kind::Null));}
+        else if(expectedType==6 || expectedType==14) {assert(actual.asText()==expected.value("invariant").toString().toStdString());}
+        else if(expectedType==8) {assert(actual.asText()==expected.value("value").toString().toStdString());}
+        else if(expectedType==5) {const auto bytes=QByteArray::fromHex(expected.value("bits").toString().toLatin1());assert(bytes.size()==8);std::uint64_t bits=0;for(int i=0;i<8;++i) bits|=static_cast<std::uint64_t>(static_cast<unsigned char>(bytes[i]))<<(8*i);const auto value=std::bit_cast<double>(bits);assert(std::abs(actual.asNumber()-value)<=2e-12*std::max(1.0,std::abs(value)));}
+        else {assert(actual.asNumber()==expected.value("value").toDouble());}
+        ++checked;
+    }
+    assert(checked==56);
+    int checkedErrors=0;for(const auto& entry:root.value("errors").toArray()) {const auto row=entry.toObject();int error=0;try {(void)host.eval(row.value("expression").toString().toStdString());}catch(const VbaRuntimeError& failure) {error=failure.number;}if(error!=row.value("error_number").toInt()) std::cerr<<"Access Eval error oracle "<<row.value("case").toString().toStdString()<<": "<<error<<" expected "<<row.value("error_number").toInt()<<"\n";assert(error==row.value("error_number").toInt());++checkedErrors;}assert(checkedErrors==8);
+}
+
 void testOwnedQueryRename() {
     using namespace linaccess;auto db=QSqlDatabase::addDatabase("QSQLITE","owned-query-rename");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);assert(sql.exec("CREATE TABLE values_table(value INTEGER)"));assert(sql.exec("INSERT INTO values_table VALUES(7),(9)"));
     auto database=makeDaoDatabase(db);auto query=database->member("CreateQueryDef",{VbaValue::string("Original Name"),VbaValue::string("PARAMETERS p LONG; SELECT value FROM values_table WHERE value>=p")}).object;
@@ -2326,6 +2348,7 @@ int main(int argc, char** argv) {
     testDetachedRelationCreation();
     testDetachedTableCreation();
     testVariantArraysDao();
+    testAccessEvalNumericOracle();
     testOwnedQueryRename();
     testDaoGetRows();
     testOwnedQueryDefs();

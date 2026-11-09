@@ -6,6 +6,7 @@
 #include "vba_expression.hpp"
 #include "vba_color.hpp"
 #include "vba_currency.hpp"
+#include "vba_decimal.hpp"
 #include "vba_round.hpp"
 #include "vba_analyzer.hpp"
 
@@ -397,6 +398,7 @@ double bankersRound(double value) {
         : std::fmod(std::abs(floor), 2.0) == 0 ? floor : floor + 1;
 }
 std::int32_t integer(const VbaValue& value) {
+    if(value.kind==VbaValue::Kind::Decimal) return static_cast<std::int32_t>(decimalInteger(value,std::numeric_limits<std::int32_t>::min(),std::numeric_limits<std::int32_t>::max()));
     const auto rounded = bankersRound(value.asNumber());
     if (!std::isfinite(rounded) || rounded < std::numeric_limits<std::int32_t>::min()
         || rounded > std::numeric_limits<std::int32_t>::max()) throw error("VBA: Long-Überlauf", 6);
@@ -497,10 +499,12 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
         const bool leftNull = left.kind == VbaValue::Kind::Null;
         const bool rightNull = right.kind == VbaValue::Kind::Null;
         if (leftNull || rightNull) {
-            if (op == "and" && ((!leftNull && !left.truthy()) || (!rightNull && !right.truthy())))
-                return VbaValue::logical(false);
-            if (op == "or" && ((!leftNull && left.truthy()) || (!rightNull && right.truthy())))
-                return VbaValue::logical(true);
+            if(leftNull && rightNull) return {};
+            const auto& known=leftNull ? right : left;const auto bits=static_cast<std::int32_t>(coerceVbaModuleValue(known,"long").number);
+            if((op=="and" && bits==0) || (op=="or" && bits==-1)) {
+                if(known.kind==VbaValue::Kind::Boolean) return VbaValue::logical(op=="or");
+                return known.kind==VbaValue::Kind::Number && known.numericType==VbaValue::NumericType::Integer ? VbaValue::integer(op=="or" ? -1 : 0) : VbaValue::longInteger(op=="or" ? -1 : 0);
+            }
             return {};
         }
         if (left.kind == VbaValue::Kind::Boolean && right.kind == VbaValue::Kind::Boolean)
@@ -572,7 +576,8 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
             // String Variant, including numeric-looking and empty strings.
             // Empty was coerced above according to the other operand.
             cmp = left.kind == VbaValue::Kind::Text ? 1 : -1;
-        } else {
+        } else if(left.kind==VbaValue::Kind::Decimal || right.kind==VbaValue::Kind::Decimal) cmp=decimalCompare(left,right);
+        else {
             const auto a = left.asNumber(), b = right.asNumber();
             cmp = (a > b) - (a < b);
         }
@@ -581,6 +586,7 @@ VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& rig
     }
     if (op == "+" && left.kind == VbaValue::Kind::Text && right.kind == VbaValue::Kind::Text)
         return VbaValue::string(left.text + right.text);
+    if(left.kind==VbaValue::Kind::Decimal || right.kind==VbaValue::Kind::Decimal) return decimalBinary(op,left,right);
     if (left.kind==VbaValue::Kind::Currency && right.kind==VbaValue::Kind::Currency && (op=="+" || op=="-" || op=="*"))
         return currencyBinary(op,left,right);
     if((left.kind==VbaValue::Kind::Date || right.kind==VbaValue::Kind::Date) && (op=="+" || op=="-")) {
@@ -711,7 +717,7 @@ bool vbaIntrinsicName(const std::string& name) {
     static const std::unordered_set<std::string> intrinsics{
                 "array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
                 "createobject","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
-                "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdate","cstr","str","str$","format","format$",
+                "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdec","cdate","cstr","str","str$","format","format$",
                 "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
@@ -724,8 +730,8 @@ bool vbaIntrinsicName(const std::string& name) {
 class ExpressionParser {
 public:
     ExpressionParser(std::string_view source, VbaHost* host, const VbaVariables& locals,
-                     const VbaFunctionResolver& resolver = {},bool objectContext=false,bool accessExpression=false,const VbaValue* withContext=nullptr,bool allowWith=false,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0)
-        : source_(source),tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase),executionEpoch_(vbaExecutionEpoch()) {}
+                     const VbaFunctionResolver& resolver = {},bool objectContext=false,bool accessExpression=false,const VbaValue* withContext=nullptr,bool allowWith=false,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0,bool jetEval=false)
+        : source_(source),tokens_(tokenize(source,accessExpression)), host_(host), locals_(locals), resolver_(resolver),objectContext_(objectContext),accessExpression_(accessExpression),jetEval_(jetEval),withContext_(withContext),allowWith_(allowWith || withContext),compareMode_(compareMode),arrayBase_(arrayBase),executionEpoch_(vbaExecutionEpoch()) {}
 
     VbaValue parse() {
         auto value = expression(1,objectContext_);
@@ -780,7 +786,13 @@ private:
             if (!host_) lhs={};
             else if (accessExpression_ && (lhs.kind==VbaValue::Kind::Error || rhs.kind==VbaValue::Kind::Error))
                 lhs=lhs.kind==VbaValue::Kind::Error ? lhs : rhs;
-            else lhs=binary(op,lhs,rhs,host_,compareMode_);
+            else {
+                const auto left=lhs;
+                try {lhs=binary(op,left,rhs,host_,compareMode_);}catch(const VbaRuntimeError& failure) {if(!jetEval_) throw;lhs=VbaValue::errorValue(failure.number);}
+                if(jetEval_ && lhs.kind==VbaValue::Kind::Boolean && (op=="and" || op=="or") && (left.kind==VbaValue::Kind::Null || rhs.kind==VbaValue::Kind::Null)) {const auto& known=left.kind==VbaValue::Kind::Null ? rhs : left;if(known.kind==VbaValue::Kind::Number && known.numericType==VbaValue::NumericType::Integer) lhs=VbaValue::integer(lhs.boolean ? -1 : 0);}
+                const auto integral=[](const VbaValue& value) {return value.kind==VbaValue::Kind::Number && (value.numericType==VbaValue::NumericType::Long || value.numericType==VbaValue::NumericType::Integer || value.numericType==VbaValue::NumericType::Byte);};
+                if(jetEval_ && (op=="+" || op=="-" || op=="*") && integral(left) && integral(rhs) && lhs.kind==VbaValue::Kind::Number && lhs.number>=-2147483648.0 && lhs.number<=2147483647.0 && std::trunc(lhs.number)==lhs.number) lhs=VbaValue::longInteger(static_cast<std::int32_t>(lhs.number));
+            }
         }
         return lhs;
     }
@@ -903,17 +915,20 @@ private:
     }
     VbaValue atom(bool objectContext,int minPrecedence) {
         if (take("-")) {
-            const auto arg = expression(std::max(12,minPrecedence));
+            const auto arg = expression(std::max(jetEval_ ? 14 : 12,minPrecedence));
             if(!host_) return {};
             const auto value=scalarObjectValue(arg);
             if(value.kind==VbaValue::Kind::Null) return {};
+            if(value.kind==VbaValue::Kind::Decimal) return decimalUnary("-",value);
+            if(jetEval_ && value.kind==VbaValue::Kind::Number && value.numericType==VbaValue::NumericType::Long && value.number!=-2147483648.0) return VbaValue::longInteger(static_cast<std::int32_t>(-value.number));
             return value.kind==VbaValue::Kind::Currency ? negateCurrency(value) : VbaValue::numeric(-value.asNumber());
         }
         if (take("+")) {
-            const auto arg = expression(std::max(12,minPrecedence));
+            const auto arg = expression(std::max(jetEval_ ? 14 : 12,minPrecedence));
             if(!host_) return {};
             const auto value=scalarObjectValue(arg);
             if(value.kind==VbaValue::Kind::Null) return {};
+            if(value.kind==VbaValue::Kind::Decimal || (jetEval_ && value.kind==VbaValue::Kind::Number)) return value;
             return value.kind==VbaValue::Kind::Currency ? value : VbaValue::numeric(value.asNumber());
         }
         if (take("not")) {
@@ -988,6 +1003,7 @@ private:
                 const auto signedValue=static_cast<std::int64_t>(magnitude)-(magnitude>0x7fffffff ? 0x100000000LL : 0);
                 return VbaValue::longInteger(static_cast<std::int32_t>(signedValue));
             }
+            if(jetEval_ && tok.value.find_first_of(".eE")!=std::string::npos && tok.value.find_first_of("eE")==std::string::npos) return decimalLiteral(tok.value);
             std::size_t consumed = 0;
             double number;
             try { number=std::stod(tok.value,&consumed); }
@@ -995,6 +1011,7 @@ private:
             catch(const std::invalid_argument&) { throw error("Invalid numeric literal",5); }
             if (consumed!=tok.value.size()) throw error("Ungültige VBA-Zahl");
             if (!std::isfinite(number)) throw error("Numeric literal overflow",6);
+            if(jetEval_ && tok.value.find_first_of(".eE")==std::string::npos && number>=0 && number<=2147483647.0) return VbaValue::longInteger(static_cast<std::int32_t>(number));
             return VbaValue::numeric(number);
         }
         if (tok.type != Token::Type::Word)
@@ -1099,8 +1116,8 @@ private:
         if (const auto type=variantTypes.find(word);type!=variantTypes.end()) return VbaValue::numeric(type->second);
         static const std::unordered_map<std::string,int> calendarConstants{{"vbusesystem",0},{"vbsunday",1},{"vbmonday",2},{"vbtuesday",3},{"vbwednesday",4},{"vbthursday",5},{"vbfriday",6},{"vbsaturday",7},{"vbfirstjan1",1},{"vbfirstfourdays",2},{"vbfirstfullweek",3}};
         if(const auto constant=calendarConstants.find(word);constant!=calendarConstants.end()) return VbaValue::integer(constant->second);
-        if (word == "true") return VbaValue::logical(true);
-        if (word == "false") return VbaValue::logical(false);
+        if (word == "true") return jetEval_ ? VbaValue::integer(-1) : VbaValue::logical(true);
+        if (word == "false") return jetEval_ ? VbaValue::integer(0) : VbaValue::logical(false);
         static const std::unordered_map<std::string,int> messageConstants{
             {"vbokonly",0},{"vbokcancel",1},{"vbabortretryignore",2},{"vbyesnocancel",3},{"vbyesno",4},{"vbretrycancel",5},
             {"vbcritical",16},{"vbquestion",32},{"vbexclamation",48},{"vbinformation",64},
@@ -1601,16 +1618,18 @@ private:
                 const auto type=word=="cbyte" ? "byte" : word=="cint" ? "integer" : word=="clng" ? "long" : word=="csng" ? "single" : word=="cdbl" ? "double" : "boolean";
                 return coerceVbaModuleValue(scalarObjectValue(args.front()),type);
             }
-            if (word=="ccur" || word=="vartype" || word=="typename") {
+            if (word=="ccur" || word=="cdec" || word=="vartype" || word=="typename") {
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Conversion/type function requires one argument",450);
                 const auto value=word=="vartype" ? typeInspectionValue(args.front()) : args.front();
                 if (word=="ccur") return convertCurrency(value);
+                if(word=="cdec" && jetEval_) throw error("CDec is unavailable in the observed Access Eval context",2439);
+                if (word=="cdec") return convertDecimal(value);
                 const int type=value.kind==VbaValue::Kind::Empty ? 0 : value.kind==VbaValue::Kind::Null ? 1
                     : value.kind==VbaValue::Kind::Number ? (value.numericType==VbaValue::NumericType::Byte ? 17 : value.numericType==VbaValue::NumericType::Integer ? 2 : value.numericType==VbaValue::NumericType::Long ? 3 : value.numericType==VbaValue::NumericType::Single ? 4 : 5) : value.kind==VbaValue::Kind::Currency ? 6
-                    : value.kind==VbaValue::Kind::Date ? 7 : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
+                    : value.kind==VbaValue::Kind::Decimal ? 14 : value.kind==VbaValue::Kind::Date ? 7 : value.kind==VbaValue::Kind::Text ? 8 : value.kind==VbaValue::Kind::Object ? 9
                     : (value.kind==VbaValue::Kind::Error || value.kind==VbaValue::Kind::Missing) ? 10 : value.kind==VbaValue::Kind::ByteArray ? 8209 : value.kind==VbaValue::Kind::Array ? vbaArrayType(value) : 11;
-                if (word=="vartype") return VbaValue::integer(static_cast<std::int16_t>(type));
+                if (word=="vartype") return jetEval_ ? VbaValue::longInteger(type) : VbaValue::integer(static_cast<std::int16_t>(type));
                 if(isVbaArray(value)) return VbaValue::string(vbaArrayTypeName(value));
                 if (type==9) {
                     if (!value.object) return VbaValue::string("Nothing");
@@ -1618,7 +1637,7 @@ private:
                     throw error("Native object class name unavailable",3251);
                 }
                 return VbaValue::string(type==0 ? "Empty" : type==1 ? "Null" : type==5 ? "Double"
-                    : type==17 ? "Byte" : type==2 ? "Integer" : type==3 ? "Long" : type==4 ? "Single" : type==6 ? "Currency" : type==7 ? "Date" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : type==8209 ? "Byte()" : type==8204 ? "Variant()" : type==8200 ? "String()" : "Boolean");
+                    : type==17 ? "Byte" : type==2 ? "Integer" : type==3 ? "Long" : type==4 ? "Single" : type==6 ? "Currency" : type==14 ? "Decimal" : type==7 ? "Date" : type==8 ? "String" : type==9 ? "Object" : type==10 ? "Error" : type==8209 ? "Byte()" : type==8204 ? "Variant()" : type==8200 ? "String()" : "Boolean");
             }
             if (word=="dsum" || word=="dcount" || word=="dlookup" || word=="dmin" || word=="dmax" || word=="davg" || word=="dfirst" || word=="dlast" || word=="dvar" || word=="dstdev") {
                 if (!host_) return {};
@@ -2121,6 +2140,7 @@ private:
                     const auto number=coerceVbaModuleValue(value,"double").number;
                     return VbaValue::integer(static_cast<std::int16_t>((number>0)-(number<0)));
                 }
+                if(value.kind==VbaValue::Kind::Decimal) return decimalUnary(word,value);
                 if (value.kind==VbaValue::Kind::Currency) {
                     if(word=="abs") return value.currencyUnits<0 ? negateCurrency(value) : value;
                     if(word=="int") return floorCurrency(value);
@@ -2143,6 +2163,7 @@ private:
                 if(!host_) return {};
                 if(args.size()<2 || (word=="switch" && args.size()%2) || std::any_of(omitted.begin(),omitted.end(),[](bool missing){ return missing; }))
                     throw error("Invalid selection function arguments",450);
+                if(jetEval_ && word=="switch" && std::any_of(args.begin(),args.end(),[](const VbaValue& value) {return value.kind==VbaValue::Kind::Error;})) throw error("Access Eval Switch cannot convert an Error Variant",6);
                 if(word=="choose") {
                     const auto index=coerceVbaModuleValue(scalarObjectValue(args[0]),"long").number;
                     if(index<1 || index>=args.size()) return {};
@@ -2267,7 +2288,7 @@ private:
                 if (!host_) return {};
                 if(omitted[0]) throw error("Nz requires a value",450);
                 return args[0].kind == VbaValue::Kind::Null
-                    ? (args.size() == 2 && !omitted[1] ? args[1] : accessExpression_ ? VbaValue::string("") : VbaValue::empty()) : args[0];
+                    ? (args.size() == 2 && !omitted[1] ? args[1] : accessExpression_ && !jetEval_ ? VbaValue::string("") : VbaValue::empty()) : args[0];
             }
             if (word == "iif" && args.size() == 3) {
                 if (!host_) return {};
@@ -2315,6 +2336,7 @@ private:
     VbaFunctionResolver resolver_;
     bool objectContext_{};
     bool accessExpression_{};
+    bool jetEval_{};
     const VbaValue* withContext_{};
     bool allowWith_{};
     VbaCompareMode compareMode_;
@@ -2367,7 +2389,7 @@ VbaValue VbaHost::eval(std::string_view source) {
         return *result.typedReturnValue;
     };
     const VbaVariables variables;
-    auto value=scalarVbaValue(ExpressionParser(source,this,variables,functions,false,true,nullptr,false,VbaCompareMode::Database).parse());
+    auto value=scalarVbaValue(ExpressionParser(source,this,variables,functions,false,true,nullptr,false,VbaCompareMode::Database,0,true).parse());
     if (value.kind==VbaValue::Kind::Error) throw VbaRuntimeError(value.errorNumber ? value.errorNumber : 13,"Eval expression failed");
     if (value.kind==VbaValue::Kind::Missing) throw VbaRuntimeError(13,"Eval cannot return a missing argument");
     if (isVbaArray(value)) throw VbaRuntimeError(13,"Eval cannot return a byte array");
@@ -2463,7 +2485,7 @@ std::string VbaValue::asText() const {
     if (kind==Kind::ByteArray || kind==Kind::Array) throw error("Byte array cannot be implicitly converted to text",13);
     if (kind==Kind::Error || kind==Kind::Missing) throw error("Error Variant cannot be implicitly converted to text",13);
     if (kind==Kind::Object) return scalarObjectValue(*this).asText();
-    if (kind == Kind::Text) return text;
+    if (kind == Kind::Text || kind==Kind::Decimal) return text;
     if (kind==Kind::Date) return vbaDateText(number);
     if (kind==Kind::Currency) {
         const auto magnitude=currencyUnits<0 ? static_cast<std::uint64_t>(-(currencyUnits+1))+1 : static_cast<std::uint64_t>(currencyUnits);

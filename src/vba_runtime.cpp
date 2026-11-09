@@ -3,6 +3,7 @@
 #include "vba_array.hpp"
 #include "vba_runtime.hpp"
 #include "vba_expression.hpp"
+#include "vba_decimal.hpp"
 #include "vba_currency.hpp"
 #include "vba_calendar.hpp"
 
@@ -1557,6 +1558,7 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
     }
     if(type=="byte" && value.kind==VbaValue::Kind::Boolean) return VbaValue::byte(value.boolean ? 255 : 0);
     if(type=="byte" || type=="integer" || type=="long") {
+        if(value.kind==VbaValue::Kind::Decimal) {const auto result=decimalInteger(value,type=="byte" ? 0 : type=="integer" ? -32768 : -2147483648LL,type=="byte" ? 255 : type=="integer" ? 32767 : 2147483647LL);return type=="byte" ? VbaValue::byte(static_cast<unsigned char>(result)) : type=="integer" ? VbaValue::integer(static_cast<std::int16_t>(result)) : VbaValue::longInteger(static_cast<std::int32_t>(result));}
         const auto number=value.kind==VbaValue::Kind::Text ? VbaValue::string(trim(value.text)).asNumber() : value.asNumber();
         if(!std::isfinite(number)) throw VbaRuntimeError(6,"Module numeric field overflow");
         const auto lower=std::floor(static_cast<long double>(number));

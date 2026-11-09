@@ -20,7 +20,7 @@ namespace linaccess {
 std::size_t vbaStringCodeUnits(std::string_view text);
 
 struct VbaValue {
-    enum class Kind { Null, Empty, Number, Text, Boolean, Object, Error, Currency, ByteArray, Array, Missing, Date } kind{Kind::Null};
+    enum class Kind { Null, Empty, Number, Text, Boolean, Object, Error, Currency, ByteArray, Array, Missing, Date, Decimal } kind{Kind::Null};
     enum class NumericType { Double, Integer, Long, Single, Byte } numericType{NumericType::Double};
     double number{};
     std::int64_t currencyUnits{};

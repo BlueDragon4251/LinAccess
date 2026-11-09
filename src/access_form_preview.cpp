@@ -24,6 +24,7 @@
 #include "vba_runtime.hpp"
 #include "vba_module_context.hpp"
 #include "vba_currency.hpp"
+#include "vba_decimal.hpp"
 #include "vba_calendar.hpp"
 #include "dao_database.hpp"
 #include "vba_qt_value.hpp"
@@ -594,7 +595,7 @@ public:
             && (value.kind==linaccess::VbaValue::Kind::Number || value.kind==linaccess::VbaValue::Kind::Null
                 || value.kind==linaccess::VbaValue::Kind::Error || value.kind==linaccess::VbaValue::Kind::Empty
                 || value.kind==linaccess::VbaValue::Kind::Boolean || value.kind==linaccess::VbaValue::Kind::Date
-                || value.kind==linaccess::VbaValue::Kind::Currency
+                || value.kind==linaccess::VbaValue::Kind::Currency || value.kind==linaccess::VbaValue::Kind::Decimal
                 || (value.kind==linaccess::VbaValue::Kind::Text && value.text.size()<=4096)))
             preview_.reportAggregateValues_.insert(key,std::make_shared<linaccess::VbaValue>(value));
         return value;
@@ -1587,7 +1588,7 @@ void AccessFormPreview::applyTextAlignment(QWidget* widget,const linaccess::Acce
         const auto kind=static_cast<linaccess::VbaValue::Kind>(widget->property("la_vba_kind").toInt());
         const bool numericField=type.contains("INT") || type.contains("REAL") || type.contains("FLOA")
             || type.contains("DOUB") || type.contains("NUM") || type.contains("DEC") || type.contains("DATE");
-        if ((!type.isEmpty() && numericField) || (type.isEmpty() && (kind==linaccess::VbaValue::Kind::Number || kind==linaccess::VbaValue::Kind::Currency)))
+        if ((!type.isEmpty() && numericField) || (type.isEmpty() && (kind==linaccess::VbaValue::Kind::Number || kind==linaccess::VbaValue::Kind::Currency || kind==linaccess::VbaValue::Kind::Decimal)))
             horizontal=Qt::AlignRight;
     }
     if (auto* editor=qobject_cast<QLineEdit*>(widget)) editor->setAlignment(horizontal|(editor->alignment()&Qt::AlignVertical_Mask)|Qt::AlignAbsolute);
@@ -2674,6 +2675,7 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
         if (kind == linaccess::VbaValue::Kind::Empty) return linaccess::VbaValue::empty();
         if (kind == linaccess::VbaValue::Kind::Date) return linaccess::VbaValue::dateSerial(widget->property("la_vba_date_serial").toDouble());
         if (kind == linaccess::VbaValue::Kind::Currency) return linaccess::convertCurrency(linaccess::VbaValue::string(textOf(widget).toStdString()));
+        if (kind == linaccess::VbaValue::Kind::Decimal) return linaccess::decimalLiteral(textOf(widget).toStdString());
         if (kind == linaccess::VbaValue::Kind::Number) type = "REAL";
         if (kind == linaccess::VbaValue::Kind::Boolean || qobject_cast<QCheckBox*>(widget)) type = "BOOLEAN";
     }

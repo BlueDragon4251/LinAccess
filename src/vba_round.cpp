@@ -1,4 +1,5 @@
 #include "vba_round.hpp"
+#include "vba_decimal.hpp"
 #include <cmath>
 #include <limits>
 
@@ -9,6 +10,7 @@ VbaValue vbaRound(const std::vector<VbaValue>& arguments) {
     const auto precision=arguments.size()==2 ? scalarVbaValue(arguments[1]) : VbaValue::integer(0);
     const auto places=static_cast<int>(coerceVbaModuleValue(precision,"long").number);
     if(places<0) throw VbaRuntimeError(5,"Round precision must be nonnegative");
+    if(value.kind==VbaValue::Kind::Decimal) return decimalRound(value,places);
     if(places>15) throw VbaRuntimeError(3251,"Round precision above 15 is not validated");
     if(value.kind==VbaValue::Kind::Null) return {};
     if(value.kind==VbaValue::Kind::Currency) {

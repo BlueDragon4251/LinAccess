@@ -1,5 +1,6 @@
 #pragma once
 #include "vba_expression.hpp"
+#include "vba_decimal.hpp"
 #include <cmath>
 #include <optional>
 #include <limits>
@@ -19,7 +20,7 @@ public:
             switch(value.kind) {
                 case VbaValue::Kind::Null: case VbaValue::Kind::Empty: case VbaValue::Kind::Number:
                 case VbaValue::Kind::Text: case VbaValue::Kind::Boolean: case VbaValue::Kind::Currency:
-                case VbaValue::Kind::Date: break;
+                case VbaValue::Kind::Date: case VbaValue::Kind::Decimal: break;
                 default: throw VbaRuntimeError(3251,"Report selector value type unsupported");
             }
             if((value.kind==VbaValue::Kind::Number || value.kind==VbaValue::Kind::Date) && !std::isfinite(value.number))
@@ -31,19 +32,23 @@ public:
         if(value.kind==VbaValue::Kind::Null) return;
         if(function_=="count") { ++count_; return; }
         if(function_=="min" || function_=="max") {
-            if(value.kind!=VbaValue::Kind::Number && value.kind!=VbaValue::Kind::Date && value.kind!=VbaValue::Kind::Currency)
+            if(value.kind!=VbaValue::Kind::Number && value.kind!=VbaValue::Kind::Date && value.kind!=VbaValue::Kind::Currency && value.kind!=VbaValue::Kind::Decimal)
                 throw VbaRuntimeError(3251,"Report extremum value type unsupported");
             if(extremum_ && value.kind!=extremum_->kind)
                 throw VbaRuntimeError(3251,"Mixed report extremum types unsupported");
-            if(value.kind!=VbaValue::Kind::Currency && !std::isfinite(value.number))
+            if(value.kind!=VbaValue::Kind::Currency && value.kind!=VbaValue::Kind::Decimal && !std::isfinite(value.number))
                 throw VbaRuntimeError(6,"Aggregate overflow");
-            const int order=!extremum_ ? 0 : value.kind==VbaValue::Kind::Currency
+            const int order=!extremum_ ? 0 : value.kind==VbaValue::Kind::Decimal ? decimalCompare(value,*extremum_) : value.kind==VbaValue::Kind::Currency
                 ? (value.currencyUnits>extremum_->currencyUnits)-(value.currencyUnits<extremum_->currencyUnits)
                 : (value.number>extremum_->number)-(value.number<extremum_->number);
             if(!extremum_ || (function_=="min" ? order<0 : order>0)) extremum_=value;
             ++count_;
             return;
         }
+        if(function_=="sum" && value.kind==VbaValue::Kind::Decimal) {
+            if(count_ && !decimalTotal_) throw VbaRuntimeError(3251,"Mixed Decimal sum types unsupported");decimalTotal_=decimalTotal_ ? decimalBinary("+",*decimalTotal_,value) : value;++count_;return;
+        }
+        if(decimalTotal_) throw VbaRuntimeError(3251,"Mixed Decimal sum types unsupported");
         if(function_=="sum" && value.kind==VbaValue::Kind::Currency) {
             if(count_ && !currencyTotal_) throw VbaRuntimeError(3251,"Mixed Currency sum types unsupported");
             const auto previous=currencyTotal_.value_or(0),units=value.currencyUnits;
@@ -87,6 +92,7 @@ public:
             return VbaValue::numeric(value);
         }
         if(extremum_) return *extremum_;
+        if(decimalTotal_) return *decimalTotal_;
         if(currencyTotal_) return VbaValue::currency(*currencyTotal_);
         const double value=function_=="avg" ? static_cast<double>(mean_) : total_;
         if(!std::isfinite(value)) throw VbaRuntimeError(6,"Aggregate overflow");
@@ -100,5 +106,6 @@ private:
     long double mean_{},secondMoment_{};
     std::optional<VbaValue> extremum_;
     std::optional<std::int64_t> currencyTotal_;
+    std::optional<VbaValue> decimalTotal_;
 };
 }

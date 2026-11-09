@@ -38,10 +38,12 @@ reproduziert. Details und verbleibende Grenzen:
 [Import-Untersuchung](docs/MDB_IMPORT_REGRESSION.md).
 
 Abhängigkeiten (je nach Distribution können die Paketnamen abweichen):
+Boost.Multiprecision ab1.74 wird nur als Header beim Bauen benötigt; eine
+zusätzliche Boost-Laufzeitbibliothek ist nicht erforderlich.
 
 ```bash
 sudo apt update
-sudo apt install build-essential cmake qt6-base-dev libqt6sql6-sqlite mdbtools mdbtools-dev pkg-config dpkg-dev file
+sudo apt install build-essential libboost-dev cmake qt6-base-dev libqt6sql6-sqlite mdbtools mdbtools-dev pkg-config dpkg-dev file
 
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
@@ -107,9 +109,9 @@ cpack --config build/CPackConfig.cmake -G DEB
 ```
 
 Die Datei `.github/workflows/build-linux.yml` prüft Ubuntu 24.04 sowie Debian
-12/13 und installiert die erzeugten Pakete. Die zuletzt bestätigten Läufe sind
-erfolgreich; die frühere Kontozahlungs-/Ausgabenlimit-Sperre trat dabei nicht
-mehr auf. Commitbezogene Nachweise stehen im [Fortschrittsprotokoll](docs/PROGRESS.md).
+12/13 und installiert die erzeugten Pakete. Nachweise erfolgreicher Läufe müssen
+zum jeweils geprüften Commit passen; commitbezogene Ergebnisse und Grenzen
+stehen im [Fortschrittsprotokoll](docs/PROGRESS.md).
 
 `mdbtools` ist optional, aber zum Lesen von `.mdb` und versuchsweise `.accdb`
 im Access-Inspektor erforderlich. Die Unterstützung ist je nach MDBTools-Version
@@ -120,7 +122,8 @@ Nur die C++-Parser-Tests (ohne Qt) mit GCC:
 ```bash
 g++ -std=c++20 -Wall -Wextra -pedantic -Isrc \
     tests/core_tests.cpp src/vba_analyzer.cpp src/vba_runtime.cpp \
-    src/vba_expression.cpp src/csv.cpp -o core_tests
+    src/vba_expression.cpp src/vba_currency.cpp src/vba_decimal.cpp \
+    src/vba_round.cpp src/vba_calendar.cpp src/vba_array.cpp src/csv.cpp -o core_tests
 ./core_tests
 ```
 

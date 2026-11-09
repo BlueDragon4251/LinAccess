@@ -1,5 +1,7 @@
 #include "csv.hpp"
 #include "vba_currency.hpp"
+#include "vba_decimal.hpp"
+#include "native_report_aggregate.hpp"
 #include <charconv>
 #include "vba_analyzer.hpp"
 #include "vba_runtime.hpp"
@@ -714,7 +716,40 @@ End Sub
     assert(executed.status==VbaExecutionStatus::Completed && host.fields["YearValue"]=="2024" && host.fields["DayDifference"]=="2" && host.fields["CalendarTypes"]=="2:3");
 }
 
+void testNativeDecimalVariants() {
+    using namespace linaccess;FakeForm host;const auto eval=[&](const std::string& source) {return evaluateVbaExpression(source,host,{});};
+    const std::string maximum="79228162514264337593543950335";
+    assert(eval("VarType(CDec(1))=vbDecimal").truthy() && eval("TypeName(CDec(1))").asText()=="Decimal");
+    assert(eval("CStr(CDec(\""+maximum+"\"))").asText()==maximum);
+    assert(eval("CDec(\""+maximum+"\")-CDec(1)").asText()=="79228162514264337593543950334");
+    assert(eval("CDec(\"0.1\")+CDec(\"0.2\")").asText()=="0.3");
+    assert(eval("CDec(\"12345678901234567890\")*CDec(\"0.00000001\")=CDec(\"123456789012.3456789\")").truthy());
+    assert(eval("CDec(1)/CDec(3)").asText()=="0.3333333333333333333333333333");
+    assert(eval("CLng(CDec(\"2.5000000000000000000000000001\"))").asNumber()==3);
+    assert(eval("CInt(CDec(\"-2.5\"))").asNumber()==-2 && eval("CByte(CDec(\"-0.5\"))").asNumber()==0);
+    assert(eval("Round(CDec(\"1.245\"),2)").asText()=="1.24" && eval("Round(CDec(\"1.255\"),2)").asText()=="1.26");
+    assert(eval("Round(CDec(\"0.0000000000000000000000000001\"),28)").asText()=="0.0000000000000000000000000001");
+    assert(eval("Int(CDec(\"-1.9\"))").asText()=="-2" && eval("Fix(CDec(\"-1.9\"))").asText()=="-1");
+    assert(eval("CCur(CDec(\"1.23445\"))").asText()=="1.2344" && eval("CCur(CDec(\"1.23455\"))").asText()=="1.2346");
+    assert(eval("Abs(-CDec(\""+maximum+"\"))").asText()==maximum);
+    for(const auto& [source,wanted]:std::vector<std::pair<std::string,int>>{{"CDec(Null)",94},{"CDec(\"invalid\")",13},{"CDec(\"79228162514264337593543950336\")",6},{"CDec(\""+maximum+"\")+CDec(1)",6},{"CDec(1)/CDec(0)",11},{"Round(CDec(1),29)",3251},{"CLng(CDec(\"2147483647.5000000001\"))",6}}) {int error=0;try {(void)eval(source);}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==wanted);}
+    auto probe=std::make_shared<ScalarProbe>();probe->value=VbaValue::string(maximum);assert(evaluateVbaExpression("CDec(probe)",host,{{"probe",VbaValue::reference(probe)}}).asText()==maximum && probe->reads==1);
+    const auto result=executeVbaProcedure(R"VBA(Sub DecimalValues()
+Dim value As Variant, entries(0 To 0) As Variant
+value=CDec("79228162514264337593543950335")
+entries(0)=value
+entries(0)=entries(0)-CDec(1)
+Me!DecimalState=CStr(entries(0)) & ":" & CStr(VarType(entries(0)))
+End Sub
+)VBA","DecimalValues",host);assert(result.status==VbaExecutionStatus::Completed && host.fields["DecimalState"]=="79228162514264337593543950334:14");
+    NativeReportAggregate sum("sum"),minimum("min"),maximumAggregate("max");for(const auto& source:{"12345678901234567890.1","0.2"}) {const auto value=decimalLiteral(source);sum.add(value);minimum.add(value);maximumAggregate.add(value);}assert(sum.result().asText()=="12345678901234567890.3" && minimum.result().asText()=="0.2" && maximumAggregate.result().asText()=="12345678901234567890.1");
+    assert(eval("Null Or 2").kind==VbaValue::Kind::Null && eval("Null And 2").kind==VbaValue::Kind::Null);
+    assert(host.eval("-2^2").asNumber()==4 && eval("-2^2").asNumber()==-4);
+    assert(host.eval("Nz(Null)").kind==VbaValue::Kind::Empty && evaluateAccessExpression("Nz(Null)",host).kind==VbaValue::Kind::Text);
+}
+
 int main() {
+    testNativeDecimalVariants();
     {
         FakeForm host;
         const auto eval=[&](const std::string& expression) { return linaccess::evaluateVbaExpression(expression,host,{}); };

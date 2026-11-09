@@ -56,7 +56,7 @@ VbaValue decimalCurrency(std::string_view input) {
 VbaValue convertCurrency(const VbaValue& value) {
     if (value.kind==VbaValue::Kind::Currency) return value;
     if (value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null Currency conversion");
-    if (value.kind==VbaValue::Kind::Text) return decimalCurrency(value.text);
+    if (value.kind==VbaValue::Kind::Text || value.kind==VbaValue::Kind::Decimal) return decimalCurrency(value.text);
     if (value.kind==VbaValue::Kind::Empty) return VbaValue::currency(0);
     if (value.kind==VbaValue::Kind::Boolean) return VbaValue::currency(value.boolean ? -10000 : 0);
     if (value.kind!=VbaValue::Kind::Number) throw VbaRuntimeError(13,"Currency type mismatch");
