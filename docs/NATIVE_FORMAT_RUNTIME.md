@@ -57,3 +57,22 @@ F014/F041/F068/F071/F118/F164 and fixed456/384/72 remain open.
 Validation: core/DAO/window/formatter4/4 (9.49s), application built. The full
 finite104-value/8-error reference suite passed in the stated split contexts.
 No fresh GitHub CI, distro matrix, original workflow or full catalog parity claim.
+
+
+Custom numeric masks now support up to three positive/negative/zero sections,
+quoted and escaped literal prefixes/suffixes (including escaped semicolons),
+explicit negative parentheses, percent prefixes/suffixes and exact trailing-comma
+thousand scaling. Empty negative/zero sections reuse the first section. Explicit
+negative sections format the absolute magnitude; fallback automatic minus signs
+precede the complete output. Decimal/Currency values retain their exact text.
+Scaling checks an exact inverse before rendering, refuses a lossy scale with3251
+and is bounded to eight comma factors. Leading fractional masks such as .00
+remain supported. Unique sections are chosen from the unrounded input sign.
+
+Scientific notation, conditional/color directives, fourth Null sections,
+interleaved digit/literal masks and full Windows regional/custom-mask equivalence
+remain explicitly unsupported. Existing Format/Format$ Null rules are preserved.
+The code is shared by native VBA/SQL/form formatting; technical regression cases
+are implementation checks, not newly supplied Windows Access observations.
+
+Existing formatter/window checks2/2 (6.01s); application built.

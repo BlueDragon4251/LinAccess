@@ -8,6 +8,7 @@
 #include <QVector>
 #include <cmath>
 #include <algorithm>
+#include <optional>
 namespace linaccess {
 namespace {
 QString localDigits(QString value,const QLocale& locale) {
@@ -40,6 +41,78 @@ QString numberText(const VbaValue& input,int minimumInteger,int minimumFraction,
     QString result=localDigits(whole,locale);if(!fraction.isEmpty()) result+=locale.decimalPoint()+localDigits(fraction,locale);
     if(currency) {const auto style=currencyStyle(locale);result=style.before+result+style.after;}if(percent) result+=locale.percent();
     if(negative) result=parens ? "("+result+")" : locale.negativeSign()+result;return result;
+}
+struct NumericMaskPiece {QChar character;bool literal{};};
+std::optional<QString> customNumericText(const VbaValue& input,const QString& pattern,const QLocale& locale) {
+    QVector<QVector<NumericMaskPiece>> sections(1);
+    bool placeholders=false;
+    for(int position=0;position<pattern.size();++position) {
+        const auto ch=pattern[position];
+        if(ch=='\\') {
+            if(++position>=pattern.size()) throw VbaRuntimeError(5,"Incomplete format escape");
+            sections.last().append({pattern[position],true});
+        } else if(ch=='"') {
+            bool closed=false;
+            while(++position<pattern.size()) {if(pattern[position]=='"') {closed=true;break;}sections.last().append({pattern[position],true});}
+            if(!closed) throw VbaRuntimeError(5,"Unterminated format literal");
+        } else if(ch==';') sections.append(QVector<NumericMaskPiece>{});
+        else {sections.last().append({ch,false});placeholders|=ch=='0' || ch=='#';}
+    }
+    if(!placeholders) return {};
+    if(sections.size()>3) throw VbaRuntimeError(5,"Numeric Null sections are not validated");
+    auto value=numericValue(input,locale);
+    const int sign=decimalCompare(value,decimalLiteral("0"));
+    int selected=0;
+    if(sign<0 && sections.size()>1 && !sections[1].isEmpty()) {selected=1;value=decimalUnary("abs",value);}
+    else if(sign==0 && sections.size()>2 && !sections[2].isEmpty()) selected=2;
+    const bool automaticNegative=sign<0 && selected==0;
+    if(automaticNegative) value=decimalUnary("abs",value);
+    const auto& pieces=sections[selected];
+    int first=-1,last=-1,percents=0;
+    for(int index=0;index<pieces.size();++index) {
+        const auto& piece=pieces[index];if(piece.literal) continue;
+        if(piece.character=='0' || piece.character=='#') {if(first<0) first=index;last=index;}
+        else if(piece.character=='%') ++percents;
+        else if(piece.character.isLetter() || piece.character=='[' || piece.character==']' || piece.character=='@' || piece.character=='&' || piece.character=='!' || piece.character=='<' || piece.character=='>') throw VbaRuntimeError(5,"Numeric mask token unsupported");
+    }
+    if(percents>1) throw VbaRuntimeError(5,"Repeated numeric percent tokens are not validated");
+    const auto literal=[&](int begin,int end) {
+        QString result;
+        for(int index=begin;index<end;++index) {
+            const auto& piece=pieces[index];
+            if(!piece.literal && (piece.character=='.' || piece.character==',')) throw VbaRuntimeError(5,"Numeric separator outside its digit mask");
+            result+=!piece.literal && piece.character=='%' ? locale.percent() : QString(piece.character);
+        }
+        return result;
+    };
+    if(first<0) return literal(0,pieces.size());
+    if(first>0 && !pieces[first-1].literal && pieces[first-1].character=='.') --first;
+    // Trailing commas belong to the scale, not to the literal suffix.
+    while(last+1<pieces.size() && !pieces[last+1].literal && pieces[last+1].character==',') ++last;
+    QString core;
+    for(int index=first;index<=last;++index) {
+        const auto& piece=pieces[index];
+        if(piece.literal || (piece.character!='0' && piece.character!='#' && piece.character!='.' && piece.character!=',')) throw VbaRuntimeError(5,"Interleaved numeric literals are not validated");
+        core+=piece.character;
+    }
+    if(core.count('.')>1) throw VbaRuntimeError(5,"Multiple numeric decimal points");
+    const int point=core.indexOf('.');
+    auto integer=point<0 ? core : core.left(point),fraction=point<0 ? QString{} : core.mid(point+1);
+    int scale=0;
+    while(integer.endsWith(',')) {integer.chop(1);++scale;}
+    while(fraction.endsWith(',')) {fraction.chop(1);++scale;}
+    if(integer.startsWith(',') || integer.contains(",,") || fraction.contains(',') || (integer.isEmpty() && point<0) || (point>=0 && fraction.isEmpty())) throw VbaRuntimeError(5,"Numeric grouping mask unsupported");
+    if(scale>8) throw VbaRuntimeError(3251,"Numeric scaling exceeds the exact supported range");
+    for(int index=0;index<scale;++index) {
+        const auto divisor=decimalLiteral("1000"),next=decimalBinary("/",value,divisor);
+        if(decimalCompare(decimalBinary("*",next,divisor),value)!=0) throw VbaRuntimeError(3251,"Numeric scaling would lose Decimal precision");
+        value=next;
+    }
+    if(percents) value=decimalBinary("*",value,decimalLiteral("100"));
+    const bool group=integer.contains(',');integer.remove(',');
+    const int required=integer.indexOf('0');
+    const auto rendered=numberText(value,required<0 ? 0 : integer.size()-required,fraction.lastIndexOf('0')+1,fraction.size(),group,true,false,false,false,locale);
+    return (automaticNegative ? locale.negativeSign() : QString{})+literal(0,first)+rendered+literal(last+1,pieces.size());
 }
 struct DateParts {QDate date;QTime time;};
 DateParts dateParts(const VbaValue& value) {
@@ -90,10 +163,7 @@ VbaValue formatAccessValue(const VbaValue& input,std::string_view mask,bool stri
         const bool on=decimalCompare(numericValue(value,locale),decimalLiteral("0"))!=0;QString result;if(locale.language()==QLocale::German) result=lower=="yes/no" ? (on ? "Ja" : "Nein") : lower=="true/false" ? (on ? "Wahr" : "Falsch") : (on ? "Ein" : "Aus");else if(locale.language()==QLocale::English || locale.language()==QLocale::C) result=lower=="yes/no" ? (on ? "Yes" : "No") : lower=="true/false" ? (on ? "True" : "False") : (on ? "On" : "Off");else throw VbaRuntimeError(3251,"Boolean format language unsupported");return VbaValue::string(result.toStdString());
     }
     if(lower=="currency" || lower=="standard" || lower=="fixed") {VbaNumericFormatOptions options;if(lower!="currency") {options.digits=2;options.group=lower=="standard";}return formatAccessNumericValue(value,lower=="currency",options);}
-    static const QRegularExpression numeric("^([#0,]*)(?:\\.([#0]+))?(%)?$");const auto match=numeric.match(pattern);if(match.hasMatch() && (pattern.contains('0') || pattern.contains('#'))) {
-        auto integer=match.captured(1);const bool group=integer.contains(',');if(integer.startsWith(',') || integer.endsWith(',') || integer.contains(",,")) throw VbaRuntimeError(5,"Scaled numeric format unsupported");integer.remove(',');const auto fraction=match.captured(2);const auto first=integer.indexOf('0');const int minimumInteger=first<0 ? 0 : integer.size()-first,minimumFraction=fraction.lastIndexOf('0')+1;
-        return VbaValue::string(numberText(value,minimumInteger,minimumFraction,fraction.size(),group,true,false,false,!match.captured(3).isEmpty(),locale).toUtf8().toStdString());
-    }
+    if(const auto numeric=customNumericText(value,pattern,locale)) return VbaValue::string(numeric->toUtf8().toStdString());
     return VbaValue::string(dateText(value,pattern,locale).toUtf8().toStdString());
 }
 }

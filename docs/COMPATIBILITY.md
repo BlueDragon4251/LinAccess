@@ -3740,3 +3740,15 @@ step loops. Core/DAO checked together2/2 (3.99s), application built. Actual Acce
 2003 loop-oracle coverage, mixed Variant counter promotion and complete numeric
 For/Next semantics remain open; no full parity assertion. Existing F041/F043/F045/
 F105 only, fixed456/384/72 unchanged. Continue implementation without a final.
+
+Native Zahlenmasken unterstützen jetzt bis zu drei Abschnitte für positive/
+negative Zahlen und Zahlenwert0, leere Ersatzabschnitte, zitierte/escaped
+Präfixe/Suffixe, negative Klammern und Prozent an beiden Seiten. Tausender-
+Skalierung durch abschließende Kommata prüft exakte Rückrechnung und verweigert
+Präzisionsverlust3251, statt still zu runden. .00 bleibt unterstützt. Gemeinsamer
+Code für VBA/SQL/Formausdrücke; Masken-/SQL-Fälle und vorhandene GUI-Ausdrucks-
+referenzen gemeinsam2/2 (6,01s), App gebaut. Keine zusätzlichen CTest-Ziele.
+Wissenschaftliche/bedingte/Farb-/vierteNull-/interleavte Masken und vollständige
+Windows-Formatgleichheit bleiben offen. Neue technische Prüfungen sind kein
+zusätzlicher Windows-Access-Nachweis. NATIVE_FORMAT_RUNTIME.md; bestehende
+F041/F068/F071/F118/F164,456/384/72 unverändert. Direkt weiterentwickeln.

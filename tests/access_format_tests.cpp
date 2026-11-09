@@ -40,6 +40,20 @@ int main(int argc,char** argv) {
     assert(format(date,"Long Date").text=="Mittwoch, 31. Dezember 2003");
     assert(format(date,"yyyy-mm-dd hh:nn:ss").asText()=="2003-12-31 18:05:06");assert(format(date,"hh:mm:ss").asText()=="18:05:06");assert(format(date,"yyyy \"Jahr\" q").asText()=="2003 Jahr 4");
     assert(format(decimalLiteral("1.245"),"0.00").asText()=="1,24");assert(format(decimalLiteral("0.25"),"0.##%").asText()=="25%");assert(format(decimalLiteral("1.2"),"0.00##").asText()=="1,20");assert(format(decimalLiteral("79228162514264337593543950335"),"0").asText()=="79228162514264337593543950335");
+    assert(format(decimalLiteral("-1234.5"),"#,##0.00;(#,##0.00);\"zero\"").asText()=="(1.234,50)");
+    assert(format(decimalLiteral("0"),"0.00;(0.00);\"zero\"").asText()=="zero");
+    assert(format(decimalLiteral("-1.5"),"0.00;;\"zero\"").asText()=="-1,50");
+    assert(format(decimalLiteral("12.5"),"\"EUR \"0.00\" net\"").asText()=="EUR 12,50 net");
+    assert(format(decimalLiteral("12.5"),"0.00\\x").asText()=="12,50x");
+    assert(format(decimalLiteral("1234500"),"0,.00\" k\"").asText()=="1234,50 k");
+    assert(format(decimalLiteral("1234500000"),"0,,.00\" m\"").asText()=="1234,50 m");
+    assert(format(decimalLiteral("-0.125"),"0.0%;(0.0%)").asText()=="(12,5%)");
+    assert(format(decimalLiteral("1.2"),"\"0; \"0.00").asText()=="0; 1,20");
+    assert(format(decimalLiteral("0.5"),".00").asText()==",50");
+    assert(format(decimalLiteral("-12.5"),"\"EUR \"0.00").asText()=="-EUR 12,50");
+    rejects(decimalLiteral("1"),"0.00;0.00;0.00;0.00",5);
+    rejects(decimalLiteral("1"),"0.00[Red]",5);
+    rejects(decimalLiteral("1e-28"),"0,.00",3251);
     const auto options=parseVbaNumericFormatOptions({decimalLiteral("-0.5"),VbaValue::integer(2),VbaValue::integer(0),VbaValue::integer(-1),VbaValue::integer(0)});assert(formatAccessNumericValue(decimalLiteral("-0.5"),false,options).asText()=="(,50)");
 
     auto db=QSqlDatabase::addDatabase("QSQLITE"); db.setDatabaseName(":memory:"); assert(db.open());
@@ -49,6 +63,8 @@ int main(int argc,char** argv) {
     assert(model.data(model.index(0,1)).metaType().id()==QMetaType::QString);
     model.execute(db,"SELECT FormatNumber(9007199254740993,0,-1,0,0),FormatCurrency(1.25,2),Format(1.245,\"0.00\")");assert(model.data(model.index(0,0)).toString()=="9007199254740993" && model.data(model.index(0,2)).toString()=="1,24");
 
+    model.execute(db,"SELECT Format(-1234.5,'#,##0.00;(#,##0.00)'),Format(1234500,'0,.00'),Format(0,'0.00;(0.00);\"zero\"')");
+    assert(model.data(model.index(0,0)).toString()=="(1.234,50)" && model.data(model.index(0,1)).toString()=="1234,50" && model.data(model.index(0,2)).toString()=="zero");
     model.execute(db,"SELECT Format$(#12/31/2003#,\"Long Date\"),Format(Null,\"yyyy\")");
     assert(model.data(model.index(0,0)).toString()=="Mittwoch, 31. Dezember 2003");
     assert(model.data(model.index(0,1)).isNull());
