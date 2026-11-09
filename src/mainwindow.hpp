@@ -37,6 +37,7 @@ public:
     Q_INVOKABLE QVariantMap requeryTableDocument();
     Q_INVOKABLE QVariantMap repaintDatabaseObject(int type,const QString& name);
     Q_INVOKABLE QVariantMap filterDatasheet(const QString& criteria,bool clear);
+    Q_INVOKABLE QVariantMap setDatabaseWindowState(const QString& command);
     Q_INVOKABLE QVariantMap outputDatasheet(bool pdf,const QString& path = {});
     Q_INVOKABLE QVariantMap previewDatasheet();
     Q_INVOKABLE QVariantMap setupDatasheetPage();

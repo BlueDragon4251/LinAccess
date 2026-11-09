@@ -952,6 +952,15 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
     return tableCommandFailure(3251,"Dieser native Tabellenbefehl ist noch nicht implementiert.");
 }
 
+QVariantMap MainWindow::setDatabaseWindowState(const QString& command) {
+    if(!db_.isOpen()) return tableCommandFailure(3420,"Projekt ist geschlossen.");
+    if(auto* modal=QApplication::activeModalWidget()) return tableCommandFailure(modal->objectName()=="native-module-editor" ? 3251 : 2046,"Fensterbefehl ist in diesem modalen Entwurf nicht verfügbar.");
+    if(queryExecutionDepth_ || datasheetOutputActive_ || activePreviewDocument() || !AccessFormPreview::databaseWindowActive(this)) return tableCommandFailure(2046,"Kein aktives natives Datenbankfenster.");
+    const QPointer<MainWindow> alive=this;
+    if(command=="maximize") showMaximized();else if(command=="minimize") showMinimized();else if(command=="restore") showNormal();else return tableCommandFailure(5,"Ungültiger Fensterbefehl.");
+    if(!alive || !db_.isOpen()) return tableCommandFailure(2501,"Projekt wurde während des Fensterbefehls geschlossen.");return {{"handled",true},{"error",0}};
+}
+
 void MainWindow::installDatasheetFilter(QWidget* rawPage,QBoxLayout* layout) {
     auto* row=new QHBoxLayout;auto* button=addButton(row,"Filter…");button->setObjectName("native-datasheet-filter-open");row->addStretch();layout->addLayout(row);
     const QPointer<QWidget> page=rawPage;connect(button,&QPushButton::clicked,rawPage,[this,page] {

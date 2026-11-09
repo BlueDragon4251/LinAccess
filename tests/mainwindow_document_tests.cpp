@@ -4154,10 +4154,7 @@ End Sub
     testStandaloneDocumentOpening(window,db);
     testMacroArgumentPresence(window,db);
     testNativeMacroSetValue(window,db);
-    testNativeRepaintObject(window,db);
-    testNativeSetValueDoubleEvaluation(window,db);
-    testNativeFormRecordFields(window,db);
-    testNativeProjectFilters(window,db);
+    testNativeProjectGuiExtensions(window,db);
     testNativeAutoExec(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

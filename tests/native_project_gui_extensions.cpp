@@ -145,3 +145,34 @@ End)FORM";
     auto reportSource=formSource;reportSource.replace("Begin Form","Begin Report");reportSource.replace("RecordSource =\"filter_rows\"","RecordSource =\"filter_rows\"\nOnOpen =\"[Event Procedure]\"");AccessFormPreview report("FilterReport",reportSource,"Private Sub Report_Open(Cancel As Integer)\nDoCmd.ApplyFilter WhereCondition:=\"id=2\"\nEnd Sub",db,&window);assert(report.eventResult("OnOpen") && report.eventResult("OnOpen")->status==linaccess::VbaExecutionStatus::Completed);auto reportRoot=makePreviewFormObject(report);assert(reportRoot->member("FilterOn",{}).boolean && reportRoot->objectItem("Value").object->scalarValue().number==20);report.show();QApplication::processEvents();auto reportCommands=makePreviewApplicationObject(report)->member("DoCmd",{}).object;int reportError=0;try {reportCommands->member("ApplyFilter",{VbaValue::missing(),VbaValue::string("id=1")});}catch(const linaccess::VbaRuntimeError& result) {reportError=result.number;}assert(reportError==2046 && reportRoot->objectItem("Value").object->scalarValue().number==20);assert(report.close());
     window.focusDatabaseWindow();int error=0;try {commands->member("ShowAllRecords",{});}catch(const linaccess::VbaRuntimeError& result) {error=result.number;}assert(error==2046);
 }
+
+void testNativeWindowStateCommands(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE native_window_rows(id INTEGER PRIMARY KEY,n INTEGER)"));assert(sql.exec("INSERT INTO native_window_rows VALUES(1,10)"));
+    const auto macro=[&](const QString& name,const QStringList& commands) {QJsonArray actions;for(const auto& command:commands) actions.append(QJsonObject{{"action",command},{"arguments",QJsonArray{}}});linaccess::storeNativeMacro(db,name,{{"version",1},{"actions",actions}});};macro("NativeWindowSequence",{"Maximize","Minimize","Restore"});macro("NativeWindowMaxRestore",{"Maximize","Restore"});
+    class StateProbe final:public QObject {public:QVector<Qt::WindowStates> states;bool saw(Qt::WindowState flag) const {for(const auto flags:states) if(flag==Qt::WindowNoState ? flags==Qt::WindowNoState : flags.testFlag(flag)) return true;return false;}bool eventFilter(QObject* watched,QEvent* event) override {if(event->type()==QEvent::WindowStateChange) if(auto* widget=qobject_cast<QWidget*>(watched)) states.append(widget->windowState() & (Qt::WindowMaximized|Qt::WindowMinimized));return false;}};
+    linaccess::NativeStandardModuleHost host(&window,db,[] {});auto commands=host.applicationObject()->member("DoCmd",{}).object;commands->member("OpenTable",{VbaValue::string("native_window_rows")});window.showNormal();QApplication::processEvents();auto* page=window.findChild<QTabWidget*>()->currentWidget();auto* view=page->findChild<QTableView*>();auto* model=qobject_cast<linaccess::AccessTableModel*>(view->model());assert(model && model->setData(model->index(0,model->fieldIndex("n")),77));
+    const auto execution=linaccess::executeVbaProcedure("Public Sub NativeMaximize()\nDoCmd.Maximize\nEnd Sub","NativeMaximize",host);assert(execution.status==linaccess::VbaExecutionStatus::Completed && window.isMaximized());commands->member("Minimize",{});assert(window.isMinimized());commands->member("Restore",{});assert(!window.isMaximized() && !window.isMinimized());StateProbe rootStates;window.installEventFilter(&rootStates);commands->member("RunMacro",{VbaValue::string("NativeWindowSequence")});window.removeEventFilter(&rootStates);assert(rootStates.saw(Qt::WindowMaximized) && rootStates.saw(Qt::WindowMinimized) && rootStates.saw(Qt::WindowNoState));assert(model->isDirty() && model->record(0).value("n").toInt()==77);assert(sql.exec("SELECT n FROM native_window_rows") && sql.next() && sql.value(0).toInt()==10);sql.finish();int error=0;try {commands->member("Maximize",{VbaValue::integer(1)});}catch(const linaccess::VbaRuntimeError& result) {error=result.number;}assert(error==450);model->revertAll();commands->member("Close",{VbaValue::integer(0),VbaValue::string("native_window_rows")});
+    const QByteArray source=R"FORM(Begin Form
+RecordSource ="native_window_rows"
+Width =2400
+Begin Section
+Height =500
+Begin TextBox
+Name ="Value"
+ControlSource ="n"
+Width =1800
+Height =300
+End
+End
+End)FORM";
+    AccessFormPreview form("NativeWindowForm",source,{},db,&window);form.show();QApplication::processEvents();auto root=makePreviewFormObject(form);root->objectItem("Value").object->assign("Value",VbaValue::integer(55));commands->member("Maximize",{});assert(form.isMaximized() && !window.isMaximized());commands->member("Minimize",{});assert(form.isMinimized());commands->member("SelectObject",{VbaValue::integer(2),VbaValue::string("NativeWindowForm"),VbaValue::logical(false)});commands->member("Restore",{});assert(!form.isMinimized() && !form.isMaximized());StateProbe formStates;form.installEventFilter(&formStates);makePreviewApplicationObject(form)->member("DoCmd",{}).object->member("RunMacro",{VbaValue::string("NativeWindowMaxRestore")});form.removeEventFilter(&formStates);assert(formStates.saw(Qt::WindowMaximized) && formStates.saw(Qt::WindowNoState));assert(root->member("Dirty",{}).boolean && root->objectItem("Value").object->scalarValue().number==55);assert(sql.exec("SELECT n FROM native_window_rows") && sql.next() && sql.value(0).toInt()==10);sql.finish();root->member("Undo",{});assert(form.close());
+    QTimer::singleShot(0,&window,[&] {auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor && editor->objectName()=="native-module-editor");auto* text=editor->findChild<QPlainTextEdit*>("native-module-source");text->setPlainText("Public Sub NativeWindowDraft()\nEnd Sub");const auto draft=text->toPlainText();int failure=0;try {commands->member("Maximize",{});}catch(const linaccess::VbaRuntimeError& result) {failure=result.number;}assert(failure==3251 && editor->isWindowModified() && text->toPlainText()==draft);editor->reject();});action(window,"+ Modul")->trigger();window.showNormal();
+}
+
+void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
+    testNativeRepaintObject(window,db);
+    testNativeSetValueDoubleEvaluation(window,db);
+    testNativeFormRecordFields(window,db);
+    testNativeProjectFilters(window,db);
+    testNativeWindowStateCommands(window,db);
+}

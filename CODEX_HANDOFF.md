@@ -4062,3 +4062,24 @@ Parameter-/Abfrage-/Makro-/Form-/Report-Open-Prüfungen, kein neues CTest-Ziel.
 Keine Gesamtsuite/Windows-Beobachtung/neue Paketprüfung; DEB073c20a, Original
 zuletzt073c20a1/1 (124,97s), erwartetes F129/3075 unverändert offen.
 F080/F056/F052/F088/F087 und456/384/72 unverändert.
+
+
+## Fortschreibung 2026-11-09: echte Fensterbefehle und kürzere Änderungswege
+Standardmodule/Makros unterstützen Maximize/Minimize/Restore ohne Ersatzform/Me.
+Tatsächliche aktive Form/Report delegiert bestehende native Befehle, Tabellen/
+Abfragen/Explorer adressieren echtes Projektfenster. Spezialisierter VBA-
+Maximize-Statementpfad überschreibt tatsächliche Host-API; Minimize/Restore
+laufen über DoCmd, dafür existieren keine virtuellen Hostmethoden. Modulfenster
+3251, andere modale Entwürfe2046; keine implizite Speicherung/Entwurfsverwerfung.
+Makroparser/Katalog/Loader einmalig als native_macro.cpp in bestehendem Daten-
+Staticlib statt Headerdefinitionen; kleinere GUI-Erweiterungsdatei erhält festen
+Einstiegspunkt. Keine neue DSO/GUI-Abhängigkeit des Datenlayers/CTest-ID.
+App gebaut; abschließende GUI1/1 (8,69s), Layout1/1 (11,29s) bestanden. Gezielte
+Prüffallkorrektur berücksichtigt Qt-Kombination minimiert+zuvor maximiert statt
+fälschlich exklusive Statusflags zu verlangen. Reale Fensterzustandsereignisse,
+Statement/Makros, unveränderte SQL-/Cache-/Formwerte, extra450, tatsächlicher
+Moduleditor mit erhaltenem Entwurf. NATIVE_WINDOW_STATE_RUNTIME.md.
+Volle Access-MDI-/Popup-/Geometrie-/Windows-Ereignisparität bleibt offen. Keine
+Gesamtsuite/Windows-Beobachtung/neue Paketprüfung; DEB073c20a, Originalzuletzt
+073c20a1/1 (124,97s), erwartetes F129/3075 offen. F052/F088/F135 und456/384/72
+unverändert. Direkt weiter mit zusammenhängenden Makro-Bedingungsblöcken.

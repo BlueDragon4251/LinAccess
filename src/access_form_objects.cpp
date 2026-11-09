@@ -2045,3 +2045,12 @@ linaccess::VbaValue nativeProjectApplyFilter(QSqlDatabase database,QWidget* owne
     QWidget* project=nullptr;for(auto* widget=owner;widget;widget=widget->parentWidget()) if(qobject_cast<QMainWindow*>(widget)) {project=widget;break;}
     QVariantMap result;if(!project || project->metaObject()->indexOfMethod("filterDatasheet(QString,bool)")<0 || !QMetaObject::invokeMethod(project,"filterDatasheet",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QString,criteria),Q_ARG(bool,clear))) throw VbaRuntimeError(2046,"No actual native filter context");if(const int error=result.value("error").toInt()) throw VbaRuntimeError(error,result.value("description").toString().toStdString());guard();return VbaValue::empty();
 }
+
+linaccess::VbaValue nativeProjectWindowState(QSqlDatabase database,QWidget* owner,const QString& command) {
+    using linaccess::VbaValue;using linaccess::VbaRuntimeError;auto guard=nativeDocumentProjectGuard(database,owner);guard();if(command!="maximize" && command!="minimize" && command!="restore") throw VbaRuntimeError(5,"Invalid window command");
+    enterNativeUiExecution();const auto leave=qScopeGuard([] {leaveNativeUiExecution();});QPointer<AccessFormPreview> selected;for(const auto& document:nativeLoadedProjectDocuments(database,owner)) if(document && document==activePreviewDocument()) selected=document;
+    if(auto* modal=QApplication::activeModalWidget();modal && modal!=selected) throw VbaRuntimeError(modal->objectName()=="native-module-editor" ? 3251 : 2046,"Window command is unavailable in this modal context");
+    if(selected) {const auto result=dispatchPreviewDocumentCommand(*selected,command.toStdString(),{});guard();return result;}
+    QWidget* project=nullptr;for(auto* widget=owner;widget;widget=widget->parentWidget()) if(qobject_cast<QMainWindow*>(widget)) {project=widget;break;}
+    QVariantMap result;if(!project || project->metaObject()->indexOfMethod("setDatabaseWindowState(QString)")<0 || !QMetaObject::invokeMethod(project,"setDatabaseWindowState",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QString,command))) throw VbaRuntimeError(2046,"Native window context is unavailable");if(const int error=result.value("error").toInt()) throw VbaRuntimeError(error,result.value("description").toString().toStdString());guard();return VbaValue::empty();
+}

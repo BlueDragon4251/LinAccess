@@ -17,3 +17,5 @@ void openNativeProjectDocument(QSqlDatabase,QWidget*,linaccess::AccessDocumentKi
 linaccess::VbaValue nativeProjectRepaintObject(QSqlDatabase,QWidget*,const std::vector<linaccess::VbaValue>&,AccessFormPreview* caller=nullptr);
 
 linaccess::VbaValue nativeProjectApplyFilter(QSqlDatabase,QWidget*,const std::vector<linaccess::VbaValue>&,bool clear,AccessFormPreview* caller=nullptr);
+
+linaccess::VbaValue nativeProjectWindowState(QSqlDatabase,QWidget*,const QString& command);

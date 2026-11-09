@@ -17,6 +17,7 @@ public:
     std::optional<std::string> field(std::string_view) override;
     void setField(std::string_view,std::optional<std::string>) override;
     void saveRecord() override;
+    void maximizeForm() override;
     int compareStrings(std::string_view,std::string_view,VbaCompareMode) override;
     bool isNumericText(std::string_view) override;
     VbaValue formatValue(const VbaValue&,std::string_view,bool) override;

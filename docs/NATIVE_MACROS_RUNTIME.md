@@ -559,3 +559,9 @@ Native ApplyFilter/ShowAllRecords and actual datasheet filter dialogs now share
 the checked document controller. See [DATASHEET_FILTER_RUNTIME.md](DATASHEET_FILTER_RUNTIME.md).
 Existing mainwindow_documents8.62s and access_2003_layouts11.77s pass; saved named
 filters, complete events/locale/persistence and the Access oracle remain open.
+
+
+Native Maximize/Minimize/Restore macro actions and standard-module commands now
+address actual checked windows. See [NATIVE_WINDOW_STATE_RUNTIME.md](NATIVE_WINDOW_STATE_RUNTIME.md).
+Macro parsing/catalog loading compiles once in the existing data static library;
+existing GUI/layout checks pass8.69s/11.29s. Full Access MDI semantics remain open.

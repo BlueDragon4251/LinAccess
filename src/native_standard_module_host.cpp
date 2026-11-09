@@ -47,6 +47,7 @@ void NativeStandardModuleHost::leaveModule() noexcept {leaveNativeUiExecution();
 std::optional<std::string> NativeStandardModuleHost::field(std::string_view){throw VbaRuntimeError(438,"Me requires a real form instance");}
 void NativeStandardModuleHost::setField(std::string_view,std::optional<std::string>){throw VbaRuntimeError(438,"Me requires a real form instance");}
 void NativeStandardModuleHost::saveRecord(){throw VbaRuntimeError(3251,"Module editor has no current record");}
+void NativeStandardModuleHost::maximizeForm(){check();(void)nativeProjectWindowState(db_,owner_,"maximize");check();}
 int NativeStandardModuleHost::compareStrings(std::string_view a,std::string_view b,VbaCompareMode mode){
         if(mode==VbaCompareMode::Binary) return VbaHost::compareStrings(a,b,mode);
         return QString::compare(QString::fromUtf8(a.data(),a.size()),QString::fromUtf8(b.data(),b.size()),Qt::CaseInsensitive);
@@ -99,7 +100,7 @@ public:
         if(key=="findrecord") return VbaArgumentSignature{{"FindWhat","Match","MatchCase","Search","SearchAsFormatted","OnlyCurrentField","FindFirst"},1};
         if(key=="repaintobject") return VbaArgumentSignature{{"ObjectType","ObjectName"},0};
         if(key=="applyfilter") return VbaArgumentSignature{{"FilterName","WhereCondition"},0};
-        if(key=="showallrecords") return VbaArgumentSignature{{},0};
+        if(key=="showallrecords" || key=="maximize" || key=="minimize" || key=="restore") return VbaArgumentSignature{{},0};
         if(key=="gotorecord") return VbaArgumentSignature{{"ObjectType","ObjectName","Record","Offset"},0};
         if(key=="openform") return VbaArgumentSignature{{"FormName","View","FilterName","WhereCondition","DataMode","WindowMode","OpenArgs"},1};
         if(key=="openreport") return VbaArgumentSignature{{"ReportName","View","FilterName","WhereCondition","WindowMode","OpenArgs"},1};
@@ -126,6 +127,7 @@ public:
         std::vector<VbaValue> values;for(const auto& argument:args) {values.push_back(scalarVbaValue(argument));host.check();}
         const auto number=[&](std::size_t index,int fallback) {return index>=values.size() || values[index].kind==VbaValue::Kind::Missing ? fallback : static_cast<int>(coerceVbaModuleValue(values[index],"long").number);};
         const auto target=[&] {if(values.empty() || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Object name is required");return QString::fromStdString(coerceVbaModuleValue(values[0],"string").asText());};
+        if(key=="maximize" || key=="minimize" || key=="restore") {if(!values.empty()) throw VbaRuntimeError(450,"Window command takes no arguments");auto result=nativeProjectWindowState(db_,owner_,key);host.check();return result;}
         if(key=="applyfilter" || key=="showallrecords") {auto result=nativeProjectApplyFilter(db_,owner_,values,key=="showallrecords");host.check();return result;}
         if(key=="repaintobject") {auto result=nativeProjectRepaintObject(db_,owner_,values);host.check();return result;}
         if(key=="hourglass") {
