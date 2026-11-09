@@ -401,6 +401,33 @@ End Function
     }
 
     {
+        assert(sql.exec("CREATE TABLE current_save(id INTEGER PRIMARY KEY AUTOINCREMENT,n INTEGER CHECK(n>=0),note TEXT,payload BLOB)"));
+        assert(sql.exec("INSERT INTO current_save VALUES(1,10,NULL,x''),(2,20,'original',x'01'),(3,30,NULL,NULL)"));
+        linaccess::AccessTableModel current(nullptr,db);current.setTable("current_save");current.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(current.select());
+        assert(current.setData(current.index(0,1),11) && current.setData(current.index(1,2),"other"));
+        assert(current.insertRow(1) && current.setData(current.index(1,1),40) && current.removeRow(3));
+        assert(current.submitExistingRecord(0) && !current.hasPendingRecord(0) && current.rowCount()==4 && current.hasPendingRecord(1) && current.hasPendingRecord(2) && current.hasPendingRecord(3));
+        assert(current.data(current.index(1,1),Qt::EditRole).toInt()==40 && current.data(current.index(2,2),Qt::EditRole).toString()=="other" && current.data(current.index(0,3),Qt::EditRole).toByteArray().isEmpty() && !current.data(current.index(0,3),Qt::EditRole).isNull());
+        assert(sql.exec("SELECT COUNT(*),SUM(n),MIN(note) FROM current_save") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==61 && sql.value(2).toString()=="original");sql.finish();
+        assert(current.setData(current.index(0,1),-1) && !current.submitExistingRecord(0) && current.hasPendingRecord(0) && current.hasPendingRecord(2));
+        assert(sql.exec("SELECT n FROM current_save WHERE id=1") && sql.next() && sql.value(0).toInt()==11);sql.finish();
+        assert(!current.submitExistingRecord(1) && !current.submitExistingRecord(3));
+        assert(current.setData(current.index(0,1),12) && current.submitExistingRecord(0) && current.submitTransactionally());
+        assert(sql.exec("SELECT COUNT(*),SUM(n),MAX(note) FROM current_save") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==72 && sql.value(2).toString()=="other");sql.finish();
+        assert(!current.setData(current.index(0,0),100));
+        current.revertAll();assert(current.select());
+        assert(sql.exec("CREATE TRIGGER current_save_rekey AFTER UPDATE OF n ON current_save WHEN NEW.n=99 BEGIN UPDATE current_save SET id=101 WHERE id=NEW.id; END"));
+        assert(current.setData(current.index(0,1),99) && current.setData(current.index(1,1),22) && !current.submitExistingRecord(0));
+        assert(current.hasPendingRecord(0) && current.hasPendingRecord(1) && sql.exec("SELECT n FROM current_save WHERE id=1") && sql.next() && sql.value(0).toInt()==12);sql.finish();
+        assert(sql.exec("SELECT COUNT(*) FROM current_save WHERE id=101") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+        current.revertAll();
+        assert(sql.exec("CREATE TABLE current_key(id TEXT PRIMARY KEY NOT NULL,n INTEGER)"));assert(sql.exec("INSERT INTO current_key VALUES('a',1),('b',2)"));
+        linaccess::AccessTableModel keys(nullptr,db);keys.setTable("current_key");keys.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(keys.select());
+        assert(keys.setData(keys.index(0,0),"c") && keys.setData(keys.index(1,1),3) && !keys.submitExistingRecord(0) && keys.isDirty());
+        assert(sql.exec("SELECT COUNT(*) FROM current_key WHERE id='c'") && sql.next() && sql.value(0).toInt()==0);sql.finish();keys.revertAll();
+    }
+
+    {
         assert(sql.exec("CREATE TABLE query_clip_source(n INTEGER,note TEXT,payload BLOB)"));
         assert(sql.exec("INSERT INTO query_clip_source VALUES(9223372036854775806,NULL,x'0001ff80'),(-9223372036854775807,'',x'')"));
         assert(sql.exec("CREATE TABLE query_clip_target(id INTEGER PRIMARY KEY AUTOINCREMENT,payload BLOB,n INTEGER,note TEXT,extra TEXT DEFAULT 'default')"));

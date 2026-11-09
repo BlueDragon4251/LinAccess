@@ -152,6 +152,53 @@ bool AccessTableModel::canSubmitCurrentRecordAlone(int row,bool allowInsert) con
         for(int column=0;column<columnCount();++column) if(isDirty(index(candidate,column))) return false;
     return true;
 }
+bool AccessTableModel::submitExistingRecord(int row) {
+    if(saving_ || changing_) return reject(2501);
+    if(readOnly_) return reject(2448);
+    if(metadataError_) return reject(metadataError_);
+    if(editStrategy()!=OnManualSubmit || row<0 || row>=rowCount() || deletedRows_.contains(row)
+        || !indexInQuery(index(row,0)).isValid() || primaryKey().isEmpty()) return reject(3251);
+    if(!hasPendingRecord(row)) {setLastError({});return true;}
+    const auto primary=primaryValues(row);
+    for(int field=0;field<primary.count();++field) {
+        const int column=fieldIndex(primary.fieldName(field));
+        if(column<0 || primary.value(field).isNull() || isDirty(index(row,column))) return reject(3251);
+    }
+    auto values=record(row);
+    for(int column=0;column<values.count();++column) {
+        const bool generated=values.isGenerated(column);
+        values.setValue(column,QSqlTableModel::data(index(row,column),Qt::EditRole));values.setGenerated(column,generated);
+    }
+    int counterError=0;
+    {
+        const QScopedValueRollback<bool> saving(saving_,true);
+        auto db=database();AccessCounterSqlScope counters(db);
+        if(!db.transaction()) {setLastError(db.lastError());return false;}
+        if(!updateRowInTable(row,values)) {const auto problem=lastError();db.rollback();setLastError(problem);return false;}
+        // Refresh after commit must still address this original key. Reject
+        // disappeared/trigger-rekeyed records before retiring any cached edit.
+        QStringList predicates;QSqlQuery check(db);
+        for(int field=0;field<primary.count();++field) predicates.push_back(db.driver()->escapeIdentifier(primary.fieldName(field),QSqlDriver::FieldName)+"=?");
+        check.prepare("SELECT 1 FROM "+db.driver()->escapeIdentifier(tableName(),QSqlDriver::TableName)+" WHERE "+predicates.join(" AND "));
+        for(int field=0;field<primary.count();++field) check.addBindValue(primary.value(field));
+        if(!check.exec()) {const auto problem=check.lastError();db.rollback();setLastError(problem);return false;}
+        if(!check.next()) {check.finish();db.rollback();return reject(3251);}check.finish();
+        if(!db.commit()) {const auto problem=db.lastError();db.rollback();setLastError(problem);return false;}
+        try {counters.complete(true);} catch(const VbaRuntimeError& error) {counterError=error.number;}
+    }
+    blockHistory_.reset();submittedKeys_.clear();
+    // Qt selectRow replaces only this cache record. No reselect/reordering or
+    // restoration of unrelated update/insert/delete drafts is necessary.
+    const bool refreshed=QSqlTableModel::selectRow(row);
+    if(!refreshed) QSqlTableModel::revertRow(row); // Never retry a committed write.
+    dirtyRows_.remove(row);deletedRows_.remove(row);
+    if(!refreshed || counterError) {
+        const auto problem=lastError();
+        setLastError(QSqlError("LinAccess",QStringLiteral("Datensatz gespeichert; die Ansicht konnte nicht vollständig aktualisiert werden. ")+problem.text(),QSqlError::StatementError,counterError ? QString::number(counterError) : QStringLiteral("3146")));
+        return false;
+    }
+    setLastError({});return true;
+}
 bool AccessTableModel::submitTransactionally() {
     submittedKeys_.clear();
     if(saving_ || changing_) return reject(2501);

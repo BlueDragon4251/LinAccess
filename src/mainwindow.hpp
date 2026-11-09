@@ -60,7 +60,7 @@ private:
     QWidget* findOpenTable(const QString& name) const;
     QWidget* findOpenQuery(const QString& name) const;
     QVariantMap loadQueryDocument(const QString& name,int view,int mode,QWidget* refresh);
-    QVariantMap saveDataPage(QWidget* page,bool interactive);
+    QVariantMap saveDataPage(QWidget* page,bool interactive,bool currentOnly=false);
     QVariantMap closeTableDataPage(QWidget* page);
     QVariantMap requeryTableDataPage(QWidget* page);
 

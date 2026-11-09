@@ -514,7 +514,7 @@ bool MainWindow::finishActiveDataEditors() {
     return true;
 }
 
-QVariantMap MainWindow::saveDataPage(QWidget* page,bool interactive) {
+QVariantMap MainWindow::saveDataPage(QWidget* page,bool interactive,bool currentOnly) {
     QPointer<MainWindow> self=this;
     QPointer<linaccess::AccessTableView> table;
     if(page) for(auto* candidate:page->findChildren<QTableView*>()) if(auto* view=dynamic_cast<linaccess::AccessTableView*>(candidate)) { table=view; break; }
@@ -527,6 +527,10 @@ QVariantMap MainWindow::saveDataPage(QWidget* page,bool interactive) {
     const auto sourceError=validateEditableQuerySource(page,model);
     if(!sourceError.isEmpty()) return sourceError;
     const auto selected=table->currentIndex();
+    if(currentOnly && !model->canSubmitCurrentRecordAlone(selected.row(),true)) {
+        if(!model->submitExistingRecord(selected.row())) return failure(3146);
+        return {{"handled",true},{"error",0}};
+    }
     const auto primary=model->primaryKey();
     QMap<QString,QVariant> selectedKey;
     if(selected.isValid() && primary.count()) {
@@ -1051,11 +1055,9 @@ QVariantMap MainWindow::navigateTableDocument(const QString& name,int action,int
     if(!table->finishEditing()) return tableModelFailure(model,2501);
     if(!self || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde während der Validierung geschlossen.");
     // A clean current record can move without writing unrelated drafts. Save
-    // only a sole current existing/populated inserted record before leaving it.
+    // only the current existing record, or a sole populated inserted record.
     if(model->isDirty() && model->hasPendingRecord(table->currentIndex().row())) {
-        if(!model->canSubmitCurrentRecordAlone(table->currentIndex().row(),true))
-            return tableCommandFailure(3251,"Navigation mit mehreren Tabellenentwürfen oder neuen/gelöschten Zeilen ist noch nicht implementiert.");
-        const auto saved=saveDataPage(page,false);
+        const auto saved=saveDataPage(page,false,true);
         if(saved.value("error").toInt()) return saved;
         if(!self || !page || !table || !model) return tableCommandFailure(2501,"Tabellendokument wurde beim Speichern geschlossen.");
     }
@@ -2038,8 +2040,7 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
             return model ? model->rejectEdit(2501,"Tabellenaktivierung wurde vor der Suche abgebrochen.") : false;
         if(!self || !page || !table || !model) return false;
         if(!model->isDirty() || !model->hasPendingRecord(table->currentIndex().row())) return true;
-        if(!model->canSubmitCurrentRecordAlone(table->currentIndex().row())) return model->rejectEdit(3251,"Suche mit weiteren Tabellenentwürfen ist noch nicht implementiert.");
-        const auto saved=self->saveDataPage(page,false);
+        const auto saved=self->saveDataPage(page,false,true);
         if(const int error=saved.value("error").toInt()) {
             if(model) return model->rejectEdit(error,saved.value("description").toString());
             return false;

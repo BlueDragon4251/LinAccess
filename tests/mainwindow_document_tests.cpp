@@ -1941,10 +1941,13 @@ End Sub
     assert(navigationModel->index(0,1).data(Qt::EditRole).toString()=="navigation-saved" && navigationModel->index(1,1).data(Qt::EditRole).toString()=="other-draft");
     navigationView->setCurrentIndex(navigationModel->index(0,1));
 
-    assert(mixed->executeProcedure("LastTableRecord",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==0 && navigationModel->isDirty());
+    assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==299 && navigationModel->isDirty());
+    assert(!navigationModel->hasPendingRecord(0) && navigationModel->hasPendingRecord(1) && navigationModel->index(1,1).data(Qt::EditRole).toString()=="other-draft");
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=2") && unchanged.next() && unchanged.value(0).toString()=="row-2");unchanged.finish();
+    navigationView->setCurrentIndex(navigationModel->index(0,1));
     assert(mixed->executeProcedure("SortTableDescending",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==0 && navigationModel->isDirty());
     assert(mixed->executeProcedure("RequeryActiveTable",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==0 && navigationModel->isDirty());
-    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="row-1"); unchanged.finish();
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=1") && unchanged.next() && unchanged.value(0).toString()=="navigation-saved"); unchanged.finish();
     assert(mixed->executeProcedure("SaveActiveTable",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(mixed->executeProcedure("LastTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==299);
     navigationView->setCurrentIndex(navigationModel->index(299,0));
@@ -2013,10 +2016,11 @@ End Sub
     assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=290") && unchanged.next() && unchanged.value(0).toString()=="find-saved"); unchanged.finish();
     assert(navigationModel->setData(navigationModel->index(279,1),"pending-current") && navigationModel->setData(navigationModel->index(278,1),"pending-other"));
     findText->setText("row-270"); findNext->click();
-    assert(navigationView->currentIndex().row()==279 && navigationModel->isDirty() && navigationModel->lastError().nativeErrorCode()=="3251");
-    assert(mixed->executeProcedure("RepeatTableFind",selectArguments).errorNumber==3251);
-    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=280") && unchanged.next() && unchanged.value(0).toString()=="row-280"); unchanged.finish();
-    navigationModel->revertAll(); assert(navigationModel->setReadOnly(true));
+    assert(navigationView->currentIndex().row()==269 && navigationModel->isDirty() && !navigationModel->hasPendingRecord(279) && navigationModel->hasPendingRecord(278));
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=280") && unchanged.next() && unchanged.value(0).toString()=="pending-current");unchanged.finish();
+    assert(unchanged.exec("SELECT value FROM command_navigation WHERE id=279") && unchanged.next() && unchanged.value(0).toString()=="row-279");unchanged.finish();
+    assert(unchanged.exec("UPDATE command_navigation SET value='row-280' WHERE id=280"));
+    navigationModel->revertAll();assert(navigationModel->select()); assert(navigationModel->setReadOnly(true));
     findText->setText("row-280"); findNext->click(); assert(navigationView->currentIndex().row()==279 && navigationModel->isReadOnly() && !navigationModel->isDirty());
     assert(navigationModel->setReadOnly(false));
     tableFind->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QApplication::processEvents(); assert(!tableFind);

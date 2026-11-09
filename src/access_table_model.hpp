@@ -18,6 +18,7 @@ public:
     bool insertRows(int row,int count,const QModelIndex& parent={}) override;
     bool removeRows(int row,int count,const QModelIndex& parent={}) override;
     bool submitTransactionally();
+    bool submitExistingRecord(int row);
     bool replaceAllWholeText(int column,const QString& search,const QString& replacement,Qt::CaseSensitivity sensitivity,int* count);
     bool replaceAllLiteralText(int column,const QString& search,const QString& replacement,int mode,Qt::CaseSensitivity sensitivity,int* count);
     bool hasPendingRecord(int row) const;

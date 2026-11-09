@@ -6674,3 +6674,20 @@ Undo/Redo/Save und vollständige Verweigerung großer Currency→REAL ohne Entwu
 SQL-Änderung. Fehlendes QMimeData-Include beim Build gezielt korrigiert. Keine neue
 CTest-ID/Windows-Beobachtung. TYPED_GRID_CLIPBOARD.md; F340/F168/F173/F014 und
 456/384/72 unverändert. Direkt weiterimplementieren.
+
+
+Bestehende aktuelle Tabellenzeilen können bei Navigation/Find jetzt einzeln
+transaktional gespeichert werden, während andere Update-/Insert-/Delete-Entwürfe
+im Qt-Cache unverändert bleiben. Bei mehreren Entwürfen sind geänderte/NULL-
+Primärschlüssel und neue/gelöschte aktuelle Zeilen weiter verweigert; alleinige
+populierte Inserts behalten den bisherigen Save-/Key-Pfad. Nach Commit aktualisiert
+Qt selectRow nur die gespeicherte Zeile; Cache-Undo wird an der SQL-Grenze ungültig.
+Vor Commit verschwundene/trigger-umgeschlüsselte Schlüssel führen zum Rollback.
+GUI/Feld gemeinsam2/2 (6,21s), App gebaut: echte VBA-Navigation/Find, andere Entwürfe
+und unveränderte Fremdzeilen, gemischte Update/Insert/Delete-Caches, Constraint-
+Rollback und Trigger-Rekey-Rollback geprüft. Veraltete Find-Negativannahme und
+Testversuch, ein geschütztes AutoWertfeld zu bearbeiten, gezielt korrigiert;
+manuelles Text-PK separat geprüft. Uploads3/3/Fixtures4/4 hashgleich. Keine neue
+CTest-ID/Windows-Beobachtung. TABLE_NAVIGATION_DRAFTS.md; vollständige aktuelle
+Insert/Delete-/Fokus-/Ereignis-/Addition-Row-Parität bleibt offen. F368/F168/F080 und
+456/384/72 unverändert. Direkt weiter.
