@@ -84,6 +84,37 @@ End Function
         const auto years=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery("TRANSFORM Count(stamp) SELECT row_key FROM cross_dates GROUP BY row_key PIVOT Year(stamp) IN (2003,2004);"),{});assert(years.rows[0][1].toInt()==1 && years.rows[0][2].toInt()==1);
         auto saved=database->member("CreateQueryDef",{VbaValue::string("fixed_cross_probe"),VbaValue::string(source.toStdString())}).object;
         rows=open("fixed_cross_probe");assert(rows->member("RecordCount",{}).number==3);rows->member("Close",{});
+        assert(sql.exec("CREATE TABLE cross_extrema(row_key INTEGER4,category TEXT,amount CURRENCY_REAL,quantity INTEGER2,stamp DATETIME)"));
+        assert(sql.exec("INSERT INTO cross_extrema VALUES(1,'A',0.2,7,'2003-12-31 18:05:06'),(1,'A',-0.3,-2,'2003-01-01 00:00:00'),(1,'B',NULL,NULL,NULL),(2,'B',0.1,4,'2004-02-29 00:00:00')"));
+        const QString extrema="TRANSFORM Min(c.amount) SELECT c.row_key FROM cross_extrema AS c GROUP BY c.row_key ORDER BY c.row_key PIVOT c.category IN ('A','B','missing')";
+        for(const auto* function:{"Min","Max"}) {
+            const auto query=QString(extrema).replace("Min(",QString(function)+'(');
+            const auto minimum=QString(function)=="Min";
+            const auto values=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(query),{});
+            assert(values.rows.size()==2 && values.types.value("a")=="CURRENCY_REAL" && values.rows[0][1].toDouble()==(minimum ? -0.3 : 0.2));
+            assert(values.rows[0][2].isNull() && values.rows[0][3].isNull() && values.rows[1][1].isNull() && values.rows[1][2].toDouble()==0.1);
+            rows=open(query.toStdString());auto amount=rows->member("Fields",{VbaValue::string("A")}).object;
+            assert(amount->member("Type",{}).number==5 && amount->member("Value",{}).kind==VbaValue::Kind::Currency && amount->member("Value",{}).currencyUnits==(minimum ? -3000 : 2000));rows->member("Close",{});
+            const auto integers=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(QString(query).replace("c.amount","c.quantity")),{});
+            assert(integers.types.value("a")=="INTEGER2" && integers.rows[0][1].toInt()==(minimum ? -2 : 7));
+            const auto dates=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(QString(query).replace("c.amount","c.stamp")),{});
+            assert(dates.types.value("a")=="DATETIME" && dates.rows[0][1].toString()==(minimum ? "2003-01-01 00:00:00" : "2003-12-31 18:05:06"));
+        }
+        auto extremumDefinition=database->member("CreateQueryDef",{VbaValue::string("fixed_extrema"),VbaValue::string(extrema.toStdString())}).object;
+        assert(extremumDefinition->member("Type",{}).number==16);
+        rows=open("fixed_extrema");assert(rows->member("Fields",{VbaValue::string("A")}).object->member("Type",{}).number==5);rows->member("Close",{});
+        const auto filteredExtrema="PARAMETERS wanted LONG; "+QString(extrema).replace("GROUP BY","WHERE c.row_key=[wanted] GROUP BY");
+        auto parameterExtrema=database->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string(filteredExtrema.toStdString())}).object;
+        parameterExtrema->member("Parameters",{VbaValue::string("wanted")}).object->assign("Value",VbaValue::numeric(2));
+        rows=parameterExtrema->member("OpenRecordset",{}).object;assert(rows->member("RecordCount",{}).number==1);rows->member("Close",{});
+        for(const auto& unsupported:QStringList{QString(extrema).replace("c.amount","c.category"),QString(extrema).replace("c.amount","c.absent"),QString(extrema).replace("cross_extrema AS c","fixed_cross_probe AS c")}) {
+            int refused=0;try {(void)linaccess::accessQueryColumns(db,linaccess::compileAccessQuery(unsupported));}catch(const linaccess::VbaRuntimeError& error){refused=error.number;}assert(refused==3251);
+        }
+        const auto emptyExtrema=linaccess::executeAccessQueryPlan(db,linaccess::compileAccessQuery(QString(extrema).replace("GROUP BY","WHERE c.row_key=99 GROUP BY")),{});
+        assert(emptyExtrema.rows.isEmpty() && emptyExtrema.types.value("a")=="CURRENCY_REAL");
+        assert(sql.exec("CREATE TEMP TABLE cross_extrema(row_key INTEGER4,category TEXT,amount CURRENCY_REAL)"));
+        int shadowRefused=0;try {(void)linaccess::accessQueryColumns(db,linaccess::compileAccessQuery(extrema));}catch(const linaccess::VbaRuntimeError& error){shadowRefused=error.number;}assert(shadowRefused==3251);
+        assert(sql.exec("DROP TABLE temp.cross_extrema"));
         for(const auto* invalid:{"TRANSFORM Sum(cell) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A','a')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('row_key')", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN ('A',)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (1,01)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (1.5)", "TRANSFORM Count(*) SELECT row_key FROM cross_probe GROUP BY row_key PIVOT category IN (2147483648)", "TRANSFORM Count(*) SELECT row_key FROM cross_dates GROUP BY row_key PIVOT CDate(stamp) IN (1)"}) {
             int refused=0;try {(void)linaccess::compileAccessQuery(invalid);}catch(const linaccess::VbaRuntimeError& error) {refused=error.number;}assert(refused==3251);
         }

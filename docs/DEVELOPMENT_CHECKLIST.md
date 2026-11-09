@@ -3391,3 +3391,17 @@ abschließend nur GUI1/1 (14,11s) wiederholt/bestanden; Layout1/1 (12,81s) berei
 bestanden. FREE_FORM_CONTROLS.md samt tatsächlicher Microsoft-Tag-Dokumentation.
 Kein neuer CTest/Windows/Original/Kern/Gesamtsuite/DEB-Nachweis; letzteDEB d8ecf41.
 F050/F080/F081/F148/F155 und456/386/70 unverändert. SQL-Kompatibilität folgt.
+
+
+## 2026-11-09: Typisierte Kreuztabellen-Minima und -Maxima
+
+Feste TRANSFORM-Min/Max-Überschriften verwenden echte physische Tabellen und
+vorhandene native Currency-/Single-/Ganzzahl-/Boolean-/Datumsprüfungen. Pivottypen
+bleiben erhalten, auch bei leeren Ergebnissen; fehlende Kategorien liefern Null.
+Parameter, Aliasse, gespeicherte QueryDefs und dbQCrosstab16 sind eingebunden.
+Text/Locale, unbestimmte Integerbreiten, Decimal, gespeicherte Quellansichten und
+temporäre Überschattung werden nicht als unterstützt ausgegeben. Schemaänderungen
+invalidieren typisierte Abfrageansichten. Details: COUNT_CROSSTAB_RUNTIME.md.
+Abschließend bestehendes SQL-Bündel3/3 bestanden (0,12s); Anwendung neu gebaut.
+Kein neuer CTest/Windows-/Original-/Gesamtsuiten-/Paketnachweis. F067/F068 bleiben
+offen; Katalog456/386 bestätigte Teilumfänge/70 offene Vollanforderungen unverändert.

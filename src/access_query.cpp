@@ -169,13 +169,13 @@ bool expressionBoundary(const QVector<Token>& tokens,qsizetype index) {
         "distinctrow","parameters","pivot","transform","asc","desc","and","or","xor","eqv","imp","not","is","like","in","between"};
     return words.contains(token.value.toCaseFolded());
 }
-// Fixed-heading Count crosstabs are rewritten structurally. Dynamic headings
-// and numeric aggregates need independent type/precision handling.
-struct CountCrosstab {int rowHeadings{},pivotHeadings{};};
-CountCrosstab expandCountCrosstab(QVector<Token>& tokens,qsizetype start) {
+// Fixed headings have stable projection metadata. Extrema preserve a proven
+// physical input type; sums/averages need separate precision handling.
+struct FixedCrosstab {int rowHeadings{},pivotHeadings{};QString type,table,alias,argument;bool extrema{};};
+FixedCrosstab expandFixedCrosstab(QVector<Token>& tokens,qsizetype start,const QMap<QString,QString>& fields={}) {
     const auto word=[&](qsizetype i,const char* value) {return i>=0 && i<tokens.size() && tokens[i].kind==Token::Word && tokens[i].value.compare(value,Qt::CaseInsensitive)==0;};
     if(!word(start,"TRANSFORM")) return {};
-    const auto fail=[] {throw VbaRuntimeError(3251,"Jet SQL: supported crosstabs require Count, simple row fields and fixed literal headings");};
+    const auto fail=[] {throw VbaRuntimeError(3251,"Jet SQL: supported crosstabs require Count/typed Min/Max, simple row fields and fixed literal headings");};
     const auto field=[](const QVector<Token>& part) {
         const auto name=[](const Token& token) {return token.kind==Token::Word || token.kind==Token::Identifier;};
         return (part.size()==1 && name(part[0])) || (part.size()==3 && name(part[0]) && symbol(part[1],".") && name(part[2]));
@@ -197,9 +197,12 @@ CountCrosstab expandCountCrosstab(QVector<Token>& tokens,qsizetype start) {
     if(aggregate.size()>=2 && aggregate[aggregate.size()-2].kind==Token::Word && aggregate[aggregate.size()-2].value.compare("AS",Qt::CaseInsensitive)==0) {
         if(aggregate.back().kind!=Token::Word && aggregate.back().kind!=Token::Identifier) fail();aggregate.resize(aggregate.size()-2);
     }
-    if(aggregate.size()<4 || aggregate[0].kind!=Token::Word || aggregate[0].value.compare("COUNT",Qt::CaseInsensitive)!=0 || !symbol(aggregate[1],"(") || !symbol(aggregate.back(),")")) fail();
+    if(aggregate.size()<4 || aggregate[0].kind!=Token::Word || !QSet<QString>{"count","min","max"}.contains(aggregate[0].value.toCaseFolded()) || !symbol(aggregate[1],"(") || !symbol(aggregate.back(),")")) fail();
     const auto argument=aggregate.mid(2,aggregate.size()-3);
-    const bool star=argument.size()==1 && symbol(argument[0],"*");if(!star && !field(argument)) fail();
+    const auto function=aggregate[0].value.toCaseFolded();const bool extrema=function!="count";
+    const bool star=argument.size()==1 && symbol(argument[0],"*");if((star && extrema) || (!star && !field(argument))) fail();
+    QString key;for(const auto& token:argument) key+=token.value.toCaseFolded();
+    const auto valueType=extrema ? fields.value(key) : QString("INTEGER4");
     QVector<QVector<Token>> rowFields;QSet<QString> outputNames;
     qsizetype first=select+1;
     for(qsizetype i=first;i<=from;++i) if(i==from || symbol(tokens[i],",")) {
@@ -249,12 +252,17 @@ CountCrosstab expandCountCrosstab(QVector<Token>& tokens,qsizetype start) {
     if(headings.isEmpty() || headings.size()+rowFields.size()>255) fail();
     auto output=tokens.mid(0,start);output.append({Token::Word,"SELECT"});output+=tokens.mid(select+1,from-select-1);
     for(const auto& heading:headings) {
-        output.append({Token::Other,","});output.append({Token::Word,"Count"});output.append({Token::Other,"("});output.append({Token::Word,"CASE"});output.append({Token::Word,"WHEN"});output+=pivotField;output.append({Token::Other,"="});output.append(heading.literal);output.append({Token::Word,"THEN"});
-        if(star) output.append({Token::Other,"1"});else output+=argument;
+        output.append({Token::Other,","});output.append({Token::Word,function});output.append({Token::Other,"("});output.append({Token::Word,"CASE"});output.append({Token::Word,"WHEN"});output+=pivotField;output.append({Token::Other,"="});output.append(heading.literal);output.append({Token::Word,"THEN"});
+        if(star) output.append({Token::Other,"1"});
+        else if(extrema && !valueType.isEmpty()) {
+            output.append({Token::Word,valueType=="CURRENCY_REAL" ? "linaccess_jet_currency_store" : "linaccess_jet_field_store"});output.append({Token::Other,"("});
+            if(valueType!="CURRENCY_REAL") {output.append({Token::String,valueType});output.append({Token::Other,","});}
+            output+=argument;output.append({Token::Other,")"});
+        } else output+=argument;
         output.append({Token::Word,"ELSE"});output.append({Token::Word,"NULL"});output.append({Token::Word,"END"});output.append({Token::Other,")"});output.append({Token::Word,"AS"});output.append({Token::Identifier,heading.label});
     }
     output+=tokens.mid(from,pivot-from);tokens=std::move(output);
-    return {static_cast<int>(rowFields.size()),static_cast<int>(headings.size())};
+    return {static_cast<int>(rowFields.size()),static_cast<int>(headings.size()),valueType,source.front().value,source.size()>1 ? source.back().value : QString{},key,extrema};
 }
 qsizetype operandEnd(const QVector<Token>& tokens,qsizetype start) {
     int depth=0;
@@ -1235,7 +1243,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
         }
     }
     require(pos < tokens.size(), "Jet SQL: query body required");
-    const auto crosstab=expandCountCrosstab(tokens,pos);
+    const auto crosstab=expandFixedCrosstab(tokens,pos,fields);
     if(tokens[pos].kind==Token::Word) {
         const auto command=tokens[pos].value.toUpper();
         if(command=="SELECT") {
@@ -1256,7 +1264,7 @@ static AccessQueryPlan compileCurrencyQuery(const QString& source,const QMap<QSt
     if(plan.daoQueryType==96) adaptCounterDdl(tokens,pos,plan);
     preserveComputedProjectionNames(tokens,pos);
     plan.resultTypes=typedProjectionExpressions(tokens,pos,plan.parameters,fields,functions);
-    if(crosstab.pivotHeadings) {plan.resultTypes.resize(crosstab.rowHeadings+crosstab.pivotHeadings);for(int i=crosstab.rowHeadings;i<plan.resultTypes.size();++i) plan.resultTypes[i]="INTEGER4";}
+    if(crosstab.pivotHeadings) {plan.resultTypes.resize(crosstab.rowHeadings+crosstab.pivotHeadings);for(int i=crosstab.rowHeadings;i<plan.resultTypes.size();++i) plan.resultTypes[i]=crosstab.type;}
     if (tokens[pos].kind==Token::Word && tokens[pos].value.compare("UPDATE",Qt::CaseInsensitive)==0) {
         for (auto i=pos+1;i<tokens.size();++i) {
             if (tokens[i].kind==Token::Word && tokens[i].value.compare("SET",Qt::CaseInsensitive)==0) break;
@@ -1435,6 +1443,24 @@ static AccessQueryPlan resolveCurrencyQuery(QSqlDatabase db,const AccessQueryPla
     const auto name=[&](qsizetype i) { return i<tokens.size() && (tokens[i].kind==Token::Word || tokens[i].kind==Token::Identifier); };
     qsizetype body=0;
     if(word(0,"PARAMETERS")) { while(body<tokens.size() && !symbol(tokens[body],";")) ++body; ++body; }
+    if(word(body,"TRANSFORM")) {
+        auto expanded=tokens;const auto shape=expandFixedCrosstab(expanded,body);
+        if(!shape.extrema) return source;
+        // Do not infer an aggregate type through saved views or temporary shadows.
+        QSqlQuery physical(db);
+        physical.prepare("SELECT 1 FROM main.sqlite_master WHERE type='table' AND name=? COLLATE NOCASE AND NOT EXISTS(SELECT 1 FROM temp.sqlite_master WHERE name=? COLLATE NOCASE)");
+        physical.addBindValue(shape.table);physical.addBindValue(shape.table);
+        if(!physical.exec() || !physical.next()) throw VbaRuntimeError(3251,"Crosstab extrema require an unshadowed physical table");
+        const QSet<QString> supported{"CURRENCY_REAL","SINGLE_REAL","INTEGER1","INTEGER2","INTEGER4","BOOL","BOOLEAN","DATE","DATETIME"};
+        QMap<QString,QString> fields;
+        const auto types=sqliteColumnTypes(db,shape.table);
+        for(auto it=types.cbegin();it!=types.cend();++it) if(supported.contains(it.value())) {
+            fields.insert(it.key(),it.value());fields.insert(shape.table.toCaseFolded()+'.'+it.key(),it.value());
+            if(!shape.alias.isEmpty()) fields.insert(shape.alias.toCaseFolded()+'.'+it.key(),it.value());
+        }
+        if(!fields.contains(shape.argument)) throw VbaRuntimeError(3251,"Crosstab extrema input type is unsupported or unavailable");
+        auto resolved=compileCurrencyQuery(source.source,fields,functions);resolved.currencyContextResolved=true;return resolved;
+    }
     if(!word(body,"SELECT")) return source;
     qsizetype from=-1; int depth=0;
     for(qsizetype i=body+1;i<tokens.size();++i) {
@@ -1784,6 +1810,9 @@ int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
     query.finish();
     // Ambiguous names receive no executable view; named lookup reports the conflict.
     for(const auto& conflict:conflicts) definitions.remove(conflict);
+    // Typed crosstab view expressions also depend on current physical declarations.
+    if(query.exec("PRAGMA main.schema_version") && query.next()) revision.addData("schema:"+query.value(0).toByteArray());
+    query.finish();
     const auto key = db.databaseName() + ':' + QString::fromLatin1(revision.result().toHex());
     auto owned = driver->property("la_query_views").toStringList();
     auto internal = driver->property("la_query_internal_views").toStringList();
@@ -1810,6 +1839,7 @@ int installAccessQueryViews(QSqlDatabase db, bool freshConnection) {
         if (tables.contains(name,Qt::CaseInsensitive) || views.contains(name,Qt::CaseInsensitive)) continue;
         try {
             auto plan = compileAccessQuery(it.value().second);
+            if(plan.daoQueryType==16) plan=resolveCurrencyQuery(db,plan);
             if (useLeftJoin(db,plan)) plan.sql=plan.rightJoinSql;
             if (!plan.parameters.empty() || !plan.sql.startsWith("SELECT ",Qt::CaseInsensitive)) continue;
             if (plan.hiddenRank) {
