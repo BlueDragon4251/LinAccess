@@ -530,6 +530,7 @@ void formatDate(sqlite3_context* context,sqlite3_value** args,bool stringResult)
 void formatNumber(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"FormatNumber",1,5);}
 void formatCurrency(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"FormatCurrency",1,5);}
 void formatPercent(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"FormatPercent",1,5);}
+void formatDateTime(sqlite3_context* context,int count,sqlite3_value** args) noexcept {scalarBuiltinFunction(context,count,args,"FormatDateTime",1,2);}
 void formatString(sqlite3_context* context,int,sqlite3_value** args) noexcept { formatDate(context,args,true); }
 void formatVariant(sqlite3_context* context,int,sqlite3_value** args) noexcept { formatDate(context,args,false); }
 // aggregate_context supplies zeroed storage. Each group retains one copied value;
@@ -717,6 +718,7 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_formatnumber",-1,&formatNumber,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_formatcurrency",-1,&formatCurrency,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_formatpercent",-1,&formatPercent,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
+    ensure("linaccess_jet_formatdatetime",-1,&formatDateTime,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);
     ensure("linaccess_jet_concat",2,&concatenate,nullptr,nullptr);
     ensure("linaccess_jet_len",1,&textLength,nullptr,nullptr);
     ensure("linaccess_jet_default_date",0,&dateFieldDefault<0>,nullptr,nullptr,SQLITE_UTF8|SQLITE_INNOCUOUS);

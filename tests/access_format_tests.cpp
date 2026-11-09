@@ -62,6 +62,13 @@ int main(int argc,char** argv) {
     assert(model.data(model.index(0,0)).toString()=="2003" && model.data(model.index(0,1)).toString()=="12" && model.data(model.index(0,2)).toString()=="31");
     assert(model.data(model.index(0,1)).metaType().id()==QMetaType::QString);
     assert(format(decimalLiteral("0.125"),"Percent").asText()=="12,50%");
+    assert(format(VbaValue::numeric(0.75),"General Date").asText()=="18:00:00");
+    model.execute(db,"SELECT FormatDateTime('2003-12-31 18:05:06',1),FormatDateTime('2003-12-31 18:05:06',3),FormatDateTime('2003-12-31 18:05:06',4),FormatDateTime(0.75)");
+    assert(model.data(model.index(0,0)).toString()=="Mittwoch, 31. Dezember 2003" && model.data(model.index(0,1)).toString()=="18:05:06" && model.data(model.index(0,2)).toString()=="18:05" && model.data(model.index(0,3)).toString()=="18:00:00");
+    for(const auto& [expression,wanted]:std::vector<std::pair<const char*,int>>{{"SELECT FormatDateTime(Null)",94},{"SELECT FormatDateTime(1,5)",5},{"SELECT FormatDateTime(1,Null)",94},{"SELECT FormatDateTime()",450},{"SELECT FormatDateTime('invalid')",13}}) {
+        int actual=0;try {model.execute(db,expression);}catch(const VbaRuntimeError& failure) {actual=failure.number;}assert(actual==wanted && model.rowCount()==0);
+    }
+
     model.execute(db,"SELECT FormatPercent(0.125),FormatPercent(-0.00125,2,0,-1,0),FormatPercent(9007199254740993,0,-1,0,0)");
     assert(model.data(model.index(0,0)).toString()=="12,50%" && model.data(model.index(0,1)).toString()=="(,12%)" && model.data(model.index(0,2)).toString()=="900719925474099300%");
     for(const auto& [expression,wanted]:std::vector<std::pair<const char*,int>>{{"SELECT FormatPercent(Null)",94},{"SELECT FormatPercent(1,29)",5},{"SELECT FormatPercent(1,2,1)",5},{"SELECT FormatPercent()",450}}) {
@@ -78,6 +85,9 @@ int main(int argc,char** argv) {
     try { model.execute(db,"SELECT Format$(Null,\"yyyy\")"); } catch(const VbaRuntimeError& error) { nullRejected=error.number==94; }
     assert(nullRejected && model.rowCount()==0);
     QLocale::setDefault(QLocale(QLocale::English,QLocale::UnitedStates));
+    model.execute(db,"SELECT FormatDateTime('2003-12-31 18:05:06',3),FormatDateTime(0.75),FormatDateTime('2003-12-31 18:05:06',4)");
+    assert(model.data(model.index(0,0)).toString()=="6:05:06 PM" && model.data(model.index(0,1)).toString()=="6:00:00 PM" && model.data(model.index(0,2)).toString()=="18:05");
+
     model.execute(db,"SELECT Format$(#12/31/2003#,\"Long Date\")");
     assert(model.data(model.index(0,0)).toString()=="Wednesday, December 31, 2003");
 

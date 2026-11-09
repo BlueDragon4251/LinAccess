@@ -6344,3 +6344,17 @@ geprüft. App/Helper gebaut; vier Fixture-Hashes und drei Upload-Originalhashes 
 Keine MDB oder Java-Abhängigkeit ins Produkt/Git übernommen. Keine Windows-
 Render-/Vollparität;456/384/72 unverändert. SOURCE_FIELD_DISPLAY_PROPERTIES.md.
 Kontinuierlich weitere allgemeine Datenbank-/VBA-Anforderungen umsetzen.
+
+FormatDateTime unterstützt jetzt native VBA-/SQL-Aufrufe mit Date und optionalem
+NamedFormat sowie vbGeneralDate/vbLongDate/vbShortDate/vbLongTime/vbShortTime.
+Default und explizit ausgelassener NamedFormat wählen General Date; reine Zeit
+und reines Datum werden getrennt dargestellt, sonst kombiniert. Lange Zeit nutzt
+das tatsächliche QLocale-Profil (einschließlich US-PM), ohne Zeitzonentext; kurze
+Zeit bleibt24-stündig. No-host-Syntaxprüfung darf geschachteltes CDate nicht
+vorzeitig als Null konvertieren: gezielt behoben. CLDR-Schmal-/NBSP vor AM/PM
+werden im nativen Legacy-Profil als Leerzeichen ausgegeben. Vorhandene Formatter/
+GUI gemeinsam2/2 (5,57s), App gebaut; echte VBA Named/Missing/qualified-Fälle,
+SQL1..2Argumente, Null94/ungültigeOption5/Arity450/ungültigesDatum13 und deutsche/
+US-Zeitdarstellung geprüft. Keine zusätzliche CTest-Registrierung oder Windows-
+Beobachtung. Volle regionale Datums-/Subsekunden-/Windows-Gleichheit weiter offen.
+NATIVE_FORMAT_RUNTIME.md;456/384/72 unverändert. Kontinuierlich weiterentwickeln.

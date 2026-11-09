@@ -3003,6 +3003,11 @@ Me.Tag=FormatNumber(GroupDigits:=vbFalse,Expression:=CDec("1234.5"),NumDigitsAft
 If FormatPercent(Expression:=CCur("-0.00125"),NumDigitsAfterDecimal:=2,IncludeLeadingDigit:=vbFalse,UseParensForNegativeNumbers:=vbTrue,GroupDigits:=vbFalse)<>"(,12%)" Then Err.Raise 5
 If VBA.FormatPercent(CCur("0.125"),,vbUseDefault)<>"12,50%" Then Err.Raise 5
 If Format(CCur("0.125"),"Percent")<>"12,50%" Then Err.Raise 5
+If FormatDateTime(Date:=#12/31/2003 18:05:06#,NamedFormat:=vbLongTime)<>"18:05:06" Then Err.Raise 5
+If VBA.FormatDateTime(CDate(0.75),)<>"18:00:00" Then Err.Raise 5
+If FormatDateTime(#12/31/2003 18:05:06#,vbShortTime)<>"18:05" Then Err.Raise 5
+If vbGeneralDate<>0 Or vbLongDate<>1 Or vbShortDate<>2 Then Err.Raise 5
+
 
 End Sub
 )VBA";AccessFormPreview caller("format-reference-caller",source,code,db,&window);const auto application=makePreviewApplicationObject(caller);const auto accessEval=[&](const QString& expression) {return application->member("Eval",{linaccess::VbaValue::string(expression.toStdString())});};
@@ -3017,7 +3022,7 @@ End Sub
             else if(type==5) {const auto bytes=QByteArray::fromHex(expected.value("bits").toString().toLatin1());assert(bytes.size()==8);std::uint64_t bits=0;for(int i=0;i<8;++i) bits|=static_cast<std::uint64_t>(static_cast<unsigned char>(bytes[i]))<<(8*i);assert(value.asNumber()==std::bit_cast<double>(bits));}
             else assert(value.asNumber()==expected.value("value").toDouble());++checked;
         }
-        assert(checked==48);std::vector<linaccess::VbaValue> arguments;const auto named=caller.executeProcedure("NamedNumberFormat",arguments);assert(named.status==linaccess::VbaExecutionStatus::Completed && makePreviewFormObject(caller)->member("Tag",{}).asText()=="1234,50");assert(caller.close());
+        assert(checked==48);std::vector<linaccess::VbaValue> arguments;const auto named=caller.executeProcedure("NamedNumberFormat",arguments);if(named.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Named format: "<<named.errorNumber<<" line="<<named.line<<" "<<named.explanation<<"\n";assert(named.status==linaccess::VbaExecutionStatus::Completed && makePreviewFormObject(caller)->member("Tag",{}).asText()=="1234,50");assert(caller.close());
     }
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

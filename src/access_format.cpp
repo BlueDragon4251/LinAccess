@@ -126,10 +126,32 @@ DateParts dateParts(const VbaValue& value) {
     if(!result.date.isValid() || !result.time.isValid() || result.date.year()<100 || result.date.year()>9999) throw VbaRuntimeError(13,"Access date format requires an ISO date or OA day value");return result;
 }
 struct DateToken {QString key,raw;};
+QString longTimeText(const QTime& time,const QLocale& locale) {
+    const auto pattern=locale.timeFormat(QLocale::LongFormat);
+    QString local;
+    bool quoted=false;
+    for(int position=0;position<pattern.size();++position) {
+        const auto ch=pattern[position];
+        if(ch==QChar(39)) {
+            local+=ch;
+            if(position+1<pattern.size() && pattern[position+1]==QChar(39)) {local+=pattern[++position];continue;}
+            quoted=!quoted;
+        } else if(!quoted && ch=='t') {
+            while(position+1<pattern.size() && pattern[position+1]=='t') ++position;
+        } else local+=ch;
+    }
+    return locale.toString(time,local.trimmed().replace(QChar(0x00a0),' ').replace(QChar(0x202f),' '));
+}
 QString dateText(const VbaValue& value,const QString& pattern,const QLocale& locale) {
     const auto lower=pattern.toCaseFolded();
+    if(lower=="general date") {
+        const auto parts=dateParts(value);
+        if(parts.date==QDate(1899,12,30)) return longTimeText(parts.time,locale);
+        const auto date=locale.toString(parts.date,QLocale::ShortFormat);
+        return parts.time==QTime(0,0) ? date : date+" "+longTimeText(parts.time,locale);
+    }
     if(lower=="long date" || lower=="short date") return locale.toString(dateParts(value).date,lower=="long date" ? QLocale::LongFormat : QLocale::ShortFormat);
-    if(lower=="long time" || lower=="short time") return dateParts(value).time.toString(lower=="long time" ? "HH:mm:ss" : "HH:mm");
+    if(lower=="long time" || lower=="short time") {const auto time=dateParts(value).time;return lower=="long time" ? longTimeText(time,locale) : time.toString("HH:mm");}
     static const QStringList names{"am/pm","a/p","dddddd","ddddd","dddd","ddd","dd","d","yyyy","yy","y","mmmm","mmm","mm","m","hh","h","nn","n","ss","s","ww","w","q"};QVector<DateToken> tokens;bool ampm=false,hasDate=false;
     for(int position=0;position<pattern.size();) {
         const auto ch=pattern[position];if(ch=='\\') {if(++position>=pattern.size()) throw VbaRuntimeError(5,"Incomplete format escape");tokens.append({{},pattern.mid(position++,1)});continue;}

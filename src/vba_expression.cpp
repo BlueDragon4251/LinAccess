@@ -717,7 +717,7 @@ bool vbaIntrinsicName(const std::string& name) {
     static const std::unordered_set<std::string> intrinsics{
                 "array","lbound","ubound","isarray","ismissing","isobject","iserror","cverr","vartype","typename",
                 "createobject","doevents","msgbox","inputbox","inputbox$","round","asc","ascw","chr","chr$","chrw","chrw$",
-                "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdec","cdate","cstr","str","str$","format","format$","formatnumber","formatcurrency","formatpercent",
+                "cbyte","cint","clng","csng","cdbl","cbool","ccur","cdec","cdate","cstr","str","str$","format","format$","formatnumber","formatcurrency","formatpercent","formatdatetime",
                 "left","left$","right","right$","mid","mid$","trim","trim$","ltrim","ltrim$","rtrim","rtrim$","len","lenb",
                 "ucase","ucase$","lcase","lcase$","instr","strcomp","instrrev","strreverse","replace","split","join","filter",
                 "hex","hex$","oct","oct$","space","space$","string","string$","val","abs","int","fix","sgn",
@@ -1093,6 +1093,11 @@ private:
             {"acobjstateopen",1},{"acobjstatedirty",2},{"acobjstatenew",4}};
         if(const auto action=statusActions.find(word);action!=statusActions.end()) return VbaValue::longInteger(action->second);
         if(word=="vbusedefault") return VbaValue::longInteger(-2);
+        if(word=="vbgeneraldate") return VbaValue::longInteger(0);
+        if(word=="vblongdate") return VbaValue::longInteger(1);
+        if(word=="vbshortdate") return VbaValue::longInteger(2);
+        if(word=="vblongtime") return VbaValue::longInteger(3);
+        if(word=="vbshorttime") return VbaValue::longInteger(4);
         if(word=="vbtrue") return VbaValue::longInteger(-1);
         if(word=="vbfalse") return VbaValue::longInteger(0);
         if(word=="vbdefault") return VbaValue::integer(0);
@@ -1370,6 +1375,7 @@ private:
                     {"formatnumber",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
                     {"formatcurrency",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
                     {"formatpercent",{{"Expression","NumDigitsAfterDecimal","IncludeLeadingDigit","UseParensForNegativeNumbers","GroupDigits"},1}},
+                    {"formatdatetime",{{"Date","NamedFormat"},1}},
                     {"datevalue",{{"Date"},1}}, {"timevalue",{{"Time"},1}},
                     {"dateadd",{{"Interval","Number","Date"},3}},
                     {"dateserial",{{"Year","Month","Day"},3}},
@@ -1663,6 +1669,15 @@ private:
                 const auto number=integer(args[0]);
                 if (number<0 || number>65535) throw error("CVErr number out of range");
                 return VbaValue::errorValue(number);
+            }
+            if(word=="formatdatetime") {
+                if(args.empty() || args.size()>2 || args[0].kind==VbaValue::Kind::Missing) throw error("FormatDateTime requires Date and optional NamedFormat",450);
+                if(!host_) return {};
+                const auto date=vbaDateValue(scalarVbaValue(args[0]));
+                const int style=args.size()<2 || omitted[1] || args[1].kind==VbaValue::Kind::Missing ? 0 : static_cast<int>(coerceVbaModuleValue(scalarVbaValue(args[1]),"long").asNumber());
+                if(style<0 || style>4) throw error("FormatDateTime NamedFormat outside0..4",5);
+                static constexpr const char* masks[]{"General Date","Long Date","Short Date","Long Time","Short Time"};
+                return host_->formatValue(date,masks[style],true);
             }
             if(word=="formatpercent") {
                 if(!host_) return {};
