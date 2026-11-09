@@ -1,4 +1,5 @@
 void testVbaDebugOutput();
+void testVbaProperties();
 void testVbaFixedStrings();
 void testVbaConditions();
 void testVbaDebugger();
@@ -5013,6 +5014,7 @@ End Function
     assert(evaluate("Chr$(CharCode:=34)").asText()=="\"");
     testVbaDebugger();
     testVbaDebugOutput();
+    testVbaProperties();
     testVbaConditions();
     std::cout << "Core tests passed\n";
 }

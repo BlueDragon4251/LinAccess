@@ -277,3 +277,20 @@ Letzte veröffentlichte Vorstufe0e4f084; dazu DEB unter
 scripts/check-deb.sh einschließlich BuildID/SQLite3.54.1/MDBTools1.0.1 geprüft.
 Dieses Paket liegt vor Debug.Print. F060 und Katalog456/386/70 unverändert.
 Entwicklung ohne Zwischenabschluss fortsetzen.
+
+
+Native Property Get/Let/Set mit getrennten Zugriffsmethoden ist implementiert:
+unveränderte Modulquelle/Zustandsidentität, echte gleichnamige Rückgabebindung,
+End/Exit Property, unqualifizierte Modulzugriffe und öffentliche Form-/Report-
+Objektzugriffe einschließlich indizierter ByVal-Parameter. Setterwert immerByVal,
+Objektidentität/Nothing bleiben erhalten; Erkennung führt keine Getter aus.
+Signatur-/Sichtbarkeits-/Eigentümerprüfungen und tatsächliche Fehlerweitergabe;
+Modulauswahl/Beobachtungen unterscheiden Get/Let/Set. Grenzen ausdrücklich in
+NATIVE_VBA_PROPERTIES.md: keine vollständigen Klassen/ByRef-Indizes/ParamArray/
+Default-Properties/Windows-Parität. Anwendung gebaut; bestehendes Kern-/GUI-
+Bündel2/2 (16,12s) nach Korrektur der tatsächlich gefundenen Bindungsfehler bestanden.
+Keine neuen CTests. Originalinventar32 VBA-Artefakte/0 Property-Deklarationen;
+keine zusätzliche Originalausführung behauptet. Vorstufe Debug.Print als469ad64
+veröffentlicht und Remote-Baum/privat verifiziert. Letzte geprüfteDEB0e4f084 liegt
+vor Debug.Print/Properties. F042/F043/F050 und Katalog456/386/70 unverändert;
+anschließend statische Prozedurlebensdauer umsetzen, ohne Zwischenabschluss.

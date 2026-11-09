@@ -76,6 +76,7 @@ public:
     virtual std::vector<std::shared_ptr<VbaModuleState>> globalModuleStates() { return {}; }
     virtual std::optional<VbaValue> resolveIdentifier(std::string_view name,bool objectReference);
     virtual bool assignIdentifier(std::string_view name,const VbaValue& value);
+    virtual bool assignObjectIdentifier(std::string_view,const VbaValue&) { return false; }
     virtual VbaValue expressionValue(std::string_view name,bool objectReference);
     virtual VbaValue bracketValue(std::string_view name,bool objectReference);
     virtual VbaValue domainAggregate(std::string_view function,const std::vector<VbaValue>& arguments);

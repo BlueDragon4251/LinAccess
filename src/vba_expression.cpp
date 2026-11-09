@@ -1217,6 +1217,14 @@ private:
                 return host_ ? host_->currentForm()->member(field.value,{}) : VbaValue{};
             }
             if (!host_) return {};
+            if(!item && nextSymbol("(")) {
+                const auto object=host_->currentForm();
+                const auto signature=object->argumentSignature(field.value);
+                if(signature && (!signature->names.empty() || (index_+1<tokens_.size() && tokens_[index_+1].value==")"))) {
+                    // Let the normal object-member binder consume property indices/named arguments.
+                    index_-=2;return VbaValue::reference(object);
+                }
+            }
             const bool formProperty = !item && (key == "name" || key == "dirty" || key == "newrecord" || key == "recordsource" || key == "caption" || key=="visible" || key=="tag" || key=="filter" || key=="filteron" || key=="keypreview" || key=="bookmark" || key=="recordset" || key=="openargs" || key=="modal" || key=="popup");
             if (!item && !formProperty)
                 if (auto value=host_->resolveIdentifier(field.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return *value;
@@ -2370,6 +2378,12 @@ private:
         if (variable==locals_.end() && accessExpression_)
             return host_->expressionValue(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"));
         if (variable==locals_.end()) {
+            if(resolver_.argumentSignature) {
+                const auto signature=resolver_.argumentSignature(tok.value);
+                if(signature && signature->localProcedure && signature->function) {
+                    std::vector<VbaValue> arguments;return resolver_(tok.value,arguments,VbaArgumentReferences{});
+                }
+            }
             if (auto value=host_->resolveIdentifier(tok.value,objectContext || nextSymbol(".") || nextSymbol("!"))) return *value;
             throw error("VBA-Variable nicht deklariert: " + tok.value);
         }

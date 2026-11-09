@@ -129,7 +129,8 @@ private:
     void openOtherForm(const QString& name,const QString& where={},std::optional<QString> openArgs={},int windowMode=0,int dataMode=-1);
     void openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where,std::optional<QString> openArgs={},int windowMode=0,int dataMode=-1);
     void closeOtherDocument(int type,const std::optional<QString>& name,int save);
-    std::optional<linaccess::VbaValue> getModuleMember(std::string_view name,bool publicOnly);
+    std::optional<linaccess::VbaValue> getModuleMember(std::string_view name,bool publicOnly,std::vector<linaccess::VbaValue> arguments={});
+    std::optional<linaccess::VbaValue> invokeModuleProperty(std::string_view name,linaccess::VbaPropertyAccess access,std::vector<linaccess::VbaValue> arguments,bool publicOnly);
     bool setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly);
     std::optional<std::string> getField(std::string_view name) const;
     void ensureWritableControl(std::string_view name) const;

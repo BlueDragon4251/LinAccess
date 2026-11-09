@@ -1,10 +1,17 @@
 #include "vba_analyzer.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <regex>
 #include <sstream>
 
 namespace linaccess {
+std::string vbaProcedureExecutionName(const VbaProcedure& procedure) {
+    std::istringstream kind(procedure.kind);std::string first,second;kind>>first>>second;
+    for(auto* word:{&first,&second}) for(auto& ch:*word) ch=static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    if(first=="property" && (second=="get" || second=="let" || second=="set")) return "property "+second+" "+procedure.name;
+    return procedure.name;
+}
 VbaAnalysis analyzeVba(std::string_view source) {
     VbaAnalysis analysis;
     std::istringstream input{std::string(source)};

@@ -554,12 +554,16 @@ public:
     }
     bool assignIdentifier(std::string_view name,const linaccess::VbaValue& value) override {
         if (!instanceScope()) return false;
+        if(preview_.setModuleMember(name,value,false)) return true;
         const auto canonical=memberControlName(name);
         if (!preview_.controls_.contains(QString::fromStdString(canonical).toCaseFolded())) {
             if(recordProperty(name)) { makePreviewFormObject(preview_)->assign(name,value); return true; }
             return false;
         }
         preview_.setFieldValue(canonical,value); return true;
+    }
+    bool assignObjectIdentifier(std::string_view name,const linaccess::VbaValue& value) override {
+        return instanceScope() && preview_.invokeModuleProperty(name,linaccess::VbaPropertyAccess::Set,{value},false).has_value();
     }
     linaccess::VbaValue bracketValue(std::string_view name,bool reference) override {
         if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Unqualified bracket reference requires a native instance context");
@@ -3064,22 +3068,46 @@ void AccessFormPreview::requeryControl(std::string_view name) {
     }
 }
 
-std::optional<linaccess::VbaValue> AccessFormPreview::getModuleMember(std::string_view name,bool publicOnly) {
+std::optional<linaccess::VbaValue> AccessFormPreview::getModuleMember(std::string_view name,bool publicOnly,std::vector<linaccess::VbaValue> arguments) {
     if (closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"CodeBehind instance is unavailable");
     const auto source=vba_.toUtf8().toStdString();
     auto found=moduleStates_.find(source);
     if (found==moduleStates_.end()) found=moduleStates_.emplace(source,linaccess::createVbaModuleState(source)).first;
     const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded().toStdString();
     const auto& frame=found->second;
-    if (publicOnly && !frame->publicVariables.contains(key)) return std::nullopt;
-    if (const auto field=frame->values.find(key);field!=frame->values.end()) return field->second;
-    return std::nullopt;
+    if ((!publicOnly || frame->publicVariables.contains(key)) && frame->values.contains(key)) {
+        if(!arguments.empty()) throw linaccess::VbaRuntimeError(450,"Module variable does not accept property indices");
+        return frame->values.at(key);
+    }
+    return invokeModuleProperty(name,linaccess::VbaPropertyAccess::Get,std::move(arguments),publicOnly);
+}
+std::optional<linaccess::VbaValue> AccessFormPreview::invokeModuleProperty(std::string_view name,linaccess::VbaPropertyAccess access,std::vector<linaccess::VbaValue> arguments,bool publicOnly) {
+    if(closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"CodeBehind instance is unavailable");
+    const auto source=vba_.toUtf8().toStdString();
+    if(!linaccess::nativeVbaPropertySignature(source,name,access,publicOnly)) return {};
+    QPointer<AccessFormPreview> guard(this);PreviewVbaHost host(*this);
+    const auto result=linaccess::executeVbaProperty(source,name,access,host,arguments,publicOnly);
+    if(!guard || guard->closed_ || guard->openCancelled_) throw linaccess::VbaRuntimeError(2450,"Property owner closed during execution");
+    if(result.status!=linaccess::VbaExecutionStatus::Completed)
+        throw linaccess::VbaRuntimeError(result.errorNumber ? result.errorNumber : 3251,result.explanation,result.errorSource,result.errorHelpFile,result.errorHelpContext);
+    return result.typedReturnValue ? *result.typedReturnValue : linaccess::VbaValue::empty();
 }
 bool AccessFormPreview::setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly) {
-    if (!getModuleMember(name,publicOnly)) return false;
+    if(closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"CodeBehind instance is unavailable");
+    const auto source=vba_.toUtf8().toStdString();
+    auto found=moduleStates_.find(source);
+    if(found==moduleStates_.end()) found=moduleStates_.emplace(source,linaccess::createVbaModuleState(source)).first;
     const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded().toStdString();
-    const auto& frame=moduleStates_.at(vba_.toUtf8().toStdString());
-    frame->values.at(key)=linaccess::coerceVbaModuleValue(value,frame->types.at(key)); return true;
+    const auto frame=found->second;
+    if((!publicOnly || frame->publicVariables.contains(key)) && frame->values.contains(key)) {
+        frame->values.at(key)=linaccess::coerceVbaModuleValue(value,frame->types.at(key));return true;
+    }
+    if(linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Let,publicOnly)) {
+        (void)invokeModuleProperty(name,linaccess::VbaPropertyAccess::Let,{linaccess::scalarVbaValue(value)},publicOnly);return true;
+    }
+    if(linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly))
+        throw linaccess::VbaRuntimeError(383,"Property is read-only");
+    return false;
 }
 
 void AccessFormPreview::closeOtherDocument(int type,const std::optional<QString>& name,int save) {

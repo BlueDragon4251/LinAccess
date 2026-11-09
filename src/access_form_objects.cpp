@@ -1012,6 +1012,9 @@ private:
 class PreviewFormObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewFormObject(AccessFormPreview& preview) : PreviewObjectBase(preview),report_(preview.layout_.kind==linaccess::AccessDocumentKind::Report) {}
+    std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        return linaccess::nativeVbaPropertySignature(checked().vba_.toUtf8().toStdString(),name,linaccess::VbaPropertyAccess::Get,true);
+    }
     bool isNativeType(std::string_view type) const override { return type==(report_ ? "access.report" : "access.form"); }
     void applyNativeFilter(const QString& criteria,bool clear) {
         auto& preview=checked();if(report_ && (clear || preview.property("la_bound_event_name").toString().compare("report_open",Qt::CaseInsensitive)!=0)) throw linaccess::VbaRuntimeError(2046,"Report filters require the actual Open event");
@@ -1050,6 +1053,9 @@ public:
             auto controls = makePreviewControlsObject(preview);
             if (args.empty()) return linaccess::VbaValue::reference(controls);
             return controls->member("Item",args);
+        }
+        if(!args.empty() && linaccess::nativeVbaPropertySignature(preview.vba_.toUtf8().toStdString(),name,linaccess::VbaPropertyAccess::Get,true)) {
+            const auto value=preview.invokeModuleProperty(name,linaccess::VbaPropertyAccess::Get,args,true);(void)checked();return *value;
         }
         if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected form arguments");
         if (key=="page" || key=="pages") {
@@ -1147,7 +1153,7 @@ public:
             if (preview.dirty_ || preview.insertionStarted_) preview.loadRecord(); return {};
         }
         if (key == "setfocus") { preview.activateWindow(); preview.setFocus(); return {}; }
-        if (auto value=preview.getModuleMember(name,true)) return *value;
+        if (auto value=preview.getModuleMember(name,true,args)) return *value;
         return preview.getFieldValue(bytes(preview.controlMemberName(text(name))));
     }
     linaccess::VbaValue item(std::string_view name) override {
@@ -1167,6 +1173,22 @@ public:
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
+    }
+    void assignIndexedMember(std::string_view name,const std::vector<linaccess::VbaValue>& indices,const linaccess::VbaValue& value) override {
+        auto arguments=indices;arguments.push_back(linaccess::scalarVbaValue(value));
+        if(!checked().invokeModuleProperty(name,linaccess::VbaPropertyAccess::Let,std::move(arguments),true))
+            throw linaccess::VbaRuntimeError(438,"Indexed Property Let is unavailable");
+        (void)checked();
+    }
+    void assignObject(std::string_view name,const linaccess::VbaValue& value) override {
+        if(checked().invokeModuleProperty(name,linaccess::VbaPropertyAccess::Set,{value},true)) {(void)checked();return;}
+        throw linaccess::VbaRuntimeError(438,"Property Set is unavailable");
+    }
+    void assignIndexedObject(std::string_view name,const std::vector<linaccess::VbaValue>& indices,const linaccess::VbaValue& value) override {
+        auto arguments=indices;arguments.push_back(value);
+        if(!checked().invokeModuleProperty(name,linaccess::VbaPropertyAccess::Set,std::move(arguments),true))
+            throw linaccess::VbaRuntimeError(438,"Indexed Property Set is unavailable");
+        (void)checked();
     }
     void assignItem(std::string_view name,const linaccess::VbaValue& value) override {
         objectItem(name).object->assign("Value",value);

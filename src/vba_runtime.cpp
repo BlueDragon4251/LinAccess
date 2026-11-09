@@ -601,6 +601,13 @@ VbaExecutionResult parseProcedure(std::string_view module, std::string_view name
 VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_view name,
                                   std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
                                   std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr,bool inheritedWith=false) {
+    const auto selector=lower(std::string(name));
+    std::string accessor,requestedName=std::string(name);
+    for(const auto kind:{"get","let","set"}) {
+        const auto prefix=std::string("property ")+kind+" ";
+        if(selector.starts_with(prefix)) {accessor=kind;requestedName=std::string(name.substr(prefix.size()));break;}
+    }
+    const std::regex propertyBegin(R"(^\s*(?:(Public|Private|Friend)\s+)?Property\s+(Get|Let|Set)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*(\(.*)$)",std::regex::icase);
     std::string activeSource;
     try {activeSource=preprocessVbaConditional(module);module=activeSource;}
     catch(const VbaConditionalError& error) {VbaExecutionResult result{VbaExecutionStatus::Unsupported,error.what(),error.line};result.errorNumber=error.number;return result;}
@@ -734,11 +741,23 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
             }
         }
         std::smatch match;
+        if(!accessor.empty()) {
+            if(!within) {
+                if(!std::regex_match(source,match,propertyBegin) || lower(match[2].str())!=accessor || lower(match[3].str())!=lower(requestedName)) continue;
+                source=(match[1].matched ? match[1].str()+" " : "")+(accessor=="get" ? "Function " : "Sub ")+match[3].str()+match[4].str();
+            } else {
+                static const std::regex propertyEnd(R"(^End\s+Property$)",std::regex::icase);
+                static const std::regex propertyExit(R"(^Exit\s+Property$)",std::regex::icase);
+                if(std::regex_match(source,end)) return {VbaExecutionStatus::Error,"Property requires End Property",line};
+                if(std::regex_match(source,propertyEnd)) source=accessor=="get" ? "End Function" : "End Sub";
+                else if(std::regex_match(source,propertyExit)) source=accessor=="get" ? "Exit Function" : "Exit Sub";
+            }
+        }
         if (!within) {
             if (std::regex_match(source, match, begin) &&
-                lower(match[2].str()) == lower(std::string(name))) {
+                lower(match[2].str()) == lower(requestedName)) {
                 const auto params = trim(match[3].str());
-                hasCancel = std::regex_match(params, cancelParam);
+                hasCancel = accessor.empty() && std::regex_match(params, cancelParam);
                 bool optionalSeen=false,paramArraySeen=false;
                 const std::regex paramArray(R"(^ParamArray\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+Variant)?$)",std::regex::icase);
                 const std::regex arrayParameter(R"(^(?:ByRef\s+)?([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*\)\s*(?:As\s+(Byte|Integer|Long|Single|Double|Currency|Date|Boolean|String|Object|Variant))?$)",std::regex::icase);
@@ -790,6 +809,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 }
                 if(lower(trim(source)).starts_with("static ") || lower(trim(source)).starts_with("static\t"))
                     return {VbaExecutionStatus::Unsupported,"Static procedures require full implicit-local lifetime support; use explicit Static declarations",line};
+                if(!accessor.empty() && accessor!="get" && parameters && !parameters->empty()) parameters->back().byReference=false;
                 within = true;
                 isFunction = lower(match[1].str()) == "function";
                 const auto declaredResult=nativeDeclaredType(lower(match[4].str()));
@@ -797,7 +817,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     return {VbaExecutionStatus::Unsupported,"Function result type unsupported",line};
                 if (resultType) *resultType=declaredResult;
             } else if (std::regex_match(source, match, anyBegin)
-                       && lower(match[1].str()) == lower(std::string(name))) {
+                       && lower(match[1].str()) == lower(requestedName)) {
                 return {VbaExecutionStatus::Unsupported,
                     "VBA-Prozedursignatur/Parameter derzeit nicht unterstützt: " + source, line};
             }
@@ -905,10 +925,11 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 const auto yes=trim(source.substr(then+4,otherwise==std::string::npos ? std::string::npos : otherwise-then-4));
                 const auto no=otherwise==std::string::npos ? std::string{} : trim(source.substr(otherwise+4));
                 if (yes.empty() && otherwise==std::string::npos) return {VbaExecutionStatus::Unsupported,"Single-line If branch missing",line};
-                const auto wrapper="Sub __la_inline()\nIf "+condition+" Then\n"+inlineStatementLines(yes,true)
-                    +(otherwise==std::string::npos ? "" : "\nElse\n"+inlineStatementLines(no,true))+"\nEnd If\nEnd Sub\n";
+                const auto wrapperHeader=accessor.empty() ? std::string("Sub __la_inline()") : std::string("Property ")+accessor+" __la_inline()";
+                const auto wrapper=wrapperHeader+"\nIf "+condition+" Then\n"+inlineStatementLines(yes,true)
+                    +(otherwise==std::string::npos ? "" : "\nElse\n"+inlineStatementLines(no,true))+"\nEnd If\n"+(accessor.empty() ? "End Sub\n" : "End Property\n");
                 std::vector<Statement> body; bool function=false,cancel=false;
-                auto parsed=parseProcedure(wrapper,"__la_inline",body,function,cancel,nullptr,false,nullptr,withActive());
+                auto parsed=parseProcedure(wrapper,accessor.empty() ? "__la_inline" : "property "+accessor+" __la_inline",body,function,cancel,nullptr,false,nullptr,withActive());
                 if (parsed.status!=VbaExecutionStatus::Completed) { parsed.line=line; return parsed; }
                 const auto offset=static_cast<int>(statements.size());
                 for (auto& statement:body) {
@@ -1141,6 +1162,9 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         } else if (lower(source) == "on error resume next") {
             statements.push_back({Statement::Type::ErrorResumeNext, {}, {}, line});
 
+        } else if (const auto propertySet=objectAssignment((lower(source).starts_with("set ") || lower(source).starts_with("set\t")) ? trim(source.substr(3)) : std::string{}); propertySet) {
+            if(!validExpression(propertySet->first) || !validExpression(propertySet->second)) return {VbaExecutionStatus::Unsupported,"Object property Set syntax unsupported",line};
+            Statement statement{Statement::Type::ObjectAssign,propertySet->first,propertySet->second,line};statement.stepExpression="object";statements.push_back(std::move(statement));
         } else if (const auto objectArrayAssignment=topLevelAssignment((lower(source).starts_with("set ") || lower(source).starts_with("set\t")) ? trim(source.substr(3)) : std::string{});
             objectArrayAssignment && memberSeparator(objectArrayAssignment->first)==std::string::npos && memberTarget(objectArrayAssignment->first) && memberTarget(objectArrayAssignment->first)->arguments) {
             const auto target=*memberTarget(objectArrayAssignment->first); const auto indices=splitArguments(*target.arguments);
@@ -1487,6 +1511,82 @@ std::optional<VbaArgumentSignature> nativeVbaProcedureSignature(std::string_view
     return localProcedureSignature(module,procedure);
 }
 
+namespace {
+std::string propertySelector(std::string_view name,VbaPropertyAccess access) {
+    return std::string("property ")+(access==VbaPropertyAccess::Get ? "get " : access==VbaPropertyAccess::Let ? "let " : "set ")+std::string(name);
+}
+}
+std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view module,std::string_view name,VbaPropertyAccess access,bool publicOnly) {
+    if(module.size()>1024*1024) throw VbaRuntimeError(3035,"Property module exceeds one MiB");
+    const auto active=preprocessVbaConditional(module);
+    static const std::regex header(R"(^\s*(?:(Public|Private|Friend)\s+)?Property\s+(Get|Let|Set)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?=\s|\())",std::regex::icase);
+    const auto kind=access==VbaPropertyAccess::Get ? "get" : access==VbaPropertyAccess::Let ? "let" : "set";
+    std::istringstream source(active);std::string line;bool found=false,visible=false;
+    std::unordered_set<std::string> accessors;
+    while(std::getline(source,line)) {
+        line=withoutComment(line);
+        while(line.size()>1 && line.back()=='_' && std::isspace(static_cast<unsigned char>(line[line.size()-2]))) {
+            line.pop_back();std::string following;if(!std::getline(source,following)) break;
+            line+=withoutComment(following);
+        }
+        std::smatch match;
+        if(!std::regex_search(line,match,header) || lower(match[3].str())!=lower(std::string(name))) continue;
+        const auto declared=lower(match[2].str());
+        if(!accessors.insert(declared).second) throw VbaRuntimeError(5,"Ambiguous property accessor");
+        if(declared==kind) {found=true;visible=!publicOnly || !match[1].matched || lower(match[1].str())=="public";}
+    }
+    if(!found || !visible) return {};
+    const auto selector=propertySelector(name,access);
+    std::vector<Statement> statements;std::vector<Parameter> parameters;bool function=false,cancel=false;std::string resultType;
+    if(parseProcedure(module,selector,statements,function,cancel,&parameters,true,&resultType).status!=VbaExecutionStatus::Completed)
+        throw VbaRuntimeError(3251,"Property accessor syntax is unsupported");
+    const auto indices=parameters.size()-(access!=VbaPropertyAccess::Get && !parameters.empty() ? 1 : 0);
+    for(std::size_t index=0;index<parameters.size();++index) {
+        if(parameters[index].paramArray) throw VbaRuntimeError(3251,"Property ParamArray is not implemented");
+        if(index<indices && parameters[index].byReference) throw VbaRuntimeError(3251,"Native property indices currently require explicit ByVal");
+    }
+    const auto normalizedType=[](const std::string& type) {return type.empty() ? std::string("variant") : type;};
+    for(const auto& sibling:accessors) {
+        if(sibling==kind) continue;
+        std::vector<Statement> siblingStatements;std::vector<Parameter> siblingParameters;bool siblingFunction=false,siblingCancel=false;std::string siblingResult;
+        if(parseProcedure(module,"property "+sibling+" "+std::string(name),siblingStatements,siblingFunction,siblingCancel,&siblingParameters,true,&siblingResult).status!=VbaExecutionStatus::Completed)
+            throw VbaRuntimeError(3251,"Matching property accessor syntax is unsupported");
+        const auto siblingIndices=siblingParameters.size()-(sibling!="get" && !siblingParameters.empty() ? 1 : 0);
+        if(indices!=siblingIndices) throw VbaRuntimeError(5,"Property index signatures do not match");
+        for(std::size_t index=0;index<indices;++index) {
+            const auto& left=parameters[index];const auto& right=siblingParameters[index];
+            if(lower(left.name)!=lower(right.name) || normalizedType(left.type)!=normalizedType(right.type) || left.byReference!=right.byReference || left.optional!=right.optional || left.paramArray!=right.paramArray)
+                throw VbaRuntimeError(5,"Property index signatures do not match");
+        }
+        if((access==VbaPropertyAccess::Get && sibling=="let") || (access==VbaPropertyAccess::Let && sibling=="get")) {
+            if((access==VbaPropertyAccess::Get && siblingParameters.empty()) || (access==VbaPropertyAccess::Let && parameters.empty()))
+                throw VbaRuntimeError(3251,"Property Let requires a value parameter");
+            const auto getterType=access==VbaPropertyAccess::Get ? resultType : siblingResult;
+            const auto valueType=access==VbaPropertyAccess::Let ? parameters.back().type : siblingParameters.back().type;
+            if(normalizedType(getterType)!=normalizedType(valueType)) throw VbaRuntimeError(5,"Property Get and Let types do not match");
+        }
+    }
+    auto signature=nativeVbaProcedureSignature(module,selector);
+    if(!signature) throw VbaRuntimeError(3251,"Property accessor syntax is unsupported");
+    if(access!=VbaPropertyAccess::Get) {
+        if(signature->names.empty() || signature->required!=signature->names.size())
+            throw VbaRuntimeError(3251,"Property setters require explicit required value parameters");
+        if(!signature->resultType.empty()) throw VbaRuntimeError(3251,"Property setters cannot declare a result");
+        const bool object=signature->objectArguments.back();
+        if(access==VbaPropertyAccess::Set && !object && !parameters.back().type.empty() && parameters.back().type!="variant")
+            throw VbaRuntimeError(3251,"Property Set requires a native object or Variant value parameter");
+        if(access==VbaPropertyAccess::Set) signature->objectArguments.back()=true;
+        if(access==VbaPropertyAccess::Let && object)
+            throw VbaRuntimeError(3251,"Property Let requires a scalar or Variant value parameter");
+    }
+    return signature;
+}
+VbaExecutionResult executeVbaProperty(std::string_view module,std::string_view name,VbaPropertyAccess access,VbaHost& host,std::vector<VbaValue>& arguments,bool publicOnly) {
+    if(!nativeVbaPropertySignature(module,name,access,publicOnly)) return {VbaExecutionStatus::ProcedureMissing,{},0};
+    if(access==VbaPropertyAccess::Set && !arguments.empty() && arguments.back().kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Property Set requires an object reference");
+    return executeVbaProcedureWithArguments(module,propertySelector(name,access),host,arguments);
+}
+
 std::vector<int> vbaDebugExecutableLines(std::string_view source,std::string_view procedure) {
     if(source.size()>1024*1024) throw VbaRuntimeError(3035,"Debugger source exceeds one MiB");std::vector<Statement> statements;bool function=false,cancel=false;const auto parsed=parseProcedure(source,procedure,statements,function,cancel);if(parsed.status!=VbaExecutionStatus::Completed) return {};std::vector<int> lines;for(const auto& statement:statements) if(debugExecutable(statement)) lines.push_back(statement.line);std::sort(lines.begin(),lines.end());lines.erase(std::unique(lines.begin(),lines.end()),lines.end());return lines;
 }
@@ -1494,6 +1594,13 @@ std::vector<int> vbaDebugExecutableLines(std::string_view source,std::string_vie
 VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_view procedure) {
     if (module.size() > 1024 * 1024)
         return {VbaExecutionStatus::Unsupported, "VBA-Modul größer als 1 MiB", 0};
+    const auto selector=lower(std::string(procedure));
+    for(const auto access:{VbaPropertyAccess::Get,VbaPropertyAccess::Let,VbaPropertyAccess::Set}) {
+        const auto prefix=propertySelector("",access);
+        if(!selector.starts_with(prefix)) continue;
+        try {if(!nativeVbaPropertySignature(module,procedure.substr(prefix.size()),access,false)) return {VbaExecutionStatus::ProcedureMissing,{},0};}
+        catch(const VbaRuntimeError& error) {VbaExecutionResult result{VbaExecutionStatus::Unsupported,error.what(),0};result.errorNumber=error.number;return result;}
+    }
     std::vector<Statement> instructions;
     bool function = false, cancel = false;
     return parseProcedure(module, procedure, instructions, function, cancel);
@@ -1761,6 +1868,10 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     std::string resultType;
     auto result = parseProcedure(module, procedure, instructions, isFunction, hasCancel, &parameters,true,&resultType);
     if (result.status != VbaExecutionStatus::Completed) return result;
+    if(lower(std::string(procedure)).starts_with("property ")) {
+        const auto validation=validateVbaProcedure(module,procedure);
+        if(validation.status!=VbaExecutionStatus::Completed) return validation;
+    }
     host.enterModule(module);
     struct ModuleScope { VbaHost& host; ~ModuleScope() { host.leaveModule(); } } moduleScope{host};
     // Resolve direct Sub calls before any effects in the calling procedure.
@@ -1825,8 +1936,10 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     std::vector<Frame> faultFrames;
     std::vector<LoopFrame> faultLoops;
     bool faultActive = true;
+    auto returnBinding=lower(std::string(procedure));
+    if(returnBinding.starts_with("property get ")) returnBinding.erase(0,13);
     if (isFunction) {
-        const auto name=lower(std::string(procedure));
+        const auto name=returnBinding;
         locals[name]=initialLocalValue(resultType); localTypes[name]=resultType;
     }
     const bool implicitCancel = hasCancel && !isFunction && arguments.empty();
@@ -2045,7 +2158,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     auto completed = [&](int line, bool exited) {
         VbaExecutionResult outcome{VbaExecutionStatus::Completed, {}, line, exited};
         if (isFunction) {
-            const auto value = locals[lower(std::string(procedure))];
+            const auto value = locals[returnBinding];
             outcome.typedReturnValue = std::make_shared<VbaValue>(value);
             if (value.kind != VbaValue::Kind::Object && value.kind!=VbaValue::Kind::Error && value.kind!=VbaValue::Kind::Missing && !isVbaArray(value)) outcome.returnValue = value.asField();
         }
@@ -2057,6 +2170,10 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     const auto invoke = [&](std::string_view name, std::vector<VbaValue>& actuals,
                             const VbaArgumentReferences& referenceInfo, bool needsValue) -> VbaValue {
         storeAliases();
+        std::string getterSelector;
+        if(!localProcedureSignature(module,name) && nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false)) {
+            getterSelector=propertySelector(name,VbaPropertyAccess::Get);name=getterSelector;
+        }
         const auto& names=referenceInfo.names;
         struct ArrayCell { VbaValue* root; std::size_t offset; std::shared_ptr<const void> allocation; VbaValue value; };
         std::vector<std::shared_ptr<ArrayCell>> cells;
@@ -2210,6 +2327,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         const auto found=signatureCache.find(key);
         if(found!=signatureCache.end()) return found->second;
         auto signature=localProcedureSignature(module,name);
+        if(!signature) signature=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false);
         if(!signature) throw VbaRuntimeError(3251,"Declared local procedure binding is unsupported");
         return signatureCache.emplace(key,std::move(signature)).first->second;
     };
@@ -2232,6 +2350,15 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         for(auto index=first;index<=static_cast<std::size_t>(end);++index)
             if(instructions[index].type==Statement::Type::Next && !loops.empty() && loops.back().forIndex==instructions[index].partner)
                 loops.pop_back();
+    };
+    const auto writeProperty=[&](std::string_view name,VbaPropertyAccess access,std::vector<VbaValue> arguments) {
+        if(!stateOwners.front()->procedures.contains(lower(std::string(name))) || !nativeVbaPropertySignature(module,name,access,false)) return false;
+        if(access==VbaPropertyAccess::Let && !arguments.empty()) arguments.back()=scalarVbaValue(arguments.back());
+        storeAliases();
+        const auto result=executeVbaProperty(module,name,access,host,arguments,false);
+        refreshAliases();
+        if(result.status!=VbaExecutionStatus::Completed) throw VbaRuntimeError(result.errorNumber ? result.errorNumber : 3251,result.explanation,result.errorSource,result.errorHelpFile,result.errorHelpContext);
+        return true;
     };
     bool active = true;
     int currentLine = 0;
@@ -2589,7 +2716,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     if(variableType(lower(instruction.argument)).ends_with("()")) throw VbaRuntimeError(13,"Set cannot replace an array variable");
                     auto value = evaluateObject(instruction.expression);
                     if (value.kind != VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set benötigt ein Objekt");
-                    assignVariable(lower(instruction.argument),value);
+                    const auto name=lower(instruction.argument);
+                    if(locals.contains(name) || (!writeProperty(instruction.argument,VbaPropertyAccess::Set,{value}) && !host.assignObjectIdentifier(instruction.argument,value))) assignVariable(name,value);
                 }
                 break;
             case Statement::Type::ObjectAssign:
@@ -2606,7 +2734,14 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                         const auto inner=trim(*target->arguments);
                         if(!inner.empty()) for(const auto& expression:splitArguments(inner)) indices.push_back(evaluate(expression));
                     }
-                    const auto value = evaluate(instruction.expression);
+                    const bool reference=instruction.stepExpression=="object";
+                    const auto value = reference ? evaluateObject(instruction.expression) : evaluate(instruction.expression);
+                    if(reference) {
+                        if(value.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Set requires an object reference");
+                        if(instruction.argument[pos]=='!') throw VbaRuntimeError(3251,"Bang object assignment is unsupported");
+                        if(indexed) object.object->assignIndexedObject(name,indices,value);else object.object->assignObject(name,value);
+                        break;
+                    }
                     if(indexed && value.kind==VbaValue::Kind::Object) throw VbaRuntimeError(3251,"Indexed object property writes require supported Set syntax");
                     if(indexed) object.object->assignIndexedMember(name,indices,value);
                     else if (instruction.argument[pos] == '!') object.object->assignItem(name,value);
@@ -2706,6 +2841,13 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                         const auto result=evaluateVbaExpression("Left$(_mid_target,_mid_prefix) & Left$(_mid_input,_mid_count) & Mid$(_mid_target,_mid_tail)",host,values);
                         assignVariable(lower(destination),result); break;
                     }
+                    const auto propertyAccess=instruction.stepExpression=="object" ? VbaPropertyAccess::Set : VbaPropertyAccess::Let;
+                    if(initial==locals.end() && stateOwners.front()->procedures.contains(name) && nativeVbaPropertySignature(module,instruction.argument,propertyAccess,false)) {
+                        std::vector<VbaValue> arguments;
+                        for(const auto& expression:splitArguments(instruction.endExpression)) arguments.push_back(evaluate(expression));
+                        auto value=propertyAccess==VbaPropertyAccess::Set ? evaluateObject(instruction.expression) : scalarVbaValue(evaluate(instruction.expression));
+                        arguments.push_back(std::move(value));(void)writeProperty(instruction.argument,propertyAccess,std::move(arguments));break;
+                    }
                     const bool objectTarget=initial!=locals.end() && initial->second.kind==VbaValue::Kind::Object;
                     const auto target=objectTarget ? initial->second.object : std::shared_ptr<VbaObject>{};
                     if(objectTarget && !target) throw VbaRuntimeError(91,"Object variable is not set");
@@ -2757,6 +2899,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                         target->assignDefaultMember({},scalarVbaValue(evaluate(instruction.expression)));
                     } else {
                         const auto value=evaluate(instruction.expression);
+                        if(!locals.contains(name) && writeProperty(instruction.argument,VbaPropertyAccess::Let,{value})) break;
+                        if(!locals.contains(name) && stateOwners.front()->procedures.contains(name) && nativeVbaPropertySignature(module,instruction.argument,VbaPropertyAccess::Get,false)) throw VbaRuntimeError(383,"Property is read-only");
                         if (locals.contains(name) || !host.assignIdentifier(instruction.argument,value)) assignVariable(name,value);
                     }
                 }

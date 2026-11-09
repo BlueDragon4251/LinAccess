@@ -95,6 +95,7 @@ struct sqlite3_value;
 void exerciseStoredForm(MainWindow& window,QSqlDatabase db);
 void exerciseVisualQueryDesigner(MainWindow& window,QSqlDatabase db);
 void exerciseNativeDebugOutput(MainWindow& window,QSqlDatabase db);
+void exerciseNativeProperties(QSqlDatabase db);
 
 namespace {
 QAction* action(MainWindow& window,const QString& text) {
@@ -3560,6 +3561,7 @@ int main(int argc,char** argv) {
     exerciseQueryEditor(window,db);
     exerciseVisualQueryDesigner(window,db);
     exerciseNativeDebugOutput(window,db);
+    exerciseNativeProperties(db);
     exerciseTableSave(window,db);
     exerciseReferenceDatasheet();
     exerciseDatasheetOutput(window,db);

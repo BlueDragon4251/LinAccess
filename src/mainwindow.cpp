@@ -1938,7 +1938,7 @@ void MainWindow::showAccessArtifact(int id) {
         auto* procedures = new QComboBox(&dialog);
         for (const auto& procedure : analysis.procedures)
             procedures->addItem(QString::fromStdString(procedure.kind) + " "
-                + QString::fromStdString(procedure.name), QString::fromStdString(procedure.name));
+                + QString::fromStdString(procedure.name), QString::fromStdString(linaccess::vbaProcedureExecutionName(procedure)));
         auto* run = new QPushButton("VBA-Prozedur ausführen (eingeschränkte Laufzeit)", &dialog);
         run->setEnabled(!analysis.procedures.empty() && bytes.size() <= 1024 * 1024);
         outer->addWidget(procedures);
@@ -2259,7 +2259,7 @@ void MainWindow::editModule(const QString& existingName) {
     auto* execution=new QHBoxLayout;auto* procedures=new QComboBox(&dialog);procedures->setObjectName("native-module-procedure");procedures->setProperty("la_designer_transient",true);execution->addWidget(procedures,1);auto* run=addButton(execution,"Prozedur ausführen (F5)");run->setObjectName("native-module-run");auto* debug=addButton(execution,"Debuggen (F8)");debug->setObjectName("native-module-debug");layout->addLayout(execution);auto breakpoints=std::make_shared<NativeModuleBreakpoints>();installNativeModuleBreakpoints(dialog,*source,breakpoints);
     auto* runShortcut=new QShortcut(QKeySequence(Qt::Key_F5),&dialog);connect(runShortcut,&QShortcut::activated,run,&QPushButton::click);
     auto* debugShortcut=new QShortcut(QKeySequence(Qt::Key_F8),source);debugShortcut->setContext(Qt::WidgetShortcut);connect(debugShortcut,&QShortcut::activated,debug,&QPushButton::click);
-    const auto updateProcedures=[&] {const auto selected=procedures->currentData();procedures->clear();for(const auto& procedure:linaccess::analyzeVba(source->toPlainText().toUtf8().toStdString()).procedures) procedures->addItem(QString::fromStdString(procedure.kind)+" "+QString::fromStdString(procedure.name),QString::fromStdString(procedure.name));const int index=procedures->findData(selected);if(index>=0) procedures->setCurrentIndex(index);run->setEnabled(procedures->count()>0);debug->setEnabled(procedures->count()>0);};
+    const auto updateProcedures=[&] {const auto selected=procedures->currentData();procedures->clear();for(const auto& procedure:linaccess::analyzeVba(source->toPlainText().toUtf8().toStdString()).procedures) procedures->addItem(QString::fromStdString(procedure.kind)+" "+QString::fromStdString(procedure.name),QString::fromStdString(linaccess::vbaProcedureExecutionName(procedure)));const int index=procedures->findData(selected);if(index>=0) procedures->setCurrentIndex(index);run->setEnabled(procedures->count()>0);debug->setEnabled(procedures->count()>0);};
     updateProcedures();connect(analyze,&QPushButton::clicked,&dialog,updateProcedures);
     connect(source,&QPlainTextEdit::textChanged,&dialog,[run,debug] {run->setEnabled(false);debug->setEnabled(false);});
     auto* result=new QTextBrowser(&dialog);result->setObjectName("native-module-result");result->setMaximumHeight(140);layout->addWidget(result);

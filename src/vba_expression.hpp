@@ -63,6 +63,12 @@ struct VbaArgumentSignature {
 // Source-only declaration metadata; never executes a procedure or retains a host.
 std::optional<VbaArgumentSignature> nativeVbaProcedureSignature(std::string_view module,std::string_view procedure);
 
+enum class VbaPropertyAccess { Get, Let, Set };
+std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view module,
+    std::string_view name,VbaPropertyAccess access,bool publicOnly=true);
+VbaExecutionResult executeVbaProperty(std::string_view module,std::string_view name,
+    VbaPropertyAccess access,VbaHost& host,std::vector<VbaValue>& arguments,bool publicOnly=true);
+
 // Late-bound Access/DAO members. Unknown properties and methods must throw.
 class VbaObject {
 public:
@@ -80,6 +86,10 @@ public:
     virtual VbaValue objectMember(std::string_view name,const std::vector<VbaValue>& arguments) { return member(name,arguments); }
     virtual VbaValue objectItem(std::string_view name) { return item(name); }
     virtual void assignItem(std::string_view name,const VbaValue& value) { assign(name,value); }
+    virtual void assignObject(std::string_view name,const VbaValue& value) { assign(name,value); }
+    virtual void assignIndexedObject(std::string_view name,const std::vector<VbaValue>& indices,const VbaValue& value) {
+        assignIndexedMember(name,indices,value);
+    }
     virtual void assignIndexedMember(std::string_view,const std::vector<VbaValue>&,const VbaValue&) {
         throw VbaRuntimeError(438,"Indexed property assignment is not supported by this object");
     }

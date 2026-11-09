@@ -19,4 +19,6 @@ struct VbaAnalysis {
 
 // Static cataloging only. This is deliberately NOT a VBA interpreter/executor.
 VbaAnalysis analyzeVba(std::string_view source);
+// Accessors sharing a source name need distinct invocation and observation identities.
+std::string vbaProcedureExecutionName(const VbaProcedure& procedure);
 }
