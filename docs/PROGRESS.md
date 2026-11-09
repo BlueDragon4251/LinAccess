@@ -6051,3 +6051,16 @@ gemeinsamen Date-Parser; ungültige Tage/regionale Formen verweigern3251. GUI/DA
 behoben. Kein Importparser-/Windowslexik-/Vollsuiteclaim;456/384/72 unverändert.
 Fortsetzung: Table-Recordsets/Index/Seek für belegte native numerische Indizes,
 mit tatsächlicher Indexreihenfolge und klaren unbewiesenen Grenzen.
+
+Native physische Table-Recordsets1 jetzt explizit/dbOpenTable sowie als Default
+für Main-Tabellen/TableDefs; SQL-/QueryDef-Dynasets2/Snapshots4 bleiben erhalten.
+Geprüfte native nichtnullable numerische Indizes liefern tatsächliche Reihenfolge,
+Index/Seek mit kompletten Schlüsseln, ASC-Bereichen, DESC-Gleichheit, NoMatch/
+Bookmarks, benannten Argumenten und kontrollierten Clonegrenzen. NativeSnapshot-
+Suche, kein B-tree-/Live-Jet-Claim; Date/Text/Null/Partial/DescendingRange und
+unabhängiger Clone-Indexwechsel noch offen. DAO_RECORDSET_INDEX_SEEK.md mit
+aktuellen Microsoft-API-Referenzen, kein2003-Oracle. Core/GUI/DAO/originalesKassa-
+Ereignis4/4 (122,64s; davon Originalimport113,62s), App gebaut. Originaluploads3/3,
+Fixtures4/4 Hashes unverändert. Keine erneute breite Originalprüfung ohne neuen
+betroffenen Umfang.456/384/72 gleich. Fortsetzung: eigene kanonische Date-Index-
+Schlüssel und typed Seek, danach offene Anforderungen ohne Zwischenabschluss.

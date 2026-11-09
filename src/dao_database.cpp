@@ -54,10 +54,10 @@ VbaValue fixedDaoFieldSize(int type) {
     if(size<0) throw VbaRuntimeError(3251,"DAO field size is not proven for this type");
     return VbaValue::longInteger(size);
 }
-int nativeRecordsetMode(const std::vector<VbaValue>& args,std::size_t index) {
-    if(index>=args.size() || args[index].kind==VbaValue::Kind::Missing) return 2;
+int nativeRecordsetMode(const std::vector<VbaValue>& args,std::size_t index,int fallback=2) {
+    if(index>=args.size() || args[index].kind==VbaValue::Kind::Missing) return fallback;
     const auto mode=static_cast<int>(coerceVbaModuleValue(scalarVbaValue(args[index]),"long").number);
-    if(mode!=2 && mode!=4) throw VbaRuntimeError(3251,"DAO: Native Recordset mode is not supported");
+    if(mode!=1 && mode!=2 && mode!=4) throw VbaRuntimeError(3251,"DAO: Native Recordset mode is not supported");
     return mode;
 }
 void require(bool valid, const char* message) { if (!valid) throw std::runtime_error(message); }
@@ -438,12 +438,15 @@ QMap<QString,QVariant> literalDefaultValues(QSqlDatabase db,const QVector<TableS
     for(int i=0;i<keys.size();++i) {auto value=values.value(i);for(const auto& field:columns) if(field.name.toCaseFolded()==keys[i] && (field.type=="SINGLE_REAL" || field.type.contains("DATE",Qt::CaseInsensitive))) {value=sqlFieldValue(fromSql(value),field.type);break;}result.insert(keys[i],value);}
     return result;
 }
+struct NativeRecordsetIndex {QString name;QStringList fields,types;QVector<bool> descending;bool operator==(const NativeRecordsetIndex&) const=default;};
+NativeRecordsetIndex checkedRecordsetIndex(QSqlDatabase db,const QString& table,const QString& requested);
 class Recordset;
 struct RecordsetData {
     std::shared_ptr<WorkspaceState> workspace;
     quint64 rollbackRevision{},fieldRevision{};
     QStringList columns;
     QString rowIdentity{"rowid"};
+    std::optional<NativeRecordsetIndex> selectedIndex;
     QMap<QString,QString> types;
     QMap<QString,int> daoTypes,definitionSizes;
     QMap<QString,QVariant> literalDefaults;
@@ -492,6 +495,7 @@ public:
         if (key=="findfirst" || key=="findlast" || key=="findnext" || key=="findprevious")
             return VbaArgumentSignature{{"Criteria"},1};
         if (key=="move") return VbaArgumentSignature{{"Rows","Start"},1};
+        if (key=="seek") return VbaArgumentSignature{{"Comparison","Key1","Key2","Key3","Key4","Key5","Key6","Key7","Key8","Key9","Key10"},2};
         if (key=="getrows") return VbaArgumentSignature{{"NumRows"},0};
         if (key=="fields") return VbaArgumentSignature{{"Index"},0};
         return {};
@@ -598,6 +602,8 @@ public:
         if (key!="close" && key!="requery") checkTransaction();
         if((key=="edit" || key=="addnew" || key=="update" || key=="delete") && !connectionUpdatable(db_)) throw VbaRuntimeError(3027,"DAO: Database or object is read-only");
         if (key=="transactions" && args.empty()) return VbaValue::logical(true);
+        if(key=="index") {if(!args.empty()) throw VbaRuntimeError(450,"DAO: Index property takes no arguments");if(!table_ || recordsetType_!=1) throw VbaRuntimeError(3251,"DAO: Index requires a table-type Recordset");if(!indexName_.isEmpty() && (!data_->selectedIndex || checkedRecordsetIndex(db_,source_,indexName_)!=*data_->selectedIndex)) throw VbaRuntimeError(3251,"DAO: Index changed; Requery is required");return VbaValue::string(indexName_.toStdString());}
+        if(key=="seek") {seek(args);return {};}
         if(key=="getrows") {
             if(args.size()>1) throw VbaRuntimeError(450,"DAO: GetRows accepts one row count");
             if(args.empty() || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(3251,"DAO: GetRows currently requires explicit positive NumRows");
@@ -748,6 +754,10 @@ public:
         return value(text(name)); // implicit default Fields(name).Value
     }
     void assign(std::string_view name, const VbaValue& value) override {
+        if(lower(name)=="index") {
+            if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");checkTransaction();if(!table_ || recordsetType_!=1) throw VbaRuntimeError(3251,"DAO: Index requires a table-type Recordset");if(mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");const auto revision=data_->revision;const auto scalar=scalarVbaValue(value);checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset closed during index evaluation");if(mode_!=Mode::Browse || revision!=data_->revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during index evaluation");if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null index name");
+            const auto requested=text(scalar.asText());std::optional<NativeRecordsetIndex> next;if(!requested.isEmpty()) next=checkedRecordsetIndex(db_,source_,requested);const auto name=next ? next->name : QString{};if(name==indexName_ && next==data_->selectedIndex) return;if(data_->cursors.size()!=1) throw VbaRuntimeError(3251,"DAO: Change Index before creating clones or after closing them");const auto old=indexName_;const auto id=position_>=0 && position_<data_->ids.size() ? data_->ids[position_] : QVariant{};indexName_=name;try {reload(false);if(!id.isNull()) position_=data_->ids.indexOf(id);}catch(...) {indexName_=old;throw;}return;
+        }
         if(lower(name)=="type") {
             if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");
             checkTransaction();
@@ -910,7 +920,7 @@ private:
     struct CloneTag {};
     Recordset(const Recordset& source,CloneTag)
         : data_(source.data_),db_(source.db_),source_(source.source_),bindings_(source.bindings_),
-          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),position_(-1),queryPlan_(source.queryPlan_) {
+          table_(source.table_),readOnly_(source.readOnly_),frozen_(source.frozen_),recordsetType_(source.recordsetType_),tableGeneration_(source.tableGeneration_),indexName_(source.indexName_),position_(-1),queryPlan_(source.queryPlan_) {
         cloneCounted_=true; ++data_->workspace->clones;
         data_->cursors.insert(this);
     }
@@ -921,6 +931,15 @@ private:
         throw std::runtime_error("DAO: Unknown field");
     }
     void current() const { if (position_<0 || position_>=data_->rows.size()) throw VbaRuntimeError(3021,"DAO: No current record"); }
+    void seek(const std::vector<VbaValue>& arguments) {
+        if(!table_ || recordsetType_!=1) throw VbaRuntimeError(3251,"DAO: Seek requires a table-type Recordset");if(mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");if(arguments.size()<2 || arguments.size()>11) throw VbaRuntimeError(450,"DAO: Seek requires comparison and complete keys");if(indexName_.isEmpty()) throw VbaRuntimeError(3251,"DAO: Set Index before Seek");
+        const auto index=checkedRecordsetIndex(db_,source_,indexName_);if(!data_->selectedIndex || index!=*data_->selectedIndex) throw VbaRuntimeError(3251,"DAO: Index changed; Requery is required");if(arguments.size()!=static_cast<std::size_t>(index.fields.size()+1)) throw VbaRuntimeError(3251,"DAO: Seek requires every numeric index key");const auto revision=data_->revision;const auto comparison=text(scalarVbaValue(arguments[0]).asText());if(comparison!="=" && comparison!="<" && comparison!="<=" && comparison!=">" && comparison!=">=") throw VbaRuntimeError(3251,"DAO: Seek comparison unsupported");if(comparison!="=" && index.descending.contains(true)) throw VbaRuntimeError(3251,"DAO: Descending range Seek requires Access reference validation");
+        QVector<double> keys;QVector<int> positions;for(int field=0;field<index.fields.size();++field) {const auto value=scalarVbaValue(arguments[field+1]);if(value.kind==VbaValue::Kind::Null || value.kind==VbaValue::Kind::Missing) throw VbaRuntimeError(3251,"DAO: Null/missing Seek keys are not supported");if(value.kind!=VbaValue::Kind::Number && value.kind!=VbaValue::Kind::Boolean) throw VbaRuntimeError(13,"DAO: Numeric Seek key required");keys.append(sqlFieldValue(value,index.types[field]).toDouble());positions.append(column(index.fields[field]));}
+        checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset closed during Seek evaluation");if(mode_!=Mode::Browse || revision!=data_->revision) throw VbaRuntimeError(3219,"DAO: Recordset changed during Seek evaluation");const bool backwards=comparison=="<" || comparison=="<=";QElapsedTimer clock;clock.start();
+        for(qsizetype row=backwards ? data_->rows.size()-1 : 0;row>=0 && row<data_->rows.size();row+=backwards ? -1 : 1) {if(clock.hasExpired(5000)) throw VbaRuntimeError(3035,"DAO: Seek execution budget exceeded");int order=0;for(int field=0;field<positions.size();++field) {const auto& value=data_->rows[row][positions[field]];if(value.isNull()) throw VbaRuntimeError(3251,"DAO: Nullable Seek index is not supported");const auto number=value.toDouble();if(number<keys[field]) {order=-1;break;}if(number>keys[field]) {order=1;break;}}
+            const bool matches=comparison=="=" ? order==0 : comparison=="<" ? order<0 : comparison=="<=" ? order<=0 : comparison==">" ? order>0 : order>=0;if(matches) {position_=row;noMatch_=false;return;}}
+        position_=data_->rows.size();noMatch_=true;
+    }
     void find(const std::string& kind,const QString& criteria) {
         if (mode_!=Mode::Browse) throw VbaRuntimeError(3219,"DAO: Pending edit");
         if (criteria.trimmed().isEmpty()) throw VbaRuntimeError(3075,"DAO: Empty find criterion");
@@ -1036,8 +1055,8 @@ private:
         }
         SqliteExecutionBudget budget(db_);
         QSqlQuery query(db_);
-        data_->rowIdentity=physicalRowIdentity(db_,source_);
-        exec(query,"SELECT "+data_->rowIdentity+",* FROM " + quote(source_));
+        data_->rowIdentity=physicalRowIdentity(db_,source_);std::optional<NativeRecordsetIndex> selected;QString order;if(!indexName_.isEmpty()) {selected=checkedRecordsetIndex(db_,source_,indexName_);QStringList terms;for(int field=0;field<selected->fields.size();++field) terms.append(quote(selected->fields[field])+(selected->descending[field] ? " DESC" : " ASC"));terms.append(data_->rowIdentity+" ASC");order=" ORDER BY "+terms.join(',');}
+        exec(query,"SELECT "+data_->rowIdentity+",* FROM " + quote(source_)+order);data_->selectedIndex=std::move(selected);
         const int offset = table_ ? 1 : 0;
         data_->columns.clear(); data_->rows.clear(); data_->ids.clear(); position_ = 0;
         const int end = query.record().count();
@@ -1091,7 +1110,7 @@ private:
     }
     std::shared_ptr<RecordsetData> data_{std::make_shared<RecordsetData>()};
     QSqlDatabase db_;
-    QString source_;
+    QString source_,indexName_;
     QMap<QString,QVariant> bindings_;
     bool table_{}, readOnly_{}, closed_{}, frozen_{},noMatch_{},cloneCounted_{};
     std::optional<int> recordsetType_; // Opening kind, independent of write capability; unknown for host-only frozen adapters.
@@ -1257,6 +1276,7 @@ public:
             if(args.size()>1) throw VbaRuntimeError(450,"DAO: QueryDef OpenRecordset accepts one mode");
             const int mode=nativeRecordsetMode(args,0);
             require(plan_.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT QueryDef required");
+            if(mode==1) throw VbaRuntimeError(3251,"DAO: QueryDef cannot open a table-type Recordset");
             return VbaValue::reference(std::make_shared<Recordset>(db_,plan_.sql,true,bindAccessQueryParameters(plan_,values_),plan_,mode));
         }
         if (key == "execute") {
@@ -1756,6 +1776,10 @@ QVector<NativeIndexData> readNativeIndexCatalog(QSqlDatabase db,const QString& t
     if(!actual.isEmpty() || primaryCount!=(primary.isEmpty() ? 0 : 1)) throw VbaRuntimeError(3251,"DAO: Native index catalog is incomplete");
     return result;
 }
+NativeRecordsetIndex checkedRecordsetIndex(QSqlDatabase db,const QString& source,const QString& requested) {
+    QString table;for(const auto& name:nativeTableNames(db)) if(name.compare(source,Qt::CaseInsensitive)==0) {table=name;break;}if(table.isEmpty()) throw VbaRuntimeError(3251,"DAO: Index requires a physical main table");std::optional<AccessSourceIndex> selected;for(const auto& index:readNativeIndexCatalog(db,table)) if(index.source.name.compare(requested,Qt::CaseInsensitive)==0) selected=index.source;if(!selected) throw VbaRuntimeError(3265,"DAO: Index not found");const auto schema=readTableSchemaColumns(db,table);QSet<QString> required;QMap<QString,QString> declarations;QSqlQuery columns(db);if(!columns.exec("PRAGMA main.table_info("+quote(table)+")")) queryFailure(columns);while(columns.next()) {const auto name=columns.value(1).toString();if(columns.value(3).toBool()) required.insert(name.toCaseFolded());declarations.insert(name.toCaseFolded(),columns.value(2).toString().trimmed().toUpper());}
+    NativeRecordsetIndex result{selected->name,selected->columns,{},selected->descending};for(const auto& name:selected->columns) {std::optional<TableSchemaColumn> field;for(const auto& column:schema) if(column.name==name) field=column;if(!field || !field->nativeAttributes || !required.contains(name.toCaseFolded()) || (field->sourceType!=1 && field->sourceType!=2 && field->sourceType!=3 && field->sourceType!=4 && field->sourceType!=6 && field->sourceType!=7) || (field->sourceType==6 && declarations.value(name.toCaseFolded())!="SINGLE_REAL")) throw VbaRuntimeError(3251,"DAO: Index navigation currently requires non-null own native numeric keys");result.types.append(field->type);}return result;
+}
 using NativeIndexReader=std::function<QVector<NativeIndexData>()>;
 class NativeIndex final : public VbaObject,public std::enable_shared_from_this<NativeIndex> {
 public:
@@ -1924,8 +1948,8 @@ public:
         }
         if (key=="openrecordset") {
             if (args.size()>1) throw VbaRuntimeError(450,"DAO: TableDef OpenRecordset arguments unsupported");
-            const int mode=nativeRecordsetMode(args,0);
-            return VbaValue::reference(std::make_shared<Recordset>(db_,name_,mode==4));
+            const int mode=nativeRecordsetMode(args,0,1);
+            return VbaValue::reference(std::make_shared<Recordset>(db_,name_,mode==4,QMap<QString,QVariant>{},AccessQueryPlan{},mode));
         }
         throw VbaRuntimeError(438,"DAO: TableDef member unsupported");
     }
@@ -3268,10 +3292,10 @@ public:
         }
         if (key == "openrecordset") {
             if(args.empty() || args.size()>2) throw VbaRuntimeError(450,"DAO: Database OpenRecordset accepts Name and optional Type");
-            const int mode=nativeRecordsetMode(args,1);
             const auto source = text(args[0].asText());
-            if (db_.tables().contains(source,Qt::CaseInsensitive))
-                return VbaValue::reference(std::make_shared<Recordset>(db_,source,mode == 4));
+            const bool physical=nativeTableNames(db_).contains(source,Qt::CaseInsensitive);const int mode=nativeRecordsetMode(args,1,physical ? 1 : 2);
+            if (db_.tables().contains(source,Qt::CaseInsensitive)) {if(mode==1 && !physical) throw VbaRuntimeError(3251,"DAO: Table-type Recordset requires a physical main user table");return VbaValue::reference(std::make_shared<Recordset>(db_,source,mode == 4,QMap<QString,QVariant>{},AccessQueryPlan{},mode));}
+            if(mode==1) throw VbaRuntimeError(3251,"DAO: Table-type Recordset requires a physical table");
             const auto sql = source.trimmed().startsWith("SELECT ",Qt::CaseInsensitive) ? source : accessQuerySource(db_,source);
             const auto plan = compileAccessQuery(sql);
             require(plan.sql.trimmed().startsWith("SELECT ",Qt::CaseInsensitive),"DAO: SELECT required");

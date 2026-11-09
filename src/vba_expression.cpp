@@ -1080,6 +1080,7 @@ private:
         static const std::unordered_map<std::string,std::int32_t> relationAttributes{{"dbdescending",1},{"dbrelationunique",1},{"dbrelationdontenforce",2},{"dbrelationinherited",4},
             {"dbrelationupdatecascade",256},{"dbrelationdeletecascade",4096},{"dbrelationleft",16777216},{"dbrelationright",33554432}};
         if(const auto attribute=relationAttributes.find(word);attribute!=relationAttributes.end()) return VbaValue::longInteger(attribute->second);
+        if (word == "dbopentable") return VbaValue::longInteger(1);
         if (word == "dbopendynaset") return VbaValue::numeric(2);
         if (word == "dbopensnapshot") return VbaValue::numeric(4);
         if (word == "acquitprompt") return VbaValue::integer(0);
