@@ -2346,7 +2346,7 @@ End Sub
         if (kind==VbaValue::Kind::Number) assert(outcome.typedReturnValue->number==0);
         if (kind==VbaValue::Kind::Object) assert(!outcome.typedReturnValue->object);
     }
-    assert(executeVbaProcedure("Function UnsupportedResult() As CustomType\nMe.Tag=\"effect\"\nEnd Function","UnsupportedResult",host).status==VbaExecutionStatus::Unsupported);
+    assert(executeVbaProcedure("Function UnsupportedResult() As CustomType\nMe.Tag=\"effect\"\nEnd Function","UnsupportedResult",host).errorNumber==3251);
     const auto inlineExit=executeVbaProcedure(R"VBA(Sub InlineExit()
 Dim total As Long
 Dim outer As Long
@@ -2649,7 +2649,7 @@ End Sub
     if(nativeTypeChecks.status!=VbaExecutionStatus::Completed) std::cerr<<"Native TypeOf error="<<nativeTypeChecks.errorNumber<<" line="<<nativeTypeChecks.line<<" explanation="<<nativeTypeChecks.explanation<<"\n";
     assert(nativeTypeChecks.status==VbaExecutionStatus::Completed && host.fields["NativeTypeChecks"]=="True:True:1" && host.fields["NativeTypeNothing"]=="91");
     const auto unknownType=executeVbaProcedure("Sub UnknownType()\nMe!NeverTypeOf=1\nDim obj As Object\nIf TypeOf obj Is UnregisteredClass Then Exit Sub\nEnd Sub","UnknownType",host);
-    assert(unknownType.status==VbaExecutionStatus::Unsupported && !host.fields.contains("NeverTypeOf"));
+    assert(unknownType.status==VbaExecutionStatus::Error && unknownType.errorNumber==3251 && !host.fields.contains("NeverTypeOf"));
     const auto computedBranches=executeVbaProcedure(R"VBA(Private picks As Long
 Function PickBranch() As Double
 picks=picks+1

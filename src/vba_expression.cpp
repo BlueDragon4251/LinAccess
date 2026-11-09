@@ -1,3 +1,4 @@
+#include "vba_project_types.hpp"
 #include "vba_conditional.hpp"
 #include "vba_condition.hpp"
 #include "native_object_types.hpp"
@@ -976,12 +977,12 @@ private:
                 type+="."+lower(token.value);
             }
             const auto nativeType=nativeObjectType(type);
-            if(nativeType.empty()) throw error("TypeOf class binding is not implemented",3251);
+            if(nativeType.empty() && (!isProjectClassIdentifier(type) || (host_ && !host_->knowsClassType(type)))) throw error("TypeOf project class binding is unavailable",3251);
             if(referenceCapture_) referenceCapture_->element.reset();
             if(!host_) return {};
             if(object.kind!=VbaValue::Kind::Object) return VbaValue::logical(false);
             if(!object.object) throw error("TypeOf object variable is not set",91);
-            return VbaValue::logical(nativeType=="object" || object.object->isNativeType(nativeType));
+            return VbaValue::logical(nativeType=="object" || object.object->isNativeType(nativeType.empty() ? std::string_view(type) : nativeType));
         }
         if (take("(")) {
             const auto value = expression(1,objectContext);
@@ -2646,6 +2647,27 @@ std::vector<std::string> vbaConstructedClasses(std::string_view expression) {
     for(std::size_t i=0;i+1<tokens.size();++i) if(tokens[i].type==Token::Type::Word && lower(tokens[i].value)=="new" && tokens[i+1].type==Token::Type::Word) {
         const auto name=lower(tokens[++i].value);
         if(name!="collection" && name!="vba" && name!="scripting") names.push_back(name);
+    }
+    return names;
+}
+
+std::vector<std::string> vbaExpressionClassTypes(std::string_view expression) {
+    constexpr std::string_view keyword="typeof";
+    if(std::search(expression.begin(),expression.end(),keyword.begin(),keyword.end(),[](unsigned char a,unsigned char b){return std::tolower(a)==b;})==expression.end()) return {};
+    const auto tokens=tokenize(expression,false);std::vector<std::string> names;
+    for(std::size_t i=0;i+1<tokens.size();++i) if(tokens[i].type==Token::Type::Word && lower(tokens[i].value)=="typeof") {
+        int depth=0;
+        for(std::size_t j=i+1;j+1<tokens.size();++j) {
+            if(tokens[j].value=="(") ++depth;
+            else if(tokens[j].value==")") {if(--depth<0) break;}
+            else if(depth==0 && tokens[j].type==Token::Type::Word && lower(tokens[j].value)=="is") {
+                if(tokens[j+1].type==Token::Type::Word) {
+                    const auto name=lower(tokens[j+1].value);
+                    if((j+2>=tokens.size() || tokens[j+2].value!=".") && isProjectClassIdentifier(name)) names.push_back(name);
+                }
+                break;
+            }
+        }
     }
     return names;
 }

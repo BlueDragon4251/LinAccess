@@ -1181,7 +1181,7 @@ public:
         (void)checked();
     }
     void assignObject(std::string_view name,const linaccess::VbaValue& value) override {
-        if(checked().invokeModuleProperty(name,linaccess::VbaPropertyAccess::Set,{value},true)) {(void)checked();return;}
+        if(checked().setModuleMember(name,value,true,true)) {(void)checked();return;}
         throw linaccess::VbaRuntimeError(438,"Property Set is unavailable");
     }
     void assignIndexedObject(std::string_view name,const std::vector<linaccess::VbaValue>& indices,const linaccess::VbaValue& value) override {

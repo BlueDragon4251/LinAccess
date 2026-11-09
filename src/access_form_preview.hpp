@@ -131,7 +131,7 @@ private:
     void closeOtherDocument(int type,const std::optional<QString>& name,int save);
     std::optional<linaccess::VbaValue> getModuleMember(std::string_view name,bool publicOnly,std::vector<linaccess::VbaValue> arguments={});
     std::optional<linaccess::VbaValue> invokeModuleProperty(std::string_view name,linaccess::VbaPropertyAccess access,std::vector<linaccess::VbaValue> arguments,bool publicOnly);
-    bool setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly);
+    bool setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly,bool reference=false);
     std::optional<std::string> getField(std::string_view name) const;
     void ensureWritableControl(std::string_view name) const;
     void setField(std::string_view name, std::optional<std::string> value);

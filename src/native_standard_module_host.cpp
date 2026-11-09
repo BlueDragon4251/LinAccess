@@ -42,6 +42,7 @@
 int nativeModuleMessageBox(QWidget*,std::string_view,int,const std::optional<std::string>&);
 namespace linaccess {
 NativeStandardModuleHost::~NativeStandardModuleHost()=default;
+bool NativeStandardModuleHost::knowsClassType(std::string_view name){check();return nativeProjectClassTypeKnown(db_,name);}
 bool NativeStandardModuleHost::canConstructClass(std::string_view name){check();return nativeProjectClassAvailable(db_,name);}
 std::shared_ptr<VbaObject> NativeStandardModuleHost::constructClass(std::string_view name){check();return constructNativeProjectClass(db_,owner_,name,guard_);}
 NativeStandardModuleHost::NativeStandardModuleHost(QWidget* owner,QSqlDatabase db,std::function<void()> guard)

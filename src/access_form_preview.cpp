@@ -1,3 +1,4 @@
+#include "vba_project_types.hpp"
 #include "native_class_catalog.hpp"
 #include "vba_array.hpp"
 #include "native_object_types.hpp"
@@ -517,6 +518,7 @@ class PreviewVbaHost final : public linaccess::VbaHost {
 public:
     static void openProjectDocument(QSqlDatabase,QWidget*,linaccess::AccessDocumentKind,const QString&,const QString&,std::optional<QString>,int,int,QPointer<AccessFormPreview> caller={});
     explicit PreviewVbaHost(AccessFormPreview& preview) : preview_(preview),observationDatabase_(preview.db_.databaseName()) {}
+    bool knowsClassType(std::string_view name) override {requireInstance();return linaccess::nativeProjectClassTypeKnown(preview_.db_,name);}
     bool canConstructClass(std::string_view name) override {requireInstance();return linaccess::nativeProjectClassAvailable(preview_.db_,name);}
     std::shared_ptr<linaccess::VbaObject> constructClass(std::string_view name) override {
         requireInstance();QPointer<AccessFormPreview> owner=&preview_;
@@ -3083,6 +3085,7 @@ std::optional<linaccess::VbaValue> AccessFormPreview::getModuleMember(std::strin
     if (found==moduleStates_.end()) found=moduleStates_.emplace(source,linaccess::createVbaModuleState(source)).first;
     const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded().toStdString();
     const auto& frame=found->second;
+    linaccess::validateNativeProjectClassFields(db_,*frame);
     if ((!publicOnly || frame->publicVariables.contains(key)) && frame->values.contains(key)) {
         if(!arguments.empty()) throw linaccess::VbaRuntimeError(450,"Module variable does not accept property indices");
         return frame->values.at(key);
@@ -3090,7 +3093,7 @@ std::optional<linaccess::VbaValue> AccessFormPreview::getModuleMember(std::strin
     const auto signature=linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly);
     if(!signature) return {};
     if(signature->names.empty() && !arguments.empty()
-        && (signature->resultType.empty() || signature->resultType=="variant" || signature->resultType.ends_with("()") || !linaccess::nativeObjectType(signature->resultType).empty())) {
+        && (signature->resultType.empty() || signature->resultType=="variant" || signature->resultType.ends_with("()") || linaccess::isDeclaredObjectType(signature->resultType))) {
         QPointer<AccessFormPreview> guard(this);
         const auto target=invokeModuleProperty(name,linaccess::VbaPropertyAccess::Get,{},publicOnly);
         if(target && linaccess::isVbaArray(*target)) return linaccess::vbaArrayElement(*target,arguments);
@@ -3111,8 +3114,8 @@ std::optional<linaccess::VbaValue> AccessFormPreview::invokeModuleProperty(std::
         const auto getter=linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly);
         if(!getter) return {};
         const bool forwarded=getter->names.empty() && arguments.size()>1
-            && (getter->resultType.empty() || getter->resultType=="variant" || !linaccess::nativeObjectType(getter->resultType).empty());
-        if(!forwarded && (access!=linaccess::VbaPropertyAccess::Let || linaccess::nativeObjectType(getter->resultType).empty())) return {};
+            && (getter->resultType.empty() || getter->resultType=="variant" || linaccess::isDeclaredObjectType(getter->resultType));
+        if(!forwarded && (access!=linaccess::VbaPropertyAccess::Let || !linaccess::isDeclaredObjectType(getter->resultType))) return {};
         value=arguments.back();arguments.pop_back();
         if(forwarded) {defaultIndices=std::move(arguments);arguments.clear();}
         if(access==linaccess::VbaPropertyAccess::Let) value=linaccess::scalarVbaValue(value);
@@ -3132,17 +3135,22 @@ std::optional<linaccess::VbaValue> AccessFormPreview::invokeModuleProperty(std::
     }
     return result.typedReturnValue ? *result.typedReturnValue : linaccess::VbaValue::empty();
 }
-bool AccessFormPreview::setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly) {
+bool AccessFormPreview::setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly,bool reference) {
     if(closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"CodeBehind instance is unavailable");
     const auto source=vba_.toUtf8().toStdString();
     auto found=moduleStates_.find(source);
     if(found==moduleStates_.end()) found=moduleStates_.emplace(source,linaccess::createVbaModuleState(source)).first;
     const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded().toStdString();
     const auto frame=found->second;
+    linaccess::validateNativeProjectClassFields(db_,*frame);
     if((!publicOnly || frame->publicVariables.contains(key)) && frame->values.contains(key)) {
-        frame->values.at(key)=linaccess::coerceVbaModuleValue(value,frame->types.at(key));return true;
+        if(frame->constants.contains(key)) throw linaccess::VbaRuntimeError(383,"Module constant is read-only");
+        const auto& type=frame->types.at(key);
+        if(reference && (value.kind!=linaccess::VbaValue::Kind::Object || (!type.empty() && type!="variant" && !linaccess::isDeclaredObjectType(type)))) throw linaccess::VbaRuntimeError(13,"Set requires an object or Variant field");
+        if(frame->fixedArrays.contains(key)) throw linaccess::VbaRuntimeError(3251,"Whole fixed-array assignment is not implemented");
+        frame->values.at(key)=linaccess::coerceVbaModuleValue(value,type);return true;
     }
-    if(invokeModuleProperty(name,linaccess::VbaPropertyAccess::Let,{value},publicOnly)) return true;
+    if(invokeModuleProperty(name,reference ? linaccess::VbaPropertyAccess::Set : linaccess::VbaPropertyAccess::Let,{value},publicOnly)) return true;
     if(linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly))
         throw linaccess::VbaRuntimeError(383,"Property is read-only");
     return false;

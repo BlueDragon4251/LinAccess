@@ -1,3 +1,4 @@
+#include "vba_project_types.hpp"
 #include "native_class_catalog.hpp"
 #include "native_class_definition.hpp"
 #include "native_standard_module_host.hpp"
@@ -50,11 +51,17 @@ std::optional<ClassRevision> revision(QSqlDatabase db,const QString& requested) 
     if(fallback && text.contains(QChar::ReplacementCharacter)) throw VbaRuntimeError(3251,"Imported class encoding has unrepresentable bytes");
     row.source=nativeClassModuleSource(QJsonObject{{"version",1},{"vba",text}},row.name);return row;
 }
-std::shared_ptr<const NativeVbaClassDefinition> compiled(QSqlDatabase db,const ClassRevision& row) {
+void proveNamespace(QSqlDatabase db,const ClassRevision& row) {
     QSet<QString> classes;const auto sources=standardVbaModuleSources(db,nullptr,&classes);if(!classes.contains(row.name.toCaseFolded()) || !sources.contains(row.name.toCaseFolded()) || sources.value(row.name.toCaseFolded())!=(row.imported ? row.encoded : row.source)) throw VbaRuntimeError(5,"Native class namespace is ambiguous");
-    return compileNativeVbaClass(row.name.toStdString(),row.source.toStdString());
+}
+std::shared_ptr<const NativeVbaClassDefinition> compiled(QSqlDatabase db,const ClassRevision& row) {
+    proveNamespace(db,row);auto result=compileNativeVbaClass(row.name.toStdString(),row.source.toStdString());
+    for(const auto& type:nativeVbaClassDeclaredTypes(*result)) if(!nativeProjectClassTypeKnown(db,type)) throw VbaRuntimeError(3251,"Class declaration type is unavailable");
+    return result;
 }
 }
+bool nativeProjectClassTypeKnown(QSqlDatabase db,std::string_view name) {const auto row=revision(db,QString::fromUtf8(name.data(),name.size()));if(!row) return false;proveNamespace(db,*row);return true;}
+void validateNativeProjectClassFields(QSqlDatabase db,const VbaModuleState& state) {for(const auto& [name,type]:state.types) if(isProjectClassType(type) && !nativeProjectClassTypeKnown(db,projectClassTypeName(type))) throw VbaRuntimeError(3251,"Module declaration type is unavailable");}
 bool nativeProjectClassAvailable(QSqlDatabase db,std::string_view name) {const auto row=revision(db,QString::fromUtf8(name.data(),name.size()));if(!row) return false;(void)compiled(db,*row);return true;}
 std::shared_ptr<VbaObject> constructNativeProjectClass(QSqlDatabase db,QWidget* caller,std::string_view name,std::function<void()> standaloneGuard) {
     const auto row=revision(db,QString::fromUtf8(name.data(),name.size()));if(!row) throw VbaRuntimeError(3251,"Native project class is unavailable");const auto definition=compiled(db,*row);

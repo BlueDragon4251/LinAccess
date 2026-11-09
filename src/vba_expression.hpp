@@ -59,11 +59,13 @@ struct VbaArgumentSignature {
     std::string resultType{};
     bool variadic{};
     std::vector<bool> byReference{};
+    std::vector<std::string> declaredTypes{};
     bool objectArgument(std::size_t position,std::string_view name={}) const;
 };
 
 // Source-only declaration metadata; never executes a procedure or retains a host.
 std::optional<VbaArgumentSignature> nativeVbaProcedureSignature(std::string_view module,std::string_view procedure);
+std::vector<std::string> nativeVbaProcedureClassTypes(std::string_view module,std::string_view procedure);
 
 enum class VbaPropertyAccess { Get, Let, Set };
 std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view module,
@@ -178,6 +180,7 @@ VbaEvaluatedArgument evaluateVbaArgumentExpression(std::string_view expression,V
     const VbaVariables& variables,const VbaFunctionResolver& resolver={},const VbaValue* withContext=nullptr,
     VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0,bool objectContext=false);
 std::vector<std::string> vbaConstructedClasses(std::string_view expression);
+std::vector<std::string> vbaExpressionClassTypes(std::string_view expression);
 bool validVbaExpression(std::string_view expression,bool withContext=false);
 VbaValue evaluateVbaExpression(std::string_view expression, VbaHost& host,
                                const VbaVariables& variables, const VbaFunctionResolver& resolver = {},const VbaValue* withContext=nullptr,VbaCompareMode compareMode=VbaCompareMode::Binary,int arrayBase=0,bool statementContext=false);

@@ -1,3 +1,4 @@
+#include "vba_typed_class_fixture.hpp"
 #include "vba_class.hpp"
 #include "vba_class_fixture.hpp"
 #include "vba_array.hpp"
@@ -22,6 +23,7 @@ public:
     void message(std::string_view) override {++state->messages;if(state->callback) state->callback();}
     std::shared_ptr<VbaModuleState> moduleState(std::string_view source) override {auto& value=state->modules[std::string(source)];if(!value) value=createVbaModuleState(source);return value;}
     std::optional<std::string> moduleForProcedure(std::string_view name) override {auto key=std::string(name);for(auto& ch:key) ch=static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));if(key=="projectvalue") return "Public Function ProjectValue As Long\nProjectValue=19\nEnd Function";if(key=="projectme") return "Public Function ProjectMe As Long\nProjectMe=VarType(Me)\nEnd Function";return {};}
+    bool knowsClassType(std::string_view name) override {auto key=std::string(name);for(auto& ch:key) ch=static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));return state->classes.contains(key);}
     bool canConstructClass(std::string_view name) override {const auto found=state->classes.find(std::string(name));if(found==state->classes.end()) return false;(void)compileNativeVbaClass(name=="nativecounter" ? "NativeCounter" : std::string(name),found->second);return true;}
     std::shared_ptr<VbaObject> constructClass(std::string_view name) override {auto key=std::string(name);for(auto& ch:key) ch=static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));const auto found=state->classes.find(key);if(found==state->classes.end()) throw VbaRuntimeError(3251,"Unknown technical class");VbaClassContext context;context.check=[state=state]{if(!state->alive) throw VbaRuntimeError(3420,"Class technical context closed");};context.host=[state=state]{return std::make_unique<ClassServices>(state);};return constructNativeVbaClass(compileNativeVbaClass(key=="nativecounter" ? "NativeCounter" : key,found->second),std::move(context));}
 };
@@ -46,5 +48,17 @@ void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<Cla
         other.moduleState(source)->values["carried"]=VbaValue::reference(first);const auto nested=executeVbaProcedure(source,"Reentrant",other);assert(nested.status==VbaExecutionStatus::Completed && nested.typedReturnValue->number==438);other.moduleState(source)->values["carried"]=VbaValue::reference(nullptr);
     };
     const auto beforeCallback=first->member("Value",{}).number;(void)first->invokeMember("Trigger",{},false);state->callback={};assert(state->messages==1 && first->member("Value",{}).number==beforeCallback+1);
+    for(const auto& probe:std::vector<std::pair<const char*,int>>{{"TypedProbe",33},{"TypedMismatch",13},{"TypedRefMismatch",13}}) {
+        const auto result=executeVbaProcedure(typedClassConsumer,probe.first,host);
+        if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Typed class "<<probe.first<<": "<<result.explanation<<" error "<<result.errorNumber<<"\n";
+        assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue && result.typedReturnValue->number==probe.second);
+    }
+    result=executeVbaProcedure(typedClassConsumer,"TypedReturnMismatch",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==13);
+    for(const auto& declaration:std::vector<std::string>{"Dim item As Missing", ""}) {
+        const auto source=declaration.empty() ? "Function UnknownTyped As Missing\nMsgBox \"unreached\"\nEnd Function" : "Sub UnknownTyped\nMsgBox \"unreached\"\n"+declaration+"\nEnd Sub";
+        const auto before=state->messages;result=executeVbaProcedure(source,"UnknownTyped",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251 && state->messages==before);
+    }
+    state->classes["selflink"]="VERSION 1.0 CLASS\nAttribute VB_Name = \"SelfLink\"\nPublic NextLink As SelfLink\nPublic Function Identity As SelfLink\nSet Identity=Me\nEnd Function\n";
+    auto self=host.constructClass("SelfLink");assert(self->member("Identity",{}).object==self && !self->member("NextLink",{}).object);
     state->alive=false;error=0;try{first->member("Calls",{});}catch(const VbaRuntimeError& e){error=e.number;}assert(error==3420);
 }

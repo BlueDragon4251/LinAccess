@@ -2785,3 +2785,21 @@ auf voriger geprüfter Umsetzung. Vorstufe7f40893 privat veröffentlicht/Baum ge
 frischeDEB7f40893 samt Payload/Rechten/Build-ID/gepinnten SQLite/MDBTools bestanden.
 Katalog456/386/70 unverändert. Ohne Zwischenabschluss mit benannten Klassen-
 Typbindungen und weiteren offenen Anforderungen fortfahren.
+
+
+Benannte Projektklassen-Typbindungen: eigene/gewöhnliche archivierte echte Klassen
+in skalaren Dim/Feldern/Parametern/Rückgaben/GetSet/TypeOf; optionalNothing und
+owning-ByRef, Typfehler13, unbekannte Bindung3251 vor Body. Selbsttypen ohne
+rekursive Instanziierung; direkte Formularfelder und SQL-Klassenresultatgrenze
+geprüft. Details NATIVE_VBA_CLASSES.md. Klassenarrays/AsNew/Interfaces/externes
+ByRef bleiben offen. Katalog456/386/70 unverändert; keine Paritätsbehauptung.
+
+Nachweise dieses Blocks: native Kernprüfung nach If-Typbindungsfix1/1 (4,15s),
+mit OptionExplicit-Fixture erneut1/1 (4,04s); Original-Ereignispfad1/1 (123,33s)
+für die native VM, anschließend nur noch Qt-Formularfeld-Set ergänzt. Finales
+vorhandenes GUI-Ziel1/1 (17,80s), App gebaut. Erster GUI-Basisblock17,88s bestand;
+Erweiterungen korrigierten technische SQL-Registrierung/Deklarationsreihenfolge
+und fanden den fehlenden echten Formularfeld-Set-Pfad. Betroffene Ziele gezielt
+wiederholt; keine neue CTest-ID oder Vollsuite. Sieben Upload-/Fixturehashes
+unverändert. Kein neuer Windows-/Distributions-/DEB-Nachweis; letzter geprüfter
+DEB-Stand7f40893 liegt vor archivierten und typisierten Klassenerweiterungen.

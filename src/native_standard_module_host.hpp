@@ -12,6 +12,7 @@ public:
     NativeStandardModuleHost(QWidget* owner,QSqlDatabase db,std::function<void()> guard);
     ~NativeStandardModuleHost() override;
     void check() const;
+    bool knowsClassType(std::string_view) override;
     bool canConstructClass(std::string_view) override;
     std::shared_ptr<VbaObject> constructClass(std::string_view) override;
     void executionObserved(std::string_view,std::string_view,const VbaExecutionResult&,bool) override;

@@ -1,11 +1,12 @@
 #pragma once
+#include "vba_project_types.hpp"
 #include "vba_runtime.hpp"
 #include "vba_module_context.hpp"
 #include "vba_source_codec.hpp"
 #include <QJsonObject>
 #include <QRegularExpression>
 namespace linaccess {
-inline bool nativeClassNameValid(const QString& name) {static const QRegularExpression valid("^[A-Za-z_][A-Za-z0-9_]{0,63}$");return valid.match(name).hasMatch();}
+inline bool nativeClassNameValid(const QString& name) {static const QRegularExpression valid("^[A-Za-z_][A-Za-z0-9_]{0,63}$");return valid.match(name).hasMatch() && isProjectClassIdentifier(name.toLower().toStdString());}
 // Source identity only; no VM, host, initialization or data execution.
 inline bool standaloneVbaClassHeader(const QString& name,const QByteArray& raw) {
     const auto text=decodeVbaSource(raw);const auto utf8=text.toUtf8();

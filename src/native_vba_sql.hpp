@@ -1,3 +1,4 @@
+#include "vba_project_types.hpp"
 #include "vba_conditional.hpp"
 #pragma once
 #include "vba_analyzer.hpp"
@@ -163,6 +164,7 @@ inline void invoke(sqlite3_context* context,int count,sqlite3_value** values) no
         const auto definition=registry.procedures.value(binding->name);
         if(!definition.module || !definition.function || definition.ambiguous) throw VbaRuntimeError(3251,"VBA SQL public function unavailable or ambiguous");
         if(definition.resultType.ends_with("()")) throw VbaRuntimeError(3251,"Array-valued VBA functions cannot execute as SQL scalars");
+        if(isProjectClassType(definition.resultType)) throw VbaRuntimeError(3251,"Class-valued VBA functions cannot execute as SQL scalars");
         if(count>60) throw VbaRuntimeError(450,"VBA SQL argument limit exceeded");
         std::vector<VbaValue> arguments; arguments.reserve(count);
         for(int index=0;index<count;++index) {

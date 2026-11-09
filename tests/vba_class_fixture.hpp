@@ -7,7 +7,7 @@ Private stored As Long
 Private reads As Long
 Private storedBag As Object
 Public Calls As Long
-Public Child As Object
+Public Child As NativeCounter
 Public Cells() As Long
 Public Const ConstantValue=4
 Private Sub Class_Initialize()
@@ -53,7 +53,7 @@ End Sub
 Public Function Label(Optional ByVal prefix As String="v") As String
 Label=prefix & CStr(stored)
 End Function
-Public Function Identity As Object
+Public Function Identity As NativeCounter
 Set Identity=Me
 End Function
 Public Sub RequiresRef(ByRef amount As Long)

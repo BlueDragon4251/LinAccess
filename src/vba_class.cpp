@@ -1,3 +1,4 @@
+#include "vba_project_types.hpp"
 #include "vba_class.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_conditional.hpp"
@@ -18,10 +19,11 @@ struct NativeVbaClassDefinition {
     std::shared_ptr<VbaModuleState> initial;
     std::unordered_map<std::string,bool> visible;
     bool initialize{};
+    std::unordered_set<std::string> classTypes;
 };
 std::shared_ptr<const NativeVbaClassDefinition> compileNativeVbaClass(std::string name,std::string source) {
     static const std::regex identifier(R"(^[A-Za-z_][A-Za-z0-9_]{0,63}$)");
-    if(!std::regex_match(name,identifier) || source.size()>1024*1024) throw VbaRuntimeError(3251,"Native class name/source is outside its supported bounds");
+    if(!std::regex_match(name,identifier) || !isProjectClassIdentifier(folded(name)) || source.size()>1024*1024) throw VbaRuntimeError(3251,"Native class name/source is outside its supported bounds");
     const auto active=preprocessVbaConditional(source);std::vector<std::string> lines;std::istringstream stream(active);std::string line;
     static const std::regex version(R"(^\s*VERSION\s+[^\r\n]*\bCLASS\s*$)",std::regex::icase);
     static const std::regex attribute(R"VBA(^\s*Attribute\s+VB_Name\s*=\s*"([^"]+)"\s*$)VBA",std::regex::icase);
@@ -44,6 +46,7 @@ std::shared_ptr<const NativeVbaClassDefinition> compileNativeVbaClass(std::strin
         const bool visible=!std::regex_search(lines[procedure.line-1],privateScope);
         if(!definition->visible.emplace(key,visible).second) throw VbaRuntimeError(5,"Ambiguous native class member");
         failed(validateVbaProcedure(definition->source,key));
+        for(const auto& type:nativeVbaProcedureClassTypes(definition->source,key)) definition->classTypes.insert(type);
         if(key=="class_terminate") throw VbaRuntimeError(3251,"Native class termination events are not implemented");
         if(key=="class_initialize") {
             const auto signature=nativeVbaProcedureSignature(definition->source,key);
@@ -51,10 +54,12 @@ std::shared_ptr<const NativeVbaClassDefinition> compileNativeVbaClass(std::strin
             definition->initialize=true;
         }
     }
+    for(const auto& [name,type]:definition->initial->types) if(isProjectClassType(type)) definition->classTypes.insert(std::string(projectClassTypeName(type)));
     for(const auto& [name,value]:definition->initial->values)
         if(definition->initial->procedures.contains(name)) throw VbaRuntimeError(5,"Native class field/procedure names collide");
     return definition;
 }
+std::vector<std::string> nativeVbaClassDeclaredTypes(const NativeVbaClassDefinition& definition) {return {definition.classTypes.begin(),definition.classTypes.end()};}
 namespace {
 class NativeClass;
 class ClassHost final:public VbaHost {
@@ -74,6 +79,7 @@ public:
     void executionObserved(std::string_view source,std::string_view name,const VbaExecutionResult& result,bool event) override {services_->executionObserved(source,name,result,event);}
     std::vector<std::shared_ptr<VbaModuleState>> globalModuleStates() override {return services_->globalModuleStates();}
     std::optional<std::string> moduleForProcedure(std::string_view name) override {return services_->moduleForProcedure(name);}
+    bool knowsClassType(std::string_view name) override {return services_->knowsClassType(name);}
     bool canConstructClass(std::string_view name) override {return services_->canConstructClass(name);}
     std::shared_ptr<VbaObject> constructClass(std::string_view name) override {return services_->constructClass(name);}
     int compareStrings(std::string_view a,std::string_view b,VbaCompareMode mode) override {return services_->compareStrings(a,b,mode);}
@@ -130,7 +136,7 @@ public:
         auto shape=signature(name,VbaPropertyAccess::Get);const bool property=shape.has_value();if(!shape) shape=method(name);
         if(!shape) throw VbaRuntimeError(438,"Native class member is unavailable");
         if(needsValue && !shape->function) throw VbaRuntimeError(3251,"A class Sub cannot be used as a value");
-        if(shape->function && shape->names.empty() && !arguments.empty() && (shape->resultType.empty() || shape->resultType=="variant" || shape->resultType.ends_with("()") || !nativeObjectType(shape->resultType).empty()))
+        if(shape->function && shape->names.empty() && !arguments.empty() && (shape->resultType.empty() || shape->resultType=="variant" || shape->resultType.ends_with("()") || isDeclaredObjectType(shape->resultType)))
             return indexed(run(name,{},property ? std::optional<VbaPropertyAccess>(VbaPropertyAccess::Get) : std::nullopt),arguments);
         return run(name,arguments,property ? std::optional<VbaPropertyAccess>(VbaPropertyAccess::Get) : std::nullopt);
     }
@@ -152,8 +158,8 @@ public:
                 if(!target.object) throw VbaRuntimeError(91,"Class object member is Nothing");target.object->assignDefaultMember(indices,input);check();return;
             }
             if(object) {
-                if(input.kind!=VbaValue::Kind::Object || (!type.empty() && type!="variant" && nativeObjectType(type).empty())) throw VbaRuntimeError(13,"Set requires an object or Variant field");
-            } else if(!nativeObjectType(type).empty()) {
+                if(input.kind!=VbaValue::Kind::Object || (!type.empty() && type!="variant" && !isDeclaredObjectType(type))) throw VbaRuntimeError(13,"Set requires an object or Variant field");
+            } else if(isDeclaredObjectType(type)) {
                 if(!target.object) throw VbaRuntimeError(91,"Class object member is Nothing");
                 if(!target.object->hasScalarDefault()) throw VbaRuntimeError(3251,"Class object field has no supported scalar default");target.object->assignDefaultMember({},scalarVbaValue(input));check();return;
             }
@@ -163,8 +169,8 @@ public:
         const auto access=object ? VbaPropertyAccess::Set : VbaPropertyAccess::Let;
         if(signature(name,access)) {auto arguments=indices;arguments.push_back(input);(void)run(name,std::move(arguments),access);return;}
         if(const auto getter=signature(name,VbaPropertyAccess::Get)) {
-            const bool forwarded=getter->names.empty() && !indices.empty() && (getter->resultType.empty() || getter->resultType=="variant" || !nativeObjectType(getter->resultType).empty());
-            if(forwarded || (!object && !nativeObjectType(getter->resultType).empty())) {
+            const bool forwarded=getter->names.empty() && !indices.empty() && (getter->resultType.empty() || getter->resultType=="variant" || isDeclaredObjectType(getter->resultType));
+            if(forwarded || (!object && isDeclaredObjectType(getter->resultType))) {
                 const auto target=run(name,forwarded ? std::vector<VbaValue>{} : indices,VbaPropertyAccess::Get);
                 if(target.kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Class default assignment requires an object result");
                 if(!target.object) throw VbaRuntimeError(91,"Class getter result is Nothing");
@@ -197,6 +203,8 @@ std::shared_ptr<VbaObject> constructNativeVbaClass(std::shared_ptr<const NativeV
     live.erase(std::remove_if(live.begin(),live.end(),[](const auto& item){return item.object.expired();}),live.end());
     std::size_t bytes=definition->source.size();for(const auto& item:live) bytes+=item.bytes;
     if(live.size()>=4096 || bytes>16*1024*1024) throw VbaRuntimeError(3035,"Native class live-instance/source budget exceeded");
+    auto services=context.host();if(!services) throw VbaRuntimeError(3251,"Native class type context is unavailable");
+    for(const auto& type:definition->classTypes) if(!services->knowsClassType(type)) throw VbaRuntimeError(3251,"Class member project type is unavailable");
     auto object=std::make_shared<NativeClass>(std::move(definition),std::move(context));object->check();live.push_back({object,object->definition_->source.size()});
     if(object->definition_->initialize) (void)object->run("class_initialize",{});return object;
 }

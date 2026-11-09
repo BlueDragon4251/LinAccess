@@ -1,3 +1,4 @@
+#include "vba_project_types.hpp"
 #include "vba_condition.hpp"
 #include "native_utf.hpp"
 #include "vba_fixed_string.hpp"
@@ -105,7 +106,9 @@ std::string trim(std::string text) {
 std::string nativeDeclaredType(std::string type) {
     if(type=="vba.collection") return "collection";
     const auto access=nativeAccessObjectType(type);
-    return access.empty() ? std::move(type) : std::string(access);
+    if(!access.empty()) return std::string(access);
+    if(isProjectClassIdentifier(type)) return std::string(projectClassPrefix)+type;
+    return type;
 }
 bool nativeDaoType(std::string_view type) {
     return type.starts_with("dao.") && nativeObjectType(type)==type;
@@ -658,6 +661,12 @@ ImplicitTypes moduleImplicitTypes(std::string_view module) {
     }
     return result;
 }
+std::unordered_set<std::string> moduleEnumNames(std::string_view module) {
+    static const std::regex declaration(R"(^\s*(?:(?:Public|Private)\s+)?Enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*$)",std::regex::icase);
+    std::istringstream source(preprocessVbaConditional(module));std::string line;std::unordered_set<std::string> names;std::smatch match;
+    while(std::getline(source,line)) {const auto stripped=withoutComment(line);if(std::regex_match(stripped,match,declaration)) names.insert(lower(match[1].str()));}
+    return names;
+}
 VbaExecutionResult parseProcedure(std::string_view module, std::string_view name,
                                   std::vector<Statement>& statements, bool& isFunction, bool& hasCancel,
                                   std::vector<Parameter>* parameters = nullptr,bool resolveLabels=true,std::string* resultType=nullptr,bool inheritedWith=false);
@@ -874,10 +883,10 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     auto type=nativeDeclaredType(lower(declared[4].str())); if(type.empty()) type=implicitTypes.forName(declared[3].str());
                     if(!type.empty() && type!="variant" && type!="byte" && type!="integer" && type!="long" && type!="string"
                         && type!="boolean" && type!="double" && type!="single" && type!="currency" && type!="date" && type!="object"
-                        && type!="collection" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty())
+                        && type!="collection" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !isProjectClassType(type))
                         return {VbaExecutionStatus::Unsupported,"Declared parameter type is not implemented",line};
-                    const bool objectDefault=(type=="collection" || type=="object" || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) && lower(defaultExpression)=="nothing";
-                    if(optional && (type=="collection" || type=="object" || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) && !defaultExpression.empty() && !objectDefault)
+                    const bool objectDefault=(type=="collection" || type=="object" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) && lower(defaultExpression)=="nothing";
+                    if(optional && (type=="collection" || type=="object" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) && !defaultExpression.empty() && !objectDefault)
                         return {VbaExecutionStatus::Unsupported,"Optional native object default must be Nothing",line};
                     if(optional && lower(defaultExpression)=="null" && !type.empty() && type!="variant")
                         return {VbaExecutionStatus::Unsupported,"Null defaults require a Variant parameter",line};
@@ -907,7 +916,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                     if(!elementTypes.contains(declaredResult)) return {VbaExecutionStatus::Unsupported,"Array result element type unsupported",line};
                 }
                 if(!isFunction && !declaredResult.empty()) return {VbaExecutionStatus::Unsupported,"Sub and Property setters cannot declare a result type",line};
-                if (isFunction && !declaredResult.empty() && declaredResult!="variant" && declaredResult!="boolean" && declaredResult!="string" && declaredResult!="integer" && declaredResult!="long" && declaredResult!="single" && declaredResult!="double" && declaredResult!="currency" && declaredResult!="date" && declaredResult!="byte" && declaredResult!="object" && declaredResult!="collection" && nativeScriptingObjectType(declaredResult).empty() && !nativeDaoType(declaredResult) && nativeAccessObjectType(declaredResult).empty())
+                if (isFunction && !declaredResult.empty() && declaredResult!="variant" && declaredResult!="boolean" && declaredResult!="string" && declaredResult!="integer" && declaredResult!="long" && declaredResult!="single" && declaredResult!="double" && declaredResult!="currency" && declaredResult!="date" && declaredResult!="byte" && declaredResult!="object" && declaredResult!="collection" && nativeScriptingObjectType(declaredResult).empty() && !nativeDaoType(declaredResult) && nativeAccessObjectType(declaredResult).empty() && !isProjectClassType(declaredResult))
                     return {VbaExecutionStatus::Unsupported,"Function result type unsupported",line};
                 if (resultType) *resultType=declaredResult+(arrayResult ? "()" : "");
             } else if (std::regex_match(source, match, anyBegin)
@@ -1461,7 +1470,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 catch(const VbaRuntimeError& error){VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Fixed scalar declaration unsupported",line};result.errorNumber=error.number;return result;}
                 if(type.empty()) type=implicitTypes.forName(declared[1].str());
                 if (!type.empty() && type != "variant" && type != "object" && type != "collection" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type)
-                    && nativeAccessObjectType(type).empty()
+                    && nativeAccessObjectType(type).empty() && !isProjectClassType(type)
                     && type != "string" && !type.starts_with("string*") && type != "boolean"
                     && type != "integer" && type != "long" && type != "single" && type != "double" && type != "currency" && type != "date"
                     && type != "byte") return {VbaExecutionStatus::Unsupported, "Variablentyp: " + type, line};
@@ -1589,6 +1598,21 @@ std::unordered_set<std::string> moduleProcedureNames(std::string_view module) {
     }
     return names;
 }
+std::vector<std::string> procedureClassTypes(std::string_view module,const std::vector<Parameter>& parameters,const std::string& resultType,const std::vector<Statement>& instructions) {
+    std::unordered_set<std::string> names;
+    const auto declared=[&](std::string_view type) {if(isProjectClassType(type)) names.insert(std::string(projectClassTypeName(type)));};
+    declared(resultType);for(const auto& parameter:parameters) declared(parameter.type);
+    const auto expression=[&](std::string_view text) {for(const auto& name:vbaExpressionClassTypes(text)) names.insert(name);};
+    for(const auto& instruction:instructions) {
+        if(instruction.type==Statement::Type::Dim) {declared(instruction.expression);continue;}
+        expression(instruction.expression);expression(instruction.endExpression);expression(instruction.stepExpression);
+        for(const auto& item:instruction.outputItems) expression(item.expression);
+        if(instruction.type==Statement::Type::ObjectAssign || instruction.type==Statement::Type::IndexedAssign || instruction.type==Statement::Type::If) expression(instruction.argument);
+        for(const auto& target:instruction.resizeTargets) expression(target.bounds);
+    }
+    const auto enums=moduleEnumNames(module);for(const auto& name:names) if(enums.contains(name)) throw VbaRuntimeError(3251,"Enum type aliases are not project class references");
+    return {names.begin(),names.end()};
+}
 std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view module,std::string_view name) {
     std::vector<Statement> statements; std::vector<Parameter> parameters; bool function=false,cancel=false; std::string resultType;
     if(parseProcedure(module,name,statements,function,cancel,&parameters,true,&resultType).status!=VbaExecutionStatus::Completed) return {};
@@ -1597,9 +1621,10 @@ std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view mod
     for(const auto& parameter:parameters) {
         signature.names.push_back(lower(parameter.name));
         signature.byReference.push_back(parameter.byReference);
+        signature.declaredTypes.push_back(parameter.type);
         signature.required+=!parameter.optional && !parameter.paramArray;
         const auto& type=parameter.type;
-        signature.objectArguments.push_back(!parameter.paramArray && (type=="object" || type=="collection"
+        signature.objectArguments.push_back(!parameter.paramArray && (type=="object" || type=="collection" || isProjectClassType(type)
             || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()));
     }
     return signature;
@@ -1607,6 +1632,12 @@ std::optional<VbaArgumentSignature> localProcedureSignature(std::string_view mod
 
 }
 
+std::vector<std::string> nativeVbaProcedureClassTypes(std::string_view module,std::string_view name) {
+    std::vector<Statement> statements;std::vector<Parameter> parameters;bool function=false,cancel=false;std::string result;
+    const auto parsed=parseProcedure(module,name,statements,function,cancel,&parameters,true,&result);
+    if(parsed.status!=VbaExecutionStatus::Completed) throw VbaRuntimeError(3251,"Project class declaration syntax is unavailable");
+    return procedureClassTypes(module,parameters,result,statements);
+}
 std::optional<VbaArgumentSignature> nativeVbaProcedureSignature(std::string_view module,std::string_view procedure) {
     if(module.size()>1024*1024) return {};
     return localProcedureSignature(module,procedure);
@@ -1708,7 +1739,7 @@ VbaExecutionResult validateVbaProcedure(std::string_view module, std::string_vie
 
 std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
     const auto activeSource=preprocessVbaConditional(module);module=activeSource;
-    const auto implicitTypes=moduleImplicitTypes(module);
+    const auto implicitTypes=moduleImplicitTypes(module);const auto enumNames=moduleEnumNames(module);
     auto state=std::make_shared<VbaModuleState>();
     state->procedures=moduleProcedureNames(module); state->procedureInventoryComplete=true;
     const std::regex procedure(R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function|Property)\s+)",std::regex::icase);
@@ -1764,10 +1795,11 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
             }
             if (!std::regex_match(entry,field,variable)) throw VbaRuntimeError(3251,"Module declaration unsupported");
             const auto name=lower(field[1].str()); auto type=declaredScalarType(field[2].str(),field[3].str(),lengthConstants);if(type.empty()) type=implicitTypes.forName(name);
-            if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency" && type!="date" && type!="byte" && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty())
+            if (!type.empty() && type!="variant" && type!="boolean" && type!="string" && !type.starts_with("string*") && type!="integer" && type!="long" && type!="single" && type!="double" && type!="currency" && type!="date" && type!="byte" && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !isProjectClassType(type))
                 throw VbaRuntimeError(3251,"Module field type unsupported");
+            if(isProjectClassType(type) && enumNames.contains(std::string(projectClassTypeName(type)))) throw VbaRuntimeError(3251,"Module Enum type aliases are not project class references");
             if (state->values.contains(name)) throw VbaRuntimeError(5,"Duplicate module field");
-            state->values.emplace(name,(type=="collection" || type=="object" || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) ? VbaValue::reference(nullptr) : type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type.starts_with("string*") ? VbaValue::string(std::string(*vbaFixedStringWidth(type),'\0')) : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : type=="single" ? VbaValue::single(0) : type=="double" ? VbaValue::numeric(0) : type=="currency" ? VbaValue::currency(0) : type=="date" ? VbaValue::dateSerial(0) : type=="byte" ? VbaValue::byte(0) : VbaValue::empty());
+            state->values.emplace(name,(type=="collection" || type=="object" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty()) ? VbaValue::reference(nullptr) : type=="boolean" ? VbaValue::logical(false) : type=="string" ? VbaValue::string("") : type.starts_with("string*") ? VbaValue::string(std::string(*vbaFixedStringWidth(type),'\0')) : type=="integer" ? VbaValue::integer(0) : type=="long" ? VbaValue::longInteger(0) : type=="single" ? VbaValue::single(0) : type=="double" ? VbaValue::numeric(0) : type=="currency" ? VbaValue::currency(0) : type=="date" ? VbaValue::dateSerial(0) : type=="byte" ? VbaValue::byte(0) : VbaValue::empty());
             state->types.emplace(name,type);
             if (visibility=="public" || visibility=="global") state->publicVariables.insert(name);
         }
@@ -1785,6 +1817,10 @@ VbaValue coerceVbaModuleValue(const VbaValue& value,std::string_view type) {
         return value;
     }
     if (type.empty() || type=="variant") return value;
+    if(isProjectClassType(type)) {
+        if(value.kind!=VbaValue::Kind::Object || (value.object && !value.object->isNativeType(projectClassTypeName(type)))) throw VbaRuntimeError(13,"Declared project class requires a matching real instance");
+        return value;
+    }
     if(nativeDaoType(type)) {
         if(value.kind!=VbaValue::Kind::Object || (value.object && lower(std::string(value.object->className()))!=type.substr(4)))
             throw VbaRuntimeError(13,"DAO binding requires the declared native object type");
@@ -1903,7 +1939,7 @@ void VbaHost::openFormArguments(const std::vector<VbaValue>& args) {
 namespace {
 VbaValue initialLocalValue(const std::string& type) {
     if(type.ends_with("()")) return makeUnallocatedVbaArray(type.substr(0,type.size()-2));
-    if (type=="object" || type=="collection" || !nativeScriptingObjectType(type).empty() || type=="control" || type=="form" || type.starts_with("access.") || type.starts_with("dao.")) return VbaValue::reference(nullptr);
+    if (type=="object" || type=="collection" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || type=="control" || type=="form" || type.starts_with("access.") || type.starts_with("dao.")) return VbaValue::reference(nullptr);
     if(const auto width=vbaFixedStringWidth(type)) return VbaValue::string(std::string(*width,'\0'));
     if (type=="string") return VbaValue::string("");
     if (type=="boolean") return VbaValue::logical(false);
@@ -1996,12 +2032,13 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     // Resolve direct Sub calls before any effects in the calling procedure.
     // Syntax acceptance alone must not turn unknown APIs into successful calls.
     try {
+        for(const auto& name:procedureClassTypes(module,parameters,resultType,instructions)) if(!host.knowsClassType(name)) throw VbaRuntimeError(3251,"Declared project class type is unavailable");
         std::unordered_set<std::string> checkedClasses;
         for(const auto& instruction:instructions) {
             if(host.hasClassInstance() && instruction.type==Statement::Type::SetField && instruction.endExpression=="!") throw VbaRuntimeError(3251,"Class bang/default writes are not implemented");
             const auto check=[&](std::string_view expression) {for(const auto& name:vbaConstructedClasses(expression)) if(checkedClasses.insert(name).second && !host.canConstructClass(name)) throw VbaRuntimeError(3251,"Native project class is unavailable");};
-            if(instruction.type==Statement::Type::ObjectAssign || instruction.type==Statement::Type::IndexedAssign || instruction.type==Statement::Type::FileCopy || instruction.type==Statement::Type::FileRename) check(instruction.argument);
-            check(instruction.expression);check(instruction.endExpression);check(instruction.stepExpression);
+            if(instruction.type==Statement::Type::ObjectAssign || instruction.type==Statement::Type::IndexedAssign || instruction.type==Statement::Type::FileCopy || instruction.type==Statement::Type::FileRename || instruction.type==Statement::Type::If) check(instruction.argument);
+            if(instruction.type!=Statement::Type::Dim) check(instruction.expression);check(instruction.endExpression);check(instruction.stepExpression);
             for(const auto& item:instruction.outputItems) check(item.expression);
             for(const auto& target:instruction.resizeTargets) check(target.bounds);
         }
@@ -2052,9 +2089,9 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     std::unordered_set<std::string> constantNames;
     const int arrayBase=moduleArrayBase(module);
     const auto integralType=[](std::string_view type) { return type=="integer" || type=="long"; };
-    const auto checkedType=[&](std::string_view type) { return type.ends_with("()") || integralType(type) || type=="boolean" || type=="string" || type.starts_with("string*") || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection" || type=="object" || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty(); };
-    const auto scalarType=[&](std::string_view type) { return checkedType(type) && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !type.ends_with("()"); };
-    const auto objectType=[](std::string_view type) { return type=="object" || type=="collection" || !nativeScriptingObjectType(type).empty() || type.starts_with("dao.") || type.starts_with("access.") || !nativeAccessObjectType(type).empty(); };
+    const auto checkedType=[&](std::string_view type) { return type.ends_with("()") || integralType(type) || type=="boolean" || type=="string" || type.starts_with("string*") || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection" || type=="object" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty(); };
+    const auto scalarType=[&](std::string_view type) { return checkedType(type) && !isProjectClassType(type) && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !type.ends_with("()"); };
+    const auto objectType=[](std::string_view type) { return type=="object" || type=="collection" || isProjectClassType(type) || !nativeScriptingObjectType(type).empty() || type.starts_with("dao.") || type.starts_with("access.") || !nativeAccessObjectType(type).empty(); };
     auto errorState = std::make_shared<ErrorObject>();
     locals["err"] = VbaValue::reference(errorState);
     bool resumeNext = false;
@@ -2203,6 +2240,11 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     } catch (const VbaRuntimeError& error) {
         VbaExecutionResult failure{VbaExecutionStatus::Error,"Module state initialization failed",0}; failure.errorNumber=error.number; return failure;
     }
+    try {
+        std::unordered_set<std::string> types;
+        for(const auto& owner:stateOwners) for(const auto& [name,type]:owner->types) if(isProjectClassType(type)) types.insert(std::string(projectClassTypeName(type)));
+        for(const auto& type:types) if(!host.knowsClassType(type)) throw VbaRuntimeError(3251,"Module project class type is unavailable");
+    } catch(const VbaRuntimeError& error) {VbaExecutionResult failure{VbaExecutionStatus::Error,"Module project type binding failed",0};failure.errorNumber=error.number;return failure;}
     const auto variableType=[&](const std::string& name) -> std::string {
         if(const auto found=localTypes.find(name); found!=localTypes.end()) return found->second;
         for(const auto& alias:aliases) if(alias.name==name) return alias.type;
@@ -2356,7 +2398,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         auto signature=localProcedureSignature(module,name);const bool property=!signature;
         if(property) signature=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false);
         if(signature && signature->function && signature->names.empty() && !actuals.empty()
-            && (signature->resultType.empty() || signature->resultType=="variant" || signature->resultType.ends_with("()") || !nativeObjectType(signature->resultType).empty())) {
+            && (signature->resultType.empty() || signature->resultType=="variant" || signature->resultType.ends_with("()") || isDeclaredObjectType(signature->resultType))) {
             for(const auto& reference:referenceInfo.names) if(reference.starts_with("@named:")) throw VbaRuntimeError(3251,"Unbound default indices cannot be named");
             std::vector<VbaValue> noArguments;
             const auto nested=property ? executeVbaProperty(module,name,VbaPropertyAccess::Get,host,noArguments,false)
@@ -2561,8 +2603,8 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
             const auto getter=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false);
             if(!getter || arguments.empty()) return false;
             const bool forwarded=getter->names.empty() && arguments.size()>1
-                && (getter->resultType.empty() || getter->resultType=="variant" || !nativeObjectType(getter->resultType).empty());
-            if(!forwarded && (access!=VbaPropertyAccess::Let || nativeObjectType(getter->resultType).empty())) return false;
+                && (getter->resultType.empty() || getter->resultType=="variant" || isDeclaredObjectType(getter->resultType));
+            if(!forwarded && (access!=VbaPropertyAccess::Let || !isDeclaredObjectType(getter->resultType))) return false;
             value=arguments.back();arguments.pop_back();
             if(forwarded) {defaultIndices=std::move(arguments);arguments.clear();references=VbaArgumentReferences{};}
             if(access==VbaPropertyAccess::Let) value=scalarVbaValue(value);
@@ -3067,7 +3109,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                     const auto propertyAccess=instruction.stepExpression=="object" ? VbaPropertyAccess::Set : VbaPropertyAccess::Let;
                     const auto getter=initial==locals.end() && stateOwners.front()->procedures.contains(name) ? nativeVbaPropertySignature(module,instruction.argument,VbaPropertyAccess::Get,false) : std::nullopt;
                     const bool defaultWrite=getter && (propertyAccess==VbaPropertyAccess::Let || getter->names.empty())
-                        && (!nativeObjectType(getter->resultType).empty() || (getter->names.empty() && (getter->resultType.empty() || getter->resultType=="variant")));
+                        && (isDeclaredObjectType(getter->resultType) || (getter->names.empty() && (getter->resultType.empty() || getter->resultType=="variant")));
                     if(initial==locals.end() && stateOwners.front()->procedures.contains(name)
                         && (nativeVbaPropertySignature(module,instruction.argument,propertyAccess,false) || defaultWrite)) {
                         std::vector<VbaValue> arguments;VbaArgumentReferences references;

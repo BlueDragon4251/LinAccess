@@ -1,3 +1,5 @@
+#include "access_form_objects.hpp"
+#include "vba_typed_class_fixture.hpp"
 #include <QCryptographicHash>
 #include <QMessageBox>
 #include <QTest>
@@ -36,13 +38,24 @@ void exerciseNativeClasses(MainWindow& window,QSqlDatabase db) {using namespace 
     auto descriptor=catalog->member("Item",{VbaValue::string("NativeCounter")}).object;assert(!descriptor->member("IsLoaded",{}).boolean);
     bool found=false;for(auto* tree:window.findChildren<QTreeWidget*>()) for(auto* item:tree->findItems("NativeCounter",Qt::MatchExactly|Qt::MatchRecursive)) if(item->data(0,Qt::UserRole).toString()=="class") found=true;assert(found);
     assert(nativeProjectClassAvailable(db,"nativecounter"));
+    {NativeStandardModuleHost typedHost(&window,db,[]{});
+        for(const auto& probe:std::vector<std::pair<const char*,int>>{{"TypedProbe",33},{"TypedMismatch",13},{"TypedRefMismatch",13}}) {
+            const auto result=executeVbaProcedure(typedClassConsumer,probe.first,typedHost);
+            if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Project typed class "<<probe.first<<": "<<result.explanation<<" error "<<result.errorNumber<<"\n";
+            assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue && result.typedReturnValue->number==probe.second);
+        }
+    }
     std::shared_ptr<VbaObject> retained;
     {QDialog editor(&window);NativeStandardModuleHost host(&editor,db,[]{});retained=evaluateVbaObjectExpression("New NativeCounter",host,{}).object;assert(retained && retained->member("Value",{}).number==1);}
     assert(retained->member("Value",{}).number==1); // Project lifetime, not the caller editor's lifetime.
     assert(retained->member("SaveAudit",{VbaValue::longInteger(17)}).number==17);assert(sql.exec("SELECT value FROM native_class_audit") && sql.next() && sql.value(0).toInt()==17 && !sql.next());sql.finish();
     installJetSqlFunctions(db);assert(!sql.exec("SELECT SaveAudit(77)"));sql.finish();assert(sql.exec("SELECT COUNT(*) FROM native_class_audit") && sql.next() && sql.value(0).toInt()==1);sql.finish();
-    const QByteArray layout="Begin Form\nBegin Section\nBegin TextBox\nName =\"New Copy\"\nEnd\nEnd\nEnd\n";AccessFormPreview form("Native class caller",layout,QByteArray::fromStdString(nativeClassConsumer+"Public Sub WriteControl\nMe![New Copy]=7\nEnd Sub\nPublic Function RetainedClass As Object\nSet RetainedClass=New NativeCounter\nEnd Function\n"),db,&window);form.show();QApplication::processEvents();std::vector<VbaValue> arguments;
+    sql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('module','TypedSqlBoundary',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba","Public typedHits As Long\nPublic Function TypedSqlResult As NativeCounter\ntypedHits=typedHits+1\nEnd Function\nPublic Function TypedSqlHits As Long\nTypedSqlHits=typedHits\nEnd Function\n"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();
+    installJetSqlFunctions(db);assert(!sql.exec("SELECT TypedSqlResult()") && sql.lastError().text().contains("3251"));sql.finish();assert(sql.exec("SELECT TypedSqlHits()") && sql.next() && sql.value(0).toInt()==0);sql.finish();assert(sql.exec("DELETE FROM main._la_objects WHERE kind='module' AND name='TypedSqlBoundary'"));
+    {AccessFormPreview invalid("Missing class field",QByteArray("Begin Form\nEnd\n"),QByteArray("Public held As NoSuchClass\n"),db,&window);int failure=0;try{(void)makePreviewFormObject(invalid)->member("held",{});}catch(const VbaRuntimeError& e){failure=e.number;}assert(failure==3251);}
+    const QByteArray layout="Begin Form\nBegin Section\nBegin TextBox\nName =\"New Copy\"\nEnd\nEnd\nEnd\n";AccessFormPreview form("Native class caller",layout,QByteArray::fromStdString(typedClassConsumer+nativeClassConsumer.substr(nativeClassConsumer.find("Public Function"))+"Public Sub WriteControl\nMe![New Copy]=7\nEnd Sub\nPublic Function RetainedClass As Object\nSet RetainedClass=New NativeCounter\nEnd Function\n"),db,&window);form.show();QApplication::processEvents();std::vector<VbaValue> arguments;
     for(const auto& probe:std::vector<std::pair<const char*,int>>{{"ClassProbe",911},{"ArrayProbe",25},{"ValueGuard",325101},{"RefGuard",325101}}){auto result=form.executeProcedure(probe.first,arguments);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Form class "<<probe.first<<": "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==probe.second);}
+    auto typedResult=form.executeProcedure("TypedProbe",arguments);if(typedResult.status!=VbaExecutionStatus::Completed) std::cerr<<"Typed form error "<<typedResult.errorNumber<<" line "<<typedResult.line<<": "<<typedResult.explanation<<"\n";assert(typedResult.status==VbaExecutionStatus::Completed && typedResult.typedReturnValue->number==33);auto facade=makePreviewFormObject(form);facade->assignObject("held",VbaValue::reference(retained));assert(facade->member("held",{}).object==retained);facade->assignObject("held",VbaValue::reference(nullptr));
     auto control=form.executeProcedure("WriteControl",arguments);assert(control.status==VbaExecutionStatus::Completed && form.findChild<QLineEdit*>("access-control-New Copy")->text()=="7");
     auto result=form.executeProcedure("MethodProbe",arguments);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->text=="x18:20");result=form.executeProcedure("IdentityProbe",arguments);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->boolean);
     result=form.executeProcedure("RetainedClass",arguments);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->object);auto afterForm=result.typedReturnValue->object;assert(form.close());assert(afterForm->member("Calls",{}).number==1);

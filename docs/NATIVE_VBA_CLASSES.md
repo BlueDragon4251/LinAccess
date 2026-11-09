@@ -104,3 +104,33 @@ from the preceding verified scope; complete F042/F043/F050 remain open. The prio
 "imported generic class construction" boundary above is superseded for this checked
 ordinary-class path. Other typed/default/reference/lifetime boundaries remain.
 Latest checked Debian7f40893 includes authored classes, before this import extension.
+
+
+## Benannte Projektklassen-Typbindungen (2026-11-09)
+
+Benannte skalare Klassen-Typen binden nun an tatsächlich vorhandene gewöhnliche
+Projektklassen: eigene und geprüfte archivierte Klassen, Felder/Dim, ByVal und
+owning-module ByRef, optionale Nothing-Parameter, Function-/Property-Get-Rückgaben,
+Property Set und TypeOf. Selbstreferenzen prüfen den Quellkatalog ohne rekursive
+Konstruktion. Nothing bleibt erlaubt; falsche reale Instanztypen ergeben13,
+unbekannte Klassennamen3251 vor Prozedureffekten. Lokale Enum-Aliase werden nicht
+als Klasse erfunden. Direkte öffentliche Formularfelder validieren den echten
+Namespace ebenfalls. Klassenwertige SQL-Funktionen werden vor ihrem Body3251
+abgewiesen; der tatsächliche gemeinsame Aufrufzähler bleibt0. Interne Typmarkierungen
+werden im Debugger nicht als Nutzer-Typnamen angezeigt.
+
+Dies ersetzt die frühere Grenze „nur As Object/Variant“ für benannte skalare
+Projektklassen. Klassen-Arrays, As New, Interfaces/WithEvents/Defaultinstanzen,
+vollständiges externes ByRef und vollständige projektübergreifende Typidentität
+bleiben offen. Technische gemeinsame Kern-/GUI-Fälle sind kein Windows-Oracle.
+Katalog456/386/70 unverändert; F042/F043 bleiben vollständige offene Anforderungen.
+
+Nachweise dieses Blocks: native Kernprüfung nach If-Typbindungsfix1/1 (4,15s),
+mit OptionExplicit-Fixture erneut1/1 (4,04s); Original-Ereignispfad1/1 (123,33s)
+für die native VM, anschließend nur noch Qt-Formularfeld-Set ergänzt. Finales
+vorhandenes GUI-Ziel1/1 (17,80s), App gebaut. Erster GUI-Basisblock17,88s bestand;
+Erweiterungen korrigierten technische SQL-Registrierung/Deklarationsreihenfolge
+und fanden den fehlenden echten Formularfeld-Set-Pfad. Betroffene Ziele gezielt
+wiederholt; keine neue CTest-ID oder Vollsuite. Sieben Upload-/Fixturehashes
+unverändert. Kein neuer Windows-/Distributions-/DEB-Nachweis; letzter geprüfter
+DEB-Stand7f40893 liegt vor archivierten und typisierten Klassenerweiterungen.
