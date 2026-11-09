@@ -17,6 +17,7 @@
 #include <limits>
 
 #include <QRegularExpression>
+#include <QUuid>
 #include <QSqlError>
 #include <QSqlQuery>
 
@@ -462,13 +463,16 @@ static void importAccessTablePhase(QSqlDatabase db, const QString& sourceFile,
                             "(table_name TEXT PRIMARY KEY, definition TEXT NOT NULL)"))
                 throw fail(query.lastError().text());
             QJsonArray metadata;
-            for (const auto& col : columns) metadata.append(QJsonObject{
+            QStringList displayColumns;for(const auto& column:columns) displayColumns.append(column.name);const auto sourceDisplay=checkedAccessSourceFieldDisplayProperties(schema.sourceIndexMetadata,displayColumns);
+            for (const auto& col : columns) {QJsonObject entry{
                 {"name", col.name}, {"source_type", col.sourceType}, {"sqlite_type", col.sqliteType},
                 {"required", col.required}, {"primary_key_order", col.primaryKeyOrder},
                 {"auto_number", col.autoNumber}, {"auto_number_native", col.autoNumber},
                 {"source_origin", col.sourceOrigin}, {"source_size", col.sourceSize},
                 {"has_default", col.hasDefault}, {"source_default", col.sourceDefault}, {"default_sql", col.sqlDefault},
-                {"default_native", col.hasDefault && !col.autoNumber}});
+                {"default_native", col.hasDefault && !col.autoNumber}};
+                if(sourceDisplay) {entry.insert("source_display_properties_proven",true);const auto properties=sourceDisplay->value(col.name.toCaseFolded());if(properties.caption) {entry.insert("source_caption",*properties.caption);entry.insert("source_caption_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}if(properties.description) {entry.insert("source_description",*properties.description);entry.insert("source_description_id",QUuid::createUuid().toString(QUuid::WithoutBraces));}}metadata.append(entry);}
+
             query.prepare("INSERT INTO _la_table_schema VALUES (?,?)");
             query.addBindValue(tableName);
             query.addBindValue(QString::fromUtf8(QJsonDocument(metadata).toJson(QJsonDocument::Compact)));

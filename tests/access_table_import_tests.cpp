@@ -8,6 +8,7 @@
 #include "access_autonumber.hpp"
 #include "jet_sql_functions.hpp"
 #include "dao_database.hpp"
+#include "native_schema_editor.hpp"
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
@@ -337,6 +338,14 @@ void verifyJetSinglePrecisionReference(const QString& path) {
     assert(refused && rejected.tables()==tables && untouched.exec("SELECT value FROM untouched") && untouched.next() && untouched.value(0).toInt()==17); untouched.finish();
     rejected.close(); assert(accessSourceDigest(negative)==negativeBefore);
     std::cout<<"Actual Jet Single precision: original bits despite lossy CSV, finite extremes, NULL, direct/full import, DAO values, mismatched CSV and negative-zero atomic refusal verified\n";
+}
+
+void verifyJetFieldDisplayReference(const QString& path) {
+    using namespace linaccess;QFile input(path);assert(input.open(QIODevice::ReadOnly));const auto before=QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256);input.close();const auto schema=parseMdbSchema(AccessCatalog(path).tableSchema("property_probe"));assert(schema.columns.size()==3);const QStringList names{"named","uncaptioned","empty_caption"};const auto source=checkedAccessSourceFieldDisplayProperties(schema.sourceIndexMetadata,names);assert(source && source->size()==3 && source->value("named").caption==QString("Spaltenkopf \"Ä\"") && source->value("named").description==QString("Technischer Hinweis\nUnicode Ä") && !source->value("uncaptioned").caption && source->value("empty_caption").caption && source->value("empty_caption").caption->isEmpty());
+    auto db=QSqlDatabase::addDatabase("QSQLITE","jet-field-display-reference");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery query(db);assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));query.finish();assert(importAccessDatabase(db,path)==1);const auto display=nativeTableFieldDisplayProperties(db,"property_probe");assert(display.value("named").caption==QString("Spaltenkopf \"Ä\"") && display.value("named").description==QString("Technischer Hinweis\nUnicode Ä") && display.value("empty_caption").caption && display.value("empty_caption").caption->isEmpty());
+    auto database=makeDaoDatabase(db);auto field=database->member("TableDefs",{VbaValue::string("property_probe")}).object->member("Fields",{VbaValue::string("named")}).object;auto caption=field->member("Properties",{VbaValue::string("Caption")}).object;assert(caption->member("Value",{}).asText()=="Spaltenkopf \"Ä\"");int error=0;try {caption->assign("Value",VbaValue::string("blocked"));}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==383);error=0;try {(void)database->member("TableDefs",{VbaValue::string("property_probe")}).object->member("Fields",{VbaValue::string("uncaptioned")}).object->member("Properties",{VbaValue::string("Caption")});}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==3270);
+    {AccessTableModel model(nullptr,db);model.setTable("property_probe");assert(model.select() && model.rowCount()==0 && model.headerData(0,Qt::Horizontal).toString()=="Spaltenkopf \"Ä\"" && model.headerData(0,Qt::Horizontal,Qt::ToolTipRole).toString().contains("Technischer Hinweis") && model.headerData(1,Qt::Horizontal).toString()=="uncaptioned" && model.headerData(2,Qt::Horizontal).toString()=="empty_caption");}
+    auto bad=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();auto properties=bad.value("field_properties").toArray();auto changed=properties[0].toObject();changed.insert("name","wrong");properties[0]=changed;bad.insert("field_properties",properties);bool refused=false;try {(void)checkedAccessSourceFieldDisplayProperties(QJsonDocument(bad).toJson(),names);}catch(const std::exception&) {refused=true;}assert(refused);assert(input.open(QIODevice::ReadOnly));assert(QCryptographicHash::hash(input.readAll(),QCryptographicHash::Sha256)==before);input.close();
 }
 
 void verifyJetIndexCatalogReference(const QString& path) {
@@ -731,6 +740,7 @@ CREATE INDEX `label` ON `source` (`a``b`);
     for(const auto* malformed:{"0","0x00","GG","00 1","00\n00"}) {
         bool rejected=false; try { (void)decodeMdbBinaryHex(malformed); } catch(const std::exception&) { rejected=true; } assert(rejected);
     }
+    const auto fieldDisplayReference=qEnvironmentVariable("LINACCESS_JET_FIELD_DISPLAY_REFERENCE");if(!fieldDisplayReference.isEmpty()) verifyJetFieldDisplayReference(fieldDisplayReference);
     const auto counterReference=qEnvironmentVariable("LINACCESS_JET_COUNTER_STATE_REFERENCE"); if(!counterReference.isEmpty()) verifyJetCounterStateReference(counterReference);
     const auto doubleReference=qEnvironmentVariable("LINACCESS_JET_DOUBLE_PRECISION_REFERENCE"); if(!doubleReference.isEmpty()) verifyJetDoublePrecisionReference(doubleReference);
     const auto precisionReference=qEnvironmentVariable("LINACCESS_JET_SINGLE_PRECISION_REFERENCE"); if(!precisionReference.isEmpty()) verifyJetSinglePrecisionReference(precisionReference);

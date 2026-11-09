@@ -1770,3 +1770,17 @@ Eigene Property-Familie folgt zulässigen Größen-/Pflicht-/Namensänderungen; 
 Count/Enum/Vollkatalog erfunden. DAO1/1 (2,46s), App gebaut;456/384/72 gleich.
 Fortsetzung: tatsächliche Caption/Description-Spaltenproperties aus MDBTools
 lesend übernehmen; vorhandene mdb_col_get_prop-API geprüft, keine VBA-Extraktion.
+
+Echte Jet4-Caption/Description-Spaltenproperties werden jetzt aus vorhandener
+lesender mdb_col_get_prop-API im selben Metadatenlauf übernommen (keine extra
+Prozesse proTabelle). Versionierter begrenzter Abschnitt, vollständige geordnete
+Spaltenbindung, Format-/SHA-/Textprüfung; fehlende Komponente bleibt unbekannt.
+Import speichert belegte Werte/Abwesenheit, leere Strings und eigene Lease-IDs;
+Datenblatt/Form-/Berichtserzeugung und readonly DAO-Properties lesen sie.
+Andere Formate/alte Projekte/Vererbungsflag/Vollkatalog nicht geraten. Echte
+unabhängige Jackcess-Jet4-Referenz ohne Datensätze bestätigt Unicode/Quotes,
+Description-Zeilenumbruch, leer/fehlend, MDB→SQLite/DAO/Kopf und Quellhash.
+Import/DAO2/2 (2,57s), App/lesender Helfer gebaut. Java nur Prüfdaten-Erzeugung,
+keine Runtime-Abhängigkeit. SOURCE_FIELD_DISPLAY_PROPERTIES.md;456/384/72 gleich.
+Fortsetzung: weitere belegbare Eigenschaften und allgemeine Entwurfsanforderungen
+fortlaufend umsetzen; keine Zwischenabschlüsse oder Fertiganrufe.

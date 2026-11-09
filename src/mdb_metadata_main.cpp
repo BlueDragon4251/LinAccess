@@ -52,12 +52,14 @@ int main(int argc,char** argv) {
         // the actual populated array, never use that return value as success.
         mdb_read_indices(table.get());
         if(!table->indices || table->indices->len!=table->num_idxs) throw 1;
-        QJsonArray columns,indexes,singleColumns,doubleColumns,counterColumns; QVector<const MdbColumn*> singleFields,doubleFields; QSet<QString> columnNames,indexNames;
+        const bool displaySupported=!floating && mdb->f->jet_version==MDB_VER_JET4;
+        QJsonArray columns,indexes,singleColumns,doubleColumns,counterColumns,fieldProperties; QVector<const MdbColumn*> singleFields,doubleFields; QSet<QString> columnNames,indexNames;
         for(unsigned i=0;i<table->columns->len;++i) {
             const auto* column=static_cast<MdbColumn*>(g_ptr_array_index(table->columns,i)); if(!column) throw 1;
             const auto name=checkedName(column->name,sizeof(column->name));
             if(columnNames.contains(name.toCaseFolded())) throw 1;
             columnNames.insert(name.toCaseFolded()); columns.append(name);
+            if(displaySupported) {QJsonObject properties{{"name",name}};for(const auto* key:{"Caption","Description"}) if(const auto* value=mdb_col_get_prop(column,key)) {const auto size=strnlen(value,16385);if(size>16384) throw 1;const QByteArray bytes(value,size);const auto text=QString::fromUtf8(bytes);if(text.size()>4096 || !text.isValidUtf16() || text.toUtf8()!=bytes || text.contains(QChar(0))) throw 1;properties.insert(QString::fromLatin1(key).toLower(),text);}fieldProperties.append(properties);}
             if(column->col_type==MDB_FLOAT) { singleColumns.append(name); singleFields.append(column); }
             if(column->col_type==MDB_DOUBLE) { doubleColumns.append(name); doubleFields.append(column); }
         }
@@ -118,7 +120,8 @@ int main(int argc,char** argv) {
             }
             indexes.append(QJsonObject{{"name",name},{"kind",index->index_type},{"flags",index->flags},{"fields",fields}});
         }
-        const QJsonObject root{{"version",1},{"source_table",args[tablePosition]},{"library",QString::fromUtf8(mdb_get_version())},{"columns",columns},{"indexes",indexes},{"single_columns",singleColumns},{"double_columns",doubleColumns},{"counter_columns",counterColumns},{"source_sha256",QString::fromLatin1(before)}};
+        QJsonObject root{{"version",1},{"source_table",args[tablePosition]},{"library",QString::fromUtf8(mdb_get_version())},{"columns",columns},{"indexes",indexes},{"single_columns",singleColumns},{"double_columns",doubleColumns},{"counter_columns",counterColumns},{"source_sha256",QString::fromLatin1(before)}};
+        if(displaySupported) {root.insert("field_properties",fieldProperties);root.insert("field_properties_format","JET4");}
         if(digest(args[filePosition])!=before) throw 1;
         output(root,1024*1024);
         return 0;
