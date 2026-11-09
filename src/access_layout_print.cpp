@@ -287,6 +287,7 @@ void AccessFormPreview::showDocumentPrintDialog() {
         QMessageBox::warning(this,"Drucken","Dieses Dokument konnte nicht vollständig ausgegeben werden.");
 }
 bool AccessFormPreview::renderLayout(QPrinter& printer) {
+    for(const auto& widget:controls_) if(widget && widget->property("la_format_error").toInt()) return false;
     auto* canvas = findChild<QWidget*>("access-form-canvas");
     if (!canvas || canvas->width()<=0 || canvas->height()<=0) return false;
     QPainter painter;
@@ -505,6 +506,7 @@ bool AccessFormPreview::renderReport(QPrinter& printer) {
             const auto* widget=controls_.value(name.toCaseFolded()).data();
             if (!widget || widget->property("la_calculation_error").toInt()!=0) return false;
         }
+        for(const auto& control:layout_.controls) if(control.section==band.section) {const auto widget=controls_.value(control.name.toCaseFolded());if(widget && widget->property("la_format_error").toInt()) return false;}
         const int offset=qRound(layout_.sectionOffsets.value(band.section)/15.0)+band.slice;
         const QRect fragment(0,offset,canvas->width(),band.height);
         QVector<NativeReportTextLayout*> clipped;

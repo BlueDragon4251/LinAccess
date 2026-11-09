@@ -38,6 +38,7 @@ struct AccessVisualControl {
     QString controlSource;
     QString defaultValue;
     QString inputMask;
+    QString format;
     AccessControlFont font;
     int textAlign{};
     std::optional<qint32> foreColor;

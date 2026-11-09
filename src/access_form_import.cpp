@@ -279,6 +279,7 @@ AccessFormLayout parseAccessFormLayout(const QString& source) {
             else if (key == "ControlSource") control.controlSource = value;
             else if (key == "DefaultValue") control.defaultValue = value;
             else if (key == "InputMask") control.inputMask = value;
+            else if (key == "Format") control.format = value;
             else if (key == "OptionValue") control.optionValue = integer();
             else if (key == "RowSource") control.rowSource = value;
             else if (key == "RowSourceType") control.rowSourceType = value;

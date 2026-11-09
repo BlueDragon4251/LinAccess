@@ -8,6 +8,8 @@
 #include <QPrintPreviewWidget>
 #include <QMainWindow>
 #include "vba_qt_value.hpp"
+#include "access_format.hpp"
+#include <QSignalBlocker>
 #include "native_domain_lookup.hpp"
 #include "native_access_file_dialog.hpp"
 #include "native_access_status.hpp"
@@ -354,6 +356,11 @@ public:
                 throw linaccess::VbaRuntimeError(3251,"Control Undo adapter requires a form text/combo editor");
             (void)preview.undoControlEdit(name_); return {};
         }
+        if(key=="format") {
+            if(!args.empty()) throw linaccess::VbaRuntimeError(450,"Format takes no arguments");
+            if(!qobject_cast<QLineEdit*>(widget)) throw linaccess::VbaRuntimeError(3251,"Format adapter requires a TextBox");
+            for(const auto& definition:preview.layout_.controls) if(definition.name.compare(name_,Qt::CaseInsensitive)==0) return linaccess::VbaValue::string(bytes(definition.format));
+        }
         if (key=="inputmask") {
             if (!qobject_cast<QLineEdit*>(widget)) throw linaccess::VbaRuntimeError(3251,"InputMask adapter requires a TextBox");
             for (const auto& definition:preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) return linaccess::VbaValue::string(bytes(definition.inputMask));
@@ -622,6 +629,28 @@ public:
                 if (key=="locked") definition.locked=scalar.truthy();
                 if (key=="tabstop") definition.tabStop=scalar.truthy();
                 preview.applyControlStates(); return;
+            }
+        }
+        if(key=="format") {
+            if(!qobject_cast<QLineEdit*>(widget) || preview.reportAggregateCaching_) throw linaccess::VbaRuntimeError(3251,"Format mutation is unavailable for this context");
+            const auto scalar=linaccess::scalarVbaValue(value);
+            (void)checked();widget=control();
+            if(scalar.kind==linaccess::VbaValue::Kind::Null) throw linaccess::VbaRuntimeError(94,"Invalid Null Format");
+            if(scalar.kind!=linaccess::VbaValue::Kind::Text) throw linaccess::VbaRuntimeError(13,"Format requires a String");
+            const auto mask=text(scalar.text);
+            if(mask.size()>1024 || mask.contains(QChar(0)) || !mask.isValidUtf16()) throw linaccess::VbaRuntimeError(5,"Invalid Format mask");
+            for(auto& definition:preview.layout_.controls) if(definition.name.compare(name_,Qt::CaseInsensitive)==0) {
+                if(preview.layout_.kind!=linaccess::AccessDocumentKind::Report && !definition.controlSource.trimmed().startsWith('=')) throw linaccess::VbaRuntimeError(3251,"Writable form Format editing is not implemented");
+                const auto actual=preview.getFieldValue(bytes(name_));
+                (void)checked();widget=control();
+                if(!mask.isEmpty()) (void)linaccess::formatAccessValue(actual.kind==linaccess::VbaValue::Kind::Null ? linaccess::VbaValue::numeric(0) : actual,bytes(mask),true);
+                const auto prior=preview.formattedControlValues_.value(name_.toCaseFolded());
+                const auto raw=prior ? widget->property("la_format_raw_text").toString() : qobject_cast<QLineEdit*>(widget)->text();
+                definition.format=mask;
+                {const QSignalBlocker blocked(widget);qobject_cast<QLineEdit*>(widget)->setText(raw);}
+                preview.displayFormattedControl(widget,name_,actual,raw);
+                if(preview.reportPageView_) preview.reportPageView_->setProperty("la_report_pages_valid",false);
+                preview.refreshReportPageView();return;
             }
         }
         if (key=="inputmask") {

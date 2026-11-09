@@ -744,3 +744,20 @@ SQL1..2Argumente, Null94/ungültigeOption5/Arity450/ungültigesDatum13 und deuts
 US-Zeitdarstellung geprüft. Keine zusätzliche CTest-Registrierung oder Windows-
 Beobachtung. Volle regionale Datums-/Subsekunden-/Windows-Gleichheit weiter offen.
 NATIVE_FORMAT_RUNTIME.md;456/384/72 unverändert. Kontinuierlich weiterentwickeln.
+
+TextBox.Format wird jetzt aus SaveAsText übernommen und für berechnete Formular-
+Textfelder sowie Berichtstextfelder tatsächlich gerendert. Getrennte typisierte
+Werte bleiben maßgeblich: Anzeige-Fehler ändern Value nicht; Currency/Datum und
+Long-Untertypen bleiben auch beim Löschen einer Maske erhalten. Native Berichte
+erben proveniente direkte Feldmasken aus dem Berichtsentwurf und drucken sie
+wirklich ins PDF. Bestehende gespeicherte Überschreibungen bleiben unabhängig.
+Runtime-Formatlesen/-setzen/-löschen unterstützt diese Kontexte; ungültige Masken
+lassen vorherige Eigenschaft stehen. Ausgabe verweigert Formatfehler vor falschem
+PDF-Erfolg. Bearbeitbare Formularfelder behalten Masken nur mit explizitem3251-
+Hinweis; deren Fokus-/Eingabepipeline ist nicht vorgetäuscht. CONTROL_FORMAT_RUNTIME.md.
+GUI-Ziel bestanden (5,70s); anschließend Layoutziel einzeln bestanden (11,56s).
+Der breitere Layoutverbund enthielt noch die alte Currency-For-Verweigerung:
+gezielt durch echten Schleifenlauf mit zwei SQL-Schreibwirkungen und exaktem
+Currency-Endzähler ersetzt. Keine neue CTest-Registrierung, keine frische gesamte
+Suite/Windows-Gleichheit. App gebaut;456/384/72 unverändert. Ohne Zwischenfinal
+weiter an den allgemeinen offenen Anforderungen programmieren.

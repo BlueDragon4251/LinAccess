@@ -136,6 +136,7 @@ private:
     linaccess::VbaValue getFieldValue(std::string_view name) const;
     linaccess::VbaValue calculatedControlValue(const QString& name) const;
     void refreshCalculatedControls();
+    void displayFormattedControl(QWidget* widget,const QString& name,const linaccess::VbaValue& value,const QString& raw) const;
     linaccess::VbaValue controlColumnValue(const QString& name,const std::vector<linaccess::VbaValue>& arguments);
     void setFieldValue(std::string_view name,const linaccess::VbaValue& value,bool initializingDefault=false);
     friend class PreviewVbaHost;
@@ -208,6 +209,7 @@ private:
     QMap<QString,int> subformErrors_;
     mutable QSet<QString> calculatingControls_;
     mutable QMap<QString,std::shared_ptr<linaccess::VbaValue>> calculatedValues_;
+    mutable QMap<QString,std::shared_ptr<linaccess::VbaValue>> formattedControlValues_;
     QMap<QString,std::shared_ptr<linaccess::VbaValue>> reportAggregateValues_;
     bool reportAggregateCaching_{};
     int reportPrintPage_{},reportPrintPages_{};

@@ -1781,6 +1781,7 @@ void AccessFormPreview::buildControls(QWidget* canvas) {
                 }
             }
         }
+        if(control.type=="TextBox" && !control.format.isEmpty() && layout_.kind==linaccess::AccessDocumentKind::Form && !control.controlSource.trimmed().startsWith('=')) widget->setToolTip("Access-Anzeigeformat für dieses bearbeitbare Textfeld noch nicht unterstützt (3251).");
         widget->setVisible(control.visible);
         if (!control.name.isEmpty()) controls_.insert(control.name.toCaseFolded(), widget);
         const auto name = control.name;
@@ -2266,6 +2267,7 @@ void AccessFormPreview::loadRecord() {
         auto* widget = controls_.value(control.name.toCaseFolded()).data();
         if (!widget) continue;
         clearDefaultError(widget);
+        formattedControlValues_.remove(control.name.toCaseFolded());widget->setProperty("la_format_error",0);
         const int index = columnIndex(control.controlSource,dataColumns_);
         const int row = currentRecordIndex_-1;
         QVariant value;
@@ -2281,6 +2283,7 @@ void AccessFormPreview::loadRecord() {
         }
         widget->setProperty("la_sql_type",type);
         setText(widget,qobject_cast<QLineEdit*>(widget) ? linaccess::qtFieldText(value,type) : value.toString(),value.isNull()); widget->setProperty("la_null",value.isNull());
+        if(control.type=="TextBox" && !control.format.isEmpty() && (layout_.kind==linaccess::AccessDocumentKind::Report || control.controlSource.trimmed().startsWith('='))) displayFormattedControl(widget,control.name,linaccess::qtFieldValue(value,type),linaccess::qtFieldText(value,type));
         widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Text));
     }
     dirty_ = false; insertionStarted_=false; pendingControls_.clear(); editOriginals_.clear();
@@ -2589,6 +2592,8 @@ std::optional<std::string> AccessFormPreview::getField(std::string_view name) co
     if (!widget) throw std::runtime_error("Unbekanntes Access-Control: " + std::string(name));
     if(widget->property("la_default_error").toInt()) throw linaccess::VbaRuntimeError(widget->property("la_default_error").toInt(),"Control default unavailable");
     if(auto* list=dynamic_cast<AccessListBox*>(widget); list && list->multiSelectMode()) return {};
+    const auto formatted=formattedControlValues_.value(QString::fromUtf8(name.data(),name.size()).toCaseFolded());
+    if(formatted) return formatted->kind==linaccess::VbaValue::Kind::Null ? std::nullopt : std::optional<std::string>(formatted->asText());
     const auto value = textOf(widget);
     if (widget->property("la_null").toBool()) return std::nullopt;
     return value.toUtf8().toStdString();
@@ -2625,6 +2630,7 @@ void AccessFormPreview::setField(std::string_view name, std::optional<std::strin
         setText(widget,value ? QString::fromUtf8(value->data(),value->size()) : QString{},!value);
         widget->setProperty("la_null",!value.has_value());
         widget->setProperty("la_vba_kind",static_cast<int>(value ? linaccess::VbaValue::Kind::Text : linaccess::VbaValue::Kind::Null));
+        if(qobject_cast<QLineEdit*>(widget) && layout_.kind==linaccess::AccessDocumentKind::Report) displayFormattedControl(widget,QString::fromUtf8(name.data(),name.size()),value ? linaccess::qtFieldValue(QString::fromUtf8(value->data(),value->size()),widget->property("la_sql_type").toString()) : linaccess::VbaValue{},value ? QString::fromUtf8(value->data(),value->size()) : QString{});
     }
     const auto assignedName=QString::fromUtf8(name.data(),name.size());
     bufferedTextControls_.remove(assignedName); pendingControls_.remove(assignedName); editOriginals_.remove(assignedName);
@@ -2653,6 +2659,7 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
     }
     if(auto* list=dynamic_cast<AccessListBox*>(widget); list && list->multiSelectMode()) return {};
     if(widget->property("la_default_error").toInt()) throw linaccess::VbaRuntimeError(widget->property("la_default_error").toInt(),"Control default unavailable");
+    if(const auto formatted=formattedControlValues_.value(key.toCaseFolded())) return *formatted;
     if (auto* calendar=qobject_cast<QCalendarWidget*>(widget)) {
         if (calendar->property("la_calendar_bound").toBool()) throw linaccess::VbaRuntimeError(3251,"Bound calendar adapter is unsupported");
         return widget->property("la_null").toBool() ? linaccess::VbaValue{} : linaccess::vbaDateValue(linaccess::VbaValue::string(calendar->selectedDate().toString(Qt::ISODate).toStdString()));
@@ -2683,6 +2690,27 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
     }
     return linaccess::qtFieldValue(textOf(widget),type);
 }
+void AccessFormPreview::displayFormattedControl(QWidget* widget,const QString& name,const linaccess::VbaValue& value,const QString& raw) const {
+    const auto key=name.toCaseFolded();
+    formattedControlValues_.remove(key);
+    if(!widget) return;
+    widget->setProperty("la_format_error",0);
+    widget->setProperty("la_format_raw_text",raw);
+    for(const auto& control:layout_.controls) if(control.name.compare(name,Qt::CaseInsensitive)==0) {
+        if(control.type!="TextBox") return;
+        // Writable form input needs a separate focus/edit-mask pipeline. Preserve its raw value.
+        if(layout_.kind!=linaccess::AccessDocumentKind::Report && !control.controlSource.trimmed().startsWith('=')) {
+            widget->setToolTip("Access-Anzeigeformat für dieses bearbeitbare Textfeld noch nicht unterstützt (3251).");return;
+        }
+        formattedControlValues_.insert(key,std::make_shared<linaccess::VbaValue>(value));
+        if(control.format.isEmpty()) return;
+        const QSignalBlocker blocked(widget);
+        if(value.kind==linaccess::VbaValue::Kind::Null || value.kind==linaccess::VbaValue::Kind::Error) return;
+        try {setText(widget,QString::fromStdString(linaccess::formatAccessValue(value,control.format.toUtf8().toStdString(),true).asText()));}
+        catch(const linaccess::VbaRuntimeError& failure) {widget->setProperty("la_format_error",failure.number);setText(widget,"#Fehler ("+QString::number(failure.number)+")");}
+        return;
+    }
+}
 linaccess::VbaValue AccessFormPreview::calculatedControlValue(const QString& name) const {
     const auto key=name.toCaseFolded();
     auto* widget=controls_.value(key).data();
@@ -2702,6 +2730,7 @@ linaccess::VbaValue AccessFormPreview::calculatedControlValue(const QString& nam
         PreviewVbaHost host(*const_cast<AccessFormPreview*>(this));
         const auto value=linaccess::evaluateAccessExpression(expression.toUtf8().toStdString(),host);
         if (value.kind==linaccess::VbaValue::Kind::Error) {
+            formattedControlValues_.remove(key);widget->setProperty("la_format_error",0);
             setText(widget,"#Fehler ("+QString::number(value.errorNumber)+")");
             widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
             widget->setProperty("la_error_number",value.errorNumber); widget->setProperty("la_calculation_error",value.errorNumber);
@@ -2711,10 +2740,12 @@ linaccess::VbaValue AccessFormPreview::calculatedControlValue(const QString& nam
         setText(widget,converted.toString(),converted.isNull()); widget->setProperty("la_null",converted.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
         widget->setProperty("la_calculation_error",0);
+        displayFormattedControl(widget,name,value,converted.toString());
         return remember(value);
     } catch (const std::exception& error) {
         const auto* typed=dynamic_cast<const linaccess::VbaRuntimeError*>(&error);
         const int number=typed ? typed->number : 5;
+        formattedControlValues_.remove(key);widget->setProperty("la_format_error",0);
         setText(widget,"#Fehler ("+QString::number(number)+")"); widget->setProperty("la_calculation_error",number);
         widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(linaccess::VbaValue::Kind::Error));
         widget->setProperty("la_error_number",number);
@@ -2775,6 +2806,7 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
             if (control.name.compare(QString::fromUtf8(name.data(),name.size()),Qt::CaseInsensitive)==0) unbound=control.controlSource.isEmpty();
         if (!unbound || !qobject_cast<QLineEdit*>(widget)) throw linaccess::VbaRuntimeError(13,"Error Variant cannot be stored in a bound field");
         clearDefaultError(widget);
+        formattedControlValues_.remove(QString::fromUtf8(name.data(),name.size()).toCaseFolded());widget->setProperty("la_format_error",0);
         const QSignalBlocker blocked(widget);
         setText(widget,"#Fehler ("+QString::number(value.errorNumber)+")");
         widget->setProperty("la_null",false); widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
@@ -2794,6 +2826,7 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
     if (!widget->property("la_option_group_name").toString().isEmpty()) throw linaccess::VbaRuntimeError(3251,"Individual grouped option assignment unsupported");
     const auto type = widget->property("la_sql_type").toString();
     const auto converted = linaccess::sqlFieldValue(assigned,type);
+    formattedControlValues_.remove(QString::fromUtf8(name.data(),name.size()).toCaseFolded());
     clearDefaultError(widget);
     const auto before = textOf(widget); const bool wasNull = widget->property("la_null").toBool();
     {
@@ -2801,6 +2834,7 @@ void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::Vba
         setText(widget,qobject_cast<QLineEdit*>(widget) ? linaccess::qtFieldText(converted,type) : converted.toString(),converted.isNull()); widget->setProperty("la_null",converted.isNull());
         widget->setProperty("la_vba_kind",static_cast<int>(value.kind));
         if(value.kind==linaccess::VbaValue::Kind::Date) widget->setProperty("la_vba_date_serial",value.number);
+        if(qobject_cast<QLineEdit*>(widget) && layout_.kind==linaccess::AccessDocumentKind::Report) displayFormattedControl(widget,QString::fromUtf8(name.data(),name.size()),type.isEmpty() ? assigned : linaccess::qtFieldValue(converted,type),qobject_cast<QLineEdit*>(widget) ? linaccess::qtFieldText(converted,type) : converted.toString());
     }
     if(initializingDefault) { refreshTextAlignments(); return; }
     const auto assignedName=QString::fromUtf8(name.data(),name.size());

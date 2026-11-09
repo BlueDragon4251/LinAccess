@@ -2933,7 +2933,33 @@ int main(int argc,char** argv) {
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-form-designer");dialog->findChild<QLineEdit*>("native-form-name")->setText("Caption form");dialog->findChild<QComboBox*>("native-form-source")->setCurrentText("authored_renamed");auto* fields=dialog->findChild<QListWidget*>("native-form-fields");bool caption=false;for(int row=0;row<fields->count();++row) if(fields->item(row)->data(Qt::UserRole).toString()=="qty") {caption=fields->item(row)->text()=="Anzahl Ä";}assert(caption);dialog->findChild<QPushButton*>("native-form-save")->click();dialog->reject();});action(window,"+ Formular")->trigger();
     {const auto stored=linaccess::loadNativeStoredForm(db,"Caption form");assert(stored && stored->layout.contains(QString("Anzahl Ä").toUtf8()));}
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-report-designer");dialog->findChild<QLineEdit*>("native-report-name")->setText("Caption report");dialog->findChild<QPlainTextEdit*>("native-report-sql")->setPlainText("SELECT * FROM authored_renamed");dialog->findChild<QPushButton*>("native-report-save")->click();dialog->reject();});action(window,"+ Bericht")->trigger();
-    {const auto stored=linaccess::loadNativeStoredReport(db,"Caption report");assert(stored && stored->layout.contains(QString("Anzahl Ä").toUtf8()));}
+    {
+        const auto stored=linaccess::loadNativeStoredReport(db,"Caption report");assert(stored && stored->layout.contains(QString("Anzahl Ä").toUtf8()) && stored->layout.contains("Format ="));
+        AccessFormPreview report(stored->name,stored->layout,stored->code,db,&window,false,{},std::nullopt,0,-1,stored->recordSource);
+        assert(report.hasDataSource());auto controls=makePreviewFormObject(report)->member("Controls",{}).object;
+        auto amount=controls->item("qty").object;assert(amount->scalarValue().kind==linaccess::VbaValue::Kind::Number && amount->scalarValue().number==7);
+        assert(controls->item("moment").object->scalarValue().kind==linaccess::VbaValue::Kind::Date);
+        const auto expected=QLocale().toString(7.0,'f',2)+" units";
+        assert(report.findChild<QLineEdit*>("access-control-qty")->text()==expected);
+        QTemporaryDir output;assert(output.isValid());const auto path=output.filePath("formatted-report.pdf");assert(report.exportReportPdf(path));
+        QFile pdf(path);assert(pdf.open(QIODevice::ReadOnly));const auto original=pdf.readAll();pdf.close();
+        const auto reader=QStandardPaths::findExecutable("pdftotext");if(!reader.isEmpty()) {QProcess text;text.start(reader,{"-layout",path,"-"});assert(text.waitForFinished(10000) && text.exitCode()==0);assert(QString::fromUtf8(text.readAllStandardOutput()).contains(expected));}
+        assert(amount->scalarValue().number==7);assert(report.close());
+        const QByteArray variantSource="Begin Report\nWidth =3000\nBegin Section\nHeight =600\nBegin TextBox\nName =\"Typed\"\nFormat =\"0.00\"\nWidth =2500\nHeight =300\nEnd\nEnd\nEnd\n";
+        AccessFormPreview variants("unbound formatted variants",variantSource,{},db,&window,false,{},std::nullopt,0,-1,stored->recordSource);
+        auto typed=makePreviewFormObject(variants)->member("Controls",{linaccess::VbaValue::string("Typed")}).object;
+        typed->assign("Value",linaccess::VbaValue::longInteger(7));assert(typed->scalarValue().numericType==linaccess::VbaValue::NumericType::Long);
+        typed->assign("Format",linaccess::VbaValue::string(""));assert(typed->scalarValue().numericType==linaccess::VbaValue::NumericType::Long);
+        typed->assign("Value",linaccess::VbaValue::currency(std::numeric_limits<std::int64_t>::max()));typed->assign("Format",linaccess::VbaValue::string("0.0000"));assert(typed->scalarValue().currencyUnits==std::numeric_limits<std::int64_t>::max());
+        typed->assign("Format",linaccess::VbaValue::string(""));assert(typed->scalarValue().kind==linaccess::VbaValue::Kind::Currency && typed->scalarValue().currencyUnits==std::numeric_limits<std::int64_t>::max());assert(variants.close());
+
+        auto invalid=linaccess::parseAccessFormLayout(QString::fromUtf8(stored->layout));assert(!invalid.controls.isEmpty());
+        auto badSource=stored->layout;badSource.replace("Format =\"0.00\"\" units\"\"\"","Format =\"0.00E+00\"");
+        AccessFormPreview bad("Unsupported report format",badSource,{},db,&window,false,{},std::nullopt,0,-1,stored->recordSource);
+        assert(bad.findChild<QLineEdit*>("access-control-qty")->property("la_format_error").toInt()==5 && !bad.exportReportPdf(path));
+        assert(makePreviewFormObject(bad)->member("Controls",{linaccess::VbaValue::string("qty")}).object->scalarValue().number==7);
+        assert(pdf.open(QIODevice::ReadOnly) && pdf.readAll()==original);assert(bad.close());
+    }
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-query-designer");dialog->findChild<QLineEdit*>("native-query-name")->setText("Owned rename query");dialog->findChild<QPlainTextEdit*>("native-query-sql")->setPlainText("SELECT qty FROM authored_renamed");dialog->findChild<QPushButton*>("native-query-save")->click();});action(window,"+ Abfrage")->trigger();
     {const auto before=linaccess::datasheet_page_store::read(db,"query","Owned rename query");linaccess::datasheet_page_store::save(db,"query","Owned rename query",before,linaccess::datasheet_page_store::defaults());}
     {auto* tree=window.findChild<QTreeWidget*>();bool selected=false;for(auto* item:tree->findItems("Owned rename query",Qt::MatchExactly|Qt::MatchRecursive,0)) if(item->data(0,Qt::UserRole).toString()=="query") {tree->setCurrentItem(item);selected=true;break;}assert(selected);}
@@ -3023,6 +3049,60 @@ End Sub
             else assert(value.asNumber()==expected.value("value").toDouble());++checked;
         }
         assert(checked==48);std::vector<linaccess::VbaValue> arguments;const auto named=caller.executeProcedure("NamedNumberFormat",arguments);if(named.status!=linaccess::VbaExecutionStatus::Completed) std::cerr<<"Named format: "<<named.errorNumber<<" line="<<named.line<<" "<<named.explanation<<"\n";assert(named.status==linaccess::VbaExecutionStatus::Completed && makePreviewFormObject(caller)->member("Tag",{}).asText()=="1234,50");assert(caller.close());
+    }
+    {
+        using linaccess::VbaValue;
+        const QByteArray source=R"FORM(Begin Form
+Width =6000
+Begin Section
+Height =1800
+Begin TextBox
+Name ="Amount"
+ControlSource ="=CCur(""1.2345"")"
+Format ="0.00"" units"""
+Width =3000
+Height =300
+End
+Begin TextBox
+Name ="Invalid"
+ControlSource ="=1"
+Format ="0.00E+00"
+Top =400
+Width =3000
+Height =300
+End
+Begin TextBox
+Name ="Writable"
+DefaultValue ="1.25"
+Format ="0.00"
+Top =800
+Width =3000
+Height =300
+End
+End
+End
+)FORM";
+        const QByteArray code=R"VBA(Sub ChangeMask()
+If VarType(Me!Amount)<>vbCurrency Then Err.Raise 5
+Me!Amount.Format="0.000"
+If Me!Amount<>CCur("1.2345") Then Err.Raise 5
+End Sub
+)VBA";
+        AccessFormPreview form("calculated format",source,code,db,&window);
+        auto controls=makePreviewFormObject(form)->member("Controls",{}).object;auto amount=controls->item("Amount").object;
+        auto* line=form.findChild<QLineEdit*>("access-control-Amount");
+        assert(line && line->text()==QLocale().toString(1.23,'f',2)+" units" && amount->scalarValue().kind==VbaValue::Kind::Currency && amount->scalarValue().currencyUnits==12345);
+        auto invalid=controls->item("Invalid").object;assert(invalid->scalarValue().asNumber()==1 && form.findChild<QLineEdit*>("access-control-Invalid")->text()=="#Fehler (5)");
+        QTemporaryDir output;assert(output.isValid() && !form.exportLayoutPdf(output.filePath("invalid.pdf")));
+        invalid->assign("Format",VbaValue::string("0.0"));assert(form.exportLayoutPdf(output.filePath("valid.pdf")));
+        std::vector<VbaValue> arguments;assert(form.executeProcedure("ChangeMask",arguments).status==linaccess::VbaExecutionStatus::Completed);
+        assert(line->text()==QLocale().toString(1.234,'f',3) && amount->scalarValue().currencyUnits==12345);
+        const auto expect=[](auto action,int wanted) {int actual=0;try {action();}catch(const linaccess::VbaRuntimeError& failure) {actual=failure.number;}assert(actual==wanted);};
+        expect([&] {amount->assign("Format",VbaValue::string("0.00E+00"));},5);assert(amount->member("Format",{}).asText()=="0.000");
+        expect([&] {amount->assign("Format",{});},94);expect([&] {controls->item("Writable").object->assign("Format",VbaValue::string("0.000"));},3251);
+        assert(form.findChild<QLineEdit*>("access-control-Writable")->toolTip().contains("3251"));
+        amount->assign("Format",VbaValue::string(""));assert(line->text()=="1.2345" && amount->scalarValue().currencyUnits==12345);
+        assert(form.close());
     }
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

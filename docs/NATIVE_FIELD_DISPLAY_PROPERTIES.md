@@ -74,8 +74,11 @@ Unsupported masks are preserved as metadata with explicit rendering failure.
 
 This scope covers owned native table fields and editable table-backed models.
 Full Jet3/ACE field Format extraction, query/view format lineage, automatic
-form/report-control inheritance, DecimalPlaces, complete string/scientific masks
+form-control inheritance and complex report lineage, DecimalPlaces, complete string/scientific masks
 and Access 2003 display/printing parity remain open. No original files are edited.
 
 Existing DAO/window checks2/2 (8.00s); application built. Actual PDF text includes
 the stored numeric mask; unsupported masks refuse before snapshot output.
+
+Proven direct table field formats now flow through native report creation into
+actual TextBox Format and PDF output; see CONTROL_FORMAT_RUNTIME.md.

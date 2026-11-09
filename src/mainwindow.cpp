@@ -2402,7 +2402,17 @@ void MainWindow::editReport(const QString& existingName) {
             const auto latest=objectDefinition("report",savedName);
             if(!latest.isEmpty()) content=latest;
         }
-        if(content.value("sql").toString()!=sql->toPlainText() || !content.contains("field_captions")) {QString table;try {table=linaccess::editableAccessQueryTable(db_,sql->toPlainText());}catch(const linaccess::VbaRuntimeError& error) {if(error.number!=3251) throw;}QJsonObject captions;if(!table.isEmpty()) {const auto display=linaccess::nativeTableFieldDisplayProperties(db_,table);for(auto it=display.cbegin();it!=display.cend();++it) if(it.value().caption && !it.value().caption->isEmpty()) captions.insert(it.key(),*it.value().caption);}content.insert("field_captions",captions);}
+        const bool changedSource=content.value("sql").toString()!=sql->toPlainText();
+        if(changedSource || !content.contains("field_captions") || !content.contains("field_formats")) {
+            QString table;try {table=linaccess::editableAccessQueryTable(db_,sql->toPlainText());}catch(const linaccess::VbaRuntimeError& error) {if(error.number!=3251) throw;}
+            QJsonObject captions,formats;
+            if(!table.isEmpty()) {const auto display=linaccess::nativeTableFieldDisplayProperties(db_,table);for(auto it=display.cbegin();it!=display.cend();++it) {
+                if(it.value().caption && !it.value().caption->isEmpty()) captions.insert(it.key(),*it.value().caption);
+                if(it.value().format) formats.insert(it.key(),*it.value().format);
+            }}
+            if(changedSource || !content.contains("field_captions")) content.insert("field_captions",captions);
+            content.insert("field_formats",formats);
+        }
         content.insert("title",title->text()); content.insert("sql",sql->toPlainText());
         content.insert("vba",vba->toPlainText()); content.insert("can_grow",canGrow->isChecked());
         content.insert("detail_force_new_page",pageBreak->currentIndex());

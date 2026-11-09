@@ -463,12 +463,13 @@ wide=1
 Call AcceptCurrency((wide))
 Temporary=TypeName(wide)&":"&CStr(wide)
 End Function
-Sub CurrencyLoop()
+Function CurrencyLoop() As Currency
 Dim counter As Currency
-CurrentDb.Execute "INSERT INTO currency_events VALUES('unsupported loop')"
 For counter=0 To 1
+CurrentDb.Execute "INSERT INTO currency_events VALUES('currency loop')"
 Next counter
-End Sub
+CurrencyLoop=counter
+End Function
 )VBA";
     AccessFormPreview form("currency procedure","Begin Form\nEnd",code,db);
     auto root=makePreviewFormObject(form);
@@ -490,7 +491,7 @@ End Sub
     assert(sql.exec("SELECT COUNT(*) FROM currency_events") && sql.next() && sql.value(0).toInt()==0); sql.finish();
     result=form.executeProcedure("Matching",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Currency && result.typedReturnValue->currencyUnits==10001);
     result=form.executeProcedure("Temporary",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="Double:1");
-    result=form.executeProcedure("CurrencyLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Unsupported && result.errorNumber==3251);
-    assert(sql.exec("SELECT COUNT(*) FROM currency_events") && sql.next() && sql.value(0).toInt()==2); sql.finish();
+    result=form.executeProcedure("CurrencyLoop",args); assert(result.status==linaccess::VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Currency && result.typedReturnValue->currencyUnits==20000);
+    assert(sql.exec("SELECT COUNT(*) FROM currency_events") && sql.next() && sql.value(0).toInt()==4); sql.finish();
     assert(form.close());
 }
