@@ -13,6 +13,7 @@
 #include "native_domain_lookup.hpp"
 #include "native_macro_runner.hpp"
 #include "native_macro_message_box.hpp"
+#include "native_find_record_arguments.hpp"
 #include "native_stored_form.hpp"
 #include "native_stored_report.hpp"
 #include "access_form_preview.hpp"
@@ -83,6 +84,7 @@ public:
         if(key=="runsql") return VbaArgumentSignature{{"SQLStatement","UseTransaction"},1};
         if(key=="opentable") return VbaArgumentSignature{{"TableName","View","DataMode"},1};
         if(key=="openquery") return VbaArgumentSignature{{"QueryName","View","DataMode"},1};
+        if(key=="findrecord") return VbaArgumentSignature{{"FindWhat","Match","MatchCase","Search","SearchAsFormatted","OnlyCurrentField","FindFirst"},1};
         if(key=="gotorecord") return VbaArgumentSignature{{"ObjectType","ObjectName","Record","Offset"},0};
         if(key=="openform") return VbaArgumentSignature{{"FormName","View"},1};
         if(key=="openreport") return VbaArgumentSignature{{"ReportName","View"},1};
@@ -107,6 +109,13 @@ public:
         std::vector<VbaValue> values;for(const auto& argument:args) {values.push_back(scalarVbaValue(argument));host.check();}
         const auto number=[&](std::size_t index,int fallback) {return index>=values.size() || values[index].kind==VbaValue::Kind::Missing ? fallback : static_cast<int>(coerceVbaModuleValue(values[index],"long").number);};
         const auto target=[&] {if(values.empty() || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Object name is required");return QString::fromStdString(coerceVbaModuleValue(values[0],"string").asText());};
+        if(key=="findrecord") {
+            const auto request=nativeFindRecordArguments(values);
+            if(auto* active=activePreviewDocument()) for(const auto& document:AccessFormPreview::projectDocuments(db_)) if(document==active) {auto result=invokeNativePreviewCommand(*active,"FindRecord",values);host.check();return result;}
+            const auto payload=request.payload();QVariantMap result;
+            if(!QMetaObject::invokeMethod(owner_,"findTableRecord",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QVariantMap,payload))) throw VbaRuntimeError(3251,"FindRecord data dispatch is unavailable");
+            if(!result.value("handled").toBool()) throw VbaRuntimeError(2046,"No active data document supports FindRecord");resultError(result);host.check();return VbaValue::empty();
+        }
         if(key=="gotorecord") {
             if(values.size()>4) throw VbaRuntimeError(450,"GoToRecord accepts at most four arguments");
             const auto omitted=[&](std::size_t index) {return index>=values.size() || values[index].kind==VbaValue::Kind::Missing || values[index].kind==VbaValue::Kind::Empty;};

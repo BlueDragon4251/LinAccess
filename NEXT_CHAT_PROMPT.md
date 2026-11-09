@@ -1510,3 +1510,25 @@ Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung. Modale Design
 und allgemeine versteckte Formularsuche bleiben explizite Grenzen.
 NATIVE_MACROS_RUNTIME.md; F178/F088/F052 und456/384/72 unverändert.
 Direkt weiter: vollständige FindRecord-Anbindung aus Standardmodulen/Makros.
+
+
+## Fortschreibung 2026-11-09: FindRecord aus Standardmodul/Makro
+Application.DoCmd.FindRecord unterstützt sieben/namentliche Argumente und echte
+aktive Projektformulare, Tabellen und Abfragen. Gemeinsame Argumentprüfung mit
+bestehendem Formularhost; typisierte Werte/Platzhalter/Formatgrenzen bleiben
+unverändert. Native Makroaktion hat literaltextiges FindWhat und optionale Löcher;
+keine Behauptung beliebiger Access-Makroausdrücke/Binärdekodierung.
+Tatsächliche Tabellenöffnung wählt nun eine erste Zelle, damit FindRecord ohne
+vorherigen manuellen Klick ein Suchfeld hat. Datensatzmarkierung selektiert die
+aktuelle ganze Zeile ausdrücklich unabhängig vom initialen Qt-Auswahlanker und
+bewahrt die aktuelle Spalte. Vorhandene GUI deckte diesen Folgefehler auf.
+App gebaut; Layout1/1 (11,23s), nach gezielten Korrekturen GUI1/1 (7,91s) bestanden.
+Der neue Suchprüffall setzt seine Sortierung ausdrücklich: die vorherige Annahme
+aufsteigender Standardsortierung war falsch, der Zahlen-Treffer bereits korrekt.
+Geprüft: sieben tatsächliche Editorargumente/Speicherung, Zahlen/Currency,
+Platzhalter/Weitersuche, benanntes Modul, Nur-Lesen-Abfrage, Formular/Makro beider
+Hosts, Null-/Mustervalidierung ohne Cursoränderung und vorhandene Zeilenauswahl.
+Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; vollständige
+No-Match-/Zeit-/Untertyp-Parität bleibt offen. NATIVE_MACROS_RUNTIME.md;
+F088/F052/F178/F363 und456/384/72 unverändert. Direkt weiter mit tatsächlichen
+Fokus-/Cursorbefehlen und gemeinsamer UI-Ausführungslebensdauer im Modulhost.

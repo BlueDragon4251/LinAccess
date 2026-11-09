@@ -17,7 +17,7 @@ namespace linaccess {
 struct NativeMacroSignature {QString name;QStringList types;int required;};
 inline const QVector<NativeMacroSignature>& nativeMacroSignatures() {
     static const QVector<NativeMacroSignature> signatures{
-        {"GoToRecord",{"long","text","long","long"},0},{"MessageBox",{"text","boolean","text","text"},1},{"RunSQL",{"text","boolean"},1},{"OpenTable",{"text","long","long"},1},
+        {"FindRecord",{"text","long","boolean","long","boolean","long","boolean"},1},{"GoToRecord",{"long","text","long","long"},0},{"MessageBox",{"text","boolean","text","text"},1},{"RunSQL",{"text","boolean"},1},{"OpenTable",{"text","long","long"},1},
         {"OpenQuery",{"text","long","long"},1},{"OpenForm",{"text","long"},1},
         {"OpenReport",{"text","long"},1},{"RunCommand",{"long"},1},
         {"SelectObject",{"long","text","boolean"},2},{"Close",{"long","text","long"},0},{"DeleteObject",{"long","text"},2},{"Rename",{"text","long","text"},3},{"RunCode",{"text"},1},{"Echo",{"boolean","text"},1},{"Requery",{"text"},0},{"StopAllMacros",{},0},{"StopMacro",{},0},{"CancelEvent",{},0},{"RunMacro",{"text","long","text"},1}};
@@ -78,7 +78,7 @@ inline QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition
         }
         for(int index=0;index<arguments.size();++index) {
             const auto value=arguments[index];const auto type=signature->types[index];
-            if(((signature->name=="RunMacro" && index==1) || signature->name=="GoToRecord") && value.isNull()) {action.arguments.push_back(VbaValue::missing());continue;}
+            if(((signature->name=="RunMacro" && index==1) || signature->name=="GoToRecord" || (signature->name=="FindRecord" && index>0)) && value.isNull()) {action.arguments.push_back(VbaValue::missing());continue;}
             if(type=="text" && value.isString()) {
                 const auto text=value.toString();if(text.size()>262144 || !text.isValidUtf16() || text.contains(QChar(0))) throw VbaRuntimeError(5,"Invalid native macro text");
                 if(index==0 && signature->required && text.trimmed().isEmpty()) throw VbaRuntimeError(5,"Native macro target cannot be empty");

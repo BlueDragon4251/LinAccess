@@ -393,3 +393,31 @@ This is documentation, not a new Windows Access 2003 observation.
 Validation: app built; layout1/1 (11.40s) and corrected readonly-query GUI1/1
 (7.61s) passed. Actual table/query/form positions, named module calls, macro
 omissions in both hosts, invalid offset preservation and multiline text covered.
+
+## Seven-argument FindRecord from modules and macros
+
+The standalone DoCmd.FindRecord member uses FindWhat, Match, MatchCase, Search,
+SearchAsFormatted, OnlyCurrentField and FindFirst, including named VBA arguments.
+It dispatches to the active actual project form or existing table/query search;
+it does not fabricate a caller form. The argument parser is shared with the
+existing form host, preserving typed value normalization, option validation,
+Null refusal and wildcard checks. Exact Currency/Date/numeric/Boolean search
+remains subject to the existing supported field types and whole-field bounds.
+Formatted searches still require text. Existing selection, validation and search
+bounds apply; complete Access no-match/error/timing equivalence remains open.
+
+The native FindRecord macro action has seven arguments. Its FindWhat is literal
+text in the native JSON action format; this does not claim arbitrary Access macro
+expression or original macro-binary decoding. Optional JSON null values are
+omissions. The complete argument dialog retains all seven options and emits
+omissions for blank optional numeric/Boolean fields. Typed FindWhat values are
+available through the actual VBA member rather than invented JSON subtype tags.
+
+Contract consulted:
+https://learn.microsoft.com/en-us/office/vba/api/access.docmd.findrecord .
+No new Windows Access2003 observation is claimed.
+
+Validation: app built; existing layout1/1 (11.23s) and corrected GUI1/1 (7.91s)
+passed. This also fixed missing initial table current-field selection and made
+whole-record selection independent of the initial Qt selection anchor. The new
+search fixture now specifies its expected ascending order explicitly.

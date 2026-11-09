@@ -938,7 +938,9 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
             if(!table->finishEditing()) return tableModelFailure(model,2501);
             if(!table || !model || !table->currentIndex().isValid()) return tableCommandFailure(2501,"Tabellenauswahl ist nicht mehr verfügbar.");
             const QPersistentModelIndex current=table->currentIndex();
-            table->selectRow(current.row());
+            // Select this complete record explicitly, independent of the view
+            // selection anchor established when the datasheet first opened.
+            table->selectionModel()->select(current,QItemSelectionModel::ClearAndSelect|QItemSelectionModel::Rows);
             if(table && current.isValid() && table->selectionModel())
                 table->selectionModel()->setCurrentIndex(current,QItemSelectionModel::NoUpdate);
         }
@@ -2157,7 +2159,9 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     tabs_->setCurrentIndex(tabs_->addTab(page, queryName.isEmpty() ? name : "Abfrage: "+queryName));
     const QPointer<linaccess::AccessTableModel> registeredModel=model;
     const QPointer<linaccess::AccessTableView> registeredView=table;
-    if(!queryName.isEmpty() && registeredModel && registeredView && model->rowCount() && model->columnCount()) table->setCurrentIndex(model->index(0,0));
+    // A newly opened populated datasheet needs a real current field for keyboard
+    // navigation and DoCmd.FindRecord, including an ordinary table.
+    if(registeredModel && registeredView && model->rowCount() && model->columnCount()) table->setCurrentIndex(model->index(0,0));
     if(!alive() || !registered || !registeredModel || !registeredView) return 2501;
     const bool activated=activateDataPage(page);
     if(!alive() || !registered) return 2501;

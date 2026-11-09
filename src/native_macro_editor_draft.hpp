@@ -17,7 +17,7 @@ inline QJsonArray nativeMacroDraftActions(const QVector<NativeMacroRowDraft>& ro
         if(count>signature->types.size()) throw VbaRuntimeError(450,"Zu viele Argumente für die Makroaktion.");QJsonArray arguments;
         for(int index=0;index<count;++index) {
             const auto value=values.value(index),type=signature->types[index];
-            if(((row.action=="RunMacro" && index==1) || (row.action=="GoToRecord" && type=="long")) && value.trimmed().isEmpty()) arguments.append(QJsonValue(QJsonValue::Null));
+            if(((row.action=="RunMacro" && index==1) || (row.action=="GoToRecord" && type=="long") || (row.action=="FindRecord" && index>0)) && value.trimmed().isEmpty()) arguments.append(QJsonValue(QJsonValue::Null));
             else if(type=="text") arguments.append(value);
             else if(type=="boolean") {if(row.action=="MessageBox" && value.isEmpty()) arguments.append(true);else if(value.compare("Ja",Qt::CaseInsensitive)==0 || value.compare("True",Qt::CaseInsensitive)==0) arguments.append(true);else if(value.compare("Nein",Qt::CaseInsensitive)==0 || value.compare("False",Qt::CaseInsensitive)==0) arguments.append(false);else throw VbaRuntimeError(13,"Makroargument erfordert Ja oder Nein.");}
             else {bool valid=false;const auto integer=value.toLongLong(&valid);if(!valid || integer<std::numeric_limits<qint32>::min() || integer>std::numeric_limits<qint32>::max()) throw VbaRuntimeError(13,"Makroargument erfordert eine 32-Bit-Ganzzahl.");arguments.append(static_cast<int>(integer));}

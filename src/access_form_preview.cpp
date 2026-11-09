@@ -22,6 +22,7 @@
 #include "native_clock_keys.hpp"
 #include "native_cell_zoom.hpp"
 #include "native_find_value.hpp"
+#include "native_find_record_arguments.hpp"
 #include <QVariantMap>
 
 #include "vba_runtime.hpp"
@@ -1135,20 +1136,8 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
         host.sendKeys(args[0].asText(),wait); return {};
     }
     if(command=="findrecord") {
-        if(args.empty() || args.size()>7 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"FindRecord argument count invalid");
-        const auto optionalNumber=[&](std::size_t index,int fallback) { return index>=args.size() || args[index].kind==VbaValue::Kind::Missing ? fallback : number(args[index]); };
-        const auto optionalBoolean=[&](std::size_t index,bool fallback) { return index>=args.size() || args[index].kind==VbaValue::Kind::Missing ? fallback : linaccess::coerceVbaModuleValue(args[index],"boolean").boolean; };
-        const int match=optionalNumber(1,1),search=optionalNumber(3,2),field=optionalNumber(5,-1);
-        const bool sensitive=optionalBoolean(2,false),formatted=optionalBoolean(4,false),first=optionalBoolean(6,true);
-        if(match<0 || match>2 || search<0 || search>2 || (field!=0 && field!=-1)) throw VbaRuntimeError(5,"Invalid FindRecord option");
-        if(formatted && args[0].kind!=VbaValue::Kind::Text) throw VbaRuntimeError(3251,"Formatted FindRecord requires literal String input");
-        const auto sought=linaccess::normalizeNativeFindValue(args[0]);
-        const bool textValue=sought.kind==VbaValue::Kind::Text;
-        const auto text=linaccess::nativeFindValueText(sought);
-        if(textValue && text.isEmpty()) throw VbaRuntimeError(3251,"Empty FindRecord is not implemented");
-        if(textValue && linaccess::nativeFindHasWildcards(text)) (void)linaccess::nativeFindTextMatches({},text,match,sensitive,true);
-        if(!textValue && match!=1) throw VbaRuntimeError(3251,"Typed FindRecord currently requires whole-field matching");
-        if(!host.findTableRecord(sought,match,sensitive,first,search,formatted,field==0)) host.findFormRecord(sought,match,sensitive,first,search,formatted,field==0);
+        const auto request=linaccess::nativeFindRecordArguments(args);
+        if(!host.findTableRecord(request.sought,request.match,request.sensitive,request.first,request.direction,request.formatted,request.all)) host.findFormRecord(request.sought,request.match,request.sensitive,request.first,request.direction,request.formatted,request.all);
         return {};
     }
     if(command=="selectobject") {
