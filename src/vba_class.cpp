@@ -79,6 +79,7 @@ public:
     ClassHost(NativeClass& owner,std::unique_ptr<VbaHost> services):owner_(owner),services_(std::move(services)){if(!services_) throw VbaRuntimeError(3251,"Native class service context is unavailable");}
     void enterModule(std::string_view source) override {services_->enterModule(source);}
     void leaveModule() noexcept override {services_->leaveModule();}
+    std::shared_ptr<VbaObject> errorObject() override {return services_->errorObject();}
     bool hasClassInstance() const override;
     bool hasInstanceIdentifier(std::string_view) override;
     std::shared_ptr<VbaModuleState> moduleState(std::string_view) override;

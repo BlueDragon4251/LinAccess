@@ -2416,6 +2416,7 @@ End Sub
     const auto errorVariants=executeVbaProcedure(R"VBA(
 Sub VariantErrors()
 Dim problem As Variant
+Err.Clear
 problem = CVErr(2015)
 Me!Name = CStr(IsError(problem)) & ":" & CStr(problem) & ":" & CStr(Err.Number)
 Call ReplaceError(problem)

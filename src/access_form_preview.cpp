@@ -516,6 +516,7 @@ int nativeModuleMessageBox(QWidget* owner,std::string_view prompt,int style,cons
 
 class PreviewVbaHost final : public linaccess::VbaHost {
 public:
+    std::shared_ptr<linaccess::VbaObject> errorObject() override {if(preview_.closed_ || preview_.openCancelled_ || preview_.db_.databaseName()!=observationDatabase_) throw linaccess::VbaRuntimeError(3420,"VBA document environment is closed");return linaccess::projectVbaErrorObject(preview_.db_);}
     static void openProjectDocument(QSqlDatabase,QWidget*,linaccess::AccessDocumentKind,const QString&,const QString&,std::optional<QString>,int,int,QPointer<AccessFormPreview> caller={});
     explicit PreviewVbaHost(AccessFormPreview& preview) : preview_(preview),observationDatabase_(preview.db_.databaseName()) {}
     std::string projectClassName(std::string_view name) override {requireInstance();return linaccess::nativeProjectClassName(preview_.db_,name);}

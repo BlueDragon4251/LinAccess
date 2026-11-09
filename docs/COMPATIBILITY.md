@@ -6015,3 +6015,18 @@ Err-Identität und Fehlerhistorie bleiben offen;456/386/70 unverändert. Vorstuf
 113b829 privat remote/Baum geprüft; Original zuletzt119,91s und sieben Hashes
 unverändert vor dieser begrenzten Reset-Korrektur. Ohne Zwischenabschluss ein
 aktuelles Debian-Paket erstellen und weitere echte Laufzeitlücken bearbeiten.
+
+
+Projektweite native Err-Instanz: VBA_ERROR_ENVIRONMENT.md beschreibt echte
+Host-/Projektbindung statt pro-Prozedur-Neuanlage, gemeinsame Referenzen über
+Modul/Formular/Klasse, lokale Handler, tatsächliche Fehlerweitergabe und getrennte
+Datenbanken. Reset invalidiert alte Referenzen; geschlossene Verbindung verweigert
+Eigenschaftszugriff3420. App; initial GUI18,42s/DAO2,75s/Original118,10s bestanden.
+Eine alte Kernfixture benötigt für ihren Null-Start ausdrücklich Err.Clear; nur
+Kern wiederholt, bestanden5,03s. Sieben Hashes unverändert; bekannte Makrogrenze.
+Keine neue CTest-ID/Windows-/Vollsuitenbehauptung;456/386/70 unverändert. Vorstufe
+55096a7 privat remote/Baum geprüft. Dessen aktuelles DEB unter
+/workspace/work/error-clear-boundaries/package/linaccess-0.7.0-Linux.deb geprüft
+(Build-ID/Payload/Rechte/keineFixtures, MDBTools1.0.1, SQLite3.54.1 JOIN/NULL/Counter),
+noch ohne diese Projektbindung. Ohne Zwischenabschluss mit echter CVErr-
+Fehlerwertübernahme/Let-Konvertierung nach MS-VBAL6.1.2.3.1.14 weiterprogrammieren.

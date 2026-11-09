@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <functional>
 #include <cstdint>
 #include <exception>
 #include <memory>
@@ -50,6 +51,7 @@ public:
 std::string_view activeVbaModuleSource() noexcept;
 bool activeVbaHostMatches(const VbaHost* host) noexcept;
 class VbaObject;
+std::shared_ptr<VbaObject> makeVbaErrorObject(std::function<void()> guard={});
 struct VbaValue;
 struct VbaModuleState;
 std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module);
@@ -72,6 +74,7 @@ struct VbaExecutionResult;
 class VbaHost {
 public:
     virtual ~VbaHost() = default;
+    virtual std::shared_ptr<VbaObject> errorObject();
     // Observation only: exceptions from observers must never change execution.
     virtual void executionObserved(std::string_view, std::string_view, const VbaExecutionResult&, bool) {}
     virtual std::optional<std::string> field(std::string_view name) = 0;
@@ -147,6 +150,7 @@ public:
     }
 private:
     std::unordered_map<std::string,std::shared_ptr<VbaModuleState>> moduleStates_;
+    std::shared_ptr<VbaObject> errorObject_;
 };
 
 enum class VbaExecutionStatus { Completed, ProcedureMissing, Unsupported, Error };

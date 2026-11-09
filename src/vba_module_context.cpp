@@ -14,6 +14,7 @@
 #include <QVariant>
 #include <QObject>
 #include <QThread>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QSet>
 
@@ -23,6 +24,7 @@ class ProjectModuleContext final:public QObject {
 public:
     explicit ProjectModuleContext(QSqlDatabase db):QObject(db.driver()),database(db.databaseName()) {}
     QString database;
+    std::shared_ptr<VbaObject> error;
     std::unordered_map<std::string,std::shared_ptr<VbaModuleState>> frames;
 };
 ProjectModuleContext& context(QSqlDatabase db) {
@@ -120,6 +122,22 @@ std::vector<std::shared_ptr<VbaModuleState>> publicVbaModuleStates(QSqlDatabase 
         if (!state->publicVariables.empty()) states.push_back(std::move(state));
     }
     return states;
+}
+std::shared_ptr<VbaObject> projectVbaErrorObject(QSqlDatabase db) {
+    auto& state=context(db);
+    if(!state.error) {
+        const QPointer<ProjectModuleContext> owner=&state;
+        const QPointer<QSqlDriver> driver=db.driver();
+        const auto connection=db.connectionName(),database=db.databaseName();
+        state.error=makeVbaErrorObject([owner,driver,connection,database] {
+            if(!owner || !driver) throw VbaRuntimeError(3420,"VBA error environment is closed");
+            if(QThread::currentThread()!=driver->thread()) throw VbaRuntimeError(3251,"VBA error environment requires its connection thread");
+            if(!QSqlDatabase::contains(connection)) throw VbaRuntimeError(3420,"VBA error connection is closed");
+            const auto current=QSqlDatabase::database(connection,false);
+            if(!current.isOpen() || current.driver()!=driver || current.databaseName()!=database) throw VbaRuntimeError(3420,"VBA error environment has changed");
+        });
+    }
+    return state.error;
 }
 void resetVbaProjectState(QSqlDatabase db) {
     clearExecutionObservations(db);

@@ -1956,6 +1956,7 @@ void MainWindow::showAccessArtifact(int id) {
             public:
                 ModuleHost(QWidget* dialog, QSqlDatabase database)
                     : dialog_(dialog), database_(std::move(database)) {}
+                std::shared_ptr<linaccess::VbaObject> errorObject() override {return linaccess::projectVbaErrorObject(database_);}
                 std::optional<std::string> field(std::string_view) override {
                     throw std::runtime_error("Me! benötigt einen geöffneten Formularkontext");
                 }

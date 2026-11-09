@@ -2356,6 +2356,21 @@ void testNativeDateDefaults() {
     assert(!sql.exec("INSERT INTO RenamedDates(Fixed) VALUES('2026-11-08')"));assert(sql.exec("SELECT Moment FROM RenamedDates WHERE ID=2") && sql.next() && sql.value(0).toString()==frozen);sql.finish();
 }
 
+void testProjectErrorContexts() {
+    using namespace linaccess;
+    const QString firstName="native-error-first",secondName="native-error-second";
+    {
+        auto first=QSqlDatabase::addDatabase("QSQLITE",firstName),second=QSqlDatabase::addDatabase("QSQLITE",secondName);
+        first.setDatabaseName(":memory:");second.setDatabaseName(":memory:");assert(first.open() && second.open());
+        auto one=projectVbaErrorObject(first),same=projectVbaErrorObject(first),other=projectVbaErrorObject(second);
+        assert(one==same && one!=other);one->assign("Number",VbaValue::longInteger(901));assert(same->member("Number",{}).number==901 && other->member("Number",{}).number==0);
+        resetVbaProjectState(first);int code=0;try{(void)one->member("Number",{});}catch(const VbaRuntimeError& error){code=error.number;}assert(code==3420);
+        auto replacement=projectVbaErrorObject(first);assert(replacement!=one && replacement->member("Number",{}).number==0);
+        first.close();code=0;try{replacement->assign("Number",VbaValue::longInteger(902));}catch(const VbaRuntimeError& error){code=error.number;}assert(code==3420);assert(other->member("Number",{}).number==0);
+        second.close();
+    }
+    QSqlDatabase::removeDatabase(firstName);QSqlDatabase::removeDatabase(secondName);
+}
 void testNativeDaoArrays() {
     auto db=QSqlDatabase::addDatabase("QSQLITE","native-dao-arrays");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);assert(sql.exec("CREATE TABLE native_array_rows(id INTEGER PRIMARY KEY,value INTEGER)"));assert(sql.exec("INSERT INTO native_array_rows VALUES(1,17),(2,23)"));Host host(db);
     const std::string source=R"VBA(Option Explicit
@@ -2407,6 +2422,7 @@ End Function
 }
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    testProjectErrorContexts();
     testNativeDaoArrays();
     testNativeIntrinsicFieldProperties();
     testNativeFieldDisplayProperties();

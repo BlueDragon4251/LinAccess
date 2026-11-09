@@ -1,3 +1,4 @@
+#include "vba_error_context_fixture.hpp"
 #include "vba_error_clear_fixture.hpp"
 #include "vba_redim_declaration_fixture.hpp"
 #include "vba_native_object_array_fixture.hpp"
@@ -17,11 +18,12 @@
 #include <cassert>
 namespace {
 using namespace linaccess;
-struct ClassState {std::shared_ptr<VbaModuleState> automaticState;bool alive{true};int messages{};std::function<void()> callback;std::unordered_map<std::string,std::shared_ptr<VbaModuleState>> modules;std::unordered_map<std::string,std::string> classes{{"nativecounter",nativeClassFixture}};};
+struct ClassState {std::shared_ptr<VbaObject> error=makeVbaErrorObject();std::shared_ptr<VbaModuleState> automaticState;bool alive{true};int messages{};std::function<void()> callback;std::unordered_map<std::string,std::shared_ptr<VbaModuleState>> modules;std::unordered_map<std::string,std::string> classes{{"nativecounter",nativeClassFixture}};};
 class ClassServices final:public VbaHost {
 public:
     explicit ClassServices(std::shared_ptr<ClassState> state):state(std::move(state)){}
     std::shared_ptr<ClassState> state;
+    std::shared_ptr<VbaObject> errorObject() override {return state->error;}
     std::optional<std::string> field(std::string_view) override {throw VbaRuntimeError(438,"No form in class services");}
     void setField(std::string_view,std::optional<std::string>) override {assert(false);}
     void saveRecord() override {assert(false);}
@@ -85,6 +87,8 @@ void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<Cla
     result=executeVbaProcedure(nativeObjectArrayFixture,"NativeObjectArrayProbe",host);if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Native object array: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==25);
     for(const auto& probe:std::vector<std::pair<const char*,int>>{{"ReDimDeclarationProbe",30},{"ReDimExistingProbe",17},{"ReDimStaticProbe",7},{"ReDimStaticProbe",14}}) {const auto outcome=executeVbaProcedure(nativeReDimDeclarationFixture,probe.first,host);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"ReDim declaration "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);}
     for(const auto& probe:std::vector<std::pair<const char*,int>>{{"ErrorClearProbe",704},{"ErrorExitProbe",17}}) {const auto outcome=executeVbaProcedure(nativeErrorClearFixture,probe.first,host);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Err reset "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);}
+    result=executeVbaProcedure(nativeErrorContextFixture,"EnvironmentErrorProbe",host);if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Shared error context: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==17);
+    result=executeVbaProcedure(nativeErrorContextFixture,"EnvironmentIdentityProbe",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->boolean);
     state->classes["database"]="VERSION 1.0 CLASS\nAttribute VB_Name = \"Database\"\nPublic Value As Long\n";
     result=executeVbaProcedure("Function RejectNominalDao As Long\nDim items(0 To 0) As DAO.Database\nOn Error Resume Next\nSet items(0)=New Database\nRejectNominalDao=Err.Number\nEnd Function","RejectNominalDao",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==13);
     state->alive=false;error=0;try{first->member("Calls",{});}catch(const VbaRuntimeError& e){error=e.number;}assert(error==3420);

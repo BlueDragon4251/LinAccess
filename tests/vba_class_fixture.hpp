@@ -83,6 +83,9 @@ Public Function SaveAudit(ByVal amount As Long) As Long
 CurrentDb.Execute "INSERT INTO native_class_audit(value) VALUES(" & CStr(amount) & ")"
 SaveAudit=amount
 End Function
+Public Function SameError(ByVal expected As VBA.ErrObject) As Boolean
+SameError=Err Is expected
+End Function
 )VBA";
 inline const std::string nativeClassConsumer=R"VBA(Option Explicit
 Public Function ClassProbe As Long

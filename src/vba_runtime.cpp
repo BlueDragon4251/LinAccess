@@ -290,19 +290,23 @@ std::string withoutComment(const std::string& line) {
 }
 
 class ErrorObject final : public VbaObject {
+    std::function<void()> guard_;
+    void check() const {if(guard_) guard_();}
 public:
+    explicit ErrorObject(std::function<void()> guard={}):guard_(std::move(guard)) {}
     int number{}, helpContext{};
     std::string_view className() const override { return "ErrObject"; }
     bool isNativeType(std::string_view type) const override { return type=="vba.errobject"; }
     std::string description, source, helpFile;
-    void clear() { number=0; helpContext=0; description.clear(); source.clear(); helpFile.clear(); }
+    void clear() { check(); number=0; helpContext=0; description.clear(); source.clear(); helpFile.clear(); }
     bool hasScalarDefault() const override { return true; }
-    VbaValue scalarValue() override { return VbaValue::longInteger(number); }
+    VbaValue scalarValue() override { check(); return VbaValue::longInteger(number); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         if(lower(std::string(name))=="raise") return VbaArgumentSignature{{"Number","Source","Description","HelpFile","HelpContext"},1};
         return {};
     }
     void assign(std::string_view name,const VbaValue& value) override {
+        check();
         const auto key=lower(std::string(name));
         if(key=="number" || key=="helpcontext") {
             const auto converted=coerceVbaModuleValue(scalarVbaValue(value),"long");
@@ -313,6 +317,7 @@ public:
         } else throw VbaRuntimeError(438,"Err property assignment unsupported");
     }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override {
+        check();
         const auto key = lower(std::string(name));
         if (key == "raise") {
             if(args.empty() || args.size()>5 || args[0].kind==VbaValue::Kind::Missing)
@@ -1841,6 +1846,8 @@ std::shared_ptr<VbaModuleState> createVbaModuleState(std::string_view module) {
     }
     return state;
 }
+std::shared_ptr<VbaObject> makeVbaErrorObject(std::function<void()> guard) {return std::make_shared<ErrorObject>(std::move(guard));}
+std::shared_ptr<VbaObject> VbaHost::errorObject() {if(!errorObject_) errorObject_=makeVbaErrorObject();return errorObject_;}
 std::shared_ptr<VbaModuleState> VbaHost::moduleState(std::string_view module) {
     const auto key=std::string(module);
     if (const auto found=moduleStates_.find(key);found!=moduleStates_.end()) return found->second;
@@ -2121,7 +2128,14 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     const auto checkedType=[&](std::string_view type) { return type.ends_with("()") || integralType(type) || type=="boolean" || type=="string" || type.starts_with("string*") || type=="single" || type=="double" || type=="currency" || type=="date" || type=="byte" || type=="collection" || type=="object" || isDeclaredObjectType(type) || !nativeScriptingObjectType(type).empty() || nativeDaoType(type) || !nativeAccessObjectType(type).empty(); };
     const auto scalarType=[&](std::string_view type) { return checkedType(type) && !isDeclaredObjectType(type) && type!="collection" && type!="object" && nativeScriptingObjectType(type).empty() && !nativeDaoType(type) && nativeAccessObjectType(type).empty() && !type.ends_with("()"); };
     const auto objectType=[](std::string_view type) {return isDeclaredObjectType(type);};
-    auto errorState = std::make_shared<ErrorObject>();
+    std::shared_ptr<ErrorObject> errorState;
+    try {
+        errorState=std::dynamic_pointer_cast<ErrorObject>(host.errorObject());
+        if(!errorState) throw VbaRuntimeError(3251,"Native error context is unavailable");
+        (void)errorState->member("Number",{});
+    } catch(const VbaRuntimeError& error) {
+        VbaExecutionResult failure{VbaExecutionStatus::Error,"Error context binding failed",0};failure.errorNumber=error.number;return failure;
+    }
     locals["err"] = VbaValue::reference(errorState);
     bool resumeNext = false;
     int handler = -1;
@@ -3405,17 +3419,17 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 if(vbaExecutionStopRequested()) throw VbaExecutionStopped{};
                 storeAliases();
                 const auto* typed = dynamic_cast<const VbaRuntimeError*>(&exception);
+                errorState->number = typed ? typed->number : 5;
+                errorState->description = exception.what();
+                errorState->source=typed ? typed->source : std::string{};
+                errorState->helpFile=typed ? typed->helpFile : std::string{};
+                errorState->helpContext=typed ? typed->helpContext : 0;
                 bool debuggerResume=false;
                 if(!resumeNext && (handler<0 || handlingError)) {
                     const VbaDebugError failure{typed ? typed->number : 5,exception.what(),typed ? typed->source : std::string{},typed ? typed->helpFile : std::string{},typed ? typed->helpContext : 0};
                     if(debugger) debuggerResume=debugger->unhandled(failure,true,currentLine);
                     if(!debuggerResume) throw;
                 }
-                errorState->number = typed ? typed->number : 5;
-                errorState->description = exception.what();
-                errorState->source=typed ? typed->source : std::string{};
-                errorState->helpFile=typed ? typed->helpFile : std::string{};
-                errorState->helpContext=typed ? typed->helpContext : 0;
                 if (!resumeNext && !debuggerResume) {
                     handlingError = true; faultInstruction = instruction.sourceStatementEnd>=0 ? executingIp : ip;
                     faultFrames = frames; faultLoops = loops; faultWithFrames=withFrames; faultActive = active;
