@@ -4881,3 +4881,22 @@ veröffentlicht/privater Remote-Baum verifiziert; letzte geprüfteDEB46297bf vor
 klammerlosen Deklarationen/impliziten normalen Variablen. F037/F042/F043 und
 Katalog456/386/70 unverändert. Anschließend objektwertige Getter/default-Member-
 Weiterleitung nach MS-VBAL5.4.3.8/5.6.13 ergänzen; ohne Zwischenabschluss weiter.
+
+
+Objektwertige Getter unterstützen jetzt native Default-Member-Weiterleitung:
+parameterlose Property-/samelokale Function-Ergebnisse mit positionalen Indizes,
+Get-only Objektproperties für native Dictionary-Let/Set und Default-Wertzuweisung
+an tatsächliche Textfelder, auch über indizierten Getter. Echte Setter haben Vorrang;
+Getter/Argumente/RHS nicht doppelt ausgeführt, Objektidentität erhalten, native
+Fehler13/91/Getterfehler weitergegeben. Eigentümerschließen im Getter verhindert
+Default-Zuweisung mit2450. Grenzen/default-Queues/Arrays/COM/ByRef-Fassade bleiben
+explizit, Norm MS-VBAL5.4.3.8/5.6.13, Details NATIVE_VBA_PROPERTIES.md.
+Anwendung gebaut; erstes Laufzeit-Kern-/GUI-Bündel2/2 (17,19s) bestanden. Keine
+neuen CTests. Originalinventar32/0 Properties/0 parameterlose Objektfunktionen;
+kein neuer Original-/Windows-/Gesamtsuitennachweis. Implizite normale Variablen
+als3c61be9 privat veröffentlicht/Remote-Baum verifiziert; Original-/Fixture-Hashes
+7/7 unverändert geprüft. Letzte geprüfteDEB46297bf liegt vor klammerlosen
+Deklarationen/normalen impliziten Variablen/Default-Weiterleitung. Katalog456/386/70
+und F042/F043/F050 unverändert. Anschließend ByRef-Property-Indizes für direkte
+samelokale Get/Let/Set-Aufrufe mit echter Rückbindung ergänzen; externe Objekt-
+fassade weiterhin explizit begrenzen. Ohne Zwischenabschluss fortsetzen.

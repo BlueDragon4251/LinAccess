@@ -1055,7 +1055,7 @@ public:
             return controls->member("Item",args);
         }
         if(!args.empty() && linaccess::nativeVbaPropertySignature(preview.vba_.toUtf8().toStdString(),name,linaccess::VbaPropertyAccess::Get,true)) {
-            const auto value=preview.invokeModuleProperty(name,linaccess::VbaPropertyAccess::Get,args,true);(void)checked();return *value;
+            const auto value=preview.getModuleMember(name,true,args);(void)checked();return *value;
         }
         if (!args.empty()) throw linaccess::VbaRuntimeError(450,"Unexpected form arguments");
         if (key=="page" || key=="pages") {

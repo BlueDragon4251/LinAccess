@@ -2,6 +2,7 @@
 #include "vba_analyzer.hpp"
 #include "vba_property_fixture.hpp"
 #include "vba_parameterless_fixture.hpp"
+#include "vba_default_property_fixture.hpp"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -44,4 +45,12 @@ void testVbaProperties(){using namespace linaccess;PropertyHost host,other;
     result=executeVbaProcedure("Function Bad value As Long\nMsgBox \"unreached\"\nEnd Function","Bad",host);assert(result.status==VbaExecutionStatus::Unsupported && host.effects==0);
     result=executeVbaProcedure("Sub Bad As Long\nMsgBox \"unreached\"\nEnd Sub","Bad",host);assert(result.status==VbaExecutionStatus::Unsupported && host.effects==0);
     const auto invalidSetter=validateVbaProcedure("Property Let Broken\nMsgBox \"unreached\"\nEnd Property","property let Broken");assert(invalidSetter.status==VbaExecutionStatus::Unsupported && invalidSetter.errorNumber==3251);
+
+    PropertyHost defaultHost;arguments.clear();result=executeVbaProcedure(nativeDefaultPropertyFixture,"DefaultProbe",defaultHost);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Default property: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==26);
+    result=executeVbaProperty(nativeDefaultPropertyFixture,"ReadCount",VbaPropertyAccess::Get,defaultHost,arguments);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==4);
+    result=executeVbaProperty(nativeDefaultPropertyFixture,"FunctionCalls",VbaPropertyAccess::Get,defaultHost,arguments);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==1);
+    result=executeVbaProcedure(nativeDefaultPropertyFixture,"RejectScalar",defaultHost);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==450);
+    result=executeVbaProperty(nativeDefaultPropertyFixture,"ReadCount",VbaPropertyAccess::Get,defaultHost,arguments);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==4);
+    result=executeVbaProcedure(nativeDefaultPropertyFixture,"MissingProbe",defaultHost);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==91);
+    result=executeVbaProcedure(nativeDefaultPropertyFixture,"FailedProbe",defaultHost);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==11);
 }

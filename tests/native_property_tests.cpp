@@ -2,7 +2,9 @@
 #include "access_form_objects.hpp"
 #include "vba_property_fixture.hpp"
 #include "vba_parameterless_fixture.hpp"
+#include "vba_default_property_fixture.hpp"
 #include <QApplication>
+#include <QLineEdit>
 #include <QSqlDatabase>
 #ifdef NDEBUG
 #undef NDEBUG
@@ -28,4 +30,39 @@ void exerciseNativeProperties(QSqlDatabase db){using namespace linaccess;
     AccessFormPreview bare("Parameterless declarations",layout,QByteArray::fromStdString(nativeParameterlessFixture),db);bare.show();QApplication::processEvents();arguments.clear();
     for(int call=1;call<=2;++call){result=bare.executeProcedure("FormProbe",arguments);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==call);}
     auto bareObject=makePreviewFormObject(bare);assert(bareObject->member("Value",{}).number==2 && bareObject->member("EmptyValue",{}).kind==VbaValue::Kind::Empty);assert(bare.close());
+
+    const auto widgetSource=QByteArray::fromStdString(nativeDefaultPropertyFixture)+R"VBA(
+Public Property Get Editor As Object
+getterReads=getterReads+1
+Set Editor=Me.Actual
+End Property
+Public Property Get EditorAt(ByVal index As Long) As Object
+getterReads=getterReads+1
+Set EditorAt=Me.Controls(index)
+End Property
+Public Function WidgetProbe As Long
+Me.Editor=17
+Editor=18
+EditorAt(0)=19
+WidgetProbe=Actual
+End Function
+Public Property Get Closing As Object
+Set Closing=Me.Actual
+DoCmd.Close
+End Property
+)VBA";
+    const QByteArray widgetLayout=R"LAYOUT(Begin Form
+Begin Section
+Begin TextBox
+Name ="Actual"
+End
+End
+End
+)LAYOUT";
+    AccessFormPreview defaults("Default property forwarding",widgetLayout,widgetSource,db);defaults.show();QApplication::processEvents();auto* actual=defaults.findChild<QLineEdit*>("access-control-Actual");assert(actual);auto defaultObject=makePreviewFormObject(defaults);
+    result=defaults.executeProcedure("DefaultProbe",arguments);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Form default property: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==26);
+    assert(defaultObject->member("Bag",{VbaValue::string("value")}).number==7);defaultObject->assignIndexedMember("Bag",{VbaValue::string("value")},VbaValue::longInteger(9));assert(defaultObject->member("Bag",{VbaValue::string("value")}).number==9);
+    const auto before=defaultObject->member("ReadCount",{}).number;result=defaults.executeProcedure("WidgetProbe",arguments);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Widget default: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==19 && actual->text()=="19" && defaultObject->member("ReadCount",{}).number==before+3);
+    defaultObject->assign("Editor",VbaValue::longInteger(21));defaultObject->assignIndexedMember("EditorAt",{VbaValue::longInteger(0)},VbaValue::longInteger(22));assert(actual->text()=="22" && defaultObject->member("ReadCount",{}).number==before+5);
+    failed=false;try{defaultObject->assign("Closing",VbaValue::longInteger(99));}catch(const VbaRuntimeError& e){failed=e.number==2450;}assert(failed && actual->text()=="22" && !defaults.isVisible());
 }

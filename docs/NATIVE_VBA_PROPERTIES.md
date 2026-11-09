@@ -29,8 +29,8 @@ source recognition alone is still not an execution or compatibility claim.
 ## Explicit boundaries
 
 This is a bounded F042/F043/F050 extension, not complete class support. Generic
-user class construction/lifecycle, default-property attributes/implicit default
-forwarding, arbitrary cross-module property binding, ByRef index copy-back,
+user class construction/lifecycle, user-defined default-property attributes and
+arbitrary argument/default queues, cross-module property binding, ByRef index copy-back,
 ParamArray, optional setter indices, named setters and complete visibility/COM
 semantics remain open. Parameterless Sub/Function/Get declarations now allow omitted parentheses, as
 specified by MS-VBAL5.3.1. Module inventory and actual form/core execution use
@@ -62,3 +62,36 @@ Variant getters, initial/trailing static counters and form instance values were
 executed. Invalid parameter syntax, typed Sub and valueless setter were refused.
 No new CTest ID; original32-artifact inventory had zero such header candidates,
 so no additional original/Windows claim. Catalog456/386/70 is unchanged.
+
+
+## Object-valued getters and native default members
+
+MS-VBAL5.6.13 permits a nonempty positional index list on an object/Variant-valued
+property or function that accepts no parameters: the list belongs to the returned
+object's default member. The native VM now executes the getter/function once and
+forwards that list, preserving object results for Set. Same-module functions and
+properties and public form property reads use this path. Nothing fails91; a
+nonobject result fails13; the original getter error propagates. An actual scalar
+getter with excess arguments still fails450 before its body effects.
+
+Writes first prefer an actual Let/Set accessor. With no setter, a zero-parameter
+object-valued getter can supply the native default indexed assignment, including
+Set dictionary items. A declared native-object getter with matching index
+parameters can supply a scalar default write to the returned control, following
+MS-VBAL5.4.3.8. No getter is executed merely to discover whether a setter exists.
+Arguments/RHS are evaluated once; getter and default member are called once.
+The source owner is checked after getter and default operations. Closing its
+real form during the getter fails2450 before touching the former control value.
+
+This covers existing native object capabilities, not arbitrary custom class
+attributes, array-valued getter mutation, function-result writes, named unbound
+default indices or complete Variant/COM/default argument queues. Public facade
+ByRef index arguments still fail explicitly. Existing visibility/lifetime and
+native value bounds remain. No Windows Access oracle is claimed.
+
+Application built; first runtime core/GUI bundle2/2 passed (17.19s). Actual native
+Dictionary values/reference identity and real TextBox writes/read counters,
+Nothing/error propagation/scalar excess arguments and owner-close rejection were
+executed. No new CTest ID. All32 original VBA artifacts had0 properties and0
+zero-argument object-function candidates; no extra original run was added.
+Catalog456/386/70 and full F042/F043/F050 requirements remain unchanged.

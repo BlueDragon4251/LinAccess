@@ -1,3 +1,4 @@
+#include "native_object_types.hpp"
 #include "vba_conditional.hpp"
 #include "execution_capabilities.hpp"
 #include "native_application_run.hpp"
@@ -3079,17 +3080,47 @@ std::optional<linaccess::VbaValue> AccessFormPreview::getModuleMember(std::strin
         if(!arguments.empty()) throw linaccess::VbaRuntimeError(450,"Module variable does not accept property indices");
         return frame->values.at(key);
     }
+    const auto signature=linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly);
+    if(signature && signature->names.empty() && !arguments.empty()
+        && (signature->resultType.empty() || signature->resultType=="variant" || !linaccess::nativeObjectType(signature->resultType).empty())) {
+        QPointer<AccessFormPreview> guard(this);
+        const auto target=invokeModuleProperty(name,linaccess::VbaPropertyAccess::Get,{},publicOnly);
+        if(!target || target->kind!=linaccess::VbaValue::Kind::Object) throw linaccess::VbaRuntimeError(13,"Default indices require a native object result");
+        if(!target->object) throw linaccess::VbaRuntimeError(91,"Default member object is Nothing");
+        const auto value=target->object->defaultMember(arguments,true);
+        if(!guard || guard->closed_ || guard->openCancelled_) throw linaccess::VbaRuntimeError(2450,"Property owner closed during default access");return value;
+    }
     return invokeModuleProperty(name,linaccess::VbaPropertyAccess::Get,std::move(arguments),publicOnly);
 }
 std::optional<linaccess::VbaValue> AccessFormPreview::invokeModuleProperty(std::string_view name,linaccess::VbaPropertyAccess access,std::vector<linaccess::VbaValue> arguments,bool publicOnly) {
     if(closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"CodeBehind instance is unavailable");
     const auto source=vba_.toUtf8().toStdString();
-    if(!linaccess::nativeVbaPropertySignature(source,name,access,publicOnly)) return {};
+    const bool setter=linaccess::nativeVbaPropertySignature(source,name,access,publicOnly).has_value();
+    const bool write=access!=linaccess::VbaPropertyAccess::Get;std::vector<linaccess::VbaValue> defaultIndices;linaccess::VbaValue value;
+    if(!setter) {
+        if(!write || arguments.empty()) return {};
+        const auto getter=linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly);
+        if(!getter) return {};
+        const bool forwarded=getter->names.empty() && arguments.size()>1
+            && (getter->resultType.empty() || getter->resultType=="variant" || !linaccess::nativeObjectType(getter->resultType).empty());
+        if(!forwarded && (access!=linaccess::VbaPropertyAccess::Let || linaccess::nativeObjectType(getter->resultType).empty())) return {};
+        value=arguments.back();arguments.pop_back();
+        if(forwarded) {defaultIndices=std::move(arguments);arguments.clear();}
+        if(access==linaccess::VbaPropertyAccess::Let) value=linaccess::scalarVbaValue(value);
+        else if(value.kind!=linaccess::VbaValue::Kind::Object) throw linaccess::VbaRuntimeError(13,"Set requires an object reference");
+    } else if(access==linaccess::VbaPropertyAccess::Let && !arguments.empty()) arguments.back()=linaccess::scalarVbaValue(arguments.back());
     QPointer<AccessFormPreview> guard(this);PreviewVbaHost host(*this);
-    const auto result=linaccess::executeVbaProperty(source,name,access,host,arguments,publicOnly);
+    const auto result=linaccess::executeVbaProperty(source,name,setter ? access : linaccess::VbaPropertyAccess::Get,host,arguments,publicOnly);
     if(!guard || guard->closed_ || guard->openCancelled_) throw linaccess::VbaRuntimeError(2450,"Property owner closed during execution");
     if(result.status!=linaccess::VbaExecutionStatus::Completed)
         throw linaccess::VbaRuntimeError(result.errorNumber ? result.errorNumber : 3251,result.explanation,result.errorSource,result.errorHelpFile,result.errorHelpContext);
+    if(!setter) {
+        if(!result.typedReturnValue || result.typedReturnValue->kind!=linaccess::VbaValue::Kind::Object) throw linaccess::VbaRuntimeError(13,"Default assignment requires a native object result");
+        if(!result.typedReturnValue->object) throw linaccess::VbaRuntimeError(91,"Default member object is Nothing");
+        result.typedReturnValue->object->assignDefaultMember(defaultIndices,value);
+        if(!guard || guard->closed_ || guard->openCancelled_) throw linaccess::VbaRuntimeError(2450,"Property owner closed during default assignment");
+        return linaccess::VbaValue::empty();
+    }
     return result.typedReturnValue ? *result.typedReturnValue : linaccess::VbaValue::empty();
 }
 bool AccessFormPreview::setModuleMember(std::string_view name,const linaccess::VbaValue& value,bool publicOnly) {
@@ -3102,9 +3133,7 @@ bool AccessFormPreview::setModuleMember(std::string_view name,const linaccess::V
     if((!publicOnly || frame->publicVariables.contains(key)) && frame->values.contains(key)) {
         frame->values.at(key)=linaccess::coerceVbaModuleValue(value,frame->types.at(key));return true;
     }
-    if(linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Let,publicOnly)) {
-        (void)invokeModuleProperty(name,linaccess::VbaPropertyAccess::Let,{linaccess::scalarVbaValue(value)},publicOnly);return true;
-    }
+    if(invokeModuleProperty(name,linaccess::VbaPropertyAccess::Let,{value},publicOnly)) return true;
     if(linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly))
         throw linaccess::VbaRuntimeError(383,"Property is read-only");
     return false;
