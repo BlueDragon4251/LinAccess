@@ -1,3 +1,4 @@
+#include "vba_error_clear_fixture.hpp"
 #include "vba_redim_declaration_fixture.hpp"
 #include "vba_native_object_array_fixture.hpp"
 #include "vba_enum_type_fixture.hpp"
@@ -83,6 +84,7 @@ void testVbaClasses() {using namespace linaccess;auto state=std::make_shared<Cla
     const auto beforeEnumGuard=state->messages;result=executeVbaProcedure(enumTypeFixture+"Sub RejectEnumClass\nMsgBox \"unreached\"\nDim item As Object\nIf TypeOf item Is NativeState_2 Then Exit Sub\nEnd Sub\n","RejectEnumClass",host);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==3251 && state->messages==beforeEnumGuard);
     result=executeVbaProcedure(nativeObjectArrayFixture,"NativeObjectArrayProbe",host);if(result.status!=VbaExecutionStatus::Completed) std::cerr<<"Native object array: "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==25);
     for(const auto& probe:std::vector<std::pair<const char*,int>>{{"ReDimDeclarationProbe",30},{"ReDimExistingProbe",17},{"ReDimStaticProbe",7},{"ReDimStaticProbe",14}}) {const auto outcome=executeVbaProcedure(nativeReDimDeclarationFixture,probe.first,host);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"ReDim declaration "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);}
+    for(const auto& probe:std::vector<std::pair<const char*,int>>{{"ErrorClearProbe",704},{"ErrorExitProbe",17}}) {const auto outcome=executeVbaProcedure(nativeErrorClearFixture,probe.first,host);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Err reset "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);}
     state->classes["database"]="VERSION 1.0 CLASS\nAttribute VB_Name = \"Database\"\nPublic Value As Long\n";
     result=executeVbaProcedure("Function RejectNominalDao As Long\nDim items(0 To 0) As DAO.Database\nOn Error Resume Next\nSet items(0)=New Database\nRejectNominalDao=Err.Number\nEnd Function","RejectNominalDao",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==13);
     state->alive=false;error=0;try{first->member("Calls",{});}catch(const VbaRuntimeError& e){error=e.number;}assert(error==3420);

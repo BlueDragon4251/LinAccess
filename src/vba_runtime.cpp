@@ -2793,10 +2793,10 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 if(active) (void)errorState->member("Raise",{evaluate(instruction.expression)});
                 break;
             case Statement::Type::ErrorResumeNext:
-                if (active) { resumeNext = true; handler = -1; }
+                if (active) { errorState->clear(); resumeNext = true; handler = -1; }
                 break;
             case Statement::Type::ErrorDisable:
-                if (active) { resumeNext = false; handler = -1; }
+                if (active) { errorState->clear(); resumeNext = false; handler = -1; }
                 break;
             case Statement::Type::Label:
                 break;
@@ -2842,7 +2842,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 }
                 break;
             case Statement::Type::ErrorHandler:
-                if (active) { handler = instruction.partner; resumeNext = false; }
+                if (active) { errorState->clear(); handler = instruction.partner; resumeNext = false; }
                 break;
             case Statement::Type::Resume:
             case Statement::Type::ResumeNext:
@@ -3393,7 +3393,7 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
                 break;
             }
             case Statement::Type::Exit:
-                if (active) return completed(instruction.line, true);
+                if (active) { errorState->clear(); return completed(instruction.line, true); }
                 break;
             case Statement::Type::Dim:
                 break; // Already initialized in the procedure declaration scope.

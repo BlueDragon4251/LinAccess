@@ -4217,3 +4217,14 @@ Bekannte Makrogrenze beibehalten; sieben Hashes unverändert. Keine neuen CTests
 Windows-/Vollsuiten-/Paketbehauptungen;456/386/70 unverändert. Vorstufe58b1723
 privat remote/Baum geprüft. Ohne Zwischenabschluss mit belegten Err-Reset-
 Grenzen nach MS-VBAL6.1.3.2.1.1 weiterprogrammieren.
+
+
+Automatisches Err.Clear: VBA_ERROR_CLEAR_BOUNDARIES.md dokumentiert echte aktive
+OnError-/ExitSub-/ExitFunction-/ExitProperty-Grenzen nach MS-VBAL6.1.3.2.1.1,
+alle fünf Eigenschaften, übersprungene Anweisungen und zurückbehaltene ErrObject-
+Referenzen. App; bestehendes Kern-/GUI-Bündel im ersten Lauf2/2 (23,07s:4,76/18,30).
+Keine neue CTest-ID/Windows-/Vollsuitenbehauptung. Vollständige umgebungsweite
+Err-Identität und Fehlerhistorie bleiben offen;456/386/70 unverändert. Vorstufe
+113b829 privat remote/Baum geprüft; Original zuletzt119,91s und sieben Hashes
+unverändert vor dieser begrenzten Reset-Korrektur. Ohne Zwischenabschluss ein
+aktuelles Debian-Paket erstellen und weitere echte Laufzeitlücken bearbeiten.
