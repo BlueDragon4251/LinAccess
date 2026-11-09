@@ -1,5 +1,6 @@
 #include "access_form_objects.hpp"
 #include "native_macro.hpp"
+#include <QScopeGuard>
 #include "access_list_box.hpp"
 #include "access_value_list.hpp"
 #include "jet_sql_functions.hpp"
@@ -1420,12 +1421,22 @@ public:
             const auto count=args.size()>1 && args[1].kind!=linaccess::VbaValue::Kind::Missing ? linaccess::coerceVbaModuleValue(scalar(args[1]),"long").number : 1;
             if(args.size()>2 && args[2].kind!=linaccess::VbaValue::Kind::Missing) throw linaccess::VbaRuntimeError(3251,"RunMacro RepeatExpression is not implemented");
             if(count<1 || count>1000) throw linaccess::VbaRuntimeError(3251,"Native macro repeat count requires 1 to 1000");
+            static thread_local int macroDepth=0,macroActions=0;
+            if(macroDepth>=16) throw linaccess::VbaRuntimeError(3251,"Native macro call depth exceeded");
+            if(!macroDepth) macroActions=0;
+            ++macroDepth;
+            const auto budget=qScopeGuard([] {if(--macroDepth==0) macroActions=0;});
             const auto actions=linaccess::loadNativeMacro(checked().db_,text(macro.asText()));
             if(count*actions.size()>10000) throw linaccess::VbaRuntimeError(3251,"Native macro action budget exceeded");
             for(int repeat=0;repeat<count;++repeat) for(int index=0;index<actions.size();++index) {
                 (void)checked();if(linaccess::vbaExecutionStopRequested()) throw linaccess::VbaExecutionStopped{};
-                const auto& action=actions[index];if(action.name=="StopMacro") return {};
-                try { (void)member(action.name.toStdString(),action.arguments); }
+                if(++macroActions>10000) throw linaccess::VbaRuntimeError(3251,"Nested native macro action budget exceeded");
+                const auto& action=actions[index];
+                try {
+                    if(action.condition) {const auto condition=linaccess::scalarVbaValue(checked().evalExpression(action.condition->toUtf8().toStdString()));(void)checked();if(!condition.truthy()) continue;}
+                    if(action.name=="StopMacro") return {};
+                    (void)member(action.name.toStdString(),action.arguments);
+                }
                 catch(const linaccess::VbaRuntimeError& error) {throw linaccess::VbaRuntimeError(error.number,"Makro "+macro.asText()+", Aktion "+std::to_string(index+1)+" ("+action.name.toStdString()+"): "+error.what(),error.source,error.helpFile,error.helpContext);}
             }
             return {};

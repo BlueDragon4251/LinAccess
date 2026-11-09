@@ -6784,3 +6784,30 @@ vorhandene Form_Load-Prozedur, unbekanntes Ereignis/Feld und negativer Timer.
 Keine neue CTest-ID/Windows-Beobachtung. Originallauf1/1 (114,46s) ist der zuvor
 geprüfte Stand, kein neuer Gesamtsuite-/Plattformnachweis. NATIVE_FORM_EVENT_DESIGNER.md;
 F080/F088/F050/F057/F130/F148 und456/384/72 unverändert. Direkt weiter.
+
+
+Native Makroaktionen unterstützen jetzt optionale Bedingungsausdrücke und
+verschachtelte RunMacro-Aktionen. Der echte Aktionseditor speichert/verschiebt die
+Bedingung mit der Aktion. Syntax/Typ/UTF16-/4096-Unit-Grenzen werden für die ganze
+Definition vor ihren Aktionen geprüft; anschließend genau eine Auswertung pro
+besuchter Aktion/Iteration im vorhandenen Eval-Kontext. False/Null überspringen.
+Öffentliche Standardmodulfunktionen bleiben vom CodeBehind getrennt; anfangs im
+falschen Kontext angelegte technische Prüffunktion in echten Standardmodul-Artefakt
+verschoben, keine privaten/öffentlichen Zugriffsgrenzen aufgeweicht. Nested RunMacro
+teilt16 aktive Aufrufe/10000 besuchte Aktionen, restauriert Budgets bei Fehlern;
+StopMacro beendet nur den aktuellen Aufruf samt Wiederholungen, Eltern können
+weiterlaufen. Vorherige SQL-Wirkungen werden bei späterem Laufzeitfehler nicht
+pauschal zurückgerollt. RepeatExpression/Gruppen/volle Macro-Expr-/Event-Parität offen.
+App gebaut; Layout1/1 (11,21s) im initialen Bündel; nach korrigiertem Modulkontext
+nur betroffene GUI-Prüfung wiederholt1/1 (6,43s): echte Editorbedingung,
+True/False/Null, exakt dreifache öffentliche Function-SQL-Wirkung, ungültige spätere
+Bedingung ohne Prefix-SQL, Nested-Wiederholung, Child-Stop/Parent-Fortsetzung,
+Rekursionsschutz/anschließende Recovery sowie echte bedingte Formularvalidierung
+(blocked verhindert Save, allowed wird gespeichert). Keine neue CTest-ID/Windows-
+Beobachtung, kein neuer Vollsuite-/Plattform-/CI-Nachweis.
+Aktuelles .deb unter /workspace/work/native-conditional-macros/package/linaccess-
+0.7.0-Linux.deb gebaut; vorhandene Paketprüfung bestätigt App-/MDB-Helfer-Build-IDs,
+bytegleichen SQLite3.54.1-Backend, tatsächlichen Backend-Selbstcheck und erlaubten
+Payload ohne Referenzdaten/Quellen. CPack-Preinstall-Build einmal mit Parallelität4
+abgeschlossen, keine zusätzliche Gesamttestsuite ausgeführt. NATIVE_MACROS_RUNTIME.md;
+F088/F041/F050/F057/F148 und456/384/72 unverändert. Direkt weiter programmieren.

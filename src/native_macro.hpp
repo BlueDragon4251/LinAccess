@@ -19,13 +19,13 @@ inline const QVector<NativeMacroSignature>& nativeMacroSignatures() {
         {"RunSQL",{"text","boolean"},1},{"OpenTable",{"text","long","long"},1},
         {"OpenQuery",{"text","long","long"},1},{"OpenForm",{"text","long"},1},
         {"OpenReport",{"text","long"},1},{"RunCommand",{"long"},1},
-        {"Requery",{"text"},0},{"StopMacro",{},0},{"CancelEvent",{},0}};
+        {"Requery",{"text"},0},{"StopMacro",{},0},{"CancelEvent",{},0},{"RunMacro",{"text","long"},1}};
     return signatures;
 }
 inline bool nativeMacroNameValid(const QString& name) {
     return !name.trimmed().isEmpty() && name.size()<=64 && name.isValidUtf16() && !name.contains(QChar(0)) && !name.contains('.') && !name.trimmed().startsWith('=') && !name.trimmed().startsWith('[');
 }
-struct NativeMacroAction {QString name;std::vector<VbaValue> arguments;};
+struct NativeMacroAction {QString name;std::vector<VbaValue> arguments;std::optional<QString> condition;};
 inline QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition) {
     if(definition.size()!=2) throw VbaRuntimeError(3251,"Unknown native macro attributes are not supported");
     if(definition.value("version")!=QJsonValue(1) || !definition.value("actions").isArray()) throw VbaRuntimeError(3251,"Unsupported native macro definition");
@@ -35,14 +35,20 @@ inline QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition
     QVector<NativeMacroAction> actions;
     for(const auto& entry:entries) {
         if(!entry.isObject()) throw VbaRuntimeError(13,"Invalid native macro action");
-        const auto object=entry.toObject();if(object.size()!=2) throw VbaRuntimeError(3251,"Native macro conditions or other action attributes are not supported");const auto name=object.value("action").toString();
+        const auto object=entry.toObject();if(object.size()<2 || object.size()>3 || (object.size()==3 && !object.contains("condition"))) throw VbaRuntimeError(3251,"Unknown native macro action attributes are not supported");const auto name=object.value("action").toString();
         const NativeMacroSignature* signature=nullptr;
         for(const auto& candidate:nativeMacroSignatures()) if(candidate.name.compare(name,Qt::CaseInsensitive)==0) {signature=&candidate;break;}
         if(!signature) throw VbaRuntimeError(3251,"Native macro action is not implemented");
         if(!object.value("arguments").isArray()) throw VbaRuntimeError(13,"Native macro arguments require a list");
         const auto arguments=object.value("arguments").toArray();
         if(arguments.size()<signature->required || arguments.size()>signature->types.size()) throw VbaRuntimeError(450,"Native macro action argument count invalid");
-        NativeMacroAction action{signature->name,{}};
+        NativeMacroAction action{signature->name,{},std::nullopt};
+        if(object.contains("condition")) {
+            if(!object.value("condition").isString()) throw VbaRuntimeError(13,"Native macro condition requires an expression string");
+            const auto condition=object.value("condition").toString().trimmed();
+            if(condition.size()>4096 || !condition.isValidUtf16() || condition.contains(QChar(0))) throw VbaRuntimeError(5,"Invalid native macro condition text");
+            if(!condition.isEmpty()) {if(!validVbaExpression(condition.toUtf8().toStdString())) throw VbaRuntimeError(3251,"Native macro condition syntax unsupported");action.condition=condition;}
+        }
         for(int index=0;index<arguments.size();++index) {
             const auto value=arguments[index];const auto type=signature->types[index];
             if(type=="text" && value.isString()) {

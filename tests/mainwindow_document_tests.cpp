@@ -2484,9 +2484,9 @@ void testNativeMacros(MainWindow& window,QSqlDatabase db) {
     QTimer::singleShot(0,&window,[&] {
         auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-macro-designer");
         dialog->findChild<QLineEdit*>("native-macro-name")->setText("Native Macro");auto* rows=dialog->findChild<QTableWidget*>("native-macro-actions");assert(rows && rows->rowCount()==1);
-        rows->item(0,1)->setText("INSERT INTO native_macro_effects VALUES(1)");rows->item(0,2)->setText("Ja");dialog->findChild<QPushButton*>("native-macro-save")->click();
+        rows->item(0,1)->setText("INSERT INTO native_macro_effects VALUES(1)");rows->item(0,2)->setText("Ja");rows->item(0,4)->setText("True");dialog->findChild<QPushButton*>("native-macro-save")->click();
     });action(window,"+ Makro")->trigger();
-    assert(linaccess::loadNativeMacro(db,"native macro").size()==1);
+    assert(linaccess::loadNativeMacro(db,"native macro").size()==1 && linaccess::loadNativeMacro(db,"native macro").front().condition==QString("True"));
     auto* explorer=window.findChild<QTreeWidget*>("database-explorer");bool listed=false;QTreeWidgetItem* macroItem=nullptr;
     for(int group=0;group<explorer->topLevelItemCount();++group) for(int index=0;index<explorer->topLevelItem(group)->childCount();++index) {auto* item=explorer->topLevelItem(group)->child(index);if(item->data(0,Qt::UserRole).toString()=="macro" && item->text(0)=="Native Macro") {listed=true;macroItem=item;}}
     assert(listed && macroItem);QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-macro-designer");auto* rows=dialog->findChild<QTableWidget*>("native-macro-actions");assert(rows && rows->item(0,1)->text()=="INSERT INTO native_macro_effects VALUES(1)");dialog->reject();});QMetaObject::invokeMethod(explorer,"itemDoubleClicked",Qt::DirectConnection,Q_ARG(QTreeWidgetItem*,macroItem),Q_ARG(int,0));
@@ -2499,6 +2499,10 @@ End Sub
 Sub MissingMacro()
 DoCmd.RunMacro "No Such Macro"
 End Sub)VBA";
+    artifact(db,"vba","MacroConditions",R"VBA(Public Function ConditionOnce() As Boolean
+CurrentDb.Execute "INSERT INTO native_macro_effects VALUES(4)"
+ConditionOnce=True
+End Function)VBA");
     AccessFormPreview form("native_macro_context","Begin Form\nBegin Section\nEnd\nEnd",code,db,&window);form.show();QApplication::processEvents();std::vector<VbaValue> args;
     assert(form.executeProcedure("RepeatMacro",args).status==linaccess::VbaExecutionStatus::Completed);
     assert(sql.exec("SELECT COUNT(*),SUM(n) FROM native_macro_effects") && sql.next() && sql.value(0).toInt()==3 && sql.value(1).toInt()==3);sql.finish();
@@ -2516,7 +2520,7 @@ End Sub)VBA";
     store("invalid",{write,QJsonObject{{"action","UnsupportedAction"},{"arguments",QJsonArray{}}}});
     int error=0;try {commands->member("RunMacro",{VbaValue::string("invalid")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
     store("conditional",{write,QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{"INSERT INTO native_macro_effects VALUES(3)"}},{"condition",false}}});
-    error=0;try {commands->member("RunMacro",{VbaValue::string("conditional")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    error=0;try {commands->member("RunMacro",{VbaValue::string("conditional")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==13);
     store("typed_invalid",{write,QJsonObject{{"action","RunCommand"},{"arguments",QJsonArray{1.5}}}});
     error=0;try {commands->member("RunMacro",{VbaValue::string("typed_invalid")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==13);
     assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects") && sql.next() && sql.value(0).toInt()==4);sql.finish();
@@ -2529,6 +2533,18 @@ End Sub)VBA";
     store(QString::fromUtf8("ÄNDERUNG"),{write});error=0;try {commands->member("RunMacro",{VbaValue::string("änderung")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
     assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects WHERE n=3") && sql.next() && sql.value(0).toInt()==1);sql.finish();
     sql.prepare("DELETE FROM _la_objects WHERE kind='macro' AND name=? COLLATE BINARY");sql.addBindValue(QString::fromUtf8("ÄNDERUNG"));assert(sql.exec());sql.finish();
+    const auto effect=[](int number,const QString& condition=QString{}) {QJsonObject value{{"action","RunSQL"},{"arguments",QJsonArray{QString("INSERT INTO native_macro_effects VALUES(%1)").arg(number)}}};if(!condition.isEmpty()) value.insert("condition",condition);return value;};
+    store("condition_values",{effect(5,"True"),effect(6,"False"),effect(7,"Null")});commands->member("RunMacro",{VbaValue::string("condition_values")});
+    assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects WHERE n=5") && sql.next() && sql.value(0).toInt()==1);sql.finish();assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects WHERE n IN (6,7)") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    store("condition_once",{effect(8,"ConditionOnce()")});commands->member("RunMacro",{VbaValue::string("condition_once"),VbaValue::integer(3)});
+    assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects WHERE n=4") && sql.next() && sql.value(0).toInt()==3);sql.finish();assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects WHERE n=8") && sql.next() && sql.value(0).toInt()==3);sql.finish();
+    assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects") && sql.next());const int beforeSyntax=sql.value(0).toInt();sql.finish();store("condition_syntax",{write,effect(9,"(")});error=0;try {commands->member("RunMacro",{VbaValue::string("condition_syntax")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
+    assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects") && sql.next() && sql.value(0).toInt()==beforeSyntax);sql.finish();
+    store("nested_child",{effect(10)});store("nested_parent",{QJsonObject{{"action","RunMacro"},{"arguments",QJsonArray{"nested_child",2}}},effect(11)});commands->member("RunMacro",{VbaValue::string("nested_parent")});
+    assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects WHERE n=10") && sql.next() && sql.value(0).toInt()==2);sql.finish();assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects WHERE n=11") && sql.next() && sql.value(0).toInt()==1);sql.finish();
+    store("nested_stop",{effect(12),QJsonObject{{"action","StopMacro"},{"arguments",QJsonArray{}}},effect(14)});store("nested_continue",{QJsonObject{{"action","RunMacro"},{"arguments",QJsonArray{"nested_stop",3}}},effect(13)});commands->member("RunMacro",{VbaValue::string("nested_continue")});
+    assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects WHERE n IN (12,13)") && sql.next() && sql.value(0).toInt()==2);sql.finish();assert(sql.exec("SELECT COUNT(*) FROM native_macro_effects WHERE n=14") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    store("recursive_macro",{QJsonObject{{"action","RunMacro"},{"arguments",QJsonArray{"recursive_macro"}}}});error=0;try {commands->member("RunMacro",{VbaValue::string("recursive_macro")});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);commands->member("RunMacro",{VbaValue::string("condition_values")});
     assert(form.close());
     assert(sql.exec("CREATE TABLE macro_event_rows(id INTEGER PRIMARY KEY,value TEXT)"));assert(sql.exec("INSERT INTO macro_event_rows VALUES(1,'before')"));assert(sql.exec("CREATE TABLE macro_event_audit(kind TEXT)"));
     for(const auto* kind:{"load","current","click","double","change","before","after","timer","close"}) store(QStringLiteral("event_")+kind,{QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{QStringLiteral("INSERT INTO macro_event_audit VALUES('")+kind+"')"}}}});
@@ -2595,6 +2611,10 @@ End)FORM";
     AccessFormPreview cancelledOpen("macro_cancel_open","Begin Form\nOnOpen =\"event_cancel\"\nBegin Section\nEnd\nEnd",{},db,&window);cancelledOpen.show();QApplication::processEvents();assert(cancelledOpen.cancelledByOpen());cancelledOpen.close();
     AccessFormPreview cancelledClose("macro_cancel_close","Begin Form\nOnUnload =\"event_cancel\"\nBegin Section\nEnd\nEnd",{},db,&window);cancelledClose.show();QApplication::processEvents();assert(!cancelledClose.close() && cancelledClose.isVisible());
     assert(cancelledClose.eventResult("OnUnload")->cancelled);cancelledClose.hide();
+    store("event_validate",{QJsonObject{{"action","CancelEvent"},{"arguments",QJsonArray{}},{"condition","[Value]=\"blocked\""}}});auto conditionalLayout=layout;conditionalLayout.replace("BeforeUpdate =\"event_before\"","BeforeUpdate =\"event_validate\"");
+    AccessFormPreview conditional("conditional_validation",conditionalLayout,{},db,&window);conditional.show();QApplication::processEvents();edit=conditional.findChild<QLineEdit*>("access-control-Value");assert(edit);edit->setFocus();QTest::keyClick(edit,Qt::Key_A,Qt::ControlModifier);QTest::keyClicks(edit,"blocked");error=0;try {makePreviewFormObject(conditional)->assign("Dirty",VbaValue::logical(false));}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2501 && conditional.eventResult("control:Value:BeforeUpdate")->cancelled);
+    assert(sql.exec("SELECT value FROM macro_event_rows WHERE id=1") && sql.next() && sql.value(0).toString()=="after");sql.finish();edit->setFocus();QTest::keyClick(edit,Qt::Key_A,Qt::ControlModifier);QTest::keyClicks(edit,"allowed");makePreviewFormObject(conditional)->assign("Dirty",VbaValue::logical(false));assert(!conditional.eventResult("control:Value:BeforeUpdate")->cancelled);
+    assert(sql.exec("SELECT value FROM macro_event_rows WHERE id=1") && sql.next() && sql.value(0).toString()=="allowed");sql.finish();assert(conditional.close());assert(sql.exec("UPDATE macro_event_rows SET value='after' WHERE id=1"));
 }
 
 void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {

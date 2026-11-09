@@ -22,6 +22,7 @@ transaction, document, modal and error guards:
 | Requery | optional ControlName |
 | StopMacro | none; terminates this RunMacro invocation, including repetitions |
 | CancelEvent | none; cancels a supported current bound event |
+| RunMacro | MacroName, optional RepeatCount; bounded nested call |
 
 The editor uses the Access action names, ordinary argument cells and Ja/Nein for
 Boolean arguments. Required text cannot be blank. Numeric arguments in persisted
@@ -32,12 +33,13 @@ for Access macro argument expression evaluation.
 
 The entire native definition is structurally validated before its first action:
 version1, known root/action attributes,1..256 actions, strict argument types and
-arity, valid UTF16/no NUL,262144 UTF16 units per text argument and1MiB serialized
-size. Unknown actions/conditions/attributes refuse3251; malformed values refuse
+arity, optional condition expression syntax, valid UTF16/no NUL,262144 UTF16 units per text argument and1MiB serialized
+size. Unknown actions/attributes refuse3251; malformed values refuse
 13/450/5 as appropriate. Duplicate case-insensitive catalog names refuse3251.
 Runtime RepeatCount uses existing Long coercion, then requires1..1000 and at most
-10000 planned actions. RepeatExpression, macro groups and nested RunMacro actions
-are explicitly unsupported. Stops/lifetime checks run before each action.
+10000 planned actions per call. Nested calls share a10000-visited-action limit
+(including skipped conditions) and a16-active-call limit. RepeatExpression and
+macro groups remain unsupported. Stops/lifetime checks run before each action.
 
 A macro is a sequence of actions, not a single database transaction. Each RunSQL
 keeps its existing UseTransaction contract. If a later action fails, earlier
@@ -53,7 +55,7 @@ SysCmd GetObjectState accepts acMacro4 for real tagged native designer state.
 Enumeration of a stored source is metadata, not proof that its content executes.
 
 This is the native project format, not an Access2003 SaveAsText/binary macro
-importer or an MS Access execution oracle. Conditions/continuations, macro groups,
+importer or an MS Access execution oracle. Complete Access condition/continuation semantics, macro groups,
 embedded/data macros, RepeatExpression, full action vocabulary/expressions,
 complete macro-bound event dispatch, AutoExec, library lookup, a macro debugger and complete
 Access timing/error identity remain open under F088/F050/F057/F148. Catalog456 /
@@ -110,3 +112,38 @@ and save conflict checks use the existing native Qt case-insensitive convention,
 including Unicode, with a1M-name/5-second forward scan and exact definition lookup.
 Ambiguous names refuse before execution. This does not establish Jet collations.
 GUI/layout2/2 (18.42s); app built; no new target or Windows oracle.
+
+
+## Conditional actions and nested macros
+
+Each action may carry an optional string `condition`; blank means unconditional.
+The real action editor saves/reopens/reorders this column with the action.
+Nonblank conditions are limited to4096 UTF16 units, checked for supported native
+expression syntax before any action starts, then evaluated exactly once before
+that action on each repetition. False/Null skip it using existing reduced native
+Eval/If semantics. Expressions run in the caller's existing Eval context, including
+supported control references and public standard-module Functions. This does not
+add general CodeBehind-function or complete Access database-expression scope.
+Function side effects remain ordinary real effects; the condition is not evaluated
+again for Boolean conversion. Lifecycle is rechecked before performing the action.
+
+RunMacro actions use the same loader and argument contracts. StopMacro exits only
+the current invocation (including its repetitions); the parent can continue.
+Nested calls share execution limits; exceptions and normal return restore depth
+and root budget. Earlier successful SQL is retained on later runtime/budget
+failure, consistently with existing per-action transaction boundaries. Syntax/type
+preflight of a complete stored definition precedes that invocation's effects;
+this is not recursive static validation of every future dynamic target.
+
+Validation: app built, existing layout target passed1/1 (11.21s) in the initial bundled run;
+after moving the technical condition Function to an actual public standard-module
+artifact, only the affected GUI target was repeated and passes1/1 (6.43s). Actual
+condition editor persistence, True/False/Null, once-per-repetition Function SQL
+effects, invalid-later-condition preflight with no prefix writes, nested repetition,
+child StopMacro with continuing parent, recursive depth refusal/recovery and real
+BeforeUpdate blocked-versus-allowed SQL persistence are verified. No new test
+target, Windows oracle or full-suite claim; F088/F041/F050/F057/F148 stays open.
+
+The current .deb also passes the existing payload/permissions/Build-ID/metadata
+helper checks and the actual SQLite3.54.1 backend self-check. No reference database
+or source is shipped. This package check does not claim a fresh platform matrix.
