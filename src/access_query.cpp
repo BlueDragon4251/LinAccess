@@ -2169,7 +2169,10 @@ QString accessScalarDomainExpression(const QString& expression,bool deterministi
     return value;
 }
 
-QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* filter,QVector<QPair<int,Qt::SortOrder>>* sort) {
+QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* filter,QVector<QPair<int,Qt::SortOrder>>* sort,QVector<AccessQueryColumn>* projection) {
+    // Match native SQLite identifier rules; full Jet identifier folding is not
+    // inferred from Qt's broader Unicode case-insensitive comparison.
+    const auto nativeName=[](QString text) {for(auto& ch:text) if(ch>=QChar('A') && ch<=QChar('Z')) ch=QChar(ch.unicode()+('a'-'A'));return text;};
     const auto plan=compileAccessQuery(source);
     auto tokens=tokenize(plan.sql,true);
     if(!tokens.isEmpty() && symbol(tokens.last(),";")) tokens.removeLast();
@@ -2177,13 +2180,25 @@ QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* 
     const auto name=[&](qsizetype at) {return at<tokens.size() && (tokens[at].kind==Token::Word || tokens[at].kind==Token::Identifier);};
     if(!plan.parameters.isEmpty() || !plan.makeTable.isEmpty() || plan.topLimit || plan.hiddenRank || tokens.size()<4 || !word(0,"SELECT"))
         throw VbaRuntimeError(3251,"Editable query requires a complete projection from one keyed table");
-    qsizetype cursor=1;QString projectionQualifier;
-    if(name(cursor) && cursor+2<tokens.size() && symbol(tokens[cursor+1],".") && symbol(tokens[cursor+2],"*")) {projectionQualifier=tokens[cursor].value;cursor+=3;}
-    else if(symbol(tokens[cursor],"*")) ++cursor;
-    else throw VbaRuntimeError(3251,"Editable query requires all source table columns");
+    const QSet<QString> clauses{"WHERE","ORDER","JOIN","INNER","LEFT","RIGHT","FULL","CROSS","GROUP","HAVING","UNION","INTERSECT","EXCEPT","LIMIT","OFFSET","WITH","RETURNING","SELECT","FROM","AS","ON","DISTINCT","DISTINCTROW","ALL","TOP"};
+    struct ProjectedField {QString qualifier,name,alias;};QVector<ProjectedField> selected;
+    qsizetype cursor=1;QString projectionQualifier;bool allColumns=false;
+    if(name(cursor) && cursor+2<tokens.size() && symbol(tokens[cursor+1],".") && symbol(tokens[cursor+2],"*")) {projectionQualifier=tokens[cursor].value;cursor+=3;allColumns=true;}
+    else if(symbol(tokens[cursor],"*")) {++cursor;allColumns=true;}
+    else {
+        if(!projection || word(cursor,"DISTINCT") || word(cursor,"DISTINCTROW") || word(cursor,"ALL")) throw VbaRuntimeError(3251,"Editable field projection requires an explicit mapping");
+        do {
+            if(!name(cursor)) throw VbaRuntimeError(3251,"Editable projection requires physical fields");
+            ProjectedField field;field.name=tokens[cursor++].value;
+            if(cursor<tokens.size() && symbol(tokens[cursor],".")) {field.qualifier=field.name;if(!name(++cursor)) throw VbaRuntimeError(3251,"Editable projected field is unavailable");field.name=tokens[cursor++].value;}
+            if(word(cursor,"AS")) {++cursor;if(!name(cursor) || (tokens[cursor].kind==Token::Word && clauses.contains(tokens[cursor].value.toUpper()))) throw VbaRuntimeError(3251,"Editable field alias is missing or reserved");field.alias=tokens[cursor++].value;if(field.alias.isEmpty()) throw VbaRuntimeError(3251,"Editable field alias is empty");}
+            else if(name(cursor) && !(tokens[cursor].kind==Token::Word && clauses.contains(tokens[cursor].value.toUpper()))) field.alias=tokens[cursor++].value;
+            selected.push_back(std::move(field));if(selected.size()>2000) throw VbaRuntimeError(3251,"Editable projection is too wide");
+            if(cursor>=tokens.size() || !symbol(tokens[cursor],",")) break;++cursor;
+        } while(cursor<tokens.size());
+    }
     if(!word(cursor++,"FROM") || !name(cursor)) throw VbaRuntimeError(3251,"Editable query requires a physical source table");
     const auto requested=tokens[cursor++].value;QString alias;
-    const QSet<QString> clauses{"WHERE","ORDER","JOIN","INNER","LEFT","RIGHT","FULL","CROSS","GROUP","HAVING","UNION","INTERSECT","EXCEPT","LIMIT","OFFSET","WITH","RETURNING","SELECT","FROM","AS","ON","DISTINCT","TOP"};
     if(word(cursor,"AS")) {++cursor;if(!name(cursor) || (tokens[cursor].kind==Token::Word && clauses.contains(tokens[cursor].value.toUpper()))) throw VbaRuntimeError(3251,"Editable table alias is missing or reserved");alias=tokens[cursor++].value;}
     else if(name(cursor) && !(tokens[cursor].kind==Token::Word && clauses.contains(tokens[cursor].value.toUpper()))) alias=tokens[cursor++].value;
     const auto qualifier=alias.isEmpty() ? requested : alias;
@@ -2209,20 +2224,20 @@ QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* 
                 throw VbaRuntimeError(3251,"Editable query predicate functions are not implemented");
         }
     }
-    QVector<QPair<QString,Qt::SortOrder>> orderedFields;
+    struct SortField {QString name;Qt::SortOrder direction;bool qualified;};QVector<SortField> orderedFields;
     if(cursor<tokens.size()) {
         if(!word(cursor++,"ORDER") || !word(cursor++,"BY")) throw VbaRuntimeError(3251,"Editable source sorting requires physical fields");
         do {
             if(!name(cursor)) throw VbaRuntimeError(3251,"Editable sort field is missing");
-            QString field=tokens[cursor++].value;Qt::SortOrder direction=Qt::AscendingOrder;
+            QString field=tokens[cursor++].value;Qt::SortOrder direction=Qt::AscendingOrder;bool qualified=false;
             if(cursor<tokens.size() && symbol(tokens[cursor],".")) {
                 if(field.compare(qualifier,Qt::CaseInsensitive)!=0 || !name(++cursor)) throw VbaRuntimeError(3251,"Editable sort qualifier is unsupported");
-                field=tokens[cursor++].value;
+                field=tokens[cursor++].value;qualified=true;
             }
             if(word(cursor,"DESC")) {direction=Qt::DescendingOrder;++cursor;}
             else if(word(cursor,"ASC")) ++cursor;
             if(orderedFields.size()>=10) throw VbaRuntimeError(3251,"Editable source supports at most ten sort fields");
-            orderedFields.push_back({field,direction});
+            orderedFields.push_back({field,direction,qualified});
             if(cursor==tokens.size()) break;
             if(!symbol(tokens[cursor++],",") || cursor==tokens.size()) throw VbaRuntimeError(3251,"Editable source sort expressions are unsupported");
         } while(cursor<tokens.size());
@@ -2262,11 +2277,22 @@ QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* 
         if(metadata.lastError().isValid()) throw VbaRuntimeError(3146,"Editable primary-key metadata could not be fully read");
     }
 
-    const auto schema=db.record(table);QVector<QPair<int,Qt::SortOrder>> ordering;QSet<int> orderedColumns;
+    const auto schema=db.record(table);QSet<QString> schemaNames;for(int i=0;i<schema.count();++i) {const auto key=schema.fieldName(i).toCaseFolded();if(schemaNames.contains(key)) throw VbaRuntimeError(3251,"Ambiguous native field metadata is not editable");schemaNames.insert(key);}
+    QVector<AccessQueryColumn> mapped;QMap<QString,int> outputFields;QSet<int> projectedColumns;
+    if(allColumns) {for(int i=0;i<schema.count();++i) mapped.push_back({i,{}});}
+    else for(const auto& field:selected) {
+        if(!field.qualifier.isEmpty() && field.qualifier.compare(qualifier,Qt::CaseInsensitive)!=0) throw VbaRuntimeError(3251,"Editable field qualifier is unavailable");
+        int column=-1;for(int i=0;i<schema.count();++i) if(nativeName(schema.fieldName(i))==nativeName(field.name)) column=i;
+        const auto output=nativeName(field.alias.isEmpty() ? field.name : field.alias);
+        if(column<0 || projectedColumns.contains(column) || outputFields.contains(output)) throw VbaRuntimeError(3251,"Editable fields must resolve uniquely");
+        projectedColumns.insert(column);outputFields.insert(output,column);const auto caption=nativeName(field.alias)==nativeName(schema.fieldName(column)) ? QString{} : field.alias;mapped.push_back({column,caption});
+    }
+    QVector<QPair<int,Qt::SortOrder>> ordering;QSet<int> orderedColumns;
     for(const auto& field:orderedFields) {
-        int column=-1;for(int i=0;i<schema.count();++i) if(schema.fieldName(i).compare(field.first,Qt::CaseInsensitive)==0) column=i;
+        int column=field.qualified ? -1 : outputFields.value(nativeName(field.name),-1);
+        if(column<0) for(int i=0;i<schema.count();++i) if(nativeName(schema.fieldName(i))==nativeName(field.name)) column=i;
         if(column<0 || orderedColumns.contains(column)) throw VbaRuntimeError(3251,"Editable sort field is unavailable or repeated");
-        orderedColumns.insert(column);ordering.push_back({column,field.second});
+        orderedColumns.insert(column);ordering.push_back({column,field.direction});
     }
     for(qsizetype i=0;i+1<predicateTokens.size();++i) if((predicateTokens[i].kind==Token::Word || predicateTokens[i].kind==Token::Identifier) && symbol(predicateTokens[i+1],".")) {
         if(predicateTokens[i].value.compare(qualifier,Qt::CaseInsensitive)!=0 || i+2>=predicateTokens.size()
@@ -2275,8 +2301,10 @@ QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* 
         if(!known) throw VbaRuntimeError(3251,"Editable qualified predicate field is unavailable");
         predicateTokens[i].value=table;predicateTokens[i].kind=Token::Identifier;i+=2;
     }
+    QSqlQuery syntax(db);if(!syntax.prepare(plan.sql)) throw VbaRuntimeError(3251,"Editable query must resolve as the checked physical projection");
     if(filter) *filter=renderJetTokens(predicateTokens);
     if(sort) *sort=ordering;
+    if(projection) *projection=mapped;
     return table;
 }
 void AccessQueryModel::executeFiltered(QSqlDatabase db,const QString& source,const QMap<QString,QVariant>& parameters,const QString& criteria) {

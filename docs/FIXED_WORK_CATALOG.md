@@ -329,7 +329,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F048** — Unlinked native embedded child forms, Form references, Requery, typed edits and parent-close cancellation; original complex Form_Load and 15 actual data-driven Tags verified.
 - [ ] **F056** — Form record sources, filters/sort, focus and control state with real persistence. Bounded direct-table DataEntry is implemented; writable-query/complete Windows semantics remain open (DATA_ENTRY_RUNTIME.md).
 - [ ] **F058** — Mouse/keyboard/timer/combo/subform events; real Kassa UI actions verified.
-- [ ] **F079** — Complete form/report query binding, implicit parameters and editable joins where valid. Bounded keyed single-table alias/filter/multifield sorting is in OPEN_QUERY_RUNTIME.md; the complete requirement remains open.
+- [ ] **F079** — Complete form/report query binding, implicit parameters and editable joins where valid. Bounded keyed single-table alias/filter/multifield sorting is in OPEN_QUERY_RUNTIME.md and explicit physical field projections in EDITABLE_QUERY_PROJECTIONS.md; the complete requirement remains open.
 - [x] **F103** — Actual native activation, deferred first Current, form-switch and close-cancellation tests; original Open/Load/Activate/Current complete.
 - [ ] **F104** — Full focus/resize/PopUp/Modal/MDI/reentrant event semantics and Microsoft Access event oracle.
 - [ ] **F111** — Complete focus-specific DoCmd.Requery targeting, sorting, advanced/nested criteria, report/reentrant event semantics and designer filter persistence.

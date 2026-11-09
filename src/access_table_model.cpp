@@ -58,7 +58,7 @@ bool AccessTableModel::refreshTypes() {
 }
 void AccessTableModel::setTable(const QString& table) {
     if(saving_) { (void)reject(2501); return; }
-    sourceSort_.clear();blockHistory_.reset();dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear(); QSqlTableModel::setTable(table); (void)refreshTypes();
+    queryAliases_.clear();sourceSort_.clear();blockHistory_.reset();dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear(); QSqlTableModel::setTable(table); (void)refreshTypes();
 }
 bool AccessTableModel::select() {
     if(saving_) return reject(2501);
@@ -68,7 +68,7 @@ bool AccessTableModel::select() {
 }
 void AccessTableModel::clear() {
     if(saving_) { (void)reject(2501); return; }
-    sourceSort_.clear();blockHistory_.reset();QSqlTableModel::clear();captions_.clear();descriptions_.clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
+    queryAliases_.clear();sourceSort_.clear();blockHistory_.reset();QSqlTableModel::clear();captions_.clear();descriptions_.clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
 }
 QVector<QPersistentModelIndex> AccessTableModel::rowAnchors(const QSet<int>& rows) const {
     QVector<QPersistentModelIndex> result; result.reserve(rows.size());
@@ -372,7 +372,12 @@ bool AccessTableModel::isTextColumn(int column) const {
     return type.contains("TEXT",Qt::CaseInsensitive) || type.contains("CHAR",Qt::CaseInsensitive) || type.contains("CLOB",Qt::CaseInsensitive);
 }
 QString AccessTableModel::columnType(int column) const { return types_.value(record().fieldName(column).toCaseFolded()); }
+bool AccessTableModel::setQueryColumnAliases(const QMap<int,QString>& aliases) {
+    for(auto it=aliases.cbegin();it!=aliases.cend();++it) if(it.key()<0 || it.key()>=columnCount() || it.value().isEmpty()) return reject(3251);
+    queryAliases_=aliases;if(columnCount()) emit headerDataChanged(Qt::Horizontal,0,columnCount()-1);return true;
+}
 QVariant AccessTableModel::headerData(int section,Qt::Orientation orientation,int role) const {
+    if(orientation==Qt::Horizontal && role==Qt::DisplayRole && queryAliases_.contains(section)) return queryAliases_.value(section);
     if(orientation==Qt::Horizontal && section>=0 && section<columnCount()) {const auto field=record().fieldName(section),key=field.toCaseFolded();if(role==Qt::DisplayRole && !captions_.value(key).isEmpty()) return captions_.value(key);if(role==Qt::ToolTipRole && (captions_.contains(key) || descriptions_.contains(key))) return field+(descriptions_.value(key).isEmpty() ? QString{} : "\n"+descriptions_.value(key));if(role==Qt::StatusTipRole && descriptions_.contains(key)) return descriptions_.value(key);}return QSqlTableModel::headerData(section,orientation,role);
 }
 QVariant AccessTableModel::data(const QModelIndex& index,int role) const {

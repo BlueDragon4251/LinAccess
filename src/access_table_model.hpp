@@ -32,6 +32,7 @@ public:
     QString fieldSqlType(int column) const;
     bool setReadOnly(bool value);
     bool isReadOnly() const { return readOnly_; }
+    bool setQueryColumnAliases(const QMap<int,QString>& aliases);
     bool setSourceSort(const QVector<QPair<int,Qt::SortOrder>>& ordering);
     void setSort(int column,Qt::SortOrder order) override;
     void sort(int column,Qt::SortOrder order=Qt::AscendingOrder) override;
@@ -68,6 +69,7 @@ private:
     QVector<QPersistentModelIndex> rowAnchors(const QSet<int>& rows) const;
     QSet<int> anchoredRows(const QVector<QPersistentModelIndex>& anchors) const;
     QMap<QString,QString> types_,captions_,descriptions_,formats_;
+    QMap<int,QString> queryAliases_;
     QSet<QString> generated_;
     int metadataError_{};
     QVector<QPair<int,Qt::SortOrder>> sourceSort_;

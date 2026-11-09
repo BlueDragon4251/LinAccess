@@ -146,7 +146,7 @@ QString editableSourceSchema(QSqlDatabase db,const QString& table) {
 QVariantMap validateEditableQuerySource(QWidget* page,linaccess::AccessTableModel* model) {
     if(!page || !page->property("la_editable_query").toBool()) return {};
     try {
-        const auto table=linaccess::editableAccessQueryTable(model->database(),page->property("la_editable_query_source").toString());
+        QVector<linaccess::AccessQueryColumn> projection;const auto table=linaccess::editableAccessQueryTable(model->database(),page->property("la_editable_query_source").toString(),nullptr,nullptr,&projection);
         if(table!=model->tableName() || editableSourceSchema(model->database(),table)!=page->property("la_editable_query_schema").toString())
             return tableCommandFailure(3251,"Die Quellstruktur wurde geändert. Abfrage schließen und erneut öffnen.");
     } catch(const linaccess::VbaRuntimeError&) {
@@ -717,7 +717,7 @@ QVariantMap MainWindow::loadQueryDocument(const QString& name,int view,int mode,
         const auto plan=linaccess::compileAccessQuery(source);
         if(!plan.makeTable.isEmpty() || !isSelect(plan.sql)) return tableCommandFailure(3251,"Nur schreibgeschützte SELECT-Abfragen werden als Dokument geöffnet.");
         if(mode==1) {
-            const auto table=linaccess::editableAccessQueryTable(database,source);
+            QVector<linaccess::AccessQueryColumn> projection;const auto table=linaccess::editableAccessQueryTable(database,source,nullptr,nullptr,&projection);
             if(refresh) {
                 if(!refreshing || !refreshing->property("la_editable_query").toBool() || refreshing->property("la_editable_query_source").toString()!=source)
                     return tableCommandFailure(3251,"Geänderte Definitionen geöffneter bearbeitbarer Abfragen sind noch nicht implementiert.");
@@ -2122,10 +2122,10 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
         for(auto* candidate:tabs_->widget(i)->findChildren<linaccess::AccessTableModel*>())
             if(!candidate->isReadOnly() && candidate->tableName().compare(name,Qt::CaseInsensitive)==0) return 3251;
     }
-    QString sourceSchema,sourceFilter;QVector<QPair<int,Qt::SortOrder>> sourceSort;
+    QString sourceSchema,sourceFilter;QVector<QPair<int,Qt::SortOrder>> sourceSort;QVector<linaccess::AccessQueryColumn> sourceProjection;
     if(!queryName.isEmpty()) {
         try {
-            if(linaccess::editableAccessQueryTable(database,querySource,&sourceFilter,&sourceSort)!=name) return 3251;
+            if(linaccess::editableAccessQueryTable(database,querySource,&sourceFilter,&sourceSort,&sourceProjection)!=name) return 3251;
             sourceSchema=editableSourceSchema(database,name);
         } catch(const linaccess::VbaRuntimeError&) { return 3251; }
     }
@@ -2176,6 +2176,18 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     table->installEventFilter(this);
     table->setModel(model);
     table->setItemDelegate(new linaccess::AccessTableDelegate(table));
+    if(!sourceProjection.isEmpty()) {
+        const auto applyProjection=[view=QPointer<linaccess::AccessTableView>(table),sourceModel=QPointer<linaccess::AccessTableModel>(model),sourceProjection] {
+            if(!view || !sourceModel) return;
+            QSet<int> selected;QMap<int,QString> aliases;bool reordered=false;int previous=-1;
+            for(int visual=0;visual<sourceProjection.size();++visual) {const auto& field=sourceProjection[visual];if(field.column<0 || field.column>=sourceModel->columnCount()) return;selected.insert(field.column);if(!field.alias.isEmpty()) aliases.insert(field.column,field.alias);reordered|=field.column<previous;previous=field.column;view->horizontalHeader()->moveSection(view->horizontalHeader()->visualIndex(field.column),visual);}
+            for(int column=0;column<sourceModel->columnCount();++column) view->setColumnHidden(column,!selected.contains(column));
+            (void)sourceModel->setQueryColumnAliases(aliases);
+            view->setProperty("la_projected_query_reordered",reordered);view->setProperty("la_projected_query",selected.size()!=sourceModel->columnCount() || reordered || !aliases.isEmpty());
+        };
+        applyProjection();connect(model,&QAbstractItemModel::modelReset,table,applyProjection);
+    }
+
     table->setRecordNavigationHandler([self=QPointer<MainWindow>(this),page=QPointer<QWidget>(page),table=QPointer<linaccess::AccessTableView>(table),model=QPointer<linaccess::AccessTableModel>(model)](linaccess::AccessTableView::RecordMove action,int distance) {
         if(!self || !page || !table || !model) return false;
         if(self->tabs_->indexOf(page)<0) return model->rejectEdit(2501,"Das Datenblatt ist nicht mehr geöffnet.");
@@ -2244,7 +2256,7 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     const QPointer<linaccess::AccessTableView> registeredView=table;
     // A newly opened populated datasheet needs a real current field for keyboard
     // navigation and DoCmd.FindRecord, including an ordinary table.
-    if(registeredModel && registeredView && model->rowCount() && model->columnCount()) table->setCurrentIndex(model->index(0,0));
+    if(registeredModel && registeredView && model->rowCount() && model->columnCount()) table->setCurrentIndex(model->index(0,sourceProjection.isEmpty() ? 0 : sourceProjection.front().column));
     if(!alive() || !registered || !registeredModel || !registeredView) return 2501;
     const bool activated=activateDataPage(page);
     if(!alive() || !registered) return 2501;

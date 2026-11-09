@@ -954,3 +954,16 @@ neues CTest/Windows-/Vollsuite-/DEB-Orakel. Crossmodule-/qualifizierte Typrefere
 UDTs und vollständige Unicode-/Compilersemantik offen;456/386/70 unverändert.
 Vorstufe455abfa privat remote/Baum geprüft. Ohne Zwischenabschluss mit echten
 editierbaren einzelnen Tabellenfeldprojektionen in Abfragedatenblättern fortfahren.
+
+
+Editierbare einzelne Abfragefelder: EDITABLE_QUERY_PROJECTIONS.md beschreibt die
+geprüfte physische Feldzuordnung mit Alias/Subset/Reihenfolge, verborgenem echtem
+Schlüssel, SQL-Speichern unveränderter ausgelassener Felder, Sortierung nach
+Ausgabealias sowie Layout-/Header-Erhalt nach Requery. Nur angeforderte Projektion
+wird erweitert; andere Stern-Caller bleiben unverändert. App/GUI1/1 (18,42s),
+nach Aliasnormalisierung/Unicode-Namensschutz nur betroffenes Modellziel1/1 (0,11s).
+Keine neuen CTests/Original-/Windows-/Vollsuite-/Paketbehauptungen. Mehrspaltige
+umgeordnete Zwischenablage zunächst geschützt3251; als nächste zusammenhängende
+Etappe echte sichtbare Spaltenabbildung für Kopieren/Ausschneiden/Einfügen/Undo
+implementieren. F079/F340/F373/456/386/70 bleiben offen/unverändert. Vorstufe03b3de2
+privat veröffentlicht, Remote/Baum geprüft; ohne Zwischenabschluss weiterarbeiten.
