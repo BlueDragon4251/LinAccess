@@ -2665,6 +2665,10 @@ End Sub
 Public Function NativeOptional(Optional value As Long=9) As Long
 NativeOptional=value
 End Function
+Public Function NativeText(ByVal value As String) As String
+Counter=Counter+1
+NativeText=value
+End Function
 Public Function NativeFailure() As Long
 Err.Raise 7001, "NativeRun", "deliberate failure"
 End Function
@@ -2709,6 +2713,34 @@ End Sub)VBA",db,&window);context.show();QApplication::processEvents();
     int unsupportedRun=0;try {(void)application->member("DoCmd",{}).object->member("Run",{VbaValue::string("NativeCounter")});}catch(const linaccess::VbaRuntimeError& failure) {unsupportedRun=failure.number;}assert(unsupportedRun==438);
     try {(void)application->member("Run",{VbaValue::string("NativeFailure")});assert(false);}catch(const linaccess::VbaRuntimeError& failure) {assert(failure.number==7001 && failure.source=="NativeRun");}
     assert(application->member("Run",{VbaValue::string("NativeOptional")}).number==9);
+    const auto storeRunCode=[&](QString name,QJsonArray actions) {QSqlQuery save(db);save.prepare("INSERT INTO _la_objects(kind,name,definition) VALUES('macro',?,?)");save.addBindValue(name);save.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"actions",actions}}).toJson(QJsonDocument::Compact));assert(save.exec());};
+    const auto codeAction=[](QString expression) {return QJsonObject{{"action","RunCode"},{"arguments",QJsonArray{expression}}};};
+    auto commands=application->member("DoCmd",{}).object;
+    storeRunCode("native_run_code",{codeAction("NativeOptional(3)")});
+    commands->member("RunMacro",{VbaValue::string("native_run_code")});
+    storeRunCode("native_run_nested_code",{QJsonObject{{"action","RunMacro"},{"arguments",QJsonArray{"native_run_code"}}}});
+    AccessFormPreview eventCode("run_code_event","Begin Form\nOnLoad =\"native_run_nested_code\"\nBegin Section\nEnd\nEnd",R"VBA(Private Function NativeOptional(value As Long) As Long
+Me.Tag=value+70
+NativeOptional=value
+End Function)VBA",db,&window);eventCode.show();QApplication::processEvents();
+    assert(makePreviewFormObject(eventCode)->member("Tag",{}).asText()=="73");
+    assert(!eventCode.property("la_bound_event_active").toBool());
+    commands->member("RunMacro",{VbaValue::string("native_run_code")});
+    assert(makePreviewFormObject(context)->member("Tag",{}).asText()=="12");
+    storeRunCode("native_run_text",{codeAction("NativeText(\"a)\"\"b(\")"),codeAction("NativeAdd(NativeOptional(2))")});
+    commands->member("RunMacro",{VbaValue::string("native_run_text")});
+    assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==43);
+    const auto macroFailure=[&](QString name,int expected) {int actual=0;try {(void)commands->member("RunMacro",{VbaValue::string(name.toStdString())});}catch(const linaccess::VbaRuntimeError& failure) {actual=failure.number;}if(actual!=expected) qFatal("RunCode expected %d, received %d",expected,actual);};
+    storeRunCode("native_run_sub",{codeAction("NativeSetCounter(99)")});macroFailure("native_run_sub",3251);
+    storeRunCode("native_run_private",{codeAction("NativeAdjust(2)")});macroFailure("native_run_private",2517);
+    assert(sql.exec("CREATE TABLE run_code_effects(n INTEGER)"));
+    storeRunCode("native_run_shape",{QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{"INSERT INTO run_code_effects VALUES(1)"}}},codeAction("NativeCounter()+NativeCounter()")});macroFailure("native_run_shape",3251);
+    assert(sql.exec("SELECT COUNT(*) FROM run_code_effects") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    storeRunCode("native_run_error",{codeAction("NativeFailure()")});
+    try {(void)commands->member("RunMacro",{VbaValue::string("native_run_error")});assert(false);}catch(const linaccess::VbaRuntimeError& failure) {assert(failure.number==7001 && failure.source=="NativeRun" && std::string(failure.what()).find("RunCode")!=std::string::npos);}
+    assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==43);
+    int directRunCode=0;try {(void)commands->member("RunCode",{VbaValue::string("NativeCounter()")});}catch(const linaccess::VbaRuntimeError& failure) {directRunCode=failure.number;}assert(directRunCode==438);
+    assert(eventCode.close());
     assert(sql.exec("CREATE TEMP TABLE _la_objects(kind,name,definition)"));int error=0;try {(void)linaccess::standardVbaModuleSources(db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251 && !sql.exec("SELECT NativeAdd(5)"));assert(sql.exec("DROP TABLE temp._la_objects"));
     const int collision=artifact(db,"vba","NATIVEMATH",body);error=0;try {(void)linaccess::standardVbaModuleSources(db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5 && !sql.exec("SELECT NativeAdd(5)"));sql.prepare("DELETE FROM _la_access_artifacts WHERE id=?");sql.addBindValue(collision);assert(sql.exec());sql.finish();assert(archive()==originalArchive);
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-module-editor");dialog->findChild<QLineEdit*>("native-module-name")->setText("MacroConditions");dialog->findChild<QPlainTextEdit*>("native-module-source")->setPlainText(QString::fromUtf8(body));QTimer::singleShot(0,&window,[&] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message);message->accept();});dialog->findChild<QPushButton*>("native-module-save")->click();assert(dialog->isVisible());dialog->reject();});action(window,"+ Modul")->trigger();assert(archive()==originalArchive);

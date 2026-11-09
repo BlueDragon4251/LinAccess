@@ -1,6 +1,7 @@
 #pragma once
 #include "vba_runtime.hpp"
 #include "vba_expression.hpp"
+#include "native_macro_function.hpp"
 #include <QJsonArray>
 #include <QElapsedTimer>
 #include <QJsonDocument>
@@ -19,7 +20,7 @@ inline const QVector<NativeMacroSignature>& nativeMacroSignatures() {
         {"RunSQL",{"text","boolean"},1},{"OpenTable",{"text","long","long"},1},
         {"OpenQuery",{"text","long","long"},1},{"OpenForm",{"text","long"},1},
         {"OpenReport",{"text","long"},1},{"RunCommand",{"long"},1},
-        {"Requery",{"text"},0},{"StopMacro",{},0},{"CancelEvent",{},0},{"RunMacro",{"text","long"},1}};
+        {"RunCode",{"text"},1},{"Requery",{"text"},0},{"StopMacro",{},0},{"CancelEvent",{},0},{"RunMacro",{"text","long"},1}};
     return signatures;
 }
 inline bool nativeMacroNameValid(const QString& name) {
@@ -54,6 +55,7 @@ inline QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition
             if(type=="text" && value.isString()) {
                 const auto text=value.toString();if(text.size()>262144 || !text.isValidUtf16() || text.contains(QChar(0))) throw VbaRuntimeError(5,"Invalid native macro text");
                 if(index==0 && signature->required && text.trimmed().isEmpty()) throw VbaRuntimeError(5,"Native macro target cannot be empty");
+                if(signature->name=="RunCode") (void)nativeMacroFunctionName(text);
                 action.arguments.push_back(VbaValue::string(text.toUtf8().toStdString()));
             } else if(type=="boolean" && value.isBool()) action.arguments.push_back(VbaValue::logical(value.toBool()));
             else if(type=="long" && value.isDouble() && std::isfinite(value.toDouble()) && std::trunc(value.toDouble())==value.toDouble()

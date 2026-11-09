@@ -1438,6 +1438,7 @@ public:
                 try {
                     if(action.condition) {const auto condition=linaccess::scalarVbaValue(checked().evalExpression(action.condition->toUtf8().toStdString()));(void)checked();if(!condition.truthy()) continue;}
                     if(action.name=="StopMacro") return {};
+                    if(action.name=="RunCode") {runNativeMacroFunction(checked(),action.arguments.front().asText());continue;}
                     (void)member(action.name.toStdString(),action.arguments);
                 }
                 catch(const linaccess::VbaRuntimeError& error) {throw linaccess::VbaRuntimeError(error.number,"Makro "+macro.asText()+", Aktion "+std::to_string(index+1)+" ("+action.name.toStdString()+"): "+error.what(),error.source,error.helpFile,error.helpContext);}

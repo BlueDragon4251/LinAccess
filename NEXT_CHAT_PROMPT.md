@@ -1234,3 +1234,24 @@ neuer Arity-Testannahme450 statt449 und konkret gefundenem Zusammenspiel der
 Rekursionsgrenzen nur betroffene GUI-Prüfung wiederholt. Keine neue CTest-ID,
 Gesamtsuite/Windows-Beobachtung/Paketprüfung behauptet. NATIVE_APPLICATION_RUN.md;
 F042/F050/F118/F148 und456/384/72 unverändert. Direkt weiter mit Makro-RunCode.
+
+
+Native Makroaktion RunCode implementiert, keine DoCmd.RunCode-Methode:
+ein einzelner unqualifizierter Function-Aufruf mit Klammern, Rückgabewert ignoriert;
+Quellsyntax/äußere Aufrufform vor erster Aktion geprüft. Geschachtelte Argumente,
+doppelte Stringquotes, Datums-/Bracket-Literale im Scanner; ASCII-Prozedurnamen,
+64Ki UTF16 Ausdruckslimit. Im gebundenen Formular-/Berichtsereignis CodeBehind
+vor Standardmodulen, danach restaurierter Ereigniskontext; Standard-Private/
+fehlende Funktionen2517, Subs/Namenskonflikte3251, originale Fehlerdaten plus
+Makroaktionskontext. GUI/Layout zusammen2/2 (18,17s) ohne Korrekturlauf, App gebaut:
+wirkliche Funktionen/Seiteneffekte, verschachtelte Makros, Private-CodeBehind,
+Kontextrestauration, verschachtelte/quotierte Argumente, Sub-/Private-Sperren,
+struktureller Abbruch ohne vorangestellten SQL-Effekt und Fehler7001/Source.
+Aktuelles DEB gebaut; erste Paketprüfung hatte im aktivierten SDK dessen älteres
+SQLite im LD_LIBRARY_PATH und scheiterte3251. Nur Paketprüfung mit wie bei den
+gezielten Tests vorangestelltem gebündeltem SQLite wiederholt:5-Datei-Payload,
+App-/Helper-BuildIDs, MDBTools1.0.1, bytegleiches SQLite3.54.1 samt tatsächlichem
+JOIN/NULL-/Counter-Backendcheck bestanden. Keine Wiederholung der GUI-Prüfungen.
+Originalupload-Hashes3/3 und Fixtures4/4 unverändert. Keine neue CTest-ID,
+Gesamtsuite/Windows-Beobachtung. NATIVE_MACROS_RUNTIME.md; F088/F042/F050/F057/F148
+und456/384/72 unverändert. Weiterprogrammieren, kein Gesamtabschluss.

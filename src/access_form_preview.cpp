@@ -1,4 +1,5 @@
 #include "native_application_run.hpp"
+#include "native_macro_function.hpp"
 #include "native_field_defaults.hpp"
 #include "native_stored_form.hpp"
 #include "native_stored_report.hpp"
@@ -953,6 +954,24 @@ public:
         requireInstance();
         makePreviewControlObject(preview_,QString::fromUtf8(name.data(),name.size()))->assign("Visible",linaccess::VbaValue::logical(value));
     }
+    void runMacroFunction(const std::string& expression) {
+        const auto name=linaccess::nativeMacroFunctionName(QString::fromUtf8(expression));
+        const auto target=name.toUtf8().toStdString();
+        const auto local=preview_.property("la_bound_event_active").toBool() ? preview_.vba_.toUtf8().toStdString() : std::string{};
+        auto signature=linaccess::nativeVbaProcedureSignature(local,target);
+        if(!signature) {
+            QMap<QString,QString> canonical;
+            (void)linaccess::standardVbaModuleSources(preview_.db_,&canonical);
+            if(canonical.contains(name.toCaseFolded())) throw linaccess::VbaRuntimeError(3251,"RunCode Function name must differ from its module name");
+            const auto source=moduleForProcedure(target);
+            if(!source) throw linaccess::VbaRuntimeError(2517,"RunCode public Function was not found");
+            signature=linaccess::nativeVbaProcedureSignature(*source,target);
+        }
+        if(!signature || !signature->function) throw linaccess::VbaRuntimeError(3251,"RunCode requires a Function, not a Sub");
+        const auto result=linaccess::executeVbaEventExpression(local,"="+expression,*this);
+        if(result.status!=linaccess::VbaExecutionStatus::Completed)
+            throw linaccess::VbaRuntimeError(result.errorNumber ? result.errorNumber : 3251,result.explanation,result.errorSource,result.errorHelpFile,result.errorHelpContext);
+    }
     std::optional<std::string> moduleForProcedure(std::string_view procedure) override {
         const auto sources=linaccess::standardVbaModuleSources(preview_.db_);
         std::optional<std::string> found;
@@ -1072,6 +1091,12 @@ private:
     AccessFormPreview& preview_;
     std::optional<int> aggregateRow_;
 };
+
+void runNativeMacroFunction(AccessFormPreview& preview,const std::string& expression) {
+    ++nativeExecutionDepth();
+    const auto unwind=qScopeGuard([] {--nativeExecutionDepth();disposeClosedForms();});
+    PreviewVbaHost host(preview); host.runMacroFunction(expression);
+}
 
 linaccess::VbaValue runNativeApplicationProcedure(AccessFormPreview& preview,const std::vector<linaccess::VbaValue>& arguments) {
     using linaccess::VbaRuntimeError;
@@ -3797,10 +3822,11 @@ linaccess::VbaExecutionResult AccessFormPreview::runHandler(const QString& handl
 }
 linaccess::VbaExecutionResult AccessFormPreview::runBoundEvent(const QString& binding,const QString& handler) {
     const QPointer<AccessFormPreview> self=this;
-    const auto previousAllowed=property("la_bound_event_can_cancel"),previousCancelled=property("la_bound_event_cancelled");
+    const auto previousAllowed=property("la_bound_event_can_cancel"),previousCancelled=property("la_bound_event_cancelled"),previousActive=property("la_bound_event_active");
+    setProperty("la_bound_event_active",true);
     static const QSet<QString> cancellable{"open","unload","nodata","dirty","beforeinsert","beforeupdate","dblclick"};
     setProperty("la_bound_event_can_cancel",cancellable.contains(handler.section('_',-1).toCaseFolded()));setProperty("la_bound_event_cancelled",false);
-    const auto restore=qScopeGuard([self,previousAllowed,previousCancelled] {if(self) {self->setProperty("la_bound_event_can_cancel",previousAllowed);self->setProperty("la_bound_event_cancelled",previousCancelled);}});
+    const auto restore=qScopeGuard([self,previousAllowed,previousCancelled,previousActive] {if(self) {self->setProperty("la_bound_event_active",previousActive);self->setProperty("la_bound_event_can_cancel",previousAllowed);self->setProperty("la_bound_event_cancelled",previousCancelled);}});
     linaccess::VbaExecutionResult result;
     if(eventProcedure(binding)) result=runHandler(handler);
     else if(binding.trimmed().startsWith('=')) {

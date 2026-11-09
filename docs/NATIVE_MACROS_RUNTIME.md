@@ -8,7 +8,7 @@ containing a dot are outside this implementation.
 
 `DoCmd.RunMacro(MacroName, RepeatCount)` loads the actual saved definition on the
 current project connection. Named arguments use the existing VBA binder. Supported
-actions delegate to the existing DoCmd implementations and their database,
+document actions delegate to the existing DoCmd implementations and their database,
 transaction, document, modal and error guards:
 
 | Action | Supported arguments |
@@ -20,6 +20,7 @@ transaction, document, modal and error guards:
 | OpenReport | ReportName, optional numeric View |
 | RunCommand | numeric Command |
 | Requery | optional ControlName |
+| RunCode | one supported Function call, including parentheses; return ignored |
 | StopMacro | none; terminates this RunMacro invocation, including repetitions |
 | CancelEvent | none; cancels a supported current bound event |
 | RunMacro | MacroName, optional RepeatCount; bounded nested call |
@@ -147,3 +148,33 @@ target, Windows oracle or full-suite claim; F088/F041/F050/F057/F148 stays open.
 The current .deb also passes the existing payload/permissions/Build-ID/metadata
 helper checks and the actual SQLite3.54.1 backend self-check. No reference database
 or source is shipped. This package check does not claim a fresh platform matrix.
+
+
+## RunCode Function actions
+
+RunCode is a saved macro action, not a DoCmd method. Function Name requires one
+unqualified Function invocation with parentheses and no leading equals sign.
+The outer-call scanner handles nested argument calls, doubled string quotes,
+bracketed identifiers and date literals; the existing expression parser checks
+the argument grammar. Trailing arithmetic/additional expressions are refused
+before any action of the macro executes. This bounded implementation accepts
+ASCII procedure identifiers and at most65536 UTF16 expression units.
+
+In an actual form/report event binding, the caller's CodeBehind Function takes
+precedence, including a local Private Function. Outside an event, lookup uses
+public standard-module Functions. A Sub is refused3251; a missing/private standard
+Function reports2517. A standard-module name colliding with the target Function
+is refused3251 rather than choosing an ambiguous namespace. Event-context markers
+are restored after nested dispatch. The return value is discarded. Supported
+native expression/argument/compiler, shared-state and lifetime limits still apply.
+Raised errors retain their number/source/help and receive the existing macro/action
+diagnostic context. No imaginary DoCmd.RunCode interface is exposed.
+
+Public contract consulted: Microsoft Learn, RunCode macro action,
+https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/runcode-macro-action .
+This is current documentation, not an additional Access2003 execution observation.
+
+Validation: existing GUI/layout checks2/2 passed (18.17s), app and matching
+DEB checked. Actual Function effects, nested macro/event scope, quoted/nested
+arguments, Sub/Private refusal, structural preflight and error source/action
+metadata are covered. Original uploads3/3 and fixtures4/4 hashes unchanged.
