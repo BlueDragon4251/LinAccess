@@ -1,3 +1,4 @@
+#include "native_schema_editor.hpp"
 #include "native_field_defaults.hpp"
 #include "mainwindow.hpp"
 #include "native_grid_clipboard.hpp"
@@ -2164,11 +2165,12 @@ void MainWindow::editForm(const QString& existingName) {
     connect(fields->model(),&QAbstractItemModel::rowsMoved,&dialog,updateGeometry);
     auto populate = [this, fields, source, old,sourceStatus] {
         fields->clear(); sourceStatus->clear(); const auto table=source->currentText(); if(table.isEmpty()) return;
-        QStringList available;
+        QStringList available;QMap<QString,linaccess::NativeFieldDisplayProperties> display;
         try {
             const bool physical=db_.tables(QSql::Tables).contains(table,Qt::CaseInsensitive);
             for(const auto& column:linaccess::nativeFormSourceColumns(db_,table))
                 if(!physical || column!="id") available.append(column);
+            if(physical) display=linaccess::nativeTableFieldDisplayProperties(db_,table);
             if(!physical) sourceStatus->setText("Abfrageformular: schreibgeschützt; keine Parameterbindung.");
         } catch(const linaccess::VbaRuntimeError& error) {
             sourceStatus->setText("Datenquelle nicht verfügbar (Fehler "+QString::number(error.number)+")."); return;
@@ -2179,8 +2181,8 @@ void MainWindow::editForm(const QString& existingName) {
         if(sameSource) for(const auto& value:previous) if(available.contains(value.toString()) && !ordered.contains(value.toString())) ordered.push_back(value.toString());
         for(const auto& field:available) if(!ordered.contains(field)) ordered.push_back(field);
         for(const auto& field:ordered) {
-            auto* item=new QListWidgetItem(captions.value(field).toString(field),fields);
-            item->setData(Qt::UserRole,field); item->setToolTip("Gebundenes Feld: "+field);
+            auto inherited=display.value(field.toCaseFolded()).caption.value_or(field);if(inherited.isEmpty()) inherited=field;auto* item=new QListWidgetItem(captions.value(field).toString(inherited),fields);
+            item->setData(Qt::UserRole,field); item->setToolTip("Gebundenes Feld: "+field+(display.value(field.toCaseFolded()).description ? "\n"+*display.value(field.toCaseFolded()).description : QString{}));
             if(sameSource) item->setData(Qt::UserRole+1,old.value("field_layout").toObject().value(field).toObject());
             item->setFlags(item->flags()|Qt::ItemIsUserCheckable|Qt::ItemIsEditable);
             item->setCheckState(!sameSource || previous.isEmpty() || previous.contains(field) ? Qt::Checked : Qt::Unchecked);
@@ -2347,6 +2349,7 @@ void MainWindow::editReport(const QString& existingName) {
             const auto latest=objectDefinition("report",savedName);
             if(!latest.isEmpty()) content=latest;
         }
+        if(content.value("sql").toString()!=sql->toPlainText() || !content.contains("field_captions")) {QString table;try {table=linaccess::editableAccessQueryTable(db_,sql->toPlainText());}catch(const linaccess::VbaRuntimeError& error) {if(error.number!=3251) throw;}QJsonObject captions;if(!table.isEmpty()) {const auto display=linaccess::nativeTableFieldDisplayProperties(db_,table);for(auto it=display.cbegin();it!=display.cend();++it) if(it.value().caption && !it.value().caption->isEmpty()) captions.insert(it.key(),*it.value().caption);}content.insert("field_captions",captions);}
         content.insert("title",title->text()); content.insert("sql",sql->toPlainText());
         content.insert("vba",vba->toPlainText()); content.insert("can_grow",canGrow->isChecked());
         content.insert("detail_force_new_page",pageBreak->currentIndex());

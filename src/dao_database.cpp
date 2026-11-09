@@ -327,7 +327,10 @@ QString sqliteLiteralDefaultSql(const QVariant& declaration) {
     // Raw SQLite TRUE is1; imported Access TRUE is already normalized to-1.
     return token.compare("TRUE",Qt::CaseInsensitive)==0 ? QString("1") : literal.value_or(QString{});
 }
-struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1},generatorAttributes{-1}; std::optional<bool> required;std::optional<int> nativeAttributes;std::optional<bool> allowZeroLength;QString storedDefault;std::optional<bool> canonicalDate;QString validationRule,validationText; };
+struct TableSchemaColumn { QString name,type; int sourceType{},sourceSize{}; QString literalDefault; bool hasDefault{}; QString foreignName; int indexAttributes{-1},generatorAttributes{-1}; std::optional<bool> required;std::optional<int> nativeAttributes;std::optional<bool> allowZeroLength;QString storedDefault;std::optional<bool> canonicalDate;QString validationRule,validationText;std::optional<QString> caption,description;QString captionIdentity,descriptionIdentity; };
+using TableSchemaReader=std::function<QVector<TableSchemaColumn>()>;
+using NativeFieldSetter=std::function<TableSchemaReader(const QString&,std::string_view,const VbaValue&)>;
+std::shared_ptr<VbaObject> makeNativeFieldProperties(TableSchemaReader reader,QString field,NativeFieldSetter setter={});
 std::optional<QString> nativeFieldDefaultExpression(const TableSchemaColumn& field) {
     if(provenDaoFieldType(field.type)==11 || field.sourceType==11) return {};
     if(!field.hasDefault) return QString{};
@@ -401,6 +404,7 @@ QVector<TableSchemaColumn> readTableSchemaColumns(QSqlDatabase db,const QString&
                         if(!attribute.isDouble() || (attribute.toDouble()!=expected && !(code==4 && attribute.toDouble()==17))) throw VbaRuntimeError(3251,"DAO native field attributes invalid");
                         column.nativeAttributes=static_cast<int>(attribute.toDouble());
                     }
+                    if(origin=="DAO_NATIVE") for(const auto& property:{QString("caption"),QString("description")}) if(object.contains("native_"+property)) {const auto value=object.value("native_"+property);const auto text=value.toString();if(!value.isString() || text.size()>255 || text.contains(QChar(0)) || !text.isValidUtf16() || (property=="caption" && (text.contains('\n') || text.contains('\r')))) throw VbaRuntimeError(3251,"DAO: Native field display property invalid");const auto identity=object.value("native_"+property+"_id");if(!identity.isString() || QUuid::fromString(identity.toString()).isNull()) throw VbaRuntimeError(3251,"DAO: Native field property identity invalid");if(property=="caption") {column.caption=text;column.captionIdentity=identity.toString();}else {column.description=text;column.descriptionIdentity=identity.toString();}}
                     if(origin=="DAO_NATIVE" && object.contains("native_validation_text")) {const auto message=object.value("native_validation_text");if(!message.isString() || message.toString().size()>255 || message.toString().contains(QChar(0)) || !message.toString().isValidUtf16() || (code!=1 && code!=2 && code!=3 && code!=4 && code!=6 && code!=7 && !(code==8 && object.value("native_date_canonical").toBool()))) throw VbaRuntimeError(3251,"DAO: Native ValidationText declaration invalid");column.validationText=message.toString();}
                     if(origin=="DAO_NATIVE" && object.contains("native_validation_rule")) {const auto rule=object.value("native_validation_rule");if(!rule.isString() || (code!=1 && code!=2 && code!=3 && code!=4 && code!=6 && code!=7 && !(code==8 && object.value("native_date_canonical").toBool()))) throw VbaRuntimeError(3251,"DAO: Native ValidationRule declaration invalid");column.validationRule=rule.toString();(void)nativeFieldValidationPredicate(code,column.validationRule,quote(column.name));}
                     if(origin=="DAO_NATIVE" && object.contains("native_date_canonical")) {const auto canonical=object.value("native_date_canonical");if(!canonical.isBool() || code!=8) throw VbaRuntimeError(3251,"DAO: Native Date storage declaration invalid");column.canonicalDate=canonical.toBool();}
@@ -471,6 +475,7 @@ public:
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     Field(std::shared_ptr<Recordset> owner, QString name) : owner_(std::move(owner)), name_(std::move(name)) {}
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if(lower(name)=="properties") return VbaArgumentSignature{{"Index"},0};
         if(lower(name)=="getchunk") return VbaArgumentSignature{{"Offset","Bytes"},2};
         if(lower(name)=="appendchunk") return VbaArgumentSignature{{"Val"},1}; return {};
     }
@@ -481,6 +486,8 @@ public:
         assign("Value",value);
     }
     VbaValue member(std::string_view name, const std::vector<VbaValue>& args) override;
+    void assignIndexedMember(std::string_view name,const std::vector<VbaValue>& args,const VbaValue& value) override {if(lower(name)!="properties" || args.size()!=1) throw VbaRuntimeError(438,"DAO: Indexed field property assignment unsupported");member("Properties",args).object->assign("Value",value);}
+
     void assign(std::string_view name, const VbaValue& value) override;
 private:
     std::shared_ptr<Recordset> owner_;
@@ -805,6 +812,7 @@ public:
         (void)fieldType(name);const auto& properties=allowZeroLength ? data_->allowZeroLengthFields : data_->requiredFields;const auto key=name.toCaseFolded();
         if(!properties.contains(key)) throw VbaRuntimeError(3251,"DAO: Recordset field property has no proven native declaration");return VbaValue::logical(properties.value(key));
     }
+    QVector<TableSchemaColumn> propertySchema() const {checkTransaction();if(closed_) throw VbaRuntimeError(3420,"DAO: Recordset is closed");if(!table_) throw VbaRuntimeError(3251,"DAO: Query field properties are not proven");return readTableSchemaColumns(db_,source_);}
     VbaValue schemaFieldValidation(const QString& name,bool message) const {
         (void)fieldType(name);const auto& properties=message ? data_->validationTexts : data_->validationRules;const auto key=name.toCaseFolded();if(!properties.contains(key)) throw VbaRuntimeError(3251,"DAO: Recordset validation metadata has no proven native declaration");return VbaValue::string(properties.value(key).toStdString());
     }
@@ -1164,6 +1172,7 @@ VbaValue fieldCollection(std::shared_ptr<Recordset> owner) {
 }
 
 VbaValue Field::member(std::string_view name, const std::vector<VbaValue>& args) {
+    if(lower(name)=="properties") {auto properties=makeNativeFieldProperties([owner=owner_] {return owner->propertySchema();},name_);if(args.empty() || (args.size()==1 && args[0].kind==VbaValue::Kind::Missing)) return VbaValue::reference(properties);return properties->member("Item",args);}
     if(lower(name)=="appendchunk") {
         if(args.size()!=1) throw VbaRuntimeError(450,"Field.AppendChunk requires Val");
         owner_->appendBinaryChunk(name_,args[0]); return {};
@@ -1579,15 +1588,64 @@ private:
     QMap<QString,std::weak_ptr<QueryDefinition>> objects_;
 };
 
-using TableSchemaReader=std::function<QVector<TableSchemaColumn>()>;
-using NativeFieldSetter=std::function<TableSchemaReader(const QString&,std::string_view,const VbaValue&)>;
+
 TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString& table,const QString& field,const QMap<QString,VbaValue>& properties);
+QString nativeTextPropertyKey(const QString& name) {const auto key=name.toCaseFolded();if(key!="caption" && key!="description") throw VbaRuntimeError(3251,"DAO: Only native Caption and Description properties are implemented");return key;}
+QString nativeTextPropertyValue(const QString& key,const VbaValue& input) {const auto value=scalarVbaValue(input);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null text property value");if(value.kind!=VbaValue::Kind::Text) throw VbaRuntimeError(13,"DAO: Text property requires a String");const auto text=QString::fromStdString(value.text);if(text.size()>255 || text.contains(QChar(0)) || !text.isValidUtf16() || (key=="caption" && (text.contains('\n') || text.contains('\r')))) throw VbaRuntimeError(3251,"DAO: Text property exceeds supported text limits");return text;}
+struct NativeFieldPropertyState {
+    TableSchemaReader reader;QString field;NativeFieldSetter setter;
+    TableSchemaColumn column() const {std::optional<TableSchemaColumn> selected;for(const auto& column:reader()) if(column.name.compare(field,Qt::CaseInsensitive)==0) {if(selected) throw VbaRuntimeError(3251,"DAO: Ambiguous property field");selected=column;}if(!selected) throw VbaRuntimeError(3420,"DAO: Property field unavailable");if(!selected->nativeAttributes) throw VbaRuntimeError(3251,"DAO: Original/unproven field properties are not inferred");return *selected;}
+    std::optional<QString> value(const QString& key) const {const auto field=column();return key=="caption" ? field.caption : field.description;}
+    QString identity(const QString& key) const {const auto field=column();return key=="caption" ? field.captionIdentity : field.descriptionIdentity;}
+    void store(const QString& key,const VbaValue& value) {const auto field=column();if(!setter) throw VbaRuntimeError(383,"DAO: Recordset field properties are readonly");auto next=setter(field.name,key.toStdString(),value);reader=std::move(next);}
+};
+class NativeFieldProperty final : public VbaObject {
+public:
+    NativeFieldProperty(std::shared_ptr<NativeFieldPropertyState> state,QString key):state_(std::move(state)),key_(std::move(key)) {}
+    std::string_view className() const override {return "Property";}bool isNativeType(std::string_view type) const override {return type=="dao.property";}
+    void bindIdentity() {identity_=state_->identity(key_);if(identity_.isEmpty()) throw VbaRuntimeError(3420,"DAO: Stored property identity unavailable");}
+    bool hasScalarDefault() const override {return true;}VbaValue scalarValue() override {return member("Value",{});}
+    void assignDefaultMember(const std::vector<VbaValue>& args,const VbaValue& value) override {if(!args.empty()) throw VbaRuntimeError(450,"DAO: Scalar property takes no indices");assign("Value",value);}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {if(!args.empty()) throw VbaRuntimeError(450,"DAO: Property takes no arguments");if(identity_.isEmpty()) bindIdentity();if(identity_!=state_->identity(key_)) throw VbaRuntimeError(3420,"DAO: Property identity replaced");const auto value=state_->value(key_);if(!value) throw VbaRuntimeError(3270,"DAO: Property not found");const auto key=lower(name);if(key=="name") return VbaValue::string(key_=="caption" ? "Caption" : "Description");if(key=="type") return VbaValue::integer(10);if(key=="value") return VbaValue::string(value->toStdString());if(key=="inherited") return VbaValue::logical(false);throw VbaRuntimeError(3251,"DAO: Property member unsupported");}
+    void assign(std::string_view name,const VbaValue& value) override {if(identity_.isEmpty()) bindIdentity();if(identity_!=state_->identity(key_)) throw VbaRuntimeError(3420,"DAO: Property identity replaced");if(!state_->value(key_)) throw VbaRuntimeError(3270,"DAO: Property not found");if(lower(name)!="value") throw VbaRuntimeError(383,"DAO: Property metadata is readonly");const auto text=nativeTextPropertyValue(key_,value);state_->store(key_,VbaValue::string(text.toStdString()));}
+private:std::shared_ptr<NativeFieldPropertyState> state_;QString key_,identity_;
+};
+class DetachedTextProperty final : public VbaObject {
+public:
+    DetachedTextProperty(QString key,QString value):key_(std::move(key)),value_(std::move(value)) {}
+    std::string_view className() const override {return "Property";}bool isNativeType(std::string_view type) const override {return type=="dao.property";}
+    bool hasScalarDefault() const override {return true;}VbaValue scalarValue() override {return member("Value",{});}
+    void assignDefaultMember(const std::vector<VbaValue>& args,const VbaValue& value) override {if(!args.empty()) throw VbaRuntimeError(450,"DAO: Scalar property takes no indices");assign("Value",value);}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {if(attached_) return attached_->member(name,args);if(!args.empty()) throw VbaRuntimeError(450,"DAO: Property takes no arguments");const auto key=lower(name);if(key=="name") return VbaValue::string(key_=="caption" ? "Caption" : "Description");if(key=="type") return VbaValue::integer(10);if(key=="value") return VbaValue::string(value_.toStdString());if(key=="inherited") return VbaValue::logical(false);throw VbaRuntimeError(3251,"DAO: Property member unsupported");}
+    void assign(std::string_view name,const VbaValue& value) override {if(attached_) {attached_->assign(name,value);return;}if(lower(name)!="value") throw VbaRuntimeError(383,"DAO: Property metadata is readonly");value_=nativeTextPropertyValue(key_,value);}
+    QString key_,value_;std::shared_ptr<VbaObject> attached_;
+};
+class NativeFieldProperties final : public VbaObject {
+public:
+    explicit NativeFieldProperties(std::shared_ptr<NativeFieldPropertyState> state):state_(std::move(state)) {}
+    std::string_view className() const override {return "Properties";}bool isNativeType(std::string_view type) const override {return type=="dao.properties";}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {const auto key=lower(name);if(key=="item") return VbaArgumentSignature{{"Index"},1};if(key=="append") return VbaArgumentSignature{{"Object"},1};if(key=="delete") return VbaArgumentSignature{{"Name"},1};return {};}
+    VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        (void)state_->column();const auto key=lower(name);if(key=="refresh" && args.empty()) return {};if(key=="count") throw VbaRuntimeError(3251,"DAO: Complete Field.Properties catalog is not implemented");
+        if(key=="item" || key=="delete") {if(args.size()!=1) throw VbaRuntimeError(450,"DAO: Properties lookup/delete takes one name");const auto scalar=scalarVbaValue(args[0]);if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null property name");if(scalar.kind!=VbaValue::Kind::Text) throw VbaRuntimeError(3251,"DAO: Property ordinal catalog is not implemented");const auto property=nativeTextPropertyKey(QString::fromStdString(scalar.text));if(!state_->value(property)) throw VbaRuntimeError(3270,"DAO: Property not found");if(key=="delete") {state_->store(property,VbaValue{});return {};}auto value=std::make_shared<NativeFieldProperty>(state_,property);value->bindIdentity();return VbaValue::reference(value);}
+        if(key=="append") {if(args.size()!=1 || args[0].kind!=VbaValue::Kind::Object) throw VbaRuntimeError(450,"DAO: Properties.Append requires a created Property");const auto property=std::dynamic_pointer_cast<DetachedTextProperty>(args[0].object);if(!property || property->attached_) throw VbaRuntimeError(3219,"DAO: Created unattached text Property required");if(state_->value(property->key_)) throw VbaRuntimeError(3367,"DAO: Property already exists");auto attached=std::make_shared<NativeFieldProperty>(state_,property->key_);state_->store(property->key_,VbaValue::string(property->value_.toStdString()));property->attached_=attached;try {attached->bindIdentity();}catch(...) {throw DaoStoredSchemaChange("DAO: Property stored; metadata reload failed, reopen the project");}return {};}
+        throw VbaRuntimeError(3251,"DAO: Field.Properties operation is not implemented");
+    }
+    std::vector<VbaValue> enumerate() override {throw VbaRuntimeError(3251,"DAO: Complete Field.Properties enumeration is not implemented");}
+private:std::shared_ptr<NativeFieldPropertyState> state_;
+};
+std::shared_ptr<VbaObject> makeNativeFieldProperties(TableSchemaReader reader,QString field,NativeFieldSetter setter) {auto state=std::make_shared<NativeFieldPropertyState>(NativeFieldPropertyState{std::move(reader),std::move(field),std::move(setter)});(void)state->column();return std::make_shared<NativeFieldProperties>(std::move(state));}
+
 class TableSchemaField final : public VbaObject {
 public:
     TableSchemaField(TableSchemaReader reader,QString name,bool defaults=true,NativeFieldSetter setter={}) : reader_(std::move(reader)),name_(std::move(name)),defaults_(defaults),setter_(std::move(setter)) {}
+    TableSchemaReader displayPropertyReader() const {return reader_;}
+    TableSchemaReader storeDisplayProperty(const QString& key,const VbaValue& value) {if(!setter_) throw VbaRuntimeError(383,"DAO: Field properties are readonly");auto next=setter_(name_,key.toStdString(),value);reader_=std::move(next);return reader_;}
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {if(lower(name)=="properties") return VbaArgumentSignature{{"Index"},0};return {};}
     std::string_view className() const override { return "Field"; }
     bool isNativeType(std::string_view type) const override { return type=="dao.field"; }
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
+        if(lower(name)=="properties") {if(!defaults_) throw VbaRuntimeError(3251,"DAO: Query field properties are not proven");auto properties=makeNativeFieldProperties(reader_,name_,setter_);if(args.empty() || (args.size()==1 && args[0].kind==VbaValue::Kind::Missing)) return VbaValue::reference(properties);return properties->member("Item",args);}
         if(!args.empty()) throw VbaRuntimeError(450,"DAO schema field properties take no arguments");
         const auto columns=reader_();
         int position=-1;
@@ -1630,6 +1688,7 @@ public:
         }
         throw VbaRuntimeError(3251,"DAO schema field property is unsupported");
     }
+    void assignIndexedMember(std::string_view name,const std::vector<VbaValue>& args,const VbaValue& value) override {if(lower(name)!="properties" || args.size()!=1) throw VbaRuntimeError(438,"DAO: Indexed field property assignment unsupported");member("Properties",args).object->assign("Value",value);}
     void assign(std::string_view name,const VbaValue& value) override {
         (void)reader_();const auto key=lower(name);
         if(!setter_ || (key!="required" && key!="defaultvalue" && key!="size" && key!="name" && key!="allowzerolength" && key!="validationrule" && key!="validationtext" && key!="ordinalposition")) throw VbaRuntimeError(383,"DAO schema field property is read-only");
@@ -1988,19 +2047,22 @@ struct DetachedTableState {
     QSqlDatabase db;std::shared_ptr<WorkspaceState> workspace;QString name;
     std::shared_ptr<TableDefinition> attached,existing;
 };
-class DetachedField final : public VbaObject {
+class DetachedField final : public VbaObject,public std::enable_shared_from_this<DetachedField> {
 public:
     DetachedField(std::shared_ptr<DetachedTableState> owner,QString name,int type,int size):owner_(std::move(owner)),name_(std::move(name)),type_(type),size_(size) {
         attributes_=(type==10 || type==11 || type==12) ? 2 : 1;
         if(type!=10) {switch(type) {case 1:case 2:size_=1;break;case 3:size_=2;break;case 4:case 6:size_=4;break;case 5:case 7:case 8:size_=8;break;case 15:size_=16;break;case 11:case 12:size_=0;break;default:break;}}
     }
+    std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {if(lower(name)=="properties") return VbaArgumentSignature{{"Index"},0};return {};}
+    TableSchemaReader displayPropertyReader() {const auto self=shared_from_this();return [self] {self->owner_->workspace->check();if(self->attachedField_) {const auto field=std::dynamic_pointer_cast<TableSchemaField>(self->attachedField_);if(!field) throw VbaRuntimeError(3251,"DAO: Attached field property metadata unavailable");return field->displayPropertyReader()();}if(self->owner_->attached || (self->owner_->existing && !self->owner_->existing->valid())) throw VbaRuntimeError(3420,"DAO: Detached property field unavailable");TableSchemaColumn field;field.name=self->name_;field.sourceType=self->type_;field.nativeAttributes=self->attributes_;field.required=self->required_;field.caption=self->caption_;field.description=self->description_;field.captionIdentity=self->captionIdentity_;field.descriptionIdentity=self->descriptionIdentity_;return QVector<TableSchemaColumn>{field};};}
     std::string_view className() const override {return "Field";}
     bool isNativeType(std::string_view type) const override {return type=="dao.field";}
     VbaValue member(std::string_view name,const std::vector<VbaValue>& args) override {
-        owner_->workspace->check();if(owner_->existing && !owner_->existing->valid()) throw VbaRuntimeError(3420,"DAO: Field builder table invalidated");if(!args.empty()) throw VbaRuntimeError(450,"DAO: Detached field properties take no arguments");
+        owner_->workspace->check();if(owner_->existing && !owner_->existing->valid()) throw VbaRuntimeError(3420,"DAO: Field builder table invalidated");if(!args.empty() && lower(name)!="properties") throw VbaRuntimeError(450,"DAO: Detached field properties take no arguments");
         const auto key=lower(name);
         if(attachedField_) return attachedField_->member(name,args);
         if(owner_->attached) throw VbaRuntimeError(3420,"DAO: Detached field was not attached");
+        if(key=="properties") {const auto self=shared_from_this();auto properties=makeNativeFieldProperties(displayPropertyReader(),name_,[self](const QString&,std::string_view name,const VbaValue& value) {const auto key=QString::fromUtf8(name.data(),name.size());(void)self->displayPropertyReader()();if(self->attachedField_) {const auto field=std::dynamic_pointer_cast<TableSchemaField>(self->attachedField_);return field->storeDisplayProperty(key,value);}auto& slot=key=="caption" ? self->caption_ : self->description_;auto& identity=key=="caption" ? self->captionIdentity_ : self->descriptionIdentity_;if(value.kind==VbaValue::Kind::Null) {slot.reset();identity.clear();}else {const auto text=nativeTextPropertyValue(key,value);if(!slot) identity=QUuid::createUuid().toString(QUuid::WithoutBraces);slot=text;}return self->displayPropertyReader();});if(args.empty() || (args.size()==1 && args[0].kind==VbaValue::Kind::Missing)) return VbaValue::reference(properties);return properties->member("Item",args);}
         if(key=="name") return VbaValue::string(name_.toStdString());
         if(key=="type") return VbaValue::integer(static_cast<std::int16_t>(type_));
         if(key=="size") return VbaValue::longInteger(size_);
@@ -2012,6 +2074,7 @@ public:
         if(key=="validationrule") return VbaValue::string(validationRule_.toStdString());
         throw VbaRuntimeError(3251,"DAO: Detached field property unsupported");
     }
+    void assignIndexedMember(std::string_view name,const std::vector<VbaValue>& args,const VbaValue& value) override {if(lower(name)!="properties" || args.size()!=1) throw VbaRuntimeError(438,"DAO: Indexed field property assignment unsupported");member("Properties",args).object->assign("Value",value);}
     void assign(std::string_view name,const VbaValue& raw) override {
         owner_->workspace->check();if(owner_->existing && !owner_->existing->valid()) throw VbaRuntimeError(3420,"DAO: Field builder table invalidated");if(attachedField_) {attachedField_->assign(name,raw);return;}if(owner_->attached) throw VbaRuntimeError(383,"DAO: Attached schema field is read-only");
         const auto value=scalarVbaValue(raw);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null schema field property");
@@ -2033,7 +2096,7 @@ public:
     }
     QJsonObject metadata() const {
         const auto source=type_==1 ? "BOOLEAN" : type_==2 ? "TINYINT" : type_==3 ? "SMALLINT" : type_==4 ? "INT" : type_==6 ? "SINGLE" : type_==7 ? "DOUBLE" : type_==8 ? "DATETIME" : type_==10 ? "VARCHAR" : type_==11 ? "BLOB" : "MEMO";
-        auto object=QJsonObject{{"name",name_},{"source_type",source},{"source_origin","DAO_NATIVE"},{"source_size",type_==10 ? size_ : 0},{"native_attributes",attributes_},{"native_required",required_}};if(type_==10 || type_==12) object.insert("native_allow_zero_length",allowZeroLength_);if(type_==8) object.insert("native_date_canonical",canonicalDate_);if(!validationRule_.isEmpty()) object.insert("native_validation_rule",validationRule_);if(!validationText_.isEmpty()) object.insert("native_validation_text",validationText_);return object;
+        auto object=QJsonObject{{"name",name_},{"source_type",source},{"source_origin","DAO_NATIVE"},{"source_size",type_==10 ? size_ : 0},{"native_attributes",attributes_},{"native_required",required_}};if(type_==10 || type_==12) object.insert("native_allow_zero_length",allowZeroLength_);if(type_==8) object.insert("native_date_canonical",canonicalDate_);if(!validationRule_.isEmpty()) object.insert("native_validation_rule",validationRule_);if(!validationText_.isEmpty()) object.insert("native_validation_text",validationText_);if(caption_) {object.insert("native_caption",*caption_);object.insert("native_caption_id",captionIdentity_);}if(description_) {object.insert("native_description",*description_);object.insert("native_description_id",descriptionIdentity_);}return object;
     }
     QString definition(bool storedDateLiteral=false) const {
         if(name_.isEmpty() || name_.trimmed()!=name_ || name_.size()>64 || name_.contains(QChar(0)) || !name_.isValidUtf16()) throw VbaRuntimeError(5,"DAO: Invalid field name");
@@ -2066,7 +2129,7 @@ public:
         if(!validationRule_.isEmpty()) result+=" CHECK (linaccess_jet_validation("+nativeFieldValidationPredicate(type_,validationRule_,column)+(validationText_.isEmpty() ? QString{} : ",'"+QString(validationText_).replace("'","''")+"'")+"))";
         return result;
     }
-    std::shared_ptr<VbaObject> attachedField_;std::shared_ptr<DetachedTableState> owner_;QString name_;int type_{},size_{},attributes_{};bool required_{},appended_{},allowZeroLength_{true},canonicalDate_{true};QString default_,validationRule_,validationText_;
+    std::shared_ptr<VbaObject> attachedField_;std::shared_ptr<DetachedTableState> owner_;QString name_;int type_{},size_{},attributes_{};bool required_{},appended_{},allowZeroLength_{true},canonicalDate_{true};QString default_,validationRule_,validationText_;std::optional<QString> caption_,description_;QString captionIdentity_,descriptionIdentity_;
 };
 class DetachedFields final : public VbaObject {
 public:
@@ -3024,19 +3087,29 @@ TableSchemaReader reorderNativeField(QSqlDatabase db,const QString& table,const 
     if(!settings.restore()) throw DaoStoredSchemaChange("DAO: Field order stored; connection settings failed to restore, reopen the project");return reader;
 }
 
+TableSchemaReader updateNativeFieldDisplayProperties(QSqlDatabase db,const QString& table,const QString& field,const QMap<QString,VbaValue>& properties) {
+    const auto workspace=workspaceState(db);workspace->check();if(!connectionUpdatable(db)) throw VbaRuntimeError(3027,"DAO: Database is read-only");const auto version=nativeSchemaVersion(db),generation=workspace->tableGenerations.value(table.toCaseFolded());QMap<QString,std::optional<QString>> values;
+    for(auto it=properties.cbegin();it!=properties.cend();++it) {if(it.key()!="caption" && it.key()!="description") throw VbaRuntimeError(3251,"DAO: Display property change must be separate");if(it.value().kind==VbaValue::Kind::Null) values.insert(it.key(),{});else {if(it.value().kind!=VbaValue::Kind::Text) throw VbaRuntimeError(13,"DAO: Field display property requires text");const auto text=QString::fromStdString(it.value().text);if(text.size()>255 || text.contains(QChar(0)) || !text.isValidUtf16() || (it.key()=="caption" && (text.contains('\n') || text.contains('\r')))) throw VbaRuntimeError(3251,"DAO: Field caption/description exceeds supported text limits");values.insert(it.key(),text);}}
+    QSqlQuery query(db);const auto savepoint="la_field_display_"+QUuid::createUuid().toString(QUuid::Id128);if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);bool complete=false;const auto rollback=qScopeGuard([&] {if(!complete) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);}});
+    if(version!=nativeSchemaVersion(db) || generation!=workspace->tableGenerations.value(table.toCaseFolded())) throw VbaRuntimeError(3420,"DAO: Field changed before display property update");query.prepare("SELECT definition FROM main._la_table_schema WHERE table_name=? COLLATE NOCASE");query.addBindValue(table);if(!query.exec() || !query.next()) throw VbaRuntimeError(3251,"DAO: Native field metadata unavailable");const auto previous=query.value(0);if(query.next()) throw VbaRuntimeError(3251,"DAO: Ambiguous native metadata");query.finish();auto metadata=QJsonDocument::fromJson(previous.toByteArray()).array();bool found=false;
+    for(int index=0;index<metadata.size();++index) {auto object=metadata[index].toObject();if(object.value("name").toString()==field) {if(found || object.value("source_origin").toString()!="DAO_NATIVE") throw VbaRuntimeError(3251,"DAO: Display property requires an own native field");for(auto it=values.cbegin();it!=values.cend();++it) {if(it.value()) {if(!object.contains("native_"+it.key())) object.insert("native_"+it.key()+"_id",QUuid::createUuid().toString(QUuid::WithoutBraces));object.insert("native_"+it.key(),*it.value());}else {object.remove("native_"+it.key());object.remove("native_"+it.key()+"_id");}}metadata[index]=object;found=true;}}
+    if(!found) throw VbaRuntimeError(3420,"DAO: Field display metadata missing");query.prepare("UPDATE main._la_table_schema SET definition=? WHERE table_name=? COLLATE NOCASE AND definition=?");query.addBindValue(QJsonDocument(metadata).toJson(QJsonDocument::Compact));query.addBindValue(table);query.addBindValue(previous);if(!query.exec() || query.numRowsAffected()!=1) throw VbaRuntimeError(3251,"DAO: Field metadata changed during display update");auto reader=currentNativeFieldReader(db,table);(void)reader();if(!query.exec("RELEASE "+savepoint)) queryFailure(query);complete=true;return reader;
+}
+
 TableSchemaReader updateNativeFieldPropertiesImpl(QSqlDatabase db,const QString& requestedTable,const QString& requestedField,const QMap<QString,VbaValue>& properties) {
     const auto workspace=workspaceState(db);QString table;
     for(const auto& name:nativeTableNames(db)) if(name.compare(requestedTable,Qt::CaseInsensitive)==0) {table=name;break;}
     if(table.isEmpty()) throw VbaRuntimeError(3265,"DAO: Field table unavailable");
     const auto version=nativeSchemaVersion(db),generation=workspace->tableGenerations.value(table.toCaseFolded());
     QMap<QString,VbaValue> evaluated;
-    for(auto it=properties.cbegin();it!=properties.cend();++it) {const auto key=it.key().toCaseFolded();if(key!="required" && key!="defaultvalue" && key!="size" && key!="name" && key!="allowzerolength" && key!="validationrule" && key!="validationtext" && key!="ordinalposition" && key!="datatype") throw VbaRuntimeError(383,"DAO: Field property is read-only");if(evaluated.contains(key)) throw VbaRuntimeError(450,"DAO: Duplicate field property");evaluated.insert(key,scalarVbaValue(it.value()));}
+    for(auto it=properties.cbegin();it!=properties.cend();++it) {const auto key=it.key().toCaseFolded();if(key!="required" && key!="defaultvalue" && key!="size" && key!="name" && key!="allowzerolength" && key!="validationrule" && key!="validationtext" && key!="ordinalposition" && key!="datatype" && key!="caption" && key!="description") throw VbaRuntimeError(383,"DAO: Field property is read-only");if(evaluated.contains(key)) throw VbaRuntimeError(450,"DAO: Duplicate field property");evaluated.insert(key,scalarVbaValue(it.value()));}
     workspace->check();if(version!=nativeSchemaVersion(db) || generation!=workspace->tableGenerations.value(table.toCaseFolded())) throw VbaRuntimeError(3420,"DAO: Field identity changed while evaluating properties");
     const auto columns=readTableSchemaColumns(db,table);std::optional<TableSchemaColumn> selected;
     for(const auto& column:columns) if(column.name.compare(requestedField,Qt::CaseInsensitive)==0) {selected=column;break;}
     if(!selected) throw VbaRuntimeError(3265,"DAO: Field not found");
     const auto& column=*selected;
     if(!column.nativeAttributes || !column.required || column.sourceType<=0) throw VbaRuntimeError(3251,"DAO: Only explicitly declared native field properties can be changed");
+    if(evaluated.contains("caption") || evaluated.contains("description")) return updateNativeFieldDisplayProperties(db,table,column.name,evaluated);
     if(evaluated.contains("ordinalposition")) {if(evaluated.size()!=1) throw VbaRuntimeError(3251,"DAO: OrdinalPosition must be a separate field operation");const auto value=coerceVbaModuleValue(evaluated.value("ordinalposition"),"long");return reorderNativeField(db,table,column.name,static_cast<int>(value.asNumber()));}
     if(*column.nativeAttributes&16) throw VbaRuntimeError(3251,"DAO: Counter property alteration requires dedicated migration");
     if(evaluated.contains("name")) {if(evaluated.size()!=1) throw VbaRuntimeError(3251,"DAO: Rename must be a separate field operation");if(evaluated.value("name").kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null field name");return renameNativeField(db,table,column,text(evaluated.value("name").asText()));}
@@ -3204,6 +3277,7 @@ public:
     bool isNativeType(std::string_view type) const override { return type.starts_with("dao.") && type.substr(4)==lower(className()); }
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
         const auto key=lower(name);
+        if (key=="createproperty") return VbaArgumentSignature{{"Name","Type","Value","DDL"},3};
         if (key=="openrecordset") return VbaArgumentSignature{{"Name","Type"},1};
         if (key=="execute") return VbaArgumentSignature{{"Query","Options"},1};
         if (key=="createquerydef") return VbaArgumentSignature{{"Name","SQLText"},1};
@@ -3241,6 +3315,7 @@ public:
             for(std::size_t i=0;i<args.size();++i) if(args[i].kind!=VbaValue::Kind::Missing) {const auto value=scalarVbaValue(args[i]);if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Null relation argument");if(i<3) values[i]=text(value.asText());else attributes=static_cast<quint32>(static_cast<qint32>(coerceVbaModuleValue(value,"long").number));}
             return VbaValue::reference(std::make_shared<DetachedRelation>(db_,values[0],values[1],values[2],attributes));
         }
+        if(key=="createproperty") {if(args.size()<3 || args.size()>4) throw VbaRuntimeError(450,"DAO: CreateProperty requires Name,Type,Value");const auto key=nativeTextPropertyKey(text(scalarVbaValue(args[0]).asText()));if(coerceVbaModuleValue(scalarVbaValue(args[1]),"long").asNumber()!=10 || (args.size()==4 && args[3].kind!=VbaValue::Kind::Missing && coerceVbaModuleValue(scalarVbaValue(args[3]),"boolean").truthy())) throw VbaRuntimeError(3251,"DAO: Only non-DDL native Caption/Description Text properties are implemented");return VbaValue::reference(std::make_shared<DetachedTextProperty>(key,nativeTextPropertyValue(key,args[2])));}
         if(key=="createtabledef") {
             if(args.size()>4) throw VbaRuntimeError(450,"DAO: CreateTableDef argument count");
             QString tableName;
@@ -3417,6 +3492,9 @@ private:
 }
 bool nativeFieldHasCanonicalDateStorage(QSqlDatabase db,const QString& table,const QString& field) {
     workspaceState(db)->check();for(const auto& column:readTableSchemaColumns(db,table)) if(column.name.compare(field,Qt::CaseInsensitive)==0) return canonicalNativeDateColumn(db,table,column);return false;
+}
+QMap<QString,NativeFieldDisplayProperties> nativeTableFieldDisplayProperties(QSqlDatabase db,const QString& requested) {
+    workspaceState(db)->check();QString table;for(const auto& name:nativeTableNames(db)) if(name.compare(requested,Qt::CaseInsensitive)==0) {table=name;break;}if(table.isEmpty()) return {};QMap<QString,NativeFieldDisplayProperties> result;for(const auto& field:readTableSchemaColumns(db,table)) if(field.nativeAttributes && (field.caption || field.description)) result.insert(field.name.toCaseFolded(),{field.caption,field.description});return result;
 }
 std::optional<QString> nativeDateLiteralSql(const QString& expression) {
     auto token=expression.trimmed();if(token.startsWith('=')) token=token.mid(1).trimmed();

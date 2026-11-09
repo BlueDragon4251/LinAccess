@@ -24,6 +24,7 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
     if (installAccessQueryViews(database)<0) throw VbaRuntimeError(3251,"Native report query views are busy");
     const auto columns=accessQueryColumns(database,plan); // prepare only, never step rows.
     if (columns.isEmpty() || columns.size()>32) throw VbaRuntimeError(3251,"Native report automatic layout supports 1-32 columns");
+    const auto captions=definition.value("field_captions").toObject();
     QSet<QString> used;
     for (const auto& column:columns) {
         if (column.isEmpty() || used.contains(column.toCaseFolded())) throw VbaRuntimeError(3251,"Native report columns are empty or ambiguous");
@@ -67,7 +68,7 @@ inline NativeStoredReport nativeStoredReport(QString name,const QJsonObject& def
         <<"Caption ="+quoted(definition.value("title").toString(name))<<"Width ="+QString::number(reportWidth-60)
         <<"Height =450"<<"FontWeight =700"<<"End"<<"End"<<"Begin PageHeader"<<"Height =450";
     for (int i=0;i<columns.size();++i)
-        lines<<"Begin Label"<<"Name ="+quoted(unique("label_"+columns[i]))<<"Caption ="+quoted(columns[i])
+        lines<<"Begin Label"<<"Name ="+quoted(unique("label_"+columns[i]))<<"Caption ="+quoted(captions.value(columns[i].toCaseFolded()).toString(columns[i]))
             <<"Left ="+QString::number(i*width+30)<<"Width ="+QString::number(width-60)<<"Height =300"<<"End";
     lines<<"End"<<"Begin Section"<<"Height =360";
     if(!forceValue.isUndefined()) lines<<"ForceNewPage ="+QString::number(force);

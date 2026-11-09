@@ -467,3 +467,17 @@ Date, explizit Missing am Suffix, Bookmark-Rettung geprüft. Explizite Nullwerte
 Lücken und absteigende Bereiche bleiben3251. DAO1/1 (2,25s), App gebaut;
 456/384/72 gleich. Fortsetzung: eigene Feld-Caption/Description im Entwurf mit
 wirklichen Tabellenköpfen und Formular-/Berichtslabels, dann übrige Anforderungen.
+
+Eigene Feld-Caption/Description jetzt tatsächlich im Projekt, Entwurf (auchCounter),
+Datenblattkopf/Hinweisen und kopierten Formular-/Berichtslabels. Physische Namen/
+Werte/Counter bleiben gleich. DAO.CreateProperty Text10 sowie begrenztes eigenes
+Field.Properties Item/Append/Delete/Refresh, Value/defaultValue, echte native
+Property/Properties-Typbindung und readonly Recordset-Properties implementiert.
+Persistente Property-IDs verhindern Wiederbelebung nach Delete/Recreate; keine
+vollständige Count-/Ordinal-/Enum-Liste erfunden. Schema-/Rollbackguards bleiben.
+Details NATIVE_FIELD_DISPLAY_PROPERTIES.md. GUI1/1 (5,65s); danach fehlende
+Typregistrierung/TypeOf-Registrierung korrigiert und zu gemeinsamer Registry
+vereinheitlicht: Core/DAO2/2 (4,66s), App gebaut. Kein frischer3/3-/Vollsuiteclaim.
+456/384/72 unverändert. Fortsetzung: weitere tatsächlich vorhandene native Feld-
+Property-Metadaten über Properties statt nur direkte Member anbinden; vollständige
+originale Properties-/Windowsparität bleibt offen. Kontinuierlich weiterarbeiten.

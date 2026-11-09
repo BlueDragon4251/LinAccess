@@ -1,3 +1,4 @@
+#include "native_schema_editor.hpp"
 #include "native_field_defaults.hpp"
 #include "access_table_model.hpp"
 #include "access_autonumber.hpp"
@@ -43,8 +44,8 @@ bool AccessTableModel::rejectEdit(int number,const QString& message) {
 }
 bool AccessTableModel::reject(int number) { return rejectEdit(number,editMessage(number)); }
 bool AccessTableModel::refreshTypes() {
-    types_.clear(); generated_.clear(); metadataError_=0;
-    try { types_=sqliteColumnTypes(database(),tableName()); generated_=generatedAccessColumns(database(),tableName()); return true; }
+    types_.clear();captions_.clear();descriptions_.clear(); generated_.clear(); metadataError_=0;
+    try { types_=sqliteColumnTypes(database(),tableName()); generated_=generatedAccessColumns(database(),tableName());const auto properties=nativeTableFieldDisplayProperties(database(),tableName());for(auto it=properties.cbegin();it!=properties.cend();++it) {if(it.value().caption) captions_.insert(it.key(),*it.value().caption);if(it.value().description) descriptions_.insert(it.key(),*it.value().description);}return true; }
     catch(const VbaRuntimeError& error) { metadataError_=error.number; return reject(error.number); }
 }
 void AccessTableModel::setTable(const QString& table) {
@@ -59,7 +60,7 @@ bool AccessTableModel::select() {
 }
 void AccessTableModel::clear() {
     if(saving_) { (void)reject(2501); return; }
-    QSqlTableModel::clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
+    QSqlTableModel::clear();captions_.clear();descriptions_.clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
 }
 QVector<QPersistentModelIndex> AccessTableModel::rowAnchors(const QSet<int>& rows) const {
     QVector<QPersistentModelIndex> result; result.reserve(rows.size());
@@ -269,7 +270,11 @@ bool AccessTableModel::isTextColumn(int column) const {
     return type.contains("TEXT",Qt::CaseInsensitive) || type.contains("CHAR",Qt::CaseInsensitive) || type.contains("CLOB",Qt::CaseInsensitive);
 }
 QString AccessTableModel::columnType(int column) const { return types_.value(record().fieldName(column).toCaseFolded()); }
+QVariant AccessTableModel::headerData(int section,Qt::Orientation orientation,int role) const {
+    if(orientation==Qt::Horizontal && section>=0 && section<columnCount()) {const auto field=record().fieldName(section),key=field.toCaseFolded();if(role==Qt::DisplayRole && !captions_.value(key).isEmpty()) return captions_.value(key);if(role==Qt::ToolTipRole && (captions_.contains(key) || descriptions_.contains(key))) return field+(descriptions_.value(key).isEmpty() ? QString{} : "\n"+descriptions_.value(key));if(role==Qt::StatusTipRole && descriptions_.contains(key)) return descriptions_.value(key);}return QSqlTableModel::headerData(section,orientation,role);
+}
 QVariant AccessTableModel::data(const QModelIndex& index,int role) const {
+    if(index.isValid() && role==Qt::StatusTipRole) {const auto key=record().fieldName(index.column()).toCaseFolded();if(descriptions_.contains(key)) return descriptions_.value(key);}
     if(index.isValid() && columnType(index.column()).contains("BOOL",Qt::CaseInsensitive)) {
         if(role==Qt::CheckStateRole) {
             const auto value=QSqlTableModel::data(index,Qt::EditRole);

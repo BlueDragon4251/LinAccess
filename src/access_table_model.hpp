@@ -29,6 +29,7 @@ public:
     bool isReadOnly() const { return readOnly_; }
     void sort(int column,Qt::SortOrder order=Qt::AscendingOrder) override;
     void protectNextSort() { protectSort_=true; }
+    QVariant headerData(int section,Qt::Orientation orientation,int role=Qt::DisplayRole) const override;
     QVariant data(const QModelIndex& index,int role=Qt::DisplayRole) const override;
     Qt::ItemFlags flags(const QModelIndex& index) const override;
     bool setData(const QModelIndex& index,const QVariant& value,int role=Qt::EditRole) override;
@@ -46,7 +47,7 @@ private:
     QString columnType(int column) const;
     QVector<QPersistentModelIndex> rowAnchors(const QSet<int>& rows) const;
     QSet<int> anchoredRows(const QVector<QPersistentModelIndex>& anchors) const;
-    QMap<QString,QString> types_;
+    QMap<QString,QString> types_,captions_,descriptions_;
     QSet<QString> generated_;
     int metadataError_{};
     int sortColumn_{-1};
