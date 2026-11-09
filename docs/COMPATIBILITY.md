@@ -5601,3 +5601,20 @@ F042/F043 und Katalog456/386/70 unverändert; jetzt Paket aktualisieren und dana
 parameterlose Prozedur-/Property-Deklarationen ohne Klammern implementieren.
 Kein Zwischenabschluss. Letzte geprüfteDEB0e4f084 liegt vor Debug.Print/Properties/
 statischen Prozeduren; Original-/Fixture-Hashes7/7 zuvor unverändert nachgewiesen.
+
+
+Parameterlose Sub-/Function-/Property-Get-Deklarationen ohne Klammern sind jetzt
+im echten Interpreter und Modul-Inventar unterstützt, einschließlich typisierter/
+Variant-Getter und Initial-/Trailing-Static. Norm MS-VBAL5.3.1; ursprüngliche
+Quellidentität bleibt erhalten. Parameter ohne erforderliche Klammern, typisierte
+Sub-/Setter-Rückgaben und Setter ohne Wertparameter verweigern vor Effekten.
+Anwendung gebaut; erstes bestehendes Kern-/GUI-Bündel2/2 (15,90s) bestanden;
+keine neuen CTests, Originalinventar32/0 Headerkandidaten, kein neuer Original-/
+Windows-/Gesamtsuitennachweis. Details NATIVE_VBA_PROPERTIES.md.
+Vorstufe statische Prozeduren46297bf veröffentlicht, Remote-Baum/privat verifiziert.
+Dazu neueDEB /workspace/work/native-language-package/package/linaccess-0.7.0-Linux.deb
+mit scripts/check-deb.sh geprüft: BuildID identisch, MDBTools1.0.1/SQLite3.54.1,
+Payload/öffentliche Rechte/keine Fixtures. Paket liegt vor klammerlosen Deklarationen.
+F040/F042/F043 und fester Katalog456/386/70 unverändert. Anschließend implizite
+lokale Variablen auch in gewöhnlichen Prozeduren ergänzen (frisch proAufruf,
+OptionExplicit und Typgrenzen beachten), gezielt prüfen und ohne Abschluss weiter.

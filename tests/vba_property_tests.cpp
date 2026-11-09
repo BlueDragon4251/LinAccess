@@ -1,6 +1,7 @@
 #include "vba_expression.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_property_fixture.hpp"
+#include "vba_parameterless_fixture.hpp"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -33,4 +34,14 @@ void testVbaProperties(){using namespace linaccess;PropertyHost host,other;
     result=executeVbaProperty(early,"Early",VbaPropertyAccess::Get,host,arguments);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==3);
     bool rejected=false;try{(void)nativeVbaPropertySignature("Property Get Bad(ByRef index As Long) As Long\nBad=index\nEnd Property","Bad",VbaPropertyAccess::Get);}catch(const VbaRuntimeError& e){rejected=e.number==3251;}assert(rejected);
     rejected=false;try{(void)nativeVbaPropertySignature(early+early,"Early",VbaPropertyAccess::Get);}catch(const VbaRuntimeError& e){rejected=e.number==5;}assert(rejected && host.effects==0);
+
+    result=executeVbaProcedure(nativeParameterlessFixture,"Answer",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==1);
+    result=executeVbaProcedure(nativeParameterlessFixture,"CallBare",host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==2);
+    arguments.clear();result=executeVbaProperty(nativeParameterlessFixture,"Value",VbaPropertyAccess::Get,host,arguments);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==2);
+    result=executeVbaProperty(nativeParameterlessFixture,"EmptyValue",VbaPropertyAccess::Get,host,arguments);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Empty);
+    for(int call=1;call<=2;++call){for(const auto* name:{"Counter","TailCounter"}) {result=executeVbaProcedure(nativeParameterlessFixture,name,host);assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==call);}}
+    const auto bareInventory=analyzeVba(nativeParameterlessFixture);bool valueListed=false,tailListed=false;for(const auto& declaration:bareInventory.procedures){valueListed|=vbaProcedureExecutionName(declaration)=="property get Value";tailListed|=declaration.name=="TailCounter";}assert(valueListed && tailListed);
+    result=executeVbaProcedure("Function Bad value As Long\nMsgBox \"unreached\"\nEnd Function","Bad",host);assert(result.status==VbaExecutionStatus::Unsupported && host.effects==0);
+    result=executeVbaProcedure("Sub Bad As Long\nMsgBox \"unreached\"\nEnd Sub","Bad",host);assert(result.status==VbaExecutionStatus::Unsupported && host.effects==0);
+    const auto invalidSetter=validateVbaProcedure("Property Let Broken\nMsgBox \"unreached\"\nEnd Property","property let Broken");assert(invalidSetter.status==VbaExecutionStatus::Unsupported && invalidSetter.errorNumber==3251);
 }

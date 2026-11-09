@@ -609,7 +609,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         const auto prefix=std::string("property ")+kind+" ";
         if(selector.starts_with(prefix)) {accessor=kind;requestedName=std::string(name.substr(prefix.size()));break;}
     }
-    const std::regex propertyBegin(R"(^\s*(?:(Public|Private|Friend)\s+)?(?:Static\s+)?Property\s+(Get|Let|Set)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*(\(.*)$)",std::regex::icase);
+    const std::regex propertyBegin(R"(^\s*(?:(Public|Private|Friend)\s+)?(?:Static\s+)?Property\s+(Get|Let|Set)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*(.*)$)",std::regex::icase);
     std::string activeSource;
     try {activeSource=preprocessVbaConditional(module);module=activeSource;}
     catch(const VbaConditionalError& error) {VbaExecutionResult result{VbaExecutionStatus::Unsupported,error.what(),error.line};result.errorNumber=error.number;return result;}
@@ -618,7 +618,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Module constant declaration unsupported",0}; result.errorNumber=error.number; return result; }
     std::unordered_set<std::string> localConstants;
     const std::regex begin(
-        R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*\(\s*(.*?)\s*\)\s*(?:As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?))?\s*$)",
+        R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*(?:\(\s*(.*?)\s*\))?\s*(?:As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?))?\s*$)",
         std::regex::icase);
     const std::regex anyBegin(
         R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\(.*\))?.*$)",
@@ -758,7 +758,10 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
         if(!accessor.empty()) {
             if(!within) {
                 if(!std::regex_match(source,match,propertyBegin) || lower(match[2].str())!=accessor || lower(match[3].str())!=lower(requestedName)) continue;
-                source=(match[1].matched ? match[1].str()+" " : "")+(accessor=="get" ? "Function " : "Sub ")+match[3].str()+match[4].str();
+                const auto visibility=match[1].matched ? match[1].str()+" " : "";
+                const auto propertyName=match[3].str();auto tail=trim(match[4].str());
+                if(accessor=="get" && !tail.starts_with('(')) tail="()"+(tail.empty() ? std::string{} : " "+tail);
+                source=visibility+(accessor=="get" ? "Function " : "Sub ")+propertyName+(tail.starts_with('(') ? "" : " ")+tail;
             } else {
                 static const std::regex propertyEnd(R"(^End\s+Property$)",std::regex::icase);
                 static const std::regex propertyExit(R"(^Exit\s+Property$)",std::regex::icase);
@@ -827,6 +830,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 within = true;
                 isFunction = lower(match[1].str()) == "function";
                 const auto declaredResult=nativeDeclaredType(lower(match[4].str()));
+                if(!isFunction && !declaredResult.empty()) return {VbaExecutionStatus::Unsupported,"Sub and Property setters cannot declare a result type",line};
                 if (isFunction && !declaredResult.empty() && declaredResult!="variant" && declaredResult!="boolean" && declaredResult!="string" && declaredResult!="integer" && declaredResult!="long" && declaredResult!="single" && declaredResult!="double" && declaredResult!="currency" && declaredResult!="date" && declaredResult!="byte" && declaredResult!="object" && declaredResult!="collection" && nativeScriptingObjectType(declaredResult).empty() && !nativeDaoType(declaredResult) && nativeAccessObjectType(declaredResult).empty())
                     return {VbaExecutionStatus::Unsupported,"Function result type unsupported",line};
                 if (resultType) *resultType=declaredResult;
@@ -1537,7 +1541,7 @@ std::string propertySelector(std::string_view name,VbaPropertyAccess access) {
 std::optional<VbaArgumentSignature> nativeVbaPropertySignature(std::string_view module,std::string_view name,VbaPropertyAccess access,bool publicOnly) {
     if(module.size()>1024*1024) throw VbaRuntimeError(3035,"Property module exceeds one MiB");
     const auto active=preprocessVbaConditional(module);
-    static const std::regex header(R"(^\s*(?:(Public|Private|Friend)\s+)?(?:Static\s+)?Property\s+(Get|Let|Set)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?=\s|\())",std::regex::icase);
+    static const std::regex header(R"(^\s*(?:(Public|Private|Friend)\s+)?(?:Static\s+)?Property\s+(Get|Let|Set)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?=\s|\(|$))",std::regex::icase);
     const auto kind=access==VbaPropertyAccess::Get ? "get" : access==VbaPropertyAccess::Let ? "let" : "set";
     std::istringstream source(active);std::string line;bool found=false,visible=false;
     std::unordered_set<std::string> accessors;
