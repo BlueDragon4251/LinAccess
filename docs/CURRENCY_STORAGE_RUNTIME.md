@@ -27,3 +27,16 @@ is recorded in PROGRESS.md. Original business execution coverage is unchanged.
 Full mixed numeric promotion/literal types, arrays/classes, Currency loops,
 object-default/Variant/reference/locale/compiler/error timing and complete SQL/
 DAO/MDB Currency storage semantics remain open. Len storage identity is not added.
+
+
+Declared Currency For/Next counters now use exact signed64 ticks for the start,
+frozen end/step and checked increment. Positive/negative four-decimal steps,
+full-range boundaries, zero iterations, explicit zero step with Exit For,
+body-written counters and the final post-loop value retain Currency kind.
+Increment overflow raises6 before replacing the prior counter. Existing structured
+loop stacks, Exit For and error recovery remain shared; no Double conversion is
+used for this counter family. The existing execution budget still bounds zero-
+step loops. Core/DAO checked together2/2 (3.99s), application built. Actual Access
+2003 loop-oracle coverage, mixed Variant counter promotion and complete numeric
+For/Next semantics remain open; no full parity assertion. Existing F041/F043/F045/
+F105 only, fixed456/384/72 unchanged. Continue implementation without a final.

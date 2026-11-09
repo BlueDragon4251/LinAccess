@@ -1709,6 +1709,8 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         std::string arrayRoot;
         std::shared_ptr<void> enumerationLease;
         std::shared_ptr<VbaObject> enumerationSource;
+        bool currencyCounter{};
+        VbaValue currencyEnd,currencyStep;
     };
     std::vector<Frame> frames;
     std::vector<LoopFrame> loops;
@@ -1901,7 +1903,7 @@ static VbaExecutionResult executeProcedure(std::string_view module,
         }
         const auto type=variableType(lower(instruction.argument));
         if(((instruction.type==Statement::Type::ForEach || instruction.type==Statement::Type::ObjectSet) && (scalarType(type) || type=="paramarray"))
-            || (instruction.type==Statement::Type::For && (type.ends_with("()") || type=="boolean" || type=="string" || type=="single" || type=="currency" || type=="date" || type=="byte" || objectType(type)))) {
+            || (instruction.type==Statement::Type::For && (type.ends_with("()") || type=="boolean" || type=="string" || type=="single" || type=="date" || type=="byte" || objectType(type)))) {
             VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"Declared variable type is unsupported for this loop/object target",instruction.line}; failure.errorNumber=3251; return failure;
         }
     }
@@ -2711,13 +2713,29 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                     ip = static_cast<std::size_t>(instruction.partner);
                     break;
                 }
+                const auto counter=lower(instruction.argument),type=variableType(counter);
+                if(type=="currency") {
+                    const auto initial=convertCurrency(scalarVbaValue(evaluate(instruction.expression)));
+                    const auto end=convertCurrency(scalarVbaValue(evaluate(instruction.endExpression)));
+                    const auto step=convertCurrency(scalarVbaValue(evaluate(instruction.stepExpression)));
+                    assignVariable(counter,initial);
+                    if((step.currencyUnits>=0 && initial.currencyUnits>end.currencyUnits)
+                        || (step.currencyUnits<0 && initial.currencyUnits<end.currencyUnits)) {
+                        ip=static_cast<std::size_t>(instruction.partner);
+                    } else {
+                        LoopFrame loop{static_cast<int>(ip)};
+                        loop.currencyCounter=true;loop.currencyEnd=end;loop.currencyStep=step;
+                        loop.frameDepth=frames.size();loop.withDepth=withFrames.size();
+                        loops.push_back(std::move(loop));
+                    }
+                    break;
+                }
                 const auto initial = evaluate(instruction.expression).asNumber();
                 const auto end = evaluate(instruction.endExpression).asNumber();
                 const auto step = evaluate(instruction.stepExpression).asNumber();
                 if (!std::isfinite(initial) || !std::isfinite(end)
                     || !std::isfinite(step) || step == 0)
                     throw std::runtime_error("Ungültige For-Schrittweite/Grenze");
-                const auto counter=lower(instruction.argument),type=variableType(counter);
                 if(integralType(type)) {
                     if(std::floor(initial)!=initial || std::floor(end)!=end || std::floor(step)!=step)
                         throw VbaRuntimeError(3251,"Fractional typed For limits and steps are not implemented");
@@ -2756,6 +2774,16 @@ static VbaExecutionResult executeProcedure(std::string_view module,
                         assignVariable(name,loop.items[loop.itemIndex]);
                         ip = static_cast<std::size_t>(loop.forIndex);
                     } else loops.pop_back();
+                    break;
+                }
+                if(loops.back().currencyCounter) {
+                    const auto next=currencyBinary("+",convertCurrency(scalarVbaValue(locals.at(name))),loops.back().currencyStep);
+                    assignVariable(name,next);
+                    const auto& loop=loops.back();
+                    if((loop.currencyStep.currencyUnits>=0 && next.currencyUnits<=loop.currencyEnd.currencyUnits)
+                        || (loop.currencyStep.currencyUnits<0 && next.currencyUnits>=loop.currencyEnd.currencyUnits))
+                        ip=static_cast<std::size_t>(loop.forIndex);
+                    else loops.pop_back();
                     break;
                 }
                 const auto nextValue = locals[name].asNumber() + loops.back().step;

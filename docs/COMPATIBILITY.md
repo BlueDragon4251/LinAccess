@@ -3727,3 +3727,16 @@ Registrierung, kein neuer Katalogpunkt, keine native Currency-Felderstellung
 oder allgemeine exakte Currency-SQL-Parität behauptet. 456/384/72 unverändert.
 Details: CURRENCY_PARAMETERS_RUNTIME.md. Fortlaufend allgemeine native
 Datenbank-/VBA-Anforderungen umsetzen; kein freiwilliger Zwischenabschluss.
+
+
+Declared Currency For/Next counters now use exact signed64 ticks for the start,
+frozen end/step and checked increment. Positive/negative four-decimal steps,
+full-range boundaries, zero iterations, explicit zero step with Exit For,
+body-written counters and the final post-loop value retain Currency kind.
+Increment overflow raises6 before replacing the prior counter. Existing structured
+loop stacks, Exit For and error recovery remain shared; no Double conversion is
+used for this counter family. The existing execution budget still bounds zero-
+step loops. Core/DAO checked together2/2 (3.99s), application built. Actual Access
+2003 loop-oracle coverage, mixed Variant counter promotion and complete numeric
+For/Next semantics remain open; no full parity assertion. Existing F041/F043/F045/
+F105 only, fixed456/384/72 unchanged. Continue implementation without a final.

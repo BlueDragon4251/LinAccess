@@ -336,6 +336,65 @@ void testCharacterFunctions() {
     }
 }
 
+void testCurrencyForLoops() {
+    using namespace linaccess;
+    FakeForm host;
+    const std::string module=R"VBA(Public upper As Currency
+Public stride As Currency
+Function CurrencyLoops() As String
+Dim value As Currency
+Dim count As Long
+Dim total As Currency
+upper=CCur("922337203685477.5806")
+stride=CCur("0.0001")
+For value=CCur("922337203685477.5804") To upper Step stride
+count=count+1
+upper=0
+stride=100
+Next value
+CurrencyLoops=CStr(count)&":"&CStr(value)&":"&CStr(VarType(value))
+count=0
+For value=CCur("-922337203685477.5805") To CCur("-922337203685477.5807") Step CCur("-0.0001")
+count=count+1
+Next value
+CurrencyLoops=CurrencyLoops&":"&CStr(count)&":"&CStr(value)
+For value=CCur("0.0003") To CCur("0.0001") Step CCur("0.0001")
+Me!Unexpected="entered"
+Next value
+CurrencyLoops=CurrencyLoops&":"&CStr(value)
+For value=1 To 2 Step 0
+Exit For
+Next value
+CurrencyLoops=CurrencyLoops&":"&CStr(value)
+For value=CCur("0.0001") To CCur("0.0003") Step CCur("0.0001")
+total=total+value
+Next value
+CurrencyLoops=CurrencyLoops&":"&CStr(total)&":"&CStr(value)
+End Function
+Function CurrencyLoopOverflow() As String
+Dim value As Currency
+On Error Resume Next
+For value=CCur("922337203685477.5807") To CCur("922337203685477.5807") Step CCur("0.0001")
+Next value
+CurrencyLoopOverflow=CStr(Err.Number)&":"&CStr(value)
+End Function
+Function CurrencyLoopBodyWrite() As Currency
+Dim value As Currency
+For value=1 To 3
+value=3
+Next value
+CurrencyLoopBodyWrite=value
+End Function
+)VBA";
+    auto result=executeVbaProcedure(module,"CurrencyLoops",host);
+    assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="3:922337203685477.5807:6:3:-922337203685477.5808:0.0003:1:0.0006:0.0004");
+    assert(!host.fields.contains("Unexpected"));
+    result=executeVbaProcedure(module,"CurrencyLoopOverflow",host);
+    assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->asText()=="6:922337203685477.5807");
+    result=executeVbaProcedure(module,"CurrencyLoopBodyWrite",host);
+    assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->kind==VbaValue::Kind::Currency && result.typedReturnValue->currencyUnits==40000);
+}
+
 void testCurrencyRealStorage() {
     using namespace linaccess;
     constexpr std::int64_t limit=5497558138880000LL;
@@ -857,6 +916,7 @@ End Sub
     testNativeCollection();
     testCalendarFunctions();
     testCurrencyRealStorage();
+    testCurrencyForLoops();
     testIsObjectFunction();
     testStringResultTypes();
     testReplaceFunction();
