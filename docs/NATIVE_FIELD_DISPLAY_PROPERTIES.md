@@ -59,8 +59,9 @@ same checked detached/attached DAO Property objects and persistent identities.
 CreateProperty/Append/Item/Value/Delete use the existing type, ownership, lifetime,
 read-only and generation checks. Rename/rebuild preserve the property. The field
 designer edits the mask beside Caption and Description; an empty designer mask
-removes this custom property. Imported Format properties remain unproven and
-explicitly refuse3251; they are not inferred absent from caption provenance.
+removes this custom property. Legacy imported Format properties without a separate proof marker refuse3251;
+they are not inferred absent from caption provenance. New Jet4 import support is
+documented in SOURCE_FIELD_DISPLAY_PROPERTIES.md.
 
 Native numeric/date/text table display applies nonempty masks through the shared
 native formatter. EditRole and SQL values retain their existing unformatted
@@ -72,7 +73,7 @@ snapshot preparation. Null remains blank and Boolean checkbox display is retaine
 Unsupported masks are preserved as metadata with explicit rendering failure.
 
 This scope covers owned native table fields and editable table-backed models.
-Original MDB field Format extraction, query/view format lineage, automatic
+Full Jet3/ACE field Format extraction, query/view format lineage, automatic
 form/report-control inheritance, DecimalPlaces, complete string/scientific masks
 and Access 2003 display/printing parity remain open. No original files are edited.
 

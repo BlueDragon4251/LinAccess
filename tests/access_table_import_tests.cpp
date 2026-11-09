@@ -10,6 +10,7 @@
 #include "dao_database.hpp"
 #include "native_schema_editor.hpp"
 #include <QCoreApplication>
+#include <QLocale>
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
@@ -356,6 +357,37 @@ void verifyJetFieldConstraintReference(const QString& path) {
     execute("INSERT INTO constraint_probe(text_required,text_optional,memo) VALUES ('y',NULL,NULL)",0);
     assert(query.exec("SELECT COUNT(*) FROM constraint_probe") && query.next() && query.value(0).toInt()==2);query.finish();
     auto bad=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();auto entries=bad.value("field_properties").toArray();auto entry=entries[0].toObject();entry.insert("required","yes");entries[0]=entry;bad.insert("field_properties",entries);bool refused=false;try {(void)checkedAccessSourceFieldDisplayProperties(QJsonDocument(bad).toJson(),names);}catch(const std::exception&) {refused=true;}assert(refused && digest()==before);
+}
+
+void verifyJetFieldFormatReference(const QString& path) {
+    using namespace linaccess;
+    const auto digest=[&] {QFile source(path);assert(source.open(QIODevice::ReadOnly));return QCryptographicHash::hash(source.readAll(),QCryptographicHash::Sha256);};
+    const auto before=digest();
+    const auto schema=parseMdbSchema(AccessCatalog(path).tableSchema("format_probe"));const QStringList names{"amount","moment","plain"};
+    const auto properties=checkedAccessSourceFieldDisplayProperties(schema.sourceIndexMetadata,names);
+    assert(properties && properties->size()==3 && properties->value("amount").format==QString("0.00") && properties->value("moment").format==QString("yyyy-mm-dd"));
+    for(const auto& field:*properties) assert(field.formatProven);
+    assert(!properties->value("plain").format);
+    auto db=QSqlDatabase::addDatabase("QSQLITE","jet-field-format-reference");db.setDatabaseName(":memory:");assert(db.open());
+    QSqlQuery query(db);assert(query.exec("CREATE TABLE _la_import_log(source_file,kind,name,status,details)"));query.finish();assert(importAccessDatabase(db,path)==1);
+    const auto display=nativeTableFieldDisplayProperties(db,"format_probe");assert(display.value("amount").format==QString("0.00") && !display.value("amount").nativeOwned);
+    auto table=makeDaoDatabase(db)->member("TableDefs",{VbaValue::string("format_probe")}).object;
+    auto format=table->member("Fields",{VbaValue::string("amount")}).object->member("Properties",{VbaValue::string("Format")}).object;
+    assert(format->member("Type",{}).asNumber()==10 && format->scalarValue().asText()=="0.00");
+    int error=0;try {format->assign("Value",VbaValue::string("0"));}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==383);
+    error=0;try {(void)table->member("Fields",{VbaValue::string("plain")}).object->member("Properties",{VbaValue::string("Format")});}catch(const VbaRuntimeError& failure) {error=failure.number;}assert(error==3270);
+    // Actual source has zero rows; only the imported disposable copy gets probe values.
+    assert(query.exec("INSERT INTO format_probe VALUES(1.25,'2003-12-31 18:05:06','technical')"));query.finish();
+    AccessTableModel model(nullptr,db);model.setTable("format_probe");assert(model.select() && model.rowCount()==1);
+    assert(model.data(model.index(0,0)).toString()==QLocale().toString(1.25,'f',2) && model.data(model.index(0,1)).toString()=="2003-12-31");
+    assert(model.data(model.index(0,0),Qt::EditRole).toDouble()==1.25 && model.clipboardText(model.index(0,0))=="1.25");
+    auto root=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();auto fields=root.value("field_properties").toArray();
+    auto invalid=fields[0].toObject();invalid.insert("format_proven","yes");fields[0]=invalid;root.insert("field_properties",fields);
+    bool refused=false;try {(void)checkedAccessSourceFieldDisplayProperties(QJsonDocument(root).toJson(),names);}catch(const std::exception&) {refused=true;}assert(refused);
+    root=QJsonDocument::fromJson(schema.sourceIndexMetadata).object();fields=root.value("field_properties").toArray();
+    for(int index=0;index<fields.size();++index) {auto field=fields[index].toObject();field.remove("format");field.remove("format_proven");fields[index]=field;}
+    root.insert("field_properties",fields);const auto legacy=checkedAccessSourceFieldDisplayProperties(QJsonDocument(root).toJson(),names);assert(legacy && !legacy->value("amount").formatProven && !legacy->value("amount").format);
+    assert(digest()==before);
 }
 
 void verifyJetFieldDisplayReference(const QString& path) {
@@ -758,6 +790,7 @@ CREATE INDEX `label` ON `source` (`a``b`);
     for(const auto* malformed:{"0","0x00","GG","00 1","00\n00"}) {
         bool rejected=false; try { (void)decodeMdbBinaryHex(malformed); } catch(const std::exception&) { rejected=true; } assert(rejected);
     }
+    const auto fieldFormatReference=qEnvironmentVariable("LINACCESS_JET_FIELD_FORMAT_REFERENCE");if(!fieldFormatReference.isEmpty()) verifyJetFieldFormatReference(fieldFormatReference);
     const auto fieldConstraintReference=qEnvironmentVariable("LINACCESS_JET_FIELD_CONSTRAINT_REFERENCE");if(!fieldConstraintReference.isEmpty()) verifyJetFieldConstraintReference(fieldConstraintReference);
     const auto fieldDisplayReference=qEnvironmentVariable("LINACCESS_JET_FIELD_DISPLAY_REFERENCE");if(!fieldDisplayReference.isEmpty()) verifyJetFieldDisplayReference(fieldDisplayReference);
     const auto counterReference=qEnvironmentVariable("LINACCESS_JET_COUNTER_STATE_REFERENCE"); if(!counterReference.isEmpty()) verifyJetCounterStateReference(counterReference);

@@ -3780,3 +3780,19 @@ gebaut. Originale Format-Eigenschaften werden noch nicht als bekannt behandelt
 (3251 statt erfundener Abwesenheit); Query-Lineage und Formular-/Berichtserbung
 bleiben offen. NATIVE_FIELD_DISPLAY_PROPERTIES.md;456/384/72 unverändert.
 Direkt als Nächstes proveniente Jet4-Formatübernahme mit technischer MDB prüfen.
+
+Jet4-Format-Eigenschaften werden jetzt durch die bestehende schreibgeschützte
+MDBTools-Grenze gelesen und mit eigener expliziter Format-Provenienz importiert.
+DAO liest vorhandene Werte readonly383 bzw. meldet nachgewiesene Abwesenheit3270;
+alte Metadaten ohne neue Format-Provenienz bleiben unbekannt3251. Datenblatt-
+Formatierung verwendet diese tatsächlich gelesenen Masken, ohne Bearbeitungs-
+oder SQL-Werte zu verändern. Die neue reine Entwicklungs-Javaquelle erzeugt eine
+unabhängig wieder geöffnete technische Jet4-MDB mit null Zeilen/ohne VBA; nur die
+importierte SQLite-Testkopie erhält Zahlen-/Datumsprüfwerte. Bestehende Import-/
+DAO-Ziele gemeinsam2/2 (2,70s), zusätzlich frühere Caption-/Required-/AllowZeroLength-
+Referenzdateien im selben Importziel; Herkunft, Typen, readonly, bekannte Abwesenheit,
+Legacy unbekannt, ungültige Provenienz, Anzeige/Edit/Copy und unveränderter MDB-Hash
+geprüft. App/Helper gebaut; vier Fixture-Hashes und drei Upload-Originalhashes OK.
+Keine MDB oder Java-Abhängigkeit ins Produkt/Git übernommen. Keine Windows-
+Render-/Vollparität;456/384/72 unverändert. SOURCE_FIELD_DISPLAY_PROPERTIES.md.
+Kontinuierlich weitere allgemeine Datenbank-/VBA-Anforderungen umsetzen.

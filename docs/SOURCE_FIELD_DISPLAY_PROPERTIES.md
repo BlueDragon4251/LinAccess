@@ -56,3 +56,25 @@ records/VBA and refuses replacement. Set LINACCESS_JET_FIELD_CONSTRAINT_REFERENC
 to its generated field-constraints-probe.mdb for the existing import target.
 Full property blobs, source mutations, validation expressions, collation and
 Access2003 runtime equivalence remain separate unproven requirements.
+
+
+## Proven Jet4 Format
+
+New helper field-property entries carry format_proven=true after actual Jet4
+Format lookup. Present strings and proven absence travel separately from the
+existing caption/description provenance. Older responses lacking this marker
+remain unknown for Format; a Format value without its proof marker is refused.
+The import stores the mask, dedicated proof and a persistent property identity.
+DAO exposes the proven property readonly (383), missing proven Format3270 and
+legacy unknown Format3251. Existing table formatting uses the actual source mask;
+SQL/EditRole/clipboard values retain their established representation. Unsupported
+render masks remain preserved metadata and refuse formatted output explicitly.
+
+JetFieldFormatReference.java creates/reopens an actual zero-row Jet4 technical
+MDB with numeric/date masks and a third field without Format. It contains no VBA
+or business records; SQLite probe values are added only to the disposable import.
+Set LINACCESS_JET_FIELD_FORMAT_REFERENCE to field-format-probe.mdb in the existing
+table_import_contracts target. No generated MDB or Java runtime is shipped.
+Import/DAO2/2 (2.70s), app/helper built; previous display/constraint technical MDBs
+were included in the same import invocation. Four fixture and three upload hashes
+pass. This proves the stated property transport, not Access2003 rendering parity.
