@@ -6462,3 +6462,23 @@ Prüfungen gemeinsam2/2 (6,35s), App gebaut: leere Tabelle, Anfügen ohne Übers
 SQL-Persistenz und tatsächlicher Hauptfenster-Dispatcher geprüft. F340 bleibt wegen
 weiterer MIME-/Regional-/Undo-/Entwurfsszenarien offen. CLIPBOARD_APPEND_RUNTIME.md;
 456/384/72 unverändert. Direkt weitere Clipboard-Teilanforderungen umsetzen.
+
+Native Tabellen-Zwischenablage überträgt jetzt zusätzlich zum TSV eine typisierte,
+begrenzte Rechteck-MIME. NULL, leerer Text, leere Binärwerte, Binärbytes, volle
+SQLite-64-Bit-Ganzzahlen und vorhandene Currency-/Datumsdarstellung bleiben getrennt.
+Binärdaten werden nur über validierte native Nutzdaten in Binärspalten geschrieben;
+Text-/AutoWert-/Readonly-/verdeckte Zielgrenzen bleiben geschützt. Fehlerhafte MIME
+wird nicht still als TSV interpretiert. Tabellen ohne SQL-Defaults benötigen keine
+unnötige DAO-Rekonstruktion ihrer BIGINT-/BLOB-Felder. Für einen unveränderten
+ungespeicherten Einfügebereich bestehen jetzt gemeinsame Strg+Z/Y-, Bearbeiten-Menü-
+und Undo/Redo(292/199)-Wege; gespeicherte Date-Defaults werden beim Redo übernommen.
+Spätere Fremdänderung, Requery oder erfolgreicher Save verwirft den Bereichsverlauf.
+Vorhandene GUI/Feld/DAO gemeinsam3/3 (8,59s), App gebaut. Echte SQL-/Qt-Nachweise für
+Bytes inklusive leerem BLOB, NULL/leer, benachbarte große Ganzzahlen, datumhaltige
+Bereiche, Anfügen, leere Tabelle, Undo/Redo und Verlaufverfall; ungültige MIME,
+AutoWert und verdeckte Ziele verweigert. Zwei veraltete Binär-Copy-Negativannahmen
+angepasst; Qt-interner Schreibschutz während geprüfter Binärübernahme begrenzt
+freigegeben, außerhalb weiterhin wirksam. Keine neue CTest-ID oder Windows-
+Beobachtung. Kein VBA-Binary-Variant, keine allgemeine SQL-Rücknahme; Einfügen über
+fremde Entwürfe, volle Regional-/Access-/MIME-Gleichheit bleiben offen. F340/F168/
+F016 unverändert; TYPED_GRID_CLIPBOARD.md;456/384/72 unverändert. Direkt weiter.

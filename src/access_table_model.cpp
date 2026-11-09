@@ -36,8 +36,11 @@ QString editMessage(int number) {
 }
 AccessTableModel::AccessTableModel(QObject* parent,QSqlDatabase database):QSqlTableModel(parent,database) {
     connect(this,&QAbstractItemModel::dataChanged,this,[this](const QModelIndex& first,const QModelIndex& last) {
+        if(!blockMutation_) blockHistory_.reset();
         if(editStrategy()==OnManualSubmit) for(int row=first.row();row<=last.row();++row) dirtyRows_.insert(row);
     });
+    connect(this,&QAbstractItemModel::rowsInserted,this,[this] {if(!blockMutation_) blockHistory_.reset();});
+    connect(this,&QAbstractItemModel::rowsRemoved,this,[this] {if(!blockMutation_) blockHistory_.reset();});
 }
 bool AccessTableModel::rejectEdit(int number,const QString& message) {
     setLastError(QSqlError("LinAccess",message,QSqlError::StatementError,QString::number(number)));
@@ -51,17 +54,17 @@ bool AccessTableModel::refreshTypes() {
 }
 void AccessTableModel::setTable(const QString& table) {
     if(saving_) { (void)reject(2501); return; }
-    dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear(); QSqlTableModel::setTable(table); (void)refreshTypes();
+    blockHistory_.reset();dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear(); QSqlTableModel::setTable(table); (void)refreshTypes();
 }
 bool AccessTableModel::select() {
     if(saving_) return reject(2501);
-    const bool result=refreshTypes() && QSqlTableModel::select();
+    blockHistory_.reset();const bool result=refreshTypes() && QSqlTableModel::select();
     if(result) { dirtyRows_.clear(); deletedRows_.clear(); }
     return result;
 }
 void AccessTableModel::clear() {
     if(saving_) { (void)reject(2501); return; }
-    QSqlTableModel::clear();captions_.clear();descriptions_.clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
+    blockHistory_.reset();QSqlTableModel::clear();captions_.clear();descriptions_.clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
 }
 QVector<QPersistentModelIndex> AccessTableModel::rowAnchors(const QSet<int>& rows) const {
     QVector<QPersistentModelIndex> result; result.reserve(rows.size());
@@ -72,6 +75,7 @@ QSet<int> AccessTableModel::anchoredRows(const QVector<QPersistentModelIndex>& a
     QSet<int> result; for(const auto& anchor:anchors) if(anchor.isValid()) result.insert(anchor.row()); return result;
 }
 void AccessTableModel::revertRow(int row) {
+    if(!blockMutation_) blockHistory_.reset();
     if(saving_) { (void)reject(2501); return; }
     const QScopedValueRollback<bool> changing(changing_,true);
     auto dirty=dirtyRows_,deleted=deletedRows_; dirty.remove(row); deleted.remove(row);
@@ -330,7 +334,7 @@ Qt::ItemFlags AccessTableModel::flags(const QModelIndex& index) const {
     auto result=QSqlTableModel::flags(index); if(!index.isValid()) return result;
     if(readOnly_) return result & ~(Qt::ItemIsEditable|Qt::ItemIsUserCheckable);
     const auto type=columnType(index.column());
-    if(metadataError_ || generated_.contains(record().fieldName(index.column()).toCaseFolded()) || type.contains("BLOB",Qt::CaseInsensitive)) return result & ~Qt::ItemIsEditable;
+    if(metadataError_ || generated_.contains(record().fieldName(index.column()).toCaseFolded()) || (type.contains("BLOB",Qt::CaseInsensitive) && !binaryWriting_)) return result & ~Qt::ItemIsEditable;
     if(type.contains("BOOL",Qt::CaseInsensitive)) result |= Qt::ItemIsUserCheckable;
     if(checkedDisplay(type)) {
         try { (void)qtFieldValue(QSqlTableModel::data(index,Qt::EditRole),type); }
@@ -378,15 +382,25 @@ bool AccessTableModel::setDataBlock(const QModelIndex& first,const QVector<QVect
     if(!first.isValid() || first.model()!=this) return reject(5);
     return setDataBlock(first.row(),first.column(),values);
 }
-bool AccessTableModel::isPasteColumn(int column) const {
+bool AccessTableModel::isPasteColumn(int column,bool binary) const {
     return !readOnly_ && !metadataError_ && column>=0 && column<columnCount()
         && !generated_.contains(record().fieldName(column).toCaseFolded())
-        && !columnType(column).contains("BLOB",Qt::CaseInsensitive);
+        && (binary || !columnType(column).contains("BLOB",Qt::CaseInsensitive));
 }
 bool AccessTableModel::setDataBlock(int firstRow,int firstColumn,const QVector<QVector<QString>>& values) {
+    QVector<QVector<QVariant>> prepared;
+    try {for(const auto& row:values) {QVector<QVariant> cells;cells.reserve(row.size());for(const auto& cell:row) cells.push_back(cell);prepared.push_back(std::move(cells));}}
+    catch(const std::bad_alloc&) {return reject(7);}
+    return applyDataBlock(firstRow,firstColumn,prepared,false);
+}
+bool AccessTableModel::setTypedDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values) {
+    return applyDataBlock(firstRow,firstColumn,values,true);
+}
+bool AccessTableModel::applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults) {
     if(saving_ || changing_) return reject(2501);
     if(readOnly_) return reject(2448);
     const QScopedValueRollback<bool> changing(changing_,true);
+    const QScopedValueRollback<bool> blockMutation(blockMutation_,true);
     if(editStrategy()!=QSqlTableModel::OnManualSubmit) return reject(3251);
     if(isDirty()) return reject(2501);
     if(metadataError_) return reject(metadataError_);
@@ -402,22 +416,35 @@ bool AccessTableModel::setDataBlock(int firstRow,int firstColumn,const QVector<Q
     const int originalRows=rowCount();
     const int appended=std::max(0,static_cast<int>(endRow)-originalRows);
     struct Cell { int row,column; QVariant value; };
-    QVector<Cell> checked;QMap<QString,QVariant> dateDefaults;
+    QVector<Cell> checked;QMap<QString,QVariant> dateDefaults;BlockHistory history;
+    history.firstRow=firstRow;history.firstColumn=firstColumn;history.originalRows=originalRows;history.applied=true;
     try {
-        if(appended) dateDefaults=nativeTableDateDefaults(database(),tableName());
+        if(appended) dateDefaults=restoredDefaults ? *restoredDefaults : nativeTableDateDefaults(database(),tableName());
+        history.dateDefaults=dateDefaults;
         checked.reserve(values.size()*columns);
         for(qsizetype row=0;row<values.size();++row) {
             if(values[row].size()!=columns) return reject(5);
+            QVector<QVariant> historyRow;historyRow.reserve(columns);
             for(qsizetype column=0;column<columns;++column) {
                 const int targetRow=firstRow+row,targetColumn=firstColumn+column;
                 const auto type=columnType(targetColumn);
                 if(targetRow<originalRows) {
-                    if(!(flags(index(targetRow,targetColumn))&Qt::ItemIsEditable)) return reject(2448);
-                } else if(generated_.contains(record().fieldName(targetColumn).toCaseFolded()) || type.contains("BLOB",Qt::CaseInsensitive)) return reject(2448);
-                checked.push_back({targetRow,targetColumn,checkedInput(type,values[row][column])});
+                    if(!(flags(index(targetRow,targetColumn))&Qt::ItemIsEditable) && !(typed && type.contains("BLOB",Qt::CaseInsensitive) && isPasteColumn(targetColumn,true))) return reject(2448);
+                } else if(!isPasteColumn(targetColumn,typed)) return reject(2448);
+                const auto input=values[row][column];QVariant converted;
+                if(typed && input.isNull()) converted={};
+                else if(typed && type.contains("BLOB",Qt::CaseInsensitive)) {
+                    if(input.metaType().id()!=QMetaType::QByteArray) return reject(13);
+                    converted=input;
+                } else if(typed && input.metaType().id()==QMetaType::QByteArray) return reject(13);
+                else if(typed && (type=="INTEGER" || type=="INT" || type=="BIGINT") && (input.metaType().id()==QMetaType::LongLong || input.metaType().id()==QMetaType::Int)) converted=input;
+                else if(typed && (input.metaType().id()==QMetaType::Double || input.metaType().id()==QMetaType::Bool)) converted=sqlFieldValue(input.metaType().id()==QMetaType::Bool ? VbaValue::logical(input.toBool()) : VbaValue::numeric(input.toDouble()),type);
+                else converted=checkedInput(type,input);
+                checked.push_back({targetRow,targetColumn,converted});historyRow.push_back(converted);
             }
+            history.values.push_back(std::move(historyRow));
         }
-    } catch(const VbaRuntimeError& error) { return reject(error.number); }
+    } catch(const VbaRuntimeError& error) { return rejectEdit(error.number,QString::fromUtf8(error.what())); }
       catch(const std::bad_alloc&) { return reject(7); }
     int failure=0;
     try {if(appended && !QSqlTableModel::insertRows(originalRows,appended)) failure=3251;}
@@ -425,6 +452,7 @@ bool AccessTableModel::setDataBlock(int firstRow,int firstColumn,const QVector<Q
     catch(const std::exception&) {failure=3251;}
     {
         const QSignalBlocker blocked(this);
+        const QScopedValueRollback<bool> binary(binaryWriting_,typed);
         try {
             if(!failure && appended) for(int row=originalRows;row<endRow;++row) for(auto it=dateDefaults.cbegin();it!=dateDefaults.cend();++it) {
                 const int column=fieldIndex(it.key());
@@ -437,12 +465,34 @@ bool AccessTableModel::setDataBlock(int firstRow,int firstColumn,const QVector<Q
     }
     if(failure) {QSqlTableModel::revertAll();dirtyRows_.clear();deletedRows_.clear();return reject(failure);}
     for(int row=originalRows;row<endRow;++row) dirtyRows_.insert(row);
+    blockHistory_=std::move(history);
     const auto last=index(firstRow+values.size()-1,firstColumn+columns-1);
     if(!failure) setLastError({});
     emit dataChanged(index(firstRow,firstColumn),last,{Qt::DisplayRole,Qt::EditRole,Qt::CheckStateRole});
     emit headerDataChanged(Qt::Vertical,firstRow,last.row());
     if(failure) return reject(failure);
     return true;
+}
+bool AccessTableModel::canUndoBlock() const {
+    return !readOnly_ && !saving_ && !changing_ && blockHistory_ && blockHistory_->applied && isDirty()
+        && rowCount()==qMax<qint64>(blockHistory_->originalRows,static_cast<qint64>(blockHistory_->firstRow)+blockHistory_->values.size());
+}
+bool AccessTableModel::canRedoBlock() const {
+    return !readOnly_ && !saving_ && !changing_ && blockHistory_ && !blockHistory_->applied && !isDirty() && rowCount()==blockHistory_->originalRows;
+}
+bool AccessTableModel::undoBlock() {
+    if(!canUndoBlock()) return rejectEdit(2046,"Kein unveränderter eingefügter Bereich zum Rückgängigmachen vorhanden.");
+    try {
+        auto history=*blockHistory_;
+        const QScopedValueRollback<bool> changing(changing_,true),blockMutation(blockMutation_,true);
+        QSqlTableModel::revertAll();dirtyRows_.clear();deletedRows_.clear();
+        history.applied=false;blockHistory_=std::move(history);setLastError({});return true;
+    } catch(const std::bad_alloc&) {return reject(7);}
+}
+bool AccessTableModel::redoBlock() {
+    if(!canRedoBlock()) return rejectEdit(2046,"Kein eingefügter Bereich zum Wiederherstellen vorhanden.");
+    try {const auto history=*blockHistory_;return applyDataBlock(history.firstRow,history.firstColumn,history.values,true,&history.dateDefaults);}
+    catch(const std::bad_alloc&) {return reject(7);}
 }
 bool AccessTableModel::insertRowIntoTable(const QSqlRecord& row) {
     insertedKey_.clear();

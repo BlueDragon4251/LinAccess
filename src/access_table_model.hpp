@@ -4,6 +4,7 @@
 #include <QSet>
 #include <QVector>
 #include <QPersistentModelIndex>
+#include <optional>
 namespace linaccess {
 class AccessTableModel final : public QSqlTableModel {
     Q_OBJECT
@@ -38,13 +39,19 @@ public:
     bool repeatPreviousValue(const QModelIndex& target);
     bool setDataBlock(const QModelIndex& first,const QVector<QVector<QString>>& values);
     bool setDataBlock(int firstRow,int firstColumn,const QVector<QVector<QString>>& values);
-    bool isPasteColumn(int column) const;
+    bool isPasteColumn(int column,bool binary=false) const;
+    bool setTypedDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values);
+    bool canUndoBlock() const;
+    bool canRedoBlock() const;
+    bool undoBlock();
+    bool redoBlock();
 signals:
     void editRejected(int number,const QString& message);
     void sortRestored(int column,Qt::SortOrder order);
 protected:
     bool insertRowIntoTable(const QSqlRecord& record) override;
 private:
+    bool applyDataBlock(int firstRow,int firstColumn,const QVector<QVector<QVariant>>& values,bool typed,const QMap<QString,QVariant>* restoredDefaults=nullptr);
     bool refreshTypes();
     bool reject(int number);
     QString columnType(int column) const;
@@ -59,6 +66,12 @@ private:
     QSet<int> dirtyRows_,deletedRows_;
     QMap<QString,QVariant> insertedKey_;
     QMap<int,QMap<QString,QVariant>> submittedKeys_;
-    bool changing_{},saving_{},readOnly_{};
+    struct BlockHistory {
+        int firstRow{},firstColumn{},originalRows{};bool applied{};
+        QVector<QVector<QVariant>> values;QMap<QString,QVariant> dateDefaults;
+    };
+    std::optional<BlockHistory> blockHistory_;
+    bool blockMutation_{};
+    bool changing_{},saving_{},readOnly_{},binaryWriting_{};
 };
 }

@@ -280,6 +280,8 @@ End Function
         assert(!sheet.pasteSelection() && cells.rowCount()==3 && !cells.isDirty());
         assert(sql.exec("DELETE FROM paste_append"));assert(cells.select() && cells.rowCount()==0);sheet.setCurrentIndex({});
         QApplication::clipboard()->setText("31\r\n32");assert(sheet.canPasteSelection() && sheet.pasteSelection() && cells.rowCount()==2 && sheet.currentIndex().column()==1);
+        assert(cells.undoBlock() && cells.rowCount()==0 && cells.canRedoBlock());assert(cells.redoBlock() && cells.rowCount()==2);
+
         assert(cells.submitTransactionally());sheet.setCurrentIndex(cells.index(0,1));
         QApplication::clipboard()->setText("33\r\n34");assert(sheet.pasteSelection(true) && cells.rowCount()==4 && sheet.currentIndex().row()==2 && cells.clipboardText(cells.index(0,1))=="31");
         assert(cells.submitTransactionally());assert(sql.exec("SELECT count(*),sum(value) FROM paste_append") && sql.next() && sql.value(0).toInt()==4 && sql.value(1).toInt()==130);sql.finish();
@@ -317,9 +319,39 @@ End Function
         sheet.selectionModel()->select(cells.index(1,1),QItemSelectionModel::Select);
         assert(!sheet.copySelection() && QApplication::clipboard()->text()==quoted);
         assert(sql.exec("ALTER TABLE copy_cells ADD COLUMN payload BLOB")); assert(sql.exec("UPDATE copy_cells SET payload=x'0102' WHERE id=1")); cells.setTable("copy_cells"); assert(cells.select());
-        sheet.setCurrentIndex(cells.index(0,2)); sheet.selectionModel()->select(cells.index(0,2),QItemSelectionModel::ClearAndSelect); assert(!sheet.copySelection() && QApplication::clipboard()->text()==quoted);
+        sheet.setCurrentIndex(cells.index(0,2)); sheet.selectionModel()->select(cells.index(0,2),QItemSelectionModel::ClearAndSelect); assert(sheet.copySelection() && QApplication::clipboard()->text()=="0x0102" && QApplication::clipboard()->mimeData()->hasFormat(linaccess::nativeGridMime));
         assert(sql.exec("SELECT value FROM copy_cells WHERE id=1") && sql.next() && sql.value(0).toString()=="a\tb\"c\n"); sql.finish();
     }
+    {
+        assert(sql.exec("CREATE TABLE typed_grid(id INTEGER PRIMARY KEY AUTOINCREMENT,n BIGINT,note TEXT,payload BLOB,amount CURRENCY_REAL,flag BOOLEAN,stamp DATETIME)"));
+        assert(sql.exec("INSERT INTO typed_grid VALUES(1,9223372036854775806,NULL,x'0001ff80',1.25,-1,'2003-12-31 18:05:06'),(2,-9223372036854775807,'',x'',NULL,NULL,NULL)"));
+        linaccess::AccessTableModel cells(nullptr,db);cells.setTable("typed_grid");cells.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(cells.select());
+        linaccess::AccessTableView sheet;sheet.setModel(&cells);sheet.setCurrentIndex(cells.index(0,1));
+        sheet.selectionModel()->select(QItemSelection(cells.index(0,1),cells.index(1,6)),QItemSelectionModel::ClearAndSelect);
+        assert(sheet.copySelection() && QApplication::clipboard()->mimeData()->hasFormat(linaccess::nativeGridMime));
+        const auto encoded=QApplication::clipboard()->mimeData()->data(linaccess::nativeGridMime);
+        sheet.setColumnHidden(2,true);assert(!sheet.pasteSelection() && !cells.isDirty());sheet.setColumnHidden(2,false);
+        const bool pasted=sheet.pasteSelection(true);if(!pasted) std::cerr<<"typed paste: "<<cells.lastError().text().toStdString()<<" code="<<cells.lastError().nativeErrorCode().toStdString()<<"\n";assert(pasted && cells.rowCount()==4);
+        assert(cells.canUndoBlock());QTest::keyClick(&sheet,Qt::Key_Z,Qt::ControlModifier);assert(cells.rowCount()==2 && !cells.isDirty() && cells.canRedoBlock());
+        QTest::keyClick(&sheet,Qt::Key_Y,Qt::ControlModifier);assert(cells.rowCount()==4 && cells.isDirty() && cells.canUndoBlock());
+        const bool saved=cells.submitTransactionally();if(!saved) std::cerr<<"typed save: "<<cells.lastError().text().toStdString()<<"\n";assert(saved);
+        assert(sql.exec("SELECT n,note,payload,amount,flag,stamp FROM typed_grid ORDER BY id"));
+        QVector<QVariantList> before;for(int row=0;row<2;++row) {assert(sql.next());QVariantList values;for(int column=0;column<6;++column) values<<sql.value(column);before<<values;}
+        for(int row=0;row<2;++row) {assert(sql.next());for(int column=0;column<6;++column) assert(sql.value(column)==before[row][column] && sql.value(column).isNull()==before[row][column].isNull());}assert(!sql.next());sql.finish();
+        assert(!before[1][1].isNull() && !before[1][2].isNull() && before[1][2].toByteArray().isEmpty());
+        sheet.setCurrentIndex(cells.index(0,3));sheet.selectionModel()->select(cells.index(0,3),QItemSelectionModel::ClearAndSelect);assert(sheet.copySelection());
+        sheet.setCurrentIndex(cells.index(1,3));assert(sheet.canPasteSelection() && sheet.pasteSelection() && cells.submitTransactionally());
+        assert(sql.exec("SELECT hex(payload) FROM typed_grid WHERE id=2") && sql.next() && sql.value(0).toString()=="0001FF80");sql.finish();
+        auto* invalid=new QMimeData;invalid->setData(linaccess::nativeGridMime,"{\"version\":1,\"rows\":[[{\"kind\":\"binary\",\"value\":\"!\"}]]}");QApplication::clipboard()->setMimeData(invalid);
+        assert(!sheet.pasteSelection() && !cells.isDirty() && cells.rowCount()==4);
+        auto* mismatch=new QMimeData;mismatch->setData(linaccess::nativeGridMime,encoded);QApplication::clipboard()->setMimeData(mismatch);
+        sheet.setCurrentIndex(cells.index(0,0));assert(!sheet.pasteSelection() && !cells.isDirty());
+        assert(cells.setTypedDataBlock(0,1,{{QVariant(2.5)}}) && cells.QSqlTableModel::data(cells.index(0,1),Qt::EditRole).toLongLong()==2 && cells.canUndoBlock());
+        assert(cells.setData(cells.index(0,2),"later") && !cells.canUndoBlock() && !cells.canRedoBlock());cells.revertAll();
+        sheet.setCurrentIndex(cells.index(0,5));sheet.selectionModel()->select(cells.index(0,5),QItemSelectionModel::ClearAndSelect);assert(sheet.copySelection() && QApplication::clipboard()->text()=="True");
+
+    }
+
     {
         assert(sql.exec("CREATE TABLE repeat_cells(id INTEGER PRIMARY KEY AUTOINCREMENT,amount CURRENCY_REAL,stamp DATETIME,flag BOOLEAN,note TEXT,payload BLOB)"));
         assert(sql.exec("INSERT INTO repeat_cells VALUES(1,549755813887.9999,'2024-02-29 12:34:56',1,NULL,x'0102'),(2,0,NULL,0,'old',NULL)"));

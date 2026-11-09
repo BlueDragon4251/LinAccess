@@ -1945,8 +1945,8 @@ End Sub
     assert(mixed->executeProcedure("NextTableRecord",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==299 && !navigationModel->isDirty());
     navigationView->setCurrentIndex(navigationModel->index(299,2));
     QApplication::clipboard()->setText("binary-copy-sentinel");
-    assert(mixed->executeProcedure("CopyTableSelection",selectArguments).errorNumber==3251);
-    assert(QApplication::clipboard()->text()=="binary-copy-sentinel" && !navigationModel->isDirty());
+    assert(mixed->executeProcedure("CopyTableSelection",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
+    assert(QApplication::clipboard()->text()=="0x0102" && QApplication::clipboard()->mimeData()->hasFormat(linaccess::nativeGridMime) && !navigationModel->isDirty());
     assert(unchanged.exec("SELECT hex(payload) FROM command_navigation WHERE id=300") && unchanged.next() && unchanged.value(0).toString()=="0102"); unchanged.finish();
     assert(mixed->executeProcedure("RepeatTableFind",selectArguments).errorNumber==2046);
     assert(mixed->executeProcedure("FindTableText",selectArguments).status==linaccess::VbaExecutionStatus::Completed);
@@ -2255,6 +2255,8 @@ End Sub
     table->setCurrentIndex(model->index(0,1));QApplication::clipboard()->setText("appended-range");
     const int beforeAppend=model->rowCount();const auto appended=window.dispatchTableCommand(38);
     assert(appended.value("handled").toBool() && appended.value("error").toInt()==0 && model->rowCount()==beforeAppend+1 && model->data(model->index(beforeAppend,1),Qt::EditRole).toString()=="appended-range");
+    assert(model->canUndoBlock());const auto undone=window.dispatchTableCommand(292);assert(undone.value("error").toInt()==0 && model->rowCount()==beforeAppend && model->canRedoBlock());
+    const auto redone=window.dispatchTableCommand(199);assert(redone.value("error").toInt()==0 && model->rowCount()==beforeAppend+1 && model->canUndoBlock());
     model->revertAll();
 
     QTest::keyClick(table,Qt::Key_A,Qt::ControlModifier); assert(table->selectionModel()->selectedIndexes().size()==model->rowCount()*model->columnCount());

@@ -3609,6 +3609,11 @@ QMap<QString,QVariant> nativeTableLiteralDefaults(QSqlDatabase database,const QS
 QMap<QString,QVariant> nativeTableDateDefaults(QSqlDatabase database,const QString& table) {
     workspaceState(database)->check();if(!nativeTableNames(database).contains(table,Qt::CaseInsensitive)) return {};
     QSqlQuery shadow(database);shadow.prepare("SELECT 1 FROM temp.sqlite_schema WHERE type IN ('table','view') AND (name=? COLLATE NOCASE OR name='_la_table_schema' COLLATE NOCASE)");shadow.addBindValue(table);if(!shadow.exec()) queryFailure(shadow);if(shadow.next()) throw VbaRuntimeError(3251,"Native Date defaults have a TEMP shadow");shadow.finish();
+    // A table without SQL defaults needs no default evaluation or DAO field
+    // reconstruction. Generic SQLite BIGINT/BLOB columns must not prevent a
+    // checked native datasheet from creating rows whose values are supplied.
+    QSqlQuery defaults(database);if(!defaults.exec("PRAGMA main.table_info("+quote(table)+")")) queryFailure(defaults);
+    bool hasDefaults=false;while(defaults.next()) hasDefaults|=!defaults.value(4).isNull();defaults.finish();if(!hasDefaults) return {};
     const auto columns=readTableSchemaColumns(database,table);QVector<TableSchemaColumn> dates;for(const auto& column:columns) if(column.sourceType==8 || column.type.contains("DATE",Qt::CaseInsensitive)) dates.append(column);return literalDefaultValues(database,dates,true);
 }
 std::shared_ptr<VbaObject> makeDaoEngine(QSqlDatabase database) {

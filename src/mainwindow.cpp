@@ -826,7 +826,7 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
         QPointer<linaccess::AccessTableModel> model=table ? qobject_cast<linaccess::AccessTableModel*>(table->model()) : nullptr;
         if(!table || !model) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
         if(const auto focused=focusedDataTextCommand(table,command);focused.value("handled").toBool()) return focused;
-        if((command!=28 && command!=38 && command!=109 && command!=29 && command!=30 && command!=341 && !(command==191 && model->rowCount()==0)) && !table->currentIndex().isValid()) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
+        if((command!=28 && command!=38 && command!=292 && command!=199 && command!=109 && command!=29 && command!=30 && command!=341 && !(command==191 && model->rowCount()==0)) && !table->currentIndex().isValid()) return tableCommandFailure(2046,"Keine aktive Tabellenzelle verfügbar.");
         if(command==28) {
             const QPointer<MainWindow> self=this;
             if(!table->finishEditing()) return tableModelFailure(model,2501);
@@ -851,7 +851,9 @@ QVariantMap MainWindow::dispatchTableCommand(int command) {
             if(!table->copySelection()) return tableModelFailure(model,2501);
         } else if(command==191 || command==38) {
             if(!table->pasteSelection(command==38)) return tableModelFailure(model,2046);
-        } else if(command==189 || command==199 || command==292) {
+        } else if(command==199 || command==292) {
+            if(!table->undoPastedBlock(command==199)) return tableModelFailure(model,2046);
+        } else if(command==189) {
             return tableCommandFailure(3251,"Dieser Bearbeitungsbefehl außerhalb eines aktiven Textfelds ist noch nicht implementiert.");
         } else if(command==179) {
             if(!table->zoomCurrentCell()) return tableModelFailure(model,2046);

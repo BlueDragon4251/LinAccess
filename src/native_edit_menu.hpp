@@ -45,7 +45,7 @@ inline QMenu* addNativeEditMenu(QMenuBar* bar,QWidget* owner) {
         auto* focus=QApplication::focusWidget();
         if(!focus || !menu->isAncestorOf(focus)) *target=focus && owner->isAncestorOf(focus) ? focus : nullptr;
         auto* widget=target->data();
-        bool readable=false,writable=false,selection=false,undo=false,redo=false,content=false,forward=false,tablePaste=false;
+        bool readable=false,writable=false,selection=false,undo=false,redo=false,content=false,forward=false,tablePaste=false,rangeUndo=false,rangeRedo=false;
         if(auto* line=qobject_cast<QLineEdit*>(widget)) {
             readable=line->echoMode()==QLineEdit::Normal; writable=!line->isReadOnly();
             selection=line->hasSelectedText(); undo=line->isUndoAvailable(); redo=line->isRedoAvailable();
@@ -63,6 +63,7 @@ inline QMenu* addNativeEditMenu(QMenuBar* bar,QWidget* owner) {
             readable=true; selection=table->selectionModel() && table->selectionModel()->hasSelection();
             content=table->model()->rowCount()>0 && table->model()->columnCount()>0;
             tablePaste=table->canPasteSelection();
+            if(auto* model=qobject_cast<AccessTableModel*>(table->model())) {rangeUndo=model->canUndoBlock();rangeRedo=model->canRedoBlock();}
         }
         if(auto* query=dynamic_cast<NativeQueryView*>(widget);query && query->model()) {
             readable=true; selection=query->selectionModel() && query->selectionModel()->hasSelection();
@@ -71,7 +72,7 @@ inline QMenu* addNativeEditMenu(QMenuBar* bar,QWidget* owner) {
         const auto* clipboard=QApplication::clipboard()->mimeData();
         for(auto* action:menu->actions()) {
             const auto id=action->objectName();
-            const bool enabled=id=="edit-undo" ? writable && undo : id=="edit-redo" ? writable && redo
+            const bool enabled=id=="edit-undo" ? (writable && undo) || rangeUndo : id=="edit-redo" ? (writable && redo) || rangeRedo
                 : id=="edit-copy" ? readable && selection : id=="edit-cut" ? readable && writable && selection
                 : id=="edit-paste" ? (writable || tablePaste) && clipboard && clipboard->hasText()
                 : id=="edit-delete" ? writable && (selection || forward) : id=="edit-select-all" && content;

@@ -342,3 +342,7 @@ to commit it. SelectRecord/Save still reject that invalid field and retain it.
 Copy with no text selection raises 2046 and preserves the clipboard. The legacy
 validation regression now checks this distinction instead of requiring Copy
 itself to validate and close a text editor.
+
+Native table range clipboard and bounded pasted-block Undo/Redo now extend the
+older text-only boundaries above; see TYPED_GRID_CLIPBOARD.md. General Access
+undo/redo, range Cut and unrelated pending draft merging remain open.
