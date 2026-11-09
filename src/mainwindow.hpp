@@ -34,6 +34,7 @@ public:
     Q_INVOKABLE QVariantMap findTableRecord(const QVariantMap& request);
     Q_INVOKABLE QVariantMap tableKeyboardContext();
     Q_INVOKABLE QVariantMap requeryTableDocument();
+    Q_INVOKABLE QVariantMap repaintDatabaseObject(int type,const QString& name);
     Q_INVOKABLE QVariantMap outputDatasheet(bool pdf,const QString& path = {});
     Q_INVOKABLE QVariantMap previewDatasheet();
     Q_INVOKABLE QVariantMap setupDatasheetPage();

@@ -97,6 +97,7 @@ public:
         if(key=="opentable") return VbaArgumentSignature{{"TableName","View","DataMode"},1};
         if(key=="openquery") return VbaArgumentSignature{{"QueryName","View","DataMode"},1};
         if(key=="findrecord") return VbaArgumentSignature{{"FindWhat","Match","MatchCase","Search","SearchAsFormatted","OnlyCurrentField","FindFirst"},1};
+        if(key=="repaintobject") return VbaArgumentSignature{{"ObjectType","ObjectName"},0};
         if(key=="gotorecord") return VbaArgumentSignature{{"ObjectType","ObjectName","Record","Offset"},0};
         if(key=="openform") return VbaArgumentSignature{{"FormName","View","FilterName","WhereCondition","DataMode","WindowMode","OpenArgs"},1};
         if(key=="openreport") return VbaArgumentSignature{{"ReportName","View","FilterName","WhereCondition","WindowMode","OpenArgs"},1};
@@ -123,6 +124,7 @@ public:
         std::vector<VbaValue> values;for(const auto& argument:args) {values.push_back(scalarVbaValue(argument));host.check();}
         const auto number=[&](std::size_t index,int fallback) {return index>=values.size() || values[index].kind==VbaValue::Kind::Missing ? fallback : static_cast<int>(coerceVbaModuleValue(values[index],"long").number);};
         const auto target=[&] {if(values.empty() || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Object name is required");return QString::fromStdString(coerceVbaModuleValue(values[0],"string").asText());};
+        if(key=="repaintobject") {auto result=nativeProjectRepaintObject(db_,owner_,values);host.check();return result;}
         if(key=="hourglass") {
             if(values.size()!=1 || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Hourglass requires one Boolean argument");
             nativeHourglass(coerceVbaModuleValue(values[0],"boolean").boolean);host.check();return VbaValue::empty();

@@ -13,3 +13,5 @@ std::shared_ptr<linaccess::VbaObject> nativeProjectScreen(QSqlDatabase,QObject*)
 QVector<QPointer<AccessFormPreview>> nativeLoadedProjectDocuments(QSqlDatabase,QObject*);
 
 void openNativeProjectDocument(QSqlDatabase,QWidget*,linaccess::AccessDocumentKind,const QString&,const QString&,std::optional<QString>,int windowMode,int dataMode);
+
+linaccess::VbaValue nativeProjectRepaintObject(QSqlDatabase,QWidget*,const std::vector<linaccess::VbaValue>&,AccessFormPreview* caller=nullptr);

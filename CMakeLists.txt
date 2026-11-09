@@ -98,7 +98,7 @@ if(BUILD_TESTING)
     add_test(NAME core_tests COMMAND linaccess_core_tests)
     if(LINACCESS_BUILD_GUI)
         find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
-        add_executable(linaccess_mainwindow_tests tests/mainwindow_document_tests.cpp)
+        add_executable(linaccess_mainwindow_tests tests/mainwindow_document_tests.cpp tests/native_project_gui_extensions.cpp)
         target_include_directories(linaccess_mainwindow_tests PRIVATE src)
         # Large assertion harnesses need short rebuilds; production libraries retain Release optimization.
         target_compile_options(linaccess_mainwindow_tests PRIVATE "$<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O1>")

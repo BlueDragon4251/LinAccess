@@ -17,6 +17,7 @@
 #include <QThread>
 #include "access_form_preview.hpp"
 #include <QPrintPreviewWidget>
+#include <QAbstractScrollArea>
 #include <QMainWindow>
 #include "vba_qt_value.hpp"
 #include "access_format.hpp"
@@ -1016,6 +1017,12 @@ public:
             if (preview.opened_ && preview.initialCurrentDispatched_ && !preview.layout_.recordSource.trimmed().isEmpty()) (void)preview.formEvent("OnCurrent","Form_Current");
             return {};
         }
+        if(key=="repaint") {
+            if(!args.empty()) throw linaccess::VbaRuntimeError(450,"Repaint requires no arguments");enterNativeUiExecution();const auto leave=qScopeGuard([] {leaveNativeUiExecution();});
+            if(preview.closing_ || preview.reportAggregateCaching_) throw linaccess::VbaRuntimeError(3251,"Repainting during document close/report rendering is unsupported");
+            if(report_) {if(!preview.reportPageView_) throw linaccess::VbaRuntimeError(3251,"Report preview is unavailable");preview.refreshReportPageView();(void)checked();if(!preview.reportPageView_->property("la_report_pages_valid").toBool()) {for(const auto& result:preview.eventResults_) if(result.status==linaccess::VbaExecutionStatus::Error || result.status==linaccess::VbaExecutionStatus::Unsupported) throw linaccess::VbaRuntimeError(result.errorNumber ? result.errorNumber : 3251,result.explanation,result.errorSource,result.errorHelpFile,result.errorHelpContext);throw linaccess::VbaRuntimeError(3251,"Report preview could not be repainted");}}
+            else preview.refreshCalculatedControls();(void)checked();preview.repaint();QVector<QPointer<QAbstractScrollArea>> areas;for(auto* area:preview.findChildren<QAbstractScrollArea*>()) areas.push_back(area);for(const auto& area:areas) if(area && area->viewport()) area->viewport()->repaint();(void)checked();return {};
+        }
         if (key=="recalc") {
             if (preview.layout_.kind!=linaccess::AccessDocumentKind::Form) throw linaccess::VbaRuntimeError(438,"Recalc requires a form");
             preview.refreshCalculatedControls(); return {};
@@ -1036,7 +1043,7 @@ public:
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
-        if (!args.empty() || key=="page" || key=="pages" || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="dataentry" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="openargs" || key=="modal" || key=="popup" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
+        if (!args.empty() || key=="page" || key=="pages" || key=="name" || key=="caption" || key=="visible" || key=="tag" || key=="dataentry" || key=="allowadditions" || key=="allowdeletions" || key=="allowedits" || key=="selheight" || key=="recordsource" || key=="currentrecord" || key=="openargs" || key=="modal" || key=="popup" || key=="dirty" || key=="newrecord" || key=="controls" || key=="requery" || key=="recalc" || key=="repaint" || key=="undo" || key=="keypreview" || key=="timerinterval" || key=="cycle" || key=="setfocus" || key=="filter" || key=="filteron" || key=="orderby" || key=="orderbyon")
             return member(name,args);
         if (auto value=checked().getModuleMember(name,true)) return *value;
         return objectItem(bytes(checked().controlMemberName(text(name))));
@@ -1413,6 +1420,7 @@ public:
         if(key=="openform") return Signature{{"FormName","View","FilterName","WhereCondition","DataMode","WindowMode","OpenArgs"},1};
         if(key=="openreport") return Signature{{"ReportName","View","FilterName","WhereCondition","WindowMode","OpenArgs"},1};
         if(key=="close") return Signature{{"ObjectType","ObjectName","Save"},0};
+        if(key=="repaintobject") return Signature{{"ObjectType","ObjectName"},0};
         if(key=="gotorecord") return Signature{{"ObjectType","ObjectName","Record","Offset"},0};
         if(key=="quit") return Signature{{"Options"},0};
         if(key=="runsql") return Signature{{"SQLStatement","UseTransaction"},1};
@@ -1436,6 +1444,7 @@ public:
             if(!preview.property("la_bound_event_can_cancel").toBool()) throw linaccess::VbaRuntimeError(3251,"CancelEvent requires a supported cancellable event");
             preview.setProperty("la_bound_event_cancelled",true);return {};
         }
+        if(key=="repaintobject") {std::vector<linaccess::VbaValue> values;for(const auto& argument:args) {values.push_back(linaccess::scalarVbaValue(argument));(void)checked();}return nativeProjectRepaintObject(preview.db_,&preview,values,&preview);}
         if(key=="runmacro") {
             enterNativeUiExecution();const auto leave=qScopeGuard([] {leaveNativeUiExecution();});
             linaccess::runNativeMacro(preview.db_,args,[&] {(void)checked();},
@@ -1981,4 +1990,17 @@ linaccess::VbaValue nativeProjectSysCmd(QWidget* owner,QSqlDatabase database,con
     const auto type=linaccess::coerceVbaModuleValue(values[1],"long").number;const auto name=linaccess::coerceVbaModuleValue(values[2],"string").asText();
     if(name.find('\0')!=std::string::npos) throw VbaRuntimeError(5,"Invalid object name");const QStringList kinds{"table","query","form","report","macro","module"};if(type<0 || type>=kinds.size()) throw VbaRuntimeError(3251,"GetObjectState object type is not implemented");
     auto project=std::dynamic_pointer_cast<NativeCurrentProjectObject>(nativeProjectContext(database,owner,false));if(!project) throw VbaRuntimeError(3420,"Native project context unavailable");return VbaValue::longInteger(project->objectState(kinds[static_cast<int>(type)],text(name)));
+}
+
+linaccess::VbaValue nativeProjectRepaintObject(QSqlDatabase database,QWidget* owner,const std::vector<linaccess::VbaValue>& args,AccessFormPreview* caller) {
+    using linaccess::VbaValue;using linaccess::VbaRuntimeError;auto guard=nativeDocumentProjectGuard(database,owner);guard();if(args.size()>2) throw VbaRuntimeError(450,"RepaintObject accepts at most two arguments");
+    for(const auto& value:args) if(value.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null RepaintObject argument");const auto omitted=[&](std::size_t index) {return index>=args.size() || args[index].kind==VbaValue::Kind::Missing || args[index].kind==VbaValue::Kind::Empty;};
+    const int type=omitted(0) ? -1 : static_cast<int>(linaccess::coerceVbaModuleValue(args[0],"long").number);const auto name=omitted(1) ? QString{} : QString::fromStdString(linaccess::coerceVbaModuleValue(args[1],"string").asText());if(name.contains(QChar(0)) || !name.isValidUtf16() || name.size()>255) throw VbaRuntimeError(5,"Invalid repaint object name");if(type< -1 || type>5 || (type==-1 && !name.isEmpty())) throw VbaRuntimeError(3251,"RepaintObject type/name context unsupported");
+    QWidget* project=nullptr;for(auto* widget=owner;widget;widget=widget->parentWidget()) if(qobject_cast<QMainWindow*>(widget)) {project=widget;break;}
+    const auto dispatch=[&](int objectType) {QVariantMap result;if(!project || project->metaObject()->indexOfMethod("repaintDatabaseObject(int,QString)")<0 || !QMetaObject::invokeMethod(project,"repaintDatabaseObject",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(int,objectType),Q_ARG(QString,name))) throw VbaRuntimeError(3251,"Native database repaint dispatch unavailable");if(const int error=result.value("error").toInt()) throw VbaRuntimeError(error,result.value("description").toString().toStdString());return result.value("handled").toBool();};
+    if(type==0 || type==1 || type==4 || type==5 || (type==-1 && QApplication::activeModalWidget() && QApplication::activeModalWidget()->property("la_project_object_kind").isValid())) {if(!dispatch(type)) throw VbaRuntimeError(2046,"No active native object to repaint");guard();return VbaValue::empty();}
+    QPointer<AccessFormPreview> selected;for(const auto& document:nativeLoadedProjectDocuments(database,owner)) if(document && (type==-1 || type==(document->documentKind()==linaccess::AccessDocumentKind::Report ? 3 : 2)) && (name.isEmpty() ? document==activePreviewDocument() : document->documentName().compare(name,Qt::CaseInsensitive)==0)) {if(selected) throw VbaRuntimeError(5,"RepaintObject document is ambiguous");selected=document;}
+    if(!selected && type==-1 && !AccessFormPreview::databaseWindowActive() && caller) selected=caller;
+    if(selected) {(void)makePreviewFormObject(*selected)->member("Repaint",{});guard();return VbaValue::empty();}
+    if(type!=-1) throw VbaRuntimeError(type==3 ? 2451 : 2450,"Requested repaint document is not open");if(!dispatch(-1)) throw VbaRuntimeError(2046,"No active native object to repaint");guard();return VbaValue::empty();
 }

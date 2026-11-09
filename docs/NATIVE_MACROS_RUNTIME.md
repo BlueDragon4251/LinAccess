@@ -507,3 +507,27 @@ is retained. No new test target or Windows observation.
 
 Contract consulted:
 https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/setvalue-macro-action .
+
+
+## Actual RepaintObject action and native Repaint
+
+RepaintObject accepts optional ObjectType/ObjectName in both DoCmd hosts and
+native macros. The shared project dispatcher addresses actual open table/query
+views, visible macro/module editors, forms and report previews. Omitted arguments
+use the actual active native context; explicit Null refuses94 and unavailable
+contexts fail rather than opening an object. Named objects use case-insensitive
+project identity and checked generations.
+
+Table/query/editor repaint does not finish the active cell editor, save drafts,
+execute SQL or change selection. Form.Repaint refreshes existing calculated
+controls and paints the actual widgets, preserving bound dirty values. Report
+repaint rerenders the existing record snapshot through its real print preview
+and checks rendering/event failures. Closing/rendering reentry refuses3251.
+This is bounded native behavior; complete Access timing, subform and report
+printing parity remains open.
+
+The existing mainwindow_documents check passes (9.43s), including actual paint
+events, preserved SQL/cache/current index/live cell text, both macro contexts,
+real DLookup recalculation without saving, report rendering and modified module
+text preserved after Ctrl+S. Existing access_2003_layouts passes (11.34s). No new
+CTest target or Windows oracle claim.

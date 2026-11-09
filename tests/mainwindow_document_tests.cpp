@@ -1,3 +1,4 @@
+#include "native_project_gui_extensions.hpp"
 #include "native_macro_storage.hpp"
 #include "native_access_cursor.hpp"
 #include <QStatusBar>
@@ -32,6 +33,7 @@
 #include "access_catalog.hpp"
 #include <QProcess>
 #include <QPrintDialog>
+#include <QPrintPreviewWidget>
 #include <QPrinter>
 #include <QRegularExpression>
 #include <QAction>
@@ -2652,6 +2654,7 @@ void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
     unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
 }
 
+
 void testNativeMacroSetValue(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE set_value_rows(id INTEGER PRIMARY KEY,n INTEGER CHECK(n>=0))"));assert(sql.exec("INSERT INTO set_value_rows VALUES(1,10)"));assert(sql.exec("CREATE TABLE set_value_audit(n INTEGER)"));sql.finish();const auto action=[](QString name,QJsonArray args) {return QJsonObject{{"action",name},{"arguments",args}};};const auto macro=[&](QString name,QJsonArray actions) {linaccess::storeNativeMacro(db,name,{{"version",1},{"actions",actions}});};
     macro("SetValueCurrent",{action("SetValue",{"Value","Forms!SetValueForm!Value+1"}),action("SetValue",{"Me.Tag","\"from macro\""})});macro("SetValueExplicit",{action("SetValue",{"Forms!SetValueForm!Value","25"}),action("SetValue",{"Forms!SetValueForm.Visible","True"})});macro("SetValueFailure",{action("SetValue",{"Value","1/0"})});macro("SetValueNull",{action("SetValue",{"Value","Null"})});macro("SetValueCalculated",{action("SetValue",{"Calc","9"})});
@@ -4151,6 +4154,7 @@ End Sub
     testStandaloneDocumentOpening(window,db);
     testMacroArgumentPresence(window,db);
     testNativeMacroSetValue(window,db);
+    testNativeRepaintObject(window,db);
     testNativeAutoExec(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

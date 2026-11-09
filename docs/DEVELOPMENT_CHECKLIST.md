@@ -2989,3 +2989,19 @@ Schließen während RHS2450, ungültiges Rohmakro vor SQL-Präfix, DoCmd.SetValu
 Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; DEB22a9284.
 NATIVE_MACROS_RUNTIME.md; F088/F052/F030/F135 und456/384/72 unverändert.
 Direkt weiter mit tatsächlichem RepaintObject für geöffnete native Dokumente.
+
+
+## Fortschreibung 2026-11-09: tatsächliches RepaintObject
+RepaintObject(ObjectType,ObjectName) in Standardmodulen/Formularen und nativen
+Makros zeichnet echte geöffnete Tabellen/Abfragen/Modul-/Makroentwürfe sowie
+Formulare/Berichte neu. Form.Repaint verwendet vorhandene berechnete Controls,
+Berichte rendern ihren vorhandenen Datensatzbestand erneut; keine Requery oder
+implizite Speicherung. Projekt-/Generation-/Lebensdauer- und Kontextprüfungen
+bleiben wirksam. Tabellen-Cache, laufende Zelleneingabe und Entwurfsänderungen
+bleiben erhalten. GUI1/1 (9,43s), Layout1/1 (11,34s) bestanden; App gebaut.
+Der letzte gezielte Korrekturlauf betraf ausschließlich den Prüffall: Speichern
+per Schaltfläche schließt den Editor bestimmungsgemäß; Strg+S hält ihn offen.
+GUI-Erweiterung in kleinere Quelldatei desselben bestehenden CTest-Ziels getrennt,
+keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; DEB22a9284.
+Vollständige Access-Neuzeichnungs-/Ereignis-/Berichtparität bleibt offen;
+F088/F052/F050/F135 und456/384/72 unverändert.
