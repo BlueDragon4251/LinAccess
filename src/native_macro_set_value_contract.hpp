@@ -6,12 +6,12 @@
 namespace linaccess {
 inline QString nativeMacroSetValueExpression(const QString& input) {
     const auto text=input.trimmed();if(text.isEmpty() || text.size()>4096 || !text.isValidUtf16() || text.contains(QChar(0))) throw VbaRuntimeError(5,"Invalid SetValue expression text");
-    if(text.startsWith('=')) throw VbaRuntimeError(3251,"SetValue leading-equals double evaluation is not implemented");
-    if(!validVbaExpression(text.toUtf8().toStdString())) throw VbaRuntimeError(3251,"SetValue expression syntax unsupported");return text;
+    const auto expression=text.startsWith('=') ? text.mid(1).trimmed() : text;
+    if(expression.isEmpty() || !validVbaExpression(expression.toUtf8().toStdString())) throw VbaRuntimeError(3251,"SetValue expression syntax unsupported");return text;
 }
 struct NativeMacroSetValueTarget {QString object;std::optional<QString> property;};
 inline NativeMacroSetValueTarget nativeMacroSetValueTarget(const QString& input) {
-    const auto text=nativeMacroSetValueExpression(input);int depth=0,dot=-1;bool quoted=false,bracket=false,date=false;
+    const auto text=nativeMacroSetValueExpression(input);if(text.startsWith('=')) throw VbaRuntimeError(3251,"Dynamic SetValue Item targets are not implemented");int depth=0,dot=-1;bool quoted=false,bracket=false,date=false;
     for(int index=0;index<text.size();++index) {
         const auto ch=text[index];
         if(quoted) {if(ch=='"') {if(index+1<text.size() && text[index+1]=='"') ++index;else quoted=false;}continue;}

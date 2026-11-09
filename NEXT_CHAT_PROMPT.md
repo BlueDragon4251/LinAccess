@@ -1726,3 +1726,19 @@ GUI-Erweiterung in kleinere Quelldatei desselben bestehenden CTest-Ziels getrenn
 keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; DEB22a9284.
 Vollständige Access-Neuzeichnungs-/Ereignis-/Berichtparität bleibt offen;
 F088/F052/F050/F135 und456/384/72 unverändert.
+
+
+## Fortschreibung 2026-11-09: SetValue-Ausdruck mit führendem Gleichheitszeichen
+Expression mit führendem= wertet erst den Rest einmal aus und danach dessen
+Skalarwert als Ausdruckstext einmal. Reale Referenzen/Funktionen beider Hosts
+verwenden vorhandene Eval-/Setterwege; keine bloße Entfernung des=, keine
+unbegrenzte Rekursion. Null94/Errornummer, Syntax-/4096-Textgrenzen, erneutes=3251
+und Kontext-/Lebensdauerprüfungen vor Zuweisung. Dynamisches Item bleibt offen.
+App gebaut, vorhandene GUI/Layout2/2 (20,35s) ohne Korrekturlauf bestanden:
+Zahl, referenzierender Text, tatsächlicher öffentlicher Funktionsaufruf exakt
+einmal je Host (SQL-Audit), sechs Fehlerfälle ohne Wert-/Dirty-Änderung und reale
+Speicherung. Ungültiger Rohmakro-Präfixtest verwendet nun tatsächlich ungültige
+Syntax=1+; vollständiger Vorabcheck vor SQL bleibt belegt. Keine neue CTest-ID/
+Gesamtsuite/Windows-Beobachtung/Paketprüfung; bisheriges DEB22a9284.
+NATIVE_MACROS_RUNTIME.md; F088/F052/F118/F164 und456/384/72 unverändert.
+Direkt weiter mit echten Formularfeldern ohne gebundenes Steuerelement.

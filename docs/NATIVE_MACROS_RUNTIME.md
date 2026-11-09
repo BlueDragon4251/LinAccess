@@ -531,3 +531,18 @@ events, preserved SQL/cache/current index/live cell text, both macro contexts,
 real DLookup recalculation without saving, report rendering and modified module
 text preserved after Ctrl+S. Existing access_2003_layouts passes (11.34s). No new
 CTest target or Windows oracle claim.
+
+
+## SetValue leading-equals expression evaluation
+
+A leading equals sign on SetValue's Expression now evaluates the remainder once,
+uses its scalar result as expression text, then evaluates that text once before
+assigning through the existing real target setter. Thus `=42` assigns42, whereas
+`="Forms!Example!Value+1"` evaluates the actual referenced value. A public
+function returning expression text executes only in the first phase. Both phases
+retain the caller's context, normal errors and lifetime checks. Null expression
+text refuses94, an Error result propagates its number, malformed/empty/oversized
+text fails before assignment. Generated text has the same4096 UTF-16 limit; a
+second leading-equals prefix refuses3251 rather than unbounded recursion. The
+Item target still requires the existing explicit supported object syntax. Earlier
+notes describing all leading-equals expressions as unsupported are superseded.

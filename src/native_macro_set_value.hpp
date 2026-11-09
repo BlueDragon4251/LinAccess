@@ -8,6 +8,14 @@ inline void nativeMacroSetValue(VbaHost& host,const std::vector<VbaValue>& args,
     if(reference.kind!=VbaValue::Kind::Object || !reference.object) throw VbaRuntimeError(3251,"SetValue requires an actual native control or property target");
     const bool control=reference.object->isNativeType("access.control");if(!control && (!target.property || (!reference.object->isNativeType("access.form") && !reference.object->isNativeType("access.report")))) throw VbaRuntimeError(3251,"SetValue target type is not implemented");
     (void)reference.object->member("Name",{});check();
-    const auto value=host.eval(expression.toUtf8().toStdString());check();reference.object->assign(target.property ? target.property->toUtf8().toStdString() : "Value",value);check();
+    auto evaluatedExpression=expression;
+    if(expression.startsWith('=')) {
+        const auto first=scalarVbaValue(host.eval(expression.mid(1).toUtf8().toStdString()));check();
+        if(first.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Null SetValue expression text");
+        if(first.kind==VbaValue::Kind::Error) throw VbaRuntimeError(first.errorNumber,"SetValue expression text is an Error value");
+        evaluatedExpression=nativeMacroSetValueExpression(QString::fromStdString(first.asText()));
+        if(evaluatedExpression.startsWith('=')) throw VbaRuntimeError(3251,"Repeated SetValue expression prefix is unsupported");
+    }
+    const auto value=host.eval(evaluatedExpression.toUtf8().toStdString());check();reference.object->assign(target.property ? target.property->toUtf8().toStdString() : "Value",value);check();
 }
 }
