@@ -2095,3 +2095,14 @@ Textfeld, Tab-Ausschluss und echte Tastatur-Zielwahl im bestehenden Layout/GUI
 gebündelt2/2 (12,28/14,29s) bestanden. Details FREE_FORM_CONTROLS.md.
 Keine neue CTest-ID oder aktuelle Gesamtsuite/Windows/Original/DEB-Prüfung;
 letzte DEB15131f0. F080/F081/F104/F148 und456/386/70 bleiben offen/unverändert.
+
+
+## 2026-11-09: bestehende Formularprüfung getrennt übersetzen
+
+Die unveränderte bestehende exerciseStoredForm-Prüfung liegt jetzt in
+tests/stored_form_authoring_tests.cpp statt im großen MainWindow-Prüfquelltext.
+Gleiches Testziel und gleiche Aufrufreihenfolge, keine neue CTest-ID oder zusätz-
+liche Prüfung. Änderungen an dieser Formularprüfung benötigen damit nicht mehr
+die Übersetzung des gesamten übrigen GUI-Prüfquelltexts. Bestehendes GUI-Ziel
+1/1 (14,34s) bestanden; keine behauptete gemessene Compiler-Prozentverbesserung.
+Produktlaufzeit unverändert51c122d; letzte DEB15131f0;456/386/70 unverändert.
