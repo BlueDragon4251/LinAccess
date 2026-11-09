@@ -71,3 +71,42 @@ void testNativeSetValueDoubleEvaluation(MainWindow& window,QSqlDatabase db) {
     }
     assert(sql.exec("SELECT COUNT(*) FROM double_eval_audit") && sql.next() && sql.value(0).toInt()==2);sql.finish();assert(sql.exec("SELECT n FROM double_eval_rows WHERE id=1") && sql.next() && sql.value(0).toInt()==45);sql.finish();assert(form.close());assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='DoubleEvaluationCode'"));
 }
+
+void testNativeFormRecordFields(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;
+    QSqlQuery sql(db);assert(sql.exec("CREATE TABLE record_field_rows(id INTEGER PRIMARY KEY AUTOINCREMENT,visible INTEGER,hidden INTEGER DEFAULT 7 CHECK(hidden>=0),note TEXT)"));assert(sql.exec("INSERT INTO record_field_rows(visible,hidden,note) VALUES(10,20,'initial'),(30,40,NULL)"));
+    const QByteArray source=R"FORM(Begin Form
+RecordSource ="record_field_rows"
+Width =2400
+Begin Section
+Height =1000
+Begin TextBox
+Name ="VisibleControl"
+ControlSource ="visible"
+Width =1800
+Height =300
+End
+Begin TextBox
+Name ="CalculatedControl"
+ControlSource ="=[hidden]+1"
+Top =400
+Width =1800
+Height =300
+End
+End
+End)FORM";
+    AccessFormPreview form("RecordFieldsForm",source,{},db,&window);form.show();QApplication::processEvents();auto root=makePreviewFormObject(form);auto field=root->objectItem("hidden").object;auto note=root->objectItem("note").object;auto visible=root->objectItem("visible").object;auto* calculated=form.findChild<QLineEdit*>("access-control-CalculatedControl");assert(field && field->isNativeType("access.formfield") && field->member("Name",{}).asText()=="hidden" && field->scalarValue().number==20 && calculated->text()=="21");assert(visible->isNativeType("access.control") && root->member("Controls",{}).object->member("Count",{}).number==2);
+    linaccess::NativeStandardModuleHost host(&window,db,[] {});const auto commands=host.applicationObject()->member("DoCmd",{}).object;
+    const auto run=linaccess::executeVbaProcedure(R"VBA(Public Sub ChangeUnboundRecordField()
+Forms!RecordFieldsForm!hidden=Forms!RecordFieldsForm!hidden+5
+Forms!RecordFieldsForm!note="Änderung"
+Forms!RecordFieldsForm!visible=11
+End Sub)VBA","ChangeUnboundRecordField",host);if(run.status!=linaccess::VbaExecutionStatus::Completed) qFatal("record field assignment error=%d",run.errorNumber);assert(field->scalarValue().number==25 && note->scalarValue().asText()=="Änderung" && visible->scalarValue().number==11 && calculated->text()=="26" && root->member("Dirty",{}).boolean);assert(sql.exec("SELECT hidden,note,visible FROM record_field_rows WHERE id=1") && sql.next() && sql.value(0).toInt()==20 && sql.value(1).toString()=="initial" && sql.value(2).toInt()==10);sql.finish();root->assign("Dirty",VbaValue::logical(false));assert(sql.exec("SELECT hidden,note,visible FROM record_field_rows WHERE id=1") && sql.next() && sql.value(0).toInt()==25 && sql.value(1).toString()==QString::fromUtf8("Änderung") && sql.value(2).toInt()==11);sql.finish();
+    linaccess::storeNativeMacro(db,"RecordFieldMacro",{{"version",1},{"actions",QJsonArray{QJsonObject{{"action","SetValue"},{"arguments",QJsonArray{"Forms!RecordFieldsForm!hidden","Forms!RecordFieldsForm!hidden+1"}}},QJsonObject{{"action","SetValue"},{"arguments",QJsonArray{"Forms!RecordFieldsForm!note","Null"}}}}}});for(const auto& cmd:{commands,makePreviewApplicationObject(form)->member("DoCmd",{}).object}) {cmd->member("RunMacro",{VbaValue::string("RecordFieldMacro")});assert(field->scalarValue().number==26 && note->scalarValue().kind==VbaValue::Kind::Null);root->member("Undo",{});assert(field->scalarValue().number==25 && note->scalarValue().asText()=="Änderung" && !root->member("Dirty",{}).boolean);}
+    field->assign("Value",VbaValue::integer(-1));int error=0;try {root->assign("Dirty",VbaValue::logical(false));}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2501 && root->member("Dirty",{}).boolean && field->scalarValue().number==-1);assert(sql.exec("SELECT hidden FROM record_field_rows WHERE id=1") && sql.next() && sql.value(0).toInt()==25);sql.finish();field->assign("Value",VbaValue::integer(27));root->assign("Dirty",VbaValue::logical(false));
+    field->assign("Value",VbaValue::integer(28));auto* visibleEditor=form.findChild<QLineEdit*>("access-control-VisibleControl");assert(visibleEditor);visibleEditor->setFocus();QApplication::processEvents();QTest::keyClick(visibleEditor,Qt::Key_A,Qt::ControlModifier);QTest::keyClicks(visibleEditor,"99");assert(visibleEditor->text()=="99");visible->member("Undo",{});assert(root->member("Dirty",{}).boolean && field->scalarValue().number==28 && visible->scalarValue().number==11);root->member("Undo",{});
+    error=0;try {root->objectItem("id").object->assign("Value",VbaValue::integer(99));}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2448 && !root->member("Dirty",{}).boolean);
+    commands->member("GoToRecord",{VbaValue::integer(2),VbaValue::string("RecordFieldsForm"),VbaValue::integer(5)});assert(field->scalarValue().number==7);field->assign("Value",VbaValue::integer(8));note->assign("Value",VbaValue::string("new field row"));root->assign("Dirty",VbaValue::logical(false));assert(sql.exec("SELECT hidden,note FROM record_field_rows WHERE id=3") && sql.next() && sql.value(0).toInt()==8 && sql.value(1).toString()=="new field row");sql.finish();commands->member("GoToRecord",{VbaValue::integer(2),VbaValue::string("RecordFieldsForm"),VbaValue::integer(2)});assert(field->scalarValue().number==27 && note->scalarValue().asText()=="Änderung");
+    assert(form.close());error=0;try {field->assign("Value",VbaValue::integer(100));}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2450);
+    assert(sql.exec("CREATE VIEW record_field_readonly AS SELECT hidden,note FROM record_field_rows"));auto readonlySource=source;readonlySource.replace("record_field_rows","record_field_readonly");AccessFormPreview readonly("RecordFieldsReadonly",readonlySource,{},db,&window);auto readonlyRoot=makePreviewFormObject(readonly);assert(readonlyRoot->objectItem("hidden").object->scalarValue().number==27);error=0;try {readonlyRoot->assignItem("hidden",VbaValue::integer(100));}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2448 && !readonlyRoot->member("Dirty",{}).boolean);assert(readonly.close());
+}

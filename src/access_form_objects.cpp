@@ -912,6 +912,21 @@ private:
     }
     QString section_;
 };
+class PreviewRecordFieldObject final : public linaccess::VbaObject, private PreviewObjectBase {
+public:
+    PreviewRecordFieldObject(AccessFormPreview& preview,QString name):PreviewObjectBase(preview),name_(std::move(name)) {}
+    std::string_view className() const override {return "FormField";}
+    bool isNativeType(std::string_view type) const override {return type=="access.formfield";}
+    linaccess::VbaValue scalarValue() override {return checked().getFieldValue(bytes(name_));}
+    linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
+        auto& preview=checked();if(!args.empty()) throw linaccess::VbaRuntimeError(450,"Form field property takes no arguments");const auto key=text(name).toCaseFolded();
+        if(key=="name") return linaccess::VbaValue::string(bytes(name_));if(key=="value") return scalarValue();if(key=="parent") return linaccess::VbaValue::reference(makePreviewFormObject(preview));throw linaccess::VbaRuntimeError(438,"Form field property unsupported");
+    }
+    void assign(std::string_view name,const linaccess::VbaValue& value) override {auto& preview=checked();if(text(name).compare("Value",Qt::CaseInsensitive)!=0) throw linaccess::VbaRuntimeError(438,"Form field property is read-only or unsupported");preview.setRecordFieldValue(name_,value);}
+private:
+    QString name_;
+};
+
 class PreviewFormObject final : public linaccess::VbaObject, private PreviewObjectBase {
 public:
     explicit PreviewFormObject(AccessFormPreview& preview) : PreviewObjectBase(preview),report_(preview.layout_.kind==linaccess::AccessDocumentKind::Report) {}
@@ -1039,7 +1054,12 @@ public:
         return checked().getFieldValue(name);
     }
     linaccess::VbaValue objectItem(std::string_view name) override {
-        return makePreviewControlsObject(checked())->item(name);
+        auto& preview=checked();const auto requested=text(name);if(preview.controls_.value(requested.toCaseFolded())) return makePreviewControlsObject(preview)->item(name);
+        for(const auto& column:preview.dataColumns_) if(column.compare(requested,Qt::CaseInsensitive)==0) {
+            for(const auto& control:preview.layout_.controls) {auto source=control.controlSource.trimmed();if(source.startsWith('[') && source.endsWith(']')) source=source.mid(1,source.size()-2);if(source.compare(column,Qt::CaseInsensitive)==0 && preview.controls_.value(control.name.toCaseFolded()) && !(control.type=="ListBox" && control.multiSelect)) return linaccess::VbaValue::reference(makePreviewControlObject(preview,control.name));}
+            if(!report_) return linaccess::VbaValue::reference(std::make_shared<PreviewRecordFieldObject>(preview,column));
+        }
+        return makePreviewControlsObject(preview)->item(name);
     }
     linaccess::VbaValue objectMember(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         const auto key=text(name).toCaseFolded();
@@ -1049,7 +1069,7 @@ public:
         return objectItem(bytes(checked().controlMemberName(text(name))));
     }
     void assignItem(std::string_view name,const linaccess::VbaValue& value) override {
-        PreviewControlObject(checked(),text(name)).assign("Value",value);
+        objectItem(name).object->assign("Value",value);
     }
     void assign(std::string_view name,const linaccess::VbaValue& value) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
@@ -1146,7 +1166,7 @@ public:
         if (key == "name" || key == "recordsource" || key == "newrecord" || key == "currentrecord" || key=="openargs")
             throw linaccess::VbaRuntimeError(438,"Form property is read-only");
         if (preview.setModuleMember(name,value,true)) return;
-        PreviewControlObject(preview,preview.controlMemberName(text(name))).assign("Value",value);
+        objectItem(bytes(preview.controlMemberName(text(name)))).object->assign("Value",value);
     }
 private:
     bool report_{};

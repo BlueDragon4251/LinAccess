@@ -2299,7 +2299,7 @@ void AccessFormPreview::setFilterState(const QString& filter,bool enabled) {
 }
 
 void AccessFormPreview::loadRecord() {
-    clearRecordSelection(); bufferedTextControls_.clear();
+    clearRecordSelection(); bufferedTextControls_.clear(); recordFieldEdits_.clear();
     if(currentRecordIndex_==0 && directTable_ && dataSourceAvailable_ && layout_.allowAdditions) {
         try {const auto dates=linaccess::nativeTableDateDefaults(db_,layout_.recordSource.trimmed());for(auto it=dates.cbegin();it!=dates.cend();++it) tableLiteralDefaults_.insert(it.key(),it.value());}
         catch(const linaccess::VbaRuntimeError& error) {dataSourceAvailable_=false;dataSourceErrorNumber_=error.number;tableLiteralDefaults_.clear();if(status_) status_->setText("Tabellenstandardwerte nicht verfügbar ("+QString::number(error.number)+")");}
@@ -2459,6 +2459,11 @@ bool AccessFormPreview::saveRecord() {
             columns << column; placeholders << "?";
             values << linaccess::sqlFieldValue(value,widget->property("la_sql_type").toString());
         } catch (const std::exception& error) { status_->setText(QString::fromUtf8(error.what())); return false; }
+    }
+    for(auto it=recordFieldEdits_.cbegin();it!=recordFieldEdits_.cend();++it) {
+        const int index=columnIndex(it.key(),dataColumns_);if(index<0 || generated.contains(it.key())) {status_->setText("Geändertes Datensatzfeld ist nicht verfügbar oder schreibgeschützt.");return false;}
+        const auto column=sqlIdentifier(dataColumns_[index]);if(columns.contains(column)) {status_->setText("Mehrdeutige Datensatzfeldänderung.");return false;}
+        columns.append(column);placeholders.append("?");values.append(it.value());
     }
     if(currentRecordIndex_==0) for(auto it=tableLiteralDefaults_.cbegin();it!=tableLiteralDefaults_.cend();++it) if(dataTypes_.value(it.key()).contains("DATE",Qt::CaseInsensitive)) {
         const int index=columnIndex(it.key(),dataColumns_);if(index<0) continue;const auto column=sqlIdentifier(dataColumns_[index]);if(columns.contains(column)) continue;columns.append(column);placeholders.append("?");values.append(it.value());
@@ -2705,8 +2710,11 @@ linaccess::VbaValue AccessFormPreview::getFieldValue(std::string_view name) cons
     if (!widget) {
         const auto index=columnIndex(key,dataColumns_);
         if (index<0) throw linaccess::VbaRuntimeError(2465,"Unknown form control or field");
+        for(const auto& control:layout_.controls) if(columnIndex(control.controlSource,dataColumns_)==index && controls_.value(control.name.toCaseFolded()) && !(control.type=="ListBox" && control.multiSelect)) return getFieldValue(control.name.toUtf8().toStdString());
+        const auto canonical=dataColumns_[index].toCaseFolded();const auto type=dataTypes_.value(canonical);
+        if(recordFieldEdits_.contains(canonical)) return linaccess::qtFieldValue(recordFieldEdits_.value(canonical),type);
         const auto row=currentRecordIndex_-1;
-        return row>=0 && row<recordRows_.size() ? linaccess::qtFieldValue(recordRows_[row][index],dataTypes_.value(key.toCaseFolded())) : linaccess::VbaValue{};
+        return row>=0 && row<recordRows_.size() ? linaccess::qtFieldValue(recordRows_[row][index],type) : currentRecordIndex_==0 && tableLiteralDefaults_.contains(canonical) ? linaccess::qtFieldValue(tableLiteralDefaults_.value(canonical),type) : linaccess::VbaValue{};
     }
     if(auto* list=dynamic_cast<AccessListBox*>(widget); list && list->multiSelectMode()) return {};
     if(widget->property("la_default_error").toInt()) throw linaccess::VbaRuntimeError(widget->property("la_default_error").toInt(),"Control default unavailable");
@@ -2854,6 +2862,22 @@ linaccess::VbaValue AccessFormPreview::controlColumnValue(const QString& name,co
     if (column>=values.size()) throw linaccess::VbaRuntimeError(5,"Column not present in row source");
     return linaccess::qtFieldValue(values[column]);
 }
+void AccessFormPreview::setRecordFieldValue(const QString& name,const linaccess::VbaValue& value) {
+    const auto writable=[&] {
+        if(closed_ || openCancelled_ || !db_.isOpen()) throw linaccess::VbaRuntimeError(2450,"Form is closed or unavailable");
+        if(recordCommandRunning_ || loading_ || closing_) throw linaccess::VbaRuntimeError(3251,"Record field editing is unavailable in this scope");
+        const int index=columnIndex(name,dataColumns_);if(index<0) throw linaccess::VbaRuntimeError(2465,"Unknown form record field");
+        if(layout_.kind!=linaccess::AccessDocumentKind::Form || !directTable_ || !dataSourceAvailable_ || (currentRecordIndex_==0 && !layout_.allowAdditions)) throw linaccess::VbaRuntimeError(2448,"Form record field is read-only");
+        if(currentRecordIndex_<0 || currentRecordIndex_>recordRows_.size()) throw linaccess::VbaRuntimeError(3021,"No current form record");
+        if(linaccess::generatedAccessColumns(db_,layout_.recordSource.trimmed()).contains(dataColumns_[index].toCaseFolded())) throw linaccess::VbaRuntimeError(2448,"AutoNumber field is read-only");
+        return index;
+    };
+    (void)writable();const QPointer<AccessFormPreview> alive(this);const auto scalar=linaccess::scalarVbaValue(value);if(!alive) throw linaccess::VbaRuntimeError(2450,"Form destroyed during field evaluation");
+    const int index=writable();const auto canonical=dataColumns_[index].toCaseFolded();const auto converted=linaccess::sqlFieldValue(scalar,dataTypes_.value(canonical));
+    const auto previous=getFieldValue(name.toUtf8().toStdString());if(linaccess::sqlFieldValue(previous,dataTypes_.value(canonical))==converted) return;
+    recordFieldEdits_.insert(canonical,converted);markDirty({});if(!alive || closed_ || openCancelled_) throw linaccess::VbaRuntimeError(2450,"Form closed during field assignment");refreshCalculatedControls();
+}
+
 void AccessFormPreview::setFieldValue(std::string_view name,const linaccess::VbaValue& value,bool initializingDefault) {
     if(!initializingDefault) ensureWritableControl(name);
     else if(!loading_) throw linaccess::VbaRuntimeError(3251,"Default initialization requires loading scope");
@@ -3221,7 +3245,7 @@ void AccessFormPreview::rememberControlEdit(QObject* watched) {
 }
 void AccessFormPreview::updateDirtyFromRecord() {
     if (!directTable_ || !dataSourceAvailable_) return;
-    dirty_=false;
+    dirty_=!recordFieldEdits_.isEmpty();
     const int row=currentRecordIndex_-1;
     for (const auto& definition : layout_.controls) {
         const int column=columnIndex(definition.controlSource,dataColumns_);

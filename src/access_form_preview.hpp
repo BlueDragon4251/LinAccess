@@ -141,6 +141,7 @@ private:
     void displayFormattedControl(QWidget* widget,const QString& name,const linaccess::VbaValue& value,const QString& raw) const;
     linaccess::VbaValue controlColumnValue(const QString& name,const std::vector<linaccess::VbaValue>& arguments);
     void setFieldValue(std::string_view name,const linaccess::VbaValue& value,bool initializingDefault=false);
+    void setRecordFieldValue(const QString& name,const linaccess::VbaValue& value);
     friend class PreviewVbaHost;
     friend void connectPreviewSqlObjects(QSqlDatabase db);
     friend std::shared_ptr<linaccess::VbaObject> makePreviewFormObject(AccessFormPreview&);
@@ -162,6 +163,7 @@ private:
     friend class PreviewFormObject;
     friend class PreviewSectionObject;
     friend class PreviewRecordsetObject;
+    friend class PreviewRecordFieldObject;
     friend class PreviewFormsObject;
     friend class PreviewControlsObject;
     friend class PreviewControlObject;
@@ -220,6 +222,7 @@ private:
     QStringList dataColumns_;
     QMap<QString,QString> dataTypes_;
     QMap<QString,QVariant> tableLiteralDefaults_;
+    QMap<QString,QVariant> recordFieldEdits_;
     QVector<QVariantList> recordRows_;
     QVector<QVariant> rowIds_;
     std::shared_ptr<linaccess::VbaObject> recordsetSnapshot_;

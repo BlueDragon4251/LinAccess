@@ -546,3 +546,10 @@ text fails before assignment. Generated text has the same4096 UTF-16 limit; a
 second leading-equals prefix refuses3251 rather than unbounded recursion. The
 Item target still requires the existing explicit supported object syntax. Earlier
 notes describing all leading-equals expressions as unsupported are superseded.
+
+
+SetValue also accepts actual native form record-field references without a bound
+control, using the same draft/save/undo path as VBA. See
+[FORM_RECORD_FIELDS_RUNTIME.md](FORM_RECORD_FIELDS_RUNTIME.md). Earlier notes
+listing this specific form-field case as unsupported are superseded; report
+fields, arbitrary targets and complete event/validation parity remain open.

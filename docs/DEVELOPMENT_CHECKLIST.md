@@ -3021,3 +3021,23 @@ Syntax=1+; vollständiger Vorabcheck vor SQL bleibt belegt. Keine neue CTest-ID/
 Gesamtsuite/Windows-Beobachtung/Paketprüfung; bisheriges DEB22a9284.
 NATIVE_MACROS_RUNTIME.md; F088/F052/F118/F164 und456/384/72 unverändert.
 Direkt weiter mit echten Formularfeldern ohne gebundenes Steuerelement.
+
+
+## Fortschreibung 2026-11-09: echte Formularfelder ohne Steuerelement
+Native FormField-Referenzen lesen/ändern tatsächliche RecordSource-Spalten ohne
+Ersatz-Controls; Name/Value/Parent und Lebensdauer geprüft, Controls haben Vorrang,
+bereits gebundene Feldnamen verwenden tatsächliches Control. Eigener typisierter
+Datensatzpuffer ist in Save/Undo/ControlUndo/Neuanlage/Navigation und berechnete
+Controls integriert. Parameterisierte gemeinsame Speicherung mit anderen Controls,
+CHECK-Fehler behalten Entwurf, AutoWert/Readonly/geschlossene Form verweigern.
+VBA und SetValue beider Hosts verwenden denselben Weg; keine DAO-/Berichts-/
+Join-/Vollereignisparität behauptet. FORM_RECORD_FIELDS_RUNTIME.md.
+App gebaut; abschließende GUI1/1 (8,50s), Layout1/1 (11,32s), Original1/1 (124,97s)
+bestanden. Korrekturlauf änderte ausschließlich den ControlUndo-Prüffall auf
+echte Tastatureingabe statt programmatischer Zuweisung ohne Eingabepuffer.
+Original-F129/3075 bleibt erwartete Grenze. Neues DEB native-form-record-fields/
+package/linaccess-0.7.0-Linux.deb mit tatsächlichem MDBTools1.0.1/SQLite3.54.1,
+JOIN/NULL/Zähler, Payload/Rechten/Build-ID/fehlenden Fixtures geprüft. Uploads3/3
+und Fixtures4/4 hashgleich. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung.
+F056/F050/F088/F052 und456/384/72 unverändert.
+Direkt weiter mit echten ApplyFilter-/ShowAllRecords-Dokumentfiltern.
