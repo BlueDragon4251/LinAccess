@@ -1,5 +1,6 @@
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
+#include "native_stored_form.hpp"
 #include "vba_source_codec.hpp"
 #include "vba_analyzer.hpp"
 #include <QApplication>
@@ -181,6 +182,44 @@ End Function
     assert(binaryField->member("FieldSize",{}).asNumber()==3);
     assert(binaryField->member("GetChunk",{VbaValue::numeric(1),VbaValue::numeric(2)}).bytes==std::vector<unsigned char>({1,255}));
     assert(binaryForm.close());
+
+    assert(query.exec("CREATE TABLE escaped_binding(id INTEGER PRIMARY KEY,\"bracket]value\" TEXT,\"[literal]\" TEXT)"));
+    assert(query.exec("INSERT INTO escaped_binding VALUES(1,'first source','second source')"));
+    const QByteArray escapedLayout=R"FORM(Begin Form
+RecordSource ="escaped_binding"
+Begin Section
+Begin TextBox
+Name ="AliasOne"
+ControlSource ="[bracket]]value]"
+End
+Begin TextBox
+Name ="AliasTwo"
+ControlSource ="[[literal]]]"
+Top =400
+End
+End
+End
+)FORM";
+    AccessFormPreview escapedForm("escaped field binding",escapedLayout,{},db);auto escaped=makePreviewFormObject(escapedForm);
+    assert(escaped->item("AliasOne").asText()=="first source" && escaped->item("AliasTwo").asText()=="second source");
+    auto aliasedField=escaped->objectItem("bracket]value").object;
+    assert(aliasedField->member("Name",{}).asText()=="AliasOne");
+    escaped->assignItem("AliasOne",VbaValue::string("first changed"));escaped->assignItem("AliasTwo",VbaValue::string("second changed"));
+    assert(aliasedField->scalarValue().asText()=="first changed" && aliasedField->member("OldValue",{}).asText()=="first source");
+    escaped->assign("Dirty",VbaValue::logical(false));assert(!escapedForm.hasUnsavedChanges());
+    assert(query.exec("SELECT \"bracket]value\",\"[literal]\" FROM escaped_binding") && query.next() && query.value(0).toString()=="first changed" && query.value(1).toString()=="second changed");query.finish();
+    assert(escapedForm.close());
+
+    assert(query.exec("CREATE TABLE literal_binding(id INTEGER PRIMARY KEY,\"=formula\" TEXT,\"[literal]\" TEXT,\" spaced \" TEXT)"));
+    assert(query.exec("INSERT INTO literal_binding VALUES(1,'equals source','bracket source','space source')"));
+    const auto literalSource=nativeStoredForm("literal fields",QJsonObject{{"table","literal_binding"},{"fields",QJsonArray{"=formula","[literal]"," spaced "}}},db);
+    AccessFormPreview literalForm("literal fields",literalSource.layout,literalSource.code,db);auto literal=makePreviewFormObject(literalForm);
+    assert(literal->item("=formula").asText()=="equals source" && literal->item("[literal]").asText()=="bracket source" && literal->item(" spaced ").asText()=="space source");
+    literal->assignItem("=formula",VbaValue::string("equals changed"));literal->assignItem("[literal]",VbaValue::string("bracket changed"));literal->assignItem(" spaced ",VbaValue::string("space changed"));
+    literal->assign("Dirty",VbaValue::logical(false));
+    assert(query.exec("SELECT \"=formula\",\"[literal]\",\" spaced \" FROM literal_binding") && query.next());
+    assert(query.value(0).toString()=="equals changed" && query.value(1).toString()=="bracket changed" && query.value(2).toString()=="space changed");query.finish();
+    assert(literalForm.close());
 }
 
 void testOriginalRecordsetSearch(const QDir& directory,const QJsonArray& objects) {

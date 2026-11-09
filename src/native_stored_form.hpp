@@ -54,7 +54,7 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
     const bool writableTable=database.tables(QSql::Tables).contains(table,Qt::CaseInsensitive);
     QStringList names; QSet<QString> used;
     for(const auto& field:fields) {
-        if(!field.isString() || field.toString().isEmpty() || field.toString().startsWith('='))
+        if(!field.isString() || field.toString().isEmpty())
             throw VbaRuntimeError(3251,"Native stored form field binding is unsupported");
         const auto column=field.toString(); bool found=false;
         int matches=0;
@@ -123,7 +123,11 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
         lines<<"        Begin Label"<<"            Name = "+quoted(unique("LinAccessLabel"))
              <<"            Caption = "+quoted(captions.value(field).toString(field))
              <<"            Left = "+QString::number(qMax(0,rectangle[0]-1920))<<"            Top = "+QString::number(top)<<"            Width = 1800"<<"            Height = 300"<<"        End";
-        lines<<"        Begin TextBox"<<"            Name = "+quoted(field)<<"            ControlSource = "+quoted(field)
+        auto binding=field;
+        if(binding.startsWith('=') || (binding.startsWith('[') && binding.endsWith(']')) || binding.trimmed()!=binding) {
+            binding.replace(']',"]]");binding='['+binding+']';
+        }
+        lines<<"        Begin TextBox"<<"            Name = "+quoted(field)<<"            ControlSource = "+quoted(binding)
              <<"            EventProcPrefix = "+quoted(eventPrefix)<<"            Left = "+QString::number(rectangle[0])<<"            Top = "+QString::number(top)
              <<"            Width = "+QString::number(rectangle[2])<<"            Height = "+QString::number(rectangle[3])<<"            TabIndex = "+QString::number(index);
         if(const auto format=formats.value(field.toCaseFolded());!format.isUndefined()) {if(!format.isString()) throw VbaRuntimeError(5,"Invalid native form field Format");lines<<"            Format = "+quoted(format.toString());}

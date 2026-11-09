@@ -5097,3 +5097,17 @@ Label/Checkbox/Combo/List und unveränderte technische VBA mit unabhängig perSQ
 bestätigtem Klick-Effekt geprüft. App gebaut; kein neuer CTest oder Katalogpunkt,
 kein neuer Original-/Qt-frei-/Windows-/Gesamtsuite-/DEB-Lauf. Letzte geprüfte
 DEB a837563; Katalog456/386/70 bleibt unverändert, keine Gesamtparitätsbehauptung.
+
+
+## 2026-11-09: literale Formular-Feldbindungen
+
+ControlSource dekodiert ]] in geklammerten Feldnamen konsistent für Laden,
+Speichern, Feldreferenz auf vorhandene Alias-Controls und OldValue. Native
+Generatoren klammern/escapen Feldnamen mit führendem =, äußeren Klammern oder
+äußeren Leerzeichen. Keine Umbenennung von Spalten oder Originalquellen.
+Native tatsächliche Lese-/Schreib-/Alias-/OldValue-/SQL-Nachweise im bestehenden
+Layout-/GUI-Ziel abschließend2/2 (12,39/14,16s), aktuelle DEB-/Build-ID-/
+MDBTools1.0.1-/SQLite3.54.1-Prüfung bestanden. Details
+LITERAL_CONTROL_SOURCE_BINDINGS.md. Kein neuer CTest oder Katalogpunkt; keine
+aktuelle Gesamtsuite/Windows/Original-Workflow-Ausführung behauptet. F155/F056/
+F160 und456/386/70 bleiben offen/unverändert. Mehrspaltige native Listen folgen.

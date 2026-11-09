@@ -485,7 +485,7 @@ void setText(QWidget* editor, const QString& text,bool isNull=false) {
 }
 int columnIndex(QString source, const QStringList& columns) {
     source = source.trimmed();
-    if (source.startsWith('[') && source.endsWith(']')) source = source.mid(1, source.size() - 2);
+    if (source.startsWith('[') && source.endsWith(']')) source = source.mid(1, source.size() - 2).replace("]]","]");
     for (int i = 0; i < columns.size(); ++i)
         if (columns[i].compare(source, Qt::CaseInsensitive) == 0) return i;
     return -1;

@@ -42,3 +42,6 @@ object and drives actual text/calculated/label/button/checkbox/combo/list widget
 Its native click writes a real isolated SQLite record and requeries the list;
 independent SQL verifies that effect. A blank zero-control form is also decoded.
 Final targeted validation is recorded in handoff/progress, without new CTest IDs.
+
+Literal bracket/equals/outer-space field bindings are covered in
+LITERAL_CONTROL_SOURCE_BINDINGS.md.

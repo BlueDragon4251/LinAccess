@@ -352,7 +352,7 @@ public:
             for (const auto& definition:preview.layout_.controls) if (definition.name.compare(name_,Qt::CaseInsensitive)==0) {
                 auto source=definition.controlSource.trimmed();
                 if (source.isEmpty() || source.startsWith('=')) throw linaccess::VbaRuntimeError(3251,"OldValue requires a bound data field");
-                if (source.startsWith('[') && source.endsWith(']')) source=source.mid(1,source.size()-2);
+                if (source.startsWith('[') && source.endsWith(']')) source=source.mid(1,source.size()-2).replace("]]","]");
                 for (int column=0;column<preview.dataColumns_.size();++column) if (preview.dataColumns_[column].compare(source,Qt::CaseInsensitive)==0) {
                     const auto previous=preview.property("la_after_update_old_values").toMap();
                     const auto field=preview.dataColumns_[column].toCaseFolded();
@@ -1156,7 +1156,7 @@ public:
     linaccess::VbaValue objectItem(std::string_view name) override {
         auto& preview=checked();const auto requested=text(name);if(preview.controls_.value(requested.toCaseFolded())) return makePreviewControlsObject(preview)->item(name);
         for(const auto& column:preview.dataColumns_) if(column.compare(requested,Qt::CaseInsensitive)==0) {
-            for(const auto& control:preview.layout_.controls) {auto source=control.controlSource.trimmed();if(source.startsWith('[') && source.endsWith(']')) source=source.mid(1,source.size()-2);if(source.compare(column,Qt::CaseInsensitive)==0 && preview.controls_.value(control.name.toCaseFolded()) && !(control.type=="ListBox" && control.multiSelect)) return linaccess::VbaValue::reference(makePreviewControlObject(preview,control.name));}
+            for(const auto& control:preview.layout_.controls) {auto source=control.controlSource.trimmed();if(source.startsWith('[') && source.endsWith(']')) source=source.mid(1,source.size()-2).replace("]]","]");if(source.compare(column,Qt::CaseInsensitive)==0 && preview.controls_.value(control.name.toCaseFolded()) && !(control.type=="ListBox" && control.multiSelect)) return linaccess::VbaValue::reference(makePreviewControlObject(preview,control.name));}
             if(!report_) return linaccess::VbaValue::reference(std::make_shared<PreviewRecordFieldObject>(preview,column));
         }
         return makePreviewControlsObject(preview)->item(name);
