@@ -1395,6 +1395,7 @@ public:
         if(key=="runsql") return Signature{{"SQLStatement","UseTransaction"},1};
         if(key=="runcommand") return Signature{{"Command"},1};
         if(key=="runmacro") return Signature{{"MacroName","RepeatCount","RepeatExpression"},1};
+        if(key=="cancelevent") return Signature{{},0};
         if(key=="sendkeys") return Signature{{"Keys","Wait"},1};
         if(key=="findrecord") return Signature{{"FindWhat","Match","MatchCase","Search","SearchAsFormatted","OnlyCurrentField","FindFirst"},1};
         if(key=="gotocontrol") return Signature{{"ControlName"},1};
@@ -1407,6 +1408,11 @@ public:
         auto& preview=checked(); const auto key=text(name).toCaseFolded();
         if (key=="domenuitem" || key=="runcommand" || key=="sendkeys" || key=="findrecord" || key=="gotorecord" || key=="requery" || key=="maximize" || key=="minimize" || key=="restore" || key=="runsql" || key=="selectobject")
             return dispatchPreviewDocumentCommand(preview,key.toStdString(),args);
+        if(key=="cancelevent") {
+            if(!args.empty()) throw linaccess::VbaRuntimeError(450,"CancelEvent requires no arguments");
+            if(!preview.property("la_bound_event_can_cancel").toBool()) throw linaccess::VbaRuntimeError(3251,"CancelEvent requires a supported cancellable event");
+            preview.setProperty("la_bound_event_cancelled",true);return {};
+        }
         if(key=="runmacro") {
             if(args.empty() || args.size()>3) throw linaccess::VbaRuntimeError(450,"RunMacro requires a name and optional repeat count");
             const auto scalar=[&](const linaccess::VbaValue& value) {const auto result=linaccess::scalarVbaValue(value);(void)checked();return result;};

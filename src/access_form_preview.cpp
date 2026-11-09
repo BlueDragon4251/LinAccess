@@ -3126,6 +3126,13 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
         if (qobject_cast<QMainWindow*>(ancestor)) { projectOwner=ancestor; break; }
     auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,db_,projectOwner,false,where,std::move(openArgs),windowMode,dataMode,std::move(sourceOverride));
     const auto validate=[&] {
+        setProperty("la_document_source_error",nested->dataSourceErrorNumber_);
+        // An invalid explicit WhereCondition can cause derivative initialization
+        // failures. Preserve the actual source error instead of masking it with
+        // a later handler's attempt to use the unavailable record source.
+        if(!where.trimmed().isEmpty() && !nested->layout_.recordSource.trimmed().isEmpty()
+            && !nested->hasDataSource() && !nested->cancelledByOpen() && !nested->closed_)
+            throw linaccess::VbaRuntimeError(nested->dataSourceErrorNumber_ ? nested->dataSourceErrorNumber_ : 3078,"Document WhereCondition record source unavailable");
         for (const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent","OnNoData"})
             if (const auto outcome=nested->eventResult(event);outcome && failed(*outcome))
                 throw linaccess::VbaRuntimeError(outcome->errorNumber ? outcome->errorNumber : 3251,"Document initialization failed");
@@ -3770,9 +3777,14 @@ linaccess::VbaExecutionResult AccessFormPreview::runHandler(const QString& handl
     return result;
 }
 linaccess::VbaExecutionResult AccessFormPreview::runBoundEvent(const QString& binding,const QString& handler) {
-    if(eventProcedure(binding)) return runHandler(handler);
+    const QPointer<AccessFormPreview> self=this;
+    const auto previousAllowed=property("la_bound_event_can_cancel"),previousCancelled=property("la_bound_event_cancelled");
+    static const QSet<QString> cancellable{"open","unload","nodata","dirty","beforeinsert","beforeupdate","dblclick"};
+    setProperty("la_bound_event_can_cancel",cancellable.contains(handler.section('_',-1).toCaseFolded()));setProperty("la_bound_event_cancelled",false);
+    const auto restore=qScopeGuard([self,previousAllowed,previousCancelled] {if(self) {self->setProperty("la_bound_event_can_cancel",previousAllowed);self->setProperty("la_bound_event_cancelled",previousCancelled);}});
     linaccess::VbaExecutionResult result;
-    if(binding.trimmed().startsWith('=')) {
+    if(eventProcedure(binding)) result=runHandler(handler);
+    else if(binding.trimmed().startsWith('=')) {
         PreviewVbaHost host(*this);
         result=linaccess::executeVbaEventExpression(vba_.toUtf8().toStdString(),binding.toUtf8().toStdString(),host);
     } else {
@@ -3783,7 +3795,10 @@ linaccess::VbaExecutionResult AccessFormPreview::runBoundEvent(const QString& bi
           catch(const linaccess::VbaRuntimeError& error) {result.status=linaccess::VbaExecutionStatus::Error;result.errorNumber=error.number;result.explanation=error.what();result.errorSource=error.source;result.errorHelpFile=error.helpFile;result.errorHelpContext=error.helpContext;}
           catch(const std::exception& error) {result.status=linaccess::VbaExecutionStatus::Error;result.errorNumber=5;result.explanation=error.what();}
     }
-    if(failed(result) && status_) status_->setText("Ereignisfehler "+QString::number(result.errorNumber)+": "+QString::fromStdString(result.explanation));
+    if(self) {
+        result.cancelled=result.cancelled || property("la_bound_event_cancelled").toBool();
+        if(failed(result) && status_) status_->setText("Ereignisfehler "+QString::number(result.errorNumber)+": "+QString::fromStdString(result.explanation));
+    }
     return result;
 }
 linaccess::VbaExecutionResult AccessFormPreview::formEvent(const QString& property,const QString& handler) {

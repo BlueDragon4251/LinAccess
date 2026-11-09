@@ -21,6 +21,7 @@ transaction, document, modal and error guards:
 | RunCommand | numeric Command |
 | Requery | optional ControlName |
 | StopMacro | none; terminates this RunMacro invocation, including repetitions |
+| CancelEvent | none; cancels a supported current bound event |
 
 The editor uses the Access action names, ordinary argument cells and Ja/Nein for
 Boolean arguments. Required text cannot be blank. Numeric arguments in persisted
@@ -54,7 +55,7 @@ Enumeration of a stored source is metadata, not proof that its content executes.
 This is the native project format, not an Access2003 SaveAsText/binary macro
 importer or an MS Access execution oracle. Conditions/continuations, macro groups,
 embedded/data macros, RepeatExpression, full action vocabulary/expressions,
-macro-bound event dispatch, AutoExec, library lookup, a macro debugger and complete
+complete macro-bound event dispatch, AutoExec, library lookup, a macro debugger and complete
 Access timing/error identity remain open under F088/F050/F057/F148. Catalog456 /
 384 confirmed partial items /72 open full requirements remains unchanged.
 
@@ -84,3 +85,20 @@ Makronamen mit führendem =/[ sind zur Abgrenzung von Ausdrücken/Embedded-Makro
 verweigert. Keine neue CTest-ID/Windows-Beobachtung. CancelEvent, Tastatur-
 Makroargumente, Gruppen/Bedingungen/volle Ereignisgleichheit bleiben offen.
 NATIVE_MACROS_RUNTIME.md; F088/F050/F057/F148 und456/384/72 unverändert. Direkt weiter.
+
+
+## Event cancellation
+
+CancelEvent sets the current bound event's cancellation flag for supported Open,
+Unload, NoData, Dirty, BeforeInsert, BeforeUpdate and DblClick dispatch. Nested
+events restore the prior scope. The macro keeps running; cancellation is passed
+to existing event validation/close/open handling. Calls outside supported scopes
+refuse3251, with no claim about complete Access error precedence. Keyboard and
+right-button MouseDown cancellation remain unsupported. GUI/layout2/2 (17.08s)
+verify actual validation/open/unload cancellation and scope cleanup. The existing
+original corpus additionally passes1/1 (114.46s), after fixing obsolete raw-display
+assumptions and restoring underlying invalid-WhereCondition error3075 before
+derivative initialization failures. No original sale completion or type/rendering
+oracle is implied. Full macros/event/Access equivalence remains open.
+
+Contract consulted: https://learn.microsoft.com/en-us/office/vba/api/access.docmd.cancelevent

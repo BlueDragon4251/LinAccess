@@ -1,4 +1,6 @@
 #include "access_form_preview.hpp"
+#include "original_bound_value.hpp"
+#include "access_format.hpp"
 #include "access_form_objects.hpp"
 #include "access_form_import.hpp"
 #include "access_table_import.hpp"
@@ -39,6 +41,7 @@
 #endif
 #include <cassert>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <set>
 #include <cmath>
@@ -167,6 +170,7 @@ QString failureCategory(const QString& error,const QJsonArray& definitions,const
     if (text.contains("syntax")) return "unsupported_grammar";
     return "other_sql_failure";
 }
+
 int verifyOriginalFilter(const QDir& directory,const QJsonArray& objects,QSqlDatabase db) {
     // This regression measures original layout/data binding. CodeBehind is
     // deliberately absent; native VBA property dispatch is tested separately.
@@ -179,6 +183,7 @@ int verifyOriginalFilter(const QDir& directory,const QJsonArray& objects,QSqlDat
         if (layout.filterOnLoad || !db.tables().contains(layout.recordSource,Qt::CaseInsensitive)) continue;
         QSqlQuery source(db); assert(source.exec("SELECT * FROM "+db.driver()->escapeIdentifier(layout.recordSource,QSqlDriver::TableName)));
         const auto record=source.record(); if (record.isEmpty()) continue;
+        const auto fieldTypes=linaccess::sqliteColumnTypes(db,layout.recordSource);
         QVector<QVariantList> rows;
         while (source.next()) {
             QVariantList row;
@@ -209,7 +214,7 @@ int verifyOriginalFilter(const QDir& directory,const QJsonArray& objects,QSqlDat
             if (column<0 || control.type!="TextBox") continue;
             auto* widget=form.findChild<QLineEdit*>("access-control-"+control.name); if (!widget) continue;
             assert(widget->property("la_null").toBool()==rows.front()[column].isNull());
-            assert(widget->text()==rows.front()[column].toString()); ++checked;
+            verifyOriginalBoundText(form,control,widget,rows.front()[column],fieldTypes.value(record.fieldName(column).toCaseFolded())); ++checked;
         }
         QString focusControl;
         for (const auto& control:layout.controls) {
@@ -252,7 +257,7 @@ End Sub
             const auto column=record.indexOf(name); if (column<0 || control.type!="TextBox") continue;
             auto* widget=opened->findChild<QLineEdit*>("access-control-"+control.name); if (!widget) continue;
             assert(widget->property("la_null").toBool()==rows.front()[column].isNull());
-            assert(widget->text()==rows.front()[column].toString()); ++cells;
+            verifyOriginalBoundText(*opened,control,widget,rows.front()[column],fieldTypes.value(record.fieldName(column).toCaseFolded())); ++cells;
         }
         assert(cells==checked);
         assert(makePreviewFormObject(caller)->member("Tag",{}).asText()==focusControl.toStdString());
@@ -265,7 +270,7 @@ End Sub
             const auto column=record.indexOf(name); if (column<0 || control.type!="TextBox") continue;
             auto* widget=opened->findChild<QLineEdit*>("access-control-"+control.name); if (!widget) continue;
             assert(widget->property("la_null").toBool()==rows.back()[column].isNull());
-            assert(widget->text()==rows.back()[column].toString()); ++lastCells;
+            verifyOriginalBoundText(*opened,control,widget,rows.back()[column],fieldTypes.value(record.fieldName(column).toCaseFolded())); ++lastCells;
         }
         assert(lastCells==checked);
         std::cout<<"Original active-document GoToControl/Last/Requery: independent bound-cell checks="<<lastCells<<'\n';
@@ -747,7 +752,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                     for (const auto& control:layout.controls) if (control.name.compare(QString::fromStdString(canonical),Qt::CaseInsensitive)==0 && !control.afterUpdate.isEmpty()) {
                         const auto updated=initialized.eventResult("control:"+control.name+":AfterUpdate");
                         if (!updated || updated->status!=linaccess::VbaExecutionStatus::Completed)
-                            std::cerr<<"Original keyboard AfterUpdate: status="<<(updated ? static_cast<int>(updated->status) : -1)<<", error="<<(updated ? updated->errorNumber : 0)<<", line="<<(updated ? updated->line : 0)<<'\n';
+                            std::cerr<<"Original keyboard AfterUpdate: status="<<(updated ? static_cast<int>(updated->status) : -1)<<", error="<<(updated ? updated->errorNumber : 0)<<", line="<<(updated ? updated->line : 0)<<", source-error="<<initialized.property("la_document_source_error").toInt()<<'\n';
                         assert(updated);
                         if (updated->status!=linaccess::VbaExecutionStatus::Completed) {
                             // These keyboard probes deliberately have no active
@@ -827,6 +832,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
             else plan=linaccess::compileAccessQuery(source.startsWith("SELECT",Qt::CaseInsensitive)
                 ? source : linaccess::accessQuerySource(db,source));
             const auto bindings=linaccess::bindAccessQueryParameters(plan,{});
+            QVector<QString> referenceTypes;(void)linaccess::accessQueryColumns(db,plan,&referenceTypes);
             linaccess::SqliteExecutionBudget budget(db);
             QSqlQuery reference(db); assert(reference.prepare(plan.sql));
             for (auto it=bindings.cbegin();it!=bindings.cend();++it) reference.bindValue(it.key(),it.value());
@@ -840,7 +846,7 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                     if (field.startsWith('[') && field.endsWith(']')) field=field.mid(1,field.size()-2);
                     const int column=reference.record().indexOf(field);
                     if (hasRow && column>=0) {
-                        assert(line->text()==reference.value(column).toString());
+                        verifyOriginalBoundText(report,control,line,reference.value(column),referenceTypes.value(column));
                         assert(line->property("la_null").toBool()==reference.value(column).isNull());
                     }
                     if (!line->property("la_null").toBool()) ++reportCells;
@@ -860,8 +866,12 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                 assert(aggregate.exec() && aggregate.next());
                 assert(line->property("la_null").toBool()==aggregate.value(0).isNull());
                 if (!aggregate.value(0).isNull()) {
-                    bool valid=false; const auto native=line->text().toDouble(&valid),expected=aggregate.value(0).toDouble();
-                    assert(valid && std::abs(native-expected)<=qMax(1e-9,std::abs(expected)*1e-12));
+                    const auto value=makePreviewFormObject(report)->item(control.name.toStdString());
+                    const auto native=value.asNumber(),expected=aggregate.value(0).toDouble();
+                    assert(std::abs(native-expected)<=qMax(1e-9,std::abs(expected)*1e-12));
+                    if(control.format.isEmpty()) {bool valid=false;const auto displayed=line->text().toDouble(&valid);assert(valid && std::abs(displayed-expected)<=qMax(1e-9,std::abs(expected)*1e-12));}
+                    else try {const auto display=linaccess::formatAccessValue(value,control.format.toUtf8().toStdString(),true);assert(line->text()==QString::fromStdString(display.asText()) && !line->property("la_format_error").toInt());}
+                    catch(const linaccess::VbaRuntimeError& error) {assert(line->text()==QString("#Fehler (%1)").arg(error.number) && line->property("la_format_error").toInt()==error.number);}
                 }
                 ++reportAggregateCells;
             }

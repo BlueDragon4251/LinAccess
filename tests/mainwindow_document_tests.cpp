@@ -2580,6 +2580,16 @@ End)FORM";
     AccessFormPreview guarded("macro_event_guarded",refused,{},db,&window);guarded.show();QApplication::processEvents();edit=guarded.findChild<QLineEdit*>("access-control-Value");assert(edit);edit->setFocus();QTest::keyClick(edit,Qt::Key_A,Qt::ControlModifier);QTest::keyClicks(edit,"refused");
     error=0;try {makePreviewFormObject(guarded)->assign("Dirty",VbaValue::logical(false));}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error && guarded.eventResult("control:Value:BeforeUpdate")->errorNumber==2485);
     assert(sql.exec("SELECT value FROM macro_event_rows WHERE id=1") && sql.next() && sql.value(0).toString()=="after");sql.finish();makePreviewFormObject(guarded)->member("Undo",{});assert(guarded.close());
+    store("event_cancel",{QJsonObject{{"action","CancelEvent"},{"arguments",QJsonArray{}}}});
+    auto cancelLayout=layout;cancelLayout.replace("BeforeUpdate =\"event_before\"","BeforeUpdate =\"event_cancel\"");
+    AccessFormPreview validation("macro_event_cancel",cancelLayout,{},db,&window);validation.show();QApplication::processEvents();edit=validation.findChild<QLineEdit*>("access-control-Value");assert(edit);edit->setFocus();QTest::keyClick(edit,Qt::Key_A,Qt::ControlModifier);QTest::keyClicks(edit,"cancelled");
+    error=0;try {makePreviewFormObject(validation)->assign("Dirty",VbaValue::logical(false));}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==2501);
+    const auto cancellation=validation.eventResult("control:Value:BeforeUpdate");assert(cancellation && cancellation->status==linaccess::VbaExecutionStatus::Completed && cancellation->cancelled && !cancellation->errorNumber);
+    assert(sql.exec("SELECT value FROM macro_event_rows WHERE id=1") && sql.next() && sql.value(0).toString()=="after");sql.finish();
+    auto outside=makePreviewApplicationObject(validation)->member("DoCmd",{}).object;error=0;try {outside->member("CancelEvent",{});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);makePreviewFormObject(validation)->member("Undo",{});assert(validation.close());
+    AccessFormPreview cancelledOpen("macro_cancel_open","Begin Form\nOnOpen =\"event_cancel\"\nBegin Section\nEnd\nEnd",{},db,&window);cancelledOpen.show();QApplication::processEvents();assert(cancelledOpen.cancelledByOpen());cancelledOpen.close();
+    AccessFormPreview cancelledClose("macro_cancel_close","Begin Form\nOnUnload =\"event_cancel\"\nBegin Section\nEnd\nEnd",{},db,&window);cancelledClose.show();QApplication::processEvents();assert(!cancelledClose.close() && cancelledClose.isVisible());
+    assert(cancelledClose.eventResult("OnUnload")->cancelled);cancelledClose.hide();
 }
 
 void testEditableControlFormats(MainWindow& window,QSqlDatabase db) {

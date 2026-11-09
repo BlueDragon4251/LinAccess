@@ -1,4 +1,5 @@
 #include "access_form_preview.hpp"
+#include "original_bound_value.hpp"
 #include "access_form_objects.hpp"
 #include <QLineEdit>
 #include <QApplication>
@@ -891,13 +892,14 @@ void testOriginalOpenReport(const QDir& directory,const QJsonArray& objects,QSql
         else if(reportLayout.recordSource.startsWith("SELECT",Qt::CaseInsensitive) || reportLayout.recordSource.startsWith("PARAMETERS",Qt::CaseInsensitive)) querySource=reportLayout.recordSource;
         else querySource=linaccess::accessQuerySource(db,reportLayout.recordSource);
         const auto plan=linaccess::compileAccessQuery(querySource); QSqlQuery reference(db); assert(reference.exec(plan.sql) && reference.next());
+        QVector<QString> referenceTypes;(void)linaccess::accessQueryColumns(db,plan,&referenceTypes);
         const auto columns=reference.record(); int cells=0;
         for(const auto& control:reportLayout.controls) {
             if(control.type!="TextBox") continue; auto fieldName=control.controlSource.trimmed();
             if(fieldName.startsWith('[') && fieldName.endsWith(']')) fieldName=fieldName.mid(1,fieldName.size()-2);
             const auto index=columns.indexOf(fieldName); if(index<0) continue;
             auto* field=opened->findChild<QLineEdit*>("access-control-"+control.name); assert(field && field->isReadOnly());
-            const auto value=reference.value(index); assert(field->property("la_null").toBool()==value.isNull() && field->text()==value.toString()); if(!value.isNull()) ++cells;
+            const auto value=reference.value(index); verifyOriginalBoundText(*opened,control,field,value,referenceTypes.value(index)); if(!value.isNull()) ++cells;
         }
         assert(cells>0); reference.finish();
         makePreviewApplicationObject(caller)->member("DoCmd",{}).object->member("Close",{linaccess::VbaValue::numeric(3),linaccess::VbaValue::string(target.toStdString())});

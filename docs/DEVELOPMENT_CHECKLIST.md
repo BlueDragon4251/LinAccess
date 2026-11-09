@@ -2406,3 +2406,27 @@ Makronamen mit führendem =/[ sind zur Abgrenzung von Ausdrücken/Embedded-Makro
 verweigert. Keine neue CTest-ID/Windows-Beobachtung. CancelEvent, Tastatur-
 Makroargumente, Gruppen/Bedingungen/volle Ereignisgleichheit bleiben offen.
 NATIVE_MACROS_RUNTIME.md; F088/F050/F057/F148 und456/384/72 unverändert. Direkt weiter.
+
+
+Native Makros/DoCmd unterstützen jetzt CancelEvent ohne Argumente in unterstützten
+abbrechbaren Bindungen (Open/Unload/NoData/Dirty/BeforeInsert/BeforeUpdate/DblClick).
+Der verschachtelt restaurierte Ereigniszustand wird in VbaExecutionResult.cancelled
+übernommen; Folgeaktionen laufen normal weiter. Außerhalb unterstützter Ereignisse
+bleibt3251, zusätzliche Argumente450. GUI/Layout2/2 (17,08s) bestätigen echte
+Kontroll-BeforeUpdate-Verweigerung ohne SQL-Save, Open-/Unload-Abbruch und keinen
+über den Ereignisrahmen hinaus verbleibenden Cancel-Zustand. App gebaut; die neue
+Designerzuordnung liegt separat noch als WIP vor.
+Zusätzlich bestehender Original-Kassa-Lauf gezielt1/1 (114,46s) bestanden. Dabei
+alte Rohtextannahmen für tatsächlich formatierte Original-Form-/Berichtsfelder und
+Summen korrigiert: gemeinsame Prüfhilfe vergleicht reale skalare Werte mit SQL und
+Anzeige separat über den bestehenden Formatter. SQLite-Ausdrucksmetadaten sind
+kein voller Access-Varianttyp-Oracle. Eigenen anfänglich falschen Objektzugriff in
+der Prüfhilfe behoben; keine Produktionsformatierung zur Erzwingung alter Erwartungen
+abgeschaltet. Ungültige explizite WhereCondition meldet den tatsächlichen
+Datenquellenfehler vor nachfolgenden Initialisierungsfolgefehlern; die bekannten
+beiden fehlende-Verkaufs-ID-Fälle liefern wieder3075/Zeile1023 statt überlagertem3146.
+Das ist Fehlerpriorität nach Konstruktion, keine Zusicherung ausbleibender früherer
+Handlerwirkungen. Originalverkaufsworkflow bleibt offen. Uploads3/3 und Fixtures4/4
+erneut hashgleich. Keine neue CTest-ID oder Windows-Beobachtung; kein frischer
+Gesamtsuite-/Plattform-/CI-Nachweis. NATIVE_MACROS_RUNTIME.md; F088/F057/F114/F129/
+F148 und456/384/72 unverändert. Direkt weiter.
