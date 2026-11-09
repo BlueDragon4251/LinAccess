@@ -1313,7 +1313,7 @@ public:
     }
     void assign(std::string_view name, const VbaValue& value) override {
         refresh();
-        if(lower(name)=="name") throw VbaRuntimeError(3251,"DAO: QueryDef renaming is unsupported");
+        if(lower(name)=="name") {renameOwned(value);return;}
         if(lower(name)=="type") throw VbaRuntimeError(383,"DAO: QueryDef.Type is read-only");
         require(lower(name) == "sql","DAO: QueryDef property is not writable");
         const auto scalar=scalarVbaValue(value);
@@ -1334,6 +1334,33 @@ public:
             if(query.numRowsAffected()!=1) throw VbaRuntimeError(3197,"DAO: Owned query changed concurrently");
         }
         installSource(source,compiled);
+    }
+    void renameOwned(const VbaValue& value) {
+        const auto scalar=scalarVbaValue(value);refresh();
+        if(!owned_ || name_.isEmpty()) throw VbaRuntimeError(3251,"DAO: QueryDef rename requires an owned persistent query");
+        if(scalar.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"DAO: Invalid Null QueryDef name");
+        const auto next=text(scalar.asText());
+        if(next.trimmed().isEmpty() || next.size()>64 || !next.isValidUtf16() || next.contains(QChar(0)) || next.contains('\n') || next.contains('\r')) throw VbaRuntimeError(5,"DAO: Unsupported QueryDef name");
+        if(next==name_) return;
+        if(!connectionUpdatable(db_)) throw VbaRuntimeError(3027,"DAO: Database or object is read-only");
+        if(!sqlite3_get_autocommit(workspace_->connection)) throw VbaRuntimeError(3251,"DAO: Complete the current transaction before renaming a QueryDef");
+        const auto oldKey=name_.toCaseFolded(),newKey=next.toCaseFolded();
+        QSqlQuery query(db_);const auto savepoint="la_rename_query_"+QUuid::createUuid().toString(QUuid::Id128);
+        QVariantMap registry;for(const auto* key:WorkspaceState::queryViewProperties) registry.insert(key,db_.driver()->property(key));
+        if(!query.exec("SAVEPOINT "+savepoint)) queryFailure(query);bool completed=false;
+        const auto rollback=qScopeGuard([&] {if(!completed) {query.exec("ROLLBACK TO "+savepoint);query.exec("RELEASE "+savepoint);for(auto it=registry.cbegin();it!=registry.cend();++it) db_.driver()->setProperty(it.key().toUtf8().constData(),it.value());}});
+        if(newKey!=oldKey) {
+            bool exists=false;try {(void)accessQuerySource(db_,next,nullptr,nullptr,true);exists=true;}catch(const VbaRuntimeError& failure) {if(failure.number!=3265) throw;}
+            if(exists || db_.tables(QSql::AllTables).contains(next,Qt::CaseInsensitive)) throw VbaRuntimeError(3012,"DAO: QueryDef name already exists");
+        }
+        query.prepare("SELECT definition FROM main._la_objects WHERE kind='query' AND name=?");query.addBindValue(name_);
+        if(!query.exec()) queryFailure(query);if(!query.next()) throw VbaRuntimeError(3420,"DAO: Owned query was removed");const auto previous=query.value(0);const auto document=QJsonDocument::fromJson(previous.toByteArray());
+        if(!document.isObject() || document.object().value("sql").toString()!=source_) throw VbaRuntimeError(3197,"DAO: Owned query changed concurrently");query.finish();
+        query.prepare("UPDATE main._la_objects SET name=? WHERE kind='query' AND name=? AND definition=?");query.addBindValue(next);query.addBindValue(name_);query.addBindValue(previous);
+        if(!query.exec()) queryFailure(query);if(query.numRowsAffected()!=1) throw VbaRuntimeError(3197,"DAO: Owned query changed concurrently");query.finish();
+        if(installAccessQueryViews(db_)<0) throw VbaRuntimeError(3251,"DAO: Query views are busy");
+        if(!query.exec("RELEASE "+savepoint)) queryFailure(query);completed=true;
+        ++workspace_->queryGenerations[oldKey];if(newKey!=oldKey) ++workspace_->queryGenerations[newKey];name_=next;namedGeneration_=workspace_->queryGenerations.value(newKey);
     }
     VbaValue parameter(const QString& name) const {
         checkParameter(name);
@@ -1562,7 +1589,8 @@ public:
         } else requested=text(value.asText());
         QString canonical; bool owned=false; const auto source=accessQuerySource(db_,requested,&canonical,&owned,true);
         auto& weak=objects_[canonical.toCaseFolded()]; auto object=weak.lock();
-        if(!object || object->closed_ || (object->owned_ && object->namedGeneration_!=workspace_->queryGenerations.value(canonical.toCaseFolded()))) { object=std::make_shared<QueryDefinition>(db_,source,canonical,owned); weak=object; }
+        if(!object) for(const auto& candidate:objects_) if(auto held=candidate.lock();held && !held->closed_ && held->name_==canonical && held->owned_==owned && (!owned || held->namedGeneration_==workspace_->queryGenerations.value(canonical.toCaseFolded()))) {object=held;weak=held;break;}
+        if(!object || object->name_!=canonical || object->closed_ || (object->owned_ && object->namedGeneration_!=workspace_->queryGenerations.value(canonical.toCaseFolded()))) { object=std::make_shared<QueryDefinition>(db_,source,canonical,owned); weak=object; }
         return VbaValue::reference(object);
     }
     VbaValue item(std::string_view name) override { return member("Item",{VbaValue::string(std::string(name))}); }

@@ -44,7 +44,23 @@ restores registry ownership; subsequently edited SQL returns the new value throu
 another query's view dependency. Independent SQL verifies catalog rows, retained
 metadata and unchanged source row count. No new CTest target or fixed-catalog item.
 
-Rename/Append/attributes, full imported overlays, arbitrary namespace/history/order/
+Append/attributes, full imported overlays, arbitrary namespace/history/order/
 error/concurrency identity and Windows Access2003 execution-oracle parity remain
 open. DAO.QueryDefs joins the explicit closed native type registry; this adds no
 COM provider and does not infer an interface from a reported TypeName.
+
+Owned persistent QueryDef.Name now supports an atomic bounded rename. It changes
+only the catalog name, preserving the entire definition byte-for-byte, SQL,
+parameter bindings and the caller's held field/parameter objects. Case-only
+renames retain the requested spelling. Collisions, invalid names, read-only
+connections and active outer transactions refuse before mutation. The latter
+restriction avoids claiming rollback identity for moving namespaces before that
+identity has been implemented. Temporary/imported queries remain protected.
+The existing installer rebuilds managed views within the same savepoint; failure
+rolls back both SQL state and its five registry properties. Old namespace handles
+are invalidated, the initiating handle follows its new name, and the held catalog
+reuses a renamed live item while rejecting stale cache entries. New queries can
+reuse the vacated name without returning the renamed query accidentally.
+Other saved SQL, forms, reports and VBA bindings are not automatically refactored.
+This is not Name AutoCorrect, cross-connection generation proof or a complete
+Access2003 QueryDef rename/transaction oracle.

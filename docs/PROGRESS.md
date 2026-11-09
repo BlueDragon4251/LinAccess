@@ -6133,3 +6133,15 @@ Kassa-Tabellenkopie3/3 (95,41s; davon Quellkopie87,28s); App/Helfer gebaut.
 SOURCE_FIELD_DISPLAY_PROPERTIES.md. Keine neue Testregistrierung oder F-ID;
 456/384/72 bleiben unverändert. Fortsetzung: eigene DAO-QueryDefs dauerhaft
 umbenennen, Katalog-/View-/Generationseigenschaften mit berücksichtigen.
+
+Eigene persistente DAO-QueryDef.Name lässt sich jetzt atomar umbenennen, auch bei
+reiner Groß-/Kleinschreibungsänderung. Gesamte gespeicherte Definition bleibt
+bytegleich; SQL, Parameterbindungen und aufrufereigene Field-/Parameterreferenzen
+bleiben erhalten. Katalogcache folgt dem neuen Namen, verwaiste alte Einträge
+geben nach Neuanlage nicht versehentlich die umbenannte Abfrage zurück. Andere
+alte Namenshandles werden über Namespace-Generation3420 ungültig. Vorhandener
+View-Installer läuft im selben Savepoint; Fehler stellt SQL und fünf Registrywerte
+zurück. Kollision/ungültiger Name/readonly/aktive äußere Transaktion verweigert;
+importierte/temporäre Namen und automatische Referenzkorrektur bleiben offen.
+DAO1/1 (2,52s), App gebaut; keine Quellkopie-/Gesamtsuite unnötig wiederholt.
+DAO_QUERYDEFS_CATALOG.md; F055/F121 offen,456/384/72 unverändert. Weiterarbeiten.

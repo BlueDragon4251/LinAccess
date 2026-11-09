@@ -1167,6 +1167,24 @@ End Sub
     assert(sql.exec("SELECT COUNT(*) FROM records") && sql.next() && sql.value(0).toInt()==3); sql.finish();
 }
 
+void testOwnedQueryRename() {
+    using namespace linaccess;auto db=QSqlDatabase::addDatabase("QSQLITE","owned-query-rename");db.setDatabaseName(":memory:");assert(db.open());QSqlQuery sql(db);assert(sql.exec("CREATE TABLE values_table(value INTEGER)"));assert(sql.exec("INSERT INTO values_table VALUES(7),(9)"));
+    auto database=makeDaoDatabase(db);auto query=database->member("CreateQueryDef",{VbaValue::string("Original Name"),VbaValue::string("PARAMETERS p LONG; SELECT value FROM values_table WHERE value>=p")}).object;
+    assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='query' AND name='Original Name'") && sql.next());const auto originalDefinition=sql.value(0).toByteArray();sql.finish();
+    auto catalog=database->member("QueryDefs",{}).object;auto other=catalog->member("Item",{VbaValue::string("Original Name")}).object;auto parameter=query->member("Parameters",{VbaValue::string("p")}).object;parameter->assign("Value",VbaValue::longInteger(8));
+    const auto error=[](const std::function<void()>& operation,int expected) {int number=0;try {operation();}catch(const VbaRuntimeError& failure) {number=failure.number;}assert(number==expected);};
+    error([&] {query->assign("Name",VbaValue{});},94);error([&] {query->assign("Name",VbaValue::string(" "));},5);error([&] {query->assign("Name",VbaValue::string("values_table"));},3012);
+    auto engine=makeDaoEngine(db);engine->member("BeginTrans",{});error([&] {query->assign("Name",VbaValue::string("Blocked"));},3251);engine->member("Rollback",{});assert(query->member("Name",{}).asText()=="Original Name");
+    assert(sql.exec("PRAGMA query_only=ON"));error([&] {query->assign("Name",VbaValue::string("Blocked"));},3027);assert(sql.exec("PRAGMA query_only=OFF"));sql.finish();
+    query->assign("Name",VbaValue::string("Renamed Ä"));assert(query->member("Name",{}).asText()=="Renamed Ä");assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='query' AND name='Renamed Ä'") && sql.next() && sql.value(0).toByteArray()==originalDefinition);sql.finish();error([&] {(void)other->member("Name",{});},3420);error([&] {(void)catalog->member("Item",{VbaValue::string("Original Name")});},3265);
+    assert(parameter->member("Value",{}).asNumber()==8);auto rows=query->member("OpenRecordset",{}).object;assert(rows->member("RecordCount",{}).asNumber()==1 && rows->item("value").asNumber()==9);rows->member("Close",{});
+    auto current=catalog->member("Item",{VbaValue::string("Renamed Ä")}).object;current->assign("Name",VbaValue::string("RENAMED Ä"));assert(catalog->member("Item",{VbaValue::string("RENAMED Ä")}).object==current);error([&] {(void)query->member("Name",{});},3420);
+    auto restored=database->member("CreateQueryDef",{VbaValue::string("Original Name"),VbaValue::string("SELECT 17 AS value")}).object;assert(catalog->member("Item",{VbaValue::string("Original Name")}).object->member("Name",{}).asText()=="Original Name");
+    current->assign("SQL",VbaValue::string("SELECT 9 AS value"));auto all=database->member("OpenRecordset",{VbaValue::string("SELECT value FROM [RENAMED Ä]")}).object;assert(all->item("value").asNumber()==9);all->member("Close",{});
+    current->assign("Name",VbaValue::string("Final Name"));assert(!db.tables(QSql::Views).contains("RENAMED Ä",Qt::CaseInsensitive));assert(db.tables(QSql::Views).contains("Final Name",Qt::CaseInsensitive));
+    assert(sql.exec("SELECT definition FROM _la_objects WHERE kind='query' AND name='Final Name'") && sql.next());assert(QJsonDocument::fromJson(sql.value(0).toByteArray()).object().value("sql").toString()=="SELECT 9 AS value");sql.finish();assert(sql.exec("SELECT COUNT(*) FROM values_table") && sql.next() && sql.value(0).toInt()==2);sql.finish();
+}
+
 void testDaoGetRows() {
     using linaccess::VbaValue;
     auto db=QSqlDatabase::addDatabase("QSQLITE","dao-getrows"); db.setDatabaseName(":memory:"); assert(db.open());
@@ -2302,6 +2320,7 @@ int main(int argc, char** argv) {
     testDetachedRelationCreation();
     testDetachedTableCreation();
     testVariantArraysDao();
+    testOwnedQueryRename();
     testDaoGetRows();
     testOwnedQueryDefs();
     testSqlVbaFunctions();
