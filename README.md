@@ -734,3 +734,20 @@ Anwendung gebaut; alle7 Upload-/Fixturehashes unverändert. Keine neuen CTests,
 Original-/Windows-/Gesamtsuitennachweise. Vorstufe a6b2429 privat veröffentlicht und
 Remote-Baum verifiziert. Letzte geprüfteDEB1313196; Paket jetzt aktualisieren.
 Katalog456/386/70 unverändert; ohne Zwischenabschluss weitere offene Umfänge umsetzen.
+
+
+Echtes Tabellen-Datenblatt: Dialogbereich Alle sichtbaren Textfelder und atomare
+Mehrfeld-Alle-ersetzen-Aktion implementiert. Vorbereitete Zellen über mehrere
+Spalten/einen SQL-Transaktionsblock; späterer Feld-/Datensatzfehler rollt frühere
+Schreibzugriffe zurück und entfernt nur eigene Ersetzungsentwürfe. Primärschlüssel,
+generierte/ausgeblendete/numerische/Binärfelder ausschließen, Nullwerte erhalten,
+generierte Werte normal ableiten. Aktuell-Ersetzen bleibt Entwurf am aktuellen
+Textfeld und behält Allfeld-Suchbereich. Validierungszeitliche Quell-/Feld-/Sicht-
+Änderungen vor Schreiben2501; sortierten aktuellen Schlüssel/Spalte wiederherstellen.
+Details LITERAL_REPLACE_RUNTIME.md. Anwendung gebaut, erstes bestehendes GUI-/Modell-
+Bündel2/2 (16,60s): reale Buttons/SQL, vier Feldwerte, später CHECK-Rollback, fremder
+Entwurf, Scopewechsel und doppelte Spalten geprüft. Keine neuen CTests/Original-/
+Windows-/Gesamtsuitennachweise. Def-Typ-Vorstufe cd0cd59 privat veröffentlicht/Remote-
+Baum verifiziert; frischeDEBcd0cd59 samt Payload/Rechten/Build-ID und gepinnten
+SQLite/MDBTools erfolgreich geprüft. Dieses Paket liegt vor Mehrfeld-Ersetzen.
+Katalog456/386/70 unverändert; ohne Zwischenabschluss weitere offene Umfänge umsetzen.

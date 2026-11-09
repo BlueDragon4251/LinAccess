@@ -21,6 +21,7 @@ public:
     bool submitExistingRecord(int row);
     bool replaceAllWholeText(int column,const QString& search,const QString& replacement,Qt::CaseSensitivity sensitivity,int* count);
     bool replaceAllLiteralText(int column,const QString& search,const QString& replacement,int mode,Qt::CaseSensitivity sensitivity,int* count);
+    bool replaceAllLiteralTextColumns(const QVector<int>& columns,const QString& search,const QString& replacement,int mode,Qt::CaseSensitivity sensitivity,int* count);
     bool hasPendingRecord(int row) const;
     bool undoPendingRecord(int row);
     QMap<QString,QVariant> submittedPrimaryKey(int originalRow) const { return submittedKeys_.value(originalRow); }

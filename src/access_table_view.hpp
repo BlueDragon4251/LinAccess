@@ -98,6 +98,8 @@ public:
         if(replacing_ || finding_) return fail(3251,"Eine Such- oder Ersetzungsaktion läuft bereits.");
         replacing_=true; const auto finished=qScopeGuard([self] { if(self) self->replacing_=false; });
         if(typed->isReadOnly()) return fail(2046,"Das Datenblatt ist schreibgeschützt.");
+        const bool allFields=arguments.column==-1;
+        if(allFields) arguments.column=currentIndex().column();
         if(arguments.formatted || arguments.wildcards || arguments.value || arguments.mode<0 || arguments.mode>2 || arguments.column<0 || arguments.column>=typed->columnCount()
             || isColumnHidden(arguments.column) || !typed->isTextColumn(arguments.column))
             return fail(3251,"Ersetzen erfordert ein ausgewähltes Textfeld und einen gültigen Vergleichsmodus.");
@@ -136,6 +138,7 @@ public:
         const bool changed=typed->setData(target,output.value,Qt::EditRole);
         if(!self || !typed) return false;
         if(!changed) { findMessage_=typed->lastError().text(); return false; }
+        if(allFields) arguments.column=-1;
         findArguments_=std::move(arguments); findArguments_.origin=0; findAdvance_=true;
         findMessage_="Feldwert ersetzt.";
         return true;
@@ -148,26 +151,42 @@ public:
         if(replacing_ || finding_) return fail(3251,"Eine Such- oder Ersetzungsaktion läuft bereits.");
         replacing_=true; const auto finished=qScopeGuard([self] { if(self) self->replacing_=false; });
         if(typed->isReadOnly()) return fail(2046,"Das Datenblatt ist schreibgeschützt.");
-        if(arguments.formatted || arguments.wildcards || arguments.value || arguments.mode<0 || arguments.mode>2 || arguments.direction!=2 || arguments.column<0 || arguments.column>=typed->columnCount()
-            || isColumnHidden(arguments.column) || !typed->isTextColumn(arguments.column))
+        if(arguments.formatted || arguments.wildcards || arguments.value || arguments.mode<0 || arguments.mode>2 || arguments.direction!=2 || arguments.column< -1 || arguments.column>=typed->columnCount()
+            || (arguments.column>=0 && (isColumnHidden(arguments.column) || !typed->isTextColumn(arguments.column))))
             return fail(3251,"Alle ersetzen erfordert ein Textfeld, einen gültigen Vergleichsmodus und die Suchrichtung Alle.");
         if(arguments.text.isEmpty()) return fail(5,"Der Suchwert darf nicht leer sein.");
         try {(void)replaceNativeText({},arguments.text,replacement,arguments.mode,arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive,false);}catch(const VbaRuntimeError& error) {return fail(error.number,QString::fromUtf8(error.what()));}
         if(!finishEditing() || !self || !typed) return false;
-        const auto table=typed->tableName(),field=typed->record().fieldName(arguments.column);
+        const auto eligibleColumns=[&] {
+            QVector<int> result;
+            const auto primary=typed->primaryKey();
+            for(int column=0;column<typed->columnCount();++column) {
+                if(arguments.column>=0) {if(arguments.column==column) result.push_back(column);continue;}
+                if(isColumnHidden(column) || !typed->isTextColumn(column) || typed->isGeneratedColumn(column)) continue;
+                bool key=false;for(int i=0;i<primary.count();++i) key|=primary.fieldName(i).compare(typed->record().fieldName(column),Qt::CaseInsensitive)==0;
+                if(!key) result.push_back(column);
+            }
+            return result;
+        };
+        const auto columns=eligibleColumns();if(columns.isEmpty()) return fail(3251,"Keine sichtbaren bearbeitbaren Textfelder ohne Primärschlüssel vorhanden.");
+        const auto table=typed->tableName();QStringList fields;
+        for(const auto column:columns) fields.push_back(typed->record().fieldName(column));
+        const int selectedColumn=arguments.column>=0 ? arguments.column : currentIndex().isValid() ? currentIndex().column() : columns.front();
         const auto primary=typed->primaryKey(); QMap<QString,QVariant> key;
         if(currentIndex().isValid()) for(int i=0;i<primary.count();++i) key.insert(primary.fieldName(i),typed->record(currentIndex().row()).value(primary.fieldName(i)));
         if(recordNavigationGuard_) {
             const auto guard=recordNavigationGuard_; if(!guard()) { if(self && typed) findMessage_=typed->lastError().text(); return false; }
         } else if(typed->isDirty()) return fail(2501,"Zuerst bestehende Änderungen speichern.");
         if(!self || !typed) return false;
-        if(model()!=typed || typed->tableName()!=table || typed->record().fieldName(arguments.column)!=field || isColumnHidden(arguments.column))
-            return fail(2501,"Die Datenquelle wurde während der Validierung geändert.");
+        if(model()!=typed || typed->tableName()!=table || eligibleColumns()!=columns)
+            return fail(2501,"Die Datenquelle oder Feldauswahl wurde während der Validierung geändert.");
+        for(int i=0;i<columns.size();++i) if(typed->record().fieldName(columns[i])!=fields[i] || isColumnHidden(columns[i]))
+            return fail(2501,"Die Datenquelle oder Feldauswahl wurde während der Validierung geändert.");
         for(auto it=key.cbegin();it!=key.cend();++it)
             if(!currentIndex().isValid() || typed->record(currentIndex().row()).value(it.key())!=it.value())
                 return fail(2501,"Der aktuelle Datensatz wurde während der Validierung geändert.");
         int count=0;
-        if(!typed->replaceAllLiteralText(arguments.column,arguments.text,replacement,arguments.mode,arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive,&count)) {
+        if(!typed->replaceAllLiteralTextColumns(columns,arguments.text,replacement,arguments.mode,arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive,&count)) {
             if(self && typed) findMessage_=typed->lastError().text(); return false;
         }
         if(!self || !typed) return false;
@@ -177,7 +196,7 @@ public:
             if(row>=typed->rowCount()) break;
             const auto record=typed->record(row); bool same=true;
             for(auto it=key.cbegin();it!=key.cend();++it) same&=record.value(it.key())==it.value();
-            if(same) { setCurrentIndex(typed->index(row,arguments.column)); scrollTo(currentIndex()); restored=true; }
+            if(same) { setCurrentIndex(typed->index(row,selectedColumn)); scrollTo(currentIndex()); restored=true; }
         }
         findArguments_=std::move(arguments); findArguments_.origin=0; findAdvance_=false;
         findMessage_=count ? QString::number(count)+" Feldwerte ersetzt und gespeichert." : QStringLiteral("Keine passenden Feldwerte gefunden.");

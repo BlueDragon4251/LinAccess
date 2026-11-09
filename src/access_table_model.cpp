@@ -251,18 +251,28 @@ bool AccessTableModel::replaceAllWholeText(int column,const QString& search,cons
     return replaceAllLiteralText(column,search,replacement,1,sensitivity,count);
 }
 bool AccessTableModel::replaceAllLiteralText(int column,const QString& search,const QString& replacement,int mode,Qt::CaseSensitivity sensitivity,int* count) {
+    return replaceAllLiteralTextColumns({column},search,replacement,mode,sensitivity,count);
+}
+bool AccessTableModel::replaceAllLiteralTextColumns(const QVector<int>& columns,const QString& search,const QString& replacement,int mode,Qt::CaseSensitivity sensitivity,int* count) {
     if(count) *count=0;
     if(saving_ || changing_ || isDirty()) return reject(2501);
     if(readOnly_) return reject(2448);
-    if(editStrategy()!=OnManualSubmit || !isTextColumn(column)) return reject(3251);
+    if(editStrategy()!=OnManualSubmit || columns.isEmpty() || columns.size()>columnCount()) return reject(3251);
     if(metadataError_) return reject(metadataError_);
     if(search.isEmpty() || mode<0 || mode>2) return reject(5);
     if(search.size()>1000000 || replacement.size()>1000000) return reject(3251);
-    const auto primary=primaryKey(); const auto name=record().fieldName(column);
+    const auto primary=primaryKey();
     if(primary.isEmpty()) return rejectEdit(3251,"Alle ersetzen erfordert eine Tabelle mit Primärschlüssel.");
-    for(int field=0;field<primary.count();++field)
-        if(primary.fieldName(field).compare(name,Qt::CaseInsensitive)==0) return rejectEdit(3251,"Primärschlüsselfelder können hier nicht gemeinsam ersetzt werden.");
-    QVector<int> matches;QVector<QVariant> prepared;qsizetype outputUnits=0;QElapsedTimer clock;clock.start();
+    QSet<int> unique;int firstColumn=columnCount(),lastColumn=-1;
+    for(const auto column:columns) {
+        if(!isTextColumn(column) || unique.contains(column)) return reject(3251);
+        if(isGeneratedColumn(column)) return reject(2448);
+        unique.insert(column);firstColumn=std::min(firstColumn,column);lastColumn=std::max(lastColumn,column);
+        const auto name=record().fieldName(column);
+        for(int field=0;field<primary.count();++field)
+            if(primary.fieldName(field).compare(name,Qt::CaseInsensitive)==0) return rejectEdit(3251,"Primärschlüsselfelder können hier nicht gemeinsam ersetzt werden.");
+    }
+    QVector<QPair<int,int>> matches;QSet<int> affectedRows;QVector<QVariant> prepared;qsizetype outputUnits=0;QElapsedTimer clock;clock.start();
     try {
         (void)replaceNativeText({},search,replacement,mode,sensitivity,true);
         setLastError({});
@@ -273,14 +283,15 @@ bool AccessTableModel::replaceAllLiteralText(int column,const QString& search,co
         }
         if(lastError().isValid()) return false;
         if(rowCount()>1000000) return reject(3251);
-        for(int row=0;row<rowCount();++row) {
+        for(int row=0;row<rowCount();++row) for(const auto column:columns) {
             const auto target=index(row,column); const auto value=QSqlTableModel::data(target,Qt::EditRole);
             if(clock.hasExpired(5000)) return reject(3035);
             if(value.isNull()) continue;
             const auto changed=replaceNativeText(value.toString(),search,replacement,mode,sensitivity,true);if(!changed.matched) continue;
             if(!(flags(target)&Qt::ItemIsEditable) || !indexInQuery(target).isValid()) return reject(2448);
             if(changed.value.size()>16*1024*1024-outputUnits) return reject(3251);outputUnits+=changed.value.size();
-            matches.append(row);prepared.append(checkedInput(columnType(column),changed.value));
+            if(matches.size()>=1000000) return reject(3251);
+            matches.append({row,column});affectedRows.insert(row);prepared.append(checkedInput(columnType(column),changed.value));
         }
     } catch(const VbaRuntimeError& error) { return reject(error.number); }
       catch(const std::bad_alloc&) { return reject(7); }
@@ -292,15 +303,15 @@ bool AccessTableModel::replaceAllLiteralText(int column,const QString& search,co
         {
             const QSignalBlocker blocked(this);
             try {
-                for(int cell=0;cell<matches.size();++cell) if(!QSqlTableModel::setData(index(matches[cell],column),prepared[cell],Qt::EditRole)) { failure=3251; break; }
+                for(int cell=0;cell<matches.size();++cell) if(!QSqlTableModel::setData(index(matches[cell].first,matches[cell].second),prepared[cell],Qt::EditRole)) { failure=3251; break; }
             } catch(const std::bad_alloc&) { failure=7; }
               catch(const std::exception&) { failure=3251; }
             if(failure) {
-                for(const auto row:matches) QSqlTableModel::revertRow(row);
+                for(const auto row:affectedRows) QSqlTableModel::revertRow(row);
                 dirtyRows_.clear(); deletedRows_.clear();
             }
         }
-        emit dataChanged(index(matches.front(),column),index(matches.back(),column),{Qt::DisplayRole,Qt::EditRole});
+        emit dataChanged(index(matches.front().first,firstColumn),index(matches.back().first,lastColumn),{Qt::DisplayRole,Qt::EditRole});
     }
     if(failure) { dirtyRows_.clear(); deletedRows_.clear(); return reject(failure); }
     if(!submitTransactionally()) {
@@ -311,7 +322,7 @@ bool AccessTableModel::replaceAllLiteralText(int column,const QString& search,co
             const QScopedValueRollback<bool> saving(saving_,true);
             // Qualified row rollback bypasses our saving guard; revertAll
             // dispatches virtual revertRow and would leave the drafts intact.
-            for(const auto row:matches) QSqlTableModel::revertRow(row);
+            for(const auto row:affectedRows) QSqlTableModel::revertRow(row);
             dirtyRows_.clear(); deletedRows_.clear();
         }
         setLastError(problem); return false;

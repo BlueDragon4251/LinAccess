@@ -559,6 +559,30 @@ void exerciseTableReplace(MainWindow& window,QSqlDatabase db) {
     assert(!view->replaceAllText({"seed",1,0,false,0,2},QString("x")+QChar(0)+"y") && model->lastError().nativeErrorCode()=="3251" && !model->isDirty());
     dialog->reject();dispose();assert(window.closeTableDocument(0,"command_replace_parts",2).value("error").toInt()==0);
 
+    assert(sql.exec("CREATE TABLE command_replace_fields(id TEXT PRIMARY KEY,a TEXT,b TEXT CHECK(id<>'seed-two' OR b<>'blocked2'),hidden TEXT,n INTEGER,derived TEXT GENERATED ALWAYS AS(a||'-calculated'),raw BLOB)"));
+    assert(sql.exec("INSERT INTO command_replace_fields(id,a,b,hidden,n,raw) VALUES('seed-one','seed1','SEED1','seed-hidden',7,X'0102'),('seed-two','seed2','SEED2','seed-hidden',8,X'0304'),('third',NULL,'other','seed-hidden',9,NULL)"));
+    assert(window.openTableDocument("command_replace_fields",0,1)==0);view=nullptr;
+    for(auto* candidate:tabs->currentWidget()->findChildren<QTableView*>()) if(auto* typed=dynamic_cast<linaccess::AccessTableView*>(candidate)) view=typed;
+    assert(view);model=qobject_cast<linaccess::AccessTableModel*>(view->model());assert(model);view->hideColumn(3);view->sortByColumn(1,Qt::DescendingOrder);
+    int selectedRow=-1;for(int row=0;row<model->rowCount();++row) if(model->record(row).value("id").toString()=="seed-two") selectedRow=row;assert(selectedRow>=0);view->setCurrentIndex(model->index(selectedRow,1));
+    assert(view->openReplaceDialog());dialog=view->findChild<QDialog*>("native-table-replace-dialog");assert(dialog);
+    auto* scope=dialog->findChild<QComboBox*>("native-table-find-field");assert(scope && scope->findData(-1)>=0);scope->setCurrentIndex(scope->findData(-1));
+    sought=dialog->findChild<QLineEdit*>("native-table-find-text");replacement=dialog->findChild<QLineEdit*>("native-table-replace-with");match=dialog->findChild<QComboBox*>("native-table-find-match");all=dialog->findChild<QPushButton*>("native-table-replace-all");apply=dialog->findChild<QPushButton*>("native-table-replace-current");
+    auto* feedback=dialog->findChild<QLabel*>("native-table-find-result");assert(feedback);
+    sought->setText("seed");replacement->setText("done");match->setCurrentIndex(0);all->click();assert(!model->isDirty() && feedback->text().startsWith("4 Feldwerte"));assert(model->record(view->currentIndex().row()).value("id").toString()=="seed-two" && view->currentIndex().column()==1);
+    assert(sql.exec("SELECT id,a,b,hidden,n,derived,hex(raw) FROM command_replace_fields WHERE id='seed-two'") && sql.next() && sql.value(1).toString()=="done2" && sql.value(2).toString()=="done2" && sql.value(3).toString()=="seed-hidden" && sql.value(4).toInt()==8 && sql.value(5).toString()=="done2-calculated" && sql.value(6).toString()=="0304");sql.finish();
+    assert(sql.exec("SELECT a IS NULL,raw IS NULL FROM command_replace_fields WHERE id='third'") && sql.next() && sql.value(0).toBool() && sql.value(1).toBool());sql.finish();
+    sought->setText("done");replacement->setText("draft");apply->click();assert(model->isDirty() && model->index(view->currentIndex().row(),1).data(Qt::EditRole).toString()=="draft2");model->revertAll();
+    assert(sql.exec("UPDATE command_replace_fields SET a=CASE id WHEN 'seed-one' THEN 'seed1' ELSE 'seed2' END,b=CASE id WHEN 'seed-one' THEN 'seed1' ELSE 'seed2' END WHERE id IN('seed-one','seed-two')"));assert(model->select());view->setCurrentIndex(model->index(0,1));
+    sought->setText("seed");replacement->setText("blocked");all->click();assert(!model->isDirty());
+    assert(sql.exec("SELECT COUNT(*) FROM command_replace_fields WHERE a LIKE 'blocked%' OR b LIKE 'blocked%'") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    assert(sql.exec("SELECT a,b FROM command_replace_fields WHERE id='seed-one'") && sql.next() && sql.value(0).toString()=="seed1" && sql.value(1).toString()=="seed1");sql.finish();
+    assert(model->setData(model->index(1,4),99,Qt::EditRole));replacement->setText("unintended");all->click();assert(model->isDirty() && model->index(1,4).data(Qt::EditRole).toInt()==99);model->revertAll();
+    view->setRecordNavigationGuard([view]{view->hideColumn(2);return true;});assert(!view->replaceAllText({"seed",-1,0,false,0,2},"unexpected") && model->lastError().nativeErrorCode()=="2501" && !model->isDirty());view->showColumn(2);view->setRecordNavigationGuard({});
+    assert(sql.exec("SELECT COUNT(*) FROM command_replace_fields WHERE a LIKE 'unexpected%' OR b LIKE 'unexpected%' OR a LIKE 'unintended%' OR b LIKE 'unintended%'") && sql.next() && sql.value(0).toInt()==0);sql.finish();
+    int untouchedCount=9;assert(!model->replaceAllLiteralTextColumns({1,1},"seed","x",0,Qt::CaseInsensitive,&untouchedCount) && untouchedCount==0 && !model->isDirty());
+    dialog->reject();dispose();assert(window.closeTableDocument(0,"command_replace_fields",2).value("error").toInt()==0);
+
 }
 void exerciseTableMultiDelete(MainWindow& window,QSqlDatabase db) {
     QSqlQuery sql(db); assert(sql.exec("PRAGMA foreign_keys=ON"));

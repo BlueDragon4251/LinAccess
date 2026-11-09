@@ -42,7 +42,7 @@ inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString
     auto* box=new QVBoxLayout(dialog); auto* fields=new QFormLayout;
     auto* text=new QLineEdit(dialog); text->setObjectName("native-table-find-text"); text->setMaxLength(std::numeric_limits<int>::max()); text->setText(initial.text);
     auto* scope=new QComboBox(dialog); scope->setObjectName("native-table-find-field");
-    if(!replace && (initial.formatted || typedHints.size()<columns.size())) scope->addItem(initial.formatted ? "Alle sichtbaren Felder" : "Alle sichtbaren Textfelder",-1);
+    if(initial.formatted || typedHints.size()<columns.size()) scope->addItem(initial.formatted ? "Alle sichtbaren Felder" : "Alle sichtbaren Textfelder",-1);
     for(const auto& column:columns) scope->addItem(column.first,column.second);
     const int selected=scope->findData(initial.column); if(selected>=0) scope->setCurrentIndex(selected);
     auto* match=new QComboBox(dialog); match->setObjectName("native-table-find-match"); match->addItems({"Teil des Feldinhalts","Ganzes Feld","Feldanfang"}); match->setCurrentIndex(initial.mode);
@@ -64,7 +64,7 @@ inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString
         const auto column=scope->currentData().toInt(); const bool exact=!formatted->isChecked() && !wildcards->isChecked() && typedHints.contains(column);
         if(exact) match->setCurrentIndex(1);
         match->setEnabled(!exact); sensitive->setEnabled(!exact);
-        hint->setText(wildcards->isChecked() ? QStringLiteral("Platzhalter: * beliebig, ? ein Zeichen, # Ziffer, [abc] Zeichenklasse.") : formatted->isChecked() ? QStringLiteral("Die tatsächlich formatierte Zellanzeige wird wörtlich durchsucht.") : exact ? typedHints.value(column) : replacing ? QStringLiteral("Text wird wörtlich ersetzt: aktuell erstes Vorkommen, Alle ersetzt jedes Vorkommen.") : QStringLiteral("Text wird wörtlich gesucht."));
+        hint->setText(wildcards->isChecked() ? QStringLiteral("Platzhalter: * beliebig, ? ein Zeichen, # Ziffer, [abc] Zeichenklasse.") : formatted->isChecked() ? QStringLiteral("Die tatsächlich formatierte Zellanzeige wird wörtlich durchsucht.") : exact ? typedHints.value(column) : replacing ? (column<0 ? QStringLiteral("Alle ersetzen: sichtbare Textfelder ohne Primärschlüssel und berechnete Felder. Jedes Vorkommen wird wörtlich ersetzt.") : QStringLiteral("Text wird wörtlich ersetzt: aktuell erstes Vorkommen, Alle ersetzt jedes Vorkommen.")) : QStringLiteral("Text wird wörtlich gesucht."));
     };
     QObject::connect(wildcards,&QCheckBox::toggled,dialog,[updateField] {updateField();});
     QObject::connect(scope,&QComboBox::currentIndexChanged,dialog,[updateField](int) { updateField(); }); updateField();
