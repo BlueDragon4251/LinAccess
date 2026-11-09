@@ -13,11 +13,11 @@ inline QJsonArray nativeMacroDraftActions(const QVector<NativeMacroRowDraft>& ro
     QJsonArray actions;
     for(const auto& row:rows) {
         const NativeMacroSignature* signature=nullptr;for(const auto& candidate:nativeMacroSignatures()) if(candidate.name==row.action) signature=&candidate;
-        if(!signature) throw VbaRuntimeError(3251,"Unbekannte Makroaktion.");QStringList values;for(int index=0;index<3;++index) values.push_back(row.cells[index]);values.append(row.extraArguments);int count=signature->required;for(int index=0;index<values.size();++index) if(!values[index].isEmpty()) count=index+1;
+        if(!signature) throw VbaRuntimeError(3251,"Unbekannte Makroaktion.");QStringList values;for(int index=0;index<3;++index) values.push_back(row.cells[index]);values.append(row.extraArguments);int count=signature->required;for(int index=0;index<values.size();++index) if(!values[index].isEmpty()) count=qMax(count,index+1);
         if(count>signature->types.size()) throw VbaRuntimeError(450,"Zu viele Argumente für die Makroaktion.");QJsonArray arguments;
         for(int index=0;index<count;++index) {
             const auto value=values.value(index),type=signature->types[index];
-            if(row.action=="RunMacro" && index==1 && value.trimmed().isEmpty()) arguments.append(QJsonValue(QJsonValue::Null));
+            if(((row.action=="RunMacro" && index==1) || (row.action=="GoToRecord" && type=="long")) && value.trimmed().isEmpty()) arguments.append(QJsonValue(QJsonValue::Null));
             else if(type=="text") arguments.append(value);
             else if(type=="boolean") {if(row.action=="MessageBox" && value.isEmpty()) arguments.append(true);else if(value.compare("Ja",Qt::CaseInsensitive)==0 || value.compare("True",Qt::CaseInsensitive)==0) arguments.append(true);else if(value.compare("Nein",Qt::CaseInsensitive)==0 || value.compare("False",Qt::CaseInsensitive)==0) arguments.append(false);else throw VbaRuntimeError(13,"Makroargument erfordert Ja oder Nein.");}
             else {bool valid=false;const auto integer=value.toLongLong(&valid);if(!valid || integer<std::numeric_limits<qint32>::min() || integer>std::numeric_limits<qint32>::max()) throw VbaRuntimeError(13,"Makroargument erfordert eine 32-Bit-Ganzzahl.");arguments.append(static_cast<int>(integer));}

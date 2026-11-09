@@ -83,6 +83,7 @@ public:
         if(key=="runsql") return VbaArgumentSignature{{"SQLStatement","UseTransaction"},1};
         if(key=="opentable") return VbaArgumentSignature{{"TableName","View","DataMode"},1};
         if(key=="openquery") return VbaArgumentSignature{{"QueryName","View","DataMode"},1};
+        if(key=="gotorecord") return VbaArgumentSignature{{"ObjectType","ObjectName","Record","Offset"},0};
         if(key=="openform") return VbaArgumentSignature{{"FormName","View"},1};
         if(key=="openreport") return VbaArgumentSignature{{"ReportName","View"},1};
         if(key=="runcommand") return VbaArgumentSignature{{"Command"},1};
@@ -106,6 +107,24 @@ public:
         std::vector<VbaValue> values;for(const auto& argument:args) {values.push_back(scalarVbaValue(argument));host.check();}
         const auto number=[&](std::size_t index,int fallback) {return index>=values.size() || values[index].kind==VbaValue::Kind::Missing ? fallback : static_cast<int>(coerceVbaModuleValue(values[index],"long").number);};
         const auto target=[&] {if(values.empty() || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"Object name is required");return QString::fromStdString(coerceVbaModuleValue(values[0],"string").asText());};
+        if(key=="gotorecord") {
+            if(values.size()>4) throw VbaRuntimeError(450,"GoToRecord accepts at most four arguments");
+            const auto omitted=[&](std::size_t index) {return index>=values.size() || values[index].kind==VbaValue::Kind::Missing || values[index].kind==VbaValue::Kind::Empty;};
+            const int type=omitted(0) ? -1 : number(0,-1),action=omitted(2) ? 1 : number(2,1),offset=omitted(3) ? 1 : number(3,1);
+            const auto object=omitted(1) ? QString{} : QString::fromStdString(coerceVbaModuleValue(values[1],"string").asText());
+            if((type!=-1 && type!=0 && type!=1 && type!=2) || (!object.isEmpty() && type==-1)) throw VbaRuntimeError(3251,"GoToRecord object type unsupported");
+            if(action<0 || action>5) throw VbaRuntimeError(5,"Invalid GoToRecord action");if((action==0 || action==1 || action==4) && offset<1) throw VbaRuntimeError(2105,"Invalid record offset");
+            if(type==2 || type==-1) {
+                QPointer<AccessFormPreview> selected;
+                for(const auto& document:AccessFormPreview::projectDocuments(db_)) if(document && document->documentKind()==AccessDocumentKind::Form && (object.isEmpty() ? document==activePreviewDocument() : document->documentName().compare(object,Qt::CaseInsensitive)==0)) {if(selected) throw VbaRuntimeError(5,"GoToRecord form target is ambiguous");selected=document;}
+                if(selected) {auto forwarded=values;for(auto& value:forwarded) if(value.kind==VbaValue::Kind::Missing) value=VbaValue::empty();auto result=invokeNativePreviewCommand(*selected,"GoToRecord",forwarded);host.check();return result;}
+                if(type==2) throw VbaRuntimeError(object.isEmpty() ? 2046 : 2450,"GoToRecord form is not open");
+            }
+            QVariantMap result;
+            if(type==1) {if(!QMetaObject::invokeMethod(owner_,"navigateQueryDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QString,object),Q_ARG(int,action),Q_ARG(int,offset))) throw VbaRuntimeError(3251,"Query navigation is unavailable");}
+            else {const bool explicitTable=type==0;if(!QMetaObject::invokeMethod(owner_,"navigateTableDocument",Qt::DirectConnection,Q_RETURN_ARG(QVariantMap,result),Q_ARG(QString,object),Q_ARG(int,action),Q_ARG(int,offset),Q_ARG(bool,explicitTable))) throw VbaRuntimeError(3251,"Data navigation is unavailable");}
+            if(!result.value("handled").toBool()) throw VbaRuntimeError(2046,"No active data document supports GoToRecord");resultError(result);host.check();return VbaValue::empty();
+        }
         if(key=="selectobject") {
             if(values.empty() || values.size()>3 || values[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"SelectObject requires a type and optional name/window mode");
             const int type=number(0,-1);const auto object=values.size()>1 && values[1].kind!=VbaValue::Kind::Missing ? QString::fromStdString(coerceVbaModuleValue(values[1],"string").asText()) : QString{};

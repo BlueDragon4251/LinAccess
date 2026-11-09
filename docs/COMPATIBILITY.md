@@ -4557,3 +4557,22 @@ unverändert. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung.
 NATIVE_MACROS_RUNTIME.md; F088/F050/F051/F059/F135/F148,456/384/72 unverändert.
 Weiter: GoToRecord aus tatsächlichen Standardmodulen/Makros mit vier Argumenten
 an vorhandene Daten-/Formularnavigation anbinden; mehrzeilige Argumente erhalten.
+
+
+## Fortschreibung 2026-11-09: GoToRecord aus Modul/Makro, mehrzeilige Argumente
+Standardmodule Application.DoCmd.GoToRecord und native Makroaktion unterstützen
+vier optionale/namentliche Argumente, tatsächliche offene Tabellen/Abfragen und
+sichtbare Projektformulare. Bestehende Save-/Ereignis-/Reihenfolge-/Grenzlogik wird
+wiederverwendet; keine erzeugten Ersatzdokumente. Native JSON-null ist hier eine
+Auslassung, direktes VBA-Null bleibt ein Laufzeitwert. Detailargumente bearbeiten
+Text mehrzeilig ohne SQL-Zeilenverlust; Bedingung bleibt separat.
+App gebaut; Layout1/1 (11,40s), nach Korrektur nur des neuen Prüffall-Abfragemodus
+auf Nur-Lesen GUI1/1 (7,61s) bestanden. Geprüft: tatsächliche Cursorpositionen,
+benannter VBA-Modulaufruf, vierargumentiges Makro beider Hosts, optionale Löcher,
+Tabellen-/Abfrage-/Formularwechsel, Offsetfehler ohne Cursoränderung, geschlossene
+Form verweigert, mehrzeiliger Argumentdialog. Erste GUI verweigerte korrekt die
+nicht unterstützte bearbeitbare sortierte Projektionsabfrage; keine Lockerung.
+Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung. Modale Designer
+und allgemeine versteckte Formularsuche bleiben explizite Grenzen.
+NATIVE_MACROS_RUNTIME.md; F178/F088/F052 und456/384/72 unverändert.
+Direkt weiter: vollständige FindRecord-Anbindung aus Standardmodulen/Makros.

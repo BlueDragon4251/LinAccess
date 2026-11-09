@@ -1211,11 +1211,11 @@ linaccess::VbaValue dispatchPreviewDocumentCommand(AccessFormPreview& preview,st
     }
     if (command=="gotorecord") {
         if (args.size()>4) throw VbaRuntimeError(450,"GoToRecord argument count invalid");
-        const auto type=!args.empty() && args[0].kind!=VbaValue::Kind::Empty ? number(args[0]) : -1;
-        const auto name=args.size()>1 && args[1].kind!=VbaValue::Kind::Empty ? QString::fromStdString(args[1].asText()) : QString{};
+        const auto type=!args.empty() && args[0].kind!=VbaValue::Kind::Empty && args[0].kind!=VbaValue::Kind::Missing ? number(args[0]) : -1;
+        const auto name=args.size()>1 && args[1].kind!=VbaValue::Kind::Empty && args[1].kind!=VbaValue::Kind::Missing ? QString::fromStdString(args[1].asText()) : QString{};
         if ((type!=-1 && type!=0 && type!=1 && type!=2) || (!name.isEmpty() && type!=0 && type!=1 && type!=2)) throw VbaRuntimeError(3251,"GoToRecord object type unsupported");
-        const auto action=args.size()>2 && args[2].kind!=VbaValue::Kind::Empty ? number(args[2]) : 1;
-        const auto offset=args.size()>3 && args[3].kind!=VbaValue::Kind::Empty ? number(args[3]) : 1;
+        const auto action=args.size()>2 && args[2].kind!=VbaValue::Kind::Empty && args[2].kind!=VbaValue::Kind::Missing ? number(args[2]) : 1;
+        const auto offset=args.size()>3 && args[3].kind!=VbaValue::Kind::Empty && args[3].kind!=VbaValue::Kind::Missing ? number(args[3]) : 1;
         if(type==0) {
             if(!host.tableNavigation(action,offset,name,true)) throw VbaRuntimeError(3251,"Native table navigation is unavailable");
         } else if(type==1) host.queryNavigation(action,offset,name);

@@ -365,3 +365,31 @@ This is documentation, not a new Windows execution observation.
 Validation: existing GUI/layout2/2 passed (19.30s), matching application build.
 Actual argument editing/cancel/group persistence and both real host dialogs are
 covered; no new CTest target or Access 2003 rendering oracle.
+
+## Four-argument GoToRecord and multiline argument editing
+
+The native GoToRecord action accepts optional ObjectType, ObjectName, Record,
+Offset. Native JSON null represents an omitted argument for this action; it does
+not inject VBA Null. The designer emits these holes for blank numeric options.
+Direct VBA Null arguments still use normal runtime conversion/error semantics.
+The corresponding standalone Application.DoCmd.GoToRecord member supports named
+arguments and dispatches to actual open table/query documents or an actual open,
+visible project form. Unnamed calls use the active form or data document; explicit
+names do not create missing documents. It uses existing record-save/event,
+query-readonly, row-order, fetch and navigation-boundary rules. Reports and other
+unsupported types are refused. Navigation under a modal designer remains blocked
+by the existing context guard; arbitrary hidden/modal form discovery is not added.
+
+The detailed action editor uses multiline plain text widgets for text arguments,
+including SQL and MessageBox source. Numeric/Boolean arguments use single-line
+inputs. No newline flattening or rich-text interpretation is required to edit an
+existing source argument. All values are still validated by the common serializer
+and whole-definition parser at Save.
+
+Public method contract:
+https://learn.microsoft.com/en-us/office/vba/api/access.docmd.gotorecord .
+This is documentation, not a new Windows Access 2003 observation.
+
+Validation: app built; layout1/1 (11.40s) and corrected readonly-query GUI1/1
+(7.61s) passed. Actual table/query/form positions, named module calls, macro
+omissions in both hosts, invalid offset preservation and multiline text covered.
