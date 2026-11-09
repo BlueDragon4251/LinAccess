@@ -63,3 +63,30 @@ text filter. Targeted layouts1/1 (10.58 s), updated package/build-ID/SQLite3.54.
 and all four original hashes pass; no new CTest target or catalog item. Last full
 baseline48/48 (83.85 s), fresh headless runtime1/1 (1.79 s);456/384/72 unchanged.
 Reference: [Office Delete](https://learn.microsoft.com/en-us/office/vba/api/office.filedialogfilters.delete).
+
+## Standalone standard-module application
+
+The standalone Application.FileDialog(DialogType) exposes the same existing
+actual file/folder picker implementation. Named DialogType, Office.FileDialog
+slots, actual Show/SelectedItems, filters and configured properties work without
+a fabricated form. Supported types remain3/4; Open1/SaveAs2 stay3251. An explicit
+Null type is94; an omitted required type is450 in this host.
+
+This picker is stored on the actual project window, so its configured state
+persists across standalone calls. Actual project reopen clears the owning picker
+property; earlier held picker/filter/selection references keep their old guard and
+fail3420. A fresh call in the new project creates a fresh working picker. Existing
+form-owned picker lifetimes remain2450 after their caller form closes. Complete
+Office global identity/default/result semantics across all hosts remain open.
+
+Standalone Application objects now capture their own connection/file/generation
+lease in addition to any caller guard. Persistent application/dialog handles
+cannot silently attach to a reopened project even when the original execution
+host supplied a no-op extra guard. Scalar type evaluation is followed by another
+project check before creating/configuring the actual picker. Selection still
+only returns paths: it neither opens nor executes selected documents.
+
+Validation: matching final app built; existing layout1/1 (11.31s) and final GUI1/1
+(8.15s) passed. Real file/folder/cancel, typed named module calls and actual
+project switching with a no-op caller guard are exercised. Fresh DEB payload,
+build-ID and actual MDBTools/SQLite backend check passed.

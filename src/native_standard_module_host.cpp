@@ -7,6 +7,7 @@
 #include "access_format.hpp"
 #include "dao_database.hpp"
 #include "native_input_box.hpp"
+#include "native_access_file_dialog.hpp"
 #include "native_access_echo.hpp"
 #include "native_access_cursor.hpp"
 #include <QScopeGuard>
@@ -246,7 +247,7 @@ public:
     std::string_view className() const override {return "Application";}
     bool isNativeType(std::string_view type) const override {return type=="access.application";}
     std::optional<VbaArgumentSignature> argumentSignature(std::string_view name) const override {
-        const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();if(key=="forms" || key=="reports") return VbaArgumentSignature{{"Index"},0};
+        const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();if(key=="forms" || key=="reports") return VbaArgumentSignature{{"Index"},0};if(key=="filedialog") return VbaArgumentSignature{{"DialogType"},1};
         if(QString::fromUtf8(name.data(),name.size()).compare("Echo",Qt::CaseInsensitive)==0) return VbaArgumentSignature{{"EchoOn","bstrStatusBarText"},1};
         if(QString::fromUtf8(name.data(),name.size()).compare("Run",Qt::CaseInsensitive)==0) return nativeApplicationRunSignature();return {};
     }
@@ -254,6 +255,12 @@ public:
         NativeStandardModuleHost host(owner_,db_,guard_);host.check();const auto key=QString::fromUtf8(name.data(),name.size()).toCaseFolded();
         if(key=="echo") {auto result=nativeEcho(*owner_,args);host.check();return result;}
         if(key=="docmd") {if(!args.empty()) throw VbaRuntimeError(450,"DoCmd requires no arguments");if(auto command=commands_.lock()) return VbaValue::reference(command);auto command=std::make_shared<NativeModuleDoCmd>(owner_,db_,guard_);commands_=command;return VbaValue::reference(command);}
+        if(key=="filedialog") {
+            if(args.size()!=1 || args[0].kind==VbaValue::Kind::Missing) throw VbaRuntimeError(450,"FileDialog requires one type");
+            const auto type=scalarVbaValue(args[0]);host.check();if(type.kind==VbaValue::Kind::Null) throw VbaRuntimeError(94,"Invalid Null FileDialog type");const int value=native_picker::integer(type);host.check();
+            const auto owner=owner_;const auto database=db_;const auto lease=guard_;auto guard=[owner,database,lease] {NativeStandardModuleHost context(owner,database,lease);context.check();};
+            return VbaValue::reference(native_picker::create(owner_,value,guard));
+        }
         if(key=="forms" || key=="reports") {
             if(args.size()>1) throw VbaRuntimeError(450,"Document collection accepts one optional index");auto& cache=key=="forms" ? forms_ : reports_;auto documents=cache.lock();if(!documents) {documents=nativeProjectDocuments(db_,owner_,key=="reports");cache=documents;}return args.empty() ? VbaValue::reference(documents) : documents->member("Item",args);
         }
@@ -279,7 +286,9 @@ std::shared_ptr<VbaObject> NativeStandardModuleHost::applicationObject() {
     auto object=contexts.value(identity).value<std::weak_ptr<VbaObject>>().lock();
     if(!object) {
         for(auto iterator=contexts.begin();iterator!=contexts.end();) if(iterator->value<std::weak_ptr<VbaObject>>().expired()) iterator=contexts.erase(iterator);else ++iterator;
-        object=std::make_shared<NativeModuleApplication>(project,db_,guard_);contexts.insert(identity,QVariant::fromValue(std::weak_ptr<VbaObject>(object)));project->setProperty("la_native_module_applications",contexts);
+        const QPointer<QWidget> owner=project;const auto database=db_;const auto databaseName=db_.databaseName();const auto generation=project->property("la_project_generation");const auto outer=guard_;
+        auto lease=[owner,database,databaseName,generation,outer] {if(!owner || !database.isOpen() || database.databaseName()!=databaseName || owner->property("la_project_generation")!=generation) throw VbaRuntimeError(3420,"Application belongs to an earlier project generation");outer();};
+        object=std::make_shared<NativeModuleApplication>(project,db_,std::move(lease));contexts.insert(identity,QVariant::fromValue(std::weak_ptr<VbaObject>(object)));project->setProperty("la_native_module_applications",contexts);
     }
     return object;
 }

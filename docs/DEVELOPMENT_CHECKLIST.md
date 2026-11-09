@@ -2888,3 +2888,24 @@ gewordene Dokumentreferenz. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/
 Paketprüfung; DEB69ac1b9. NATIVE_STANDARD_MODULES_RUNTIME.md;
 F052/F178/F042/F135 und456/384/72 unverändert. Direkt weiter mit echtem FileDialog
 für Standardmodule und zugehöriger Projekt-/Dialogzustandslebensdauer.
+
+
+## Fortschreibung 2026-11-09: echte FileDialog-Picker aus Standardmodulen
+Application.FileDialog(DialogType) verwendet den vorhandenen tatsächlichen Datei-/
+Ordnerpicker (3/4), Office.FileDialog-Typ, Filter/Show/SelectedItems. Keine
+Ersatzform, kein injiziertes Ergebnis, Auswahl öffnet/führt keine Datei aus.
+Projektfenster hält den Pickerzustand; tatsächlicher Projektwechsel leert den
+Cache. Alte Picker bleiben3420-geschützt, neuer Projektaufruf erzeugt funktionie-
+renden neuen Picker. Application besitzt jetzt zusätzlich eine eigene Datei-/
+Generationslease, unabhängig von einer optionalen Prüfung des Aufrufers.
+App gebaut; bestehende Layout1/1 (11,31s) und abschließende GUI1/1 (8,15s) bestanden:
+reale temporäre Datei/Ordner, Abbruch/geleerte Auswahl, Filter, typisierter
+namentlicher VBA-Aufruf, Open1 verweigert/Null94 sowie tatsächlicher Projektwechsel
+mit frisch erzeugtem Application-/Pickerobjekt bei ausdrücklich leerer Zusatz-
+prüfung des Hosts. Finale App/GUI auf demselben Quellstand neu gebaut.
+Frisches DEB native-module-file-dialog/package/linaccess-0.7.0-Linux.deb:
+Payload/Rechte/Build-ID/bytegleicheSQLite und tatsächliches MDBTools1.0.1/
+SQLite3.54.1-Backend (JOIN/NULL/Zähler) bestanden; keine MDB/VBA/Fixtures enthalten.
+Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung. NATIVE_FILE_DIALOG.md;
+F052/F042/F059/F135 und456/384/72 unverändert. Direkt weiter mit SysCmd am echten
+Projekt-Statusbalken/GetObjectState und weiteren vorhandenen Application-Diensten.

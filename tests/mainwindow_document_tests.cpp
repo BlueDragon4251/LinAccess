@@ -2651,6 +2651,23 @@ void testNativeMacroDesigner(MainWindow& window,QSqlDatabase db) {
     unknown=definition;unknown.insert("timer_interval",-1);error=0;try {(void)linaccess::nativeStoredForm("Invalid timer",unknown,db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5);
 }
 
+void testStandaloneFileDialog(MainWindow& window,QSqlDatabase db) {
+    using linaccess::VbaValue;QTemporaryDir directory;assert(directory.isValid());const auto path=directory.filePath("native-picker-reference.txt");{QFile file(path);assert(file.open(QIODevice::WriteOnly) && file.write("native picker reference\n")>0);}
+    linaccess::NativeStandardModuleHost host(&window,db,[] {});auto application=host.applicationObject();auto picker=application->member("FileDialog",{VbaValue::integer(3)}).object;picker->assign("Title",VbaValue::string("Native module file selection"));picker->assign("InitialFileName",VbaValue::string(path.toStdString()));picker->assign("AllowMultiSelect",VbaValue::logical(false));auto filters=picker->member("Filters",{}).object;filters->member("Clear",{});filters->member("Add",{VbaValue::string("Technical reference"),VbaValue::string("*.txt")});auto selected=picker->member("SelectedItems",{}).object;
+    const auto choose=[&](bool accept,bool folder) {QTimer::singleShot(0,&window,[&,accept,folder] {auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="access-file-dialog");assert(dialog->fileMode()==(folder ? QFileDialog::Directory : QFileDialog::ExistingFile));if(!accept) {dialog->reject();return;}dialog->selectFile(folder ? directory.path() : path);QMetaObject::invokeMethod(dialog,"accept",Qt::DirectConnection);});};
+    choose(true,false);assert(picker->member("Show",{}).number==-1 && selected->member("Count",{}).number==1 && selected->member("Item",{VbaValue::integer(1)}).asText()==path.toStdString());choose(false,false);assert(picker->member("Show",{}).number==0 && selected->member("Count",{}).number==0);assert(application->member("FileDialog",{VbaValue::integer(4)}).object==picker);picker->assign("InitialFileName",VbaValue::string(directory.path().toStdString()));choose(true,true);assert(picker->member("Show",{}).number==-1 && selected->member("Item",{VbaValue::integer(1)}).asText()==directory.path().toStdString());
+    QSqlQuery sql(db);sql.prepare("INSERT INTO _la_objects VALUES('module','StandalonePickerCode',?)");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",R"VBA(Public Function StandalonePick(ByVal initial As String) As String
+Dim picker As Office.FileDialog
+Set picker=Application.FileDialog(DialogType:=msoFileDialogFilePicker)
+picker.InitialFileName=initial
+picker.AllowMultiSelect=False
+If picker.Show=-1 Then
+StandalonePick=picker.SelectedItems(1)
+End If
+End Function)VBA"}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();choose(true,false);assert(application->member("Run",{VbaValue::string("StandalonePick"),VbaValue::string(path.toStdString())}).asText()==path.toStdString());choose(false,false);assert(application->member("Run",{VbaValue::string("StandalonePick"),VbaValue::string(path.toStdString())}).asText().empty());
+    int error=0;try {(void)application->member("FileDialog",{VbaValue::integer(1)});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);error=0;try {(void)application->member("FileDialog",{VbaValue{}});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==94);assert(sql.exec("DELETE FROM _la_objects WHERE kind='module' AND name='StandalonePickerCode'"));
+}
+
 void testProjectDocumentLifetime(MainWindow& window,QSqlDatabase db) {
     using linaccess::VbaValue;linaccess::NativeStandardModuleHost host(&window,db,[] {});auto application=host.applicationObject();auto forms=application->member("Forms",{}).object;auto reports=application->member("Reports",{}).object;auto screen=application->member("Screen",{}).object;const auto before=forms->member("Count",{}).number;
     application.reset();const auto result=linaccess::executeVbaProcedure(R"VBA(Public Function GlobalDocumentIdentity() As Boolean
@@ -2929,11 +2946,12 @@ End Function)VBA"}});
         store("macro","aUtOeXeC",{{"version",1},{"actions",QJsonArray{QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{"INSERT INTO startup_effects(n) VALUES(1)"}}},QJsonObject{{"action","RunCode"},{"arguments",QJsonArray{"StartupFunction()"}}},QJsonObject{{"action","OpenTable"},{"arguments",QJsonArray{"startup_effects",0,1}}}}}});}
         setup.close();
     }QSqlDatabase::removeDatabase("native-autoexec-setup");
-    const auto generation=window.property("la_project_generation");linaccess::NativeStandardModuleHost host(&window,db,[&] {if(window.property("la_project_generation")!=generation) throw linaccess::VbaRuntimeError(3420,"Project changed");});auto heldApplication=host.applicationObject();auto heldProject=heldApplication->member("CurrentProject",{}).object;auto heldForms=heldApplication->member("Forms",{}).object;auto heldScreen=heldApplication->member("Screen",{}).object;auto heldTables=heldApplication->member("CurrentData",{}).object->member("AllTables",{}).object;
+    window.setProperty("la_native_module_applications",QVariant{});window.setProperty("la_native_file_dialog",QVariant{});linaccess::NativeStandardModuleHost host(&window,db,[] {});auto heldApplication=host.applicationObject();auto heldProject=heldApplication->member("CurrentProject",{}).object;auto heldForms=heldApplication->member("Forms",{}).object;auto heldScreen=heldApplication->member("Screen",{}).object;auto heldPicker=heldApplication->member("FileDialog",{VbaValue::integer(3)}).object;auto heldTables=heldApplication->member("CurrentData",{}).object->member("AllTables",{}).object;
     openProject(window,path);assert(window.property("la_startup_macro_status").toString()=="completed");
     const auto count=[&] {QSqlQuery query(db);assert(query.exec("SELECT COUNT(*) FROM startup_effects") && query.next());return query.value(0).toInt();};assert(count()==2);
     int stale=0;try {(void)heldApplication->member("Eval",{VbaValue::string("1")});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);stale=0;try {(void)heldProject->member("AllModules",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);stale=0;try {(void)heldTables->member("Count",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);
     stale=0;try {(void)heldForms->member("Count",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);stale=0;try {(void)heldScreen->member("MousePointer",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);
+    stale=0;try {(void)heldPicker->member("Title",{});}catch(const linaccess::VbaRuntimeError& error) {stale=error.number;}assert(stale==3420);{linaccess::NativeStandardModuleHost current(&window,db,[] {});auto fresh=current.applicationObject()->member("FileDialog",{VbaValue::integer(3)}).object;assert(fresh!=heldPicker && fresh->member("DialogType",{}).number==3);}
     openProject(window,path);assert(window.property("la_startup_macro_status").toString()=="completed" && count()==4);
     openProject(window,path,nullptr,true);QTest::keyRelease(&window,Qt::Key_Shift);assert(window.property("la_startup_macro_status").toString()=="bypassed" && count()==4);
     {QSqlQuery sql(db);assert(sql.exec("DELETE FROM _la_objects WHERE kind='macro'"));}
@@ -4069,6 +4087,7 @@ End Sub
     testStandaloneProjectCatalog(window,db);
     testStandaloneDocuments(window,db);
     testProjectDocumentLifetime(window,db);
+    testStandaloneFileDialog(window,db);
     testNativeAutoExec(window,db);
     assert(window.close()); dispose(); watchdog.stop();
     std::cout<<"Main window: native project/explorer opening, independent nonmodal form/report lifetime, deduplication, modal metadata, cancellation, SQL save and retained close/MsgBox passed\n";

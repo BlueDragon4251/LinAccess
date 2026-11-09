@@ -1491,6 +1491,7 @@ void MainWindow::openDatabase(const QString& path) {
     setProperty("la_project_generation",QVariant::fromValue<qulonglong>(property("la_project_generation").toULongLong()+1));
     setProperty("la_native_current_projects",QVariant{});
     setProperty("la_native_document_contexts",QVariant{});
+    setProperty("la_native_file_dialog",QVariant{});
     setProperty("la_native_module_applications",QVariant{});
     setProperty("la_startup_macro_status","none");
     while (tabs_->count()) {
