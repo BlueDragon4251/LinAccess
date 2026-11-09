@@ -204,3 +204,39 @@ Jet locking, concurrent update or Access refresh behavior parity.
 Full desktop 48/48 (89.83 s), fresh GUI-free core 1/1 (1.49 s), Debian package
 payload/permissions/Build-ID/pinned SQLite and all four original fixture SHA-256
 checks pass; no new CTest targets.
+
+## Editable table aliases and source sorting (2026-11-09)
+
+The bounded native editable path now accepts complete `SELECT *` / `alias.*`
+projections over one physical keyed main table, optional explicit/implicit table
+aliases, qualified WHERE field references and ORDER BY on up to ten distinct
+physical fields with independent ASC/DESC directions. Qualified projection,
+predicate and sort names must identify that same source; qualified predicate and
+sort columns must exist. No predicates, functions or user records are executed
+while establishing editability. Existing parameter/subquery/function/aggregate/
+join/projection/hidden-column/nullable-key/TEMP-shadow restrictions remain.
+
+Aliases are removed only from the checked model predicate, replacing their
+qualifier with the actual canonical base-table identity. Literal strings are
+untouched. Sort metadata consists of checked column indices/directions, not raw
+SQL pasted into the writable model. The native table model renders escaped order
+terms and retains all source sort fields on select/save/requery. Its header shows
+the first sort field. Choosing a different field or direction replaces the source
+ordering with the ordinary datasheet sort; requesting the unchanged first sort
+keeps existing tie-break fields. Dirty/protected-editor sort guards remain.
+
+The actual saved-query data document uses this metadata before display. It saves
+real keyed base rows, retains record identity when sorting moves a changed value,
+and removes rows from the displayed result when an edit stops matching the source
+filter. Existing frozen source/schema/lifetime/requery checks continue to apply.
+This is not editable join, arbitrary projection or general Access query parity.
+
+Application built. Initial alias/single-field existing GUI/model block2/2 passed
+16.82s. The scope was completed with multiple sort fields and new actual GUI/model
+integration; a missing model-test include was corrected, rebuilding only that
+target. Final existing GUI/model block2/2 passed16.59s (model0.09s). It proves
+qualified/quoted/implicit aliases, physical sort mapping, real equal-value tie
+ordering, unchanged/new header sorting, dirty-cache refusal, actual saved-query
+writes/reordering/filter disappearance/requery and invalid name/ordinal/function/
+join/nullable-key/TEMP-shadow refusals. No new CTest, Original/Windows/full-suite/
+package proof. Catalog456/386/70 and complete F079/F080 requirements unchanged.

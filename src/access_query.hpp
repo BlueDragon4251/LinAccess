@@ -87,8 +87,8 @@ QString accessOrderByClause(const QString& orderBy,const QStringList& columns,co
 AccessQueryPlan sortAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& source,const QString& orderBy);
 int installAccessQueryViews(QSqlDatabase db, bool freshConnection = false);
 QString accessQuerySource(QSqlDatabase db, const QString& name,QString* canonical=nullptr,bool* owned=nullptr,bool allowEmpty=false);
-// Editable subset: unparameterized SELECT * over one keyed main table, optional bounded WHERE.
-QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* filter=nullptr);
+// Editable subset: complete single-table projection, optional alias/WHERE and bounded field sorting.
+QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* filter=nullptr,QVector<QPair<int,Qt::SortOrder>>* sort=nullptr);
 QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan,
                                                 const QMap<QString,QVariant>& values);
 }

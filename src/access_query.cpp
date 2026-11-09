@@ -2169,31 +2169,64 @@ QString accessScalarDomainExpression(const QString& expression,bool deterministi
     return value;
 }
 
-QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* filter) {
+QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* filter,QVector<QPair<int,Qt::SortOrder>>* sort) {
     const auto plan=compileAccessQuery(source);
     auto tokens=tokenize(plan.sql,true);
     if(!tokens.isEmpty() && symbol(tokens.last(),";")) tokens.removeLast();
-    if(!plan.parameters.isEmpty() || !plan.makeTable.isEmpty() || plan.topLimit || plan.hiddenRank || tokens.size()<4
-        || tokens[0].kind!=Token::Word || tokens[0].value.compare("SELECT",Qt::CaseInsensitive)!=0 || !symbol(tokens[1],"*")
-        || tokens[2].kind!=Token::Word || tokens[2].value.compare("FROM",Qt::CaseInsensitive)!=0
-        || (tokens[3].kind!=Token::Word && tokens[3].kind!=Token::Identifier))
-        throw VbaRuntimeError(3251,"Editable query currently requires SELECT * FROM one keyed table");
-    QString predicate;
-    if(tokens.size()>4) {
-        if(tokens.size()<6 || tokens[4].kind!=Token::Word || tokens[4].value.compare("WHERE",Qt::CaseInsensitive)!=0)
-            throw VbaRuntimeError(3251,"Editable query supports only a bounded WHERE clause after its table");
+    const auto word=[&](qsizetype at,const char* value) {return at<tokens.size() && tokens[at].kind==Token::Word && tokens[at].value.compare(QLatin1String(value),Qt::CaseInsensitive)==0;};
+    const auto name=[&](qsizetype at) {return at<tokens.size() && (tokens[at].kind==Token::Word || tokens[at].kind==Token::Identifier);};
+    if(!plan.parameters.isEmpty() || !plan.makeTable.isEmpty() || plan.topLimit || plan.hiddenRank || tokens.size()<4 || !word(0,"SELECT"))
+        throw VbaRuntimeError(3251,"Editable query requires a complete projection from one keyed table");
+    qsizetype cursor=1;QString projectionQualifier;
+    if(name(cursor) && cursor+2<tokens.size() && symbol(tokens[cursor+1],".") && symbol(tokens[cursor+2],"*")) {projectionQualifier=tokens[cursor].value;cursor+=3;}
+    else if(symbol(tokens[cursor],"*")) ++cursor;
+    else throw VbaRuntimeError(3251,"Editable query requires all source table columns");
+    if(!word(cursor++,"FROM") || !name(cursor)) throw VbaRuntimeError(3251,"Editable query requires a physical source table");
+    const auto requested=tokens[cursor++].value;QString alias;
+    const QSet<QString> clauses{"WHERE","ORDER","JOIN","INNER","LEFT","RIGHT","FULL","CROSS","GROUP","HAVING","UNION","INTERSECT","EXCEPT","LIMIT","OFFSET","WITH","RETURNING","SELECT","FROM","AS","ON","DISTINCT","TOP"};
+    if(word(cursor,"AS")) {++cursor;if(!name(cursor) || (tokens[cursor].kind==Token::Word && clauses.contains(tokens[cursor].value.toUpper()))) throw VbaRuntimeError(3251,"Editable table alias is missing or reserved");alias=tokens[cursor++].value;}
+    else if(name(cursor) && !(tokens[cursor].kind==Token::Word && clauses.contains(tokens[cursor].value.toUpper()))) alias=tokens[cursor++].value;
+    const auto qualifier=alias.isEmpty() ? requested : alias;
+    if(!projectionQualifier.isEmpty() && projectionQualifier.compare(qualifier,Qt::CaseInsensitive)!=0)
+        throw VbaRuntimeError(3251,"Editable projection qualifier does not identify its source");
+    QVector<Token> predicateTokens;
+    if(word(cursor,"WHERE")) {
+        const auto begin=++cursor;int depth=0;
+        for(;cursor<tokens.size();++cursor) {
+            if(symbol(tokens[cursor],"(")) ++depth;
+            else if(symbol(tokens[cursor],")")) --depth;
+            else if(depth==0 && word(cursor,"ORDER")) break;
+        }
+        predicateTokens=tokens.mid(begin,cursor-begin);
+        if(predicateTokens.isEmpty()) throw VbaRuntimeError(3251,"Editable WHERE predicate is empty");
         const QSet<QString> forbidden{"SELECT","FROM","JOIN","GROUP","HAVING","ORDER","LIMIT","OFFSET","UNION","INTERSECT","EXCEPT","WITH","RETURNING"};
-        for(qsizetype i=5;i<tokens.size();++i) {
-            const auto& token=tokens[i];
+        for(qsizetype i=0;i<predicateTokens.size();++i) {
+            const auto& token=predicateTokens[i];
             if(symbol(token,";") || (token.kind==Token::Word && forbidden.contains(token.value.toUpper())))
                 throw VbaRuntimeError(3251,"Editable query subqueries and additional clauses are not implemented");
-            if((token.kind==Token::Word || token.kind==Token::Identifier) && i+1<tokens.size() && symbol(tokens[i+1],"(")
+            if((token.kind==Token::Word || token.kind==Token::Identifier) && i+1<predicateTokens.size() && symbol(predicateTokens[i+1],"(")
                 && !(token.kind==Token::Word && QSet<QString>{"IN","NOT","AND","OR"}.contains(token.value.toUpper())))
                 throw VbaRuntimeError(3251,"Editable query predicate functions are not implemented");
         }
-        predicate=renderJetTokens(tokens.mid(5));
     }
-    const auto requested=tokens[3].value;
+    QVector<QPair<QString,Qt::SortOrder>> orderedFields;
+    if(cursor<tokens.size()) {
+        if(!word(cursor++,"ORDER") || !word(cursor++,"BY")) throw VbaRuntimeError(3251,"Editable source sorting requires physical fields");
+        do {
+            if(!name(cursor)) throw VbaRuntimeError(3251,"Editable sort field is missing");
+            QString field=tokens[cursor++].value;Qt::SortOrder direction=Qt::AscendingOrder;
+            if(cursor<tokens.size() && symbol(tokens[cursor],".")) {
+                if(field.compare(qualifier,Qt::CaseInsensitive)!=0 || !name(++cursor)) throw VbaRuntimeError(3251,"Editable sort qualifier is unsupported");
+                field=tokens[cursor++].value;
+            }
+            if(word(cursor,"DESC")) {direction=Qt::DescendingOrder;++cursor;}
+            else if(word(cursor,"ASC")) ++cursor;
+            if(orderedFields.size()>=10) throw VbaRuntimeError(3251,"Editable source supports at most ten sort fields");
+            orderedFields.push_back({field,direction});
+            if(cursor==tokens.size()) break;
+            if(!symbol(tokens[cursor++],",") || cursor==tokens.size()) throw VbaRuntimeError(3251,"Editable source sort expressions are unsupported");
+        } while(cursor<tokens.size());
+    }
     if(db.driverName()!="QSQLITE" || requested.startsWith("_la_",Qt::CaseInsensitive) || requested.startsWith("sqlite_",Qt::CaseInsensitive))
         throw VbaRuntimeError(3251,"Editable query target is not a supported user table");
     QSqlQuery metadata(db);
@@ -2229,7 +2262,21 @@ QString editableAccessQueryTable(QSqlDatabase db,const QString& source,QString* 
         if(metadata.lastError().isValid()) throw VbaRuntimeError(3146,"Editable primary-key metadata could not be fully read");
     }
 
-    if(filter) *filter=predicate;
+    const auto schema=db.record(table);QVector<QPair<int,Qt::SortOrder>> ordering;QSet<int> orderedColumns;
+    for(const auto& field:orderedFields) {
+        int column=-1;for(int i=0;i<schema.count();++i) if(schema.fieldName(i).compare(field.first,Qt::CaseInsensitive)==0) column=i;
+        if(column<0 || orderedColumns.contains(column)) throw VbaRuntimeError(3251,"Editable sort field is unavailable or repeated");
+        orderedColumns.insert(column);ordering.push_back({column,field.second});
+    }
+    for(qsizetype i=0;i+1<predicateTokens.size();++i) if((predicateTokens[i].kind==Token::Word || predicateTokens[i].kind==Token::Identifier) && symbol(predicateTokens[i+1],".")) {
+        if(predicateTokens[i].value.compare(qualifier,Qt::CaseInsensitive)!=0 || i+2>=predicateTokens.size()
+            || (predicateTokens[i+2].kind!=Token::Word && predicateTokens[i+2].kind!=Token::Identifier)) throw VbaRuntimeError(3251,"Editable predicate qualifier is unsupported");
+        bool known=false;for(int field=0;field<schema.count();++field) known|=schema.fieldName(field).compare(predicateTokens[i+2].value,Qt::CaseInsensitive)==0;
+        if(!known) throw VbaRuntimeError(3251,"Editable qualified predicate field is unavailable");
+        predicateTokens[i].value=table;predicateTokens[i].kind=Token::Identifier;i+=2;
+    }
+    if(filter) *filter=renderJetTokens(predicateTokens);
+    if(sort) *sort=ordering;
     return table;
 }
 void AccessQueryModel::executeFiltered(QSqlDatabase db,const QString& source,const QMap<QString,QVariant>& parameters,const QString& criteria) {

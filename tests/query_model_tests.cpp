@@ -1,3 +1,5 @@
+#include "access_table_model.hpp"
+#include <QSqlRecord>
 #include <cmath>
 #include "access_query.hpp"
 #include "vba_qt_value.hpp"
@@ -90,12 +92,27 @@ int main(int argc, char** argv) {
         assert(linaccess::editableAccessQueryTable(db,"SELECT * FROM editable_source WHERE id=1 AND (value='a;b' OR value IS NULL)",&editableFilter)=="editable_source" && !editableFilter.isEmpty());
         assert(query.exec("INSERT INTO editable_source VALUES(1,'a;b'),(2,'other')"));
         assert(query.exec("SELECT * FROM editable_source WHERE "+editableFilter) && query.next() && query.value(0).toInt()==1 && !query.next()); query.finish();
+
+        QVector<QPair<int,Qt::SortOrder>> ordering;
+        assert(linaccess::editableAccessQueryTable(db,"SELECT s.* FROM editable_source AS s WHERE s.id>=1 ORDER BY s.id DESC",&editableFilter,&ordering)=="editable_source" && ordering.size()==1 && ordering[0].first==0 && ordering[0].second==Qt::DescendingOrder);
+        assert(query.exec("SELECT * FROM editable_source WHERE "+editableFilter+" ORDER BY id DESC") && query.next() && query.value(0).toInt()==2 && query.next() && query.value(0).toInt()==1 && !query.next());query.finish();
+        assert(linaccess::editableAccessQueryTable(db,"SELECT [source row].* FROM editable_source AS [source row] WHERE [source row].[id]=1 ORDER BY [source row].[value] ASC",&editableFilter,&ordering)=="editable_source" && ordering.size()==1 && ordering[0].first==1 && ordering[0].second==Qt::AscendingOrder);
+        assert(query.exec("SELECT * FROM editable_source WHERE "+editableFilter) && query.next() && query.value(0).toInt()==1 && !query.next());query.finish();
+        assert(linaccess::editableAccessQueryTable(db,"SELECT * FROM editable_source s WHERE s.id=2",&editableFilter,&ordering)=="editable_source" && ordering.isEmpty());
+        assert(linaccess::editableAccessQueryTable(db,"SELECT editable_source.* FROM editable_source ORDER BY value",nullptr,&ordering)=="editable_source" && ordering.size()==1 && ordering[0].first==1 && ordering[0].second==Qt::AscendingOrder);
+        for(const auto& invalid:{"SELECT wrong.* FROM editable_source AS s","SELECT s.* FROM editable_source AS WHERE","SELECT s.* FROM editable_source AS s WHERE other.id=1","SELECT s.* FROM editable_source AS s WHERE s.missing=1","SELECT * FROM editable_source AS s ORDER BY other.id","SELECT * FROM editable_source ORDER BY missing","SELECT * FROM editable_source ORDER BY Len(value)","SELECT * FROM editable_source ORDER BY 1","SELECT s.* FROM editable_source AS s JOIN editable_source AS t ON s.id=t.id"}) {int failure=0;try{(void)linaccess::editableAccessQueryTable(db,invalid);}catch(const linaccess::VbaRuntimeError& e){failure=e.number;}assert(failure==3251);}
+
+        assert(linaccess::editableAccessQueryTable(db,"SELECT s.* FROM editable_source s ORDER BY s.value ASC,s.id DESC",nullptr,&ordering)=="editable_source" && ordering.size()==2 && ordering[0].first==1 && ordering[1].first==0 && ordering[1].second==Qt::DescendingOrder);
+        assert(query.exec("INSERT INTO editable_source VALUES(3,'other')"));query.finish();
+        linaccess::AccessTableModel sourceSorted(nullptr,db);sourceSorted.setTable("editable_source");sourceSorted.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(sourceSorted.setSourceSort(ordering) && sourceSorted.select() && sourceSorted.rowCount()==3 && sourceSorted.record(0).value("id").toInt()==1 && sourceSorted.record(1).value("id").toInt()==3 && sourceSorted.record(2).value("id").toInt()==2);
+        sourceSorted.sort(1,Qt::AscendingOrder);assert(sourceSorted.record(1).value("id").toInt()==3);sourceSorted.sort(0,Qt::AscendingOrder);assert(sourceSorted.record(1).value("id").toInt()==2);
+        assert(sourceSorted.setData(sourceSorted.index(0,1),"pending"));assert(!sourceSorted.setSourceSort(ordering) && sourceSorted.isDirty() && sourceSorted.lastError().nativeErrorCode()=="2501");sourceSorted.revertAll();sourceSorted.clear();assert(query.exec("DELETE FROM editable_source WHERE id=3"));query.finish();
         assert(query.exec("CREATE TABLE editable_nullable(id TEXT PRIMARY KEY,value TEXT)"));
         assert(query.exec("CREATE TABLE editable_desc(id INTEGER PRIMARY KEY DESC,value TEXT)"));
         assert(query.exec("CREATE TABLE editable_nonnull(id TEXT NOT NULL PRIMARY KEY,value TEXT)"));
         assert(linaccess::editableAccessQueryTable(db,"SELECT * FROM editable_nonnull")=="editable_nonnull");
         assert(query.exec("CREATE TABLE editable_generated(id INTEGER PRIMARY KEY,value INTEGER,doubled INTEGER GENERATED ALWAYS AS(value*2))"));
-        for(const auto& source:{"SELECT * FROM editable_nullable","SELECT * FROM editable_desc","SELECT id FROM editable_source","SELECT * FROM editable_source ORDER BY id","SELECT * FROM editable_source WHERE id IN(SELECT id FROM editable_source)","SELECT * FROM samples","PARAMETERS p Long; SELECT * FROM editable_source","SELECT * FROM origin_saved","SELECT * FROM editable_generated"}) {
+        for(const auto& source:{"SELECT * FROM editable_nullable","SELECT * FROM editable_desc","SELECT id FROM editable_source","SELECT * FROM editable_source ORDER BY id,id","SELECT * FROM editable_source WHERE id IN(SELECT id FROM editable_source)","SELECT * FROM samples","PARAMETERS p Long; SELECT * FROM editable_source","SELECT * FROM origin_saved","SELECT * FROM editable_generated"}) {
             int error=0; try { (void)linaccess::editableAccessQueryTable(db,source); } catch(const linaccess::VbaRuntimeError& failure) { error=failure.number; }
             assert(error==3251);
         }

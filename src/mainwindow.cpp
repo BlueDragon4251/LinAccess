@@ -2117,10 +2117,10 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
         for(auto* candidate:tabs_->widget(i)->findChildren<linaccess::AccessTableModel*>())
             if(!candidate->isReadOnly() && candidate->tableName().compare(name,Qt::CaseInsensitive)==0) return 3251;
     }
-    QString sourceSchema,sourceFilter;
+    QString sourceSchema,sourceFilter;QVector<QPair<int,Qt::SortOrder>> sourceSort;
     if(!queryName.isEmpty()) {
         try {
-            if(linaccess::editableAccessQueryTable(database,querySource,&sourceFilter)!=name) return 3251;
+            if(linaccess::editableAccessQueryTable(database,querySource,&sourceFilter,&sourceSort)!=name) return 3251;
             sourceSchema=editableSourceSchema(database,name);
         } catch(const linaccess::VbaRuntimeError&) { return 3251; }
     }
@@ -2148,6 +2148,7 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     model->setTable(name);
     page->setProperty("la_datasheet_base_filter",sourceFilter);
     if(!sourceFilter.isEmpty()) model->setFilter(sourceFilter);
+    if(!sourceSort.isEmpty() && !model->setSourceSort(sourceSort)) return 3251;
     model->setEditStrategy(QSqlTableModel::OnManualSubmit);
     (void)model->setReadOnly(readOnly);
     bool selected=false;
@@ -2200,6 +2201,7 @@ int MainWindow::showTable(const QString& name,bool readOnly,bool interactive,con
     {
         const auto key=queryName.toCaseFolded(); if(!key.isEmpty()) executingQueries_.insert(key); ++queryExecutionDepth_;
         const auto finished=qScopeGuard([self,key] { if(self) { if(!key.isEmpty()) self->executingQueries_.remove(key); --self->queryExecutionDepth_; } });
+        if(!sourceSort.isEmpty()) table->horizontalHeader()->setSortIndicator(sourceSort.front().first,sourceSort.front().second);
         table->setSortingEnabled(true);
     }
     if(!alive()) return 2501;

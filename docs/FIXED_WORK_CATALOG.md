@@ -329,7 +329,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F048** — Unlinked native embedded child forms, Form references, Requery, typed edits and parent-close cancellation; original complex Form_Load and 15 actual data-driven Tags verified.
 - [ ] **F056** — Form record sources, filters/sort, focus and control state with real persistence. Bounded direct-table DataEntry is implemented; writable-query/complete Windows semantics remain open (DATA_ENTRY_RUNTIME.md).
 - [ ] **F058** — Mouse/keyboard/timer/combo/subform events; real Kassa UI actions verified.
-- [ ] **F079** — Complete form/report query binding, implicit parameters and editable joins where valid.
+- [ ] **F079** — Complete form/report query binding, implicit parameters and editable joins where valid. Bounded keyed single-table alias/filter/multifield sorting is in OPEN_QUERY_RUNTIME.md; the complete requirement remains open.
 - [x] **F103** — Actual native activation, deferred first Current, form-switch and close-cancellation tests; original Open/Load/Activate/Current complete.
 - [ ] **F104** — Full focus/resize/PopUp/Modal/MDI/reentrant event semantics and Microsoft Access event oracle.
 - [ ] **F111** — Complete focus-specific DoCmd.Requery targeting, sorting, advanced/nested criteria, report/reentrant event semantics and designer filter persistence.
@@ -424,7 +424,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [ ] **F368** — General table navigation with unrelated multirow drafts, inserted/deleted current records, and Access addition-row/error equivalence.
 - [x] **F370** — Native table literal Find handles visible text-field scope, part/whole/start and case modes, real SQL fetching and retained dirty-cache boundaries.
 - [x] **F372** — Modeless table Find reactivates its owning page safely and is disposed with its document; checked view errors propagate accurately to VBA.
-- [ ] **F373** — General table formatted/wildcard/locale/all-field search, remaining typed coercion/partial matching, Replace and DoCmd.FindRecord equivalence. Bounded atomic whole-text Replace All is documented in TABLE_REPLACE_ALL_RUNTIME.md; the complete requirement remains open.
+- [ ] **F373** — General table formatted/wildcard/locale/all-field search, remaining typed coercion/partial matching, Replace and DoCmd.FindRecord equivalence. Bounded atomic literal multi-field Replace All is documented in LITERAL_REPLACE_RUNTIME.md; the complete requirement remains open.
 - [x] **F381** — Native table SendKeys resolves actual cell/Find/Zoom focus per key, retains project identity and ordered modal/queued delivery without old-caller fallback.
 - [x] **F384** — Native table acCmdPaste routes real clipboard TSV through atomic typed preflight/manual-submit cache; invalid later cells, readonly targets and existing drafts retain checked errors without SQL writes.
 - [x] **F392** — Native table acCmdPaste resolves actual owned QLineEdit cell/Find focus, pastes into the real text buffer and preserves checked field/SQL boundaries, including readonly-source Find queries.

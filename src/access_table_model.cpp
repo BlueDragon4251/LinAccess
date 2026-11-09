@@ -58,7 +58,7 @@ bool AccessTableModel::refreshTypes() {
 }
 void AccessTableModel::setTable(const QString& table) {
     if(saving_) { (void)reject(2501); return; }
-    blockHistory_.reset();dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear(); QSqlTableModel::setTable(table); (void)refreshTypes();
+    sourceSort_.clear();blockHistory_.reset();dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear(); QSqlTableModel::setTable(table); (void)refreshTypes();
 }
 bool AccessTableModel::select() {
     if(saving_) return reject(2501);
@@ -68,7 +68,7 @@ bool AccessTableModel::select() {
 }
 void AccessTableModel::clear() {
     if(saving_) { (void)reject(2501); return; }
-    blockHistory_.reset();QSqlTableModel::clear();captions_.clear();descriptions_.clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
+    sourceSort_.clear();blockHistory_.reset();QSqlTableModel::clear();captions_.clear();descriptions_.clear(); dirtyRows_.clear(); deletedRows_.clear(); submittedKeys_.clear(); insertedKey_.clear();
 }
 QVector<QPersistentModelIndex> AccessTableModel::rowAnchors(const QSet<int>& rows) const {
     QVector<QPersistentModelIndex> result; result.reserve(rows.size());
@@ -329,6 +329,27 @@ bool AccessTableModel::replaceAllLiteralTextColumns(const QVector<int>& columns,
     }
     if(count) *count=matches.size();
     return true;
+}
+bool AccessTableModel::setSourceSort(const QVector<QPair<int,Qt::SortOrder>>& ordering) {
+    if(saving_ || changing_ || isDirty()) return reject(2501);
+    if(ordering.isEmpty() || ordering.size()>10) return reject(3251);
+    QSet<int> unique;
+    for(const auto& item:ordering) {
+        if(item.first<0 || item.first>=columnCount() || unique.contains(item.first) || (item.second!=Qt::AscendingOrder && item.second!=Qt::DescendingOrder)) return reject(3251);
+        unique.insert(item.first);
+    }
+    sourceSort_=ordering;sortColumn_=ordering.front().first;sortOrder_=ordering.front().second;
+    QSqlTableModel::setSort(sortColumn_,sortOrder_);return true;
+}
+void AccessTableModel::setSort(int column,Qt::SortOrder order) {
+    if(!sourceSort_.isEmpty() && sourceSort_.front()!=qMakePair(column,order)) sourceSort_.clear();
+    QSqlTableModel::setSort(column,order);
+}
+QString AccessTableModel::orderByClause() const {
+    if(sourceSort_.isEmpty()) return QSqlTableModel::orderByClause();
+    QStringList terms;const auto* driver=database().driver();
+    for(const auto& item:sourceSort_) terms.push_back(driver->escapeIdentifier(tableName(),QSqlDriver::TableName)+"."+driver->escapeIdentifier(record().fieldName(item.first),QSqlDriver::FieldName)+(item.second==Qt::DescendingOrder ? " DESC" : " ASC"));
+    return "ORDER BY "+terms.join(',');
 }
 void AccessTableModel::sort(int column,Qt::SortOrder order) {
     const bool protectedEditor=protectSort_; protectSort_=false;

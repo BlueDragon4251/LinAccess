@@ -5753,3 +5753,23 @@ Windows-/Gesamtsuitennachweise. Def-Typ-Vorstufe cd0cd59 privat veröffentlicht/
 Baum verifiziert; frischeDEBcd0cd59 samt Payload/Rechten/Build-ID und gepinnten
 SQLite/MDBTools erfolgreich geprüft. Dieses Paket liegt vor Mehrfeld-Ersetzen.
 Katalog456/386/70 unverändert; ohne Zwischenabschluss weitere offene Umfänge umsetzen.
+
+
+Bearbeitbare vollständige Einzeltabellen-Abfragen erweitert: SELECT */alias.*,
+explizite/implizite Aliasnamen, qualifizierte WHERE-Felder und bis10 unterschiedliche
+physische ORDER-BY-Felder mit ASC/DESC. Nur geprüfte Quelltabelle/-felder; Alias-
+Filterqualifikation kanonisch umsetzen, Literale erhalten. Nativer Tabellenmodell-
+Sortierpfad verwendet geprüfte Index-/Richtungsmetadaten, escaped SQL und behält
+sekundäre Reihenfolge bei Select/Save/Requery. Kopf zeigt erstes Feld, andere
+Benutzersortierung ersetzt Quellsortierung; vorhandene Draft-/Editor-Guards bleiben.
+Echte gespeicherte Abfrage schreibt Basisdatensätze, erhält Schlüssel bei Sortier-
+bewegung und entfernt nicht mehr passende Zeilen aus Filteransicht. Keine pauschale
+Join-/Projektions-/Parameter-/Nullschlüssel-/Shadow-Updatebarkeit. Details
+OPEN_QUERY_RUNTIME.md. Anfangs bestehendes GUI/Modell2/2 (16,82s); anschließend
+Mehrfeldsortierung und echte neue GUI-/Modellfälle komplettiert, fehlendes Modell-
+Test-Include korrigiert und nur dessen Ziel neu gebaut. FinalGUI/Modell2/2 (16,59s,
+Modell0,09s), Anwendung gebaut. Keine neuen CTests/Original-/Windows-/Gesamtsuiten-/
+Paketnachweise. Mehrfeld-Ersetzungs-Vorstufe1c66d81 privat veröffentlicht/Baum
+verifiziert; letzte geprüfteDEBcd0cd59 liegt vor beiden Datenblatt-Erweiterungen.
+Katalog456/386/70 unverändert; F079/F373-Beschreibungen bestehenden Umfängen
+zugeordnet. Ohne Zwischenabschluss weiter, danach Paket aktualisieren.
