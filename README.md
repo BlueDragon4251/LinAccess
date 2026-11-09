@@ -155,7 +155,8 @@ keine nachgewiesene pixelgenaue Access-2003-Oberfläche. Details: [Darstellung](
   Umfang und Grenzen: [Makrolaufzeit](docs/NATIVE_MACROS_RUNTIME.md).
   [Formularereignisse zuordnen](docs/NATIVE_FORM_EVENT_DESIGNER.md) geht im nativen Designer.
 - [Eigene Standardmodule](docs/NATIVE_STANDARD_MODULES_RUNTIME.md) erstellen und bearbeiten;
-  unterstützte öffentliche Funktionen aus VBA und SQL verwenden.
+  unterstützte öffentliche Funktionen aus VBA und SQL verwenden;
+  [Application.Run](docs/NATIVE_APPLICATION_RUN.md) ruft öffentliche Funktionen und Subs dynamisch auf.
 - Einfache tabellengebundene Formulare definieren und Datensätze damit bearbeiten
 - Pro Formular VBA-Quelltext speichern; `.bas`/`.cls`-Textdateien laden und auf
   Prozeduren bzw. Abhängigkeiten statisch untersuchen. Originalbytes importierter

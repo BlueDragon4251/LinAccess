@@ -2658,9 +2658,24 @@ NativeAdd=NativeAdjust(value)
 End Function
 Public Function NativeCounter() As Long
 NativeCounter=Counter
+End Function
+Public Sub NativeSetCounter(ByVal value As Long)
+Counter=value
+End Sub
+Public Function NativeOptional(Optional value As Long=9) As Long
+NativeOptional=value
+End Function
+Public Function NativeFailure() As Long
+Err.Raise 7001, "NativeRun", "deliberate failure"
+End Function
+Public Function NativeRecursive() As Long
+NativeRecursive=Application.Run("NativeRecursive")
 End Function)VBA";
     AccessFormPreview context("owned_module_context","Begin Form\nBegin Section\nEnd\nEnd",R"VBA(Sub UseOwnedModule()
 Me.Tag=NativeAdd(4)
+End Sub
+Sub UseDynamicModule()
+Me.Tag=Application.Run(Procedure:="NativeOptional",Arg1:=12)
 End Sub)VBA",db,&window);context.show();QApplication::processEvents();
     auto application=makePreviewApplicationObject(context);auto modules=application->member("CurrentProject",{}).object->member("AllModules",{}).object;const auto baseline=modules->member("Count",{}).number;
     std::shared_ptr<linaccess::VbaObject> descriptor;
@@ -2678,6 +2693,22 @@ End Sub)VBA",db,&window);context.show();QApplication::processEvents();
     assert(prepared.exec() && prepared.next() && prepared.value(0).toInt()==15);prepared.finish();assert(context.executeProcedure("UseOwnedModule",arguments).status==linaccess::VbaExecutionStatus::Completed && makePreviewFormObject(context)->member("Tag",{}).asText()=="14");
     assert(sql.exec("SELECT NativeCounter()") && sql.next() && sql.value(0).toInt()==2);sql.finish();
     assert(sql.exec("SAVEPOINT owned_module_revision"));auto temporary=changed;temporary.replace("value+10","value+20");sql.prepare("UPDATE _la_objects SET definition=? WHERE kind='module' AND name='NativeMath'");sql.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromUtf8(temporary)}}).toJson(QJsonDocument::Compact));assert(sql.exec());sql.finish();assert(prepared.exec() && prepared.next() && prepared.value(0).toInt()==25);prepared.finish();assert(sql.exec("ROLLBACK TO owned_module_revision") && sql.exec("RELEASE owned_module_revision"));assert(prepared.exec() && prepared.next() && prepared.value(0).toInt()==15);prepared.finish();
+    assert(application->member("Run",{VbaValue::string("nativeadd"),VbaValue::longInteger(2)}).number==12);
+    assert(application->member("Run",{VbaValue::string("NativeSetCounter"),VbaValue::longInteger(41)}).kind==VbaValue::Kind::Empty);
+    assert(context.executeProcedure("UseDynamicModule",arguments).status==linaccess::VbaExecutionStatus::Completed && makePreviewFormObject(context)->member("Tag",{}).asText()=="12");
+    assert(application->member("Run",{VbaValue::string("NativeCounter")}).number==41);
+    assert(application->member("Run",{VbaValue::string("NativeOptional")}).number==9);
+    assert(application->member("Run",{VbaValue::string("NativeOptional"),VbaValue::longInteger(6)}).number==6);
+    const auto runError=[&](std::vector<VbaValue> args,int expected) {int actual=0;try {(void)application->member("Run",args);}catch(const linaccess::VbaRuntimeError& failure) {actual=failure.number;}if(actual!=expected) qFatal("Application.Run expected %d, received %d",expected,actual);};
+    runError({VbaValue::string("NativeAdjust"),VbaValue::longInteger(1)},2517);
+    runError({VbaValue::string("NoSuchNativeProcedure")},2517);
+    runError({VbaValue::string("OtherProject.NativeAdd")},3251);
+    runError({VbaValue::string("NativeAdd")},450);
+    runError({VbaValue::string("NativeRecursive")},28);
+    runError(std::vector<VbaValue>(32,VbaValue::longInteger(0)),450);
+    int unsupportedRun=0;try {(void)application->member("DoCmd",{}).object->member("Run",{VbaValue::string("NativeCounter")});}catch(const linaccess::VbaRuntimeError& failure) {unsupportedRun=failure.number;}assert(unsupportedRun==438);
+    try {(void)application->member("Run",{VbaValue::string("NativeFailure")});assert(false);}catch(const linaccess::VbaRuntimeError& failure) {assert(failure.number==7001 && failure.source=="NativeRun");}
+    assert(application->member("Run",{VbaValue::string("NativeOptional")}).number==9);
     assert(sql.exec("CREATE TEMP TABLE _la_objects(kind,name,definition)"));int error=0;try {(void)linaccess::standardVbaModuleSources(db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251 && !sql.exec("SELECT NativeAdd(5)"));assert(sql.exec("DROP TABLE temp._la_objects"));
     const int collision=artifact(db,"vba","NATIVEMATH",body);error=0;try {(void)linaccess::standardVbaModuleSources(db);}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==5 && !sql.exec("SELECT NativeAdd(5)"));sql.prepare("DELETE FROM _la_access_artifacts WHERE id=?");sql.addBindValue(collision);assert(sql.exec());sql.finish();assert(archive()==originalArchive);
     QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-module-editor");dialog->findChild<QLineEdit*>("native-module-name")->setText("MacroConditions");dialog->findChild<QPlainTextEdit*>("native-module-source")->setPlainText(QString::fromUtf8(body));QTimer::singleShot(0,&window,[&] {auto* message=qobject_cast<QMessageBox*>(QApplication::activeModalWidget());assert(message);message->accept();});dialog->findChild<QPushButton*>("native-module-save")->click();assert(dialog->isVisible());dialog->reject();});action(window,"+ Modul")->trigger();assert(archive()==originalArchive);

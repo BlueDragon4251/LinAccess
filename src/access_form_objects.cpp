@@ -1,5 +1,6 @@
 #include "access_form_objects.hpp"
 #include "native_macro.hpp"
+#include "native_application_run.hpp"
 #include "vba_module_context.hpp"
 #include "vba_source_codec.hpp"
 #include <QScopeGuard>
@@ -1838,6 +1839,11 @@ public:
     explicit PreviewApplicationObject(AccessFormPreview& preview) : PreviewObjectBase(preview) {}
     bool isNativeType(std::string_view type) const override { return type=="access.application"; }
     std::optional<linaccess::VbaArgumentSignature> argumentSignature(std::string_view name) const override {
+        if (text(name).compare("Run",Qt::CaseInsensitive)==0) {
+            linaccess::VbaArgumentSignature signature{{"Procedure"},1};
+            for(int index=1;index<=30;++index) signature.names.push_back("Arg"+std::to_string(index));
+            return signature;
+        }
         if (text(name).compare("Echo",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"EchoOn","bstrStatusBarText"},1};
         if (text(name).compare("SysCmd",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"Action","Argument2","Argument3"},1};
         if (text(name).compare("FileDialog",Qt::CaseInsensitive)==0) return linaccess::VbaArgumentSignature{{"DialogType"},1};
@@ -1848,6 +1854,7 @@ public:
     }
     linaccess::VbaValue member(std::string_view name,const std::vector<linaccess::VbaValue>& args) override {
         auto& preview = checked(); const auto key = text(name).toCaseFolded();
+        if(key=="run") return runNativeApplicationProcedure(preview,args);
         if(key=="echo") return linaccess::nativeEcho(preview,args);
         if(key=="syscmd") {
             if(!args.empty() && args[0].kind!=linaccess::VbaValue::Kind::Missing

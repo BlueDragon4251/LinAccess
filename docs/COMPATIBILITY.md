@@ -4286,3 +4286,17 @@ vorhandene Archivbytes. Keine neue CTest-ID/Windows-Beobachtung, kein neuer
 Gesamtsuite-/Plattformnachweis. Paketprüfung gehört zum vorherigen64abd69-Stand,
 kein frisch paketierter Modulstand behauptet. NATIVE_STANDARD_MODULES_RUNTIME.md;
 F042/F050/F068/F118/F130/F155 und456/384/72 unverändert. Direkt weiter.
+
+
+Application.Run für unqualifizierte öffentliche Standardmodul-Functions/Subs
+implementiert: Procedure/Arg1..Arg30 mit bestehender benannter Bindung,
+typisierte Rückgabe bzw. Empty, optionale Parameter und geteilter Modulzustand.
+Private/fehlende Ziele2517, Projektqualifikation3251, Arity450; Fehlernummer,
+Source und Help bleiben erhalten. Eigener Run-Grenzwert32 liefert28 vor der
+allgemeinen Interpreter-Stapelgrenze. Ausführungstiefe schützt laufenden Kontext.
+Kein DoCmd.Run, keine neue COM-Automation oder ByRef-Aufrufer-Rückschreibung.
+App gebaut; bestehendes mainwindow_documents1/1 (6,48s) bestanden. Nach falscher
+neuer Arity-Testannahme450 statt449 und konkret gefundenem Zusammenspiel der
+Rekursionsgrenzen nur betroffene GUI-Prüfung wiederholt. Keine neue CTest-ID,
+Gesamtsuite/Windows-Beobachtung/Paketprüfung behauptet. NATIVE_APPLICATION_RUN.md;
+F042/F050/F118/F148 und456/384/72 unverändert. Direkt weiter mit Makro-RunCode.
