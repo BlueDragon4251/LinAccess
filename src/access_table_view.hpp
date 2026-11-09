@@ -17,6 +17,7 @@
 #include <QClipboard>
 #include <QMimeData>
 #include <new>
+#include <algorithm>
 #include <QItemSelectionModel>
 #include <limits>
 #include <QTableView>
@@ -504,7 +505,9 @@ public:
         const auto* typed=qobject_cast<AccessTableModel*>(model());const auto* mime=QApplication::clipboard()->mimeData();
         if(!typed || typed->isReadOnly() || typed->editStrategy()!=QSqlTableModel::OnManualSubmit || !typed->canPasteOverUpdates() || hasPendingEditor()) return false;
         if(canPasteSelection()) return true;
-        return mime && mime->hasFormat(nativeGridMime) && mime->data(nativeGridMime).size()<=nativeGridMimeLimit && QJsonDocument::fromJson(mime->data(nativeGridMime)).object().value("fields").toArray().size()==typed->columnCount();
+        if(!mime || !mime->hasFormat(nativeGridMime) || mime->data(nativeGridMime).size()>nativeGridMimeLimit) return false;
+        const auto fields=QJsonDocument::fromJson(mime->data(nativeGridMime)).object().value("fields").toArray();
+        return !fields.isEmpty() && fields.size()<=typed->columnCount();
     }
     int firstPasteColumn(const AccessTableModel* typed,bool binary=false) const {
         for(int column=0;column<typed->columnCount();++column) if(!isColumnHidden(column) && typed->isPasteColumn(column,binary)) return column;
@@ -518,17 +521,22 @@ public:
         const auto* mime=QApplication::clipboard()->mimeData();
         const bool typedMime=mime && mime->hasFormat(nativeGridMime);
         if(typedMime && mime->data(nativeGridMime).size()>nativeGridMimeLimit) return refuse(3035,"Die typisierte Zwischenablage überschreitet die native Größenbegrenzung.");
-        QStringList recordFields;bool fullRecord=false;
+        QStringList recordFields;bool namedRecord=false;
         if(append && typedMime) {
             const auto fields=QJsonDocument::fromJson(mime->data(nativeGridMime)).object().value("fields");
-            if(fields.isArray() && fields.toArray().size()==typed->columnCount()) {
-                fullRecord=true;for(const auto& value:fields.toArray()) {if(!value.isString()) return refuse(13,"Ungültige Datensatzfelder in der Zwischenablage.");recordFields<<value.toString();}
-                for(int column=0;column<recordFields.size();++column) if(recordFields[column].compare(typed->record().fieldName(column),Qt::CaseInsensitive)!=0) return refuse(13,"Die Datensatzfelder stimmen nicht mit der Zieltabelle überein.");
+            if(!fields.isUndefined()) {
+                if(!fields.isArray() || fields.toArray().isEmpty() || fields.toArray().size()>typed->columnCount()) return refuse(13,"Ungültige Datensatzfelder in der Zwischenablage.");
+                QSet<QString> target,source;for(int column=0;column<typed->columnCount();++column) target.insert(typed->record().fieldName(column).toCaseFolded());
+                if(target.size()!=typed->columnCount()) return refuse(3251,"Die Zielspaltennamen sind nicht eindeutig.");
+                namedRecord=true;for(const auto& value:fields.toArray()) {
+                    if(!value.isString() || source.contains(value.toString().toCaseFolded()) || !target.contains(value.toString().toCaseFolded())) return refuse(13,"Die Datensatzfelder sind nicht eindeutig in der Zieltabelle vorhanden.");
+                    source.insert(value.toString().toCaseFolded());recordFields<<value.toString();
+                }
             }
         }
         const auto current=currentIndex();
-        const int firstColumn=fullRecord ? 0 : current.isValid() ? current.column() : firstPasteColumn(typed,typedMime);
-        if(firstColumn<0 || (!fullRecord && !typed->isPasteColumn(firstColumn,typedMime))) return refuse(2448,"Die Zielspalte ist schreibgeschützt.");
+        const int firstColumn=namedRecord ? 0 : current.isValid() ? current.column() : firstPasteColumn(typed,typedMime);
+        if(firstColumn<0 || (!namedRecord && !typed->isPasteColumn(firstColumn,typedMime))) return refuse(2448,"Die Zielspalte ist schreibgeschützt.");
         if(!append && current.isValid() && !current.flags().testFlag(Qt::ItemIsEditable) && !(typedMime && typed->isPasteColumn(firstColumn,true))) return refuse(2448,"Die Zielzelle ist schreibgeschützt.");
         if(append) while(typed->canFetchMore()) {
             if(typed->rowCount()>=1000000) return refuse(3251,"Die Tabelle überschreitet die native Anfügegrenze.");
@@ -563,16 +571,19 @@ public:
           catch(const std::length_error&) { return refuse(3251,"Die Zwischenablage enthält zu viele Zellen."); }
           catch(const std::exception&) { return refuse(5,"Die Zwischenablage enthält kein gültiges Tabellenformat."); }
         const auto rows=typedMime ? typedValues.size() : values.size();
-        const auto columns=typedMime ? typedValues.front().size() : values.front().size();
+        const auto columns=namedRecord ? typed->columnCount() : typedMime ? typedValues.front().size() : values.front().size();
         const auto endRow=static_cast<qint64>(firstRow)+rows;
         if(endRow>std::numeric_limits<int>::max() || static_cast<qint64>(firstColumn)+columns>typed->columnCount())
             return refuse(5,"Der einzufügende Bereich passt nicht in die vorhandenen Spalten.");
         while(typed->rowCount()<endRow && typed->canFetchMore()) {
             const auto count=typed->rowCount(); typed->fetchMore(); if(typed->rowCount()==count) break;
         }
-        for(int column=firstColumn;column<firstColumn+columns;++column) if(isColumnHidden(column)) return refuse(3251,"Verdeckte Zielspalten werden nicht überschrieben.");
+        for(int column=firstColumn;column<firstColumn+columns;++column) if(isColumnHidden(column)) {
+            const auto name=typed->record().fieldName(column);const bool supplied=std::any_of(recordFields.cbegin(),recordFields.cend(),[&](const auto& field) {return field.compare(name,Qt::CaseInsensitive)==0;});
+            if(!namedRecord || (supplied && !typed->isGeneratedColumn(column))) return refuse(3251,"Verdeckte Zielspalten werden nicht überschrieben.");
+        }
         for(int row=firstRow;row<qMin<qint64>(endRow,typed->rowCount());++row) if(isRowHidden(row)) return refuse(3251,"Verdeckte Zieldatensätze werden nicht überschrieben.");
-        if(!(fullRecord ? typed->setTypedRecordBlock(firstRow,recordFields,typedValues) : typedMime ? typed->setTypedDataBlock(firstRow,firstColumn,typedValues) : typed->setDataBlock(firstRow,firstColumn,values))) return false;
+        if(!(namedRecord ? typed->setTypedRecordBlock(firstRow,recordFields,typedValues) : typedMime ? typed->setTypedDataBlock(firstRow,firstColumn,typedValues) : typed->setDataBlock(firstRow,firstColumn,values))) return false;
         const auto first=typed->index(firstRow,firstColumn);
         setCurrentIndex(first);
         if(selectionModel()) selectionModel()->select(QItemSelection(first,typed->index(endRow-1,firstColumn+columns-1)),QItemSelectionModel::ClearAndSelect);

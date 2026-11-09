@@ -6642,3 +6642,18 @@ pro Zeile verschiedene Ausgaben, vollständiger Check-Constraint-Rollback und NU
 Verweigerung geprüft. Keine neue CTest-ID oder Windows-Beobachtung.
 LITERAL_REPLACE_RUNTIME.md; volle Match-Offset-/Highlight-/Wildcard-/Locale-/Event-
 Gleichheit bleibt offen; F373/F340/F168 und456/384/72 unverändert. Direkt weiter.
+
+Explizites natives Datensatz-Anfügen ordnet Grid-MIME-Felder jetzt nach eindeutigen
+Namen zu, auch bei anderer Reihenfolge und Teilmengen. Ausgelassene Felder bleiben
+ungesetzt und erhalten SQL-Defaults; ausdrücklich geliefertes NULL überschreibt
+Defaults. Nur proveniente AutoWerte werden ausgelassen. Name-/Formprüfung und
+Expandierungsgrenze erfolgen vor Cacheänderung; die Supplied-/Default-Regel bleibt
+bei Undo/Redo erhalten. Normales Paste/alte namenlose MIME bleiben positionsbezogen.
+Vorhandene GUI/Feld gemeinsam2/2 (6,21s), App gebaut; zusätzlich Default/NULL-Nachweis
+gezielt1/1 (0,48s): anders geordnete Zieltabelle mit zusätzlichem Defaultfeld,
+AutoWert an anderer Position und echter Folge-ID11/12, Binärbytes, voller SQLite-
+Integer, vollständiges Datum, Teilrecord mit ausgelassenen NULL-Feldern, explizites
+NULL bei existierendem Textdefault, Undo/Redo und verweigerte doppelte Namen.
+Keine neue CTest-ID oder Windows-Beobachtung. TYPED_GRID_CLIPBOARD.md; externe/
+Formular-MIME-/Access-Ereignisgleichheit bleibt offen. F340/F168/F173 und456/384/72
+unverändert. Direkt weiterimplementieren.
