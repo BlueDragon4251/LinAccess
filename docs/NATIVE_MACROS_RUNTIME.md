@@ -19,6 +19,7 @@ transaction, document, modal and error guards:
 | OpenForm | FormName, optional numeric View |
 | OpenReport | ReportName, optional numeric View |
 | RunCommand | numeric Command |
+| SelectObject | numeric ObjectType, ObjectName, optional Boolean InDatabaseWindow |
 | Close | optional numeric ObjectType, ObjectName, numeric Save |
 | DeleteObject | explicit numeric ObjectType and ObjectName |
 | Rename | NewName, explicit numeric ObjectType and OldName |

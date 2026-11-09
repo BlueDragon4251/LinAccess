@@ -35,3 +35,32 @@ Actual window.close during a MsgBox is denied with unchanged project generation;
 the macro continues afterward. Existing historical Load7003 is not rerun, while a
 new initial Load7003 remains an error and leaves no live failed document. No new
 CTest target, full-suite, package or Windows observation is claimed here.
+
+
+## SelectObject
+
+The native SelectObject macro action accepts numeric type, object name and optional
+InDatabaseWindow Boolean. The standalone DoCmd API uses the corresponding named
+parameters. Open table/query selection activates the actual existing document;
+closed objects are not silently opened. Real open forms/reports use the existing
+validated preview selection path and execution lifetime guard. Missing/ambiguous/
+modal targets retain explicit native failures.
+
+InDatabaseWindow supports native table/query/form/report/macro/module selection,
+including the corresponding folder when name is blank. Macro/module selection is
+limited to the database-window context; no nonexistent editor/VBE window is
+fabricated. The real form host accepts these native macro/module selections too.
+Imported archive-only module navigation and complete Access context equivalence
+remain open. Explorer refresh preserves exact logical selection or archive ID
+only within the same project generation, so a macro's final selection survives
+its normal catalog refresh.
+
+The standalone execution host implementation now lives in its own Forms C++ unit
+with a small declaration header. This avoids recompiling its implementation inside
+the main window and test translation unit on every runtime change; the Qt-free
+core boundary and application dependencies remain unchanged.
+
+Validation: existing GUI/layout2/2 passed (19.03s), app and matching DEB checked.
+Actual open table/query/form/report activation, macro/module/folder selection,
+refresh preservation, final menu-macro selection and real form-host4/5 selection
+are exercised, alongside unavailable targets. No new test target or Windows oracle.

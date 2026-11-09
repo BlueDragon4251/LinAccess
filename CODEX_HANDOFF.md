@@ -3712,3 +3712,25 @@ keine automatische Verweisrefaktorierung oder vollständige Access-Close-Paritä
 Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; DEB gehört9c80f00.
 NATIVE_MACRO_PROJECT_COMMANDS.md; F088/F050/F057/F114/F121/F135/F140/F148/F155
 und456/384/72 unverändert. Kontinuierlich weiter.
+
+
+SelectObject als native Makroaktion und formularfreier DoCmd-Member ergänzt:
+wirklich offene Tabellen/Abfragen über bestehende Aktivierung, echte Form-/Report-
+Instanzen über lebensdauergeschützten Preview-Dispatch, eigene Makro-/Modulobjekte
+und Ordner im Datenbankfenster. Gleiche4/5-InDatabase-Erweiterung im Formularhost;
+kein erfundenes Modulfenster, kein Öffnen eines geschlossenen Datenobjekts.
+Explorer behält tatsächliche logische Auswahl/Archiv-ID bei Refresh derselben
+Projektgeneration; neues Projekt übernimmt keine alte Auswahl. Damit bleibt die
+von einem Makro gesetzte Auswahl nach dessen abschließendem Refresh erhalten.
+Gewachsene NativeStandardModuleHost/DoCmd/Application-Implementierung aus Header
+in eigene Forms-C++-Einheit verschoben (öffentliche schlanke Deklaration); zwei
+mechanische Qualifizierungs-/Duplikatfehler vor Testlauf korrigiert. Keine Änderung
+an Kern-Qt-Freiheit oder Python/Java-App-Abhängigkeiten. App gebaut, bestehende
+GUI/Layout2/2 (19,03s) bestanden: reale Table/Query/Form/Report-Aktivierung,
+Macro/Module-/Ordnerauswahl, Refresh und tatsächlicher Menü-Makro-Endzustand,
+Formularhost4/5, fehlende/geschlossene/unsupported Ziele. Vorige Modul-/Makro-/
+Speicher-/Startprüfungen im gleichen Ziel weiter enthalten. Aktuelles DEB gebaut
+und Payload/Rechte/App-/Helper-BuildIDs/MDBTools1.0.1/bytegleiches SQLite3.54.1
+samt realem JOIN/NULL-/Countercheck verifiziert. Keine neue CTest-ID/Gesamtsuite/
+Windows-Beobachtung. NATIVE_MACRO_PROJECT_COMMANDS.md; F088/F050/F135/F140/F148
+und456/384/72 unverändert. Direkt weiter mit StopAllMacros/Echo-Wiederherstellung.

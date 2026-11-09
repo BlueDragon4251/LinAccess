@@ -508,7 +508,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
 int MainWindow::selectDatabaseObject(int objectType,const QString& name,bool activate) {
     if(!db_.isOpen()) return 3078;
-    const QStringList kinds{"table","query","form","report"};
+    const QStringList kinds{"table","query","form","report","macro","module"};
     if(objectType<0 || objectType>=kinds.size()) return 3251;
     const auto locate=[&](int& error) -> QTreeWidgetItem* {
         QTreeWidgetItem* target=nullptr;
@@ -1593,7 +1593,13 @@ bool MainWindow::saveObject(const QString& kind, const QString& name, const QJso
 }
 
 void MainWindow::refreshExplorer() {
-    explorer_->clear();
+    const auto* previous=explorer_->currentItem();const bool sameProject=explorer_->property("la_explorer_project_generation")==property("la_project_generation");
+    const auto previousKind=previous && sameProject ? previous->data(0,Qt::UserRole).toString() : QString{};
+    const auto previousFamily=previous && sameProject ? previous->data(0,Qt::UserRole+2).toString() : QString{};
+    const auto previousName=previous && sameProject ? previous->data(0,Qt::UserRole+3).toString() : QString{};
+    const int previousArtifact=previous && sameProject ? previous->data(0,Qt::UserRole+1).toInt() : 0;
+    const bool previousGroup=previous && sameProject && previous->data(0,Qt::UserRole+4).toBool();
+    explorer_->clear();explorer_->setProperty("la_explorer_project_generation",property("la_project_generation"));
     if (!db_.isOpen()) return;
     QMap<QString,QTreeWidgetItem*> groups;
     const auto group = [this,&groups](const QString& label, const QString& kind, const QStringList& names) {
@@ -1628,6 +1634,17 @@ void MainWindow::refreshExplorer() {
         }
         accessGroup->setExpanded(true);
     }
+    if(previousKind.isEmpty() && !previousGroup) return;
+    const std::function<void(QTreeWidgetItem*)> restore=[&](QTreeWidgetItem* item) {
+        bool match=false;
+        if(previousGroup) match=item->data(0,Qt::UserRole+4).toBool() && item->data(0,Qt::UserRole+2).toString()==previousFamily;
+        else if(previousKind=="access_artifact") match=item->data(0,Qt::UserRole).toString()==previousKind && item->data(0,Qt::UserRole+1).toInt()==previousArtifact;
+        else match=item->data(0,Qt::UserRole).toString()==previousKind && item->data(0,Qt::UserRole+3).toString()==previousName;
+        if(match) {explorer_->setCurrentItem(item);explorer_->scrollToItem(item);return;}
+        for(int index=0;index<item->childCount();++index) restore(item->child(index));
+    };
+    for(int index=0;index<explorer_->topLevelItemCount();++index) restore(explorer_->topLevelItem(index));
+
 }
 
 void MainWindow::openExplorerItem(QTreeWidgetItem* item, int) {

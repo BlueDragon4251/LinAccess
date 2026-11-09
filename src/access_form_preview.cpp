@@ -794,7 +794,7 @@ public:
         throw linaccess::VbaRuntimeError(2046,"Sorting requires an active bound field control");
     }
     void selectObject(int type,const QString& name,bool inDatabase) {
-        if(type<0 || type>3) throw linaccess::VbaRuntimeError(3251,"SelectObject object type is not implemented");
+        if(type<0 || type>5 || (!inDatabase && type>3)) throw linaccess::VbaRuntimeError(3251,"SelectObject object type/window context is not implemented");
         if(!inDatabase && name.isEmpty()) throw linaccess::VbaRuntimeError(450,"SelectObject requires an open object name");
         QWidget* owner=nullptr;
         for(auto* ancestor=preview_.parentWidget();ancestor;ancestor=ancestor->parentWidget())
