@@ -21,10 +21,18 @@ corpus 1/1 (118.10 s), final DEB payload/Build-ID/MDBTools 1.0.1/SQLite 3.54.1
 checks, four fixture hashes and three uploaded-original hashes passed. No new
 CTest ID, Windows run, full-suite run or physical-printer proof is claimed.
 
-The original keyboard workflow now reaches explicit 3146 at source line 1023;
-a separate genuine tagged-button probe progresses to missing macro error 2485.
+The original keyboard workflow now reaches missing macro error2485 at source
+line1023; a separate genuine tagged-button probe also reaches2485. The former
+3146 was traced to an absent optional owned-macro catalog in the artifact-only
+test database, not an unresolved source SQL operation. Macro lookup now handles
+that absence as an empty catalog while preserving actual catalog failures.
 Four macros exist in both original MDB catalogs, but the existing bridge archive
 contains zero macro sources. This is an export gap, not a missing user database.
 Full dependency scheduling, arbitrary query updates and full original sale
 workflow remain open. Catalog remains 456 / 386 confirmed partial scopes / 70
 open full requirements; no Access-parity claim follows from these counts.
+
+The subsequent existing GUI/original bundle passed2/2 (125.46s; GUI15.85s),
+including both original keyboard handlers reaching2485/1023 and isolated absent,
+temporary-shadow, malformed and empty main catalogs. No new CTest ID or Windows
+or positive original sale/macro execution proof is claimed.

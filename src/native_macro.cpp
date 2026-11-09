@@ -90,6 +90,11 @@ QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition,const 
     return actions;
 }
 QString nativeMacroCatalogName(QSqlDatabase database,const QString& requested) {
+    // Imported artifact-only databases have no owned-object catalog yet.
+    // Its absence means no native macro; existing unreadable catalogs remain errors.
+    QSqlQuery catalog(database);if(!catalog.exec("SELECT 1 FROM main.sqlite_schema WHERE name='_la_objects' COLLATE NOCASE LIMIT 1"))throw VbaRuntimeError(3146,"Native macro catalog unavailable");
+    if(!catalog.next()){if(catalog.lastError().isValid())throw VbaRuntimeError(3146,"Native macro catalog read failed");return {};}
+    catalog.finish();
     QSqlQuery names(database);names.setForwardOnly(true);if(!names.exec("SELECT name FROM main._la_objects WHERE kind='macro'")) throw VbaRuntimeError(3146,"Native macro catalog unavailable");
     QElapsedTimer timer;timer.start();int count=0;QString found;
     while(names.next()) {

@@ -3648,3 +3648,24 @@ Fixture- und drei Upload-Originalhashes erneut unverändert geprüft. Details in
 VISUAL_QUERY_DESIGNER.md/NATIVE_QUERY_FORM_DESIGN.md. F050/F080/F148 und fester
 Katalog456/386/70 unverändert. Nächste unabhängige Untersuchung: ursprüngliche
 3146/1023-Grenze beim Öffnen des Originalformulars, keine erneute Makro-Rückfrage.
+
+
+Korrektur der bisherigen Original-3146/1023-Deutung: private Diagnose zeigte
+Document initialization failed: Native macro catalog unavailable bei source-error0.
+Die Import-Testkopie besitzt keinen optionalen main._la_objects-Katalog. Native
+Makrosuche behandelt dessen Abwesenheit jetzt wie einen leeren Katalog (2485),
+ohne Tabellen anzulegen oder temporäre Schatten zu lesen; vorhandene defekte
+Kataloge bleiben3146. Beide tatsächlichen Tastaturhandler erreichen nun den
+fehlenden Makroquelltext2485 in Zeile1023. Das ist keine offene Datensatzquellen-
+SQL-Operation. Getaggter Click erreicht separat ebenfalls fehlenden Makroquelltext.
+Bestehendes GUI-/Original-Bündel2/2 bestanden (125,46s; GUI15,85s); Anwendung gebaut.
+Isolierte Prüfungen für fehlenden/temporären/defekten/leeren Hauptkatalog sind in
+bestehendem Ziel enthalten. Keine neuen CTests, Windows- oder positive Original-
+Verkaufs-/Makrolaufnachweise. Die diagnostischen Instrumentierungen/privaten Details
+liegen ausschließlich außerhalb Git; sie sind keine zusätzlichen erfolgreichen
+Prüfziele. Native Makroquelle fehlt weiterhin im Bridge-Export; vorhandene
+Codex-Call-Rückfrage dazu blieb unbeantwortet, kein wiederholter Anruf nötig.
+Formularintegration als3b18277 veröffentlicht; letzte geprüfteDEB fe01e1d vor dieser
+Integration. Details NATIVE_MACROS_RUNTIME.md/READONLY_FORM_REQUERY_RUNTIME.md.
+F129-Text korrigiert, fester Katalog456/386/70 unverändert. Weiter mit echten
+Quellenaliasen und Selbstverknüpfungen im visuellen Entwurf.

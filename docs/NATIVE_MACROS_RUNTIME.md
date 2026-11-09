@@ -573,3 +573,23 @@ local. See [MACRO_CONDITION_BLOCKS_RUNTIME.md](MACRO_CONDITION_BLOCKS_RUNTIME.md
 Existing GUI/layout2/2 passes20.25s; current native-macro-continuation Debian
 payload and actual MDBTools/SQLite backend checks pass. Full macro parity remains
 open; no new fixed catalog point or Windows observation.
+
+## Import-only projects without an owned catalog
+
+An imported-artifact-only database can legitimately lack main._la_objects. Native
+macro name lookup now checks the main schema before reading that optional catalog.
+Absence behaves like an empty owned macro catalog: loading returns2485 (macro not
+found), without creating tables or consulting a temporary shadow. A present but
+unreadable/malformed catalog remains3146; ambiguity and action preflight are
+unchanged. No Access macro source is fabricated or converted by this guard.
+
+A private diagnostic of the original keyboard path identified its former3146 at
+line1023 as Document initialization failed: Native macro catalog unavailable.
+The opened document had source-error0. This was not an unresolved record-source
+SQL operation. The actual missing macro source remains required for further
+original initialization, just as in the separately observed tagged-click path.
+
+Validation: existing GUI/original bundle2/2 passed (125.46s, GUI15.85s),
+application built. Original keyboard handlers now reach2485/1023. Isolated
+regression checks missing/temporary-shadow/malformed/empty main catalogs without
+creating metadata during lookup. No new CTest ID or Windows/positive sale proof.

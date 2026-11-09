@@ -2215,6 +2215,13 @@ void exerciseDateDefaultBuffers() {
 }
 
 void testNativeMacros(MainWindow& window,QSqlDatabase db) {
+    const QString isolatedConnection="missing-native-macro-catalog";
+    {auto isolated=QSqlDatabase::addDatabase("QSQLITE",isolatedConnection);isolated.setDatabaseName(":memory:");assert(isolated.open());QSqlQuery probe(isolated);
+        const auto expect=[&](int wanted){int actual=0;try{(void)linaccess::loadNativeMacro(isolated,"MissingMacro");}catch(const linaccess::VbaRuntimeError& error){actual=error.number;}assert(actual==wanted);};
+        expect(2485);assert(probe.exec("SELECT COUNT(*) FROM main.sqlite_schema WHERE name='_la_objects'") && probe.next() && probe.value(0).toInt()==0);probe.finish();
+        assert(probe.exec("CREATE TEMP TABLE _la_objects(kind TEXT,name TEXT,definition TEXT)"));assert(probe.exec("INSERT INTO temp._la_objects VALUES('macro','MissingMacro','{}')"));expect(2485);
+        assert(probe.exec("CREATE TABLE main._la_objects(name TEXT)"));expect(3146);assert(probe.exec("DROP TABLE main._la_objects"));assert(probe.exec("CREATE TABLE main._la_objects(kind TEXT,name TEXT,definition TEXT)"));expect(2485);probe.finish();isolated.close();}
+    QSqlDatabase::removeDatabase(isolatedConnection);
     using linaccess::VbaValue;QSqlQuery sql(db);assert(sql.exec("CREATE TABLE native_macro_effects(n INTEGER)"));
     QTimer::singleShot(0,&window,[&] {
         auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="native-macro-designer");

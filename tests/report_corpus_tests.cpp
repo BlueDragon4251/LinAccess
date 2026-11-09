@@ -770,10 +770,10 @@ void testReportCorpus(const QDir& directory,const QJsonArray& objects,const QStr
                             std::cerr<<"Original keyboard AfterUpdate: status="<<(updated ? static_cast<int>(updated->status) : -1)<<", error="<<(updated ? updated->errorNumber : 0)<<", line="<<(updated ? updated->line : 0)<<", source-error="<<initialized.property("la_document_source_error").toInt()<<'\n';
                         assert(updated);
                         if (updated->status!=linaccess::VbaExecutionStatus::Completed) {
-                            // The refreshed readonly child now provides its real
-                            // key. Opening the original target still reaches the
-                            // explicit unresolved SQL operation boundary.
-                            assert(updated->status==linaccess::VbaExecutionStatus::Error && updated->errorNumber==3146 && updated->line==1023);
+                            // The target opens with an available record source;
+                            // initialization requests a macro whose source is absent.
+                            // An artifact-only database has no owned macro catalog.
+                            assert(updated->status==linaccess::VbaExecutionStatus::Error && updated->errorNumber==2485 && updated->line==1023);
                             ++sourceWorkflowFailures;
                         }
                     }
