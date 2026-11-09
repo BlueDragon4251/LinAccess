@@ -8,7 +8,7 @@ Keine neuen F-IDs anlegen, keine Punkte löschen oder durch Zerlegung vermehren.
 
 `[x]` bestätigt nur den ausdrücklich beschriebenen Teilumfang. `[ ]` bedeutet
 offen; darunter liegen breite Vollanforderungen. Die Punkte haben sehr
-unterschiedlichen Aufwand. 385 bestätigte Teilumfänge und 71 offene Punkte
+unterschiedlichen Aufwand. 386 bestätigte Teilumfänge und 70 offene Punkte
 belegen daher **keinen gewichteten Gesamtfortschritt oder Access-2003-Parität**. Der feste Katalog ist
 eine Arbeitsstruktur und kein Beweis einer lückenlosen Microsoft-Spezifikation.
 Neue entdeckte Access-Details müssen innerhalb der bestehenden Vollanforderungen
@@ -34,8 +34,8 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 | 03 Oberfläche und Dokumente | Fenster, Menüs und Access-2003-Darstellung | 34 | 26 | 8 |
 | 04 Integration und Lieferung | Access-Integration, Makros und externe Schnittstellen | 4 | 1 | 3 |
 | 04 Integration und Lieferung | Linux, Paketierung und Betrieb | 13 | 11 | 2 |
-| 05 Gesamtauftrag | Ende-zu-Ende-Parität und verbleibende Querschnittsanforderungen | 32 | 25 | 7 |
-| **Gesamt** | **F001–F456** | **456** | **385** | **71** |
+| 05 Gesamtauftrag | Ende-zu-Ende-Parität und verbleibende Querschnittsanforderungen | 32 | 26 | 6 |
+| **Gesamt** | **F001–F456** | **456** | **386** | **70** |
 
 ## 01 Daten und Dateien
 
@@ -521,7 +521,7 @@ keine Tests oder Teilpunkte allein zur Erhöhung einer Fortschrittszahl anlegen.
 - [x] **F060** — Breakpoints, locals, stack frames, runtime errors and recovery. Native supported-runtime scope and boundaries: [debugger](NATIVE_VBA_DEBUGGER_RUNTIME.md).
 - [x] **F061** — Imported QueryDefs, typed bound Parameters, temporary CreateQueryDef, SELECT/action execution.
 - [x] **F062** — Basic ANSI-89 strings/LIKE, single-table DISTINCTROW and TOP boundary ties.
-- [ ] **F090** — Per-artifact and per-procedure capability/execution classification, including failures.
+- [x] **F090** — Per-artifact and per-procedure capability/execution classification, including failures. Actual session observations, source revision matching and explicit unproven states: [scope](PROJECT_CAPABILITY_REPORT.md).
 - [ ] **F098** — Full end-to-end operation of the original Kassa application, without compatibility claims based solely on import counts, synthetic UI actions, or static source recognition.
 - [x] **F106** — Jet bracketed derived tables, full-field DISTINCTROW, unique column-origin rebinding, bounded pure aliases and positive original parameter results.
 - [ ] **F107** — Resolve/compare the original six-column source mismatch against Access; full nested/intermediate lineage, ambiguous records and aggregate/volatile alias semantics remain open.

@@ -1,3 +1,5 @@
+#include "execution_capabilities.hpp"
+#include "native_capability_report.hpp"
 #include "native_schema_editor.hpp"
 #include "native_field_defaults.hpp"
 #include "mainwindow.hpp"
@@ -460,6 +462,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         }
     });
     auto* toolsMenu=menuBar()->addMenu("E&xtras");
+    auto* capabilities=toolsMenu->addAction("Kompatibilität und Ausführungsbeobachtungen…");capabilities->setObjectName("project-capabilities");connect(capabilities,&QAction::triggered,this,[this] {if(hasProject()) showNativeCapabilityReport(this,db_);});
     auto* options=toolsMenu->addAction("&Optionen..."); options->setObjectName("application-options");
     connect(options,&QAction::triggered,this,[this,classicStyle] { linaccess::showNativeOptions(this,classicStyle); });
     auto* windowMenu=menuBar()->addMenu("&Fenster");
@@ -1951,6 +1954,7 @@ void MainWindow::showAccessArtifact(int id) {
                     QMessageBox::information(dialog_, "VBA MsgBox",
                         QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size())));
                 }
+                void executionObserved(std::string_view source,std::string_view procedure,const linaccess::VbaExecutionResult& result,bool stopped) override {linaccess::recordVbaObservation(database_,source,procedure,result,stopped,"imported_module");}
                 void quitApplication() override { AccessFormPreview::quitApplication(); }
                 void saveRecord() override {
                     throw std::runtime_error("DoCmd benötigt einen geöffneten Formularkontext");

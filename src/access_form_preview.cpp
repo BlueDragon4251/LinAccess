@@ -1,3 +1,4 @@
+#include "execution_capabilities.hpp"
 #include "native_application_run.hpp"
 #include "native_project_documents.hpp"
 #include "native_document_open.hpp"
@@ -523,7 +524,8 @@ int nativeModuleMessageBox(QWidget* owner,std::string_view prompt,int style,cons
 class PreviewVbaHost final : public linaccess::VbaHost {
 public:
     static void openProjectDocument(QSqlDatabase,QWidget*,linaccess::AccessDocumentKind,const QString&,const QString&,std::optional<QString>,int,int,QPointer<AccessFormPreview> caller={});
-    explicit PreviewVbaHost(AccessFormPreview& preview) : preview_(preview) {}
+    explicit PreviewVbaHost(AccessFormPreview& preview) : preview_(preview),observationDatabase_(preview.db_.databaseName()) {}
+    void executionObserved(std::string_view source,std::string_view procedure,const linaccess::VbaExecutionResult& result,bool stopped) override { if(preview_.closed_ || preview_.openCancelled_ || preview_.db_.databaseName()!=observationDatabase_) return;linaccess::recordVbaObservation(preview_.db_,source,procedure,result,stopped,"document"); }
     int compareStrings(std::string_view left,std::string_view right,linaccess::VbaCompareMode mode) override {
         if (mode==linaccess::VbaCompareMode::Binary) return linaccess::VbaHost::compareStrings(left,right,mode);
         return QString::compare(QString::fromUtf8(left.data(),left.size()),QString::fromUtf8(right.data(),right.size()),Qt::CaseInsensitive);
@@ -1097,6 +1099,7 @@ private:
     bool instanceScope() const { return moduleScopes_.empty() || moduleScopes_.back(); }
     void requireInstance() const { if (!instanceScope()) throw linaccess::VbaRuntimeError(438,"Me is unavailable in a standard module"); }
     AccessFormPreview& preview_;
+    QString observationDatabase_;
     std::optional<int> aggregateRow_;
 };
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "vba_analyzer.hpp"
+#include "execution_capabilities.hpp"
 #include "vba_expression.hpp"
 #include "vba_module_context.hpp"
 #include "vba_source_codec.hpp"
@@ -99,6 +100,7 @@ inline void refresh(QSqlDatabase db,sqlite3* native,Registry& registry) {
 class Host final : public VbaHost {
 public:
     Host(QSqlDatabase db,Registry& registry):db_(std::move(db)),registry_(registry) {}
+    void executionObserved(std::string_view source,std::string_view procedure,const VbaExecutionResult& result,bool stopped) override {recordVbaObservation(db_,source,procedure,result,stopped,"sql_function");}
     std::optional<std::string> field(std::string_view) override { unavailable(); }
     void setField(std::string_view,std::optional<std::string>) override { unavailable(); }
     void message(std::string_view) override { unavailable(); }

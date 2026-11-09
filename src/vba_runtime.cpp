@@ -1658,10 +1658,21 @@ std::uint64_t vbaExecutionEpoch() noexcept { return stopEpoch; }
 bool vbaExecutionStopRequested() noexcept { return !activeExecutionEpochs.empty() && activeExecutionEpochs.back()!=stopEpoch; }
 void requestVbaExecutionStop() noexcept { ++stopEpoch; }
 
-static VbaExecutionResult executeProcedure(std::string_view module,
+static VbaExecutionResult executeProcedureImpl(std::string_view module,std::string_view procedure,
+    VbaHost& host,std::vector<VbaValue>& arguments,const std::vector<ReferenceBinding>* references);
+static VbaExecutionResult executeProcedure(std::string_view module,std::string_view procedure,
+    VbaHost& host,std::vector<VbaValue>& arguments,const std::vector<ReferenceBinding>* references=nullptr) {
+    const auto epoch=vbaExecutionEpoch();
+    const auto observe=[&](const VbaExecutionResult& result,bool stopped) {try {host.executionObserved(module,procedure,result,stopped);}catch(...) {}};
+    try {auto result=executeProcedureImpl(module,procedure,host,arguments,references);observe(result,epoch!=vbaExecutionEpoch() || vbaExecutionStopRequested());return result;}
+    catch(const VbaExecutionStopped&) {observe({VbaExecutionStatus::Completed,{},0,true},true);throw;}
+    catch(const VbaRuntimeError& failure) {VbaExecutionResult result{VbaExecutionStatus::Error,{},0};result.errorNumber=failure.number;observe(result,false);throw;}
+    catch(...) {observe({VbaExecutionStatus::Error,{},0},false);throw;}
+}
+static VbaExecutionResult executeProcedureImpl(std::string_view module,
                                        std::string_view procedure,
                                        VbaHost& host, std::vector<VbaValue>& arguments,
-                                       const std::vector<ReferenceBinding>* references = nullptr) {
+                                       const std::vector<ReferenceBinding>* references) {
     if(vbaDebuggerBusy()) {VbaExecutionResult failure{VbaExecutionStatus::Error,"VBA-Ausführung während eines Debugger-Halts nicht verfügbar",0};failure.errorNumber=3251;return failure;}
     VbaExecutionScope executionFrame;
     ArrayElementRootScope arrayElementScope;

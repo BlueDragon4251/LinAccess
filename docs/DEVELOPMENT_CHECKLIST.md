@@ -137,7 +137,7 @@ Full targets remain open:
 
 - [x] Existing real Bridge regressions cover 192 artifacts and hashes, 47 forms,
   9 reports, 100 queries, 32 VBA files and 187 statically catalogued procedures.
-- [ ] Per-artifact and per-procedure capability/execution classification, including failures.
+- [x] Per-artifact and per-procedure capability/execution classification, including failures; [instrumented paths and explicit unproven states](PROJECT_CAPABILITY_REPORT.md).
 - [ ] COM/ActiveX/WinAPI reference inventory and feasible native/optional Windows adapters.
 - [ ] Real Windows Access 2003/365 Bridge export validation, 32/64-bit registration,
   references, encoding and failed-export diagnostics.
@@ -3145,3 +3145,29 @@ F060 bestätigt diesen beschriebenen nativen Teilumfang; vollständige IDE-,
 Makrodebugger-, Sprach-, COM- und Ereignisparität bleibt in den übrigen offenen
 Anforderungen. Fester Katalog456:385 bestätigte Teilumfänge/71 offene
 Vollanforderungen, ausschließlich theoretisch und ungewichtet. Kein Gesamtabschluss.
+
+
+## 2026-11-09: projektbezogene Einstufung, F090
+
+Extras-Bericht mit deutschem Statusbaum und explizitem JSON-Export für den
+wirklichen Import-/Objekt-/Tabellenkatalog. Getrennte statische Syntaxannahme,
+Kontextgrenzen und tatsächlich beobachtete VBA-/Makro-/SELECT-Aufrufe samt
+Fehlern und Abbruch. Verschachtelte Aufrufe, Quellrevisionen, nicht gestartete
+Prozeduren, ungültige Definitionen und Rollback-Beobachtungen nachgewiesen.
+Keine automatische Geschäftsprozedurausführung, keine VBA-/Argument-/
+Datensatzwerte im Export. Projektwechsel leert die maximal1024 Sitzungsbelege;
+gleichlautende Quellen belegen ausdrücklich keine konkrete Objektinstanz.
+Andere SQL-/Tabellenmodellpfade und komplettes Dokumentrendering gelten als
+nicht beobachtet, niemals als erfolgreich. Scope: docs/PROJECT_CAPABILITY_REPORT.md.
+
+Gebündelter Lauf: Kern1/1 (2,04s), Layout1/1 (12,09s), Original1/1 (120,17s);
+GUI-Testreihenfolge nach absichtlich defektem Modul korrigiert. Abschließende
+gezielte GUI/Layout-Nachprüfung2/2 (13,93s; GUI13,93s/Layout12,54s), frisch
+GUI-freier Kern1/1 (2,02s). Tatsächliche Makrorevision und gültiger Projektkontext
+für Beobachtungen geschützt. Abschließendes DEB/Build-ID/MDBTools1.0.1/
+SQLite3.54.1 und vier Fixture-/drei Uploadhashes bestanden. Keine neue CTest-ID,
+keine aktuelle Vollsuite/Distributionsmatrix/GitHub-CI behaupten. Original-F129/
+3075 bleibt offene Ausführungsgrenze. F090 bestätigt den beschriebenen
+Klassifizierungsumfang, keine vollständige Ausführungs- oder Access-Parität.
+Fester Katalog456:386 bestätigte Teilumfänge/70 offene Vollanforderungen,
+ausschließlich theoretisch und ungewichtet. Kein Gesamtabschluss.

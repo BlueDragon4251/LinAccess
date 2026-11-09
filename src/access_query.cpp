@@ -1,3 +1,4 @@
+#include "artifact_execution_observer.hpp"
 #include "access_query.hpp"
 #include "access_autonumber.hpp"
 #include "access_table_import.hpp"
@@ -2057,7 +2058,15 @@ QStringList accessQueryColumns(QSqlDatabase db,const AccessQueryPlan& plan,QVect
     }
     return columns;
 }
-AccessQueryResult executeAccessQueryPlan(QSqlDatabase db, const AccessQueryPlan& plan,
+static AccessQueryResult executeAccessQueryPlanObserved(QSqlDatabase,const AccessQueryPlan&,const QMap<QString,QVariant>&);
+AccessQueryResult executeAccessQueryPlan(QSqlDatabase db,const AccessQueryPlan& plan,const QMap<QString,QVariant>& bindings) {
+    const auto source=(plan.source.isEmpty() ? plan.sql : plan.source).toUtf8();
+    const auto observe=[&](const QString& status,int error) {try {recordArtifactExecution(db,"query",{},source,status,error);}catch(...) {}};
+    try {auto result=executeAccessQueryPlanObserved(db,plan,bindings);observe("completed",0);return result;}
+    catch(const VbaRuntimeError& failure) {observe("error",failure.number);throw;}
+    catch(...) {observe("error",0);throw;}
+}
+static AccessQueryResult executeAccessQueryPlanObserved(QSqlDatabase db, const AccessQueryPlan& plan,
                                        const QMap<QString,QVariant>& bindings) {
     if (!plan.sql.trimmed().startsWith("SELECT", Qt::CaseInsensitive))
         throw VbaRuntimeError(3065,"Query result requires SELECT");

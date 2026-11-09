@@ -57,9 +57,12 @@ struct VbaNumericFormatOptions {
 };
 VbaNumericFormatOptions parseVbaNumericFormatOptions(const std::vector<VbaValue>& arguments);
 
+struct VbaExecutionResult;
 class VbaHost {
 public:
     virtual ~VbaHost() = default;
+    // Observation only: exceptions from observers must never change execution.
+    virtual void executionObserved(std::string_view, std::string_view, const VbaExecutionResult&, bool) {}
     virtual std::optional<std::string> field(std::string_view name) = 0;
     virtual void setField(std::string_view name, std::optional<std::string> value) = 0;
     virtual int compareStrings(std::string_view left,std::string_view right,VbaCompareMode mode);

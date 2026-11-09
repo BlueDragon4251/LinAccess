@@ -1,4 +1,5 @@
 #include "vba_module_context.hpp"
+#include "execution_capabilities.hpp"
 #include "native_module_definition.hpp"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -112,6 +113,7 @@ std::vector<std::shared_ptr<VbaModuleState>> publicVbaModuleStates(QSqlDatabase 
     return states;
 }
 void resetVbaProjectState(QSqlDatabase db) {
+    clearExecutionObservations(db);
     if (!db.driver()) return;
     if (QThread::currentThread()!=db.driver()->thread()) throw VbaRuntimeError(3251,"VBA project reset requires its connection thread");
     const auto children=db.driver()->children();

@@ -1,3 +1,4 @@
+#include "execution_capabilities.hpp"
 #include "native_standard_module_host.hpp"
 #include "vba_runtime.hpp"
 #include "vba_expression.hpp"
@@ -296,3 +297,5 @@ std::shared_ptr<VbaObject> NativeStandardModuleHost::applicationObject() {
 }
 
 }
+
+void linaccess::NativeStandardModuleHost::executionObserved(std::string_view source,std::string_view procedure,const VbaExecutionResult& result,bool stopped) { check();recordVbaObservation(db_,source,procedure,result,stopped,"standard_module"); }

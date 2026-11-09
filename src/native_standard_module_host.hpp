@@ -12,6 +12,7 @@ public:
     NativeStandardModuleHost(QWidget* owner,QSqlDatabase db,std::function<void()> guard);
     ~NativeStandardModuleHost() override;
     void check() const;
+    void executionObserved(std::string_view,std::string_view,const VbaExecutionResult&,bool) override;
     void enterModule(std::string_view) override;
     void leaveModule() noexcept override;
     std::optional<std::string> field(std::string_view) override;

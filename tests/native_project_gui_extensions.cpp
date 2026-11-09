@@ -1,3 +1,4 @@
+#include "execution_capabilities.hpp"
 #include "native_project_gui_extensions.hpp"
 #include "mainwindow.hpp"
 #include "native_standard_module_host.hpp"
@@ -296,6 +297,29 @@ End Sub)VBA";
     });action(window,"+ Modul")->trigger();
 }
 
+void testNativeCapabilityReport(MainWindow& window,QSqlDatabase db) {
+    using namespace linaccess;
+    clearExecutionObservations(db);QSqlQuery query(db);assert(query.exec("CREATE TABLE capability_audit(n INTEGER)"));
+    const QByteArray source="Public Sub CapabilityRoot()\nCapabilityChild\nEnd Sub\nPrivate Sub CapabilityChild()\nCurrentDb.Execute \"INSERT INTO capability_audit VALUES(7)\"\nEnd Sub\nPublic Sub CapabilityFailure()\nDim n As Long\nn=1/0\nEnd Sub\nPublic Sub CapabilityNeverRun()\nCurrentDb.Execute \"INSERT INTO capability_audit VALUES(99)\"\nEnd Sub";
+    const auto save=[&](QByteArray bytes) {query.prepare("INSERT OR REPLACE INTO _la_objects VALUES('module','CapabilityProbe',?)");query.addBindValue(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromUtf8(bytes)}}).toJson(QJsonDocument::Compact));assert(query.exec());query.finish();};save(source);
+    const auto find=[&](const QJsonObject& report) {for(const auto& value:report["artifacts"].toArray()) {const auto item=value.toObject();if(item["origin"]=="native" && item["name"]=="CapabilityProbe") return item;}assert(false);return QJsonObject{};};
+    auto item=find(projectCapabilityReport(db));assert(item["procedures"].toArray().size()==4 && executionObservations(db).isEmpty());for(const auto& value:item["procedures"].toArray()) assert(value.toObject()["execution"]=="not_observed");
+    assert(query.exec("SELECT COUNT(*) FROM capability_audit") && query.next() && query.value(0).toInt()==0);query.finish();
+    NativeStandardModuleHost host(&window,db,[] {});assert(executeVbaProcedure(source.toStdString(),"CapabilityRoot",host).status==VbaExecutionStatus::Completed);assert(executeVbaProcedure(source.toStdString(),"CapabilityFailure",host).errorNumber==11);
+    item=find(projectCapabilityReport(db));bool root=false,child=false,failure=false,never=false;for(const auto& value:item["procedures"].toArray()) {const auto entry=value.toObject();const auto name=entry["name"].toString();if(name=="CapabilityRoot") root=entry["last_source_result"]=="completed";if(name=="CapabilityChild") child=entry["last_source_result"]=="completed";if(name=="CapabilityFailure") failure=entry["last_source_result"]=="error" && entry["observations"].toArray().last().toObject()["error"].toInt()==11;if(name=="CapabilityNeverRun") never=entry["execution"]=="not_observed";}assert(root && child && failure && never);
+    assert(query.exec("SELECT n FROM capability_audit") && query.next() && query.value(0).toInt()==7 && !query.next());query.finish();
+    save(source+"\n'changed revision");item=find(projectCapabilityReport(db));for(const auto& value:item["procedures"].toArray()) assert(value.toObject()["execution"]=="not_observed");
+    const auto encoded=QJsonDocument(projectCapabilityReport(db)).toJson();assert(!encoded.contains("INSERT INTO capability_audit") && !encoded.contains("n=1/0"));
+    QTimer::singleShot(0,&window,[&] {auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog && dialog->objectName()=="project-capability-report" && dialog->findChild<QTreeWidget*>("project-capability-items")->topLevelItemCount()>0);dialog->reject();});window.findChild<QAction*>("project-capabilities")->trigger();
+    assert(query.exec("INSERT INTO _la_objects VALUES('module','CapabilityBroken','{}')"));bool invalid=false;for(const auto& value:projectCapabilityReport(db)["artifacts"].toArray()) {const auto entry=value.toObject();if(entry["name"]=="CapabilityBroken") invalid=entry["capability"]=="invalid_definition";}assert(invalid);assert(query.exec("DELETE FROM _la_objects WHERE kind='module' AND name='CapabilityBroken'"));query.finish();
+    QSqlQuery rollback(db);assert(rollback.exec("SAVEPOINT capability_observations"));assert(executeVbaProcedure(source.toStdString(),"CapabilityRoot",host).status==VbaExecutionStatus::Completed);assert(rollback.exec("ROLLBACK TO capability_observations") && rollback.exec("RELEASE capability_observations"));assert(!executionObservations(db).isEmpty());
+    const QString select="SELECT n FROM capability_audit";query.prepare("INSERT INTO _la_objects VALUES('query','CapabilityQuery',?)");query.addBindValue(QJsonDocument(QJsonObject{{"sql",select}}).toJson(QJsonDocument::Compact));assert(query.exec());query.finish();assert(executeAccessQueryPlan(db,compileAccessQuery(select),{}).rows.size()==1);
+    const QString missing="SELECT missing_column FROM capability_audit";query.prepare("INSERT INTO _la_objects VALUES('query','CapabilityMissingQuery',?)");query.addBindValue(QJsonDocument(QJsonObject{{"sql",missing}}).toJson(QJsonDocument::Compact));assert(query.exec());query.finish();bool failedQuery=false;try {(void)executeAccessQueryPlan(db,compileAccessQuery(missing),{});}catch(const VbaRuntimeError&) {failedQuery=true;}assert(failedQuery);
+    storeNativeMacro(db,"CapabilityMacro",{{"version",1},{"actions",QJsonArray{QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{"INSERT INTO capability_audit VALUES(8)"}}},QJsonObject{{"action","StopMacro"},{"arguments",QJsonArray{}}}}}});host.applicationObject()->member("DoCmd",{}).object->member("RunMacro",{VbaValue::string("CapabilityMacro")});
+    bool observedSelect=false,observedFailure=false,observedMacro=false;for(const auto& value:projectCapabilityReport(db)["artifacts"].toArray()) {const auto entry=value.toObject();if(entry["origin"]!="native") continue;if(entry["name"]=="CapabilityQuery") observedSelect=entry["last_source_result"]=="completed";if(entry["name"]=="CapabilityMissingQuery") observedFailure=entry["last_source_result"]=="error";if(entry["name"]=="CapabilityMacro") observedMacro=entry["last_source_result"]=="stopped" && entry["capability"]=="macro_syntax_accepted_runtime_unproven";}assert(observedSelect && observedFailure && observedMacro);
+    clearExecutionObservations(db);assert(executionObservations(db).isEmpty());
+}
+
 void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
     testNativeRepaintObject(window,db);
     testNativeSetValueDoubleEvaluation(window,db);
@@ -305,4 +329,5 @@ void testNativeProjectGuiExtensions(MainWindow& window,QSqlDatabase db) {
     testNativeMacroContinuations(window,db);
     testNativeSqlObjectProperties(window,db);
     testNativeModuleDebugger(window,db);
+    testNativeCapabilityReport(window,db);
 }
