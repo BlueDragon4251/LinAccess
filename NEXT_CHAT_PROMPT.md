@@ -980,3 +980,21 @@ SQL-Schlüssel; Mehrfach-Save-/Sort-/Requery-Sperren weiterhin geprüft. Keine n
 CTest-ID oder Windows-Beobachtung; TABLE_NAVIGATION_DRAFTS.md. Aktueller gelöschter
 Datensatz, nötige Teil-Saves mehrerer Entwürfe, allgemeine Addition-Row-/Windows-
 Ereignisse bleiben offen. F368/F168/F080 und456/384/72 unverändert. Direkt weiter.
+
+Native Find-Dialoge von Tabellen, Abfragen und Formularen unterstützen jetzt einen
+expliziten Platzhaltermodus, getrennt von wörtlicher Suche. DoCmd.FindRecord
+String-Muster aktivieren ihn bei * ? # oder [. Syntax/Matching teilen den bestehenden
+VBA-Like-Parser und UTF16-DP-Matcher, einschließlich Zeichenklassen/Negation,
+Whole/Prefix/Substring-Grenzen, Case-Modus und gespeichertem FindNext-Zustand.
+Formatierte Suche behält reale Delegate-/Kontrollmaske und Passwortdarstellung;
+typisierte Gleichheit bleibt getrennt, Musterersetzung verweigert3251. Musterfehler93
+und absolute Patternlänge werden vor Navigation/Save geprüft; pro Kandidat gelten
+1M Input×Pattern-Units,16384 Pattern-Units und Scan-Zell-/Zeitgrenzen. Bestehende
+Navigation kann beim Matchscan den angenommenen aktuellen Datensatz speichern.
+Vorhandene Core/GUI/Layout gemeinsam3/3 (19,13s), App gebaut: tatsächliche VBA-/Qt-
+Muster, Ziffern/Klassen/Negation, Text-/Datumsmasken, Literal-Umschaltung, Query,
+Fehler-/Größengrenzen und unveränderte SQL-Daten geprüft. Zunächst kollidierenden
+lokalen Testvariablennamen korrigiert; veraltete globale Wildcard-Negativannahme
+gezielt ersetzt. Keine neue CTest-ID/Windows-Beobachtung. Nicht-ASCII-Textranges/
+Surrogatvergleiche und volle Jet-/Locale-/Allfeld-/Error/Event-Gleichheit bleiben
+offen. WILDCARD_FIND_RUNTIME.md; F373/F071/F130 und456/384/72 unverändert. Direkt weiter.

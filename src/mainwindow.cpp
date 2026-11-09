@@ -974,8 +974,9 @@ QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
         if(all && !formatted) return tableCommandFailure(3251,"Unformatierte Suche über alle Felder ist hier nicht implementiert.");
         if(formatted && !textValue) return tableCommandFailure(3251,"Formatierte Suche benötigt wörtlichen Text.");
         const auto text=linaccess::nativeFindValueText(sought);
-        if(textValue && (text.isEmpty() || text.contains('*') || text.contains('?') || text.contains('#') || text.contains('[') || text.contains(']')))
-            return tableCommandFailure(3251,"Leere und Wildcard-FindRecord-Suchen sind noch nicht implementiert.");
+        if(textValue && text.isEmpty()) return tableCommandFailure(3251,"Leere FindRecord-Suche ist noch nicht implementiert.");
+        const bool wildcards=textValue && linaccess::nativeFindHasWildcards(text);
+        if(wildcards) (void)linaccess::nativeFindTextMatches({},text,mode,sensitive,true);
         if(!textValue && mode!=1) return tableCommandFailure(3251,"Typisierte FindRecord-Suche unterstützt nur ganze Feldwerte.");
         if(page->property("la_project_object_kind").toString()=="query" && !page->property("la_editable_query").toBool()) {
             auto* view=dynamic_cast<linaccess::NativeQueryView*>(page->findChild<QTableView*>("native-query-view"));
@@ -984,7 +985,7 @@ QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
             auto* result=dynamic_cast<linaccess::AccessQueryModel*>(view->model());
             if(!result || (!all && (view->isColumnHidden(column) || (!formatted && !linaccess::nativeFindSupports(sought,result->fieldSqlType(column))))))
                 return tableCommandFailure(3251,"FindRecord-Suchwert und Abfragefeldtyp passen nicht zum unterstützten Teilumfang.");
-            linaccess::NativeTableFindArguments arguments{text,all ? -1 : column,mode,sensitive,first ? 1 : 2,direction};arguments.formatted=formatted;
+            linaccess::NativeTableFindArguments arguments{text,all ? -1 : column,mode,sensitive,first ? 1 : 2,direction};arguments.formatted=formatted;arguments.wildcards=wildcards;
             if(!textValue) arguments.value=sought;
             view->findText(std::move(arguments));
             return {{"handled",true},{"error",0}};
@@ -996,7 +997,7 @@ QVariantMap MainWindow::findTableRecord(const QVariantMap& request) {
         const int column=table->currentIndex().column();
         if(!all && (table->isColumnHidden(column) || (!formatted && !linaccess::nativeFindSupports(sought,model->fieldSqlType(column)))))
             return tableCommandFailure(3251,"FindRecord-Suchwert und aktueller Feldtyp passen nicht zum unterstützten Teilumfang.");
-        linaccess::NativeTableFindArguments arguments{text,all ? -1 : column,mode,sensitive,first ? 1 : 2,direction};arguments.formatted=formatted;
+        linaccess::NativeTableFindArguments arguments{text,all ? -1 : column,mode,sensitive,first ? 1 : 2,direction};arguments.formatted=formatted;arguments.wildcards=wildcards;
         if(!textValue) arguments.value=sought;
         if(table->findText(std::move(arguments))<0) return tableModelFailure(model,2501);
         return {{"handled",true},{"error",0}};

@@ -1,10 +1,23 @@
 #pragma once
 #include "vba_qt_value.hpp"
+#include "vba_like.hpp"
 #include <QVariantMap>
 #include <cmath>
 #include <limits>
 #include <optional>
 namespace linaccess {
+inline bool nativeFindHasWildcards(const QString& text) {
+    return text.contains('*') || text.contains('?') || text.contains('#') || text.contains('[');
+}
+inline bool nativeFindTextMatches(const QString& candidate,const QString& text,int mode,bool sensitive,bool wildcards) {
+    if(!wildcards) {const auto cs=sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;return mode==1 ? candidate.compare(text,cs)==0 : mode==2 ? candidate.startsWith(text,cs) : candidate.contains(text,cs);}
+    if(mode<0 || mode>2) throw VbaRuntimeError(5,"Invalid wildcard match mode");
+    if(candidate.contains(QChar(0)) || text.contains(QChar(0)) || !candidate.isValidUtf16() || !text.isValidUtf16()) throw VbaRuntimeError(3251,"Wildcard search text is not representable");
+    auto pattern=text;if(mode!=1) pattern+='*';if(mode==0) pattern.prepend('*');
+    if(pattern.size()>16384 || (!pattern.isEmpty() && candidate.size()>1000000/pattern.size())) throw VbaRuntimeError(3251,"Wildcard search exceeds its native pattern bound");
+    const auto input=candidate.toStdU16String(),mask=pattern.toStdU16String();
+    return matchVbaLikePattern(input,mask,!sensitive,[](char16_t left,char16_t right) {return QString(QChar(left)).compare(QString(QChar(right)),Qt::CaseInsensitive);});
+}
 inline bool nativeFindTextType(const QString& type) {
     return type.contains("TEXT",Qt::CaseInsensitive) || type.contains("CHAR",Qt::CaseInsensitive) || type.contains("CLOB",Qt::CaseInsensitive);
 }

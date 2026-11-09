@@ -24,7 +24,7 @@ struct NativeTableFindArguments {
     int origin{}; // 0: continue dialog search, 1: first record, 2: next record.
     int direction{2}; // AcSearchDirection: Up=0, Down=1, All=2.
     std::optional<VbaValue> value;
-    bool formatted{};
+    bool formatted{},wildcards{};
 };
 inline QString nativeVisibleFindText(const QAbstractItemView& view,const QModelIndex& index) {
     const auto* delegate=qobject_cast<const QStyledItemDelegate*>(view.itemDelegateForIndex(index));
@@ -58,13 +58,15 @@ inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString
     }
     box->addLayout(fields); box->addWidget(sensitive);
     auto* formatted=new QCheckBox("Formatierte Anzeige durchsuchen",dialog);formatted->setObjectName("native-table-find-formatted");formatted->setChecked(!replace && initial.formatted);formatted->setVisible(!replace);box->addWidget(formatted);
+    auto* wildcards=new QCheckBox("Platzhalter verwenden (* ? # [ ])",dialog);wildcards->setObjectName("native-table-find-wildcards");wildcards->setChecked(!replace && initial.wildcards);wildcards->setVisible(!replace);box->addWidget(wildcards);
     auto* hint=new QLabel(dialog); hint->setObjectName("native-table-find-hint"); hint->setWordWrap(true); box->addWidget(hint);
-    const auto updateField=[scope,match,sensitive,hint,typedHints,formatted,replacing=bool(replace)] {
-        const auto column=scope->currentData().toInt(); const bool exact=!formatted->isChecked() && typedHints.contains(column);
+    const auto updateField=[scope,match,sensitive,hint,typedHints,formatted,wildcards,replacing=bool(replace)] {
+        const auto column=scope->currentData().toInt(); const bool exact=!formatted->isChecked() && !wildcards->isChecked() && typedHints.contains(column);
         if(exact || replacing) match->setCurrentIndex(1);
         match->setEnabled(!exact && !replacing); sensitive->setEnabled(!exact);
-        hint->setText(formatted->isChecked() ? QStringLiteral("Die tatsächlich formatierte Zellanzeige wird wörtlich durchsucht.") : exact ? typedHints.value(column) : replacing ? QStringLiteral("Text wird wörtlich als ganzer Feldwert gesucht.") : QStringLiteral("Text wird wörtlich gesucht."));
+        hint->setText(wildcards->isChecked() ? QStringLiteral("Platzhalter: * beliebig, ? ein Zeichen, # Ziffer, [abc] Zeichenklasse.") : formatted->isChecked() ? QStringLiteral("Die tatsächlich formatierte Zellanzeige wird wörtlich durchsucht.") : exact ? typedHints.value(column) : replacing ? QStringLiteral("Text wird wörtlich als ganzer Feldwert gesucht.") : QStringLiteral("Text wird wörtlich gesucht."));
     };
+    QObject::connect(wildcards,&QCheckBox::toggled,dialog,[updateField] {updateField();});
     QObject::connect(scope,&QComboBox::currentIndexChanged,dialog,[updateField](int) { updateField(); }); updateField();
     QObject::connect(formatted,&QCheckBox::toggled,dialog,[scope,updateField,hasText=typedHints.size()<columns.size()](bool checked) {int all=scope->findData(-1);if(checked && all<0) {scope->insertItem(0,"Alle sichtbaren Felder",-1);all=0;}if(!checked && !hasText && all>=0) scope->removeItem(all);else if(all>=0) scope->setItemText(all,checked ? "Alle sichtbaren Felder" : "Alle sichtbaren Textfelder");updateField();});
     auto* result=new QLabel(dialog); result->setObjectName("native-table-find-result"); result->setWordWrap(true); box->addWidget(result);
@@ -74,9 +76,9 @@ inline QDialog* nativeTableFindDialog(QWidget* owner,const QVector<QPair<QString
     QObject::connect(text,&QLineEdit::textChanged,next,[next](const QString& value) { next->setEnabled(!value.isEmpty()); });
     QObject::connect(close,&QPushButton::clicked,dialog,&QDialog::reject);
     const QPointer<QDialog> guarded=dialog;
-    QObject::connect(next,&QPushButton::clicked,dialog,[guarded,text,scope,match,sensitive,direction,formatted,result,search] {
+    QObject::connect(next,&QPushButton::clicked,dialog,[guarded,text,scope,match,sensitive,direction,formatted,wildcards,result,search] {
         try {
-            NativeTableFindArguments arguments{text->text(),scope->currentData().toInt(),match->currentIndex(),sensitive->isChecked(),0,direction->currentData().toInt()};arguments.formatted=formatted->isChecked();
+            NativeTableFindArguments arguments{text->text(),scope->currentData().toInt(),match->currentIndex(),sensitive->isChecked(),0,direction->currentData().toInt()};arguments.formatted=formatted->isChecked();arguments.wildcards=wildcards->isChecked();
             const auto message=search(std::move(arguments));
             if(guarded) result->setText(message);
         } catch(const std::exception& error) { if(guarded) result->setText(QString::fromUtf8(error.what())); }

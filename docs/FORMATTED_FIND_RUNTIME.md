@@ -34,3 +34,6 @@ records; validation failure preserves drafts and stops navigation. Table save/
 unrelated-draft guards remain unchanged. Readonly query searching does not write
 or reexecute its source. This is native literal display search, not full Jet/
 Windows collation, wildcard, error-timing or FindRecord equivalence.
+
+Explicit native wildcard search now extends the prior literal-only boundary;
+see WILDCARD_FIND_RUNTIME.md. Full Jet/Windows behavior remains open.

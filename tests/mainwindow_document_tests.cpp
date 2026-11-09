@@ -1441,8 +1441,8 @@ DoCmd.FindRecord 42
 Me.Tag="must-not-run"
 End Sub
 Sub FindRecordWildcard()
-DoCmd.FindRecord "row-*"
-Me.Tag="must-not-run"
+DoCmd.FindRecord "row-2[45]#",1,False,2,False,-1,True
+Me.Tag="wildcard-found"
 End Sub
 Sub FindTableText()
 DoCmd.RunCommand acCmdFind
@@ -2010,11 +2010,12 @@ End Sub
     assert(mixed->executeProcedure("FindRecordAllFormatted",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==249 && navigationView->currentIndex().column()==1);
     assert(mixed->executeProcedure("FindRecordEmptyMatch",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==24);
     assert(mixed->executeProcedure("FindRecordNoMatch",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==24);
-    for(const char* procedure:{"FindRecordAllFields","FindRecordNumber","FindRecordWildcard"})
+    for(const char* procedure:{"FindRecordAllFields","FindRecordNumber"})
         assert(mixed->executeProcedure(procedure,selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==24);
+    assert(mixed->executeProcedure("FindRecordWildcard",selectArguments).status==linaccess::VbaExecutionStatus::Completed && navigationView->currentIndex().row()==239 && makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="wildcard-found");
     assert(mixed->executeProcedure("FindRecordInvalidDirection",selectArguments).errorNumber==5);
     assert(mixed->executeProcedure("FindRecordNull",selectArguments).errorNumber==94);
-    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="findrecord-nohit");
+    assert(makePreviewFormObject(*mixed)->member("Tag",{}).asText()=="wildcard-found");
     navigationView->setCurrentIndex(navigationModel->index(24,0));
     assert(mixed->executeProcedure("FindRecordDefault",selectArguments).errorNumber==3251 && navigationView->currentIndex().row()==24);
     navigationView->setCurrentIndex(navigationModel->index(24,1));
@@ -2506,6 +2507,14 @@ Sub FindDuplicateFormatted()
 Me!Duplicate.SetFocus
 DoCmd.FindRecord "0.1235",1,False,2,True,-1,True
 End Sub
+Sub FindWildcardLabel()
+Me!Label.SetFocus
+DoCmd.FindRecord "m[!a]x??",1,False,2,False,-1,True
+End Sub
+Sub InvalidWildcardLabel()
+Me!Label.SetFocus
+DoCmd.FindRecord "[",1,False,2,False,-1,True
+End Sub
 Sub OpenSearch()
 Me!Moment.SetFocus
 DoCmd.RunCommand acCmdFind
@@ -2551,12 +2560,15 @@ End Sub
     assert(form.executeProcedure("Store",arguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(sql.exec("SELECT label,moment FROM format_edit WHERE id=1") && sql.next() && sql.value(0).toString()=="mixed" && sql.value(1).toString()=="2003-12-31 18:05:06");sql.finish();
     assert(form.executeProcedure("FindDateSecond",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==2);
+    assert(form.executeProcedure("FindWildcardLabel",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==1);
+    assert(form.executeProcedure("InvalidWildcardLabel",arguments).errorNumber==93 && root->member("CurrentRecord",{}).number==1);
+    assert(form.executeProcedure("FindDateSecond",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==2);
     assert(form.executeProcedure("FindAllFormatted",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==1);
     assert(form.executeProcedure("FindDateSecond",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==2);
     assert(form.executeProcedure("FindDuplicateFormatted",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==1);
     assert(form.executeProcedure("FindDateSecond",arguments).status==linaccess::VbaExecutionStatus::Completed);
     assert(form.executeProcedure("OpenSearch",arguments).status==linaccess::VbaExecutionStatus::Completed);auto* search=form.findChild<QDialog*>("access-find-dialog");assert(search);
-    search->findChild<QCheckBox*>("access-find-formatted")->setChecked(true);search->findChild<QLineEdit*>("access-find-text")->setText("2003-12-31");search->findChild<QComboBox*>("access-find-match")->setCurrentIndex(1);search->findChild<QPushButton*>("access-find-next")->click();
+    search->findChild<QCheckBox*>("access-find-formatted")->setChecked(true);search->findChild<QCheckBox*>("access-find-wildcards")->setChecked(true);search->findChild<QLineEdit*>("access-find-text")->setText("2003-##-##");search->findChild<QComboBox*>("access-find-match")->setCurrentIndex(1);search->findChild<QPushButton*>("access-find-next")->click();
     assert(root->member("CurrentRecord",{}).number==1 && search->findChild<QLabel*>("access-find-result")->text().contains("gefunden"));search->reject();
     assert(sql.exec("SELECT label,moment FROM format_edit WHERE id=1") && sql.next() && sql.value(0).toString()=="mixed" && sql.value(1).toString()=="2003-12-31 18:05:06");sql.finish();
     assert(form.executeProcedure("FindDateSecond",arguments).status==linaccess::VbaExecutionStatus::Completed && root->member("CurrentRecord",{}).number==2);
@@ -2567,6 +2579,17 @@ End Sub
     assert(root->member("CurrentRecord",{}).number==1 && controls->item("Label").object->scalarValue().asText()=="mixed");search->reject();
     controls->item("Label").object->assign("InputMask",VbaValue::string(""));
     assert(form.close());
+    linaccess::AccessTableModel records(nullptr,db);records.setTable("format_edit");records.setEditStrategy(QSqlTableModel::OnManualSubmit);assert(records.select());
+    linaccess::AccessTableView sheet;sheet.setModel(&records);sheet.setCurrentIndex(records.index(1,2));
+    linaccess::NativeTableFindArguments find{"m[!a]x??",2,1,false,1,2};find.wildcards=true;
+    assert(sheet.findText(find)==1 && sheet.currentIndex().row()==0 && !records.isDirty());
+    find.text="*";find.wildcards=false;assert(sheet.findText(find)==0);find.wildcards=true;assert(sheet.findText(find)==1);
+    find.text="[";assert(sheet.findText(find)==-1 && records.lastError().nativeErrorCode()=="93");
+    find.text="s*c?nd";assert(sheet.findText(find)==1 && sheet.currentIndex().row()==1);
+    assert(sheet.openFindDialog());auto* dialog=sheet.findChild<QDialog*>("native-table-find-dialog");assert(dialog);dialog->findChild<QCheckBox*>("native-table-find-wildcards")->setChecked(true);dialog->findChild<QLineEdit*>("native-table-find-text")->setText("M?XED");dialog->findChild<QComboBox*>("native-table-find-match")->setCurrentIndex(1);dialog->findChild<QPushButton*>("native-table-find-next")->click();assert(sheet.currentIndex().row()==0);dialog->reject();
+    linaccess::AccessQueryModel results;results.execute(db,"SELECT label FROM format_edit ORDER BY id");linaccess::NativeQueryView query;query.setModel(&results);query.setCurrentIndex(results.index(1,0));find.column=0;find.text="m[!a]x??";assert(query.findText(find)==1 && query.currentIndex().row()==0);
+    find.text=QString(16385,'*');bool bounded=false;try{query.findText(find);}catch(const linaccess::VbaRuntimeError& error){bounded=error.number==3251;}assert(bounded);
+
 }
 
 int main(int argc,char** argv) {

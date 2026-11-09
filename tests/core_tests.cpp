@@ -6,6 +6,7 @@
 #include "vba_analyzer.hpp"
 #include "vba_runtime.hpp"
 #include "vba_expression.hpp"
+#include "vba_like.hpp"
 #include "vba_array.hpp"
 
 // Tests must stay active in Release builds (which normally define NDEBUG).
@@ -4525,6 +4526,8 @@ End Sub
     assert(host.fields["MissingArgumentError"]=="450");
     assert(evaluate("\"alpha7\" Like \"a*#\"").truthy());
     assert(evaluate("\"a7\" Like \"[a-z][!a-z]\"").truthy());
+    assert(matchVbaLikePattern(u"A7",u"[A-Z]#",false,{}));
+    assert(!matchVbaLikePattern(u"A7",u"[!A-Z]#",false,{}));
     assert(!evaluate("\"Abc\" Like \"a*\"").truthy());
     assert(evaluate("\"[x]\" Like \"[[]?]\"").truthy());
     assert(evaluate("\"ab\" Like \"a[]b\"").truthy());

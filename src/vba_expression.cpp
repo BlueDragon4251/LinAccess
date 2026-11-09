@@ -4,6 +4,7 @@
 #include "vba_array.hpp"
 #include "vba_calendar.hpp"
 #include "vba_expression.hpp"
+#include "vba_like.hpp"
 #include "vba_color.hpp"
 #include "vba_currency.hpp"
 #include "vba_decimal.hpp"
@@ -406,7 +407,7 @@ std::int32_t integer(const VbaValue& value) {
 }
 VbaValue scalarObjectValue(VbaValue value);
 VbaValue typeInspectionValue(VbaValue value);
-bool likeMatch(std::u16string_view input,std::u16string_view pattern,VbaHost& host,VbaCompareMode mode) {
+bool likeMatchWithCompare(std::u16string_view input,std::u16string_view pattern,bool textMode,const std::function<int(char16_t,char16_t)>& comparator) {
     struct Part {
         enum class Kind { Literal, Star, Any, Digit, List } kind{Kind::Literal};
         char16_t literal{};
@@ -414,10 +415,10 @@ bool likeMatch(std::u16string_view input,std::u16string_view pattern,VbaHost& ho
         std::vector<std::pair<char16_t,char16_t>> ranges;
     };
     const auto compare=[&](char16_t left,char16_t right) {
-        if(mode==VbaCompareMode::Binary) return (left>right)-(left<right);
+        if(!textMode) return (left>right)-(left<right);
         if((left>=0xd800 && left<=0xdfff) || (right>=0xd800 && right<=0xdfff))
             throw error("Locale-aware Like surrogate comparisons are not implemented",3251);
-        return host.compareStrings(utf8String(std::u16string(1,left)),utf8String(std::u16string(1,right)),mode);
+        return comparator(left,right);
     };
     std::vector<Part> parts;
     for(std::size_t index=0;index<pattern.size();++index) {
@@ -437,7 +438,7 @@ bool likeMatch(std::u16string_view input,std::u16string_view pattern,VbaHost& ho
                 const auto first=pattern[cursor++]; auto last=first;
                 if(cursor+1<closing && pattern[cursor]==u'-') {
                     last=pattern[cursor+1]; cursor+=2;
-                    if(mode!=VbaCompareMode::Binary && (first>127 || last>127))
+                    if(textMode && (first>127 || last>127))
                         throw error("Non-ASCII Like range collation is not implemented",3251);
                     if(compare(first,last)>0) throw error("Descending Like range",93);
                 }
@@ -464,7 +465,7 @@ bool likeMatch(std::u16string_view input,std::u16string_view pattern,VbaHost& ho
             case Part::Kind::Literal: match=compare(unit,part.literal)==0; break;
             case Part::Kind::List:
                 for(const auto& range:part.ranges) {
-                    if(mode!=VbaCompareMode::Binary && range.first!=range.second && unit>127)
+                    if(textMode && range.first!=range.second && unit>127)
                         throw error("Non-ASCII Like range collation is not implemented",3251);
                     if(compare(unit,range.first)>=0 && compare(unit,range.second)<=0) { match=true; break; }
                 }
@@ -477,6 +478,12 @@ bool likeMatch(std::u16string_view input,std::u16string_view pattern,VbaHost& ho
     }
     return previous.back()!=0;
 }
+bool likeMatch(std::u16string_view input,std::u16string_view pattern,VbaHost& host,VbaCompareMode mode) {
+    return likeMatchWithCompare(input,pattern,mode!=VbaCompareMode::Binary,[&](char16_t left,char16_t right) {
+        return host.compareStrings(utf8String(std::u16string(1,left)),utf8String(std::u16string(1,right)),mode);
+    });
+}
+
 VbaValue binary(const std::string& op, const VbaValue& left, const VbaValue& right,VbaHost* host,VbaCompareMode mode) {
     if (left.kind==VbaValue::Kind::Error || right.kind==VbaValue::Kind::Error || left.kind==VbaValue::Kind::Missing || right.kind==VbaValue::Kind::Missing)
         throw error("Error Variant cannot be used as an operand",13);
@@ -2571,6 +2578,12 @@ bool VbaValue::truthy() const {
 }
 std::optional<std::string> VbaValue::asField() const {
     return kind == Kind::Null ? std::nullopt : std::optional<std::string>{asText()};
+}
+bool matchVbaLikePattern(std::u16string_view input,std::u16string_view pattern,bool textMode,
+    const std::function<int(char16_t,char16_t)>& compare) {
+    if(pattern.size()>16384 || (!pattern.empty() && input.size()>1000000/pattern.size()))
+        throw VbaRuntimeError(3251,"Wildcard search exceeds its native pattern bound");
+    return likeMatchWithCompare(input,pattern,textMode,compare);
 }
 VbaValue compareVbaValues(std::string_view relation,const VbaValue& left,const VbaValue& right,
                          VbaHost& host,VbaCompareMode mode) {

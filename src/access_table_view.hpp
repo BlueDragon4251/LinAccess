@@ -61,7 +61,7 @@ public:
         if(existing && existing->isVisible()) { existing->raise(); existing->activateWindow(); return true; }
         auto initial=findArguments_;
         if(initial.text.isEmpty() && currentIndex().isValid() && typed->isSearchableColumn(currentIndex().column())) initial.column=currentIndex().column();
-        if(replace) { initial.mode=1; initial.value.reset();initial.formatted=false; }
+        if(replace) { initial.mode=1; initial.value.reset();initial.formatted=false;initial.wildcards=false; }
         std::function<QString(NativeTableFindArguments,QString)> replaceAction;
         if(replace) replaceAction=[self](NativeTableFindArguments arguments,QString value) {
             if(self) self->replaceCurrentText(std::move(arguments),std::move(value));
@@ -71,7 +71,7 @@ public:
             if(!self) return QString{};
             try {
                 auto* model=qobject_cast<AccessTableModel*>(self->model());
-                if(model && !arguments.formatted && arguments.column>=0 && !model->isTextColumn(arguments.column)) {
+                if(model && !arguments.formatted && !arguments.wildcards && arguments.column>=0 && !model->isTextColumn(arguments.column)) {
                     arguments.value=nativeFindInput(arguments.text,model->fieldSqlType(arguments.column));
                     arguments.text=nativeFindValueText(*arguments.value); arguments.mode=1;
                 }
@@ -96,7 +96,7 @@ public:
         if(replacing_ || finding_) return fail(3251,"Eine Such- oder Ersetzungsaktion läuft bereits.");
         replacing_=true; const auto finished=qScopeGuard([self] { if(self) self->replacing_=false; });
         if(typed->isReadOnly()) return fail(2046,"Das Datenblatt ist schreibgeschützt.");
-        if(arguments.formatted || arguments.value || arguments.mode!=1 || arguments.column<0 || arguments.column>=typed->columnCount()
+        if(arguments.formatted || arguments.wildcards || arguments.value || arguments.mode!=1 || arguments.column<0 || arguments.column>=typed->columnCount()
             || isColumnHidden(arguments.column) || !typed->isTextColumn(arguments.column))
             return fail(3251,"Ersetzen erfordert ein ausgewähltes Textfeld und einen ganzen Feldwert.");
         if(arguments.text.isEmpty()) return fail(5,"Der Suchwert darf nicht leer sein.");
@@ -144,7 +144,7 @@ public:
         if(replacing_ || finding_) return fail(3251,"Eine Such- oder Ersetzungsaktion läuft bereits.");
         replacing_=true; const auto finished=qScopeGuard([self] { if(self) self->replacing_=false; });
         if(typed->isReadOnly()) return fail(2046,"Das Datenblatt ist schreibgeschützt.");
-        if(arguments.formatted || arguments.value || arguments.mode!=1 || arguments.direction!=2 || arguments.column<0 || arguments.column>=typed->columnCount()
+        if(arguments.formatted || arguments.wildcards || arguments.value || arguments.mode!=1 || arguments.direction!=2 || arguments.column<0 || arguments.column>=typed->columnCount()
             || isColumnHidden(arguments.column) || !typed->isTextColumn(arguments.column))
             return fail(3251,"Alle ersetzen erfordert ein Textfeld, ganze Feldwerte und die Suchrichtung Alle.");
         if(arguments.text.isEmpty()) return fail(5,"Der Suchwert darf nicht leer sein.");
@@ -206,6 +206,7 @@ public:
             if(arguments.mode!=1) return fail(3251,"Typisierte Suche unterstützt derzeit nur ganze Feldwerte.");
         }
         if(arguments.mode<0 || arguments.mode>2 || arguments.column< -1 || arguments.column>=typed->columnCount() || arguments.origin<0 || arguments.origin>2 || arguments.direction<0 || arguments.direction>2) return fail(5,"Ungültige Sucheinstellung.");
+        if(arguments.wildcards) {if(arguments.value) return fail(3251,"Platzhaltersuche benötigt String-Eingabe.");(void)nativeFindTextMatches({},arguments.text,arguments.mode,arguments.sensitive,true);}
         if(!finishEditing()) { if(self && typed) findMessage_=typed->lastError().text(); return -1; }
         if(!self || !typed) return -1;
         if(recordNavigationGuard_) {
@@ -225,7 +226,7 @@ public:
             if(typed->rowCount()==before && typed->canFetchMore()) return fail(3251,"Suchdaten konnten nicht vollständig geladen werden.");
         }
         if(static_cast<qint64>(typed->rowCount())*columns.size()>cellLimit) return fail(3251,"Suchumfang überschreitet die native Grenze.");
-        if(findArguments_.text!=arguments.text || findArguments_.column!=arguments.column || findArguments_.mode!=arguments.mode || findArguments_.sensitive!=arguments.sensitive || findArguments_.direction!=arguments.direction || findArguments_.formatted!=arguments.formatted || !sameNativeFindValue(findArguments_.value,arguments.value)) findAdvance_=false;
+        if(findArguments_.text!=arguments.text || findArguments_.column!=arguments.column || findArguments_.mode!=arguments.mode || findArguments_.sensitive!=arguments.sensitive || findArguments_.direction!=arguments.direction || findArguments_.formatted!=arguments.formatted || findArguments_.wildcards!=arguments.wildcards || !sameNativeFindValue(findArguments_.value,arguments.value)) findAdvance_=false;
         findArguments_=arguments; findArguments_.origin=0;
         const int count=typed->rowCount();
         if(!count) { findMessage_="Keine Datensätze vorhanden."; return 0; }
@@ -234,19 +235,19 @@ public:
         const auto cs=arguments.sensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
         QElapsedTimer clock;clock.start();
         for(int offset=0;offset<count;++offset) {
-            if(arguments.formatted && clock.hasExpired(5000)) return fail(3035,"Formatierte Suche überschreitet ihr Zeitlimit.");
+            if((arguments.formatted || arguments.wildcards) && clock.hasExpired(5000)) return fail(3035,"Formatierte Suche überschreitet ihr Zeitlimit.");
             const qint64 candidateRow=static_cast<qint64>(start)+static_cast<qint64>(step)*offset;
             if(arguments.direction!=2 && (candidateRow<0 || candidateRow>=count)) break;
             const int row=static_cast<int>((candidateRow%count+count)%count); if(isRowHidden(row)) continue;
             for(int column:columns) {
-                if(arguments.formatted && clock.hasExpired(5000)) return fail(3035,"Formatierte Suche überschreitet ihr Zeitlimit.");
+                if((arguments.formatted || arguments.wildcards) && clock.hasExpired(5000)) return fail(3035,"Formatierte Suche überschreitet ihr Zeitlimit.");
                 const auto candidate=typed->index(row,column);
                 const auto value=candidate.data(Qt::EditRole);
                 if(value.isNull() || value.metaType().id()==QMetaType::QByteArray) continue;
                 if(arguments.formatted) (void)typed->formattedText(candidate); // Validate actual type/mask; never search error placeholders.
                 const auto text=arguments.formatted ? nativeVisibleFindText(*this,candidate) : value.toString();
                 const bool matches=arguments.value ? nativeFindEqual(qtFieldValue(value,typed->fieldSqlType(column)),*arguments.value)
-                    : arguments.mode==1 ? text.compare(arguments.text,cs)==0 : arguments.mode==2 ? text.startsWith(arguments.text,cs) : text.contains(arguments.text,cs);
+                    : nativeFindTextMatches(text,arguments.text,arguments.mode,arguments.sensitive,arguments.wildcards);
                 if(matches) {
                     setCurrentIndex(candidate);
                     if(!self || !typed) return -1;
