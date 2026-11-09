@@ -1227,7 +1227,7 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
     filter_=whereCondition.trimmed().isEmpty() ? layout_.filter : whereCondition;
     filterOn_=whereCondition.trimmed().isEmpty() ? layout_.filterOnLoad && !filter_.trimmed().isEmpty() : true;
     orderBy_=layout_.orderBy; orderByOn_=layout_.orderByOnLoad && !orderBy_.trimmed().isEmpty();
-    initialCurrentDeferred_=!embedded && windowMode!=1 && eventProcedure(layout_.events.value("onactivate"));
+    initialCurrentDeferred_=!embedded && windowMode!=1 && !layout_.events.value("onactivate").trimmed().isEmpty();
     if (db_.isOpen()) connectPreviewSqlObjects(db_);
     static qlonglong openingSequence = 0;
     setProperty("la_form_open_order",++openingSequence);
@@ -1293,21 +1293,14 @@ AccessFormPreview::AccessFormPreview(QString formName, const QByteArray& source,
             this, [this](int index) { selectRecord(index); });
     connect(save, &QPushButton::clicked, this, [this] { (void)saveRecord(); });
     if (layout_.kind==linaccess::AccessDocumentKind::Form) {
-        formTimer_=new QTimer(this); formTimer_->setTimerType(Qt::PreciseTimer);
+        formTimer_=new QTimer(this); formTimer_->setObjectName("access-form-timer");formTimer_->setTimerType(Qt::PreciseTimer);
         connect(formTimer_,&QTimer::timeout,this,[this] {
             if (!opened_ || closed_ || closing_ || openCancelled_ || timerDispatching_ || loading_
                 || saving_ || navigating_ || recordCommandRunning_ || insertionEventRunning_) return;
             ++nativeExecutionDepth();
             const auto execution=qScopeGuard([] { --nativeExecutionDepth(); disposeClosedForms(); });
             QScopedValueRollback<bool> dispatching(timerDispatching_,true);
-            const auto binding=layout_.events.value("ontimer");
-            if (eventProcedure(binding)) (void)formEvent("OnTimer","Form_Timer");
-            else if (!binding.trimmed().isEmpty()) {
-                PreviewVbaHost host(*this);
-                const auto result=linaccess::executeVbaEventExpression(vba_.toUtf8().toStdString(),binding.toUtf8().toStdString(),host);
-                eventResults_.insert("ontimer",result);
-                if (failed(result) && status_) status_->setText("Timer-Ereignisfehler "+QString::number(result.errorNumber));
-            }
+            (void)formEvent("OnTimer","Form_Timer");
         });
     }
     if (!queryViewsReady) {
@@ -2359,10 +2352,9 @@ bool AccessFormPreview::commitControl(const QString& name) {
     for (const auto& control : layout_.controls) {
         if (control.name.compare(name,Qt::CaseInsensitive) != 0) continue;
         QScopedValueRollback<QString> updating(updatingControl_,control.name);
-        if (eventProcedure(control.beforeUpdate)) {
+        if (!control.beforeUpdate.trimmed().isEmpty()) {
             QScopedValueRollback<QString> validating(validatingControl_,control.name);
-            const auto result = runHandler(controlEventPrefix(control.name)+"_BeforeUpdate");
-            eventResults_.insert(("control:"+control.name+":BeforeUpdate").toCaseFolded(),result);
+            const auto result = runControlBinding(control.name,"BeforeUpdate",control.beforeUpdate);
             if (result.cancelled || failed(result)) {
                 if (auto* widget = controls_.value(control.name.toCaseFolded()).data()) widget->setFocus();
                 return false;
@@ -2372,9 +2364,8 @@ bool AccessFormPreview::commitControl(const QString& name) {
         pendingControls_.remove(name); bufferedTextControls_.remove(name); editOriginals_.remove(name);
         markDirty(name); refreshCalculatedControls();
         rememberControlEdit(controls_.value(control.name.toCaseFolded()).data());
-        if (eventProcedure(control.afterUpdate)) {
-            const auto result = runHandler(controlEventPrefix(control.name)+"_AfterUpdate");
-            eventResults_.insert(("control:"+control.name+":AfterUpdate").toCaseFolded(),result);
+        if (!control.afterUpdate.trimmed().isEmpty()) {
+            const auto result = runControlBinding(control.name,"AfterUpdate",control.afterUpdate);
             if (failed(result)) return false;
         }
         if(!closed_ && !openCancelled_) {const auto widget=controls_.value(control.name.toCaseFolded());if(widget && !widget->hasFocus()) {QScopedValueRollback<QString> release(updatingControl_,QString{});refreshFormattedControl(control.name);}}
@@ -3754,13 +3745,7 @@ bool AccessFormPreview::eventFilter(QObject* watched,QEvent* event) {
 }
 linaccess::VbaExecutionResult AccessFormPreview::runControlBinding(const QString& control,const QString& event,const QString& binding) {
     if (binding.trimmed().isEmpty()) return {linaccess::VbaExecutionStatus::Completed,{}};
-    linaccess::VbaExecutionResult result;
-    if (eventProcedure(binding)) result=runHandler(controlEventPrefix(control)+"_"+event);
-    else {
-        PreviewVbaHost host(*this);
-        result=linaccess::executeVbaEventExpression(vba_.toUtf8().toStdString(),binding.toUtf8().toStdString(),host);
-        if (failed(result) && status_) status_->setText("Ereignisfehler "+QString::number(result.errorNumber)+" (Zeile "+QString::number(result.line)+")");
-    }
+    const auto result=runBoundEvent(binding,controlEventPrefix(control)+"_"+event);
     eventResults_.insert(("control:"+control+":"+event).toCaseFolded(),result); return result;
 }
 
@@ -3784,12 +3769,30 @@ linaccess::VbaExecutionResult AccessFormPreview::runHandler(const QString& handl
     }
     return result;
 }
+linaccess::VbaExecutionResult AccessFormPreview::runBoundEvent(const QString& binding,const QString& handler) {
+    if(eventProcedure(binding)) return runHandler(handler);
+    linaccess::VbaExecutionResult result;
+    if(binding.trimmed().startsWith('=')) {
+        PreviewVbaHost host(*this);
+        result=linaccess::executeVbaEventExpression(vba_.toUtf8().toStdString(),binding.toUtf8().toStdString(),host);
+    } else {
+        try {
+            (void)makePreviewApplicationObject(*this)->member("DoCmd",{}).object->member("RunMacro",{linaccess::VbaValue::string(binding.trimmed().toUtf8().toStdString())});
+            result.status=linaccess::VbaExecutionStatus::Completed;
+        } catch(const linaccess::VbaExecutionStopped&) {result.status=linaccess::VbaExecutionStatus::Completed;result.exitSub=true;}
+          catch(const linaccess::VbaRuntimeError& error) {result.status=linaccess::VbaExecutionStatus::Error;result.errorNumber=error.number;result.explanation=error.what();result.errorSource=error.source;result.errorHelpFile=error.helpFile;result.errorHelpContext=error.helpContext;}
+          catch(const std::exception& error) {result.status=linaccess::VbaExecutionStatus::Error;result.errorNumber=5;result.explanation=error.what();}
+    }
+    if(failed(result) && status_) status_->setText("Ereignisfehler "+QString::number(result.errorNumber)+": "+QString::fromStdString(result.explanation));
+    return result;
+}
 linaccess::VbaExecutionResult AccessFormPreview::formEvent(const QString& property,const QString& handler) {
-    if (!eventProcedure(layout_.events.value(property.toCaseFolded()))) return {};
+    const auto binding=layout_.events.value(property.toCaseFolded());
+    if(binding.trimmed().isEmpty()) return {};
 
     auto name = handler;
     if (layout_.kind==linaccess::AccessDocumentKind::Report && name.startsWith("Form_")) name.replace(0,5,"Report_");
-    const auto result = runHandler(name);
+    const auto result = runBoundEvent(binding,name);
     eventResults_.insert(property.toCaseFolded(),result);
     return result;
 }

@@ -95,6 +95,7 @@ private:
     void pasteAppendRecord();
     void clearRecordSelection();
     linaccess::VbaExecutionResult runHandler(const QString& handler);
+    linaccess::VbaExecutionResult runBoundEvent(const QString& binding,const QString& handler);
     linaccess::VbaExecutionResult runControlBinding(const QString& control,const QString& event,const QString& binding);
     bool eventFilter(QObject* watched,QEvent* event) override;
     linaccess::VbaExecutionResult formEvent(const QString& property,const QString& handler);

@@ -2525,6 +2525,61 @@ End Sub)VBA";
     assert(sql.exec("SELECT COUNT(*),SUM(n) FROM native_macro_effects") && sql.next() && sql.value(0).toInt()==5 && sql.value(1).toInt()==7);sql.finish();
     error=0;try {commands->member("RunMacro",{VbaValue::string("Native Macro"),VbaValue::longInteger(1001)});}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error==3251);
     assert(form.close());
+    assert(sql.exec("CREATE TABLE macro_event_rows(id INTEGER PRIMARY KEY,value TEXT)"));assert(sql.exec("INSERT INTO macro_event_rows VALUES(1,'before')"));assert(sql.exec("CREATE TABLE macro_event_audit(kind TEXT)"));
+    for(const auto* kind:{"load","current","click","double","change","before","after","timer","close"}) store(QStringLiteral("event_")+kind,{QJsonObject{{"action","RunSQL"},{"arguments",QJsonArray{QStringLiteral("INSERT INTO macro_event_audit VALUES('")+kind+"')"}}}});
+    const QByteArray layout=R"FORM(Begin Form
+RecordSource ="macro_event_rows"
+OnLoad ="event_load"
+OnCurrent ="event_current"
+OnTimer ="event_timer"
+OnClose ="event_close"
+Width =5000
+Begin Section
+Height =1800
+Begin TextBox
+Name ="Value"
+ControlSource ="value"
+OnChange ="event_change"
+BeforeUpdate ="event_before"
+AfterUpdate ="event_after"
+OnDblClick ="event_double"
+Width =2000
+Height =400
+End
+Begin CommandButton
+Name ="Run"
+OnClick ="event_click"
+Top =600
+Width =1800
+Height =400
+End
+Begin CommandButton
+Name ="Missing"
+OnClick ="No Such Macro"
+Left =2200
+Top =600
+Width =1800
+Height =400
+End
+End
+End)FORM";
+    AccessFormPreview bound("macro_event_form",layout,{},db,&window);bound.show();QApplication::processEvents();assert(bound.hasDataSource());
+    const auto observed=[&](const QString& kind) {QSqlQuery audit(db);audit.prepare("SELECT COUNT(*) FROM macro_event_audit WHERE kind=?");audit.addBindValue(kind);assert(audit.exec() && audit.next());return audit.value(0).toInt();};
+    assert(observed("load")==1 && observed("current")==1);
+    auto* button=bound.findChild<QPushButton*>("access-control-Run");auto* missing=bound.findChild<QPushButton*>("access-control-Missing");auto* edit=bound.findChild<QLineEdit*>("access-control-Value");assert(button && missing && edit);
+    QTest::mouseClick(button,Qt::LeftButton);assert(observed("click")==1 && bound.eventResult("control:Run:Click")->status==linaccess::VbaExecutionStatus::Completed);
+    QTest::mouseClick(missing,Qt::LeftButton);assert(bound.eventResult("control:Missing:Click")->errorNumber==2485);
+    QTest::mouseDClick(edit,Qt::LeftButton);assert(observed("double")==1);
+    edit->setFocus();QTest::keyClick(edit,Qt::Key_A,Qt::ControlModifier);QTest::keyClicks(edit,"after");assert(observed("change")>0);
+    assert(sql.exec("SELECT value FROM macro_event_rows WHERE id=1") && sql.next() && sql.value(0).toString()=="before");sql.finish();
+    makePreviewFormObject(bound)->assign("Dirty",VbaValue::logical(false));assert(observed("before")==1 && observed("after")==1);
+    assert(sql.exec("SELECT value FROM macro_event_rows WHERE id=1") && sql.next() && sql.value(0).toString()=="after");sql.finish();
+    auto* timer=bound.findChild<QTimer*>("access-form-timer");assert(timer && QMetaObject::invokeMethod(timer,"timeout",Qt::DirectConnection));assert(observed("timer")==1);
+    assert(bound.close() && observed("close")==1);
+    auto refused=layout;refused.replace("BeforeUpdate =\"event_before\"","BeforeUpdate =\"No Such Macro\"");
+    AccessFormPreview guarded("macro_event_guarded",refused,{},db,&window);guarded.show();QApplication::processEvents();edit=guarded.findChild<QLineEdit*>("access-control-Value");assert(edit);edit->setFocus();QTest::keyClick(edit,Qt::Key_A,Qt::ControlModifier);QTest::keyClicks(edit,"refused");
+    error=0;try {makePreviewFormObject(guarded)->assign("Dirty",VbaValue::logical(false));}catch(const linaccess::VbaRuntimeError& failure) {error=failure.number;}assert(error && guarded.eventResult("control:Value:BeforeUpdate")->errorNumber==2485);
+    assert(sql.exec("SELECT value FROM macro_event_rows WHERE id=1") && sql.next() && sql.value(0).toString()=="after");sql.finish();makePreviewFormObject(guarded)->member("Undo",{});assert(guarded.close());
 }
 
 void testEditableControlFormats(MainWindow& window,QSqlDatabase db) {

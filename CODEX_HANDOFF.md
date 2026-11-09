@@ -3390,3 +3390,20 @@ Keine neue CTest-ID/Windows-Beobachtung. NATIVE_MACROS_RUNTIME.md beschreibt eig
 Format-/Budgetgrenzen; kein Access-Makroimport. Gruppen, Bedingungen/Ausdrücke,
 RepeatExpression, Eventbindung, volle Aktionssprache und Oracle bleiben offen.
 F088/F050/F057/F148 und456/384/72 unverändert. Direkt weiter programmieren.
+
+
+Gespeicherte native Makronamen funktionieren jetzt auch als Ereignisbindungen:
+vorhandene generische Steuerelementpfade (u.a. Click/DblClick/Change), Kontroll-
+BeforeUpdate/AfterUpdate sowie Form-/Berichtsereignisse und Timer verwenden einen
+geteilten Dispatcher für [Event Procedure], =Funktion() und benannte Makros.
+OnActivate verschiebt Current bei jeder vorhandenen Bindung wie bisher bei VBA.
+Makrofehler werden als echte Ereignisergebnisse/Statusdiagnose gespeichert;
+fehlendes Kontroll-BeforeUpdate-Makro verhindert Save mit unveränderten SQL-Werten.
+GUI/Layout gemeinsam2/2 (17,33s), App gebaut: tatsächliches Load/Current, Qt-Klick,
+Doppelklick, Texttastatur/Change, Before/AfterUpdate mit SQL-Persistenz, tatsächliches
+Timer-Timeoutsignal, Close sowie fehlender Click/BeforeUpdate-Name2485 nachgewiesen.
+Timerprüfung prüft Signaldelivery, keinen neuen Wandzeit-/Access-Timing-Oracle.
+Makronamen mit führendem =/[ sind zur Abgrenzung von Ausdrücken/Embedded-Makros
+verweigert. Keine neue CTest-ID/Windows-Beobachtung. CancelEvent, Tastatur-
+Makroargumente, Gruppen/Bedingungen/volle Ereignisgleichheit bleiben offen.
+NATIVE_MACROS_RUNTIME.md; F088/F050/F057/F148 und456/384/72 unverändert. Direkt weiter.

@@ -21,7 +21,7 @@ inline const QVector<NativeMacroSignature>& nativeMacroSignatures() {
     return signatures;
 }
 inline bool nativeMacroNameValid(const QString& name) {
-    return !name.trimmed().isEmpty() && name.size()<=64 && name.isValidUtf16() && !name.contains(QChar(0)) && !name.contains('.');
+    return !name.trimmed().isEmpty() && name.size()<=64 && name.isValidUtf16() && !name.contains(QChar(0)) && !name.contains('.') && !name.trimmed().startsWith('=') && !name.trimmed().startsWith('[');
 }
 struct NativeMacroAction {QString name;std::vector<VbaValue> arguments;};
 inline QVector<NativeMacroAction> parseNativeMacro(const QJsonObject& definition) {
