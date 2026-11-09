@@ -223,20 +223,34 @@ CountCrosstab expandCountCrosstab(QVector<Token>& tokens,qsizetype start) {
         for(int token=0;token<grouped[i].size();++token) if(grouped[i][token].value.compare(rowFields[i][token].value,Qt::CaseInsensitive)!=0) fail();
     }
     qsizetype in=pivot+1;while(in<tokens.size() && !word(in,"IN")) ++in;
-    const auto pivotField=tokens.mid(pivot+1,in-pivot-1);if(!field(pivotField) || in+3>=tokens.size() || !symbol(tokens[in+1],"(") || !symbol(tokens.back(),")")) fail();
-    QVector<Token> headings;
-    for(qsizetype i=in+2;i<tokens.size()-1;++i) {
-        if((i-in-2)%2) {if(!symbol(tokens[i],",")) fail();continue;}
-        const auto token=tokens[i];
-        if(token.kind!=Token::String || token.value.isEmpty() || token.value.size()>64 || token.value.contains(QChar(0)) || !token.value.isValidUtf16() || outputNames.contains(token.value.toCaseFolded())) fail();
-        outputNames.insert(token.value.toCaseFolded());headings.push_back(token);
+    const auto pivotField=tokens.mid(pivot+1,in-pivot-1);
+    const bool calendar=pivotField.size()>=4 && pivotField.front().kind==Token::Word && QSet<QString>{"year","month","day"}.contains(pivotField.front().value.toCaseFolded())
+        && symbol(pivotField[1],"(") && symbol(pivotField.back(),")") && field(pivotField.mid(2,pivotField.size()-3));
+    if((!field(pivotField) && !calendar) || in+3>=tokens.size() || !symbol(tokens[in+1],"(") || !symbol(tokens.back(),")")) fail();
+    struct Heading {QString label;Token literal;};QVector<Heading> headings;
+    qsizetype at=in+2;
+    while(at<tokens.size()-1) {
+        const auto token=tokens[at++];Heading heading;
+        if(token.kind==Token::String) heading={token.value,token};
+        else {
+            bool negative=false;auto number=token;
+            if(symbol(number,"-") || symbol(number,"+")) {negative=symbol(number,"-");if(at>=tokens.size()-1) fail();number=tokens[at++];}
+            bool valid=false;const auto digits=number.kind==Token::Other ? number.value.toLongLong(&valid) : 0;
+            if(!valid || digits<0 || digits>2147483648LL) fail();
+            const auto value=negative ? -digits : digits;if(value<std::numeric_limits<qint32>::min() || value>std::numeric_limits<qint32>::max()) fail();
+            heading={QString::number(value),{Token::Other,QString::number(value)}};
+        }
+        if(heading.label.isEmpty() || heading.label.size()>64 || heading.label.contains(QChar(0)) || !heading.label.isValidUtf16() || outputNames.contains(heading.label.toCaseFolded())) fail();
+        outputNames.insert(heading.label.toCaseFolded());headings.push_back(heading);
+        if(at==tokens.size()-1) break;
+        if(!symbol(tokens[at++],",") || at>=tokens.size()-1) fail();
     }
-    if(headings.isEmpty() || (tokens.size()-in-3)%2==0 || headings.size()+rowFields.size()>255) fail();
+    if(headings.isEmpty() || headings.size()+rowFields.size()>255) fail();
     auto output=tokens.mid(0,start);output.append({Token::Word,"SELECT"});output+=tokens.mid(select+1,from-select-1);
     for(const auto& heading:headings) {
-        output.append({Token::Other,","});output.append({Token::Word,"Count"});output.append({Token::Other,"("});output.append({Token::Word,"CASE"});output.append({Token::Word,"WHEN"});output+=pivotField;output.append({Token::Other,"="});output.append(heading);output.append({Token::Word,"THEN"});
+        output.append({Token::Other,","});output.append({Token::Word,"Count"});output.append({Token::Other,"("});output.append({Token::Word,"CASE"});output.append({Token::Word,"WHEN"});output+=pivotField;output.append({Token::Other,"="});output.append(heading.literal);output.append({Token::Word,"THEN"});
         if(star) output.append({Token::Other,"1"});else output+=argument;
-        output.append({Token::Word,"ELSE"});output.append({Token::Word,"NULL"});output.append({Token::Word,"END"});output.append({Token::Other,")"});output.append({Token::Word,"AS"});output.append({Token::Identifier,heading.value});
+        output.append({Token::Word,"ELSE"});output.append({Token::Word,"NULL"});output.append({Token::Word,"END"});output.append({Token::Other,")"});output.append({Token::Word,"AS"});output.append({Token::Identifier,heading.label});
     }
     output+=tokens.mid(from,pivot-from);tokens=std::move(output);
     return {static_cast<int>(rowFields.size()),static_cast<int>(headings.size())};

@@ -3164,3 +3164,13 @@ werden semantisch gleich verglichen. Kein Windows-Ergebnis-/Kollationsorakel und
 keine volle Kreuztabellenparität behauptet. Siehe COUNT_CROSSTAB_RUNTIME.md.
 F068/F067 und456/384/72 bleiben unverändert. Vier Repository-Originale und drei
 Upload-Originale aktuell per SHA unverändert. Ohne Zwischenabschluss fortsetzen.
+
+Feste Count-Kreuztabellen unterstützen jetzt zusätzlich vorzeichenbehaftete
+Long-Überschriften und reine Year(Feld)/Month(Feld)/Day(Feld)-Pivot-Ausdrücke.
+Integer-Spaltennamen werden kanonisch gebildet;01/1 und Text-/Zahl-Namenskonflikte
+werden vor Ausführung verweigert. Nichtintegrale, außerhalb Long liegende und
+beliebige andere Pivot-Ausdrücke bleiben3251. Vorhandene Query-Resultat-/Schema-
+Prüfungen gemeinsam2/2 (0,12s), App gebaut: echte Datumszeilen mit Uhrzeit,
+Schalttag und NULL, vorgegebene Monats-/Jahresreihenfolge, fehlende Kategorie,
+Signum und Negativfälle geprüft. Keine neue CTest-ID/Windows-Beobachtung;
+COUNT_CROSSTAB_RUNTIME.md; F068/F067 und456/384/72 unverändert. Direkt weiter.

@@ -1,7 +1,10 @@
 # Fixed-heading native Count crosstabs
 
 The Jet query compiler accepts bounded TRANSFORM Count(field) / Count(*) queries
-with simple grouped row fields and a fixed PIVOT field IN ('heading',...) list.
+with simple grouped row fields and a fixed PIVOT field IN (...) list. Headings
+can be text or signed-Long integer literals; integer labels are canonical decimal
+names, so 01 and 1 collide. Year(field), Month(field) and Day(field) are supported
+as pure calendar pivot expressions through the existing native date functions.
 It rewrites tokens into conditional counts, preserving heading order, literal
 escaping, explicit aliases, WHERE/HAVING/ORDER clauses and declared parameters.
 Count(field) omits NULL values; Count(*) counts matching rows. Absent categories
@@ -15,7 +18,7 @@ compiler. Aggregate results remain readonly. Simple source-column lineage uses
 the existing SQLite origin metadata path. Native execution budgets, parameter
 binding and result bounds remain in effect.
 
-Dynamic headings, numeric heading literals, numeric aggregates, expression row
+Dynamic headings, nonintegral/out-of-Long headings, numeric aggregates, expression row
 headings, compound/join sources and arbitrary TRANSFORM grammar refuse3251.
 This implements native fixed-heading counting; no new Windows Access result,
 collation, regional heading or full crosstab compatibility oracle is claimed.
