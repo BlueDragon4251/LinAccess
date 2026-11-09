@@ -41,6 +41,7 @@
 #include <QCryptographicHash>
 #include <QClipboard>
 #include <QCheckBox>
+#include <QStyleOptionButton>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -880,6 +881,61 @@ End Sub
     for(auto* candidate:toolbar->actions()) if(candidate->text()=="+ Abfrage") createQuery=candidate;
     assert(createQuery); createQuery->trigger(); dispose();
     assert(sql.exec("DELETE FROM main._la_objects WHERE kind='query' AND name='Shortcut Saved Query'")); sql.finish();
+
+    assert(sql.exec("CREATE TABLE free_control_effects(value INTEGER)"));
+    const QString freeCode=R"VBA(Sub Form_Load()
+Me.Choice.Requery
+End Sub
+Sub ApplyValue_Click()
+CurrentDb.Execute "INSERT INTO free_control_effects(value) VALUES (" & CLng(Me.EntryValue) & ")"
+Me.ResultLabel.Caption=CStr(Me.EntryValue)
+Me.Listing.Requery
+End Sub
+)VBA";
+    QTimer::singleShot(0,&window,[&] {
+        auto* designer=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(designer && designer->objectName()=="native-form-designer");
+        designer->findChild<QLineEdit*>("native-form-name")->setText("Free Controls Form");
+        designer->findChild<QLineEdit*>("native-form-caption")->setText("Freies Formular");
+        assert(designer->findChild<QComboBox*>("native-form-source")->currentText().isEmpty());
+        assert(designer->findChild<QListWidget*>("native-form-fields")->count()==0);
+        designer->findChild<QPlainTextEdit*>("native-form-vba")->setPlainText(freeCode);
+        QTimer::singleShot(0,&window,[&] {
+            auto* editor=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(editor && editor->objectName()=="native-form-controls-editor");
+            auto* grid=editor->findChild<QTableWidget*>("native-form-controls-grid");auto* add=editor->findChild<QPushButton*>("native-form-controls-add");assert(grid && add);
+            const QStringList types{"TextBox","TextBox","Label","CommandButton","CheckBox","ComboBox","ListBox"};
+            const QStringList names{"EntryValue","ComputedValue","ResultLabel","ApplyValue","EnabledFlag","Choice","Listing"};
+            for(int row=0;row<names.size();++row) {add->click();qobject_cast<QComboBox*>(grid->cellWidget(row,0))->setCurrentText(types[row]);grid->item(row,1)->setText(names[row]);}
+            grid->item(1,3)->setText("=[EntryValue]*2");grid->item(2,2)->setText("Bereit");grid->item(3,2)->setText("Übernehmen");grid->item(4,2)->setText("Aktiv");
+            qobject_cast<QComboBox*>(grid->cellWidget(5,8))->setCurrentText("Value List");grid->item(5,9)->setText("alpha;beta");
+            grid->item(6,9)->setText("SELECT value FROM free_control_effects");grid->item(6,7)->setText("700");
+            grid->item(1,1)->setText("EntryValue");editor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+            assert(editor->isVisible() && editor->findChild<QLabel*>("native-form-controls-status")->text().contains("(5)"));
+            grid->item(1,1)->setText("ComputedValue");editor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+        });
+        designer->findChild<QPushButton*>("native-form-controls")->click();
+        auto* undo=designer->findChild<QPushButton*>("native-designer-undo");auto* redo=designer->findChild<QPushButton*>("native-designer-redo");assert(undo->isEnabled());undo->click();redo->click();
+        designer->findChild<QPushButton*>("native-form-save")->click();
+    });
+    create->trigger();dispose();
+    assert(sql.exec("SELECT definition FROM main._la_objects WHERE kind='form' AND name='Free Controls Form'") && sql.next());
+    const auto freeDefinition=QJsonDocument::fromJson(sql.value(0).toByteArray()).object();sql.finish();
+    assert(freeDefinition.value("table").toString().isEmpty() && freeDefinition.value("fields").toArray().isEmpty() && freeDefinition.value("controls").toArray().size()==7);
+    selected=nullptr;for(QTreeWidgetItemIterator item(explorer);*item;++item) if((*item)->data(0,Qt::UserRole).toString()=="form" && (*item)->text(0)=="Free Controls Form") selected=*item;
+    assert(selected);explorer->setCurrentItem(selected);open();auto freeForm=locate("Free Controls Form");assert(freeForm && !freeForm->hasDataSource());
+    auto freeObject=makePreviewFormObject(*freeForm);
+    auto* entry=freeForm->findChild<QLineEdit*>("access-control-EntryValue");auto* computed=freeForm->findChild<QLineEdit*>("access-control-ComputedValue");
+    auto* button=freeForm->findChild<QPushButton*>("access-control-ApplyValue");auto* check=freeForm->findChild<QCheckBox*>("access-control-EnabledFlag");auto* choice=freeForm->findChild<QComboBox*>("access-control-Choice");
+    assert(entry && computed && button && check && choice && !entry->isReadOnly() && computed->isReadOnly() && choice->count()==2);
+    QApplication::setActiveWindow(freeForm);entry->setFocus();QTest::keyClicks(entry,"17");entry->clearFocus();QApplication::processEvents();
+    assert(computed->text()=="34");QStyleOptionButton checkboxStyle;checkboxStyle.initFrom(check);const auto indicator=check->style()->subElementRect(QStyle::SE_CheckBoxIndicator,&checkboxStyle,check);QTest::mouseClick(check,Qt::LeftButton,Qt::NoModifier,indicator.center());assert(check->isChecked() && freeObject->item("EnabledFlag").truthy());choice->setCurrentIndex(1);assert(freeObject->item("Choice").asText()=="beta");
+    QTest::mouseClick(button,Qt::LeftButton);QApplication::processEvents();
+    const auto clicked=freeForm->eventResult("control:ApplyValue:Click");assert(clicked && clicked->status==linaccess::VbaExecutionStatus::Completed);
+    assert(freeForm->findChild<QLabel*>("access-control-ResultLabel")->text()=="17");
+    assert(freeObject->member("Controls",{linaccess::VbaValue::string("Listing")}).object->member("ListCount",{}).asNumber()==1);
+    assert(sql.exec("SELECT COUNT(*),MIN(value),MAX(value) FROM free_control_effects") && sql.next() && sql.value(0).toInt()==1 && sql.value(1).toInt()==17 && sql.value(2).toInt()==17);sql.finish();
+    assert(freeForm->close());dispose();
+    const auto blank=linaccess::nativeStoredForm("Blank",QJsonObject{{"table",""},{"fields",QJsonArray{}}},db);
+    assert(linaccess::parseAccessFormLayout(QString::fromUtf8(blank.layout)).controls.isEmpty());
 }
 
 void exerciseStoredReport(MainWindow& window,QSqlDatabase db) {

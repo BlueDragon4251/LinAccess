@@ -1,6 +1,7 @@
 #pragma once
 #include "vba_analyzer.hpp"
 #include "native_form_events.hpp"
+#include "native_form_controls.hpp"
 #include "access_query.hpp"
 #include "vba_runtime.hpp"
 #include <QByteArray>
@@ -48,9 +49,8 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
     };
     const auto table=definition.value("table").toString();
     const auto fields=definition.value("fields").toArray();
-    if(fields.isEmpty() || fields.size()>255)
-        throw VbaRuntimeError(3251,"Native stored form requires 1-255 fields");
-    const auto schema=nativeFormSourceColumns(database,table);
+    if(fields.size()>255) throw VbaRuntimeError(3251,"Native stored form accepts at most 255 bound fields");
+    const auto schema=table.isEmpty() ? QStringList{} : nativeFormSourceColumns(database,table);
     const bool writableTable=database.tables(QSql::Tables).contains(table,Qt::CaseInsensitive);
     QStringList names; QSet<QString> used;
     for(const auto& field:fields) {
@@ -74,6 +74,8 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
     auto code=definition.value("vba").toString(); QSet<QString> procedures;
     const auto utf8=code.toUtf8(); const auto analysis=analyzeVba(std::string_view(utf8.constData(),static_cast<std::size_t>(utf8.size())));
     for(const auto& procedure:analysis.procedures) procedures.insert(QString::fromStdString(procedure.name).toCaseFolded());
+    const auto extra=nativeFormControls(definition.value("controls"),names,schema,procedures);
+    for(const auto& name:extra.names) used.insert(name.toCaseFolded());
     const auto prefix=[](QString value) {
         for(auto& character:value) if(!character.isLetterOrNumber() && character!='_') character='_';
         if(value.isEmpty() || value.front().isDigit()) value.prepend('_');
@@ -100,10 +102,11 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
         buttonTop=qMax(buttonTop,rectangle[1]+rectangle[3]+240);
         geometry.push_back(rectangle);
     }
+    formWidth=qMax(formWidth,extra.width);buttonTop=qMax(buttonTop,extra.bottom);
     QStringList lines{"Begin Form","    Caption = "+quoted(definition.value("caption").toString(name)),
         "    RecordSource = "+quoted(table),"    Width = "+QString::number(formWidth)};
     if(definition.contains("timer_interval")) lines<<"    TimerInterval = "+QString::number(timerInterval);
-    if(!writableTable) lines<<"    AllowAdditions =0"<<"    AllowEdits =0"<<"    AllowDeletions =0";
+    if(!table.isEmpty() && !writableTable) lines<<"    AllowAdditions =0"<<"    AllowEdits =0"<<"    AllowDeletions =0";
     for(const auto* event:{"OnOpen","OnLoad","OnCurrent","OnActivate","OnDeactivate","OnUnload","OnClose","BeforeInsert","AfterInsert","BeforeUpdate","AfterUpdate","OnDirty","OnError","OnTimer"}) {
         const QString property=QString::fromLatin1(event);
         auto procedure=property.startsWith("On") ? property.mid(2) : property;
@@ -133,6 +136,7 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
         }
         lines<<"        End";
     }
+    lines.append(extra.lines);
     const auto button=[&](const QString& eventPrefix,const QString& caption,int left,const QString& fallback) {
         const auto handler=eventPrefix+"_Click";
         if(!procedures.contains(handler.toCaseFolded())) {
@@ -141,7 +145,7 @@ inline NativeStoredForm nativeStoredForm(QString name,const QJsonObject& definit
         }
         lines<<"        Begin CommandButton"<<"            Name = "+quoted(unique(eventPrefix))<<"            EventProcPrefix = "+quoted(eventPrefix)
              <<"            Caption = "+quoted(caption)<<"            Left = "+QString::number(left)<<"            Top = "+QString::number(buttonTop)
-             <<"            Width = 1500"<<"            Height = 420"<<"            TabIndex = "+QString::number(names.size()+left/1700)
+             <<"            Width = 1500"<<"            Height = 420"<<"            TabIndex = "+QString::number(names.size()+extra.names.size()+left/1700)
              <<"            OnClick = \"[Event Procedure]\"";
         for(const auto* event:{"MouseDown","MouseUp"})
             if(procedures.contains((eventPrefix+"_"+event).toCaseFolded())) lines<<"            On"+QString::fromLatin1(event)+" = \"[Event Procedure]\"";

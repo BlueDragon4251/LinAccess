@@ -1,6 +1,7 @@
 #include "execution_capabilities.hpp"
 #include "native_capability_report.hpp"
 #include "native_designer_history.hpp"
+#include "native_form_controls.hpp"
 #include "native_schema_editor.hpp"
 #include "native_field_defaults.hpp"
 #include "mainwindow.hpp"
@@ -2426,6 +2427,8 @@ void MainWindow::editForm(const QString& existingName) {
     const auto old = existingName.isEmpty() ? QJsonObject{} : objectDefinition("form", existingName);
     QJsonObject formEvents;QMap<QString,QMap<QString,QString>> priorFieldEvents;int formTimerInterval=0;
     QPointer<linaccess::NativeDesignerHistory> history;
+    QJsonArray extraControls=old.value("controls").toArray();
+    if(old.contains("controls") && !old.value("controls").isArray()) {messageError(this,"Ungültiger Steuerelementkatalog.");return;}
     try {
         formEvents=linaccess::nativeEventObject(linaccess::nativeEventOverrides(old.value("events"),linaccess::nativeFormMacroEvents()));formTimerInterval=linaccess::nativeFormTimerInterval(old.value("timer_interval"));
         QStringList names;for(const auto& value:old.value("fields").toArray()) names.append(value.toString());priorFieldEvents=linaccess::nativeFieldEventOverrides(old.value("field_events"),names);
@@ -2449,8 +2452,8 @@ void MainWindow::editForm(const QString& existingName) {
     auto* source = new QComboBox(&dialog); source->setObjectName("native-form-source");
     source->setEditable(true);
     auto sourceNames=tableNames(); sourceNames.append(objectNames("query")); sourceNames.removeDuplicates();
-    source->addItems(sourceNames);
-    outer->addWidget(new QLabel("Datenquelle: Tabelle, Abfrage oder einzeiliges SELECT"));
+    source->addItem(QString{});source->addItems(sourceNames);
+    outer->addWidget(new QLabel("Datenquelle: Tabelle, Abfrage oder SELECT; leer für ein ungebundenes Formular"));
     outer->addWidget(source);
     auto* sourceStatus=new QLabel(&dialog); sourceStatus->setObjectName("native-form-source-status");
     sourceStatus->setWordWrap(true); outer->addWidget(sourceStatus);
@@ -2492,7 +2495,7 @@ void MainWindow::editForm(const QString& existingName) {
     connect(fields,&QListWidget::itemChanged,&dialog,updateGeometry);
     connect(fields->model(),&QAbstractItemModel::rowsMoved,&dialog,updateGeometry);
     auto populate = [this, fields, source, old,sourceStatus,priorFieldEvents] {
-        fields->clear(); sourceStatus->clear(); const auto table=source->currentText(); if(table.isEmpty()) return;
+        fields->clear(); sourceStatus->clear(); const auto table=source->currentText(); if(table.isEmpty()) {sourceStatus->setText("Ungebundenes Formular — eigene Steuerelemente und VBA verwenden.");return;}
         QStringList available;QMap<QString,linaccess::NativeFieldDisplayProperties> display;
         try {
             const bool physical=db_.tables(QSql::Tables).contains(table,Qt::CaseInsensitive);
@@ -2517,6 +2520,14 @@ void MainWindow::editForm(const QString& existingName) {
             item->setCheckState(!sameSource || previous.isEmpty() || previous.contains(field) ? Qt::Checked : Qt::Unchecked);
         }
     };
+    auto* controlsEditor=new QPushButton("Steuerelemente...",&dialog);controlsEditor->setObjectName("native-form-controls");outer->addWidget(controlsEditor);
+    connect(controlsEditor,&QPushButton::clicked,&dialog,[&] {
+        try {QStringList selected;for(int row=0;row<fields->count();++row) if(fields->item(row)->checkState()==Qt::Checked) selected.append(fields->item(row)->data(Qt::UserRole).toString());
+            const auto schema=source->currentText().isEmpty() ? QStringList{} : linaccess::nativeFormSourceColumns(db_,source->currentText());
+            const auto before=extraControls;
+            if(linaccess::editNativeFormControls(&dialog,extraControls,selected,schema) && extraControls!=before) {dialog.setWindowModified(true);if(history) history->record();}
+        }catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));}
+    });
     auto* eventEditor=new QPushButton("Ereignisse zuordnen...",&dialog);eventEditor->setObjectName("native-form-event-bindings");outer->addWidget(eventEditor);
     connect(eventEditor,&QPushButton::clicked,&dialog,[&] {
         QStringList chosen;QMap<QString,QJsonObject> bindings;
@@ -2603,7 +2614,7 @@ void MainWindow::editForm(const QString& existingName) {
             lines << "Noch nicht implementierte Abhängigkeit: " + QString::fromStdString(issue);
         findings->setPlainText(lines.join('\n'));
     });
-    connect(save, &QPushButton::clicked, &dialog, [this, &dialog, name, caption, source, fields, vba, importedBytes,old,&formEvents,&formTimerInterval,&history] {
+    connect(save, &QPushButton::clicked, &dialog, [this, &dialog, name, caption, source, fields, vba, importedBytes,old,&formEvents,&formTimerInterval,&history,&extraControls] {
         QJsonArray chosen; QJsonObject captions,positions,eventBindings;
         for(int index=0;index<fields->count();++index) if(fields->item(index)->checkState()==Qt::Checked) {
             const auto field=fields->item(index)->data(Qt::UserRole).toString(); chosen.append(field); captions.insert(field,fields->item(index)->text());
@@ -2611,18 +2622,18 @@ void MainWindow::editForm(const QString& existingName) {
             if(!position.isEmpty()) positions.insert(field,position);
             const auto events=fields->item(index)->data(Qt::UserRole+2).toJsonObject();if(!events.isEmpty()) eventBindings.insert(field.toCaseFolded(),events);
         }
-        if(chosen.isEmpty()) { messageError(&dialog,"Mindestens ein Feld auswählen."); return; }
         auto content=old; const auto savedName=dialog.property("la_editor_saved_name").toString();
         if(!savedName.isEmpty()) { const auto latest=objectDefinition("form",savedName); if(!latest.isEmpty()) content=latest; }
         const bool sameFormatSource=content.value("table").toString()==source->currentText();
         const auto previousFormats=sameFormatSource ? content.value("field_formats").toObject() : QJsonObject{};
         QJsonObject formats;QMap<QString,linaccess::NativeFieldDisplayProperties> inherited;
-        try {inherited=linaccess::nativeTableFieldDisplayProperties(db_,source->currentText());}catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));return;}
+        try {if(!source->currentText().isEmpty()) inherited=linaccess::nativeTableFieldDisplayProperties(db_,source->currentText());}catch(const std::exception& error) {messageError(&dialog,QString::fromUtf8(error.what()));return;}
         for(const auto& value:chosen) {const auto key=value.toString().toCaseFolded();if(previousFormats.contains(key)) formats.insert(key,previousFormats.value(key));else if(inherited.value(key).format) formats.insert(key,*inherited.value(key).format);}
         content.insert("field_formats",formats);
         content.insert("table",source->currentText()); content.insert("fields",chosen);
         content.insert("caption",caption->text()); content.insert("field_captions",captions); content.insert("vba",vba->toPlainText());
         content.insert("field_layout",positions);
+        content.insert("controls",extraControls);
         content.insert("events",formEvents);content.insert("field_events",eventBindings);content.insert("timer_interval",formTimerInterval);
         content.insert("original_vba_base64",QString::fromLatin1(importedBytes->toBase64())); content.insert("language","vba_subset_experimental");
         try { (void)linaccess::nativeStoredForm(name->text(),content,db_); }
@@ -2634,7 +2645,7 @@ void MainWindow::editForm(const QString& existingName) {
     });
     trackDesignerChanges(dialog);
     auto* historyButtons=new QHBoxLayout;outer->insertLayout(2,historyButtons);
-    const auto capture=[name,caption,source,fields,vba,importedBytes,&formEvents,&formTimerInterval] {
+    const auto capture=[name,caption,source,fields,vba,importedBytes,&formEvents,&formTimerInterval,&extraControls] {
         QJsonArray items;
         for(int row=0;row<fields->count();++row) {
             const auto* item=fields->item(row);
@@ -2644,9 +2655,9 @@ void MainWindow::editForm(const QString& existingName) {
         }
         return QJsonObject{{"name",name->text()},{"caption",caption->text()},{"source",source->currentText()},
             {"fields",items},{"vba",vba->toPlainText()},{"original_vba",QString::fromLatin1(importedBytes->toBase64())},
-            {"events",formEvents},{"timer_interval",formTimerInterval}};
+            {"events",formEvents},{"timer_interval",formTimerInterval},{"controls",extraControls}};
     };
-    const auto restore=[name,caption,source,fields,vba,importedBytes,findings,updateGeometry,populate,&formEvents,&formTimerInterval](const QJsonObject& state) {
+    const auto restore=[name,caption,source,fields,vba,importedBytes,findings,updateGeometry,populate,&formEvents,&formTimerInterval,&extraControls](const QJsonObject& state) {
         const QSignalBlocker blockName(name),blockCaption(caption),blockSource(source),blockFields(fields),blockModel(fields->model()),blockCode(vba);
         const auto current=fields->currentItem() ? fields->currentItem()->data(Qt::UserRole).toString() : QString{};
         name->setText(state.value("name").toString());caption->setText(state.value("caption").toString());
@@ -2661,7 +2672,7 @@ void MainWindow::editForm(const QString& existingName) {
         }
         fields->setCurrentRow(selection>=0 ? selection : fields->count() ? 0 : -1);updateGeometry();
         vba->setPlainText(state.value("vba").toString());*importedBytes=QByteArray::fromBase64(state.value("original_vba").toString().toLatin1());
-        formEvents=state.value("events").toObject();formTimerInterval=state.value("timer_interval").toInt();findings->clear();
+        formEvents=state.value("events").toObject();formTimerInterval=state.value("timer_interval").toInt();extraControls=state.value("controls").toArray();findings->clear();
     };
     history=new linaccess::NativeDesignerHistory(dialog,*historyButtons,capture,restore);
     const auto record=[history] {if(history) history->record();};

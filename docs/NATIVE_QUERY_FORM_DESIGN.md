@@ -7,7 +7,8 @@ VBA and original archive bytes retain their existing storage contract.
 
 Physical-table field behavior remains unchanged. Query field names come from
 actual schema-only preparation without stepping rows or evaluating SQL expressions.
-The generator validates 1-255 selected, existing, unambiguous fields. Action and
+The generator validates up to 255 selected, existing, unambiguous fields. Native
+blank/unbound forms and extra controls are now also supported (FREE_FORM_CONTROLS.md). Action and
 parameter sources are refused. SELECT/view/query forms emit AllowAdditions/Edits/
 Deletions=False and omit automatic New/Save command buttons; they execute actual
 query records and Requery through the native form host. General query updateability,

@@ -2117,9 +2117,9 @@ void AccessFormPreview::loadRecords() {
     recordSelector_->clear(); recordRows_.clear(); rowIds_.clear(); dataColumns_.clear(); dataTypes_.clear(); tableLiteralDefaults_.clear();
     dataSourceAvailable_ = false; directTable_ = false; dataTruncated_ = false;
     dataSourceErrorNumber_=0;
-    recordSelector_->addItem(layout_.kind==linaccess::AccessDocumentKind::Report ? "(Kein Datensatz)" : "(Neuer Datensatz)");
-    if (auto* model=qobject_cast<QStandardItemModel*>(recordSelector_->model());model && model->item(0)) model->item(0)->setEnabled(layout_.kind==linaccess::AccessDocumentKind::Form && layout_.allowAdditions);
     const auto source = layout_.recordSource.trimmed();
+    recordSelector_->addItem(layout_.kind==linaccess::AccessDocumentKind::Report ? "(Kein Datensatz)" : source.isEmpty() ? "(Ungebunden)" : "(Neuer Datensatz)");
+    if (auto* model=qobject_cast<QStandardItemModel*>(recordSelector_->model());model && model->item(0)) model->item(0)->setEnabled(layout_.kind==linaccess::AccessDocumentKind::Form && layout_.allowAdditions && !source.isEmpty());
     if (!source.isEmpty() && db_.isOpen()) {
         try {
             directTable_ = layout_.kind==linaccess::AccessDocumentKind::Form && db_.tables().contains(source,Qt::CaseInsensitive);
@@ -2198,7 +2198,9 @@ void AccessFormPreview::loadRecords() {
     recordSelector_->blockSignals(false);
     loadRecord();
     if (auto* save = findChild<QPushButton*>("access-save-record")) save->setEnabled(dataSourceAvailable_ && directTable_);
-    if (status_) status_->setText(dataSourceAvailable_
+    if (status_) status_->setText(source.isEmpty() && layout_.kind==linaccess::AccessDocumentKind::Form
+        ? "Ungebundenes Formular: "+QString::number(renderedControls_)+" Elemente."
+        : dataSourceAvailable_
         ? "Access-Layout: " + QString::number(renderedControls_) + " Elemente, "
             + QString::number(recordRows_.size()) + " Datensätze." + (!directTable_ ? " Datenquelle schreibgeschützt." : "") + (dataTruncated_ ? " Anzeige auf die ersten 10000 begrenzt." : "")
         : "Die Datenquelle ist nicht verfügbar oder ihre Ausführung wurde abgebrochen: " + source);

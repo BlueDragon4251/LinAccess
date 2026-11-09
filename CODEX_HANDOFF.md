@@ -4304,3 +4304,23 @@ vier Fixture- und drei Uploadhashes unverändert. Keine neue CTest-ID, kein neue
 Windows-/Gesamtsuite-/Qt-frei-Nachweis. Letzter Kern d2488e0:2,17s; letzter
 Layout2a3a781:12,76s; letzter Original9eae43f:118,10s. F080/F148 und
 Katalog456/386/70 bleiben offen/unverändert. Allgemeine Formularerstellung folgt.
+
+
+## 2026-11-09: freie Formularerstellung und eigene Steuerelemente
+
+Native leere/ungebundene Formulare und Formulare ohne ausgewählte gebundene Felder
+sind speicherbar. Steuerelementdialog erzeugt bis128 tatsächliche TextBox/Label/
+CommandButton/CheckBox/ComboBox/ListBox mit geprüften Namen, Twip-Geometrie,
+Bindungen, Listenherkunft und Klickereignis. Vorhandene VBA-Ereignisse binden
+automatisch; eigener Entwurf einschließlich Controls nimmt am Undo/Redo teil.
+Ungebundene Ansicht zeigt keinen erfundenen Datensatz oder Quellenfehler an.
+Umfang/Grenzen FREE_FORM_CONTROLS.md, bestehende F080/F081/F083/F148/F155.
+
+Gebündelter bestehender Lauf: Layout1/1 (12,02s) bestanden. GUI fand einen
+Prüfklick außerhalb der tatsächlichen Checkbox-Markierung; auf echten Qt-
+Indikator korrigiert und nur dieses Ziel erneut: GUI1/1 (13,08s) bestanden.
+Tatsächlicher Designer, Duplikatfehler/Korrektur, Save/Reload, Eingabe/Berechnung,
+Label/Checkbox/Combo/List und unveränderte technische VBA mit unabhängig perSQL
+bestätigtem Klick-Effekt geprüft. App gebaut; kein neuer CTest oder Katalogpunkt,
+kein neuer Original-/Qt-frei-/Windows-/Gesamtsuite-/DEB-Lauf. Letzte geprüfte
+DEB a837563; Katalog456/386/70 bleibt unverändert, keine Gesamtparitätsbehauptung.

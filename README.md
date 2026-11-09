@@ -258,6 +258,10 @@ keine nachgewiesene pixelgenaue Access-2003-Oberfläche. Details: [Darstellung](
   Der Formulardesigner unterstützt außerdem gespeicherte Abfragen und einzeilige,
   parameterfreie SELECT-Datenquellen als schreibgeschützte Formulare; Feldlisten
   stammen aus vorbereiteten Abfragen. [Umfang](docs/NATIVE_QUERY_FORM_DESIGN.md).
+- **Freie Formularerstellung:** Ungebundene und leere Formulare sowie eigene
+  Textfelder, Labels, Schaltflächen, Checkboxen, Kombinations- und Listenfelder
+  mit tatsächlicher VBA-/SQL-Laufzeit und Designer-Undo.
+  [Umfang und Grenzen](docs/FREE_FORM_CONTROLS.md).
 
 **Nicht implementiert:** vollständige Original-VBA-Ausführung, wirklich
 pixelidentische Form-/Report-Rekonstruktion, eingebettete Access-Makros,
