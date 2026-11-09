@@ -1713,8 +1713,8 @@ private:
                 if (!host_) return {};
                 if (args.size()!=1) throw error("Error function requires one argument",450);
                 if (word=="iserror") return VbaValue::logical(args[0].kind==VbaValue::Kind::Error || args[0].kind==VbaValue::Kind::Missing);
-                if (args[0].kind==VbaValue::Kind::Null) throw error("Invalid Null CVErr argument",94);
-                const auto number=integer(args[0]);
+                if(args[0].kind==VbaValue::Kind::Error) return args[0];
+                const auto number=static_cast<std::int32_t>(coerceVbaModuleValue(scalarVbaValue(args[0]),"long").number);
                 if (number<0 || number>65535) throw error("CVErr number out of range");
                 return VbaValue::errorValue(number);
             }

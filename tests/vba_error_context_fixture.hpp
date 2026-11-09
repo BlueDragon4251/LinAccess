@@ -38,6 +38,32 @@ End Function
 Public Function EnvironmentIdentityProbe As Boolean
 EnvironmentIdentityProbe=Err Is retainedEnvironmentError
 End Function
+Public Function ErrorVariantConversionProbe As Long
+Dim value As Variant, code As Long
+value=CVErr(CVErr(2015))
+If Not IsError(value) Or VarType(value)<>10 Or CStr(value)<>"Error 2015" Then Err.Raise 5
+value=CVErr(65535.49)
+If CStr(value)<>"Error 65535" Then Err.Raise 5
+value=CVErr(CCur("2.5"))
+If CStr(value)<>"Error 2" Then Err.Raise 5
+value=CVErr(CDec("3.5"))
+If CStr(value)<>"Error 4" Then Err.Raise 5
+value=CVErr(Empty)
+If Not IsError(value) Or CStr(value)<>"Error 0" Then Err.Raise 5
+On Error Resume Next
+value=CVErr(65535.5)
+code=Err.Number
+Err.Clear
+value=CVErr(2147483647.5)
+code=code+Err.Number
+Err.Clear
+value=CVErr(Null)
+code=code+Err.Number
+Err.Clear
+value=CVErr(Nothing)
+code=code+Err.Number
+ErrorVariantConversionProbe=code
+End Function
 )VBA";
 inline const std::string nativeFormErrorContextFixture=R"VBA(Option Explicit
 Public Function FormEnvironmentError(ByVal expected As VBA.ErrObject) As Boolean

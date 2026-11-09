@@ -6030,3 +6030,15 @@ Keine neue CTest-ID/Windows-/Vollsuitenbehauptung;456/386/70 unverändert. Vorst
 (Build-ID/Payload/Rechte/keineFixtures, MDBTools1.0.1, SQLite3.54.1 JOIN/NULL/Counter),
 noch ohne diese Projektbindung. Ohne Zwischenabschluss mit echter CVErr-
 Fehlerwertübernahme/Let-Konvertierung nach MS-VBAL6.1.2.3.1.14 weiterprogrammieren.
+
+
+CVErr-Fehlerwertübernahme: CVERR_CONVERSION.md beschreibt unveränderte echte
+Error-Argumente und sonstige Long-Let-Konvertierung, typisierte Rundung und
+Grenzfehler. App; bestehendes Kern-/GUI-Bündel im ersten Lauf2/2 (22,83s:4,65/18,17).
+Echte gespeicherte skalare SQL-VBA-Funktionen lesen denselben Projekt-Err.Number907
+und liefern CVErr(Error2015) als Text, ohne einen neuen Fehler auszulösen. SQL-
+Objekt-/Array-Schutz bleibt. Keine neue CTest-ID/Original-/Windows-/Vollsuiten-/
+Paketbehauptung;456/386/70 unverändert. Vorstufe725b4bd privat remote/Baum geprüft.
+Aktuell geprüftes DEB55096a7 liegt vor Projekt-Err/CVErr. Ohne Zwischenabschluss
+mit nativen Error/Error$-Funktionen und getrennter zuletzt-ausgelöster Fehlernummer
+nach MS-VBAL6.1.2.3.1.15 weiterprogrammieren.
