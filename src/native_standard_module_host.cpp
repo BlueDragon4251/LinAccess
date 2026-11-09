@@ -15,6 +15,7 @@
 #include "native_application_run.hpp"
 #include "native_project_context.hpp"
 #include "native_project_documents.hpp"
+#include "native_document_open.hpp"
 #include "native_domain_lookup.hpp"
 #include "native_macro_runner.hpp"
 #include "native_macro_message_box.hpp"
@@ -96,8 +97,8 @@ public:
         if(key=="openquery") return VbaArgumentSignature{{"QueryName","View","DataMode"},1};
         if(key=="findrecord") return VbaArgumentSignature{{"FindWhat","Match","MatchCase","Search","SearchAsFormatted","OnlyCurrentField","FindFirst"},1};
         if(key=="gotorecord") return VbaArgumentSignature{{"ObjectType","ObjectName","Record","Offset"},0};
-        if(key=="openform") return VbaArgumentSignature{{"FormName","View"},1};
-        if(key=="openreport") return VbaArgumentSignature{{"ReportName","View"},1};
+        if(key=="openform") return VbaArgumentSignature{{"FormName","View","FilterName","WhereCondition","DataMode","WindowMode","OpenArgs"},1};
+        if(key=="openreport") return VbaArgumentSignature{{"ReportName","View","FilterName","WhereCondition","WindowMode","OpenArgs"},1};
         if(key=="runcommand") return VbaArgumentSignature{{"Command"},1};
         if(key=="requery") return VbaArgumentSignature{{"ControlName"},0};return {};
     }
@@ -209,23 +210,10 @@ public:
             host.check();return VbaValue::empty();
         }
         if(key=="openform" || key=="openreport") {
-            if(values.empty() || values.size()>2) throw VbaRuntimeError(450,"Stored document opening supports name and view");
             if(QApplication::activeModalWidget()) throw VbaRuntimeError(2046,"Document opening is blocked by a modal editor");
-            const bool report=key=="openreport";const int view=number(1,0);if(view!=(report ? 2 : 0)) throw VbaRuntimeError(3251,"Only normal native forms and report preview are implemented");
-            const auto requested=target();const auto kind=report ? AccessDocumentKind::Report : AccessDocumentKind::Form;
-            const auto form=report ? std::optional<NativeStoredForm>{} : loadNativeStoredForm(db_,requested);
-            const auto storedReport=report ? loadNativeStoredReport(db_,requested) : std::optional<NativeStoredReport>{};
-            if(!form && !storedReport) throw VbaRuntimeError(report ? 2103 : 2102,"Native stored document was not found");
-            const auto canonical=report ? storedReport->name : form->name;const auto layout=report ? storedReport->layout : form->layout;const auto code=report ? storedReport->code : form->code;
-            bool existed=false;for(const auto& document:AccessFormPreview::projectDocuments(db_)) if(document && document->documentKind()==kind && document->documentName().compare(canonical,Qt::CaseInsensitive)==0) existed=true;
-            QPointer<AccessFormPreview> document=AccessFormPreview::showDocument(kind,canonical,layout,code,db_,owner_,report ? std::optional<QString>(storedReport->recordSource) : std::nullopt);
-            if(!document) throw VbaRuntimeError(2501,"Document opening was cancelled");
-            try {
-                if(!existed) for(const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent","OnNoData"}) if(const auto outcome=document->eventResult(event);outcome && outcome->status!=VbaExecutionStatus::Completed && outcome->status!=VbaExecutionStatus::ProcedureMissing) throw VbaRuntimeError(outcome->errorNumber ? outcome->errorNumber : 3251,outcome->explanation,outcome->errorSource,outcome->errorHelpFile,outcome->errorHelpContext);
-                if(!existed && (report ? !storedReport->recordSource.isEmpty() : !parseAccessFormLayout(QString::fromUtf8(layout)).recordSource.isEmpty()) && !document->hasDataSource()) throw VbaRuntimeError(3078,"Document record source is unavailable");
-                host.check();
-            }catch(...) {if(!existed && document) delete document.data();throw;}
-            return VbaValue::empty();
+            if(key=="openform") {const auto request=nativeFormOpenArguments(values);openNativeProjectDocument(db_,owner_,AccessDocumentKind::Form,QString::fromStdString(request.name),QString::fromStdString(request.where),request.openArgs ? std::optional<QString>(QString::fromStdString(*request.openArgs)) : std::nullopt,request.windowMode,request.dataMode);}
+            else {const auto request=nativeReportOpenArguments(values);openNativeProjectDocument(db_,owner_,AccessDocumentKind::Report,request.name,request.where,request.openArgs,request.windowMode,-1);}
+            host.check();return VbaValue::empty();
         }
         if(key=="runcommand" || key=="requery") {
             if(auto* active=activePreviewDocument()) for(const auto& document:AccessFormPreview::projectDocuments(db_)) if(document==active) return invokeNativePreviewCommand(*active,name,args);

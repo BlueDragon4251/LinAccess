@@ -828,7 +828,10 @@ End Sub
     invokeError({VbaValue::string("summary"),VbaValue::numeric(1)},3251);
     invokeError({VbaValue::string("summary"),VbaValue::numeric(2147483648.0)},6);
     invokeError({VbaValue::string("summary"),VbaValue::numeric(2),VbaValue::string("filter")},3251);
-    invokeError({VbaValue::string("summary"),VbaValue::numeric(2),VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(1)},3251);
+    commands->member("OpenReport",{VbaValue::string("summary"),VbaValue::numeric(2),VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(1)});
+    assert(report->isHidden() && eventCount("open")==1);
+    commands->member("OpenReport",{VbaValue::string("summary"),VbaValue::numeric(2),VbaValue::empty(),VbaValue::empty(),VbaValue::numeric(0)});
+    assert(report->isVisible() && eventCount("open")==1);
     invokeError({VbaValue::string("missing"),VbaValue::numeric(2)},2103);
     assert(eventCount("open")==1);
     invokeError({VbaValue::string("cancelled"),VbaValue::numeric(2)},2501);

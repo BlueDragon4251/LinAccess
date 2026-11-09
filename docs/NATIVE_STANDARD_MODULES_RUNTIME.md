@@ -183,3 +183,32 @@ correction. Actual module DAO reads/domain aggregates/named calls, status text/
 meter values/removal, real table loaded state, one scalar-default evaluation in
 both hosts and Echo on the actual project bar are covered. No new CTest target,
 Windows observation or complete Application/DAO/domain-function parity claim.
+
+
+## Shared actual form/report opening
+
+Standalone DoCmd.OpenForm now accepts all seven existing native arguments;
+OpenReport accepts six. The actual opener is shared with the form host through
+a static project operation, without constructing a caller form. Stored and
+imported documents use the same existing source/CodeBehind loading, independent
+project ownership, deferred disposal and initialization checks. Imported source
+queries are main-qualified. Explicit WhereCondition source errors retain priority;
+initialization errors now preserve source/help metadata.
+
+Supported form view remains normal0, report view preview2. Named filters and
+unsupported views still fail3251. The supported WhereCondition, fresh form data
+modes, text/Null OpenArgs and native window modes use the actual constructor;
+acDialog waits for the actual window to close. Existing-instance data-mode/
+OpenArgs changes retain explicit refusal. Hidden report reuse can hide/show the
+same actual instance without rerunning Open; the prior unsupported test was
+replaced with that actual behavior check. Macro action signatures still have
+only name/view pending the separate full-argument editor/serialization stage.
+
+Validation: matching app built; existing GUI/layout/original-Kassa3/3 passed
+(137.86s; GUI9.24s, layout12.39s, original116.22s). A test Qt cast was corrected;
+new imported source fixture now includes its actual OnLoad event binding, and the
+old report-window refusal expectation was updated to actual hide/show. Real hidden
+filter/readonly/OpenArgs before Load, guarded reuse, Add insert, modal wait, hidden
+report, error7006 source/help and imported handler execution are covered. Original
+regression evidence retains its known3075 boundary; this does not fix/close F129
+or assert complete Access views/filter/object lifetime compatibility.

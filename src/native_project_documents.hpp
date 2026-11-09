@@ -4,8 +4,12 @@
 #include <QPointer>
 #include <QVector>
 class QObject;
+class QWidget;
 class AccessFormPreview;
+namespace linaccess {enum class AccessDocumentKind;}
 std::shared_ptr<linaccess::VbaObject> nativeProjectDocuments(QSqlDatabase,QObject*,bool reports);
 std::shared_ptr<linaccess::VbaObject> nativeProjectScreen(QSqlDatabase,QObject*);
 
 QVector<QPointer<AccessFormPreview>> nativeLoadedProjectDocuments(QSqlDatabase,QObject*);
+
+void openNativeProjectDocument(QSqlDatabase,QWidget*,linaccess::AccessDocumentKind,const QString&,const QString&,std::optional<QString>,int windowMode,int dataMode);

@@ -1,4 +1,6 @@
 #include "native_application_run.hpp"
+#include "native_project_documents.hpp"
+#include "native_document_open.hpp"
 #include "native_public_procedure_run.hpp"
 #include "native_macro_function.hpp"
 #include "native_field_defaults.hpp"
@@ -519,6 +521,7 @@ int nativeModuleMessageBox(QWidget* owner,std::string_view prompt,int style,cons
 
 class PreviewVbaHost final : public linaccess::VbaHost {
 public:
+    static void openProjectDocument(QSqlDatabase,QWidget*,linaccess::AccessDocumentKind,const QString&,const QString&,std::optional<QString>,int,int,QPointer<AccessFormPreview> caller={});
     explicit PreviewVbaHost(AccessFormPreview& preview) : preview_(preview) {}
     int compareStrings(std::string_view left,std::string_view right,linaccess::VbaCompareMode mode) override {
         if (mode==linaccess::VbaCompareMode::Binary) return linaccess::VbaHost::compareStrings(left,right,mode);
@@ -1070,7 +1073,7 @@ public:
             });
     }
     void openFormArguments(const std::vector<linaccess::VbaValue>& args) override {
-        const auto request=linaccess::parseVbaOpenFormArguments(args);
+        const auto request=linaccess::nativeFormOpenArguments(args);
         preview_.openOtherForm(QString::fromStdString(request.name),QString::fromStdString(request.where),request.openArgs ? std::optional<QString>(QString::fromStdString(*request.openArgs)) : std::nullopt,request.windowMode,request.dataMode);
     }
     void openForm(std::string_view name) override {
@@ -3103,17 +3106,23 @@ void AccessFormPreview::openOtherForm(const QString& name,const QString& where,s
 }
 
 void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,const QString& name,const QString& where,std::optional<QString> openArgs,int windowMode,int dataMode) {
+    PreviewVbaHost::openProjectDocument(db_,parentWidget(),kind,name,where,std::move(openArgs),windowMode,dataMode,this);
+}
+
+void PreviewVbaHost::openProjectDocument(QSqlDatabase database,QWidget* projectWindow,linaccess::AccessDocumentKind kind,const QString& name,const QString& where,std::optional<QString> openArgs,int windowMode,int dataMode,QPointer<AccessFormPreview> caller) {
+    enterNativeUiExecution();const auto unwind=qScopeGuard([] {leaveNativeUiExecution();});
+    if(!database.isOpen()) throw linaccess::VbaRuntimeError(3420,"Document project is closed");
     if(windowMode<0 || windowMode>3) throw linaccess::VbaRuntimeError(3251,"Native window mode is not implemented");
     if(dataMode<-1 || dataMode>2) throw linaccess::VbaRuntimeError(3251,"Native data mode is not implemented");
     const bool report=kind==linaccess::AccessDocumentKind::Report;
     if(report && dataMode!=-1) throw linaccess::VbaRuntimeError(3251,"DataMode requires a form");
-    if (closing_ || closingProjects().contains(projectKey(db_))) throw linaccess::VbaRuntimeError(2501,"Project is closing");
-    AccessFormPreview* existing=nullptr;
+    if ((caller && caller->closing_) || closingProjects().contains(projectKey(database))) throw linaccess::VbaRuntimeError(2501,"Project is closing");
+    QPointer<AccessFormPreview> existing;
     for (auto* widget:QApplication::topLevelWidgets()) {
         auto* document=dynamic_cast<AccessFormPreview*>(widget);
         if (!document || !document->opened_ || document->closed_ || document->openCancelled_
             || document->layout_.kind!=kind
-            || document->db_.connectionName()!=db_.connectionName() || document->db_.databaseName()!=db_.databaseName()
+            || document->db_.connectionName()!=database.connectionName() || document->db_.databaseName()!=database.databaseName()
             || document->formName_.compare(name,Qt::CaseInsensitive)!=0) continue;
         if (existing) throw linaccess::VbaRuntimeError(5,"Document target instance is ambiguous");
         existing=document;
@@ -3133,18 +3142,18 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
         return;
     }
     QString canonical; QByteArray form,code;
-    const auto stored=report ? std::optional<linaccess::NativeStoredForm>{} : linaccess::loadNativeStoredForm(db_,name);
-    const auto storedReport=report ? linaccess::loadNativeStoredReport(db_,name) : std::optional<linaccess::NativeStoredReport>{};
+    const auto stored=report ? std::optional<linaccess::NativeStoredForm>{} : linaccess::loadNativeStoredForm(database,name);
+    const auto storedReport=report ? linaccess::loadNativeStoredReport(database,name) : std::optional<linaccess::NativeStoredReport>{};
     std::optional<QString> sourceOverride;
     if(storedReport) { canonical=storedReport->name; form=storedReport->layout; code=storedReport->code; sourceOverride=storedReport->recordSource; }
     else if(stored) { canonical=stored->name; form=stored->layout; code=stored->code; }
     else {
-        QSqlQuery query(db_);
-        query.prepare("SELECT name,source_bytes FROM _la_access_artifacts WHERE kind=? AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
+        QSqlQuery query(database);
+        query.prepare("SELECT name,source_bytes FROM main._la_access_artifacts WHERE kind=? AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
         query.addBindValue(report ? "report" : "form"); query.addBindValue(name);
         if(!query.exec() || !query.next()) throw linaccess::VbaRuntimeError(report ? 2103 : 2102,"Document target is not imported or stored");
         canonical=query.value(0).toString(); form=query.value(1).toByteArray(); query.finish();
-        query.prepare("SELECT source_bytes FROM _la_access_artifacts WHERE kind='vba' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
+        query.prepare("SELECT source_bytes FROM main._la_access_artifacts WHERE kind='vba' AND name=? COLLATE NOCASE ORDER BY id DESC LIMIT 1");
         query.addBindValue((report ? "Report_" : "Form_")+canonical);
         if(query.exec() && query.next()) code=query.value(0).toByteArray();
     }
@@ -3153,11 +3162,11 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
     // Preserve the actual project UI without owning the new document through
     // its invoking form. Project close validates every independent document.
     QWidget* projectOwner=nullptr;
-    for (auto* ancestor=parentWidget();ancestor;ancestor=ancestor->parentWidget())
+    for (auto* ancestor=projectWindow;ancestor;ancestor=ancestor->parentWidget())
         if (qobject_cast<QMainWindow*>(ancestor)) { projectOwner=ancestor; break; }
-    auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,db_,projectOwner,false,where,std::move(openArgs),windowMode,dataMode,std::move(sourceOverride));
+    auto nested=std::make_unique<AccessFormPreview>(canonical,form,code,database,projectOwner,false,where,std::move(openArgs),windowMode,dataMode,std::move(sourceOverride));
     const auto validate=[&] {
-        setProperty("la_document_source_error",nested->dataSourceErrorNumber_);
+        if(caller) caller->setProperty("la_document_source_error",nested->dataSourceErrorNumber_);else if(projectOwner) projectOwner->setProperty("la_document_source_error",nested->dataSourceErrorNumber_);
         // An invalid explicit WhereCondition can cause derivative initialization
         // failures. Preserve the actual source error instead of masking it with
         // a later handler's attempt to use the unavailable record source.
@@ -3166,7 +3175,7 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
             throw linaccess::VbaRuntimeError(nested->dataSourceErrorNumber_ ? nested->dataSourceErrorNumber_ : 3078,"Document WhereCondition record source unavailable");
         for (const auto* event:{"OnOpen","OnLoad","OnActivate","OnCurrent","OnNoData"})
             if (const auto outcome=nested->eventResult(event);outcome && failed(*outcome))
-                throw linaccess::VbaRuntimeError(outcome->errorNumber ? outcome->errorNumber : 3251,"Document initialization failed");
+                throw linaccess::VbaRuntimeError(outcome->errorNumber ? outcome->errorNumber : 3251,"Document initialization failed: "+outcome->explanation,outcome->errorSource,outcome->errorHelpFile,outcome->errorHelpContext);
         if (nested->cancelledByOpen() || nested->closed_) throw linaccess::VbaRuntimeError(2501,"Document open action cancelled");
         if (!nested->layout_.recordSource.trimmed().isEmpty() && !nested->hasDataSource())
             throw linaccess::VbaRuntimeError(nested->dataSourceErrorNumber_ ? nested->dataSourceErrorNumber_ : 3078,"Document record source unavailable");
@@ -3185,6 +3194,10 @@ void AccessFormPreview::openOtherDocument(linaccess::AccessDocumentKind kind,con
     QObject::connect(nested.get(),&QDialog::finished,nested.get(),[form=nested.get()] { deferFormDisposal(form); });
     auto* document=nested.release();
     if(windowMode==3) waitForNativeDialog(document);
+}
+
+void openNativeProjectDocument(QSqlDatabase database,QWidget* owner,linaccess::AccessDocumentKind kind,const QString& name,const QString& where,std::optional<QString> openArgs,int windowMode,int dataMode) {
+    PreviewVbaHost::openProjectDocument(std::move(database),owner,kind,name,where,std::move(openArgs),windowMode,dataMode);
 }
 
 void AccessFormPreview::rememberControlEdit(QObject* watched) {

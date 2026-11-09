@@ -3927,3 +3927,26 @@ am Projektbalken. Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüf
 DEBf4e9ff8. NATIVE_STANDARD_MODULES_RUNTIME.md; F052/F053/F135 und456/384/72 bleiben
 unverändert. Direkt weiter mit vollständiger tatsächlicher OpenForm-/OpenReport-
 Anbindung (Where/DataMode/OpenArgs/WindowMode) über gemeinsame Dokumentöffnung.
+
+
+## Fortschreibung 2026-11-09: gemeinsame tatsächliche Dokumentöffnung
+Standardmodul-DoCmd.OpenForm hat sieben, OpenReport sechs Argumente und nutzt nun
+dieselbe tatsächliche Öffnung wie der Formularhost: gespeicherte/importierte
+Objekte, WhereCondition, frische Datenmodi, OpenArgs vor Load, native Fenster-
+modi/acDialog-Warten, unabhängige Projektzuordnung und verzögerte Freigabe. Keine
+Platzhalterform. Importquellen main-qualifiziert; explizite Where-Quellfehler
+behalten Vorrang und Initialisierungsfehler jetzt Source-/Help-Metadaten.
+Normalformular0/Berichtsvorschau2 bleiben unterstützt; andere Ansichten/benannte
+Filter und unerlaubte Änderung bestehender Instanzen weiterhin3251. Native Makro-
+aktionen haben bis zum nächsten Editorumfang weiterhin nur Name/Ansicht.
+App gebaut; vorhandene GUI/Layout/Original-Kassa3/3 (137,86s;9,24/12,39/116,22s)
+bestanden. Neuer Prüffall-Cast korrigiert, importiertes Testlayout mit tatsächlicher
+OnLoad-Bindung ergänzt und alte Report-Window-Verweigerung durch echtes Aus-/
+Einblenden ersetzt. Geprüft: Filter/Readonly/OpenArgs/Load, Wiederverwendung ohne
+Mutation bei verweigertem Modus, echtes Add-Insert, modales Warten, versteckter
+Bericht, Fehler7006 inkl.Source/Help und tatsächlicher importierter Handler.
+Original-F129/3075 bleibt bekannte Grenze. Keine neue CTest-ID/Gesamtsuite/Windows-
+Beobachtung/Paketprüfung; DEBf4e9ff8. NATIVE_STANDARD_MODULES_RUNTIME.md;
+F052/F178/F042/F135 und456/384/72 unverändert. Direkt weiter: optionale Makro-
+argumente einschließlich ausdrücklich leerem OpenArgs verlustfrei bearbeiten und
+vollständige OpenForm-/OpenReport-Makroargumente ausführen.
