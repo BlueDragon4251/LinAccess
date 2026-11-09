@@ -476,3 +476,34 @@ MessageBox type are exercised in both hosts. Afterwards only the two misleading
 summary-column optional labels were removed; no logic changed. Fresh app/DEB
 payload/permissions/build-ID/SQLite/backend checks passed. Upload3/3 and fixture4/4
 hashes remain unchanged; no new CTest target or Windows reference observation.
+
+
+## Actual SetValue action
+
+SetValue(Item, Expression) is a native macro action rather than a fabricated
+DoCmd.SetValue member. It resolves actual native controls or explicit form/report/
+control properties, evaluates the value with the existing host Eval and calls the
+existing setter. Bare controls use the actual caller/active document; standalone
+macros can use explicit Forms/Reports references without a caller placeholder.
+Bracket/quote/parenthesis/date-aware target splitting preserves dots inside names
+and extracts explicit property targets. No generated VBA assignment source runs.
+
+Item/Expression syntax and4096-code-unit bounds are preflighted. A leading = is
+explicitly3251: the documented additional expression-evaluation stage is not
+implemented and is not silently stripped. Target Name/liveness is checked before
+value evaluation; context is rechecked after evaluation and assignment. Existing
+write, readonly/calculated, buffering, save and validation behavior remains active.
+Underlying fields without controls, arbitrary function-returned targets, full
+report/property coverage and exact Access validation/event timing remain open.
+
+Validation: matching app built; existing layout1/1 (11.34s) and final GUI1/1
+(8.49s) passed. The new test now explicitly selects the real form before testing
+an unqualified target after showing it;438 with database-window context was
+correct. Both hosts perform real arithmetic assignments/save, explicit hidden
+control/property targets and Null writes. Error11/readonly2448 do not change the
+field; close during value evaluation2450 prevents assignment. A raw invalid macro
+fails whole-program preflight before its earlier SQL action. DoCmd.SetValue438
+is retained. No new test target or Windows observation.
+
+Contract consulted:
+https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/setvalue-macro-action .

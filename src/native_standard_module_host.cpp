@@ -19,6 +19,7 @@
 #include "native_domain_lookup.hpp"
 #include "native_macro_runner.hpp"
 #include "native_macro_message_box.hpp"
+#include "native_macro_set_value.hpp"
 #include "native_find_record_arguments.hpp"
 #include "native_stored_form.hpp"
 #include "native_stored_report.hpp"
@@ -108,6 +109,7 @@ public:
             enterNativeUiExecution();const auto leave=qScopeGuard([] {leaveNativeUiExecution();});
             runNativeMacro(db_,args,[&] {host.check();},[&](const QString& expression) {return host.eval(expression.toUtf8().toStdString());},[&](const NativeMacroAction& action) {
                 if(action.name=="MessageBox") nativeMacroMessageBox(owner_,action.arguments,[&](const QString& expression) {return host.eval(expression.toUtf8().toStdString());},[&] {host.check();});
+                else if(action.name=="SetValue") {QPointer<AccessFormPreview> active;for(const auto& document:nativeLoadedProjectDocuments(db_,owner_)) if(document && document==activePreviewDocument()) active=document;if(active) runNativeMacroSetValue(*active,action.arguments);else nativeMacroSetValue(host,action.arguments,[&] {host.check();});}
                 else if(action.name=="RunCode") {
                     const auto expression=action.arguments.front().asText();const auto target=nativeMacroFunctionName(QString::fromUtf8(expression));
                     QMap<QString,QString> names;(void)standardVbaModuleSources(db_,&names);if(names.contains(target.toCaseFolded())) throw VbaRuntimeError(3251,"RunCode Function/module name conflict");

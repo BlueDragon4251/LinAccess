@@ -1,6 +1,7 @@
 #include "native_application_run.hpp"
 #include "native_project_documents.hpp"
 #include "native_document_open.hpp"
+#include "native_macro_set_value.hpp"
 #include "native_public_procedure_run.hpp"
 #include "native_macro_function.hpp"
 #include "native_field_defaults.hpp"
@@ -1105,6 +1106,11 @@ void leaveNativeUiExecution() noexcept {--nativeExecutionDepth();disposeClosedFo
 linaccess::VbaValue invokeNativePreviewCommand(AccessFormPreview& preview,std::string_view name,const std::vector<linaccess::VbaValue>& arguments) {
     ++nativeExecutionDepth();const auto unwind=qScopeGuard([] {--nativeExecutionDepth();disposeClosedForms();});
     return makePreviewApplicationObject(preview)->member("DoCmd",{}).object->member(name,arguments);
+}
+
+void runNativeMacroSetValue(AccessFormPreview& preview,const std::vector<linaccess::VbaValue>& arguments) {
+    enterNativeUiExecution();const auto unwind=qScopeGuard([] {leaveNativeUiExecution();});const QPointer<AccessFormPreview> owner=&preview;PreviewVbaHost host(preview);
+    linaccess::nativeMacroSetValue(host,arguments,[owner] {if(!owner) throw linaccess::VbaRuntimeError(2450,"SetValue context is closed");(void)makePreviewFormObject(*owner)->member("Name",{});});
 }
 
 void runNativeMacroFunction(AccessFormPreview& preview,const std::string& expression) {

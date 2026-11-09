@@ -7306,3 +7306,21 @@ Beobachtung. Originaltest zuletzt f86d8eb:3/3 inkl.Original116,22s; F129/3075 of
 NATIVE_MACROS_RUNTIME.md; F088/F052/F178/F135 und456/384/72 unverändert.
 Direkt weiter mit echter SetValue-Makrozuweisung über vorhandene native Formular-
 /Steuerelementobjekte und bestehende Ausdrucksauswertung; dokumentierte Grenzen.
+
+
+## Fortschreibung 2026-11-09: tatsächliche SetValue-Makrozuweisung
+SetValue(Item,Expression) greift auf echte native Controls/ausdrückliche Formular-/
+Berichts-/Control-Eigenschaften und vorhandene Eval-/Setterwege zu, keine erzeugte
+VBA-Zuweisung/keine Ersatzform/kein erfundenes DoCmd.SetValue. Bare Controls brauchen
+echten Aufrufer/aktives Dokument, explizite Forms-Ziele funktionieren ohne Me.
+Syntax/4096-Grenzen vorab, dokumentierte führende=-Doppelauswertung ausdrücklich
+3251, Ziel-/Kontextprüfung vor/nach Auswertung. Vorhandene Readonly-/Puffer-/Save-
+und Validierungsregeln gelten; Feld-ohne-Control/Funktionsziel-/Vollreport-/Ereignis-
+parität bleibt offen. App gebaut; Layout1/1 (11,34s), abschließende GUI1/1 (8,49s)
+bestanden. Gezielter Prüffall nach Einblenden wählt tatsächliche Form ausdrücklich;
+vorher438 war mangels aktivem Dokument korrekt. Reale Zuweisung/Speicherung beider
+Hosts, explizites verstecktes Ziel/Visible, Null, Fehler11/2448 ohne Wertänderung,
+Schließen während RHS2450, ungültiges Rohmakro vor SQL-Präfix, DoCmd.SetValue438.
+Keine neue CTest-ID/Gesamtsuite/Windows-Beobachtung/Paketprüfung; DEB22a9284.
+NATIVE_MACROS_RUNTIME.md; F088/F052/F030/F135 und456/384/72 unverändert.
+Direkt weiter mit tatsächlichem RepaintObject für geöffnete native Dokumente.
