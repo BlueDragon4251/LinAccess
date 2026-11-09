@@ -1,4 +1,5 @@
 #include "dao_database.hpp"
+#include "vba_currency.hpp"
 #include "dao_schema_change.hpp"
 #include "native_schema_editor.hpp"
 #include "native_field_defaults.hpp"
@@ -1385,7 +1386,7 @@ public:
         checkParameter(name);
         const auto stored=values_.value(name.toCaseFolded());
         for(const auto& parameter:plan_.parameters) if(parameter.name.compare(name,Qt::CaseInsensitive)==0) {
-            if(parameter.type=="currency") return qtFieldValue(stored,"CURRENCY_REAL");
+            if(parameter.type=="currency") return stored.isNull() ? VbaValue{} : convertCurrency(fromSql(stored));
             if(parameter.type=="date" || parameter.type=="datetime") return qtFieldValue(stored,"DATETIME");
         }
         return fromSql(stored);
@@ -1394,7 +1395,7 @@ public:
         checkParameter(name);
         for(const auto& parameter:plan_.parameters)
             if(parameter.type=="currency" && parameter.name.compare(name,Qt::CaseInsensitive)==0) {
-                const auto converted=sqlFieldValue(value,"CURRENCY_REAL");
+                const auto converted=value.kind==VbaValue::Kind::Null ? QVariant{} : QVariant(QString::fromStdString(convertCurrency(value).asText()));
                 values_.insert(name.toCaseFolded(),converted); return;
             }
         values_.insert(name.toCaseFolded(),toSql(value));
@@ -1553,7 +1554,8 @@ void QueryParameter::assign(std::string_view name, const VbaValue& value) {
     query_->parameterGeneration(generation_);
     if (lower(name)=="type") throw VbaRuntimeError(383,"DAO: Parameter Type is read-only in an Access workspace");
     require(lower(name) == "value","DAO: Parameter property is not writable");
-    query_->setParameter(name_,value);
+    const auto scalar=scalarVbaValue(value);query_->parameterGeneration(generation_);
+    query_->setParameter(name_,scalar);
 }
 QStringList nativeTableNames(QSqlDatabase db) {
     if (!db.isOpen()) throw VbaRuntimeError(3420,"DAO: Database is closed");

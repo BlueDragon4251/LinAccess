@@ -6,9 +6,14 @@ Integer dbCurrency (5); assigned Value/default access returns fixed Currency
 missing execution bindings diagnosed as 3061. Type remains read-only (383), and
 SQL replacement/Close retains generation/lifetime error 3420.
 
-Assignments use the existing lossless Currency REAL backing strictly inside
-+/-2^39. Scalar object input is evaluated once. Conversion/range failure occurs
-before replacing the old parameter value. The query binder sends an actual
+Parameter values now retain canonical exact Currency text independently of the
+SQL backing, including both signed64 extremes. Scalar object input is evaluated
+once, then the parameter generation/lifetime is checked again before mutation.
+A scalar callback that replaces SQL or closes the query cannot write through an
+obsolete parameter. Invalid conversion retains the previous value. The SQL binder
+still uses the existing lossless Currency REAL backing strictly inside +/-2^39:
+unsupported execution refuses without discarding the exact parameter value.
+The query binder sends an actual
 numeric Double encoding, rather than decimal text: a Currency parameter 0.5
 compares numerically below 1. Direct numeric/text bindings use checked Currency
 conversion and the same range guard. Money/Currency use identical descriptors.
@@ -37,3 +42,9 @@ References:
 https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/sql-data-types
 https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/sql-reserved-words
 https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/datatypeenum-enumeration-dao
+
+Exact-value follow-up: both signed64 Currency extrema can be assigned/read even
+when the current SQL REAL binder cannot encode them. Unsupported Execute retains
+the exact value and writes no rows. Scalar default callbacks are checked against
+the original parameter generation after evaluation. Existing parameter/DAO2/2
+passed (2.40s), app built. This does not establish full-range Currency SQL/storage.

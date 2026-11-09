@@ -6249,3 +6249,15 @@ wiederholt. Core-Prüfharness jetztwieDAO/GUI unterGNU/ClangRelease -O1; Runtime
 lautflags.make weiter-O3. Keine neueTestregistrierung/F-ID;456/384/72 gleich.
 Fortsetzung: Currency-Parameterwerte von begrenzterSQL-REAL-Kodierung trennen und
 an allgemeinenexaktenDatenbanktypen fortlaufendweiterarbeiten.
+
+Currency-Parameterwerte sind jetzt von der begrenzten SQL-REAL-Kodierung getrennt.
+Value/defaultValue behält exakteCurrency-Werte einschließlich beider signed64-
+Extrema undNull; ungültige Zuweisung ersetztvorigenWert nicht. ErstBind/Execute
+prüft weiterdiebelegteREAL-Grenze undverweigertunsupportedWerte3251 ohnesieaus
+demParameterzulöschen. Skalarstandardwerte werden einmalaufgelöst, danachwird
+Generation/Lebensdauererneutgeprüft: einSQL-ändernderRückruf kannnichtdurchalte
+ParameterinsneueSQLschreiben. VorhandeneParameter-/DAO2/2 (2,40s), Appgebaut;
+Eingabe/Lesen/Überlauf-/SQL-Verweigerung/Null/Rückruf-/CloseundechteDatensätzegeprüft.
+CURRENCY_PARAMETERS_RUNTIME.md. KeinexakterDatenbank-Currency-Speicherbehauptet;
+456/384/72gleich. Fortsetzung: sichere reineCurrency-Parameterprojektionenohne
+REAL-Umweg undallgemeineexakteDatenbanktypenweiterumsetzen.

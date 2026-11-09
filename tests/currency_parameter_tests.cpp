@@ -9,12 +9,20 @@
 #endif
 #include <cassert>
 #include <optional>
+#include <functional>
+#include <limits>
 
 class CurrencyScalar final:public linaccess::VbaObject {
 public:
     int reads{};
     linaccess::VbaValue scalarValue() override { ++reads; return linaccess::VbaValue::currency(5000); }
     linaccess::VbaValue member(std::string_view,const std::vector<linaccess::VbaValue>&) override { throw linaccess::VbaRuntimeError(438,"No explicit member"); }
+};
+class MutatingCurrencyScalar final:public linaccess::VbaObject {
+public:
+    std::function<void()> callback;int reads{};
+    linaccess::VbaValue scalarValue() override {++reads;callback();return linaccess::VbaValue::currency(2000);}
+    linaccess::VbaValue member(std::string_view,const std::vector<linaccess::VbaValue>&) override {throw linaccess::VbaRuntimeError(438,"No explicit member");}
 };
 int main(int argc,char** argv) {
     QCoreApplication app(argc,argv);
@@ -35,9 +43,11 @@ int main(int argc,char** argv) {
     definition->member("Execute",{});
     const auto probe=std::make_shared<CurrencyScalar>(); parameter->assign("Value",VbaValue::reference(probe));
     assert(probe->reads==1 && parameter->member("Value",{}).currencyUnits==5000);
-    expect([&] { parameter->assign("Value",VbaValue::currency(5497558138880000LL)); },3251);
-    expect([&] { parameter->assign("Value",VbaValue::errorValue(11)); },13);
-    assert(parameter->member("Value",{}).currencyUnits==5000);
+    for(const auto units:{5497558138880000LL,std::numeric_limits<long long>::max(),std::numeric_limits<long long>::min()}) {
+        parameter->assign("Value",VbaValue::currency(units));assert(parameter->member("Value",{}).kind==VbaValue::Kind::Currency && parameter->scalarValue().currencyUnits==units);
+        expect([&] {definition->member("Execute",{});},3251);expect([&] {parameter->assign("Value",VbaValue::errorValue(11));},13);assert(parameter->scalarValue().currencyUnits==units);
+    }
+    parameter->assign("Value",VbaValue::currency(5000));assert(parameter->member("Value",{}).currencyUnits==5000);
     parameter->assign("Value",VbaValue::currency(5497558138879999LL)); definition->member("Execute",{});
     parameter->assign("Value",{}); assert(parameter->member("Value",{}).kind==VbaValue::Kind::Null); definition->member("Execute",{});
     auto rows=linaccess::makeDaoDatabase(db)->member("OpenRecordset",{VbaValue::string("cash")}).object;
@@ -63,6 +73,7 @@ int main(int argc,char** argv) {
     expect([&] { (void)parameter->member("Value",{}); },3420);
     auto fresh=definition->member("Parameters",{VbaValue::string("p")}).object; fresh->assign("Value",VbaValue::currency(1000));
     assert(fresh->scalarValue().kind==VbaValue::Kind::Currency && fresh->scalarValue().currencyUnits==1000);
+    auto mutating=std::make_shared<MutatingCurrencyScalar>();mutating->callback=[definition] {definition->assign("SQL",VbaValue::string("PARAMETERS p Currency; SELECT p AS changed"));};expect([&] {fresh->assign("Value",VbaValue::reference(mutating));},3420);assert(mutating->reads==1);fresh=definition->member("Parameters",{VbaValue::string("p")}).object;assert(fresh->scalarValue().kind==VbaValue::Kind::Null);fresh->assign("Value",VbaValue::currency(1000));assert(fresh->scalarValue().currencyUnits==1000);
     definition->member("Close",{}); expect([&] { (void)fresh->member("Type",{}); },3420);
     assert(sql.exec("SELECT COUNT(*) FROM cash") && sql.next() && sql.value(0).toInt()==3); sql.finish();
 }
