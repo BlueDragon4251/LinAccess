@@ -63,3 +63,35 @@ conversion boundary. The private result descriptor does not enable creation of
 Currency database fields, arbitrary SQL money operators or MDB write support.
 
 Existing parameter/DAO checks passed together 2/2 (2.69s); application built.
+
+
+## Exact parameter-only arithmetic
+
+The table-free signed64-tick projection now also accepts +, -, *, unary signs and
+parentheses over declared Currency/Money parameters. Every result must be a
+proven Currency expression; computed expressions require explicit unique aliases.
+Bare parameters retain their previous implicit names. The proof parser is bounded
+to64 nested levels and4096 nodes. It never assigns this representation to raw
+numeric literals, mixed types, source fields, predicates, subqueries or functions.
+Those shapes retain their existing adapters and explicit range/unsupported guards.
+
+Private integer-only SQL callbacks reuse native currencyBinary with checked wide
+intermediates and ties-to-even multiplication. They return exact signed64 ticks;
+there is no intermediate binary64 conversion. Null stays Null; Currency overflow
+raises6. Native DAO Type5/Size8 and Currency Values survive snapshots and EOF;
+query display and clipboard format logical amounts from the result descriptor.
+
+Binding now regenerates the proven exact SQL and checks it against the immutable
+compiled statement as well as descriptors. A different source expression with the
+same result count cannot reuse another expression's proof. Textual filtering and
+DAO Find on these private tick projections remain refused; raw ticks never become
+logical amount predicates. Physical Currency storage remains the existing verified
+REAL-backed interval, and action/table/MDB storage semantics are not widened here.
+
+Validation: existing parameter/arithmetic/results/DAO bundle4/4 passed (2.84s),
+application built. Checks include maximum addition/display/clipboard, both extrema
+as inputs, exact multiplication, precedence/grouping/signs, positive/negative
+half-tick rounding, Null descriptors, overflow, DAO/EOF type/size and source-proof
+tampering. Existing physical REAL fields, legacy arithmetic and rejected mixed/
+source/action/filter shapes remain in the same targets. No new CTest ID or new
+original/Windows/full-suite/package proof is attributed to this arithmetic stage.

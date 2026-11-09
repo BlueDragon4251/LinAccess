@@ -1166,38 +1166,30 @@ void adaptCounterDdl(QVector<Token>& tokens,qsizetype pos,AccessQueryPlan& plan)
     }
 }
 }
-// Full-range ticks are valid only when every result is a bare Currency parameter.
-// Render explicit aliases so SQLite's placeholder names never become type identities.
+// Full-range ticks require a table-free projection of proven Currency parameter
+// expressions. No raw literals, predicates, source fields or mixed types acquire
+// this private representation. Explicit aliases retain computed result identity.
 static int pureCurrencyParameterProjections(const QString& source,const QVector<AccessQueryParameter>& parameters,QString* sql=nullptr) {
-    if(std::none_of(parameters.cbegin(),parameters.cend(),[](const auto& value) {return value.type=="currency";})) return 0;
-    const auto tokens=tokenize(source);
-    qsizetype position=0;
-    const auto word=[&](qsizetype index,const char* text) {return index<tokens.size() && tokens[index].kind==Token::Word && tokens[index].value.compare(text,Qt::CaseInsensitive)==0;};
-    const auto name=[&](qsizetype index) {return index<tokens.size() && (tokens[index].kind==Token::Word || tokens[index].kind==Token::Identifier);};
-    if(word(position,"PARAMETERS")) {
-        while(position<tokens.size() && !symbol(tokens[position],";")) ++position;
-        ++position;
-    }
-    if(!word(position,"SELECT")) return 0;
-    ++position;
-    QSet<QString> columns;
-    QStringList projections;
-    const auto finish=[&] {if(sql) *sql="SELECT "+projections.join(", ");return projections.size();};
-    while(position<tokens.size()) {
-        if(!name(position)) return 0;
-        const auto requested=tokens[position++].value;
-        const AccessQueryParameter* parameter=nullptr;
-        for(const auto& candidate:parameters) if(candidate.name.compare(requested,Qt::CaseInsensitive)==0) parameter=&candidate;
-        if(!parameter || parameter->type!="currency") return 0;
-        QString column=requested;
-        if(word(position,"AS")) {++position;if(!name(position)) return 0;column=tokens[position++].value;}
-        if(columns.contains(column.toCaseFolded())) return 0;
-        columns.insert(column.toCaseFolded());
-        projections.append(parameter->binding+" AS "+identifier(column));
-        if(position==tokens.size()) return finish();
-        if(symbol(tokens[position],";")) return position+1==tokens.size() ? finish() : 0;
-        if(!symbol(tokens[position],",")) return 0;
-        ++position;
+    if(std::none_of(parameters.cbegin(),parameters.cend(),[](const auto& value) {return value.type=="currency";}))return 0;
+    const auto tokens=tokenize(source);qsizetype position=0;int nodes=0;
+    const auto word=[&](qsizetype index,const char* text){return index<tokens.size() && tokens[index].kind==Token::Word && tokens[index].value.compare(text,Qt::CaseInsensitive)==0;};
+    const auto name=[&](qsizetype index){return index<tokens.size() && (tokens[index].kind==Token::Word || tokens[index].kind==Token::Identifier);};
+    const auto at=[&](const char* text){return position<tokens.size() && symbol(tokens[position],text);};
+    if(word(position,"PARAMETERS")){while(position<tokens.size() && !symbol(tokens[position],";"))++position;++position;}
+    if(!word(position,"SELECT"))return 0;++position;
+    const auto call=[](const char* operation,const QString& left,const QString& right){return "linaccess_jet_currency_ticks_"+QString::fromLatin1(operation)+'('+left+", "+right+')';};
+    std::function<QString(int)> sum,product,unary;
+    unary=[&](int depth)->QString{if(depth>64 || ++nodes>4096)return {};if(at("+") || at("-")){const bool negative=at("-");++position;const auto value=unary(depth+1);return value.isEmpty() ? QString{} : negative ? call("subtract","0",value) : value;}
+        if(at("(")){++position;const auto value=sum(depth+1);if(value.isEmpty() || !at(")"))return {};++position;return value;}
+        if(!name(position))return {};const auto requested=tokens[position++].value;for(const auto& parameter:parameters)if(parameter.type=="currency" && parameter.name.compare(requested,Qt::CaseInsensitive)==0)return parameter.binding;return {};};
+    product=[&](int depth)->QString{auto value=unary(depth);if(value.isEmpty())return {};while(at("*")){if(++nodes>4096)return {};++position;const auto right=unary(depth);if(right.isEmpty())return {};value=call("multiply",value,right);}return value;};
+    sum=[&](int depth)->QString{auto value=product(depth);if(value.isEmpty())return {};while(at("+") || at("-")){if(++nodes>4096)return {};const bool minus=at("-");++position;const auto right=product(depth);if(right.isEmpty())return {};value=call(minus ? "subtract" : "add",value,right);}return value;};
+    QSet<QString> columns;QStringList projections;const auto finish=[&]{if(sql)*sql="SELECT "+projections.join(", ");return projections.size();};
+    while(position<tokens.size()){const auto start=position;const auto value=sum(0);if(value.isEmpty())return 0;QString column;
+        if(word(position,"AS")){++position;if(!name(position))return 0;column=tokens[position++].value;}
+        else if(position==start+1 && name(start))column=tokens[start].value;else return 0;
+        if(columns.contains(column.toCaseFolded()))return 0;columns.insert(column.toCaseFolded());projections.append(value+" AS "+identifier(column));
+        if(position==tokens.size())return finish();if(at(";"))return position+1==tokens.size() ? finish() : 0;if(!at(","))return 0;++position;
     }
     return 0;
 }
@@ -1941,7 +1933,8 @@ QString accessQuerySource(QSqlDatabase db, const QString& name,QString* canonica
 QMap<QString,QVariant> bindAccessQueryParameters(const AccessQueryPlan& plan, const QMap<QString,QVariant>& values) {
     QMap<QString,QVariant> result;
     const bool ticks=std::any_of(plan.parameters.cbegin(),plan.parameters.cend(),[](const auto& parameter) {return parameter.currencyTicks;});
-    if(ticks && (plan.source.isEmpty() || plan.resultTypes.isEmpty() || plan.sql!=plan.compiledSql || pureCurrencyParameterProjections(plan.source,plan.parameters)!=plan.resultTypes.size() || std::any_of(plan.resultTypes.cbegin(),plan.resultTypes.cend(),[](const auto& type) {return type!="CURRENCY_TICKS";}))) throw VbaRuntimeError(3251,"Exact Currency parameter projection was modified; recompile it");
+    QString exactSql;const auto exactCount=ticks ? pureCurrencyParameterProjections(plan.source,plan.parameters,&exactSql) : 0;
+    if(ticks && (plan.source.isEmpty() || plan.resultTypes.isEmpty() || plan.sql!=plan.compiledSql || exactCount!=plan.resultTypes.size() || exactSql!=plan.sql || std::any_of(plan.resultTypes.cbegin(),plan.resultTypes.cend(),[](const auto& type) {return type!="CURRENCY_TICKS";}))) throw VbaRuntimeError(3251,"Exact Currency parameter projection was modified; recompile it");
     for (const auto& parameter : plan.parameters) {
         const auto found = values.constFind(parameter.name.toCaseFolded());
         if (found == values.cend()) throw VbaRuntimeError(3061,"DAO: required query parameter is unset");

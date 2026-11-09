@@ -27,3 +27,8 @@ function/condition/alias/view/join/set-operation typing, action target coercion,
 full-range SQL output, locale and Windows parity remain open. Unproven expressions
 keep existing generic behavior; SQL Currency arithmetic is not claimed generally
 compatible. No complete original business workflow is added.
+
+Table-free expressions entirely over Currency/Money parameters now have a
+separate full signed64 tick path for +, -, *, signs and parentheses; see
+CURRENCY_PARAMETERS_RUNTIME.md. The physical-field/CCur/REAL boundaries above
+remain in force, including the exact backing interval and unsupported mixed types.

@@ -397,6 +397,18 @@ void currencyAdd(sqlite3_context* context,int,sqlite3_value** args) noexcept { c
 void currencySubtract(sqlite3_context* context,int,sqlite3_value** args) noexcept { currencyArithmetic(context,args,"-"); }
 void currencyMultiply(sqlite3_context* context,int,sqlite3_value** args) noexcept { currencyArithmetic(context,args,"*"); }
 
+// These callbacks consume private integer ticks only; numeric SQL amounts and
+// physical REAL-backed Currency continue to use their existing checked adapter.
+void currencyTicksArithmetic(sqlite3_context* context,sqlite3_value** args,std::string_view operation) noexcept {
+    auto& native=api();try{if(native.type(args[0])==SQLITE_NULL || native.type(args[1])==SQLITE_NULL){native.nullResult(context);return;}
+        if(native.type(args[0])!=SQLITE_INTEGER || native.type(args[1])!=SQLITE_INTEGER)throw VbaRuntimeError(13,"Exact Currency arithmetic requires integer ticks");
+        const auto value=currencyBinary(operation,VbaValue::currency(native.integer(args[0])),VbaValue::currency(native.integer(args[1])));native.integerResult(context,value.currencyUnits);
+    }catch(const VbaRuntimeError& failure){functionError(context,failure);}catch(...){native.error(context,"Exact SQL Currency arithmetic failed",-1);}
+}
+void currencyTicksAdd(sqlite3_context* c,int,sqlite3_value** a) noexcept {currencyTicksArithmetic(c,a,"+");}
+void currencyTicksSubtract(sqlite3_context* c,int,sqlite3_value** a) noexcept {currencyTicksArithmetic(c,a,"-");}
+void currencyTicksMultiply(sqlite3_context* c,int,sqlite3_value** a) noexcept {currencyTicksArithmetic(c,a,"*");}
+
 struct CurrencySumState { std::int64_t units; int error; bool seen; };
 void currencySumStep(sqlite3_context* context,int,sqlite3_value** args) noexcept {
     auto& native=api(); auto* state=static_cast<CurrencySumState*>(native.aggregate(context,sizeof(CurrencySumState)));
@@ -752,6 +764,9 @@ void installJetSqlFunctions(QSqlDatabase db) {
     ensure("linaccess_jet_currency_add",2,&currencyAdd,nullptr,nullptr);
     ensure("linaccess_jet_currency_subtract",2,&currencySubtract,nullptr,nullptr);
     ensure("linaccess_jet_currency_multiply",2,&currencyMultiply,nullptr,nullptr);
+    ensure("linaccess_jet_currency_ticks_add",2,&currencyTicksAdd,nullptr,nullptr);
+    ensure("linaccess_jet_currency_ticks_subtract",2,&currencyTicksSubtract,nullptr,nullptr);
+    ensure("linaccess_jet_currency_ticks_multiply",2,&currencyTicksMultiply,nullptr,nullptr);
     ensure("linaccess_jet_var",1,nullptr,&statisticalStep<false>,&statisticalFinal);
     ensure("linaccess_jet_stdev",1,nullptr,&statisticalStep<true>,&statisticalFinal);
     ensure("linaccess_jet_first",1,nullptr,&firstStep,&aggregateFinal);

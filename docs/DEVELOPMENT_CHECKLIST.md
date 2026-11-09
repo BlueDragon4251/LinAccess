@@ -3742,3 +3742,23 @@ CTests oder zusätzliche Kern-/Original-/Windows-/Gesamtsuiten-/Paketnachweise.
 Aktionsstufe als1481810 veröffentlicht/verifiziert; letzte geprüfteDEB44b1f70
 vor Aktions-/TOP-Erweiterung. Details VISUAL_QUERY_DESIGNER.md. F067/F068/F080/
 F148 und fester Katalog456/386/70 unverändert; Arbeit fortsetzen.
+
+
+Exakte SQL-Currency-Parameterarithmetik: tabellenfreie, vollständig bewiesene
+Currency/Money-Parameter-Ausdrücke mit +,-,*, Vorzeichen und Klammern verwenden
+signed64-Ticks bis zu beiden Currency-Grenzen. Berechnete Ausgaben benötigen
+eindeutige explizite Aliase; Parser64 Ebenen/4096 Knoten. Native integer-only-
+Callbacks verwenden currencyBinary einschließlich Zwischenwert-/Überlaufprüfung
+und ties-to-even, Null bleibt Null. DAO-Type5/Size8/Value sowie Anzeige/Clipboard
+behalten exakte logische Werte. Bindung regeneriert den bewiesenen SQL-Text und
+verweigert auch geänderte Quellausdrücke mit gleicher Ausgabenzahl. Bestehende
+REAL-Feldgrenze, Rohzahlen/Mischtypen/FROM/WHERE/Aktionsspeicherung/Filter/Find
+bleiben ausdrücklich begrenzt. Keine physische Currency-Speichererweiterung.
+Anwendung gebaut; bestehendes Parameter-/Arithmetik-/Ergebnis-/DAO-Bündel4/4
+(2,84s) ohne Nachlauf bestanden. Grenzwerte/Rundung/Null/Überlauf/Präzedenz,
+DAO-EOF-Metadaten und manipulierter Quellbeweis tatsächlich geprüft. Keine neuen
+CTests oder neue Original-/Windows-/Gesamtsuiten-/Paketnachweise dieser Stufe.
+Details CURRENCY_PARAMETERS_RUNTIME.md/CURRENCY_ARITHMETIC_SQL_RUNTIME.md.
+TOP-Entwurf alsc068ccd veröffentlicht/verifiziert; letzte geprüfteDEB44b1f70
+vor Aktions-/TOP-/exakter Parameterarithmetik. Jetzt aktuelles Paket prüfen;
+F014/F067/F068 und fester Katalog456/386/70 unverändert, Entwicklung fortsetzen.

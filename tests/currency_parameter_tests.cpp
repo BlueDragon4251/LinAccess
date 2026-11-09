@@ -102,6 +102,27 @@ int main(int argc,char** argv) {
         assert(!bounded.parameters[0].currencyTicks);
         expect([&] {(void)linaccess::bindAccessQueryParameters(bounded,{{"p",exactValues.value("p")}});},3251);
     }
+    // Exact parameter-only arithmetic never passes through the REAL money adapter.
+    const QString arithmetic="PARAMETERS p Currency,q Money; SELECT ([p]+[q]) AS amount,[p]-[q] AS difference,[p]*[q] AS product";
+    const auto arithmeticPlan=linaccess::compileAccessQuery(arithmetic);assert(arithmeticPlan.resultTypes==QVector<QString>({"CURRENCY_TICKS","CURRENCY_TICKS","CURRENCY_TICKS"}));
+    const QMap<QString,QVariant> arithmeticValues{{"p",QString("922337203685477.5806")},{"q",QString("0.0001")}};
+    auto calculated=linaccess::executeAccessQueryPlan(db,arithmeticPlan,linaccess::bindAccessQueryParameters(arithmeticPlan,arithmeticValues));
+    assert(calculated.rows.size()==1 && calculated.rows[0][0].toLongLong()==maximum && calculated.rows[0][1].toLongLong()==maximum-2 && calculated.rows[0][2].toLongLong()==922337203685478LL);
+    linaccess::AccessQueryModel arithmeticModel;arithmeticModel.execute(db,arithmetic,arithmeticValues);assert(arithmeticModel.data(arithmeticModel.index(0,0)).toString()=="922337203685477.5807" && arithmeticModel.clipboardText(arithmeticModel.index(0,2))=="92233720368.5478");
+    const auto arithmeticDefinition=linaccess::makeDaoDatabase(db)->member("CreateQueryDef",{VbaValue::string(""),VbaValue::string(arithmetic.toStdString())}).object;
+    arithmeticDefinition->member("Parameters",{VbaValue::string("p")}).object->assign("Value",VbaValue::currency(maximum-1));arithmeticDefinition->member("Parameters",{VbaValue::string("q")}).object->assign("Value",VbaValue::currency(1));
+    auto arithmeticRows=arithmeticDefinition->member("OpenRecordset",{}).object;auto arithmeticField=arithmeticRows->member("Fields",{VbaValue::string("amount")}).object;assert(arithmeticField->scalarValue().kind==VbaValue::Kind::Currency && arithmeticField->scalarValue().currencyUnits==maximum && arithmeticField->member("Type",{}).number==5 && arithmeticField->member("Size",{}).number==8);arithmeticRows->member("MoveNext",{});assert(arithmeticRows->member("EOF",{}).truthy() && arithmeticField->member("Type",{}).number==5);arithmeticRows->member("Close",{});arithmeticDefinition->member("Close",{});
+    const auto exactRun=[&](const QString& expression,const QMap<QString,QVariant>& values){const auto plan=linaccess::compileAccessQuery("PARAMETERS p Currency,q Currency; SELECT "+expression);assert(plan.parameters[0].currencyTicks && plan.parameters[1].currencyTicks);return linaccess::executeAccessQueryPlan(db,plan,linaccess::bindAccessQueryParameters(plan,values));};
+    calculated=exactRun("p+q AS value",exactValues);assert(calculated.rows[0][0].toLongLong()==-1);
+    calculated=exactRun("p+q*q AS precedence,(p+q)*q AS grouped,-p AS negative,+q AS positive",{{"p",QString("1")},{"q",QString("2")}});assert(calculated.rows[0][0].toLongLong()==50000 && calculated.rows[0][1].toLongLong()==60000 && calculated.rows[0][2].toLongLong()==-10000 && calculated.rows[0][3].toLongLong()==20000);
+    for(const auto& item:std::vector<std::pair<QString,std::int64_t>>{{"0.0001",0},{"0.0003",2},{"-0.0001",0},{"-0.0003",-2}}){calculated=exactRun("p*q AS value",{{"p",item.first},{"q",QString("0.5")}});assert(calculated.rows[0][0].toLongLong()==item.second);}
+    calculated=linaccess::executeAccessQueryPlan(db,arithmeticPlan,linaccess::bindAccessQueryParameters(arithmeticPlan,{{"p",arithmeticValues.value("p")},{"q",QVariant{}}}));assert(calculated.rows[0][0].isNull() && calculated.rows[0][1].isNull() && calculated.rows[0][2].isNull() && calculated.types.value("product")=="CURRENCY_TICKS");
+    expect([&]{(void)exactRun("p+q AS value",{{"p",exactValues.value("p")},{"q",QString("0.0001")}});},6);
+    expect([&]{(void)exactRun("p-q AS value",{{"p",exactValues.value("q")},{"q",QString("0.0001")}});},6);
+    expect([&]{(void)exactRun("p*q AS value",{{"p",exactValues.value("p")},{"q",QString("2")}});},6);
+    expect([&]{(void)exactRun("-p AS value",{{"p",exactValues.value("q")},{"q",QString("0")}});},6);
+    auto changedArithmetic=arithmeticPlan;changedArithmetic.source="PARAMETERS p Currency,q Money; SELECT ([p]-[q]) AS amount,[p]-[q] AS difference,[p]*[q] AS product";expect([&]{(void)linaccess::bindAccessQueryParameters(changedArithmetic,arithmeticValues);},3251);
+    expect([&]{(void)linaccess::filterAccessQueryPlan(db,arithmeticPlan,"amount > 1");},3251);
     exact->member("Close",{});
     const auto like=linaccess::compileAccessQuery("PARAMETERS p Currency; SELECT amount FROM cash WHERE amount Like p");
     expect([&] { (void)linaccess::bindAccessQueryParameters(like,{{"p",0.5}}); },3251);
