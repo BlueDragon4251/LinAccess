@@ -6073,3 +6073,11 @@ Wiederholung des unverändert betroffenen Originalimports. Voller Jet-/OLE-/Loca
 Oracle bleibt offen,456/384/72 gleich. Fortsetzung: dokumentierte zusammengesetzte
 Teilschlüssel-Suche mit fehlenden hinteren Schlüsseln als Null für die bereits
 strukturell nichtnullen unterstützten Indizes; danach weitere offene Anforderungen.
+
+Seek unterstützt jetzt ausgelassene hintere Schlüssel zusammengesetzter
+nichtnuller eigener Indizes: Suffix wird gemäß dokumentierter Access-Suche als
+Null behandelt; Gleichheit NoMatch, aufsteigende Präfixbereiche passend. Numerik/
+Date, explizit Missing am Suffix, Bookmark-Rettung geprüft. Explizite Nullwerte,
+Lücken und absteigende Bereiche bleiben3251. DAO1/1 (2,25s), App gebaut;
+456/384/72 gleich. Fortsetzung: eigene Feld-Caption/Description im Entwurf mit
+wirklichen Tabellenköpfen und Formular-/Berichtslabels, dann übrige Anforderungen.

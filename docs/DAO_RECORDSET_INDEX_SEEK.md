@@ -52,3 +52,10 @@ order. Old/imported/noncanonical Date backing remains unsupported. Existing
 Date/OLE/precision limits apply; no full Jet date-identity oracle is implied.
 Focused DAO1/1 passed (2.20s), app built; the preceding original-event run is not
 claimed as freshly repeated for this additional key family.
+
+Omitted trailing keys in supported non-null composite indices now receive the
+documented Null suffix. Equality cannot match that suffix; ascending ranges use
+its lowest-key position, so >=prefix locates the corresponding range. Explicit
+Missing at the suffix is accepted; explicit Null inputs, nonterminal holes and
+missing first key remain unsupported. Numeric and typed Date prefixes are
+checked in existing DAO1/1 (2.25s), app built. No new target/full-suite claim.
