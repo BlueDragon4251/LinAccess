@@ -19,6 +19,7 @@ Private Sub Bump(ByRef value As Variant)
 value=value+1
 End Sub
 Static Function Implicit() As String
+Dim values As Variant
 count=count+1
 If IsEmpty(bag) Then Set bag=New Scripting.Dictionary
 If Not bag.Exists("calls") Then bag.Add "calls",0

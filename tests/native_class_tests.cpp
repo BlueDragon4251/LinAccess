@@ -1,3 +1,4 @@
+#include "vba_redim_declaration_fixture.hpp"
 #include "vba_native_object_array_fixture.hpp"
 #include "vba_enum_type_fixture.hpp"
 #include "vba_automatic_class_fixture.hpp"
@@ -63,6 +64,7 @@ void exerciseNativeClasses(MainWindow& window,QSqlDatabase db) {using namespace 
     assert(sql.exec("DELETE FROM main._la_objects WHERE kind='module' AND name='EnumTypeScope'"));
     {NativeStandardModuleHost arraysHost(&window,db,[]{});const auto probe=executeVbaProcedure(nativeObjectArrayFixture,"NativeObjectArrayProbe",arraysHost);if(probe.status!=VbaExecutionStatus::Completed) std::cerr<<"Project native array: "<<probe.explanation<<" line "<<probe.line<<" error "<<probe.errorNumber<<"\n";assert(probe.status==VbaExecutionStatus::Completed && probe.typedReturnValue->number==25);}
     {const QByteArray layout="Begin Form\nBegin Section\nBegin TextBox\nName =\"ArrayFirst\"\nEnd\nBegin TextBox\nName =\"ArraySecond\"\nEnd\nEnd\nEnd\n";AccessFormPreview arraysForm("Native array controls",layout,QByteArray::fromStdString(nativeAccessArrayFixture),db,&window);arraysForm.show();QApplication::processEvents();std::vector<VbaValue> inputs;const auto probe=arraysForm.executeProcedure("NativeAccessArrayProbe",inputs);if(probe.status!=VbaExecutionStatus::Completed) std::cerr<<"Access native array: "<<probe.explanation<<" line "<<probe.line<<" error "<<probe.errorNumber<<"\n";assert(probe.status==VbaExecutionStatus::Completed && probe.typedReturnValue->number==39);assert(arraysForm.close());}
+    {NativeStandardModuleHost declarationHost(&window,db,[]{});for(const auto& probe:std::vector<std::pair<const char*,int>>{{"ReDimDeclarationProbe",30},{"ReDimExistingProbe",17},{"ReDimStaticProbe",7},{"ReDimStaticProbe",14}}) {const auto outcome=executeVbaProcedure(nativeReDimDeclarationFixture,probe.first,declarationHost);if(outcome.status!=VbaExecutionStatus::Completed) std::cerr<<"Project ReDim declaration "<<probe.first<<": "<<outcome.explanation<<" line "<<outcome.line<<" error "<<outcome.errorNumber<<"\n";assert(outcome.status==VbaExecutionStatus::Completed && outcome.typedReturnValue->number==probe.second);}}
     std::shared_ptr<VbaObject> retained;
     {QDialog editor(&window);NativeStandardModuleHost host(&editor,db,[]{});retained=evaluateVbaObjectExpression("New NativeCounter",host,{}).object;assert(retained && retained->member("Value",{}).number==1);}
     assert(retained->member("Value",{}).number==1); // Project lifetime, not the caller editor's lifetime.

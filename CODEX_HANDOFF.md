@@ -5237,3 +5237,14 @@ unverändert; vollständige F042/F043 offen. Vorstufe9bc07b2 privat remote/Baum 
 Gespeicherten Makro-Codex-Call einmal ohne neuen Anruf fortgesetzt: failed, keine
 Antwort/Entscheidung; Ende vor Agent-Abschlussverarbeitung. Makroreferenz bleibt
 offen; unabhängig ohne Zwischenabschluss weiterprogrammieren.
+
+
+ReDim-Deklarationswirkung: REDIM_DECLARATIONS.md beschreibt echte prozedurweite
+Arraydeklaration bei ungebundenem Namen (auch OptionExplicit/übersprungene Zweige),
+Def-/Elementtyp, ByRef/Rückgaben/Static und Schutz bestehender Modulbindungen.
+App; bestehendes Kern-/GUI-Bündel2/2 (22,96s:4,74/18,22). Gemeinsame Integration
+mit nativen Objektarrays: DAO2,71s + Original-Ereignispfad119,91s,2/2 in122,62s.
+Bekannte Makrogrenze beibehalten; sieben Hashes unverändert. Keine neuen CTests/
+Windows-/Vollsuiten-/Paketbehauptungen;456/386/70 unverändert. Vorstufe58b1723
+privat remote/Baum geprüft. Ohne Zwischenabschluss mit belegten Err-Reset-
+Grenzen nach MS-VBAL6.1.3.2.1.1 weiterprogrammieren.

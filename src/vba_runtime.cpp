@@ -2272,6 +2272,31 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
     } catch (const VbaRuntimeError& error) {
         VbaExecutionResult failure{VbaExecutionStatus::Error,"Module state initialization failed",0}; failure.errorNumber=error.number; return failure;
     }
+    // MS-VBAL 5.4.3.3: an unmatched ReDim name declares a resizable
+    // local array for the entire procedure, even under Option Explicit.
+    // Resolve existing procedure/module/instance bindings before introducing it.
+    try {
+        for(const auto& instruction:instructions) if(instruction.type==Statement::Type::ResizeArray)
+            for(const auto& target:instruction.resizeTargets) {
+                const auto name=lower(target.name);
+                if(locals.contains(name)) continue;
+                if(host.hasInstanceIdentifier(name) || stateOwners.front()->procedures.contains(name) || host.moduleForProcedure(name))
+                    throw VbaRuntimeError(3251,"ReDim target resolves to a nonlocal member or procedure");
+                if(localTypes.size()>=4096) throw VbaRuntimeError(3035,"Local declaration limit exceeded");
+                auto element=target.elementType.empty() ? implicitTypes.forName(name) : target.elementType;
+                if(element.empty()) element="variant";
+                const auto type=element+"()";
+                auto value=makeUnallocatedVbaArray(element);
+                if(staticProcedure) {
+                    auto& saved=stateOwners.front()->procedureStatics[lower(std::string(procedure))];
+                    auto [slot,inserted]=saved.try_emplace(name,std::move(value));
+                    locals.emplace(name,slot->second);aliases.push_back({name,&slot->second,slot->second,type});
+                } else locals.emplace(name,std::move(value));
+                localTypes.emplace(name,type);
+            }
+    } catch(const VbaRuntimeError& error) {
+        VbaExecutionResult failure{VbaExecutionStatus::Unsupported,"ReDim declaration binding failed",0};failure.errorNumber=error.number;return failure;
+    }
     try {
         std::unordered_set<std::string> types;
         for(const auto& owner:stateOwners) for(const auto& [name,type]:owner->types) if(isProjectClassType(type)) types.insert(std::string(projectClassTypeName(type)));

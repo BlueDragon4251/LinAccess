@@ -3632,7 +3632,7 @@ Me!TypedBoolean=TypeName(a) & ":" & CStr(VarType(a(0))) & ":" & CStr(a(0))
 End Sub
 )VBA","TypedMatrices",host);
     assert(typedMatrix.status==VbaExecutionStatus::Completed);
-    assert(host.fields["TypedDeclarationError"]=="3251");
+    assert(host.fields["TypedDeclarationError"]=="0");
     assert(host.fields["TypedMatrix"]=="Integer():8194:2:0:2" && host.fields["TypedOverflow"]=="6" && host.fields["TypedPreserveError"]=="13");
     assert(host.fields["TypedPreserved"]=="2:0:2" && host.fields["TypedText"]=="String():42||" && host.fields["TypedReset"]=="String():|");
     assert(host.fields["TypedBytes"]=="Byte():8209:17:255" && host.fields["TypedMoney"]=="Currency():6:1.2346" && host.fields["TypedDate"]=="Date():7:0" && host.fields["TypedBoolean"]=="Boolean():11:True");
