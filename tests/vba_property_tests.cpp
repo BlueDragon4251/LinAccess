@@ -1,3 +1,5 @@
+#include "vba_array_return_fixture.hpp"
+#include "vba_array.hpp"
 #include "vba_expression.hpp"
 #include "vba_analyzer.hpp"
 #include "vba_property_fixture.hpp"
@@ -72,4 +74,17 @@ MsgBox "unreached"
 values(,1)=7
 End Sub)VBA","ArrayHole",optionalHost);assert(result.status==VbaExecutionStatus::Unsupported && result.errorNumber==3251 && optionalHost.effects==0);
     const auto mixed=validateVbaProcedure("Property Get Bad(Optional ByVal first As Long,ParamArray rest() As Variant) As Long\nEnd Property","property get Bad");assert(mixed.status==VbaExecutionStatus::Unsupported);
+    PropertyHost arrayHost;
+    const auto arrayRun=[&](const char* name){auto value=executeVbaProcedure(nativeArrayReturnFixture,name,arrayHost);if(value.status!=VbaExecutionStatus::Completed)std::cerr<<"Array return "<<name<<": "<<value.explanation<<" line "<<value.line<<" error "<<value.errorNumber<<"\n";assert(value.status==VbaExecutionStatus::Completed && value.typedReturnValue);return *value.typedReturnValue;};
+    for(const auto& probe:std::vector<std::pair<const char*,int>>{{"LinArrayReadProbe",297},{"LinArrayCopyProbe",1299},{"LinArrayQueueProbe",14}}) assert(arrayRun(probe.first).number==probe.second);
+    const auto longs=arrayRun("LinArrayReturnLongs");assert(isVbaArray(longs) && vbaArrayElementType(longs)=="long" && (vbaArrayBounds(longs)==std::vector<VbaArrayDimension>{{2,4}}) && vbaArrayElement(longs,{VbaValue::longInteger(4)}).number==14);
+    const auto bytes=arrayRun("LinArrayBytes");assert(isVbaArray(bytes) && vbaArrayElementType(bytes)=="byte" && vbaArrayElement(bytes,{VbaValue::longInteger(2)}).number==255);
+    const auto strings=arrayRun("LinArrayStrings");assert(vbaArrayElementType(strings)=="string" && vbaArrayElement(strings,{VbaValue::longInteger(2)}).text=="ä");
+    const auto objects=arrayRun("LinArrayObjects");const auto child=vbaArrayElement(objects,{VbaValue::longInteger(1)});assert(vbaArrayElementType(objects)=="object" && child.object && child.object->member("Item",{VbaValue::string("value")}).number==19);
+    arguments.clear();result=executeVbaProperty(nativeArrayReturnFixture,"LinArrayReturnMatrix",VbaPropertyAccess::Get,arrayHost,arguments);assert(result.status==VbaExecutionStatus::Completed && (vbaArrayBounds(*result.typedReturnValue)==std::vector<VbaArrayDimension>{{2,3},{-1,0}}));
+    const auto beforeBounds=arrayRun("LinArrayCallCount").number;result=executeVbaProcedure(nativeArrayReturnFixture,"LinArrayBoundsProbe",arrayHost);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==9 && arrayRun("LinArrayCallCount").number==beforeBounds+1);
+    const auto unallocated=arrayRun("LinArrayUnallocated");assert(isVbaArray(unallocated) && vbaArrayElementType(unallocated)=="long" && vbaArraySize(unallocated)==0);
+    result=executeVbaProcedure(nativeArrayReturnFixture,"LinArrayWrong",arrayHost);assert(result.status==VbaExecutionStatus::Error && result.errorNumber==13);
+    result=executeVbaProcedure("Function Bad() As Scripting.Dictionary()\nMsgBox \"unreached\"\nEnd Function","Bad",arrayHost);assert(result.status==VbaExecutionStatus::Unsupported && arrayHost.effects==0);
+
 }

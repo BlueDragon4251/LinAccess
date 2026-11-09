@@ -1,3 +1,13 @@
+#include "vba_array_return_fixture.hpp"
+#include "vba_array.hpp"
+#include "native_standard_module_host.hpp"
+#include "jet_sql_functions.hpp"
+#include "access_query.hpp"
+#include <QDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSqlQuery>
+#include <QSqlError>
 #include "access_form_preview.hpp"
 #include "access_form_objects.hpp"
 #include "vba_property_fixture.hpp"
@@ -102,4 +112,16 @@ End Function
     AccessFormPreview optional("Optional property indices",layout,optionalSource,db);optional.show();QApplication::processEvents();
     for(const auto& probe:std::vector<std::pair<std::string,int>>{{"DefaultsProbe",487},{"HoleProbe",543},{"EmptyCallProbe",457},{"OwnedProbe",3067},{"ManyProbe",673},{"EmptyManyProbe",7},{"OptionalObjectProbe",439},{"ManyObjectProbe",249},{"GuardedValuesProbe",10251},{"QualifiedProbe",543},{"QualifiedManyProbe",673},{"NamedManyProbe",3251}}){arguments.clear();result=optional.executeProcedure(QString::fromStdString(probe.first),arguments);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Form optional property "<<probe.first<<": "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==probe.second);}
     auto optionalObject=makePreviewFormObject(optional);optionalObject->assign("Cell",VbaValue::longInteger(7));assert(optionalObject->member("Written",{}).number==457);assert(optionalObject->member("Cell",{VbaValue::missing(),VbaValue::longInteger(8)}).number==28);optionalObject->assignIndexedMember("Many",{VbaValue::longInteger(1),VbaValue::longInteger(2),VbaValue::longInteger(3)},VbaValue::longInteger(7));assert(optionalObject->member("Written",{}).number==367);assert(optional.close());
+    AccessFormPreview arrays("Typed array return fixture",layout,QByteArray::fromStdString(nativeArrayReturnFixture),db);arrays.show();QApplication::processEvents();
+    for(const auto& probe:std::vector<std::pair<const char*,int>>{{"LinArrayReadProbe",297},{"LinArrayCopyProbe",1299},{"LinArrayQueueProbe",14}}){arguments.clear();result=arrays.executeProcedure(probe.first,arguments);if(result.status!=VbaExecutionStatus::Completed)std::cerr<<"Form array "<<probe.first<<": "<<result.explanation<<" line "<<result.line<<" error "<<result.errorNumber<<"\n";assert(result.status==VbaExecutionStatus::Completed && result.typedReturnValue->number==probe.second);}
+    auto arrayObject=makePreviewFormObject(arrays);const auto getCount=arrayObject->member("LinArrayGetCount",{}).number;
+    assert(arrayObject->member("LinArrayReturnMatrix",{VbaValue::longInteger(3),VbaValue::longInteger(0)}).number==30 && arrayObject->member("LinArrayGetCount",{}).number==getCount+1);
+    const auto retainedMatrix=arrayObject->member("LinArrayReturnMatrix",{});assert(arrays.close());assert(vbaArrayElement(retainedMatrix,{VbaValue::longInteger(2),VbaValue::longInteger(-1)}).number==21);
+    QSqlQuery arraySql(db);arraySql.prepare("INSERT INTO main._la_objects(kind,name,definition) VALUES('module','TypedArrayReturnFixture',?)");arraySql.addBindValue(QString::fromUtf8(QJsonDocument(QJsonObject{{"version",1},{"vba",QString::fromStdString(nativeArrayReturnFixture)}}).toJson(QJsonDocument::Compact)));assert(arraySql.exec());arraySql.finish();installJetSqlFunctions(db);
+    const auto sqlCount=[&](){assert(arraySql.exec("SELECT LinArrayCallCount()") && arraySql.next());const auto count=arraySql.value(0).toInt();arraySql.finish();return count;};assert(sqlCount()==0);
+    assert(!arraySql.exec("SELECT LinArrayReturnLongs()") && arraySql.lastError().text().contains("3251"));arraySql.finish();assert(sqlCount()==0);
+    const auto scalar=executeAccessQueryPlan(db,compileAccessQuery("SELECT LinArrayCallCount() AS NativeCount"),{});assert(scalar.rows.size()==1 && scalar.rows[0][0].toInt()==0);
+    QDialog moduleOwner;NativeStandardModuleHost moduleHost(&moduleOwner,db,[]{});result=executeVbaProcedure(nativeArrayReturnFixture,"LinArrayReturnLongs",moduleHost);assert(result.status==VbaExecutionStatus::Completed && vbaArrayElementType(*result.typedReturnValue)=="long" && sqlCount()==1);
+    assert(arraySql.exec("DELETE FROM main._la_objects WHERE kind='module' AND name='TypedArrayReturnFixture'"));arraySql.finish();installJetSqlFunctions(db);
+
 }

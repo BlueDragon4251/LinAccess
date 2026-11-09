@@ -618,7 +618,7 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
     catch(const VbaRuntimeError& error) { VbaExecutionResult result{VbaExecutionStatus::Unsupported,"Module constant declaration unsupported",0}; result.errorNumber=error.number; return result; }
     std::unordered_set<std::string> localConstants;
     const std::regex begin(
-        R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*(?:\(\s*(.*?)\s*\))?\s*(?:As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?))?\s*$)",
+        R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)\s*(?:\(\s*(.*?)\s*\))?\s*(?:As\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*(\(\s*\))?)?\s*$)",
         std::regex::icase);
     const std::regex anyBegin(
         R"(^\s*(?:(?:Public|Private|Friend)\s+)?(?:Static\s+)?(?:Sub|Function)\s+([A-Za-z_\x80-\xFF][A-Za-z0-9_\x80-\xFF]*)(?:\s*\(.*\))?.*$)",
@@ -834,11 +834,16 @@ VbaExecutionResult parseProcedureUncached(std::string_view module, std::string_v
                 if(!accessor.empty() && accessor!="get" && parameters && !parameters->empty()) parameters->back().byReference=false;
                 within = true;
                 isFunction = lower(match[1].str()) == "function";
-                const auto declaredResult=nativeDeclaredType(lower(match[4].str()));
+                auto declaredResult=nativeDeclaredType(lower(match[4].str()));
+                const bool arrayResult=match[5].matched;
+                if(arrayResult) {
+                    static const std::unordered_set<std::string> elementTypes{"variant","byte","integer","long","single","double","currency","date","boolean","string","object"};
+                    if(!elementTypes.contains(declaredResult)) return {VbaExecutionStatus::Unsupported,"Array result element type unsupported",line};
+                }
                 if(!isFunction && !declaredResult.empty()) return {VbaExecutionStatus::Unsupported,"Sub and Property setters cannot declare a result type",line};
                 if (isFunction && !declaredResult.empty() && declaredResult!="variant" && declaredResult!="boolean" && declaredResult!="string" && declaredResult!="integer" && declaredResult!="long" && declaredResult!="single" && declaredResult!="double" && declaredResult!="currency" && declaredResult!="date" && declaredResult!="byte" && declaredResult!="object" && declaredResult!="collection" && nativeScriptingObjectType(declaredResult).empty() && !nativeDaoType(declaredResult) && nativeAccessObjectType(declaredResult).empty())
                     return {VbaExecutionStatus::Unsupported,"Function result type unsupported",line};
-                if (resultType) *resultType=declaredResult;
+                if (resultType) *resultType=declaredResult+(arrayResult ? "()" : "");
             } else if (std::regex_match(source, match, anyBegin)
                        && lower(match[1].str()) == lower(requestedName)) {
                 return {VbaExecutionStatus::Unsupported,
@@ -2271,14 +2276,15 @@ static VbaExecutionResult executeProcedureImpl(std::string_view module,
         auto signature=localProcedureSignature(module,name);const bool property=!signature;
         if(property) signature=nativeVbaPropertySignature(module,name,VbaPropertyAccess::Get,false);
         if(signature && signature->function && signature->names.empty() && !actuals.empty()
-            && (signature->resultType.empty() || signature->resultType=="variant" || !nativeObjectType(signature->resultType).empty())) {
+            && (signature->resultType.empty() || signature->resultType=="variant" || signature->resultType.ends_with("()") || !nativeObjectType(signature->resultType).empty())) {
             for(const auto& reference:referenceInfo.names) if(reference.starts_with("@named:")) throw VbaRuntimeError(3251,"Unbound default indices cannot be named");
             std::vector<VbaValue> noArguments;
             const auto nested=property ? executeVbaProperty(module,name,VbaPropertyAccess::Get,host,noArguments,false)
                 : executeVbaProcedureWithArguments(module,name,host,noArguments);
             refreshAliases();
             if(nested.status!=VbaExecutionStatus::Completed) throw VbaRuntimeError(nested.errorNumber ? nested.errorNumber : 3251,nested.explanation,nested.errorSource,nested.errorHelpFile,nested.errorHelpContext);
-            if(!nested.typedReturnValue || nested.typedReturnValue->kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Default indices require a native object result");
+            if(nested.typedReturnValue && isVbaArray(*nested.typedReturnValue)) return vbaArrayElement(*nested.typedReturnValue,actuals);
+            if(!nested.typedReturnValue || nested.typedReturnValue->kind!=VbaValue::Kind::Object) throw VbaRuntimeError(13,"Default indices require a native array or object result");
             if(!nested.typedReturnValue->object) throw VbaRuntimeError(91,"Default member object is Nothing");
             const auto value=nested.typedReturnValue->object->defaultMember(actuals,true);refreshAliases();return value;
         }

@@ -162,6 +162,7 @@ inline void invoke(sqlite3_context* context,int count,sqlite3_value** values) no
         auto db=registry.database(native); refresh(db,native,registry);
         const auto definition=registry.procedures.value(binding->name);
         if(!definition.module || !definition.function || definition.ambiguous) throw VbaRuntimeError(3251,"VBA SQL public function unavailable or ambiguous");
+        if(definition.resultType.ends_with("()")) throw VbaRuntimeError(3251,"Array-valued VBA functions cannot execute as SQL scalars");
         if(count>60) throw VbaRuntimeError(450,"VBA SQL argument limit exceeded");
         std::vector<VbaValue> arguments; arguments.reserve(count);
         for(int index=0;index<count;++index) {

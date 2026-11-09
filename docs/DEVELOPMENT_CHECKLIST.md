@@ -3902,3 +3902,19 @@ Gesamtsuitennachweis. ByRef-Vorstufe bc52b22 privat veröffentlicht/Baum verifiz
 Letzte geprüfteDEB46297bf liegt vor mehreren Sprachstufen; jetzt Paket aktualisieren.
 Katalog456/386/70 und F042/F043/F050 unverändert; anschließend typisierte Array-
 Funktions-/Getterrückgaben und echte Leseindizierung ergänzen. Ohne Abschluss weiter.
+
+
+Typisierte Function-/Property-Get-Arrayrückgaben sind implementiert: geschlossene
+native Elementtypen, vorhandene Array-Typ-/Rang-/Grenz-/Wertkopiesemantik und echte
+Leseindizierung mit einmaliger Erzeugerausführung. Auch Variant-Arrayergebnisse,
+mehrdimensionale Getter und separate Indexqueue nach parametrisiertem Aufruf.
+Bekannte typisierte Array-SQL-Funktionen vor Bodyeffekten3251; keine erfundenen
+SQLite-Skalarwerte. Reale Formularfassade und gemeinsamer SQL/Modul-Zustandszähler
+beweisen Lesezugriff bzw. fehlende SQL-Seiteneffekte. Details NATIVE_VBA_PROPERTIES.md.
+Anwendung gebaut; erstes bestehendes Kern-/GUI-Bündel2/2 (16,91s) bestanden, keine
+neuen CTests/Original-/Windows-/Gesamtsuitennachweise. Vorstufe1313196 privat
+veröffentlicht und frischeDEB1313196 samt Build-ID/Payload/Permissions und gepinnten
+SQLite/MDBTools geprüft. Aktuelle Array-Erweiterung liegt nach diesem Paket.
+Katalog456/386/70 unverändert; Array-Ergebniszuweisungen/Klassen-/UDT-/COM-Typen
+bleiben begrenzt. Direkt weiter: For Each über tatsächliche Array-Funktions-/Getter-
+ergebnisse mit einmaliger Ausdrucksauswertung und erhaltenen Named-Root-Guards.

@@ -1,3 +1,4 @@
+#include "vba_array.hpp"
 #include "native_object_types.hpp"
 #include "vba_conditional.hpp"
 #include "execution_capabilities.hpp"
@@ -3083,10 +3084,11 @@ std::optional<linaccess::VbaValue> AccessFormPreview::getModuleMember(std::strin
     const auto signature=linaccess::nativeVbaPropertySignature(source,name,linaccess::VbaPropertyAccess::Get,publicOnly);
     if(!signature) return {};
     if(signature->names.empty() && !arguments.empty()
-        && (signature->resultType.empty() || signature->resultType=="variant" || !linaccess::nativeObjectType(signature->resultType).empty())) {
+        && (signature->resultType.empty() || signature->resultType=="variant" || signature->resultType.ends_with("()") || !linaccess::nativeObjectType(signature->resultType).empty())) {
         QPointer<AccessFormPreview> guard(this);
         const auto target=invokeModuleProperty(name,linaccess::VbaPropertyAccess::Get,{},publicOnly);
-        if(!target || target->kind!=linaccess::VbaValue::Kind::Object) throw linaccess::VbaRuntimeError(13,"Default indices require a native object result");
+        if(target && linaccess::isVbaArray(*target)) return linaccess::vbaArrayElement(*target,arguments);
+        if(!target || target->kind!=linaccess::VbaValue::Kind::Object) throw linaccess::VbaRuntimeError(13,"Default indices require a native array or object result");
         if(!target->object) throw linaccess::VbaRuntimeError(91,"Default member object is Nothing");
         const auto value=target->object->defaultMember(arguments,true);
         if(!guard || guard->closed_ || guard->openCancelled_) throw linaccess::VbaRuntimeError(2450,"Property owner closed during default access");return value;

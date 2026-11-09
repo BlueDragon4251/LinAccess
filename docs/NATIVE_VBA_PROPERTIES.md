@@ -157,3 +157,29 @@ object ParamArrays, real public form facade calls, and negative array-hole,
 ParamArray-write and named-variadic cases. No new CTest ID, new Original/Windows/
 full-suite/package proof. The complete F042/F043/F050 requirements remain open;
 the catalog stays456 IDs/386 confirmed partial scopes/70 open requirements.
+
+## Typed array function and getter returns (2026-11-09)
+
+Native Function/Property Get declarations accept `As T()` (including spaced
+array designators) for Variant, Byte, Integer, Long, Single, Double, Currency,
+Date, Boolean, String and Object. Return bindings use the existing dynamic-array
+initialization and exact element-type assignment rules: an unassigned return is
+unallocated, not Empty; mismatched element types fail13. Returned values retain
+rank, lower/upper bounds, typed cells and independent whole-array copy semantics;
+Object cells retain actual object identity. Class/UDT/COM array types remain refused.
+
+A no-argument function/getter whose actual result is an array can be read with
+indices, including Variant results and public form getters. The producer runs
+once and existing rank/bounds checks apply. A function with parameters uses a
+separate result-index queue, e.g. `Build(2)(1)`. Array-valued result writes remain
+outside this scope. Known typed-array SQL functions fail3251 before executing the
+body; arrays are not serialized into fake SQLite scalar values. Ordinary scalar
+SQL calls in the same module continue to execute through the native query adapter.
+
+Application built; first existing core/GUI bundle2/2 passed (16.91s), including
+actual form facade reads, retained arrays after form close, typed Byte/String/
+Object/matrix values, copy independence, bounds/type failures and the real shared
+SQL/module-state counter proving pre-body rejection. No new CTest, Windows oracle,
+Original or full-suite run. F043/F050 remain open. Catalog456/386/70 unchanged.
+Latest checked Debian package is1313196 (before this array-return scope), with
+payload, permissions, exact Build-ID and pinned SQLite/MDBTools checks passing.
