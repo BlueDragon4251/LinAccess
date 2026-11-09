@@ -43,3 +43,12 @@ and report wizards. Then native type declaration/TypeOf registration was unified
 Core/DAO2/2 passed (4.66s) with actual typed VBA, readonly access, missing-property
 errors, identity across delete/recreate, field/table rename and retained values.
 App built; no new target or fresh combined3/3/full-suite/Windows claim.
+
+Existing native intrinsic metadata is now also reachable through Property.Value:
+Name, Type, Size, Attributes, DataUpdatable, OrdinalPosition, Required,
+AllowZeroLength, DefaultValue, ValidationRule and ValidationText, whenever the
+underlying field getter is actually proven. Values/types and write guards route
+through that same context; counter flags remain17 for TableDef and49 for writable
+Recordset. Property setters retain their own shared family after a supported
+field change. Built-ins cannot be deleted; full catalog/Count remains unsupported.
+DAO1/1 passed (2.46s), app built; no repeated GUI/original import or full-suite claim.

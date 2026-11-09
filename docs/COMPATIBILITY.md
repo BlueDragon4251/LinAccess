@@ -3547,3 +3547,13 @@ vereinheitlicht: Core/DAO2/2 (4,66s), App gebaut. Kein frischer3/3-/Vollsuitecla
 456/384/72 unverändert. Fortsetzung: weitere tatsächlich vorhandene native Feld-
 Property-Metadaten über Properties statt nur direkte Member anbinden; vollständige
 originale Properties-/Windowsparität bleibt offen. Kontinuierlich weiterarbeiten.
+
+Native Field.Properties stellt jetzt zusätzlich vorhandene intrinsische Metadaten
+über echte Property-Objekte bereit: Name/Type/Size/Attributes/DataUpdatable/
+OrdinalPosition/Required/AllowZeroLength/DefaultValue/ValidationRule/-Text, jeweils
+nur soweit direkter Getter belegt. Kontext bleibt erhalten (Counter TableDef17,
+Recordset49); Value-Schreiben nutzt vorhandene atomare Setter, readonly bleibt383.
+Eigene Property-Familie folgt zulässigen Größen-/Pflicht-/Namensänderungen; kein
+Count/Enum/Vollkatalog erfunden. DAO1/1 (2,46s), App gebaut;456/384/72 gleich.
+Fortsetzung: tatsächliche Caption/Description-Spaltenproperties aus MDBTools
+lesend übernehmen; vorhandene mdb_col_get_prop-API geprüft, keine VBA-Extraktion.
